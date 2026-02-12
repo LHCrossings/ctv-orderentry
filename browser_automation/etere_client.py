@@ -37,7 +37,6 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional, List, Tuple
 import time
-from credential_loader import load_credentials
 
 
 class EtereClient:
@@ -67,46 +66,13 @@ class EtereClient:
     # ═══════════════════════════════════════════════════════════════════════
     
     def login(self) -> None:
-        """
-        Navigate to Etere login page and authenticate.
-        
-        Attempts auto-login using credentials from credentials.env.
-        Falls back to manual login if credentials are unavailable
-        or if the login form field IDs don't match.
-        """
+        """Navigate to login and wait for user to log in."""
         print("[LOGIN] Navigating to Etere login page...")
         self.driver.get(f"{self.BASE_URL}/etere/etere.html")
+        print("[LOGIN] Please log in to Etere in the browser window...")
+        self.wait.until(EC.presence_of_element_located((By.ID, "menu")))
+        print("[LOGIN] ✓ Login successful!")
         time.sleep(2)
-        
-        try:
-            username, password = load_credentials()
-            
-            # Fill username
-            user_field = self.wait.until(
-                EC.presence_of_element_located((By.ID, "LoginUserName"))
-            )
-            user_field.clear()
-            user_field.send_keys(username)
-            
-            # Fill password
-            pass_field = self.driver.find_element(By.ID, "LoginUserPassword")
-            pass_field.clear()
-            pass_field.send_keys(password)
-            
-            # Submit
-            pass_field.send_keys(Keys.RETURN)
-            
-            # Wait for successful login
-            self.wait.until(EC.presence_of_element_located((By.ID, "menu")))
-            print("[LOGIN] ✓ Auto-login successful!")
-            time.sleep(2)
-            
-        except (FileNotFoundError, ValueError) as e:
-            print(f"[LOGIN] ⚠ Auto-login unavailable: {e}")
-            print("[LOGIN] Please log in manually in the browser window...")
-            self.wait.until(EC.presence_of_element_located((By.ID, "menu")))
-            print("[LOGIN] ✓ Manual login successful!")
-            time.sleep(2)
     
     # ═══════════════════════════════════════════════════════════════════════
     # MASTER MARKET SELECTION
@@ -574,18 +540,54 @@ class EtereClient:
         try:
             # Universal calculation: If max_daily_run not provided, calculate it
             if max_daily_run is None:
-                # Count active days in the days pattern
-                day_count = self._count_active_days(days)
+                # Calculate actual days in date range that match the day pattern
+                from datetime import datetime, timedelta
                 
-                # Calculate using ceiling division to ensure all spots can fit
-                # Example: 14 spots ÷ 6 days = 2.33 → 3/day (not 2/day)
-                if day_count > 0 and spots_per_week > 0:
-                    import math
-                    max_daily_run = math.ceil(spots_per_week / day_count)
-                else:
-                    max_daily_run = spots_per_week  # Fallback
-                
-                print(f"[LINE] ℹ Auto-calculated max_daily_run: {spots_per_week} spots/week ÷ {day_count} days = {max_daily_run} spots/day")
+                try:
+                    start = datetime.strptime(start_date, '%m/%d/%Y')
+                    end = datetime.strptime(end_date, '%m/%d/%Y')
+                    
+                    # Map day pattern to actual days
+                    day_pattern_map = {
+                        "M-Su": [0, 1, 2, 3, 4, 5, 6],  # All days
+                        "M-F": [0, 1, 2, 3, 4],          # Weekdays
+                        "M-Sa": [0, 1, 2, 3, 4, 5],      # Mon-Sat
+                        "Sa-Su": [5, 6],                  # Weekend
+                        "SAT": [5], "Sa": [5],           # Saturday only
+                        "SU": [6], "Su": [6], "Sun": [6], "SUN": [6]  # Sunday only
+                    }
+                    
+                    # Get active day indices (0=Monday, 6=Sunday)
+                    active_days = day_pattern_map.get(days, [0, 1, 2, 3, 4, 5, 6])
+                    
+                    # Count actual days in range that match the pattern
+                    actual_days = 0
+                    current = start
+                    while current <= end:
+                        if current.weekday() in active_days:
+                            actual_days += 1
+                        current += timedelta(days=1)
+                    
+                    # Calculate using ceiling division to ensure all spots can fit
+                    # Example: 20 spots ÷ 3 days = 6.67 → 7/day
+                    if actual_days > 0 and spots_per_week > 0:
+                        import math
+                        max_daily_run = math.ceil(spots_per_week / actual_days)
+                    else:
+                        max_daily_run = spots_per_week  # Fallback
+                    
+                    print(f"[LINE] ℹ Auto-calculated max_daily_run: {spots_per_week} spots ÷ {actual_days} matching days ({days} in {start_date} to {end_date}) = {max_daily_run} spots/day")
+                    
+                except Exception as e:
+                    # Fallback to old method if date parsing fails
+                    print(f"[LINE] ⚠ Date parsing failed, using day pattern: {e}")
+                    day_count = self._count_active_days(days)
+                    if day_count > 0 and spots_per_week > 0:
+                        import math
+                        max_daily_run = math.ceil(spots_per_week / day_count)
+                    else:
+                        max_daily_run = spots_per_week
+                    print(f"[LINE] ℹ Fallback max_daily_run: {spots_per_week} spots ÷ {day_count} days = {max_daily_run} spots/day")
             
             print(f"[LINE] Adding line to contract {contract_number}...")
             
