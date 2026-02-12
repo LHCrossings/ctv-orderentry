@@ -1,0 +1,182 @@
+"""
+BROWSER AUTOMATION INTEGRATION PLAN
+====================================
+
+Goal: Add Selenium browser automation to the refactored system
+Agency: TCAA (as test case)
+
+ARCHITECTURE OVERVIEW
+=====================
+
+Current (Refactored) System:
+----------------------------
+src/
+├── domain/              ← Entities, enums, value objects
+├── data_access/         ← Customer repository (SQLite)
+├── business_logic/      ← Detection, parsing, processing services  
+├── presentation/        ← CLI input/output
+└── orchestration/       ← Main coordinator
+
+NEW Addition:
+-------------
+src/
+└── browser_automation/  ← NEW! Selenium automation layer
+    ├── __init__.py
+    ├── etere_session.py          ← Browser session manager (from browser_session.py)
+    ├── etere_navigator.py        ← Common Etere navigation helpers
+    ├── customer_matcher.py       ← Customer detection (from customer_matcher.py)
+    └── automations/              ← Per-agency automation modules
+        ├── __init__.py
+        ├── tcaa_automation.py    ← TCAA-specific automation (from tcaa_functions.py)
+        ├── worldlink_automation.py
+        ├── daviselen_automation.py
+        └── ... (other agencies)
+
+
+MIGRATION STRATEGY
+==================
+
+Phase 1: Setup Browser Automation Layer (30 min)
+-------------------------------------------------
+1. Create src/browser_automation/ directory structure
+2. Port browser_session.py → etere_session.py (clean it up)
+3. Port customer_matcher.py → customer_matcher.py (adapt to SQLite)
+4. Create base automation helpers in etere_navigator.py
+
+Phase 2: Extract TCAA Automation (45 min)
+------------------------------------------
+1. Port tcaa_functions.py → automations/tcaa_automation.py
+2. Extract reusable helpers to etere_navigator.py
+3. Adapt to use new domain entities (Order, TCAAEstimate)
+4. Remove legacy parser dependencies (use refactored detection service)
+
+Phase 3: Integrate with Orchestrator (30 min)
+----------------------------------------------
+1. Update order_processing_service.py to call browser automation
+2. Wire up TCAA automation in orchestrator
+3. Handle browser lifecycle (start/login/process/close)
+
+Phase 4: Test & Verify (1 hour)
+--------------------------------
+1. Test single TCAA order
+2. Test multi-estimate annual buy  
+3. Test customer detection
+4. Fix any integration issues
+
+
+DETAILED IMPLEMENTATION
+========================
+
+Step 1: Create Directory Structure
+-----------------------------------
+```powershell
+cd C:\Users\scrib\windev\OrderEntry
+mkdir src\browser_automation
+mkdir src\browser_automation\automations
+New-Item src\browser_automation\__init__.py
+New-Item src\browser_automation\etere_session.py
+New-Item src\browser_automation\etere_navigator.py
+New-Item src\browser_automation\customer_matcher.py
+New-Item src\browser_automation\automations\__init__.py
+New-Item src\browser_automation\automations\tcaa_automation.py
+```
+
+Step 2: Files to Create
+------------------------
+I will provide complete, ready-to-use files for:
+
+1. etere_session.py          - Browser session management
+2. customer_matcher.py       - Customer detection (adapted)
+3. etere_navigator.py        - Common Etere helpers
+4. automations/tcaa_automation.py - TCAA contract creation
+5. Updated order_processing_service.py - Integration point
+
+
+KEY DESIGN DECISIONS
+====================
+
+1. **Separation of Concerns**
+   - Browser automation is a separate layer
+   - Business logic doesn't know about Selenium
+   - Orchestrator coordinates between layers
+
+2. **Dependency Flow**
+   Domain ← Business Logic ← Browser Automation ← Orchestrator
+   
+3. **Customer Matching**
+   - Legacy uses JSON file (customers.json)
+   - Refactored uses SQLite (customers.db)
+   - Will use refactored customer repository
+
+4. **Browser Session**
+   - Orchestrator creates ONE browser session
+   - Passes to automation functions
+   - Closes at end of batch
+
+5. **Error Handling**
+   - Automation returns success/failure
+   - Orchestrator handles errors gracefully
+   - Failed orders logged, not crash
+
+
+INTEGRATION POINTS
+==================
+
+orchestrator.py changes:
+------------------------
+```python
+def _process_orders_interactive(self, orders: list[Order]) -> list[ProcessingResult]:
+    # NEW: Create browser session
+    from browser_automation import EtereSession
+    
+    browser = EtereSession()
+    browser.start()
+    browser.login()
+    
+    try:
+        results = []
+        for order in orders:
+            # Collect input
+            order_input = self._input_collector.collect_order_input(order)
+            
+            # Process with browser automation
+            result = self._processing_service.process_order(order, browser)
+            results.append(result)
+        
+        return results
+    
+    finally:
+        browser.close()
+```
+
+order_processing_service.py changes:
+------------------------------------
+```python
+def process_order(self, order: Order, browser=None) -> ProcessingResult:
+    if order.order_type == OrderType.TCAA:
+        from browser_automation.automations import tcaa_automation
+        return tcaa_automation.process_tcaa_order(order, browser)
+    
+    # ... other order types
+```
+
+
+NEXT STEPS
+==========
+
+1. I'll create the 5 files listed above
+2. You copy them into your refactored system
+3. We test with your 3 TCAA PDFs
+4. Once working, we replicate for other agencies
+
+
+TIMELINE
+========
+- File creation: 1-2 hours (me)
+- Integration: 30 minutes (you)
+- Testing: 1 hour (you)
+- Total: ~3 hours to working TCAA automation
+
+
+Ready to proceed?
+"""

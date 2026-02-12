@@ -1,0 +1,220 @@
+"""
+TCAA ANNUAL BUY FIX - INTEGRATION GUIDE
+========================================
+
+This fix addresses three issues:
+1. Annual buys showing as 1 order instead of multiple estimates
+2. "Estimate: Unknown" not being extracted
+3. Range selection "1-4,5,9" not working
+
+FILES TO UPDATE IN YOUR REFACTORED SYSTEM
+==========================================
+
+1. parsers/tcaa_parser.py
+   - Replace entire file with tcaa_parser_fix.py
+   - Key changes:
+     * Returns List[TCAAEstimate] instead of single estimate
+     * Parses each estimate section separately
+     * Filters out summary-only pages
+
+2. application/order_scanner.py
+   - Update _process_tcaa() method to create multiple Order objects
+   - See order_scanner_fix.py for reference
+   - Key change: One PDF → Multiple Orders
+
+3. presentation/input_handler.py (or wherever selection happens)
+   - Add RangeSelectionParser class
+   - Update prompt_for_selection() to use range parser
+   - See range_selection_fix.py for reference
+
+STEP-BY-STEP INTEGRATION
+=========================
+
+Step 1: Update TCAA Parser
+---------------------------
+Location: C:\Users\scrib\windev\OrderEntry\parsers\tcaa_parser.py
+
+BEFORE:
+```python
+def parse(pdf_path: str) -> TCAAOrder:
+    # Returns single order
+    return order
+```
+
+AFTER:
+```python
+def parse(pdf_path: str) -> list[TCAAEstimate]:
+    # Returns list of estimates
+    estimates = []
+    # ... parsing logic ...
+    return estimates
+```
+
+Key Method Changes:
+- Add _find_estimate_sections() - splits PDF into estimate blocks
+- Update _parse_estimate_section() - filters summary pages
+- Return list instead of single object
+
+
+Step 2: Update Order Scanner
+-----------------------------
+Location: C:\Users\scrib\windev\OrderEntry\application\order_scanner.py
+
+Find the _process_pdf() method and ensure TCAA processing creates
+multiple Order objects:
+
+```python
+def _process_tcaa(self, pdf_path: Path) -> List[Order]:
+    orders = []
+    
+    estimates = TCAAParser.parse(str(pdf_path))
+    
+    print(f"[SCAN] {pdf_path.name}: Detected {len(estimates)} estimate(s)")
+    
+    for estimate in estimates:
+        order = Order(
+            pdf_path=str(pdf_path),
+            order_type=OrderType.TCAA,
+            status=OrderStatus.PENDING,
+            customer_name="Western Washington Toyota Dlrs Adv Assoc",
+            estimate_number=estimate.estimate_number,  # <-- KEY FIX
+            description=estimate.description
+        )
+        orders.append(order)
+    
+    return orders  # Returns LIST not single order
+```
+
+
+Step 3: Update Input Handler
+-----------------------------
+Location: C:\Users\scrib\windev\OrderEntry\presentation\input_handler.py
+(or wherever user selection happens - might be in cli.py or main.py)
+
+Add the RangeSelectionParser class from range_selection_fix.py
+
+Then update your selection prompt:
+
+```python
+def prompt_for_selection(orders: List[Order]) -> List[int]:
+    # Display orders...
+    
+    print("Selection options:")
+    print("  - Enter order numbers (e.g., '1 3 5' or '1,3,5')")
+    print("  - Enter ranges (e.g., '1-4' or '1-4,7,9-11')")  # <-- NEW
+    print("  - Enter 'all' to process all orders")
+    
+    user_input = input("Your selection: ")
+    
+    # Use range parser instead of simple split
+    selected = RangeSelectionParser.parse(user_input, len(orders))
+    
+    return selected
+```
+
+
+TESTING THE FIX
+===============
+
+Test 1: Annual Buy Detection
+-----------------------------
+Expected:
+- 2026_Annual_CRTV-TV.pdf should create 7+ separate orders
+- Each order should have correct estimate_number (9709, 9711, etc.)
+- Each order should have description (APR26 Asian Cable, etc.)
+
+Command:
+```bash
+python main.py
+```
+
+Output should show:
+```
+[SCAN] 2026 Annual CRTV-TV.pdf: Detected 7 estimate(s)
+
+AVAILABLE ORDERS:
+[1] 2026 Annual CRTV-TV.pdf (Estimate: 9709)
+    Description: APR26 Asian Cable
+[2] 2026 Annual CRTV-TV.pdf (Estimate: 9711)
+    Description: JUN26 Asian Cable
+...
+[7] 2026 Annual CRTV-TV.pdf (Estimate: 9717)
+    Description: DEC26 Asian Cable
+[8] MAY26_CROSSINGS.pdf (Estimate: 9710)
+[9] OCT26_CRTV.pdf (Estimate: 9715)
+
+Total: 9 order(s)
+```
+
+
+Test 2: Range Selection
+------------------------
+When prompted for selection, try:
+
+Input: "1-4,7"
+Expected: Selects orders 1, 2, 3, 4, 7
+
+Input: "1-3,5,8-9"
+Expected: Selects orders 1, 2, 3, 5, 8, 9
+
+
+KNOWN LIMITATIONS
+=================
+
+1. Parser Finding 7 Instead of 10 Estimates
+   - Currently finds: 9709, 9711, 9712, 9713, 9714, 9716, 9717
+   - Missing: 9710, 9715 (these appear in separate PDF files)
+   - Reason: Annual buy PDF doesn't contain all months
+   - Solution: This is correct! MAY26 and OCT26 are in separate files
+
+2. Line Item Parsing
+   - Currently simplified
+   - Only extracts basic info (days, time, program, spots)
+   - Full implementation needed for actual contract creation
+
+3. Date Format
+   - Parser extracts dates as strings (e.g., "3/30/2026")
+   - May need conversion to datetime objects downstream
+
+
+VERIFICATION CHECKLIST
+======================
+
+□ tcaa_parser.py returns list[TCAAEstimate]
+□ order_scanner.py creates multiple Order objects from annual buy
+□ Each Order has correct estimate_number (not "Unknown")
+□ Each Order has description
+□ Selection prompt shows all estimates separately
+□ Range input "1-4,7" works correctly
+□ Total order count is correct (not 1 for annual buy)
+
+
+ROLLBACK PLAN
+=============
+
+If issues occur, you can rollback by:
+1. Restore from your backup folder (the exact copy you made)
+2. Run the legacy process_orders.py temporarily
+3. File bugs and we'll fix in next iteration
+
+
+NEXT STEPS AFTER INTEGRATION
+=============================
+
+Once this fix is working:
+1. Test with all three PDFs
+2. Verify estimate selection workflow
+3. Implement full line item parsing if needed
+4. Add Selenium browser automation integration
+5. Test end-to-end contract creation
+
+
+QUESTIONS?
+==========
+
+If you encounter issues:
+1. Check console output for [ERROR] messages
+2. Verify file paths match your system
+3. Ensure all imports are correct
+4. Test each component individually before integration
+"""

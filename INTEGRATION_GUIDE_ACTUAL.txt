@@ -1,0 +1,291 @@
+"""
+TCAA MULTI-ORDER FIX - INTEGRATION GUIDE
+=========================================
+For your actual file structure at C:\Users\scrib\windev\OrderEntry
+
+PROBLEM SUMMARY:
+- Annual buy PDF detected as "7 orders" but only showing 1 in list
+- "Estimate: Unknown" instead of actual estimate numbers (9709, 9711, etc.)
+- Range selection "1-4,7" not working
+
+ROOT CAUSE:
+- split_tcaa_orders() is grouping by estimate number incorrectly
+- Summary pages have same estimate numbers, creating duplicates
+- Need to filter summary-only pages
+
+FILES TO MODIFY (2 files):
+1. src\business_logic\services\order_detection_service.py
+2. src\presentation\cli\input_collectors.py (or wherever selection happens)
+
+
+═══════════════════════════════════════════════════════════════════
+FIX #1: UPDATE split_tcaa_orders() METHOD
+═══════════════════════════════════════════════════════════════════
+
+File: src\business_logic\services\order_detection_service.py
+Location: Lines ~171-203
+
+FIND THIS METHOD:
+    def split_tcaa_orders(self, full_text: str) -> list[dict[str, str]]:
+        ...existing code...
+
+REPLACE WITH:
+    def split_tcaa_orders(self, full_text: str) -> list[dict[str, str]]:
+        """
+        Split a multi-order TCAA PDF into individual orders.
+        
+        FIXED: Now filters out summary-only pages.
+        """
+        import re
+
+        # Split text into sections by "Estimate:" markers
+        estimate_pattern = r'Estimate:\s*(\d+)'
+        
+        # Find all estimates
+        all_estimates = re.findall(estimate_pattern, full_text)
+        
+        if not all_estimates:
+            return [{'estimate': 'Unknown', 'text': full_text}]
+        
+        # Split text at each "Estimate:" occurrence
+        parts = re.split(r'(?=Estimate:\s*\d+)', full_text)
+        
+        sections = []
+        
+        # Process each part
+        for part in parts:
+            if not part.strip():
+                continue
+                
+            # Extract estimate number
+            est_match = re.search(estimate_pattern, part)
+            if not est_match:
+                continue
+            
+            estimate_num = est_match.group(1)
+            
+            # CRITICAL FIX: Filter out summary-only pages
+            # Real schedule pages have "SCHEDULE TOTALS" or multiple line items
+            has_schedule = (
+                'SCHEDULE TOTALS' in part or 
+                'Station Total:' in part or
+                part.count('CRTV-Cable') > 3
+            )
+            
+            # Summary pages have "Summary by Market"
+            is_summary = (
+                'Summary by Market' in part or
+                'Summary by Station/System' in part
+            )
+            
+            # Only include actual schedule pages
+            if has_schedule and not is_summary:
+                sections.append({
+                    'estimate': estimate_num,
+                    'text': part
+                })
+        
+        # Return filtered sections
+        if sections:
+            return sections
+        
+        # Fallback
+        unique_estimates = sorted(set(all_estimates))
+        return [{'estimate': est, 'text': full_text} for est in unique_estimates]
+
+
+TESTING THIS FIX:
+-----------------
+After making the change, run:
+
+    python fix_split_tcaa_orders.py
+
+This will test the new split logic and show you:
+- How many orders are found
+- Each estimate number
+- Text snippets from each order
+
+Expected output:
+    Found 7 orders:
+      1. Estimate 9709
+      2. Estimate 9711
+      3. Estimate 9712
+      ...
+
+If this works, proceed to Fix #2.
+
+
+═══════════════════════════════════════════════════════════════════
+FIX #2: ADD RANGE SELECTION SUPPORT
+═══════════════════════════════════════════════════════════════════
+
+File: src\presentation\cli\input_collectors.py
+Action: Add RangeSelectionParser class
+
+STEP 1: Copy RangeSelectionParser class
+----------------------------------------
+Open fix_range_selection.py and copy the entire RangeSelectionParser 
+class (lines ~10-90) into your input_collectors.py file.
+
+Just add it at the bottom of the file or after imports.
+
+
+STEP 2: Find your order selection code
+---------------------------------------
+Location: Likely in main.py or orchestrator.py where you see:
+
+    Your selection:
+
+The code probably looks like:
+
+    user_input = input("Your selection: ").strip()
+    if user_input.lower() == 'all':
+        selected = list(range(1, len(orders) + 1))
+    else:
+        # Parse numbers somehow
+        selected = [int(x) for x in user_input.split()]
+
+
+STEP 3: Replace with range parser
+----------------------------------
+CHANGE TO:
+
+    from presentation.cli.input_collectors import RangeSelectionParser
+    
+    user_input = input("Your selection: ").strip()
+    selected = RangeSelectionParser.parse(user_input, len(orders))
+    
+    if not selected:
+        print("[INFO] No valid orders selected")
+        return
+
+
+STEP 4: Update prompt text
+---------------------------
+FIND the text that says:
+    "Enter order numbers (e.g., '1 3 5' or '1,3,5')"
+
+ADD this line after it:
+    "Enter ranges (e.g., '1-4' or '1-4,7,9-11')"
+
+
+TESTING THIS FIX:
+-----------------
+Run: python main.py
+
+Try these inputs:
+    1-4        → Should select [1,2,3,4]
+    1-4,7      → Should select [1,2,3,4,7]
+    1-3,5,8-9  → Should select [1,2,3,5,8,9]
+    all        → Should select all orders
+
+
+═══════════════════════════════════════════════════════════════════
+VERIFICATION CHECKLIST
+═══════════════════════════════════════════════════════════════════
+
+After applying both fixes:
+
+□ Run python main.py
+□ See "[SCAN] 2026 Annual CRTV-TV.pdf: Detected 7 estimate(s)"
+□ See 7+ separate orders in list (not 1)
+□ Each order shows correct estimate number (not "Unknown")
+□ Each order shows description (APR26 Asian Cable, etc.)
+□ Can select "1-4" and get 4 orders
+□ Can select "1-4,7,9-11" and get correct range
+□ Total order count is 9 (7 from annual + 2 standalone)
+
+
+═══════════════════════════════════════════════════════════════════
+EXPECTED FINAL OUTPUT
+═══════════════════════════════════════════════════════════════════
+
+PS C:\Users\scrib\windev\OrderEntry> python main.py
+
+[SCAN] 2026 Annual CRTV-TV.pdf: Detected 7 estimate(s)
+
+AVAILABLE ORDERS:
+[1] 2026 Annual CRTV-TV.pdf (Estimate: 9709)
+    Type: TCAA
+    Customer: Western Washington Toyota Dlrs Adv Assoc
+    
+[2] 2026 Annual CRTV-TV.pdf (Estimate: 9711)
+    Type: TCAA
+    Customer: Western Washington Toyota Dlrs Adv Assoc
+    
+[3] 2026 Annual CRTV-TV.pdf (Estimate: 9712)
+    Type: TCAA
+    Customer: Western Washington Toyota Dlrs Adv Assoc
+    
+... (continuing through all 7 estimates)
+
+[8] MAY26_CROSSINGS.pdf (Estimate: 9710)
+    Type: TCAA
+    Customer: Western Washington Toyota Dlrs Adv Assoc
+    
+[9] OCT26_CRTV.pdf (Estimate: 9715)
+    Type: TCAA
+    Customer: Western Washington Toyota Dlrs Adv Assoc
+
+Total: 9 order(s)
+
+Selection options:
+  - Enter order numbers (e.g., '1 3 5' or '1,3,5')
+  - Enter ranges (e.g., '1-4' or '1-4,7,9-11')
+  - Enter 'all' to process all orders
+
+Your selection: 1-4,7
+
+[INFO] Selected 5 order(s): [1, 2, 3, 4, 7]
+Proceed? (y/n):
+
+
+═══════════════════════════════════════════════════════════════════
+TROUBLESHOOTING
+═══════════════════════════════════════════════════════════════════
+
+Problem: Still seeing "Detected 7 orders" but only 1 in list
+Solution: Check that split_tcaa_orders() was updated correctly
+          Run fix_split_tcaa_orders.py to test the method directly
+
+Problem: "Estimate: Unknown" still showing
+Solution: The split_tcaa_orders() fix handles this
+          Verify the method returns dicts with 'estimate' key
+
+Problem: Range selection not working
+Solution: Verify RangeSelectionParser was imported correctly
+          Check for import errors in console output
+
+Problem: Getting fewer than 7 orders from annual PDF
+Solution: The PDF might only contain 7 estimates (not 10)
+          MAY26 (9710) and OCT26 (9715) are in separate files
+          This is correct! Total should be 9 orders (7+2)
+
+
+═══════════════════════════════════════════════════════════════════
+ROLLBACK PLAN
+═══════════════════════════════════════════════════════════════════
+
+If anything breaks:
+1. You have an exact copy of the old folder
+2. Just rename directories to swap back
+3. No database changes were made
+
+
+═══════════════════════════════════════════════════════════════════
+SUMMARY
+═══════════════════════════════════════════════════════════════════
+
+TWO FILES to modify:
+1. order_detection_service.py - Update split_tcaa_orders() method
+2. input_collectors.py - Add RangeSelectionParser class
+
+TWO PLACES to integrate:
+1. The split_tcaa_orders() method replacement
+2. The order selection prompt (add range parser)
+
+ESTIMATED TIME: 5-10 minutes
+
+The fixes are surgical and focused - just improving existing logic
+that's already 90% working. Your architecture is solid!
+"""
