@@ -37,6 +37,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional, List, Tuple
 import time
+from credential_loader import load_credentials
 
 
 class EtereClient:
@@ -66,13 +67,46 @@ class EtereClient:
     # ═══════════════════════════════════════════════════════════════════════
     
     def login(self) -> None:
-        """Navigate to login and wait for user to log in."""
+        """
+        Navigate to Etere login page and authenticate.
+        
+        Attempts auto-login using credentials from credentials.env.
+        Falls back to manual login if credentials are unavailable
+        or if the login form field IDs don't match.
+        """
         print("[LOGIN] Navigating to Etere login page...")
         self.driver.get(f"{self.BASE_URL}/etere/etere.html")
-        print("[LOGIN] Please log in to Etere in the browser window...")
-        self.wait.until(EC.presence_of_element_located((By.ID, "menu")))
-        print("[LOGIN] ✓ Login successful!")
         time.sleep(2)
+        
+        try:
+            username, password = load_credentials()
+            
+            # Fill username
+            user_field = self.wait.until(
+                EC.presence_of_element_located((By.ID, "LoginUserName"))
+            )
+            user_field.clear()
+            user_field.send_keys(username)
+            
+            # Fill password
+            pass_field = self.driver.find_element(By.ID, "LoginUserPassword")
+            pass_field.clear()
+            pass_field.send_keys(password)
+            
+            # Submit
+            pass_field.send_keys(Keys.RETURN)
+            
+            # Wait for successful login
+            self.wait.until(EC.presence_of_element_located((By.ID, "menu")))
+            print("[LOGIN] ✓ Auto-login successful!")
+            time.sleep(2)
+            
+        except (FileNotFoundError, ValueError) as e:
+            print(f"[LOGIN] ⚠ Auto-login unavailable: {e}")
+            print("[LOGIN] Please log in manually in the browser window...")
+            self.wait.until(EC.presence_of_element_located((By.ID, "menu")))
+            print("[LOGIN] ✓ Manual login successful!")
+            time.sleep(2)
     
     # ═══════════════════════════════════════════════════════════════════════
     # MASTER MARKET SELECTION

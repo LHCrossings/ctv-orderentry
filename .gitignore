@@ -130,3 +130,6 @@ Thumbs.db
 
 # Project-specific: ignore data directory contents
 data/
+
+# Credentials - NEVER commit
+credentials.env

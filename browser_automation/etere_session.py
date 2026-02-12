@@ -19,6 +19,8 @@ _src_path = Path(__file__).parent.parent
 if str(_src_path) not in sys.path:
     sys.path.insert(0, str(_src_path))
 
+from credential_loader import load_credentials
+
 
 # Etere Configuration
 ETERE_URL = "http://100.102.206.113"
@@ -66,9 +68,10 @@ class EtereSession:
     
     def login(self) -> None:
         """
-        Navigate to Etere login and wait for manual login.
+        Navigate to Etere login and authenticate.
         
-        Opens the login page and pauses for user to authenticate.
+        Attempts auto-login using credentials from credentials.env.
+        Falls back to manual login if credentials are unavailable.
         """
         if self.is_logged_in:
             print("[BROWSER] Already logged in")
@@ -79,22 +82,48 @@ class EtereSession:
         
         print("\n[LOGIN] Navigating to Etere login page...")
         self.driver.get(LOGIN_URL)
-        
-        print("\n" + "=" * 70)
-        print("PLEASE LOG IN TO ETERE")
-        print("=" * 70)
-        print("1. Enter your username")
-        print("2. Enter your password")
-        print("3. Click the login button")
-        print("4. Wait for the main page to load")
-        print("5. Return here and press Enter")
-        print("=" * 70)
-        
-        input("\nPress Enter after you've logged in...")
-        
         time.sleep(2)
-        self.is_logged_in = True
-        print("[LOGIN] ✓ Login completed")
+        
+        try:
+            username, password = load_credentials()
+            
+            # Fill username
+            user_field = self.wait.until(
+                EC.presence_of_element_located((By.ID, "LoginUserName"))
+            )
+            user_field.clear()
+            user_field.send_keys(username)
+            
+            # Fill password
+            from selenium.webdriver.common.keys import Keys
+            pass_field = self.driver.find_element(By.ID, "LoginUserPassword")
+            pass_field.clear()
+            pass_field.send_keys(password)
+            
+            # Submit
+            pass_field.send_keys(Keys.RETURN)
+            
+            time.sleep(2)
+            self.is_logged_in = True
+            print("[LOGIN] ✓ Auto-login successful!")
+            
+        except (FileNotFoundError, ValueError) as e:
+            print(f"[LOGIN] ⚠ Auto-login unavailable: {e}")
+            print("\n" + "=" * 70)
+            print("PLEASE LOG IN TO ETERE MANUALLY")
+            print("=" * 70)
+            print("1. Enter your username")
+            print("2. Enter your password")
+            print("3. Click the login button")
+            print("4. Wait for the main page to load")
+            print("5. Return here and press Enter")
+            print("=" * 70)
+            
+            input("\nPress Enter after you've logged in...")
+            
+            time.sleep(2)
+            self.is_logged_in = True
+            print("[LOGIN] ✓ Manual login completed")
     
     def set_market(self, market_code: str = "NYC") -> None:
         """
