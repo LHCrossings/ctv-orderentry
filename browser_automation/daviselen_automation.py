@@ -53,7 +53,6 @@ from etere_client import EtereClient
 from selenium.webdriver.common.by import By
 from ros_definitions import ROS_SCHEDULES
 from language_utils import (
-    get_language_block_prefixes,
     extract_language_from_program,
 )
 from src.domain.enums import BillingType, OrderType, SeparationInterval
@@ -586,9 +585,6 @@ def process_daviselen_order(
             
             description = " ".join(desc_parts)
             
-            # Block prefixes for language filtering
-            block_prefixes = get_language_block_prefixes(language)
-            
             # ═══════════════════════════════════════════════════════
             # CONSOLIDATED LINE ENTRY
             # ═══════════════════════════════════════════════════════
@@ -620,9 +616,7 @@ def process_daviselen_order(
                     duration_seconds=line.duration,
                     total_spots=group_total,
                     spots_per_week=group_spots_per_week,
-                    rate=line.rate,
-                    block_prefixes=block_prefixes,
-                    separation_intervals=separation,
+                    rate=line.rate,                    separation_intervals=separation,
                 )
                 
                 if not success:

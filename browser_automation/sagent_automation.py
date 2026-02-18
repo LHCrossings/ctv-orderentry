@@ -34,7 +34,6 @@ if str(_src_path) not in sys.path:
 
 from browser_automation.etere_client import EtereClient
 from browser_automation.ros_definitions import get_ros_schedule
-from browser_automation.language_utils import get_language_block_prefixes
 from parsers.sagent_parser import (
     parse_sagent_pdf,
     SagentOrder,
@@ -324,10 +323,8 @@ def create_sagent_contract(
                 
                 # Get line description (handles paid vs bonus formatting)
                 desc = line.get_description()
-                
-                # Get language and block prefixes
+                # Get language
                 language = line.get_language()
-                block_prefixes = get_language_block_prefixes(language) if language else []
                 
                 # Spot code
                 spot_code = 10 if line.is_bonus() else 2  # BNS=10, Paid=2
@@ -385,9 +382,7 @@ def create_sagent_contract(
                         total_spots=total_spots,
                         spots_per_week=spots_per_week,
                         # max_daily_run is auto-calculated - no need to pass it!
-                        rate=float(line.gross_rate),  # USE GROSS RATE
-                        block_prefixes=block_prefixes,
-                        separation_intervals=separation_intervals,
+                        rate=float(line.gross_rate),  # USE GROSS RATE                        separation_intervals=separation_intervals,
                         is_bookend=False
                     )
                     

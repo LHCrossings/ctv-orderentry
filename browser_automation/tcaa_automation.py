@@ -23,7 +23,7 @@ if str(_src_path) not in sys.path:
 
 from browser_automation.etere_client import EtereClient
 from browser_automation.ros_definitions import ROS_SCHEDULES
-from browser_automation.language_utils import get_language_block_prefixes, extract_language_from_program
+from browser_automation.language_utils import extract_language_from_program
 from src.domain.enums import BillingType
 from parsers.tcaa_parser import (
     parse_tcaa_pdf,
@@ -64,7 +64,6 @@ ROS_OPTIONS = ROS_SCHEDULES
 
 # Import universal language utilities (shared across all agencies)
 # Defined in browser_automation/language_utils.py
-# get_language_block_prefixes already imported above
 
 
 # ============================================================================
@@ -689,12 +688,6 @@ def create_tcaa_contract(
                 if not is_ros:
                     desc = f"BNS {days} {time} {language}"
                 
-                # Get block prefixes
-                block_prefixes = get_language_block_prefixes(
-                    language,
-                    bonus_input.hindi_punjabi_both
-                )
-                
             else:
                 # PAID LINE
                 days = line.days
@@ -705,20 +698,6 @@ def create_tcaa_contract(
                 # Format description
                 time_fmt = format_time_for_description(time)
                 desc = f"{days} {time_fmt} {language}"
-                
-                # Get block prefixes (handle South Asian)
-                if language == "South Asian":
-                    # Get pre-gathered choice from bonus_inputs
-                    sa_input = bonus_inputs.get(line_idx)
-                    if sa_input and sa_input.hindi_punjabi_both:
-                        choice = sa_input.hindi_punjabi_both
-                    else:
-                        # Fallback to Both if not found (shouldn't happen)
-                        choice = "Both"
-                    block_prefixes = get_language_block_prefixes(language, choice)
-                else:
-                    block_prefixes = get_language_block_prefixes(language)
-            
             # Consolidate weekly distribution (groups identical consecutive weeks)
             ranges = EtereClient.consolidate_weeks_from_flight(
                 line.weekly_spots,
@@ -762,9 +741,7 @@ def create_tcaa_contract(
                     total_spots=range_data['spots'],  # Total spots for this date range
                     spots_per_week=spots_per_week,
                     # max_daily_run is auto-calculated - no need to pass it!
-                    rate=line.rate,
-                    block_prefixes=block_prefixes,
-                    separation_intervals=separation_intervals,  # Use confirmed intervals
+                    rate=line.rate,                    separation_intervals=separation_intervals,  # Use confirmed intervals
                     is_bookend=False
                 )
                 

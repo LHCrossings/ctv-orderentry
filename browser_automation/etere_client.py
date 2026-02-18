@@ -509,7 +509,6 @@ class EtereClient:
         spots_per_week: int = 0,
         max_daily_run: Optional[int] = None,  # Auto-calculated if None
         rate: float = 0.0,
-        block_prefixes: Optional[List[str]] = None,
         separation_intervals: Tuple[int, int, int] = (15, 0, 0),  # DEFAULT: Customer=15, Event=0, Order=0
         is_bookend: bool = False
     ) -> bool:
@@ -520,10 +519,9 @@ class EtereClient:
         1. Navigate to Add Line page
         2. Fill all GENERAL tab fields
         3. Select days of week
-        4. Select programming blocks
-        5. Set separation intervals in OPTIONS tab
-        6. Set bookend scheduling type if requested
-        7. Save line
+        4. Set separation intervals in OPTIONS tab
+        5. Set bookend scheduling type if requested
+        6. Save line
         
         Args:
             max_daily_run: Maximum spots per day. If None, calculated automatically
@@ -540,51 +538,18 @@ class EtereClient:
         try:
             # Universal calculation: If max_daily_run not provided, calculate it
             if max_daily_run is None:
-                # Calculate actual days in date range that match the day pattern
-                from datetime import datetime, timedelta
+                # Count active days in the days pattern
+                day_count = self._count_active_days(days)
                 
-                try:
-                    start = datetime.strptime(start_date, '%m/%d/%Y')
-                    end = datetime.strptime(end_date, '%m/%d/%Y')
-                    
-                    # Map day pattern to actual days
-                    day_pattern_map = {
-                        "M-Su": [0, 1, 2, 3, 4, 5, 6],  # All days
-                        "M-F": [0, 1, 2, 3, 4],          # Weekdays
-                        "M-Sa": [0, 1, 2, 3, 4, 5],      # Mon-Sat
-                        "Sa-Su": [5, 6],                  # Weekend
-                        "SAT": [5], "Sa": [5],           # Saturday only
-                        "SU": [6], "Su": [6], "Sun": [6], "SUN": [6]  # Sunday only
-                    }
-                    
-                    # Get active day indices (0=Monday, 6=Sunday)
-                    active_days = day_pattern_map.get(days, [0, 1, 2, 3, 4, 5, 6])
-                    
-                    # Calculate max_daily_run based on days PER WEEK, not total days
-                    # Example: 2 spots/week on M-F = 2 spots ÷ 5 days = 0.4 → 1/day
-                    # NOT: 2 spots/week ÷ 20 total M-F days across 4 weeks!
-                    days_per_week = len(active_days)
-                    
-                    # Calculate using ceiling division to ensure all spots can fit
-                    # Example: 10 spots/week on M-F = 10 ÷ 5 = 2/day
-                    if days_per_week > 0 and spots_per_week > 0:
-                        import math
-                        max_daily_run = math.ceil(spots_per_week / days_per_week)
-                    else:
-                        max_daily_run = spots_per_week  # Fallback
-                    
-                    print(f"[LINE] ℹ Auto-calculated max_daily_run: {spots_per_week} spots/week ÷ {days_per_week} days/week ({days}) = {max_daily_run} spots/day")
-                    
-                except Exception as e:
-                    # Fallback to old method if date parsing fails
-                    print(f"[LINE] ⚠ Date parsing failed, using day pattern: {e}")
-                    day_count = self._count_active_days(days)
-                    if day_count > 0 and spots_per_week > 0:
-                        import math
-                        max_daily_run = math.ceil(spots_per_week / day_count)
-                    else:
-                        max_daily_run = spots_per_week
-                    print(f"[LINE] ℹ Fallback max_daily_run: {spots_per_week} spots ÷ {day_count} days = {max_daily_run} spots/day")
+                # Calculate using ceiling division to ensure all spots can fit
+                # Example: 14 spots ÷ 6 days = 2.33 → 3/day (not 2/day)
+                if day_count > 0 and spots_per_week > 0:
+                    import math
+                    max_daily_run = math.ceil(spots_per_week / day_count)
+                else:
+                    max_daily_run = spots_per_week  # Fallback
+                
+                print(f"[LINE] ℹ Auto-calculated max_daily_run: {spots_per_week} spots/week ÷ {day_count} days = {max_daily_run} spots/day")
             
             print(f"[LINE] Adding line to contract {contract_number}...")
             
@@ -645,6 +610,21 @@ class EtereClient:
             ))
             spot_code_select.select_by_value(str(spot_code))
             
+            # SCHEDULING TYPE - Bookend (Top and Bottom)
+            # Must be set here on the GENERAL tab, before navigating to OPTIONS tab
+            if is_bookend:
+                print(f"[LINE] Setting bookend scheduling...")
+                try:
+                    radio = self.driver.find_element(
+                        By.CSS_SELECTOR, 'input[name="selectedSchedulingType"][value="6"]'
+                    )
+                    parent = radio.find_element(By.XPATH, "..")
+                    parent.click()
+                    time.sleep(0.5)
+                    print(f"[LINE] ✓ Bookend set")
+                except Exception as e:
+                    print(f"[LINE] ⚠ Bookend: {e}")
+            
             # Duration
             duration_formatted = self._format_duration(duration_seconds)
             duration_field = self.driver.find_element(By.ID, "contractLineGeneralDuration")
@@ -689,28 +669,6 @@ class EtereClient:
             print(f"[LINE] ✓ Days: {days}")
             
             # ═══════════════════════════════════════════════════════════════
-            # BLOCKS TAB
-            # ═══════════════════════════════════════════════════════════════
-            
-            if block_prefixes:
-                blocks_tab = self.driver.find_element(
-                    By.CSS_SELECTOR, "a[href='#tabLineBlocks']"
-                )
-                blocks_tab.click()
-                time.sleep(1)
-                
-                # Click "Add Blocks Automatically" button
-                add_blocks_btn = self.wait.until(EC.element_to_be_clickable(
-                    (By.ID, "contractLineBlocksAddBlockAutomatically")
-                ))
-                add_blocks_btn.click()
-                time.sleep(5)  # Wait for blocks to populate
-                
-                # Filter by prefix
-                self._filter_blocks_by_prefix(block_prefixes)
-                print(f"[LINE] ✓ Blocks: {block_prefixes}")
-            
-            # ═══════════════════════════════════════════════════════════════
             # OPTIONS TAB
             # ═══════════════════════════════════════════════════════════════
             
@@ -736,16 +694,6 @@ class EtereClient:
             order_field.send_keys(str(order_int))
             
             print(f"[LINE] ✓ Intervals: Cust={customer_int}, Event={event_int}, Order={order_int}")
-            
-            # SCHEDULING TYPE - Bookend (Top and Bottom)
-            if is_bookend:
-                print(f"[LINE] Setting bookend scheduling...")
-                try:
-                    self._click_iradio_by_value("selectedSchedulingType", "6")
-                    time.sleep(0.5)
-                    print(f"[LINE] ✓ Bookend set")
-                except Exception as e:
-                    print(f"[LINE] ⚠ Bookend: {e}")
             
             # ═══════════════════════════════════════════════════════════════
             # SAVE LINE
@@ -821,40 +769,6 @@ class EtereClient:
             checkbox = self.driver.find_element(By.ID, day_ids[day_index])
             if not self._is_icheck_checked(checkbox):
                 self._click_icheck(checkbox)
-    
-    def _filter_blocks_by_prefix(self, prefixes: List[str]) -> None:
-        """Filter programming blocks by language prefixes."""
-        try:
-            block_checkboxes = self.driver.find_elements(
-                By.CLASS_NAME, "block-checkbox"
-            )
-            
-            selected_count = 0
-            for checkbox in block_checkboxes:
-                block_id = checkbox.get_attribute("id")
-                block_label = self.driver.find_element(
-                    By.CSS_SELECTOR, f"label[for='{block_id}']"
-                )
-                block_name = block_label.text.strip()
-                
-                should_select = False
-                for prefix in prefixes:
-                    if block_name.startswith(f"{prefix} - "):
-                        should_select = True
-                        break
-                
-                if should_select:
-                    if not checkbox.is_selected():
-                        checkbox.click()
-                        selected_count += 1
-                else:
-                    if checkbox.is_selected():
-                        checkbox.click()
-            
-            print(f"[BLOCKS] Selected {selected_count} blocks")
-            
-        except Exception as e:
-            print(f"[BLOCKS] ⚠ Error: {e}")
     
     def _is_icheck_checked(self, checkbox) -> bool:
         """Check if iCheck checkbox is checked."""
@@ -1069,170 +983,6 @@ class EtereClient:
             return "Sa", 1
         else:
             return days, EtereClient._count_active_days(days) - 1
-    
-    # ═══════════════════════════════════════════════════════════════════════
-    # WEEK CONSOLIDATION UTILITIES
-    # ═══════════════════════════════════════════════════════════════════════
-    
-    @staticmethod
-    def calculate_week_end_date(week_start: str, flight_end: str) -> str:
-        """
-        Calculate the end date for a week, capped by flight end date.
-        
-        A "week" runs 6 days from start (Mon-Sun). The last week
-        may end earlier if the flight ends mid-week.
-        
-        Args:
-            week_start: Week start date in MM/DD/YYYY format
-            flight_end: Overall flight end date in MM/DD/YYYY format
-            
-        Returns:
-            Week end date in MM/DD/YYYY format
-        """
-        from datetime import datetime, timedelta
-        start = datetime.strptime(week_start, "%m/%d/%Y")
-        end = datetime.strptime(flight_end, "%m/%d/%Y")
-        week_natural_end = start + timedelta(days=6)
-        actual_end = min(week_natural_end, end)
-        return actual_end.strftime("%m/%d/%Y")
-    
-    @staticmethod
-    def consolidate_weeks(
-        weekly_spots: list,
-        week_start_dates: list,
-        flight_end: str,
-    ) -> list:
-        """
-        Group consecutive weeks with the same spot count into single Etere lines.
-        
-        UNIVERSAL RULE: When spot counts are identical across consecutive weeks,
-        combine them into one contract line spanning the full date range.
-        This dramatically reduces the number of lines entered.
-        
-        When spot counts differ, split at the boundary into separate groups.
-        
-        Examples:
-            [3,3,3,3,3,3,3,3,3] → 1 group  (3/wk × 9wk = 27 total)
-            [3,3,3,5,5,5,3,3,3] → 3 groups (9, 15, 9)
-            [0,0,3,3,3,0,0,0,0] → 1 group  (3/wk × 3wk, zeros skipped)
-        
-        Args:
-            weekly_spots: List of spot counts per week (ints)
-            week_start_dates: List of week start dates (str MM/DD/YYYY) or
-                objects with .start_date attribute (e.g., CharmaineWeekColumn)
-            flight_end: Overall flight end date (MM/DD/YYYY)
-            
-        Returns:
-            List of dicts with keys:
-                start_date:     First day of group (MM/DD/YYYY)
-                end_date:       Last day of group (MM/DD/YYYY)
-                spots_per_week: Spots per week in this group (int)
-                spots:          Total spots in this group (int)
-                weeks:          Number of weeks in this group (int)
-                total_spots:    Same as spots (alias for compatibility)
-                num_weeks:      Same as weeks (alias for compatibility)
-        """
-        groups: list = []
-        
-        # Normalize week_start_dates to strings
-        def _get_date(item) -> str:
-            if isinstance(item, str):
-                return item
-            return getattr(item, 'start_date', str(item))
-        
-        # Filter to non-zero weeks with valid date data
-        active_weeks = []
-        for idx, spots in enumerate(weekly_spots):
-            if spots > 0 and idx < len(week_start_dates):
-                active_weeks.append((idx, spots))
-        
-        if not active_weeks:
-            return groups
-        
-        # Group consecutive weeks with same spot count
-        current_start_idx = active_weeks[0][0]
-        current_spots = active_weeks[0][1]
-        current_count = 1
-        
-        for i in range(1, len(active_weeks)):
-            idx, spots = active_weeks[i]
-            prev_idx = active_weeks[i - 1][0]
-            
-            if spots == current_spots and idx == prev_idx + 1:
-                current_count += 1
-            else:
-                # Close current group
-                group_start = _get_date(week_start_dates[current_start_idx])
-                last_idx = active_weeks[i - 1][0]
-                group_end = EtereClient.calculate_week_end_date(
-                    _get_date(week_start_dates[last_idx]), flight_end
-                )
-                total = current_spots * current_count
-                groups.append({
-                    'start_date': group_start,
-                    'end_date': group_end,
-                    'spots_per_week': current_spots,
-                    'spots': total,
-                    'weeks': current_count,
-                    'total_spots': total,
-                    'num_weeks': current_count,
-                })
-                
-                # Start new group
-                current_start_idx = idx
-                current_spots = spots
-                current_count = 1
-        
-        # Close final group
-        group_start = _get_date(week_start_dates[current_start_idx])
-        last_idx = active_weeks[-1][0]
-        group_end = EtereClient.calculate_week_end_date(
-            _get_date(week_start_dates[last_idx]), flight_end
-        )
-        total = current_spots * current_count
-        groups.append({
-            'start_date': group_start,
-            'end_date': group_end,
-            'spots_per_week': current_spots,
-            'spots': total,
-            'weeks': current_count,
-            'total_spots': total,
-            'num_weeks': current_count,
-        })
-        
-        return groups
-    
-    @staticmethod
-    def consolidate_weeks_from_flight(
-        weekly_spots: list,
-        flight_start: str,
-        flight_end: str,
-    ) -> list:
-        """
-        Convenience wrapper for consolidate_weeks when only flight dates are available.
-        
-        Generates week start dates from flight_start (one per week, 7 days apart)
-        then delegates to consolidate_weeks.
-        
-        Used by agencies like TCAA whose parsers provide flight dates
-        instead of explicit week start date lists.
-        
-        Args:
-            weekly_spots: List of spot counts per week
-            flight_start: Flight start date (MM/DD/YYYY)
-            flight_end: Flight end date (MM/DD/YYYY)
-            
-        Returns:
-            Same as consolidate_weeks
-        """
-        from datetime import datetime, timedelta
-        start = datetime.strptime(flight_start, "%m/%d/%Y")
-        week_dates = []
-        for i in range(len(weekly_spots)):
-            week_date = start + timedelta(weeks=i)
-            week_dates.append(week_date.strftime("%m/%d/%Y"))
-        
-        return EtereClient.consolidate_weeks(weekly_spots, week_dates, flight_end)
     
     @staticmethod
     def _count_active_days(days: str) -> int:

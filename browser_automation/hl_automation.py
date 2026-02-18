@@ -26,7 +26,6 @@ from typing import Optional
 from selenium import webdriver
 
 from browser_automation.etere_client import EtereClient
-from browser_automation.language_utils import get_language_block_prefixes
 from parsers.hl_parser import (
     HLEstimate,
     HLLine,
@@ -232,7 +231,6 @@ def _execute_order(
                     total_spots=etere_line["total_spots"],
                     spots_per_week=etere_line["spots_per_week"],
                     rate=etere_line["rate"],
-                    block_prefixes=etere_line["block_prefixes"],
                     separation_intervals=separation,
                 )
 
@@ -299,14 +297,10 @@ def _build_etere_lines(
         # Force BNS, use IO time, description = "BNS ROS"
         spot_code = SPOT_CODE_BONUS
         description = f"{etere_days} {time_fmt} BNS ROS"
-        # No block filtering - user removes inapplicable blocks manually
-        block_prefixes = None
     else:
         # Standard line
         spot_code = SPOT_CODE_BONUS if line.is_bonus() else SPOT_CODE_PAID
         description = f"{etere_days} {time_fmt}{lang_suffix}"
-        # Get language block prefixes (universal function)
-        block_prefixes = get_language_block_prefixes(language) if language and language != "Unknown" else None
 
     # Parse time range using EtereClient universal parser
     time_from, time_to = EtereClient.parse_time_range(line.time)
@@ -325,7 +319,6 @@ def _build_etere_lines(
             "total_spots": range_data["spots"],
             "spots_per_week": range_data["spots_per_week"],
             "rate": line.rate,
-            "block_prefixes": block_prefixes,
         })
 
     return etere_lines

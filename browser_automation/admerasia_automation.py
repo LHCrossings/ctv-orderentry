@@ -505,9 +505,7 @@ def process_admerasia_order(
                 total_spots=line_spec['total_spots'],
                 spots_per_week=spots_per_week,
                 max_daily_run=line_spec['per_day_max'],
-                rate=float(line_spec['rate']),
-                block_prefixes=None,  # No block filtering for Admerasia
-                separation_intervals=separation,
+                rate=float(line_spec['rate']),                separation_intervals=separation,
             )
 
             if not success:

@@ -130,6 +130,7 @@ class OrderProcessingService:
                     OrderType.DAVISELEN, OrderType.SAGENT,
                     OrderType.CHARMAINE, OrderType.ADMERASIA,
                     OrderType.OPAD, OrderType.HL, OrderType.IGRAPHIX,
+                    OrderType.IMPACT,
                 ]
                 for order in orders
             )
@@ -253,6 +254,8 @@ class OrderProcessingService:
             return self._process_opad_order(order, shared_session)
         elif order.order_type == OrderType.IGRAPHIX:
             return self._process_igraphix_order(order, shared_session)
+        elif order.order_type == OrderType.IMPACT:
+            return self._process_impact_order(order, shared_session)
         else:
             # For future agencies: process_order will handle them
             return self.process_order(order, shared_session)
@@ -1391,6 +1394,97 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.IGRAPHIX,
+                error_message=error_detail
+            )
+
+    def _process_impact_order(
+        self,
+        order: Order,
+        shared_session: any
+    ) -> ProcessingResult:
+        """
+        Process Impact Marketing order using impact_automation.
+
+        Impact orders have:
+        - Big Valley Ford as sole client (Customer ID: 252)
+        - CVC market only (Central Valley)
+        - One PDF = up to 4 quarters = up to 4 separate Etere contracts
+        - Quarterly line splitting (different spot counts per week = split lines)
+        - Bookend option (:15 spots placed first/last in break)
+        - Separation: customer=15, event=0, order=0
+        - Universal agency billing
+        - Master market: NYC (set by session before calling)
+
+        Args:
+            order: Impact order to process
+            shared_session: Shared browser session (EtereSession)
+
+        Returns:
+            ProcessingResult with success status
+        """
+        try:
+            from browser_automation.impact_automation import process_impact_order
+
+            print(f"\n{'='*70}")
+            print(f"PROCESSING IMPACT MARKETING ORDER")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            if order.customer_name:
+                print(f"Customer: {order.customer_name}")
+            print(f"{'='*70}\n")
+
+            # Impact REQUIRES a browser session
+            if shared_session is None:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.IMPACT,
+                    error_message="Browser session required for Impact Marketing orders"
+                )
+
+            # Get inputs from order (already collected by orchestrator)
+            if not order.order_input:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.IMPACT,
+                    error_message="Order inputs not collected"
+                )
+
+            print("[SESSION] ✓ Using shared browser session")
+            # Market already set to NYC once at batch start
+
+            # Process the order with pre-collected inputs (matching iGraphix pattern)
+            success = process_impact_order(
+                driver=shared_session.driver,  # ← Pass driver, not session!
+                pdf_path=str(order.pdf_path),
+                user_input=order.order_input
+            )
+
+            contracts = []
+
+            if success:
+                print(f"\n✓ Impact Marketing order processed successfully")
+            else:
+                print(f"\n✗ Impact Marketing order processing failed")
+
+            return ProcessingResult(
+                success=success,
+                contracts=contracts,
+                order_type=OrderType.IMPACT,
+                error_message=None if success else "Processing failed"
+            )
+
+        except Exception as e:
+            import traceback
+            error_detail = f"Impact Marketing processing error: {str(e)}\n{traceback.format_exc()}"
+
+            print(f"\n✗ Impact Marketing processing failed: {e}")
+
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.IMPACT,
                 error_message=error_detail
             )
 

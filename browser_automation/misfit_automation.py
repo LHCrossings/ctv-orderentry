@@ -31,7 +31,6 @@ if str(_src_path) not in sys.path:
 
 from browser_automation.etere_client import EtereClient
 from browser_automation.ros_definitions import get_ros_schedule
-from browser_automation.language_utils import get_language_block_prefixes
 from parsers.misfit_parser import (
     parse_misfit_pdf,
     MisfitOrder,
@@ -460,9 +459,6 @@ def create_misfit_contract(
                     days = line.days
                     time = line.time
                 
-                # Get language block prefixes (universal function)
-                block_prefixes = get_language_block_prefixes(line.language) if line.language else []
-                
                 # Spot code
                 spot_code = 10 if line.is_bonus else 2  # BNS=10, Paid=2
                 
@@ -517,9 +513,7 @@ def create_misfit_contract(
                         total_spots=total_spots,  # Calculated from spots_per_week * weeks
                         spots_per_week=spots_per_week,
                         # max_daily_run is auto-calculated - no need to pass it!
-                        rate=line.rate,
-                        block_prefixes=block_prefixes,
-                        separation_intervals=separation_intervals,
+                        rate=line.rate,                        separation_intervals=separation_intervals,
                         is_bookend=False
                     )
                     

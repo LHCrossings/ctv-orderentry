@@ -35,7 +35,6 @@ from browser_automation.etere_client import EtereClient
 from selenium.webdriver.common.by import By
 from browser_automation.ros_definitions import ROS_SCHEDULES
 from browser_automation.language_utils import (
-    get_language_block_prefixes,
     extract_language_from_program,
 )
 from src.domain.enums import BillingType, OrderType, OrderBillingType, detect_order_billing_type
@@ -842,12 +841,6 @@ def process_charmaine_order(
                 # Parse time range through etere_client (handles semicolons)
                 time_from, time_to = EtereClient.parse_time_range(time_range)
                 
-                # Block prefixes
-                block_prefixes = get_language_block_prefixes(
-                    language,
-                    hindi_punjabi_both=hindi_punjabi if language == "South Asian" else None
-                )
-                
                 # ═══════════════════════════════════════════════════
                 # CONSOLIDATED LINE ENTRY
                 # ═══════════════════════════════════════════════════
@@ -884,9 +877,7 @@ def process_charmaine_order(
                         duration_seconds=order.duration_seconds,
                         total_spots=group_total,
                         spots_per_week=group_spots_per_week,
-                        rate=rate,
-                        block_prefixes=block_prefixes,
-                        separation_intervals=separation,
+                        rate=rate,                        separation_intervals=separation,
                     )
                     
                     if not success:

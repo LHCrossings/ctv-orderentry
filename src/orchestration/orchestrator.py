@@ -369,6 +369,31 @@ class ApplicationOrchestrator:
                 
                 continue
             
+            # IMPACT: Gather inputs upfront (before browser session)
+            if order.order_type == OrderType.IMPACT:
+                print(f"Type: IMPACT")
+                print(f"Customer: {order.customer_name}")
+                print()
+                
+                try:
+                    from browser_automation.impact_automation import gather_impact_inputs
+                    
+                    impact_inputs = gather_impact_inputs(str(order.pdf_path))
+                    
+                    if not impact_inputs:
+                        print("\n[CANCELLED] Impact Marketing input gathering cancelled")
+                        continue
+                    
+                    order_with_input = order.with_input(impact_inputs)
+                    orders_with_input.append(order_with_input)
+                    
+                except ImportError as e:
+                    print(f"\n[ERROR] Could not import Impact Marketing automation: {e}")
+                    print("[INFO] Falling back to runtime input gathering")
+                    orders_with_input.append(order)
+                
+                continue
+            
             # Collect input for other order types
             order_input = self._input_collector.collect_order_input(order)
             

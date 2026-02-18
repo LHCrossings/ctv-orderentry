@@ -11,7 +11,6 @@ opAD Business Rules:
 - Billing: Charge To = "Customer share indicating agency %", Invoice Header = "Agency"
 - Description from IO → contract header Notes field
 - Estimate number → Customer Order Ref
-- No block filtering (block_prefixes=None)
 - Bonus lines (rate=0) → spot code BNS (10)
 - Weekly distribution splitting on gaps and differing spot counts
 - Sunday 6-7a paid programming rule applies
@@ -169,9 +168,7 @@ def _execute_order(
                 duration_seconds=line.duration,
                 total_spots=etere_line["total_spots"],
                 spots_per_week=etere_line["spots_per_week"],
-                rate=etere_line["rate"],
-                block_prefixes=None,  # No block filtering for opAD
-                separation_intervals=separation,
+                rate=etere_line["rate"],                separation_intervals=separation,
             )
 
             if not success:
