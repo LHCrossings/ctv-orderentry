@@ -213,7 +213,7 @@ def _extract_lines_from_page(text: str, num_weeks: int) -> List[OpADLine]:
             continue
         
         # Check if this line starts with a station or day pattern
-        if re.match(r'^(CROSSINGS TV|M-Su|M-F|M-Sa|Sa-Su)', line.strip()):
+        if re.match(r'^(CROSSINGS TV|M-Su|M-F|M-Sa|Sa-Su|M-Th|Tu-F|M|Tu|W|Th|F|Sa|Su)\b', line.strip()):
             line_obj, next_idx = _parse_line_entry(text_lines, i, num_weeks, current_language)
             if line_obj:
                 lines.append(line_obj)
@@ -253,8 +253,8 @@ def _parse_line_entry(text_lines: List[str], start_index: int, num_weeks: int, c
         # Station is either explicit or implied (CROSSINGS TV for all)
         station = "CROSSINGS TV"
         
-        # Days pattern: M-Su, M-F, M-Sa, Sa-Su
-        days_match = re.search(r'(M-Su|M-F|M-Sa|Sa-Su|M-Th|Tu-F)', line)
+        # Days pattern: M-Su, M-F, M-Sa, Sa-Su, or single days (M, Tu, W, Th, F, Sa, Su)
+        days_match = re.search(r'(M-Su|M-F|M-Sa|Sa-Su|M-Th|Tu-F|Tu|Th|Su|Sa|M|W|F)\b', line)
         if not days_match:
             return None, start_index + 1
         
@@ -282,7 +282,7 @@ def _parse_line_entry(text_lines: List[str], start_index: int, num_weeks: int, c
                 next_line = text_lines[next_idx].strip()
                 
                 # Check if next line is a program continuation (not a new line or language)
-                is_new_line = re.match(r'^(CROSSINGS TV|M-Su|M-F|M-Sa|Sa-Su)', next_line)
+                is_new_line = re.match(r'^(CROSSINGS TV|M-Su|M-F|M-Sa|Sa-Su|M-Th|Tu-F|M|Tu|W|Th|F|Sa|Su)\b', next_line)
                 is_language = next_line in ['MANDARIN', 'CANTONESE', 'KOREAN', 'VIETNAMESE', 'FILIPINO', 'SOUTH ASIAN', 'PUNJABI', 'HMONG']
                 
                 if not is_new_line and not is_language:

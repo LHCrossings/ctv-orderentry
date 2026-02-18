@@ -224,11 +224,11 @@ def format_time_for_description(time_str: str) -> str:
 
 def get_default_customer_order_ref(order: AdmerasiaOrder) -> str:
     """
-    Get default customer/order reference for contract notes.
+    Get default customer/order reference.
     
-    Returns: "McDonald's [Order Number]"
+    Returns: Just the order number (e.g., "05-MD10-2602FT")
     """
-    return f"McDonald's {order.order_number}"
+    return order.order_number
 
 
 def get_default_notes(order: AdmerasiaOrder) -> str:
@@ -1137,9 +1137,16 @@ def _normalize_time_to_colon_format(time_str: str) -> str:
     Examples:
         "7-730p" → "7:00p-7:30p"
         "7:00-7:30p" → "7:00p-7:30p"  (has colon but shared am/pm)
+        "11:30-12:00p" → "11:30a-12:00p"  (noon-crossing: start must be AM)
+        "11-100p" → "11:00a-1:00p"  (noon-crossing: start must be AM)
         "1030p-12a" → "10:30p-12:00a"
         "6a-7a" → "6:00a-7:00a"  
         "7:00p-7:30p" → "7:00p-7:30p" (already normalized)
+    
+    NOON-CROSSING RULE: When a shared period is 'p' but start_hour > end_hour
+    (e.g., 11 > 1 in "11:30-1:00p"), the start time must be AM because going
+    from 11pm to 1pm would be backward. This handles the common case where
+    Admerasia PDFs write "11:30-12:00p" meaning 11:30am-12:00pm.
     """
     import re
     
@@ -1155,7 +1162,20 @@ def _normalize_time_to_colon_format(time_str: str) -> str:
         end_hour = match.group(3)
         end_min = match.group(4)
         period = match.group(5)
-        return f"{start_hour}:{start_min}{period}-{end_hour}:{end_min}{period}"
+        
+        # Detect noon-crossing: "11:30-12:00p" means 11:30a-12:00p
+        # Rule: if shared period is 'p', start is AM when:
+        #   - end is 12 and start is not 12 (e.g., 11:30-12:00p)
+        #   - start > end and start is not 12 (e.g., 11:30-1:00p)
+        # But NOT when start is 12 (e.g., 12:00-1:00p stays PM)
+        start_period = period
+        start_h = int(start_hour)
+        end_h = int(end_hour)
+        if period == 'p' and start_h != 12:
+            if end_h == 12 or start_h > end_h:
+                start_period = 'a'
+        
+        return f"{start_hour}:{start_min}{start_period}-{end_hour}:{end_min}{period}"
     
     # Pattern 3: "7-730p" or "6-7a" (shared am/pm at end, no colons)
     match = re.match(r'^(\d+)-(\d{3,4})([ap])$', time_str)
@@ -1175,7 +1195,16 @@ def _normalize_time_to_colon_format(time_str: str) -> str:
         else:
             return time_str  # Can't parse
         
-        return f"{start_hour}:00{period}-{end_hour}:{end_min}{period}"
+        # Detect noon-crossing: "11-1200p" means 11:00a-12:00p
+        # Same rule as Pattern 2
+        start_period = period
+        start_h = int(start_hour)
+        end_h = int(end_hour)
+        if period == 'p' and start_h != 12:
+            if end_h == 12 or start_h > end_h:
+                start_period = 'a'
+        
+        return f"{start_hour}:00{start_period}-{end_hour}:{end_min}{period}"
     
     # Pattern 4: "1030p-12a" (each has own am/pm, no colons in first time)
     match = re.match(r'^(\d{3,4})([ap])-(\d+)([ap])$', time_str)
@@ -1386,28 +1415,9 @@ def _are_consecutive_days(dows: List[str], day_order: List[str]) -> bool:
 # HELPER FUNCTIONS FOR AUTOMATION
 # ============================================================================
 
-def get_default_order_code(order: AdmerasiaOrder) -> str:
-    """Generate default contract code from order data."""
-    # Format: "Admerasia [Estimate#]"
-    # Example: "Admerasia 11SE 2602"
-    estimate = order.get_estimate_number()
-    return f"Admerasia {estimate}"
-
-
-def get_default_order_description(order: AdmerasiaOrder) -> str:
-    """Generate default contract description from order data."""
-    # Use estimate number
-    return order.get_estimate_number()
-
-
-def get_default_customer_order_ref(order: AdmerasiaOrder) -> str:
-    """Generate customer order reference - just the order number."""
-    return order.order_number
-
-
-def get_default_notes(order: AdmerasiaOrder) -> str:
-    """Generate notes field content - header text verbatim."""
-    return order.header_text
+# NOTE: get_default_order_code, get_default_order_description,
+# get_default_customer_order_ref, and get_default_notes are defined
+# earlier in this file (near line 225-280). Do NOT duplicate them here.
 
 
 def get_admerasia_billing_defaults() -> Dict[str, str]:

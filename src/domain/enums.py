@@ -13,18 +13,20 @@ class OrderType(Enum):
     Types of advertising orders supported by the system.
     
     Each agency has unique PDF formats and processing requirements.
+    CHARMAINE is a generic catch-all for Charmaine's direct client orders.
     """
     WORLDLINK = "worldlink"
     TCAA = "tcaa"
     OPAD = "opad"
     RPM = "rpm"
-    HL_PARTNERS = "hl"
+    HL = "hl"
     DAVISELEN = "daviselen"
     MISFIT = "misfit"
     IMPACT = "impact"
     IGRAPHIX = "igraphix"
     ADMERASIA = "admerasia"
     SAGENT = "sagent"
+    CHARMAINE = "charmaine"
     UNKNOWN = "unknown"
     
     def requires_block_refresh(self) -> bool:
@@ -35,6 +37,98 @@ class OrderType(Enum):
     def supports_multiple_markets(self) -> bool:
         """Check if this order type can span multiple markets."""
         return self in {OrderType.WORLDLINK, OrderType.MISFIT, OrderType.RPM, OrderType.SAGENT}
+    
+    def is_always_agency(self) -> bool:
+        """
+        Check if this order type is always an agency order.
+        
+        All known agency OrderTypes are always billed as agency.
+        CHARMAINE and UNKNOWN may be either agency or client.
+        """
+        return self not in {OrderType.CHARMAINE, OrderType.UNKNOWN}
+
+
+class OrderBillingType(Enum):
+    """
+    Whether an order comes through an agency or direct from a client.
+    
+    This determines billing configuration universally across ALL order types.
+    
+    AGENCY orders:
+        - Charge To: "Customer share indicating agency %"
+        - Invoice Header: "Agency"
+        
+    CLIENT orders:
+        - Charge To: "Customer"
+        - Invoice Header: "Customer"
+    
+    Detection logic:
+        - Known agency OrderTypes (WORLDLINK, TCAA, MISFIT, etc.) → AGENCY
+        - No agency detected in PDF → likely CLIENT → prompt user to confirm
+    """
+    AGENCY = "agency"
+    CLIENT = "client"
+    
+    def get_billing_type(self) -> "BillingType":
+        """Map order billing type to standard billing configuration."""
+        if self == OrderBillingType.AGENCY:
+            return BillingType.CUSTOMER_SHARE_AGENCY
+        else:
+            return BillingType.CUSTOMER_DIRECT
+    
+    def get_charge_to(self) -> str:
+        """Convenience: get charge_to string directly."""
+        return self.get_billing_type().get_charge_to()
+    
+    def get_invoice_header(self) -> str:
+        """Convenience: get invoice_header string directly."""
+        return self.get_billing_type().get_invoice_header()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# KNOWN AGENCY KEYWORDS - For auto-detection of agency vs client orders
+# ═══════════════════════════════════════════════════════════════════════════════
+
+KNOWN_AGENCY_KEYWORDS: list[str] = [
+    "worldlink", "tatari", "tcaa", "daviselen", "misfit",
+    "igraphix", "admerasia", "opad", "rpm", "h&l partners",
+    "impact marketing", "sagent", "galeforce", "galeforcemedia",
+    "ntooitive",
+]
+"""
+If ANY of these keywords appear in the PDF text (case-insensitive),
+the order is automatically flagged as an AGENCY order.
+If NONE are found, the system prompts the user to confirm CLIENT.
+"""
+
+
+def detect_order_billing_type(pdf_text: str) -> tuple[OrderBillingType, str | None]:
+    """
+    Detect whether an order is agency or client based on PDF content.
+    
+    Scans PDF text for known agency keywords. If found, returns AGENCY
+    with the matched keyword. If not found, returns CLIENT with None.
+    
+    Args:
+        pdf_text: Full text extracted from the PDF
+        
+    Returns:
+        Tuple of (OrderBillingType, matched_keyword_or_None)
+        
+    Examples:
+        >>> detect_order_billing_type("Agency: TCAA\\nClient: Toyota")
+        (OrderBillingType.AGENCY, "tcaa")
+        
+        >>> detect_order_billing_type("Sacramento Region Community Foundation")
+        (OrderBillingType.CLIENT, None)
+    """
+    text_lower = pdf_text.lower()
+    
+    for keyword in KNOWN_AGENCY_KEYWORDS:
+        if keyword in text_lower:
+            return OrderBillingType.AGENCY, keyword
+    
+    return OrderBillingType.CLIENT, None
 
 
 class OrderStatus(Enum):
@@ -120,11 +214,11 @@ class Language(Enum):
         Get the Etere block code abbreviation for this language.
         
         Returns:
-            Block code used in Etere system (e.g., "C/M" for Chinese)
+            Block code used in Etere system (e.g., "M/C" for Chinese)
         """
         block_codes = {
-            Language.MANDARIN: "C/M",
-            Language.CANTONESE: "C/M",
+            Language.MANDARIN: "M/C",
+            Language.CANTONESE: "M/C",
             Language.FILIPINO: "T",
             Language.KOREAN: "K",
             Language.VIETNAMESE: "V",
@@ -133,7 +227,7 @@ class Language(Enum):
             Language.PUNJABI: "SA/P",
             Language.JAPANESE: "J",
         }
-        return block_codes.get(self, "C/M")
+        return block_codes.get(self, "M/C")
 
 
 class BillingType(Enum):
@@ -171,6 +265,7 @@ class SeparationInterval(Enum):
     DAVISELEN_DEFAULT = (15, 0, 0)
     MISFIT = (15, 0, 0)
     SAGENT = (10, 0, 0)
+    CHARMAINE = (15, 0, 0)
     DEFAULT = (15, 0, 0)
     
     @classmethod
@@ -188,9 +283,10 @@ class SeparationInterval(Enum):
             OrderType.WORLDLINK: cls.WORLDLINK.value,
             OrderType.OPAD: cls.OPAD.value,
             OrderType.RPM: cls.RPM.value,
-            OrderType.HL_PARTNERS: cls.HL_PARTNERS.value,
+            OrderType.HL: cls.HL_PARTNERS.value,
             OrderType.DAVISELEN: cls.DAVISELEN_DEFAULT.value,
             OrderType.MISFIT: cls.MISFIT.value,
             OrderType.SAGENT: cls.SAGENT.value,
+            OrderType.CHARMAINE: cls.CHARMAINE.value,
         }
         return mapping.get(order_type, cls.DEFAULT.value)

@@ -270,8 +270,8 @@ def _parse_line_entry(text_lines: List[str], start_index: int) -> Tuple[Optional
             next_line_idx = start_index + 1
             if next_line_idx < len(text_lines):
                 next_line = text_lines[next_line_idx].strip()
-                # Check if next line starts with a time (e.g., "9:00p EN $65.00...")
-                time_continuation = re.match(r'^(\d+:\d+[ap])\s', next_line)
+                # Check if next line starts with a time (e.g., "9:00p EN $65.00..." or just "9:00p")
+                time_continuation = re.match(r'^(\d+:\d+[ap])', next_line)
                 if time_continuation:
                     # Complete the time
                     time_str += time_continuation.group(1)
@@ -428,77 +428,32 @@ def convert_hl_days_to_etere(hl_days: str) -> str:
         'Tu': 'Tu',
         'W': 'W',
         'Th': 'Th',
-        'F': 'F'
+        'F': 'F',
+        'WThF': 'WThF',
+        'WThFSaSu': 'WThFSaSu',
+        'WThFSa': 'WThFSa',
+        'ThF': 'ThF',
+        'ThFSaSu': 'ThFSaSu',
     }
     
     return mapping.get(hl_days, hl_days)
 
 
-def extract_language_from_program(program: str) -> str:
-    """
-    Extract language from program description.
-    
-    Args:
-        program: Program text (e.g., "mandarin news", "Korean News", "South Asian")
-        
-    Returns:
-        Language name with proper capitalization
-    """
-    program_lower = program.lower().strip()
-    
-    # Check for specific languages
-    if 'mandarin' in program_lower:
-        return 'Mandarin'
-    elif 'korean' in program_lower:
-        return 'Korean'
-    elif 'japanese' in program_lower:
-        return 'Japanese'
-    elif 'vietnamese' in program_lower:
-        return 'Vietnamese'
-    elif 'south asian' in program_lower:
-        return 'South Asian'
-    elif 'filipino' in program_lower:
-        return 'Filipino'
-    elif 'cantonese' in program_lower:
-        return 'Cantonese'
-    elif 'chinese' in program_lower:
-        return 'Chinese'
-    elif 'punjabi' in program_lower:
-        return 'Punjabi'
-    elif 'hindi' in program_lower:
-        return 'Hindi'
-    elif 'hmong' in program_lower:
-        return 'Hmong'
-    else:
-        # Return first word capitalized as fallback
-        return program.split()[0].capitalize() if program else 'Unknown'
+# ═══════════════════════════════════════════════════════════════════════════════
+# LANGUAGE UTILITIES - imported from universal language_utils
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# extract_language_from_program() → use language_utils.extract_language_from_program()
+# get_language_block_prefix()     → use language_utils.get_language_block_prefixes()
+#
+# These were removed from this file to avoid duplication.
+# Import from browser_automation.language_utils instead.
+# ═══════════════════════════════════════════════════════════════════════════════
 
-
-def get_language_block_prefix(language: str) -> List[str]:
-    """
-    Get block prefix(es) for a given language.
-    
-    Args:
-        language: Language name (e.g., "Mandarin", "Korean", "Chinese")
-        
-    Returns:
-        List of block prefixes to filter by
-    """
-    mapping = {
-        'Mandarin': ['M'],
-        'Korean': ['K'],
-        'South Asian': ['SA'],  # Note: May need user clarification for Hindi vs Punjabi
-        'Hindi': ['SA'],
-        'Punjabi': ['P'],
-        'Filipino': ['T'],
-        'Vietnamese': ['V'],
-        'Cantonese': ['C'],
-        'Chinese': ['M', 'C'],  # Both Mandarin and Cantonese
-        'Japanese': ['J'],
-        'Hmong': ['Hm']
-    }
-    
-    return mapping.get(language, [])
+from browser_automation.language_utils import (
+    extract_language_from_program,
+    get_language_block_prefixes as get_language_block_prefix,
+)
 
 
 def analyze_weekly_distribution(weekly_spots: List[int], flight_start: str, flight_end: str) -> List[Dict]:

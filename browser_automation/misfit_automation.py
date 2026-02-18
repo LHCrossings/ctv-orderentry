@@ -36,9 +36,9 @@ from parsers.misfit_parser import (
     parse_misfit_pdf,
     MisfitOrder,
     MisfitLine,
-    analyze_weekly_distribution,
     prompt_for_spot_duration,
-    _parse_week_date
+    _parse_week_date,
+    analyze_weekly_distribution,
 )
 
 # Customer detection
@@ -473,6 +473,7 @@ def create_misfit_contract(
                     for week in order.week_start_dates
                 ]
                 
+                # Consolidate weekly distribution (groups identical consecutive weeks)
                 ranges = analyze_weekly_distribution(
                     line.weekly_spots,
                     converted_week_dates,

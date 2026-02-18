@@ -9,7 +9,6 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .enums import OrderStatus, OrderType
-from .value_objects import OrderInput
 
 
 @dataclass(frozen=True)
@@ -27,7 +26,7 @@ class Order:
     order_type: OrderType
     customer_name: str
     status: OrderStatus = OrderStatus.PENDING
-    order_input: OrderInput | None = None
+    order_input: "OrderInput | None" = None
     estimate_number: str | None = None  # For multi-order PDFs (e.g., TCAA)
     
     def is_processable(self) -> bool:
@@ -56,14 +55,15 @@ class Order:
             OrderType.DAVISELEN,
             OrderType.ADMERASIA,
             OrderType.MISFIT,
-            OrderType.IMPACT
+            OrderType.IMPACT,
+            OrderType.CHARMAINE,
         }
     
     def with_status(self, status: OrderStatus) -> "Order":
         """Create new Order with updated status (immutability pattern)."""
         return replace(self, status=status)
     
-    def with_input(self, order_input: OrderInput) -> "Order":
+    def with_input(self, order_input: "OrderInput") -> "Order":
         """Create new Order with collected input data."""
         return replace(self, order_input=order_input)
     
@@ -148,10 +148,19 @@ class Customer:
     Represents a customer in the system.
     
     Customers are advertisers whose spots are scheduled in Etere.
+    The extended fields (abbreviation, default_market, etc.) support
+    the self-learning customer database — once a customer is entered,
+    their defaults are stored for future orders.
     """
     customer_id: str
     customer_name: str
     order_type: OrderType
+    abbreviation: str = ""              # Short code for contract codes (e.g., "SRCF")
+    default_market: str | None = None   # Default market code (e.g., "CVC"), None for any
+    billing_type: str = "agency"        # "agency" or "client"
+    separation_customer: int = 15       # Customer separation minutes
+    separation_event: int = 0           # Event separation minutes
+    separation_order: int = 0           # Order separation minutes
     
     def matches_name(self, name: str, threshold: float = 0.8) -> bool:
         """
@@ -178,3 +187,7 @@ class Customer:
         
         # For more sophisticated matching, would use fuzzywuzzy library
         return False
+    
+    def get_separation_intervals(self) -> tuple[int, int, int]:
+        """Get separation intervals as a tuple for etere_client."""
+        return (self.separation_customer, self.separation_event, self.separation_order)

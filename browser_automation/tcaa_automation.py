@@ -30,7 +30,6 @@ from parsers.tcaa_parser import (
     TCAAEstimate,
     TCAALine,
     format_time_for_description,
-    analyze_weekly_distribution
 )
 
 
@@ -720,8 +719,8 @@ def create_tcaa_contract(
                 else:
                     block_prefixes = get_language_block_prefixes(language)
             
-            # Analyze weekly distribution (may split into multiple Etere lines)
-            ranges = analyze_weekly_distribution(
+            # Consolidate weekly distribution (groups identical consecutive weeks)
+            ranges = EtereClient.consolidate_weeks_from_flight(
                 line.weekly_spots,
                 estimate.flight_start,
                 estimate.flight_end

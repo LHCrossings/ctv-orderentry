@@ -312,14 +312,179 @@ class InputCollector:
             required=True
         )
         
+        # Get separation intervals (from DB or default)
+        separation = self._collect_separation_intervals(order)
+        
         return OrderInput(
             order_code=order_code,
-            description=description
+            description=description,
+            separation_intervals=separation,
         )
+    
+    def _collect_separation_intervals(
+        self,
+        order: Order,
+    ) -> tuple[int, int, int]:
+        """
+        Look up default separation from customer DB and prompt user to confirm.
+        
+        Universal for ALL agencies. Presents DB defaults (or system default 15,0,0)
+        and lets user confirm or change.
+        
+        Args:
+            order: Order being processed
+            
+        Returns:
+            Tuple of (customer, event, order) separation intervals in minutes
+        """
+        # Look up from database
+        default_sep = self._get_customer_separation(
+            order.customer_name or "",
+            order.order_type.name.lower(),
+        )
+        
+        if default_sep is None:
+            default_sep = (15, 0, 0)  # Industry standard default
+        
+        # Present to user
+        default_str = f"{default_sep[0]},{default_sep[1]},{default_sep[2]}"
+        print(f"\nSeparation intervals (customer, event, order)")
+        user_input = input(f"  Confirm or change (default: {default_str}): ").strip()
+        
+        if not user_input:
+            return default_sep
+        
+        # Parse user override
+        try:
+            parts = [int(x.strip()) for x in user_input.split(",")]
+            if len(parts) == 3:
+                return (parts[0], parts[1], parts[2])
+            elif len(parts) == 1:
+                # Single number = customer interval, rest stays default
+                return (parts[0], default_sep[1], default_sep[2])
+            else:
+                print(f"[WARN] Expected 3 values (got {len(parts)}), using default")
+                return default_sep
+        except ValueError:
+            print("[WARN] Invalid input, using default")
+            return default_sep
+    
+    def _get_customer_separation(
+        self,
+        customer_name: str,
+        order_type: str,
+    ) -> tuple[int, int, int] | None:
+        """
+        Look up customer separation intervals from database.
+        
+        Args:
+            customer_name: Customer name (from order detection)
+            order_type: Agency type (e.g., "opad", "tcaa")
+            
+        Returns:
+            (customer, event, order) tuple or None if not found
+        """
+        try:
+            import sqlite3
+            from pathlib import Path
+            
+            db_path = Path("data") / "customers.db"
+            if not db_path.exists():
+                return None
+            
+            with sqlite3.connect(str(db_path)) as conn:
+                # Exact match
+                cursor = conn.execute(
+                    """SELECT separation_customer, separation_event, separation_order
+                    FROM customers WHERE customer_name = ? AND order_type = ?""",
+                    (customer_name, order_type),
+                )
+                row = cursor.fetchone()
+                if row:
+                    return (row[0], row[1], row[2])
+                
+                # Fuzzy containment match
+                cursor = conn.execute(
+                    """SELECT customer_name, separation_customer, separation_event, separation_order
+                    FROM customers WHERE order_type = ?""",
+                    (order_type,),
+                )
+                for db_name, sep_c, sep_e, sep_o in cursor.fetchall():
+                    if (db_name.lower() in customer_name.lower()
+                            or customer_name.lower() in db_name.lower()):
+                        return (sep_c, sep_e, sep_o)
+                
+                return None
+                
+        except Exception:
+            return None
+    
+    def _get_customer_abbreviation(
+        self,
+        client_name: str,
+        order_type: str,
+    ) -> str | None:
+        """
+        Look up customer abbreviation from the database.
+        
+        Uses fuzzy matching against customer_name to find the right entry,
+        then returns the abbreviation field.
+        
+        Args:
+            client_name: Client name from the PDF
+            order_type: Agency type (e.g., "opad", "sagent")
+            
+        Returns:
+            Abbreviation string if found, None otherwise
+        """
+        try:
+            import sqlite3
+            from pathlib import Path
+            
+            db_path = Path("data") / "customers.db"
+            if not db_path.exists():
+                return None
+            
+            with sqlite3.connect(str(db_path)) as conn:
+                # Try exact match first
+                cursor = conn.execute(
+                    """
+                    SELECT abbreviation FROM customers
+                    WHERE customer_name = ? AND order_type = ? AND abbreviation IS NOT NULL
+                    """,
+                    (client_name, order_type),
+                )
+                row = cursor.fetchone()
+                if row and row[0]:
+                    return row[0]
+                
+                # Try fuzzy match: check if any DB name is contained in PDF name or vice versa
+                cursor = conn.execute(
+                    """
+                    SELECT customer_name, abbreviation FROM customers
+                    WHERE order_type = ? AND abbreviation IS NOT NULL
+                    """,
+                    (order_type,),
+                )
+                for db_name, abbrev in cursor.fetchall():
+                    if not abbrev:
+                        continue
+                    # Case-insensitive containment check
+                    if (db_name.lower() in client_name.lower()
+                            or client_name.lower() in db_name.lower()):
+                        return abbrev
+                
+                return None
+                
+        except Exception:
+            return None
     
     def _get_smart_defaults(self, order: Order) -> tuple[str, str]:
         """
         Generate smart default values for order code and description.
+        
+        Uses customer database abbreviation when available, falls back
+        to parsing the PDF for client name.
         
         Args:
             order: Order to generate defaults for
@@ -336,6 +501,29 @@ class InputCollector:
                 code = "TCAA Toyota"
                 description = "Toyota SEA"
             return (code, description)
+        
+        if order.order_type == OrderType.OPAD:
+            # opAD orders - look up abbreviation from customer DB, fall back to PDF parsing
+            try:
+                from parsers.opad_parser import parse_opad_pdf
+                parsed = parse_opad_pdf(str(order.pdf_path))
+                
+                # Try to get abbreviation from customer database
+                abbrev = self._get_customer_abbreviation(
+                    parsed.client, "opad"
+                )
+                
+                if not abbrev:
+                    # Fallback: first word of client name
+                    abbrev = parsed.client.split()[0] if parsed.client else "CLIENT"
+                
+                code = f"opAD {abbrev} {parsed.estimate_number}"
+                desc = parsed.description if parsed.description else parsed.product
+                desc = f"{desc} Est {parsed.estimate_number}"
+                return (code, desc)
+            except Exception as e:
+                print(f"[WARN] Could not parse opAD defaults: {e}")
+                return ("opAD Order", "opAD Order")
         
         # Default fallback for other order types
         return ("AUTO", "Order")

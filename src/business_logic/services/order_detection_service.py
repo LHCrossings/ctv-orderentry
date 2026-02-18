@@ -84,7 +84,7 @@ class OrderDetectionService:
         
         # H&L Partners (before TCAA - both use CRTV)
         if self._is_hl_partners(first_page_text):
-            return OrderType.HL_PARTNERS
+            return OrderType.HL
         
         # TCAA (specific CRTV-Cable marker)
         if self._is_tcaa(first_page_text):
@@ -482,7 +482,7 @@ class OrderDetectionService:
         elif order_type == OrderType.OPAD:
             return self._extract_opad_client(first_page_text)
         
-        elif order_type == OrderType.HL_PARTNERS:
+        elif order_type == OrderType.HL:
             return self._extract_hl_client(first_page_text)
         
         elif order_type == OrderType.DAVISELEN:
@@ -593,17 +593,15 @@ class OrderDetectionService:
         """
         Extract client from iGraphix order.
         
-        Pattern: "Advertiser: IGraphix c/o <client>"
+        Pattern: "Advertiser: IGraphix c/o <client>" where client is one line.
         """
         match = re.search(
-            r'Advertiser:.*?c/o\s+(.+?)(?:\n\n|\*\*PLEASE)',
+            r'Advertiser:.*?c/o\s+([^\n]+)',
             text,
             re.DOTALL | re.IGNORECASE
         )
         if match:
             client = match.group(1).strip()
-            # Clean up extra whitespace
-            client = re.sub(r'\s+', ' ', client)
             return client
         return None
     

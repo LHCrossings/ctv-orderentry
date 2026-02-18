@@ -86,6 +86,9 @@ class OrderProcessingService:
         # Misfit processor components (lazy loaded)
         self._misfit_processor = None
         
+        # Charmaine processor components (lazy loaded)
+        self._charmaine_processor = None
+        
         # Ensure directory structure exists
         self._setup_directories()
     
@@ -122,7 +125,12 @@ class OrderProcessingService:
         if browser_session is None and orders:
             # Check if any orders need browser automation
             needs_browser = any(
-                order.order_type in [OrderType.TCAA, OrderType.MISFIT, OrderType.WORLDLINK]
+                order.order_type in [
+                    OrderType.TCAA, OrderType.MISFIT, OrderType.WORLDLINK,
+                    OrderType.DAVISELEN, OrderType.SAGENT,
+                    OrderType.CHARMAINE, OrderType.ADMERASIA,
+                    OrderType.OPAD, OrderType.HL, OrderType.IGRAPHIX,
+                ]
                 for order in orders
             )
             
@@ -143,6 +151,13 @@ class OrderProcessingService:
                 print(f"{'='*70}\n")
                 
                 with EtereSession() as shared_session:
+                    # Set master market ONCE for the entire batch.
+                    # All Crossings TV agencies use NYC. The individual contract
+                    # lines set their own market (LAX, SEA, WDC, etc.) — master
+                    # market only affects the top-level session context.
+                    print("[SESSION] Setting master market to NYC...")
+                    shared_session.set_market("NYC")
+                    print("[SESSION] \u2713 Master market set \u2014 beginning batch\n")
                     return self._process_orders_with_session(orders, shared_session)
         
         # Session provided or no orders need browser
@@ -224,8 +239,20 @@ class OrderProcessingService:
             return self._process_tcaa_order(order, shared_session)
         elif order.order_type == OrderType.MISFIT:
             return self._process_misfit_order(order, shared_session)
+        elif order.order_type == OrderType.DAVISELEN:
+            return self._process_daviselen_order(order, shared_session)
         elif order.order_type == OrderType.SAGENT:
             return self._process_sagent_order(order, shared_session)
+        elif order.order_type == OrderType.CHARMAINE:
+            return self._process_charmaine_order(order, shared_session)
+        elif order.order_type == OrderType.ADMERASIA:
+            return self._process_admerasia_order(order, shared_session)
+        elif order.order_type == OrderType.HL:
+            return self._process_hl_order(order, shared_session)
+        elif order.order_type == OrderType.OPAD:
+            return self._process_opad_order(order, shared_session)
+        elif order.order_type == OrderType.IGRAPHIX:
+            return self._process_igraphix_order(order, shared_session)
         else:
             # For future agencies: process_order will handle them
             return self.process_order(order, shared_session)
@@ -392,6 +419,10 @@ class OrderProcessingService:
             if order.order_type == OrderType.MISFIT:
                 return self._process_misfit_order(order)
             
+            # Check if this is a Charmaine order that we can auto-process
+            if order.order_type == OrderType.CHARMAINE:
+                return self._process_charmaine_order(order)
+            
             # For other types, return stub result
             return self._create_stub_result(order)
         
@@ -538,7 +569,7 @@ class OrderProcessingService:
             if shared_session:
                 # BATCH MODE: Using shared session
                 print("[SESSION] ✓ Using shared browser session")
-                shared_session.set_market("NYC")
+                # Market already set to NYC once at batch start
                 
                 success = self._tcaa_processor['process'](
                     driver=shared_session.driver,
@@ -663,7 +694,7 @@ class OrderProcessingService:
             if shared_session:
                 # BATCH MODE: Using shared session
                 print("[SESSION] ✓ Using shared browser session")
-                shared_session.set_market("NYC")
+                # Market already set to NYC once at batch start
                 
                 success = self._misfit_processor['process'](
                     driver=shared_session.driver,
@@ -741,6 +772,96 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.MISFIT,
+                error_message=error_detail
+            )
+    
+    def _process_daviselen_order(
+        self,
+        order: Order,
+        shared_session: any
+    ) -> ProcessingResult:
+        """
+        Process Daviselen order using daviselen_automation.
+        
+        Daviselen orders have:
+        - Customer lookup from database (4 known customers)
+        - Smart contract code/description defaults
+        - Single market per order
+        - Universal agency billing
+        - Master market: NYC (set by session before calling)
+        
+        Args:
+            order: Daviselen order to process
+            shared_session: Shared browser session (EtereSession)
+            
+        Returns:
+            ProcessingResult with success status
+        """
+        try:
+            # Import Daviselen automation
+            from daviselen_automation import process_daviselen_order
+            
+            print(f"\n{'='*70}")
+            print(f"PROCESSING DAVISELEN ORDER")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            if order.customer_name:
+                print(f"Customer: {order.customer_name}")
+            print(f"{'='*70}\n")
+            
+            # Daviselen REQUIRES a browser session (no standalone mode)
+            if shared_session is None:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.DAVISELEN,
+                    error_message="Browser session required for Daviselen orders"
+                )
+            
+            # Get inputs from order (already collected by orchestrator)
+            if not order.order_input:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.DAVISELEN,
+                    error_message="Order inputs not collected"
+                )
+            
+            print("[SESSION] ✓ Using shared browser session")
+            # Market already set to NYC once at batch start
+            
+            # Process the order with pre-collected inputs (matching TCAA pattern)
+            success = process_daviselen_order(
+                driver=shared_session.driver,  # ← Pass driver, not session!
+                pdf_path=str(order.pdf_path),
+                user_input=order.order_input
+            )
+            
+            # TODO: Extract contract numbers from automation
+            contracts = []
+            
+            if success:
+                print(f"\n✓ Daviselen order processed successfully")
+            else:
+                print(f"\n✗ Daviselen order processing failed")
+            
+            return ProcessingResult(
+                success=success,
+                contracts=contracts,
+                order_type=OrderType.DAVISELEN,
+                error_message=None if success else "Processing failed"
+            )
+            
+        except Exception as e:
+            import traceback
+            error_detail = f"Daviselen processing error: {str(e)}\n{traceback.format_exc()}"
+            
+            print(f"\n✗ Daviselen processing failed: {e}")
+            
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.DAVISELEN,
                 error_message=error_detail
             )
     
@@ -828,9 +949,9 @@ class OrderProcessingService:
                     )
             
             # Use existing shared session
+            # Market already set to NYC once at batch start
             if hasattr(shared_session, 'set_market'):
-                shared_session.set_market("NYC")
-                print("[SESSION] Master market set to NYC for SAGENT multi-market order")
+                print("[SESSION] ✓ Using shared browser session (market pre-set to NYC)")
             
             # Get pre-gathered inputs from order if available
             pre_gathered_inputs = None
@@ -873,6 +994,494 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.SAGENT,
+                error_message=error_detail
+            )
+    
+    def _process_charmaine_order(
+        self,
+        order: Order,
+        shared_session: any = None
+    ) -> ProcessingResult:
+        """
+        Process Charmaine order using charmaine_automation.
+        
+        Charmaine orders are generic client template orders with:
+        - Single market per order (detected from PDF)
+        - Agency vs Client billing detection
+        - Customer DB integration (self-learning)
+        - Weekly line entry (each week = separate Etere line)
+        - Master market: NYC
+        
+        Args:
+            order: CHARMAINE order to process
+            shared_session: Shared browser session (creates one if None)
+            
+        Returns:
+            ProcessingResult with success status
+        """
+        try:
+            # Import CHARMAINE automation
+            from charmaine_automation import process_charmaine_order
+            
+            print(f"\n{'='*70}")
+            print(f"PROCESSING CHARMAINE ORDER")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            if order.customer_name:
+                print(f"Customer: {order.customer_name}")
+            print(f"{'='*70}\n")
+            
+            # If no shared session, create one for this order
+            if shared_session is None:
+                try:
+                    from etere_session import EtereSession
+                    
+                    print("[SESSION] Creating browser session for CHARMAINE order...")
+                    
+                    with EtereSession() as session:
+                        # Set master market to NYC
+                        session.set_market("NYC")
+                        print("[SESSION] Master market set to NYC")
+                        
+                        # Create EtereClient from session driver
+                        from etere_client import EtereClient
+                        etere_client = EtereClient(session.driver)
+                        
+                        # Process order
+                        success = process_charmaine_order(
+                            str(order.pdf_path),
+                            shared_session=etere_client
+                        )
+                        
+                        if success:
+                            print(f"\n✓ CHARMAINE order processed successfully")
+                            return ProcessingResult(
+                                success=True,
+                                contracts=[],
+                                order_type=OrderType.CHARMAINE
+                            )
+                        else:
+                            print(f"\n✗ CHARMAINE order processing failed")
+                            return ProcessingResult(
+                                success=False,
+                                contracts=[],
+                                order_type=OrderType.CHARMAINE,
+                                error_message="CHARMAINE processing failed - check browser output"
+                            )
+                            
+                except ImportError:
+                    print("[ERROR] Could not import EtereSession")
+                    return ProcessingResult(
+                        success=False,
+                        contracts=[],
+                        order_type=OrderType.CHARMAINE,
+                        error_message="EtereSession import failed"
+                    )
+            
+            # Use existing shared session
+            # Market already set to NYC once at batch start
+            if hasattr(shared_session, 'set_market'):
+                print("[SESSION] ✓ Using shared browser session (market pre-set to NYC)")
+            
+            # Create EtereClient from session driver
+            from etere_client import EtereClient
+            driver = shared_session.driver if hasattr(shared_session, 'driver') else shared_session
+            etere_client = EtereClient(driver)
+            
+            # Process order using charmaine_automation with shared session
+            success = process_charmaine_order(
+                str(order.pdf_path),
+                shared_session=etere_client
+            )
+            
+            if success:
+                print(f"\n✓ CHARMAINE order processed successfully")
+                
+                return ProcessingResult(
+                    success=True,
+                    contracts=[],
+                    order_type=OrderType.CHARMAINE
+                )
+            else:
+                print(f"\n✗ CHARMAINE order processing failed")
+                
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.CHARMAINE,
+                    error_message="CHARMAINE processing failed - check browser output"
+                )
+        
+        except Exception as e:
+            import traceback
+            error_detail = f"CHARMAINE processing error: {str(e)}\n{traceback.format_exc()}"
+            
+            print(f"\n✗ CHARMAINE processing failed: {e}")
+            
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.CHARMAINE,
+                error_message=error_detail
+            )
+    
+    def _process_admerasia_order(
+        self,
+        order: Order,
+        shared_session: any
+    ) -> ProcessingResult:
+        """
+        Process Admerasia order using admerasia_automation.
+        
+        Admerasia orders have:
+        - McDonald's as sole customer (ID: 42)
+        - Single market per order (detected from DMA field)
+        - NET rates grossed up by /0.85 (parser handles this)
+        - Daily spot calendar grid analysis (parser handles this)
+        - Separation: customer=3, event=0, order=5
+        - Universal agency billing
+        - Master market: NYC (set by session before calling)
+        
+        Args:
+            order: Admerasia order to process
+            shared_session: Shared browser session (EtereSession)
+            
+        Returns:
+            ProcessingResult with success status
+        """
+        try:
+            # Import Admerasia automation
+            from admerasia_automation import process_admerasia_order
+            
+            print(f"\n{'='*70}")
+            print(f"PROCESSING ADMERASIA ORDER")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            if order.customer_name:
+                print(f"Customer: {order.customer_name}")
+            print(f"{'='*70}\n")
+            
+            # Admerasia REQUIRES a browser session
+            if shared_session is None:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.ADMERASIA,
+                    error_message="Browser session required for Admerasia orders"
+                )
+            
+            # Get inputs from order (already collected by orchestrator)
+            if not order.order_input:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.ADMERASIA,
+                    error_message="Order inputs not collected"
+                )
+            
+            print("[SESSION] ✓ Using shared browser session")
+            # Market already set to NYC once at batch start
+            
+            # Process the order with pre-collected inputs (matching Daviselen pattern)
+            success = process_admerasia_order(
+                driver=shared_session.driver,  # ← Pass driver, not session!
+                pdf_path=str(order.pdf_path),
+                user_input=order.order_input
+            )
+            
+            contracts = []
+            
+            if success:
+                print(f"\n✓ Admerasia order processed successfully")
+            else:
+                print(f"\n✗ Admerasia order processing failed")
+            
+            return ProcessingResult(
+                success=success,
+                contracts=contracts,
+                order_type=OrderType.ADMERASIA,
+                error_message=None if success else "Processing failed"
+            )
+            
+        except Exception as e:
+            import traceback
+            error_detail = f"Admerasia processing error: {str(e)}\n{traceback.format_exc()}"
+            
+            print(f"\n✗ Admerasia processing failed: {e}")
+            
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.ADMERASIA,
+                error_message=error_detail
+            )
+    
+
+    def _process_hl_order(
+        self,
+        order: Order,
+        shared_session: any
+    ) -> ProcessingResult:
+        """
+        Process H&L Partners order using hl_automation.
+        
+        H&L Partners orders have:
+        - SFO or CVC markets only (detected from PDF header)
+        - Multiple clients possible → customer DB lookup with manual fallback
+        - Separation: customer=25, event=0, order=0
+        - Universal agency billing
+        - Multiple estimates per PDF → each becomes a separate contract
+        - Master market: NYC (set by session before calling)
+        
+        Args:
+            order: H&L Partners order to process
+            shared_session: Shared browser session (EtereSession)
+            
+        Returns:
+            ProcessingResult with success status
+        """
+        try:
+            from browser_automation.hl_automation import process_hl_order
+            
+            print(f"\n{'='*70}")
+            print(f"PROCESSING H&L PARTNERS ORDER")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            if order.customer_name:
+                print(f"Customer: {order.customer_name}")
+            print(f"{'='*70}\n")
+            
+            if shared_session is None:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.HL,
+                    error_message="Browser session required for H&L Partners orders"
+                )
+            
+            if not order.order_input:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.HL,
+                    error_message="Order inputs not collected"
+                )
+            
+            print("[SESSION] ✓ Using shared browser session")
+            # Market already set to NYC once at batch start
+            
+            success = process_hl_order(
+                driver=shared_session.driver,
+                pdf_path=str(order.pdf_path),
+                user_input=order.order_input
+            )
+            
+            contracts = []
+            
+            if success:
+                print(f"\n✓ H&L Partners order processed successfully")
+            else:
+                print(f"\n✗ H&L Partners order processing failed")
+            
+            return ProcessingResult(
+                success=success,
+                contracts=contracts,
+                order_type=OrderType.HL,
+                error_message=None if success else "Processing failed"
+            )
+            
+        except Exception as e:
+            import traceback
+            error_detail = f"H&L Partners processing error: {str(e)}\n{traceback.format_exc()}"
+            
+            print(f"\n✗ H&L Partners processing failed: {e}")
+            
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.HL,
+                error_message=error_detail
+            )
+    
+    def _process_igraphix_order(
+        self,
+        order: Order,
+        shared_session: any
+    ) -> ProcessingResult:
+        """
+        Process iGraphix order using igraphix_automation.
+
+        iGraphix orders have:
+        - Two known clients: Pechanga Resort Casino (LAX) and Sky River Casino (SFO/CVC)
+        - Customer IDs hardcoded in parser (26 and 191) with DB self-learning
+        - Rate grossing: net / 0.85
+        - Paid/bonus split by top-to-bottom allocation across ad codes
+        - One Etere line per ad code entry (after split)
+        - Language-specific separation intervals
+        - Universal agency billing
+        - Master market: NYC (set by session before calling)
+
+        Args:
+            order: iGraphix order to process
+            shared_session: Shared browser session (EtereSession)
+
+        Returns:
+            ProcessingResult with success status
+        """
+        try:
+            from igraphix_automation import process_igraphix_order
+
+            print(f"\n{'='*70}")
+            print(f"PROCESSING IGRAPHIX ORDER")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            if order.customer_name:
+                print(f"Customer: {order.customer_name}")
+            print(f"{'='*70}\n")
+
+            # iGraphix REQUIRES a browser session
+            if shared_session is None:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.IGRAPHIX,
+                    error_message="Browser session required for iGraphix orders"
+                )
+
+            # Get inputs from order (already collected by orchestrator)
+            if not order.order_input:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.IGRAPHIX,
+                    error_message="Order inputs not collected"
+                )
+
+            print("[SESSION] ✓ Using shared browser session")
+            # Market already set to NYC once at batch start
+
+            # Process the order with pre-collected inputs (matching Daviselen pattern)
+            success = process_igraphix_order(
+                driver=shared_session.driver,  # ← Pass driver, not session!
+                pdf_path=str(order.pdf_path),
+                user_input=order.order_input
+            )
+
+            contracts = []
+
+            if success:
+                print(f"\n✓ iGraphix order processed successfully")
+            else:
+                print(f"\n✗ iGraphix order processing failed")
+
+            return ProcessingResult(
+                success=success,
+                contracts=contracts,
+                order_type=OrderType.IGRAPHIX,
+                error_message=None if success else "Processing failed"
+            )
+
+        except Exception as e:
+            import traceback
+            error_detail = f"iGraphix processing error: {str(e)}\n{traceback.format_exc()}"
+
+            print(f"\n✗ iGraphix processing failed: {e}")
+
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.IGRAPHIX,
+                error_message=error_detail
+            )
+
+    def _process_opad_order(
+        self,
+        order: Order,
+        shared_session: any
+    ) -> ProcessingResult:
+        """
+        Process opAD order using opad_automation.
+        
+        opAD orders have:
+        - NYC market ONLY (always)
+        - Multiple clients possible → customer DB lookup with manual fallback
+        - Separation intervals: Customer=15, Event=0, Order=15
+        - Universal agency billing
+        - Bonus lines (rate=0) → BNS spot code
+        - Weekly distribution splitting (gaps + differing counts)
+        - Master market: NYC (set by session before calling)
+        
+        Args:
+            order: opAD order to process
+            shared_session: Shared browser session (EtereSession)
+            
+        Returns:
+            ProcessingResult with success status
+        """
+        try:
+            # Import opAD automation
+            from opad_automation import process_opad_order
+            
+            print(f"\n{'='*70}")
+            print(f"PROCESSING opAD ORDER")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            if order.customer_name:
+                print(f"Customer: {order.customer_name}")
+            print(f"{'='*70}\n")
+            
+            # opAD REQUIRES a browser session
+            if shared_session is None:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.OPAD,
+                    error_message="Browser session required for opAD orders"
+                )
+            
+            # Get inputs from order (already collected by orchestrator)
+            if not order.order_input:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.OPAD,
+                    error_message="Order inputs not collected"
+                )
+            
+            print("[SESSION] ✓ Using shared browser session")
+            # Market already set to NYC once at batch start
+            
+            # Process the order with pre-collected inputs (matching Daviselen/Admerasia pattern)
+            success = process_opad_order(
+                driver=shared_session.driver,
+                pdf_path=str(order.pdf_path),
+                user_input=order.order_input
+            )
+            
+            contracts = []
+            
+            if success:
+                print(f"\n✓ opAD order processed successfully")
+            else:
+                print(f"\n✗ opAD order processing failed")
+            
+            return ProcessingResult(
+                success=success,
+                contracts=contracts,
+                order_type=OrderType.OPAD,
+                error_message=None if success else "Processing failed"
+            )
+            
+        except Exception as e:
+            import traceback
+            error_detail = f"opAD processing error: {str(e)}\n{traceback.format_exc()}"
+            
+            print(f"\n✗ opAD processing failed: {e}")
+            
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.OPAD,
                 error_message=error_detail
             )
     
@@ -1080,6 +1689,29 @@ def get_default_order_values(order: Order) -> tuple[str, str]:
             code = "TCAA Toyota"
             description = "Toyota SEA"
         return (code, description)
+    
+    elif order.order_type == OrderType.CHARMAINE:
+        # Charmaine client orders - parse PDF for smart defaults
+        try:
+            from browser_automation.parsers.charmaine_parser import parse_charmaine_pdf
+            parsed = parse_charmaine_pdf(str(order.pdf_path))
+            # Default code from advertiser abbreviation + YYMM
+            from datetime import datetime
+            yymm = datetime.now().strftime("%y%m")
+            code = f"{parsed.get('advertiser', 'CLIENT')[:4].upper()} {yymm}"
+            description = parsed.get('campaign', 'Client Order')
+            return (code, description)
+        except Exception:
+            return ("CLIENT", "Client Order")
+    
+    elif order.order_type == OrderType.OPAD:
+        # opAD orders - parse PDF to get smart defaults
+        try:
+            from opad_automation import get_opad_defaults
+            return get_opad_defaults(str(order.pdf_path))
+        except Exception as e:
+            print(f"[WARN] Could not parse opAD defaults: {e}")
+            return ("opAD Order", "opAD Order")
     
     # Default fallback
     return ("AUTO", "Order")

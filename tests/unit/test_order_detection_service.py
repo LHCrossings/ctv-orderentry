@@ -104,7 +104,7 @@ class TestOrderDetectionService:
         Client: Northern California Dealers Association
         Estimate: 12345
         """
-        assert service.detect_from_text(text) == OrderType.HL_PARTNERS
+        assert service.detect_from_text(text) == OrderType.HL
     
     def test_detect_hl_partners_with_crtv_tv(self, service):
         """Should detect H&L from CRTV-TV (not Cable) + location markers."""
@@ -114,7 +114,7 @@ class TestOrderDetectionService:
         Market: Sacramento
         Send Billing to: H&L Agency
         """
-        assert service.detect_from_text(text) == OrderType.HL_PARTNERS
+        assert service.detect_from_text(text) == OrderType.HL
     
     def test_detect_hl_with_encoding_issues(self, service):
         """Should detect H&L even with encoding damage ('HL Agency')."""
@@ -124,7 +124,7 @@ class TestOrderDetectionService:
         SAN FRANCISCO
         HL Agency
         """
-        assert service.detect_from_text(text) == OrderType.HL_PARTNERS
+        assert service.detect_from_text(text) == OrderType.HL
     
     def test_hl_not_confused_with_tcaa(self, service):
         """H&L uses CRTV-TV, not CRTV-Cable."""
@@ -135,7 +135,7 @@ class TestOrderDetectionService:
         Agency San Francisco
         """
         # No CRTV-Cable, has location and agency markers
-        assert service.detect_from_text(text) == OrderType.HL_PARTNERS
+        assert service.detect_from_text(text) == OrderType.HL
     
     # ========================================================================
     # OPAD DETECTION
@@ -438,7 +438,7 @@ class TestOrderDetectionService:
     def test_extract_hl_client_default(self, service):
         """Should return default H&L client."""
         text = "H/L Agency San Francisco"
-        client = service.extract_client_name(text, None, OrderType.HL_PARTNERS)
+        client = service.extract_client_name(text, None, OrderType.HL)
         assert "Northern California Dealers" in client
     
     def test_extract_daviselen_client_page2(self, service):
@@ -503,7 +503,7 @@ class TestDetectionPrecedence:
         Sacramento
         H/L Agency
         """
-        assert service.detect_from_text(text) == OrderType.HL_PARTNERS
+        assert service.detect_from_text(text) == OrderType.HL
         
         # But TCAA should match when it's specifically CRTV-Cable
         text = """

@@ -37,7 +37,14 @@ KNOWN_CUSTOMERS = {
     
     # Daviselen customers
     'daviselen': [
-        # Add as: ('customer_id', 'customer_name'),
+        ('362', 'SO. CAL. TDA'),  # So Cal Toyota
+        ('362', 'SCTDA'),  # So Cal Toyota (short code)
+        ('122', 'WESTERN WASHINGTON OP. ASSOC.'),  # Seattle McDonald's
+        ('122', 'DMWW'),  # Seattle McDonald's (short code)
+        ('416', 'CAPITAL BUSINESS UNIT'),  # WDC McDonald's
+        ('416', 'DCBU'),  # WDC McDonald's (short code)
+        ('368', "MCD'S OP. ASSOC. OF SO. CAL."),  # SoCal McDonald's
+        ('368', 'DMLA'),  # SoCal McDonald's (short code)
     ],
     
     # opAD customers

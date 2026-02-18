@@ -39,7 +39,6 @@ from parsers.sagent_parser import (
     parse_sagent_pdf,
     SagentOrder,
     SagentLine,
-    analyze_weekly_distribution
 )
 from src.domain.enums import OrderType, BillingType
 
@@ -337,11 +336,11 @@ def create_sagent_contract(
                 days = line.get_etere_days()
                 time = line.get_etere_time()
                 
-                # Analyze weekly distribution
-                ranges = analyze_weekly_distribution(
+                # Consolidate weekly distribution (groups identical consecutive weeks)
+                ranges = EtereClient.consolidate_weeks(
                     line.weekly_spots,
                     order.week_start_dates,
-                    contract_end_date=order.flight_end
+                    flight_end=order.flight_end
                 )
                 
                 print(f"\n  Line {line.line_number}: {desc}")

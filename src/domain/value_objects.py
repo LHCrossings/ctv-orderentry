@@ -218,6 +218,7 @@ class OrderInput:
     customer_id: str | None = None
     time_overrides: dict[str, Any] | None = None
     spot_duration: int | None = None
+    separation_intervals: tuple[int, int, int] | None = None  # (customer, event, order)
     
     def has_customer_override(self) -> bool:
         """Check if user provided explicit customer ID."""
