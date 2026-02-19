@@ -235,7 +235,7 @@ class TestCollectOrderInput:
     
     def test_collects_order_input(self, input_collector, sample_order):
         """Should collect order code and description."""
-        with patch('builtins.input', side_effect=['ORD-001', 'Test Order']):
+        with patch('builtins.input', side_effect=['ORD-001', 'Test Order', '']):
             result = input_collector.collect_order_input(sample_order)
             
             assert isinstance(result, OrderInput)
@@ -244,7 +244,7 @@ class TestCollectOrderInput:
     
     def test_uses_defaults(self, input_collector, sample_order):
         """Should use provided defaults."""
-        with patch('builtins.input', side_effect=['', '']):
+        with patch('builtins.input', side_effect=['', '', '']):
             result = input_collector.collect_order_input(
                 sample_order,
                 default_code='DEF-001',
@@ -328,11 +328,11 @@ class TestBatchCollectAllOrderInputs:
     def test_collects_inputs_for_all_orders(self, batch_input_collector, sample_orders):
         """Should collect inputs for all orders."""
         inputs = [
-            'ORD-001', 'Order 1',
-            'ORD-002', 'Order 2',
-            'ORD-003', 'Order 3'
+            'ORD-001', 'Order 1', '',
+            'ORD-002', 'Order 2', '',
+            'ORD-003', 'Order 3', ''
         ]
-        
+
         with patch('builtins.input', side_effect=inputs):
             result = batch_input_collector.collect_all_order_inputs(sample_orders)
             
@@ -344,7 +344,7 @@ class TestBatchCollectAllOrderInputs:
         def defaults_provider(order):
             return ('DEFAULT', 'Default Description')
         
-        with patch('builtins.input', side_effect=['', '', '', '', '', '']):
+        with patch('builtins.input', side_effect=['', '', '', '', '', '', '', '', '']):
             result = batch_input_collector.collect_all_order_inputs(
                 sample_orders,
                 defaults_provider=defaults_provider
@@ -358,8 +358,8 @@ class TestBatchCollectAllOrderInputs:
         def failing_defaults_provider(order):
             raise Exception("Provider error")
         
-        inputs = ['ORD-001', 'Order 1', 'ORD-002', 'Order 2', 'ORD-003', 'Order 3']
-        
+        inputs = ['ORD-001', 'Order 1', '', 'ORD-002', 'Order 2', '', 'ORD-003', 'Order 3', '']
+
         with patch('builtins.input', side_effect=inputs):
             # Should not raise exception
             result = batch_input_collector.collect_all_order_inputs(

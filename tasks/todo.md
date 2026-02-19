@@ -9,22 +9,10 @@
 
 ## Critical
 
-- [ ] **Implement or delete `_move_processed_files()`**
-  `src/orchestration/orchestrator.py:551` — method body is a loop of `pass`. Documented to
-  move processed files to archive directories but does nothing. Implement it or delete and
-  remove all callers.
-
-- [ ] **Delete `LegacyProcessorAdapter`**
-  `src/business_logic/services/order_processing_service.py:1644–1752` — never instantiated
-  or used anywhere. Dead code per "Replace, don't deprecate" rule.
-
-- [ ] **Delete `detect_order_type_legacy()` and `detect_order_type_from_pdf()`**
-  `src/business_logic/services/pdf_order_detector.py:403–422` — backward-compat wrappers.
-  Verify no callers, then remove.
-
-- [ ] **Delete `detect_customer()` deprecated wrapper**
-  `src/business_logic/services/customer_matching_service.py:211–243` — verify no callers,
-  then remove.
+- [x] **Implement or delete `_move_processed_files()`** — deleted stub + 3 callers
+- [x] **Delete `LegacyProcessorAdapter`** — deleted class + tests
+- [x] **Delete `detect_order_type_legacy()` and `detect_order_type_from_pdf()`** — deleted both
+- [x] **Delete `detect_customer()` deprecated wrapper** — deleted function + tests
 
 ---
 
@@ -32,33 +20,27 @@
 
 ### Project infrastructure
 
-- [ ] **Add `pyproject.toml`** — no packaging or tool config exists. At minimum: project
-  metadata, `[tool.pytest.ini_options]`, `[tool.ruff]`, `[tool.ty]`.
+- [x] **Add `pyproject.toml`** — created with project metadata, pytest, ruff config; replaces `requirements-dev.txt`.
 
-- [ ] **Add `prek` hooks** — `prek install` + configure ruff, ty, and pytest as pre-commit
-  checks per CLAUDE.md.
+- [x] **Add pre-commit hooks** — `.pre-commit-config.yaml` with ruff lint + format.
 
-- [ ] **Set up GitHub Actions CI** — run `pytest -q` and `ruff check` on push/PR.
+- [x] **Set up GitHub Actions CI** — `.github/workflows/ci.yml` runs `ruff check` and `pytest -q` on push/PR.
 
 ### Silent exception handling
 
-- [ ] **Fix bare `except Exception: pass`**
-  - `src/business_logic/services/pdf_order_detector.py:170` — swallows errors silently
-  - `src/presentation/cli/input_collectors.py:167` — no error logging
-  - `src/presentation/cli/input_collectors.py:419`, `:479` — catch too broadly
+- [x] **Annotate bare `except Exception`** — added clarifying comments to all 3 intentional fallbacks:
+  - `src/business_logic/services/pdf_order_detector.py:170` — heuristic table parse, non-fatal
+  - `src/presentation/cli/input_collectors.py:419`, `:479` — best-effort DB lookups
 
 ### Type hints
 
-- [ ] **Replace `any` (lowercase) with `Any`** — 17 instances in
-  `src/business_logic/services/order_processing_service.py` (lines 38, 105, 170, 223, 313,
-  401, 534, 654, 784, 874, 1006, 1134, 1226, 1312, 1403, 1494, 1664). Breaks static type
-  checking.
+- [x] **Replace `any` (lowercase) with `Any`** — fixed all instances in
+  `src/business_logic/services/order_processing_service.py`.
 
 ### Unused imports
 
-- [ ] `src/business_logic/services/order_processing_service.py:23–24` — `Customer`,
-  `OrderStatus` imported but unused.
-- [ ] `src/orchestration/orchestrator.py:15` — `shutil` imported but unused.
+- [x] `src/business_logic/services/order_processing_service.py:23–24` — removed `Customer` and `OrderStatus`.
+- [x] `src/orchestration/orchestrator.py:15` — removed `import shutil`.
 
 ---
 

@@ -20,8 +20,8 @@ _browser_automation_path = _src_path.parent / "browser_automation"
 if str(_browser_automation_path) not in sys.path:
     sys.path.insert(0, str(_browser_automation_path))
 
-from domain.entities import Order, Contract, ProcessingResult, Customer
-from domain.enums import OrderType, OrderStatus
+from domain.entities import Order, Contract, ProcessingResult
+from domain.enums import OrderType
 from domain.value_objects import OrderInput
 
 
@@ -35,7 +35,7 @@ class OrderProcessor(Protocol):
     
     def process(
         self,
-        browser_session: any,  # BrowserSession type
+        browser_session: Any,  # BrowserSession type
         pdf_path: Path,
         order_input: OrderInput | None
     ) -> ProcessingResult:
@@ -102,7 +102,7 @@ class OrderProcessingService:
     def process_orders_batch(
         self,
         orders: list[Order],
-        browser_session: any = None
+        browser_session: Any = None
     ) -> list[ProcessingResult]:
         """
         UNIVERSAL BATCH PROCESSING: Process multiple orders with SINGLE shared browser session.
@@ -310,7 +310,7 @@ class OrderProcessingService:
         
         return results
     
-    def _process_tcaa_orders_batch(self, orders: list[Order], shared_session: any = None) -> ProcessingResult:
+    def _process_tcaa_orders_batch(self, orders: list[Order], shared_session: Any = None) -> ProcessingResult:
         """
         Process multiple TCAA orders from same PDF together.
         
@@ -398,7 +398,7 @@ class OrderProcessingService:
     def process_order(
         self,
         order: Order,
-        browser_session: any = None,  # BrowserSession type, optional for now
+        browser_session: Any = None,  # BrowserSession type, optional
         order_input: OrderInput | None = None
     ) -> ProcessingResult:
         """
@@ -531,7 +531,7 @@ class OrderProcessingService:
             error_message=message
         )
     
-    def _process_tcaa_order(self, order: Order, shared_session: any = None) -> ProcessingResult:
+    def _process_tcaa_order(self, order: Order, shared_session: Any = None) -> ProcessingResult:
         """
         UNIVERSAL: Process TCAA order with optional shared browser session.
         
@@ -651,7 +651,7 @@ class OrderProcessingService:
                 error_message=error_detail
             )
     
-    def _process_misfit_order(self, order: Order, shared_session: any = None) -> ProcessingResult:
+    def _process_misfit_order(self, order: Order, shared_session: Any = None) -> ProcessingResult:
         """
         UNIVERSAL: Process Misfit order with optional shared browser session.
         
@@ -1003,7 +1003,7 @@ class OrderProcessingService:
     def _process_charmaine_order(
         self,
         order: Order,
-        shared_session: any = None
+        shared_session: Any = None
     ) -> ProcessingResult:
         """
         Process Charmaine order using charmaine_automation.
@@ -1641,115 +1641,6 @@ class OrderProcessingService:
         return list(self._processors.keys())
 
 
-class LegacyProcessorAdapter:
-    """
-    Adapter to wrap legacy processing functions into the OrderProcessor protocol.
-    
-    This allows us to use existing worldlink_functions.py, tcaa_functions.py, etc.
-    without rewriting them immediately.
-    """
-    
-    def __init__(self, legacy_function: callable):
-        """
-        Initialize adapter with legacy processing function.
-        
-        Args:
-            legacy_function: Function with signature:
-                func(browser, pdf_path, inputs=None) -> (success, needs_refresh, contracts)
-        """
-        self._legacy_function = legacy_function
-    
-    def process(
-        self,
-        browser_session: any,
-        pdf_path: Path,
-        order_input: OrderInput | None
-    ) -> ProcessingResult:
-        """
-        Process order using legacy function.
-        
-        Adapts the legacy return format to ProcessingResult.
-        """
-        try:
-            # Call legacy function
-            if order_input:
-                # Convert OrderInput to dict for legacy functions
-                legacy_inputs = {
-                    'order_code': order_input.order_code,
-                    'description': order_input.description,
-                    'customer_id': order_input.customer_id,
-                    'time_overrides': order_input.time_overrides,
-                }
-                success, needs_refresh, contract_data = self._legacy_function(
-                    browser_session,
-                    pdf_path,
-                    legacy_inputs
-                )
-            else:
-                success, needs_refresh, contract_data = self._legacy_function(
-                    browser_session,
-                    pdf_path
-                )
-            
-            # Determine order type from contract data or infer it
-            # Legacy functions return different formats, normalize here
-            order_type = self._infer_order_type(contract_data)
-            
-            # Convert legacy contract format to Contract entities
-            contracts = self._convert_contracts(contract_data, order_type, needs_refresh)
-            
-            return ProcessingResult(
-                success=success,
-                contracts=contracts,
-                order_type=order_type
-            )
-            
-        except Exception as e:
-            # Extract order type if possible
-            order_type = OrderType.UNKNOWN
-            
-            return ProcessingResult(
-                success=False,
-                contracts=[],
-                order_type=order_type,
-                error_message=str(e)
-            )
-    
-    def _infer_order_type(self, contract_data: list) -> OrderType:
-        """Infer order type from contract data."""
-        # This is a simplified version - in reality, you'd need more context
-        # For now, we'll need to pass order type explicitly or enhance this logic
-        return OrderType.UNKNOWN  # Placeholder
-    
-    def _convert_contracts(
-        self,
-        contract_data: list,
-        order_type: OrderType,
-        needs_refresh: bool
-    ) -> list[Contract]:
-        """
-        Convert legacy contract format to Contract entities.
-        
-        Legacy format: list of tuples like (contract_number, highest_line)
-        """
-        contracts = []
-        
-        for item in contract_data:
-            if isinstance(item, tuple) and len(item) >= 2:
-                contract_number, highest_line = item[0], item[1]
-                contracts.append(Contract(
-                    contract_number=str(contract_number),
-                    order_type=order_type,
-                    highest_line=highest_line
-                ))
-            elif isinstance(item, str):
-                # Just a contract number
-                contracts.append(Contract(
-                    contract_number=item,
-                    order_type=order_type
-                ))
-        
-        return contracts
 
 
 def get_default_order_values(order: Order) -> tuple[str, str]:

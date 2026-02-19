@@ -1,0 +1,29 @@
+[project]
+name = "ctv-orderentry"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "selenium>=4.0.0",
+    "pdfplumber>=0.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.1.0",
+    "pyright>=1.1.0",
+    "pre-commit>=3.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+exclude = ["Old Code", "archived scripts", "browser_automation"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]

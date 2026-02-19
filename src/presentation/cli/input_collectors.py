@@ -415,10 +415,10 @@ class InputCollector:
                         return (sep_c, sep_e, sep_o)
                 
                 return None
-                
+
         except Exception:
-            return None
-    
+            return None  # DB lookup is best-effort; caller handles None
+
     def _get_customer_abbreviation(
         self,
         client_name: str,
@@ -475,10 +475,10 @@ class InputCollector:
                         return abbrev
                 
                 return None
-                
+
         except Exception:
-            return None
-    
+            return None  # DB lookup is best-effort; caller handles None
+
     def _get_smart_defaults(self, order: Order) -> tuple[str, str]:
         """
         Generate smart default values for order code and description.

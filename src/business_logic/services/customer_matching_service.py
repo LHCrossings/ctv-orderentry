@@ -208,36 +208,3 @@ class CustomerMatchingService:
         return stats
 
 
-def detect_customer(
-    customer_name: str,
-    order_type: str | OrderType,
-    market: str | None = None,
-    repository_path: Path | str = "customer_database.db"
-) -> str | None:
-    """
-    Legacy function for backward compatibility with existing code.
-    
-    This function maintains the same signature as the old detect_customer
-    from customer_matcher.py, making migration easier.
-    
-    Args:
-        customer_name: Name of customer to find
-        order_type: Order type (string or enum)
-        market: Market (not used, kept for compatibility)
-        repository_path: Path to customer database
-        
-    Returns:
-        Customer ID if found, None otherwise
-    """
-    # Convert string to enum if needed
-    if isinstance(order_type, str):
-        try:
-            order_type = OrderType(order_type)
-        except ValueError:
-            order_type = OrderType.UNKNOWN
-    
-    # Create service and find customer
-    repo = CustomerRepository(repository_path)
-    service = CustomerMatchingService(repo)
-    
-    return service.find_customer(customer_name, order_type, prompt_if_not_found=True)

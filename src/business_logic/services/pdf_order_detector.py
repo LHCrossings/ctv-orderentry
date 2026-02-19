@@ -168,8 +168,8 @@ class PDFOrderDetector:
                         ):
                             return True
         except Exception:
-            pass
-        
+            pass  # Table extraction is a heuristic; failure is non-fatal
+
         # If we had 3+ markers, still likely Charmaine even without table parse
         return sum(markers) >= 3
     
@@ -400,44 +400,3 @@ class PDFOrderDetector:
             order_type
         )
     
-    def detect_order_type_legacy(
-        self,
-        pdf_path: Path | str,
-        silent: bool = False
-    ) -> str:
-        """
-        Legacy wrapper that returns string instead of OrderType enum.
-        
-        This method exists for backward compatibility with existing code.
-        New code should use detect_order_type() instead.
-        
-        Args:
-            pdf_path: Path to PDF file
-            silent: If True, suppress interactive prompts
-            
-        Returns:
-            Order type as string ("worldlink", "tcaa", etc.)
-        """
-        order_type = self.detect_order_type(pdf_path, silent)
-        return order_type.value
-
-
-# Convenience function for backward compatibility
-def detect_order_type_from_pdf(
-    pdf_path: Path | str,
-    silent: bool = False
-) -> OrderType:
-    """
-    Convenience function for detecting order type from PDF.
-    
-    This provides a simple functional interface for quick usage.
-    
-    Args:
-        pdf_path: Path to PDF file
-        silent: If True, suppress interactive prompts
-        
-    Returns:
-        OrderType enum value
-    """
-    detector = PDFOrderDetector()
-    return detector.detect_order_type(pdf_path, silent)

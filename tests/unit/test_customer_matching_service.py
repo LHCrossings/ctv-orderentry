@@ -138,32 +138,5 @@ class TestCustomerMatchingService:
         assert 'WORLDLINK' not in stats
 
 
-class TestLegacyDetectCustomerFunction:
-    """Test backward-compatible detect_customer function."""
-    
-    def test_detect_customer_with_string_order_type(self):
-        """Should accept string order type for compatibility."""
-        from business_logic.services.customer_matching_service import detect_customer
-        
-        # This would normally prompt user, but we're just testing the signature works
-        # In real usage, this would be tested with a real database
-        pass
-    
-    def test_detect_customer_with_enum_order_type(self):
-        """Should accept enum order type."""
-        from business_logic.services.customer_matching_service import detect_customer
-        
-        # This would normally prompt user, but we're just testing the signature works
-        pass
-    
-    def test_detect_customer_with_market_parameter(self):
-        """Should accept market parameter for backward compatibility."""
-        from business_logic.services.customer_matching_service import detect_customer
-        
-        # Market parameter is accepted but not used
-        # Just testing signature compatibility
-        pass
-
-
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

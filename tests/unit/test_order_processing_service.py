@@ -18,7 +18,6 @@ from domain.enums import OrderType, OrderStatus
 from domain.value_objects import OrderInput
 from business_logic.services.order_processing_service import (
     OrderProcessingService,
-    LegacyProcessorAdapter
 )
 
 
@@ -195,72 +194,6 @@ class TestOrderProcessingService:
         
         assert OrderType.WORLDLINK in supported
         assert len(supported) == 1
-
-
-class TestLegacyProcessorAdapter:
-    """Test legacy function adapter."""
-    
-    def test_adapter_success(self):
-        """Should adapt legacy function successfully."""
-        # Mock legacy function
-        def legacy_func(browser, pdf_path, inputs=None):
-            return (True, True, [("12345", 10)])
-        
-        adapter = LegacyProcessorAdapter(legacy_func)
-        
-        result = adapter.process(Mock(), Path("test.pdf"), None)
-        
-        assert result.success is True
-        assert len(result.contracts) == 1
-        assert result.contracts[0].contract_number == "12345"
-    
-    def test_adapter_with_inputs(self):
-        """Should pass inputs to legacy function."""
-        called_with = {}
-        
-        def legacy_func(browser, pdf_path, inputs=None):
-            called_with['inputs'] = inputs
-            return (True, False, [])
-        
-        adapter = LegacyProcessorAdapter(legacy_func)
-        order_input = OrderInput(
-            order_code="TEST",
-            description="Test"
-        )
-        
-        adapter.process(Mock(), Path("test.pdf"), order_input)
-        
-        assert called_with['inputs']['order_code'] == "TEST"
-        assert called_with['inputs']['description'] == "Test"
-    
-    def test_adapter_failure(self):
-        """Should handle legacy function exceptions."""
-        def legacy_func(browser, pdf_path, inputs=None):
-            raise ValueError("Test error")
-        
-        adapter = LegacyProcessorAdapter(legacy_func)
-        
-        result = adapter.process(Mock(), Path("test.pdf"), None)
-        
-        assert result.success is False
-        assert "Test error" in result.error_message
-    
-    def test_adapter_contract_conversion(self):
-        """Should convert various legacy contract formats."""
-        def legacy_func(browser, pdf_path, inputs=None):
-            # Legacy functions return different formats
-            return (True, False, [
-                ("12345", 10),  # Tuple with highest line
-                ("67890", None),  # Tuple without highest line
-            ])
-        
-        adapter = LegacyProcessorAdapter(legacy_func)
-        result = adapter.process(Mock(), Path("test.pdf"), None)
-        
-        assert len(result.contracts) == 2
-        assert result.contracts[0].contract_number == "12345"
-        assert result.contracts[0].highest_line == 10
-        assert result.contracts[1].contract_number == "67890"
 
 
 if __name__ == "__main__":

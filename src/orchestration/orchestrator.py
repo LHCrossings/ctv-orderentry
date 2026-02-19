@@ -12,7 +12,6 @@ This is the top-level component that ties together all layers:
 from pathlib import Path
 from typing import Callable
 import sys
-import shutil
 
 # Add src to path
 _src_path = Path(__file__).parent.parent
@@ -127,9 +126,6 @@ class ApplicationOrchestrator:
         # Display results
         print(self._result_formatter.format_batch_summary(results))
         
-        # Move processed files
-        self._move_processed_files(results)
-    
     def run_batch(self) -> None:
         """
         Run the application in batch mode.
@@ -172,9 +168,6 @@ class ApplicationOrchestrator:
         # Display results
         print(self._result_formatter.format_batch_summary(results))
         
-        # Move processed files
-        self._move_processed_files(results)
-    
     def run_auto(self) -> None:
         """
         Run the application in automatic mode.
@@ -202,9 +195,6 @@ class ApplicationOrchestrator:
         # Display results
         print(self._result_formatter.format_batch_summary(results))
         
-        # Move processed files
-        self._move_processed_files(results)
-    
     def _process_orders_interactive(self, orders: list[Order]) -> list[ProcessingResult]:
         """
         Process orders interactively with batch grouping for TCAA orders from same PDF.
@@ -534,28 +524,6 @@ class ApplicationOrchestrator:
         
         return results
     
-    def _move_processed_files(self, results: list[ProcessingResult]) -> None:
-        """
-        Move processed files to appropriate directories.
-        
-        Successful: incoming → processed
-        Failed: incoming → error
-        
-        Args:
-            results: Processing results to determine file movements
-        """
-        print("\n" + "=" * 70)
-        print("ORGANIZING FILES")
-        print("=" * 70)
-        
-        for result in results:
-            # Note: In a real implementation, you'd need to track which
-            # result corresponds to which file. For now, this is a placeholder.
-            pass
-        
-        print("\n[OK] Files organized")
-
-
 def create_orchestrator(config: ApplicationConfig | None = None) -> ApplicationOrchestrator:
     """
     Factory function to create a fully configured orchestrator.
