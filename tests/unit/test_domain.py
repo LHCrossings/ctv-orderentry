@@ -19,6 +19,47 @@ from domain.value_objects import TimeRange, DayPattern, ScheduleLine, OrderInput
 from domain.entities import Order, Contract, ProcessingResult
 
 
+class TestMarket:
+    """Test Market enum etere_id values and .value stability."""
+
+    def test_etere_ids_match_confirmed_mapping(self):
+        """All 10 markets must map to the correct Etere integer IDs."""
+        expected = {
+            "NYC": 1,
+            "CMP": 2,
+            "HOU": 3,
+            "SFO": 4,
+            "SEA": 5,
+            "LAX": 6,
+            "CVC": 7,
+            "WDC": 8,
+            "MMT": 9,
+            "DAL": 10,
+        }
+        for code, etere_id in expected.items():
+            assert Market[code].etere_id == etere_id, f"{code}: expected {etere_id}"
+
+    def test_value_is_string_code(self):
+        """Market.value must remain the string market code."""
+        assert Market.NYC.value == "NYC"
+        assert Market.SEA.value == "SEA"
+        assert Market.CVC.value == "CVC"
+
+    def test_lookup_by_string_value(self):
+        """Market('NYC') lookup by value must still work."""
+        assert Market("NYC") is Market.NYC
+
+    def test_crossings_tv_markets(self):
+        """All markets except DAL are Crossings TV markets."""
+        assert Market.NYC.is_crossings_tv_market() is True
+        assert Market.DAL.is_crossings_tv_market() is False
+
+    def test_asian_channel_market(self):
+        """Only DAL is an Asian Channel market."""
+        assert Market.DAL.is_asian_channel_market() is True
+        assert Market.SEA.is_asian_channel_market() is False
+
+
 class TestOrderType:
     """Test OrderType enum behavior."""
     
@@ -55,8 +96,8 @@ class TestLanguage:
         assert time_range == "4p-7p"
     
     def test_chinese_block_abbreviation(self):
-        """Chinese should use C/M block code."""
-        assert Language.MANDARIN.get_block_abbreviation() == "C/M"
+        """Chinese should use M/C block code."""
+        assert Language.MANDARIN.get_block_abbreviation() == "M/C"
     
     def test_filipino_block_abbreviation(self):
         """Filipino should use T block code."""

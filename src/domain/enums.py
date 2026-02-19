@@ -142,27 +142,35 @@ class OrderStatus(Enum):
 class Market(Enum):
     """
     Broadcast markets for Crossings TV and The Asian Channel.
-    
-    Maps market codes to full names per project documentation.
+
+    Each member carries both the string code (.value) and the Etere integer
+    station ID (.etere_id).  Integer values are authoritative — taken from
+    etere_client.py which is confirmed correct.
     """
-    # Crossings TV markets
-    CVC = "CVC"  # Central Valley (Sacramento)
-    SFO = "SFO"  # San Francisco
-    LAX = "LAX"  # Los Angeles
-    SEA = "SEA"  # Seattle
-    HOU = "HOU"  # Houston
-    CMP = "CMP"  # Chicago/Minneapolis
-    WDC = "WDC"  # Washington DC
-    MMT = "MMT"  # Multimarket National
-    NYC = "NYC"  # New York City/New Jersey
-    
+    # Crossings TV markets          code   etere_id
+    NYC = ("NYC", 1)   # New York City/New Jersey
+    CMP = ("CMP", 2)   # Chicago/Minneapolis
+    HOU = ("HOU", 3)   # Houston
+    SFO = ("SFO", 4)   # San Francisco
+    SEA = ("SEA", 5)   # Seattle
+    LAX = ("LAX", 6)   # Los Angeles
+    CVC = ("CVC", 7)   # Central Valley (Sacramento)
+    WDC = ("WDC", 8)   # Washington DC
+    MMT = ("MMT", 9)   # Multimarket National
+
     # The Asian Channel markets
-    DAL = "DAL"  # Dallas
-    
+    DAL = ("DAL", 10)  # Dallas
+
+    def __new__(cls, code: str, etere_id: int):
+        obj = object.__new__(cls)
+        obj._value_ = code
+        obj.etere_id = etere_id  # type: ignore[attr-defined]
+        return obj
+
     def is_crossings_tv_market(self) -> bool:
         """Check if this is a Crossings TV market (vs Asian Channel)."""
         return self != Market.DAL
-    
+
     def is_asian_channel_market(self) -> bool:
         """Check if this is an Asian Channel market."""
         return self == Market.DAL

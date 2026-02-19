@@ -27,6 +27,13 @@ This file extracts ALL Etere operations from ALL agencies:
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
+from pathlib import Path
+import sys
+
+_project_root = Path(__file__).parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait, Select
@@ -38,17 +45,14 @@ from decimal import Decimal
 from typing import Optional, List, Tuple
 import time
 
+from src.domain.enums import Market
+
 
 class EtereClient:
     """Single client for ALL Etere web interactions."""
     
     # Etere Configuration
     BASE_URL = "http://100.102.206.113"
-    
-    MARKET_CODES = {
-        "NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4, "SEA": 5,
-        "LAX": 6, "CVC": 7, "WDC": 8, "MMT": 9, "DAL": 10
-    }
     
     SPOT_CODES = {
         "Paid Commercial": 2,
@@ -110,8 +114,9 @@ class EtereClient:
             self.wait.until(EC.presence_of_element_located((By.ID, "GalleryStations")))
             
             # Get market ID
-            market_id = self.MARKET_CODES.get(market.upper())
-            if not market_id:
+            try:
+                market_id = Market[market.upper()].etere_id
+            except KeyError:
                 print(f"[MARKET] ✗ Unknown market: {market}")
                 return False
             
@@ -566,13 +571,15 @@ class EtereClient:
             # ═══════════════════════════════════════════════════════════════
             
             # Scheduled Station (Market) - CRITICAL for setting line market
-            market_id = self.MARKET_CODES.get(market.upper())
-            if market_id:
+            try:
+                market_id = Market[market.upper()].etere_id
                 market_select = Select(self.driver.find_element(
                     By.ID, "selectedschedStation"
                 ))
                 market_select.select_by_value(str(market_id))
                 print(f"[LINE] ✓ Market: {market}")
+            except KeyError:
+                print(f"[LINE] ⚠ Unknown market: {market}, skipping station selection")
             
             # Start Date
             start_field = self.driver.find_element(By.ID, "contractLineGeneralFromDate")

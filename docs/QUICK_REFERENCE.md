@@ -74,8 +74,8 @@ block_code = Language.FILIPINO.get_block_abbreviation()
 # Returns: "T"
 
 # All languages
-Language.MANDARIN      # "M"  -> Block: "C/M",  ROS: M-Su 6a-11:59p
-Language.CANTONESE     # "C"  -> Block: "C/M",  ROS: M-Su 6a-11:59p
+Language.MANDARIN      # "M"  -> Block: "M/C",  ROS: M-Su 6a-11:59p
+Language.CANTONESE     # "C"  -> Block: "M/C",  ROS: M-Su 6a-11:59p
 Language.FILIPINO      # "T"  -> Block: "T",    ROS: M-Su 4p-7p
 Language.KOREAN        # "K"  -> Block: "K",    ROS: M-Su 8a-10a
 Language.VIETNAMESE    # "V"  -> Block: "V",    ROS: M-Su 11a-1p

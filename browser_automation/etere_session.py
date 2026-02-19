@@ -20,6 +20,7 @@ if str(_src_path) not in sys.path:
     sys.path.insert(0, str(_src_path))
 
 from credential_loader import load_credentials
+from src.domain.enums import Market
 
 
 # Etere Configuration
@@ -161,21 +162,10 @@ class EtereSession:
                 EC.presence_of_element_located((By.ID, "GalleryStations"))
             )
             
-            # Map market codes to data-coduser values
-            market_map = {
-                "NYC": "1",
-                "SEA": "2",
-                "SFO": "3",
-                "CVC": "4",
-                "LAX": "5",
-                "HOU": "6",
-                "CMP": "7",
-                "WDC": "8",
-                "MMT": "9",
-                "DAL": "10"
-            }
-            
-            coduser = market_map.get(market_code, "1")
+            try:
+                coduser = str(Market[market_code].etere_id)
+            except KeyError:
+                coduser = "1"
             
             # Click the market station
             market_station = self.wait.until(
