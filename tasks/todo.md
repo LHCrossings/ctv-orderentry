@@ -48,39 +48,55 @@
 
 ### Function length (>100 lines — violates CLAUDE.md limit)
 
-- [ ] `_process_sagent_order()` — 131 lines
-  `src/business_logic/services/order_processing_service.py:871`
-- [ ] `_process_charmaine_order()` — 127 lines
-  `src/business_logic/services/order_processing_service.py:1003`
-- [ ] `_process_misfit_order()` — 126 lines
-  `src/business_logic/services/order_processing_service.py:654`
-- [ ] `_process_tcaa_order()` — 119 lines
-  `src/business_logic/services/order_processing_service.py:534`
+- [x] Extracted `_run_{tcaa,misfit,sagent,charmaine}_with_driver()` helpers; all 4 main functions
+  now ≤65 lines, all helpers ≤25 lines.
 
 ### Repeated dispatch pattern (DRY violation)
 
-- [ ] **Refactor agency input-gathering dispatch** —
-  `src/orchestration/orchestrator.py:231–395` repeats the same
-  `if order_type == X: gather_X_inputs()` pattern 8+ times. Replace with a registry dict
-  mapping `OrderType → callable`.
+- [x] **Refactor agency input-gathering dispatch** — replaced 6 identical blocks in
+  `orchestrator._process_orders_interactive()` with `_INPUT_GATHERERS` registry dict +
+  single generic handler (importlib dynamic import).
 
-- [ ] **Same pattern in `_process_orders_interactive()`** —
-  `src/business_logic/services/order_processing_service.py:220–435`.
+- [x] **Dispatch in `_process_single_order()`** — replaced 10-way if/elif with
+  `_PROCESSOR_DISPATCH` class dict + `getattr`.
 
 ### Incomplete implementation
 
-- [ ] **`_process_daviselen_order()` returns empty contracts list**
-  `src/business_logic/services/order_processing_service.py:843` — TODO comment says
-  "Extract contract numbers from automation". Either implement or make the limitation explicit.
+- [x] **`_process_daviselen_order()` TODO comment** — replaced vague TODO with clear
+  explanation: Daviselen automation is one-directional (Python → browser); contract numbers
+  must be retrieved from Etere manually.
 
 ---
 
 ## Test Coverage Gaps
 
-The following modules have zero tests:
+- [x] **Fixed 3 collection errors** (`test_orchestrator.py`, `test_order_scanner.py`,
+  `test_config.py`) by creating `tests/conftest.py` with global pdfplumber/selenium mocks.
+  Also fixed `test_order_scanner.py` mocks to match actual `detect_multi_order_pdf` API.
+- [x] **Added dispatch coverage** to `test_order_processing_service.py`:
+  `TestProcessorDispatch` (6 tests) and `TestOrderGroupingLogic` (4 tests) covering
+  `_PROCESSOR_DISPATCH`, `_process_single_order` routing, `_create_stub_result`, and
+  TCAA-by-PDF batch grouping.
+- [x] All other modules (`orchestrator.py`, `order_scanner.py`, `customer_repository`,
+  `input_collectors.py`, `output_formatters.py`) have existing test files that now run.
 
-- [ ] `src/business_logic/services/order_processing_service.py` (1,824 lines)
-- [ ] `src/orchestration/orchestrator.py` (592 lines)
-- [ ] `src/orchestration/order_scanner.py` (160 lines)
-- [ ] Customer repository operations
-- [ ] `src/presentation/cli/input_collectors.py` and output formatters
+**Result: 250 tests passing, 0 collection errors.**
+
+---
+
+## RPM Conversion
+
+- [x] **Create `browser_automation/rpm_automation.py`** — full automation following Daviselen
+  pattern: `gather_rpm_inputs()` + `process_rpm_order()`, DB-based customer lookup,
+  weekly spot distribution loop, language-specific lines, bonus line handling,
+  separation (25, 0, 15), universal agency billing. Blocks tab intentionally skipped
+  (matches all new automations per Admerasia pattern).
+- [x] **Add RPM to `_PROCESSOR_DISPATCH`** in `order_processing_service.py` (now 11 types).
+- [x] **Add `_process_rpm_order()`** to `order_processing_service.py` — mirrors
+  `_process_daviselen_order` exactly.
+- [x] **Add RPM to `needs_browser` list** in `order_processing_service.py`.
+- [x] **Add RPM to `_INPUT_GATHERERS`** in `orchestrator.py`.
+- [x] **Update dispatch test** — `test_dispatch_dict_covers_all_automated_types` now
+  expects 11 types; fallback test changed from RPM → WORLDLINK.
+
+**Result: 250 tests passing, 0 failures.**

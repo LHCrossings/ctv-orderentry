@@ -20,7 +20,7 @@ from domain.enums import OrderType, OrderStatus
 def mock_detection_service():
     """Create a mock detection service."""
     service = Mock()
-    service.detect_order_type.return_value = OrderType.WORLDLINK
+    service.detect_multi_order_pdf.return_value = (OrderType.WORLDLINK, 1)
     service.extract_customer_name.return_value = "Test Customer"
     return service
 
@@ -116,12 +116,12 @@ class TestOrderScanner:
         # Mock different return values for each file
         def detect_order_type_side_effect(path):
             if "worldlink" in path.name:
-                return OrderType.WORLDLINK
+                return (OrderType.WORLDLINK, 1)
             elif "tcaa" in path.name:
-                return OrderType.TCAA
-            return OrderType.UNKNOWN
-        
-        mock_detection_service.detect_order_type.side_effect = detect_order_type_side_effect
+                return (OrderType.TCAA, 1)
+            return (OrderType.UNKNOWN, 1)
+
+        mock_detection_service.detect_multi_order_pdf.side_effect = detect_order_type_side_effect
         
         scanner = OrderScanner(mock_detection_service, incoming_dir)
         orders = scanner.scan_for_orders()
@@ -167,9 +167,9 @@ class TestOrderScanner:
         def detect_side_effect(path):
             if "bad" in path.name:
                 raise Exception("Detection failed")
-            return OrderType.WORLDLINK
-        
-        mock_detection_service.detect_order_type.side_effect = detect_side_effect
+            return (OrderType.WORLDLINK, 1)
+
+        mock_detection_service.detect_multi_order_pdf.side_effect = detect_side_effect
         
         scanner = OrderScanner(mock_detection_service, incoming_dir)
         

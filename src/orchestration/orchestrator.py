@@ -11,6 +11,7 @@ This is the top-level component that ties together all layers:
 
 from pathlib import Path
 from typing import Callable
+import importlib
 import sys
 
 # Add src to path
@@ -19,7 +20,7 @@ if str(_src_path) not in sys.path:
     sys.path.insert(0, str(_src_path))
 
 from domain.entities import Order, ProcessingResult
-from domain.enums import OrderStatus
+from domain.enums import OrderStatus, OrderType
 from business_logic.services.pdf_order_detector import PDFOrderDetector
 from business_logic.services.order_processing_service import OrderProcessingService
 from data_access.repositories.customer_repository import CustomerRepository
@@ -31,6 +32,19 @@ from presentation.formatters import (
 )
 from orchestration.config import ApplicationConfig
 from orchestration.order_scanner import OrderScanner
+
+
+# Registry mapping OrderType → (module_path, function_name, display_name)
+# for agencies that gather inputs upfront before the browser session opens.
+_INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
+    OrderType.SAGENT:    ("browser_automation.sagent_automation",   "gather_sagent_inputs_from_pdf", "SAGENT"),
+    OrderType.DAVISELEN: ("browser_automation.daviselen_automation", "gather_daviselen_inputs",       "DAVISELEN"),
+    OrderType.ADMERASIA: ("browser_automation.admerasia_automation", "gather_admerasia_inputs",       "ADMERASIA"),
+    OrderType.HL:        ("browser_automation.hl_automation",        "gather_hl_inputs",              "H&L PARTNERS"),
+    OrderType.IGRAPHIX:  ("browser_automation.igraphix_automation",  "gather_igraphix_inputs",        "IGRAPHIX"),
+    OrderType.IMPACT:    ("browser_automation.impact_automation",    "gather_impact_inputs",          "IMPACT"),
+    OrderType.RPM:       ("browser_automation.rpm_automation",       "gather_rpm_inputs",             "RPM"),
+}
 
 
 class ApplicationOrchestrator:
@@ -205,8 +219,6 @@ class ApplicationOrchestrator:
         Returns:
             List of processing results
         """
-        from domain.enums import OrderType
-        
         # Collect inputs for all orders first
         orders_with_input = []
         for i, order in enumerate(orders, 1):
@@ -217,179 +229,36 @@ class ApplicationOrchestrator:
             )
             print(progress)
             print("=" * 70)
-            
-            # SAGENT: Gather inputs upfront (before browser session)
-            if order.order_type == OrderType.SAGENT:
-                print("Type: SAGENT")
-                print("Customer: CAL FIRE")
-                print()
-                
-                # Import SAGENT input gathering function
-                try:
-                    from browser_automation.sagent_automation import gather_sagent_inputs_from_pdf
-                    
-                    # Gather inputs now (no browser needed!)
-                    sagent_inputs = gather_sagent_inputs_from_pdf(str(order.pdf_path))
-                    
-                    if not sagent_inputs:
-                        print("\n[CANCELLED] SAGENT input gathering cancelled")
-                        continue
-                    
-                    # Store inputs in order
-                    order_with_input = order.with_input(sagent_inputs)
-                    orders_with_input.append(order_with_input)
-                    
-                except ImportError as e:
-                    print(f"\n[ERROR] Could not import SAGENT automation: {e}")
-                    print("[INFO] Falling back to runtime input gathering")
-                    orders_with_input.append(order)
-                
-                continue
-            
-            # DAVISELEN: Gather inputs upfront (before browser session)
-            if order.order_type == OrderType.DAVISELEN:
-                print(f"Type: DAVISELEN")
-                print(f"Customer: {order.customer_name}")
-                print()
-                
-                # Import Daviselen input gathering function
-                try:
-                    from browser_automation.daviselen_automation import gather_daviselen_inputs
-                    
-                    # Gather inputs now (no browser needed!)
-                    daviselen_inputs = gather_daviselen_inputs(str(order.pdf_path))
-                    
-                    if not daviselen_inputs:
-                        print("\n[CANCELLED] Daviselen input gathering cancelled")
-                        continue
-                    
-                    # Store inputs in order
-                    order_with_input = order.with_input(daviselen_inputs)
-                    orders_with_input.append(order_with_input)
-                    
-                except ImportError as e:
-                    print(f"\n[ERROR] Could not import Daviselen automation: {e}")
-                    print("[INFO] Falling back to runtime input gathering")
-                    orders_with_input.append(order)
-                
-                continue
-            
-            # CHARMAINE: Skip generic input collection — process_charmaine_order
-            # handles all input internally (customer lookup, code, description,
-            # separation, South Asian disambiguation) with smart defaults.
+
+            display_name = _INPUT_GATHERERS.get(order.order_type, (None, None, order.order_type.name))[2]
+            print(f"Type: {display_name}")
+            print(f"Customer: {order.customer_name}")
+            print()
+
+            # CHARMAINE: handles all input internally — no pre-gathering needed
             if order.order_type == OrderType.CHARMAINE:
-                print(f"Type: CHARMAINE")
-                print(f"Customer: {order.customer_name}")
-                print()
                 orders_with_input.append(order)
                 continue
-            
-            # ADMERASIA: Gather inputs upfront (before browser session)
-            if order.order_type == OrderType.ADMERASIA:
-                print(f"Type: ADMERASIA")
-                print(f"Customer: {order.customer_name}")
-                print()
-                
+
+            # Registry-driven agencies: dynamic import + gather inputs upfront
+            if order.order_type in _INPUT_GATHERERS:
+                module_path, fn_name, display_name = _INPUT_GATHERERS[order.order_type]
                 try:
-                    from browser_automation.admerasia_automation import gather_admerasia_inputs
-                    
-                    admerasia_inputs = gather_admerasia_inputs(str(order.pdf_path))
-                    
-                    if not admerasia_inputs:
-                        print("\n[CANCELLED] Admerasia input gathering cancelled")
+                    module = importlib.import_module(module_path)
+                    inputs = getattr(module, fn_name)(str(order.pdf_path))
+                    if not inputs:
+                        print(f"\n[CANCELLED] {display_name} input gathering cancelled")
                         continue
-                    
-                    order_with_input = order.with_input(admerasia_inputs)
-                    orders_with_input.append(order_with_input)
-                    
+                    orders_with_input.append(order.with_input(inputs))
                 except ImportError as e:
-                    print(f"\n[ERROR] Could not import Admerasia automation: {e}")
+                    print(f"\n[ERROR] Could not import {display_name} automation: {e}")
                     print("[INFO] Falling back to runtime input gathering")
                     orders_with_input.append(order)
-                
                 continue
-            
-            # H&L PARTNERS: Gather inputs upfront (before browser session)
-            if order.order_type == OrderType.HL:
-                print(f"Type: H&L PARTNERS")
-                print(f"Customer: {order.customer_name}")
-                print()
-                
-                try:
-                    from browser_automation.hl_automation import gather_hl_inputs
-                    
-                    hl_inputs = gather_hl_inputs(str(order.pdf_path))
-                    
-                    if not hl_inputs:
-                        print("\n[CANCELLED] H&L Partners input gathering cancelled")
-                        continue
-                    
-                    order_with_input = order.with_input(hl_inputs)
-                    orders_with_input.append(order_with_input)
-                    
-                except ImportError as e:
-                    print(f"\n[ERROR] Could not import H&L Partners automation: {e}")
-                    print("[INFO] Falling back to runtime input gathering")
-                    orders_with_input.append(order)
-                
-                continue
-            
-            # IGRAPHIX: Gather inputs upfront (before browser session)
-            if order.order_type == OrderType.IGRAPHIX:
-                print(f"Type: IGRAPHIX")
-                print(f"Customer: {order.customer_name}")
-                print()
-                
-                try:
-                    from browser_automation.igraphix_automation import gather_igraphix_inputs
-                    
-                    igraphix_inputs = gather_igraphix_inputs(str(order.pdf_path))
-                    
-                    if not igraphix_inputs:
-                        print("\n[CANCELLED] iGraphix input gathering cancelled")
-                        continue
-                    
-                    order_with_input = order.with_input(igraphix_inputs)
-                    orders_with_input.append(order_with_input)
-                    
-                except ImportError as e:
-                    print(f"\n[ERROR] Could not import iGraphix automation: {e}")
-                    print("[INFO] Falling back to runtime input gathering")
-                    orders_with_input.append(order)
-                
-                continue
-            
-            # IMPACT: Gather inputs upfront (before browser session)
-            if order.order_type == OrderType.IMPACT:
-                print(f"Type: IMPACT")
-                print(f"Customer: {order.customer_name}")
-                print()
-                
-                try:
-                    from browser_automation.impact_automation import gather_impact_inputs
-                    
-                    impact_inputs = gather_impact_inputs(str(order.pdf_path))
-                    
-                    if not impact_inputs:
-                        print("\n[CANCELLED] Impact Marketing input gathering cancelled")
-                        continue
-                    
-                    order_with_input = order.with_input(impact_inputs)
-                    orders_with_input.append(order_with_input)
-                    
-                except ImportError as e:
-                    print(f"\n[ERROR] Could not import Impact Marketing automation: {e}")
-                    print("[INFO] Falling back to runtime input gathering")
-                    orders_with_input.append(order)
-                
-                continue
-            
-            # Collect input for other order types
+
+            # All other types: generic input collector (TCAA, MISFIT, OPAD, etc.)
             order_input = self._input_collector.collect_order_input(order)
-            
-            # Add input to order
-            order_with_input = order.with_input(order_input)
-            orders_with_input.append(order_with_input)
+            orders_with_input.append(order.with_input(order_input))
         
         # Now process all orders using batch processing
         # (TCAA orders from same PDF will be grouped and processed together)
