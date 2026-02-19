@@ -897,15 +897,25 @@ class EtereClient:
                 if end_period_match:
                     end_period = end_period_match.group(1)
                     
-                    # Parse end hour to determine if start should be AM or PM
-                    end_hour_match = re.match(r'(\d{1,2})', end_str)
-                    if end_hour_match:
-                        end_hour = int(end_hour_match.group(1))
+                    # Parse end hour to determine if start should be AM or PM.
+                    # Handle compressed format ("130p"=1:30p, "730p"=7:30p) to avoid
+                    # greedy \d{1,2} extracting 13 instead of 1 from "130p".
+                    compressed = re.match(r'^(\d{3,4})[ap]?$', end_str)
+                    if compressed:
+                        d = compressed.group(1)
+                        end_hour = int(d[0]) if len(d) == 3 else int(d[0:2])
+                    else:
+                        end_hour_match = re.match(r'(\d{1,2})', end_str)
+                        end_hour = int(end_hour_match.group(1)) if end_hour_match else None
+                    if end_hour is not None:
                         
-                        # If end is PM and start hour > end hour (e.g., 11-130p)
-                        # Then start is AM (11am-1:30pm)
-                        if end_period == 'p' and hour > end_hour and hour != 12:
-                            period = 'a'
+                        # If end is PM and either end==12 (noon) or start>end,
+                        # then start is AM (e.g., "1130-12p" → 11:30a, "11-130p" → 11a)
+                        if end_period == 'p' and hour != 12:
+                            if end_hour == 12 or hour > end_hour:
+                                period = 'a'
+                            else:
+                                period = end_period
                         else:
                             period = end_period
             
@@ -928,14 +938,29 @@ class EtereClient:
         # ═══════════════════════════════════════════════════════════════
         # PARSE END TIME
         # ═══════════════════════════════════════════════════════════════
-        
+
         # Try: "7:00a", "800p", "10a", "1159p", etc.
-        end_match = re.match(r'(\d{1,2}):?(\d{2})?([ap])?', end_str)
-        
-        if end_match:
-            hour = int(end_match.group(1))
-            minute = end_match.group(2) if end_match.group(2) else "00"
-            period = end_match.group(3) if end_match.group(3) else None
+        # Handle compressed 3-4 digit format first ("730p"=7:30p, "130p"=1:30p) to
+        # avoid greedy \d{1,2} misparsing "130p" as hour=13.
+        compressed_end = re.match(r'^(\d{3,4})([ap]?)$', end_str)
+        if compressed_end:
+            digits = compressed_end.group(1)
+            end_period = compressed_end.group(2) or None
+            if len(digits) == 3:
+                hour, minute = int(digits[0]), digits[1:3]
+            else:
+                hour, minute = int(digits[0:2]), digits[2:4]
+            period = end_period
+        else:
+            end_match = re.match(r'(\d{1,2}):?(\d{2})?([ap])?', end_str)
+            if end_match:
+                hour = int(end_match.group(1))
+                minute = end_match.group(2) if end_match.group(2) else "00"
+                period = end_match.group(3) if end_match.group(3) else None
+            else:
+                hour, minute, period = None, None, None
+
+        if hour is not None:
             
             # CRITICAL: 12:00a or 12a = midnight = 23:59
             if hour == 12 and period == 'a':

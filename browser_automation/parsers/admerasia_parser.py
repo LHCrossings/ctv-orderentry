@@ -1177,34 +1177,45 @@ def _normalize_time_to_colon_format(time_str: str) -> str:
         
         return f"{start_hour}:{start_min}{start_period}-{end_hour}:{end_min}{period}"
     
-    # Pattern 3: "7-730p" or "6-7a" (shared am/pm at end, no colons)
-    match = re.match(r'^(\d+)-(\d{3,4})([ap])$', time_str)
+    # Pattern 3: "7-730p", "1130-12p", "6-7a" (shared am/pm at end, no colons)
+    # Handles 1-4 digit start and end times (e.g., "12" = noon, "1130" = 11:30)
+    match = re.match(r'^(\d{1,4})-(\d{1,4})([ap])$', time_str)
     if match:
-        start_hour = match.group(1)
-        end_time_digits = match.group(2)
+        start_digits = match.group(1)
+        end_digits = match.group(2)
         period = match.group(3)
-        
-        # Split end time: if 3 digits like "730", it's "7:30"
-        # if 4 digits like "1030", it's "10:30"
-        if len(end_time_digits) == 3:
-            end_hour = end_time_digits[0]
-            end_min = end_time_digits[1:3]
-        elif len(end_time_digits) == 4:
-            end_hour = end_time_digits[0:2]
-            end_min = end_time_digits[2:4]
+
+        # Parse start time (1-2 digits = hour only, 3-4 digits = HHMM)
+        if len(start_digits) <= 2:
+            start_hour = start_digits
+            start_min = "00"
+        elif len(start_digits) == 3:
+            start_hour = start_digits[0]
+            start_min = start_digits[1:3]
         else:
-            return time_str  # Can't parse
-        
-        # Detect noon-crossing: "11-1200p" means 11:00a-12:00p
-        # Same rule as Pattern 2
+            start_hour = start_digits[0:2]
+            start_min = start_digits[2:4]
+
+        # Parse end time (1-2 digits = hour only, 3-4 digits = HHMM)
+        if len(end_digits) <= 2:
+            end_hour = end_digits
+            end_min = "00"
+        elif len(end_digits) == 3:
+            end_hour = end_digits[0]
+            end_min = end_digits[1:3]
+        else:
+            end_hour = end_digits[0:2]
+            end_min = end_digits[2:4]
+
+        # Noon-crossing rule: "1130-12p" means 11:30a-12:00p (not 11:30pm)
         start_period = period
         start_h = int(start_hour)
         end_h = int(end_hour)
         if period == 'p' and start_h != 12:
             if end_h == 12 or start_h > end_h:
                 start_period = 'a'
-        
-        return f"{start_hour}:00{start_period}-{end_hour}:{end_min}{period}"
+
+        return f"{start_hour}:{start_min}{start_period}-{end_hour}:{end_min}{period}"
     
     # Pattern 4: "1030p-12a" (each has own am/pm, no colons in first time)
     match = re.match(r'^(\d{3,4})([ap])-(\d+)([ap])$', time_str)
