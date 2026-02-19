@@ -6,8 +6,8 @@ order processing workflows.
 """
 
 from .config import ApplicationConfig
-from .order_scanner import OrderScanner
 from .orchestrator import ApplicationOrchestrator, create_orchestrator
+from .order_scanner import OrderScanner
 
 __all__ = [
     "ApplicationConfig",

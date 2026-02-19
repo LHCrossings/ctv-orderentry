@@ -9,8 +9,6 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
-
 # browser_automation is outside src/; add it directly
 _ba_path = str(Path(__file__).parent.parent.parent / "browser_automation")
 if _ba_path not in sys.path:
@@ -26,9 +24,8 @@ for _mod in ("pdfplumber", "selenium", "selenium.webdriver",
     if _mod not in sys.modules:
         sys.modules[_mod] = MagicMock()
 
-from parsers.admerasia_parser import _normalize_time_to_colon_format  # noqa: E402
 from etere_client import EtereClient  # noqa: E402
-
+from parsers.admerasia_parser import _normalize_time_to_colon_format  # noqa: E402
 
 # ─────────────────────────────────────────────────────────────────────────────
 # _normalize_time_to_colon_format

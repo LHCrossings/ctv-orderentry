@@ -12,26 +12,26 @@ from pathlib import Path
 class ApplicationConfig:
     """
     Central configuration for the application.
-    
+
     All paths and settings are configurable through this object.
     """
     # Directory paths
     incoming_dir: Path
     processed_dir: Path
     error_dir: Path
-    
+
     # Database paths
     customer_db_path: Path
-    
+
     # Processing settings
     batch_size: int = 10
     auto_process: bool = False
     require_confirmation: bool = True
-    
+
     # Browser settings
     headless: bool = False
     browser_timeout: int = 30
-    
+
     def __post_init__(self):
         """Validate configuration after initialization."""
         # Ensure directories exist or can be created
@@ -40,17 +40,17 @@ class ApplicationConfig:
                 # In production, you might want to create these
                 # For now, just validate they're set
                 pass
-    
+
     @classmethod
     def from_defaults(cls) -> "ApplicationConfig":
         """
         Create configuration with default values.
-        
+
         Returns:
             ApplicationConfig with standard defaults
         """
         base_path = Path.cwd()
-        
+
         return cls(
             incoming_dir=base_path / "incoming",
             processed_dir=base_path / "processed",
@@ -62,17 +62,17 @@ class ApplicationConfig:
             headless=False,
             browser_timeout=30
         )
-    
+
     @classmethod
     def for_testing(cls) -> "ApplicationConfig":
         """
         Create configuration for testing environment.
-        
+
         Returns:
             ApplicationConfig with testing defaults
         """
         base_path = Path("/tmp/order_processing_test")
-        
+
         return cls(
             incoming_dir=base_path / "incoming",
             processed_dir=base_path / "processed",
@@ -84,7 +84,7 @@ class ApplicationConfig:
             headless=True,
             browser_timeout=10
         )
-    
+
     def ensure_directories(self) -> None:
         """Create all required directories if they don't exist."""
         self.incoming_dir.mkdir(parents=True, exist_ok=True)

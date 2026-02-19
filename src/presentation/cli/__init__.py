@@ -6,10 +6,10 @@ keeping user interaction separate from business logic.
 """
 
 from .input_collectors import (
-    InputCollector,
     BatchInputCollector,
-    input_collector,
+    InputCollector,
     batch_input_collector,
+    input_collector,
 )
 
 __all__ = [

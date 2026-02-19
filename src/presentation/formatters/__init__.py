@@ -12,8 +12,8 @@ from .output_formatters import (
     ProgressFormatter,
     console_formatter,
     order_formatter,
-    result_formatter,
     progress_formatter,
+    result_formatter,
 )
 
 __all__ = [

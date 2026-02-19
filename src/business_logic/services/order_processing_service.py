@@ -5,10 +5,10 @@ This service coordinates between detection, parsing, customer matching,
 and browser automation to process orders into Etere contracts.
 """
 
-from pathlib import Path
-from typing import Protocol, Any, Optional
-import sys
 import shutil
+import sys
+from pathlib import Path
+from typing import Any, Protocol
 
 # Add src to path for imports
 _src_path = Path(__file__).parent.parent.parent
@@ -20,7 +20,7 @@ _browser_automation_path = _src_path.parent / "browser_automation"
 if str(_browser_automation_path) not in sys.path:
     sys.path.insert(0, str(_browser_automation_path))
 
-from domain.entities import Order, Contract, ProcessingResult
+from domain.entities import Contract, Order, ProcessingResult
 from domain.enums import OrderType
 from domain.value_objects import OrderInput
 
@@ -28,11 +28,11 @@ from domain.value_objects import OrderInput
 class OrderProcessor(Protocol):
     """
     Protocol defining the interface for order processors.
-    
+
     Each agency type (WorldLink, TCAA, etc.) implements this protocol
     to handle its specific processing logic.
     """
-    
+
     def process(
         self,
         browser_session: Any,  # BrowserSession type
@@ -41,12 +41,12 @@ class OrderProcessor(Protocol):
     ) -> ProcessingResult:
         """
         Process an order PDF into Etere contracts.
-        
+
         Args:
             browser_session: Active browser session with Etere
             pdf_path: Path to order PDF file
             order_input: Optional pre-gathered user inputs
-            
+
         Returns:
             ProcessingResult with success status and contracts created
         """
@@ -86,33 +86,33 @@ class OrderProcessingService:
     ):
         """
         Initialize service with processor registry.
-        
+
         Args:
             processors: Map of OrderType to processor implementations
             orders_dir: Base directory for order files (default: orders/)
         """
         self._processors = processors
         self._orders_dir = Path(orders_dir) if orders_dir else Path("orders")
-        
+
         # TCAA processor components (lazy loaded)
         self._tcaa_processor = None
-        
+
         # Misfit processor components (lazy loaded)
         self._misfit_processor = None
-        
+
         # Charmaine processor components (lazy loaded)
         self._charmaine_processor = None
-        
+
         # Ensure directory structure exists
         self._setup_directories()
-    
+
     def _setup_directories(self) -> None:
         """Create orders directory structure if it doesn't exist."""
         (self._orders_dir / "incoming").mkdir(parents=True, exist_ok=True)
         (self._orders_dir / "processing").mkdir(parents=True, exist_ok=True)
         (self._orders_dir / "completed").mkdir(parents=True, exist_ok=True)
         (self._orders_dir / "failed").mkdir(parents=True, exist_ok=True)
-    
+
     def process_orders_batch(
         self,
         orders: list[Order],
@@ -120,18 +120,18 @@ class OrderProcessingService:
     ) -> list[ProcessingResult]:
         """
         UNIVERSAL BATCH PROCESSING: Process multiple orders with SINGLE shared browser session.
-        
+
         This works automatically for:
         - TCAA, Misfit, WorldLink, opAD, RPM, H&L, Daviselen, iGraphix, Admerasia, Impact
         - ANY combination of order types in the same batch
         - ALL current and future agencies
-        
+
         User logs in ONCE, all orders process, then browser closes.
-        
+
         Args:
             orders: List of orders to process
             browser_session: Optional pre-existing browser session
-            
+
         Returns:
             List of ProcessingResults for each order
         """
@@ -148,14 +148,14 @@ class OrderProcessingService:
                 ]
                 for order in orders
             )
-            
+
             if needs_browser:
                 try:
                     from etere_session import EtereSession
                 except ImportError:
                     print("[ERROR] Could not import EtereSession")
                     return self._process_orders_fallback(orders)
-                
+
                 # Create ONE session for entire batch
                 print(f"\n{'='*70}")
                 print(f"BATCH SESSION: {len(orders)} order(s) - SINGLE BROWSER")
@@ -164,7 +164,7 @@ class OrderProcessingService:
                 print("✓ You only need to log in ONCE")
                 print("✓ Browser will stay open until all orders complete")
                 print(f"{'='*70}\n")
-                
+
                 with EtereSession() as shared_session:
                     # Set master market ONCE for the entire batch.
                     # All Crossings TV agencies use NYC. The individual contract
@@ -174,10 +174,10 @@ class OrderProcessingService:
                     shared_session.set_market("NYC")
                     print("[SESSION] \u2713 Master market set \u2014 beginning batch\n")
                     return self._process_orders_with_session(orders, shared_session)
-        
+
         # Session provided or no orders need browser
         return self._process_orders_with_session(orders, browser_session)
-    
+
     def _process_orders_with_session(
         self,
         orders: list[Order],
@@ -185,20 +185,20 @@ class OrderProcessingService:
     ) -> list[ProcessingResult]:
         """
         UNIVERSAL: Process orders with shared session (works for ALL agencies).
-        
+
         Args:
             orders: Orders to process
             shared_session: Shared browser session (or None for no-browser orders)
-            
+
         Returns:
             List of ProcessingResults
         """
         results = []
-        
+
         # Group TCAA orders by PDF (for multi-estimate batch processing)
         tcaa_groups = {}
         other_orders = []
-        
+
         for order in orders:
             if order.order_type == OrderType.TCAA:
                 pdf_key = str(order.pdf_path)
@@ -207,7 +207,7 @@ class OrderProcessingService:
                 tcaa_groups[pdf_key].append(order)
             else:
                 other_orders.append(order)
-        
+
         # Process TCAA groups (multiple estimates from same PDF together)
         for pdf_path, tcaa_orders in tcaa_groups.items():
             if len(tcaa_orders) > 1:
@@ -217,20 +217,20 @@ class OrderProcessingService:
                 for order in tcaa_orders:
                     print(f"  - Estimate {order.estimate_number}")
                 print()
-                
+
                 result = self._process_tcaa_orders_batch(tcaa_orders, shared_session)
                 results.append(result)
             else:
                 result = self._process_single_order(tcaa_orders[0], shared_session)
                 results.append(result)
-        
+
         # Process all other orders (Misfit, WorldLink, opAD, etc.) with shared session
         for order in other_orders:
             result = self._process_single_order(order, shared_session)
             results.append(result)
-        
+
         return results
-    
+
     def _process_single_order(
         self,
         order: Order,
@@ -238,14 +238,14 @@ class OrderProcessingService:
     ) -> ProcessingResult:
         """
         UNIVERSAL: Process single order with optional shared session.
-        
+
         Automatically routes to correct processor based on order type.
         Works for TCAA, Misfit, WorldLink, opAD, RPM, etc.
-        
+
         Args:
             order: Order to process
             shared_session: Optional shared browser session
-            
+
         Returns:
             ProcessingResult
         """
@@ -253,23 +253,23 @@ class OrderProcessingService:
         if method_name:
             return getattr(self, method_name)(order, shared_session)
         return self.process_order(order, shared_session)  # RPM + future agencies
-    
+
     def _process_orders_fallback(self, orders: list[Order]) -> list[ProcessingResult]:
         """
         Fallback: Process without shared session (backward compatible).
-        
+
         Args:
             orders: Orders to process
-            
+
         Returns:
             List of ProcessingResults
         """
         results = []
-        
+
         # Group TCAA orders by PDF path
         tcaa_groups = {}
         non_tcaa_orders = []
-        
+
         for order in orders:
             if order.order_type == OrderType.TCAA:
                 pdf_key = str(order.pdf_path)
@@ -278,7 +278,7 @@ class OrderProcessingService:
                 tcaa_groups[pdf_key].append(order)
             else:
                 non_tcaa_orders.append(order)
-        
+
         # Process TCAA groups (multiple estimates from same PDF together)
         for pdf_path, tcaa_orders in tcaa_groups.items():
             if len(tcaa_orders) > 1:
@@ -289,60 +289,60 @@ class OrderProcessingService:
                 for order in tcaa_orders:
                     print(f"  - Estimate {order.estimate_number}")
                 print()
-                
+
                 # Process all estimates together
                 result = self._process_tcaa_orders_batch(tcaa_orders, None)
                 results.append(result)
             else:
                 result = self.process_order(tcaa_orders[0], None)
                 results.append(result)
-        
+
         # Process non-TCAA orders
         for order in non_tcaa_orders:
             result = self.process_order(order, None)
             results.append(result)
-        
+
         return results
-    
+
     def _process_tcaa_orders_batch(self, orders: list[Order], shared_session: Any = None) -> ProcessingResult:
         """
         Process multiple TCAA orders from same PDF together.
-        
+
         Args:
             orders: List of TCAA orders from same PDF
-            
+
         Returns:
             ProcessingResult combining all contracts created
         """
         try:
             # Lazy load TCAA processor
             if self._tcaa_processor is None:
-                from tcaa_automation import process_tcaa_order
                 from etere_session import EtereSession
                 from parsers.tcaa_parser import parse_tcaa_pdf
-                
+                from tcaa_automation import process_tcaa_order
+
                 self._tcaa_processor = {
                     'process': process_tcaa_order,
                     'session_class': EtereSession,
                     'parser': parse_tcaa_pdf
                 }
-            
+
             # Use first order for display info
             first_order = orders[0]
-            
+
             print(f"\n{'='*70}")
-            print(f"TCAA BROWSER AUTOMATION (BATCH MODE)")
+            print("TCAA BROWSER AUTOMATION (BATCH MODE)")
             print(f"{'='*70}")
             print(f"PDF: {first_order.pdf_path.name}")
             print(f"Estimates: {', '.join(o.estimate_number for o in orders)}")
             print(f"Customer: {first_order.customer_name}")
             print(f"{'='*70}\n")
-            
+
             # Start browser session
             with self._tcaa_processor['session_class']() as session:
                 # Set master market to NYC
                 session.set_market("NYC")
-                
+
                 # Process all estimates together (pass None for estimate_number)
                 # This triggers batch mode in tcaa_automation
                 success = self._tcaa_processor['process'](
@@ -350,7 +350,7 @@ class OrderProcessingService:
                     pdf_path=str(first_order.pdf_path),
                     estimate_number=None  # Process ALL estimates in batch
                 )
-                
+
                 if success:
                     # Create contracts for all processed estimates
                     contracts = [
@@ -360,9 +360,9 @@ class OrderProcessingService:
                         )
                         for order in orders
                     ]
-                    
+
                     print(f"\n✓ Successfully created {len(contracts)} contracts")
-                    
+
                     return ProcessingResult(
                         success=True,
                         contracts=contracts,
@@ -375,20 +375,20 @@ class OrderProcessingService:
                         order_type=OrderType.TCAA,
                         error_message="TCAA batch processing failed"
                     )
-                    
+
         except Exception as e:
             import traceback
             error_msg = f"TCAA batch processing error: {str(e)}"
             print(f"✗ {error_msg}")
             traceback.print_exc()
-            
+
             return ProcessingResult(
                 success=False,
                 contracts=[],
                 order_type=OrderType.TCAA,
                 error_message=error_msg
             )
-    
+
     def process_order(
         self,
         order: Order,
@@ -397,12 +397,12 @@ class OrderProcessingService:
     ) -> ProcessingResult:
         """
         Process a single order through the complete workflow.
-        
+
         Args:
             order: Order to process
             browser_session: Optional browser session (None returns stub result)
             order_input: Optional pre-collected input for the order
-            
+
         Returns:
             ProcessingResult with success/failure status
         """
@@ -411,24 +411,24 @@ class OrderProcessingService:
             # Check if this is a TCAA order that we can auto-process
             if order.order_type == OrderType.TCAA:
                 return self._process_tcaa_order(order)
-            
+
             # Check if this is a Misfit order that we can auto-process
             if order.order_type == OrderType.MISFIT:
                 return self._process_misfit_order(order)
-            
+
             # Check if this is a Charmaine order that we can auto-process
             if order.order_type == OrderType.CHARMAINE:
                 return self._process_charmaine_order(order)
-            
+
             # For other types, return stub result
             return self._create_stub_result(order)
-        
+
         # Continue with normal processing if browser_session provided
         print("\n" + "="*70)
         print(f"PROCESSING: {order.get_display_name()}")
         print("="*70)
         print(f"[DETECT] Order type: {order.order_type.name}")
-        
+
         # Check if order is processable
         if not order.is_processable():
             return ProcessingResult(
@@ -437,7 +437,7 @@ class OrderProcessingService:
                 order_type=order.order_type,
                 error_message="Order is not in processable state"
             )
-        
+
         # Move to processing folder
         processing_path = self._move_to_processing(order.pdf_path)
         if not processing_path:
@@ -447,11 +447,11 @@ class OrderProcessingService:
                 order_type=order.order_type,
                 error_message="Failed to move file to processing folder"
             )
-        
+
         try:
             # Get processor for this order type
             processor = self._processors.get(order.order_type)
-            
+
             if not processor:
                 error_msg = f"No processor registered for {order.order_type.name}"
                 print(f"[ERROR] {error_msg}")
@@ -463,39 +463,39 @@ class OrderProcessingService:
                     order_type=order.order_type,
                     error_message=error_msg
                 )
-            
+
             # Process the order
             result = processor.process(browser_session, processing_path, order_input)
-            
+
             # Move to appropriate folder based on result
             if result.success:
                 self._move_to_completed(processing_path)
             else:
                 self._move_to_failed(processing_path)
-            
+
             return result
-            
+
         except Exception as e:
             print(f"[ERROR] Exception during processing: {e}")
             import traceback
             traceback.print_exc()
-            
+
             self._move_to_failed(processing_path)
-            
+
             return ProcessingResult(
                 success=False,
                 contracts=[],
                 order_type=order.order_type,
                 error_message=str(e)
             )
-    
+
     def _create_stub_result(self, order: Order) -> ProcessingResult:
         """
         Create stub result for orders without browser automation.
-        
+
         Args:
             order: Order that can't be auto-processed
-        
+
         Returns:
             ProcessingResult with manual processing instructions
         """
@@ -504,27 +504,27 @@ class OrderProcessingService:
             f"  Order Type: {order.order_type.name}\n"
             f"  Customer: {order.customer_name}\n"
         )
-        
+
         if order.order_input:
             message += (
                 f"  Order Code: {order.order_input.order_code}\n"
                 f"  Description: {order.order_input.description}\n"
             )
-        
+
         message += (
             "\nTo process this order:\n"
             "  1. Open Etere manually\n"
             "  2. Process the order using the information above\n"
             "  3. Browser automation will be added in a future update"
         )
-        
+
         return ProcessingResult(
             success=False,
             order_type=order.order_type,
             contracts=[],
             error_message=message
         )
-    
+
     def _run_tcaa_with_driver(self, order: Order, driver: Any) -> ProcessingResult:
         """Call TCAA processor with an already-open driver and build ProcessingResult."""
         success = self._tcaa_processor['process'](
@@ -562,9 +562,9 @@ class OrderProcessingService:
         try:
             # Lazy load TCAA processor components
             if self._tcaa_processor is None:
-                from tcaa_automation import process_tcaa_order
                 from etere_session import EtereSession
                 from parsers.tcaa_parser import parse_tcaa_pdf
+                from tcaa_automation import process_tcaa_order
 
                 self._tcaa_processor = {
                     'process': process_tcaa_order,
@@ -573,7 +573,7 @@ class OrderProcessingService:
                 }
 
             print(f"\n{'='*70}")
-            print(f"TCAA BROWSER AUTOMATION")
+            print("TCAA BROWSER AUTOMATION")
             print(f"{'='*70}")
             print(f"Order: {order.get_display_name()}")
             print(f"Type: {order.order_type.name}")
@@ -600,7 +600,7 @@ class OrderProcessingService:
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.TCAA, error_message=error_detail
             )
-    
+
     def _run_misfit_with_driver(self, order: Order, driver: Any) -> ProcessingResult:
         """Call Misfit processor with an already-open driver and build ProcessingResult."""
         success = self._misfit_processor['process'](
@@ -616,7 +616,7 @@ class OrderProcessingService:
                 contract_number=f"MISFIT-{parsed_order.date.replace('/', '')}",
                 order_type=OrderType.MISFIT
             )
-            print(f"\n✓ Successfully created Misfit contract")
+            print("\n✓ Successfully created Misfit contract")
             return ProcessingResult(
                 success=True, contracts=[contract], order_type=OrderType.MISFIT, error_message=None
             )
@@ -644,8 +644,8 @@ class OrderProcessingService:
         try:
             # Lazy load Misfit processor components
             if self._misfit_processor is None:
-                from misfit_automation import process_misfit_order
                 from etere_session import EtereSession
+                from misfit_automation import process_misfit_order
                 from parsers.misfit_parser import parse_misfit_pdf
 
                 self._misfit_processor = {
@@ -655,7 +655,7 @@ class OrderProcessingService:
                 }
 
             print(f"\n{'='*70}")
-            print(f"MISFIT BROWSER AUTOMATION")
+            print("MISFIT BROWSER AUTOMATION")
             print(f"{'='*70}")
             print(f"Order: {order.get_display_name()}")
             print(f"Type: {order.order_type.name}")
@@ -682,7 +682,7 @@ class OrderProcessingService:
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.MISFIT, error_message=error_detail
             )
-    
+
     def _process_daviselen_order(
         self,
         order: Order,
@@ -690,33 +690,33 @@ class OrderProcessingService:
     ) -> ProcessingResult:
         """
         Process Daviselen order using daviselen_automation.
-        
+
         Daviselen orders have:
         - Customer lookup from database (4 known customers)
         - Smart contract code/description defaults
         - Single market per order
         - Universal agency billing
         - Master market: NYC (set by session before calling)
-        
+
         Args:
             order: Daviselen order to process
             shared_session: Shared browser session (EtereSession)
-            
+
         Returns:
             ProcessingResult with success status
         """
         try:
             # Import Daviselen automation
             from daviselen_automation import process_daviselen_order
-            
+
             print(f"\n{'='*70}")
-            print(f"PROCESSING DAVISELEN ORDER")
+            print("PROCESSING DAVISELEN ORDER")
             print(f"{'='*70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
             print(f"{'='*70}\n")
-            
+
             # Daviselen REQUIRES a browser session (no standalone mode)
             if shared_session is None:
                 return ProcessingResult(
@@ -725,7 +725,7 @@ class OrderProcessingService:
                     order_type=OrderType.DAVISELEN,
                     error_message="Browser session required for Daviselen orders"
                 )
-            
+
             # Get inputs from order (already collected by orchestrator)
             if not order.order_input:
                 return ProcessingResult(
@@ -734,47 +734,47 @@ class OrderProcessingService:
                     order_type=OrderType.DAVISELEN,
                     error_message="Order inputs not collected"
                 )
-            
+
             print("[SESSION] ✓ Using shared browser session")
             # Market already set to NYC once at batch start
-            
+
             # Process the order with pre-collected inputs (matching TCAA pattern)
             success = process_daviselen_order(
                 driver=shared_session.driver,  # ← Pass driver, not session!
                 pdf_path=str(order.pdf_path),
                 user_input=order.order_input
             )
-            
+
             # Daviselen automation drives the browser directly and does not return
             # contract numbers — the session is one-directional (Python → browser).
             # Contract numbers can be retrieved from Etere manually if needed.
             contracts = []
-            
+
             if success:
-                print(f"\n✓ Daviselen order processed successfully")
+                print("\n✓ Daviselen order processed successfully")
             else:
-                print(f"\n✗ Daviselen order processing failed")
-            
+                print("\n✗ Daviselen order processing failed")
+
             return ProcessingResult(
                 success=success,
                 contracts=contracts,
                 order_type=OrderType.DAVISELEN,
                 error_message=None if success else "Processing failed"
             )
-            
+
         except Exception as e:
             import traceback
             error_detail = f"Daviselen processing error: {str(e)}\n{traceback.format_exc()}"
-            
+
             print(f"\n✗ Daviselen processing failed: {e}")
-            
+
             return ProcessingResult(
                 success=False,
                 contracts=[],
                 order_type=OrderType.DAVISELEN,
                 error_message=error_detail
             )
-    
+
     def _run_sagent_with_driver(
         self, order: Order, driver: Any, session: Any, pre_gathered_inputs: Any, process_fn: Any
     ) -> ProcessingResult:
@@ -786,9 +786,9 @@ class OrderProcessingService:
             pre_gathered_inputs=pre_gathered_inputs
         )
         if success:
-            print(f"\n✓ SAGENT order processed successfully")
+            print("\n✓ SAGENT order processed successfully")
             return ProcessingResult(success=True, contracts=[], order_type=OrderType.SAGENT)
-        print(f"\n✗ SAGENT order processing failed")
+        print("\n✗ SAGENT order processing failed")
         return ProcessingResult(
             success=False, contracts=[], order_type=OrderType.SAGENT,
             error_message="SAGENT processing failed - check browser output for details"
@@ -819,7 +819,7 @@ class OrderProcessingService:
             from sagent_automation import process_sagent_order
 
             print(f"\n{'='*70}")
-            print(f"PROCESSING SAGENT ORDER")
+            print("PROCESSING SAGENT ORDER")
             print(f"{'='*70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
@@ -859,16 +859,16 @@ class OrderProcessingService:
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.SAGENT, error_message=error_detail
             )
-    
+
     def _run_charmaine_with_driver(self, order: Order, driver: Any, process_fn: Any) -> ProcessingResult:
         """Call CHARMAINE processor with an already-open driver and build ProcessingResult."""
         from etere_client import EtereClient
         etere_client = EtereClient(driver)
         success = process_fn(str(order.pdf_path), shared_session=etere_client)
         if success:
-            print(f"\n✓ CHARMAINE order processed successfully")
+            print("\n✓ CHARMAINE order processed successfully")
             return ProcessingResult(success=True, contracts=[], order_type=OrderType.CHARMAINE)
-        print(f"\n✗ CHARMAINE order processing failed")
+        print("\n✗ CHARMAINE order processing failed")
         return ProcessingResult(
             success=False, contracts=[], order_type=OrderType.CHARMAINE,
             error_message="CHARMAINE processing failed - check browser output"
@@ -900,7 +900,7 @@ class OrderProcessingService:
             from charmaine_automation import process_charmaine_order
 
             print(f"\n{'='*70}")
-            print(f"PROCESSING CHARMAINE ORDER")
+            print("PROCESSING CHARMAINE ORDER")
             print(f"{'='*70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
@@ -934,7 +934,7 @@ class OrderProcessingService:
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.CHARMAINE, error_message=error_detail
             )
-    
+
     def _process_admerasia_order(
         self,
         order: Order,
@@ -942,7 +942,7 @@ class OrderProcessingService:
     ) -> ProcessingResult:
         """
         Process Admerasia order using admerasia_automation.
-        
+
         Admerasia orders have:
         - McDonald's as sole customer (ID: 42)
         - Single market per order (detected from DMA field)
@@ -951,26 +951,26 @@ class OrderProcessingService:
         - Separation: customer=3, event=0, order=5
         - Universal agency billing
         - Master market: NYC (set by session before calling)
-        
+
         Args:
             order: Admerasia order to process
             shared_session: Shared browser session (EtereSession)
-            
+
         Returns:
             ProcessingResult with success status
         """
         try:
             # Import Admerasia automation
             from admerasia_automation import process_admerasia_order
-            
+
             print(f"\n{'='*70}")
-            print(f"PROCESSING ADMERASIA ORDER")
+            print("PROCESSING ADMERASIA ORDER")
             print(f"{'='*70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
             print(f"{'='*70}\n")
-            
+
             # Admerasia REQUIRES a browser session
             if shared_session is None:
                 return ProcessingResult(
@@ -979,7 +979,7 @@ class OrderProcessingService:
                     order_type=OrderType.ADMERASIA,
                     error_message="Browser session required for Admerasia orders"
                 )
-            
+
             # Get inputs from order (already collected by orchestrator)
             if not order.order_input:
                 return ProcessingResult(
@@ -988,44 +988,44 @@ class OrderProcessingService:
                     order_type=OrderType.ADMERASIA,
                     error_message="Order inputs not collected"
                 )
-            
+
             print("[SESSION] ✓ Using shared browser session")
             # Market already set to NYC once at batch start
-            
+
             # Process the order with pre-collected inputs (matching Daviselen pattern)
             success = process_admerasia_order(
                 driver=shared_session.driver,  # ← Pass driver, not session!
                 pdf_path=str(order.pdf_path),
                 user_input=order.order_input
             )
-            
+
             contracts = []
-            
+
             if success:
-                print(f"\n✓ Admerasia order processed successfully")
+                print("\n✓ Admerasia order processed successfully")
             else:
-                print(f"\n✗ Admerasia order processing failed")
-            
+                print("\n✗ Admerasia order processing failed")
+
             return ProcessingResult(
                 success=success,
                 contracts=contracts,
                 order_type=OrderType.ADMERASIA,
                 error_message=None if success else "Processing failed"
             )
-            
+
         except Exception as e:
             import traceback
             error_detail = f"Admerasia processing error: {str(e)}\n{traceback.format_exc()}"
-            
+
             print(f"\n✗ Admerasia processing failed: {e}")
-            
+
             return ProcessingResult(
                 success=False,
                 contracts=[],
                 order_type=OrderType.ADMERASIA,
                 error_message=error_detail
             )
-    
+
 
     def _process_hl_order(
         self,
@@ -1034,7 +1034,7 @@ class OrderProcessingService:
     ) -> ProcessingResult:
         """
         Process H&L Partners order using hl_automation.
-        
+
         H&L Partners orders have:
         - SFO or CVC markets only (detected from PDF header)
         - Multiple clients possible → customer DB lookup with manual fallback
@@ -1042,25 +1042,25 @@ class OrderProcessingService:
         - Universal agency billing
         - Multiple estimates per PDF → each becomes a separate contract
         - Master market: NYC (set by session before calling)
-        
+
         Args:
             order: H&L Partners order to process
             shared_session: Shared browser session (EtereSession)
-            
+
         Returns:
             ProcessingResult with success status
         """
         try:
             from browser_automation.hl_automation import process_hl_order
-            
+
             print(f"\n{'='*70}")
-            print(f"PROCESSING H&L PARTNERS ORDER")
+            print("PROCESSING H&L PARTNERS ORDER")
             print(f"{'='*70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
             print(f"{'='*70}\n")
-            
+
             if shared_session is None:
                 return ProcessingResult(
                     success=False,
@@ -1068,7 +1068,7 @@ class OrderProcessingService:
                     order_type=OrderType.HL,
                     error_message="Browser session required for H&L Partners orders"
                 )
-            
+
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
@@ -1076,43 +1076,43 @@ class OrderProcessingService:
                     order_type=OrderType.HL,
                     error_message="Order inputs not collected"
                 )
-            
+
             print("[SESSION] ✓ Using shared browser session")
             # Market already set to NYC once at batch start
-            
+
             success = process_hl_order(
                 driver=shared_session.driver,
                 pdf_path=str(order.pdf_path),
                 user_input=order.order_input
             )
-            
+
             contracts = []
-            
+
             if success:
-                print(f"\n✓ H&L Partners order processed successfully")
+                print("\n✓ H&L Partners order processed successfully")
             else:
-                print(f"\n✗ H&L Partners order processing failed")
-            
+                print("\n✗ H&L Partners order processing failed")
+
             return ProcessingResult(
                 success=success,
                 contracts=contracts,
                 order_type=OrderType.HL,
                 error_message=None if success else "Processing failed"
             )
-            
+
         except Exception as e:
             import traceback
             error_detail = f"H&L Partners processing error: {str(e)}\n{traceback.format_exc()}"
-            
+
             print(f"\n✗ H&L Partners processing failed: {e}")
-            
+
             return ProcessingResult(
                 success=False,
                 contracts=[],
                 order_type=OrderType.HL,
                 error_message=error_detail
             )
-    
+
     def _process_igraphix_order(
         self,
         order: Order,
@@ -1142,7 +1142,7 @@ class OrderProcessingService:
             from igraphix_automation import process_igraphix_order
 
             print(f"\n{'='*70}")
-            print(f"PROCESSING IGRAPHIX ORDER")
+            print("PROCESSING IGRAPHIX ORDER")
             print(f"{'='*70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
@@ -1180,9 +1180,9 @@ class OrderProcessingService:
             contracts = []
 
             if success:
-                print(f"\n✓ iGraphix order processed successfully")
+                print("\n✓ iGraphix order processed successfully")
             else:
-                print(f"\n✗ iGraphix order processing failed")
+                print("\n✗ iGraphix order processing failed")
 
             return ProcessingResult(
                 success=success,
@@ -1233,7 +1233,7 @@ class OrderProcessingService:
             from browser_automation.impact_automation import process_impact_order
 
             print(f"\n{'='*70}")
-            print(f"PROCESSING IMPACT MARKETING ORDER")
+            print("PROCESSING IMPACT MARKETING ORDER")
             print(f"{'='*70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
@@ -1271,9 +1271,9 @@ class OrderProcessingService:
             contracts = []
 
             if success:
-                print(f"\n✓ Impact Marketing order processed successfully")
+                print("\n✓ Impact Marketing order processed successfully")
             else:
-                print(f"\n✗ Impact Marketing order processing failed")
+                print("\n✗ Impact Marketing order processing failed")
 
             return ProcessingResult(
                 success=success,
@@ -1302,7 +1302,7 @@ class OrderProcessingService:
     ) -> ProcessingResult:
         """
         Process opAD order using opad_automation.
-        
+
         opAD orders have:
         - NYC market ONLY (always)
         - Multiple clients possible → customer DB lookup with manual fallback
@@ -1311,26 +1311,26 @@ class OrderProcessingService:
         - Bonus lines (rate=0) → BNS spot code
         - Weekly distribution splitting (gaps + differing counts)
         - Master market: NYC (set by session before calling)
-        
+
         Args:
             order: opAD order to process
             shared_session: Shared browser session (EtereSession)
-            
+
         Returns:
             ProcessingResult with success status
         """
         try:
             # Import opAD automation
             from opad_automation import process_opad_order
-            
+
             print(f"\n{'='*70}")
-            print(f"PROCESSING opAD ORDER")
+            print("PROCESSING opAD ORDER")
             print(f"{'='*70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
             print(f"{'='*70}\n")
-            
+
             # opAD REQUIRES a browser session
             if shared_session is None:
                 return ProcessingResult(
@@ -1339,7 +1339,7 @@ class OrderProcessingService:
                     order_type=OrderType.OPAD,
                     error_message="Browser session required for opAD orders"
                 )
-            
+
             # Get inputs from order (already collected by orchestrator)
             if not order.order_input:
                 return ProcessingResult(
@@ -1348,44 +1348,44 @@ class OrderProcessingService:
                     order_type=OrderType.OPAD,
                     error_message="Order inputs not collected"
                 )
-            
+
             print("[SESSION] ✓ Using shared browser session")
             # Market already set to NYC once at batch start
-            
+
             # Process the order with pre-collected inputs (matching Daviselen/Admerasia pattern)
             success = process_opad_order(
                 driver=shared_session.driver,
                 pdf_path=str(order.pdf_path),
                 user_input=order.order_input
             )
-            
+
             contracts = []
-            
+
             if success:
-                print(f"\n✓ opAD order processed successfully")
+                print("\n✓ opAD order processed successfully")
             else:
-                print(f"\n✗ opAD order processing failed")
-            
+                print("\n✗ opAD order processing failed")
+
             return ProcessingResult(
                 success=success,
                 contracts=contracts,
                 order_type=OrderType.OPAD,
                 error_message=None if success else "Processing failed"
             )
-            
+
         except Exception as e:
             import traceback
             error_detail = f"opAD processing error: {str(e)}\n{traceback.format_exc()}"
-            
+
             print(f"\n✗ opAD processing failed: {e}")
-            
+
             return ProcessingResult(
                 success=False,
                 contracts=[],
                 order_type=OrderType.OPAD,
                 error_message=error_detail
             )
-    
+
     def _process_rpm_order(
         self,
         order: Order,
@@ -1414,7 +1414,7 @@ class OrderProcessingService:
             from browser_automation.rpm_automation import process_rpm_order
 
             print(f"\n{'='*70}")
-            print(f"PROCESSING RPM ORDER")
+            print("PROCESSING RPM ORDER")
             print(f"{'='*70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
@@ -1447,9 +1447,9 @@ class OrderProcessingService:
             )
 
             if success:
-                print(f"\n✓ RPM order processed successfully")
+                print("\n✓ RPM order processed successfully")
             else:
-                print(f"\n✗ RPM order processing failed")
+                print("\n✗ RPM order processing failed")
 
             return ProcessingResult(
                 success=success,
@@ -1472,10 +1472,10 @@ class OrderProcessingService:
     def _move_to_processing(self, pdf_path: Path) -> Path | None:
         """
         Move PDF to processing folder.
-        
+
         Args:
             pdf_path: Current path to PDF
-            
+
         Returns:
             New path in processing folder, or None if move failed
         """
@@ -1487,7 +1487,7 @@ class OrderProcessingService:
         except Exception as e:
             print(f"[ERROR] Failed to move file to processing: {e}")
             return None
-    
+
     def _move_to_completed(self, pdf_path: Path) -> Path | None:
         """Move PDF to completed folder."""
         try:
@@ -1498,7 +1498,7 @@ class OrderProcessingService:
         except Exception as e:
             print(f"[ERROR] Failed to move file to completed: {e}")
             return None
-    
+
     def _move_to_failed(self, pdf_path: Path) -> Path | None:
         """Move PDF to failed folder."""
         try:
@@ -1509,7 +1509,7 @@ class OrderProcessingService:
         except Exception as e:
             print(f"[ERROR] Failed to move file to failed: {e}")
             return None
-    
+
     def register_processor(
         self,
         order_type: OrderType,
@@ -1517,15 +1517,15 @@ class OrderProcessingService:
     ) -> None:
         """
         Register a processor for a specific order type.
-        
+
         This allows dynamic addition of processors without modifying the service.
-        
+
         Args:
             order_type: Order type to handle
             processor: Processor implementation
         """
         self._processors[order_type] = processor
-    
+
     def get_supported_order_types(self) -> list[OrderType]:
         """Get list of order types that have registered processors."""
         return list(self._processors.keys())
@@ -1536,10 +1536,10 @@ class OrderProcessingService:
 def get_default_order_values(order: Order) -> tuple[str, str]:
     """
     Get smart default values for order code and description.
-    
+
     Args:
         order: Order to get defaults for
-    
+
     Returns:
         Tuple of (default_code, default_description)
     """
@@ -1554,7 +1554,7 @@ def get_default_order_values(order: Order) -> tuple[str, str]:
         except Exception as e:
             print(f"[WARN] Could not parse SAGENT defaults: {e}")
             return ("Sagent Order", "SAGENT Order")
-    
+
     elif order.order_type == OrderType.TCAA:
         # TCAA Toyota orders
         if order.estimate_number:
@@ -1564,7 +1564,7 @@ def get_default_order_values(order: Order) -> tuple[str, str]:
             code = "TCAA Toyota"
             description = "Toyota SEA"
         return (code, description)
-    
+
     elif order.order_type == OrderType.CHARMAINE:
         # Charmaine client orders - parse PDF for smart defaults
         try:
@@ -1578,7 +1578,7 @@ def get_default_order_values(order: Order) -> tuple[str, str]:
             return (code, description)
         except Exception:
             return ("CLIENT", "Client Order")
-    
+
     elif order.order_type == OrderType.OPAD:
         # opAD orders - parse PDF to get smart defaults
         try:
@@ -1587,7 +1587,7 @@ def get_default_order_values(order: Order) -> tuple[str, str]:
         except Exception as e:
             print(f"[WARN] Could not parse opAD defaults: {e}")
             return ("opAD Order", "opAD Order")
-    
+
     # Default fallback
     return ("AUTO", "Order")
 
@@ -1595,10 +1595,10 @@ def get_default_order_values(order: Order) -> tuple[str, str]:
 def create_processing_service(customer_repository) -> OrderProcessingService:
     """
     Factory function to create a fully configured OrderProcessingService.
-    
+
     Args:
         customer_repository: Customer repository instance
-    
+
     Returns:
         Configured OrderProcessingService instance
     """

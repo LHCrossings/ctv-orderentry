@@ -6,10 +6,10 @@ keeping it separate from business logic.
 """
 
 from .cli.input_collectors import (
-    InputCollector,
     BatchInputCollector,
-    input_collector,
+    InputCollector,
     batch_input_collector,
+    input_collector,
 )
 from .formatters.output_formatters import (
     ConsoleFormatter,
@@ -18,8 +18,8 @@ from .formatters.output_formatters import (
     ProgressFormatter,
     console_formatter,
     order_formatter,
-    result_formatter,
     progress_formatter,
+    result_formatter,
 )
 
 __all__ = [
