@@ -212,12 +212,12 @@ class TestProcessorDispatch:
         return OrderProcessingService({}, temp_orders_dir)
 
     def test_dispatch_dict_covers_all_automated_types(self, service):
-        """_PROCESSOR_DISPATCH must contain exactly the 11 dedicated-handler types."""
+        """_PROCESSOR_DISPATCH must contain exactly the 12 dedicated-handler types."""
         expected = {
             OrderType.TCAA, OrderType.MISFIT, OrderType.DAVISELEN,
             OrderType.SAGENT, OrderType.CHARMAINE, OrderType.ADMERASIA,
             OrderType.HL, OrderType.OPAD, OrderType.IGRAPHIX, OrderType.IMPACT,
-            OrderType.RPM,
+            OrderType.RPM, OrderType.WORLDLINK,
         }
         assert set(service._PROCESSOR_DISPATCH.keys()) == expected
 
@@ -242,12 +242,12 @@ class TestProcessorDispatch:
         m.assert_called_once_with(order, shared_session)
         assert result is fake_result
 
-    def test_process_single_order_fallback_for_worldlink(self, service):
-        """WORLDLINK is not in _PROCESSOR_DISPATCH — must fall through to process_order()."""
-        fake_result = ProcessingResult(success=True, contracts=[], order_type=OrderType.WORLDLINK)
+    def test_process_single_order_fallback_for_unknown(self, service):
+        """UNKNOWN is not in _PROCESSOR_DISPATCH — must fall through to process_order()."""
+        fake_result = ProcessingResult(success=True, contracts=[], order_type=OrderType.UNKNOWN)
         order = Order(
-            pdf_path=Path("/t/o.pdf"), order_type=OrderType.WORLDLINK,
-            customer_name="WorldLink", status=OrderStatus.PENDING,
+            pdf_path=Path("/t/o.pdf"), order_type=OrderType.UNKNOWN,
+            customer_name="Unknown", status=OrderStatus.PENDING,
         )
         with patch.object(service, 'process_order', return_value=fake_result) as m:
             result = service._process_single_order(order, None)

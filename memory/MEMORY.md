@@ -12,7 +12,7 @@ Inputs gathered upfront (before browser session opens) via `_INPUT_GATHERERS` in
 Template: see `browser_automation/daviselen_automation.py`.
 
 ### Dispatch Registries
-- `_PROCESSOR_DISPATCH` in `order_processing_service.py` — maps OrderType → method name (11 agencies as of RPM addition)
+- `_PROCESSOR_DISPATCH` in `order_processing_service.py` — maps OrderType → method name (12 agencies as of WorldLink addition)
 - `_INPUT_GATHERERS` in `orchestrator.py` — maps OrderType → (module, fn_name, display_name) for upfront input gathering
 - Both use `importlib.import_module` / `getattr` to avoid giant if/elif chains
 
@@ -39,10 +39,19 @@ Old code's `_filter_blocks_by_prefix` is legacy — do NOT add blocks tab to new
 - Separation: `SeparationInterval.RPM.value` = `(25, 0, 15)`
 - Billing: `BillingType.CUSTOMER_SHARE_AGENCY` (universal agency)
 
+### WorldLink Specifics
+- Parser: `parse_worldlink_pdf(pdf_path)` → dict with `lines[]`, `network` (CROSSINGS/ASIAN), `order_type` (new/revision_add/revision_change), `order_code`, `description`, `tracking_number`, `advertiser`
+- Line fields: `line_number`, `action`, `start_date`, `end_date`, `from_time` (24-hr HH:MM), `to_time`, `time_range` (12-hr string), `duration` (seconds as str), `spots` (spots/wk), `total_spots`, `rate` (str), `days_of_week`
+- Crossings TV: NYC line (real rate) + CMP line ($0) per PDF line — CMP replicates via block refresh
+- Asian Channel: DAL market only — single line per PDF line
+- `process_worldlink_order()` returns `Optional[str]` (contract_number), not bool — needed for Contract entity + block refresh tracking
+- Revision orders: prompt for existing contract_number; `highest_line = lines[0]['line_number'] - 1`
+- `requires_block_refresh()` = True for WORLDLINK only — user must manually refresh in Etere after CMP lines added
+
 ### Testing
 - `tests/conftest.py` mocks pdfplumber + selenium globally (prevents collection errors)
-- `test_dispatch_dict_covers_all_automated_types` — update when adding new agencies (currently 11)
-- Fallback dispatch test uses `OrderType.WORLDLINK` (not in `_PROCESSOR_DISPATCH`)
+- `test_dispatch_dict_covers_all_automated_types` — update when adding new agencies (currently 12)
+- Fallback dispatch test uses `OrderType.UNKNOWN` (not in `_PROCESSOR_DISPATCH`)
 
 ## Key File Paths
 - `src/business_logic/services/order_processing_service.py` — dispatch, processing methods

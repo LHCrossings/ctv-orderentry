@@ -77,6 +77,7 @@ class OrderProcessingService:
         OrderType.IGRAPHIX:  "_process_igraphix_order",
         OrderType.IMPACT:    "_process_impact_order",
         OrderType.RPM:       "_process_rpm_order",
+        OrderType.WORLDLINK: "_process_worldlink_order",
     }
 
     def __init__(
@@ -1466,6 +1467,97 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.RPM,
+                error_message=error_detail
+            )
+
+    def _process_worldlink_order(
+        self,
+        order: Order,
+        shared_session: any
+    ) -> ProcessingResult:
+        """
+        Process WorldLink order using worldlink_automation.
+
+        WorldLink orders have:
+        - Two networks: Crossings TV (NYC+CMP two-line) or Asian Channel (DAL)
+        - New contracts and revisions (revision_add / revision_change)
+        - Separation: customer=5, event=0, order=15
+        - Universal agency billing
+        - Block refresh required after CMP lines are added
+
+        Args:
+            order: WorldLink order to process
+            shared_session: Shared browser session (EtereSession)
+
+        Returns:
+            ProcessingResult with contract for block-refresh tracking
+        """
+        try:
+            from browser_automation.worldlink_automation import process_worldlink_order
+
+            print(f"\n{'='*70}")
+            print("PROCESSING WORLDLINK ORDER")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            if order.customer_name:
+                print(f"Customer: {order.customer_name}")
+            print(f"{'='*70}\n")
+
+            if shared_session is None:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.WORLDLINK,
+                    error_message="Browser session required for WorldLink orders"
+                )
+
+            if not order.order_input:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.WORLDLINK,
+                    error_message="Order inputs not collected"
+                )
+
+            print("[SESSION] ✓ Using shared browser session")
+
+            contract_num = process_worldlink_order(
+                driver=shared_session.driver,
+                pdf_path=str(order.pdf_path),
+                user_input=order.order_input
+            )
+
+            success = contract_num is not None
+            contracts = []
+            if success:
+                highest_line = order.order_input.get('highest_line') if isinstance(order.order_input, dict) else None
+                contracts = [Contract(
+                    contract_number=contract_num,
+                    order_type=OrderType.WORLDLINK,
+                    highest_line=highest_line,
+                )]
+
+            if success:
+                print("\n✓ WorldLink order processed successfully")
+                print("⚠ Remember: block refresh required in Etere after processing")
+            else:
+                print("\n✗ WorldLink order processing failed")
+
+            return ProcessingResult(
+                success=success,
+                contracts=contracts,
+                order_type=OrderType.WORLDLINK,
+                error_message=None if success else "Processing failed"
+            )
+
+        except Exception as e:
+            import traceback
+            error_detail = f"WorldLink processing error: {str(e)}\n{traceback.format_exc()}"
+            print(f"\n✗ WorldLink processing failed: {e}")
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.WORLDLINK,
                 error_message=error_detail
             )
 
