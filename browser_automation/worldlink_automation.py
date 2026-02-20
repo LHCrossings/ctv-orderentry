@@ -372,8 +372,8 @@ def process_worldlink_order(
 
     try:
         if order_type_str == 'new':
-            flight_start = min(_parse_date(l['start_date']) for l in lines)
-            flight_end = max(_parse_date(l['end_date']) for l in lines)
+            flight_start = min(_parse_date(l['start_date']) for l in lines).strftime('%m/%d/%Y')
+            flight_end = max(_parse_date(l['end_date']) for l in lines).strftime('%m/%d/%Y')
 
             contract_number = etere.create_contract_header(
                 customer_id=int(user_input['customer_id']),

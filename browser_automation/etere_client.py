@@ -210,6 +210,10 @@ class EtereClient:
     # CONTRACT HEADER CREATION
     # ═══════════════════════════════════════════════════════════════════════
     
+    # Standard billing for ALL agency orders. Client/direct orders override these explicitly.
+    AGENCY_CHARGE_TO = "Customer share indicating agency %"
+    AGENCY_INVOICE_HEADER = "Agency"
+
     def create_contract_header(
         self,
         customer_id: Optional[int] = None,
@@ -354,10 +358,19 @@ class EtereClient:
         contract_end: Optional[str],
         customer_order_ref: Optional[str],
         notes: Optional[str],
-        charge_to: Optional[str],
-        invoice_header: Optional[str]
+        charge_to: Optional[str] = None,
+        invoice_header: Optional[str] = None,
     ) -> None:
-        """Fill additional contract details on General tab."""
+        """Fill additional contract details on General tab.
+
+        charge_to and invoice_header default to the universal agency billing
+        constants (AGENCY_CHARGE_TO / AGENCY_INVOICE_HEADER). Client/direct
+        order automations pass different values explicitly to override.
+        """
+        if charge_to is None:
+            charge_to = self.AGENCY_CHARGE_TO
+        if invoice_header is None:
+            invoice_header = self.AGENCY_INVOICE_HEADER
         try:
             print("[HEADER] Filling contract details...")
             self.wait.until(EC.presence_of_element_located((By.ID, "date")))
