@@ -30,9 +30,9 @@ class OrderType(Enum):
     UNKNOWN = "unknown"
 
     def requires_block_refresh(self) -> bool:
-        """Determine if this order type needs block refresh after processing."""
-        # Only WorldLink orders with multiple markets need block refresh
-        return self == OrderType.WORLDLINK
+        """Determine if this order type needs manual block refresh after processing."""
+        # WorldLink block refresh is now automated — no manual step needed
+        return False
 
     def supports_multiple_markets(self) -> bool:
         """Check if this order type can span multiple markets."""

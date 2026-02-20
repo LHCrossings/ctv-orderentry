@@ -1539,7 +1539,6 @@ class OrderProcessingService:
 
             if success:
                 print("\n✓ WorldLink order processed successfully")
-                print("⚠ Remember: block refresh required in Etere after processing")
             else:
                 print("\n✗ WorldLink order processing failed")
 
