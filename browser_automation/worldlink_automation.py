@@ -403,8 +403,8 @@ def process_worldlink_order(
             if not etere.extend_contract_end_date(contract_number, lines):
                 return None
             # Scan existing lines to get the highest Etere internal line number.
-            # This is the 5-digit onscreen ID (e.g. 10234), NOT the 2-digit PDF
-            # line number. Block refresh filters by this to skip pre-existing lines.
+            # This is the onscreen Etere-assigned ID (unique per line, SQL-assigned),
+            # NOT the PDF line number. Block refresh filters by this to skip pre-existing lines.
             existing_data = etere.get_all_line_ids_with_numbers(contract_number)
             etere_line_nums = [lnum for _, lnum in existing_data if lnum is not None]
             highest_existing_etere_num = max(etere_line_nums) if etere_line_nums else None

@@ -596,7 +596,7 @@ class EtereClient:
         Scan contract Lines tab and return (line_id, line_number) tuples.
 
         line_id  — Etere's internal ID from onclick="openModalChangeContractLine(id)"
-        line_number — The numeric line number from the first table cell (matches PDF)
+        line_number — Etere's SQL-assigned line number from the first table cell (onscreen value, grows over time)
 
         Used to determine which lines to refresh after revision adds.
         """
