@@ -65,8 +65,8 @@ class TestOrderType:
     """Test OrderType enum behavior."""
 
     def test_worldlink_requires_block_refresh(self):
-        """WorldLink orders should require block refresh."""
-        assert OrderType.WORLDLINK.requires_block_refresh() is True
+        """WorldLink block refresh is automated — no manual refresh needed."""
+        assert OrderType.WORLDLINK.requires_block_refresh() is False
 
     def test_tcaa_does_not_require_block_refresh(self):
         """TCAA orders should not require block refresh."""
@@ -250,12 +250,12 @@ class TestContract:
     """Test Contract entity."""
 
     def test_worldlink_contract_requires_refresh(self):
-        """WorldLink contracts should require block refresh."""
+        """WorldLink block refresh is automated — contract reports no manual refresh needed."""
         contract = Contract(
             contract_number="12345",
             order_type=OrderType.WORLDLINK
         )
-        assert contract.requires_block_refresh() is True
+        assert contract.requires_block_refresh() is False
 
     def test_tcaa_contract_does_not_require_refresh(self):
         """TCAA contracts should not require block refresh."""

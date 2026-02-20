@@ -370,7 +370,6 @@ class TestProcessingResultFormatter:
         assert "TCAA" in output
         assert "CON-001" in output
         assert "CON-002" in output
-        assert "needs refresh" in output  # For contract with block
 
 
 # Tests for ProgressFormatter
