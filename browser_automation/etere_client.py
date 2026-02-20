@@ -647,6 +647,13 @@ class EtereClient:
                     continue
 
             print(f"[SCAN] ✓ Found {len(lines_data)} lines")
+
+            # Return to General tab — leaves browser in clean state so subsequent
+            # operations (e.g., add_contract_line navigating to modalcreatecontractline)
+            # don't get caught by SPA state left on the Lines tab.
+            self.driver.get(f"{self.BASE_URL}/sales/contract/{contract_number}")
+            time.sleep(2)
+
             return lines_data
 
         except Exception as e:

@@ -223,12 +223,9 @@ def gather_worldlink_inputs(pdf_path: str) -> Optional[dict]:
 
     # Revision handling: prompt for existing contract number
     contract_number = None
-    highest_line = None
     if order_type_str != 'new':
         print(f"\n[REVISION] Order type: {order_type_str.upper()}")
         contract_number = input("  Existing contract number: ").strip()
-        if lines:
-            highest_line = lines[0]['line_number'] - 1  # block refresh starts here
 
     billing = BillingType.CUSTOMER_SHARE_AGENCY
     print(f"\n[BILLING] ✓ Customer share indicating agency % / Agency")
@@ -244,7 +241,6 @@ def gather_worldlink_inputs(pdf_path: str) -> Optional[dict]:
         'billing': billing,
         'network': network,
         'contract_number': contract_number,
-        'highest_line': highest_line,
         'notes': _build_notes(order_data),
     }
 
@@ -394,7 +390,7 @@ def process_worldlink_order(
                 print("[CONTRACT] ✗ Failed to create contract")
                 return None
             print(f"[CONTRACT] ✓ Created: {contract_number}")
-            highest_line = None  # New contract — refresh all lines
+            highest_existing_etere_num = None  # New contract — refresh all lines
         else:
             contract_number = user_input.get('contract_number', '')
             if not contract_number:
@@ -406,13 +402,14 @@ def process_worldlink_order(
             # create_contract_header; revision orders need it explicitly).
             if not etere.extend_contract_end_date(contract_number, lines):
                 return None
-            # Scan existing lines so block refresh only covers new lines.
-            # highest_line = PDF line number before the first new line (e.g. 12
-            # means new lines start at 13). Computed from the PDF in gather step.
-            highest_line = user_input.get('highest_line')
+            # Scan existing lines to get the highest Etere internal line number.
+            # This is the 5-digit onscreen ID (e.g. 10234), NOT the 2-digit PDF
+            # line number. Block refresh filters by this to skip pre-existing lines.
             existing_data = etere.get_all_line_ids_with_numbers(contract_number)
+            etere_line_nums = [lnum for _, lnum in existing_data if lnum is not None]
+            highest_existing_etere_num = max(etere_line_nums) if etere_line_nums else None
             print(f"[LINES] {len(existing_data)} existing lines — "
-                  f"new lines start above {highest_line}")
+                  f"highest Etere line number: {highest_existing_etere_num}")
 
         if network == 'ASIAN':
             success = _add_asian_lines(etere, contract_number, lines, separation)
@@ -424,7 +421,7 @@ def process_worldlink_order(
 
         # Block refresh: Crossings TV only (CMP lines replicated to other markets)
         if network == 'CROSSINGS' and success:
-            etere.perform_block_refresh(contract_number, only_lines_above=highest_line)
+            etere.perform_block_refresh(contract_number, only_lines_above=highest_existing_etere_num)
 
         return contract_number if success else None
 
