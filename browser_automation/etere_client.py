@@ -516,15 +516,24 @@ class EtereClient:
         try:
             print(f"\n[DATES] Checking contract {contract_number} end date...")
 
-            # Two-step navigation: /sales first to establish the SPA context,
-            # then /sales/contract/{id}. Direct navigation to the contract page
-            # immediately after market setup fails because Etere's SPA needs to
-            # be loaded before sub-pages are accessible.
-            self.driver.get(f"{self.BASE_URL}/sales")
-            time.sleep(2)
-            self.driver.get(f"{self.BASE_URL}/sales/contract/{contract_number}")
+            contract_url = f"{self.BASE_URL}/sales/contract/{contract_number}"
+
+            # Etere's SPA requires two navigations to a contract URL when coming
+            # from market setup — the first attempt never lands on the page
+            # (SPA isn't ready), the second always succeeds. This mirrors the old
+            # code where get_highest_existing_line_number navigated first (silently
+            # failing), then update_contract_dates_for_revision navigated again.
+            self.driver.get(contract_url)
             time.sleep(3)
-            self.wait.until(EC.presence_of_element_located((By.ID, "date")))
+            try:
+                WebDriverWait(self.driver, 8).until(
+                    EC.presence_of_element_located((By.ID, "date"))
+                )
+            except TimeoutException:
+                print(f"[DATES] First navigation didn't land — retrying...")
+                self.driver.get(contract_url)
+                time.sleep(3)
+                self.wait.until(EC.presence_of_element_located((By.ID, "date")))
 
             expiry_field = self.driver.find_element(By.ID, "expirydate")
             current_to_str = expiry_field.get_attribute("value")
