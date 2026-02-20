@@ -90,15 +90,12 @@ def _parse_date(date_str: str):
 
 
 def _build_notes(order_data: dict) -> str:
-    """Build contract notes from parsed WorldLink order data."""
-    parts = [
-        f"ADVERTISER {order_data.get('advertiser', '')}",
-        f"PRODUCT {order_data.get('product', '')}",
-        f"TRACKING {order_data.get('tracking_number', '')}",
-    ]
-    if order_data.get('order_comment'):
-        parts.append(order_data['order_comment'])
-    return "\n".join(parts)
+    """Build contract notes — just the Order Comment from the PDF."""
+    import re
+    comment = order_data.get('order_comment', '') or ''
+    # Strip Unicode private-use area characters (PDF font artifacts like \ue010)
+    comment = re.sub(r'[\ue000-\uf8ff]', '', comment).strip()
+    return comment
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
