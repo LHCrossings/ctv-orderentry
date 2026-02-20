@@ -516,6 +516,12 @@ class EtereClient:
         try:
             print(f"\n[DATES] Checking contract {contract_number} end date...")
 
+            # Two-step navigation: /sales first to establish the SPA context,
+            # then /sales/contract/{id}. Direct navigation to the contract page
+            # immediately after market setup fails because Etere's SPA needs to
+            # be loaded before sub-pages are accessible.
+            self.driver.get(f"{self.BASE_URL}/sales")
+            time.sleep(2)
             self.driver.get(f"{self.BASE_URL}/sales/contract/{contract_number}")
             time.sleep(3)
             self.wait.until(EC.presence_of_element_located((By.ID, "date")))
