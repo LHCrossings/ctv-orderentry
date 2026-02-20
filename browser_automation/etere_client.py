@@ -588,6 +588,194 @@ class EtereClient:
             return False
 
     # ═══════════════════════════════════════════════════════════════════════
+    # CONTRACT LINE SCANNING
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def get_all_line_ids_with_numbers(self, contract_number: str) -> list:
+        """
+        Scan contract Lines tab and return (line_id, line_number) tuples.
+
+        line_id  — Etere's internal ID from onclick="openModalChangeContractLine(id)"
+        line_number — The numeric line number from the first table cell (matches PDF)
+
+        Used to determine which lines to refresh after revision adds.
+        """
+        try:
+            print(f"\n[SCAN] Scanning lines for contract {contract_number}...")
+            self.driver.get(f"{self.BASE_URL}/sales/contract/{contract_number}")
+            time.sleep(3)
+
+            # Click Lines tab
+            try:
+                tab = self.wait.until(EC.element_to_be_clickable(
+                    (By.XPATH, "//a[contains(text(), 'Lines')]")
+                ))
+                tab.click()
+                time.sleep(3)
+            except Exception:
+                try:
+                    tab = self.driver.find_element(By.CSS_SELECTOR, 'a[href="#Lines"]')
+                    tab.click()
+                    time.sleep(3)
+                except Exception:
+                    pass
+
+            time.sleep(2)
+            lines_data = []
+
+            for row in self.driver.find_elements(By.CSS_SELECTOR, "table tbody tr"):
+                try:
+                    link = row.find_element(
+                        By.CSS_SELECTOR, "a[onclick*='openModalChangeContractLine']"
+                    )
+                    onclick = link.get_attribute('onclick')
+                    if not onclick:
+                        continue
+                    line_id = onclick.split('(')[1].split(')')[0]
+
+                    cells = row.find_elements(By.TAG_NAME, "td")
+                    line_number = None
+                    for cell in cells[:3]:
+                        try:
+                            line_number = int(cell.text.strip())
+                            break
+                        except ValueError:
+                            continue
+
+                    lines_data.append((line_id, line_number))
+                except Exception:
+                    continue
+
+            print(f"[SCAN] ✓ Found {len(lines_data)} lines")
+            return lines_data
+
+        except Exception as e:
+            print(f"[SCAN] ✗ Error: {e}")
+            return []
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # BLOCK REFRESH (WorldLink Crossings TV only)
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def refresh_line_blocks(self, line_id: str) -> bool:
+        """
+        Refresh blocks for a single contract line.
+
+        Navigates to /sales/modalchangecontractline/{line_id}, cleans
+        description asterisks, runs Add Blocks Automatically, checks all
+        blocks, and saves.
+        """
+        try:
+            self.driver.get(f"{self.BASE_URL}/sales/modalchangecontractline/{line_id}")
+            self.wait.until(EC.presence_of_element_located(
+                (By.ID, "contractLineGeneralFromDate")
+            ))
+            time.sleep(2)
+
+            # Clean description asterisks (Etere appends these after block operations)
+            try:
+                field = self.driver.find_element(By.ID, "contractLineGeneralDescription")
+                desc = field.get_attribute('value') or ''
+                if '*' in desc:
+                    cleaned = desc.rstrip('*').strip()
+                    field.clear()
+                    field.send_keys(cleaned)
+            except Exception:
+                pass
+
+            # Blocks tab
+            self.driver.find_element(By.CSS_SELECTOR, 'a[href="#tabLineBlocks"]').click()
+            time.sleep(2)
+
+            # Add blocks automatically
+            try:
+                btn = self.wait.until(EC.element_to_be_clickable(
+                    (By.ID, "contractLineBlocksAddBlockAutomatically")
+                ))
+                btn.click()
+                time.sleep(8)
+            except Exception as e:
+                print(f"[REFRESH] ⚠ Add blocks button: {e}")
+
+            # Check all blocks
+            try:
+                cb = self.driver.find_element(By.CLASS_NAME, "checkAllTableRows")
+                cb.find_element(
+                    By.XPATH, "./following-sibling::ins[@class='iCheck-helper']"
+                ).click()
+                time.sleep(0.5)
+            except Exception:
+                try:
+                    self._click_icheck(
+                        self.driver.find_element(By.CLASS_NAME, "checkAllTableRows")
+                    )
+                    time.sleep(0.5)
+                except Exception:
+                    pass
+
+            # Save
+            self.wait.until(EC.element_to_be_clickable(
+                (By.ID, "btnsaveexitcl")
+            )).click()
+            time.sleep(3)
+            return True
+
+        except Exception as e:
+            print(f"[REFRESH] ✗ Line {line_id}: {e}")
+            return False
+
+    def perform_block_refresh(
+        self, contract_number: str, only_lines_above: Optional[int] = None
+    ) -> bool:
+        """
+        Refresh blocks for WorldLink Crossings TV lines.
+
+        Args:
+            contract_number: Contract to refresh
+            only_lines_above: If set, only refresh lines with line_number > this value.
+                              Pass highest_line from gather_worldlink_inputs for revisions
+                              (e.g., 12 → refreshes lines 13, 14, 15...).
+                              None (default) refreshes all lines (new contracts).
+
+        Only called for Crossings TV — Asian Channel is single-market, no refresh needed.
+        """
+        print(f"\n{'='*60}")
+        print(f"BLOCK REFRESH: Contract {contract_number}")
+        if only_lines_above is not None:
+            print(f"Filter: lines > {only_lines_above} only")
+        print(f"{'='*60}")
+
+        lines_data = self.get_all_line_ids_with_numbers(contract_number)
+        if not lines_data:
+            print("[REFRESH] ✗ No lines found")
+            return False
+
+        if only_lines_above is not None:
+            lines_data = [
+                (lid, lnum) for lid, lnum in lines_data
+                if lnum is not None and lnum > only_lines_above
+            ]
+
+        if not lines_data:
+            print("[REFRESH] ✓ No new lines to refresh")
+            return True
+
+        print(f"[REFRESH] Refreshing {len(lines_data)} lines...")
+        ok_count = 0
+        for idx, (line_id, line_num) in enumerate(lines_data, 1):
+            label = f"Line {line_num}" if line_num else f"ID {line_id}"
+            print(f"[REFRESH] {idx}/{len(lines_data)}: {label}")
+            if self.refresh_line_blocks(line_id):
+                ok_count += 1
+                print(f"[REFRESH] ✓")
+            else:
+                print(f"[REFRESH] ✗")
+            time.sleep(2)
+
+        print(f"\n[REFRESH] ✓ Complete — {ok_count}/{len(lines_data)} succeeded")
+        return ok_count == len(lines_data)
+
+    # ═══════════════════════════════════════════════════════════════════════
     # CONTRACT LINE CREATION
     # ═══════════════════════════════════════════════════════════════════════
 
@@ -608,7 +796,8 @@ class EtereClient:
         max_daily_run: Optional[int] = None,  # Auto-calculated if None
         rate: float = 0.0,
         separation_intervals: Tuple[int, int, int] = (15, 0, 0),  # DEFAULT: Customer=15, Event=0, Order=0
-        is_bookend: bool = False
+        is_bookend: bool = False,
+        other_markets: Optional[List[str]] = None,  # WorldLink CMP multi-market replication
     ) -> bool:
         """
         Add contract line to existing contract.
@@ -794,7 +983,24 @@ class EtereClient:
             order_field.send_keys(str(order_int))
             
             print(f"[LINE] ✓ Intervals: Cust={customer_int}, Event={event_int}, Order={order_int}")
-            
+
+            # Other markets (WorldLink CMP lines — ddpselectedStationOther multi-select)
+            if other_markets:
+                for market_code in other_markets:
+                    try:
+                        market_id = Market[market_code.upper()].etere_id
+                        self.driver.execute_script(
+                            "var s = document.getElementById('ddpselectedStationOther');"
+                            f"var o = s ? s.querySelector('option[value=\"{market_id}\"]') : null;"
+                            "if (o) { o.selected = true; }"
+                        )
+                    except Exception:
+                        pass
+                self.driver.execute_script(
+                    "$('#ddpselectedStationOther').trigger('change');"
+                )
+                print(f"[LINE] ✓ Other markets: {', '.join(other_markets)}")
+
             # ═══════════════════════════════════════════════════════════════
             # SAVE LINE
             # ═══════════════════════════════════════════════════════════════

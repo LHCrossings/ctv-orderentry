@@ -73,6 +73,17 @@ def _duration_to_seconds(duration_str: str) -> int:
         return 30
 
 
+def _format_time_range_short(time_range: str) -> str:
+    """Convert '7:00 AM - 4:00 PM' to '7a-4p' format."""
+    parts = time_range.split(' - ')
+    if len(parts) != 2:
+        return time_range
+    start, end = parts
+    start_short = start.replace(':00', '').replace(' AM', 'a').replace(' PM', 'p')
+    end_short = end.replace(':00', '').replace(' AM', 'a').replace(' PM', 'p')
+    return f"{start_short}-{end_short}"
+
+
 def _parse_date(date_str: str):
     """Convert 'MM/DD/YYYY' string to date object for create_contract_header."""
     return datetime.strptime(date_str.strip(), '%m/%d/%Y').date()
@@ -259,7 +270,7 @@ def _add_crossings_lines(
         days, _ = EtereClient.check_sunday_6_7a_rule(days, line['time_range'])
         time_from = line['from_time']
         time_to = line['to_time']
-        desc = f"({line['line_number']}) {line['time_range']}"
+        desc = f"(Line {line['line_number']}) {days} {_format_time_range_short(line['time_range'])}"
         duration = _duration_to_seconds(line['duration'])
         rate = float(line['rate'])
 
@@ -279,7 +290,7 @@ def _add_crossings_lines(
             print(f"  ✗ NYC line failed")
             all_success = False
 
-        # CMP line: $0 (multi-market replication via block refresh)
+        # CMP line: $0 — replicated to other markets via Options tab selection
         ok = etere.add_contract_line(
             contract_number=contract_number, market="CMP",
             start_date=line['start_date'], end_date=line['end_date'],
@@ -287,6 +298,7 @@ def _add_crossings_lines(
             description=desc, spot_code=2, duration_seconds=duration,
             total_spots=line['total_spots'], spots_per_week=line['spots'],
             rate=0.0, separation_intervals=separation,
+            other_markets=["CVC", "SFO", "LAX", "SEA", "HOU", "WDC", "MMT"],
         )
         if not ok:
             print(f"  ✗ CMP line failed")
@@ -310,7 +322,7 @@ def _add_asian_lines(
             contract_number=contract_number, market="DAL",
             start_date=line['start_date'], end_date=line['end_date'],
             days=days, time_from=line['from_time'], time_to=line['to_time'],
-            description=f"({line['line_number']}) {line['time_range']}",
+            description=f"(Line {line['line_number']}) {days} {_format_time_range_short(line['time_range'])}",
             spot_code=2,
             duration_seconds=_duration_to_seconds(line['duration']),
             total_spots=line['total_spots'], spots_per_week=line['spots'],
@@ -382,6 +394,7 @@ def process_worldlink_order(
                 print("[CONTRACT] ✗ Failed to create contract")
                 return None
             print(f"[CONTRACT] ✓ Created: {contract_number}")
+            highest_line = None  # New contract — refresh all lines
         else:
             contract_number = user_input.get('contract_number', '')
             if not contract_number:
@@ -389,11 +402,17 @@ def process_worldlink_order(
                 return None
             print(f"[CONTRACT] ✓ Using existing: {contract_number}")
             # Extend contract end date if revision lines go beyond it.
-            # This navigation also warms up the Etere sales context so the first
-            # add_contract_line call doesn't time out (new orders get this via
+            # Also warms up the Etere sales context (new orders get this via
             # create_contract_header; revision orders need it explicitly).
             if not etere.extend_contract_end_date(contract_number, lines):
                 return None
+            # Scan existing lines so block refresh only covers new lines.
+            # highest_line = PDF line number before the first new line (e.g. 12
+            # means new lines start at 13). Computed from the PDF in gather step.
+            highest_line = user_input.get('highest_line')
+            existing_data = etere.get_all_line_ids_with_numbers(contract_number)
+            print(f"[LINES] {len(existing_data)} existing lines — "
+                  f"new lines start above {highest_line}")
 
         if network == 'ASIAN':
             success = _add_asian_lines(etere, contract_number, lines, separation)
@@ -402,6 +421,10 @@ def process_worldlink_order(
 
         status = "✓" if success else "⚠ (some lines failed)"
         print(f"\n[COMPLETE] {status} Contract {contract_number} — {len(lines)} PDF lines")
+
+        # Block refresh: Crossings TV only (CMP lines replicated to other markets)
+        if network == 'CROSSINGS' and success:
+            etere.perform_block_refresh(contract_number, only_lines_above=highest_line)
 
         return contract_number if success else None
 
