@@ -495,9 +495,87 @@ class EtereClient:
             print(f"[HEADER] ⚠ Error: {e}")
     
     # ═══════════════════════════════════════════════════════════════════════
+    # CONTRACT DATE EXTENSION
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def extend_contract_end_date(self, contract_number: str, lines: list) -> bool:
+        """
+        Extend a contract's end date to cover revision lines that go beyond it.
+
+        Also serves as the warm-up navigation for revision orders — navigating to
+        the contract page establishes the Etere sales context before adding lines
+        (new orders get this via create_contract_header; revisions need it explicitly).
+
+        Args:
+            contract_number: Contract to update
+            lines: List of line dicts with 'end_date' in MM/DD/YYYY format
+
+        Returns:
+            True if successful or no update needed, False if update failed (stops processing)
+        """
+        try:
+            print(f"\n[DATES] Checking contract {contract_number} end date...")
+
+            self.driver.get(f"{self.BASE_URL}/sales/contract/{contract_number}")
+            time.sleep(3)
+            self.wait.until(EC.presence_of_element_located((By.ID, "date")))
+
+            expiry_field = self.driver.find_element(By.ID, "expirydate")
+            current_to_str = expiry_field.get_attribute("value")
+            print(f"[DATES] Current contract end: {current_to_str}")
+
+            latest_end = max(datetime.strptime(line['end_date'], '%m/%d/%Y') for line in lines)
+            contract_end = datetime.strptime(current_to_str, '%m/%d/%Y')
+
+            if latest_end <= contract_end:
+                print(f"[DATES] ✓ No extension needed")
+                return True
+
+            new_end_str = latest_end.strftime('%m/%d/%Y')
+            print(f"[DATES] New lines end {new_end_str} — extending contract end date")
+
+            # Update field (handle readonly/disabled via JavaScript)
+            is_readonly = expiry_field.get_attribute("readonly")
+            is_disabled = expiry_field.get_attribute("disabled")
+
+            if is_readonly or is_disabled:
+                self.driver.execute_script("arguments[0].value = arguments[1];", expiry_field, new_end_str)
+                self.driver.execute_script(
+                    "arguments[0].dispatchEvent(new Event('change', { bubbles: true }));",
+                    expiry_field
+                )
+            else:
+                expiry_field.clear()
+                expiry_field.send_keys(new_end_str)
+
+            # Save
+            save_btn = self.driver.find_element(By.ID, "formContractGeneralSubmit")
+            try:
+                save_btn.click()
+            except Exception:
+                self.driver.execute_script("arguments[0].click();", save_btn)
+            time.sleep(3)
+
+            # Verify
+            saved = self.driver.find_element(By.ID, "expirydate").get_attribute("value")
+            if saved == new_end_str:
+                print(f"[DATES] ✓ Contract end date extended to {saved}")
+                return True
+            else:
+                print(f"[DATES] ✗ Date save failed — expected {new_end_str}, got {saved}")
+                print(f"[DATES] *** STOPPING — fix contract end date before adding lines ***")
+                return False
+
+        except Exception as e:
+            print(f"[DATES] ✗ Error: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    # ═══════════════════════════════════════════════════════════════════════
     # CONTRACT LINE CREATION
     # ═══════════════════════════════════════════════════════════════════════
-    
+
     def add_contract_line(
         self,
         contract_number: str,

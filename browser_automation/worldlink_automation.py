@@ -39,7 +39,6 @@ IMPORTS
 
 import os
 import sys
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -389,11 +388,12 @@ def process_worldlink_order(
                 print("[CONTRACT] ✗ No contract number provided for revision")
                 return None
             print(f"[CONTRACT] ✓ Using existing: {contract_number}")
-            # Warm up the Etere sales context — revision orders skip create_contract_header
-            # which normally provides this navigation. Without it, the first add_contract_line
-            # call times out because the browser is still in post-market-setup state.
-            etere.driver.get(f"{etere.BASE_URL}/sales")
-            time.sleep(3)
+            # Extend contract end date if revision lines go beyond it.
+            # This navigation also warms up the Etere sales context so the first
+            # add_contract_line call doesn't time out (new orders get this via
+            # create_contract_header; revision orders need it explicitly).
+            if not etere.extend_contract_end_date(contract_number, lines):
+                return None
 
         if network == 'ASIAN':
             success = _add_asian_lines(etere, contract_number, lines, separation)
