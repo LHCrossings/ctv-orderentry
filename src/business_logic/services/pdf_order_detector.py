@@ -53,7 +53,8 @@ class PDFOrderDetector:
         except ImportError:
             return ""
         try:
-            import sys as _sys, os as _os
+            import os as _os
+            import sys as _sys
             if _sys.platform == "win32":
                 default = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
                 if _os.path.exists(default):
