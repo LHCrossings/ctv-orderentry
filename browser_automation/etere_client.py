@@ -1187,6 +1187,7 @@ class EtereClient:
         # Clean up input
         time_str = time_str.replace(' ', '').lower()
         time_str = time_str.replace('am', 'a').replace('pm', 'p')  # Normalize am/pm
+        time_str = time_str.replace('12m', '12a').replace('12n', '12p')  # midnight/noon
         
         # Split on dash to get start and end
         parts = time_str.split('-')
