@@ -35,8 +35,8 @@ IMPORTS
 
 import os
 import sys
-from pathlib import Path
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Optional
 
 project_root = Path(__file__).parent.parent
@@ -44,14 +44,11 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from etere_client import EtereClient
-from src.domain.enums import BillingType, OrderType, SeparationInterval
 
 from browser_automation.parsers.rpm_parser import (
     parse_rpm_pdf,
-    RPMOrder,
-    RPMLine,
 )
-
+from src.domain.enums import BillingType, OrderType, SeparationInterval
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONSTANTS
@@ -78,6 +75,43 @@ def _duration_to_seconds(duration_str: str) -> int:
     """Convert "00:00:30:00" (HH:MM:SS:FF) to integer seconds."""
     parts = duration_str.split(":")
     return int(parts[2]) if len(parts) >= 3 else 30
+
+
+def _consolidate_weeks(
+    weekly_spots: list[int],
+    week_dates: tuple,
+    flight_end: date,
+) -> list[tuple]:
+    """
+    Group adjacent weeks with identical non-zero spot counts into single Etere lines.
+
+    Adjacent means exactly 7 days apart. Returns a list of
+    (start_date, end_date, spots_per_week, total_spots) tuples.
+    """
+    blocks = []
+    n = len(weekly_spots)
+    i = 0
+    while i < n:
+        if weekly_spots[i] == 0:
+            i += 1
+            continue
+        block_spots = weekly_spots[i]
+        block_start = week_dates[i]
+        prev_date = week_dates[i]
+        count = 1
+        j = i + 1
+        while j < n:
+            if weekly_spots[j] != block_spots:
+                break
+            if week_dates[j] != prev_date + timedelta(days=7):
+                break
+            prev_date = week_dates[j]
+            count += 1
+            j += 1
+        block_end = min(prev_date + timedelta(days=6), flight_end)
+        blocks.append((block_start, block_end, block_spots, block_spots * count))
+        i = j
+    return blocks
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -245,18 +279,18 @@ def gather_rpm_inputs(pdf_path: str) -> Optional[dict]:
 
     customer_order_ref = f"Est {order.estimate_number}"
 
-    print(f"\n[CONTRACT]")
+    print("\n[CONTRACT]")
     contract_code = input(f"  Code [{suggested_code}]: ").strip() or suggested_code
     description = input(f"  Description [{suggested_desc}]: ").strip() or suggested_desc
 
     notes = (f"CLIENT {order.client}\nPRODUCT {order.product}"
              f"\nESTIMATE {order.estimate_number}\nDEMO {order.primary_demo}")
-    print(f"  Notes:")
+    print("  Notes:")
     for ln in notes.split('\n'):
         print(f"    {ln}")
 
     billing = BillingType.CUSTOMER_SHARE_AGENCY
-    print(f"\n[BILLING] ✓ Customer share indicating agency % / Agency")
+    print("\n[BILLING] ✓ Customer share indicating agency % / Agency")
 
     print("\n" + "="*70)
     print("INPUT COLLECTION COMPLETE - Ready for automation")
@@ -334,43 +368,43 @@ def process_rpm_order(
             days, time_range, language = _parse_rpm_daypart(line.daypart)
             days, _ = EtereClient.check_sunday_6_7a_rule(days, time_range)
             time_from, time_to = EtereClient.parse_time_range(time_range)
-            description = f"({line_num}) {line.daypart}"
+            description = line.daypart
             spot_code = 10 if line.is_bonus else 2
             duration_seconds = _duration_to_seconds(line.duration)
 
             print(f"\n[LINE {line_num}] {'BNS' if line.is_bonus else 'PAID'} "
                   f"{language} | {days} {time_range} | {duration_seconds}s")
 
-            for week_idx, spots in enumerate(line.weekly_spots):
-                if spots == 0:
-                    continue
-                # Use the actual week date from the column header when available.
-                # RPM orders frequently skip weeks (e.g. Jan then March), so
-                # deriving dates from flight_start + week_idx produces wrong results.
-                if order.week_dates and week_idx < len(order.week_dates):
-                    week_start = order.week_dates[week_idx]
-                else:
-                    week_start = order.flight_start + timedelta(weeks=week_idx)
-                week_end = min(week_start + timedelta(days=6), order.flight_end)
-                print(f"  Week {week_idx + 1}: {week_start} - {week_end}, {spots} spots")
+            # Build week_dates for this line (fall back to flight_start + offset)
+            if order.week_dates:
+                line_week_dates = order.week_dates
+            else:
+                line_week_dates = tuple(
+                    order.flight_start + timedelta(weeks=k)
+                    for k in range(len(line.weekly_spots))
+                )
+            blocks = _consolidate_weeks(line.weekly_spots, line_week_dates, order.flight_end)
+
+            for block_start, block_end, spots_per_week, total_spots in blocks:
+                print(f"  {block_start} - {block_end}: {spots_per_week}/wk, {total_spots} total")
                 success = etere.add_contract_line(
                     contract_number=contract_number,
                     market=market,
-                    start_date=week_start.strftime('%m/%d/%Y'),
-                    end_date=week_end.strftime('%m/%d/%Y'),
+                    start_date=block_start.strftime('%m/%d/%Y'),
+                    end_date=block_end.strftime('%m/%d/%Y'),
                     days=days,
                     time_from=time_from,
                     time_to=time_to,
                     description=description,
                     spot_code=spot_code,
                     duration_seconds=duration_seconds,
-                    total_spots=spots,
-                    spots_per_week=spots,
+                    total_spots=total_spots,
+                    spots_per_week=spots_per_week,
                     rate=float(line.rate),
                     separation_intervals=separation,
                 )
                 if not success:
-                    print(f"  [LINE {line_num}] ✗ Failed for week {week_idx + 1}")
+                    print(f"  [LINE {line_num}] ✗ Failed for block {block_start} - {block_end}")
                     all_success = False
 
         print(f"\n[COMPLETE] Contract {contract_number} — {len(lines)} lines processed")
