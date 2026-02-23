@@ -245,6 +245,7 @@ class ApplicationOrchestrator:
                     if not inputs:
                         print(f"\n[CANCELLED] {display_name} input gathering cancelled")
                         continue
+                    inputs = self._confirm_separation(inputs)
                     orders_with_input.append(order.with_input(inputs))
                 except ImportError as e:
                     print(f"\n[ERROR] Could not import {display_name} automation: {e}")
@@ -287,6 +288,37 @@ class ApplicationOrchestrator:
             ]
 
         return results
+
+    def _confirm_separation(self, inputs: dict) -> dict:
+        """
+        Show the separation that will be applied and let the user edit it.
+
+        Called after every agency's gather-inputs phase so the user always
+        has a chance to override the stored default before automation runs.
+        """
+        if 'separation' not in inputs:
+            return inputs
+
+        sep = inputs['separation']
+        print(f"\n[SEPARATION] Will apply  Customer={sep[0]}, Event={sep[1]}, Order={sep[2]}")
+        response = input(
+            "  Press Enter to confirm, or type new values (e.g. 25,0,15): "
+        ).strip()
+
+        if not response:
+            return inputs
+
+        try:
+            parts = [int(x.strip()) for x in response.replace(' ', '').split(',')]
+            if len(parts) == 3:
+                print(f"  ✓ Updated to  Customer={parts[0]}, Event={parts[1]}, Order={parts[2]}")
+                return {**inputs, 'separation': tuple(parts)}
+            else:
+                print("  ⚠ Expected 3 comma-separated values — keeping original")
+        except ValueError:
+            print("  ⚠ Invalid format — keeping original")
+
+        return inputs
 
     def _process_orders_batch(
         self,
