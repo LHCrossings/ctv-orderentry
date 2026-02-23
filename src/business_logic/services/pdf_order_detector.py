@@ -53,6 +53,11 @@ class PDFOrderDetector:
         except ImportError:
             return ""
         try:
+            import sys as _sys, os as _os
+            if _sys.platform == "win32":
+                default = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+                if _os.path.exists(default):
+                    pytesseract.pytesseract.tesseract_cmd = default
             doc = fitz.open(str(pdf_path))
             page = doc[0]
             mat = fitz.Matrix(dpi / 72, dpi / 72)

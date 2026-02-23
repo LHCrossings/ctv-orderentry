@@ -157,6 +157,12 @@ def _ocr_extract_text(pdf_path: str, dpi: int = 300) -> str:
         print(f"[OCR] ⚠ Dependencies not available ({e}) — install pymupdf and pytesseract")
         return ""
     try:
+        import sys as _sys
+        if _sys.platform == "win32":
+            default = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+            import os as _os
+            if _os.path.exists(default):
+                pytesseract.pytesseract.tesseract_cmd = default
         doc = fitz.open(pdf_path)
         page = doc[0]
         mat = fitz.Matrix(dpi / 72, dpi / 72)
