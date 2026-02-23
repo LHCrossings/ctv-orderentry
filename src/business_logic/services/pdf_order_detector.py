@@ -38,6 +38,32 @@ class PDFOrderDetector:
         """
         self._service = detection_service or OrderDetectionService()
 
+    def _ocr_first_page(self, pdf_path: Path, dpi: int = 200) -> str:
+        """
+        Render the first page via PyMuPDF + tesseract OCR.
+
+        Used as a fallback when pdfplumber returns insufficient text
+        (image-based PDFs with vector-outline fonts).  Returns "" if
+        OCR dependencies are not installed.
+        """
+        try:
+            import fitz
+            import pytesseract
+            from PIL import Image
+        except ImportError:
+            return ""
+        try:
+            doc = fitz.open(str(pdf_path))
+            page = doc[0]
+            mat = fitz.Matrix(dpi / 72, dpi / 72)
+            pix = page.get_pixmap(matrix=mat, colorspace=fitz.csGRAY)
+            img = Image.frombytes("L", [pix.width, pix.height], pix.samples)
+            text = pytesseract.image_to_string(img, config="--psm 6")
+            doc.close()
+            return text
+        except Exception:
+            return ""
+
     def detect_order_type(
         self,
         pdf_path: Path | str,
@@ -46,13 +72,11 @@ class PDFOrderDetector:
         """
         Detect order type from PDF file.
 
-        This is the main entry point that replaces the old detect_order_type
-        function. It reads the PDF and delegates to the service.
-
         Detection order:
-        1. Try known agency detection via OrderDetectionService
-        2. If UNKNOWN, check for Charmaine-style template
-        3. If still UNKNOWN and has encoding issues, prompt for H&L Partners
+        1. Try known agency detection via pdfplumber text
+        2. If < 50 chars extracted, retry with OCR (image-based PDFs)
+        3. If UNKNOWN, check for Charmaine-style template
+        4. If still UNKNOWN and encoding issues, prompt for H&L Partners
 
         Args:
             pdf_path: Path to PDF file
@@ -72,6 +96,12 @@ class PDFOrderDetector:
                 second_page_text = None
                 if len(pdf.pages) > 1:
                     second_page_text = pdf.pages[1].extract_text()
+
+                # Image-based PDF? Fall back to OCR before giving up
+                if len(first_page_text.strip()) < 50:
+                    ocr_text = self._ocr_first_page(pdf_path)
+                    if len(ocr_text.strip()) >= 50:
+                        first_page_text = ocr_text
 
                 # Use service for detection of known agencies
                 order_type = self._service.detect_from_text(
@@ -200,6 +230,13 @@ class PDFOrderDetector:
                 second_page_text = None
                 if len(pdf.pages) > 1:
                     second_page_text = pdf.pages[1].extract_text()
+
+                # Image-based PDF? Fall back to OCR
+                if len(first_page_text.strip()) < 50:
+                    ocr_text = self._ocr_first_page(pdf_path)
+                    if len(ocr_text.strip()) >= 50:
+                        first_page_text = ocr_text
+                        full_text = ocr_text
 
                 order_type = self._service.detect_from_text(
                     first_page_text,

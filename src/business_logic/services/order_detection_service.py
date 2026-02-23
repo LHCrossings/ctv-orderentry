@@ -428,13 +428,16 @@ class OrderDetectionService:
             return True
 
         # Check for market-specific patterns
+        # "Sacramento-Stockton" for clean text; "Sacramento" alone for OCR output
         has_market = any(market in text for market in [
             "Seattle-Tacoma",
             "Sacramento-Stockton",
+            "Sacramento",
             "San Francisco"
         ])
         has_estimate = "Estimate:" in text
-        has_header = "CROSSINGS TV SEATTLE-TV" in text
+        # Any Crossings TV station header (Seattle, Sacramento, SFO vary)
+        has_header = "CROSSINGS TV" in text.upper()
 
         return has_market and has_estimate and has_header
 
