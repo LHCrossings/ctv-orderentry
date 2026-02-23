@@ -112,6 +112,9 @@ def lookup_customer(
                     customer.separation_order,
                 ),
                 'billing_type': customer.billing_type,
+                'code_name': customer.code_name,
+                'description_name': customer.description_name,
+                'include_market_in_code': customer.include_market_in_code,
             }
     except Exception as e:
         print(f"[CUSTOMER DB] ⚠ Database lookup failed: {e}")
@@ -124,6 +127,9 @@ def save_new_customer(
     abbreviation: str,
     market: str,
     separation: tuple,
+    code_name: str = "",
+    description_name: str = "",
+    include_market_in_code: bool = False,
     db_path: str = CUSTOMER_DB_PATH,
 ) -> None:
     """Save a new RPM customer to the database for future orders."""
@@ -141,6 +147,9 @@ def save_new_customer(
             separation_customer=separation[0],
             separation_event=separation[1],
             separation_order=separation[2],
+            code_name=code_name,
+            description_name=description_name,
+            include_market_in_code=include_market_in_code,
         )
         repo.save(customer)
         print(f"[CUSTOMER DB] ✓ Saved: {customer_name} → ID {customer_id}")
@@ -182,6 +191,9 @@ def gather_rpm_inputs(pdf_path: str) -> Optional[dict]:
 
     market = order.market  # Already SEA/SFO/CVC from parser
 
+    # Market short codes for contract codes (e.g. CVC → CV, SFO → SF)
+    _MARKET_SHORT = {'CVC': 'CV', 'SFO': 'SF', 'SEA': 'SEA'}
+
     customer = lookup_customer(order.client)
     if customer:
         print(f"\n[CUSTOMER] ✓ Found: ID={customer['customer_id']}, "
@@ -189,6 +201,9 @@ def gather_rpm_inputs(pdf_path: str) -> Optional[dict]:
         customer_id = customer['customer_id']
         abbreviation = customer['abbreviation']
         separation = customer['separation']
+        code_name = customer.get('code_name', '')
+        description_name = customer.get('description_name', '')
+        include_market = customer.get('include_market_in_code', False)
     else:
         print(f"\n[CUSTOMER] ✗ Not found: {order.client}")
         print("Please enter customer details:")
@@ -198,10 +213,36 @@ def gather_rpm_inputs(pdf_path: str) -> Optional[dict]:
         event_sep = input("  Event separation [0]: ").strip() or "0"
         order_sep = input("  Order separation [15]: ").strip() or "15"
         separation = (int(cust_sep), int(event_sep), int(order_sep))
-        save_new_customer(customer_id, order.client, abbreviation, market, separation)
+        print("\n[CONTRACT DEFAULTS]")
+        code_name = input(
+            f"  Code name (e.g., 'Muckleshoot', 'TVC') [{order.client.split()[0]}]: "
+        ).strip() or order.client.split()[0]
+        description_name = input(
+            f"  Description name (e.g., 'Muckleshoot Casino') [{order.client}]: "
+        ).strip() or order.client
+        include_mkt_str = input("  Include market in code/description? (y/n) [n]: ").strip().lower()
+        include_market = include_mkt_str in ('y', 'yes')
+        save_new_customer(
+            customer_id, order.client, abbreviation, market, separation,
+            code_name=code_name,
+            description_name=description_name,
+            include_market_in_code=include_market,
+        )
 
-    suggested_code = f"RPM {order.estimate_number}"
-    suggested_desc = f"{market} Est {order.estimate_number}"
+    # Build contract code and description defaults
+    mkt_short = _MARKET_SHORT.get(market, market)
+    if code_name:
+        if include_market:
+            suggested_code = f"RPM {code_name} {order.estimate_number} {mkt_short}"
+            suggested_desc = f"{description_name} Est {order.estimate_number} {market}"
+        else:
+            suggested_code = f"RPM {code_name} {order.estimate_number}"
+            suggested_desc = f"{description_name} {order.estimate_number}"
+    else:
+        # Fallback for customers saved before this feature
+        suggested_code = f"RPM {order.estimate_number}"
+        suggested_desc = f"{market} Est {order.estimate_number}"
+
     customer_order_ref = f"Est {order.estimate_number}"
 
     print(f"\n[CONTRACT]")
