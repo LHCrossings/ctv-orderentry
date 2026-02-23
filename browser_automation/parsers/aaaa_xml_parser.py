@@ -120,8 +120,8 @@ def parse_aaaa_xml(xml_path: str) -> list[TCAAEstimate]:
             f"This parser handles SpotTVCableProposal / SpotTVCableOrder only."
         )
 
-    media  = _text(root, _r("Media"))  or "Unknown"
-    action = _text(root, _r("Action")) or "Unknown"
+    media  = root.findtext(f".//{_r('Media')}")  or "Unknown"
+    action = root.findtext(f".//{_r('Action')}") or "Unknown"
     print(f"[XML] Schema: {schema_name}, Media: {media}, Action: {action}")
 
     # Find all Proposal elements
@@ -404,7 +404,7 @@ def _detect_market(proposal: ET.Element) -> str:
     """
     avail_list = proposal.find(_r("AvailList"))
     if avail_list is not None:
-        avail_desc = (_text(avail_list, _r("n")) or "").lower()
+        avail_desc = (_text(avail_list, _r("Name")) or "").lower()
 
         dma_market_map = {
             "seattle":        "SEA",

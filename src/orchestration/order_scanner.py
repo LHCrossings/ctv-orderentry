@@ -54,8 +54,9 @@ class OrderScanner:
 
         orders = []
 
-        # Find all PDF files
+        # Find all order files (PDF and AAAA SpotTV XML)
         pdf_files = sorted(self._incoming_dir.glob("*.pdf"))
+        xml_files = sorted(self._incoming_dir.glob("*.xml"))
 
         for pdf_path in pdf_files:
             try:
@@ -134,6 +135,29 @@ class OrderScanner:
                 print(f"Warning: Failed to process {pdf_path.name}: {e}")
                 continue
 
+        # Find all AAAA SpotTV XML files
+        for xml_path in xml_files:
+            try:
+                import xml.etree.ElementTree as ET
+                tree = ET.parse(xml_path)
+                root = ET.ElementTree(tree.getroot()).getroot()
+                # Extract advertiser name from XML for display
+                ns = "http://www.AAAA.org/schemas/spotTVCableProposal"
+                advertiser = root.find(f".//{{{ns}}}Advertiser")
+                customer_name = advertiser.get("name", "Unknown") if advertiser is not None else "Unknown"
+
+                order = Order(
+                    pdf_path=xml_path,
+                    order_type=OrderType.XML,
+                    customer_name=customer_name,
+                    status=OrderStatus.PENDING,
+                    estimate_number=None,
+                )
+                orders.append(order)
+            except Exception as e:
+                print(f"Warning: Failed to process {xml_path.name}: {e}")
+                continue
+
         return orders
 
     def get_pending_orders(self) -> list[Order]:
@@ -155,4 +179,7 @@ class OrderScanner:
         if not self._incoming_dir.exists():
             return 0
 
-        return len(list(self._incoming_dir.glob("*.pdf")))
+        return (
+            len(list(self._incoming_dir.glob("*.pdf")))
+            + len(list(self._incoming_dir.glob("*.xml")))
+        )

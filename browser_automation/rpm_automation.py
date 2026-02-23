@@ -303,7 +303,13 @@ def process_rpm_order(
             for week_idx, spots in enumerate(line.weekly_spots):
                 if spots == 0:
                     continue
-                week_start = order.flight_start + timedelta(weeks=week_idx)
+                # Use the actual week date from the column header when available.
+                # RPM orders frequently skip weeks (e.g. Jan then March), so
+                # deriving dates from flight_start + week_idx produces wrong results.
+                if order.week_dates and week_idx < len(order.week_dates):
+                    week_start = order.week_dates[week_idx]
+                else:
+                    week_start = order.flight_start + timedelta(weeks=week_idx)
                 week_end = min(week_start + timedelta(days=6), order.flight_end)
                 print(f"  Week {week_idx + 1}: {week_start} - {week_end}, {spots} spots")
                 success = etere.add_contract_line(

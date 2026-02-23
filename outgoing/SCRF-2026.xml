@@ -1,0 +1,441 @@
+<?xml version='1.0' encoding='utf-8'?>
+<SpotCableData xmlns="http://www.AAAA.org/schemas/spotTVCableProposal" xmlns:tvb-tp="http://www.AAAA.org/schemas/TVBGeneralTypes">
+  <Description>
+    <SchemaName>SpotTVCableProposal</SchemaName>
+    <SchemaVersion>0.3</SchemaVersion>
+    <Media>Cable</Media>
+    <Action>Proposal</Action>
+    <SentBy>Crossings TV</SentBy>
+    <SentDate>2026-02-23T17:45:19</SentDate>
+  </Description>
+  <Proposal uniqueIdentifier="SCRF-2026" startDate="2026-04-27" endDate="2026-05-07" version="1">
+    <Advertiser name="Sacramento Region Community Foundation">
+      <Product name="Big Day Of Giving" />
+    </Advertiser>
+    <Buyer buyingCompanyName="Direct" />
+    <Seller sellingCompanyName="Crossings TV" />
+    <Contact name="Vasey Coman" email="Vasey@sacregcf.org" />
+    <AvailList startDate="2026-04-27" endDate="2026-05-07">
+      <Name>Television Schedule - Sacramento-Central Valley Nielsen Live+3</Name>
+      <Outlets>
+        <Outlet>
+          <CallLetters>CRTV</CallLetters>
+        </Outlet>
+      </Outlets>
+      <AvailLineWithDetailedPeriods>
+        <DayTimes>
+          <DayTime>
+            <StartTime>19:00</StartTime>
+            <EndTime>23:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>Y</tvb-tp:Monday>
+              <tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>Y</tvb-tp:Thursday>
+              <tvb-tp:Friday>Y</tvb-tp:Friday>
+              <tvb-tp:Saturday>N</tvb-tp:Saturday>
+              <tvb-tp:Sunday>N</tvb-tp:Sunday>
+            </Days>
+            <ProgramName>Chinese ( Mandarin)</ProgramName>
+          </DayTime>
+          <DayTime>
+            <StartTime>19:00</StartTime>
+            <EndTime>24:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>N</tvb-tp:Monday>
+              <tvb-tp:Tuesday>N</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>N</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>N</tvb-tp:Thursday>
+              <tvb-tp:Friday>N</tvb-tp:Friday>
+              <tvb-tp:Saturday>Y</tvb-tp:Saturday>
+              <tvb-tp:Sunday>Y</tvb-tp:Sunday>
+            </Days>
+            <ProgramName>Chinese ( Mandarin)</ProgramName>
+          </DayTime>
+        </DayTimes>
+        <AvailName>Chinese ( Mandarin)</AvailName>
+        <SpotLength>00:00:15</SpotLength>
+        <Periods>
+          <DetailedPeriod startDate="2026-04-27" endDate="2026-05-03">
+            <Rate>30.00</Rate>
+            <SpotsPerWeek>10</SpotsPerWeek>
+          </DetailedPeriod>
+          <DetailedPeriod startDate="2026-05-04" endDate="2026-05-07">
+            <Rate>30.00</Rate>
+            <SpotsPerWeek>6</SpotsPerWeek>
+          </DetailedPeriod>
+        </Periods>
+      </AvailLineWithDetailedPeriods>
+      <AvailLineWithDetailedPeriods>
+        <DayTimes>
+          <DayTime>
+            <StartTime>19:00</StartTime>
+            <EndTime>23:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>Y</tvb-tp:Monday>
+              <tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>Y</tvb-tp:Thursday>
+              <tvb-tp:Friday>Y</tvb-tp:Friday>
+              <tvb-tp:Saturday>N</tvb-tp:Saturday>
+              <tvb-tp:Sunday>N</tvb-tp:Sunday>
+            </Days>
+            <ProgramName>Chinese</ProgramName>
+          </DayTime>
+          <DayTime>
+            <StartTime>19:00</StartTime>
+            <EndTime>24:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>N</tvb-tp:Monday>
+              <tvb-tp:Tuesday>N</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>N</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>N</tvb-tp:Thursday>
+              <tvb-tp:Friday>N</tvb-tp:Friday>
+              <tvb-tp:Saturday>Y</tvb-tp:Saturday>
+              <tvb-tp:Sunday>Y</tvb-tp:Sunday>
+            </Days>
+            <ProgramName>Chinese</ProgramName>
+          </DayTime>
+        </DayTimes>
+        <AvailName>Chinese</AvailName>
+        <SpotLength>00:00:15</SpotLength>
+        <Periods>
+          <DetailedPeriod startDate="2026-04-27" endDate="2026-05-03">
+            <Rate>0.00</Rate>
+            <SpotsPerWeek>8</SpotsPerWeek>
+          </DetailedPeriod>
+          <DetailedPeriod startDate="2026-05-04" endDate="2026-05-07">
+            <Rate>0.00</Rate>
+            <SpotsPerWeek>5</SpotsPerWeek>
+          </DetailedPeriod>
+        </Periods>
+      </AvailLineWithDetailedPeriods>
+      <AvailLineWithDetailedPeriods>
+        <DayTimes>
+          <DayTime>
+            <StartTime>16:00</StartTime>
+            <EndTime>19:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>Y</tvb-tp:Monday>
+              <tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>Y</tvb-tp:Thursday>
+              <tvb-tp:Friday>Y</tvb-tp:Friday>
+              <tvb-tp:Saturday>N</tvb-tp:Saturday>
+              <tvb-tp:Sunday>N</tvb-tp:Sunday>
+            </Days>
+            <ProgramName>Filipino</ProgramName>
+          </DayTime>
+          <DayTime>
+            <StartTime>16:00</StartTime>
+            <EndTime>18:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>N</tvb-tp:Monday>
+              <tvb-tp:Tuesday>N</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>N</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>N</tvb-tp:Thursday>
+              <tvb-tp:Friday>N</tvb-tp:Friday>
+              <tvb-tp:Saturday>Y</tvb-tp:Saturday>
+              <tvb-tp:Sunday>Y</tvb-tp:Sunday>
+            </Days>
+            <ProgramName>Filipino</ProgramName>
+          </DayTime>
+        </DayTimes>
+        <AvailName>Filipino</AvailName>
+        <SpotLength>00:00:15</SpotLength>
+        <Periods>
+          <DetailedPeriod startDate="2026-04-27" endDate="2026-05-03">
+            <Rate>30.00</Rate>
+            <SpotsPerWeek>10</SpotsPerWeek>
+          </DetailedPeriod>
+          <DetailedPeriod startDate="2026-05-04" endDate="2026-05-07">
+            <Rate>30.00</Rate>
+            <SpotsPerWeek>6</SpotsPerWeek>
+          </DetailedPeriod>
+        </Periods>
+      </AvailLineWithDetailedPeriods>
+      <AvailLineWithDetailedPeriods>
+        <DayTimes>
+          <DayTime>
+            <StartTime>16:00</StartTime>
+            <EndTime>19:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>Y</tvb-tp:Monday>
+              <tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>Y</tvb-tp:Thursday>
+              <tvb-tp:Friday>Y</tvb-tp:Friday>
+              <tvb-tp:Saturday>N</tvb-tp:Saturday>
+              <tvb-tp:Sunday>N</tvb-tp:Sunday>
+            </Days>
+            <ProgramName>Filipino</ProgramName>
+          </DayTime>
+          <DayTime>
+            <StartTime>16:00</StartTime>
+            <EndTime>18:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>N</tvb-tp:Monday>
+              <tvb-tp:Tuesday>N</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>N</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>N</tvb-tp:Thursday>
+              <tvb-tp:Friday>N</tvb-tp:Friday>
+              <tvb-tp:Saturday>Y</tvb-tp:Saturday>
+              <tvb-tp:Sunday>Y</tvb-tp:Sunday>
+            </Days>
+            <ProgramName>Filipino</ProgramName>
+          </DayTime>
+        </DayTimes>
+        <AvailName>Filipino</AvailName>
+        <SpotLength>00:00:15</SpotLength>
+        <Periods>
+          <DetailedPeriod startDate="2026-04-27" endDate="2026-05-03">
+            <Rate>0.00</Rate>
+            <SpotsPerWeek>7</SpotsPerWeek>
+          </DetailedPeriod>
+          <DetailedPeriod startDate="2026-05-04" endDate="2026-05-07">
+            <Rate>0.00</Rate>
+            <SpotsPerWeek>5</SpotsPerWeek>
+          </DetailedPeriod>
+        </Periods>
+      </AvailLineWithDetailedPeriods>
+      <AvailLineWithDetailedPeriods>
+        <DayTimes>
+          <DayTime>
+            <StartTime>18:00</StartTime>
+            <EndTime>20:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>N</tvb-tp:Monday>
+              <tvb-tp:Tuesday>N</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>N</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>N</tvb-tp:Thursday>
+              <tvb-tp:Friday>N</tvb-tp:Friday>
+              <tvb-tp:Saturday>Y</tvb-tp:Saturday>
+              <tvb-tp:Sunday>Y</tvb-tp:Sunday>
+            </Days>
+            <ProgramName>Hmong</ProgramName>
+          </DayTime>
+        </DayTimes>
+        <AvailName>Hmong</AvailName>
+        <SpotLength>00:00:15</SpotLength>
+        <Periods>
+          <DetailedPeriod startDate="2026-04-27" endDate="2026-05-03">
+            <Rate>25.00</Rate>
+            <SpotsPerWeek>4</SpotsPerWeek>
+          </DetailedPeriod>
+          <DetailedPeriod startDate="2026-05-04" endDate="2026-05-07">
+            <Rate>25.00</Rate>
+          </DetailedPeriod>
+        </Periods>
+      </AvailLineWithDetailedPeriods>
+      <AvailLineWithDetailedPeriods>
+        <DayTimes>
+          <DayTime>
+            <StartTime>18:00</StartTime>
+            <EndTime>20:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>N</tvb-tp:Monday>
+              <tvb-tp:Tuesday>N</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>N</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>N</tvb-tp:Thursday>
+              <tvb-tp:Friday>N</tvb-tp:Friday>
+              <tvb-tp:Saturday>Y</tvb-tp:Saturday>
+              <tvb-tp:Sunday>Y</tvb-tp:Sunday>
+            </Days>
+            <ProgramName>Hmong</ProgramName>
+          </DayTime>
+        </DayTimes>
+        <AvailName>Hmong</AvailName>
+        <SpotLength>00:00:15</SpotLength>
+        <Periods>
+          <DetailedPeriod startDate="2026-04-27" endDate="2026-05-03">
+            <Rate>0.00</Rate>
+            <SpotsPerWeek>3</SpotsPerWeek>
+          </DetailedPeriod>
+          <DetailedPeriod startDate="2026-05-04" endDate="2026-05-07">
+            <Rate>0.00</Rate>
+          </DetailedPeriod>
+        </Periods>
+      </AvailLineWithDetailedPeriods>
+      <AvailLineWithDetailedPeriods>
+        <DayTimes>
+          <DayTime>
+            <StartTime>11:00</StartTime>
+            <EndTime>13:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>Y</tvb-tp:Monday>
+              <tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>Y</tvb-tp:Thursday>
+              <tvb-tp:Friday>Y</tvb-tp:Friday>
+              <tvb-tp:Saturday>Y</tvb-tp:Saturday>
+              <tvb-tp:Sunday>Y</tvb-tp:Sunday>
+            </Days>
+            <ProgramName>Vietnamese</ProgramName>
+          </DayTime>
+        </DayTimes>
+        <AvailName>Vietnamese</AvailName>
+        <SpotLength>00:00:15</SpotLength>
+        <Periods>
+          <DetailedPeriod startDate="2026-04-27" endDate="2026-05-03">
+            <Rate>30.00</Rate>
+            <SpotsPerWeek>10</SpotsPerWeek>
+          </DetailedPeriod>
+          <DetailedPeriod startDate="2026-05-04" endDate="2026-05-07">
+            <Rate>30.00</Rate>
+            <SpotsPerWeek>6</SpotsPerWeek>
+          </DetailedPeriod>
+        </Periods>
+      </AvailLineWithDetailedPeriods>
+      <AvailLineWithDetailedPeriods>
+        <DayTimes>
+          <DayTime>
+            <StartTime>11:00</StartTime>
+            <EndTime>13:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>Y</tvb-tp:Monday>
+              <tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>Y</tvb-tp:Thursday>
+              <tvb-tp:Friday>Y</tvb-tp:Friday>
+              <tvb-tp:Saturday>Y</tvb-tp:Saturday>
+              <tvb-tp:Sunday>Y</tvb-tp:Sunday>
+            </Days>
+            <ProgramName>Vietnamese</ProgramName>
+          </DayTime>
+        </DayTimes>
+        <AvailName>Vietnamese</AvailName>
+        <SpotLength>00:00:15</SpotLength>
+        <Periods>
+          <DetailedPeriod startDate="2026-04-27" endDate="2026-05-03">
+            <Rate>0.00</Rate>
+            <SpotsPerWeek>8</SpotsPerWeek>
+          </DetailedPeriod>
+          <DetailedPeriod startDate="2026-05-04" endDate="2026-05-07">
+            <Rate>0.00</Rate>
+            <SpotsPerWeek>5</SpotsPerWeek>
+          </DetailedPeriod>
+        </Periods>
+      </AvailLineWithDetailedPeriods>
+      <AvailLineWithDetailedPeriods>
+        <DayTimes>
+          <DayTime>
+            <StartTime>08:00</StartTime>
+            <EndTime>10:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>Y</tvb-tp:Monday>
+              <tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>Y</tvb-tp:Thursday>
+              <tvb-tp:Friday>Y</tvb-tp:Friday>
+              <tvb-tp:Saturday>Y</tvb-tp:Saturday>
+              <tvb-tp:Sunday>Y</tvb-tp:Sunday>
+            </Days>
+            <ProgramName>Korean</ProgramName>
+          </DayTime>
+        </DayTimes>
+        <AvailName>Korean</AvailName>
+        <SpotLength>00:00:15</SpotLength>
+        <Periods>
+          <DetailedPeriod startDate="2026-04-27" endDate="2026-05-03">
+            <Rate>30.00</Rate>
+            <SpotsPerWeek>10</SpotsPerWeek>
+          </DetailedPeriod>
+          <DetailedPeriod startDate="2026-05-04" endDate="2026-05-07">
+            <Rate>30.00</Rate>
+            <SpotsPerWeek>6</SpotsPerWeek>
+          </DetailedPeriod>
+        </Periods>
+      </AvailLineWithDetailedPeriods>
+      <AvailLineWithDetailedPeriods>
+        <DayTimes>
+          <DayTime>
+            <StartTime>08:00</StartTime>
+            <EndTime>10:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>Y</tvb-tp:Monday>
+              <tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>Y</tvb-tp:Thursday>
+              <tvb-tp:Friday>Y</tvb-tp:Friday>
+              <tvb-tp:Saturday>Y</tvb-tp:Saturday>
+              <tvb-tp:Sunday>Y</tvb-tp:Sunday>
+            </Days>
+            <ProgramName>Korean</ProgramName>
+          </DayTime>
+        </DayTimes>
+        <AvailName>Korean</AvailName>
+        <SpotLength>00:00:15</SpotLength>
+        <Periods>
+          <DetailedPeriod startDate="2026-04-27" endDate="2026-05-03">
+            <Rate>0.00</Rate>
+            <SpotsPerWeek>8</SpotsPerWeek>
+          </DetailedPeriod>
+          <DetailedPeriod startDate="2026-05-04" endDate="2026-05-07">
+            <Rate>0.00</Rate>
+            <SpotsPerWeek>5</SpotsPerWeek>
+          </DetailedPeriod>
+        </Periods>
+      </AvailLineWithDetailedPeriods>
+      <AvailLineWithDetailedPeriods>
+        <DayTimes>
+          <DayTime>
+            <StartTime>13:00</StartTime>
+            <EndTime>16:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>Y</tvb-tp:Monday>
+              <tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>Y</tvb-tp:Thursday>
+              <tvb-tp:Friday>Y</tvb-tp:Friday>
+              <tvb-tp:Saturday>Y</tvb-tp:Saturday>
+              <tvb-tp:Sunday>Y</tvb-tp:Sunday>
+            </Days>
+            <ProgramName>South Asian</ProgramName>
+          </DayTime>
+        </DayTimes>
+        <AvailName>South Asian</AvailName>
+        <SpotLength>00:00:15</SpotLength>
+        <Periods>
+          <DetailedPeriod startDate="2026-04-27" endDate="2026-05-03">
+            <Rate>30.00</Rate>
+            <SpotsPerWeek>12</SpotsPerWeek>
+          </DetailedPeriod>
+          <DetailedPeriod startDate="2026-05-04" endDate="2026-05-07">
+            <Rate>30.00</Rate>
+            <SpotsPerWeek>4</SpotsPerWeek>
+          </DetailedPeriod>
+        </Periods>
+      </AvailLineWithDetailedPeriods>
+      <AvailLineWithDetailedPeriods>
+        <DayTimes>
+          <DayTime>
+            <StartTime>13:00</StartTime>
+            <EndTime>16:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>Y</tvb-tp:Monday>
+              <tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>Y</tvb-tp:Thursday>
+              <tvb-tp:Friday>Y</tvb-tp:Friday>
+              <tvb-tp:Saturday>Y</tvb-tp:Saturday>
+              <tvb-tp:Sunday>Y</tvb-tp:Sunday>
+            </Days>
+            <ProgramName>South Asian</ProgramName>
+          </DayTime>
+        </DayTimes>
+        <AvailName>South Asian</AvailName>
+        <SpotLength>00:00:15</SpotLength>
+        <Periods>
+          <DetailedPeriod startDate="2026-04-27" endDate="2026-05-03">
+            <Rate>0.00</Rate>
+            <SpotsPerWeek>8</SpotsPerWeek>
+          </DetailedPeriod>
+          <DetailedPeriod startDate="2026-05-04" endDate="2026-05-07">
+            <Rate>0.00</Rate>
+            <SpotsPerWeek>4</SpotsPerWeek>
+          </DetailedPeriod>
+        </Periods>
+      </AvailLineWithDetailedPeriods>
+    </AvailList>
+  </Proposal>
+</SpotCableData>

@@ -27,6 +27,7 @@ class OrderType(Enum):
     ADMERASIA = "admerasia"
     SAGENT = "sagent"
     CHARMAINE = "charmaine"
+    XML = "xml"
     UNKNOWN = "unknown"
 
     def requires_block_refresh(self) -> bool:

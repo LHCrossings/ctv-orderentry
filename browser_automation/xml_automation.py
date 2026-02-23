@@ -40,11 +40,14 @@ from browser_automation.parsers.aaaa_xml_parser import parse_aaaa_xml, print_par
 from browser_automation.tcaa_automation import (
     create_tcaa_contract,
     prompt_for_bonus_lines,
-    BonusLineInput,
-    ROS_OPTIONS,
 )
 from parsers.tcaa_parser import TCAAEstimate
-from src.domain.enums import BillingType
+from src.data_access.repositories.customer_repository import CustomerRepository
+from src.business_logic.services.customer_matching_service import CustomerMatchingService
+from src.domain.enums import OrderType
+
+# Path to customer database (relative to project root)
+_DB_PATH = Path(__file__).parent.parent / "data" / "customers.db"
 
 
 # ============================================================================
@@ -73,6 +76,9 @@ class XmlOrderInputs:
     """All user inputs gathered before unattended processing begins."""
     xml_path: str
     estimates: list[TCAAEstimate]
+    agency: str                            # Agency/buyer name (for notes only)
+    client: str                            # Confirmed client/advertiser name
+    client_id: str                         # Etere customer ID for the client
     market: str                            # Confirmed market code
     bonus_inputs: dict[str, dict]          # estimate_number → bonus_inputs dict
     separation_intervals: tuple[int, int, int]
@@ -108,6 +114,15 @@ def gather_xml_inputs(xml_path: str) -> Optional[XmlOrderInputs]:
 
     print_parse_summary(estimates)
 
+    # ── Open customer DB ──
+    repo = CustomerRepository(_DB_PATH) if _DB_PATH.exists() else None
+
+    # ── Confirm agency (name only — for notes) ──
+    agency = _confirm_agency(estimates)
+
+    # ── Confirm client + look up Etere customer ID ──
+    client, client_id = _confirm_client(estimates, repo)
+
     # ── Confirm market ──
     market = _confirm_market(estimates)
     if not market:
@@ -126,7 +141,7 @@ def gather_xml_inputs(xml_path: str) -> Optional[XmlOrderInputs]:
     all_bonus_inputs = _gather_bonus_inputs(estimates)
 
     # ── Separation intervals ──
-    from separation_utils import confirm_separation_intervals
+    from browser_automation.separation_utils import confirm_separation_intervals
     separation_intervals = confirm_separation_intervals(
         detected_separation=None,  # XML doesn't specify separation
         order_type="XML",
@@ -138,12 +153,89 @@ def gather_xml_inputs(xml_path: str) -> Optional[XmlOrderInputs]:
     return XmlOrderInputs(
         xml_path=xml_path,
         estimates=estimates,
+        agency=agency,
+        client=client,
+        client_id=client_id,
         market=market,
         bonus_inputs=all_bonus_inputs,
         separation_intervals=separation_intervals,
         order_code=order_code,
         description=description,
     )
+
+
+def _confirm_agency(estimates: list[TCAAEstimate]) -> str:
+    """
+    Confirm the agency/buyer name (for notes only — no Etere ID needed).
+
+    Reads Buyer/@buyingCompanyName from parsed estimates.
+    If blank or 'N/A', requires user entry.
+    """
+    detected_buyers = {est.buyer for est in estimates if est.buyer and est.buyer != "N/A"}
+    detected = next(iter(detected_buyers)) if len(detected_buyers) == 1 else ""
+
+    print("\n" + "="*70)
+    print("AGENCY")
+    print("="*70)
+
+    if detected:
+        print(f"\nDetected agency: {detected}")
+        confirm = input("Use this? (Y/n): ").strip().lower()
+        if confirm in ("", "y", "yes"):
+            return detected
+
+    while True:
+        agency = input("Agency name: ").strip()
+        if agency:
+            return agency
+        print("  Agency name cannot be blank")
+
+
+def _confirm_client(
+    estimates: list[TCAAEstimate],
+    repo: Optional[CustomerRepository],
+) -> tuple[str, str]:
+    """
+    Confirm the client/advertiser and look up their Etere customer ID.
+
+    1. Reads Advertiser/@name from parsed estimates
+    2. Fuzzy-matches against customers.db (OrderType.XML)
+    3. If found: confirms with user and returns (name, customer_id)
+    4. If not found: prompts for customer ID and saves to DB for next time
+
+    Returns:
+        (client_name, etere_customer_id)
+    """
+    detected_clients = {est.client for est in estimates if est.client and est.client != "Unknown"}
+    detected = next(iter(detected_clients)) if len(detected_clients) == 1 else ""
+
+    print("\n" + "="*70)
+    print("CLIENT / ADVERTISER")
+    print("="*70)
+
+    # Try DB fuzzy match on detected name
+    if repo and detected:
+        customer = repo.find_by_fuzzy_match(detected, OrderType.XML)
+        if customer:
+            print(f"\nDetected client: {customer.customer_name}  (Etere ID: {customer.customer_id})")
+            confirm = input("Use this? (Y/n): ").strip().lower()
+            if confirm in ("", "y", "yes"):
+                return (customer.customer_name, customer.customer_id)
+
+    if detected:
+        print(f"\nDetected from XML: {detected}")
+    client_name = input("Client name [Enter to use above]: ").strip() or detected
+    while not client_name:
+        client_name = input("Client name: ").strip()
+
+    # Look up / prompt for Etere customer ID
+    if repo:
+        service = CustomerMatchingService(repo)
+        client_id = service.find_customer(client_name, OrderType.XML, prompt_if_not_found=True)
+        return (client_name, client_id or "")
+    else:
+        client_id = input(f"Etere customer ID for '{client_name}': ").strip()
+        return (client_name, client_id)
 
 
 def _confirm_market(estimates: list[TCAAEstimate]) -> Optional[str]:
@@ -301,14 +393,15 @@ def process_xml_order(
     success_count = 0
 
     for estimate in estimates:
-        # Inject the confirmed market into the estimate
-        # (TCAAEstimate.market is used by create_tcaa_contract for line market)
-        estimate_with_market = _inject_market(estimate, inputs.market)
+        # Inject confirmed agency, client, and market into the estimate
+        estimate_confirmed = _inject_confirmed(estimate, inputs.agency, inputs.client, inputs.market)
 
         bonus_inputs = inputs.bonus_inputs.get(estimate.estimate_number, {})
 
         print(f"\n{'='*60}")
         print(f"Creating contract for estimate {estimate.estimate_number}")
+        print(f"  Agency: {inputs.agency}")
+        print(f"  Client: {inputs.client}  (ID: {inputs.client_id})")
         print(f"  Market: {inputs.market}")
         print(f"  Flight: {estimate.flight_start} – {estimate.flight_end}")
         print(f"  Lines:  {len(estimate.lines)}")
@@ -316,7 +409,7 @@ def process_xml_order(
 
         success = create_tcaa_contract(
             etere=etere,
-            estimate=estimate_with_market,
+            estimate=estimate_confirmed,
             bonus_inputs=bonus_inputs,
             separation_intervals=inputs.separation_intervals,
             order_code=inputs.order_code,
@@ -340,15 +433,15 @@ def process_xml_order(
     return success_count == len(estimates)
 
 
-def _inject_market(estimate: TCAAEstimate, market: str) -> TCAAEstimate:
-    """
-    Return a copy of the estimate with the confirmed market code set.
-
-    TCAAEstimate is a dataclass (not frozen), so we can update in place.
-    But we follow the immutability principle and return a new instance.
-    """
+def _inject_confirmed(
+    estimate: TCAAEstimate,
+    agency: str,
+    client: str,
+    market: str,
+) -> TCAAEstimate:
+    """Return a copy of the estimate with confirmed agency, client, and market."""
     from dataclasses import replace
-    return replace(estimate, market=market)
+    return replace(estimate, buyer=agency, client=client, market=market)
 
 
 # ============================================================================
@@ -384,6 +477,8 @@ if __name__ == "__main__":
 
     if inputs:
         print(f"\n✓ Inputs gathered successfully:")
+        print(f"  Agency:      {inputs.agency}")
+        print(f"  Client:      {inputs.client}  (ID: {inputs.client_id})")
         print(f"  Market:      {inputs.market}")
         print(f"  Estimates:   {len(inputs.estimates)}")
         print(f"  Separation:  {inputs.separation_intervals}")

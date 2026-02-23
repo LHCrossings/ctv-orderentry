@@ -39,6 +39,7 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
     OrderType.IMPACT:    ("browser_automation.impact_automation",    "gather_impact_inputs",          "IMPACT"),
     OrderType.RPM:       ("browser_automation.rpm_automation",       "gather_rpm_inputs",             "RPM"),
     OrderType.WORLDLINK: ("browser_automation.worldlink_automation", "gather_worldlink_inputs",       "WORLDLINK"),
+    OrderType.XML:       ("browser_automation.xml_automation",       "gather_xml_inputs_from_path",   "XML (AAAA SpotTV)"),
 }
 
 
