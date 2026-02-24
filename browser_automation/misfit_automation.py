@@ -413,7 +413,10 @@ def create_misfit_contract(
         
         # Get flight dates
         flight_start, flight_end = order.get_flight_dates()
-        
+
+        # Use order date in ref; fall back to flight start when date is missing
+        ref_date = order.date if order.date and order.date not in ('None', '') else flight_start
+
         # Handle customer ID
         if customer_id is None:
             # User will select in browser - etere_client will show instructions
@@ -423,7 +426,7 @@ def create_misfit_contract(
                 description=description,
                 contract_start=flight_start,
                 contract_end=flight_end,
-                customer_order_ref=f"Misfit {order.date}",
+                customer_order_ref=f"Misfit {ref_date}",
                 notes=None,  # Leave notes blank for Misfit
                 charge_to=BillingType.CUSTOMER_SHARE_AGENCY.get_charge_to(),
                 invoice_header=BillingType.CUSTOMER_SHARE_AGENCY.get_invoice_header()
@@ -436,7 +439,7 @@ def create_misfit_contract(
                 description=description,
                 contract_start=flight_start,
                 contract_end=flight_end,
-                customer_order_ref=f"Misfit {order.date}",
+                customer_order_ref=f"Misfit {ref_date}",
                 notes=None,  # Leave notes blank for Misfit
                 charge_to=BillingType.CUSTOMER_SHARE_AGENCY.get_charge_to(),
                 invoice_header=BillingType.CUSTOMER_SHARE_AGENCY.get_invoice_header()
