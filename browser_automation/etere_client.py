@@ -64,6 +64,7 @@ class EtereClient:
         """Initialize with existing Selenium WebDriver."""
         self.driver = driver
         self.wait = WebDriverWait(driver, 15)
+        self.last_customer_id: str | None = None  # Set after manual browser selection
     
     # ═══════════════════════════════════════════════════════════════════════
     # SESSION MANAGEMENT
@@ -291,7 +292,8 @@ class EtereClient:
                     return None
                 
                 print(f"[CONTRACT] ✓ Customer ID: {populated_id}")
-                
+                self.last_customer_id = populated_id
+
             elif search_required and client_name:
                 # Legacy: Auto-trigger search with client name (kept for backward compatibility)
                 self.search_customer(client_name)

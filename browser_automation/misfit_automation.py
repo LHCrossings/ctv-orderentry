@@ -42,6 +42,7 @@ from parsers.misfit_parser import (
 
 # Customer detection
 from src.domain.enums import OrderType, BillingType
+from src.domain.entities import Customer
 from src.data_access.repositories.customer_repository import CustomerRepository
 from src.business_logic.services.customer_matching_service import CustomerMatchingService
 
@@ -344,6 +345,23 @@ def process_misfit_order(
         print("MISFIT ORDER PROCESSING COMPLETE")
         print(f"{'='*70}")
         print("✓ Contract created successfully!")
+
+        # If customer was selected manually in the browser, offer to save for future orders
+        if customer_id is None and etere.last_customer_id:
+            selected_id = etere.last_customer_id
+            save_yn = input(
+                f"\nSave customer ID {selected_id} as '{order.agency}' for future Misfit orders? (y/n): "
+            ).strip().lower()
+            if save_yn == 'y':
+                db_path = Path(__file__).parent.parent / "data" / "customers.db"
+                repo = CustomerRepository(str(db_path))
+                repo.save(Customer(
+                    customer_id=str(selected_id),
+                    customer_name=order.agency,
+                    order_type=OrderType.MISFIT,
+                    separation_customer=15,
+                ))
+                print(f"✓ Saved '{order.agency}' (ID: {selected_id}) to customer database")
     else:
         print(f"\n{'='*70}")
         print("MISFIT ORDER PROCESSING FAILED")

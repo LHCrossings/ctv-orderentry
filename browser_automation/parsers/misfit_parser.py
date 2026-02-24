@@ -179,12 +179,17 @@ def parse_misfit_pdf(pdf_path: str) -> MisfitOrder:
                 if not week_dates:
                     week_dates = weeks
         
+        # Derive markets from parsed lines — more reliable than the header field,
+        # which can be None/empty in supplemental budget PDFs.
+        derived_markets = list(dict.fromkeys(line.market for line in lines))
+        markets = derived_markets if derived_markets else header['markets']
+
         return MisfitOrder(
             agency=header['agency'],
             contact=header['contact'],
             email=header['email'],
             phone=header['phone'],
-            markets=header['markets'],
+            markets=markets,
             budget_gross=header['budget_gross'],
             budget_net=header['budget_net'],
             date=header['date'],
@@ -310,8 +315,8 @@ def _parse_market_table(table: List[List[str]]) -> tuple[str, List[MisfitLine], 
     for row_idx in range(start_row, len(table)):
         row = table[row_idx]
         
-        # Skip empty rows or summary rows
-        if not row or len(row) < 10:
+        # Skip empty rows (need at least: Language Block, Day Part, Rate, 1 week col, Total)
+        if not row or len(row) < 5:
             continue
         
         # Skip rows with "Paid"/"Bonus" in any of first few columns
