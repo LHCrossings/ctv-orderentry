@@ -395,9 +395,6 @@ def _parse_schedule_line(row: List[str], market: str, week_dates: List[str]) -> 
         rate_str = str(row[2 + offset]).strip()
         rate = _parse_currency(rate_str)
         
-        # Check if bonus (rate = 0)
-        is_bonus = (rate == 0.0)
-        
         # Extract weekly spots (columns 3+offset to 3+offset+num_weeks)
         num_weeks = len(week_dates)
         weekly_spots = []
@@ -425,6 +422,10 @@ def _parse_schedule_line(row: List[str], market: str, week_dates: List[str]) -> 
         gross = 0.0
         if gross_col < len(row):
             gross = _parse_currency(str(row[gross_col]))
+
+        # Bonus if rate is $0 OR gross is $0 despite non-zero spots
+        # (some PDFs list a unit value for ROS bonus lines but zero out the gross)
+        is_bonus = (rate == 0.0 or gross == 0.0)
         
         # NET column
         net_col = gross_col + 1
