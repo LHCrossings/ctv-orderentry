@@ -455,31 +455,42 @@ def _parse_schedule_line(row: List[str], market: str, week_dates: List[str]) -> 
         return None
 
 
+_DAY_ALIASES = {
+    "Sat-Sun": "Sa-Su",
+    "SAT-SUN": "Sa-Su",
+    "M-Sun":   "M-Su",
+    "M-SUN":   "M-Su",
+    "Mon-Fri": "M-F",
+    "Mon-Sun": "M-Su",
+}
+
+
 def _parse_program_field(program: str) -> tuple[str, str]:
     """
     Parse program field into days and time.
-    
+
     Examples:
-    - "M-F 7p-8p" → ("M-F", "7p-8p")
-    - "M-Sun 8p-9p" → ("M-Sun", "8p-9p")
-    - "Sat-Sun 6p-8p" → ("Sat-Sun", "6p-8p")
-    - "M-F 4p-5p; 6p-7p" → ("M-F", "4p-5p; 6p-7p")  # Semicolon ranges
-    - "ROS" → ("M-Su", "ROS")
+    - "M-F 7p-8p"        → ("M-F",   "7p-8p")
+    - "M-Sun 8p-9p"      → ("M-Su",  "8p-9p")
+    - "Sat-Sun 6p-8p"    → ("Sa-Su", "6p-8p")
+    - "M-F 4p-5p; 6p-7p" → ("M-F",   "4p-5p; 6p-7p")
+    - "ROS"              → ("M-Su",  "ROS")
     """
     program = program.strip()
-    
+
     # Check for ROS (Run of Schedule)
     if program == "ROS":
         return ("M-Su", "ROS")
-    
+
     # Try to split on space
     parts = program.split()
     if len(parts) >= 2:
         days = parts[0]
-        # Join all remaining parts (handles "4p-5p; 6p-7p")
+        # Normalise to canonical form expected by etere_client day patterns
+        days = _DAY_ALIASES.get(days, days)
         time = ' '.join(parts[1:])
         return (days, time)
-    
+
     # Default
     return ("M-Su", program)
 
