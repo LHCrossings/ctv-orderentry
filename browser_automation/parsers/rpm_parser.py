@@ -88,16 +88,17 @@ def _normalize_daypart_name(program_name: str) -> tuple[str, str]:
         "SaSu 11:00a-1:00p VIETNAMESE" → ("Sa-Su 11a-1p Vietnamese", "V")
         "MTuWThFSaSu 6:00a-12:00a Asian Rotation" → ("M-Su 6a-12m ROS", "ROS")
     """
-    # Extract day pattern
-    day_pattern = ""
-    if "MTuWThF" in program_name and "SaSu" in program_name:
+    # Extract day pattern — use regex to tolerate OCR artifacts like "MTuWTHhF"
+    first_word = program_name.split()[0].upper() if program_name.split() else ""
+    has_mf   = bool(re.match(r'^MT[A-Z]+F', first_word))
+    has_sasu = bool(re.search(r'SASU', first_word))
+    if has_mf and has_sasu:
         day_pattern = "M-Su"
-    elif "MTuWThF" in program_name:
+    elif has_mf:
         day_pattern = "M-F"
-    elif "SaSu" in program_name:
+    elif has_sasu:
         day_pattern = "Sa-Su"
     else:
-        # Shouldn't happen, but handle edge cases
         day_pattern = "M-Su"
     
     # Extract time range and normalize
@@ -435,13 +436,18 @@ def parse_rpm_pdf(pdf_path: str) -> tuple[Optional[RPMOrder], list[RPMLine]]:
 
         # Preprocess: fix spaces in times (e.g., "11 :00a" → "11:00a")
         text_lines = [re.sub(r'(\d+)\s*:\s*(\d+)([ap])', r'\1:\2\3', ln) for ln in text_lines]
+        # Preprocess: close OCR space in time ranges (e.g., "6:00a- 8:00p" → "6:00a-8:00p")
+        # Must run AFTER colon-space fix so times are normalised first.
+        # Does NOT affect "6:00a- RT" split lines — those have no second time token.
+        text_lines = [re.sub(r'(\d+:\d+[ap])-\s+(\d+:\d+[ap])', r'\1-\2', ln) for ln in text_lines]
 
         i = 0
         while i < len(text_lines):
             line_text = text_lines[i].strip()
 
-            # Look for lines that start with daypart patterns (case-insensitive for OCR)
-            if re.match(r'^(MTuWThF|SaSu|MTuWThFSaSu)', line_text, re.IGNORECASE):
+            # Look for lines that start with daypart patterns (tolerant of OCR artifacts
+            # such as doubled letters: "MTuWTHhF" instead of "MTuWThF")
+            if re.match(r'^(MT[A-Za-z]+SaSu|MT[A-Za-z]+F\b|SaSu\w*)', line_text, re.IGNORECASE):
                 try:
                     # Handle split time: "MTuWThFSaSu 6:00a- RT $0.00..."
                     split_match = re.search(r'(\d+:\d+[ap])-\s+(RT|DT)', line_text, re.IGNORECASE)
@@ -489,7 +495,8 @@ def parse_rpm_pdf(pdf_path: str) -> tuple[Optional[RPMOrder], list[RPMLine]]:
                     if i + 1 < len(text_lines):
                         next_line = text_lines[i + 1].strip()
                         if next_line and not re.match(
-                            r'^(MTuWThF|SaSu|Total)', next_line, re.IGNORECASE
+                            r'^(MT[A-Za-z]+SaSu|MT[A-Za-z]+F\b|SaSu\w*|Total)',
+                            next_line, re.IGNORECASE
                         ):
                             language_name = next_line
                             i += 1
