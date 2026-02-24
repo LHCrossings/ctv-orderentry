@@ -233,7 +233,7 @@ def parse_impact_pdf(pdf_path: str) -> List[ImpactQuarterOrder]:
             else:
                 print(f"[PARSE] Warning: Could not determine quarter from page {page_num}")
                 quarter_num = page_num
-                year = 2026
+                year = datetime.now().year
                 quarter = f"Q{quarter_num}-{year}"
             
             print(f"[PARSE] Quarter: {quarter}")
@@ -574,11 +574,11 @@ def _parse_week_date(week_str: str, year: int) -> str:
     except Exception as e:
         print(f"[PARSE] Warning: Could not parse week date '{week_str}': {e}")
     
-    return "01/01/2026"  # Fallback
+    return f"01/01/{datetime.now().year}"  # Fallback
 
 
-def analyze_weekly_distribution(weekly_spots: List[int], week_dates: List[str], 
-                                contract_end_date: Optional[str] = None, year: int = 2026) -> List[Dict]:
+def analyze_weekly_distribution(weekly_spots: List[int], week_dates: List[str],
+                                contract_end_date: Optional[str] = None, year: Optional[int] = None) -> List[Dict]:
     """
     Analyze weekly spot distribution to determine how to split into Etere lines.
     
@@ -595,7 +595,10 @@ def analyze_weekly_distribution(weekly_spots: List[int], week_dates: List[str],
     """
     if not weekly_spots or not week_dates:
         return []
-    
+
+    if year is None:
+        year = datetime.now().year
+
     ranges = []
     current_range = None
     
