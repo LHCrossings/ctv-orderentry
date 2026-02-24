@@ -194,6 +194,33 @@ def parse_misfit_pdf(pdf_path: str) -> MisfitOrder:
         )
 
 
+def _normalize_date(date_str: str) -> str:
+    """
+    Normalize various date formats to MM/DD/YYYY.
+    Handles: MM/DD/YYYY (passthrough), DD-Mon (e.g. '16-Mar'), M/D/YYYY, etc.
+    """
+    if not date_str:
+        return date_str
+    # Already in expected format
+    if re.match(r'\d{1,2}/\d{1,2}/\d{4}', date_str):
+        return date_str
+    # DD-Mon or D-Mon (e.g. '16-Mar', '3-Jan')
+    m = re.match(r'^(\d{1,2})-([A-Za-z]{3})$', date_str.strip())
+    if m:
+        day = int(m.group(1))
+        month_str = m.group(2).upper()
+        months = {
+            'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4,
+            'MAY': 5, 'JUN': 6, 'JUL': 7, 'AUG': 8,
+            'SEP': 9, 'OCT': 10, 'NOV': 11, 'DEC': 12
+        }
+        month = months.get(month_str)
+        if month:
+            year = datetime.now().year
+            return f"{month:02d}/{day:02d}/{year}"
+    return date_str
+
+
 def _parse_header_table(table: List[List[str]]) -> Dict:
     """Parse header table (Table 1) for order info."""
     header = {
@@ -233,7 +260,7 @@ def _parse_header_table(table: List[List[str]]) -> Dict:
         elif 'net' in label:
             header['budget_net'] = _parse_currency(value)
         elif 'date' in label:
-            header['date'] = value
+            header['date'] = _normalize_date(value)
         elif 'commission' in label:
             header['commission'] = value
     
