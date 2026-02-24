@@ -515,9 +515,12 @@ def _parse_week_date(week_str: str, order_date: str) -> str:
         Date in MM/DD/YYYY format
     """
     try:
-        # Extract year from order date
-        order_dt = datetime.strptime(order_date, '%m/%d/%Y')
-        year = order_dt.year
+        # Extract year from order date (fall back to current year if format differs)
+        try:
+            order_dt = datetime.strptime(order_date, '%m/%d/%Y')
+            year = order_dt.year
+        except (ValueError, TypeError):
+            year = datetime.now().year
         
         # Parse week string: "26-Jan" or "2-Feb"
         parts = week_str.split('-')
