@@ -951,12 +951,19 @@ class EtereClient:
             total_spots_field.clear()
             total_spots_field.send_keys(str(total_spots))
             
-            # Spots Per Week
+            # Spots Per Week  (contractLineGeneralMaxWeekSchedule)
+            # RULE: If an order specifies exact per-day spot counts (e.g. Admerasia),
+            # pass spots_per_week=0 — the weekly cap is irrelevant because per-day
+            # placement is fully controlled by max_daily_run.  Only set spots_per_week
+            # to a non-zero value for orders that specify a weekly quota and let Etere
+            # distribute spots freely within the week.
             spots_field = self.driver.find_element(By.ID, "contractLineGeneralMaxWeekSchedule")
             spots_field.clear()
             spots_field.send_keys(str(spots_per_week))
-            
-            # Max Daily Run
+
+            # Max Daily Run  (contractLineGeneralMaxDailyRun)
+            # For per-day exact orders: set this to the actual spots-per-day from the order.
+            # For weekly quota orders: auto-calculated above as ceil(spots_per_week / day_count).
             max_daily_field = self.driver.find_element(By.ID, "contractLineGeneralMaxDailyRun")
             max_daily_field.clear()
             max_daily_field.send_keys(str(max_daily_run))
