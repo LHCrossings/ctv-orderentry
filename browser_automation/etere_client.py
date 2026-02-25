@@ -43,6 +43,7 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional, List, Tuple
+import re
 import time
 
 from src.domain.enums import Market
@@ -1067,38 +1068,30 @@ class EtereClient:
             return f"00:{minutes:02d}:{remaining_seconds:02d}:00"
     
     def _select_days(self, days: str) -> None:
-        """Select days of week based on pattern."""
+        """Select days of week based on pattern string.
+
+        Supports ranges (M-F, M-R, M-Su), comma lists (M,W,R,F), and
+        single days (M, S, U).  Unknown strings default to M-Su and log
+        a warning rather than silently selecting all days.
+        """
         day_ids = [
-            'contractLineBlocksSunday',
-            'contractLineBlocksMonday',
-            'contractLineBlocksTuesday',
-            'contractLineBlocksWednesday',
-            'contractLineBlocksThursday',
-            'contractLineBlocksFriday',
-            'contractLineBlocksSaturday'
+            'contractLineBlocksSunday',     # index 0
+            'contractLineBlocksMonday',     # index 1
+            'contractLineBlocksTuesday',    # index 2
+            'contractLineBlocksWednesday',  # index 3
+            'contractLineBlocksThursday',   # index 4
+            'contractLineBlocksFriday',     # index 5
+            'contractLineBlocksSaturday'    # index 6
         ]
-        
-        patterns = {
-            "M-Su": [0, 1, 2, 3, 4, 5, 6],
-            "M-F": [1, 2, 3, 4, 5],
-            "M-Sa": [1, 2, 3, 4, 5, 6],
-            "Sa-Su": [6, 0],
-            "SAT": [6],
-            "Sa": [6],
-            "SU": [0],
-            "Su": [0],
-            "Sun": [0],
-            "SUN": [0]
-        }
-        
-        active_days = patterns.get(days, [0, 1, 2, 3, 4, 5, 6])
-        
+
+        active_days = self._parse_day_codes(days)
+
         # Uncheck all first
         for checkbox_id in day_ids:
             checkbox = self.driver.find_element(By.ID, checkbox_id)
             if self._is_icheck_checked(checkbox):
                 self._click_icheck(checkbox)
-        
+
         # Check active days
         for day_index in active_days:
             checkbox = self.driver.find_element(By.ID, day_ids[day_index])
@@ -1346,18 +1339,69 @@ class EtereClient:
             return days, EtereClient._count_active_days(days) - 1
     
     @staticmethod
-    def _count_active_days(days: str) -> int:
-        """Count number of active days."""
-        if days == "M-Su":
-            return 7
-        elif days == "M-F":
-            return 5
-        elif days == "M-Sa":
-            return 6
-        elif days == "Sa-Su":
-            return 2
+    def _parse_day_codes(days: str) -> List[int]:
+        """Parse a day-pattern string into a sorted list of day_ids indices.
+
+        day_ids index mapping (matches contractLineBlocks* element order):
+            0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday,
+            4=Thursday, 5=Friday, 6=Saturday
+
+        Supported input formats:
+            Ranges:      M-F, M-R, M-Su, M-Sa, Sa-Su
+            Comma list:  M,W,R,F  or  M,R
+            Single:      M  T  W  R  F  S  U
+            Aliases:     Sa Su SAT SU Sun SUN
+        """
+        # Single-letter parser codes → day_ids index
+        code_to_idx = {
+            'M': 1, 'T': 2, 'W': 3, 'R': 4, 'F': 5, 'S': 6, 'U': 0,
+        }
+        # Multi-char aliases → normalise to single-letter before lookup
+        aliases = {
+            'Sa': 'S', 'SAT': 'S',
+            'Su': 'U', 'SU': 'U', 'Sun': 'U', 'SUN': 'U',
+        }
+        # Week sequence used for range expansion (Mon → Sun)
+        week_seq = ['M', 'T', 'W', 'R', 'F', 'S', 'U']
+
+        def _resolve(code: str) -> int:
+            code = aliases.get(code, code)
+            return code_to_idx[code]
+
+        days = days.strip()
+        indices = set()
+
+        # Range notation: two tokens separated by a single hyphen
+        m = re.match(r'^([A-Za-z]+)-([A-Za-z]+)$', days)
+        if m:
+            start = aliases.get(m.group(1), m.group(1))
+            end   = aliases.get(m.group(2), m.group(2))
+            if start in week_seq and end in week_seq:
+                si, ei = week_seq.index(start), week_seq.index(end)
+                for code in week_seq[si:ei + 1]:
+                    indices.add(code_to_idx[code])
+            else:
+                print(f"[DAYS] ⚠ Unknown range '{days}', defaulting to M-Su")
+                return list(range(7))
         else:
-            return 7
+            # Comma-separated or single token
+            for part in days.split(','):
+                part = part.strip()
+                try:
+                    indices.add(_resolve(part))
+                except KeyError:
+                    print(f"[DAYS] ⚠ Unknown day code '{part}' in '{days}', skipping")
+
+        if not indices:
+            print(f"[DAYS] ⚠ Could not parse '{days}', defaulting to M-Su")
+            return list(range(7))
+
+        return sorted(indices)
+
+    @staticmethod
+    def _count_active_days(days: str) -> int:
+        """Count number of active days in a day-pattern string."""
+        return len(EtereClient._parse_day_codes(days))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
