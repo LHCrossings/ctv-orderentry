@@ -46,6 +46,24 @@ no parsed lines. 0 lines entered despite a valid contract being created.
 the typical case. Always derive `markets` from parsed `line.market` values, not the header field
 which can be absent in supplemental/non-standard PDFs.
 
+## Admerasia Day Selection Must Come From Calendar Grid, Not Program Bracket
+
+**Session:** Admerasia McDonald's SEA 11-MD10-2603CT (2026-02-25)
+
+**What happened:** Misread user complaint about day selection. Thought the fix was to use
+the program name bracket `(M-F)` as the Etere day string. This was wrong — it caused Etere
+to freely distribute 10 spots across 15 available M-F slots instead of placing them on the
+exact days specified in the calendar grid.
+
+Admerasia orders are ordered **day by day**. Each cell in the calendar grid specifies the
+exact number of spots for that exact date. The Etere day selection must reflect precisely
+which days have spots (and per_day_max must match the count in the cell).
+
+**Rule:** Never use the program name bracket to override calendar-derived day strings for
+Admerasia. The bracket describes when the program airs; the calendar grid is the purchase
+order. Use the grid to build exact per-week Etere lines with precise day patterns and
+per_day_max values.
+
 ## Admerasia Chinese Format Detection Must Check Col 0, Not Just Col 1
 
 **Session:** Admerasia McDonald's SEA 11-MD10-2603CT (2026-02-25)
