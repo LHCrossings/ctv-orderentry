@@ -118,7 +118,7 @@ def lookup_customer(
         from src.data_access.repositories.customer_repository import CustomerRepository
         repo = CustomerRepository(db_path)
         customer = (repo.find_by_name(client_name, OrderType.WORLDLINK)
-                    or repo.find_by_name_fuzzy(client_name, OrderType.WORLDLINK))
+                    or repo.find_by_fuzzy_match(client_name, OrderType.WORLDLINK))
         if customer:
             return {
                 'customer_id': customer.customer_id,
@@ -199,30 +199,34 @@ def gather_worldlink_inputs(pdf_path: str) -> Optional[dict]:
     print(f"[PARSE] ✓ Network: {network} | Type: {order_type_str.upper()}")
     print(f"[PARSE] ✓ Lines: {len(lines)}")
 
-    # Customer lookup
-    customer = lookup_customer(advertiser)
-    if customer:
-        print(f"\n[CUSTOMER] ✓ Found: ID={customer['customer_id']}, "
-              f"Abbrev={customer['abbreviation']}")
-        customer_id = customer['customer_id']
-        abbreviation = customer['abbreviation']
-        separation = customer['separation']
-    else:
-        print(f"\n[CUSTOMER] ✗ Not found: {advertiser}")
-        print("Please enter customer details:")
-        customer_id = input("  Customer ID: ").strip()
-        abbreviation = input("  Abbreviation (e.g., Muck, Cross): ").strip()
-        cust_sep = input("  Customer separation [5]: ").strip() or "5"
-        event_sep = input("  Event separation [0]: ").strip() or "0"
-        order_sep = input("  Order separation [15]: ").strip() or "15"
-        separation = (int(cust_sep), int(event_sep), int(order_sep))
-        save_new_customer(customer_id, advertiser, abbreviation, separation)
-
-    # Revision handling: prompt for existing contract number
+    # Revision orders: skip customer details — contract already exists in Etere.
+    # Only the contract number is needed to add lines.
     contract_number = None
     if order_type_str != 'new':
         print(f"\n[REVISION] Order type: {order_type_str.upper()}")
         contract_number = input("  Existing contract number: ").strip()
+        customer_id = None
+        separation = (5, 0, 15)  # WorldLink default — contract already has its own settings
+        print(f"[CUSTOMER] ✓ Revision — using existing contract {contract_number}")
+    else:
+        # New order: look up or prompt for customer details
+        customer = lookup_customer(advertiser)
+        if customer:
+            print(f"\n[CUSTOMER] ✓ Found: ID={customer['customer_id']}, "
+                  f"Abbrev={customer['abbreviation']}")
+            customer_id = customer['customer_id']
+            abbreviation = customer['abbreviation']
+            separation = customer['separation']
+        else:
+            print(f"\n[CUSTOMER] ✗ Not found: {advertiser}")
+            print("Please enter customer details:")
+            customer_id = input("  Customer ID: ").strip()
+            abbreviation = input("  Abbreviation (e.g., Muck, Cross): ").strip()
+            cust_sep = input("  Customer separation [5]: ").strip() or "5"
+            event_sep = input("  Event separation [0]: ").strip() or "0"
+            order_sep = input("  Order separation [15]: ").strip() or "15"
+            separation = (int(cust_sep), int(event_sep), int(order_sep))
+            save_new_customer(customer_id, advertiser, abbreviation, separation)
 
     billing = BillingType.CUSTOMER_SHARE_AGENCY
     print(f"\n[BILLING] ✓ Customer share indicating agency % / Agency")
