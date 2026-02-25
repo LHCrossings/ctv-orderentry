@@ -129,7 +129,8 @@ cython_debug/
 Thumbs.db
 
 # Project-specific: ignore data directory contents
-data/
+data/*
+!data/customers.db
 
 # Credentials - NEVER commit
 credentials.env
