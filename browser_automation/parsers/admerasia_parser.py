@@ -178,7 +178,8 @@ class AdmerasiaOrder:
                 campaign_end=campaign_end,
                 time_str=line.time,
                 net_rate=line.net_rate,
-                spot_length=line.spot_length
+                spot_length=line.spot_length,
+                days_ref=line.days if line.days != "VARIES" else None
             )
             
             all_etere_lines.extend(etere_specs)
@@ -1256,10 +1257,11 @@ def _normalize_time_to_colon_format(time_str: str) -> str:
     return time_str
 
 
-def analyze_daily_patterns_to_etere_lines(daily_spots: List[int], calendar_days: List[int], 
+def analyze_daily_patterns_to_etere_lines(daily_spots: List[int], calendar_days: List[int],
                                          campaign_start: date, campaign_end: date,
-                                         time_str: str, net_rate: Decimal, 
-                                         spot_length: int) -> List[Dict]:
+                                         time_str: str, net_rate: Decimal,
+                                         spot_length: int,
+                                         days_ref: str = None) -> List[Dict]:
     """
     Analyze daily spot patterns and convert to Etere line specifications.
     
@@ -1328,8 +1330,11 @@ def analyze_daily_patterns_to_etere_lines(daily_spots: List[int], calendar_days:
             if not sorted_dows:
                 continue
             
-            # Determine day string (M-F, M,W, etc.)
-            if len(sorted_dows) > 1 and _are_consecutive_days(sorted_dows, day_order):
+            # Determine day string: use program bracket (M-F, S, U) when available,
+            # otherwise derive from which calendar cells have spots.
+            if days_ref:
+                days_str = days_ref
+            elif len(sorted_dows) > 1 and _are_consecutive_days(sorted_dows, day_order):
                 days_str = f"{sorted_dows[0]}-{sorted_dows[-1]}"
             elif len(sorted_dows) > 1:
                 days_str = ",".join(sorted_dows)
