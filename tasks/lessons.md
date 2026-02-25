@@ -45,3 +45,24 @@ no parsed lines. 0 lines entered despite a valid contract being created.
 **Rule:** Column count guards should reflect the minimum structure (≥5 for Misfit tables), not
 the typical case. Always derive `markets` from parsed `line.market` values, not the header field
 which can be absent in supplemental/non-standard PDFs.
+
+## Admerasia Chinese Format Detection Must Check Col 0, Not Just Col 1
+
+**Session:** Admerasia McDonald's SEA 11-MD10-2603CT (2026-02-25)
+
+**What happened:** Parser detected "Vietnamese format" for a Chinese-language order, producing
+0 lines. The Vietnamese/Chinese format detection checked `first_data_row[1]` for `:\d+s?` (spot
+length). In this order the spot length (`:15`) was in col 0 and an ad title text was in col 1
+(`ACM Yes/ACM Name/`), so the check failed and col offsets were set to Vietnamese mode
+(`program_col=2`). Column 2 is `None` for all data rows → every line skipped silently.
+
+Also found: PDF typo `10:300p` (3-digit minute). The normalizer's pre-process regex
+`re.sub(r'(\d+):(\d{2})\d+([ap])', ...)` trims extra minute digits before pattern matching.
+
+**Rules:**
+1. Chinese format detection must check **both col 0 and col 1** for the `:\d+s?` spot length
+   pattern — the column position varies across orders.
+2. When 0 lines are found, immediately dump the raw table rows around `row_offset` to identify
+   which skip condition is firing (no program, no rate, garbled time, etc.).
+3. Add the `10:300p`-style 3-digit minute sanitization as a pre-process step in
+   `_normalize_time_to_colon_format` to handle PDF OCR/typo artifacts silently.

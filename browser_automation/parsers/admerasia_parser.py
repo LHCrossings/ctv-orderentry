@@ -935,12 +935,15 @@ def _parse_line_items_table_based(pdf: pdfplumber.PDF, week_start_dates: List[da
     # Vietnamese orders: [empty, empty, Program, DayPart, Rate, calendar...]
     # Chinese orders: [Length, AdTitle, empty, Program, DayPart, Rate, calendar...]
     # Check first data row to determine layout
-    # Note: Column 0 might be None even for Chinese format, so check column 1 for Length value
+    # Note: Check columns 0 AND 1 for spot length — in some orders the length
+    # is in col 0 (":15") with ad title in col 1; in others it's in col 1 (":15s").
     first_data_row = broadcast_table[row_offset + 2]
     col_offset = 0
-    
-    # Check if column 1 has a spot length (like ":15s" or ":30s") - indicates Chinese format
-    if first_data_row[1] and re.search(r':\d+s?', str(first_data_row[1])):
+
+    # Check if column 0 OR column 1 has a spot length (like ":15s" or ":30s") - indicates Chinese format
+    col0_has_length = bool(first_data_row[0] and re.search(r':\d+s?', str(first_data_row[0])))
+    col1_has_length = bool(first_data_row[1] and re.search(r':\d+s?', str(first_data_row[1])))
+    if col0_has_length or col1_has_length:
         # Chinese format - has Length column
         col_offset = 0
         print("[PARSE] Detected Chinese format (with Length/AdTitle columns)")
@@ -1149,7 +1152,10 @@ def _normalize_time_to_colon_format(time_str: str) -> str:
     Admerasia PDFs write "11:30-12:00p" meaning 11:30am-12:00pm.
     """
     import re
-    
+
+    # Pre-process: fix 3+ digit minutes (e.g., "10:300p" → "10:30p" PDF typo)
+    time_str = re.sub(r'(\d+):(\d{2})\d+([ap])', r'\1:\2\3', time_str)
+
     # Pattern 1: Already fully normalized (both times have am/pm)? Return as-is
     if re.match(r'^\d+:\d+[ap]-\d+:\d+[ap]$', time_str):
         return time_str
