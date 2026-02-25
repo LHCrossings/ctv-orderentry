@@ -46,6 +46,19 @@ no parsed lines. 0 lines entered despite a valid contract being created.
 the typical case. Always derive `markets` from parsed `line.market` values, not the header field
 which can be absent in supplemental/non-standard PDFs.
 
+## Static Day-Pattern Dict in _select_days Silently Defaults to All Days
+
+**Session:** Admerasia McDonald's SEA 11-MD10-2603CT (2026-02-25)
+
+**What happened:** `_select_days` used a hardcoded dict mapping known strings to checkbox
+indices. Any unrecognised string (M,W,R,F / M-R / M,R / S / U) silently fell through to the
+default `[0,1,2,3,4,5,6]` = M-Su. Result: every Admerasia line got all 7 days checked.
+
+**Rule:** Never use a static dict + silent all-day default for day-pattern parsing. Use a
+proper parser (`_parse_day_codes`) that handles ranges, comma lists, and single codes, and
+**warns explicitly** on unknown input rather than defaulting silently. Verify by running
+`_parse_day_codes` against every pattern a parser can produce before shipping.
+
 ## Admerasia Day Selection Must Come From Calendar Grid, Not Program Bracket
 
 **Session:** Admerasia McDonald's SEA 11-MD10-2603CT (2026-02-25)
