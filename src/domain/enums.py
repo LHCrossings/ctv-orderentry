@@ -25,6 +25,7 @@ class OrderType(Enum):
     IMPACT = "impact"
     IGRAPHIX = "igraphix"
     ADMERASIA = "admerasia"
+    LEXUS = "lexus"
     SAGENT = "sagent"
     CHARMAINE = "charmaine"
     XML = "xml"

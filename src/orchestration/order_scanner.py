@@ -12,6 +12,7 @@ _src_path = Path(__file__).parent.parent
 if str(_src_path) not in sys.path:
     sys.path.insert(0, str(_src_path))
 
+from business_logic.services.order_detection_service import detect_from_filename
 from business_logic.services.pdf_order_detector import PDFOrderDetector
 from domain.entities import Order
 from domain.enums import OrderStatus, OrderType
@@ -158,6 +159,40 @@ class OrderScanner:
                 print(f"Warning: Failed to process {xml_path.name}: {e}")
                 continue
 
+        # Find JPG / PNG / XLSX files (detected by filename, not content)
+        # Include both lowercase and uppercase extensions for Linux compatibility
+        image_xlsx_files: list[Path] = []
+        for pattern in ("*.jpg", "*.JPG", "*.jpeg", "*.JPEG",
+                         "*.png", "*.PNG", "*.xlsx", "*.XLSX"):
+            image_xlsx_files.extend(self._incoming_dir.glob(pattern))
+        image_xlsx_files.sort()
+
+        for file_path in image_xlsx_files:
+            try:
+                order_type = detect_from_filename(file_path.name)
+                if order_type == OrderType.UNKNOWN:
+                    continue
+
+                # Extract customer name hint from filename (best-effort)
+                name_upper = file_path.stem.upper()
+                if "LEXUS" in name_upper:
+                    customer_name = "Lexus"
+                else:
+                    customer_name = "Unknown"
+
+                order = Order(
+                    pdf_path=file_path,
+                    order_type=order_type,
+                    customer_name=customer_name,
+                    status=OrderStatus.PENDING,
+                    estimate_number=None,
+                )
+                orders.append(order)
+
+            except Exception as e:
+                print(f"Warning: Failed to process {file_path.name}: {e}")
+                continue
+
         return orders
 
     def get_pending_orders(self) -> list[Order]:
@@ -182,4 +217,12 @@ class OrderScanner:
         return (
             len(list(self._incoming_dir.glob("*.pdf")))
             + len(list(self._incoming_dir.glob("*.xml")))
+            + len(list(self._incoming_dir.glob("*.jpg")))
+            + len(list(self._incoming_dir.glob("*.JPG")))
+            + len(list(self._incoming_dir.glob("*.jpeg")))
+            + len(list(self._incoming_dir.glob("*.JPEG")))
+            + len(list(self._incoming_dir.glob("*.png")))
+            + len(list(self._incoming_dir.glob("*.PNG")))
+            + len(list(self._incoming_dir.glob("*.xlsx")))
+            + len(list(self._incoming_dir.glob("*.XLSX")))
         )

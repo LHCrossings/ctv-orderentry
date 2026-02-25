@@ -628,6 +628,25 @@ class OrderDetectionService:
         return None
 
 
+def detect_from_filename(filename: str) -> OrderType:
+    """
+    Detect order type from a filename alone (for non-PDF files).
+
+    Used for JPG, XLSX, and other formats where content-based detection
+    is not applicable at scan time.
+
+    Args:
+        filename: File name (basename, not full path)
+
+    Returns:
+        Detected OrderType, or UNKNOWN if not recognised
+    """
+    name_upper = filename.upper()
+    if "LEXUS" in name_upper:
+        return OrderType.LEXUS
+    return OrderType.UNKNOWN
+
+
 def create_detection_service():
     """
     Factory function to create a fully configured PDFOrderDetector.
