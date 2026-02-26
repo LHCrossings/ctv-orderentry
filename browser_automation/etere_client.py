@@ -1403,6 +1403,133 @@ class EtereClient:
         """Count number of active days in a day-pattern string."""
         return len(EtereClient._parse_day_codes(days))
 
+    # ═══════════════════════════════════════════════════════════════════════
+    # WEEK CONSOLIDATION UTILITIES
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def consolidate_weeks(
+        weekly_spots: List[int],
+        week_start_dates: List,
+        flight_end: str,
+    ) -> List[dict]:
+        """
+        Group consecutive weeks with identical non-zero spot counts.
+
+        Universal helper used by SAGENT, Charmaine, and GaleForce.
+
+        Args:
+            weekly_spots: Spots per week, e.g. [3, 3, 0, 3]
+            week_start_dates: Either List[str] ("Apr 27") or
+                              List[CharmaineWeekColumn] (has .start_date MM/DD/YYYY)
+            flight_end: Contract end date in MM/DD/YYYY format
+
+        Returns:
+            List of dicts with keys: start_date, end_date, spots_per_week, weeks
+            Dates are MM/DD/YYYY strings.
+        """
+        from datetime import datetime, timedelta
+
+        # Normalise week_start_dates → List[date]
+        parsed_dates: List[date] = []
+        year = int(flight_end.split('/')[-1])
+
+        month_map = {
+            'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4,
+            'May': 5, 'Jun': 6, 'Jul': 7, 'Aug': 8,
+            'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12,
+        }
+
+        for item in week_start_dates:
+            # CharmaineWeekColumn or any object with start_date attribute
+            if hasattr(item, 'start_date'):
+                parsed_dates.append(datetime.strptime(item.start_date, '%m/%d/%Y').date())
+            elif isinstance(item, str):
+                # "Apr 27" format
+                parts = item.strip().split()
+                if len(parts) == 2 and parts[0] in month_map:
+                    m = month_map[parts[0]]
+                    d = int(parts[1])
+                    # Year-crossing: if the date is before Jan 01 of flight_end year,
+                    # use year+1 (unlikely but defensive).
+                    parsed_dates.append(date(year, m, d))
+                else:
+                    # Try MM/DD/YYYY
+                    try:
+                        parsed_dates.append(datetime.strptime(item, '%m/%d/%Y').date())
+                    except ValueError:
+                        print(f"[CONSOLIDATE] ⚠ Cannot parse week date '{item}', skipping")
+            else:
+                print(f"[CONSOLIDATE] ⚠ Unknown week date type {type(item)}, skipping")
+
+        flight_end_date = datetime.strptime(flight_end, '%m/%d/%Y').date()
+
+        ranges = []
+        n = min(len(weekly_spots), len(parsed_dates))
+        i = 0
+        while i < n:
+            if weekly_spots[i] == 0:
+                i += 1
+                continue
+
+            block_spots = weekly_spots[i]
+            block_start_date = parsed_dates[i]
+
+            # Extend while consecutive weeks have the same count AND are
+            # exactly 7 days apart (handles non-contiguous week schedules,
+            # e.g. BMO Apr-May gap before Aug).
+            j = i + 1
+            while j < n and weekly_spots[j] == block_spots:
+                gap = (parsed_dates[j] - parsed_dates[j - 1]).days
+                if gap != 7:
+                    break  # Non-consecutive weeks — start a new range
+                j += 1
+
+            last_week_start = parsed_dates[j - 1]
+            # End of last week = Saturday of that week, capped at flight_end
+            block_end_date = min(last_week_start + timedelta(days=6), flight_end_date)
+
+            ranges.append({
+                'start_date': block_start_date.strftime('%m/%d/%Y'),
+                'end_date': block_end_date.strftime('%m/%d/%Y'),
+                'spots_per_week': block_spots,
+                'weeks': j - i,
+            })
+            i = j
+
+        return ranges
+
+    @staticmethod
+    def consolidate_weeks_from_flight(
+        weekly_spots: List[int],
+        flight_start: str,
+        flight_end: str,
+    ) -> List[dict]:
+        """
+        Generate week dates from flight_start + 7-day increments, then consolidate.
+
+        Used by TCAA where week dates are not explicitly listed in the PDF.
+
+        Args:
+            weekly_spots: Spots per week
+            flight_start: Contract start date MM/DD/YYYY
+            flight_end: Contract end date MM/DD/YYYY
+
+        Returns:
+            List of dicts with keys: start_date, end_date, spots_per_week, weeks
+        """
+        from datetime import datetime, timedelta
+
+        start = datetime.strptime(flight_start, '%m/%d/%Y').date()
+        week_dates = [start + timedelta(weeks=i) for i in range(len(weekly_spots))]
+
+        # Build string list in the "Apr 27" format that consolidate_weeks accepts
+        month_abbr = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        week_start_dates = [f"{month_abbr[d.month - 1]} {d.day}" for d in week_dates]
+
+        return EtereClient.consolidate_weeks(weekly_spots, week_start_dates, flight_end)
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # CONVENIENCE FUNCTION

@@ -61,6 +61,25 @@ Old code's `_filter_blocks_by_prefix` is legacy — do NOT add blocks tab to new
 - `src/domain/enums.py` — `OrderType`, `SeparationInterval`, `BillingType`, `Market`
 - `tests/conftest.py` — global test mocks
 
+## Universal Booking Rules
+
+### Split Time Ranges (e.g. "4p-5p; 6p-7p")
+Book as **one Etere line using the max range** (4p-7p). The operator manually removes the
+intervening programming in Etere afterward. This commonly occurs on Filipino dayparts.
+Never split into two Etere lines for a semicolon time range — always use max range.
+Source: `archived scripts/CHARMAINE_GENERIC_TEMPLATE_DOCUMENTATION.md` line 424.
+
+### Week Consolidation (universal — applies to every order/agency)
+Group consecutive weeks with the **same spot count** into a single Etere line.
+Split into a new line whenever: (a) the spot count changes, or (b) there is a gap (0-spot week).
+Example: weekly spots [3,3,3,4,4] → 2 Etere lines (3 wks @ 3/wk, then 2 wks @ 4/wk).
+Non-contiguous flight windows (e.g. May block + Aug/Sep block) are always separate lines.
+Source: `consolidate_weeks()` in archived scripts; documented in TCAA/SAGENT/Misfit docs.
+
+### Bonus Lines ($0 rate with spots ordered)
+Any line with $0.00 rate AND spots > 0 on a given week is **always entered** in Etere as
+**BNS** (bonus billing type). Lines with 0 spots on every week are skipped.
+
 ## Separation Intervals by Agency
 All defined in `SeparationInterval` enum in `src/domain/enums.py`:
 - RPM: (25, 0, 15)  WORLDLINK: (5, 0, 15)  OPAD: (15, 0, 15)

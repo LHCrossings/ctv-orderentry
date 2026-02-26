@@ -27,6 +27,7 @@ class OrderType(Enum):
     ADMERASIA = "admerasia"
     LEXUS = "lexus"
     SAGENT = "sagent"
+    GALEFORCE = "galeforce"
     CHARMAINE = "charmaine"
     XML = "xml"
     UNKNOWN = "unknown"
@@ -275,6 +276,7 @@ class SeparationInterval(Enum):
     DAVISELEN_DEFAULT = (15, 0, 0)
     MISFIT = (15, 0, 0)
     SAGENT = (10, 0, 0)
+    GALEFORCE = (25, 0, 0)
     CHARMAINE = (15, 0, 0)
     DEFAULT = (15, 0, 0)
 
@@ -297,6 +299,7 @@ class SeparationInterval(Enum):
             OrderType.DAVISELEN: cls.DAVISELEN_DEFAULT.value,
             OrderType.MISFIT: cls.MISFIT.value,
             OrderType.SAGENT: cls.SAGENT.value,
+            OrderType.GALEFORCE: cls.GALEFORCE.value,
             OrderType.CHARMAINE: cls.CHARMAINE.value,
         }
         return mapping.get(order_type, cls.DEFAULT.value)
