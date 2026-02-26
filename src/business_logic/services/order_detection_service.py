@@ -119,7 +119,7 @@ class OrderDetectionService:
             return OrderType.GALEFORCE
 
         # Sacramento County Voter Registration
-        if self._is_saccountyvoters(first_page_text):
+        if self._is_saccountyvoters(first_page_text, second_page_text):
             return OrderType.SACCOUNTYVOTERS
 
         return OrderType.UNKNOWN
@@ -449,15 +449,16 @@ class OrderDetectionService:
 
         return has_market and has_estimate and has_header
 
-    def _is_saccountyvoters(self, text: str) -> bool:
+    def _is_saccountyvoters(self, text: str, second_page: str | None = None) -> bool:
         """
         Check if text matches Sacramento County Voter Registration order.
 
         Markers:
         - "Sacramento County Voter" (client name)
-        - "Phase 1 Length" (unique two-phase structure)
+        - "Phase 1 Length" (unique two-phase structure, may appear on page 2)
         """
-        return "Sacramento County Voter" in text and "Phase 1 Length" in text
+        combined = text + (second_page or "")
+        return "Sacramento County Voter" in combined and "Phase 1 Length" in combined
 
     def _is_galeforce(self, text: str) -> bool:
         """
