@@ -259,10 +259,12 @@ def gather_saccountyvoters_inputs(pdf_path: str) -> Optional[dict]:
     print()
 
     # ── Phase 1 inputs ────────────────────────────────────────────────────────
-    year_ph1 = order.phases[0].flight_start.split('/')[-1]
+    # yymm from flight start: "04/07/2026" → "2604"
+    fs1 = order.phases[0].flight_start   # MM/DD/YYYY
+    yymm1 = fs1[8:10] + fs1[0:2]        # "26" + "04" = "2604"
     print("[1/5] Phase 1 Contract Code")
     print("-" * 70)
-    default_code_ph1 = f"SAC VTR {year_ph1} PH1"
+    default_code_ph1 = f"Sac County Voters {yymm1}"
     print(f"Default: {default_code_ph1}")
     use_default = input("Use default? (y/n): ").strip().lower()
     code_ph1 = default_code_ph1 if use_default == 'y' else input("Enter contract code: ").strip()
@@ -270,17 +272,18 @@ def gather_saccountyvoters_inputs(pdf_path: str) -> Optional[dict]:
 
     print("[2/5] Phase 1 Contract Description")
     print("-" * 70)
-    default_desc_ph1 = f"Sacramento County Voter Registration Phase 1"
+    default_desc_ph1 = f"Sac County Voters Phase 1 {yymm1}"
     print(f"Default: {default_desc_ph1}")
     use_default = input("Use default? (y/n): ").strip().lower()
     desc_ph1 = default_desc_ph1 if use_default == 'y' else input("Enter description: ").strip()
     print(f"✓ {desc_ph1}\n")
 
     # ── Phase 2 inputs ────────────────────────────────────────────────────────
-    year_ph2 = order.phases[1].flight_start.split('/')[-1]
+    fs2 = order.phases[1].flight_start   # MM/DD/YYYY
+    yymm2 = fs2[8:10] + fs2[0:2]        # "26" + "05" = "2605"
     print("[3/5] Phase 2 Contract Code")
     print("-" * 70)
-    default_code_ph2 = f"SAC VTR {year_ph2} PH2"
+    default_code_ph2 = f"Sac County Voters {yymm2}"
     print(f"Default: {default_code_ph2}")
     use_default = input("Use default? (y/n): ").strip().lower()
     code_ph2 = default_code_ph2 if use_default == 'y' else input("Enter contract code: ").strip()
@@ -288,7 +291,7 @@ def gather_saccountyvoters_inputs(pdf_path: str) -> Optional[dict]:
 
     print("[4/5] Phase 2 Contract Description")
     print("-" * 70)
-    default_desc_ph2 = f"Sacramento County Voter Registration Phase 2"
+    default_desc_ph2 = f"Sac County Voters Phase 2 {yymm2}"
     print(f"Default: {default_desc_ph2}")
     use_default = input("Use default? (y/n): ").strip().lower()
     desc_ph2 = default_desc_ph2 if use_default == 'y' else input("Enter description: ").strip()
@@ -452,7 +455,9 @@ def _create_phase_contract(
         True on success, False on failure.
     """
     try:
-        code        = phase_inputs.get('contract_code', f"SAC VTR PH{phase.phase_number}")
+        fs = phase.flight_start
+        yymm = fs[8:10] + fs[0:2]
+        code        = phase_inputs.get('contract_code', f"Sac County Voters {yymm}")
         description = phase_inputs.get('description', f"Sacramento County Phase {phase.phase_number}")
 
         print(f"\n[SAC PH{phase.phase_number}] Creating contract: {code}")
