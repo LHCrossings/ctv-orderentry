@@ -14,6 +14,7 @@ Business Rules:
 """
 
 import os
+import re
 import sys
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
@@ -25,6 +26,7 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from browser_automation.etere_client import EtereClient
+from browser_automation.ros_definitions import ROS_SCHEDULES
 from browser_automation.parsers.galeforce_parser import (
     GaleForceOrder,
     GaleForceLine,
@@ -337,6 +339,25 @@ def _create_galeforce_contract(
 
             # Parse time for Etere fields (handles semicolons automatically)
             time_from, time_to = EtereClient.parse_time_range(etere_time)
+
+            # ROS bonus override (not for billboards):
+            # Detected by: is_bonus + not billboard + :15/:30 + all-day time (12a-12a).
+            # Match language by keyword; use standard ROS time from ros_definitions.
+            # Description: "{days} BNS {Language} ROS"
+            is_ros = (
+                line.is_bonus
+                and not line.is_billboard
+                and line.length in (':15', ':30')
+                and etere_time == '12a-12a'
+            )
+            if is_ros:
+                prog_lower = line.program.lower()
+                for language, sched in ROS_SCHEDULES.items():
+                    if language.lower() in prog_lower:
+                        time_from, time_to = EtereClient.parse_time_range(sched['time'])
+                        description = f"{etere_days} BNS {language} ROS"
+                        print(f"    [ROS] {language} — {sched['time']}, desc: {description!r}")
+                        break
 
             # Sunday 6-7a rule
             adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(etere_days, etere_time)
