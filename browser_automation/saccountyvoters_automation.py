@@ -463,6 +463,12 @@ def _create_phase_contract(
         print(f"\n[SAC PH{phase.phase_number}] Creating contract: {code}")
         print(f"[SAC PH{phase.phase_number}] Flight: {phase.flight_start} – {phase.flight_end}")
 
+        # Convert "4-May" → "May 4" so consolidate_weeks can parse the labels
+        week_dates = [
+            f"{label.split('-')[1]} {label.split('-')[0]}"
+            for label in phase.week_columns
+        ]
+
         contract_number = etere.create_contract_header(
             customer_id=customer_id,
             code=code,
@@ -507,7 +513,7 @@ def _create_phase_contract(
 
                 ranges = EtereClient.consolidate_weeks(
                     line.weekly_spots,
-                    phase.week_columns,
+                    week_dates,
                     flight_end=phase.flight_end,
                 )
 
@@ -556,7 +562,7 @@ def _create_phase_contract(
 
                 ranges = EtereClient.consolidate_weeks(
                     line.weekly_spots,
-                    phase.week_columns,
+                    week_dates,
                     flight_end=phase.flight_end,
                 )
 
