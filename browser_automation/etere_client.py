@@ -859,8 +859,17 @@ class EtereClient:
 
         # Billboard lines always use 0,0,0 separation — they air first in the break,
         # immediately followed by a paid spot, so no separation buffer is needed.
+        # Description format: "{days} BILLBOARD {program}" — no BNS, no time.
         if is_billboard:
             separation_intervals = (0, 0, 0)
+            if 'BILLBOARD' not in description.upper():
+                import re as _re
+                # Strip BNS indicator
+                desc = _re.sub(r'\bBNS\b\s*', '', description, flags=_re.IGNORECASE).strip()
+                # Strip time token (e.g. "8a-9a", "12a-12a", "4p-7p")
+                desc = _re.sub(r'\b\d+(?::\d+)?[ap]-\d+(?::\d+)?[ap]\b\s*', '', desc, flags=_re.IGNORECASE).strip()
+                parts = desc.split(' ', 1)
+                description = f"{parts[0]} BILLBOARD {parts[1]}" if len(parts) > 1 else f"{desc} BILLBOARD"
 
         try:
             # Universal calculation: If max_daily_run not provided, calculate it
