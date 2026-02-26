@@ -857,6 +857,11 @@ class EtereClient:
                 is_billboard = True
                 print(f"[LINE] ℹ Auto-detected billboard ({duration_seconds}s @ {time_from}-{time_to})")
 
+        # Billboard lines always use 0,0,0 separation — they air first in the break,
+        # immediately followed by a paid spot, so no separation buffer is needed.
+        if is_billboard:
+            separation_intervals = (0, 0, 0)
+
         try:
             # Universal calculation: If max_daily_run not provided, calculate it
             if max_daily_run is None:
