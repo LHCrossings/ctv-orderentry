@@ -376,6 +376,7 @@ def _create_galeforce_contract(
                     rate=float(rate),
                     separation_intervals=separation,
                     is_bookend=False,
+                    is_billboard=line.is_billboard,
                 )
 
                 if not success:

@@ -68,6 +68,7 @@ class GaleForceLine:
         weekly_spots:  Spots per week column
         total_spots:   Sum of weekly_spots (or explicit total from PDF)
         is_bonus:      True when net_rate == 0 and total_spots > 0
+        is_billboard:  True when :05/:10 shares a time period with a :30 line
     """
     line_number: int
     time_period: str
@@ -78,6 +79,7 @@ class GaleForceLine:
     weekly_spots: List[int]
     total_spots: int
     is_bonus: bool
+    is_billboard: bool
 
     def get_etere_days(self) -> str:
         """
@@ -436,6 +438,7 @@ def parse_galeforce_pdf(pdf_path: str) -> GaleForceOrder:
                 weekly_spots=weekly_spots,
                 total_spots=total_spots,
                 is_bonus=is_bonus,
+                is_billboard=False,  # Set in post-processing pass below
             )
             lines.append(gfl)
 
@@ -445,6 +448,21 @@ def parse_galeforce_pdf(pdf_path: str) -> GaleForceOrder:
 
         if not lines:
             raise ValueError("No lines parsed from GaleForceMedia PDF")
+
+        # ── Billboard detection ───────────────────────────────────────────────
+        # A :05 or :10 line is a billboard if there is a :30 line with the
+        # same time period (shares the daypart → airs first in break).
+        thirty_time_periods = {l.time_period for l in lines if l.length == ':30'}
+        from dataclasses import replace as _dc_replace
+        lines = [
+            _dc_replace(l, is_billboard=True)
+            if l.length in (':05', ':10') and l.time_period in thirty_time_periods
+            else l
+            for l in lines
+        ]
+        for l in lines:
+            if l.is_billboard:
+                print(f"[GALEFORCE PARSER] Line {l.line_number}: BILLBOARD detected ({l.length})")
 
         return GaleForceOrder(
             advertiser=advertiser,

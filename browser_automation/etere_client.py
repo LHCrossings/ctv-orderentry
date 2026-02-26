@@ -66,6 +66,7 @@ class EtereClient:
         self.driver = driver
         self.wait = WebDriverWait(driver, 15)
         self.last_customer_id: str | None = None  # Set after manual browser selection
+        self._thirty_windows: set[tuple[str, str]] = set()  # (time_from, time_to) of :30 lines
     
     # ═══════════════════════════════════════════════════════════════════════
     # SESSION MANAGEMENT
@@ -347,8 +348,9 @@ class EtereClient:
                 invoice_header=invoice_header
             )
             
+            self._thirty_windows.clear()  # Reset billboard tracking for new contract
             return contract_number
-            
+
         except Exception as e:
             print(f"[CONTRACT] ✗ Failed: {e}")
             import traceback
@@ -820,6 +822,7 @@ class EtereClient:
         rate: float = 0.0,
         separation_intervals: Tuple[int, int, int] = (15, 0, 0),  # DEFAULT: Customer=15, Event=0, Order=0
         is_bookend: bool = False,
+        is_billboard: bool = False,
         other_markets: Optional[List[str]] = None,  # WorldLink CMP multi-market replication
     ) -> bool:
         """
@@ -845,6 +848,15 @@ class EtereClient:
         Returns:
             True if successful
         """
+        # ── Billboard auto-detection (universal across all order types) ────────
+        # Track :30 time windows; auto-mark :05/:10 lines in same window as billboard.
+        if duration_seconds == 30:
+            self._thirty_windows.add((time_from, time_to))
+        elif duration_seconds in (5, 10) and not is_billboard:
+            if (time_from, time_to) in self._thirty_windows:
+                is_billboard = True
+                print(f"[LINE] ℹ Auto-detected billboard ({duration_seconds}s @ {time_from}-{time_to})")
+
         try:
             # Universal calculation: If max_daily_run not provided, calculate it
             if max_daily_run is None:
@@ -922,10 +934,10 @@ class EtereClient:
             ))
             spot_code_select.select_by_value(str(spot_code))
             
-            # SCHEDULING TYPE - Bookend (Top and Bottom)
+            # SCHEDULING TYPE - Bookend (Top and Bottom) or Billboard (Top)
             # Must be set here on the GENERAL tab, before navigating to OPTIONS tab
             if is_bookend:
-                print(f"[LINE] Setting bookend scheduling...")
+                print(f"[LINE] Setting bookend scheduling (Top and Bottom)...")
                 try:
                     radio = self.driver.find_element(
                         By.CSS_SELECTOR, 'input[name="selectedSchedulingType"][value="6"]'
@@ -936,6 +948,18 @@ class EtereClient:
                     print(f"[LINE] ✓ Bookend set")
                 except Exception as e:
                     print(f"[LINE] ⚠ Bookend: {e}")
+            elif is_billboard:
+                print(f"[LINE] Setting billboard scheduling (Top)...")
+                try:
+                    radio = self.driver.find_element(
+                        By.CSS_SELECTOR, 'input[name="selectedSchedulingType"][value="4"]'
+                    )
+                    parent = radio.find_element(By.XPATH, "..")
+                    parent.click()
+                    time.sleep(0.5)
+                    print(f"[LINE] ✓ Billboard set")
+                except Exception as e:
+                    print(f"[LINE] ⚠ Billboard: {e}")
             
             # Duration
             duration_formatted = self._format_duration(duration_seconds)
