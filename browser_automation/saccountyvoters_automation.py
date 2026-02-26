@@ -515,6 +515,7 @@ def _create_phase_contract(
                     line.weekly_spots,
                     week_dates,
                     flight_end=phase.flight_end,
+                    flight_start=phase.flight_start,
                 )
 
                 print(f"\n  [{line.language}] BONUS  {line_description}")
@@ -564,6 +565,7 @@ def _create_phase_contract(
                     line.weekly_spots,
                     week_dates,
                     flight_end=phase.flight_end,
+                    flight_start=phase.flight_start,
                 )
 
                 print(f"\n  [{line.language}] PAID  ${line.rate}")

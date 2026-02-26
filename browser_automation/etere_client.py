@@ -1468,6 +1468,7 @@ class EtereClient:
         weekly_spots: List[int],
         week_start_dates: List,
         flight_end: str,
+        flight_start: str | None = None,
     ) -> List[dict]:
         """
         Group consecutive weeks with identical non-zero spot counts.
@@ -1479,6 +1480,8 @@ class EtereClient:
             week_start_dates: Either List[str] ("Apr 27") or
                               List[CharmaineWeekColumn] (has .start_date MM/DD/YYYY)
             flight_end: Contract end date in MM/DD/YYYY format
+            flight_start: Optional contract start date (MM/DD/YYYY); when provided,
+                          line start dates are clipped to not precede it.
 
         Returns:
             List of dicts with keys: start_date, end_date, spots_per_week, weeks
@@ -1519,6 +1522,10 @@ class EtereClient:
                 print(f"[CONSOLIDATE] ⚠ Unknown week date type {type(item)}, skipping")
 
         flight_end_date = datetime.strptime(flight_end, '%m/%d/%Y').date()
+        flight_start_date = (
+            datetime.strptime(flight_start, '%m/%d/%Y').date()
+            if flight_start else None
+        )
 
         ranges = []
         n = min(len(weekly_spots), len(parsed_dates))
@@ -1530,6 +1537,9 @@ class EtereClient:
 
             block_spots = weekly_spots[i]
             block_start_date = parsed_dates[i]
+            # Clip to flight start so lines never precede the contract header dates
+            if flight_start_date and block_start_date < flight_start_date:
+                block_start_date = flight_start_date
 
             # Extend while consecutive weeks have the same count AND are
             # exactly 7 days apart (handles non-contiguous week schedules,
