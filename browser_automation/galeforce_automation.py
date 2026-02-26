@@ -359,6 +359,9 @@ def _create_galeforce_contract(
                         print(f"    [ROS] {language} — {sched['time']}, desc: {description!r}")
                         break
 
+            # Prepend line number — universal rule: IO line numbers appear in Etere descriptions
+            description = f"(Line {line.line_number}) {description}"
+
             # Sunday 6-7a rule
             adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(etere_days, etere_time)
 

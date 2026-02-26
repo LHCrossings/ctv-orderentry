@@ -864,12 +864,21 @@ class EtereClient:
             separation_intervals = (0, 0, 0)
             if 'BILLBOARD' not in description.upper():
                 import re as _re
-                # Strip BNS indicator
+                # Strip BNS indicator and time token (e.g. "8a-9a", "12a-12a", "4p-7p")
                 desc = _re.sub(r'\bBNS\b\s*', '', description, flags=_re.IGNORECASE).strip()
-                # Strip time token (e.g. "8a-9a", "12a-12a", "4p-7p")
                 desc = _re.sub(r'\b\d+(?::\d+)?[ap]-\d+(?::\d+)?[ap]\b\s*', '', desc, flags=_re.IGNORECASE).strip()
-                parts = desc.split(' ', 1)
-                description = f"{parts[0]} BILLBOARD {parts[1]}" if len(parts) > 1 else f"{desc} BILLBOARD"
+                # Handle optional "(Line N)" prefix
+                line_prefix_m = _re.match(r'^(\(Line \d+\))\s+(.+)$', desc, _re.IGNORECASE)
+                if line_prefix_m:
+                    # "(Line N) {days} {program}" → "(Line N) {days} BILLBOARD {program}"
+                    prefix, rest = line_prefix_m.group(1), line_prefix_m.group(2)
+                    parts = rest.split(' ', 1)
+                    body = f"{parts[0]} BILLBOARD {parts[1]}" if len(parts) > 1 else f"{rest} BILLBOARD"
+                    description = f"{prefix} {body}"
+                else:
+                    # "{days} {program}" → "{days} BILLBOARD {program}"
+                    parts = desc.split(' ', 1)
+                    description = f"{parts[0]} BILLBOARD {parts[1]}" if len(parts) > 1 else f"{desc} BILLBOARD"
 
         try:
             # Universal calculation: If max_daily_run not provided, calculate it
