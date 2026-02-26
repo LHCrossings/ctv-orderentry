@@ -118,6 +118,10 @@ class OrderDetectionService:
         if self._is_galeforce(first_page_text):
             return OrderType.GALEFORCE
 
+        # Sacramento County Voter Registration
+        if self._is_saccountyvoters(first_page_text):
+            return OrderType.SACCOUNTYVOTERS
+
         return OrderType.UNKNOWN
 
     def _is_sagent(self, text: str) -> bool:
@@ -445,6 +449,16 @@ class OrderDetectionService:
 
         return has_market and has_estimate and has_header
 
+    def _is_saccountyvoters(self, text: str) -> bool:
+        """
+        Check if text matches Sacramento County Voter Registration order.
+
+        Markers:
+        - "Sacramento County Voter" (client name)
+        - "Phase 1 Length" (unique two-phase structure)
+        """
+        return "Sacramento County Voter" in text and "Phase 1 Length" in text
+
     def _is_galeforce(self, text: str) -> bool:
         """
         Check if text matches generic GaleForceMedia order (not Sagent).
@@ -510,6 +524,9 @@ class OrderDetectionService:
 
         elif order_type == OrderType.IGRAPHIX:
             return self._extract_igraphix_client(first_page_text)
+
+        elif order_type == OrderType.SACCOUNTYVOTERS:
+            return self._extract_saccountyvoters_client(first_page_text)
 
         # Fallback: try common patterns
         return self._extract_generic_client(first_page_text)
@@ -621,6 +638,13 @@ class OrderDetectionService:
             client = match.group(1).strip()
             return client
         return None
+
+    def _extract_saccountyvoters_client(self, text: str) -> str | None:
+        """Extract client from Sacramento County Voters order."""
+        match = re.search(r'Client:\s*([^\n]+)', text, re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+        return "Sacramento County"
 
     def _extract_generic_client(self, text: str) -> str | None:
         """

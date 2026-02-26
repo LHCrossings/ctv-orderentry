@@ -554,5 +554,46 @@ class TestDetectionPrecedence:
         assert service.detect_from_text(text) == OrderType.TCAA
 
 
+# ============================================================================
+# SACRAMENTO COUNTY VOTERS DETECTION
+# ============================================================================
+
+class TestSacCountyVotersDetection:
+    """Tests for Sacramento County Voter Registration order detection."""
+
+    @pytest.fixture
+    def service(self):
+        return OrderDetectionService()
+
+    def test_detect_saccountyvoters(self, service):
+        """Should detect SacCountyVoters from unique markers."""
+        text = """
+        Voter Registration Media Campaign
+        Client: Sacramento County Voter/Registration
+        Contact: Karalyn Fox
+        Email: FoxK@saccounty.gov
+        Phase 1 Length: :15 seconds 4/7/2026 through 5/4/2026
+        Phase 2 Length: :30 seconds 5/5/2026 through 6/2/2026
+        """
+        assert service.detect_from_text(text) == OrderType.SACCOUNTYVOTERS
+
+    def test_saccountyvoters_requires_both_markers(self, service):
+        """Only 'Sacramento County Voter' without 'Phase 1 Length' → UNKNOWN."""
+        text = """
+        Client: Sacramento County Voter/Registration
+        Contact: Karalyn Fox
+        """
+        assert service.detect_from_text(text) == OrderType.UNKNOWN
+
+    def test_extract_saccountyvoters_client(self, service):
+        """SacCountyVoters client extracted from Client: field."""
+        text = """
+        Client: Sacramento County Voter/Registration
+        Phase 1 Length: :15 seconds 4/7/2026 through 5/4/2026
+        """
+        client = service.extract_client_name(text, None, OrderType.SACCOUNTYVOTERS)
+        assert client == "Sacramento County Voter/Registration"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

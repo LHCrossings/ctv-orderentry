@@ -1201,9 +1201,18 @@ class EtereClient:
         import re
         
         # ═══════════════════════════════════════════════════════════════
+        # NORMALISE ALTERNATE SEPARATORS (/ and ,) TO SEMICOLONS
+        # ═══════════════════════════════════════════════════════════════
+
+        # Treat "/" and "," as semicolons so the range logic below handles all formats.
+        # Only replace when they act as separators (not inside times like "11:30p").
+        time_str = re.sub(r'\s*/\s*', '; ', time_str)
+        time_str = re.sub(r'\s*,\s*', '; ', time_str)
+
+        # ═══════════════════════════════════════════════════════════════
         # HANDLE SEMICOLON-SEPARATED TIME RANGES (e.g., "4p-5p; 6p-7p")
         # ═══════════════════════════════════════════════════════════════
-        
+
         if ';' in time_str:
             # Split on semicolon to get multiple ranges
             ranges = [r.strip() for r in time_str.split(';') if r.strip()]
