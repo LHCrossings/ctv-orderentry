@@ -163,6 +163,7 @@ class GaleForceOrder:
         estimate_number:   With leading zeros (e.g. "000027")
         estimate_stripped: Without leading zeros (e.g. "27")
         agency:            Ordering agency (e.g. "PACO Collective")
+        job_number:        Internal job/campaign number (e.g. "26-BMO-00102")
         week_start_dates:  Week column header dates (e.g. ["Apr 27", "May 04"])
         lines:             Parsed line items
     """
@@ -175,6 +176,7 @@ class GaleForceOrder:
     estimate_number: str
     estimate_stripped: str
     agency: str
+    job_number: str
     week_start_dates: List[str]
     lines: List[GaleForceLine]
 
@@ -187,8 +189,8 @@ class GaleForceOrder:
         return f"{self.advertiser} {self.campaign}"
 
     def get_default_notes(self) -> str:
-        """e.g. "Est 27" """
-        return f"Est {self.estimate_stripped}"
+        """Multi-line notes block for Etere General tab."""
+        return f"CAMPAIGN: {self.campaign}\nORDER #: {self.order_number}\nJob #:{self.job_number}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -290,6 +292,9 @@ def parse_galeforce_pdf(pdf_path: str) -> GaleForceOrder:
         # Agency: appears as "ORDER <Agency>" in the header block
         agency_match = re.search(r'^ORDER\s+([A-Za-z].+)$', full_text, re.MULTILINE)
         agency = agency_match.group(1).strip() if agency_match else ""
+
+        # Job number: "Job #:26-BMO-00102" (no space after colon in GaleForce PDFs)
+        job_number = _extract_field(full_text, r'Job\s*#:([^\n\s,]+)')
 
         flight_start, flight_end = _parse_flight_dates(flight_raw)
 
@@ -451,6 +456,7 @@ def parse_galeforce_pdf(pdf_path: str) -> GaleForceOrder:
             estimate_number=estimate_raw,
             estimate_stripped=estimate_stripped,
             agency=agency,
+            job_number=job_number,
             week_start_dates=week_start_dates,
             lines=lines,
         )
