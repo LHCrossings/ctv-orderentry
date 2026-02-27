@@ -10,9 +10,11 @@ Each phase becomes a separate Etere contract.
 Market: CVC, Separation: (15, 0, 0).
 """
 
+import math
 import os
 import re
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -429,6 +431,40 @@ def process_saccountyvoters_order(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# MAX DAILY RUN CALCULATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+_DAY_SETS = {
+    'M-F':  {0, 1, 2, 3, 4},
+    'M-Sa': {0, 1, 2, 3, 4, 5},
+    'M-Su': {0, 1, 2, 3, 4, 5, 6},
+    'Sa-Su': {5, 6},
+    'Sa':   {5},
+    'Su':   {6},
+}
+
+def _compute_max_daily_run(etere_days: str, start_date_str: str, end_date_str: str, spots_per_week: int) -> int:
+    """
+    Calculate max_daily_run based on actual eligible days within the first week
+    of the date range, not just the day pattern's theoretical day count.
+
+    Handles partial weeks correctly: if a flight ends on Monday with 2 spots
+    scheduled that week, both must air Monday → max_daily_run = 2, not 1.
+    """
+    eligible = _DAY_SETS.get(etere_days, {0, 1, 2, 3, 4})
+    start = datetime.strptime(start_date_str, '%m/%d/%Y')
+    end = datetime.strptime(end_date_str, '%m/%d/%Y')
+
+    # Count eligible days in first 7 days of range (one week's window)
+    week_end = min(end, start + timedelta(days=6))
+    count = sum(
+        1 for i in range((week_end - start).days + 1)
+        if (start + timedelta(days=i)).weekday() in eligible
+    )
+    return math.ceil(spots_per_week / count) if count > 0 else spots_per_week
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # PHASE CONTRACT CREATION
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -527,9 +563,13 @@ def _create_phase_contract(
                 for rng in ranges:
                     line_count += 1
                     total_spots_rng = rng['spots_per_week'] * rng['weeks']
+                    max_daily = _compute_max_daily_run(
+                        adjusted_days, rng['start_date'], rng['end_date'], rng['spots_per_week']
+                    )
                     print(f"    Creating line {line_count}: "
                           f"{rng['start_date']} – {rng['end_date']} "
-                          f"({rng['spots_per_week']} spots/wk × {rng['weeks']} wks = {total_spots_rng})")
+                          f"({rng['spots_per_week']} spots/wk × {rng['weeks']} wks = {total_spots_rng}, "
+                          f"max/day={max_daily})")
 
                     ok = etere.add_contract_line(
                         contract_number=contract_number,
@@ -544,6 +584,7 @@ def _create_phase_contract(
                         duration_seconds=phase.duration_seconds,
                         total_spots=total_spots_rng,
                         spots_per_week=rng['spots_per_week'],
+                        max_daily_run=max_daily,
                         rate=0.0,
                         separation_intervals=separation,
                         is_bookend=False,
@@ -578,9 +619,13 @@ def _create_phase_contract(
                 for rng in ranges:
                     line_count += 1
                     total_spots_rng = rng['spots_per_week'] * rng['weeks']
+                    max_daily = _compute_max_daily_run(
+                        adjusted_days, rng['start_date'], rng['end_date'], rng['spots_per_week']
+                    )
                     print(f"    Creating line {line_count}: "
                           f"{rng['start_date']} – {rng['end_date']} "
-                          f"({rng['spots_per_week']} spots/wk × {rng['weeks']} wks = {total_spots_rng})")
+                          f"({rng['spots_per_week']} spots/wk × {rng['weeks']} wks = {total_spots_rng}, "
+                          f"max/day={max_daily})")
 
                     ok = etere.add_contract_line(
                         contract_number=contract_number,
@@ -595,6 +640,7 @@ def _create_phase_contract(
                         duration_seconds=phase.duration_seconds,
                         total_spots=total_spots_rng,
                         spots_per_week=rng['spots_per_week'],
+                        max_daily_run=max_daily,
                         rate=line.rate,
                         separation_intervals=separation,
                         is_bookend=False,
