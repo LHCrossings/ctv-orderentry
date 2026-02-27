@@ -74,6 +74,7 @@ from parsers.admerasia_parser import (
     get_default_customer_order_ref,
     get_default_notes,
     get_default_separation_intervals,
+    extract_order_total_from_pdf,
 )
 
 
@@ -237,6 +238,84 @@ def map_market_to_code(market_name: str) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# ORDER VERIFICATION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _verify_parsed_order(order: AdmerasiaOrder, pdf_path: str) -> Optional[AdmerasiaOrder]:
+    """
+    Display a formatted verification table of parsed line items and let the user
+    confirm, abort, or edit before automation begins.
+
+    Returns the (possibly edited) order, or None if the user aborts.
+    """
+    while True:
+        flight_start, flight_end = order.get_flight_dates()
+        start_str = flight_start.strftime('%-m/%-d/%Y')
+        end_str = flight_end.strftime('%-m/%-d/%Y')
+
+        print("\n" + "=" * 70)
+        print(f"ORDER VERIFICATION — {order.order_number}")
+        print(f"{order.language} | {', '.join(order.markets)} | {start_str} – {end_str}")
+        print("=" * 70)
+
+        header = f"{'#':>2}  {'Day Pattern':<14}{'Time':<18}{'Rate':>9}  {'Spots':>5}"
+        print(header)
+
+        total_spots = 0
+        for i, line in enumerate(order.lines, 1):
+            spots = line.get_total_spots()
+            total_spots += spots
+            rate_str = f"${float(line.net_rate):>7.2f}"
+            print(f"{i:>2}  {line.days:<14}{line.time:<18}{rate_str}  {spots:>5}")
+
+        print(f"{'':>43} {'--------':>5}")
+        print(f"{'Total:':>44} {total_spots:>5}")
+
+        # Cross-check against PDF's own "Order Total"
+        pdf_total = extract_order_total_from_pdf(pdf_path)
+        if pdf_total is not None:
+            if pdf_total == total_spots:
+                print(f"\n PDF Order Total: {pdf_total}  \u2713 MATCHES")
+            else:
+                print(f"\n PDF Order Total: {pdf_total}  \u2717 MISMATCH ({total_spots} vs {pdf_total})")
+
+        print("=" * 70)
+        choice = input("Does this look correct? [Y/n/e(dit)]: ").strip().lower()
+
+        if choice in ("", "y", "yes"):
+            return order
+
+        if choice in ("n", "no"):
+            print("\nPlease recheck the IO and re-run.")
+            return None
+
+        if choice.startswith("e"):
+            # Edit mode — let user correct times line by line
+            while True:
+                line_input = input("\nEnter line number to edit (or Enter to finish): ").strip()
+                if not line_input:
+                    break
+                try:
+                    line_num = int(line_input)
+                    if line_num < 1 or line_num > len(order.lines):
+                        print(f"  Invalid line number. Enter 1–{len(order.lines)}.")
+                        continue
+                except ValueError:
+                    print("  Please enter a number.")
+                    continue
+
+                target = order.lines[line_num - 1]
+                corrected = input(f"  Line {line_num} current time: {target.time}\n"
+                                  f"  Enter corrected time (or Enter to keep): ").strip()
+                if corrected:
+                    target.time = corrected
+                    print(f"  Updated to: {corrected}")
+
+            # Redisplay the table after edits
+            continue
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # UPFRONT INPUT COLLECTION
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -274,6 +353,11 @@ def gather_admerasia_inputs(pdf_path: str) -> Optional[dict]:
 
     flight_start, flight_end = order.get_flight_dates()
     print(f"[PARSE] ✓ Flight: {flight_start} - {flight_end}")
+
+    # Verification step — show human-readable summary before proceeding
+    order = _verify_parsed_order(order, pdf_path)
+    if order is None:
+        return None
 
     # Detect market
     market = order.get_market_code()

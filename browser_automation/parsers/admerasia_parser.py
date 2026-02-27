@@ -256,6 +256,14 @@ def get_language_block_prefix(language: str) -> str:
         return "C"
 
 
+def extract_order_total_from_pdf(pdf_path: str) -> Optional[int]:
+    """Extract Order Total spot count from plain text for verification cross-check."""
+    with pdfplumber.open(pdf_path) as pdf:
+        text = pdf.pages[0].extract_text() or ""
+    match = re.search(r'Order Total\s+(\d+)', text)
+    return int(match.group(1)) if match else None
+
+
 def get_default_order_code(order: AdmerasiaOrder) -> str:
     """
     Get default contract code.
@@ -439,8 +447,10 @@ def _check_for_ambiguous_times(pdf: pdfplumber.PDF) -> Dict[int, Optional[str]]:
         if not re.search(r'\(([MTWRFSU-]+)\)', program):
             continue
         
-        # Check if time is garbled
-        if not re.search(r'\d+:?\d*[ap]?-\d+:?\d*[ap]', time_str):
+        # Check if time is garbled - must start with optional tz prefix then digits
+        # Use match (anchored) not search to avoid false positives where program name
+        # overflows into the time cell (e.g. "nP OSTu1r1 L:i3fe0-12:00p")
+        if not re.match(r'^(PST|CT|ET|CST|EST|MST|MT|PT|EDT|CDT|MDT|PDT)?\s*\d+', time_str):
             # Time is garbled - save context to help user
             context = f"Program: {program[:60]}..." if len(program) > 60 else program
             context += f" | Rate: {rate_str}"
@@ -1030,7 +1040,7 @@ def _parse_line_items_table_based(pdf: pdfplumber.PDF, week_start_dates: List[da
         if time_overrides and row_idx in time_overrides:
             time_str = time_overrides[row_idx]
             print(f"[INFO] Using user-provided time for row {row_idx}: {time_str}")
-        elif time_str and not re.search(r'\d+:?\d*[ap]?-\d+:?\d*[ap]', time_str):
+        elif time_str and not re.match(r'^(PST|CT|ET|CST|EST|MST|MT|PT|EDT|CDT|MDT|PDT)?\s*\d+', time_str):
             # Time column is garbled and no override - skip this line
             print(f"[ERROR] Row {row_idx} has garbled time but no user override provided")
             continue

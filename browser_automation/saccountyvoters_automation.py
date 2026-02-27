@@ -190,6 +190,8 @@ def _language_to_ros_key(language: str) -> Optional[str]:
                 return "Chinese"
             if key == "tagalog":
                 return "Filipino"
+            if key in ("hindi", "punjabi"):
+                return "South Asian"
             return key.title()
     # Fallback: try direct title match
     for ros_key in ROS_SCHEDULES:
