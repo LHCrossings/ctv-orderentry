@@ -558,8 +558,9 @@ def _create_phase_contract(
                 etere_days, time_range_str = _parse_daypart(line.daypart)
                 time_from, time_to = EtereClient.parse_time_range(time_range_str)
 
-                # Build description: "{days} {time} {language}"
-                line_description = f"{etere_days} {time_range_str} {line.language}"
+                # Build description: "{days} {language}" — time is captured in Etere line fields
+                lang_label = re.sub(r'(\w)\(', r'\1 (', line.language)  # "Chinese(Cantonese)" → "Chinese (Cantonese)"
+                line_description = f"{etere_days} {lang_label}"
 
                 adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(etere_days, time_range_str)
 
