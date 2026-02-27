@@ -38,7 +38,20 @@ ROS_SCHEDULES = {
     'South Asian': {
         'days': 'M-Su',
         'time': '1p-4p',
-        'language': 'South Asian'
+        'language': 'South Asian',
+        'language_code': 'SA',
+    },
+    'Hindi': {
+        'days': 'M-Su',
+        'time': '1p-4p',
+        'language': 'Hindi',
+        'language_code': 'SA',
+    },
+    'Punjabi': {
+        'days': 'M-F',
+        'time': '2p-4p',
+        'language': 'Punjabi',
+        'language_code': 'P',
     },
     'Japanese': {
         'days': 'M-F',

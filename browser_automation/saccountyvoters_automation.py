@@ -190,8 +190,6 @@ def _language_to_ros_key(language: str) -> Optional[str]:
                 return "Chinese"
             if key == "tagalog":
                 return "Filipino"
-            if key in ("hindi", "punjabi"):
-                return "South Asian"
             return key.title()
     # Fallback: try direct title match
     for ros_key in ROS_SCHEDULES:
@@ -506,11 +504,13 @@ def _create_phase_contract(
                     ros_days = sched['days']
                     ros_time = sched['time']
                     time_from, time_to = EtereClient.parse_time_range(ros_time)
+                    lang_label = sched.get('language', line.language)
                 else:
                     ros_days = "M-Su"
                     time_from, time_to = "06:00", "23:59"
+                    lang_label = line.language
 
-                line_description = f"BNS {line.language} ROS"
+                line_description = f"BNS {lang_label} ROS"
                 adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(ros_days, f"{time_from}-{time_to}")
 
                 ranges = EtereClient.consolidate_weeks(
