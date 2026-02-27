@@ -52,8 +52,10 @@ Melissa Check:
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
+import calendar
 import math
 import os
+import re
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -70,6 +72,8 @@ from src.domain.enums import BillingType
 from parsers.lexus_parser import (
     LexusLine,
     LexusParseResult,
+    _extract_days_from_program,
+    _extract_time_from_program,
     melissa_check,
     parse_lexus_file,
     parse_lexus_filename,
@@ -246,6 +250,184 @@ def _build_etere_lines(
 
 
 # ───────────────────────────────────────────────────────────────────────────
+# OCR FAILURE DETECTION & MANUAL ENTRY FALLBACK
+# ───────────────────────────────────────────────────────────────────────────
+
+def _detect_ocr_failure(result: LexusParseResult, file_path: Path) -> bool:
+    """Return True when the OCR parse result looks unreliable."""
+    if file_path.suffix.lower() not in (".jpg", ".jpeg", ".png"):
+        return False
+    return result.broadcast_month == "Unknown" or len(result.lines) < 4
+
+
+def _manual_entry_fallback(
+    estimate: str,
+    market: str,
+    language: str,
+) -> Optional[LexusParseResult]:
+    """
+    Interactive manual entry for Lexus orders when OCR fails.
+    Builds a LexusParseResult from user-supplied data.
+    """
+    print("\n" + "─" * 70)
+    print("MANUAL ENTRY MODE — Enter order data from the document")
+    print("─" * 70)
+
+    # Campaign year
+    current_year = datetime.now().year
+    year_input = input(f"\n  Campaign year [{current_year}]: ").strip() or str(current_year)
+    try:
+        year = int(year_input)
+    except ValueError:
+        year = current_year
+
+    # Number of lines
+    try:
+        num_paid = int(input("\n  Number of paid lines: ").strip() or "0")
+    except ValueError:
+        num_paid = 0
+    try:
+        num_bonus = int(input("  Number of BNS bonus lines: ").strip() or "0")
+    except ValueError:
+        num_bonus = 0
+
+    lines: list[LexusLine] = []
+    all_start_dates: list[date] = []
+
+    def _parse_date(s: str, yr: int) -> Optional[date]:
+        m = re.match(r'^(\d{1,2})/(\d{1,2})$', s.strip())
+        if m:
+            try:
+                return date(yr, int(m.group(1)), int(m.group(2)))
+            except ValueError:
+                pass
+        return None
+
+    def _collect_date_ranges(yr: int) -> list[tuple[tuple[date, date], int]]:
+        """
+        Prompt for date ranges with spot counts.
+          M/D: N         → single week starting M/D (end = start+6)
+          M/D-M/D: N     → explicit start–end range
+        Returns list of ((start, end), spots).
+        """
+        print("    Date ranges (e.g. '1/6: 3'  or  '1/6-1/12: 3').  Blank to finish.")
+        entries: list[tuple[tuple[date, date], int]] = []
+        while True:
+            raw = input("    > ").strip()
+            if not raw:
+                break
+            m = re.match(r'^(\d{1,2}/\d{1,2})\s*[-–]\s*(\d{1,2}/\d{1,2})\s*:\s*(\d+)$', raw)
+            if m:
+                start = _parse_date(m.group(1), yr)
+                end   = _parse_date(m.group(2), yr)
+                spots = int(m.group(3))
+                if start and end:
+                    entries.append(((start, end), spots))
+                    continue
+            m = re.match(r'^(\d{1,2}/\d{1,2})\s*:\s*(\d+)$', raw)
+            if m:
+                start = _parse_date(m.group(1), yr)
+                spots = int(m.group(2))
+                if start:
+                    end = start + timedelta(days=6)
+                    entries.append(((start, end), spots))
+                    continue
+            print("    ⚠ Couldn't parse — use '1/6: 3' or '1/6-1/12: 3'")
+        return entries
+
+    def _enter_line(line_num: int, is_bonus: bool) -> Optional[LexusLine]:
+        kind = "BNS bonus" if is_bonus else "paid"
+        print(f"\n  --- Line {line_num} ({kind}) ---")
+        program_raw = input("  Program name (e.g. 'M-F 2-3p Punjabi News'): ").strip()
+        if not program_raw:
+            return None
+
+        auto_days = _extract_days_from_program(program_raw)
+        auto_time = _extract_time_from_program(program_raw)
+
+        days_input = input(f"  Days [{auto_days or 'M-F'}]: ").strip() or auto_days or "M-F"
+        time_input = input(f"  Time [{auto_time or ''}]: ").strip() or auto_time or ""
+
+        dur_input = input("  Duration (15/30) [30]: ").strip() or "30"
+        try:
+            duration = int(dur_input)
+        except ValueError:
+            duration = 30
+
+        rate_net = 0.0
+        rate_gross = 0.0
+        if not is_bonus:
+            rate_input = input("  Net rate (e.g. 150.00): ").strip()
+            try:
+                rate_net = float(rate_input)
+                rate_gross = rate_net / 0.85
+            except ValueError:
+                print("  ⚠ Invalid rate — using $0")
+
+        entries = _collect_date_ranges(year)
+        if not entries:
+            print("  ⚠ No date ranges entered — skipping line")
+            return None
+
+        week_date_ranges = [e[0] for e in entries]
+        spots_by_week   = [e[1] for e in entries]
+        all_start_dates.extend(s for (s, _e) in week_date_ranges)
+
+        return LexusLine(
+            program=program_raw,
+            duration=duration,
+            time=time_input,
+            days=days_input,
+            rate_net=rate_net,
+            rate_gross=rate_gross,
+            spots_by_week=spots_by_week,
+            week_date_ranges=week_date_ranges,
+            market=market,
+            language=language,
+            estimate=estimate,
+            is_bonus=is_bonus,
+        )
+
+    for i in range(1, num_paid + 1):
+        ln = _enter_line(i, is_bonus=False)
+        if ln:
+            lines.append(ln)
+
+    for i in range(num_paid + 1, num_paid + num_bonus + 1):
+        ln = _enter_line(i, is_bonus=True)
+        if ln:
+            lines.append(ln)
+
+    if not lines:
+        print("\n[MANUAL] ✗ No lines entered")
+        return None
+
+    # Derive broadcast_month from earliest date entered
+    if all_start_dates:
+        earliest = min(all_start_dates)
+        broadcast_month = f"{earliest.strftime('%b')}-{str(earliest.year)[2:]}"
+    else:
+        broadcast_month = f"Jan-{str(year)[2:]}"
+
+    week_headers = [
+        f"{s.month}/{s.day}" for ln in lines for (s, _e) in ln.week_date_ranges
+    ]
+
+    print(f"\n[MANUAL] ✓ {len(lines)} line(s) entered")
+    print(f"[MANUAL] Broadcast month: {broadcast_month}")
+
+    return LexusParseResult(
+        lines=lines,
+        broadcast_month=broadcast_month,
+        week_headers=week_headers,
+        language=language,
+        estimate=estimate,
+        market=market,
+        order_type="new",
+    )
+
+
+# ───────────────────────────────────────────────────────────────────────────
 # UPFRONT INPUT COLLECTION
 # ───────────────────────────────────────────────────────────────────────────
 
@@ -319,6 +501,17 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
     print(f"\n[MARKET]   {market}")
     print(f"[LANGUAGE] {language}")
     print(f"[ESTIMATE] {estimate}")
+
+    # ── OCR failure check ─────────────────────────────────────────────────
+    if _detect_ocr_failure(result, file_path):
+        print(
+            f"\n[PARSE] ⚠ OCR yielded only {len(result.lines)} line(s) "
+            f"with month='{result.broadcast_month}'"
+        )
+        print("[PARSE] Switching to manual entry mode...")
+        result = _manual_entry_fallback(estimate, market, language)
+        if result is None:
+            return None
 
     # ── Melissa Check ────────────────────────────────────────────────────
     # Attach resolved week_date_ranges to lines before check

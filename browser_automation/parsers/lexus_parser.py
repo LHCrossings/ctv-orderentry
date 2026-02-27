@@ -425,8 +425,14 @@ def _parse_duration(text: str) -> Optional[int]:
 
 
 def _looks_like_time(text: str) -> bool:
-    """Check if text looks like a time range, e.g. '6A-10A', '10A-3P'."""
-    return bool(re.match(r'\d+[AaPp]M?[-–]\d+[AaPp]M?', text))
+    """Check if text looks like a time range, e.g. '6A-10A', '2-3p', '330-4p'."""
+    # Both ends have suffix: "6A-10A", "11:30A-12P"
+    if re.match(r'\d+[AaPp]M?[-–]\d+[AaPp]M?', text):
+        return True
+    # Suffix only at end (IW Group format): "2-3p", "330-4p", "1-130p"
+    if re.match(r'^\d{1,4}(?::\d{2})?[-–]\d{1,4}(?::\d{2})?[AaPp][Mm]?$', text):
+        return True
+    return False
 
 
 def _looks_like_days(text: str) -> bool:
@@ -449,57 +455,66 @@ def _parse_data_row_ocr(
     if not text.strip():
         return None
 
-    # Detect bonus row
-    is_bonus = "BNS" in text.upper() or "BONUS" in text.upper()
+    # Skip summary / total rows early
+    text_upper = text.upper()
+    if any(kw in text_upper for kw in ("TOTAL PAID", "TOTAL BONUS", "GRAND TOTAL",
+                                        "WEEKLY PAID", "WEEKLY SPEND", "PROGRAM NAME")):
+        return None
 
-    # Try to find duration token
+    # Detect bonus row
+    is_bonus = "BNS" in text_upper or "BONUS" in text_upper
+
+    # Find duration token (:15 or :30) and its position in the word list
     duration = None
-    for word in row:
+    duration_word_idx = None
+    for word_idx, word in enumerate(row):
         d = _parse_duration(word['text'])
         if d:
             duration = d
+            duration_word_idx = word_idx
             break
     if duration is None:
         duration = 30  # default
 
-    # Try to find time range token
-    time_str = ""
-    for word in row:
-        if _looks_like_time(word['text']):
-            time_str = word['text'].upper()
+    # Collect program name: all words BEFORE the duration token.
+    # IW Group programs embed days+time in the name ("M-F 2-3p Punjabi News"),
+    # so don't stop at day/time tokens — let _extract_days/time_from_program handle it.
+    program_words = []
+    for word_idx, word in enumerate(row):
+        if duration_word_idx is not None and word_idx >= duration_word_idx:
             break
+        t = word['text'].strip()
+        if not t:
+            continue
+        if '$' in t or re.match(r'^\d+\.\d{2}$', t):
+            break
+        # Stop at what looks like an isolated small integer (spot count column)
+        if re.match(r'^\d{1,2}$', t) and 1 <= int(t) <= 31:
+            break
+        program_words.append(t)
+    program = " ".join(program_words)
 
-    # Try to find day pattern
-    days_str = "M-F"  # default
-    for word in row:
-        if _looks_like_days(word['text']):
-            days_str = word['text'].upper()
-            break
+    # Extract days and time from assembled program name (same logic as XLSX parser)
+    days_str = _extract_days_from_program(program) if program else "M-F"
+    time_str = _extract_time_from_program(program) if program else ""
+
+    # Fallback: scan row tokens individually for time if extraction failed
+    if not time_str:
+        for word in row:
+            if _looks_like_time(word['text']):
+                time_str = word['text'].upper()
+                break
 
     # Try to find rate
     rate_net = 0.0
     if not is_bonus:
-        # Look for dollar-amount-like tokens (avoid week counts)
         for word in row:
             t = word['text']
-            if '$' in t or (re.match(r'^\d+\.\d{2}$', t)):
+            if '$' in t or re.match(r'^\d+\.\d{2}$', t):
                 r = _parse_rate(t)
                 if r and r > 5:  # rates are typically > $5
                     rate_net = r
                     break
-
-    # Extract program name: words before duration/time/days tokens
-    program_words = []
-    for word in row:
-        t = word['text'].strip()
-        if not t:
-            continue
-        if _parse_duration(t) or _looks_like_time(t) or _looks_like_days(t):
-            break
-        if '$' in t or re.match(r'^\d+\.\d{2}$', t):
-            break
-        program_words.append(t)
-    program = " ".join(program_words) if program_words else "Rotation"
 
     # Extract spots per week: find word closest to each week column
     spots_by_week = []
@@ -533,6 +548,91 @@ def _parse_data_row_ocr(
         "spots_by_week": spots_by_week,
         "is_bonus": is_bonus,
     }
+
+
+def _find_date_range_row_ocr(rows: list[list[dict]]) -> Optional[list[dict]]:
+    """
+    Find the OCR row containing multiple 'M/D-M/D' date-range tokens.
+
+    Used in multi-month orders (e.g. 1/20-1/30, 2/10-2/27, 3/4-3/30).
+    Returns the row word list, or None if not found.
+    """
+    dr_re = re.compile(r'^\d{1,2}/\d{1,2}-\d{1,2}/\d{1,2}$')
+    best_row: Optional[list[dict]] = None
+    best_count = 0
+    for row in rows:
+        count = sum(1 for w in row if dr_re.match(w['text'].strip()))
+        if count > best_count:
+            best_count = count
+            best_row = row
+    return best_row if best_count >= 2 else None
+
+
+def _build_week_dates_from_date_range_row(
+    date_range_row: list[dict],
+    week_col_lefts: list[int],
+    week_headers: list[str],
+    year: int,
+) -> list[tuple[date, date]]:
+    """
+    Build week date ranges for a multi-month order by mapping each week column's
+    x-position to the nearest 'M/D-M/D' date-range cell to its left.
+
+    The date-range row has cells like '1/20-1/30', '2/10-2/27', '3/4-3/30',
+    each spanning multiple week columns.  For each week column we find the
+    rightmost date-range cell whose left edge is ≤ column left, giving us
+    the month.  The day-number comes from the week header token.
+    """
+    dr_re = re.compile(r'^(\d{1,2})/(\d{1,2})-(\d{1,2})/(\d{1,2})$')
+    dr_words = sorted(
+        [w for w in date_range_row if dr_re.match(w['text'].strip())],
+        key=lambda w: w['left'],
+    )
+
+    result: list[tuple[date, date]] = []
+
+    for col_left, wh in zip(week_col_lefts, week_headers):
+        # Rightmost date-range word whose left edge is at or before this column
+        owning_dr = dr_words[0] if dr_words else None
+        for dr_word in dr_words:
+            if dr_word['left'] <= col_left + 30:  # 30px tolerance for centering
+                owning_dr = dr_word
+
+        if owning_dr is None:
+            result.append((date.today(), date.today()))
+            continue
+
+        m = dr_re.match(owning_dr['text'].strip())
+        if not m:
+            result.append((date.today(), date.today()))
+            continue
+
+        start_month = int(m.group(1))
+
+        range_m = re.match(r'^(\d{1,2})-(\d{1,2})$', wh)
+        plain_m = re.match(r'^(\d{1,2})$', wh)
+
+        try:
+            if range_m:
+                start_day = int(range_m.group(1))
+                end_day = int(range_m.group(2))
+                wk_start = date(year, start_month, start_day)
+                max_day = calendar.monthrange(year, start_month)[1]
+                wk_end = date(year, start_month, min(end_day, max_day))
+            elif plain_m:
+                start_day = int(plain_m.group(1))
+                wk_start = date(year, start_month, start_day)
+                max_day = calendar.monthrange(year, start_month)[1]
+                wk_end = min(wk_start + timedelta(days=6),
+                             date(year, start_month, max_day))
+            else:
+                wk_start = wk_end = date(year, start_month, 1)
+        except ValueError:
+            wk_start = wk_end = date(year, start_month, 1)
+
+        result.append((wk_start, wk_end))
+
+    return result
 
 
 def parse_lexus_jpg(path: str | Path, filename_meta: Optional[dict] = None) -> LexusParseResult:
@@ -604,15 +704,19 @@ def parse_lexus_jpg(path: str | Path, filename_meta: Optional[dict] = None) -> L
         elif "vietnamese" in full_text_lower or "viet" in full_text_lower:
             language = "Viet"
 
-    # Find header row with week numbers
+    # Find header row with week numbers — pick the row with the MOST integer tokens.
+    # Requiring ≥4 avoids firing on the UNIT column (:15/:30 → OCR reads as "15"/"30").
     week_headers: list[str] = []
     header_row_idx = -1
+    best_wh_count = 0
     for idx, row in enumerate(rows):
         wh = _extract_week_headers(row)
-        if len(wh) >= 2:
+        if len(wh) > best_wh_count:
+            best_wh_count = len(wh)
             week_headers = wh
             header_row_idx = idx
-            break
+    if best_wh_count < 4:
+        print(f"[LEXUS PARSER] ⚠ Week header row found only {best_wh_count} tokens — may be wrong")
 
     # Get x-positions of week columns for data extraction
     week_col_lefts: list[int] = []
@@ -625,9 +729,23 @@ def parse_lexus_jpg(path: str | Path, filename_meta: Optional[dict] = None) -> L
                re.match(r'^\d{1,2}/\d{1,2}$', t):
                 week_col_lefts.append(word['left'])
 
-    # Resolve week date ranges
+    # Resolve week date ranges.
+    # Multi-month orders (e.g. Jan–Apr) have a 'M/D-M/D' date-range row instead of
+    # a single broadcast month — detect and use it first.
+    year = _infer_year_from_filename(path, default=date.today().year)
     week_date_ranges: list[tuple[date, date]] = []
-    if broadcast_month != "Unknown" and week_headers:
+
+    date_range_row = _find_date_range_row_ocr(rows)
+    if date_range_row and week_col_lefts:
+        week_date_ranges = _build_week_dates_from_date_range_row(
+            date_range_row, week_col_lefts, week_headers, year
+        )
+        if week_date_ranges:
+            first_start = week_date_ranges[0][0]
+            broadcast_month = first_start.strftime("%b-%y")
+            print(f"[LEXUS PARSER] ✓ Multi-month date range row found; "
+                  f"first week → {broadcast_month}")
+    elif broadcast_month != "Unknown" and week_headers:
         try:
             week_date_ranges = resolve_week_dates(broadcast_month, week_headers)
         except Exception as e:
