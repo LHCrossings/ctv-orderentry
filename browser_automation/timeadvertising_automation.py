@@ -165,30 +165,28 @@ def _gather_inputs(order: TimeAdvertisingOrder) -> Optional[dict]:
     }
 
 
-def _default_contract_code(order: TimeAdvertisingOrder) -> str:
-    """Generate default contract code from advertiser + market + date."""
-    # e.g. "GratonCasino-SFO-Mar26"
-    name = order.advertiser.replace(' ', '')
-    market = order.market
+def _yymm(order: TimeAdvertisingOrder) -> str:
+    """Return 'yymm' tag from order date, e.g. 3/2/2026 → '2603'."""
     if order.order_date:
         parts = order.order_date.split('/')
         if len(parts) == 3:
-            from datetime import datetime
             try:
-                dt = datetime(int(parts[2]), int(parts[0]), int(parts[1]))
-                date_tag = dt.strftime('%b%y')
+                yy = str(int(parts[2]))[-2:]
+                mm = f"{int(parts[0]):02d}"
+                return f"{yy}{mm}"
             except ValueError:
-                date_tag = order.order_date.replace('/', '')
-        else:
-            date_tag = order.order_date.replace('/', '')
-    else:
-        date_tag = ""
-    return f"{name}-{market}-{date_tag}"
+                pass
+    return ""
+
+
+def _default_contract_code(order: TimeAdvertisingOrder) -> str:
+    """Generate default contract code: 'Time Graton CVC 2603'"""
+    return f"Time Graton {order.market} {_yymm(order)}"
 
 
 def _default_description(order: TimeAdvertisingOrder) -> str:
-    """Generate default description from advertiser + agency."""
-    return f"{order.advertiser} / {order.agency}"
+    """Generate default description: 'Graton Casino 2603 - CVC'"""
+    return f"{order.advertiser} {_yymm(order)} - {order.market}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
