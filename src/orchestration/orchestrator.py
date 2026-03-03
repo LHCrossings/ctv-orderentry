@@ -42,6 +42,7 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
     OrderType.XML:       ("browser_automation.xml_automation",       "gather_xml_inputs_from_path",   "XML (AAAA SpotTV)"),
     OrderType.LEXUS:     ("browser_automation.lexus_automation",     "gather_lexus_inputs",           "IW Group / Lexus"),
     OrderType.GALEFORCE:         ("browser_automation.galeforce_automation",         "gather_galeforce_inputs",         "GaleForceMedia"),
+    OrderType.TIMEADVERTISING:   ("browser_automation.timeadvertising_automation",   "gather_timeadvertising_inputs",   "Time Advertising"),
     OrderType.SACCOUNTYVOTERS:   ("browser_automation.saccountyvoters_automation",   "gather_saccountyvoters_inputs",   "Sacramento County Voters"),
 }
 

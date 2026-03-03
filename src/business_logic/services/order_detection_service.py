@@ -118,6 +118,10 @@ class OrderDetectionService:
         if self._is_galeforce(first_page_text):
             return OrderType.GALEFORCE
 
+        # Time Advertising broadcast orders (Graton Casino, etc.)
+        if self._is_timeadvertising(first_page_text):
+            return OrderType.TIMEADVERTISING
+
         # Sacramento County Voter Registration
         if self._is_saccountyvoters(first_page_text, second_page_text):
             return OrderType.SACCOUNTYVOTERS
@@ -460,6 +464,16 @@ class OrderDetectionService:
         combined = text + (second_page or "")
         return "Sacramento County Voter" in combined and "Phase 1 Length" in combined
 
+    def _is_timeadvertising(self, text: str) -> bool:
+        """
+        Check if text matches Time Advertising broadcast order format.
+
+        Time Advertising patterns (need both):
+        - "BROADCAST ORDER" header
+        - "Time Advertising" in the BILL TO line
+        """
+        return "BROADCAST ORDER" in text and "Time Advertising" in text
+
     def _is_galeforce(self, text: str) -> bool:
         """
         Check if text matches generic GaleForceMedia order (not Sagent).
@@ -502,6 +516,9 @@ class OrderDetectionService:
             Client name if found, None otherwise
         """
         # Agency-specific extraction patterns
+        if order_type == OrderType.TIMEADVERTISING:
+            return self._extract_timeadvertising_client(first_page_text)
+
         if order_type in (OrderType.SAGENT, OrderType.GALEFORCE):
             return self._extract_sagent_client(first_page_text)
 
@@ -531,6 +548,11 @@ class OrderDetectionService:
 
         # Fallback: try common patterns
         return self._extract_generic_client(first_page_text)
+
+    def _extract_timeadvertising_client(self, text: str) -> str | None:
+        """Extract advertiser from Time Advertising order — "ADVERTISER: {name}" line."""
+        match = re.search(r'ADVERTISER:\s*([^\n]+)', text)
+        return match.group(1).strip() if match else None
 
     def _extract_sagent_client(self, text: str) -> str | None:
         """

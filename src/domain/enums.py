@@ -28,6 +28,7 @@ class OrderType(Enum):
     LEXUS = "lexus"
     SAGENT = "sagent"
     GALEFORCE = "galeforce"
+    TIMEADVERTISING = "timeadvertising"
     CHARMAINE = "charmaine"
     SACCOUNTYVOTERS = "saccountyvoters"
     XML = "xml"
@@ -97,7 +98,7 @@ KNOWN_AGENCY_KEYWORDS: list[str] = [
     "worldlink", "tatari", "tcaa", "daviselen", "misfit",
     "igraphix", "admerasia", "opad", "rpm", "h&l partners",
     "impact marketing", "sagent", "galeforce", "galeforcemedia",
-    "ntooitive",
+    "ntooitive", "time advertising",
 ]
 """
 If ANY of these keywords appear in the PDF text (case-insensitive),
@@ -278,6 +279,7 @@ class SeparationInterval(Enum):
     MISFIT = (15, 0, 0)
     SAGENT = (10, 0, 0)
     GALEFORCE = (25, 0, 0)
+    TIMEADVERTISING = (15, 0, 0)
     CHARMAINE = (15, 0, 0)
     SACCOUNTYVOTERS = (15, 0, 0)
     DEFAULT = (15, 0, 0)
@@ -302,6 +304,7 @@ class SeparationInterval(Enum):
             OrderType.MISFIT: cls.MISFIT.value,
             OrderType.SAGENT: cls.SAGENT.value,
             OrderType.GALEFORCE: cls.GALEFORCE.value,
+            OrderType.TIMEADVERTISING: cls.TIMEADVERTISING.value,
             OrderType.CHARMAINE: cls.CHARMAINE.value,
             OrderType.SACCOUNTYVOTERS: cls.SACCOUNTYVOTERS.value,
         }
