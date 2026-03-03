@@ -215,6 +215,14 @@ class CustomerRepository:
         finally:
             conn.close()
 
+    def find_by_name_fuzzy(
+        self,
+        customer_name: str,
+        order_type: OrderType
+    ) -> Customer | None:
+        """Alias for find_by_fuzzy_match (used by automation modules)."""
+        return self.find_by_fuzzy_match(customer_name, order_type)
+
     def find_by_fuzzy_match(
         self,
         customer_name: str,

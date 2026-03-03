@@ -65,6 +65,34 @@ def _lookup_customer(client_name: str) -> Optional[dict]:
     return None
 
 
+def _save_new_customer(
+    customer_id: str,
+    customer_name: str,
+    default_market: str,
+    db_path: str = CUSTOMER_DB_PATH,
+) -> None:
+    """Save a new Time Advertising customer to the database."""
+    try:
+        from src.data_access.repositories.customer_repository import CustomerRepository
+        from src.domain.entities import Customer
+        repo = CustomerRepository(db_path)
+        customer = Customer(
+            customer_id=customer_id,
+            customer_name=customer_name,
+            order_type=OrderType.TIMEADVERTISING,
+            abbreviation=customer_name[:6].upper(),
+            default_market=default_market,
+            billing_type="agency",
+            separation_customer=TIMEADVERTISING_SEPARATION[0],
+            separation_event=TIMEADVERTISING_SEPARATION[1],
+            separation_order=TIMEADVERTISING_SEPARATION[2],
+        )
+        repo.save(customer)
+        print(f"[CUSTOMER DB] ✓ Saved: {customer_name} → ID {customer_id}")
+    except Exception as exc:
+        print(f"[CUSTOMER DB] ✗ Save failed: {exc}")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # UPFRONT INPUT GATHERING
 # ─────────────────────────────────────────────────────────────────────────────
@@ -117,6 +145,9 @@ def _gather_inputs(order: TimeAdvertisingOrder) -> Optional[dict]:
         if not customer_id:
             print("[CANCELLED]")
             return None
+        save_yn = input(f"  Save '{order.advertiser}' (ID {customer_id}) to DB for next time? (y/n): ").strip().lower()
+        if save_yn == 'y':
+            _save_new_customer(customer_id, order.advertiser, order.market)
 
     # ── Contract code ─────────────────────────────────────────────────────
     default_code = _default_contract_code(order)
