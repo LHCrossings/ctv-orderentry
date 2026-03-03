@@ -28,7 +28,6 @@ SCHEDULE TABLE (space-aligned plain text, NOT a grid table):
     M-F: Cant. News/Talk 7pm-8pm    wk of 3/2/26   1 1  $180.00  2  $ 3 60.00
                                      wk of 3/9/26   1 1  $180.00  2  $ 3 60.00
     M-F: Mand. News/Drama 8pm-10pm  wk of 3/2/26   1 1  $180.00  2  $ 3 60.00
-                                     wk of 3/9/26   1 1  $180.00  2  $ 3 60.00
 
     Thematic {Title} (Existing)
     M-Sun: ROS Free spots            wk of 3/2/26   1 1       2
@@ -42,10 +41,13 @@ KEY CHARACTERISTICS:
     - One PDF per market (SF = SFO, Sacramento = CVC)
     - Paid dayparts: Cantonese + Mandarin blocks with rates
     - Thematic spots: bonus/free (no rate, no cost)
-    - Day columns: individual "1" under M T W T F S S (visual columns, not parsed)
+    - Day columns: individual "1" under M T W T F S S — parsed using
+      x-coordinates so exact days are captured (like Admerasia)
+    - Day codes: M=Mon, T=Tue, W=Wed, R=Thu, F=Fri, S=Sat, U=Sun
     - Dollar amounts may have PDF rendering spaces: "$ 3 60.00" = "$360.00"
     - Week dates: "wk of 3/2/26" → "03/02/2026"
     - Sacramento variant: program line may appear without week on same line
+    - Spots must air on the exact days marked — no weekly cap (like Admerasia)
 
 ═══════════════════════════════════════════════════════════════════════════════
 """
@@ -53,7 +55,17 @@ KEY CHARACTERISTICS:
 import re
 import pdfplumber
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Optional
+
+
+# Day code order for display and sorting (matches Admerasia convention)
+# M=Mon, T=Tue, W=Wed, R=Thu, F=Fri, S=Sat, U=Sun
+DAY_ORDER = "MTWRFSU"
+
+# Maps position index in "M T W T F S S" header → day code
+# The two T's are disambiguated by x-position (first=Tue, second=Thu)
+_COL_INDEX_TO_CODE = ["M", "T", "W", "R", "F", "S", "U"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -62,27 +74,42 @@ from typing import Optional
 
 @dataclass(frozen=True)
 class TimeAdvertisingWeek:
-    """A single week's spot data for one program line."""
-    week_start: str   # "03/02/2026" (MM/DD/YYYY)
-    spots: int        # total spots this week
-    rate: float       # per-spot gross rate (0.0 for thematic/free)
+    """
+    A single week's spot data for one program line, with day-level resolution.
+
+    day_spots maps day code → spot count on that day.
+    Example: {"R": 1, "F": 1} = 1 spot on Thursday + 1 spot on Friday.
+    """
+    week_start: str        # "03/02/2026" (MM/DD/YYYY, always Monday)
+    day_spots: dict        # {"R": 1, "F": 1} etc.
+    rate: float            # per-spot gross rate (0.0 for thematic/free)
+
+    @property
+    def total_spots(self) -> int:
+        return sum(self.day_spots.values())
+
+    @property
+    def days_str(self) -> str:
+        """Sorted day string for pattern comparison, e.g. 'RF' or 'WR'."""
+        return ''.join(d for d in DAY_ORDER if d in self.day_spots)
 
 
 @dataclass(frozen=True)
 class TimeAdvertisingLine:
     """A program/daypart line with its weekly spot schedule."""
-    program: str                      # "M-F: Cant. News/Talk 7pm-8pm"
-    section: str                      # "Prime Time Dream Drive..." or "Thematic..."
-    is_thematic: bool                 # True = free/bonus spots, False = paid
-    weeks: tuple                      # tuple[TimeAdvertisingWeek, ...]
+    program: str                # "M-F: Cant. News/Talk 7pm-8pm"
+    section: str                # "Prime Time Dream Drive..." or "Thematic..."
+    is_thematic: bool           # True = free/bonus spots, False = paid
+    weeks: tuple                # tuple[TimeAdvertisingWeek, ...]
 
     @property
     def total_spots(self) -> int:
-        return sum(w.spots for w in self.weeks)
+        return sum(w.total_spots for w in self.weeks)
 
     @property
     def weekly_spots(self) -> list:
-        return [w.spots for w in self.weeks]
+        """Total spots per week (for compatibility with consolidate_weeks)."""
+        return [w.total_spots for w in self.weeks]
 
     @property
     def week_start_dates(self) -> list:
@@ -95,6 +122,71 @@ class TimeAdvertisingLine:
             if w.rate > 0:
                 return w.rate
         return 0.0
+
+    def get_etere_lines(self) -> list:
+        """
+        Convert weekly day-spot data to Etere line specifications.
+
+        Groups consecutive weeks with identical day patterns into single blocks.
+        Weeks with different day patterns become separate Etere lines.
+
+        Etere entry style (like Admerasia):
+          - spots_per_week = 0   (no weekly cap — exact scheduling)
+          - max_daily_run  = 1   (1 spot per day per line)
+          - total_spots    = total across block date range
+          - days           = day code string e.g. "RF", "T", "WR"
+
+        Returns:
+            List of dicts: start_date, end_date, days, total_spots,
+                           per_day_max, spots_per_week, rate
+        """
+        etere_lines = []
+        n = len(self.weeks)
+        i = 0
+
+        while i < n:
+            wk = self.weeks[i]
+            if wk.total_spots == 0:
+                i += 1
+                continue
+
+            pattern = wk.days_str
+            block_total = wk.total_spots
+            block_week_start = datetime.strptime(wk.week_start, '%m/%d/%Y')
+            last_week_start = block_week_start
+
+            # Extend block while consecutive weeks have the same day pattern
+            j = i + 1
+            while j < n:
+                next_wk = self.weeks[j]
+                next_start = datetime.strptime(next_wk.week_start, '%m/%d/%Y')
+                gap = (next_start - datetime.strptime(
+                    self.weeks[j - 1].week_start, '%m/%d/%Y'
+                )).days
+
+                if next_wk.days_str != pattern or gap != 7:
+                    break
+
+                block_total += next_wk.total_spots
+                last_week_start = next_start
+                j += 1
+
+            # Block end = Saturday of last week in block
+            block_end = last_week_start + timedelta(days=6)
+
+            etere_lines.append({
+                'days': pattern,
+                'start_date': block_week_start.strftime('%m/%d/%Y'),
+                'end_date': block_end.strftime('%m/%d/%Y'),
+                'total_spots': block_total,
+                'per_day_max': 1,
+                'spots_per_week': 0,
+                'rate': self.rate,
+            })
+
+            i = j
+
+        return etere_lines
 
 
 @dataclass
@@ -113,23 +205,25 @@ class TimeAdvertisingOrder:
 
     @property
     def paid_lines(self) -> list:
-        return [l for l in self.lines if not l.is_thematic]
+        return [ln for ln in self.lines if not ln.is_thematic]
 
     @property
     def thematic_lines(self) -> list:
-        return [l for l in self.lines if l.is_thematic]
+        return [ln for ln in self.lines if ln.is_thematic]
 
     @property
     def flight_start(self) -> str:
-        """First week start across all paid lines."""
         dates = [w.week_start for ln in self.paid_lines for w in ln.weeks]
         return min(dates) if dates else ""
 
     @property
     def flight_end(self) -> str:
-        """Last week start across all paid lines (approximate)."""
+        """Saturday of the last paid week."""
         dates = [w.week_start for ln in self.paid_lines for w in ln.weeks]
-        return max(dates) if dates else ""
+        if not dates:
+            return ""
+        last_wk = datetime.strptime(max(dates), '%m/%d/%Y')
+        return (last_wk + timedelta(days=6)).strftime('%m/%d/%Y')
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -159,13 +253,7 @@ def _detect_market(station_text: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _parse_week_date(date_str: str) -> str:
-    """
-    Parse "M/D/YY" from "wk of M/D/YY" into "MM/DD/YYYY".
-
-    Examples:
-        "3/2/26"  → "03/02/2026"
-        "3/30/26" → "03/30/2026"
-    """
+    """Parse "M/D/YY" to "MM/DD/YYYY"."""
     parts = date_str.strip().split('/')
     if len(parts) != 3:
         return date_str
@@ -175,39 +263,107 @@ def _parse_week_date(date_str: str) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# WEEK LINE PARSING
+# COORDINATE-BASED DAY COLUMN DETECTION
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _parse_week_data(text_after_wk_date: str) -> tuple:
+def _group_words_by_row(words: list, y_tolerance: float = 4.0) -> dict:
     """
-    Parse total spots and rate from the text following "wk of M/D/YY".
-
-    Paid format:  "   1 1  $180.00  2  $ 3 60.00"
-      → rate=180.0, spots=2  (first $ = rate, next integer = total)
-
-    Thematic:     "   1 1       2"
-      → rate=0.0, spots=2  (no $, last integer = total)
+    Group pdfplumber words by visual row using y-coordinate proximity.
 
     Returns:
-        (total_spots, rate_per_spot)
+        Dict of representative_y → [words in that row], sorted by y.
     """
-    if '$' in text_after_wk_date:
-        # Paid line: first $ = rate, first integer after rate = total spots
-        rate_match = re.search(r'\$\s*([\d,]+\.?\d*)', text_after_wk_date)
-        if rate_match:
-            rate = float(rate_match.group(1).replace(',', ''))
-            after_rate = text_after_wk_date[rate_match.end():]
-            total_match = re.search(r'(\d+)', after_rate)
-            total_spots = int(total_match.group(1)) if total_match else 0
-            return total_spots, rate
+    rows: dict = {}
+    for word in words:
+        y = word['top']
+        matched_y = None
+        for ey in rows:
+            if abs(ey - y) <= y_tolerance:
+                matched_y = ey
+                break
+        if matched_y is None:
+            matched_y = y
+        rows.setdefault(matched_y, []).append(word)
+    return rows
 
-    # Thematic / free: last standalone integer = total spots
-    total_match = re.search(r'(\d+)\s*$', text_after_wk_date.strip())
-    return (int(total_match.group(1)), 0.0) if total_match else (0, 0.0)
+
+def _find_day_columns(words: list) -> dict:
+    """
+    Find x-positions of the M T W T F S S day columns from the header row.
+
+    Looks for a row containing at least 5 single-letter words from {M,T,W,F,S}
+    clustered within ~80px (the day column grid). Maps column positions to
+    day codes M,T,W,R,F,S,U (R=Thursday to avoid T ambiguity).
+
+    Returns:
+        Dict day_code → x_position, or {} if not found.
+    """
+    rows = _group_words_by_row(words)
+
+    for _y, row_words in sorted(rows.items()):
+        candidates = [
+            w for w in row_words
+            if len(w['text']) == 1 and w['text'] in 'MTWFS'
+        ]
+        if len(candidates) < 5:
+            continue
+
+        candidates_sorted = sorted(candidates, key=lambda w: w['x0'])
+        xs = [w['x0'] for w in candidates_sorted]
+
+        # Must span <80px (day column grid width) and have M and F in there
+        texts = [w['text'] for w in candidates_sorted]
+        if 'M' not in texts or 'F' not in texts:
+            continue
+        if xs[-1] - xs[0] > 100:
+            continue
+
+        # Map positions → day codes
+        result = {}
+        for i, w in enumerate(candidates_sorted[:7]):
+            if i < len(_COL_INDEX_TO_CODE):
+                result[_COL_INDEX_TO_CODE[i]] = w['x0']
+        return result
+
+    return {}
+
+
+def _get_day_spots_from_row(row_words: list, day_col_x: dict, x_tol: float = 8.0) -> dict:
+    """
+    Extract day-spot markers from a week row using x-coordinate alignment.
+
+    Counts digits ("1", "2", etc.) whose x-position aligns with a day column.
+    Digits outside the day column x-range (total spots, cost) are ignored.
+
+    Args:
+        row_words: Words in the week row (from extract_words)
+        day_col_x: Dict day_code → x_position (from _find_day_columns)
+        x_tol: Tolerance in points for matching a word to a column
+
+    Returns:
+        Dict day_code → spot_count (e.g. {"R": 1, "F": 1})
+    """
+    if not day_col_x:
+        return {}
+
+    min_x = min(day_col_x.values()) - x_tol
+    max_x = max(day_col_x.values()) + x_tol
+
+    day_spots: dict = {}
+    for word in row_words:
+        if not re.match(r'^\d+$', word['text']):
+            continue
+        wx = word['x0']
+        if not (min_x <= wx <= max_x):
+            continue
+        closest = min(day_col_x, key=lambda d: abs(day_col_x[d] - wx))
+        day_spots[closest] = day_spots.get(closest, 0) + int(word['text'])
+
+    return day_spots
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# HEADER PARSING
+# HEADER PARSING (text-based)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _COLUMN_HEADER_KEYWORDS = [
@@ -220,7 +376,8 @@ def _parse_header(raw_lines: list) -> tuple:
     Parse the header block (above DAY-PART SCHEDULE).
 
     Returns:
-        (advertiser, station, from_name, order_date, ad_titles, duration_seconds, schedule_start_idx)
+        (advertiser, station, from_name, order_date, ad_titles,
+         duration_seconds, schedule_start_idx)
     """
     advertiser = ""
     station = ""
@@ -240,9 +397,9 @@ def _parse_header(raw_lines: list) -> tuple:
             continue
 
         if stripped.startswith("TO:"):
-            date_match = re.search(r'DATE:\s*(\d{1,2}/\d{1,2}/\d{4})', stripped)
-            if date_match:
-                order_date = date_match.group(1)
+            m = re.search(r'DATE:\s*(\d{1,2}/\d{1,2}/\d{4})', stripped)
+            if m:
+                order_date = m.group(1)
             in_ad_title = False
             continue
 
@@ -276,9 +433,9 @@ def _parse_header(raw_lines: list) -> tuple:
             continue
 
         if stripped.startswith("LENGTH:"):
-            dur_match = re.search(r'(\d+)\s*sec', stripped, re.IGNORECASE)
-            if dur_match:
-                duration_seconds = int(dur_match.group(1))
+            m = re.search(r'(\d+)\s*sec', stripped, re.IGNORECASE)
+            if m:
+                duration_seconds = int(m.group(1))
             in_ad_title = False
             continue
 
@@ -288,35 +445,73 @@ def _parse_header(raw_lines: list) -> tuple:
 
         in_ad_title = False
 
-    return advertiser, station, from_name, order_date, ad_titles, duration_seconds, schedule_start_idx
+    return (
+        advertiser, station, from_name, order_date,
+        ad_titles, duration_seconds, schedule_start_idx,
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# SCHEDULE PARSING
+# SCHEDULE PARSING (coordinate-aware)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _parse_schedule(schedule_lines: list) -> list:
+def _parse_schedule(schedule_lines: list, word_rows: dict, day_col_x: dict) -> list:
     """
     Parse the schedule section into TimeAdvertisingLine objects.
 
-    State machine:
-    - Section header → set current_section, in_thematic flag
-    - M-[Day]: program line → flush previous, start new program
-    - wk of line → append week to current program
-    - FLIGHT TOTAL / GROSS TOTAL → stop
+    Uses text content for structure detection (section headers, program lines,
+    week lines) and x-coordinates for day-level spot parsing.
 
     Args:
-        schedule_lines: Lines starting just after "DAY-PART SCHEDULE"
+        schedule_lines: Text lines starting just after "DAY-PART SCHEDULE"
+        word_rows: Dict of y → [words] covering the full page
+        day_col_x: Dict day_code → x_position (from _find_day_columns)
 
     Returns:
         List of TimeAdvertisingLine objects
     """
     parsed_lines: list = []
-
     current_section = ""
     in_thematic = False
     current_program: Optional[str] = None
     current_weeks: list = []
+
+    # Build a lookup: week date string → [day_spots dict per occurrence]
+    # Key is the y-coordinate of the row so duplicate dates (same wk in different
+    # dayparts) are distinguished.
+    y_to_day_spots: dict = {}
+    for y, rw in word_rows.items():
+        texts = [w['text'] for w in rw]
+        if 'wk' not in texts:
+            continue
+        y_to_day_spots[y] = _get_day_spots_from_row(rw, day_col_x)
+
+    # We also need to link text lines → y coordinates for week rows.
+    # Strategy: for each text line containing "wk of M/D/YY", find the
+    # matching y row by looking for a word_row that contains that date string.
+    # We consume y-keys in order so duplicate dates map correctly.
+    wk_date_y_queue: dict = {}   # date_str → [sorted y values]
+    for y, rw in sorted(word_rows.items()):
+        texts = [w['text'] for w in rw]
+        if 'wk' not in texts:
+            continue
+        row_text = ' '.join(w['text'] for w in sorted(rw, key=lambda w: w['x0']))
+        m = re.search(r'wk of (\d{1,2}/\d{1,2}/\d{2})', row_text)
+        if m:
+            ds = m.group(1)
+            wk_date_y_queue.setdefault(ds, []).append(y)
+
+    # Usage counters for consuming the queue
+    wk_date_used: dict = {}
+
+    def _pop_day_spots(date_str: str) -> dict:
+        """Get the next unused y-row's day_spots for this week date string."""
+        ys = wk_date_y_queue.get(date_str, [])
+        idx = wk_date_used.get(date_str, 0)
+        if idx < len(ys):
+            wk_date_used[date_str] = idx + 1
+            return y_to_day_spots.get(ys[idx], {})
+        return {}
 
     def _flush():
         if current_program and current_weeks:
@@ -330,25 +525,45 @@ def _parse_schedule(schedule_lines: list) -> list:
     for line in schedule_lines:
         stripped = line.strip()
 
-        # End of schedule
         if "FLIGHT TOTAL" in stripped or "GROSS TOTAL" in stripped:
             break
 
-        # Skip blank lines and column headers
         if not stripped:
             continue
         if any(kw in stripped for kw in _COLUMN_HEADER_KEYWORDS):
             continue
 
-        # ── Week line (may also start with program name) ──────────────────
+        # ── Week line ─────────────────────────────────────────────────────
         wk_match = re.search(r'wk of (\d{1,2}/\d{1,2}/\d{2})', stripped)
         if wk_match:
-            week_date_str = wk_match.group(1)
-            week_start = _parse_week_date(week_date_str)
-            after_wk = stripped[wk_match.end():]
-            spots, rate = _parse_week_data(after_wk)
+            date_str = wk_match.group(1)
+            week_start = _parse_week_date(date_str)
 
-            # Check if this line also carries the program name
+            # Rate from first $ in line
+            rate = 0.0
+            rate_m = re.search(r'\$\s*([\d,]+\.?\d*)', stripped)
+            if rate_m:
+                rate = float(rate_m.group(1).replace(',', ''))
+
+            # Day spots from coordinates
+            day_spots = _pop_day_spots(date_str)
+
+            # Fallback if no coordinate data: infer from total spots count
+            if not day_spots:
+                # Try text-based total as a last resort
+                after_wk = stripped[wk_match.end():]
+                if '$' in after_wk:
+                    after_rate = after_wk[after_wk.index('$') + 1:]
+                    after_rate = re.sub(r'[\d,]+\.?\d*', '', after_rate, count=1)
+                    tm = re.search(r'(\d+)', after_rate)
+                    total = int(tm.group(1)) if tm else 0
+                else:
+                    tm = re.search(r'(\d+)\s*$', after_wk.strip())
+                    total = int(tm.group(1)) if tm else 0
+                if total:
+                    day_spots = {'?': total}
+
+            # Check for program name before "wk" on same line
             before_wk = stripped[:wk_match.start()].strip()
             if before_wk and re.match(r'^M-[A-Za-z]', before_wk):
                 _flush()
@@ -357,20 +572,19 @@ def _parse_schedule(schedule_lines: list) -> list:
 
             current_weeks.append(TimeAdvertisingWeek(
                 week_start=week_start,
-                spots=spots,
+                day_spots=day_spots,
                 rate=rate,
             ))
             continue
 
-        # ── Program line: "M-F: ...", "M-Sun: ...", etc. ─────────────────
+        # ── Program line ─────────────────────────────────────────────────
         if re.match(r'^M-[A-Za-z]+:', stripped):
             _flush()
             current_program = stripped
             current_weeks = []
             continue
 
-        # ── Section header ────────────────────────────────────────────────
-        # Anything else that isn't blank, a column header, or a digit-leading line
+        # ── Section header ───────────────────────────────────────────────
         if stripped and not re.match(r'^\d', stripped):
             _flush()
             current_section = stripped
@@ -378,7 +592,6 @@ def _parse_schedule(schedule_lines: list) -> list:
             current_program = None
             current_weeks = []
 
-    # Flush final program
     _flush()
     return parsed_lines
 
@@ -395,11 +608,13 @@ def parse_timeadvertising_pdf(pdf_path: str) -> Optional[TimeAdvertisingOrder]:
         pdf_path: Path to the PDF file
 
     Returns:
-        TimeAdvertisingOrder, or None if the PDF cannot be parsed
+        TimeAdvertisingOrder, or None if parsing fails
     """
     try:
         with pdfplumber.open(pdf_path) as pdf:
-            text = pdf.pages[0].extract_text() or ""
+            page = pdf.pages[0]
+            text = page.extract_text() or ""
+            words = page.extract_words(x_tolerance=3, y_tolerance=3)
     except Exception as e:
         print(f"[TIMEADVERTISING] Error opening PDF: {e}")
         return None
@@ -407,30 +622,33 @@ def parse_timeadvertising_pdf(pdf_path: str) -> Optional[TimeAdvertisingOrder]:
     if not text.strip():
         return None
 
-    return _parse_text(text, pdf_path)
-
-
-def _parse_text(text: str, pdf_path: str = "") -> Optional[TimeAdvertisingOrder]:
-    """Parse raw extracted text into a TimeAdvertisingOrder."""
     raw_lines = text.split('\n')
 
-    # ── Agency from BILL TO (scan full text) ──────────────────────────────
+    # Agency from BILL TO (scan full text)
     agency = "Time Advertising, Inc."
-    bill_match = re.search(r'BILL TO:\s*(.+)', text)
-    if bill_match:
-        agency = bill_match.group(1).strip()
+    bill_m = re.search(r'BILL TO:\s*(.+)', text)
+    if bill_m:
+        agency = bill_m.group(1).strip()
 
-    # ── Parse header ──────────────────────────────────────────────────────
+    # Parse header (text-based)
     (
         advertiser, station, from_name, order_date,
-        ad_titles, duration_seconds, schedule_start_idx
+        ad_titles, duration_seconds, schedule_start_idx,
     ) = _parse_header(raw_lines)
 
     market = _detect_market(station)
 
-    # ── Parse schedule ────────────────────────────────────────────────────
+    # Find day column x-positions
+    day_col_x = _find_day_columns(words)
+    if not day_col_x:
+        print("[TIMEADVERTISING] ⚠ Could not find day column headers — day-level data may be missing")
+
+    # Group words by y-row for coordinate-based schedule parsing
+    word_rows = _group_words_by_row(words)
+
+    # Parse schedule
     schedule_lines = raw_lines[schedule_start_idx:]
-    lines = _parse_schedule(schedule_lines)
+    lines = _parse_schedule(schedule_lines, word_rows, day_col_x)
 
     return TimeAdvertisingOrder(
         advertiser=advertiser,
@@ -478,14 +696,27 @@ if __name__ == "__main__":
     print(f"  Ad Titles:")
     for t in order.ad_titles:
         print(f"    • {t}")
-    print(f"  Lines:       {len(order.lines)} "
-          f"({len(order.paid_lines)} paid, {len(order.thematic_lines)} thematic)")
+    print(f"  Lines:  {len(order.lines)} ({len(order.paid_lines)} paid, {len(order.thematic_lines)} thematic)")
 
     for j, ln in enumerate(order.lines):
-        spot_type = "THEMATIC" if ln.is_thematic else "PAID"
-        print(f"\n  [{j+1}] {spot_type}  {ln.program}")
+        kind = "THEMATIC" if ln.is_thematic else "PAID"
+        print(f"\n  [{j+1}] {kind}  {ln.program}")
         print(f"        Section: {ln.section}")
         print(f"        Rate: ${ln.rate:.2f}/spot")
         for w in ln.weeks:
-            print(f"        {w.week_start}: {w.spots} spots")
+            print(f"        {w.week_start}: {w.days_str:6s}  {w.total_spots} spot(s)  {w.day_spots}")
         print(f"        Total: {ln.total_spots} spots")
+
+    print(f"\n{'='*70}")
+    print("ETERE LINES (as would be entered)")
+    print(f"{'='*70}")
+    for j, ln in enumerate(order.lines):
+        kind = "THEMATIC" if ln.is_thematic else "PAID"
+        etere = ln.get_etere_lines()
+        print(f"\n  [{j+1}] {kind}  {ln.program}")
+        for k, spec in enumerate(etere, 1):
+            rate_str = f"${spec['rate']:.2f}" if spec['rate'] > 0 else "$0.00 (free)"
+            print(f"    Line {k}: days={spec['days']:6s}  "
+                  f"{spec['start_date']} – {spec['end_date']}  "
+                  f"{spec['total_spots']} spots  "
+                  f"{rate_str}")
