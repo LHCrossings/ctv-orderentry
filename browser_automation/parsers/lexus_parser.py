@@ -1132,7 +1132,7 @@ def parse_lexus_xlsx(path: str | Path, filename_meta: Optional[dict] = None) -> 
 
     for row_idx, row_vals in enumerate(all_row_values[data_start:], data_start):
         # Determine if this row is in the bonus section
-        is_bonus_section = bns_start_row is not None and row_idx > bns_start_row
+        is_bonus_section = bns_start_row is not None and row_idx >= bns_start_row
 
         # Col 0: category label
         col0 = str(row_vals[0]).strip() if row_vals and row_vals[0] else ""
@@ -1142,7 +1142,13 @@ def parse_lexus_xlsx(path: str | Path, filename_meta: Optional[dict] = None) -> 
         if any(kw in col0.upper() for kw in SKIP_MARKERS):
             continue
         if col0.upper().startswith("BONUS SPOTS"):
-            continue   # the header row of the BNS section — skip it
+            # "BONUS SPOTS" marks the start of the bonus section, but the same
+            # row can also contain the first bonus data line (program in col 1).
+            # Only skip if col 1 is empty (pure header row).
+            prog_check = str(row_vals[1]).strip() if len(row_vals) > 1 and row_vals[1] else ""
+            if not prog_check:
+                continue
+            # Fall through to parse col 1 as program data
 
         # Col 1: program name (contains days/time embedded)
         program_raw = str(row_vals[1]).strip() if len(row_vals) > 1 and row_vals[1] else ""
