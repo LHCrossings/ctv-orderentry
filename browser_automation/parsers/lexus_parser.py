@@ -255,32 +255,9 @@ _WEEK_SEQ = ['M', 'T', 'W', 'R', 'F', 'S', 'U']
 
 def _parse_day_codes(days: str) -> list[int]:
     """Return sorted list of EtereClient day_ids indices from a day pattern string."""
-    days = days.strip()
-    indices: set[int] = set()
-
-    def _resolve(code: str) -> int:
-        code = _ALIASES.get(code, code)
-        return _CODE_TO_IDX[code]
-
-    m = re.match(r'^([A-Za-z]+)-([A-Za-z]+)$', days)
-    if m:
-        start = _ALIASES.get(m.group(1), m.group(1))
-        end = _ALIASES.get(m.group(2), m.group(2))
-        if start in _WEEK_SEQ and end in _WEEK_SEQ:
-            si, ei = _WEEK_SEQ.index(start), _WEEK_SEQ.index(end)
-            for code in _WEEK_SEQ[si:ei + 1]:
-                indices.add(_CODE_TO_IDX[code])
-        else:
-            return list(range(7))
-    else:
-        for part in days.split(','):
-            part = part.strip()
-            try:
-                indices.add(_resolve(part))
-            except KeyError:
-                pass
-
-    return sorted(indices) if indices else list(range(7))
+    from browser_automation.day_utils import to_indices
+    result = to_indices(days)
+    return result if result else list(range(7))
 
 
 def melissa_check(lines: list[LexusLine]) -> list[str]:

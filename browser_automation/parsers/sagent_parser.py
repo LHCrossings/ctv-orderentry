@@ -65,35 +65,9 @@ class SagentLine:
         return 15  # Default
     
     def get_etere_days(self) -> str:
-        """
-        Convert day pattern to Etere format.
-        
-        Examples:
-            "M T W R F Sa Su" -> "M-Su"
-            "M T W R F" -> "M-F"
-        """
-        # Map day abbreviations
-        day_map = {
-            'M': 'M', 'T': 'T', 'W': 'W', 'R': 'R', 
-            'F': 'F', 'Sa': 'Sa', 'Su': 'Su'
-        }
-        
-        days_list = self.days.split()
-        
-        # Check for M-Su (all 7 days)
-        if len(days_list) == 7 and days_list == ['M', 'T', 'W', 'R', 'F', 'Sa', 'Su']:
-            return "M-Su"
-        
-        # Check for M-F (weekdays)
-        if days_list == ['M', 'T', 'W', 'R', 'F']:
-            return "M-F"
-        
-        # Check for Sa-Su (weekends)
-        if days_list == ['Sa', 'Su']:
-            return "Sa-Su"
-        
-        # Otherwise, return as-is with spaces
-        return self.days
+        """Convert day pattern to Etere format via universal day_utils."""
+        from browser_automation.day_utils import to_etere
+        return to_etere(self.days)
     
     def get_etere_time(self) -> str:
         """

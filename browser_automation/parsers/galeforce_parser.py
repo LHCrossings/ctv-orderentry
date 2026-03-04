@@ -82,21 +82,9 @@ class GaleForceLine:
     is_billboard: bool
 
     def get_etere_days(self) -> str:
-        """
-        Convert PDF day pattern to Etere abbreviated format.
-
-        "M T W R F Sa Su" → "M-Su"
-        "M T W R F"       → "M-F"
-        "Sa Su"           → "Sa-Su"
-        """
-        days_list = self.days.split()
-        if days_list == ['M', 'T', 'W', 'R', 'F', 'Sa', 'Su']:
-            return "M-Su"
-        if days_list == ['M', 'T', 'W', 'R', 'F']:
-            return "M-F"
-        if days_list == ['Sa', 'Su']:
-            return "Sa-Su"
-        return ' '.join(days_list)
+        """Convert PDF day pattern to Etere abbreviated format via universal day_utils."""
+        from browser_automation.day_utils import to_etere
+        return to_etere(self.days)
 
     def get_etere_time(self) -> str:
         """

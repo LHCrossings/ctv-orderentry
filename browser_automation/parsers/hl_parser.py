@@ -416,42 +416,18 @@ def format_time_for_description(time: str) -> str:
 def convert_hl_days_to_etere(hl_days: str) -> str:
     """
     Convert H&L day format to Etere format.
-    
-    H&L uses: MTuWThF, SaSu, MTuWThFSaSu
-    Etere uses: M-F, Sa-Su, M-Su
-    
-    Args:
-        hl_days: Day string from H&L (e.g., "MTuWThF")
-        
-    Returns:
-        Etere format day string (e.g., "M-F")
-    """
-    # Map H&L concatenated day tokens to Etere codes.
-    # Etere single-letter codes: M T W R(=Thu) F S(=Sat) U(=Sun)
-    mapping = {
-        'MTuWThF':    'M-F',
-        'MTuWThFSa':  'M-Sa',
-        'MTuWThFSaSu': 'M-Su',
-        'SaSu':       'Sa-Su',
-        'Su':         'Su',
-        'Sa':         'Sa',
-        'M':          'M',
-        'Tu':         'T',
-        'W':          'W',
-        'Th':         'R',
-        'F':          'F',
-        # Partial-week patterns — comma-separated Etere codes
-        'WThF':       'W,R,F',
-        'WThFSa':     'W,R,F,Sa',
-        'WThFSaSu':   'W,R,F,Sa,Su',
-        'ThF':        'R,F',
-        'ThFSaSu':    'R,F,Sa,Su',
-        'MTu':        'M,T',
-        'MTuW':       'M,T,W',
-        'TuWThF':     'T,W,R,F',
-    }
 
-    return mapping.get(hl_days, hl_days)
+    Delegates to day_utils.to_etere which tokenizes greedily and
+    handles any combination without a hardcoded lookup table.
+
+    Examples:
+        "MTuWThF"    → "M-F"
+        "WThF"       → "W-F"
+        "SaSu"       → "Sa-Su"
+        "MTuWThFSaSu" → "M-Su"
+    """
+    from browser_automation.day_utils import to_etere
+    return to_etere(hl_days)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

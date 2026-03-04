@@ -1396,63 +1396,23 @@ class EtereClient:
     
     @staticmethod
     def _parse_day_codes(days: str) -> List[int]:
-        """Parse a day-pattern string into a sorted list of day_ids indices.
+        """Parse any day-pattern string into a sorted list of day_ids indices.
+
+        Delegates to day_utils.to_indices which recognises all formats:
+        concatenated (MTuWThF), comma-separated (M,R,F), space-separated
+        (M T W R F), range notation (M-F, Sa-Su), and any known alias
+        variant (Mon, Tue, Wed, Thu/Th, Fri, Sat/Sa, Sun/Su).
 
         day_ids index mapping (matches contractLineBlocks* element order):
             0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday,
             4=Thursday, 5=Friday, 6=Saturday
-
-        Supported input formats:
-            Ranges:      M-F, M-R, M-Su, M-Sa, Sa-Su
-            Comma list:  M,W,R,F  or  M,R
-            Single:      M  T  W  R  F  S  U
-            Aliases:     Sa Su SAT SU Sun SUN
         """
-        # Single-letter parser codes → day_ids index
-        code_to_idx = {
-            'M': 1, 'T': 2, 'W': 3, 'R': 4, 'F': 5, 'S': 6, 'U': 0,
-        }
-        # Multi-char aliases → normalise to single-letter before lookup
-        aliases = {
-            'Sa': 'S', 'SAT': 'S',
-            'Su': 'U', 'SU': 'U', 'Sun': 'U', 'SUN': 'U',
-        }
-        # Week sequence used for range expansion (Mon → Sun)
-        week_seq = ['M', 'T', 'W', 'R', 'F', 'S', 'U']
-
-        def _resolve(code: str) -> int:
-            code = aliases.get(code, code)
-            return code_to_idx[code]
-
-        days = days.strip()
-        indices = set()
-
-        # Range notation: two tokens separated by a single hyphen
-        m = re.match(r'^([A-Za-z]+)-([A-Za-z]+)$', days)
-        if m:
-            start = aliases.get(m.group(1), m.group(1))
-            end   = aliases.get(m.group(2), m.group(2))
-            if start in week_seq and end in week_seq:
-                si, ei = week_seq.index(start), week_seq.index(end)
-                for code in week_seq[si:ei + 1]:
-                    indices.add(code_to_idx[code])
-            else:
-                print(f"[DAYS] ⚠ Unknown range '{days}', defaulting to M-Su")
-                return list(range(7))
-        else:
-            # Comma-separated or single token
-            for part in days.split(','):
-                part = part.strip()
-                try:
-                    indices.add(_resolve(part))
-                except KeyError:
-                    print(f"[DAYS] ⚠ Unknown day code '{part}' in '{days}', skipping")
-
+        from browser_automation.day_utils import to_indices
+        indices = to_indices(days)
         if not indices:
             print(f"[DAYS] ⚠ Could not parse '{days}', defaulting to M-Su")
             return list(range(7))
-
-        return sorted(indices)
+        return indices
 
     @staticmethod
     def _count_active_days(days: str) -> int:
