@@ -24,6 +24,7 @@ class HLLine:
     rate: float
     total_spots: int
     total_cost: float
+    line_number: Optional[int] = None
     
     def is_bonus(self) -> bool:
         """Check if this is a bonus/value-added line."""
@@ -376,7 +377,8 @@ def _parse_line_entry(text_lines: List[str], start_index: int) -> Tuple[Optional
             weekly_spots=weekly_spots,
             rate=rate,
             total_spots=total_spots,
-            total_cost=total_cost
+            total_cost=total_cost,
+            line_number=int(line_number) if line_number.isdigit() else None,
         )
         
         return line_obj, next_idx

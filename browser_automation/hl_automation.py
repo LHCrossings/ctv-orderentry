@@ -296,14 +296,16 @@ def _build_etere_lines(
     # The user will manually remove non-applicable shows in Etere.
     is_asian_rotator = "asian rotat" in line.program.lower()
 
+    line_prefix = f"(Line {line.line_number}) " if line.line_number is not None else ""
+
     if is_asian_rotator:
         # Force BNS, use IO time, description = "BNS ROS"
         spot_code = SPOT_CODE_BONUS
-        description = f"{etere_days} {time_fmt} BNS ROS"
+        description = f"{line_prefix}{etere_days} {time_fmt} BNS ROS"
     else:
         # Standard line
         spot_code = SPOT_CODE_BONUS if line.is_bonus() else SPOT_CODE_PAID
-        description = f"{etere_days} {time_fmt}{lang_suffix}"
+        description = f"{line_prefix}{etere_days} {time_fmt}{lang_suffix}"
 
     # Parse time range using EtereClient universal parser
     time_from, time_to = EtereClient.parse_time_range(line.time)
