@@ -370,9 +370,19 @@ def _extract_week_headers(row: list[dict]) -> list[str]:
     """
     headers = []
     for word in row:
-        t = word['text'].strip()
-        if re.match(r'^\d{1,2}$', t) and 1 <= int(t) <= 31:
-            headers.append(t)
+        # Strip leading/trailing punctuation that OCR picks up from table borders
+        t = re.sub(r'^[^\d]+', '', word['text'].strip())
+        t = re.sub(r'[^\d\-/]+$', '', t)
+        if not t:
+            continue
+        if re.match(r'^\d{1,2}$', t):
+            n = int(t)
+            if 1 <= n <= 31:
+                headers.append(t)
+            elif 32 <= n <= 49:
+                # OCR often reads '1' as '4' in certain fonts (e.g. "13" → "43")
+                corrected = n - 30
+                headers.append(str(corrected))
         elif re.match(r'^\d{1,2}-\d{1,2}$', t):
             headers.append(t)
         elif re.match(r'^\d{1,2}/\d{1,2}$', t):
@@ -545,6 +555,73 @@ def _find_date_range_row_ocr(rows: list[list[dict]]) -> Optional[list[dict]]:
     return best_row if best_count >= 2 else None
 
 
+MONTH_NAME_TO_NUM = {
+    'january': 1, 'february': 2, 'march': 3, 'april': 4,
+    'may': 5, 'june': 6, 'july': 7, 'august': 8,
+    'september': 9, 'october': 10, 'november': 11, 'december': 12,
+}
+
+
+def _find_month_col_positions(rows: list[list[dict]]) -> list[tuple[int, int]]:
+    """
+    Find month-name words in OCR rows and return [(month_num, left_x), ...]
+    sorted by x-position.  Used when the date-range row is missing (merged cells).
+    """
+    results = []
+    for row in rows:
+        for word in row:
+            t = word['text'].strip().lower()
+            if t in MONTH_NAME_TO_NUM:
+                results.append((MONTH_NAME_TO_NUM[t], word['left']))
+    results.sort(key=lambda x: x[1])
+    return results
+
+
+def _build_week_dates_from_month_positions(
+    month_col_positions: list[tuple[int, int]],
+    week_col_lefts: list[int],
+    week_headers: list[str],
+    year: int,
+) -> list[tuple[date, date]]:
+    """
+    Build week date ranges when the date-range row is not available in OCR.
+    Assigns each week column to a month based on which month-name header is
+    immediately to its left (same logic as the date-range row approach).
+    """
+    if not month_col_positions:
+        return []
+
+    result: list[tuple[date, date]] = []
+    for col_left, header in zip(week_col_lefts, week_headers):
+        # Find rightmost month header whose left ≤ col_left
+        month_num = month_col_positions[0][0]
+        for m_num, m_left in month_col_positions:
+            if m_left <= col_left:
+                month_num = m_num
+
+        # Compute week start/end from header token
+        range_m = re.match(r'^(\d{1,2})-(\d{1,2})$', header)
+        plain_m = re.match(r'^(\d{1,2})$', header)
+        try:
+            if range_m:
+                start_day = int(range_m.group(1))
+                end_day = int(range_m.group(2))
+                start = date(year, month_num, start_day)
+                max_day = calendar.monthrange(year, month_num)[1]
+                end = date(year, month_num, min(end_day, max_day))
+            elif plain_m:
+                start_day = int(plain_m.group(1))
+                start = date(year, month_num, start_day)
+                max_day = calendar.monthrange(year, month_num)[1]
+                end = min(start + timedelta(days=6), date(year, month_num, max_day))
+            else:
+                start = end = date(year, month_num, 1)
+        except ValueError:
+            start = end = date(year, month_num, 1)
+        result.append((start, end))
+    return result
+
+
 def _build_week_dates_from_date_range_row(
     date_range_row: list[dict],
     week_col_lefts: list[int],
@@ -635,10 +712,15 @@ def parse_lexus_jpg(path: str | Path, filename_meta: Optional[dict] = None) -> L
 
     img = Image.open(path)
 
+    # Scale up 2x — improves OCR accuracy significantly for table images
+    scale = 2
+    img_ocr = img.resize((img.width * scale, img.height * scale), Image.LANCZOS)
+
     # OCR with position data
-    data = pytesseract.image_to_data(img, output_type=Output.DICT, config='--psm 6')
+    data = pytesseract.image_to_data(img_ocr, output_type=Output.DICT, config='--psm 6')
 
     # Build word dicts (filter out low-confidence and empty words)
+    # Scale coordinates back to original image space
     words = []
     for i, text in enumerate(data['text']):
         if not text.strip():
@@ -647,10 +729,10 @@ def parse_lexus_jpg(path: str | Path, filename_meta: Optional[dict] = None) -> L
             continue
         words.append({
             'text': text,
-            'left': data['left'][i],
-            'top': data['top'][i],
-            'width': data['width'][i],
-            'height': data['height'][i],
+            'left': data['left'][i] // scale,
+            'top': data['top'][i] // scale,
+            'width': data['width'][i] // scale,
+            'height': data['height'][i] // scale,
         })
 
     rows = _cluster_by_y(words)
@@ -674,36 +756,53 @@ def parse_lexus_jpg(path: str | Path, filename_meta: Optional[dict] = None) -> L
     language = meta.get("language")
     if not language:
         full_text_lower = pytesseract.image_to_string(img).lower()
-        if "hinglish" in full_text_lower or "asian indian" in full_text_lower:
+        if "hinglish" in full_text_lower or "asian indian" in full_text_lower \
+                or "hindi" in full_text_lower or "punjabi" in full_text_lower:
             language = "Hinglish"
         elif "chinese" in full_text_lower or "mandarin" in full_text_lower or "cantonese" in full_text_lower:
             language = "Chinese"
         elif "vietnamese" in full_text_lower or "viet" in full_text_lower:
             language = "Viet"
 
-    # Find header row with week numbers — pick the row with the MOST integer tokens.
-    # Requiring ≥4 avoids firing on the UNIT column (:15/:30 → OCR reads as "15"/"30").
+    # Find header row with week numbers.
+    # Strategy: prefer the FIRST row that contains a "dd-dd" range token (e.g. "26-31"),
+    # since those are unique to week header rows and won't appear in data cells.
+    # Fall back to the row with the most integer tokens if no range row is found.
     week_headers: list[str] = []
     header_row_idx = -1
     best_wh_count = 0
+    range_row_idx = -1
     for idx, row in enumerate(rows):
         wh = _extract_week_headers(row)
-        if len(wh) > best_wh_count:
+        has_range = any(re.match(r'^\d{1,2}-\d{1,2}$', h) for h in wh)
+        if has_range and range_row_idx < 0:
+            range_row_idx = idx
+            week_headers = wh
+            header_row_idx = idx
+            best_wh_count = len(wh)
+        elif range_row_idx < 0 and len(wh) > best_wh_count:
             best_wh_count = len(wh)
             week_headers = wh
             header_row_idx = idx
     if best_wh_count < 4:
         print(f"[LEXUS PARSER] ⚠ Week header row found only {best_wh_count} tokens — may be wrong")
 
-    # Get x-positions of week columns for data extraction
+    # Get x-positions of week columns for data extraction.
+    # Apply the same punctuation stripping as _extract_week_headers so that
+    # week_col_lefts stays in sync with week_headers (same tokens, same count).
     week_col_lefts: list[int] = []
     if header_row_idx >= 0:
         header_row = rows[header_row_idx]
         for word in header_row:
-            t = word['text'].strip()
-            if (re.match(r'^\d{1,2}$', t) and 1 <= int(t) <= 31) or \
-               re.match(r'^\d{1,2}-\d{1,2}$', t) or \
-               re.match(r'^\d{1,2}/\d{1,2}$', t):
+            t = re.sub(r'^[^\d]+', '', word['text'].strip())
+            t = re.sub(r'[^\d\-/]+$', '', t)
+            if not t:
+                continue
+            if re.match(r'^\d{1,2}$', t):
+                n = int(t)
+                if 1 <= n <= 31 or 32 <= n <= 49:
+                    week_col_lefts.append(word['left'])
+            elif re.match(r'^\d{1,2}-\d{1,2}$', t) or re.match(r'^\d{1,2}/\d{1,2}$', t):
                 week_col_lefts.append(word['left'])
 
     # Resolve week date ranges.
@@ -722,11 +821,24 @@ def parse_lexus_jpg(path: str | Path, filename_meta: Optional[dict] = None) -> L
             broadcast_month = first_start.strftime("%b-%y")
             print(f"[LEXUS PARSER] ✓ Multi-month date range row found; "
                   f"first week → {broadcast_month}")
-    elif broadcast_month != "Unknown" and week_headers:
-        try:
-            week_date_ranges = resolve_week_dates(broadcast_month, week_headers)
-        except Exception as e:
-            print(f"[LEXUS PARSER] ⚠ Could not resolve week dates: {e}")
+    elif week_col_lefts:
+        # Fallback: assign weeks to months using x-positions of month-name headers
+        # (handles cases where the date-range row is in a merged cell OCR misses)
+        month_positions = _find_month_col_positions(rows)
+        if month_positions:
+            week_date_ranges = _build_week_dates_from_month_positions(
+                month_positions, week_col_lefts, week_headers, year
+            )
+            if week_date_ranges:
+                first_start = week_date_ranges[0][0]
+                broadcast_month = first_start.strftime("%b-%y")
+                print(f"[LEXUS PARSER] ✓ Month-position fallback; "
+                      f"first week → {broadcast_month}")
+        elif broadcast_month != "Unknown":
+            try:
+                week_date_ranges = resolve_week_dates(broadcast_month, week_headers)
+            except Exception as e:
+                print(f"[LEXUS PARSER] ⚠ Could not resolve week dates: {e}")
 
     # Pad to match week count
     n_weeks = len(week_headers)
