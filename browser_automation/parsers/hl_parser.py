@@ -426,26 +426,31 @@ def convert_hl_days_to_etere(hl_days: str) -> str:
     Returns:
         Etere format day string (e.g., "M-F")
     """
-    # Map H&L patterns to Etere patterns
+    # Map H&L concatenated day tokens to Etere codes.
+    # Etere single-letter codes: M T W R(=Thu) F S(=Sat) U(=Sun)
     mapping = {
-        'MTuWThF': 'M-F',
-        'MTuWThFSa': 'M-Sa',
+        'MTuWThF':    'M-F',
+        'MTuWThFSa':  'M-Sa',
         'MTuWThFSaSu': 'M-Su',
-        'SaSu': 'Sa-Su',
-        'Su': 'Su',
-        'Sa': 'Sa',
-        'M': 'M',
-        'Tu': 'Tu',
-        'W': 'W',
-        'Th': 'Th',
-        'F': 'F',
-        'WThF': 'WThF',
-        'WThFSaSu': 'WThFSaSu',
-        'WThFSa': 'WThFSa',
-        'ThF': 'ThF',
-        'ThFSaSu': 'ThFSaSu',
+        'SaSu':       'Sa-Su',
+        'Su':         'Su',
+        'Sa':         'Sa',
+        'M':          'M',
+        'Tu':         'T',
+        'W':          'W',
+        'Th':         'R',
+        'F':          'F',
+        # Partial-week patterns — comma-separated Etere codes
+        'WThF':       'W,R,F',
+        'WThFSa':     'W,R,F,Sa',
+        'WThFSaSu':   'W,R,F,Sa,Su',
+        'ThF':        'R,F',
+        'ThFSaSu':    'R,F,Sa,Su',
+        'MTu':        'M,T',
+        'MTuW':       'M,T,W',
+        'TuWThF':     'T,W,R,F',
     }
-    
+
     return mapping.get(hl_days, hl_days)
 
 
