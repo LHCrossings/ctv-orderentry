@@ -936,16 +936,17 @@ def _build_week_date_ranges_from_headers(
 
         start_month, start_day, end_month = anchor
 
-        # If the week's day number is less than the anchor's start day, it
-        # belongs to the end month of the range (e.g. day 4 in "7/28-8/31" → August)
+        # Broadcast calendar: all weeks in a cross-month section belong to the
+        # broadcast month (end_month). However, the actual calendar date for the
+        # week is computed using the true calendar month of the day number:
+        #   day >= start_day → still in start_month (e.g. day 28 in "7/28-8/31" → July 28)
+        #   day < start_day  → rolled into end_month  (e.g. day 4  in "7/28-8/31" → Aug 4)
+        # The broadcast_month label (for billing) is always end_month.
         day_val = row16_cells[week_col] if week_col < len(row16_cells) else "1"
-        raw_day = re.match(r'^(\d{1,2})', str(day_val).strip())
-        week_start_day = int(raw_day.group(1)) if raw_day else 1
+        raw_day_pre = re.match(r'^(\d{1,2})', str(day_val).strip())
+        week_start_day = int(raw_day_pre.group(1)) if raw_day_pre else 1
         month = end_month if week_start_day < start_day else start_month
 
-        # Actual year: if month < 3 and the date range is from a CY25 file,
-        # check if the week is in year+1 (e.g. Dec 2025 → Dec 25, Jan 2026 → Jan 26)
-        # Simple rule: month 1-12 stays in 'year'; we'll adjust during cutoff filtering
         day_val = row16_cells[week_col] if week_col < len(row16_cells) else "1"
 
         # Parse day spec ("20", "27-30")
