@@ -133,18 +133,21 @@ def _execute_order(
 ) -> bool:
     """Execute the full order workflow."""
 
-    order_code = user_input.order_code
-    description = user_input.description
-
-    # Customer ID comes from user_input (resolved upfront by gather_hl_inputs).
-    # Fall back to live DB lookup only if not provided (e.g. standalone mode).
-    if hasattr(user_input, 'customer_id') and user_input.customer_id is not None:
-        customer_id = user_input.customer_id
+    # Support both dict and SimpleNamespace for backward compatibility
+    if isinstance(user_input, dict):
+        order_code = user_input['order_code']
+        description = user_input['description']
+        customer_id = user_input.get('customer_id')
+        separation = user_input.get('separation') or SEPARATION_INTERVALS
     else:
-        customer_id, _ = _resolve_customer_id(pdf_path)
+        order_code = user_input.order_code
+        description = user_input.description
+        customer_id = getattr(user_input, 'customer_id', None)
+        separation = getattr(user_input, 'separation_intervals', None) or SEPARATION_INTERVALS
 
-    # Separation intervals from user_input (confirmed by user in input_collectors)
-    separation = user_input.separation_intervals or SEPARATION_INTERVALS
+    # Fall back to live DB lookup if customer_id not provided (e.g. standalone mode)
+    if customer_id is None:
+        customer_id, _ = _resolve_customer_id(pdf_path)
 
     # ── Parse PDF ──
     print(f"\n{'='*60}")
@@ -427,6 +430,44 @@ def _save_customer_to_db(client_name: str, customer_id: int) -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# TEMPLATE SEEDING (apply known templates after first-time customer save)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _seed_known_template(client_name: str) -> None:
+    """
+    If client_name matches a known H&L template, seed it into the DB.
+    Only runs when templates are NULL (safe to call every time).
+    """
+    try:
+        from seed_customer_templates import KNOWN_TEMPLATES
+        from browser_automation.customer_defaults import ensure_template_columns
+        import sqlite3 as _sqlite3
+
+        ensure_template_columns(CUSTOMERS_DB_PATH)
+        name_lower = client_name.lower()
+
+        with _sqlite3.connect(str(CUSTOMERS_DB_PATH)) as conn:
+            for tmpl_name, tmpl_type, code_tmpl, desc_tmpl in KNOWN_TEMPLATES:
+                if tmpl_type != AGENCY_NAME:
+                    continue
+                if tmpl_name.lower() not in name_lower and name_lower not in tmpl_name.lower():
+                    continue
+                # Only update if templates are still NULL
+                conn.execute(
+                    """UPDATE customers
+                       SET default_code_template = ?, default_desc_template = ?
+                       WHERE customer_name = ? AND order_type = ?
+                         AND default_code_template IS NULL""",
+                    (code_tmpl, desc_tmpl, client_name, AGENCY_NAME),
+                )
+                if conn.total_changes > 0:
+                    print(f"[CUSTOMER DB] ✓ Templates set: code='{code_tmpl}' desc='{desc_tmpl}'")
+                break
+    except Exception:
+        pass
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # DEFAULT VALUES (called by order_processing_service.get_default_order_values)
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -531,6 +572,11 @@ def gather_hl_inputs(pdf_path: str) -> dict | None:
     # ── Customer resolution ──
     customer_id, _ = _resolve_customer_id(pdf_path)
 
+    # ── Persist customer to DB immediately so template lookup works ──
+    if customer_id and est.client:
+        _save_customer_to_db(est.client, customer_id)
+        _seed_known_template(est.client)
+
     # ── Smart code/description defaults ──
     suggested_code, suggested_desc = get_hl_defaults(pdf_path)
 
@@ -547,12 +593,9 @@ def gather_hl_inputs(pdf_path: str) -> dict | None:
     print("INPUT COLLECTION COMPLETE - Ready for automation")
     print("=" * 70)
 
-    # Return as a simple namespace so _execute_order can use dot notation
-    # (matches how OrderInput is accessed: user_input.order_code etc.)
-    from types import SimpleNamespace
-    return SimpleNamespace(
-        order_code=contract_code,
-        description=description,
-        customer_id=customer_id,
-        separation_intervals=separation,
-    )
+    return {
+        'order_code': contract_code,
+        'description': description,
+        'customer_id': customer_id,
+        'separation': separation,
+    }
