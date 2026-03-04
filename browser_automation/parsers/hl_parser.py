@@ -72,31 +72,41 @@ def parse_hl_pdf(pdf_path: str) -> List[HLEstimate]:
                 estimate_data = _extract_estimate_header(text)
                 
                 if estimate_data:
-                    # If we were building an estimate, save it
-                    if current_estimate:
-                        estimates.append(current_estimate)
-                    
-                    # Start new estimate
-                    current_estimate = HLEstimate(
-                        estimate_number=estimate_data['estimate'],
-                        description=estimate_data['description'],
-                        flight_start=estimate_data['flight_start'],
-                        flight_end=estimate_data['flight_end'],
-                        client=estimate_data['client'],
-                        buyer=estimate_data['buyer'],
-                        market=estimate_data['market'],
-                        lines=[]
+                    est_num = estimate_data['estimate']
+
+                    # Check if this is a continuation page for an estimate we already started
+                    # (header repeats on every page of a multi-page estimate)
+                    existing = next(
+                        (e for e in estimates if e.estimate_number == est_num),
+                        current_estimate if current_estimate and current_estimate.estimate_number == est_num else None
                     )
-                    
-                    # Extract lines from this page
-                    lines = _extract_lines_from_page(text)
-                    
-                    # Only add lines if we actually found some
-                    if lines:
-                        current_estimate.lines.extend(lines)
-                    elif current_estimate and not current_estimate.lines:
-                        # First page with no lines - might be duplicate, skip it
-                        current_estimate = None
+
+                    if existing:
+                        # Continuation page — just append new lines to the existing estimate
+                        lines = _extract_lines_from_page(text)
+                        if lines:
+                            existing.lines.extend(lines)
+                    else:
+                        # Genuinely new estimate number
+                        if current_estimate:
+                            estimates.append(current_estimate)
+
+                        current_estimate = HLEstimate(
+                            estimate_number=est_num,
+                            description=estimate_data['description'],
+                            flight_start=estimate_data['flight_start'],
+                            flight_end=estimate_data['flight_end'],
+                            client=estimate_data['client'],
+                            buyer=estimate_data['buyer'],
+                            market=estimate_data['market'],
+                            lines=[]
+                        )
+
+                        lines = _extract_lines_from_page(text)
+                        if lines:
+                            current_estimate.lines.extend(lines)
+                        elif not current_estimate.lines:
+                            current_estimate = None
         
         # Don't forget the last estimate
         if current_estimate:
