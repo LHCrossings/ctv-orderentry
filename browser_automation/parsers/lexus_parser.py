@@ -912,28 +912,36 @@ def _build_week_date_ranges_from_headers(
     whose column index is ≤ the week column. Extract month from that entry.
     Combine with day number from row 16.
     """
-    # Build mapping: col → month from row 13 date-range cells
-    col_to_month: dict[int, int] = {}
+    # Build mapping: col → (start_month, start_day, end_month) from row 13
+    col_to_range: dict[int, tuple[int, int, int]] = {}
     date_range_re = re.compile(r'^(\d{1,2})/(\d{1,2})-(\d{1,2})/(\d{1,2})$')
 
     for col_idx, val in enumerate(row13_cells):
         val = val.strip()
         m = date_range_re.match(val)
         if m:
-            col_to_month[col_idx] = int(m.group(1))   # start month of range
+            col_to_range[col_idx] = (int(m.group(1)), int(m.group(2)), int(m.group(3)))
 
     result: list[tuple[date, date]] = []
 
     for week_col in week_col_indices:
-        # Find month: nearest col_to_month entry with col ≤ week_col
-        month = None
-        for c in sorted(col_to_month.keys(), reverse=True):
+        # Find nearest anchor with col ≤ week_col
+        anchor = None
+        for c in sorted(col_to_range.keys(), reverse=True):
             if c <= week_col:
-                month = col_to_month[c]
+                anchor = col_to_range[c]
                 break
-        if month is None:
-            # Fallback: first month in col_to_month
-            month = min(col_to_month.values()) if col_to_month else 1
+        if anchor is None:
+            anchor = list(col_to_range.values())[0] if col_to_range else (1, 1, 1)
+
+        start_month, start_day, end_month = anchor
+
+        # If the week's day number is less than the anchor's start day, it
+        # belongs to the end month of the range (e.g. day 4 in "7/28-8/31" → August)
+        day_val = row16_cells[week_col] if week_col < len(row16_cells) else "1"
+        raw_day = re.match(r'^(\d{1,2})', str(day_val).strip())
+        week_start_day = int(raw_day.group(1)) if raw_day else 1
+        month = end_month if week_start_day < start_day else start_month
 
         # Actual year: if month < 3 and the date range is from a CY25 file,
         # check if the week is in year+1 (e.g. Dec 2025 → Dec 25, Jan 2026 → Jan 26)
