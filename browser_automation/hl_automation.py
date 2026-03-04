@@ -310,6 +310,7 @@ def _build_etere_lines(
 
     # Apply Sunday 6-7a rule
     adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(etere_days, line.time)
+    etere_lines = []
     for range_data in ranges:
         etere_lines.append({
             "start_date": range_data["start_date"],
