@@ -378,6 +378,15 @@ def collect_user_input(order: CharmaineOrder) -> dict:
     #       move this block to the orchestrator.
     # ═══════════════════════════════════════════════════════════════
 
+    def _normalize_date(raw: str) -> str:
+        """Parse M/D/YY, M/D/YYYY, MM/DD/YY, MM/DD/YYYY → MM/DD/YYYY."""
+        for fmt in ('%m/%d/%Y', '%m/%d/%y'):
+            try:
+                return datetime.strptime(raw.strip(), fmt).strftime('%m/%d/%Y')
+            except ValueError:
+                continue
+        return raw.strip()  # Return as-is if unparseable (Etere will catch it)
+
     if order.flight_start:
         try:
             start_date = datetime.strptime(order.flight_start, '%m/%d/%Y').date()
@@ -385,14 +394,14 @@ def collect_user_input(order: CharmaineOrder) -> dict:
                 print(f"\n[DATES] ⚠ Flight start {order.flight_start} is in the past.")
                 adjust = input("  Adjust flight dates? (Y/n): ").strip().lower()
                 if adjust in ('', 'y', 'yes'):
-                    new_start = input(f"  New start date (MM/DD/YYYY): ").strip()
+                    new_start = input(f"  New start date (M/D/YY or MM/DD/YYYY): ").strip()
                     if new_start:
-                        order.flight_start = new_start
+                        order.flight_start = _normalize_date(new_start)
                     new_end = input(
-                        f"  New end date (MM/DD/YYYY) [Enter to keep {order.flight_end}]: "
+                        f"  New end date (M/D/YY or MM/DD/YYYY) [Enter to keep {order.flight_end}]: "
                     ).strip()
                     if new_end:
-                        order.flight_end = new_end
+                        order.flight_end = _normalize_date(new_end)
                     print(f"  → Flight updated: {order.flight_start} - {order.flight_end}")
         except ValueError:
             pass  # Unparseable date — skip check
