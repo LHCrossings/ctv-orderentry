@@ -57,7 +57,13 @@ ROS_SCHEDULES = {
         'days': 'M-F',
         'time': '10a-11a',
         'language': 'Japanese'
-    }
+    },
+    'Cantonese': {
+        'days': 'M-F',
+        'time': '7p-11:59p',
+        'language': 'Cantonese',
+        'language_code': 'C',
+    },
 }
 
 
