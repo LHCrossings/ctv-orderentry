@@ -438,15 +438,17 @@ def collect_user_input(order: CharmaineOrder) -> dict:
     customer_id = None
     abbreviation = ""
     separation = (15, 0, 0)
-    
+    confirmed_customer_info = None  # Set only when user confirms the DB match
+
     if customer_info:
         print(f"\n[CUSTOMER] Found in database:")
         print(f"  Name:         {customer_info['customer_name']}")
         print(f"  ID:           {customer_info['customer_id']}")
         print(f"  Abbreviation: {customer_info.get('abbreviation', 'N/A')}")
-        
+
         confirm = input("  Use this customer? (Y/n): ").strip().lower()
         if confirm in ('', 'y', 'yes'):
+            confirmed_customer_info = customer_info
             customer_id = customer_info['customer_id']
             abbreviation = customer_info.get('abbreviation', '')
             sep_c = customer_info.get('separation_customer', 15)
@@ -499,22 +501,36 @@ def collect_user_input(order: CharmaineOrder) -> dict:
     # ═══════════════════════════════════════════════════════════════
     # CONTRACT CODE & DESCRIPTION
     # ═══════════════════════════════════════════════════════════════
-    
-    # Build suggested code and description
-    if abbreviation:
-        suggested_code = f"{abbreviation} {order.campaign} {order.year}"
+
+    # Pull code/description prefix from customer record if user confirmed the match
+    code_name = confirmed_customer_info.get('code_name', '').strip() if confirmed_customer_info else ''
+    description_name = confirmed_customer_info.get('description_name', '').strip() if confirmed_customer_info else ''
+
+    if code_name:
+        # Stored prefix — prompt for optional suffix (e.g., yymm like 2603)
+        print(f"\n[CONTRACT] Code prefix: {code_name}")
+        suffix = input(f"  Suffix to append (e.g., 2603, or Enter to use prefix only): ").strip()
+        contract_code = f"{code_name} {suffix}" if suffix else code_name
     else:
-        suggested_code = f"{order.advertiser} {order.campaign} {order.year}"
-    
-    suggested_description = f"{order.advertiser} {order.campaign}"
-    
-    print(f"\n[CONTRACT] Suggested code: {suggested_code}")
-    code_input = input(f"  Contract code (or Enter for suggested): ").strip()
-    contract_code = code_input if code_input else suggested_code
-    
-    print(f"[CONTRACT] Suggested description: {suggested_description}")
-    desc_input = input(f"  Description (or Enter for suggested): ").strip()
-    contract_description = desc_input if desc_input else suggested_description
+        # No stored prefix — build default suggestion
+        if abbreviation:
+            suggested_code = f"{abbreviation} {order.campaign} {order.year}" if order.campaign else f"{abbreviation} {order.year}"
+        else:
+            suggested_code = f"{order.advertiser} {order.year}"
+        print(f"\n[CONTRACT] Suggested code: {suggested_code}")
+        code_input = input(f"  Contract code (or Enter for suggested): ").strip()
+        contract_code = code_input if code_input else suggested_code
+
+    if description_name:
+        # Stored prefix — prompt for optional suffix
+        print(f"[CONTRACT] Desc prefix: {description_name}")
+        suffix = input(f"  Suffix to append (e.g., 2603, or Enter to use prefix only): ").strip()
+        contract_description = f"{description_name} {suffix}" if suffix else description_name
+    else:
+        suggested_description = f"{order.advertiser} {order.campaign}" if order.campaign else order.advertiser
+        print(f"[CONTRACT] Suggested description: {suggested_description}")
+        desc_input = input(f"  Description (or Enter for suggested): ").strip()
+        contract_description = desc_input if desc_input else suggested_description
     
     # ═══════════════════════════════════════════════════════════════
     # CONTRACT NOTES
