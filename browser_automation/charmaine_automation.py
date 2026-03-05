@@ -390,7 +390,7 @@ def collect_user_input(order: CharmaineOrder) -> dict:
     if order.flight_start:
         try:
             start_date = datetime.strptime(order.flight_start, '%m/%d/%Y').date()
-            if start_date < datetime.today().date():
+            if start_date <= datetime.today().date():
                 print(f"\n[DATES] ⚠ Flight start {order.flight_start} is in the past.")
                 adjust = input("  Adjust flight dates? (Y/n): ").strip().lower()
                 if adjust in ('', 'y', 'yes'):
