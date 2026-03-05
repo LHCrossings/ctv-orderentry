@@ -78,6 +78,7 @@ class CharmaineOrder:
     lines: list[CharmaineLine] = field(default_factory=list)
     pdf_path: str = ""
     year: int = 0                       # Detected or inferred year
+    is_single_flight: bool = False      # True when one date-range column (no weekly breakdown)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -150,6 +151,18 @@ def parse_flight_dates(header_text: str, year: int) -> tuple[str, str]:
         end_date = _normalize_date_mmddyyyy(end_raw)
         return start_date, end_date
     
+    # Try "M/D through M/D" (no "Week of" prefix — e.g. "Flight Dates 3/4 through 3/17")
+    simple_through = re.search(
+        r'(\d{1,2}/\d{1,2}(?:/\d{4})?)\s+through\s+(\d{1,2}/\d{1,2}(?:/\d{4})?)',
+        header_text
+    )
+    if simple_through:
+        start_raw = simple_through.group(1).strip()
+        end_raw = simple_through.group(2).strip()
+        start_date = _parse_flexible_date(start_raw, year)
+        end_date = _parse_flexible_date(end_raw, year)
+        return start_date, end_date
+
     # Try "Week of {start} through {end}"
     match = re.search(
         r'[Ww]eek\s+of\s+(.+?)\s+through\s+(.+?)(?:\s*$)',
@@ -287,7 +300,7 @@ def parse_rate(rate_str: str) -> float:
     if not rate_str:
         return 0.0
     
-    cleaned = rate_str.replace('$', '').replace(',', '').strip()
+    cleaned = rate_str.replace('$', '').replace(',', '').replace(' ', '').strip()
     
     if cleaned in ['-', '', '–', '—']:
         return 0.0
@@ -346,7 +359,7 @@ def parse_charmaine_pdf(pdf_path: str) -> list[CharmaineOrder]:
             tables = page.extract_tables()
             
             # Skip pages with no meaningful content (e.g., signature audit pages)
-            if not tables or len(tables) < 2:
+            if not tables:
                 continue
             
             # Check if this page has actual order data
@@ -397,6 +410,7 @@ def _parse_page(
     campaign = ""
     duration_seconds = 30  # Default
     year = datetime.now().year
+    airtime_line = ""  # Initialized early; may be set from text or table
     
     # ── Strategy 1: Parse from free text lines (BDOG-style) ──
     
@@ -413,6 +427,13 @@ def _parse_page(
         # Explicit fields (BDOG format: "Advertiser Name Here")
         if line_stripped.startswith("Advertiser ") and not advertiser:
             advertiser = line_stripped.replace("Advertiser ", "", 1).strip()
+        elif line_stripped.startswith("Client ") and not advertiser:
+            val = line_stripped.replace("Client ", "", 1).strip()
+            # Skip signature/placeholder labels (e.g., "Client signature", "Client name")
+            if val and val.lower() not in ('signature', 'name', 'print', 'initial', 'date'):
+                advertiser = val
+        elif line_stripped.startswith("Campaign ") and not campaign:
+            campaign = line_stripped.replace("Campaign ", "", 1).strip()
         elif line_stripped.startswith("Contact ") and not contact:
             contact = line_stripped.replace("Contact ", "", 1).strip()
         elif line_stripped.startswith("Email ") and not email:
@@ -421,7 +442,17 @@ def _parse_page(
             station = line_stripped.replace("Station ", "", 1).strip()
         elif line_stripped.startswith("Languages ") and not languages:
             languages = line_stripped.replace("Languages ", "", 1).strip()
-        
+
+        # "Airtime :60seconds ..." field (new format, no "Schedule" keyword)
+        if line_stripped.lower().startswith("airtime ") and duration_seconds == 30:
+            dur_match = re.search(r':(\d+)\s*seconds?', line_stripped, re.IGNORECASE)
+            if dur_match:
+                duration_seconds = int(dur_match.group(1))
+
+        # "Flight Dates M/D through M/D" field (new format)
+        if line_stripped.lower().startswith("flight dates ") and not airtime_line:
+            airtime_line = line_stripped[len("flight dates "):].strip()
+
         # AIRTIME line: duration + flight dates (BDOG format)
         if "AIRTIME" in line_stripped and "Schedule" in line_stripped:
             dur_match = re.search(r':(\d+)\s*seconds?', line_stripped)
@@ -557,7 +588,9 @@ def _parse_page(
             continue
         
         # Check if any row has week date patterns (e.g., "23-Mar", "6-Apr", "11-May")
+        # or a single date-range column header (e.g., "3/4/2026 - 3/17/2026")
         has_week_dates = False
+        has_flight_range = False
         has_dollars = False
         for row in table:
             if not row:
@@ -567,10 +600,14 @@ def _parse_page(
                 # Week date pattern: number + dash + month abbreviation
                 if re.search(r'\d{1,2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)', cell_str):
                     has_week_dates = True
+                # Single flight date range in a column header (>2 cols = not a key-value table)
+                if (len(row) > 2 and
+                        re.search(r'\d{1,2}/\d{1,2}/\d{4}\s*-\s*\d{1,2}/\d{1,2}/\d{4}', cell_str)):
+                    has_flight_range = True
                 if '$' in cell_str:
                     has_dollars = True
-        
-        if has_week_dates and has_dollars:
+
+        if (has_week_dates or has_flight_range) and has_dollars:
             if main_table is None or len(table) > len(main_table):
                 main_table = table
     
@@ -579,17 +616,40 @@ def _parse_page(
     
     # ── Detect column layout dynamically ──
     # Some PDFs have an extra leading column (e.g., "BONUS" label in col 0)
-    # Find the offset by locating "Language" in the header row
-    
-    header_row = main_table[1] if len(main_table) > 1 else main_table[0] if main_table else []
-    
+    # Find the offset by locating "Language" in the header row.
+    #
+    # Single-flight format (e.g., Sac County DBHS): row 0 IS the header (no market row),
+    # col 0 = Language+Daypart combined, col 1 = Rate, col 2 = spot count for date range.
+    # Standard Charmaine: row 0 = market, row 1 = header, col 0 = Language, col 1 = Daypart, etc.
+
+    # Detect if row 0 is the column header row (no separate market row)
+    is_single_flight = False
+    if main_table[0] and any(
+        cell and "language" in str(cell).lower()
+        for cell in main_table[0] if cell
+    ):
+        header_row_idx = 0
+        data_start_row = 1
+        market_text = ""
+    else:
+        header_row_idx = 1
+        data_start_row = 2
+        market_text = ""
+        if main_table[0]:
+            for cell in main_table[0]:
+                if cell and len(str(cell)) > 10:
+                    market_text = str(cell)
+                    break
+
+    header_row = main_table[header_row_idx] if header_row_idx < len(main_table) else []
+
     # Detect column offset: find which column has "Language" header
     col_offset = 0
     for i, cell in enumerate(header_row):
         if cell and "language" in str(cell).lower():
             col_offset = i
             break
-    
+
     # Detect if there are Spot Type / Length columns between Daypart and week data
     # BDOG format:  Language | Daypart | Rate | Week1 | Week2 | ... | Total | Amount
     # Ntooitive:    [extra] | Language | Daypart | SpotType | Length | Week1 | ... | Total | Rate | LineTotal | NetTotal
@@ -600,21 +660,15 @@ def _parse_page(
             has_spot_type_col = True
             spot_type_offset = 2  # Spot Type + Length = 2 extra columns
             break
-    
-    # Row 0: Market header
-    market_text = ""
-    # Search across all columns in row 0 for market info
-    if main_table[0]:
-        for cell in main_table[0]:
-            if cell and len(str(cell)) > 10:
-                market_text = str(cell)
-                break
+
     market = detect_market_from_text(market_text)
-    
+    if market == "UNKNOWN":
+        market = detect_market_from_text(text)  # Full page text fallback
+
     # Find week column labels from header row
     # Weeks start after: Language, Daypart, [SpotType, Length], then week dates
     week_start_col = col_offset + 2 + spot_type_offset  # After language + daypart + optional cols
-    
+
     # Find where weeks end: look for "Total" column
     week_end_col = len(header_row)
     for i in range(week_start_col, len(header_row)):
@@ -622,24 +676,49 @@ def _parse_page(
         if "total" in cell:
             week_end_col = i
             break
-    
+
+    # Check if the "week area" contains a date-range column instead of weekly columns
+    # e.g., "3/4/2026 - 3/17/2026" → single-flight format
+    table_flight_start = ""
+    table_flight_end = ""
+    for i in range(week_start_col, min(week_end_col + 1, len(header_row))):
+        cell_str = str(header_row[i]) if header_row[i] else ""
+        date_match = re.search(
+            r'(\d{1,2}/\d{1,2}/\d{4})\s*-\s*(\d{1,2}/\d{1,2}/\d{4})', cell_str
+        )
+        if date_match:
+            is_single_flight = True
+            table_flight_start = _normalize_date_mmddyyyy(date_match.group(1))
+            table_flight_end = _normalize_date_mmddyyyy(date_match.group(2))
+            year_match = re.search(r'20\d{2}', cell_str)
+            if year_match:
+                year = int(year_match.group())
+            break
+
     week_labels: list[str] = []
     for i in range(week_start_col, week_end_col):
         cell = header_row[i]
         if cell and str(cell).strip():
             week_labels.append(str(cell).strip())
-    
-    week_columns = parse_week_column_dates(week_labels, year)
-    
+
+    if is_single_flight and table_flight_start:
+        # Single date-range column: create one week column at flight start
+        week_columns = [CharmaineWeekColumn(
+            label=week_labels[0] if week_labels else table_flight_start,
+            start_date=table_flight_start,
+        )]
+    else:
+        week_columns = parse_week_column_dates(week_labels, year)
+
     # Parse flight dates from text or header table
-    airtime_line = ""
-    for line in lines_text:
-        if "AIRTIME" in line:
-            airtime_line = line.strip()
-            break
-    
+    if not airtime_line:
+        for line in lines_text:
+            if "AIRTIME" in line:
+                airtime_line = line.strip()
+                break
+
     # Also check table rows for AIRTIME info
-    if tables:
+    if not airtime_line and tables:
         for tbl in tables:
             if tbl:
                 for row in tbl:
@@ -647,14 +726,14 @@ def _parse_page(
                         if cell and "AIRTIME" in str(cell):
                             airtime_line = str(cell).strip()
                             break
-    
+
     # Also check for "Flight schedule" format
     if not airtime_line:
         for line in lines_text:
             if "flight schedule" in line.lower():
                 airtime_line = line.strip()
                 break
-    
+
     # Try to get flight dates from header table too
     for tbl in tables:
         if tbl and len(tbl) <= 12:
@@ -662,13 +741,18 @@ def _parse_page(
                 if row and row[0] and "flight" in str(row[0]).lower():
                     airtime_line = f"{row[0]} {row[1] if len(row) > 1 and row[1] else ''}"
                     break
-    
+
     flight_start, flight_end = parse_flight_dates(airtime_line, year)
-    
+
+    # Single-flight table: use dates from the column header (they include the year)
+    if is_single_flight and table_flight_start:
+        flight_start = table_flight_start
+        flight_end = table_flight_end
+
     # ── Detect duration from table data if not found in header ──
     # Look at "Length" column in data rows (e.g., ":30", ":15")
     if duration_seconds == 30:  # Still default, try to confirm from table
-        for row_idx in range(2, min(5, len(main_table))):
+        for row_idx in range(data_start_row, min(data_start_row + 3, len(main_table))):
             row = main_table[row_idx]
             if not row:
                 continue
@@ -679,105 +763,150 @@ def _parse_page(
                 if dur_match:
                     duration_seconds = int(dur_match.group(1))
                     break
-    
+
     # ═══════════════════════════════════════════════════════════════
     # PARSE DATA ROWS
     # ═══════════════════════════════════════════════════════════════
-    
+
     parsed_lines: list[CharmaineLine] = []
-    
-    for row_idx in range(2, len(main_table)):
+
+    for row_idx in range(data_start_row, len(main_table)):
         row = main_table[row_idx]
-        
+
         if not row:
             continue
-        
-        # Get the language cell (at col_offset)
-        lang_cell = str(row[col_offset]).strip() if col_offset < len(row) and row[col_offset] else ""
-        
-        # Also check column before offset for "BONUS" marker
-        bonus_marker = ""
-        if col_offset > 0 and row[0]:
-            bonus_marker = str(row[0]).strip().upper()
-        
-        # Skip summary/total rows
-        lang_lower = lang_cell.lower()
-        if lang_lower in ['total paid', 'total bonus', 'total units', 'total bonuses',
-                          'production', 'production ( talent hosting)']:
-            continue
-        if not lang_cell and not bonus_marker:
-            continue
-        
-        # Detect bonus from multiple signals
-        daypart_col = col_offset + 1
-        daypart = str(row[daypart_col]).strip() if daypart_col < len(row) and row[daypart_col] else ""
-        
-        is_bonus = (
-            "ros bonus" in daypart.lower()
-            or "bonus" in daypart.lower()
-            or bonus_marker == "BONUS"
-            or (has_spot_type_col and (col_offset + 2) < len(row) 
-                and row[col_offset + 2] and "bonus" in str(row[col_offset + 2]).lower())
-        )
-        
-        # Language: combine bonus_marker cell with language cell if needed
-        # e.g., bonus_marker="BONUS", lang_cell="CHINESE" → language="Chinese"
-        language = lang_cell
-        if bonus_marker == "BONUS" and not lang_cell:
-            continue  # Skip if no language info at all
-        
-        # Rate: find it in the right column
-        # For Ntooitive format with Spot Type + Length, rate is in the "Promo Unit Cost" 
-        # column which is after the week columns
-        # For BDOG format, rate is at col_offset + 2
-        rate = 0.0
-        if has_spot_type_col:
-            # Rate is in the column after Total Unit # (which is at week_end_col)
-            rate_col = week_end_col + 1
-            if rate_col < len(row) and row[rate_col]:
-                rate = parse_rate(str(row[rate_col]))
+
+        if is_single_flight:
+            # ── Single-flight format ──
+            # Col 0: "Language Daypart" combined (newlines normalized)
+            # Col 1: Rate   Col 2 (week_start_col): Spot count for full date range
+            lang_daypart_raw = (
+                str(row[col_offset]).strip().replace('\n', ' ')
+                if col_offset < len(row) and row[col_offset] else ""
+            )
+            lang_lower = lang_daypart_raw.lower()
+            if not lang_daypart_raw or any(
+                lang_lower.startswith(s)
+                for s in ['total paid', 'total bonus', 'total units', 'language']
+            ):
+                continue
+
+            # First word = language, rest = daypart
+            parts = lang_daypart_raw.split(' ', 1)
+            language = parts[0].title()
+            daypart = parts[1].strip() if len(parts) > 1 else ""
+            is_bonus = daypart.upper() == "ROS"
+
+            rate = (
+                parse_rate(str(row[col_offset + 1]))
+                if col_offset + 1 < len(row) and row[col_offset + 1] else 0.0
+            )
+            spots = (
+                parse_spots(str(row[week_start_col]))
+                if week_start_col < len(row) and row[week_start_col] else 0
+            )
+
+            if spots == 0:
+                continue
+
+            # Amount: last cell containing '$'
+            total_amount = 0.0
+            for cell in reversed(row):
+                if cell and '$' in str(cell):
+                    total_amount = parse_amount(str(cell))
+                    break
+
+            parsed_lines.append(CharmaineLine(
+                language=language,
+                daypart=daypart,
+                is_bonus=is_bonus,
+                rate=rate,
+                weekly_spots=[spots],
+                total_spots=spots,
+                total_amount=total_amount,
+            ))
+
         else:
-            rate_col = col_offset + 2
-            if rate_col < len(row) and row[rate_col]:
-                rate = parse_rate(str(row[rate_col]))
-        
-        # Weekly spots
-        weekly_spots: list[int] = []
-        num_week_cols = len(week_columns) if week_columns else 0
-        for i in range(week_start_col, week_start_col + num_week_cols):
-            if i < len(row):
-                weekly_spots.append(parse_spots(str(row[i]) if row[i] else "0"))
+            # ── Standard multi-week format ──
+            lang_cell = str(row[col_offset]).strip() if col_offset < len(row) and row[col_offset] else ""
+
+            # Also check column before offset for "BONUS" marker
+            bonus_marker = ""
+            if col_offset > 0 and row[0]:
+                bonus_marker = str(row[0]).strip().upper()
+
+            # Skip summary/total rows
+            lang_lower = lang_cell.lower()
+            if lang_lower in ['total paid', 'total bonus', 'total units', 'total bonuses',
+                              'production', 'production ( talent hosting)']:
+                continue
+            if not lang_cell and not bonus_marker:
+                continue
+
+            # Detect bonus from multiple signals
+            daypart_col = col_offset + 1
+            daypart = str(row[daypart_col]).strip() if daypart_col < len(row) and row[daypart_col] else ""
+
+            is_bonus = (
+                "ros bonus" in daypart.lower()
+                or "bonus" in daypart.lower()
+                or bonus_marker == "BONUS"
+                or (has_spot_type_col and (col_offset + 2) < len(row)
+                    and row[col_offset + 2] and "bonus" in str(row[col_offset + 2]).lower())
+            )
+
+            language = lang_cell
+            if bonus_marker == "BONUS" and not lang_cell:
+                continue  # Skip if no language info at all
+
+            # Rate
+            rate = 0.0
+            if has_spot_type_col:
+                rate_col = week_end_col + 1
+                if rate_col < len(row) and row[rate_col]:
+                    rate = parse_rate(str(row[rate_col]))
             else:
-                weekly_spots.append(0)
-        
-        # Total spots (at week_end_col)
-        total_spots = 0
-        if week_end_col < len(row) and row[week_end_col]:
-            total_spots = parse_spots(str(row[week_end_col]))
-        
-        # Total amount (after rate column)
-        total_amount = 0.0
-        amount_col = (week_end_col + 2) if has_spot_type_col else (week_end_col + 1)
-        if amount_col < len(row) and row[amount_col]:
-            total_amount = parse_amount(str(row[amount_col]))
-        
-        # Skip rows with no weekly spots (summary rows that slipped through)
-        if all(s == 0 for s in weekly_spots) and total_spots == 0:
-            continue
-        
-        parsed_lines.append(CharmaineLine(
-            language=language,
-            daypart=daypart,
-            is_bonus=is_bonus,
-            rate=rate,
-            weekly_spots=weekly_spots,
-            total_spots=total_spots,
-            total_amount=total_amount,
-        ))
-    
+                rate_col = col_offset + 2
+                if rate_col < len(row) and row[rate_col]:
+                    rate = parse_rate(str(row[rate_col]))
+
+            # Weekly spots
+            weekly_spots: list[int] = []
+            num_week_cols = len(week_columns) if week_columns else 0
+            for i in range(week_start_col, week_start_col + num_week_cols):
+                if i < len(row):
+                    weekly_spots.append(parse_spots(str(row[i]) if row[i] else "0"))
+                else:
+                    weekly_spots.append(0)
+
+            # Total spots (at week_end_col)
+            total_spots = 0
+            if week_end_col < len(row) and row[week_end_col]:
+                total_spots = parse_spots(str(row[week_end_col]))
+
+            # Total amount (after rate column)
+            total_amount = 0.0
+            amount_col = (week_end_col + 2) if has_spot_type_col else (week_end_col + 1)
+            if amount_col < len(row) and row[amount_col]:
+                total_amount = parse_amount(str(row[amount_col]))
+
+            # Skip rows with no weekly spots (summary rows that slipped through)
+            if all(s == 0 for s in weekly_spots) and total_spots == 0:
+                continue
+
+            parsed_lines.append(CharmaineLine(
+                language=language,
+                daypart=daypart,
+                is_bonus=is_bonus,
+                rate=rate,
+                weekly_spots=weekly_spots,
+                total_spots=total_spots,
+                total_amount=total_amount,
+            ))
+
     if not parsed_lines:
         return None
-    
+
     return CharmaineOrder(
         advertiser=advertiser,
         contact=contact,
@@ -793,6 +922,7 @@ def _parse_page(
         lines=parsed_lines,
         pdf_path=pdf_path,
         year=year,
+        is_single_flight=is_single_flight,
     )
 
 

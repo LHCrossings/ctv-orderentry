@@ -371,7 +371,32 @@ def collect_user_input(order: CharmaineOrder) -> dict:
     print(f"  Flight:     {order.flight_start} - {order.flight_end}")
     print(f"  Lines:      {len(order.lines)} ({sum(1 for l in order.lines if not l.is_bonus)} paid + {sum(1 for l in order.lines if l.is_bonus)} bonus)")
     print("=" * 70)
-    
+
+    # ═══════════════════════════════════════════════════════════════
+    # FLIGHT DATE CHECK (start date in the past)
+    # NOTE: If this check is ever needed for other order types,
+    #       move this block to the orchestrator.
+    # ═══════════════════════════════════════════════════════════════
+
+    if order.flight_start:
+        try:
+            start_date = datetime.strptime(order.flight_start, '%m/%d/%Y').date()
+            if start_date < datetime.today().date():
+                print(f"\n[DATES] ⚠ Flight start {order.flight_start} is in the past.")
+                adjust = input("  Adjust flight dates? (Y/n): ").strip().lower()
+                if adjust in ('', 'y', 'yes'):
+                    new_start = input(f"  New start date (MM/DD/YYYY): ").strip()
+                    if new_start:
+                        order.flight_start = new_start
+                    new_end = input(
+                        f"  New end date (MM/DD/YYYY) [Enter to keep {order.flight_end}]: "
+                    ).strip()
+                    if new_end:
+                        order.flight_end = new_end
+                    print(f"  → Flight updated: {order.flight_start} - {order.flight_end}")
+        except ValueError:
+            pass  # Unparseable date — skip check
+
     # ═══════════════════════════════════════════════════════════════
     # DETECT AGENCY VS CLIENT
     # ═══════════════════════════════════════════════════════════════
@@ -848,19 +873,29 @@ def process_charmaine_order(
                 # into a single Etere line to minimize entries.
                 # Example: 9 weeks all with 3 spots → 1 line (not 9)
                 
-                week_groups = EtereClient.consolidate_weeks(
-                    line.weekly_spots, order.week_columns, order.flight_end
-                )
-                
+                if order.is_single_flight:
+                    # Single date-range order: total spots for full flight, no per-week limit
+                    week_groups = [{
+                        'start_date': order.flight_start,
+                        'end_date': order.flight_end,
+                        'spots_per_week': 0,
+                        'weeks': 1,
+                        'total_spots': line.total_spots,
+                    }] if line.total_spots > 0 else []
+                else:
+                    week_groups = EtereClient.consolidate_weeks(
+                        line.weekly_spots, order.week_columns, order.flight_end
+                    )
+
                 # Rate (only for paid lines)
                 rate = line.rate if not line.is_bonus else 0.0
-                
+
                 for group in week_groups:
                     group_start = group['start_date']
                     group_end = group['end_date']
                     group_spots_per_week = group['spots_per_week']
-                    group_total = group['total_spots']
-                    group_weeks = group['num_weeks']
+                    group_weeks = group['weeks']
+                    group_total = group.get('total_spots', group_spots_per_week * group_weeks)
                     
                     print(f"  {group_start} - {group_end} ({group_weeks} wk): {group_spots_per_week}/wk, {group_total} total")
                     

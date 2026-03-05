@@ -173,8 +173,11 @@ class PDFOrderDetector:
             or ("flight" in text_lower and "schedule" in text_lower)
         )
 
-        # Marker 3: Advertiser field
-        has_advertiser = "advertiser" in text_lower
+        # Marker 3: Advertiser or Client field
+        has_advertiser = (
+            "advertiser" in text_lower
+            or any(line.strip().lower().startswith("client ") for line in text.split('\n'))
+        )
 
         # Marker 4: Bonus lines (ROS Bonus, or just BONUS with language)
         has_bonus = (
