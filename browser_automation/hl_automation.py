@@ -139,11 +139,13 @@ def _execute_order(
         description = user_input['description']
         customer_id = user_input.get('customer_id')
         separation = user_input.get('separation') or SEPARATION_INTERVALS
+        existing_contract_number = user_input.get('existing_contract_number')
     else:
         order_code = user_input.order_code
         description = user_input.description
         customer_id = getattr(user_input, 'customer_id', None)
         separation = getattr(user_input, 'separation_intervals', None) or SEPARATION_INTERVALS
+        existing_contract_number = getattr(user_input, 'existing_contract_number', None)
 
     # Fall back to live DB lookup if customer_id not provided (e.g. standalone mode)
     if customer_id is None:
@@ -185,25 +187,33 @@ def _execute_order(
         # Normalize market
         market_code = _normalize_hl_market(estimate.market)
 
-        # ── Create contract header ──
-        contract_number = etere.create_contract_header(
-            customer_id=customer_id,
-            code=est_order_code,
-            description=description,
-            contract_start=estimate.flight_start,
-            contract_end=estimate.flight_end,
-            customer_order_ref=estimate.estimate_number,
-            notes=est_notes,
-            charge_to=CHARGE_TO,
-            invoice_header=INVOICE_HEADER,
-        )
+        # ── Create or reuse contract header ──
+        if existing_contract_number:
+            contract_number = existing_contract_number
+            print(f"\n{'!'*60}")
+            print(f"  REVISION MODE — reusing contract {contract_number}")
+            print(f"  Please delete ALL existing lines from contract {contract_number} in Etere now.")
+            input("  Press Enter when lines are cleared and you are ready to continue...")
+            print(f"{'!'*60}")
+        else:
+            contract_number = etere.create_contract_header(
+                customer_id=customer_id,
+                code=est_order_code,
+                description=description,
+                contract_start=estimate.flight_start,
+                contract_end=estimate.flight_end,
+                customer_order_ref=estimate.estimate_number,
+                notes=est_notes,
+                charge_to=CHARGE_TO,
+                invoice_header=INVOICE_HEADER,
+            )
 
-        if not contract_number:
-            print(f"[H&L] ✗ Failed to create contract header for estimate {estimate.estimate_number}")
-            all_success = False
-            continue
+            if not contract_number:
+                print(f"[H&L] ✗ Failed to create contract header for estimate {estimate.estimate_number}")
+                all_success = False
+                continue
 
-        print(f"[H&L] ✓ Contract created: {contract_number}")
+            print(f"[H&L] ✓ Contract created: {contract_number}")
 
         # ── Save customer to DB on first discovery ──
         if customer_id:
@@ -587,6 +597,50 @@ def gather_hl_inputs(pdf_path: str) -> dict | None:
     contract_code = input(f"  Code [{suggested_code}]: ").strip() or suggested_code
     description = input(f"  Description [{suggested_desc}]: ").strip() or suggested_desc
 
+    # ── Revision detection ──
+    is_revision = any(
+        'revis' in e.description.lower() or 'revis' in e.client.lower()
+        for e in estimates
+    )
+    existing_contract_number = None
+    if is_revision:
+        print(f"\n[REVISION] ⚠ Detected 'revised' in order description.")
+    revision_input = input(
+        f"  Is this a revision of an existing Etere contract? [{'Y/n' if is_revision else 'y/N'}]: "
+    ).strip().lower()
+    is_revision = revision_input != 'n' if is_revision else revision_input == 'y'
+    if is_revision:
+        existing_contract_number = input("  Enter the existing Etere contract number: ").strip()
+        if not existing_contract_number:
+            print("  No contract number entered — will create a new contract instead.")
+            existing_contract_number = None
+
+    # ── Net rate check ──
+    gross_up_factor = 1.0
+    if any(e.rates_are_net for e in estimates):
+        paid_rates = [l.rate for e in estimates for l in e.lines if not l.is_bonus()]
+        print(f"\n{'!'*70}")
+        print("  WARNING: This order's rates are labeled NET in the PDF.")
+        sample = ", ".join(f"${r:.2f}" for r in paid_rates[:5])
+        print(f"  Sample rates: {sample}")
+        gross_up = input("  Gross these rates up for agency commission? [y/N]: ").strip().lower()
+        if gross_up == 'y':
+            pct_str = input("  Agency commission % (e.g. 15): ").strip()
+            try:
+                pct = float(pct_str)
+                gross_up_factor = 1.0 / (1.0 - pct / 100.0)
+                print(f"  Gross-up factor: {gross_up_factor:.6f}  (net ÷ {1 - pct/100:.2f})")
+                # Apply to all non-bonus lines across all estimates
+                for e in estimates:
+                    for l in e.lines:
+                        if not l.is_bonus():
+                            l.rate = round(l.rate * gross_up_factor, 2)
+                grossed_sample = ", ".join(f"${l.rate:.2f}" for e in estimates for l in e.lines if not l.is_bonus())[:80]
+                print(f"  Grossed rates (first several): {grossed_sample}")
+            except ValueError:
+                print("  Invalid percentage — rates left as-is.")
+        print('!'*70)
+
     # ── Separation intervals (use agency default, no prompt needed) ──
     separation = SEPARATION_INTERVALS
     print(f"\n[BILLING] ✓ Customer share indicating agency % / Agency")
@@ -601,4 +655,5 @@ def gather_hl_inputs(pdf_path: str) -> dict | None:
         'description': description,
         'customer_id': customer_id,
         'separation': separation,
+        'existing_contract_number': existing_contract_number,
     }

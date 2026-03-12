@@ -42,6 +42,7 @@ class HLEstimate:
     buyer: str
     market: str
     lines: List[HLLine]
+    rates_are_net: bool = False  # True when column header says "Net" instead of "Rate"/"Gross"
 
 
 def parse_hl_pdf(pdf_path: str) -> List[HLEstimate]:
@@ -100,7 +101,8 @@ def parse_hl_pdf(pdf_path: str) -> List[HLEstimate]:
                             client=estimate_data['client'],
                             buyer=estimate_data['buyer'],
                             market=estimate_data['market'],
-                            lines=[]
+                            lines=[],
+                            rates_are_net=estimate_data.get('rates_are_net', False),
                         )
 
                         lines = _extract_lines_from_page(text)
@@ -166,7 +168,12 @@ def _extract_estimate_header(text: str) -> Optional[Dict[str, str]]:
         header['market'] = market_match.group(1).strip()
     else:
         header['market'] = 'Unknown'
-    
+
+    # Detect net vs gross rates from column header
+    # Gross orders say "Rate" or "Gross"; net orders say "Net" in the column header row
+    # e.g. "No Program Code STN Net Wks Spots"
+    header['rates_are_net'] = bool(re.search(r'\bNet\b', text) and not re.search(r'\bGross\b', text))
+
     return header
 
 
