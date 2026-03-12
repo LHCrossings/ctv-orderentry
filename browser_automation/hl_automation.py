@@ -140,12 +140,14 @@ def _execute_order(
         customer_id = user_input.get('customer_id')
         separation = user_input.get('separation') or SEPARATION_INTERVALS
         existing_contract_number = user_input.get('existing_contract_number')
+        gross_up_factor = user_input.get('gross_up_factor', 1.0)
     else:
         order_code = user_input.order_code
         description = user_input.description
         customer_id = getattr(user_input, 'customer_id', None)
         separation = getattr(user_input, 'separation_intervals', None) or SEPARATION_INTERVALS
         existing_contract_number = getattr(user_input, 'existing_contract_number', None)
+        gross_up_factor = getattr(user_input, 'gross_up_factor', 1.0)
 
     # Fall back to live DB lookup if customer_id not provided (e.g. standalone mode)
     if customer_id is None:
@@ -163,6 +165,14 @@ def _execute_order(
         return False
 
     print(f"[PARSE] ✓ Found {len(estimates)} estimate(s)")
+
+    # Apply gross-up if rates were net (factor comes from gather_hl_inputs)
+    if gross_up_factor != 1.0:
+        for est in estimates:
+            for line in est.lines:
+                if not line.is_bonus():
+                    line.rate = round(line.rate * gross_up_factor, 2)
+        print(f"[PARSE] ✓ Gross-up applied (factor {gross_up_factor:.6f})")
 
     all_success = True
 
@@ -656,4 +666,5 @@ def gather_hl_inputs(pdf_path: str) -> dict | None:
         'customer_id': customer_id,
         'separation': separation,
         'existing_contract_number': existing_contract_number,
+        'gross_up_factor': gross_up_factor,
     }
