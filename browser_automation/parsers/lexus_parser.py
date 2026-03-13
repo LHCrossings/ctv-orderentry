@@ -919,6 +919,9 @@ def _extract_days_from_program(program: str) -> str:
     """
     from day_utils import tokenize, to_etere
     first_token = program.strip().split()[0] if program.strip() else ""
+    # Melissa uses "Ss" to mean Saturday+Sunday — normalise before tokenizing
+    if re.match(r'^[Ss][Ss]$', first_token):
+        first_token = "Sa-Su"
     if first_token and tokenize(first_token):
         return to_etere(first_token)
     return "M-F"   # default
