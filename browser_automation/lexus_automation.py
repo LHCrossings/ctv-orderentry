@@ -678,8 +678,15 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
                 print(f"    • {msg}")
             print(f"  Lines will be entered as-is — adjust day pattern to M-Su in Etere if needed.")
 
-        broadcast_week_start = date.today() - timedelta(days=date.today().weekday())
-        has_past_spots = any(ln["start_date"] < broadcast_week_start for ln in q_lines)
+        # Check raw (unfiltered) parse data: if this quarter had weeks that
+        # already ended before the current broadcast week, the contract is on air.
+        bws = date.today() - timedelta(days=date.today().weekday())
+        has_past_spots = any(
+            wk_end < bws
+            for raw_line in result.lines
+            for (wk_start, wk_end) in raw_line.week_date_ranges
+            if _date_to_quarter(wk_start) == qkey
+        )
 
         if has_past_spots:
             # Spots on or before tomorrow means this quarter is already on air —
