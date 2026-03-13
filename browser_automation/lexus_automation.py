@@ -678,7 +678,8 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
                 print(f"    • {msg}")
             print(f"  Lines will be entered as-is — adjust day pattern to M-Su in Etere if needed.")
 
-        has_past_spots = any(ln["start_date"] <= tomorrow for ln in q_lines)
+        broadcast_week_start = date.today() - timedelta(days=date.today().weekday())
+        has_past_spots = any(ln["start_date"] < broadcast_week_start for ln in q_lines)
 
         if has_past_spots:
             # Spots on or before tomorrow means this quarter is already on air —
