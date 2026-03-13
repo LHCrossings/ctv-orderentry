@@ -1309,7 +1309,7 @@ class OrderProcessingService:
 
             success = process_lexus_order(
                 driver=shared_session.driver,
-                xlsx_path=str(order.pdf_path),
+                file_path=str(order.pdf_path),
                 user_input=order.order_input
             )
 
