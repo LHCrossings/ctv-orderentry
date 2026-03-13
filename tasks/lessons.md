@@ -1,5 +1,16 @@
 # Lessons Learned
 
+## Melissa Uses "Ss" to Mean Saturday+Sunday
+
+**Session:** Lexus EST 210 (2026-03-13)
+
+**What happened:** Program name `Ss 12N-1P Vt Drama` had `Ss` as the day token. The tokenizer
+matched `S` (Saturday) and dropped the trailing `s`, producing Saturday-only instead of Sa-Su.
+
+**Rule:** `Ss` (mixed case, exactly 2 characters) = Melissa's shorthand for Saturday+Sunday.
+Normalise to `Sa-Su` before tokenizing in `_extract_days_from_program`. Check for similar
+shorthand variants if new notation appears.
+
 ## 12N (Noon) Must Be Handled in All Time Extraction Regexes
 
 **Session:** Lexus EST 207 / EST 210 (2026-03-13)
