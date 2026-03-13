@@ -154,7 +154,27 @@ def gather_upfront_inputs(order: SagentOrder) -> dict:
     print(f"{'='*70}")
     print("✓ All inputs gathered - ready for automation")
     print(f"{'='*70}\n")
-    
+
+    # Silently upsert customer to DB
+    try:
+        import sys as _sys
+        from pathlib import Path as _Path
+        _src = _Path(__file__).parent.parent / "src"
+        if str(_src) not in _sys.path:
+            _sys.path.insert(0, str(_src))
+        from data_access.repositories.customer_repository import CustomerRepository as _CR
+        from domain.entities import Customer as _Cust
+        from domain.enums import OrderType as _OT
+        _repo = _CR(_Path(__file__).parent.parent / "data" / "customers.db")
+        _repo.save(_Cust(
+            customer_id=str(SAGENT_CUSTOMER_ID),
+            customer_name="CAL FIRE",
+            order_type=_OT.SAGENT,
+            billing_type="agency",
+        ))
+    except Exception:
+        pass
+
     return {
         'contract_code': contract_code,
         'description': description,

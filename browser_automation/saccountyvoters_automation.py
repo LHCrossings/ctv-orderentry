@@ -258,6 +258,28 @@ def gather_saccountyvoters_inputs(pdf_path: str) -> Optional[dict]:
             ).strip().lower()
             if save_yn == 'y':
                 _save_new_customer(str(customer_id), order.client)
+
+    # Silently upsert customer to DB
+    if customer_id is not None:
+        try:
+            import sys as _sys
+            from pathlib import Path as _Path
+            _src = _Path(__file__).parent.parent / "src"
+            if str(_src) not in _sys.path:
+                _sys.path.insert(0, str(_src))
+            from data_access.repositories.customer_repository import CustomerRepository as _CR
+            from domain.entities import Customer as _Cust
+            from domain.enums import OrderType as _OT
+            _repo = _CR(_Path(__file__).parent.parent / "data" / "customers.db")
+            _repo.save(_Cust(
+                customer_id=str(customer_id),
+                customer_name=order.client,
+                order_type=_OT.SACCOUNTYVOTERS,
+                billing_type="client",
+            ))
+        except Exception:
+            pass
+
     print()
 
     # ── Phase 1 inputs ────────────────────────────────────────────────────────
