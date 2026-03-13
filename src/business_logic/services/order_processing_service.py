@@ -75,6 +75,7 @@ class OrderProcessingService:
         OrderType.CHARMAINE: "_process_charmaine_order",
         OrderType.ADMERASIA: "_process_admerasia_order",
         OrderType.HL:        "_process_hl_order",
+        OrderType.LEXUS:     "_process_lexus_order",
         OrderType.OPAD:      "_process_opad_order",
         OrderType.IGRAPHIX:  "_process_igraphix_order",
         OrderType.IMPACT:    "_process_impact_order",
@@ -1267,6 +1268,65 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.HL,
+                error_message=error_detail
+            )
+
+    def _process_lexus_order(
+        self,
+        order: Order,
+        shared_session: any
+    ) -> ProcessingResult:
+        """
+        Process Lexus / IW Group order using lexus_automation.
+        """
+        try:
+            from browser_automation.lexus_automation import process_lexus_order
+
+            print(f"\n{'='*70}")
+            print("PROCESSING LEXUS / IW GROUP ORDER")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            print(f"{'='*70}\n")
+
+            if shared_session is None:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.LEXUS,
+                    error_message="Browser session required for Lexus orders"
+                )
+
+            if not order.order_input:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.LEXUS,
+                    error_message="Order inputs not collected"
+                )
+
+            print("[SESSION] ✓ Using shared browser session")
+
+            success = process_lexus_order(
+                driver=shared_session.driver,
+                xlsx_path=str(order.pdf_path),
+                user_input=order.order_input
+            )
+
+            return ProcessingResult(
+                success=success,
+                contracts=[],
+                order_type=OrderType.LEXUS,
+                error_message=None if success else "Processing failed"
+            )
+
+        except Exception as e:
+            import traceback
+            error_detail = f"Lexus processing error: {str(e)}\n{traceback.format_exc()}"
+            print(f"\n✗ Lexus processing failed: {e}")
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.LEXUS,
                 error_message=error_detail
             )
 
