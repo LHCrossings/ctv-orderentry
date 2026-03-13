@@ -321,6 +321,29 @@ def gather_imprenta_inputs(file_path: str) -> Optional[dict]:
     except ValueError:
         customer_id = None
 
+    # Silently upsert customer to DB so future orders pre-populate
+    if customer_id is not None:
+        try:
+            import sys as _sys
+            _src = Path(__file__).parent.parent / "src"
+            if str(_src) not in _sys.path:
+                _sys.path.insert(0, str(_src))
+            from data_access.repositories.customer_repository import CustomerRepository
+            from domain.entities import Customer
+            from domain.enums import OrderType as _OT
+            _repo = CustomerRepository(Path(__file__).parent.parent / "data" / "customers.db")
+            _repo.save(Customer(
+                customer_id=str(customer_id),
+                customer_name=result.client,
+                order_type=_OT.IMPRENTA,
+                billing_type="agency",
+                code_name=result.client,
+                description_name=result.client,
+                default_market=result.market,
+            ))
+        except Exception:
+            pass  # DB write is best-effort — never block order entry
+
     print("\n" + "=" * 70)
     print("INPUT COLLECTION COMPLETE")
     print("=" * 70)
