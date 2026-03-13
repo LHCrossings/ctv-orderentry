@@ -679,8 +679,11 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
                 print(f"    • {msg}")
             print(f"  Lines will be entered as-is — adjust day pattern to M-Su in Etere if needed.")
 
-        flow_input = input("\n  New contract or add to existing? [N=new / A=add]: ").strip().upper()
-        if flow_input == 'A':
+        flow_input = input("\n  New contract or add to existing? [N=new / A=add / S=skip]: ").strip().upper()
+        if flow_input == 'S':
+            print(f"  [SKIPPED] {quarter_label}")
+            continue
+        elif flow_input == 'A':
             contract_number = input("  Existing contract number: ").strip()
             if not contract_number:
                 print("  [CANCELLED] No contract number provided")
