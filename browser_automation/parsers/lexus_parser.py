@@ -297,11 +297,7 @@ def melissa_check(lines: list[LexusLine]) -> list[str]:
 
             if not valid_dates:
                 warnings.append(
-                    f"{prefix}: {spots} spots but NO valid placement days for '{line.days}'"
-                )
-            elif spots > len(valid_dates):
-                warnings.append(
-                    f"{prefix}: {spots} spots > {len(valid_dates)} available days"
+                    f"{prefix}: {spots} spots ordered but NO valid placement days for '{line.days}' — unplaceable"
                 )
 
     return warnings
@@ -909,34 +905,22 @@ def _extract_days_from_program(program: str) -> str:
     """
     Extract the day pattern from an IW Group program name.
 
+    Uses day_utils tokenizer — recognises any day abbreviation variant
+    without a hardcoded pattern list.
+
+    The day prefix is always the first whitespace-delimited token.
     Examples:
         "M-Sun 8p-9P Shanghai TV..." → "M-Su"
         "Mon-Friday 10p-11:30p..."   → "M-F"
         "Sat 9-1030p..."             → "Sa"
         "Sat-Sun 1030p-12m..."       → "Sa-Su"
         "M-SAT 6A-7A NEWS"           → "M-Sa"
-        "M-SU 8P-12M PRIMEBREAK"     → "M-Su"
+        "SA-SU HINDI VARIETY 1-4P"   → "Sa-Su"
     """
-    prog_upper = program.strip().upper().lstrip()
-
-    # Multi-word day patterns (must check before single-word)
-    day_map = [
-        (r'^MON[\-\s]+FRI(DAY)?', "M-F"),
-        (r'^M[\-\s]+SUN', "M-Su"),
-        (r'^M[\-\s]+SU\b', "M-Su"),
-        (r'^M[\-\s]+SAT', "M-Sa"),
-        (r'^M[\-\s]+F\b', "M-F"),
-        (r'^M[\-\s]+TH\b', "M-R"),
-        (r'^SAT[\-\s]+SUN', "Sa-Su"),
-        (r'^SAT[\-\s]+SU\b', "Sa-Su"),
-        (r'^TU[\-\s]+SU\b', "T-Su"),
-        (r'^SAT\b', "Sa"),
-        (r'^SUN\b', "Su"),
-        (r'^M\b', "M-F"),         # bare "M" at start — assume M-F
-    ]
-    for pattern, result in day_map:
-        if re.match(pattern, prog_upper):
-            return result
+    from day_utils import tokenize, to_etere
+    first_token = program.strip().split()[0] if program.strip() else ""
+    if first_token and tokenize(first_token):
+        return to_etere(first_token)
     return "M-F"   # default
 
 

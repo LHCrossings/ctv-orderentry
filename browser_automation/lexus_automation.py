@@ -135,13 +135,52 @@ def _broadcast_month_to_quarter(broadcast_month: str) -> tuple[str, str]:
 
 
 # ───────────────────────────────────────────────────────────────────────────
+# HELPERS
+# ───────────────────────────────────────────────────────────────────────────
+
+def _date_to_quarter(d: date) -> tuple[str, str]:
+    """Return (quarter_code, quarter_label) for a given date.
+    e.g. 2026-03-16 → ("2601", "26Q1")
+    """
+    yr2 = str(d.year)[2:]
+    if d.month <= 3:
+        return f"{yr2}01", f"{yr2}Q1"
+    elif d.month <= 6:
+        return f"{yr2}04", f"{yr2}Q2"
+    elif d.month <= 9:
+        return f"{yr2}07", f"{yr2}Q3"
+    else:
+        return f"{yr2}10", f"{yr2}Q4"
+
+
+def _window_minutes(time_str: str) -> int:
+    """Return duration of the time window in minutes. Returns 0 on parse failure."""
+    def _to_mins(t: str) -> int:
+        import re
+        m = re.match(r'^(\d{1,2})(?::(\d{2}))?([AP]M)$', t.strip().upper())
+        if not m:
+            return -1
+        hour, minute, period = int(m.group(1)), int(m.group(2) or 0), m.group(3)
+        if period == 'PM' and hour != 12:
+            hour += 12
+        elif period == 'AM' and hour == 12:
+            hour = 0
+        return hour * 60 + minute
+
+    parts = time_str.split('-')
+    if len(parts) < 2:
+        return 0
+    start, end = _to_mins(parts[0]), _to_mins(parts[-1])
+    return (end - start) if start >= 0 and end > start else 0
+
+
+# ───────────────────────────────────────────────────────────────────────────
 # ETERE LINE BUILDING
 # ───────────────────────────────────────────────────────────────────────────
 
 def _build_etere_lines(
     parse_result: LexusParseResult,
     include_bns: bool,
-    spot_duration: int,
     cutoff_date: Optional[date] = None,
 ) -> list[dict]:
     """
@@ -168,6 +207,10 @@ def _build_etere_lines(
         # Per-week data: (start, end, spots)
         week_data = list(zip(line.week_date_ranges, line.spots_by_week))
 
+        # Drop weeks that ended before the current broadcast week (historical data)
+        broadcast_week_start = date.today() - timedelta(days=date.today().weekday())
+        week_data = [(wk, sp) for wk, sp in week_data if wk[1] >= broadcast_week_start]
+
         # Filter by cutoff_date (revision mode)
         if cutoff_date:
             filtered = []
@@ -188,8 +231,8 @@ def _build_etere_lines(
         current_group: list[tuple[tuple[date, date], int]] = []
 
         for (wk_start, wk_end), spots in week_data:
-            if spots <= 0 and not line.is_bonus:
-                # Zero-spot week breaks a group
+            if spots <= 0:
+                # Zero-spot week breaks a group (paid and bonus alike)
                 if current_group:
                     groups.append(current_group)
                     current_group = []
@@ -231,6 +274,16 @@ def _build_etere_lines(
             desc_suffix = " BNS" if line.is_bonus else ""
             description = f"{line.program} {line.time}{desc_suffix}".strip()
 
+            # Per-line separation
+            if line.is_bonus:
+                line_separation = (15, 0, 0)
+            elif max_daily_run <= 1:
+                line_separation = LEXUS_SEPARATION
+            else:
+                window = _window_minutes(line.time)
+                customer_sep = min(LEXUS_SEPARATION[0], window // max_daily_run) if window > 0 else LEXUS_SEPARATION[0]
+                line_separation = (customer_sep, LEXUS_SEPARATION[1], LEXUS_SEPARATION[2])
+
             etere_lines.append({
                 "days": line.days,
                 "time": line.time,
@@ -243,7 +296,8 @@ def _build_etere_lines(
                 "description": description,
                 "is_bonus": line.is_bonus,
                 "spot_code": spot_code,
-                "duration": spot_duration,
+                "duration": line.duration,
+                "separation": line_separation,
             })
 
     return etere_lines
@@ -531,104 +585,99 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
         warnings = []
         print("\n[MELISSA CHECK] (skipped — no lines parsed)")
 
-    # ── Quarter code from broadcast month ────────────────────────────────
-    quarter_code, quarter_label = _broadcast_month_to_quarter(result.broadcast_month)
-
-    # ── Default contract code and description ────────────────────────────
-    default_code = f"IW Lexus {estimate} {market} {quarter_code}"
-    default_desc = f"Lexus {market} {language} Est {estimate} {quarter_label}"
-
-    # ── New order vs revision ────────────────────────────────────────────
-    contract_number: Optional[str] = None
+    # ── First entry date ─────────────────────────────────────────────────
+    # Melissa sends orders late. Spots before this date won't be entered;
+    # lines that straddle it have their start date trimmed to this date.
+    _tmr = date.today() + timedelta(days=1)
+    suggested = f"{_tmr.month}/{_tmr.day}/{_tmr.year}"
     cutoff_date: Optional[date] = None
-    separation = LEXUS_SEPARATION
-    include_bns = False
-
-    if order_flow == "new":
-        # Separation (with override)
-        print(f"\n[SEPARATION] Default: Customer={separation[0]}, Event={separation[1]}, Order={separation[2]}")
-        sep_input = input("  Press Enter to confirm, or type new values (e.g. 25,0,0): ").strip()
-        if sep_input:
-            try:
-                parts = [int(x.strip()) for x in sep_input.split(',')]
-                if len(parts) == 3:
-                    separation = tuple(parts)
-            except ValueError:
-                pass
-
-        # Spot duration
-        spot_dur_input = input("\n  Spot duration in seconds [30]: ").strip() or "30"
+    cutoff_str = input(
+        f"\n  First date to enter (lines before this are skipped/trimmed) [{suggested}]: "
+    ).strip() or suggested
+    for fmt in ("%m/%d/%Y", "%m/%d/%y", "%m-%d-%Y"):
         try:
-            spot_duration = int(spot_dur_input)
+            cutoff_date = datetime.strptime(cutoff_str, fmt).date()
+            print(f"  ✓ First entry date: {cutoff_date}")
+            break
         except ValueError:
-            spot_duration = 30
-
-        # BNS bonus spots
-        bns_input = input("\n  Include BNS bonus spots? [y/N]: ").strip().lower()
-        include_bns = bns_input == 'y'
-
+            pass
     else:
-        # Revision: no new contract header
-        spot_dur_input = input("\n  Spot duration in seconds [30]: ").strip() or "30"
-        try:
-            spot_duration = int(spot_dur_input)
-        except ValueError:
-            spot_duration = 30
+        print("  ⚠ Couldn't parse date — no cutoff applied")
 
-        contract_number = input("\n  Existing contract number: ").strip()
-        if not contract_number:
-            print("[CANCELLED] No contract number provided")
-            return None
+    # ── Build all Etere lines ────────────────────────────────────────────
+    all_etere_lines = _build_etere_lines(parse_result=result, include_bns=True, cutoff_date=cutoff_date)
 
-        cutoff_str = input(
-            "  First NEW date (spots before this date already entered, YYYY-MM-DD): "
-        ).strip()
-        if cutoff_str:
-            try:
-                cutoff_date = datetime.strptime(cutoff_str, "%Y-%m-%d").date()
-                print(f"  ✓ Cutoff: {cutoff_date}")
-            except ValueError:
-                print("  ⚠ Invalid date format — no cutoff applied")
-
-        # BNS
-        bns_input = input("\n  Include BNS bonus spots? [y/N]: ").strip().lower()
-        include_bns = bns_input == 'y'
-
-    # ── Contract code / description prompts ──────────────────────────────
-    print(f"\n[CONTRACT]")
-    contract_code = input(f"  Code [{default_code}]: ").strip() or default_code
-    contract_description = input(f"  Description [{default_desc}]: ").strip() or default_desc
-
-    # ── Build Etere lines ────────────────────────────────────────────────
-    etere_lines = _build_etere_lines(
-        parse_result=result,
-        include_bns=include_bns,
-        spot_duration=spot_duration,
-        cutoff_date=cutoff_date,
-    )
-
-    if not etere_lines:
-        print("\n[LINES] ✗ No valid lines to enter (check cutoff date or spots counts)")
+    if not all_etere_lines:
+        print("\n[LINES] ✗ No valid lines found")
         return None
 
-    print(f"\n[LINES] ✓ {len(etere_lines)} Etere line(s) ready")
-    for i, ln in enumerate(etere_lines, 1):
-        bns_flag = " [BNS]" if ln["is_bonus"] else ""
-        print(
-            f"  Line {i}: {ln['days']} {ln['time']}"
-            f" | {ln['start_date']} - {ln['end_date']}"
-            f" | {ln['total_spots']}x ({ln['spots_per_week']}/wk)"
-            f" @ ${ln['rate']:.2f}{bns_flag}"
-        )
+    # ── Group lines by broadcast quarter ─────────────────────────────────
+    from collections import defaultdict
+    quarter_buckets: dict[tuple, list] = defaultdict(list)
+    for ln in all_etere_lines:
+        qkey = _date_to_quarter(ln["start_date"])   # (quarter_code, quarter_label)
+        quarter_buckets[qkey].append(ln)
 
-    # Flight dates (union of all line ranges)
-    all_starts = [ln["start_date"] for ln in etere_lines]
-    all_ends = [ln["end_date"] for ln in etere_lines]
-    flight_start = min(all_starts)
-    flight_end = max(all_ends)
+    tomorrow = date.today() + timedelta(days=1)
+    contracts = []
+
+    for qkey in sorted(quarter_buckets.keys()):
+        quarter_code, quarter_label = qkey
+        q_lines = quarter_buckets[qkey]
+        q_flight_start = min(ln["start_date"] for ln in q_lines)
+        q_flight_end   = max(ln["end_date"]   for ln in q_lines)
+
+        default_code = f"IW Lexus {estimate} {market} {quarter_code}"
+        default_desc = f"Lexus {market} {language} Est {estimate} {quarter_label}"
+
+        print(f"\n{'─' * 60}")
+        print(f"[{quarter_label}] {len(q_lines)} line(s)  |  {q_flight_start} – {q_flight_end}")
+        for ln in q_lines:
+            bns = " [BNS]" if ln["is_bonus"] else ""
+            print(
+                f"  {ln['days']} {ln['time']}"
+                f" | {ln['start_date']} - {ln['end_date']}"
+                f" | {ln['total_spots']}x @ ${ln['rate']:.2f}{bns}"
+            )
+
+        has_past_spots = any(ln["start_date"] <= tomorrow for ln in q_lines)
+
+        if has_past_spots:
+            print(f"\n  ⚠  Some spots start on/before tomorrow ({tomorrow})")
+            flow_input = input("  New contract or add to existing? [N=new / A=add]: ").strip().upper()
+            if flow_input == 'A':
+                contract_number = input("  Existing contract number: ").strip()
+                if not contract_number:
+                    print("  [CANCELLED] No contract number provided")
+                    return None
+                order_flow = "add"
+                contract_code = default_code
+                contract_description = default_desc
+            else:
+                order_flow = "new"
+                contract_number = None
+                contract_code = input(f"  Code [{default_code}]: ").strip() or default_code
+                contract_description = input(f"  Description [{default_desc}]: ").strip() or default_desc
+        else:
+            order_flow = "new"
+            contract_number = None
+            contract_code = input(f"\n  Code [{default_code}]: ").strip() or default_code
+            contract_description = input(f"  Description [{default_desc}]: ").strip() or default_desc
+
+        contracts.append({
+            "quarter_code": quarter_code,
+            "quarter_label": quarter_label,
+            "order_flow": order_flow,
+            "contract_number": contract_number,
+            "contract_code": contract_code,
+            "contract_description": contract_description,
+            "etere_lines": q_lines,
+            "flight_start": q_flight_start,
+            "flight_end": q_flight_end,
+        })
 
     print("\n" + "=" * 70)
-    print("INPUT COLLECTION COMPLETE — Ready for automation")
+    print(f"INPUT COLLECTION COMPLETE — {len(contracts)} contract(s) to process")
     print("=" * 70)
 
     return {
@@ -637,18 +686,8 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
         "market": market,
         "language": language,
         "estimate": estimate,
-        "order_flow": order_flow,
-        "contract_number": contract_number,       # None for new orders
-        "cutoff_date": cutoff_date,
-        "contract_code": contract_code,
-        "contract_description": contract_description,
-        "separation": separation,
-        "etere_lines": etere_lines,
-        "spot_duration": spot_duration,
-        "include_bns": include_bns,
         "billing": LEXUS_BILLING,
-        "flight_start": flight_start,
-        "flight_end": flight_end,
+        "contracts": contracts,
         "melissa_warnings": warnings,
     }
 
@@ -676,12 +715,8 @@ def process_lexus_order(driver, file_path: str, user_input: dict = None) -> bool
         if not user_input:
             return False
 
-    etere_lines = user_input["etere_lines"]
-    order_flow = user_input["order_flow"]
     billing = user_input["billing"]
-    separation = user_input["separation"]
-    market = user_input["market"]
-    spot_duration = user_input["spot_duration"]
+    market  = user_input["market"]
 
     print("\n" + "=" * 70)
     print("STARTING BROWSER AUTOMATION — LEXUS / IW GROUP")
@@ -691,86 +726,86 @@ def process_lexus_order(driver, file_path: str, user_input: dict = None) -> bool
     all_success = True
 
     try:
-        # ── Create or retrieve contract ──────────────────────────────────
-        if order_flow == "new":
-            flight_start = user_input["flight_start"]
-            flight_end = user_input["flight_end"]
+        for contract_job in user_input["contracts"]:
+            order_flow    = contract_job["order_flow"]
+            etere_lines   = contract_job["etere_lines"]
+            quarter_label = contract_job["quarter_label"]
 
-            contract_number = etere.create_contract_header(
-                customer_id=int(user_input["customer_id"]),
-                code=user_input["contract_code"],
-                description=user_input["contract_description"],
-                contract_start=flight_start.strftime('%m/%d/%Y'),
-                contract_end=flight_end.strftime('%m/%d/%Y'),
-                charge_to=billing.get_charge_to(),
-                invoice_header=billing.get_invoice_header(),
-            )
+            print(f"\n{'═' * 60}")
+            print(f"[{quarter_label}] {len(etere_lines)} line(s) — {order_flow.upper()}")
 
-            if not contract_number:
-                print("[CONTRACT] ✗ Failed to create contract")
-                return False
+            # ── Create or retrieve contract ───────────────────────────
+            if order_flow == "new":
+                contract_number = etere.create_contract_header(
+                    customer_id=int(user_input["customer_id"]),
+                    code=contract_job["contract_code"],
+                    description=contract_job["contract_description"],
+                    contract_start=contract_job["flight_start"].strftime('%m/%d/%Y'),
+                    contract_end=contract_job["flight_end"].strftime('%m/%d/%Y'),
+                    charge_to=billing.get_charge_to(),
+                    invoice_header=billing.get_invoice_header(),
+                )
+                if not contract_number:
+                    print(f"[{quarter_label}] ✗ Failed to create contract")
+                    all_success = False
+                    continue
+                print(f"[{quarter_label}] ✓ Created contract: {contract_number}")
+            else:
+                contract_number = contract_job["contract_number"]
+                print(f"[{quarter_label}] Adding to existing contract: {contract_number}")
+                try:
+                    etere._extend_contract_end_date(
+                        contract_number, contract_job["flight_end"].strftime('%m/%d/%Y')
+                    )
+                except AttributeError:
+                    pass
 
-            print(f"[CONTRACT] ✓ Created: {contract_number}")
+            # ── Add contract lines ────────────────────────────────────
+            for line_idx, line_spec in enumerate(etere_lines, 1):
+                days     = line_spec["days"]
+                time_str = line_spec["time"]
+                days, _  = EtereClient.check_sunday_6_7a_rule(days, time_str)
+                time_from, time_to = EtereClient.parse_time_range(time_str)
+                start_date_str = line_spec["start_date"].strftime('%m/%d/%Y')
+                end_date_str   = line_spec["end_date"].strftime('%m/%d/%Y')
 
-        else:
-            # Revision: use existing contract number
-            contract_number = user_input["contract_number"]
-            print(f"[CONTRACT] Using existing contract: {contract_number}")
+                bns_flag = " [BNS]" if line_spec["is_bonus"] else ""
+                print(f"\n  [LINE {line_idx}] {days} {time_str}{bns_flag}")
+                print(f"    {start_date_str} – {end_date_str}")
+                print(
+                    f"    {line_spec['total_spots']}x total, "
+                    f"{line_spec['spots_per_week']}/wk, "
+                    f"{line_spec['max_daily_run']}x/day @ ${line_spec['rate']:.2f}  "
+                    f"sep={line_spec['separation']}"
+                )
 
-            # Extend contract end date to cover new lines if needed
-            flight_end = user_input["flight_end"]
-            try:
-                etere._extend_contract_end_date(contract_number, flight_end.strftime('%m/%d/%Y'))
-            except AttributeError:
-                pass  # Method may not exist; non-fatal
+                is_priority = (
+                    not line_spec.get("is_bonus", False)
+                    and line_spec["separation"] == (15, 0, 0)
+                )
+                success = etere.add_contract_line(
+                    contract_number=contract_number,
+                    market=market,
+                    start_date=start_date_str,
+                    end_date=end_date_str,
+                    days=days,
+                    time_from=time_from,
+                    time_to=time_to,
+                    description=line_spec["description"],
+                    spot_code=line_spec["spot_code"],
+                    duration_seconds=line_spec["duration"],
+                    total_spots=line_spec["total_spots"],
+                    spots_per_week=line_spec["spots_per_week"],
+                    max_daily_run=line_spec["max_daily_run"],
+                    rate=float(line_spec["rate"]),
+                    separation_intervals=line_spec["separation"],
+                    is_priority=is_priority,
+                )
+                if not success:
+                    print(f"    ✗ Failed")
+                    all_success = False
 
-        # ── Add contract lines ───────────────────────────────────────────
-        for line_idx, line_spec in enumerate(etere_lines, 1):
-            days = line_spec["days"]
-            time_str = line_spec["time"]
-
-            # Apply Sunday 6-7a rule (EtereClient standard)
-            days, _ = EtereClient.check_sunday_6_7a_rule(days, time_str)
-
-            # Parse time range
-            time_from, time_to = EtereClient.parse_time_range(time_str)
-
-            start_date_str = line_spec["start_date"].strftime('%m/%d/%Y')
-            end_date_str = line_spec["end_date"].strftime('%m/%d/%Y')
-
-            bns_flag = " [BNS]" if line_spec["is_bonus"] else ""
-            print(f"\n[LINE {line_idx}] {days} {time_str}{bns_flag}")
-            print(f"  {start_date_str} - {end_date_str}")
-            print(
-                f"  {line_spec['total_spots']}x total, "
-                f"{line_spec['spots_per_week']}/wk, "
-                f"{line_spec['max_daily_run']}x/day @ ${line_spec['rate']:.2f}"
-            )
-
-            success = etere.add_contract_line(
-                contract_number=contract_number,
-                market=market,
-                start_date=start_date_str,
-                end_date=end_date_str,
-                days=days,
-                time_from=time_from,
-                time_to=time_to,
-                description=line_spec["description"],
-                spot_code=line_spec["spot_code"],
-                duration_seconds=spot_duration,
-                total_spots=line_spec["total_spots"],
-                spots_per_week=line_spec["spots_per_week"],
-                max_daily_run=line_spec["max_daily_run"],
-                rate=float(line_spec["rate"]),
-                separation_intervals=separation,
-            )
-
-            if not success:
-                print(f"  [LINE {line_idx}] ✗ Failed")
-                all_success = False
-
-        print(f"\n[COMPLETE] Contract {contract_number} — "
-              f"{len(etere_lines)} line(s) processed")
+            print(f"\n[{quarter_label}] ✓ Contract {contract_number} — {len(etere_lines)} line(s) complete")
 
     except Exception as e:
         print(f"\n[ERROR] Browser automation failed: {e}")

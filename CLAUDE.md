@@ -1,3 +1,6 @@
+@.claude/documents/data-reference.md
+@tasks/lessons.md
+
 ## Workflow Orchestration
 
 ### 1. Plan Mode Default

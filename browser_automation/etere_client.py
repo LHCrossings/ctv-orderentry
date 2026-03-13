@@ -60,6 +60,17 @@ class EtereClient:
         "BNS": 10,
         "Bonus Spot": 10
     }
+
+    # Scheduling type radio button values (selectedSchedulingType)
+    SCHEDULING_TYPES = {
+        "Priority":     "0",  # Front-loads spots into earliest available breaks
+        "Rotation":     "1",  # Default — distributes spots evenly across breaks
+        "Optimization": "2",  # Etere optimizer chooses placement
+        "Fixed time":   "3",  # Spot airs at a specific fixed time (requires time value)
+        "Top":          "4",  # Billboard — airs first in break (is_billboard)
+        "Bottom":       "5",  # Airs last in break
+        "TopAndBottom": "6",  # Bookend — airs both first and last (is_bookend)
+    }
     
     def __init__(self, driver: webdriver.Chrome):
         """Initialize with existing Selenium WebDriver."""
@@ -823,6 +834,9 @@ class EtereClient:
         separation_intervals: Tuple[int, int, int] = (15, 0, 0),  # DEFAULT: Customer=15, Event=0, Order=0
         is_bookend: bool = False,
         is_billboard: bool = False,
+        is_priority: bool = False,
+        is_optimization: bool = False,
+        is_bottom: bool = False,
         other_markets: Optional[List[str]] = None,  # WorldLink CMP multi-market replication
     ) -> bool:
         """
@@ -957,9 +971,21 @@ class EtereClient:
             ))
             spot_code_select.select_by_value(str(spot_code))
             
-            # SCHEDULING TYPE - Bookend (Top and Bottom) or Billboard (Top)
+            # SCHEDULING TYPE - Priority, Bookend (Top and Bottom), or Billboard (Top)
             # Must be set here on the GENERAL tab, before navigating to OPTIONS tab
-            if is_bookend:
+            if is_priority and not is_bookend and not is_billboard:
+                print(f"[LINE] Setting priority scheduling...")
+                try:
+                    radio = self.driver.find_element(
+                        By.CSS_SELECTOR, 'input[name="selectedSchedulingType"][value="0"]'
+                    )
+                    parent = radio.find_element(By.XPATH, "..")
+                    parent.click()
+                    time.sleep(0.5)
+                    print(f"[LINE] ✓ Priority set")
+                except Exception as e:
+                    print(f"[LINE] ⚠ Priority: {e}")
+            elif is_bookend:
                 print(f"[LINE] Setting bookend scheduling (Top and Bottom)...")
                 try:
                     radio = self.driver.find_element(
@@ -983,7 +1009,31 @@ class EtereClient:
                     print(f"[LINE] ✓ Billboard set")
                 except Exception as e:
                     print(f"[LINE] ⚠ Billboard: {e}")
-            
+            elif is_optimization:
+                print(f"[LINE] Setting optimization scheduling...")
+                try:
+                    radio = self.driver.find_element(
+                        By.CSS_SELECTOR, 'input[name="selectedSchedulingType"][value="2"]'
+                    )
+                    parent = radio.find_element(By.XPATH, "..")
+                    parent.click()
+                    time.sleep(0.5)
+                    print(f"[LINE] ✓ Optimization set")
+                except Exception as e:
+                    print(f"[LINE] ⚠ Optimization: {e}")
+            elif is_bottom:
+                print(f"[LINE] Setting bottom scheduling...")
+                try:
+                    radio = self.driver.find_element(
+                        By.CSS_SELECTOR, 'input[name="selectedSchedulingType"][value="5"]'
+                    )
+                    parent = radio.find_element(By.XPATH, "..")
+                    parent.click()
+                    time.sleep(0.5)
+                    print(f"[LINE] ✓ Bottom set")
+                except Exception as e:
+                    print(f"[LINE] ⚠ Bottom: {e}")
+
             # Duration
             duration_formatted = self._format_duration(duration_seconds)
             duration_field = self.driver.find_element(By.ID, "contractLineGeneralDuration")
