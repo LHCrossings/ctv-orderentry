@@ -271,8 +271,9 @@ def _build_etere_lines(
 
             rate = 0.0 if line.is_bonus else line.rate_gross
             spot_code = 10 if line.is_bonus else 2
-            desc_suffix = " BNS" if line.is_bonus else ""
-            description = f"{line.program.title()}{desc_suffix}".strip()
+            desc_prefix = "BNS " if line.is_bonus else ""
+            program_tc = re.sub(r'\bRos\b', 'ROS', line.program.title())
+            description = f"{desc_prefix}{program_tc}".strip()
 
             # Per-line separation
             if line.is_bonus:
