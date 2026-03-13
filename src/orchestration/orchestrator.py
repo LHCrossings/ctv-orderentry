@@ -256,6 +256,12 @@ class ApplicationOrchestrator:
                     print(f"\n[ERROR] Could not import {display_name} automation: {e}")
                     print("[INFO] Falling back to runtime input gathering")
                     orders_with_input.append(order)
+                except Exception as e:
+                    import traceback
+                    print(f"\n[ERROR] Input gathering failed for {display_name}: {e}")
+                    traceback.print_exc()
+                    print("[INFO] Skipping order due to gather error")
+                    continue
                 continue
 
             # All other types: generic input collector (TCAA, MISFIT, OPAD, etc.)

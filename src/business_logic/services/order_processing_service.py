@@ -1365,6 +1365,7 @@ class OrderProcessingService:
                 )
 
             print("[SESSION] ✓ Using shared browser session")
+            print(f"[DEBUG] order.order_input type: {type(order.order_input).__name__}")
 
             success = process_imprenta_order(
                 driver=shared_session.driver,
