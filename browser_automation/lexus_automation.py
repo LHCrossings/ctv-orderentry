@@ -524,6 +524,7 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
     # ── Parse filename ───────────────────────────────────────────────────
     meta = parse_lexus_filename(file_path.name)
     order_flow = meta["order_type"]     # "new" or "revision"
+    is_revision = (order_flow == "revision")
     estimate = meta["estimate"]
     market = meta["market"]
 
@@ -665,8 +666,25 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
             order_flow = "add"
             contract_code = default_code
             contract_description = default_desc
+        elif is_revision:
+            # Revision file — future quarter may have been entered from a prior revision.
+            print(f"\n  ℹ  Revision file — this quarter may already be in Etere")
+            flow_input = input("  New contract or add to existing? [N=new / A=add]: ").strip().upper()
+            if flow_input == 'A':
+                contract_number = input("  Existing contract number: ").strip()
+                if not contract_number:
+                    print("  [CANCELLED] No contract number provided")
+                    return None
+                order_flow = "add"
+                contract_code = default_code
+                contract_description = default_desc
+            else:
+                order_flow = "new"
+                contract_number = None
+                contract_code = input(f"  Code [{default_code}]: ").strip() or default_code
+                contract_description = input(f"  Description [{default_desc}]: ").strip() or default_desc
         else:
-            # All spots are in the future — new contract.
+            # All spots in the future, no revision — definitely a new contract.
             print(f"\n  ✓ All spots in the future — new contract")
             order_flow = "new"
             contract_number = None
