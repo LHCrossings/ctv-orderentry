@@ -151,6 +151,7 @@ class OrderProcessingService:
                     OrderType.CHARMAINE, OrderType.ADMERASIA,
                     OrderType.OPAD, OrderType.HL, OrderType.IGRAPHIX,
                     OrderType.IMPACT, OrderType.RPM,
+                    OrderType.LEXUS,
                     OrderType.SACCOUNTYVOTERS,
                 ]
                 for order in orders
