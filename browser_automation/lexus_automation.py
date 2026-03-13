@@ -213,24 +213,12 @@ def _build_etere_lines(
 
         # Filter by cutoff_date (revision mode)
         if cutoff_date:
-            from parsers.lexus_parser import _parse_day_codes as _pdc
-            _WD_CODE_EARLY = {0: 'M', 1: 'T', 2: 'W', 3: 'R', 4: 'F', 5: 'S', 6: 'U'}
-            pattern_codes = set(_pdc(line.days))
             filtered = []
             for (wk_start, wk_end), spots in week_data:
                 if wk_end < cutoff_date:
                     continue  # entirely before cutoff — skip
                 if wk_start < cutoff_date:
                     wk_start = cutoff_date  # straddles cutoff — trim start
-                    # Snap forward to first valid day for this line's pattern
-                    if pattern_codes:
-                        while wk_start <= wk_end and _WD_CODE_EARLY[wk_start.weekday()] not in pattern_codes:
-                            wk_start += timedelta(days=1)
-                        if wk_start > wk_end:
-                            print(f"[LINE] ⚠ No valid {line.days} days in partial week ending {wk_end} — skipped")
-                            continue
-                        if wk_start > cutoff_date:
-                            print(f"[LINE] ℹ Start adjusted {cutoff_date} → {wk_start} (first valid {line.days} day)")
                 filtered.append(((wk_start, wk_end), spots))
             week_data = filtered
 
@@ -308,6 +296,17 @@ def _build_etere_lines(
                 customer_sep = min(LEXUS_SEPARATION[0], max(0, window // max_daily_run - 5)) if window > 0 else LEXUS_SEPARATION[0]
                 line_separation = (customer_sep, LEXUS_SEPARATION[1], LEXUS_SEPARATION[2])
 
+            # Flag when cutoff trimming left the start date on an invalid pattern day
+            _WD_CODE = {0: 'M', 1: 'T', 2: 'W', 3: 'R', 4: 'F', 5: 'S', 6: 'U'}
+            start_day_code = _WD_CODE[group_start.weekday()]
+            pattern_codes_check = set(_parse_day_codes(line.days))
+            start_day_warning = (
+                cutoff_date is not None
+                and group_start == cutoff_date
+                and pattern_codes_check
+                and start_day_code not in pattern_codes_check
+            )
+
             etere_lines.append({
                 "days": line.days,
                 "time": line.time,
@@ -322,6 +321,7 @@ def _build_etere_lines(
                 "spot_code": spot_code,
                 "duration": line.duration,
                 "separation": line_separation,
+                "start_day_warning": start_day_warning,
             })
 
     return etere_lines
@@ -657,13 +657,30 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
 
         print(f"\n{'─' * 60}")
         print(f"[{quarter_label}] {len(q_lines)} line(s)  |  {q_flight_start} – {q_flight_end}")
-        for ln in q_lines:
+        start_day_issues = []
+        for i, ln in enumerate(q_lines, 1):
             bns = " [BNS]" if ln["is_bonus"] else ""
+            warn = " ⚠ START DAY MISMATCH" if ln.get("start_day_warning") else ""
             print(
-                f"  {ln['days']} {ln['time']}"
+                f"  {i}. {ln['days']} {ln['time']}"
                 f" | {ln['start_date']} - {ln['end_date']}"
-                f" | {ln['total_spots']}x @ ${ln['rate']:.2f}{bns}"
+                f" | {ln['total_spots']}x @ ${ln['rate']:.2f}{bns}{warn}"
             )
+            if ln.get("start_day_warning"):
+                start_day_issues.append(
+                    f"Line {i}: start date {ln['start_date']} "
+                    f"({ln['start_date'].strftime('%A')}) is not a valid {ln['days']} day"
+                )
+
+        if start_day_issues:
+            print(f"\n  ⚠ START DATE WARNING(S) — cutoff trimming left these lines starting on an invalid day:")
+            for msg in start_day_issues:
+                print(f"    • {msg}")
+            print(f"  Please adjust the start dates manually before continuing.")
+            confirm = input("  Continue anyway? [y/N]: ").strip().lower()
+            if confirm != 'y':
+                print("\n[CANCELLED] Aborted by user — fix start dates and re-run")
+                return None
 
         has_past_spots = any(ln["start_date"] <= tomorrow for ln in q_lines)
 
