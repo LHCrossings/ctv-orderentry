@@ -410,7 +410,7 @@ def _parse_duration(text: str) -> Optional[int]:
 def _looks_like_time(text: str) -> bool:
     """Check if text looks like a time range, e.g. '6A-10A', '2-3p', '330-4p'."""
     # Both ends have suffix: "6A-10A", "11:30A-12P"
-    if re.match(r'\d+[AaPp]M?[-–]\d+[AaPp]M?', text):
+    if re.match(r'\d+[AaPpNn]M?[-–]\d+[AaPpNn]M?', text):
         return True
     # Suffix only at end (IW Group format): "2-3p", "330-4p", "1-130p"
     if re.match(r'^\d{1,4}(?::\d{2})?[-–]\d{1,4}(?::\d{2})?[AaPp][Mm]?$', text):
@@ -941,7 +941,7 @@ def _extract_time_from_program(program: str) -> str:
     prog = program.strip()
 
     def _normalise_suffix(s: str) -> str:
-        """Convert 'a','p','am','pm','m' to uppercase 2-char AM/PM."""
+        """Convert 'a','p','am','pm','m','n' to uppercase 2-char AM/PM."""
         s = s.upper()
         if s in ('A', 'AM'):
             return 'AM'
@@ -949,6 +949,8 @@ def _extract_time_from_program(program: str) -> str:
             return 'PM'
         if s in ('M', 'MN', 'MIDNIGHT'):
             return 'AM'   # midnight = 12 AM next day
+        if s in ('N', 'NOON'):
+            return 'PM'   # noon = 12 PM
         return s
 
     def _fmt_h(h_str: str) -> str:
@@ -966,7 +968,7 @@ def _extract_time_from_program(program: str) -> str:
     # Captures: start_h (1-4 digits, optional :mm), optional start_sfx ([AaPpMm]+),
     #           separator, end_h (1-4 digits, optional :mm), required end_sfx
     m = re.search(
-        r'(\d{1,4}(?::\d{2})?)\s*([AaPpMm]+)?\s*[-–]\s*(\d{1,4}(?::\d{2})?)\s*([AaPpMm]+)',
+        r'(\d{1,4}(?::\d{2})?)\s*([AaPpMmNn]+)?\s*[-–]\s*(\d{1,4}(?::\d{2})?)\s*([AaPpMmNn]+)',
         prog
     )
     if m:
