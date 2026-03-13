@@ -212,13 +212,13 @@ class TestProcessorDispatch:
         return OrderProcessingService({}, temp_orders_dir)
 
     def test_dispatch_dict_covers_all_automated_types(self, service):
-        """_PROCESSOR_DISPATCH must contain exactly the 15 dedicated-handler types."""
+        """_PROCESSOR_DISPATCH must contain exactly the 16 dedicated-handler types."""
         expected = {
             OrderType.TCAA, OrderType.MISFIT, OrderType.DAVISELEN,
             OrderType.SAGENT, OrderType.GALEFORCE, OrderType.TIMEADVERTISING,
             OrderType.CHARMAINE, OrderType.ADMERASIA, OrderType.HL, OrderType.OPAD,
             OrderType.IGRAPHIX, OrderType.IMPACT, OrderType.RPM,
-            OrderType.WORLDLINK, OrderType.SACCOUNTYVOTERS,
+            OrderType.WORLDLINK, OrderType.SACCOUNTYVOTERS, OrderType.LEXUS,
         }
         assert set(service._PROCESSOR_DISPATCH.keys()) == expected
 
