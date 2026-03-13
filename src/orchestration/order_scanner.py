@@ -160,11 +160,18 @@ class OrderScanner:
                 continue
 
         # Find JPG / PNG / XLSX files (detected by filename, not content)
-        # Include both lowercase and uppercase extensions for Linux compatibility
+        # Include both lowercase and uppercase extensions for Linux compatibility.
+        # Deduplicate via set — case-insensitive filesystems (WSL2/NTFS) return
+        # the same file for both *.xlsx and *.XLSX globs.
+        # Skip ~$ Excel temp/lock files.
         image_xlsx_files: list[Path] = []
+        seen: set[Path] = set()
         for pattern in ("*.jpg", "*.JPG", "*.jpeg", "*.JPEG",
                          "*.png", "*.PNG", "*.xlsx", "*.XLSX"):
-            image_xlsx_files.extend(self._incoming_dir.glob(pattern))
+            for p in self._incoming_dir.glob(pattern):
+                if p not in seen and not p.name.startswith("~$"):
+                    seen.add(p)
+                    image_xlsx_files.append(p)
         image_xlsx_files.sort()
 
         for file_path in image_xlsx_files:
