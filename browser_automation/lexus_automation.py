@@ -213,12 +213,24 @@ def _build_etere_lines(
 
         # Filter by cutoff_date (revision mode)
         if cutoff_date:
+            from parsers.lexus_parser import _parse_day_codes as _pdc
+            _WD_CODE_EARLY = {0: 'M', 1: 'T', 2: 'W', 3: 'R', 4: 'F', 5: 'S', 6: 'U'}
+            pattern_codes = set(_pdc(line.days))
             filtered = []
             for (wk_start, wk_end), spots in week_data:
                 if wk_end < cutoff_date:
                     continue  # entirely before cutoff — skip
                 if wk_start < cutoff_date:
                     wk_start = cutoff_date  # straddles cutoff — trim start
+                    # Snap forward to first valid day for this line's pattern
+                    if pattern_codes:
+                        while wk_start <= wk_end and _WD_CODE_EARLY[wk_start.weekday()] not in pattern_codes:
+                            wk_start += timedelta(days=1)
+                        if wk_start > wk_end:
+                            print(f"[LINE] ⚠ No valid {line.days} days in partial week ending {wk_end} — skipped")
+                            continue
+                        if wk_start > cutoff_date:
+                            print(f"[LINE] ℹ Start adjusted {cutoff_date} → {wk_start} (first valid {line.days} day)")
                 filtered.append(((wk_start, wk_end), spots))
             week_data = filtered
 
