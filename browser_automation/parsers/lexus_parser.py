@@ -214,7 +214,7 @@ def resolve_week_dates(
                 start = date(year, hdr_month, hdr_day)
             except ValueError:
                 start = date(year, month, hdr_day)
-            end = min(start + timedelta(days=6), month_end)
+            end = min(start + timedelta(days=(6 - start.weekday()) % 7), month_end)
             result.append((start, end))
             continue
 
@@ -227,7 +227,7 @@ def resolve_week_dates(
             except ValueError:
                 result.append((month_end, month_end))
                 continue
-            end = min(start + timedelta(days=6), month_end)
+            end = min(start + timedelta(days=(6 - start.weekday()) % 7), month_end)
             result.append((start, end))
             continue
 
@@ -609,7 +609,7 @@ def _build_week_dates_from_month_positions(
                 start_day = int(plain_m.group(1))
                 start = date(year, month_num, start_day)
                 max_day = calendar.monthrange(year, month_num)[1]
-                end = min(start + timedelta(days=6), date(year, month_num, max_day))
+                end = min(start + timedelta(days=(6 - start.weekday()) % 7), date(year, month_num, max_day))
             else:
                 start = end = date(year, month_num, 1)
         except ValueError:
@@ -673,7 +673,7 @@ def _build_week_dates_from_date_range_row(
                 start_day = int(plain_m.group(1))
                 wk_start = date(year, start_month, start_day)
                 max_day = calendar.monthrange(year, start_month)[1]
-                wk_end = min(wk_start + timedelta(days=6),
+                wk_end = min(wk_start + timedelta(days=(6 - wk_start.weekday()) % 7),
                              date(year, start_month, max_day))
             else:
                 wk_start = wk_end = date(year, start_month, 1)
@@ -1060,7 +1060,7 @@ def _build_week_date_ranges_from_headers(
                 start_day = int(plain_m.group(1))
                 start = date(year, month, start_day)
                 max_day = calendar.monthrange(year, month)[1]
-                end = min(start + timedelta(days=6), date(year, month, max_day))
+                end = min(start + timedelta(days=(6 - start.weekday()) % 7), date(year, month, max_day))
             else:
                 # Not parseable — use a placeholder
                 start = end = date(year, month, 1)

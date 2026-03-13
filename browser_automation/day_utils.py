@@ -34,9 +34,9 @@ _ALIAS_MAP: dict[str, str] = {
     # Friday
     'Friday': 'F', 'Fri': 'F', 'Fr': 'F', 'F': 'F',
     # Saturday  →  S  (displayed as Sa)
-    'Saturday': 'S', 'Sat': 'S', 'Sa': 'S', 'S': 'S',
+    'Saturday': 'S', 'Sat': 'S', 'SAT': 'S', 'Sa': 'S', 'S': 'S',
     # Sunday    →  U  (displayed as Su)
-    'Sunday': 'U', 'Sun': 'U', 'Su': 'U', 'U': 'U',
+    'Sunday': 'U', 'Sun': 'U', 'SUN': 'U', 'Su': 'U', 'U': 'U',
 }
 
 # Pre-sorted longest-first for greedy matching

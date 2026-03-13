@@ -262,8 +262,19 @@ def _build_etere_lines(
             total_spots = sum(g[1] for g in group)
 
             # max_daily_run = ceil(spots_per_week / active_day_count)
+            # For partial weeks, count only the days that actually fall in the range.
             from parsers.lexus_parser import _parse_day_codes
-            active_days = len(_parse_day_codes(line.days))
+            day_span = (group_end - group_start).days + 1
+            if day_span >= 7:
+                active_days = len(_parse_day_codes(line.days))
+            else:
+                # Map Python weekday() → Etere single-letter codes
+                _WD_CODE = {0: 'M', 1: 'T', 2: 'W', 3: 'R', 4: 'F', 5: 'S', 6: 'U'}
+                pattern_codes = set(_parse_day_codes(line.days))
+                active_days = sum(
+                    1 for i in range(day_span)
+                    if _WD_CODE[(group_start + timedelta(days=i)).weekday()] in pattern_codes
+                ) or 1  # floor at 1 to avoid div/0
             if active_days > 0 and spots_per_week > 0:
                 max_daily_run = math.ceil(spots_per_week / active_days)
             else:
