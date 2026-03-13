@@ -1,5 +1,22 @@
 # Lessons Learned
 
+## 12N (Noon) Must Be Handled in All Time Extraction Regexes
+
+**Session:** Lexus EST 207 / EST 210 (2026-03-13)
+
+**What happened:** Program names like `M-Su 1130A-12N VT Variety` and `M-Su 12N-1P Vt Drama`
+were entered as `06:00–23:59` (the empty-time fallback). The time extraction regex only
+included `[AaPpMm]` as valid suffix characters — `N` (noon) was not in the set, so `12N`
+failed to match entirely.
+
+**Rule:** ANY time extraction regex that accepts `A`, `P`, or `M` as a suffix MUST also accept
+`N`/`n` for noon. The `_normalise_suffix` function must map `N`/`NOON` → `'PM'` (noon = 12 PM).
+Be **extremely careful** with `11:30A-12N`, `12N-1P`, and any range ending or starting at noon.
+The silent fallback to `06:00–23:59` means the error will pass validation with no warning.
+
+**Applies to:** `lexus_parser.py`, `imprenta_parser.py`, and any future parser with embedded
+time extraction logic.
+
 ## Tests Are Not Authoritative for String Constants
 
 **Session:** Market code mismatch fix (2026-02-19)
