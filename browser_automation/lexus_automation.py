@@ -297,9 +297,10 @@ def _build_etere_lines(
                 line_separation = (customer_sep, LEXUS_SEPARATION[1], LEXUS_SEPARATION[2])
 
             # Flag when cutoff trimming left the start date on an invalid pattern day
+            from day_utils import tokenize as _tokenize_days
             _WD_CODE = {0: 'M', 1: 'T', 2: 'W', 3: 'R', 4: 'F', 5: 'S', 6: 'U'}
             start_day_code = _WD_CODE[group_start.weekday()]
-            pattern_codes_check = set(_parse_day_codes(line.days))
+            pattern_codes_check = set(_tokenize_days(line.days))
             start_day_warning = (
                 cutoff_date is not None
                 and group_start == cutoff_date
@@ -678,20 +679,8 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
                 print(f"    • {msg}")
             print(f"  Lines will be entered as-is — adjust day pattern to M-Su in Etere if needed.")
 
-        # Check raw (unfiltered) parse data: if this quarter had weeks that
-        # already ended before the current broadcast week, the contract is on air.
-        bws = date.today() - timedelta(days=date.today().weekday())
-        has_past_spots = any(
-            wk_end < bws
-            for raw_line in result.lines
-            for (wk_start, wk_end) in raw_line.week_date_ranges
-            if _date_to_quarter(wk_start) == qkey
-        )
-
-        if has_past_spots:
-            # Spots on or before tomorrow means this quarter is already on air —
-            # the contract was created in a prior entry. Auto-add to existing.
-            print(f"\n  ✓ Spots already on air — adding to existing contract")
+        flow_input = input("\n  New contract or add to existing? [N=new / A=add]: ").strip().upper()
+        if flow_input == 'A':
             contract_number = input("  Existing contract number: ").strip()
             if not contract_number:
                 print("  [CANCELLED] No contract number provided")
@@ -699,26 +688,7 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
             order_flow = "add"
             contract_code = default_code
             contract_description = default_desc
-        elif is_revision:
-            # Revision file — future quarter may have been entered from a prior revision.
-            print(f"\n  ℹ  Revision file — this quarter may already be in Etere")
-            flow_input = input("  New contract or add to existing? [N=new / A=add]: ").strip().upper()
-            if flow_input == 'A':
-                contract_number = input("  Existing contract number: ").strip()
-                if not contract_number:
-                    print("  [CANCELLED] No contract number provided")
-                    return None
-                order_flow = "add"
-                contract_code = default_code
-                contract_description = default_desc
-            else:
-                order_flow = "new"
-                contract_number = None
-                contract_code = input(f"  Code [{default_code}]: ").strip() or default_code
-                contract_description = input(f"  Description [{default_desc}]: ").strip() or default_desc
         else:
-            # All spots in the future, no revision — definitely a new contract.
-            print(f"\n  ✓ All spots in the future — new contract")
             order_flow = "new"
             contract_number = None
             contract_code = input(f"  Code [{default_code}]: ").strip() or default_code
