@@ -713,6 +713,27 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
     print(f"INPUT COLLECTION COMPLETE — {len(contracts)} contract(s) to process")
     print("=" * 70)
 
+    # Silently upsert customer to DB so future orders pre-populate
+    try:
+        _src = Path(__file__).parent.parent / "src"
+        if str(_src) not in sys.path:
+            sys.path.insert(0, str(_src))
+        from data_access.repositories.customer_repository import CustomerRepository
+        from domain.entities import Customer
+        from domain.enums import OrderType as _OT
+        _repo = CustomerRepository(Path(__file__).parent.parent / "data" / "customers.db")
+        _repo.save(Customer(
+            customer_id=str(LEXUS_CUSTOMER_ID),
+            customer_name="Lexus",
+            order_type=_OT.LEXUS,
+            billing_type="agency",
+            code_name="IW Lexus",
+            description_name="Lexus",
+            default_market=market,
+        ))
+    except Exception:
+        pass  # DB write is best-effort — never block order entry
+
     return {
         "order": result,
         "customer_id": LEXUS_CUSTOMER_ID,
