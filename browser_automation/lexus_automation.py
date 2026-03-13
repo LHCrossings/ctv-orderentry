@@ -676,11 +676,7 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
             print(f"\n  ⚠ START DATE WARNING(S) — cutoff trimming left these lines starting on an invalid day:")
             for msg in start_day_issues:
                 print(f"    • {msg}")
-            print(f"  Please adjust the start dates manually before continuing.")
-            confirm = input("  Continue anyway? [y/N]: ").strip().lower()
-            if confirm != 'y':
-                print("\n[CANCELLED] Aborted by user — fix start dates and re-run")
-                return None
+            print(f"  Lines will be entered as-is — adjust day pattern to M-Su in Etere if needed.")
 
         has_past_spots = any(ln["start_date"] <= tomorrow for ln in q_lines)
 
