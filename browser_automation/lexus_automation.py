@@ -744,6 +744,7 @@ def process_lexus_order(driver, file_path: str, user_input: dict = None) -> bool
                     contract_end=contract_job["flight_end"].strftime('%m/%d/%Y'),
                     charge_to=billing.get_charge_to(),
                     invoice_header=billing.get_invoice_header(),
+                    customer_order_ref=f"Est {user_input['estimate']}",
                 )
                 if not contract_number:
                     print(f"[{quarter_label}] ✗ Failed to create contract")
