@@ -705,6 +705,8 @@ def detect_from_filename(filename: str) -> OrderType:
     name_upper = filename.upper()
     if "LEXUS" in name_upper:
         return OrderType.LEXUS
+    # Imprenta XLSX files don't carry "Imprenta" in the filename —
+    # fall through to content-based detection in the scanner.
     return OrderType.UNKNOWN
 
 

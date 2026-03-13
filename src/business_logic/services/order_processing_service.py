@@ -76,6 +76,7 @@ class OrderProcessingService:
         OrderType.ADMERASIA: "_process_admerasia_order",
         OrderType.HL:        "_process_hl_order",
         OrderType.LEXUS:     "_process_lexus_order",
+        OrderType.IMPRENTA:  "_process_imprenta_order",
         OrderType.OPAD:      "_process_opad_order",
         OrderType.IGRAPHIX:  "_process_igraphix_order",
         OrderType.IMPACT:    "_process_impact_order",
@@ -152,6 +153,7 @@ class OrderProcessingService:
                     OrderType.OPAD, OrderType.HL, OrderType.IGRAPHIX,
                     OrderType.IMPACT, OrderType.RPM,
                     OrderType.LEXUS,
+                    OrderType.IMPRENTA,
                     OrderType.SACCOUNTYVOTERS,
                 ]
                 for order in orders
@@ -1328,6 +1330,63 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.LEXUS,
+                error_message=error_detail
+            )
+
+    def _process_imprenta_order(
+        self,
+        order: Order,
+        shared_session: any
+    ) -> ProcessingResult:
+        """Process Imprenta / PG&E order using imprenta_automation."""
+        try:
+            from browser_automation.imprenta_automation import process_imprenta_order
+
+            print(f"\n{'='*70}")
+            print("PROCESSING IMPRENTA ORDER")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            print(f"{'='*70}\n")
+
+            if shared_session is None:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.IMPRENTA,
+                    error_message="Browser session required for Imprenta orders"
+                )
+
+            if not order.order_input:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.IMPRENTA,
+                    error_message="Order inputs not collected"
+                )
+
+            print("[SESSION] ✓ Using shared browser session")
+
+            success = process_imprenta_order(
+                driver=shared_session.driver,
+                file_path=str(order.pdf_path),
+                user_input=order.order_input
+            )
+
+            return ProcessingResult(
+                success=success,
+                contracts=[],
+                order_type=OrderType.IMPRENTA,
+                error_message=None if success else "Processing failed"
+            )
+
+        except Exception as e:
+            import traceback
+            error_detail = f"Imprenta processing error: {str(e)}\n{traceback.format_exc()}"
+            print(f"\n✗ Imprenta processing failed: {e}")
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.IMPRENTA,
                 error_message=error_detail
             )
 

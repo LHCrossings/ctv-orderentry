@@ -18,6 +18,27 @@ from domain.entities import Order
 from domain.enums import OrderStatus, OrderType
 
 
+def _detect_xlsx_content(file_path: Path) -> OrderType:
+    """
+    Peek inside an XLSX file (first 10 rows) to detect order type by content.
+    Used when filename-based detection returns UNKNOWN.
+    """
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(str(file_path), read_only=True, data_only=True)
+        ws = wb.active
+        for row in ws.iter_rows(max_row=10):
+            for cell in row:
+                v = str(cell.value or "").upper()
+                if "IMPRENTA" in v:
+                    wb.close()
+                    return OrderType.IMPRENTA
+        wb.close()
+    except Exception:
+        pass
+    return OrderType.UNKNOWN
+
+
 class OrderScanner:
     """
     Scans directories for order PDF files.
@@ -177,13 +198,20 @@ class OrderScanner:
         for file_path in image_xlsx_files:
             try:
                 order_type = detect_from_filename(file_path.name)
+
+                # For XLSX files not identified by filename, peek inside for agency markers
+                if order_type == OrderType.UNKNOWN and file_path.suffix.lower() == ".xlsx":
+                    order_type = _detect_xlsx_content(file_path)
+
                 if order_type == OrderType.UNKNOWN:
                     continue
 
-                # Extract customer name hint from filename (best-effort)
+                # Extract customer name hint
                 name_upper = file_path.stem.upper()
                 if "LEXUS" in name_upper:
                     customer_name = "Lexus"
+                elif order_type == OrderType.IMPRENTA:
+                    customer_name = "PG&E"
                 else:
                     customer_name = "Unknown"
 

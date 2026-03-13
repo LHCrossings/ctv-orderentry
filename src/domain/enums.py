@@ -26,6 +26,7 @@ class OrderType(Enum):
     IGRAPHIX = "igraphix"
     ADMERASIA = "admerasia"
     LEXUS = "lexus"
+    IMPRENTA = "imprenta"
     SAGENT = "sagent"
     GALEFORCE = "galeforce"
     TIMEADVERTISING = "timeadvertising"
