@@ -282,7 +282,7 @@ def _build_etere_lines(
                 line_separation = LEXUS_SEPARATION
             else:
                 window = _window_minutes(line.time)
-                customer_sep = min(LEXUS_SEPARATION[0], window // max_daily_run) if window > 0 else LEXUS_SEPARATION[0]
+                customer_sep = min(LEXUS_SEPARATION[0], max(0, window // max_daily_run - 5)) if window > 0 else LEXUS_SEPARATION[0]
                 line_separation = (customer_sep, LEXUS_SEPARATION[1], LEXUS_SEPARATION[2])
 
             etere_lines.append({
@@ -783,7 +783,7 @@ def process_lexus_order(driver, file_path: str, user_input: dict = None) -> bool
 
                 is_priority = (
                     not line_spec.get("is_bonus", False)
-                    and line_spec["separation"] == (15, 0, 0)
+                    and line_spec["separation"][0] < LEXUS_SEPARATION[0]
                 )
                 success = etere.add_contract_line(
                     contract_number=contract_number,
