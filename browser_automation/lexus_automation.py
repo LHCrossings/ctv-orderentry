@@ -781,12 +781,14 @@ def process_lexus_order(driver, file_path: str, user_input: dict = None) -> bool
             else:
                 contract_number = contract_job["contract_number"]
                 print(f"[{quarter_label}] Adding to existing contract: {contract_number}")
-                try:
-                    etere._extend_contract_end_date(
-                        contract_number, contract_job["flight_end"].strftime('%m/%d/%Y')
-                    )
-                except AttributeError:
-                    pass
+                lines_for_extend = [
+                    {"end_date": ln["end_date"].strftime('%m/%d/%Y')}
+                    for ln in etere_lines
+                ]
+                if not etere.extend_contract_end_date(contract_number, lines_for_extend):
+                    print(f"[{quarter_label}] ✗ Failed to extend contract end date")
+                    all_success = False
+                    continue
 
             # ── Add contract lines ────────────────────────────────────
             for line_idx, line_spec in enumerate(etere_lines, 1):
