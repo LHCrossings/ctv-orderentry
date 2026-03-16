@@ -361,24 +361,36 @@ def gather_imprenta_inputs(file_path: str) -> Optional[dict]:
         contract_code        = input(f"  Code [{default_code}]: ").strip() or default_code
         contract_description = input(f"  Description [{default_desc}]: ").strip() or default_desc
 
-    # ── Customer ID ───────────────────────────────────────────────────────
-    cid_input = input("\n  Etere customer ID (blank = manual search in browser): ").strip()
+    # ── Customer ID — look up saved value, then prompt ────────────────────
+    import sys as _sys
+    _src = Path(__file__).parent.parent / "src"
+    if str(_src) not in _sys.path:
+        _sys.path.insert(0, str(_src))
+    from data_access.repositories.customer_repository import CustomerRepository
+    from domain.entities import Customer
+    from domain.enums import OrderType as _OT
+
+    _repo = CustomerRepository(Path(__file__).parent.parent / "data" / "customers.db")
+    _existing = _repo.find_by_name_any_type(result.client)
+    _saved_id = next(
+        (c.customer_id for c in _existing if c.order_type == _OT.IMPRENTA),
+        None
+    )
+
+    if _saved_id:
+        cid_prompt = f"\n  Etere customer ID [{_saved_id}]: "
+    else:
+        cid_prompt = "\n  Etere customer ID (blank = manual search in browser): "
+
+    cid_input = input(cid_prompt).strip() or _saved_id or ""
     try:
         customer_id = int(cid_input)
-    except ValueError:
+    except (ValueError, TypeError):
         customer_id = None
 
-    # Silently upsert customer to DB so future orders pre-populate
+    # Write customer ID back to DB for future pre-population
     if customer_id is not None:
         try:
-            import sys as _sys
-            _src = Path(__file__).parent.parent / "src"
-            if str(_src) not in _sys.path:
-                _sys.path.insert(0, str(_src))
-            from data_access.repositories.customer_repository import CustomerRepository
-            from domain.entities import Customer
-            from domain.enums import OrderType as _OT
-            _repo = CustomerRepository(Path(__file__).parent.parent / "data" / "customers.db")
             _repo.save(Customer(
                 customer_id=str(customer_id),
                 customer_name=result.client,
@@ -388,8 +400,8 @@ def gather_imprenta_inputs(file_path: str) -> Optional[dict]:
                 description_name=result.client,
                 default_market=result.market,
             ))
-        except Exception:
-            pass  # DB write is best-effort — never block order entry
+        except Exception as e:
+            print(f"  ⚠ Could not save customer to DB: {e}")
 
     print("\n" + "=" * 70)
     print("INPUT COLLECTION COMPLETE")
