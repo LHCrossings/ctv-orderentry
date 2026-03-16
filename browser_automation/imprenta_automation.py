@@ -371,7 +371,7 @@ def gather_imprenta_inputs(file_path: str) -> Optional[dict]:
     from domain.enums import OrderType as _OT
 
     _repo = CustomerRepository(Path(__file__).parent.parent / "data" / "customers.db")
-    _existing = _repo.find_by_name_any_type(result.client)
+    _existing = _repo.find_by_name_any_type(result.client) or []
     _saved_id = next(
         (c.customer_id for c in _existing if c.order_type == _OT.IMPRENTA),
         None
