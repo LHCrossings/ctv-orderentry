@@ -163,10 +163,10 @@ def _build_etere_lines(
             # Halve spot counts and double rate so Etere airs the correct number.
             if line.is_bookend:
                 if spots_per_week % 2 != 0 or total_spots % 2 != 0:
-                    print(
-                        f"  ⚠ BOOKEND ODD-SPOT WARNING: '{line.program}' has an odd spot count "
+                    raise ValueError(
+                        f"BOOKEND ERROR: '{line.program}' has an odd spot count "
                         f"(spw={spots_per_week}, total={total_spots}). "
-                        f"Bookends must run in pairs — verify the order."
+                        f"Bookends must run in pairs. Correct the order before entry."
                     )
                 spots_per_week = spots_per_week // 2
                 total_spots    = total_spots    // 2
@@ -297,7 +297,12 @@ def gather_imprenta_inputs(file_path: str) -> Optional[dict]:
         print("  ⚠ Couldn't parse date — no cutoff applied")
 
     # ── Build Etere lines ─────────────────────────────────────────────────
-    etere_lines = _build_etere_lines(result, cutoff_date=cutoff_date)
+    try:
+        etere_lines = _build_etere_lines(result, cutoff_date=cutoff_date)
+    except ValueError as e:
+        print(f"\n[ERROR] ✗ {e}")
+        print("[ERROR] This bookend order has an odd number of spots and needs to be corrected by the AE before entry.")
+        return None
     if not etere_lines:
         print("\n[LINES] ✗ No valid lines found after cutoff filtering")
         return None

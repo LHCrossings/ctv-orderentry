@@ -499,10 +499,10 @@ def _add_line(
         # Halve spot counts and double rate so Etere airs the correct number.
         if is_bookend:
             if spots_per_week % 2 != 0 or spots_this_range % 2 != 0:
-                print(
-                    f"  ⚠ BOOKEND ODD-SPOT WARNING: '{desc}' has an odd spot count "
+                raise ValueError(
+                    f"BOOKEND ERROR: '{desc}' has an odd spot count "
                     f"(spw={spots_per_week}, total={spots_this_range}). "
-                    f"Bookends must run in pairs — verify the order."
+                    f"This bookend order has an odd number of spots and needs to be corrected by the AE before entry."
                 )
             spots_per_week   = spots_per_week   // 2
             spots_this_range = spots_this_range // 2
