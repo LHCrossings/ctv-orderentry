@@ -27,8 +27,8 @@ Bookend Orders:
     - Bonus lines: separation = (15, 0, 0)
 
 Contract Format (prompted, defaults shown):
-    Code:        "Imprenta {client} {market} {campaign_short}"
-    Description: "{client} {campaign} {market}"
+    Code:        "Imprenta {client_code} {campaign_abbrev} {year_quarter}"  e.g. "Imprenta PGE TS 26Q1"
+    Description: "{client} {campaign_short} {year_quarter}"                 e.g. "PG&E Traditional Safety 26Q1"
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
@@ -57,6 +57,32 @@ IMPRENTA_BILLING  = BillingType.CUSTOMER_SHARE_AGENCY
 IMPRENTA_SEP_BOOKEND = (0, 0, 0)    # position-locked; no separation needed
 IMPRENTA_SEP_BONUS   = (15, 0, 0)
 IMPRENTA_SEP_DEFAULT = (15, 0, 0)
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# HELPERS
+# ───────────────────────────────────────────────────────────────────────────
+
+def _campaign_code_parts(campaign: str, client: str) -> tuple[str, str, str]:
+    """Derive contract code components from campaign name and client.
+
+    Returns (client_code, abbrev, yq):
+        client_code — client name stripped to alphanumeric (e.g. "PG&E" → "PGE")
+        abbrev      — first letter of each word before the year (e.g. "TS", "WS")
+        yq          — 2-digit year + quarter (e.g. "26Q1"), or "" if not found
+
+    Example: "Traditional Safety 2026 Q1", "PG&E" → ("PGE", "TS", "26Q1")
+    """
+    client_code = re.sub(r'[^A-Za-z0-9]', '', client)
+    m = re.search(r'\b(20\d{2})\s*(Q\d)\b', campaign, re.IGNORECASE)
+    if m:
+        yq = m.group(1)[2:] + m.group(2).upper()       # "26Q1"
+        before = campaign[:m.start()].strip()
+    else:
+        yq = ""
+        before = campaign
+    abbrev = ''.join(w[0].upper() for w in before.split() if w)
+    return client_code, abbrev, yq
 
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -153,10 +179,12 @@ def _build_etere_lines(
             else:
                 separation = IMPRENTA_SEP_DEFAULT
 
-            # Description
+            # Description — bookend lines lead with "BOOKEND" (universal rule)
             program_tc = re.sub(r'\bRos\b', 'ROS', line.program.title())
             if line.is_bonus:
                 description = f"BNS {program_tc}".strip()
+            elif line.is_bookend:
+                description = f"BOOKEND {program_tc}"
             else:
                 description = program_tc
 
@@ -291,9 +319,10 @@ def gather_imprenta_inputs(file_path: str) -> Optional[dict]:
         print(f"  Lines will be entered as-is — adjust day pattern in Etere if needed.")
 
     # ── Contract details ──────────────────────────────────────────────────
-    campaign_short = re.sub(r'\s+\d{4}.*$', '', result.campaign).strip()  # strip year+
-    default_code = f"Imprenta {result.client} {result.market}"
-    default_desc = f"{result.client} {result.campaign} {result.market}"
+    campaign_short = re.sub(r'\s+\d{4}.*$', '', result.campaign).strip()  # e.g. "Traditional Safety"
+    client_code, abbrev, yq = _campaign_code_parts(result.campaign, result.client)
+    default_code = f"Imprenta {client_code} {abbrev} {yq}".strip()       # e.g. "Imprenta PGE TS 26Q1"
+    default_desc = f"{result.client} {campaign_short} {yq}".strip()      # e.g. "PG&E Traditional Safety 26Q1"
 
     print(f"\n{'─' * 60}")
     flow_input = input("  New contract or add to existing? [N=new / A=add / S=skip]: ").strip().upper()
