@@ -126,6 +126,10 @@ class OrderDetectionService:
         if self._is_saccountyvoters(first_page_text, second_page_text):
             return OrderType.SACCOUNTYVOTERS
 
+        # Imprenta (PDF version — XLSX is detected via content scan in order_scanner)
+        if self._is_imprenta(first_page_text):
+            return OrderType.IMPRENTA
+
         return OrderType.UNKNOWN
 
     def _is_sagent(self, text: str) -> bool:
@@ -463,6 +467,14 @@ class OrderDetectionService:
         """
         combined = text + (second_page or "")
         return "Sacramento County Voter" in combined and "Phase 1 Length" in combined
+
+    def _is_imprenta(self, text: str) -> bool:
+        """
+        Check if text matches an Imprenta PDF broadcast order.
+
+        Marker: "IMPRENTA:" appears in the header identifying the agency.
+        """
+        return "IMPRENTA:" in text.upper()
 
     def _is_timeadvertising(self, text: str) -> bool:
         """

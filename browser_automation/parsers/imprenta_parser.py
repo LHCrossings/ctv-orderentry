@@ -1,7 +1,11 @@
 """
-imprenta_parser.py — Imprenta / PG&E XLSX Order Parser
+imprenta_parser.py — Imprenta / PG&E Order Parser (XLSX and PDF)
 
-File format (single-sheet XLSX):
+Supported formats:
+  - XLSX (original spreadsheet format)
+  - PDF  (printed/exported version of the same order)
+
+XLSX format (single-sheet):
     Row 2:  Campaign title
     Row 3:  "IMPRENTA: <client>"
     Row 4:  Flight date range
@@ -106,6 +110,38 @@ def _clean_program(raw: str) -> str:
     return s.strip()
 
 
+# ── PDF-specific helpers ──────────────────────────────────────────────────────
+
+def _parse_pdf_date(s: str) -> Optional[date]:
+    """Parse '3/16/26' or '3/16/2026' → date, or None."""
+    for fmt in ('%m/%d/%y', '%m/%d/%Y'):
+        try:
+            return datetime.strptime(s.strip(), fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _parse_rate(raw) -> float:
+    """Parse a PDF rate string like '$ 2 5.00' or '$ -' → float.
+
+    PDF rendering sometimes inserts spaces inside numbers; stripping all
+    whitespace and '$' before parsing handles that artifact.
+    """
+    s = re.sub(r'[\$\s]', '', str(raw or ''))
+    if not s or s == '-':
+        return 0.0
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+
+def _market_code_if_exact(s: str) -> str:
+    """Return market code when the entire string is a known market name, else ''."""
+    return _MARKET_MAP.get(s.strip().lower(), '')
+
+
 # ── Data classes ──────────────────────────────────────────────────────────────
 @dataclass
 class ImprentaLine:
@@ -135,10 +171,10 @@ class ImprentaParseResult:
     gross_up_factor: float
 
 
-# ── Main parser ───────────────────────────────────────────────────────────────
-def parse_imprenta_file(
+# ── XLSX parser ───────────────────────────────────────────────────────────────
+def _parse_imprenta_xlsx(
     file_path: Path,
-    gross_up_factor: float = 1 / 0.85,
+    gross_up_factor: float,
 ) -> ImprentaParseResult:
     """Parse an Imprenta XLSX broadcast order."""
     wb = openpyxl.load_workbook(str(file_path), data_only=True)
@@ -285,3 +321,178 @@ def parse_imprenta_file(
         is_bookend=is_bookend,
         gross_up_factor=gross_up_factor,
     )
+
+
+# ── PDF parser ────────────────────────────────────────────────────────────────
+def _parse_imprenta_pdf(
+    file_path: Path,
+    gross_up_factor: float,
+) -> ImprentaParseResult:
+    """Parse an Imprenta PDF broadcast order."""
+    import pdfplumber
+
+    lines: list[ImprentaLine] = []
+    is_bookend = False
+    campaign = ""
+    client = ""
+    flight_start: Optional[date] = None
+    flight_end: Optional[date] = None
+    week_start_dates: list[date] = []
+    week_date_ranges: list[tuple[date, date]] = []
+    primary_market = ""
+
+    with pdfplumber.open(str(file_path)) as pdf:
+        for page in pdf.pages:
+            text = page.extract_text() or ""
+            current_market = primary_market  # inherit market from previous pages
+
+            # ── Metadata + market labels from page text ───────────────────
+            for line_text in text.splitlines():
+                v = line_text.strip()
+                if not v:
+                    continue
+                vl = v.lower()
+                if "bookend" in vl:
+                    is_bookend = True
+                if "campaign" in vl and not campaign:
+                    campaign = re.sub(r'(?i)^campaign\s*:', '', v).strip()
+                if "client" in vl and not client:
+                    client = re.sub(r'(?i)^client\s*:', '', v).strip()
+                if "flight" in vl and not flight_start:
+                    dates = re.findall(r'\d{1,2}/\d{1,2}/\d{4}', v)
+                    if len(dates) >= 2:
+                        try:
+                            flight_start = datetime.strptime(dates[0], "%m/%d/%Y").date()
+                            flight_end   = datetime.strptime(dates[1], "%m/%d/%Y").date()
+                        except ValueError:
+                            pass
+                    elif len(dates) == 1:
+                        try:
+                            flight_start = datetime.strptime(dates[0], "%m/%d/%Y").date()
+                        except ValueError:
+                            pass
+                mcode = _market_code_if_exact(v)
+                if mcode:
+                    current_market = mcode
+                    if not primary_market:
+                        primary_market = mcode
+
+            # ── Table data ────────────────────────────────────────────────
+            for table in page.extract_tables():
+                if not table:
+                    continue
+
+                # Find header row: contains ≥2 sequentially weekly date strings
+                header_idx: Optional[int] = None
+                local_week_cols: list[int] = []
+                local_week_dates: list[date] = []
+
+                for row_i, row in enumerate(table):
+                    date_hits = []
+                    for col_i, cell in enumerate(row):
+                        if cell:
+                            d = _parse_pdf_date(str(cell))
+                            if d:
+                                date_hits.append((col_i, d))
+                    if len(date_hits) >= 2:
+                        date_hits.sort(key=lambda x: x[0])
+                        dates_seq = [d for _, d in date_hits]
+                        if all(
+                            (dates_seq[i + 1] - dates_seq[i]).days == 7
+                            for i in range(len(dates_seq) - 1)
+                        ):
+                            header_idx = row_i
+                            local_week_cols = [c for c, _ in date_hits]
+                            local_week_dates = dates_seq
+                            break
+
+                if not local_week_dates:
+                    continue
+
+                if not week_start_dates:
+                    week_start_dates = local_week_dates
+                    week_date_ranges = [
+                        (s, s + timedelta(days=(6 - s.weekday()) % 7))
+                        for s in week_start_dates
+                    ]
+
+                # Parse data rows
+                table_market = current_market
+                for row in table[header_idx + 1:]:
+                    if not row or not row[0]:
+                        continue
+                    col_a = str(row[0]).strip()
+                    if not col_a or col_a == '``':
+                        continue
+                    if col_a.lower().startswith('total'):
+                        continue
+
+                    # Market label row inside the table
+                    mcode = _market_code_if_exact(col_a)
+                    if mcode:
+                        table_market = mcode
+                        continue
+
+                    # Spot counts per week
+                    spot_vals: list[int] = []
+                    for col_i in local_week_cols:
+                        try:
+                            spot_vals.append(int(str(row[col_i] or '0').strip()))
+                        except (TypeError, ValueError):
+                            spot_vals.append(0)
+
+                    if not any(s > 0 for s in spot_vals):
+                        continue
+
+                    rate_net = _parse_rate(row[1] if len(row) > 1 else None)
+                    duration = _parse_duration(str(row[2] or '') if len(row) > 2 else '')
+                    is_bonus = rate_net == 0 or 'bonus' in col_a.lower()
+                    days = _extract_days(col_a)
+                    time_str = _extract_time(col_a)
+                    program = _clean_program(col_a)
+                    rate_gross = 0.0 if is_bonus else round(rate_net * gross_up_factor, 2)
+
+                    lines.append(ImprentaLine(
+                        program=program,
+                        days=days,
+                        time=time_str,
+                        duration=duration,
+                        rate_net=rate_net,
+                        rate_gross=rate_gross,
+                        spots_by_week=list(spot_vals),
+                        week_date_ranges=list(week_date_ranges),
+                        market=table_market,
+                        is_bonus=is_bonus,
+                        is_bookend=is_bookend and not is_bonus,
+                    ))
+
+    if flight_start is None and week_date_ranges:
+        flight_start = week_date_ranges[0][0]
+    if flight_end is None and week_date_ranges:
+        flight_end = week_date_ranges[-1][1]
+    if not primary_market and lines:
+        primary_market = lines[0].market
+
+    return ImprentaParseResult(
+        lines=lines,
+        flight_start=flight_start,
+        flight_end=flight_end,
+        campaign=campaign,
+        client=client,
+        market=primary_market,
+        week_start_dates=week_start_dates,
+        is_bookend=is_bookend,
+        gross_up_factor=gross_up_factor,
+    )
+
+
+# ── Public entry point ────────────────────────────────────────────────────────
+def parse_imprenta_file(
+    file_path: Path,
+    gross_up_factor: float = 1 / 0.85,
+) -> ImprentaParseResult:
+    """Parse an Imprenta XLSX or PDF broadcast order."""
+    file_path = Path(file_path)
+    if file_path.suffix.lower() == '.pdf':
+        return _parse_imprenta_pdf(file_path, gross_up_factor)
+    return _parse_imprenta_xlsx(file_path, gross_up_factor)
