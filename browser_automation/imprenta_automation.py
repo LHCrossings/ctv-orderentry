@@ -159,6 +159,18 @@ def _build_etere_lines(
             spots_per_week = group[0][1]
             total_spots    = sum(g[1] for g in group)
 
+            # Bookend adjustment: Etere's Top+Bottom fires 2 spots per entry.
+            # Halve spot counts and double rate so Etere airs the correct number.
+            if line.is_bookend:
+                if spots_per_week % 2 != 0 or total_spots % 2 != 0:
+                    print(
+                        f"  ⚠ BOOKEND ODD-SPOT WARNING: '{line.program}' has an odd spot count "
+                        f"(spw={spots_per_week}, total={total_spots}). "
+                        f"Bookends must run in pairs — verify the order."
+                    )
+                spots_per_week = spots_per_week // 2
+                total_spots    = total_spots    // 2
+
             # max_daily_run — partial week aware
             day_span = (group_end - group_start).days + 1
             pattern_codes = set(_tok(line.days))
@@ -206,7 +218,7 @@ def _build_etere_lines(
                 "total_spots":     total_spots,
                 "spots_per_week":  spots_per_week,
                 "max_daily_run":   max_daily_run,
-                "rate":            line.rate_gross,
+                "rate":            line.rate_gross * (2 if line.is_bookend else 1),
                 "description":     description,
                 "is_bonus":        line.is_bonus,
                 "is_bookend":      line.is_bookend,

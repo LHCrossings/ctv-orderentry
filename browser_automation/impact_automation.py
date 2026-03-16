@@ -491,19 +491,34 @@ def _add_line(
     lines_added = 0
 
     for idx, rng in enumerate(ranges, 1):
-        spots_this_range = rng["spots_per_week"] * rng["weeks"]
+        spots_per_week   = rng["spots_per_week"]
+        spots_this_range = spots_per_week * rng["weeks"]
+        rate             = line.rate
+
+        # Bookend adjustment: Etere's Top+Bottom fires 2 spots per entry.
+        # Halve spot counts and double rate so Etere airs the correct number.
+        if is_bookend:
+            if spots_per_week % 2 != 0 or spots_this_range % 2 != 0:
+                print(
+                    f"  ⚠ BOOKEND ODD-SPOT WARNING: '{desc}' has an odd spot count "
+                    f"(spw={spots_per_week}, total={spots_this_range}). "
+                    f"Bookends must run in pairs — verify the order."
+                )
+            spots_per_week   = spots_per_week   // 2
+            spots_this_range = spots_this_range // 2
+            rate             = rate * 2
 
         day_count = EtereClient._count_active_days(adjusted_days)
         max_daily = (
-            math.ceil(rng["spots_per_week"] / day_count)
+            math.ceil(spots_per_week / day_count)
             if day_count > 0
-            else rng["spots_per_week"]
+            else spots_per_week
         )
 
         if len(ranges) > 1:
             print(
                 f"    Range {idx}: {rng['start_date']} – {rng['end_date']} | "
-                f"{rng['spots_per_week']}/week × {rng['weeks']} weeks = {spots_this_range} spots"
+                f"{spots_per_week}/week × {rng['weeks']} weeks = {spots_this_range} spots"
             )
 
         success = etere.add_contract_line(
@@ -518,9 +533,9 @@ def _add_line(
             spot_code=spot_code,
             duration_seconds=spot_duration,
             total_spots=spots_this_range,
-            spots_per_week=rng["spots_per_week"],
+            spots_per_week=spots_per_week,
             max_daily_run=max_daily,
-            rate=line.rate,
+            rate=rate,
             separation_intervals=SEPARATION,
             is_bookend=is_bookend,
         )
