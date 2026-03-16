@@ -13,7 +13,7 @@
 - Halving applies to **all** lines in a bookend order, including bonus lines (they also air top+bottom)
 - If any bookend line has an odd spot count, **abort with an error** — bookends must run in pairs and the AE must correct the order before entry.
 
-**Key distinction:** Use the order-level `is_bookend` flag (e.g. `parse_result.is_bookend`) for the halving condition, not the line-level flag (which is False for bonus lines).
+**Key distinction:** Use the order-level `is_bookend` flag (e.g. `parse_result.is_bookend`) for BOTH the spot-halving condition AND the `is_bookend` key passed to Etere — not the line-level flag (which is False for bonus lines). Using `line.is_bookend` for the Etere scheduling flag causes bonus lines to enter as rotation instead of Top/Bottom.
 
 ## Melissa Uses "Ss" to Mean Saturday+Sunday
 
