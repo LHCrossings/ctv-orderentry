@@ -160,8 +160,9 @@ def _build_etere_lines(
             total_spots    = sum(g[1] for g in group)
 
             # Bookend adjustment: Etere's Top+Bottom fires 2 spots per entry.
-            # Halve spot counts and double rate so Etere airs the correct number.
-            if line.is_bookend:
+            # ALL lines in a bookend order (including bonus) are halved.
+            # Rate is doubled for paid lines only (bonus rate stays $0).
+            if parse_result.is_bookend:
                 if spots_per_week % 2 != 0 or total_spots % 2 != 0:
                     raise ValueError(
                         f"BOOKEND ERROR: '{line.program}' has an odd spot count "
