@@ -457,6 +457,9 @@ def process_imprenta_order(driver, file_path: str, user_input: dict = None) -> b
     all_success = True
 
     try:
+        # Master market must be set before navigating to /sales/new
+        etere.set_master_market("NYC")
+
         # ── Create or retrieve contract ───────────────────────────────────
         if order_flow == "new":
             contract_number = etere.create_contract_header(
