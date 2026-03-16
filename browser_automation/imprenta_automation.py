@@ -222,7 +222,7 @@ def _build_etere_lines(
                 "rate":            line.rate_gross * (2 if line.is_bookend else 1),
                 "description":     description,
                 "is_bonus":        line.is_bonus,
-                "is_bookend":      line.is_bookend,
+                "is_bookend":      parse_result.is_bookend,  # all lines in a bookend order air top/bottom
                 "spot_code":       10 if line.is_bonus else 2,
                 "duration":        line.duration,
                 "separation":      separation,
