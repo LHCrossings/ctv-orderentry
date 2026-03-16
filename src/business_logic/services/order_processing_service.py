@@ -1373,9 +1373,10 @@ class OrderProcessingService:
                 user_input=order.order_input
             )
 
+            contracts = [order.order_input.get("contract_code", "imprenta")] if success else []
             return ProcessingResult(
                 success=success,
-                contracts=[],
+                contracts=contracts,
                 order_type=OrderType.IMPRENTA,
                 error_message=None if success else "Processing failed"
             )
