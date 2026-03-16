@@ -1,5 +1,20 @@
 # Lessons Learned
 
+## Bookend Orders: Halve Spot Counts, Double Rate Before Etere Entry
+
+**Session:** Imprenta PG&E bookend fix (2026-03-16)
+
+**Rule:** When an order is a bookend order, Etere's "Top and Bottom" scheduling fires **2 spots per line entry** — one at the top of the break and one at the bottom. Entering the PDF spot count directly would double the spots on air.
+
+**Fix (universal — applies to Imprenta, Impact, and any future bookend order):**
+- `spots_per_week` ÷ 2
+- `total_spots` ÷ 2
+- `rate` × 2 (paid lines only — bonus lines stay at $0)
+- Halving applies to **all** lines in a bookend order, including bonus lines (they also air top+bottom)
+- If any bookend line has an odd spot count, **abort with an error** — bookends must run in pairs and the AE must correct the order before entry.
+
+**Key distinction:** Use the order-level `is_bookend` flag (e.g. `parse_result.is_bookend`) for the halving condition, not the line-level flag (which is False for bonus lines).
+
 ## Melissa Uses "Ss" to Mean Saturday+Sunday
 
 **Session:** Lexus EST 210 (2026-03-13)
