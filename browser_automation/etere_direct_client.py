@@ -626,7 +626,15 @@ EXEC web_sales_InsertContractLine
     ) -> int:
         """
         Populate CONTRATTIFASCE for a contract line by finding matching
-        trafficPalinse breaks (same market, date range, time window, day pattern).
+        trafficPalinse blocks (same market, date range, time window, day pattern).
+
+        Algorithm (reverse-engineered from Etere's "Add Blocks Automatically"):
+          - For each (id_fascia, Date) in the date range, compute MIN(offset).
+          - Include id_fascia if MIN(offset) falls in [lb, ub) on at least one day.
+          - lb = start_frames - PREROLL  (Etere stores program starts 9 frames
+            before the hour boundary, e.g. 22h stored as 22*107892-9)
+          - ub = end_frames - PREROLL    (exclusive upper bound)
+          - For point-in-time lines (start == end): ub = lb + FPH (1-hour window)
 
         SQL Server DATEPART(dw): 1=Sun, 2=Mon, 3=Tue, 4=Wed, 5=Thu, 6=Fri, 7=Sat
         """
@@ -643,22 +651,34 @@ EXEC web_sales_InsertContractLine
         if not active_dw:
             return 0
 
+        PREROLL = 9          # frames before hour boundary
+        FPH = round(29.97 * 3600)   # 107892 frames per hour
+        lb = start_frames - PREROLL
+        if start_frames == end_frames:
+            ub = lb + FPH    # point-in-time: 1-hour window
+        else:
+            ub = end_frames - PREROLL
+
         dw_placeholders = ",".join("?" * len(active_dw))
 
         cursor = self._conn.cursor()
         cursor.execute(f"""
             INSERT INTO CONTRATTIFASCE (ID_CONTRATTIRIGHE, ID_FASCE, PRICELIST, SELECTEDSEGMENTS)
-            SELECT DISTINCT ?, id_fascia, '', ''
-            FROM trafficPalinse
-            WHERE Cod_User = ?
-              AND Date >= ? AND Date <= ?
-              AND offset >= ? AND offset <= ?
-              AND DATEPART(dw, Date) IN ({dw_placeholders})
-              AND id_fascia NOT IN (
-                  SELECT ID_FASCE FROM CONTRATTIFASCE WHERE ID_CONTRATTIRIGHE = ?
-              )
-        """, [line_id, user_id, date_from, date_to, start_frames, end_frames,
-              *active_dw, line_id])
+            SELECT DISTINCT ?, sub.id_fascia, '', ''
+            FROM (
+                SELECT tp.id_fascia
+                FROM trafficPalinse tp
+                WHERE tp.Cod_User = ?
+                  AND tp.Date >= ? AND tp.Date <= ?
+                  AND DATEPART(dw, tp.Date) IN ({dw_placeholders})
+                GROUP BY tp.id_fascia, tp.Date
+                HAVING MIN(tp.offset) >= ? AND MIN(tp.offset) < ?
+            ) sub
+            WHERE sub.id_fascia NOT IN (
+                SELECT ID_FASCE FROM CONTRATTIFASCE WHERE ID_CONTRATTIRIGHE = ?
+            )
+        """, [line_id, user_id, date_from, date_to,
+              *active_dw, lb, ub, line_id])
 
         count = cursor.rowcount
         if self._autocommit:
