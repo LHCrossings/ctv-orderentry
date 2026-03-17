@@ -25,11 +25,13 @@ for r in cursor.fetchall():
 
 # ── 2. Sample rows from CONTRATTIFASCE for a known contract ──────────────────
 print("\n" + "=" * 60)
-print("CONTRATTIFASCE sample (contract 2381)")
+print("CONTRATTIFASCE sample (contract 2381, via CONTRATTIRIGHE join)")
 print("=" * 60)
 cursor.execute("""
-    SELECT TOP 5 * FROM CONTRATTIFASCE
-    WHERE ID_CONTRATTITESTATA = 2381
+    SELECT TOP 5 cf.*
+    FROM CONTRATTIFASCE cf
+    JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = cf.ID_CONTRATTIRIGHE
+    WHERE cr.ID_CONTRATTITESTATA = 2381
 """)
 cols = [d[0] for d in cursor.description]
 print("  Cols:", cols)
@@ -91,7 +93,11 @@ row = cursor.fetchone()
 if row:
     test_cid = row[0]
     print(f"  Contract ID: {test_cid}")
-    cursor.execute("SELECT COUNT(*) FROM CONTRATTIFASCE WHERE ID_CONTRATTITESTATA = ?", test_cid)
+    cursor.execute("""
+        SELECT COUNT(*) FROM CONTRATTIFASCE cf
+        JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = cf.ID_CONTRATTIRIGHE
+        WHERE cr.ID_CONTRATTITESTATA = ?
+    """, test_cid)
     cnt = cursor.fetchone()[0]
     print(f"  CONTRATTIFASCE rows: {cnt}")
 else:
