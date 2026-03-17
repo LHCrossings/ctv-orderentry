@@ -361,8 +361,8 @@ EXEC web_sales_savecontractgeneral
             False,            # @packageorder
             False,            # @suborder
             0,                # @suborderid
-            None,             # @approvalref
-            None,             # @customerorderref
+            "",               # @approvalref
+            "",               # @customerorderref
             0,                # @listino
             0,                # @id  (INOUT — SP sets it; we retrieve via SELECT)
             0,                # @idanagraflink
