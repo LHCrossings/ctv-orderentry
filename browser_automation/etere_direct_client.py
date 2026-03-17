@@ -597,10 +597,75 @@ EXEC web_sales_InsertContractLine
         row = cursor.fetchone()
         line_id = row[0] if row else 0
 
+        # Assign available program blocks to this line
+        if line_id:
+            self._assign_blocks(
+                line_id=line_id,
+                user_id=user_id,
+                start_frames=start_frames,
+                end_frames=end_frames,
+                day_bits=day_bits,
+                date_from=datefrom_dt,
+                date_to=dateto_dt,
+            )
+
         label = "BNS" if is_bonus else "PAID"
         print(f"[DIRECT]   Line #{line_id} [{label}] {days} {time_range} | "
               f"{date_from}–{date_to} | {total_spots} spots @ ${rate:.2f}")
         return line_id
+
+    def _assign_blocks(
+        self,
+        line_id: int,
+        user_id: int,
+        start_frames: int,
+        end_frames: int,
+        day_bits: dict,
+        date_from,
+        date_to,
+    ) -> int:
+        """
+        Populate CONTRATTIFASCE for a contract line by finding matching
+        trafficPalinse breaks (same market, date range, time window, day pattern).
+
+        SQL Server DATEPART(dw): 1=Sun, 2=Mon, 3=Tue, 4=Wed, 5=Thu, 6=Fri, 7=Sat
+        """
+        _DAY_BITS_TO_DW = {
+            "dom": 1,  # Sunday
+            "lun": 2,  # Monday
+            "mar": 3,  # Tuesday
+            "mer": 4,  # Wednesday
+            "gio": 5,  # Thursday
+            "ven": 6,  # Friday
+            "sab": 7,  # Saturday
+        }
+        active_dw = [dw for key, dw in _DAY_BITS_TO_DW.items() if day_bits.get(key)]
+        if not active_dw:
+            return 0
+
+        dw_placeholders = ",".join("?" * len(active_dw))
+
+        cursor = self._conn.cursor()
+        cursor.execute(f"""
+            INSERT INTO CONTRATTIFASCE (ID_CONTRATTIRIGHE, ID_FASCE, PRICELIST, SELECTEDSEGMENTS)
+            SELECT DISTINCT ?, id_fascia, '', ''
+            FROM trafficPalinse
+            WHERE Cod_User = ?
+              AND Date >= ? AND Date <= ?
+              AND offset >= ? AND offset <= ?
+              AND DATEPART(dw, Date) IN ({dw_placeholders})
+              AND id_fascia NOT IN (
+                  SELECT ID_FASCE FROM CONTRATTIFASCE WHERE ID_CONTRATTIRIGHE = ?
+              )
+        """, [line_id, user_id, date_from, date_to, start_frames, end_frames,
+              *active_dw, line_id])
+
+        count = cursor.rowcount
+        if self._autocommit:
+            self._conn.commit()
+        if count:
+            print(f"[DIRECT]     → {count} block(s) assigned")
+        return count
 
     # ── Utilities (pass-through to shared helpers) ───────────────────────────────
 
