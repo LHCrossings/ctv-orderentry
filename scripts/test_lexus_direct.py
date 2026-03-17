@@ -24,7 +24,9 @@ from browser_automation.parsers.lexus_parser import parse_lexus_file
 from browser_automation.lexus_automation import _build_etere_lines, LEXUS_CUSTOMER_ID
 
 # ── File ─────────────────────────────────────────────────────────────────────
-FILE_PATH = project_root / "incoming" / "NEW ORDER Lexus CY26 LDA - AI - NY EST 202 -Crossings r1.xlsx"
+_FILENAME = "NEW ORDER Lexus CY26 LDA - AI - NY EST 202 -Crossings r1.xlsx"
+_WSL_PATH = Path(r"\\wsl.localhost\Ubuntu\home\scrib\dev\ctv-orderentry\incoming") / _FILENAME
+FILE_PATH = _WSL_PATH if _WSL_PATH.exists() else project_root / "incoming" / _FILENAME
 MARKET = "NYC"
 TEST_CODE = "TEST LEXUS 202 NYC"
 TEST_DESC = "TEST — Lexus NYC Est 202 (delete me)"
