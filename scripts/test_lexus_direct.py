@@ -94,6 +94,7 @@ try:
         media_center_id=media_center_id,
         contract_date=date.today(),
         contract_type=2,
+        customer_order_ref=f"{result.estimate} {MARKET} {result.language}",
     )
     print(f"  → contract_id = {contract_id}")
 

@@ -262,6 +262,7 @@ class EtereDirectClient:
         vat: int = 1,
         payment_id: int = 1,
         note: str = "",
+        customer_order_ref: str = "",
     ) -> int:
         """
         Create a contract header via web_sales_savecontractgeneral.
@@ -364,7 +365,7 @@ EXEC web_sales_savecontractgeneral
             False,            # @suborder
             0,                # @suborderid
             "",               # @approvalref
-            "",               # @customerorderref
+            customer_order_ref,  # @customerorderref
             0,                # @listino
             0,                # @id  (INOUT — SP sets it; we retrieve via SELECT)
             0,                # @idanagraflink
