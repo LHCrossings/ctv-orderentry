@@ -50,15 +50,15 @@ cursor.execute(f"""
         cf.ID_CONTRATTIRIGHE,
         cf.ID_FASCE,
         tp.id_fascia,
-        tp.data,
-        tp.ora,
-        tp.COD_USER,
-        tp.NEWTYPE,
-        tp.TITLE
+        tp.Date,
+        tp.offset,
+        tp.Cod_User,
+        tp.id_palinsesto,
+        tp.scadenza
     FROM CONTRATTIFASCE cf
     JOIN trafficPalinse tp ON tp.id_fascia = cf.ID_FASCE
     WHERE cf.ID_CONTRATTIRIGHE IN ({KNOWN_LINE_IDS_STR})
-    ORDER BY cf.ID_CONTRATTIRIGHE, tp.data
+    ORDER BY cf.ID_CONTRATTIRIGHE, tp.Date
 """)
 cols = [d[0] for d in cursor.description]
 for row in cursor.fetchall():
@@ -78,13 +78,52 @@ cursor.execute(f"""
 for row in cursor.fetchall():
     print(f"  line {row[0]}: {row[1]} blocks")
 
-# ── 5. What does a trafficPalinse "block" row look like (non-ad events)? ──────
+# ── 5. Find distinct id_fascia values for NYC market, 2PM-3PM, future dates ───
 print("\n" + "=" * 60)
-print("trafficPalinse: distinct NEWTYPE values (sample)")
+print("Distinct id_fascia for Cod_User=1 (NYC), offset≈14:00-15:00, future dates")
 print("=" * 60)
-cursor.execute("SELECT DISTINCT TOP 20 NEWTYPE FROM trafficPalinse ORDER BY NEWTYPE")
+import math
+FRAMES = 29.97
+start_f = round(14 * 3600 * FRAMES)
+end_f   = round(15 * 3600 * FRAMES)
+cursor.execute(f"""
+    SELECT DISTINCT TOP 20 id_fascia, id_palinsesto, Cod_User, MIN(Date) as first_date, MAX(Date) as last_date
+    FROM trafficPalinse
+    WHERE Cod_User = 1
+      AND offset >= ? AND offset < ?
+      AND Date >= '2026-03-01'
+    GROUP BY id_fascia, id_palinsesto, Cod_User
+    ORDER BY first_date
+""", start_f, end_f)
+cols = [d[0] for d in cursor.description]
 for row in cursor.fetchall():
-    print(f"  {row[0]!r}")
+    print(" ", dict(zip(cols, row)))
+
+# ── 6. What id_fascia values does a real NYC line use (recent contract)? ──────
+print("\n" + "=" * 60)
+print("CONTRATTIFASCE for a recent NYC contract (CONTRATTITESTATA like IW Lexus%)")
+print("=" * 60)
+cursor.execute("""
+    SELECT TOP 1 ct.ID_CONTRATTITESTATA, ct.COD_CONTRATTO
+    FROM CONTRATTITESTATA ct
+    WHERE ct.COD_CONTRATTO LIKE 'IW Lexus%'
+    ORDER BY ct.ID_CONTRATTITESTATA DESC
+""")
+row = cursor.fetchone()
+if row:
+    cid, code = row
+    print(f"  Contract: {code} (id={cid})")
+    cursor.execute(f"""
+        SELECT cf.ID_CONTRATTIRIGHE, cf.ID_FASCE,
+               cr.ORA_INIZIO, cr.ORA_FINE, cr.LUNEDI, cr.MARTEDI, cr.VENERDI
+        FROM CONTRATTIFASCE cf
+        JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = cf.ID_CONTRATTIRIGHE
+        WHERE cr.ID_CONTRATTITESTATA = {cid}
+        ORDER BY cf.ID_CONTRATTIRIGHE, cf.ID_FASCE
+    """)
+    cols = [d[0] for d in cursor.description]
+    for row in cursor.fetchall():
+        print(" ", dict(zip(cols, row)))
 
 cursor.close()
 conn.close()
