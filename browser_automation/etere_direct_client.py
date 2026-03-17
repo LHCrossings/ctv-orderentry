@@ -256,6 +256,7 @@ class EtereDirectClient:
         agent_id: int = 11,
         media_center_id: int = 316,
         contract_date: Optional[date] = None,
+        contract_end_date: Optional[date] = None,
         contract_type: int = 2,
         invoice_mode: int = 2,
         invoice_header: int = 1,
@@ -278,6 +279,10 @@ class EtereDirectClient:
         # Call the SP directly; retrieve the new ID by querying the table.
         # date objects must be cast to datetime for the legacy driver.
         contract_dt = datetime(contract_date.year, contract_date.month, contract_date.day)
+        expire_dt = (
+            datetime(contract_end_date.year, contract_end_date.month, contract_end_date.day)
+            if contract_end_date else contract_dt
+        )
 
         sql = """
 EXEC web_sales_savecontractgeneral
@@ -334,7 +339,7 @@ EXEC web_sales_savecontractgeneral
             code,             # @codeProposal
             description,      # @descProposal
             0,                # @discount
-            contract_dt,      # @dateExpireProposal
+            expire_dt,        # @dateExpireProposal
             agent_id,         # @idAgent
             0,                # @percAgentCommission
             note or "",       # @note  (NOT NULL)

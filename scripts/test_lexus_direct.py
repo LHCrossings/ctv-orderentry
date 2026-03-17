@@ -93,6 +93,7 @@ try:
         agency_id=agency_id,
         media_center_id=media_center_id,
         contract_date=date.today(),
+        contract_end_date=max(ln["end_date"] for ln in etere_lines),
         contract_type=2,
         customer_order_ref=f"{result.estimate} {MARKET} {result.language}",
     )
