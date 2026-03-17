@@ -372,8 +372,9 @@ def process_rpm_order(
             spot_code = 10 if line.is_bonus else 2
             duration_seconds = _duration_to_seconds(line.duration)
 
+            rate_note = " [RATE MISSING — enter manually]" if line.rate_missing else ""
             print(f"\n[LINE {line_num}] {'BNS' if line.is_bonus else 'PAID'} "
-                  f"{language} | {days} {time_range} | {duration_seconds}s")
+                  f"{language} | {days} {time_range} | {duration_seconds}s{rate_note}")
 
             # Build week_dates for this line (fall back to flight_start + offset)
             if order.week_dates:

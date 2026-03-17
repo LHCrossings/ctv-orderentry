@@ -47,6 +47,7 @@ class RPMLine:
     weekly_spots: list[int]  # Distribution across weeks
     total_spots: int
     is_bonus: bool
+    rate_missing: bool = False  # True when PDF has no per-line rate column
 
 
 def _extract_market_code(market_text: str) -> str:
@@ -107,14 +108,25 @@ def _normalize_daypart_name(program_name: str) -> tuple[str, str]:
         start_hr, start_min, start_ap, end_hr, end_min, end_ap = time_match.groups()
         
         # Format start time
-        start_display = f"{int(start_hr)}{start_ap}"
-        
+        start_mins = int(start_min)
+        if int(start_hr) == 12 and start_ap == 'p' and start_mins == 0:
+            start_display = "12n"
+        elif int(start_hr) == 12 and start_ap == 'a' and start_mins == 0:
+            start_display = "12m"
+        elif start_mins:
+            start_display = f"{int(start_hr)}:{start_min}{start_ap}"
+        else:
+            start_display = f"{int(start_hr)}{start_ap}"
+
         # Format end time - special handling for midnight/noon
         end_hour = int(end_hr)
-        if end_ap == 'p' and end_hour == 12 and end_min == '00':
+        end_mins = int(end_min)
+        if end_ap == 'p' and end_hour == 12 and end_mins == 0:
             end_display = "12n"  # Noon
-        elif end_ap == 'a' and end_hour == 12 and end_min == '00':
+        elif end_ap == 'a' and end_hour == 12 and end_mins == 0:
             end_display = "12m"  # Midnight
+        elif end_mins:
+            end_display = f"{end_hour}:{end_min}{end_ap}"
         else:
             end_display = f"{end_hour}{end_ap}"
         
@@ -126,7 +138,7 @@ def _normalize_daypart_name(program_name: str) -> tuple[str, str]:
     language_code = "ROS"  # Default
     language_display = "ROS"
     
-    if "CHINESE" in program_name.upper():
+    if any(w in program_name.upper() for w in ("CHINESE", "MANDARIN", "CANTONESE", "CANO", "MAND")):
         language_code = "M/C"
         language_display = "Chinese"
     elif "VIETNAMESE" in program_name.upper():
@@ -146,9 +158,10 @@ def _ocr_extract_text(pdf_path: str, dpi: int = 300) -> str:
     """
     Extract text from an image-based PDF using tesseract OCR.
 
-    Renders the first page at the given DPI (300 is a good balance of
-    speed vs. quality for these single-column schedule tables) and passes
-    the greyscale image through pytesseract.
+    Uses coordinate-based row reconstruction (image_to_data + Y-bucketing)
+    so that left-column daypart info and right-column spot counts land on
+    the same logical line.  Simple image_to_string with --psm 6 reads
+    columns sequentially, which splits multi-column tables.
     """
     try:
         import fitz          # PyMuPDF
@@ -169,7 +182,32 @@ def _ocr_extract_text(pdf_path: str, dpi: int = 300) -> str:
         mat = fitz.Matrix(dpi / 72, dpi / 72)
         pix = page.get_pixmap(matrix=mat, colorspace=fitz.csGRAY)
         img = Image.frombytes("L", [pix.width, pix.height], pix.samples)
-        text = pytesseract.image_to_string(img, config="--psm 6")
+
+        data = pytesseract.image_to_data(img, config="--psm 6",
+                                         output_type=pytesseract.Output.DICT)
+
+        # Group words by Y-coordinate bucket.  At 300 DPI a 12pt line is
+        # ~50px tall; a 35px bucket absorbs OCR jitter without merging
+        # adjacent lines.
+        rows: dict[int, list[tuple[int, str]]] = {}
+        for idx, word in enumerate(data['text']):
+            if data['conf'][idx] < 0:
+                continue
+            word = word.strip()
+            if not word:
+                continue
+            top = data['top'][idx]
+            row_key = (top // 35) * 35
+            if row_key not in rows:
+                rows[row_key] = []
+            rows[row_key].append((data['left'][idx], word))
+
+        lines = []
+        for row_key in sorted(rows.keys()):
+            row_words = sorted(rows[row_key], key=lambda x: x[0])
+            lines.append(' '.join(w for _, w in row_words))
+
+        text = '\n'.join(lines)
         doc.close()
         print(f"[OCR] ✓ Extracted {len(text)} chars at {dpi} DPI")
         return text
@@ -246,6 +284,12 @@ def _try_parse_date_token(
         day = int(clean)
         if 2 <= day <= 31:   # skip 0 and 1 — too noisy
             d = try_date(prev_month, day)
+            if d and in_flight(d):
+                return d
+        # Fallback: 2-digit token where value > 31 is likely a slash-dropped
+        # M/D (e.g. "61" → 6/1, "38" → 3/8) from coordinate-based OCR.
+        if re.fullmatch(r'\d{2}', clean) and day > 31:
+            d = try_date(int(clean[0]), int(clean[1]))
             if d and in_flight(d):
                 return d
 
@@ -393,7 +437,7 @@ def parse_rpm_pdf(pdf_path: str) -> tuple[Optional[RPMOrder], list[RPMLine]]:
                     description = desc_match.group(1).strip()
 
             if "Market:" in line:
-                market_match = re.search(r'Market:\s*([^F]+?)(?:Flight|$)', line)
+                market_match = re.search(r'Market:\s*(.+?)(?:\s+Flight|$)', line)
                 if market_match:
                     market_text = market_match.group(1).strip()
 
@@ -447,10 +491,10 @@ def parse_rpm_pdf(pdf_path: str) -> tuple[Optional[RPMOrder], list[RPMLine]]:
 
             # Look for lines that start with daypart patterns (tolerant of OCR artifacts
             # such as doubled letters: "MTuWTHhF" instead of "MTuWThF")
-            if re.match(r'^(MT[A-Za-z]+SaSu|MT[A-Za-z]+F\b|SaSu\w*)', line_text, re.IGNORECASE):
+            if re.match(r'^(MT[A-Za-z]+SaSu|MT[A-Za-z]+Sa\b|MT[A-Za-z]+F\b|SaSu\w*)', line_text, re.IGNORECASE):
                 try:
                     # Handle split time: "MTuWThFSaSu 6:00a- RT $0.00..."
-                    split_match = re.search(r'(\d+:\d+[ap])-\s+(RT|DT)', line_text, re.IGNORECASE)
+                    split_match = re.search(r'(\d+:\d+[ap])-\s+(RT|DT|PA)', line_text, re.IGNORECASE)
                     if split_match:
                         i += 1
                         if i < len(text_lines):
@@ -464,29 +508,45 @@ def parse_rpm_pdf(pdf_path: str) -> tuple[Optional[RPMOrder], list[RPMLine]]:
 
                     parts = line_text.split()
 
-                    if len(parts) < 10:
+                    if len(parts) < 5:
                         i += 1
                         continue
 
                     daypart_time = parts[1]
-                    daypart_code = parts[2]   # RT or DT
-                    rate_str = parts[3]       # $36.00
-                    duration_val = parts[4]   # 30
+                    daypart_code = parts[2]   # RT, DT, or PA
 
-                    # Weekly spots (up to 6 values)
+                    # Detect format: old PDFs have an explicit dollar rate at
+                    # parts[3] (e.g. "$36.00"); new PDFs omit the rate column
+                    # and have the duration integer at parts[3].
+                    if parts[3].startswith('$') or (
+                        '.' in parts[3] and not parts[3].replace('.', '').isdigit()
+                    ):
+                        # Old format: rate | duration | weekly…
+                        rate_str = parts[3]
+                        duration_val = parts[4] if len(parts) > 4 else '30'
+                        spots_start = 5
+                        no_rate_format = False
+                    else:
+                        # New format (no rate column): duration | weekly… | total | rtg
+                        rate_str = '$0.00'
+                        duration_val = parts[3]
+                        spots_start = 4
+                        no_rate_format = True
+
+                    # Weekly spots — collect consecutive integers starting at
+                    # spots_start, stopping at the first non-integer token.
                     weekly_spots = []
-                    for j in range(5, min(11, len(parts))):
+                    for j in range(spots_start, len(parts)):
                         try:
                             weekly_spots.append(int(parts[j]))
                         except ValueError:
                             break
 
-                    # Total spots
-                    if len(parts) > 11:
-                        try:
-                            total_spots = int(parts[11])
-                        except ValueError:
-                            total_spots = sum(weekly_spots)
+                    # If the last integer equals the sum of the preceding
+                    # integers it is a "Total Spots" column, not a week.
+                    if len(weekly_spots) > 1 and weekly_spots[-1] == sum(weekly_spots[:-1]):
+                        total_spots = weekly_spots[-1]
+                        weekly_spots = weekly_spots[:-1]
                     else:
                         total_spots = sum(weekly_spots)
 
@@ -495,7 +555,7 @@ def parse_rpm_pdf(pdf_path: str) -> tuple[Optional[RPMOrder], list[RPMLine]]:
                     if i + 1 < len(text_lines):
                         next_line = text_lines[i + 1].strip()
                         if next_line and not re.match(
-                            r'^(MT[A-Za-z]+SaSu|MT[A-Za-z]+F\b|SaSu\w*|Total)',
+                            r'^(MT[A-Za-z]+SaSu|MT[A-Za-z]+Sa\b|MT[A-Za-z]+F\b|SaSu\w*|Total)',
                             next_line, re.IGNORECASE
                         ):
                             language_name = next_line
@@ -508,7 +568,10 @@ def parse_rpm_pdf(pdf_path: str) -> tuple[Optional[RPMOrder], list[RPMLine]]:
                         i += 1
                         continue
 
-                    is_bonus = (rate == Decimal('0.00'))
+                    # Only treat $0 as bonus when the PDF explicitly has a rate
+                    # column and it was $0.  When the rate column is absent,
+                    # all lines are paid — rate entry will be manual.
+                    is_bonus = (rate == Decimal('0.00')) and not no_rate_format
                     program_name = f"{parts[0]} {daypart_time} {language_name}"
                     daypart, language = _normalize_daypart_name(program_name)
 
@@ -527,6 +590,7 @@ def parse_rpm_pdf(pdf_path: str) -> tuple[Optional[RPMOrder], list[RPMLine]]:
                         weekly_spots=weekly_spots,
                         total_spots=total_spots,
                         is_bonus=is_bonus,
+                        rate_missing=no_rate_format,
                     ))
 
                 except Exception as e:
