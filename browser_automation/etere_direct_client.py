@@ -423,10 +423,11 @@ EXEC web_sales_savecontractgeneral
 
         user_id = MARKET_USER_IDS.get(market, 1)
 
-        # Times
-        time_parts = time_range.split("-")
-        start_h, start_m = _parse_hhmm(time_parts[0])
-        end_h,   end_m   = _parse_hhmm(time_parts[1])
+        # Times — normalize any format ("2PM-3PM", "14:00-15:00") to HH:MM
+        from etere_client import EtereClient as _EC
+        time_from_norm, time_to_norm = _EC.parse_time_range(time_range)
+        start_h, start_m = _parse_hhmm(time_from_norm)
+        end_h,   end_m   = _parse_hhmm(time_to_norm)
         start_frames = _to_frames(start_h, start_m)
         end_frames   = _to_frames(end_h, end_m)
 
