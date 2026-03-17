@@ -286,6 +286,7 @@ EXEC web_sales_savecontractgeneral
     @codeProposal          = ?,
     @descProposal          = ?,
     @discount              = ?,
+    @dateExpireProposal    = ?,
     @idAgent               = ?,
     @percAgentCommission   = ?,
     @note                  = ?,
@@ -307,6 +308,7 @@ EXEC web_sales_savecontractgeneral
             code,             # @codeProposal
             description,      # @descProposal
             0,                # @discount
+            contract_dt,      # @dateExpireProposal (same as proposal date)
             agent_id,         # @idAgent
             0,                # @percAgentCommission
             note or None,     # @note  (ntext — pass None for empty)
