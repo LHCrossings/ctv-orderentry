@@ -65,20 +65,29 @@ cursor.execute("""
 for r in cursor.fetchall():
     print(f"  {r[0]:40} {r[1]}")
 
-# ── 5. Sample FASCE rows (NYC market blocks) ──────────────────────────────────
+# ── 5. Sample FASCE rows ──────────────────────────────────────────────────────
 print("\n" + "=" * 60)
-print("FASCE sample (market=1 i.e. NYC, top 10)")
+print("FASCE sample (top 20 by ORA_INI)")
 print("=" * 60)
-cursor.execute("""
-    SELECT TOP 10 * FROM FASCE
-    WHERE ID_STAZIONE = 1
-    ORDER BY ORA_INIZIO
-""")
+cursor.execute("SELECT TOP 20 * FROM FASCE ORDER BY ORA_INI")
 cols = [d[0] for d in cursor.description]
 print("  Cols:", cols)
 for row in cursor.fetchall():
-    d = dict(zip(cols, row))
-    print(" ", {k: v for k, v in d.items() if v is not None and v != ''})
+    print(" ", dict(zip(cols, row)))
+
+# ── 5b. FASCE that overlap with a 2PM-3PM window (frames) ────────────────────
+import math
+FRAMES = 29.97
+start_f = round(14 * 3600 * FRAMES)  # 14:00
+end_f   = round(15 * 3600 * FRAMES)  # 15:00
+print(f"\n  Blocks overlapping 14:00-15:00 (frames {start_f}-{end_f}):")
+cursor.execute("""
+    SELECT * FROM FASCE
+    WHERE ORA_INI < ? AND ORA_FIN > ?
+    ORDER BY ORA_INI
+""", end_f, start_f)
+for row in cursor.fetchall():
+    print(" ", dict(zip(cols, row)))
 
 # ── 6. Does our test contract have any CONTRATTIFASCE rows? ──────────────────
 print("\n" + "=" * 60)
