@@ -121,8 +121,8 @@ try:
         print(f"  {i:2}. line_id={line_id}  {ln['days']} {ln['time']}{bns}")
 
     print(f"\n✓ All {len(etere_lines)} lines entered successfully.")
-    print("Rolling back — no data was permanently written.")
-    conn.rollback()
+    print(f"Contract #{contract_id} (TEST LEXUS 202 NYC) committed to DB — delete when done reviewing.")
+    conn.commit()
 
 except Exception as e:
     print(f"\n✗ Error: {e}")
