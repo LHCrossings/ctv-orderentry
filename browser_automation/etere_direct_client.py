@@ -278,48 +278,94 @@ class EtereDirectClient:
 
         sql = """
 EXEC web_sales_savecontractgeneral
-    @idcontract            = ?,
-    @idcustomer            = ?,
-    @coduser               = ?,
-    @contractType          = ?,
-    @dateProposal          = ?,
-    @codeProposal          = ?,
-    @descProposal          = ?,
-    @discount              = ?,
-    @dateExpireProposal    = ?,
-    @idAgent               = ?,
-    @percAgentCommission   = ?,
-    @note                  = ?,
-    @owner                 = ?,
-    @idAgency              = ?,
-    @idMediacenter         = ?,
-    @vat                   = ?,
-    @idPayment             = ?,
-    @percAgency            = ?,
-    @invoicemode           = ?,
-    @intestazione          = ?
+    @idcontract           = ?,
+    @idcustomer           = ?,
+    @coduser              = ?,
+    @contractType         = ?,
+    @dateProposal         = ?,
+    @codeProposal         = ?,
+    @descProposal         = ?,
+    @discount             = ?,
+    @dateExpireProposal   = ?,
+    @idAgent              = ?,
+    @percAgentCommission  = ?,
+    @note                 = ?,
+    @owner                = ?,
+    @idAgency             = ?,
+    @idFinaluser          = ?,
+    @idMediacenter        = ?,
+    @vat                  = ?,
+    @idPayment            = ?,
+    @idAgent2             = ?,
+    @percAgentCommission2 = ?,
+    @idAgent3             = ?,
+    @percAgentCommission3 = ?,
+    @idAgent4             = ?,
+    @percAgentCommission4 = ?,
+    @idAgent5             = ?,
+    @percAgentCommission5 = ?,
+    @percAgency           = ?,
+    @percMediaCenter      = ?,
+    @invoicemode          = ?,
+    @idbank               = ?,
+    @scontoinco           = ?,
+    @customercolor        = ?,
+    @intestazione         = ?,
+    @pagrate              = ?,
+    @fattprepaga          = ?,
+    @packageorder         = ?,
+    @suborder             = ?,
+    @suborderid           = ?,
+    @approvalref          = ?,
+    @customerorderref     = ?,
+    @listino              = ?,
+    @id                   = ?,
+    @idanagraflink        = ?
 """
         params = [
-            0,                # @idcontract  (0 = new)
+            0,                # @idcontract         (0 = new)
             customer_id,      # @idcustomer
-            user_id,          # @coduser     (master market station)
+            user_id,          # @coduser
             contract_type,    # @contractType
-            contract_dt,      # @dateProposal (datetime, not date)
+            contract_dt,      # @dateProposal
             code,             # @codeProposal
             description,      # @descProposal
             0,                # @discount
-            contract_dt,      # @dateExpireProposal (same as proposal date)
+            contract_dt,      # @dateExpireProposal
             agent_id,         # @idAgent
             0,                # @percAgentCommission
-            note or None,     # @note  (ntext — pass None for empty)
+            note or None,     # @note  (ntext)
             self.owner,       # @owner
             agency_id,        # @idAgency
+            0,                # @idFinaluser
             media_center_id,  # @idMediacenter
             vat,              # @vat
             payment_id,       # @idPayment
+            0,                # @idAgent2
+            0,                # @percAgentCommission2
+            0,                # @idAgent3
+            0,                # @percAgentCommission3
+            0,                # @idAgent4
+            0,                # @percAgentCommission4
+            0,                # @idAgent5
+            0,                # @percAgentCommission5
             agency_pct,       # @percAgency
+            0,                # @percMediaCenter
             invoice_mode,     # @invoicemode
-            invoice_header,   # @intestazione (FATTURAZIONE_PRINCIPALE)
+            0,                # @idbank
+            0,                # @scontoinco
+            0,                # @customercolor
+            invoice_header,   # @intestazione
+            False,            # @pagrate
+            False,            # @fattprepaga
+            False,            # @packageorder
+            False,            # @suborder
+            0,                # @suborderid
+            None,             # @approvalref
+            None,             # @customerorderref
+            0,                # @listino
+            0,                # @id  (INOUT — SP sets it; we retrieve via SELECT)
+            0,                # @idanagraflink
         ]
 
         cursor = self._conn.cursor()
