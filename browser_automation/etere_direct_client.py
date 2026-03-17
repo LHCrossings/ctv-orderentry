@@ -334,7 +334,7 @@ EXEC web_sales_savecontractgeneral
             contract_dt,      # @dateExpireProposal
             agent_id,         # @idAgent
             0,                # @percAgentCommission
-            note or None,     # @note  (ntext)
+            note or "",       # @note  (NOT NULL)
             self.owner,       # @owner
             agency_id,        # @idAgency
             0,                # @idFinaluser
