@@ -482,6 +482,7 @@ EXEC web_sales_InsertContractLine
     @dom               = ?,
     @manualprice       = ?,
     @idbooking         = ?,
+    @id                = ?,
     @priwhitelist      = ?,
     @rowstatus         = ?,
     @intcomm           = ?,
@@ -542,7 +543,7 @@ EXEC web_sales_InsertContractLine
             day_bits["dom"],    # @dom
             True,               # @manualprice
             2,                  # @idbooking
-            # @id OUTPUT — handled by @new_id
+            0,                  # @id (new line; SP returns the assigned ID)
             50,                 # @priwhitelist
             1,                  # @rowstatus
             intcomm,            # @intcomm
