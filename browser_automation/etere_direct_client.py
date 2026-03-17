@@ -41,7 +41,12 @@ from datetime import date, datetime
 from math import ceil
 from typing import Optional
 
+import os
+
 import pyodbc  # noqa: F401 — caller imports this module for type hints
+from dotenv import load_dotenv
+
+load_dotenv()  # loads .env from project root (or CWD) if present
 
 # ── Connection ──────────────────────────────────────────────────────────────────
 
@@ -51,7 +56,25 @@ DB_DRIVER   = "{SQL Server}"
 
 
 def connect() -> pyodbc.Connection:
-    """Return a new pyodbc connection using Windows Authentication."""
+    """Return a new pyodbc connection.
+
+    Credentials are read from environment variables (set in .env):
+        ETERE_DB_USER     — SQL Server login name
+        ETERE_DB_PASSWORD — SQL Server login password
+
+    If neither is set, falls back to Windows Authentication (Trusted_Connection).
+    """
+    user = os.getenv("ETERE_DB_USER")
+    password = os.getenv("ETERE_DB_PASSWORD")
+
+    if user and password:
+        return pyodbc.connect(
+            f"DRIVER={DB_DRIVER};"
+            f"SERVER={DB_SERVER};"
+            f"DATABASE={DB_DATABASE};"
+            f"UID={user};"
+            f"PWD={password};"
+        )
     return pyodbc.connect(
         f"DRIVER={DB_DRIVER};"
         f"SERVER={DB_SERVER};"
