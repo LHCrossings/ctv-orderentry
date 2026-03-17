@@ -271,8 +271,12 @@ class EtereDirectClient:
 
         user_id = MARKET_USER_IDS.get(self._master_market, 1)
 
+        # Legacy {SQL Server} driver can't bind ? params inside a DECLARE batch.
+        # Call the SP directly; retrieve the new ID by querying the table.
+        # date objects must be cast to datetime for the legacy driver.
+        contract_dt = datetime(contract_date.year, contract_date.month, contract_date.day)
+
         sql = """
-DECLARE @new_id INT = 0;
 EXEC web_sales_savecontractgeneral
     @idcontract            = ?,
     @idcustomer            = ?,
@@ -292,22 +296,20 @@ EXEC web_sales_savecontractgeneral
     @idPayment             = ?,
     @percAgency            = ?,
     @invoicemode           = ?,
-    @intestazione          = ?,
-    @id                    = @new_id OUTPUT;
-SELECT @new_id;
+    @intestazione          = ?
 """
         params = [
             0,                # @idcontract  (0 = new)
             customer_id,      # @idcustomer
             user_id,          # @coduser     (master market station)
             contract_type,    # @contractType
-            contract_date,    # @dateProposal
+            contract_dt,      # @dateProposal (datetime, not date)
             code,             # @codeProposal
             description,      # @descProposal
             0,                # @discount
             agent_id,         # @idAgent
             0,                # @percAgentCommission
-            note,             # @note
+            note or None,     # @note  (ntext — pass None for empty)
             self.owner,       # @owner
             agency_id,        # @idAgency
             media_center_id,  # @idMediacenter
@@ -320,8 +322,16 @@ SELECT @new_id;
 
         cursor = self._conn.cursor()
         cursor.execute(sql, params)
-        row = cursor.fetchone()
         self._conn.commit()
+
+        # Retrieve the ID the SP just inserted
+        cursor.execute(
+            "SELECT ID_CONTRATTITESTATA FROM CONTRATTITESTATA "
+            "WHERE COD_CONTRATTO = ?", [code]
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise RuntimeError(f"Contract '{code}' not found after SP call")
 
         self._contract_id = row[0]
         print(f"[DIRECT] Created contract #{self._contract_id}: {code}")
@@ -388,8 +398,11 @@ SELECT @new_id;
 
         newtype = NEWTYPE_BONUS if is_bonus else NEWTYPE_PAID
 
+        # Convert date → datetime for legacy ODBC driver
+        datefrom_dt = datetime(date_from.year, date_from.month, date_from.day)
+        dateto_dt   = datetime(date_to.year,   date_to.month,   date_to.day)
+
         sql = """
-DECLARE @new_id INT = 0;
 EXEC web_sales_InsertContractLine
     @idproposal        = ?,
     @iddetails         = ?,
@@ -421,7 +434,6 @@ EXEC web_sales_InsertContractLine
     @dom               = ?,
     @manualprice       = ?,
     @idbooking         = ?,
-    @id                = @new_id OUTPUT,
     @priwhitelist      = ?,
     @rowstatus         = ?,
     @intcomm           = ?,
@@ -449,15 +461,14 @@ EXEC web_sales_InsertContractLine
     @idpianoconti      = ?,
     @note              = ?,
     @linkedspotpos     = ?,
-    @linkedspotid      = ?;
-SELECT @new_id;
+    @linkedspotid      = ?
 """
         params = [
             cid,                # @idproposal
             0,                  # @iddetails  (0 = new line)
             user_id,            # @coduser    (line's station/market)
-            date_from,          # @datefrom
-            date_to,            # @dateto
+            datefrom_dt,        # @datefrom
+            dateto_dt,          # @dateto
             description,        # @description
             dur_frames,         # @duration
             start_frames,       # @starttime
@@ -516,10 +527,16 @@ SELECT @new_id;
 
         cursor = self._conn.cursor()
         cursor.execute(sql, params)
-        row = cursor.fetchone()
         self._conn.commit()
 
-        line_id = row[0]
+        # Retrieve the ID the SP just inserted
+        cursor.execute(
+            "SELECT MAX(ID_CONTRATTIRIGHE) FROM CONTRATTIRIGHE "
+            "WHERE ID_CONTRATTITESTATA = ?", [cid]
+        )
+        row = cursor.fetchone()
+        line_id = row[0] if row else 0
+
         label = "BNS" if is_bonus else "PAID"
         print(f"[DIRECT]   Line #{line_id} [{label}] {days} {time_range} | "
               f"{date_from}–{date_to} | {total_spots} spots @ ${rate:.2f}")
