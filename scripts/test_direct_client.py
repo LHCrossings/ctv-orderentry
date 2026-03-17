@@ -20,7 +20,7 @@ print("Connected.\n")
 conn.autocommit = False
 
 try:
-    client = EtereDirectClient(conn, owner="Charmaine Lane")
+    client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
     client.set_master_market("NYC")
 
     print("Creating test contract header...")

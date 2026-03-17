@@ -231,9 +231,11 @@ class EtereDirectClient:
     be switched by changing one import and the constructor call.
     """
 
-    def __init__(self, conn: pyodbc.Connection, owner: str = "Charmaine Lane"):
+    def __init__(self, conn: pyodbc.Connection, owner: str = "Charmaine Lane",
+                 autocommit: bool = True):
         self._conn = conn
         self.owner = owner
+        self._autocommit = autocommit
         self._master_market = "NYC"
         self._contract_id: Optional[int] = None
 
@@ -370,7 +372,8 @@ EXEC web_sales_savecontractgeneral
 
         cursor = self._conn.cursor()
         cursor.execute(sql, params)
-        self._conn.commit()
+        if self._autocommit:
+            self._conn.commit()
 
         # Retrieve the ID the SP just inserted
         cursor.execute(
@@ -576,7 +579,8 @@ EXEC web_sales_InsertContractLine
 
         cursor = self._conn.cursor()
         cursor.execute(sql, params)
-        self._conn.commit()
+        if self._autocommit:
+            self._conn.commit()
 
         # Retrieve the ID the SP just inserted
         cursor.execute(
