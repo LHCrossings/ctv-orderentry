@@ -24,9 +24,10 @@ print("  Cols:", [d[0] for d in cursor.description])
 print("\n" + "=" * 60)
 print("TPALINSE detail: 9923 (CORRECT) vs 9940 (EXTRA) — Jan 5-11")
 print("=" * 60)
-for fid, label in [(9923, "CORRECT"), (9940, "EXTRA")]:
+for fid, label in [(9923, "CORRECT"), (9940, "EXTRA"), (11229, "EXTRA/CORRECT")]:
     cursor.execute("""
-        SELECT DISTINCT t.*
+        SELECT DISTINCT t.ID_TPALINSE, t.ORA, t.NEWTYPE, t.EVENT_TYPE, t.COD_PROGRA,
+               t.LIVELLO, t.SPLIT, t.DURATION, t.TYPE, t.TITLE
         FROM trafficPalinse tp
         JOIN TPALINSE t ON t.ID_TPALINSE = tp.id_tpalinse
         WHERE tp.id_fascia = ?
@@ -34,13 +35,11 @@ for fid, label in [(9923, "CORRECT"), (9940, "EXTRA")]:
           AND tp.Date >= '2026-01-05' AND tp.Date <= '2026-01-11'
         ORDER BY t.ORA
     """, fid)
-    cols = [d[0] for d in cursor.description]
     rows = cursor.fetchall()
     print(f"\n  id_fascia={fid} [{label}]: {len(rows)} distinct TPALINSE rows")
     for r in rows[:5]:
-        d = dict(zip(cols, r))
-        ora_h = (d.get('ORA') or 0) / FRAMES / 3600
-        print(f"    ORA={ora_h:.3f}h  {d}")
+        ora_h = (r[1] or 0) / FRAMES / 3600
+        print(f"    ORA={ora_h:.3f}h  NEWTYPE={r[2]}  EVENT_TYPE={r[3]}  COD_PROGRA={r[4]}  LIVELLO={r[5]}  SPLIT={r[6]}  DURATION={r[7]}  TYPE={r[8]}  TITLE={r[9]}")
 
 # ── 2. trafficPalinse fields for 9923 vs 9940 in Jan ─────────────────────────
 print("\n" + "=" * 60)
