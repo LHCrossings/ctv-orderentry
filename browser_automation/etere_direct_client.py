@@ -712,20 +712,21 @@ EXEC web_sales_InsertContractLine
             print(f"[DIRECT]     → {count} block(s) assigned")
         return count
 
-    def get_all_line_ids(self, contract_number: str) -> list[int]:
+    def get_all_line_ids(self, contract_id) -> list[int]:
         """
-        Return all ID_CONTRATTIRIGHE values for the given contract code,
+        Return all ID_CONTRATTIRIGHE values for the given contract,
         ordered by ID (i.e. creation order).
+
+        contract_id may be an int or a numeric string — both are the
+        ID_CONTRATTITESTATA primary key used in the Etere URL (/sales/contract/NNN).
         """
         cursor = self._conn.cursor()
         cursor.execute("""
-            SELECT cr.ID_CONTRATTIRIGHE
-            FROM   CONTRATTIRIGHE cr
-            JOIN   CONTRATTITESTATA ct
-                   ON cr.ID_CONTRATTITESTATA = ct.ID_CONTRATTITESTATA
-            WHERE  ct.COD_CONTRATTO = ?
-            ORDER  BY cr.ID_CONTRATTIRIGHE
-        """, [contract_number])
+            SELECT ID_CONTRATTIRIGHE
+            FROM   CONTRATTIRIGHE
+            WHERE  ID_CONTRATTITESTATA = ?
+            ORDER  BY ID_CONTRATTIRIGHE
+        """, [int(contract_id)])
         return [row[0] for row in cursor.fetchall()]
 
     def assign_blocks_for_existing_line(self, line_id: int) -> int:
