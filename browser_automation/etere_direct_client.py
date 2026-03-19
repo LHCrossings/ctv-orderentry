@@ -738,15 +738,13 @@ EXEC web_sales_InsertContractLine
         """
         cursor = self._conn.cursor()
         cursor.execute("""
-            SELECT cr.ORA_INIZIO, cr.ORA_FINE,
-                   cr.LUNEDI, cr.MARTEDI, cr.MERCOLEDI, cr.GIOVEDI,
-                   cr.VENERDI, cr.SABATO, cr.DOMENICA,
-                   cr.DATA_INIZIO, cr.DATA_FINE,
-                   ct.COD_USER
-            FROM   CONTRATTIRIGHE cr
-            JOIN   CONTRATTITESTATA ct
-                   ON cr.ID_CONTRATTITESTATA = ct.ID_CONTRATTITESTATA
-            WHERE  cr.ID_CONTRATTIRIGHE = ?
+            SELECT ORA_INIZIO, ORA_FINE,
+                   LUNEDI, MARTEDI, MERCOLEDI, GIOVEDI,
+                   VENERDI, SABATO, DOMENICA,
+                   DATA_INIZIO, DATA_FINE,
+                   COD_USER
+            FROM   CONTRATTIRIGHE
+            WHERE  ID_CONTRATTIRIGHE = ?
         """, [line_id])
         row = cursor.fetchone()
         if not row:
