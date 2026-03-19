@@ -247,6 +247,64 @@ def gather_worldlink_inputs(pdf_path: str) -> Optional[dict]:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# BLOCK REFRESH (direct DB — replaces Selenium perform_block_refresh)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _perform_block_refresh_direct(
+    etere: EtereClient,
+    contract_number: str,
+    only_lines_above=None,
+) -> bool:
+    """
+    Assign blocks for Crossings TV lines via direct DB instead of Selenium.
+
+    Uses etere.get_all_line_ids_with_numbers() to enumerate line IDs (same
+    filtering as perform_block_refresh), then reads each line's parameters
+    from CONTRATTIRIGHE and inserts into CONTRATTIFASCE in one SQL call per
+    line — no browser navigation or 8-second waits required.
+    """
+    from browser_automation.etere_direct_client import EtereDirectClient, connect as db_connect
+
+    print(f"\n{'='*60}")
+    print(f"BLOCK REFRESH (direct DB): Contract {contract_number}")
+    if only_lines_above is not None:
+        print(f"Filter: lines > {only_lines_above} only")
+    print(f"{'='*60}")
+
+    lines_data = etere.get_all_line_ids_with_numbers(contract_number)
+    if not lines_data:
+        print("[REFRESH] ✗ No lines found")
+        return False
+
+    if only_lines_above is not None:
+        lines_data = [
+            (lid, lnum) for lid, lnum in lines_data
+            if lnum is not None and lnum > only_lines_above
+        ]
+
+    if not lines_data:
+        print("[REFRESH] ✓ No new lines to refresh")
+        return True
+
+    print(f"[REFRESH] Assigning blocks for {len(lines_data)} lines via direct DB...")
+    ok_count = 0
+    with db_connect() as conn:
+        direct = EtereDirectClient(conn)
+        for idx, (line_id, line_num) in enumerate(lines_data, 1):
+            label = f"Line {line_num}" if line_num else f"ID {line_id}"
+            print(f"[REFRESH] {idx}/{len(lines_data)}: {label} (ID {line_id})")
+            count = direct.assign_blocks_for_existing_line(line_id)
+            if count >= 0:
+                ok_count += 1
+                print(f"[REFRESH] ✓ {count} block(s)")
+            else:
+                print(f"[REFRESH] ✗ line not found in DB")
+
+    print(f"\n[REFRESH] Complete — {ok_count}/{len(lines_data)} succeeded")
+    return ok_count == len(lines_data)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # LINE HELPERS
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -422,7 +480,7 @@ def process_worldlink_order(
 
         # Block refresh: Crossings TV only (CMP lines replicated to other markets)
         if network == 'CROSSINGS' and success:
-            etere.perform_block_refresh(contract_number, only_lines_above=highest_existing_etere_num)
+            _perform_block_refresh_direct(etere, contract_number, only_lines_above=highest_existing_etere_num)
 
         return contract_number if success else None
 

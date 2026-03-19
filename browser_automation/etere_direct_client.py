@@ -710,6 +710,55 @@ EXEC web_sales_InsertContractLine
             print(f"[DIRECT]     → {count} block(s) assigned")
         return count
 
+    def assign_blocks_for_existing_line(self, line_id: int) -> int:
+        """
+        Assign blocks to a line that already exists in CONTRATTIRIGHE (e.g. created
+        via Selenium).  Reads ORA_INIZIO/ORA_FINE, day bits, date range, and
+        COD_USER directly from the DB and delegates to _assign_blocks().
+
+        Returns the number of blocks assigned, or -1 if the line was not found.
+        """
+        cursor = self._conn.cursor()
+        cursor.execute("""
+            SELECT cr.ORA_INIZIO, cr.ORA_FINE,
+                   cr.LUNEDI, cr.MARTEDI, cr.MERCOLEDI, cr.GIOVEDI,
+                   cr.VENERDI, cr.SABATO, cr.DOMENICA,
+                   cr.DATA_INIZIO, cr.DATA_FINE,
+                   ct.COD_USER
+            FROM   CONTRATTIRIGHE cr
+            JOIN   CONTRATTITESTATA ct
+                   ON cr.ID_CONTRATTITESTATA = ct.ID_CONTRATTITESTATA
+            WHERE  cr.ID_CONTRATTIRIGHE = ?
+        """, [line_id])
+        row = cursor.fetchone()
+        if not row:
+            print(f"[DIRECT] assign_blocks_for_existing_line: line {line_id} not found")
+            return -1
+
+        start_frames, end_frames = row[0], row[1]
+        day_bits = {
+            "lun": bool(row[2]),
+            "mar": bool(row[3]),
+            "mer": bool(row[4]),
+            "gio": bool(row[5]),
+            "ven": bool(row[6]),
+            "sab": bool(row[7]),
+            "dom": bool(row[8]),
+        }
+        date_from = row[9]
+        date_to   = row[10]
+        user_id   = row[11]
+
+        return self._assign_blocks(
+            line_id=line_id,
+            user_id=user_id,
+            start_frames=start_frames,
+            end_frames=end_frames,
+            day_bits=day_bits,
+            date_from=date_from,
+            date_to=date_to,
+        )
+
     # ── Utilities (pass-through to shared helpers) ───────────────────────────────
 
     @staticmethod
