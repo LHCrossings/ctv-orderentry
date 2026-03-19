@@ -751,6 +751,16 @@ EXEC web_sales_InsertContractLine
         date_to   = row[10]
         user_id   = row[11]
 
+        # Strip trailing asterisks Etere appends after block operations
+        cursor.execute("""
+            UPDATE CONTRATTIRIGHE
+            SET    DESCRIZIONE = RTRIM(REPLACE(DESCRIZIONE, '*', ''))
+            WHERE  ID_CONTRATTIRIGHE = ?
+              AND  DESCRIZIONE LIKE '%*%'
+        """, [line_id])
+        if self._autocommit:
+            self._conn.commit()
+
         return self._assign_blocks(
             line_id=line_id,
             user_id=user_id,
