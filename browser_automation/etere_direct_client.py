@@ -44,9 +44,11 @@ from typing import Optional
 import os
 
 import pyodbc  # noqa: F401 — caller imports this module for type hints
-from dotenv import load_dotenv
-
-load_dotenv()  # loads .env from project root (or CWD) if present
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # loads .env from project root (or CWD) if present
+except ImportError:
+    pass  # python-dotenv not installed; connect() falls back to Windows Auth
 
 # ── Connection ──────────────────────────────────────────────────────────────────
 
