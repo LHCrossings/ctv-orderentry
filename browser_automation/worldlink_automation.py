@@ -299,7 +299,7 @@ def _perform_block_refresh_direct(
                 print(f"[REFRESH] ✗ line not found in DB")
 
     print(f"\n[REFRESH] Complete — {ok_count}/{len(all_ids)} succeeded")
-    return ok_count == len(lines_data)
+    return ok_count == len(all_ids)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
