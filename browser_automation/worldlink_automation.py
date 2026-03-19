@@ -271,28 +271,26 @@ def _perform_block_refresh_direct(
         print(f"Filter: lines > {only_lines_above} only")
     print(f"{'='*60}")
 
-    lines_data = etere.get_all_line_ids_with_numbers(contract_number)
-    if not lines_data:
-        print("[REFRESH] ✗ No lines found")
+    with db_connect() as conn:
+        direct = EtereDirectClient(conn)
+        all_ids = direct.get_all_line_ids(contract_number)
+
+    if not all_ids:
+        print("[REFRESH] ✗ No lines found in DB")
         return False
 
     if only_lines_above is not None:
-        lines_data = [
-            (lid, lnum) for lid, lnum in lines_data
-            if lnum is not None and lnum > only_lines_above
-        ]
+        # For revisions: the Selenium line scan used a display line number;
+        # we don't support that filter here yet — refresh all lines instead.
+        # (Revision support via DB threshold can be added later.)
+        print(f"[REFRESH] ℹ  only_lines_above filter not yet supported in direct mode — refreshing all {len(all_ids)} lines")
 
-    if not lines_data:
-        print("[REFRESH] ✓ No new lines to refresh")
-        return True
-
-    print(f"[REFRESH] Assigning blocks for {len(lines_data)} lines via direct DB...")
+    print(f"[REFRESH] Assigning blocks for {len(all_ids)} lines via direct DB...")
     ok_count = 0
     with db_connect() as conn:
         direct = EtereDirectClient(conn)
-        for idx, (line_id, line_num) in enumerate(lines_data, 1):
-            label = f"Line {line_num}" if line_num else f"ID {line_id}"
-            print(f"[REFRESH] {idx}/{len(lines_data)}: {label} (ID {line_id})")
+        for idx, line_id in enumerate(all_ids, 1):
+            print(f"[REFRESH] {idx}/{len(all_ids)}: ID {line_id}")
             count = direct.assign_blocks_for_existing_line(line_id)
             if count >= 0:
                 ok_count += 1

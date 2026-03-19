@@ -712,6 +712,22 @@ EXEC web_sales_InsertContractLine
             print(f"[DIRECT]     → {count} block(s) assigned")
         return count
 
+    def get_all_line_ids(self, contract_number: str) -> list[int]:
+        """
+        Return all ID_CONTRATTIRIGHE values for the given contract code,
+        ordered by ID (i.e. creation order).
+        """
+        cursor = self._conn.cursor()
+        cursor.execute("""
+            SELECT cr.ID_CONTRATTIRIGHE
+            FROM   CONTRATTIRIGHE cr
+            JOIN   CONTRATTITESTATA ct
+                   ON cr.ID_CONTRATTITESTATA = ct.ID_CONTRATTITESTATA
+            WHERE  ct.COD_CONTRATTO = ?
+            ORDER  BY cr.ID_CONTRATTIRIGHE
+        """, [contract_number])
+        return [row[0] for row in cursor.fetchall()]
+
     def assign_blocks_for_existing_line(self, line_id: int) -> int:
         """
         Assign blocks to a line that already exists in CONTRATTIRIGHE (e.g. created
