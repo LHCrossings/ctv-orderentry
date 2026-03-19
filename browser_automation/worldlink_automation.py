@@ -280,10 +280,10 @@ def _perform_block_refresh_direct(
         return False
 
     if only_lines_above is not None:
-        # For revisions: the Selenium line scan used a display line number;
-        # we don't support that filter here yet — refresh all lines instead.
-        # (Revision support via DB threshold can be added later.)
-        print(f"[REFRESH] ℹ  only_lines_above filter not yet supported in direct mode — refreshing all {len(all_ids)} lines")
+        all_ids = [lid for lid in all_ids if lid > only_lines_above]
+        if not all_ids:
+            print("[REFRESH] ✓ No new lines to refresh")
+            return True
 
     print(f"[REFRESH] Assigning blocks for {len(all_ids)} lines via direct DB...")
     ok_count = 0
@@ -298,7 +298,7 @@ def _perform_block_refresh_direct(
             else:
                 print(f"[REFRESH] ✗ line not found in DB")
 
-    print(f"\n[REFRESH] Complete — {ok_count}/{len(lines_data)} succeeded")
+    print(f"\n[REFRESH] Complete — {ok_count}/{len(all_ids)} succeeded")
     return ok_count == len(lines_data)
 
 
