@@ -14,7 +14,7 @@ from browser_automation.etere_direct_client import connect
 
 # Frame constants (29.97 fps)
 FPS = 29.97
-ORA_FINE_2AM   = round(2 * 3600 * FPS)   # 215784
+ORA_FINE_2AM   = round(26 * 3600 * FPS)  # 2805192 — Etere broadcast hour (2am = hour 26)
 ORA_FINE_2359  = round((23 * 3600 + 59 * 60) * FPS)  # 2588402
 SEP_5_MIN      = round(5 * 60 * FPS)     # 8991
 CONTRACT_ID    = 2611
