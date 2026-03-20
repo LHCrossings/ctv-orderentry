@@ -16,7 +16,7 @@ ORA_INIZIO_6   = round(6  * 3600 * FPS)          # 647352
 ORA_FINE_9     = round(9  * 3600 * FPS)          # 971028
 ORA_INIZIO_22  = round(22 * 3600 * FPS)          # 2373624
 ORA_FINE_2359  = round((23 * 3600 + 59 * 60) * FPS)  # 2588402
-SEP_5_MIN      = round(5 * 60 * FPS)             # 8991
+SEP_10_MIN     = round(10 * 60 * FPS)            # 17982
 CONTRACT_ID    = 2611
 
 
@@ -59,10 +59,10 @@ def main():
                    INTERVALLO         = ?,
                    INTERV_CONTRATTO   = ?
             WHERE  ID_CONTRATTIRIGHE IN ({placeholders})
-        """, [0, SEP_5_MIN, 0, *line_ids])
+        """, [0, SEP_10_MIN, 0, *line_ids])
 
         conn.commit()
-        print(f"\n[DONE] Updated {cursor.rowcount} line(s) → separation (0, 5, 0).")
+        print(f"\n[DONE] Updated {cursor.rowcount} line(s) → separation (0, 10, 0).")
 
 
 if __name__ == "__main__":
