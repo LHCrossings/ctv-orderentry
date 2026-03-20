@@ -20,9 +20,30 @@ SEP_5_MIN      = round(5 * 60 * FPS)     # 8991
 CONTRACT_ID    = 2611
 
 
+def frames_to_hhmm(f):
+    secs = f / FPS
+    h = int(secs // 3600)
+    m = int((secs % 3600) // 60)
+    return f"{h:02d}:{m:02d}"
+
+
 def main():
     with connect() as conn:
         cursor = conn.cursor()
+
+        # Diagnostic: show all ORA_FINE values on the contract
+        cursor.execute("""
+            SELECT ID_CONTRATTIRIGHE, ORA_INIZIO, ORA_FINE
+            FROM   CONTRATTIRIGHE
+            WHERE  ID_CONTRATTITESTATA = ?
+            ORDER  BY ID_CONTRATTIRIGHE
+        """, [CONTRACT_ID])
+        all_rows = cursor.fetchall()
+        print(f"[DIAG] All lines on contract {CONTRACT_ID}:")
+        for r in all_rows:
+            print(f"  line {r[0]}: {frames_to_hhmm(r[1])} – {frames_to_hhmm(r[2])}  "
+                  f"(ORA_INIZIO={r[1]}, ORA_FINE={r[2]})")
+        print()
 
         # Find affected lines
         cursor.execute("""
