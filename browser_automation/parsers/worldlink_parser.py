@@ -234,11 +234,12 @@ def _parse_single_line(line_text):
     # Time range (e.g., "6:00 AM - 9:00 AM")
     line_item['time_range'] = time_range.strip()
     
-    # Convert to 24-hour format
+    # Convert to 24-hour format, then apply floor/ceiling rules
     time_parts = time_range.split('-')
     if len(time_parts) == 2:
-        line_item['from_time'] = _convert_to_24hr(time_parts[0].strip())
-        line_item['to_time'] = _convert_to_24hr(time_parts[1].strip())
+        from_raw = _convert_to_24hr(time_parts[0].strip())
+        to_raw   = _convert_to_24hr(time_parts[1].strip())
+        line_item['from_time'], line_item['to_time'] = _apply_time_bounds(from_raw, to_raw)
     
     # Duration - store as-is, will be formatted when entering into Etere
     line_item['duration'] = length
@@ -387,28 +388,30 @@ def _format_duration_for_etere(duration_seconds):
         return "00003000"
 
 def _convert_to_24hr(time_str):
-    """Convert 12-hour time to 24-hour format (HH:MM)"""
+    """Convert 12-hour time to 24-hour format (HH:MM). No clamping — callers apply floor/ceiling."""
     try:
-        # Parse time like "9:00 AM" or "5:00 PM"
         time_str = time_str.strip()
-        
-        # Handle special cases
-        if '12:00 AM' in time_str.upper():
-            return '00:00'
-        if '2:00 AM' in time_str.upper() or '2AM' in time_str.upper():
-            return '02:00'
-        
-        # Try standard format
-        dt = datetime.strptime(time_str, '%I:%M %p')
-        return dt.strftime('%H:%M')
-    except:
-        # Try without space: "9:00AM"
         try:
+            dt = datetime.strptime(time_str, '%I:%M %p')
+        except ValueError:
             dt = datetime.strptime(time_str.replace(' ', ''), '%I:%M%p')
-            return dt.strftime('%H:%M')
-        except:
-            print(f"[PARSER] Could not parse time: {time_str}")
-            return '00:00'
+        return dt.strftime('%H:%M')
+    except Exception:
+        print(f"[PARSER] Could not parse time: {time_str}")
+        return '00:00'
+
+
+def _apply_time_bounds(from_time: str, to_time: str):
+    """Apply universal Etere floor/ceiling rules.
+
+    Floor: from_time < 06:00 → clamp to 06:00
+    Ceiling: to_time is a past-midnight AM hour (00:00–05:59) → clamp to 23:59
+    """
+    if from_time < '06:00':
+        from_time = '06:00'
+    if to_time < '06:00':          # past-midnight end (e.g. 2:00 AM after 10 PM)
+        to_time = '23:59'
+    return from_time, to_time
 
 def validate_parsed_data(order_data):
     """Validate that parsed data has required fields"""
