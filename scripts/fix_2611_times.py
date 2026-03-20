@@ -26,7 +26,8 @@ def main():
 
         # Find affected lines
         cursor.execute("""
-            SELECT ID_CONTRATTIRIGHE, ORA_INIZIO, ORA_FINE, INTCOMM, INTEVENT, INTSRIGHE
+            SELECT ID_CONTRATTIRIGHE, ORA_INIZIO, ORA_FINE,
+                   Interv_Committente, INTERVALLO, INTERV_CONTRATTO
             FROM   CONTRATTIRIGHE
             WHERE  ID_CONTRATTITESTATA = ?
               AND  ORA_FINE = ?
@@ -40,17 +41,17 @@ def main():
         print(f"[INFO] Found {len(rows)} line(s) to fix:")
         for row in rows:
             print(f"  line {row[0]}: ORA_INIZIO={row[1]}, ORA_FINE={row[2]}, "
-                  f"INTCOMM={row[3]}, INTEVENT={row[4]}, INTSRIGHE={row[5]}")
+                  f"Interv_Committente={row[3]}, INTERVALLO={row[4]}, INTERV_CONTRATTO={row[5]}")
 
         # Apply fix
         line_ids = [row[0] for row in rows]
         placeholders = ",".join("?" * len(line_ids))
         cursor.execute(f"""
             UPDATE CONTRATTIRIGHE
-            SET    ORA_FINE   = ?,
-                   INTCOMM    = ?,
-                   INTEVENT   = ?,
-                   INTSRIGHE  = ?
+            SET    ORA_FINE            = ?,
+                   Interv_Committente  = ?,
+                   INTERVALLO          = ?,
+                   INTERV_CONTRATTO    = ?
             WHERE  ID_CONTRATTIRIGHE IN ({placeholders})
         """, [ORA_FINE_2359, SEP_5_MIN, 0, SEP_5_MIN, *line_ids])
 
