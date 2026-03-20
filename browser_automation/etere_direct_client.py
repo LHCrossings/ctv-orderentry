@@ -687,6 +687,15 @@ EXEC web_sales_InsertContractLine
         dw_placeholders = ",".join("?" * len(active_dw))
 
         cursor = self._conn.cursor()
+
+        # Clear existing blocks so duplicated-line inherited blocks don't persist
+        cursor.execute(
+            "DELETE FROM CONTRATTIFASCE WHERE ID_CONTRATTIRIGHE = ?", [line_id]
+        )
+        deleted = cursor.rowcount
+        if deleted:
+            print(f"[DIRECT]     → {deleted} existing block(s) cleared")
+
         cursor.execute(f"""
             INSERT INTO CONTRATTIFASCE (ID_CONTRATTIRIGHE, ID_FASCE, PRICELIST, SELECTEDSEGMENTS)
             SELECT DISTINCT ?, sub.id_fascia, '', ''
@@ -699,11 +708,8 @@ EXEC web_sales_InsertContractLine
                 GROUP BY tp.id_fascia, tp.Date
                 HAVING MIN(tp.offset) >= ? AND MIN(tp.offset) < ?
             ) sub
-            WHERE sub.id_fascia NOT IN (
-                SELECT ID_FASCE FROM CONTRATTIFASCE WHERE ID_CONTRATTIRIGHE = ?
-            )
         """, [line_id, user_id, date_from, date_to,
-              *active_dw, lb, ub, line_id])
+              *active_dw, lb, ub])
 
         count = cursor.rowcount
         if self._autocommit:
