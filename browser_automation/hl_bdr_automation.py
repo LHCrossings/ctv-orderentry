@@ -198,7 +198,6 @@ def _add_bdr_line(
             spots_per_week=dr["spots_per_week"],
             rate=float(line.rate),
             separation_intervals=separation,
-            block_prefixes=[line.block_prefix],
         )
 
         status = "✓" if success else "✗"
