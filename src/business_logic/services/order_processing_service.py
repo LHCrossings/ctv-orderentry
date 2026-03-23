@@ -1324,7 +1324,7 @@ class OrderProcessingService:
 
             return ProcessingResult(
                 success=success,
-                contracts=contracts,
+                contracts=[Contract(c, OrderType.HL_BDR) for c in contracts],
                 order_type=OrderType.HL_BDR,
                 error_message=None if success else "Processing failed"
             )
