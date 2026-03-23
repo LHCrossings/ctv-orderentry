@@ -250,8 +250,8 @@ def _verify_parsed_order(order: AdmerasiaOrder, pdf_path: str) -> Optional[Admer
     """
     while True:
         flight_start, flight_end = order.get_flight_dates()
-        start_str = flight_start.strftime('%-m/%-d/%Y')
-        end_str = flight_end.strftime('%-m/%-d/%Y')
+        start_str = f"{flight_start.month}/{flight_start.day}/{flight_start.year}"
+        end_str = f"{flight_end.month}/{flight_end.day}/{flight_end.year}"
 
         print("\n" + "=" * 70)
         print(f"ORDER VERIFICATION — {order.order_number}")
