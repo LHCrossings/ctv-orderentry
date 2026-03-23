@@ -435,8 +435,17 @@ def parse_bdr_pdf(pdf_path: str) -> list[BDROrder]:
 
 def is_bdr_pdf(pdf_path: str) -> bool:
     """
-    Quick check: OCR first page and look for 'Buy Detail Report' marker.
-    Used by the order detector.
+    Quick check: detect H/L Buy Detail Report PDFs by their Type3 font fingerprint.
+
+    BDR PDFs use a single custom Type3 font that pdfplumber cannot decode
+    (produces cid: codes).  This check uses PyMuPDF to inspect the font
+    metadata — no OCR required, so it runs in under a second.
     """
-    text = _ocr_page(pdf_path, page_num=0)
-    return "Buy Detail Report" in text and "H/L Agency" in text
+    try:
+        import fitz
+        doc = fitz.open(pdf_path)
+        fonts = doc[0].get_fonts()
+        doc.close()
+        return any(f[2] == "Type3" for f in fonts)
+    except Exception:
+        return False
