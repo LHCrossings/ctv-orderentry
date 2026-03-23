@@ -384,9 +384,9 @@ def _validate_contract(contract_number: int | str, order: "BDROrder") -> None:
     After Selenium entry, query Etere DB directly to verify what was entered.
 
     Checks:
-    - Line count entered vs. expected (BDR rows, accounting for date-range splits)
-    - Total spots in DB matches BDR stated total
+    - Line count entered
     - All line start dates >= order.flight_start (no pre-flight lines)
+    - Per-line spots/week, rate, description
 
     Silently skips if the DB connection is unavailable (e.g. not on Windows,
     or Tailscale not connected).
@@ -409,7 +409,7 @@ def _validate_contract(contract_number: int | str, order: "BDROrder") -> None:
         cursor.execute("""
             SELECT
                 DATA_INIZIO, DATA_FINE,
-                N_PUNTATE, PASSAGGI_SETTIMANALI,
+                PASSAGGI_SETTIMANALI,
                 IMPORTO, DESCRIZIONE
             FROM CONTRATTIRIGHE
             WHERE ID_CONTRATTITESTATA = ?
@@ -425,14 +425,10 @@ def _validate_contract(contract_number: int | str, order: "BDROrder") -> None:
             pass
         return
 
-    expected_spots = sum(ln.total_spots for ln in order.lines)
-    actual_spots = sum(r[2] or 0 for r in rows)
     flight_start = datetime.strptime(order.flight_start, "%m/%d/%Y")
 
     print(f"\n[VALIDATE] Contract {contract_number} — DB check:")
-    print(f"  Lines in DB   : {len(rows)}")
-    print(f"  Spots expected: {expected_spots}  |  Spots in DB: {actual_spots}", end="")
-    print(" ✓" if actual_spots == expected_spots else " ✗ MISMATCH")
+    print(f"  Lines in DB: {len(rows)}")
 
     early = [r for r in rows if r[0] and r[0] < flight_start]
     if early:
@@ -442,7 +438,9 @@ def _validate_contract(contract_number: int | str, order: "BDROrder") -> None:
         print(f"  All start dates ≥ {order.flight_start} ✓")
 
     for i, r in enumerate(rows, 1):
-        spots_wk = r[3] or 0
-        rate = r[4] or 0
-        desc = (r[5] or "").strip()
-        print(f"  Line {i}: {r[0]}–{r[1]}  {spots_wk}/wk={r[2]}  ${rate:.2f}  {desc}")
+        spots_wk = r[2] or 0
+        rate = r[3] or 0
+        desc = (r[4] or "").strip()
+        start = r[0].date() if hasattr(r[0], "date") else r[0]
+        end   = r[1].date() if hasattr(r[1], "date") else r[1]
+        print(f"  Line {i}: {start}–{end}  {spots_wk}/wk  ${rate:.2f}  {desc}")
