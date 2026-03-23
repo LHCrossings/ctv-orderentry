@@ -409,7 +409,7 @@ def _validate_contract(contract_number: int | str, order: "BDROrder") -> None:
         cursor.execute("""
             SELECT
                 DATA_INIZIO, DATA_FINE,
-                TOTALE_PASSAGGI, PASSAGGI_SETT,
+                N_PUNTATE, PASSAGGI_SETTIMANALI,
                 IMPORTO, DESCRIZIONE
             FROM CONTRATTIRIGHE
             WHERE ID_CONTRATTITESTATA = ?
