@@ -426,35 +426,51 @@ def _check_for_ambiguous_times(pdf: pdfplumber.PDF) -> Dict[int, Optional[str]]:
         return ambiguous
     
     broadcast_table, row_offset = _find_broadcast_table(tables)
-    
+
+    # Detect column layout from header row (same logic as main parse)
+    header_row = broadcast_table[row_offset]
+    program_col = 2  # fallback
+    for i, cell in enumerate(header_row):
+        if cell and 'Program' in str(cell):
+            program_col = i
+            break
+    time_col = program_col + 1
+    rate_col = program_col + 2
+
     # Adjust starting row based on offset (headers are at row_offset, day numbers at row_offset+1, data starts at row_offset+2)
     start_row = row_offset + 2
-    
+
     for row_idx in range(start_row, len(broadcast_table)):
         row = broadcast_table[row_idx]
-        
+
         if len(row) < 5:
             continue
-        
-        program = row[3] if len(row) > 3 and row[3] else ""
-        time_str = row[4] if len(row) > 4 and row[4] else ""
-        rate_str = row[5] if len(row) > 5 and row[5] else ""
-        
+
+        program = row[program_col] if len(row) > program_col and row[program_col] else ""
+        time_str = row[time_col] if len(row) > time_col and row[time_col] else ""
+        rate_str = row[rate_col] if len(row) > rate_col and row[rate_col] else ""
+
         if not program or not time_str:
             continue
-        
+
         # Check if this is a valid line (has day pattern)
         if not re.search(r'\(([MTWRFSU-]+)\)', program):
             continue
-        
+
         # Check if time is garbled - must start with optional tz prefix then digits
-        # Use match (anchored) not search to avoid false positives where program name
-        # overflows into the time cell (e.g. "nP OSTu1r1 L:i3fe0-12:00p")
         if not re.match(r'^(PST|CT|ET|CST|EST|MST|MT|PT|EDT|CDT|MDT|PDT)?\s*\d+', time_str):
-            # Time is garbled - save context to help user
-            context = f"Program: {program[:60]}..." if len(program) > 60 else program
-            context += f" | Rate: {rate_str}"
-            ambiguous[row_idx] = context
+            # Try to salvage - if a recognisable time is embedded in the garbled text
+            # (program name overflow), it's not truly ambiguous; skip flagging it.
+            salvaged = re.search(r'(\d+:\d+[ap]?-\d+:\d+[ap])', time_str)
+            if not salvaged:
+                stripped = re.sub(r'[^0-9:aApP\-]', '', time_str)
+                stripped = re.sub(r'^[^0-9]+', '', stripped)
+                salvaged = re.match(r'(\d+:\d+[aApP]?-\d+:\d+[aApP])', stripped)
+            if not salvaged:
+                # Time is truly garbled - save context to help user
+                context = f"Program: {program[:60]}..." if len(program) > 60 else program
+                context += f" | Rate: {rate_str}"
+                ambiguous[row_idx] = context
     
     return ambiguous
 
@@ -947,28 +963,20 @@ def _parse_line_items_table_based(pdf: pdfplumber.PDF, week_start_dates: List[da
     # Check first data row to determine layout
     # Note: Check columns 0 AND 1 for spot length — in some orders the length
     # is in col 0 (":15") with ad title in col 1; in others it's in col 1 (":15s").
-    first_data_row = broadcast_table[row_offset + 2]
-    col_offset = 0
-
-    # Check if column 0 OR column 1 has a spot length (like ":15s" or ":30s") - indicates Chinese format
-    col0_has_length = bool(first_data_row[0] and re.search(r':\d+s?', str(first_data_row[0])))
-    col1_has_length = bool(first_data_row[1] and re.search(r':\d+s?', str(first_data_row[1])))
-    if col0_has_length or col1_has_length:
-        # Chinese format - has Length column
-        col_offset = 0
-        print("[PARSE] Detected Chinese format (with Length/AdTitle columns)")
-    else:
-        # Vietnamese format - no Length/AdTitle columns
-        col_offset = -2
-        print("[PARSE] Detected Vietnamese format (no Length/AdTitle columns)")
-    
-    # Adjust column indices based on format
-    # Vietnamese: Program=2, Time=3, Rate=4, Calendar=5
-    # Chinese: Program=3, Time=4, Rate=5, Calendar=6
-    program_col = 2 if col_offset == -2 else 3
-    time_col = 3 if col_offset == -2 else 4
-    rate_col = 4 if col_offset == -2 else 5
-    calendar_start_col = 5 if col_offset == -2 else 6
+    # Detect column layout from the header row (row_offset + 0).
+    # Some PDFs have 2 leading cols (Length, Ad Title, Program Name → col 2),
+    # others have 3 (Length, Ad Title, <blank>, Program Name → col 3).
+    # Read the actual header to find "Program Name" instead of guessing.
+    header_row = broadcast_table[row_offset]
+    program_col = 2  # fallback
+    for i, cell in enumerate(header_row):
+        if cell and 'Program' in str(cell):
+            program_col = i
+            break
+    time_col = program_col + 1
+    rate_col = program_col + 2
+    calendar_start_col = program_col + 3
+    print(f"[PARSE] Column layout: program={program_col}, time={time_col}, rate={rate_col}, calendar_start={calendar_start_col}")
     
     # Get calendar day numbers from day numbers row (row_offset + 1)
     day_numbers_row = broadcast_table[row_offset + 1]
@@ -1041,9 +1049,22 @@ def _parse_line_items_table_based(pdf: pdfplumber.PDF, week_start_dates: List[da
             time_str = time_overrides[row_idx]
             print(f"[INFO] Using user-provided time for row {row_idx}: {time_str}")
         elif time_str and not re.match(r'^(PST|CT|ET|CST|EST|MST|MT|PT|EDT|CDT|MDT|PDT)?\s*\d+', time_str):
-            # Time column is garbled and no override - skip this line
-            print(f"[ERROR] Row {row_idx} has garbled time but no user override provided")
-            continue
+            # Time column may be garbled (e.g. long program name overflows into Day Part cell).
+            # First try a direct regex match on the raw string.
+            salvaged = re.search(r'(\d+:\d+[ap]?-\d+:\d+[ap])', time_str)
+            if not salvaged:
+                # Second attempt: strip all non-time characters (letters that aren't a/p),
+                # collapse the remainder, and try again. This handles character-level
+                # interleaving like 'TPecShT 1in1 :O30u-r1 L2if:e00p' → '11:30-12:00p'.
+                stripped = re.sub(r'[^0-9:aApP\-]', '', time_str)
+                stripped = re.sub(r'^[^0-9]+', '', stripped)  # drop leading non-digits
+                salvaged = re.match(r'(\d+:\d+[aApP]?-\d+:\d+[aApP])', stripped)
+            if salvaged:
+                time_str = salvaged.group(1).lower()
+                print(f"[INFO] Row {row_idx}: salvaged time from garbled column: {time_str}")
+            else:
+                print(f"[ERROR] Row {row_idx} has garbled time but no user override provided")
+                continue
         else:
             # Strip common time zone abbreviations (PST, CT, ET, CST, EST, MST, MT, PT)
             time_str = re.sub(r'^(PST|CT|ET|CST|EST|MST|MT|PT|EST|EDT|CDT|MDT|PDT)\s*', '', time_str)
