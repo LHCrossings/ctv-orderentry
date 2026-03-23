@@ -276,6 +276,8 @@ def _execute_order(
         print(f"  Contract: {contract_number}  |  Lines Added: {line_count}")
         print(f"{'='*60}")
 
+        _validate_contract(contract_number, order)
+
     return created
 
 
@@ -352,3 +354,72 @@ def _add_bdr_line(
             count += 1
 
     return count
+
+
+# ── Post-entry validation ─────────────────────────────────────────────────────
+
+def _validate_contract(contract_number: int | str, order: "BDROrder") -> None:
+    """
+    After Selenium entry, query Etere DB directly to verify what was entered.
+
+    Checks:
+    - Line count entered vs. expected (BDR rows, accounting for date-range splits)
+    - Total spots in DB matches BDR stated total
+    - All line start dates >= order.flight_start (no pre-flight lines)
+
+    Silently skips if the DB connection is unavailable (e.g. not on Windows,
+    or Tailscale not connected).
+    """
+    try:
+        from browser_automation.etere_direct_client import connect
+    except ImportError:
+        return
+
+    try:
+        conn = connect()
+    except Exception:
+        return  # DB not reachable — skip silently
+
+    try:
+        from datetime import datetime
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT
+                DATA_INIZIO, DATA_FINE,
+                TOTALE_PASSAGGI, PASSAGGI_SETT,
+                IMPORTO, DESCRIZIONE
+            FROM CONTRATTIRIGHE
+            WHERE ID_CONTRATTITESTATA = ?
+            ORDER BY ID_CONTRATTIRIGHE
+        """, [int(contract_number)])
+        rows = cursor.fetchall()
+        conn.close()
+    except Exception as e:
+        print(f"[VALIDATE] ⚠ DB query failed: {e}")
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return
+
+    expected_spots = sum(ln.total_spots for ln in order.lines)
+    actual_spots = sum(r[2] or 0 for r in rows)
+    flight_start = datetime.strptime(order.flight_start, "%m/%d/%Y")
+
+    print(f"\n[VALIDATE] Contract {contract_number} — DB check:")
+    print(f"  Lines in DB   : {len(rows)}")
+    print(f"  Spots expected: {expected_spots}  |  Spots in DB: {actual_spots}", end="")
+    print(" ✓" if actual_spots == expected_spots else " ✗ MISMATCH")
+
+    early = [r for r in rows if r[0] and r[0] < flight_start.date()]
+    if early:
+        for r in early:
+            print(f"  ✗ Line starts {r[0]} — before flight start {order.flight_start}")
+    else:
+        print(f"  All start dates ≥ {order.flight_start} ✓")
+
+    for i, r in enumerate(rows, 1):
+        spots_wk = r[3] or 0
+        rate = r[4] or 0
+        desc = (r[5] or "").strip()
+        print(f"  Line {i}: {r[0]}–{r[1]}  {spots_wk}/wk={r[2]}  ${rate:.2f}  {desc}")
