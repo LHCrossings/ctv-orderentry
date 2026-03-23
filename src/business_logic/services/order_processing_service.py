@@ -1154,13 +1154,14 @@ class OrderProcessingService:
             # Market already set to NYC once at batch start
 
             # Process the order with pre-collected inputs (matching Daviselen pattern)
-            success = process_admerasia_order(
+            contract_num = process_admerasia_order(
                 driver=shared_session.driver,  # ← Pass driver, not session!
                 pdf_path=str(order.pdf_path),
                 user_input=order.order_input
             )
 
-            contracts = []
+            success = bool(contract_num)
+            contracts = [str(contract_num)] if contract_num else []
 
             if success:
                 print("\n✓ Admerasia order processed successfully")

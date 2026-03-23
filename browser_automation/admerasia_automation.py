@@ -460,7 +460,7 @@ def process_admerasia_order(
     driver,
     pdf_path: str,
     user_input: dict = None
-) -> bool:
+):
     """
     Process Admerasia order with completely unattended automation.
 
@@ -471,7 +471,7 @@ def process_admerasia_order(
     2. Start browser automation (no interruptions)
     3. Create contract header
     4. Add all contract lines (pre-analyzed from daily spot grid)
-    5. Return success status
+    5. Return contract number on success, None on failure
 
     Args:
         driver: Selenium WebDriver (raw driver, not session)
@@ -479,7 +479,7 @@ def process_admerasia_order(
         user_input: Pre-collected inputs from orchestrator (optional)
 
     Returns:
-        True if successful, False otherwise
+        Contract number string if successful, None otherwise
     """
     # ═══════════════════════════════════════════════════════════════
     # GET INPUTS (pre-collected OR gather now)
@@ -489,7 +489,7 @@ def process_admerasia_order(
         # Not called from orchestrator - gather inputs now
         user_input = gather_admerasia_inputs(pdf_path)
         if not user_input:
-            return False
+            return None
 
     order = user_input['order']
     etere_lines = user_input['etere_lines']
@@ -532,7 +532,7 @@ def process_admerasia_order(
 
         if not contract_number:
             print("[CONTRACT] ✗ Failed to create contract")
-            return False
+            return None
 
         print(f"[CONTRACT] ✓ Created: {contract_number}")
 
@@ -603,9 +603,9 @@ def process_admerasia_order(
         print(f"\n[ERROR] Browser automation failed: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        return None
 
-    return all_success
+    return contract_number if all_success else None
 
 
 
