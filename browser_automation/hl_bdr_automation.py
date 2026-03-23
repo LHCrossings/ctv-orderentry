@@ -165,6 +165,14 @@ def gather_hl_bdr_inputs(pdf_path: str) -> dict | None:
     contract_code = input(f"  Code [{suggested_code}]: ").strip() or suggested_code
     description = input(f"  Description [{suggested_desc}]: ").strip() or suggested_desc
 
+    # ── Show generated codes for all estimates ──
+    if len(orders) > 1:
+        print(f"\n[CONTRACTS] Will create {len(orders)} contracts:")
+        for o in orders:
+            est_code = contract_code.replace(orders[0].estimate_number, o.estimate_number)
+            est_desc = description.replace(orders[0].estimate_number, o.estimate_number)
+            print(f"  Est {o.estimate_number} → {est_code}  |  {est_desc}")
+
     # ── Separation (HL default, no prompt needed) ──
     separation = SEPARATION_INTERVALS
     print(f"\n[BILLING] ✓ Customer share indicating agency % / Agency")
