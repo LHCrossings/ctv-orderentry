@@ -45,6 +45,33 @@ class HLEstimate:
     rates_are_net: bool = False  # True when column header says "Net" instead of "Rate"/"Gross"
 
 
+def _ocr_page_hl(pdf_path: str, page_num: int) -> str:
+    """
+    OCR fallback for H&L PDFs that use custom font encoding.
+    Renders at 2× zoom with 180° rotation correction, then OCRs.
+    Returns empty string if OCR dependencies are unavailable.
+    """
+    try:
+        import fitz
+        import pytesseract
+        from PIL import Image
+        import sys
+        import os
+        if sys.platform == "win32":
+            default = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+            if os.path.exists(default):
+                pytesseract.pytesseract.tesseract_cmd = default
+        doc = fitz.open(pdf_path)
+        page = doc[page_num]
+        mat = fitz.Matrix(2.0, 2.0).prerotate(90)
+        pix = page.get_pixmap(matrix=mat, colorspace=fitz.csRGB)
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        doc.close()
+        return pytesseract.image_to_string(img, config="--psm 6")
+    except Exception:
+        return ""
+
+
 def parse_hl_pdf(pdf_path: str) -> List[HLEstimate]:
     """
     Parse H&L Partners PDF and extract all estimates.
@@ -61,7 +88,13 @@ def parse_hl_pdf(pdf_path: str) -> List[HLEstimate]:
         current_estimate = None
         
         for page_num, page in enumerate(pdf.pages):
-            text = page.extract_text()
+            text = page.extract_text() or ""
+            # Some H&L PDFs use custom font encoding — pdfplumber returns (cid:...) garbage.
+            # Fall back to OCR (PyMuPDF + tesseract) with 180° rotation correction.
+            if "(cid:" in text or "Estimate:" not in text:
+                ocr_text = _ocr_page_hl(pdf_path, page_num)
+                if ocr_text and "Estimate:" in ocr_text:
+                    text = ocr_text
             
             # Check if this is a new estimate page (has estimate number and table headers)
             # H&L uses "Estimate:" and "Line No" or "Daypart Program" headers

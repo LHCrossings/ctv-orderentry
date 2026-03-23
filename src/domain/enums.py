@@ -20,6 +20,7 @@ class OrderType(Enum):
     OPAD = "opad"
     RPM = "rpm"
     HL = "hl"
+    HL_BDR = "hl_bdr"
     DAVISELEN = "daviselen"
     MISFIT = "misfit"
     IMPACT = "impact"

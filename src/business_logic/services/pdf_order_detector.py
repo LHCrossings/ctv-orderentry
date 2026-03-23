@@ -123,6 +123,13 @@ class PDFOrderDetector:
                 # Handle encoding issues with user interaction if needed
                 if order_type == OrderType.UNKNOWN and not silent:
                     if self._service.has_encoding_issues(first_page_text):
+                        # Auto-detect H/L Buy Detail Report (rotated, custom font)
+                        try:
+                            from browser_automation.parsers.hl_bdr_parser import is_bdr_pdf
+                            if is_bdr_pdf(str(pdf_path)):
+                                return OrderType.HL_BDR
+                        except Exception:
+                            pass
                         print("\n[DETECT] [!] WARNING: PDF has encoding issues - text cannot be read properly")
                         print("[DETECT] This PDF may need to be re-saved using Chrome's 'Print to PDF' feature")
                         print("[DETECT] If you know the agency, you can manually specify it below:")

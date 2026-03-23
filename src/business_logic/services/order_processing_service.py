@@ -75,6 +75,7 @@ class OrderProcessingService:
         OrderType.CHARMAINE: "_process_charmaine_order",
         OrderType.ADMERASIA: "_process_admerasia_order",
         OrderType.HL:        "_process_hl_order",
+        OrderType.HL_BDR:    "_process_hl_bdr_order",
         OrderType.LEXUS:     "_process_lexus_order",
         OrderType.IMPRENTA:  "_process_imprenta_order",
         OrderType.OPAD:      "_process_opad_order",
@@ -150,7 +151,7 @@ class OrderProcessingService:
                     OrderType.DAVISELEN, OrderType.SAGENT, OrderType.GALEFORCE,
                     OrderType.TIMEADVERTISING,
                     OrderType.CHARMAINE, OrderType.ADMERASIA,
-                    OrderType.OPAD, OrderType.HL, OrderType.IGRAPHIX,
+                    OrderType.OPAD, OrderType.HL, OrderType.HL_BDR, OrderType.IGRAPHIX,
                     OrderType.IMPACT, OrderType.RPM,
                     OrderType.LEXUS,
                     OrderType.IMPRENTA,
@@ -1272,6 +1273,70 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.HL,
+                error_message=error_detail
+            )
+
+    def _process_hl_bdr_order(
+        self,
+        order: Order,
+        shared_session: any
+    ) -> ProcessingResult:
+        """Process H/L Buy Detail Report order (rotated PDF, custom font encoding)."""
+        try:
+            from browser_automation.hl_bdr_automation import process_hl_bdr_order
+
+            print(f"\n{'='*70}")
+            print("PROCESSING H/L BUY DETAIL REPORT")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            print(f"{'='*70}\n")
+
+            if shared_session is None:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.HL_BDR,
+                    error_message="Browser session required for H/L BDR orders"
+                )
+
+            if not order.order_input:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.HL_BDR,
+                    error_message="Order inputs not collected"
+                )
+
+            print("[SESSION] ✓ Using shared browser session")
+
+            contracts = process_hl_bdr_order(
+                driver=shared_session.driver,
+                pdf_path=str(order.pdf_path),
+                user_input=order.order_input
+            )
+
+            success = bool(contracts)
+
+            if success:
+                print(f"\n✓ H/L BDR order processed — {len(contracts)} contract(s): {', '.join(contracts)}")
+            else:
+                print("\n✗ H/L BDR order processing failed")
+
+            return ProcessingResult(
+                success=success,
+                contracts=contracts,
+                order_type=OrderType.HL_BDR,
+                error_message=None if success else "Processing failed"
+            )
+
+        except Exception as e:
+            import traceback
+            error_detail = f"H/L BDR processing error: {str(e)}\n{traceback.format_exc()}"
+            print(f"\n✗ H/L BDR processing failed: {e}")
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.HL_BDR,
                 error_message=error_detail
             )
 

@@ -35,6 +35,7 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
     OrderType.DAVISELEN: ("browser_automation.daviselen_automation", "gather_daviselen_inputs",       "DAVISELEN"),
     OrderType.ADMERASIA: ("browser_automation.admerasia_automation", "gather_admerasia_inputs",       "ADMERASIA"),
     OrderType.HL:        ("browser_automation.hl_automation",        "gather_hl_inputs",              "H&L PARTNERS"),
+    OrderType.HL_BDR:    ("browser_automation.hl_bdr_automation",    "gather_hl_bdr_inputs",          "H&L BDR"),
     OrderType.IGRAPHIX:  ("browser_automation.igraphix_automation",  "gather_igraphix_inputs",        "IGRAPHIX"),
     OrderType.IMPACT:    ("browser_automation.impact_automation",    "gather_impact_inputs",          "IMPACT"),
     OrderType.RPM:       ("browser_automation.rpm_automation",       "gather_rpm_inputs",             "RPM"),
