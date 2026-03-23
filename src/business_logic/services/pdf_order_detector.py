@@ -94,6 +94,7 @@ class PDFOrderDetector:
         pdf_path = Path(pdf_path)
 
         try:
+            has_encoding = False
             with pdfplumber.open(pdf_path) as pdf:
                 # Extract text from first page
                 first_page_text = pdf.pages[0].extract_text() or ""
@@ -120,27 +121,28 @@ class PDFOrderDetector:
                     if self._is_charmaine_template(first_page_text, pdf):
                         return OrderType.CHARMAINE
 
-                # Handle encoding issues — auto-detect BDR first, then prompt
-                if order_type == OrderType.UNKNOWN and self._service.has_encoding_issues(first_page_text):
-                    # Auto-detect H/L Buy Detail Report (rotated, custom font encoding)
-                    try:
-                        from browser_automation.parsers.hl_bdr_parser import is_bdr_pdf
-                        if is_bdr_pdf(str(pdf_path)):
-                            return OrderType.HL_BDR
-                    except Exception:
-                        pass
+                has_encoding = self._service.has_encoding_issues(first_page_text)
 
-                if order_type == OrderType.UNKNOWN and not silent:
-                    if self._service.has_encoding_issues(first_page_text):
-                        print("\n[DETECT] [!] WARNING: PDF has encoding issues - text cannot be read properly")
-                        print("[DETECT] This PDF may need to be re-saved using Chrome's 'Print to PDF' feature")
-                        print("[DETECT] If you know the agency, you can manually specify it below:")
-                        print("\nIs this an H&L Partners order? (y/n): ", end="")
-                        response = input().strip().lower()
-                        if response in ['y', 'yes']:
-                            return OrderType.HL
+            # pdfplumber is closed here — safe for PyMuPDF to open the same file
+            # Auto-detect H/L Buy Detail Report (rotated PDF, custom Type3 font)
+            if order_type == OrderType.UNKNOWN and has_encoding:
+                try:
+                    from browser_automation.parsers.hl_bdr_parser import is_bdr_pdf
+                    if is_bdr_pdf(str(pdf_path)):
+                        return OrderType.HL_BDR
+                except Exception:
+                    pass
 
-                return order_type
+            if order_type == OrderType.UNKNOWN and not silent and has_encoding:
+                print("\n[DETECT] [!] WARNING: PDF has encoding issues - text cannot be read properly")
+                print("[DETECT] This PDF may need to be re-saved using Chrome's 'Print to PDF' feature")
+                print("[DETECT] If you know the agency, you can manually specify it below:")
+                print("\nIs this an H&L Partners order? (y/n): ", end="")
+                response = input().strip().lower()
+                if response in ['y', 'yes']:
+                    return OrderType.HL
+
+            return order_type
 
         except Exception as e:
             print(f"[DETECT] Error detecting order type: {e}")
