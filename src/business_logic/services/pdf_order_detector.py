@@ -97,10 +97,12 @@ class PDFOrderDetector:
         # opens the file to avoid Windows file-lock conflicts with PyMuPDF.
         try:
             from browser_automation.parsers.hl_bdr_parser import is_bdr_pdf
-            if is_bdr_pdf(str(pdf_path)):
+            _bdr_result = is_bdr_pdf(str(pdf_path))
+            print(f"[DETECT] BDR check: {_bdr_result} ({pdf_path.name})")
+            if _bdr_result:
                 return OrderType.HL_BDR
-        except Exception:
-            pass
+        except Exception as _e:
+            print(f"[DETECT] BDR check error: {_e}")
 
         try:
             has_encoding = False
