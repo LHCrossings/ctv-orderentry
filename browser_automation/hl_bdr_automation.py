@@ -372,13 +372,15 @@ def _validate_contract(contract_number: int | str, order: "BDROrder") -> None:
     """
     try:
         from browser_automation.etere_direct_client import connect
-    except ImportError:
+    except ImportError as e:
+        print(f"[VALIDATE] ⚠ Skipping — etere_direct_client not importable: {e}")
         return
 
     try:
         conn = connect()
-    except Exception:
-        return  # DB not reachable — skip silently
+    except Exception as e:
+        print(f"[VALIDATE] ⚠ Skipping — DB not reachable: {e}")
+        return
 
     try:
         from datetime import datetime
