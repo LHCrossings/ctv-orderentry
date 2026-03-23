@@ -127,9 +127,9 @@ def _ocr_page(pdf_path: str, page_num: int = 0) -> str:
     try:
         doc = fitz.open(pdf_path)
         page = doc[page_num]
-        mat = fitz.Matrix(2.0, 2.0).prerotate(90)
-        pix = page.get_pixmap(matrix=mat, colorspace=fitz.csRGB)
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        mat = fitz.Matrix(3.0, 3.0).prerotate(90)
+        pix = page.get_pixmap(matrix=mat, colorspace=fitz.csGRAY)
+        img = Image.frombytes("L", [pix.width, pix.height], pix.samples)
         doc.close()
         return pytesseract.image_to_string(img, config="--psm 6")
     except Exception:
@@ -305,7 +305,7 @@ def _parse_bdr_page(text: str) -> Optional[BDROrder]:
             r"\s+"
             r"(\d+)"                                  # duration
             r"\s+"
-            r"([\d\s]+)$",                            # spot columns + total
+            r"(.+)$",                                 # spot columns + total (permissive)
             line,
         )
         if not m:
@@ -325,9 +325,11 @@ def _parse_bdr_page(text: str) -> Optional[BDROrder]:
         spot_tokens = m.group(5).split()
         spot_ints: list[int] = []
         for tok in spot_tokens:
-            try:
-                spot_ints.append(int(tok))
-            except ValueError:
+            # Extract leading digits only — handles OCR artifacts like '1°44', 'o', etc.
+            digit_m = re.match(r"^(\d+)", tok)
+            if digit_m:
+                spot_ints.append(int(digit_m.group(1)))
+            else:
                 spot_ints.append(0)
 
         if len(spot_ints) < 2:
