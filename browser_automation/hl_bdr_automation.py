@@ -300,6 +300,16 @@ def _add_bdr_line(
         flight_end=order.flight_end,
     )
 
+    # Clamp start dates: week column headers may precede the EXACT FLIGHT DATES start
+    from datetime import datetime as _dt
+    _flight_start = _dt.strptime(order.flight_start, "%m/%d/%Y")
+    date_ranges = [
+        {**dr, "start_date": order.flight_start}
+        if _dt.strptime(dr["start_date"], "%m/%d/%Y") < _flight_start
+        else dr
+        for dr in date_ranges
+    ]
+
     if not date_ranges:
         print(f"  [BDR] ⚠ {line.days} {line.time} — no active weeks, skipping")
         return 0
