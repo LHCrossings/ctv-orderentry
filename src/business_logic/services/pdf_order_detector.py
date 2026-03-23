@@ -249,6 +249,14 @@ class PDFOrderDetector:
         """
         pdf_path = Path(pdf_path)
 
+        # H/L Buy Detail Report uses Type3 custom fonts — detect before pdfplumber
+        try:
+            from browser_automation.parsers.hl_bdr_parser import is_bdr_pdf
+            if is_bdr_pdf(str(pdf_path)):
+                return (OrderType.HL_BDR, 1)
+        except Exception:
+            pass
+
         try:
             with pdfplumber.open(pdf_path) as pdf:
                 # Extract ALL text from ALL pages
