@@ -434,7 +434,7 @@ def _validate_contract(contract_number: int | str, order: "BDROrder") -> None:
     print(f"  Spots expected: {expected_spots}  |  Spots in DB: {actual_spots}", end="")
     print(" ✓" if actual_spots == expected_spots else " ✗ MISMATCH")
 
-    early = [r for r in rows if r[0] and r[0] < flight_start.date()]
+    early = [r for r in rows if r[0] and r[0] < flight_start]
     if early:
         for r in early:
             print(f"  ✗ Line starts {r[0]} — before flight start {order.flight_start}")
