@@ -140,6 +140,27 @@ def gather_hl_bdr_inputs(pdf_path: str) -> dict | None:
     if len(orders) > 1:
         print(f"[PARSE] ℹ {len(orders)} estimates — each becomes a separate contract")
 
+        # ── Estimate selection ──
+        print(f"\n[SELECT] Which estimates do you want to enter?")
+        for i, o in enumerate(orders, 1):
+            total_spots = sum(ln.total_spots for ln in o.lines)
+            print(f"  [{i}] Est {o.estimate_number}: {o.market}  {o.flight_start}–{o.flight_end}  {total_spots} spots")
+        print(f"  Enter numbers (e.g. '1 3'), ranges (e.g. '1-3'), or 'all' [all]: ", end="")
+        sel_input = input().strip()
+        if sel_input and sel_input.lower() != "all":
+            selected_indices: list[int] = []
+            for part in sel_input.replace(",", " ").split():
+                if "-" in part:
+                    a, b = part.split("-", 1)
+                    selected_indices.extend(range(int(a) - 1, int(b)))
+                else:
+                    selected_indices.append(int(part) - 1)
+            orders = [orders[i] for i in selected_indices if 0 <= i < len(orders)]
+            if not orders:
+                print("[SELECT] ✗ No valid estimates selected")
+                return None
+            print(f"[SELECT] ✓ Processing {len(orders)} estimate(s): {', '.join(o.estimate_number for o in orders)}")
+
     # ── Customer resolution ──
     client_name = orders[0].client
     customer_id = _resolve_bdr_customer_id(client_name)
