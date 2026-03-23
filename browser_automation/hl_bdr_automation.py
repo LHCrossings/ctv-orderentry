@@ -225,19 +225,21 @@ def _execute_order(
     for order in orders:
         print(f"\n[BDR] Processing Est {order.estimate_number}: {order.description}")
 
-        # Build per-estimate code (same logic as HL: append Est N if multi-estimate)
+        # Build per-estimate code: substitute this estimate's number for the first one
+        # e.g. "HL Toyota 13931 SF" → "HL Toyota 13932 SF" for estimate 13932
         if len(orders) > 1:
-            est_order_code = f"{order_code} Est {order.estimate_number}"
+            est_order_code = order_code.replace(orders[0].estimate_number, order.estimate_number)
         else:
             est_order_code = order_code
 
         # Use estimate description for notes (like HL)
         est_notes = order.description if order.description else description
+        est_description = description.replace(orders[0].estimate_number, order.estimate_number)
 
         contract_number = etere.create_contract_header(
             customer_id=customer_id,
             code=est_order_code,
-            description=description,
+            description=est_description,
             contract_start=order.flight_start,
             contract_end=order.flight_end,
             customer_order_ref=order.estimate_number,
