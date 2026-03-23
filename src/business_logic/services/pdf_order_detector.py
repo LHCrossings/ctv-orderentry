@@ -93,6 +93,15 @@ class PDFOrderDetector:
         """
         pdf_path = Path(pdf_path)
 
+        # H/L Buy Detail Report uses Type3 custom fonts — detect before pdfplumber
+        # opens the file to avoid Windows file-lock conflicts with PyMuPDF.
+        try:
+            from browser_automation.parsers.hl_bdr_parser import is_bdr_pdf
+            if is_bdr_pdf(str(pdf_path)):
+                return OrderType.HL_BDR
+        except Exception:
+            pass
+
         try:
             has_encoding = False
             with pdfplumber.open(pdf_path) as pdf:
