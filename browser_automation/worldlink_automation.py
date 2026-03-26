@@ -296,7 +296,7 @@ def _perform_block_refresh_direct(
                 ok_count += 1
                 print(f"[REFRESH] ✓ {count} block(s)")
             else:
-                print(f"[REFRESH] ✗ line not found in DB")
+                print(f"[REFRESH] ✗ failed (see above)")
 
     print(f"\n[REFRESH] Complete — {ok_count}/{len(all_ids)} succeeded")
     return ok_count == len(all_ids)
