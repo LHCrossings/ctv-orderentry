@@ -126,11 +126,28 @@ class OrderDetectionService:
         if self._is_saccountyvoters(first_page_text, second_page_text):
             return OrderType.SACCOUNTYVOTERS
 
+        # Sacramento County Water Agency (Crossings TV house template)
+        if self._is_scwa(first_page_text):
+            return OrderType.SCWA
+
         # Imprenta (PDF version — XLSX is detected via content scan in order_scanner)
         if self._is_imprenta(first_page_text):
             return OrderType.IMPRENTA
 
         return OrderType.UNKNOWN
+
+    def _is_scwa(self, text: str) -> bool:
+        """
+        Check if text matches Sacramento County Water Agency (SCWA) order patterns.
+
+        SCWA patterns:
+        - "Crossings TV Media Proposal" (house template title)
+        - "Sacramento County Water Agency" (advertiser)
+        """
+        return (
+            "Crossings TV Media Proposal" in text and
+            "Sacramento County Water Agency" in text
+        )
 
     def _is_sagent(self, text: str) -> bool:
         """
@@ -557,6 +574,10 @@ class OrderDetectionService:
 
         elif order_type == OrderType.SACCOUNTYVOTERS:
             return self._extract_saccountyvoters_client(first_page_text)
+
+        elif order_type == OrderType.SCWA:
+            m = re.search(r'Advertiser\s+([^\n]+)', first_page_text)
+            return m.group(1).strip() if m else "Sacramento County Water Agency"
 
         # Fallback: try common patterns
         return self._extract_generic_client(first_page_text)

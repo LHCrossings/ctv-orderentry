@@ -33,6 +33,7 @@ class OrderType(Enum):
     TIMEADVERTISING = "timeadvertising"
     CHARMAINE = "charmaine"
     SACCOUNTYVOTERS = "saccountyvoters"
+    SCWA = "scwa"
     XML = "xml"
     UNKNOWN = "unknown"
 
@@ -284,6 +285,7 @@ class SeparationInterval(Enum):
     TIMEADVERTISING = (15, 0, 0)
     CHARMAINE = (15, 0, 0)
     SACCOUNTYVOTERS = (15, 0, 0)
+    SCWA = (15, 0, 0)
     DEFAULT = (15, 0, 0)
 
     @classmethod
@@ -309,5 +311,6 @@ class SeparationInterval(Enum):
             OrderType.TIMEADVERTISING: cls.TIMEADVERTISING.value,
             OrderType.CHARMAINE: cls.CHARMAINE.value,
             OrderType.SACCOUNTYVOTERS: cls.SACCOUNTYVOTERS.value,
+            OrderType.SCWA: cls.SCWA.value,
         }
         return mapping.get(order_type, cls.DEFAULT.value)

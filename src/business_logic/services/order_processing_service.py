@@ -84,6 +84,7 @@ class OrderProcessingService:
         OrderType.RPM:              "_process_rpm_order",
         OrderType.WORLDLINK:        "_process_worldlink_order",
         OrderType.SACCOUNTYVOTERS:  "_process_saccountyvoters_order",
+        OrderType.SCWA:             "_process_scwa_order",
     }
 
     def __init__(
@@ -156,6 +157,7 @@ class OrderProcessingService:
                     OrderType.LEXUS,
                     OrderType.IMPRENTA,
                     OrderType.SACCOUNTYVOTERS,
+                    OrderType.SCWA,
                 ]
                 for order in orders
             )
@@ -1977,6 +1979,65 @@ class OrderProcessingService:
             print(f"\n✗ SacCountyVoters processing failed: {exc}")
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.SACCOUNTYVOTERS,
+                error_message=error_detail,
+            )
+
+    def _process_scwa_order(
+        self,
+        order: Any,
+        shared_session: Any,
+    ) -> "ProcessingResult":
+        """Process Sacramento County Water Agency (SCWA) order."""
+        try:
+            from browser_automation.scwa_automation import process_scwa_order
+
+            print(f"\n{'='*70}")
+            print("PROCESSING SACRAMENTO COUNTY WATER AGENCY ORDER")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            if order.customer_name:
+                print(f"Customer: {order.customer_name}")
+            print(f"{'='*70}\n")
+
+            pre_gathered_inputs = order.order_input if order.order_input else None
+
+            def _run(driver, session):
+                success = process_scwa_order(
+                    driver,
+                    str(order.pdf_path),
+                    shared_session=session,
+                    pre_gathered_inputs=pre_gathered_inputs,
+                )
+                if success:
+                    print("\n✓ SCWA order processed successfully")
+                    return ProcessingResult(success=True, contracts=[], order_type=OrderType.SCWA)
+                print("\n✗ SCWA order processing failed")
+                return ProcessingResult(
+                    success=False, contracts=[], order_type=OrderType.SCWA,
+                    error_message="SCWA processing failed - check browser output for details",
+                )
+
+            if shared_session is None:
+                try:
+                    from etere_session import EtereSession
+                except ImportError:
+                    return ProcessingResult(
+                        success=False, contracts=[], order_type=OrderType.SCWA,
+                        error_message="EtereSession import failed",
+                    )
+                with EtereSession() as session:
+                    session.set_market("NYC")
+                    return _run(session.driver, session)
+
+            driver = shared_session.driver if hasattr(shared_session, 'driver') else shared_session
+            return _run(driver, shared_session)
+
+        except Exception as exc:
+            import traceback
+            error_detail = f"SCWA processing error: {str(exc)}\n{traceback.format_exc()}"
+            print(f"\n✗ SCWA processing failed: {exc}")
+            return ProcessingResult(
+                success=False, contracts=[], order_type=OrderType.SCWA,
                 error_message=error_detail,
             )
 

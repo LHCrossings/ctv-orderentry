@@ -27,7 +27,7 @@ ROS_SCHEDULES = {
     },
     'Vietnamese': {
         'days': 'M-Su',
-        'time': '11a-1p',
+        'time': '10a-1p',   # Updated Apr 1, 2026 (was 11a-1p)
         'language': 'Vietnamese'
     },
     'Hmong': {
