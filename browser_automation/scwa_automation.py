@@ -112,10 +112,6 @@ def _eligible_days_in_flight(days_pattern: str, start_str: str, end_str: str) ->
     return max(count, 1)
 
 
-def _active_days_per_week(days_pattern: str) -> int:
-    return len(_DAY_SETS.get(days_pattern, _DAY_SETS['M-Su']))
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # CUSTOMER DB
 # ─────────────────────────────────────────────────────────────────────────────
@@ -346,17 +342,15 @@ def process_scwa_order(
             # Apply Sunday 6–7a rule
             adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(days, time_str)
 
-            # Calculate max_daily_run from total spots / eligible days in flight
-            eligible_days   = _eligible_days_in_flight(adjusted_days, line.start_date, line.end_date)
-            max_daily_run   = math.ceil(line.total_spots / eligible_days)
-            active_per_week = _active_days_per_week(adjusted_days)
-            spots_per_week  = max_daily_run * active_per_week
+            # SCWA is a monthly total-spots order — no spots_per_week.
+            # Only total_spots and max_daily_run are entered in Etere.
+            eligible_days = _eligible_days_in_flight(adjusted_days, line.start_date, line.end_date)
+            max_daily_run = math.ceil(line.total_spots / eligible_days)
 
             line_count += 1
             print(f"\n  [{line.language_block}]")
             print(f"    Days: {adjusted_days}  Time: {time_from}–{time_to}")
-            print(f"    Total spots: {line.total_spots}  Eligible days: {eligible_days}")
-            print(f"    spots/wk: {spots_per_week}  max/day: {max_daily_run}  rate: ${line.rate}")
+            print(f"    Total spots: {line.total_spots}  Eligible days: {eligible_days}  max/day: {max_daily_run}  rate: ${line.rate}")
 
             ok = etere.add_contract_line(
                 contract_number=contract_number,
@@ -370,7 +364,7 @@ def process_scwa_order(
                 spot_code=2,                      # Paid Commercial
                 duration_seconds=line.duration_seconds,
                 total_spots=line.total_spots,
-                spots_per_week=spots_per_week,
+                spots_per_week=0,
                 max_daily_run=max_daily_run,
                 rate=line.rate,
                 separation_intervals=separation,
