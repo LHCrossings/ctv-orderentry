@@ -846,11 +846,13 @@ EXEC web_sales_InsertContractLine
                         obj, _ = decoder.raw_decode(body, start)
                         keys = list(obj.keys()) if isinstance(obj, dict) else f"array[{len(obj)}]"
                         print(f"[DIRECT]     tableSearchBlocksTable keys: {keys}")
-                        # Print first row sample if Rows/Data key found
-                        for k in ('Rows', 'rows', 'Data', 'data', 'Items', 'items'):
+                        # Print first row sample
+                        for k in ('Body', 'Rows', 'rows', 'Data', 'data', 'Items', 'items'):
                             if k in obj and obj[k]:
                                 print(f"[DIRECT]     {k}[0] sample: {str(obj[k][0])[:300]!r}")
                                 break
+                            elif k in obj:
+                                print(f"[DIRECT]     {k} is empty")
                     except Exception as ex:
                         print(f"[DIRECT]     parse error: {ex}")
             return 0
