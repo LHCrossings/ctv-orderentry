@@ -838,9 +838,9 @@ EXEC web_sales_InsertContractLine
                   f"(len={len(body)}, tableVar={'yes' if has_table else 'no'}, "
                   f"ID_FASCE hits={id_fasce_count})")
             if has_table:
-                tv = _re.search(r'tableSearchBlocksTable\s*=\s*(\[.*?\])\s*;', body, _re.DOTALL)
+                tv = _re.search(r'tableSearchBlocksTable\s*=\s*(.{0,200})', body)
                 if tv:
-                    print(f"[DIRECT]     tableSearchBlocksTable value: {tv.group(1)[:300]!r}")
+                    print(f"[DIRECT]     tableSearchBlocksTable = {tv.group(1)[:200]!r}")
             return 0
 
         # Write to CONTRATTIFASCE: clear stale entries then insert the new set
