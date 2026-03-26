@@ -374,7 +374,6 @@ def process_scwa_order(
                 max_daily_run=max_daily_run,
                 rate=line.rate,
                 separation_intervals=separation,
-                block_prefixes=block_prefixes,
                 is_bookend=False,
                 is_billboard=False,
             )
