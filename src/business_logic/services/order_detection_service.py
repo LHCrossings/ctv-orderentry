@@ -576,7 +576,8 @@ class OrderDetectionService:
             return self._extract_saccountyvoters_client(first_page_text)
 
         elif order_type == OrderType.SCWA:
-            m = re.search(r'Advertiser\s+([^\n]+)', first_page_text)
+            # PDF is two-column; address follows on same line — stop at "Address:"
+            m = re.search(r'Advertiser\s+(.*?)\s+Address:', first_page_text)
             return m.group(1).strip() if m else "Sacramento County Water Agency"
 
         # Fallback: try common patterns

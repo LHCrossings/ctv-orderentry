@@ -310,7 +310,8 @@ def process_scwa_order(
         flight_start = order.lines[0].start_date
         flight_end   = order.lines[0].end_date
 
-        etere.set_master_market(SCWA_MARKET)
+        # NOTE: master market is ALWAYS NYC — set once by EtereSession before the
+        # browser automation runs. Never override it here.
 
         contract_number = etere.create_contract_header(
             customer_id=customer_id,
