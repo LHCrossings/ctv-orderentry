@@ -45,14 +45,14 @@ SCWA_MARKET     = "CVC"
 SCWA_SEPARATION = SeparationInterval.SCWA.value   # (15, 0, 0)
 CUSTOMER_DB_PATH = os.path.join("data", "customers.db")
 
-# ROS schedule per language key → (days, time_str, block_prefixes)
+# ROS schedule per language key → (days, time_str)
 # Vietnamese updated Apr 1, 2026: was 11a-1p, now 10a-1p
-_ROS_MAP: dict[str, tuple[str, str, list[str]]] = {
-    'chinese':     ('M-Su',  '6a-11:59p', ['M', 'C']),
-    'filipino':    ('M-Su',  '4p-7p',     ['T']),
-    'hmong':       ('Sa-Su', '6p-8p',     ['Hm']),
-    'south asian': ('M-Su',  '1p-4p',     ['SA']),
-    'vietnamese':  ('M-Su',  '10a-1p',    ['V']),
+_ROS_MAP: dict[str, tuple[str, str]] = {
+    'chinese':     ('M-Su',  '6a-11:59p'),
+    'filipino':    ('M-Su',  '4p-7p'),
+    'hmong':       ('Sa-Su', '6p-8p'),
+    'south asian': ('M-Su',  '1p-4p'),
+    'vietnamese':  ('M-Su',  '10a-1p'),
 }
 
 # Weekday sets for eligible-day counting (Monday=0)
@@ -340,7 +340,7 @@ def process_scwa_order(
                 print(f"  ✗ Unknown language block: {line.language_block!r} — skipped")
                 continue
 
-            days, time_str, block_prefixes = _ROS_MAP[lang_key]
+            days, time_str = _ROS_MAP[lang_key]
             time_from, time_to = EtereClient.parse_time_range(time_str)
 
             # Apply Sunday 6–7a rule
