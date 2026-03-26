@@ -55,6 +55,7 @@ except ImportError:
 DB_SERVER   = "etere-sql-server.tail98be.ts.net"
 DB_DATABASE = "Etere_crossing"
 DB_DRIVER   = "{SQL Server}"
+ETERE_WEB_URL = "http://100.102.206.113"
 
 
 def connect() -> pyodbc.Connection:
@@ -149,6 +150,14 @@ def _parse_hhmm(time_str: str) -> tuple[int, int]:
     """Parse 'HH:MM' → (h, m)."""
     h, m = time_str.strip().split(":")
     return int(h), int(m)
+
+
+def _frames_to_hhmm(frames: int) -> str:
+    """Convert Etere SMPTE frame count back to 'HH:MM' string."""
+    total_seconds = round(frames / FRAMES_PER_SECOND)
+    h = total_seconds // 3600
+    m = (total_seconds % 3600) // 60
+    return f"{h:02d}:{m:02d}"
 
 
 def _duration_str_to_seconds(duration: str) -> int:
@@ -624,8 +633,8 @@ EXEC web_sales_InsertContractLine
 
         # Assign available program blocks to this line
         if line_id:
-            self._assign_blocks(
-                line_id=line_id,
+            self._assign_blocks_http(
+                contract_id=cid,
                 user_id=user_id,
                 start_frames=start_frames,
                 end_frames=end_frames,
@@ -718,6 +727,89 @@ EXEC web_sales_InsertContractLine
             print(f"[DIRECT]     → {count} block(s) assigned")
         return count
 
+    def _assign_blocks_http(
+        self,
+        contract_id: int,
+        user_id: int,
+        start_frames: int,
+        end_frames: int,
+        day_bits: dict,
+        date_from,
+        date_to,
+    ) -> int:
+        """
+        Assign program blocks to a contract line via Etere's web API.
+
+        Replicates the browser's "Add Blocks Automatically" AJAX call to:
+          POST /sales/getautomaticcontractlineblockstable
+
+        This is more accurate than the reverse-engineered SQL approach because
+        Etere applies its own matching logic server-side.
+
+        Returns number of blocks found in the response, or -1 on HTTP error.
+        Note: the typo "ToFimeProghhmm" (not "ToTimeProghhmm") is intentional —
+        it matches the actual Etere API parameter name.
+        """
+        import json as _json
+        import re as _re
+        try:
+            import requests as _requests
+        except ImportError:
+            print("[DIRECT]     ⚠ requests not installed — skipping HTTP block assignment")
+            return -1
+
+        time_from = _frames_to_hhmm(start_frames)
+        time_to   = _frames_to_hhmm(end_frames)
+
+        # Dates to M/D/YYYY (Etere web API format)
+        fd = date_from if hasattr(date_from, 'month') else date_from
+        td = date_to   if hasattr(date_to,   'month') else date_to
+        from_str = f"{fd.month}/{fd.day}/{fd.year}"
+        to_str   = f"{td.month}/{td.day}/{td.year}"
+
+        payload = {"f": {
+            "IdContract":       contract_id,
+            "FromDate":         from_str,
+            "ToDate":           to_str,
+            "CodUser":          str(user_id),
+            "FromTimeProghhmm": time_from,
+            "ToFimeProghhmm":   time_to,   # typo is intentional — matches Etere API
+            "Mon": day_bits.get("lun", False),
+            "Tue": day_bits.get("mar", False),
+            "Wed": day_bits.get("mer", False),
+            "Thu": day_bits.get("gio", False),
+            "Fri": day_bits.get("ven", False),
+            "Sat": day_bits.get("sab", False),
+            "Sun": day_bits.get("dom", False),
+        }}
+
+        url = f"{ETERE_WEB_URL}/sales/getautomaticcontractlineblockstable"
+        try:
+            resp = _requests.post(url, json=payload, timeout=30)
+            resp.raise_for_status()
+        except Exception as exc:
+            print(f"[DIRECT]     ✗ Block assignment HTTP error: {exc}")
+            return -1
+
+        # Count blocks from the JS variable embedded in the HTML response
+        count = 0
+        m = _re.search(r'tableSearchBlocksTable\s*=\s*(\[.*?\])\s*;', resp.text, _re.DOTALL)
+        if m:
+            try:
+                blocks = _json.loads(m.group(1))
+                count = len(blocks)
+            except Exception:
+                count = resp.text.count('"ID_FASCE"')
+        else:
+            # Fallback: count ID_FASCE occurrences in raw HTML
+            count = resp.text.count('"ID_FASCE"')
+
+        if count:
+            print(f"[DIRECT]     → {count} block(s) assigned (HTTP)")
+        else:
+            print("[DIRECT]     ⚠ Block assignment: 0 blocks found in response")
+        return count
+
     def get_all_line_ids(self, contract_id) -> list[int]:
         """
         Return all ID_CONTRATTIRIGHE values for the given contract,
@@ -739,7 +831,7 @@ EXEC web_sales_InsertContractLine
         """
         Assign blocks to a line that already exists in CONTRATTIRIGHE (e.g. created
         via Selenium).  Reads ORA_INIZIO/ORA_FINE, day bits, date range, and
-        COD_USER directly from the DB and delegates to _assign_blocks().
+        COD_USER directly from the DB and delegates to _assign_blocks_http().
 
         Returns the number of blocks assigned, or -1 if the line was not found.
         """
@@ -749,7 +841,7 @@ EXEC web_sales_InsertContractLine
                    LUNEDI, MARTEDI, MERCOLEDI, GIOVEDI,
                    VENERDI, SABATO, DOMENICA,
                    DATA_INIZIO, DATA_FINE,
-                   COD_USER
+                   COD_USER, ID_CONTRATTITESTATA
             FROM   CONTRATTIRIGHE
             WHERE  ID_CONTRATTIRIGHE = ?
         """, [line_id])
@@ -768,9 +860,10 @@ EXEC web_sales_InsertContractLine
             "sab": bool(row[7]),
             "dom": bool(row[8]),
         }
-        date_from = row[9]
-        date_to   = row[10]
-        user_id   = row[11]
+        date_from   = row[9]
+        date_to     = row[10]
+        user_id     = row[11]
+        contract_id = row[12]
 
         # Strip trailing asterisks Etere appends after block operations
         cursor.execute("""
@@ -782,8 +875,8 @@ EXEC web_sales_InsertContractLine
         if self._autocommit:
             self._conn.commit()
 
-        return self._assign_blocks(
-            line_id=line_id,
+        return self._assign_blocks_http(
+            contract_id=contract_id,
             user_id=user_id,
             start_frames=start_frames,
             end_frames=end_frames,
