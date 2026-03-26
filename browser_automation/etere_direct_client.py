@@ -825,7 +825,8 @@ EXEC web_sales_InsertContractLine
         count = len(block_ids)
 
         if not block_ids:
-            print("[DIRECT]     ⚠ No blocks returned from HTTP")
+            snippet = resp.text[:200].replace('\n', ' ').strip()
+            print(f"[DIRECT]     ⚠ No blocks returned from HTTP (response: {snippet!r})")
             return 0
 
         # Write to CONTRATTIFASCE: clear stale entries then insert the new set
