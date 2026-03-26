@@ -646,6 +646,7 @@ EXEC web_sales_InsertContractLine
                 day_bits=day_bits,
                 date_from=datefrom_dt,
                 date_to=dateto_dt,
+                line_id=line_id,
             )
 
         label = "BNS" if is_bonus else "PAID"
@@ -741,17 +742,20 @@ EXEC web_sales_InsertContractLine
         day_bits: dict,
         date_from,
         date_to,
+        line_id: int = 0,
     ) -> int:
         """
         Assign program blocks to a contract line via Etere's web API.
 
-        Replicates the browser's "Add Blocks Automatically" AJAX call to:
-          POST /sales/getautomaticcontractlineblockstable
+        Calls POST /sales/getautomaticcontractlineblockstable to get the list of
+        blocks Etere's server would assign (using its own matching logic), then
+        writes those blocks to CONTRATTIFASCE directly.
 
-        This is more accurate than the reverse-engineered SQL approach because
-        Etere applies its own matching logic server-side.
+        This hybrid approach is more accurate than the reverse-engineered SQL
+        method because Etere's server-side algorithm selects the blocks, while
+        our direct DB write avoids a separate "save" HTTP call.
 
-        Returns number of blocks found in the response, or -1 on HTTP error.
+        Returns number of blocks assigned, or -1 on HTTP error.
         Note: the typo "ToFimeProghhmm" (not "ToTimeProghhmm") is intentional —
         it matches the actual Etere API parameter name.
         """
@@ -761,6 +765,10 @@ EXEC web_sales_InsertContractLine
             import requests as _requests
         except ImportError:
             print("[DIRECT]     ⚠ requests not installed — skipping HTTP block assignment")
+            return -1
+
+        if not self._session_cookies:
+            print("[DIRECT]     ⚠ No session cookies — call set_session_cookies() first")
             return -1
 
         time_from = _frames_to_hhmm(start_frames)
@@ -788,10 +796,6 @@ EXEC web_sales_InsertContractLine
             "Sun": day_bits.get("dom", False),
         }}
 
-        if not self._session_cookies:
-            print("[DIRECT]     ⚠ No session cookies — call set_session_cookies() first")
-            return -1
-
         url = f"{ETERE_WEB_URL}/sales/getautomaticcontractlineblockstable"
         try:
             resp = _requests.post(url, json=payload, cookies=self._session_cookies, timeout=30)
@@ -800,23 +804,49 @@ EXEC web_sales_InsertContractLine
             print(f"[DIRECT]     ✗ Block assignment HTTP error: {exc}")
             return -1
 
-        # Count blocks from the JS variable embedded in the HTML response
-        count = 0
+        # Parse block IDs from the response.
+        # Primary: JS variable `tableSearchBlocksTable = [...];`
+        # Fallback: extract all "ID_FASCE": NNN occurrences from raw HTML/JSON.
+        block_ids: list[int] = []
         m = _re.search(r'tableSearchBlocksTable\s*=\s*(\[.*?\])\s*;', resp.text, _re.DOTALL)
         if m:
             try:
                 blocks = _json.loads(m.group(1))
-                count = len(blocks)
+                block_ids = [int(b['ID_FASCE']) for b in blocks if 'ID_FASCE' in b]
             except Exception:
-                count = resp.text.count('"ID_FASCE"')
-        else:
-            # Fallback: count ID_FASCE occurrences in raw HTML
-            count = resp.text.count('"ID_FASCE"')
+                pass
+        if not block_ids:
+            block_ids = [int(x) for x in _re.findall(r'"ID_FASCE"\s*:\s*(\d+)', resp.text)]
 
-        if count:
+        # Deduplicate while preserving order
+        seen: set[int] = set()
+        block_ids = [bid for bid in block_ids if not (bid in seen or seen.add(bid))]
+
+        count = len(block_ids)
+
+        if not block_ids:
+            print("[DIRECT]     ⚠ No blocks returned from HTTP")
+            return 0
+
+        # Write to CONTRATTIFASCE: clear stale entries then insert the new set
+        if line_id:
+            cursor = self._conn.cursor()
+            cursor.execute(
+                "DELETE FROM CONTRATTIFASCE WHERE ID_CONTRATTIRIGHE = ?", [line_id]
+            )
+            for bid in block_ids:
+                cursor.execute(
+                    "INSERT INTO CONTRATTIFASCE "
+                    "(ID_CONTRATTIRIGHE, ID_FASCE, PRICELIST, SELECTEDSEGMENTS) "
+                    "VALUES (?, ?, '', '')",
+                    [line_id, bid],
+                )
+            if self._autocommit:
+                self._conn.commit()
             print(f"[DIRECT]     → {count} block(s) assigned (HTTP)")
         else:
-            print("[DIRECT]     → blocks assigned (HTTP)")
+            print(f"[DIRECT]     ⚠ {count} block(s) found but no line_id — not saved")
+
         return count
 
     def get_all_line_ids(self, contract_id) -> list[int]:
@@ -892,6 +922,7 @@ EXEC web_sales_InsertContractLine
             day_bits=day_bits,
             date_from=date_from,
             date_to=date_to,
+            line_id=line_id,
         )
 
     # ── Utilities (pass-through to shared helpers) ───────────────────────────────
