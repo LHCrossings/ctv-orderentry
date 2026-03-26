@@ -429,9 +429,8 @@ def gather_admerasia_inputs(pdf_path: str) -> Optional[dict]:
     billing = BillingType.CUSTOMER_SHARE_AGENCY
     print(f"\n[BILLING] ✓ Customer share indicating agency % / Agency")
 
-    # Spot duration (from parsed order)
-    spot_duration = order.lines[0].spot_length if order.lines else 15
-    print(f"[SPOT] ✓ Duration: :{spot_duration}s")
+    # Spot duration is read per-line from line_spec['spot_length'] during entry
+    # (orders may mix :15 and :30 lines)
 
     print("\n" + "=" * 70)
     print("INPUT COLLECTION COMPLETE - Ready for automation")
@@ -585,7 +584,7 @@ def process_admerasia_order(
                 time_to=time_to,
                 description=description,
                 spot_code=spot_code,
-                duration_seconds=spot_duration,
+                duration_seconds=line_spec.get('spot_length', 15),
                 total_spots=line_spec['total_spots'],
                 spots_per_week=spots_per_week,
                 max_daily_run=line_spec['per_day_max'],

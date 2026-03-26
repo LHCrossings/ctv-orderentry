@@ -1004,24 +1004,24 @@ def _parse_line_items_table_based(pdf: pdfplumber.PDF, week_start_dates: List[da
                         f"This may indicate an error in the order. Full sequence: {calendar_days}"
                     )
     
-    # Get spot length from first data row
-    spot_length = 15  # Default
-    first_data_row = broadcast_table[row_offset + 2]
-    if first_data_row[0] and str(first_data_row[0]) != 'None':
-        match = re.search(r':(\d+)', str(first_data_row[0]))
-        if match:
-            spot_length = int(match.group(1))
-    
-    print(f"[PARSE] Spot length: :{spot_length}s")
-    
+    spot_length = 15  # Default — updated per-row when a length marker (":15", ":30") appears in col 0
+
     # Parse data rows (starting from first data row)
     for row_idx in range(row_offset + 2, len(broadcast_table)):
         row = broadcast_table[row_idx]
-        
+
         # Stop at footer/totals row
         if len(row) < 6:
             continue
-        
+
+        # Update spot_length whenever col 0 has a new length marker (:15, :30, etc.)
+        col0 = str(row[0] or "").strip()
+        if col0:
+            m = re.search(r':(\d+)', col0)
+            if m:
+                spot_length = int(m.group(1))
+                print(f"[PARSE] Row {row_idx}: spot length → :{spot_length}s")
+
         program = row[program_col] if len(row) > program_col and row[program_col] else ""
         time_str = row[time_col] if len(row) > time_col and row[time_col] else ""
         rate_str = row[rate_col] if len(row) > rate_col and row[rate_col] else ""
