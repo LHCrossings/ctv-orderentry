@@ -837,11 +837,10 @@ EXEC web_sales_InsertContractLine
             print(f"[DIRECT]     ⚠ No blocks returned from HTTP "
                   f"(len={len(body)}, tableVar={'yes' if has_table else 'no'}, "
                   f"ID_FASCE hits={id_fasce_count})")
-            if not has_table and id_fasce_count == 0:
-                # Dump middle section to show table area
-                mid = len(body) // 2
-                snippet = body[mid:mid+400].replace('\n', ' ')
-                print(f"[DIRECT]     HTML mid-section: {snippet!r}")
+            if has_table:
+                tv = _re.search(r'tableSearchBlocksTable\s*=\s*(\[.*?\])\s*;', body, _re.DOTALL)
+                if tv:
+                    print(f"[DIRECT]     tableSearchBlocksTable value: {tv.group(1)[:300]!r}")
             return 0
 
         # Write to CONTRATTIFASCE: clear stale entries then insert the new set
