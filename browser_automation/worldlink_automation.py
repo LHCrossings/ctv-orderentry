@@ -285,10 +285,15 @@ def _perform_block_refresh_direct(
             print("[REFRESH] ✓ No new lines to refresh")
             return True
 
+    # Extract session cookies from the live Selenium driver so the HTTP block
+    # assignment call can authenticate with Etere's web server.
+    session_cookies = {c['name']: c['value'] for c in etere.driver.get_cookies()}
+
     print(f"[REFRESH] Assigning blocks for {len(all_ids)} lines via direct DB...")
     ok_count = 0
     with db_connect() as conn:
         direct = EtereDirectClient(conn)
+        direct.set_session_cookies(session_cookies)
         for idx, line_id in enumerate(all_ids, 1):
             print(f"[REFRESH] {idx}/{len(all_ids)}: ID {line_id}")
             count = direct.assign_blocks_for_existing_line(line_id)

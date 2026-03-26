@@ -272,6 +272,11 @@ class EtereDirectClient:
         self._autocommit = autocommit
         self._master_market = "NYC"
         self._contract_id: Optional[int] = None
+        self._session_cookies: dict = {}   # populated via set_session_cookies()
+
+    def set_session_cookies(self, cookies: dict) -> None:
+        """Pass browser session cookies so _assign_blocks_http can authenticate."""
+        self._session_cookies = cookies
 
     # ── Market ──────────────────────────────────────────────────────────────────
 
@@ -783,15 +788,17 @@ EXEC web_sales_InsertContractLine
             "Sun": day_bits.get("dom", False),
         }}
 
+        if not self._session_cookies:
+            print("[DIRECT]     ⚠ No session cookies — call set_session_cookies() first")
+            return -1
+
         url = f"{ETERE_WEB_URL}/sales/getautomaticcontractlineblockstable"
         try:
-            resp = _requests.post(url, json=payload, timeout=30)
+            resp = _requests.post(url, json=payload, cookies=self._session_cookies, timeout=30)
             resp.raise_for_status()
         except Exception as exc:
             print(f"[DIRECT]     ✗ Block assignment HTTP error: {exc}")
             return -1
-
-        print(f"[DIRECT]     HTTP {resp.status_code}, {len(resp.text)} chars, snippet: {resp.text[:120]!r}")
 
         # Count blocks from the JS variable embedded in the HTML response
         count = 0
