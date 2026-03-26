@@ -219,7 +219,7 @@ class TestProcessorDispatch:
             OrderType.CHARMAINE, OrderType.ADMERASIA, OrderType.HL, OrderType.HL_BDR,
             OrderType.OPAD, OrderType.IGRAPHIX, OrderType.IMPACT, OrderType.RPM,
             OrderType.WORLDLINK, OrderType.SACCOUNTYVOTERS, OrderType.LEXUS,
-            OrderType.IMPRENTA,
+            OrderType.IMPRENTA, OrderType.SCWA,
         }
         assert set(service._PROCESSOR_DISPATCH.keys()) == expected
 
