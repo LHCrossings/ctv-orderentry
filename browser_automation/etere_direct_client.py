@@ -791,6 +791,8 @@ EXEC web_sales_InsertContractLine
             print(f"[DIRECT]     ✗ Block assignment HTTP error: {exc}")
             return -1
 
+        print(f"[DIRECT]     HTTP {resp.status_code}, {len(resp.text)} chars, snippet: {resp.text[:120]!r}")
+
         # Count blocks from the JS variable embedded in the HTML response
         count = 0
         m = _re.search(r'tableSearchBlocksTable\s*=\s*(\[.*?\])\s*;', resp.text, _re.DOTALL)
