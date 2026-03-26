@@ -804,11 +804,18 @@ EXEC web_sales_InsertContractLine
             print(f"[DIRECT]     ✗ Block assignment HTTP error: {exc}")
             return -1
 
-        # Parse block IDs from the response.
+        # Response is a JSON envelope: {"Result": {...}, "Value": "<html...>"}
+        # The HTML block table is inside the "Value" field.
+        try:
+            body = resp.json().get("Value", resp.text)
+        except Exception:
+            body = resp.text
+
+        # Parse block IDs from the HTML.
         # Primary: JS variable `tableSearchBlocksTable = [...];`
-        # Fallback: extract all "ID_FASCE": NNN occurrences from raw HTML/JSON.
+        # Fallback: extract all "ID_FASCE": NNN occurrences from the HTML.
         block_ids: list[int] = []
-        m = _re.search(r'tableSearchBlocksTable\s*=\s*(\[.*?\])\s*;', resp.text, _re.DOTALL)
+        m = _re.search(r'tableSearchBlocksTable\s*=\s*(\[.*?\])\s*;', body, _re.DOTALL)
         if m:
             try:
                 blocks = _json.loads(m.group(1))
@@ -816,7 +823,7 @@ EXEC web_sales_InsertContractLine
             except Exception:
                 pass
         if not block_ids:
-            block_ids = [int(x) for x in _re.findall(r'"ID_FASCE"\s*:\s*(\d+)', resp.text)]
+            block_ids = [int(x) for x in _re.findall(r'"ID_FASCE"\s*:\s*(\d+)', body)]
 
         # Deduplicate while preserving order
         seen: set[int] = set()
@@ -825,8 +832,8 @@ EXEC web_sales_InsertContractLine
         count = len(block_ids)
 
         if not block_ids:
-            snippet = resp.text[:200].replace('\n', ' ').strip()
-            print(f"[DIRECT]     ⚠ No blocks returned from HTTP (response: {snippet!r})")
+            snippet = body[:200].replace('\n', ' ').strip()
+            print(f"[DIRECT]     ⚠ No blocks returned from HTTP (html: {snippet!r})")
             return 0
 
         # Write to CONTRATTIFASCE: clear stale entries then insert the new set
