@@ -1,5 +1,19 @@
 # Lessons Learned
 
+## Master Market Is Always NYC — Never Override It in Agency Automations
+
+**Session:** SCWA implementation (2026-03-26)
+
+**Rule:** Master market is set ONCE by `EtereSession` before any automation runs. Agency automation files must NEVER call `etere.set_master_market()` — doing so fires a second market-selection and can set the wrong market.
+
+The only valid exception: `charmaine_automation.py` sets "DAL" for Asian Channel orders, then "NYC" for all others — because Charmaine handles both networks in one automation.
+
+**Universal defaults:**
+- Master market = **NYC** for all Crossings TV orders (CVC, SFO, LAX, SEA, HOU, CMP, WDC, MMT, NYC)
+- Master market = **DAL** only for The Asian Channel (Dallas)
+
+**How to apply:** When writing a new agency automation, do NOT include a `set_master_market` call. The session handles it. The line-level `market` argument to `add_contract_line()` is separate and correct to set per line.
+
 ## Bookend Orders: Halve Spot Counts, Double Rate Before Etere Entry
 
 **Session:** Imprenta PG&E bookend fix (2026-03-16)
