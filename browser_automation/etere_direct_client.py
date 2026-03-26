@@ -832,8 +832,16 @@ EXEC web_sales_InsertContractLine
         count = len(block_ids)
 
         if not block_ids:
-            snippet = body[:200].replace('\n', ' ').strip()
-            print(f"[DIRECT]     ⚠ No blocks returned from HTTP (html: {snippet!r})")
+            has_table = 'tableSearchBlocksTable' in body
+            id_fasce_count = body.count('ID_FASCE')
+            print(f"[DIRECT]     ⚠ No blocks returned from HTTP "
+                  f"(len={len(body)}, tableVar={'yes' if has_table else 'no'}, "
+                  f"ID_FASCE hits={id_fasce_count})")
+            if not has_table and id_fasce_count == 0:
+                # Dump middle section to show table area
+                mid = len(body) // 2
+                snippet = body[mid:mid+400].replace('\n', ' ')
+                print(f"[DIRECT]     HTML mid-section: {snippet!r}")
             return 0
 
         # Write to CONTRATTIFASCE: clear stale entries then insert the new set
