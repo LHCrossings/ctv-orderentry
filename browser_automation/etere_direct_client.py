@@ -838,9 +838,21 @@ EXEC web_sales_InsertContractLine
                   f"(len={len(body)}, tableVar={'yes' if has_table else 'no'}, "
                   f"ID_FASCE hits={id_fasce_count})")
             if has_table:
-                tv = _re.search(r'tableSearchBlocksTable\s*=\s*(.{0,200})', body)
+                tv = _re.search(r'tableSearchBlocksTable\s*=\s*([{\[])', body)
                 if tv:
-                    print(f"[DIRECT]     tableSearchBlocksTable = {tv.group(1)[:200]!r}")
+                    start = tv.start(1)
+                    try:
+                        decoder = _json.JSONDecoder()
+                        obj, _ = decoder.raw_decode(body, start)
+                        keys = list(obj.keys()) if isinstance(obj, dict) else f"array[{len(obj)}]"
+                        print(f"[DIRECT]     tableSearchBlocksTable keys: {keys}")
+                        # Print first row sample if Rows/Data key found
+                        for k in ('Rows', 'rows', 'Data', 'data', 'Items', 'items'):
+                            if k in obj and obj[k]:
+                                print(f"[DIRECT]     {k}[0] sample: {str(obj[k][0])[:300]!r}")
+                                break
+                    except Exception as ex:
+                        print(f"[DIRECT]     parse error: {ex}")
             return 0
 
         # Write to CONTRATTIFASCE: clear stale entries then insert the new set
