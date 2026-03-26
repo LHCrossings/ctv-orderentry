@@ -811,19 +811,24 @@ EXEC web_sales_InsertContractLine
         except Exception:
             body = resp.text
 
-        # Parse block IDs from the HTML.
-        # Primary: JS variable `tableSearchBlocksTable = [...];`
-        # Fallback: extract all "ID_FASCE": NNN occurrences from the HTML.
+        # Parse block IDs from the tableSearchBlocksTable JSON object.
+        # Structure: {"Code":"BlocksTable","Header":[...],"Body":[[row cells],...]}
+        # Each row's first cell has HiddenParams.idBlock = the block ID.
         block_ids: list[int] = []
-        m = _re.search(r'tableSearchBlocksTable\s*=\s*(\[.*?\])\s*;', body, _re.DOTALL)
-        if m:
+        tv = _re.search(r'tableSearchBlocksTable\s*=\s*([{\[])', body)
+        if tv:
             try:
-                blocks = _json.loads(m.group(1))
-                block_ids = [int(b['ID_FASCE']) for b in blocks if 'ID_FASCE' in b]
+                decoder = _json.JSONDecoder()
+                obj, _ = decoder.raw_decode(body, tv.start(1))
+                rows = obj.get('Body') or [] if isinstance(obj, dict) else obj
+                for row in rows:
+                    try:
+                        bid = row[0]['HiddenParams']['idBlock']
+                        block_ids.append(int(bid))
+                    except (KeyError, IndexError, TypeError, ValueError):
+                        pass
             except Exception:
                 pass
-        if not block_ids:
-            block_ids = [int(x) for x in _re.findall(r'"ID_FASCE"\s*:\s*(\d+)', body)]
 
         # Deduplicate while preserving order
         seen: set[int] = set()
@@ -832,29 +837,7 @@ EXEC web_sales_InsertContractLine
         count = len(block_ids)
 
         if not block_ids:
-            has_table = 'tableSearchBlocksTable' in body
-            id_fasce_count = body.count('ID_FASCE')
-            print(f"[DIRECT]     ⚠ No blocks returned from HTTP "
-                  f"(len={len(body)}, tableVar={'yes' if has_table else 'no'}, "
-                  f"ID_FASCE hits={id_fasce_count})")
-            if has_table:
-                tv = _re.search(r'tableSearchBlocksTable\s*=\s*([{\[])', body)
-                if tv:
-                    start = tv.start(1)
-                    try:
-                        decoder = _json.JSONDecoder()
-                        obj, _ = decoder.raw_decode(body, start)
-                        keys = list(obj.keys()) if isinstance(obj, dict) else f"array[{len(obj)}]"
-                        print(f"[DIRECT]     tableSearchBlocksTable keys: {keys}")
-                        # Print first row sample
-                        for k in ('Body', 'Rows', 'rows', 'Data', 'data', 'Items', 'items'):
-                            if k in obj and obj[k]:
-                                print(f"[DIRECT]     {k}[0] sample: {str(obj[k][0])[:300]!r}")
-                                break
-                            elif k in obj:
-                                print(f"[DIRECT]     {k} is empty")
-                    except Exception as ex:
-                        print(f"[DIRECT]     parse error: {ex}")
+            print("[DIRECT]     ⚠ No blocks returned from HTTP")
             return 0
 
         # Write to CONTRATTIFASCE: clear stale entries then insert the new set
