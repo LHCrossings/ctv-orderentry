@@ -84,6 +84,34 @@ def _format_time_range_short(time_range: str) -> str:
     return f"{start_short}-{end_short}"
 
 
+def _format_24hr_short(hhmm: str) -> str:
+    """Convert 24-hour 'HH:MM' to short display string.
+
+    Examples: '06:00' → '6a', '23:00' → '11p', '23:59' → '12m', '12:00' → '12n'
+    """
+    try:
+        h, m = int(hhmm[:2]), int(hhmm[3:])
+    except (ValueError, IndexError):
+        return hhmm
+    if hhmm == '23:59':
+        return '12m'
+    if h == 0:
+        suffix, display_h = 'a', 12
+    elif h < 12:
+        suffix, display_h = 'a', h
+    elif h == 12:
+        suffix, display_h = 'n', 12
+    else:
+        suffix, display_h = 'p', h - 12
+    mins = f":{m:02d}" if m != 0 else ''
+    return f"{display_h}{mins}{suffix}"
+
+
+def _short_time_range(from_time: str, to_time: str) -> str:
+    """Build short time range string from normalized 24hr times, e.g. '6a-12m'."""
+    return f"{_format_24hr_short(from_time)}-{_format_24hr_short(to_time)}"
+
+
 def _parse_date(date_str: str):
     """Convert 'MM/DD/YYYY' string to date object for create_contract_header."""
     return datetime.strptime(date_str.strip(), '%m/%d/%Y').date()
@@ -328,19 +356,24 @@ def _add_crossings_lines(
         days, _ = EtereClient.check_sunday_6_7a_rule(days, line['time_range'])
         time_from = line['from_time']
         time_to = line['to_time']
-        desc = f"(Line {line['line_number']}) {days} {_format_time_range_short(line['time_range'])}"
-        duration = _duration_to_seconds(line['duration'])
         rate = float(line['rate'])
+        is_bonus = rate == 0.0
+        spot_code = 10 if is_bonus else 2
+        time_short = _short_time_range(line['from_time'], line['to_time'])
+        label = "BNS " if is_bonus else ""
+        desc = f"(Line {line['line_number']}) {label}{days} {time_short}"
+        duration = _duration_to_seconds(line['duration'])
 
         print(f"\n[LINE {line['line_number']}] {days} {line['time_range']} | "
-              f"{duration}s | {line['spots']}/wk | ${rate}")
+              f"{duration}s | {line['spots']}/wk | ${rate}"
+              + (" [BNS]" if is_bonus else ""))
 
         # NYC line: actual rate
         ok = etere.add_contract_line(
             contract_number=contract_number, market="NYC",
             start_date=line['start_date'], end_date=line['end_date'],
             days=days, time_from=time_from, time_to=time_to,
-            description=desc, spot_code=2, duration_seconds=duration,
+            description=desc, spot_code=spot_code, duration_seconds=duration,
             total_spots=line['total_spots'], spots_per_week=line['spots'],
             rate=rate, separation_intervals=separation,
         )
@@ -353,7 +386,7 @@ def _add_crossings_lines(
             contract_number=contract_number, market="CMP",
             start_date=line['start_date'], end_date=line['end_date'],
             days=days, time_from=time_from, time_to=time_to,
-            description=desc, spot_code=2, duration_seconds=duration,
+            description=desc, spot_code=spot_code, duration_seconds=duration,
             total_spots=line['total_spots'], spots_per_week=line['spots'],
             rate=0.0, separation_intervals=separation,
             other_markets=["CVC", "SFO", "LAX", "SEA", "HOU", "WDC", "MMT"],
@@ -376,15 +409,23 @@ def _add_asian_lines(
     for line in lines:
         days = line['days_of_week']
         days, _ = EtereClient.check_sunday_6_7a_rule(days, line['time_range'])
+        rate = float(line['rate'])
+        is_bonus = rate == 0.0
+        spot_code = 10 if is_bonus else 2
+        time_short = _short_time_range(line['from_time'], line['to_time'])
+        label = "BNS " if is_bonus else ""
+        desc = f"(Line {line['line_number']}) {label}{days} {time_short}"
+        print(f"\n[LINE {line['line_number']}] {days} {line['time_range']} | "
+              f"{_duration_to_seconds(line['duration'])}s | {line['spots']}/wk | ${rate}"
+              + (" [BNS]" if is_bonus else ""))
         ok = etere.add_contract_line(
             contract_number=contract_number, market="DAL",
             start_date=line['start_date'], end_date=line['end_date'],
             days=days, time_from=line['from_time'], time_to=line['to_time'],
-            description=f"(Line {line['line_number']}) {days} {_format_time_range_short(line['time_range'])}",
-            spot_code=2,
+            description=desc, spot_code=spot_code,
             duration_seconds=_duration_to_seconds(line['duration']),
             total_spots=line['total_spots'], spots_per_week=line['spots'],
-            rate=float(line['rate']), separation_intervals=separation,
+            rate=rate, separation_intervals=separation,
         )
         if not ok:
             print(f"  ✗ DAL line {line['line_number']} failed")

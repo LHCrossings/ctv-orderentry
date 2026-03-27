@@ -406,10 +406,14 @@ def _apply_time_bounds(from_time: str, to_time: str):
 
     Floor: from_time < 06:00 → clamp to 06:00
     Ceiling: to_time is a past-midnight AM hour (00:00–05:59) → clamp to 23:59
+             to_time <= from_time (same time or earlier) → clamp to 23:59
+             (e.g. "6:00 AM - 6:00 AM" means ROS/end-of-day, not a zero-length window)
     """
     if from_time < '06:00':
         from_time = '06:00'
     if to_time < '06:00':          # past-midnight end (e.g. 2:00 AM after 10 PM)
+        to_time = '23:59'
+    if to_time <= from_time:       # same time or earlier — treat as end-of-broadcast-day
         to_time = '23:59'
     return from_time, to_time
 
