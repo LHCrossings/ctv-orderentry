@@ -26,7 +26,6 @@ if str(_project_root) not in sys.path:
 from browser_automation.etere_client import EtereClient
 from browser_automation.parsers.hyphen_parser import HyphenEstimate, HyphenLine, parse_hyphen_pdf
 from browser_automation.ros_definitions import ROS_SCHEDULES
-from browser_automation.parsers.hyphen_parser import _shorten_time
 from src.domain.enums import BillingType, OrderType
 
 CUSTOMER_DB_PATH = os.path.join("data", "customers.db")
@@ -315,8 +314,7 @@ def _create_hyphen_contract(
                 if ros:
                     time_from, time_to = EtereClient.parse_time_range(ros['time'])
                     adjusted_days = ros['days']
-                    short_time = _shorten_time(ros['time'])
-                    description = f"(Line {line.line_number}) {adjusted_days} {short_time} BNS {language} ROS"
+                    description = f"(Line {line.line_number}) BNS {language} ROS"
                     print(f"    [ROS] {language}: {adjusted_days} {ros['time']}")
                 else:
                     adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(etere_days, etere_time)
