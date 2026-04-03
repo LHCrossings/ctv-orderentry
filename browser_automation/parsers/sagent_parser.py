@@ -256,6 +256,7 @@ def normalize_market_code(market: str) -> str:
         "CVC": "CVC",
         "CENTRAL VALLEY": "CVC",
         "SACRAMENTO": "CVC",
+        "FRESNO": "CVC",
         "SEA": "SEA",
         "SEATTLE": "SEA",
         "NYC": "NYC",

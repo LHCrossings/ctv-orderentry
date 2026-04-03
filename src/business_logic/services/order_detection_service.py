@@ -114,6 +114,10 @@ class OrderDetectionService:
         if self._is_rpm(first_page_text):
             return OrderType.RPM
 
+        # Hyphen (formerly JP Marketing) — "Buy Detail Report" format
+        if self._is_hyphen(first_page_text):
+            return OrderType.HYPHEN
+
         # GaleForceMedia (generic, not Sagent) — check AFTER Sagent
         if self._is_galeforce(first_page_text):
             return OrderType.GALEFORCE
@@ -502,6 +506,15 @@ class OrderDetectionService:
         - "Time Advertising" in the BILL TO line
         """
         return "BROADCAST ORDER" in text and "Time Advertising" in text
+
+    def _is_hyphen(self, text: str) -> bool:
+        """
+        Check if text matches a Hyphen (formerly JP Marketing) Buy Detail Report.
+
+        Two definitive markers: the "Buy Detail Report" header and "HYPHEN"
+        in the Send Billing To field.
+        """
+        return "Buy Detail Report" in text and "HYPHEN" in text
 
     def _is_galeforce(self, text: str) -> bool:
         """

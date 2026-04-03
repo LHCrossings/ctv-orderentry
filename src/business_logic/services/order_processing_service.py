@@ -71,6 +71,7 @@ class OrderProcessingService:
         OrderType.DAVISELEN: "_process_daviselen_order",
         OrderType.SAGENT:    "_process_sagent_order",
         OrderType.GALEFORCE:        "_process_galeforce_order",
+        OrderType.HYPHEN:           "_process_hyphen_order",
         OrderType.TIMEADVERTISING:  "_process_timeadvertising_order",
         OrderType.CHARMAINE: "_process_charmaine_order",
         OrderType.ADMERASIA: "_process_admerasia_order",
@@ -149,7 +150,7 @@ class OrderProcessingService:
             needs_browser = any(
                 order.order_type in [
                     OrderType.TCAA, OrderType.MISFIT, OrderType.WORLDLINK,
-                    OrderType.DAVISELEN, OrderType.SAGENT, OrderType.GALEFORCE,
+                    OrderType.DAVISELEN, OrderType.SAGENT, OrderType.GALEFORCE, OrderType.HYPHEN,
                     OrderType.TIMEADVERTISING,
                     OrderType.CHARMAINE, OrderType.ADMERASIA,
                     OrderType.OPAD, OrderType.HL, OrderType.HL_BDR, OrderType.IGRAPHIX,
@@ -946,6 +947,79 @@ class OrderProcessingService:
             print(f"\n✗ GaleForce processing failed: {exc}")
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.GALEFORCE,
+                error_message=error_detail,
+            )
+
+    def _run_hyphen_with_driver(
+        self, order: Order, driver: Any, session: Any, pre_gathered_inputs: Any, process_fn: Any
+    ) -> ProcessingResult:
+        """Call Hyphen processor with an already-open driver and build ProcessingResult."""
+        success = process_fn(
+            driver,
+            str(order.pdf_path),
+            shared_session=session,
+            pre_gathered_inputs=pre_gathered_inputs,
+        )
+        if success:
+            print("\n✓ Hyphen order processed successfully")
+            return ProcessingResult(success=True, contracts=[], order_type=OrderType.HYPHEN)
+        print("\n✗ Hyphen order processing failed")
+        return ProcessingResult(
+            success=False, contracts=[], order_type=OrderType.HYPHEN,
+            error_message="Hyphen processing failed - check browser output for details",
+        )
+
+    def _process_hyphen_order(
+        self,
+        order: Order,
+        shared_session: Any,
+    ) -> ProcessingResult:
+        """
+        Process a Hyphen Buy Detail Report order.
+
+        Single-market orders (CVC or LAX). Master market is NYC.
+        """
+        try:
+            from hyphen_automation import process_hyphen_order
+
+            print(f"\n{'='*70}")
+            print("PROCESSING HYPHEN ORDER")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            print(f"{'='*70}\n")
+
+            pre_gathered_inputs = order.order_input if order.order_input else None
+
+            if shared_session is None:
+                try:
+                    from etere_session import EtereSession
+                except ImportError:
+                    print("[ERROR] Could not import EtereSession")
+                    return ProcessingResult(
+                        success=False, contracts=[], order_type=OrderType.HYPHEN,
+                        error_message="EtereSession import failed",
+                    )
+                print("[SESSION] Creating browser session for Hyphen order...")
+                with EtereSession() as session:
+                    session.set_market("NYC")
+                    print("[SESSION] Master market set to NYC")
+                    return self._run_hyphen_with_driver(
+                        order, session.driver, session, pre_gathered_inputs, process_hyphen_order
+                    )
+
+            if hasattr(shared_session, 'set_market'):
+                print("[SESSION] ✓ Using shared browser session (market pre-set to NYC)")
+            driver = shared_session.driver if hasattr(shared_session, 'driver') else shared_session
+            return self._run_hyphen_with_driver(
+                order, driver, shared_session, pre_gathered_inputs, process_hyphen_order
+            )
+
+        except Exception as exc:
+            import traceback
+            error_detail = f"Hyphen processing error: {str(exc)}\n{traceback.format_exc()}"
+            print(f"\n✗ Hyphen processing failed: {exc}")
+            return ProcessingResult(
+                success=False, contracts=[], order_type=OrderType.HYPHEN,
                 error_message=error_detail,
             )
 
