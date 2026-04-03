@@ -343,7 +343,6 @@ def _create_hyphen_contract(
                     spots_per_week=rng['spots_per_week'],
                     rate=float(rate),
                     separation_intervals=separation,
-                    block_prefixes=block_pfx,
                     is_bookend=False,
                     is_billboard=False,
                 )
