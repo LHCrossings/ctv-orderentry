@@ -118,15 +118,16 @@ def gather_hyphen_inputs(pdf_path: str) -> Optional[dict]:
     # ── Customer lookup ──────────────────────────────────────────────────────
     customer_info = _lookup_customer(estimate.client)
     customer_id: Optional[int] = None
-    # 30-min separation on IO → enter as 25 (allows 2x/hour, buyers OK with this)
     customer_sep = 25 if estimate.separation == 30 else estimate.separation
     separation = (customer_sep, 0, 0)
 
     if customer_info:
         customer_id = customer_info['customer_id']
-        separation  = customer_info['separation']
+        raw_sep    = customer_info['separation']
+        # 30-min separation in DB → enter as 25 (allows 2x/hour, buyers OK with this)
+        separation = (25 if raw_sep[0] == 30 else raw_sep[0], raw_sep[1], raw_sep[2])
         print(f"[CUSTOMER] ✓ Found in DB: {estimate.client} → ID {customer_id}")
-        print(f"[CUSTOMER] Separation from DB: {separation}")
+        print(f"[CUSTOMER] Separation: {separation}")
     else:
         print(f"[CUSTOMER] Not found in DB for '{estimate.client}'")
         raw_id = input("  Enter Etere customer ID (or blank to select in browser): ").strip()
