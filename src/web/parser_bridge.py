@@ -84,12 +84,12 @@ def _int(val, default=0) -> int:
 def _normalize_line(line, idx: int) -> dict:
     description = _str(_get(
         line, "description", "program", "daypart", "daypart_code",
-        "program_name", "line_description"
+        "program_name", "line_description", "language_block"
     ), default=f"Line {idx + 1}")
 
-    days = _str(_get(line, "days", "day_pattern", "day_string", "day_code"))
+    days = _str(_get(line, "days", "day_pattern", "day_string", "day_code", "fix_ros"))
     time = _str(_get(line, "time_str", "time", "time_period", "time_range", "time_slot"))
-    duration = _str(_get(line, "duration", "spot_length", "length", "spot_duration"))
+    duration = _str(_get(line, "duration", "spot_length", "length", "spot_duration", "duration_seconds"))
 
     # Weekly spots — may be a list or a scalar
     ws_raw = _get(line, "weekly_spots", "spots_per_week")
@@ -149,8 +149,20 @@ def _normalize_order(order_obj) -> dict:
     else:
         markets = []
 
-    flight_start = _str(_get(order_obj, "flight_start", "start_date", "flight_begin", "start"))
-    flight_end   = _str(_get(order_obj, "flight_end",   "end_date",   "flight_stop",  "end"))
+    flight_start = _str(_get(order_obj, "flight_start", "flight_begin", "start"))
+    flight_end   = _str(_get(order_obj, "flight_end",   "flight_stop",  "end"))
+
+    # Some parsers (SCWA) put dates on lines rather than the order header
+    if not flight_start or not flight_end:
+        lines_for_dates = _get(order_obj, "lines", "line_items", "entries") or []
+        starts = [_str(_get(ln, "start_date", "flight_start")) for ln in lines_for_dates]
+        ends   = [_str(_get(ln, "end_date",   "flight_end"))   for ln in lines_for_dates]
+        starts = [s for s in starts if s]
+        ends   = [e for e in ends   if e]
+        if starts and not flight_start:
+            flight_start = sorted(starts)[0]
+        if ends and not flight_end:
+            flight_end = sorted(ends)[-1]
     buyer        = _str(_get(order_obj, "buyer", "contact", "buyer_name", "rep"))
     total_spots  = _int(_get(order_obj, "total_spots", "spots_total"))
     total_cost   = _float(_get(order_obj, "total_cost", "gross_cost", "net_cost", "cost_total"))
