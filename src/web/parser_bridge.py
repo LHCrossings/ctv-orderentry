@@ -107,6 +107,13 @@ def _normalize_line(line, idx: int) -> dict:
         "program_name", "line_description", "language_block", "language"
     ), default=f"Line {idx + 1}")
 
+    # If the parser has both a language name and a daypart, combine them
+    # (e.g. Charmaine: language="Filipino", daypart="M-Sun 8p-9p")
+    lang_val  = _str(_get(line, "language", "language_block"))
+    daypart_val = _str(_get(line, "daypart", "daypart_code"))
+    if lang_val and daypart_val and description == daypart_val and lang_val != daypart_val:
+        description = f"{lang_val} — {daypart_val}"
+
     days = _str(_get(line, "days", "day_pattern", "day_string", "day_code", "fix_ros"))
     time = _str(_get(line, "time_str", "time", "time_period", "time_range", "time_slot"))
     duration = _str(_get(line, "duration", "spot_length", "length", "spot_duration", "duration_seconds"))
