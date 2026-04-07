@@ -109,13 +109,26 @@ def _normalize_line(line, idx: int) -> dict:
 
     # If the parser has both a language name and a daypart, combine them
     # (e.g. Charmaine: language="Filipino", daypart="M-Sun 8p-9p")
-    lang_val  = _str(_get(line, "language", "language_block"))
+    lang_val    = _str(_get(line, "language", "language_block"))
     daypart_val = _str(_get(line, "daypart", "daypart_code"))
     if lang_val and daypart_val and description == daypart_val and lang_val != daypart_val:
         description = f"{lang_val} — {daypart_val}"
 
     days = _str(_get(line, "days", "day_pattern", "day_string", "day_code", "fix_ros"))
     time = _str(_get(line, "time_str", "time", "time_period", "time_range", "time_slot"))
+
+    # Charmaine: split combined daypart string into days + time when not separately stored
+    # e.g. "M-Sun 8p-9p" → days="M-Sun", time="8p-9p"
+    if not days and not time and daypart_val and not getattr(line, "is_bonus", False):
+        import re as _re
+        _dp_match = _re.match(
+            r'^((?:M(?:on)?[-–]?(?:Sun?|Sat?|F(?:ri)?|Tu?|W(?:ed)?|Th?)?|'
+            r'Sa(?:t)?[-–]?Su(?:n)?|Su(?:n)?|Mon?|Fri?)\S*)\s+(.+)$',
+            daypart_val.strip(), _re.IGNORECASE
+        )
+        if _dp_match:
+            days = _dp_match.group(1).strip()
+            time = _dp_match.group(2).strip()
     duration = _str(_get(line, "duration", "spot_length", "length", "spot_duration", "duration_seconds"))
 
     # Weekly spots — may be a list or a scalar
