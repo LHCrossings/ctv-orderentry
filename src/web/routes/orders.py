@@ -17,6 +17,7 @@ if str(_src_path) not in sys.path:
 from business_logic.services.pdf_order_detector import PDFOrderDetector
 from orchestration.config import ApplicationConfig
 from orchestration.order_scanner import OrderScanner
+from web.parser_bridge import get_order_detail
 
 _ALLOWED_EXTENSIONS = {".pdf", ".xml", ".xlsx", ".jpg", ".jpeg", ".png"}
 
@@ -78,6 +79,28 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         dest.write_bytes(contents)
 
         return JSONResponse(content={"message": f"'{file.filename}' uploaded successfully.", "filename": file.filename})
+
+    @router.get("/api/orders/{filename:path}/detail")
+    async def order_detail(filename: str):
+        target = (config.incoming_dir / filename).resolve()
+        if not str(target).startswith(str(config.incoming_dir.resolve())):
+            raise HTTPException(status_code=400, detail="Invalid filename.")
+        if not target.exists():
+            raise HTTPException(status_code=404, detail="File not found.")
+
+        # Get the order type from the scanner
+        scanner = _make_scanner()
+        orders = scanner.scan_for_orders()
+        order_type = "UNKNOWN"
+        for o in orders:
+            if o.pdf_path.resolve() == target:
+                order_type = o.order_type.value if o.order_type else "UNKNOWN"
+                break
+
+        detail = get_order_detail(target, order_type)
+        detail["filename"] = filename
+        detail["order_type"] = order_type
+        return JSONResponse(content=detail)
 
     @router.delete("/api/orders/{filename:path}")
     async def delete_order(filename: str):

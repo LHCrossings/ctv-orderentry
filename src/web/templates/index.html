@@ -61,8 +61,53 @@
             </tbody>
         </table>
     </div>
-
 </main>
+
+<!-- ── Order Detail Modal ─────────────────────────────────────────────── -->
+<div id="detail-overlay" class="detail-overlay hidden" onclick="closeDetail(event)">
+    <div class="detail-modal">
+        <div class="detail-header">
+            <div>
+                <div id="detail-title" class="detail-title">Order Detail</div>
+                <div id="detail-subtitle" class="detail-subtitle"></div>
+            </div>
+            <button class="detail-close" onclick="closeDetailModal()">✕</button>
+        </div>
+
+        <div id="detail-warnings" class="detail-warnings hidden"></div>
+
+        <div id="detail-error" class="detail-error hidden"></div>
+
+        <div id="detail-meta" class="detail-meta"></div>
+
+        <div id="detail-lines-section" class="hidden">
+            <div class="detail-section-title">Line Items</div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Description</th>
+                            <th>Days</th>
+                            <th>Time</th>
+                            <th>Dur</th>
+                            <th>Wkly Spots</th>
+                            <th>Total</th>
+                            <th>Rate</th>
+                            <th>Type</th>
+                        </tr>
+                    </thead>
+                    <tbody id="detail-lines-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="detail-loading" class="detail-loading">
+            <div class="spinner"></div>
+            Parsing order...
+        </div>
+    </div>
+</div>
 
 <script src="/static/js/app.js"></script>
 </body>

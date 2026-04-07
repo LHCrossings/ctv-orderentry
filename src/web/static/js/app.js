@@ -76,12 +76,12 @@ async function loadQueue() {
         }
 
         queueBody.innerHTML = orders.map(o => `
-            <tr>
+            <tr class="clickable" onclick="showDetail('${esc(o.filename)}', '${esc(o.order_type)}')">
                 <td class="filename" title="${esc(o.filename)}">${esc(o.filename)}</td>
                 <td><span class="agency-badge ${o.order_type === 'Unknown' ? 'unknown' : ''}">${esc(o.order_type)}</span></td>
                 <td class="meta">${esc(o.customer_name)}</td>
                 <td class="meta">${o.size_kb} KB &nbsp;·&nbsp; ${esc(o.modified)}</td>
-                <td><button class="delete-btn" onclick="deleteOrder('${esc(o.filename)}')">Delete</button></td>
+                <td><button class="delete-btn" onclick="event.stopPropagation(); deleteOrder('${esc(o.filename)}')">Delete</button></td>
             </tr>`).join('');
     } catch (err) {
         console.error('Failed to load queue:', err);
@@ -110,6 +110,103 @@ function esc(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
 }
+
+// ── Detail Modal ───────────────────────────────────────────────────────────
+
+const detailOverlay  = document.getElementById('detail-overlay');
+const detailTitle    = document.getElementById('detail-title');
+const detailSubtitle = document.getElementById('detail-subtitle');
+const detailWarnings = document.getElementById('detail-warnings');
+const detailError    = document.getElementById('detail-error');
+const detailMeta     = document.getElementById('detail-meta');
+const detailLines    = document.getElementById('detail-lines-section');
+const detailLinesBody= document.getElementById('detail-lines-body');
+const detailLoading  = document.getElementById('detail-loading');
+
+async function showDetail(filename, orderType) {
+    // Reset state
+    detailTitle.textContent = filename;
+    detailSubtitle.textContent = orderType;
+    detailWarnings.classList.add('hidden');
+    detailError.classList.add('hidden');
+    detailLines.classList.add('hidden');
+    detailMeta.innerHTML = '';
+    detailLinesBody.innerHTML = '';
+    detailLoading.classList.remove('hidden');
+    detailOverlay.classList.remove('hidden');
+
+    try {
+        const res = await fetch('/api/orders/' + encodeURIComponent(filename) + '/detail');
+        const d = await res.json();
+        detailLoading.classList.add('hidden');
+
+        if (d.error) {
+            detailError.textContent = d.error;
+            detailError.classList.remove('hidden');
+            return;
+        }
+
+        // Update header
+        if (d.client) detailTitle.textContent = d.client;
+
+        // Warnings
+        if (d.warnings && d.warnings.length > 0) {
+            detailWarnings.innerHTML = '⚠️ ' + d.warnings.join('<br>⚠️ ');
+            detailWarnings.classList.remove('hidden');
+        }
+
+        // Meta grid
+        const metaFields = [
+            ['Agency',    orderType],
+            ['Client',    d.client],
+            ['Estimate',  d.estimate_number],
+            ['Market(s)', (d.markets || []).join(', ')],
+            ['Flight',    [d.flight_start, d.flight_end].filter(Boolean).join(' – ')],
+            ['Buyer',     d.buyer],
+            ['Total Spots', d.total_spots ? d.total_spots.toLocaleString() : null],
+            ['Total Cost',  d.total_cost  ? '$' + d.total_cost.toLocaleString('en-US', {minimumFractionDigits:2}) : null],
+        ];
+        detailMeta.innerHTML = metaFields.map(([label, val]) => `
+            <div class="meta-item">
+                <span class="meta-label">${esc(label)}</span>
+                <span class="meta-value ${val ? '' : 'empty'}">${val ? esc(String(val)) : '—'}</span>
+            </div>`).join('');
+
+        // Lines
+        if (d.lines && d.lines.length > 0) {
+            detailLinesBody.innerHTML = d.lines.map((ln, i) => `
+                <tr>
+                    <td class="meta">${i + 1}</td>
+                    <td class="filename" style="max-width:220px" title="${esc(ln.description)}">${esc(ln.description)}</td>
+                    <td class="meta">${esc(ln.days)}</td>
+                    <td class="meta">${esc(ln.time)}</td>
+                    <td class="meta">${esc(ln.duration)}</td>
+                    <td class="meta">${ln.weekly_spots && ln.weekly_spots.length ? ln.weekly_spots.join(', ') : '—'}</td>
+                    <td class="meta">${ln.total_spots || '—'}</td>
+                    <td class="meta">${ln.rate ? '$' + ln.rate.toFixed(2) : '—'}</td>
+                    <td><span class="${ln.is_bonus ? 'line-bonus' : 'line-paid'}">${ln.is_bonus ? 'BNS' : 'PAID'}</span></td>
+                </tr>`).join('');
+            detailLines.classList.remove('hidden');
+        }
+
+    } catch (err) {
+        detailLoading.classList.add('hidden');
+        detailError.textContent = 'Failed to load detail: ' + err.message;
+        detailError.classList.remove('hidden');
+    }
+}
+
+function closeDetailModal() {
+    detailOverlay.classList.add('hidden');
+}
+
+function closeDetail(event) {
+    if (event.target === detailOverlay) closeDetailModal();
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeDetailModal();
+});
 
 // ── Auto-refresh every 10s ─────────────────────────────────────────────────
 
