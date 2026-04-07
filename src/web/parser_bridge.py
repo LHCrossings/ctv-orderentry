@@ -84,7 +84,7 @@ def _int(val, default=0) -> int:
 def _normalize_line(line, idx: int) -> dict:
     description = _str(_get(
         line, "description", "program", "daypart", "daypart_code",
-        "program_name", "line_description", "language_block"
+        "program_name", "line_description", "language_block", "language"
     ), default=f"Line {idx + 1}")
 
     days = _str(_get(line, "days", "day_pattern", "day_string", "day_code", "fix_ros"))
