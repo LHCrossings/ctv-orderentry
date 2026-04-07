@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CTV Order Entry</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <div class="logo-icon">📋</div>
+            <h1>CTV <span>Order Entry</span></h1>
+        </div>
+        <span class="header-badge">Order Queue</span>
+    </div>
+</header>
+
+<main>
+
+    <!-- Drop Zone -->
+    <div id="drop-zone" class="drop-zone">
+        <div class="drop-icon">📂</div>
+        <h2>Drop order files here</h2>
+        <p>PDF, XML, XLSX, JPG, PNG accepted</p>
+        <label class="browse-btn">
+            Browse files
+            <input type="file" id="file-input" multiple accept=".pdf,.xml,.xlsx,.jpg,.jpeg,.png" />
+        </label>
+        <div id="upload-status" class="upload-status"></div>
+    </div>
+
+    <!-- Queue -->
+    <div class="queue-header">
+        <h2>Pending Orders &nbsp;<span id="queue-count" class="queue-count zero">0</span></h2>
+        <button id="refresh-btn" class="refresh-btn">&#8635; Refresh</button>
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Filename</th>
+                    <th>Agency</th>
+                    <th>Client</th>
+                    <th>Size / Modified</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="queue-body">
+                <tr><td colspan="5">
+                    <div class="empty-state">
+                        <div class="empty-icon">📭</div>
+                        <p>Loading...</p>
+                    </div>
+                </td></tr>
+            </tbody>
+        </table>
+    </div>
+
+</main>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
