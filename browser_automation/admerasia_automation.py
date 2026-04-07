@@ -447,7 +447,6 @@ def gather_admerasia_inputs(pdf_path: str) -> Optional[dict]:
         'billing': billing,
         'separation': separation,
         'etere_lines': etere_lines,
-        'spot_duration': spot_duration,
     }
 
 
@@ -541,7 +540,6 @@ def process_admerasia_order(
 
         separation = user_input['separation']
         market = user_input['market']
-        spot_duration = user_input['spot_duration']
 
         for line_idx, line_spec in enumerate(etere_lines, 1):
             # Build description: DAYS TIME
