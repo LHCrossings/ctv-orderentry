@@ -1,10 +1,23 @@
 /* CTV Order Entry - Frontend */
 
-const dropZone = document.getElementById('drop-zone');
-const fileInput = document.getElementById('file-input');
-const uploadStatus = document.getElementById('upload-status');
-const queueBody = document.getElementById('queue-body');
-const queueCount = document.getElementById('queue-count');
+const dropZone    = document.getElementById('drop-zone');
+const fileInput   = document.getElementById('file-input');
+const uploadStatus= document.getElementById('upload-status');
+const queueBody   = document.getElementById('queue-body');
+const queueCount  = document.getElementById('queue-count');
+const historyCount= document.getElementById('history-count');
+
+let currentTab = 'pending';
+
+// ── Tab switching ──────────────────────────────────────────────────────────
+
+function switchTab(tab) {
+    currentTab = tab;
+    document.getElementById('tab-pending').classList.toggle('active',  tab === 'pending');
+    document.getElementById('tab-history').classList.toggle('active',  tab === 'history');
+    document.getElementById('drop-zone').style.display = tab === 'pending' ? '' : 'none';
+    loadQueue();
+}
 
 // ── Drag and drop ──────────────────────────────────────────────────────────
 
@@ -14,8 +27,7 @@ dropZone.addEventListener('dragleave', e => { dropZone.classList.remove('drag-ov
 dropZone.addEventListener('drop', e => {
     e.preventDefault();
     dropZone.classList.remove('drag-over');
-    const files = Array.from(e.dataTransfer.files);
-    files.forEach(uploadFile);
+    Array.from(e.dataTransfer.files).forEach(uploadFile);
 });
 
 dropZone.addEventListener('click', () => fileInput.click());
@@ -28,12 +40,10 @@ fileInput.addEventListener('change', () => {
 
 async function uploadFile(file) {
     setStatus(`Uploading ${file.name}...`, 'info');
-
     const form = new FormData();
     form.append('file', file);
-
     try {
-        const res = await fetch('/api/orders/upload', { method: 'POST', body: form });
+        const res  = await fetch('/api/orders/upload', { method: 'POST', body: form });
         const data = await res.json();
         if (!res.ok) {
             setStatus(data.detail || 'Upload failed.', 'error');
@@ -54,75 +64,99 @@ function setStatus(msg, type) {
     }
 }
 
-// ── Queue ──────────────────────────────────────────────────────────────────
+// ── Queue / History ────────────────────────────────────────────────────────
 
 async function loadQueue() {
+    const isHistory = currentTab === 'history';
+    const url = isHistory ? '/api/history' : '/api/orders';
+
     try {
-        const res = await fetch('/api/orders');
+        const res    = await fetch(url);
         const orders = await res.json();
 
-        queueCount.textContent = orders.length;
-        queueCount.className = 'queue-count' + (orders.length === 0 ? ' zero' : '');
+        // Update counts
+        if (isHistory) {
+            historyCount.textContent = orders.length;
+            historyCount.className   = 'queue-count' + (orders.length === 0 ? ' zero' : '');
+        } else {
+            queueCount.textContent = orders.length;
+            queueCount.className   = 'queue-count' + (orders.length === 0 ? ' zero' : '');
+        }
 
         if (orders.length === 0) {
-            queueBody.innerHTML = `
-                <tr><td colspan="5">
-                    <div class="empty-state">
-                        <div class="empty-icon">📭</div>
-                        <p>No orders in queue. Drop a PDF above to get started.</p>
-                    </div>
-                </td></tr>`;
+            queueBody.innerHTML = `<tr><td colspan="5">
+                <div class="empty-state">
+                    <div class="empty-icon">${isHistory ? '🗂️' : '📭'}</div>
+                    <p>${isHistory ? 'No completed orders in history.' : 'No orders in queue. Drop a PDF above to get started.'}</p>
+                </div></td></tr>`;
             return;
         }
 
+        const detailBase = isHistory ? '/api/history/' : '/api/orders/';
+
         queueBody.innerHTML = orders.map(o => `
-            <tr class="clickable" data-filename="${esc(o.filename)}" data-order-type="${esc(o.order_type)}">
+            <tr class="clickable" data-filename="${esc(o.filename)}" data-order-type="${esc(o.order_type)}" data-detail-base="${esc(detailBase)}">
                 <td class="filename" title="${esc(o.filename)}">${esc(o.filename)}</td>
                 <td><span class="agency-badge ${o.order_type === 'Unknown' ? 'unknown' : ''}">${esc(o.order_type)}</span></td>
                 <td class="meta">${esc(o.customer_name)}</td>
                 <td class="meta">${o.size_kb} KB &nbsp;·&nbsp; ${esc(o.modified)}</td>
-                <td><button class="delete-btn" data-filename="${esc(o.filename)}">Delete</button></td>
+                <td>${isHistory
+                    ? `<button class="restore-btn" data-filename="${esc(o.filename)}">Restore</button>`
+                    : `<button class="delete-btn"  data-filename="${esc(o.filename)}">Mark Done</button>`
+                }</td>
             </tr>`).join('');
 
-        // Attach row click and delete listeners after rendering
+        // Row click → detail modal
         queueBody.querySelectorAll('tr.clickable').forEach(row => {
             row.addEventListener('click', e => {
-                if (e.target.closest('.delete-btn')) return;
-                showDetail(row.dataset.filename, row.dataset.orderType);
+                if (e.target.closest('button')) return;
+                showDetail(row.dataset.filename, row.dataset.orderType, row.dataset.detailBase);
             });
         });
+
+        // Pending: Mark Done → move to Used
         queueBody.querySelectorAll('.delete-btn').forEach(btn => {
             btn.addEventListener('click', e => {
                 e.stopPropagation();
-                deleteOrder(btn.dataset.filename);
+                markDone(btn.dataset.filename);
             });
         });
+
+        // History: Restore → move back to incoming
+        queueBody.querySelectorAll('.restore-btn').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                restoreOrder(btn.dataset.filename);
+            });
+        });
+
     } catch (err) {
         console.error('Failed to load queue:', err);
     }
 }
 
-async function deleteOrder(filename) {
-    if (!confirm(`Delete "${filename}"?`)) return;
+async function markDone(filename) {
+    if (!confirm(`Move "${filename}" to history?`)) return;
     try {
-        const res = await fetch('/api/orders/' + encodeURIComponent(filename), { method: 'DELETE' });
+        const res  = await fetch('/api/orders/' + encodeURIComponent(filename), { method: 'DELETE' });
         const data = await res.json();
-        if (!res.ok) {
-            alert(data.detail || 'Delete failed.');
-        } else {
-            await loadQueue();
-        }
+        if (!res.ok) alert(data.detail || 'Failed.');
+        else await loadQueue();
     } catch (err) {
-        alert('Delete error: ' + err.message);
+        alert('Error: ' + err.message);
     }
 }
 
-function esc(str) {
-    return String(str ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+async function restoreOrder(filename) {
+    if (!confirm(`Restore "${filename}" to the pending queue?`)) return;
+    try {
+        const res  = await fetch('/api/history/' + encodeURIComponent(filename) + '/restore', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) alert(data.detail || 'Failed.');
+        else await loadQueue();
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -141,6 +175,14 @@ function renderLineRow(ln, i) {
     </tr>`;
 }
 
+function esc(str) {
+    return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
 // ── Detail Modal ───────────────────────────────────────────────────────────
 
 const detailOverlay  = document.getElementById('detail-overlay');
@@ -153,8 +195,7 @@ const detailLines    = document.getElementById('detail-lines-section');
 const detailLinesBody= document.getElementById('detail-lines-body');
 const detailLoading  = document.getElementById('detail-loading');
 
-async function showDetail(filename, orderType) {
-    // Reset state
+async function showDetail(filename, orderType, detailBase) {
     detailTitle.textContent = filename;
     detailSubtitle.textContent = orderType;
     detailWarnings.classList.add('hidden');
@@ -166,8 +207,8 @@ async function showDetail(filename, orderType) {
     detailOverlay.classList.remove('hidden');
 
     try {
-        const res = await fetch('/api/orders/' + encodeURIComponent(filename) + '/detail');
-        const d = await res.json();
+        const res = await fetch((detailBase || '/api/orders/') + encodeURIComponent(filename) + '/detail');
+        const d   = await res.json();
         detailLoading.classList.add('hidden');
 
         if (d.error) {
@@ -176,23 +217,20 @@ async function showDetail(filename, orderType) {
             return;
         }
 
-        // Update header
         if (d.client) detailTitle.textContent = d.client;
 
-        // Warnings
         if (d.warnings && d.warnings.length > 0) {
             detailWarnings.innerHTML = '⚠️ ' + d.warnings.join('<br>⚠️ ');
             detailWarnings.classList.remove('hidden');
         }
 
-        // Meta grid
         const metaFields = [
-            ['Agency',    orderType],
-            ['Client',    d.client],
-            ['Estimate',  d.estimate_number],
-            ['Market(s)', (d.markets || []).join(', ')],
-            ['Flight',    [d.flight_start, d.flight_end].filter(Boolean).join(' – ')],
-            ['Buyer',     d.buyer],
+            ['Agency',      orderType],
+            ['Client',      d.client],
+            ['Estimate',    d.estimate_number],
+            ['Market(s)',   (d.markets || []).join(', ')],
+            ['Flight',      [d.flight_start, d.flight_end].filter(Boolean).join(' – ')],
+            ['Buyer',       d.buyer],
             ['Total Spots', d.total_spots ? d.total_spots.toLocaleString() : null],
             ['Total Cost',  d.total_cost  ? '$' + d.total_cost.toLocaleString('en-US', {minimumFractionDigits:2}) : null],
         ];
@@ -202,7 +240,6 @@ async function showDetail(filename, orderType) {
                 <span class="meta-value ${val ? '' : 'empty'}">${val ? esc(String(val)) : '—'}</span>
             </div>`).join('');
 
-        // Lines — single order or multi-order (sub_orders)
         if (d.sub_orders && d.sub_orders.length > 0) {
             detailLines.classList.remove('hidden');
             detailLinesBody.innerHTML = d.sub_orders.map((sub, si) => {
@@ -214,8 +251,7 @@ async function showDetail(filename, orderType) {
                         &nbsp;·&nbsp; ${sub.total_spots} spots
                         ${sub.total_cost ? ' &nbsp;·&nbsp; $' + sub.total_cost.toLocaleString('en-US', {minimumFractionDigits:2}) : ''}
                     </td></tr>`;
-                const lineRows = (sub.lines || []).map((ln, i) => renderLineRow(ln, i)).join('');
-                return headerRow + lineRows;
+                return headerRow + (sub.lines || []).map((ln, i) => renderLineRow(ln, i)).join('');
             }).join('');
         } else if (d.lines && d.lines.length > 0) {
             detailLinesBody.innerHTML = d.lines.map((ln, i) => renderLineRow(ln, i)).join('');
@@ -229,21 +265,12 @@ async function showDetail(filename, orderType) {
     }
 }
 
-function closeDetailModal() {
-    detailOverlay.classList.add('hidden');
-}
-
-function closeDetail(event) {
-    if (event.target === detailOverlay) closeDetailModal();
-}
-
-document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeDetailModal();
-});
+function closeDetailModal() { detailOverlay.classList.add('hidden'); }
+function closeDetail(event) { if (event.target === detailOverlay) closeDetailModal(); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetailModal(); });
 
 // ── Auto-refresh every 10s ─────────────────────────────────────────────────
 
 loadQueue();
 setInterval(loadQueue, 10000);
-
 document.getElementById('refresh-btn').addEventListener('click', loadQueue);

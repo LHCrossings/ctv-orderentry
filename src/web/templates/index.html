@@ -22,7 +22,7 @@
 
 <main>
 
-    <!-- Drop Zone -->
+    <!-- Drop Zone (pending only) -->
     <div id="drop-zone" class="drop-zone">
         <div class="drop-icon">📂</div>
         <h2>Drop order files here</h2>
@@ -34,12 +34,18 @@
         <div id="upload-status" class="upload-status"></div>
     </div>
 
-    <!-- Queue -->
-    <div class="queue-header">
-        <h2>Pending Orders &nbsp;<span id="queue-count" class="queue-count zero">0</span></h2>
-        <button id="refresh-btn" class="refresh-btn">&#8635; Refresh</button>
+    <!-- Tab bar -->
+    <div class="tab-bar">
+        <button id="tab-pending"  class="tab-btn active" onclick="switchTab('pending')">
+            Pending &nbsp;<span id="queue-count" class="queue-count zero">0</span>
+        </button>
+        <button id="tab-history" class="tab-btn" onclick="switchTab('history')">
+            History &nbsp;<span id="history-count" class="queue-count zero">0</span>
+        </button>
+        <button id="refresh-btn" class="refresh-btn" style="margin-left:auto">&#8635; Refresh</button>
     </div>
 
+    <!-- Shared table -->
     <div class="table-wrap">
         <table>
             <thead>
@@ -61,6 +67,7 @@
             </tbody>
         </table>
     </div>
+
 </main>
 
 <!-- ── Order Detail Modal ─────────────────────────────────────────────── -->
@@ -75,10 +82,8 @@
         </div>
 
         <div id="detail-warnings" class="detail-warnings hidden"></div>
-
-        <div id="detail-error" class="detail-error hidden"></div>
-
-        <div id="detail-meta" class="detail-meta"></div>
+        <div id="detail-error"   class="detail-error hidden"></div>
+        <div id="detail-meta"    class="detail-meta"></div>
 
         <div id="detail-lines-section" class="hidden">
             <div class="detail-section-title">Line Items</div>

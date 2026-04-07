@@ -313,6 +313,63 @@ tbody td {
     font-size: 0.9rem;
 }
 
+/* ── Tab bar ─────────────────────────────────────────────────────────────── */
+
+.tab-bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 14px;
+}
+
+.tab-btn {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    padding: 7px 16px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.tab-btn:hover {
+    border-color: var(--nord8);
+    color: var(--text-primary);
+}
+
+.tab-btn.active {
+    background: var(--nord10);
+    border-color: var(--nord10);
+    color: #fff;
+}
+
+.tab-btn.active .queue-count {
+    background: rgba(255,255,255,0.25);
+}
+
+/* ── Restore button ──────────────────────────────────────────────────────── */
+
+.restore-btn {
+    background: none;
+    border: 1px solid var(--nord14);
+    color: var(--nord14);
+    border-radius: 5px;
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.restore-btn:hover {
+    background: var(--nord14);
+    color: #fff;
+}
+
 /* ── Clickable row ───────────────────────────────────────────────────────── */
 
 tbody tr.clickable {
