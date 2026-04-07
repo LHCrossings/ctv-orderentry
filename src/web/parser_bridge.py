@@ -226,6 +226,79 @@ def _normalize_order(order_obj) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Agency-specific normalizers (where duck-typing isn't enough)
+# ---------------------------------------------------------------------------
+
+def _normalize_admerasia(order) -> dict:
+    """Admerasia uses methods rather than plain attributes for key values."""
+    # Flight dates
+    try:
+        start, end = order.get_flight_dates()
+        flight_start = start.strftime("%m/%d/%Y") if start else ""
+        flight_end   = end.strftime("%m/%d/%Y")   if end   else ""
+    except Exception:
+        flight_start = flight_end = ""
+
+    # Market — convert DMA name to Etere code
+    try:
+        market = order.get_market_code()
+    except Exception:
+        market = _str(_get(order, "markets", default=""))
+        if isinstance(market, list):
+            market = ", ".join(market)
+
+    # Lines
+    lines = []
+    for i, ln in enumerate(getattr(order, "lines", []) or []):
+        try:
+            total = ln.get_total_spots()
+        except Exception:
+            total = _int(_get(ln, "total_spots", "spots"))
+
+        try:
+            rate = float(ln.get_gross_rate())
+        except Exception:
+            rate = _float(_get(ln, "rate", "gross_rate"))
+
+        try:
+            desc = ln.get_description()
+        except Exception:
+            desc = _str(_get(ln, "description", "program", "days"), default=f"Line {i+1}")
+
+        daily = getattr(ln, "_daily_spots", None) or getattr(ln, "weekly_spots", None) or []
+
+        lines.append({
+            "description": desc,
+            "days": _str(getattr(ln, "days", "")),
+            "time": _str(getattr(ln, "time", "")),
+            "duration": _str(getattr(ln, "duration", getattr(ln, "spot_length", ""))),
+            "weekly_spots": [int(x) for x in daily if x is not None],
+            "total_spots": total,
+            "rate": rate,
+            "is_bonus": bool(getattr(ln, "is_bonus", False)),
+            "market": market,
+            "language": _str(getattr(order, "language", "")),
+        })
+
+    total_spots = sum(ln["total_spots"] for ln in lines)
+    total_cost  = sum(ln["rate"] * ln["total_spots"] for ln in lines if not ln["is_bonus"])
+
+    return {
+        "client": "McDonald's",
+        "estimate_number": _str(getattr(order, "order_number", "")),
+        "description": _str(getattr(order, "language", "")),
+        "markets": [market] if market else [],
+        "flight_start": flight_start,
+        "flight_end": flight_end,
+        "buyer": "",
+        "total_spots": total_spots,
+        "total_cost": round(total_cost, 2),
+        "lines": lines,
+        "warnings": [],
+    }
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -304,7 +377,10 @@ def get_order_detail(file_path: Path, order_type: str) -> dict:
             "sub_orders": sub_orders,
         }
 
-    # Single object
-    result = _normalize_order(raw)
+    # Single object — agency-specific normalizers where needed
+    if order_type == "ADMERASIA":
+        result = _normalize_admerasia(raw)
+    else:
+        result = _normalize_order(raw)
     result["lines"] = _apply_ros_overrides(result["lines"])
     return result
