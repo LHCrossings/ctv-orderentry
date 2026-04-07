@@ -3,6 +3,7 @@ Order queue routes: list, upload, move-to-used, history, restore, detail.
 """
 
 import shutil
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -107,6 +108,38 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
         shutil.move(str(target), str(dest))
         return JSONResponse(content={"message": f"'{filename}' moved to Used."})
+
+    # ------------------------------------------------------------------
+    # Run queue
+    # ------------------------------------------------------------------
+
+    @router.post("/api/run")
+    async def run_queue():
+        if not any(config.incoming_dir.glob("*.pdf")):
+            raise HTTPException(status_code=400, detail="No PDF orders in queue.")
+
+        project_root = Path(__file__).parent.parent.parent.parent
+        main_py = project_root / "main.py"
+
+        # Prefer venv python, fall back to current interpreter
+        python_exe = project_root / ".venv" / "Scripts" / "python.exe"  # Windows
+        if not python_exe.exists():
+            python_exe = project_root / ".venv" / "bin" / "python"       # Linux
+        if not python_exe.exists():
+            python_exe = Path(sys.executable)
+
+        if sys.platform == "win32":
+            subprocess.Popen(
+                f'start "CTV Order Entry" cmd /k "{python_exe}" "{main_py}"',
+                shell=True,
+                cwd=str(project_root)
+            )
+            return JSONResponse({"message": "Terminal opened — complete prompts there."})
+        else:
+            return JSONResponse({
+                "message": "Run in your terminal: uv run python main.py",
+                "manual": True
+            })
 
     # ------------------------------------------------------------------
     # History (Used folder)

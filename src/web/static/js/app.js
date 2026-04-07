@@ -74,6 +74,11 @@ async function loadQueue() {
         const res    = await fetch(url);
         const orders = await res.json();
 
+        // Run button — only active on pending tab with orders present
+        const runBtn = document.getElementById('run-btn');
+        runBtn.style.display = isHistory ? 'none' : '';
+        runBtn.disabled = isHistory || orders.length === 0;
+
         // Update counts
         if (isHistory) {
             historyCount.textContent = orders.length;
@@ -132,6 +137,28 @@ async function loadQueue() {
 
     } catch (err) {
         console.error('Failed to load queue:', err);
+    }
+}
+
+async function runQueue() {
+    const btn = document.getElementById('run-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Starting...';
+    try {
+        const res  = await fetch('/api/run', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) {
+            alert(data.detail || 'Failed to start.');
+        } else if (data.manual) {
+            setStatus(data.message, 'info');
+        } else {
+            setStatus(data.message, 'success');
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '▶ Run Queue';
     }
 }
 
@@ -274,3 +301,4 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetailM
 loadQueue();
 setInterval(loadQueue, 10000);
 document.getElementById('refresh-btn').addEventListener('click', loadQueue);
+document.getElementById('run-btn').addEventListener('click', runQueue);
