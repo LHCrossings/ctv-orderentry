@@ -112,7 +112,12 @@ def _normalize_line(line, idx: int) -> dict:
     lang_val    = _str(_get(line, "language", "language_block"))
     daypart_val = _str(_get(line, "daypart", "daypart_code"))
     if lang_val and daypart_val and description == daypart_val and lang_val != daypart_val:
-        description = f"{lang_val} — {daypart_val}"
+        # Only combine if daypart looks like a real schedule (has a time marker)
+        import re as _re2
+        if _re2.search(r'\d+[ap]|\d:\d{2}', daypart_val, _re2.IGNORECASE):
+            description = f"{lang_val} — {daypart_val}"
+        else:
+            description = lang_val  # garbled OCR — just show language name
 
     days = _str(_get(line, "days", "day_pattern", "day_string", "day_code", "fix_ros"))
     time = _str(_get(line, "time_str", "time", "time_period", "time_range", "time_slot"))
