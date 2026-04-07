@@ -47,6 +47,26 @@ _REGISTRY = {
 
 _MISSING = object()
 
+# Import ROS schedules for bonus line overrides
+try:
+    from browser_automation.ros_definitions import ROS_SCHEDULES as _ROS_SCHEDULES
+except Exception:
+    _ROS_SCHEDULES = {}
+
+
+def _apply_ros_overrides(lines: list[dict]) -> list[dict]:
+    """For bonus lines, replace days/time with the standard ROS schedule."""
+    result = []
+    for ln in lines:
+        if ln.get("is_bonus"):
+            # Language is the first word of the description (e.g. "Hmong BONUS" → "Hmong")
+            lang = (ln.get("description") or "").split()[0].title()
+            ros = _ROS_SCHEDULES.get(lang)
+            if ros:
+                ln = dict(ln, days=ros["days"], time=ros["time"])
+        result.append(ln)
+    return result
+
 
 def _get(obj, *attrs, default=None):
     """Return the first non-None attribute found on obj from the given names."""
@@ -249,6 +269,7 @@ def get_order_detail(file_path: Path, order_type: str) -> dict:
         result = _normalize_order(order_obj)
         if not result["lines"] and lines:
             result["lines"] = [_normalize_line(ln, i) for i, ln in enumerate(lines)]
+        result["lines"] = _apply_ros_overrides(result["lines"])
         return result
 
     # Handle parsers that return a list (HL, TCAA, CHARMAINE, IMPACT, etc.)
@@ -256,9 +277,15 @@ def get_order_detail(file_path: Path, order_type: str) -> dict:
         if not raw:
             return {"error": "Parser returned an empty list."}
         if len(raw) == 1:
-            return _normalize_order(raw[0])
+            result = _normalize_order(raw[0])
+            result["lines"] = _apply_ros_overrides(result["lines"])
+            return result
         # Multiple orders in one PDF — return each as a sub_order
-        sub_orders = [_normalize_order(item) for item in raw]
+        def _norm_with_ros(item):
+            r = _normalize_order(item)
+            r["lines"] = _apply_ros_overrides(r["lines"])
+            return r
+        sub_orders = [_norm_with_ros(item) for item in raw]
         # Roll up totals for the top-level summary
         all_warnings = []
         for s in sub_orders:
@@ -278,4 +305,6 @@ def get_order_detail(file_path: Path, order_type: str) -> dict:
         }
 
     # Single object
-    return _normalize_order(raw)
+    result = _normalize_order(raw)
+    result["lines"] = _apply_ros_overrides(result["lines"])
+    return result
