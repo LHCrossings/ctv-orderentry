@@ -141,7 +141,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 files_arg = " --files " + " ".join(f'"{f}"' for f in safe_files)
 
         if sys.platform == "win32":
-            cmd = f'start "CTV Order Entry" cmd /k "{python_exe}" "{main_py}"{files_arg}'
+            # cmd /k requires the entire inner command wrapped in an extra pair of quotes
+            cmd = f'start "CTV Order Entry" cmd /k ""{python_exe}" "{main_py}"{files_arg}"'
             subprocess.Popen(cmd, shell=True, cwd=str(project_root))
             n = len(files) if files else "all"
             return JSONResponse({"message": f"Terminal opened — processing {n} order(s)."})
