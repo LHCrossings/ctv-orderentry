@@ -255,16 +255,27 @@ def get_order_detail(file_path: Path, order_type: str) -> dict:
     if isinstance(raw, list):
         if not raw:
             return {"error": "Parser returned an empty list."}
-        # Merge: use first item for header, collect all lines
-        result = _normalize_order(raw[0])
-        if len(raw) > 1:
-            extra_lines = []
-            for item in raw[1:]:
-                extra_lines.extend(_normalize_line(ln, i) for i, ln in enumerate(
-                    _get(item, "lines", "line_items", "entries") or []
-                ))
-            result["lines"].extend(extra_lines)
-        return result
+        if len(raw) == 1:
+            return _normalize_order(raw[0])
+        # Multiple orders in one PDF — return each as a sub_order
+        sub_orders = [_normalize_order(item) for item in raw]
+        # Roll up totals for the top-level summary
+        all_warnings = []
+        for s in sub_orders:
+            all_warnings.extend(s.get("warnings", []))
+        return {
+            "client": sub_orders[0].get("client", ""),
+            "description": sub_orders[0].get("description", ""),
+            "markets": list({m for s in sub_orders for m in s.get("markets", [])}),
+            "flight_start": sub_orders[0].get("flight_start", ""),
+            "flight_end": sub_orders[-1].get("flight_end", "") or sub_orders[0].get("flight_end", ""),
+            "buyer": sub_orders[0].get("buyer", ""),
+            "total_spots": sum(s.get("total_spots", 0) for s in sub_orders),
+            "total_cost": round(sum(s.get("total_cost", 0.0) for s in sub_orders), 2),
+            "lines": [],
+            "warnings": list(dict.fromkeys(all_warnings)),
+            "sub_orders": sub_orders,
+        }
 
     # Single object
     return _normalize_order(raw)

@@ -125,6 +125,22 @@ function esc(str) {
         .replace(/"/g, '&quot;');
 }
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function renderLineRow(ln, i) {
+    return `<tr>
+        <td class="meta">${i + 1}</td>
+        <td class="filename" style="max-width:220px" title="${esc(ln.description)}">${esc(ln.description)}</td>
+        <td class="meta">${esc(ln.days)}</td>
+        <td class="meta">${esc(ln.time)}</td>
+        <td class="meta">${esc(ln.duration)}</td>
+        <td class="meta">${ln.weekly_spots && ln.weekly_spots.length ? ln.weekly_spots.join(', ') : '—'}</td>
+        <td class="meta">${ln.total_spots || '—'}</td>
+        <td class="meta">${ln.rate ? '$' + ln.rate.toFixed(2) : '—'}</td>
+        <td><span class="${ln.is_bonus ? 'line-bonus' : 'line-paid'}">${ln.is_bonus ? 'BNS' : 'PAID'}</span></td>
+    </tr>`;
+}
+
 // ── Detail Modal ───────────────────────────────────────────────────────────
 
 const detailOverlay  = document.getElementById('detail-overlay');
@@ -186,20 +202,23 @@ async function showDetail(filename, orderType) {
                 <span class="meta-value ${val ? '' : 'empty'}">${val ? esc(String(val)) : '—'}</span>
             </div>`).join('');
 
-        // Lines
-        if (d.lines && d.lines.length > 0) {
-            detailLinesBody.innerHTML = d.lines.map((ln, i) => `
-                <tr>
-                    <td class="meta">${i + 1}</td>
-                    <td class="filename" style="max-width:220px" title="${esc(ln.description)}">${esc(ln.description)}</td>
-                    <td class="meta">${esc(ln.days)}</td>
-                    <td class="meta">${esc(ln.time)}</td>
-                    <td class="meta">${esc(ln.duration)}</td>
-                    <td class="meta">${ln.weekly_spots && ln.weekly_spots.length ? ln.weekly_spots.join(', ') : '—'}</td>
-                    <td class="meta">${ln.total_spots || '—'}</td>
-                    <td class="meta">${ln.rate ? '$' + ln.rate.toFixed(2) : '—'}</td>
-                    <td><span class="${ln.is_bonus ? 'line-bonus' : 'line-paid'}">${ln.is_bonus ? 'BNS' : 'PAID'}</span></td>
-                </tr>`).join('');
+        // Lines — single order or multi-order (sub_orders)
+        if (d.sub_orders && d.sub_orders.length > 0) {
+            detailLines.classList.remove('hidden');
+            detailLinesBody.innerHTML = d.sub_orders.map((sub, si) => {
+                const headerRow = `<tr style="background:var(--nord1)">
+                    <td colspan="9" style="padding:8px 12px;color:var(--nord4);font-size:0.78rem;font-weight:600;letter-spacing:0.04em;">
+                        EST ${esc(sub.estimate_number || String(si + 1))}
+                        ${sub.markets && sub.markets.length ? ' · ' + esc(sub.markets.join(', ')) : ''}
+                        ${sub.flight_start ? ' · ' + esc(sub.flight_start) + ' – ' + esc(sub.flight_end) : ''}
+                        &nbsp;·&nbsp; ${sub.total_spots} spots
+                        ${sub.total_cost ? ' &nbsp;·&nbsp; $' + sub.total_cost.toLocaleString('en-US', {minimumFractionDigits:2}) : ''}
+                    </td></tr>`;
+                const lineRows = (sub.lines || []).map((ln, i) => renderLineRow(ln, i)).join('');
+                return headerRow + lineRows;
+            }).join('');
+        } else if (d.lines && d.lines.length > 0) {
+            detailLinesBody.innerHTML = d.lines.map((ln, i) => renderLineRow(ln, i)).join('');
             detailLines.classList.remove('hidden');
         }
 
