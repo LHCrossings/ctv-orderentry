@@ -65,7 +65,14 @@ Modes:
         type=Path,
         help="Load configuration from file (not implemented yet)"
     )
-    
+
+    parser.add_argument(
+        "--files",
+        nargs="+",
+        metavar="FILENAME",
+        help="Process only these specific filenames (from incoming/)"
+    )
+
     args = parser.parse_args()
     
     try:
@@ -88,7 +95,15 @@ Modes:
         
         # Create orchestrator
         orchestrator = create_orchestrator(config)
-        
+
+        # If --files specified, limit scanning to those filenames only
+        if args.files:
+            file_set = set(args.files)
+            _orig_scan = orchestrator._scanner.scan_for_orders
+            orchestrator._scanner.scan_for_orders = lambda: [
+                o for o in _orig_scan() if o.pdf_path.name in file_set
+            ]
+
         # Run in appropriate mode
         if args.scan:
             # Just scan and display

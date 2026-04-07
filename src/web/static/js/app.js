@@ -88,8 +88,16 @@ async function loadQueue() {
             queueCount.className   = 'queue-count' + (orders.length === 0 ? ' zero' : '');
         }
 
+        // Reset select-all when reloading
+        const selectAll = document.getElementById('select-all');
+        if (selectAll) {
+            selectAll.style.display = isHistory ? 'none' : '';
+            selectAll.checked = false;
+        }
+        document.getElementById('col-check').style.display = isHistory ? 'none' : '';
+
         if (orders.length === 0) {
-            queueBody.innerHTML = `<tr><td colspan="5">
+            queueBody.innerHTML = `<tr><td colspan="6">
                 <div class="empty-state">
                     <div class="empty-icon">${isHistory ? '🗂️' : '📭'}</div>
                     <p>${isHistory ? 'No completed orders in history.' : 'No orders in queue. Drop a PDF above to get started.'}</p>
@@ -101,6 +109,7 @@ async function loadQueue() {
 
         queueBody.innerHTML = orders.map(o => `
             <tr class="clickable" data-filename="${esc(o.filename)}" data-order-type="${esc(o.order_type)}" data-detail-base="${esc(detailBase)}">
+                <td class="cb-cell">${isHistory ? '' : `<input type="checkbox" class="order-cb" data-filename="${esc(o.filename)}">`}</td>
                 <td class="filename" title="${esc(o.filename)}">${esc(o.filename)}</td>
                 <td><span class="agency-badge ${o.order_type === 'Unknown' ? 'unknown' : ''}">${esc(o.order_type)}</span></td>
                 <td class="meta">${esc(o.customer_name)}</td>
@@ -119,6 +128,12 @@ async function loadQueue() {
             });
         });
 
+        // Pending: checkbox click stops row-click propagation
+        queueBody.querySelectorAll('.order-cb').forEach(cb => {
+            cb.addEventListener('click', e => e.stopPropagation());
+            cb.addEventListener('change', updateRunBtn);
+        });
+
         // Pending: Mark Done → move to Used
         queueBody.querySelectorAll('.delete-btn').forEach(btn => {
             btn.addEventListener('click', e => {
@@ -135,17 +150,37 @@ async function loadQueue() {
             });
         });
 
+        updateRunBtn();
+
     } catch (err) {
         console.error('Failed to load queue:', err);
     }
+}
+
+function getSelectedFiles() {
+    return [...document.querySelectorAll('.order-cb:checked')].map(cb => cb.dataset.filename);
+}
+
+function updateRunBtn() {
+    const runBtn = document.getElementById('run-btn');
+    if (!runBtn || currentTab !== 'pending') return;
+    const checked = document.querySelectorAll('.order-cb:checked').length;
+    const total   = document.querySelectorAll('.order-cb').length;
+    runBtn.disabled = total === 0;
+    runBtn.textContent = checked > 0 ? `▶ Run Selected (${checked})` : '▶ Run Queue';
 }
 
 async function runQueue() {
     const btn = document.getElementById('run-btn');
     btn.disabled = true;
     btn.textContent = '⏳ Starting...';
+    const selected = getSelectedFiles();
     try {
-        const res  = await fetch('/api/run', { method: 'POST' });
+        const res  = await fetch('/api/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(selected),
+        });
         const data = await res.json();
         if (!res.ok) {
             alert(data.detail || 'Failed to start.');
@@ -158,7 +193,7 @@ async function runQueue() {
         alert('Error: ' + err.message);
     } finally {
         btn.disabled = false;
-        btn.textContent = '▶ Run Queue';
+        updateRunBtn();
     }
 }
 
@@ -295,6 +330,13 @@ async function showDetail(filename, orderType, detailBase) {
 function closeDetailModal() { detailOverlay.classList.add('hidden'); }
 function closeDetail(event) { if (event.target === detailOverlay) closeDetailModal(); }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetailModal(); });
+
+// ── Select-all checkbox ────────────────────────────────────────────────────
+
+document.getElementById('select-all').addEventListener('change', function () {
+    document.querySelectorAll('.order-cb').forEach(cb => { cb.checked = this.checked; });
+    updateRunBtn();
+});
 
 // ── Auto-refresh every 10s ─────────────────────────────────────────────────
 

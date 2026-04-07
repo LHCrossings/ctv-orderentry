@@ -393,6 +393,28 @@ tbody td {
     color: #fff;
 }
 
+/* ── Checkbox column ─────────────────────────────────────────────────────── */
+
+#col-check {
+    width: 36px;
+    text-align: center;
+    padding: 11px 8px;
+}
+
+.cb-cell {
+    width: 36px;
+    text-align: center;
+    padding: 12px 8px;
+}
+
+.cb-cell input[type="checkbox"],
+#col-check input[type="checkbox"] {
+    cursor: pointer;
+    accent-color: var(--nord10);
+    width: 14px;
+    height: 14px;
+}
+
 /* ── Clickable row ───────────────────────────────────────────────────────── */
 
 tbody tr.clickable {

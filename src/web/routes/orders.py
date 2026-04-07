@@ -8,7 +8,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Body, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
@@ -114,7 +114,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     # ------------------------------------------------------------------
 
     @router.post("/api/run")
-    async def run_queue():
+    async def run_queue(files: list[str] = Body(default=[])):
         if not any(config.incoming_dir.glob("*.pdf")):
             raise HTTPException(status_code=400, detail="No PDF orders in queue.")
 
@@ -128,18 +128,26 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         if not python_exe.exists():
             python_exe = Path(sys.executable)
 
+        # Build --files args if specific files selected
+        files_arg = ""
+        if files:
+            # Validate each filename stays within incoming/
+            safe_files = []
+            for f in files:
+                p = (config.incoming_dir / f).resolve()
+                if str(p).startswith(str(config.incoming_dir.resolve())) and p.exists():
+                    safe_files.append(f)
+            if safe_files:
+                files_arg = " --files " + " ".join(f'"{f}"' for f in safe_files)
+
         if sys.platform == "win32":
-            subprocess.Popen(
-                f'start "CTV Order Entry" cmd /k "{python_exe}" "{main_py}"',
-                shell=True,
-                cwd=str(project_root)
-            )
-            return JSONResponse({"message": "Terminal opened — complete prompts there."})
+            cmd = f'start "CTV Order Entry" cmd /k "{python_exe}" "{main_py}"{files_arg}'
+            subprocess.Popen(cmd, shell=True, cwd=str(project_root))
+            n = len(files) if files else "all"
+            return JSONResponse({"message": f"Terminal opened — processing {n} order(s)."})
         else:
-            return JSONResponse({
-                "message": "Run in your terminal: uv run python main.py",
-                "manual": True
-            })
+            cmd = f"uv run python main.py{files_arg}"
+            return JSONResponse({"message": f"Run in your terminal: {cmd}", "manual": True})
 
     # ------------------------------------------------------------------
     # History (Used folder)
