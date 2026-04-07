@@ -76,13 +76,27 @@ async function loadQueue() {
         }
 
         queueBody.innerHTML = orders.map(o => `
-            <tr class="clickable" onclick="showDetail('${esc(o.filename)}', '${esc(o.order_type)}')">
+            <tr class="clickable" data-filename="${esc(o.filename)}" data-order-type="${esc(o.order_type)}">
                 <td class="filename" title="${esc(o.filename)}">${esc(o.filename)}</td>
                 <td><span class="agency-badge ${o.order_type === 'Unknown' ? 'unknown' : ''}">${esc(o.order_type)}</span></td>
                 <td class="meta">${esc(o.customer_name)}</td>
                 <td class="meta">${o.size_kb} KB &nbsp;·&nbsp; ${esc(o.modified)}</td>
-                <td><button class="delete-btn" onclick="event.stopPropagation(); deleteOrder('${esc(o.filename)}')">Delete</button></td>
+                <td><button class="delete-btn" data-filename="${esc(o.filename)}">Delete</button></td>
             </tr>`).join('');
+
+        // Attach row click and delete listeners after rendering
+        queueBody.querySelectorAll('tr.clickable').forEach(row => {
+            row.addEventListener('click', e => {
+                if (e.target.closest('.delete-btn')) return;
+                showDetail(row.dataset.filename, row.dataset.orderType);
+            });
+        });
+        queueBody.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                deleteOrder(btn.dataset.filename);
+            });
+        });
     } catch (err) {
         console.error('Failed to load queue:', err);
     }
