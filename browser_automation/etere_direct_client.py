@@ -975,6 +975,7 @@ EXEC web_sales_InsertContractLine
             return -1
 
         start_frames, end_frames = row[0], row[1]
+        print(f"[DIRECT]     DB raw: ORA_INIZIO={start_frames}, ORA_FINE={end_frames} -> {_frames_to_hhmm(start_frames)}-{_frames_to_hhmm(end_frames)}")
         day_bits = {
             "lun": bool(row[2]),
             "mar": bool(row[3]),
