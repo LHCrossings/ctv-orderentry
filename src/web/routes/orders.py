@@ -614,35 +614,41 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 out["stations"] = [{"cod_user": c, "nome": n} for c, n in stations]
                 out["markets"] = []
 
-                # Check if broadcast schedule (MESSINONDA) has spots for CVC in date range
-                from datetime import datetime as _dt2
+                # Inspect TPalinseSpotsInCluster columns and sample CVC data
                 try:
-                    sch_cur = conn.cursor()
-                    sch_cur.execute("""
-                        SELECT TOP 5 cod_user, data_onda, cod_spot, cod_materiale
-                        FROM MESSINONDA
-                        WHERE cod_user = 7
-                          AND data_onda BETWEEN ? AND ?
-                        ORDER BY data_onda
-                    """, dt_from, dt_to)
-                    rows = sch_cur.fetchall()
-                    out["messinonda_cvc_sample"] = [list(r) for r in rows]
-                    out["messinonda_cvc_count"] = len(rows)
+                    t1 = conn.cursor()
+                    t1.execute("SELECT TOP 1 * FROM TPalinseSpotsInCluster")
+                    cols = [d[0] for d in t1.description] if t1.description else []
+                    out["tpalins_columns"] = cols
+                    row = t1.fetchone()
+                    out["tpalins_sample"] = list(row) if row else None
                 except Exception as e:
-                    out["messinonda_error"] = str(e)
+                    out["tpalins_error"] = str(e)
 
-                # Also check what tables exist with 'material' or 'messa' in name
+                # Inspect StampaMateriale columns and sample
+                try:
+                    t2 = conn.cursor()
+                    t2.execute("SELECT TOP 1 * FROM StampaMateriale")
+                    cols2 = [d[0] for d in t2.description] if t2.description else []
+                    out["stampa_columns"] = cols2
+                    row2 = t2.fetchone()
+                    out["stampa_sample"] = list(row2) if row2 else None
+                except Exception as e:
+                    out["stampa_error"] = str(e)
+
+                # Broader table search
                 try:
                     tbl_cur = conn.cursor()
                     tbl_cur.execute("""
                         SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
-                        WHERE TABLE_NAME LIKE '%material%' OR TABLE_NAME LIKE '%messa%'
-                           OR TABLE_NAME LIKE '%spot%' OR TABLE_NAME LIKE '%miss%'
+                        WHERE TABLE_NAME LIKE '%palins%' OR TABLE_NAME LIKE '%trasmiss%'
+                           OR TABLE_NAME LIKE '%onda%' OR TABLE_NAME LIKE '%schedula%'
+                           OR TABLE_NAME LIKE '%broadcast%' OR TABLE_NAME LIKE '%rundown%'
                         ORDER BY TABLE_NAME
                     """)
-                    out["relevant_tables"] = [r[0] for r in tbl_cur.fetchall()]
+                    out["schedule_tables"] = [r[0] for r in tbl_cur.fetchall()]
                 except Exception as e:
-                    out["relevant_tables_error"] = str(e)
+                    out["schedule_tables_error"] = str(e)
 
                 for cod_user, nome in stations:
                     try:
