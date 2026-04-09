@@ -99,10 +99,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         total_s = round(frames / _FPS)
         h, rem = divmod(total_s, 3600)
         m = rem // 60
-        if h == 0:   return f"12:{m:02d}a"
-        if h < 12:   return f"{h}:{m:02d}a"
-        if h == 12:  return f"12:{m:02d}p"
-        return f"{h-12}:{m:02d}p"
+        if h == 0:
+            return f"12:{m:02d}a"
+        if h < 12:
+            return f"{h}:{m:02d}a"
+        if h == 12:
+            return f"12:{m:02d}p"
+        return f"{h - 12}:{m:02d}p"
 
     def _frames_to_min(frames) -> int:
         return round(frames / _FPS / 60) if frames else 0
@@ -112,12 +115,18 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     def _days_str(lun, mar, mer, gio, ven, sab, dom) -> str:
         d = [bool(lun), bool(mar), bool(mer), bool(gio), bool(ven), bool(sab), bool(dom)]
-        if all(d): return "M-Su"
-        if d[:5] == [True]*5 and not d[5] and not d[6]: return "M-F"
-        if d[:6] == [True]*6 and not d[6]: return "M-Sa"
-        if not any(d[:5]) and d[5] and d[6]: return "Sa-Su"
-        if d[5] and not any(d[:5]) and not d[6]: return "Sa"
-        if d[6] and not any(d[:5]) and not d[5]: return "Su"
+        if all(d):
+            return "M-Su"
+        if d[:5] == [True] * 5 and not d[5] and not d[6]:
+            return "M-F"
+        if d[:6] == [True] * 6 and not d[6]:
+            return "M-Sa"
+        if not any(d[:5]) and d[5] and d[6]:
+            return "Sa-Su"
+        if d[5] and not any(d[:5]) and not d[6]:
+            return "Sa"
+        if d[6] and not any(d[:5]) and not d[5]:
+            return "Su"
         abbr = ["M", "Tu", "W", "Th", "F", "Sa", "Su"]
         return "/".join(a for a, v in zip(abbr, d) if v) or "—"
 
