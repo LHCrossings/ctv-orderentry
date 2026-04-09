@@ -134,32 +134,23 @@ def etere_web_login():
     )
     resp.raise_for_status()
 
-    cookies_after_login = {k: v for k, v in session.cookies.items()}
-    snippet = resp.text[:300].replace('\n', ' ').replace('\r', '')
-    print(f"[LOGIN] Post-login cookies: {list(cookies_after_login.keys())} final_url={resp.url}")
-    print(f"[LOGIN] POST response ({resp.status_code}): {snippet}")
+    # Parse login response — Etere returns JSON: {"IsOk": true/false, "Message": "..."}
+    try:
+        login_result = resp.json()
+    except Exception:
+        login_result = {}
 
-    # Warmup: navigate to the sales module WITHOUT following redirects — a redirect
-    # here means the page wants re-authentication and would overwrite our valid cookies.
-    for warmup_path in ("/etere/etere.html", "/sales/index"):
-        try:
-            wr = session.get(
-                f"{ETERE_WEB_URL}{warmup_path}", timeout=15, allow_redirects=False
-            )
-            print(f"[LOGIN] Warmup {warmup_path}: status={wr.status_code} location={wr.headers.get('Location','')}")
-        except Exception as exc:
-            print(f"[LOGIN] Warmup {warmup_path}: error={exc}")
+    if not login_result.get("IsOk", False):
+        msg = login_result.get("Message", "Login failed (unknown reason)")
+        raise RuntimeError(f"Etere login failed: {msg}")
 
-    cookies_final = {k: v for k, v in session.cookies.items()}
-    print(f"[LOGIN] Final cookies: {list(cookies_final.keys())}")
-
-    if not cookies_final:
+    if not dict(session.cookies):
         raise RuntimeError(
             "Etere login returned no cookies — credentials may be wrong "
             "or the login endpoint has changed."
         )
 
-    print(f"[LOGIN] OK - Logged into Etere as {username} ({len(cookies_final)} cookie(s))")
+    print(f"[LOGIN] OK - Logged into Etere as {username} ({len(dict(session.cookies))} cookie(s))")
     return session
 
 
