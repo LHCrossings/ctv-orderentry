@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Report Sort — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 720px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+        }
+
+        .tool-card h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+
+        .tool-card > p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .field-group.log-type { flex: 0 0 120px; }
+        .field-group.date     { flex: 0 0 140px; }
+
+        .field-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .field-input, .field-select {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 0.95rem;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            color: var(--text-primary);
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            width: 100%;
+        }
+
+        .field-input:focus, .field-select:focus {
+            border-color: var(--nord10);
+            box-shadow: 0 0 0 3px rgba(94,129,172,0.15);
+        }
+
+        .run-btn {
+            padding: 10px 24px;
+            background: var(--nord10);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.15s;
+            white-space: nowrap;
+            height: 42px;
+        }
+
+        .run-btn:hover:not(:disabled) {
+            background: var(--nord9);
+            transform: translateY(-1px);
+        }
+
+        .run-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .terminal {
+            background: var(--nord0);
+            border: 1px solid var(--nord1);
+            border-radius: 10px;
+            padding: 16px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.82rem;
+            line-height: 1.7;
+            min-height: 160px;
+            max-height: 500px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .terminal.visible { display: block; }
+
+        .t-line { color: var(--nord4); }
+        .t-info  { color: var(--nord8); }
+        .t-done  { color: var(--nord14); font-weight: 600; }
+        .t-err   { color: var(--nord11); }
+        .t-warn  { color: var(--nord13); }
+        .t-cursor {
+            display: inline-block;
+            width: 8px;
+            height: 14px;
+            background: var(--nord8);
+            animation: blink 1s step-end infinite;
+            vertical-align: middle;
+            margin-left: 2px;
+        }
+
+        @keyframes blink { 50% { opacity: 0; } }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/scripts" class="back-link">&#8592;</a>
+            <div class="logo-icon">📊</div>
+            <div>
+                <h1>Report <span>Sort</span></h1>
+                <div class="logo-sub">Scripts · Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="tool-card">
+        <h2>Worldlink Pre/Post Log</h2>
+        <p>Downloads the Placement Confirmation report from Etere for Worldlink (Agency 133), then splits it by booking number into individual Excel files using the correct CTV or TAC template.</p>
+
+        <div class="input-row">
+            <div class="field-group log-type">
+                <label class="field-label" for="logType">Log Type</label>
+                <select id="logType" class="field-select">
+                    <option value="post">Post Log</option>
+                    <option value="pre">Pre Log</option>
+                </select>
+            </div>
+            <div class="field-group date">
+                <label class="field-label" for="dateFrom">From Date</label>
+                <input id="dateFrom" class="field-input" type="text" placeholder="MM/DD/YYYY" />
+            </div>
+            <div class="field-group date">
+                <label class="field-label" for="dateTo">To Date</label>
+                <input id="dateTo" class="field-input" type="text" placeholder="MM/DD/YYYY" />
+            </div>
+            <button id="runBtn" class="run-btn" onclick="runReportSort()">&#9654; Run</button>
+        </div>
+
+        <div id="terminal" class="terminal"></div>
+    </div>
+</main>
+
+<script>
+function runReportSort() {
+    const logType  = document.getElementById('logType').value;
+    const dateFrom = document.getElementById('dateFrom').value.trim();
+    const dateTo   = document.getElementById('dateTo').value.trim();
+
+    if (!dateFrom || !dateTo) {
+        document.getElementById(dateFrom ? 'dateTo' : 'dateFrom').focus();
+        return;
+    }
+
+    const terminal = document.getElementById('terminal');
+    const runBtn   = document.getElementById('runBtn');
+
+    terminal.innerHTML = '';
+    terminal.classList.add('visible');
+    runBtn.disabled = true;
+
+    const cursor = document.createElement('span');
+    cursor.className = 't-cursor';
+    terminal.appendChild(cursor);
+
+    const params = new URLSearchParams({ log_type: logType, date_from: dateFrom, date_to: dateTo });
+    const evtSource = new EventSource(`/api/scripts/reportsort?${params}`);
+
+    evtSource.onmessage = (e) => {
+        const raw = e.data;
+        if (terminal.contains(cursor)) terminal.removeChild(cursor);
+
+        const div = document.createElement('div');
+
+        if (raw.startsWith('[EXIT:')) {
+            const code = parseInt(raw.match(/\d+/)[0]);
+            div.className = code === 0 ? 't-done' : 't-err';
+            div.textContent = code === 0 ? '✓ Completed successfully.' : `✗ Exited with code ${code}.`;
+            terminal.appendChild(div);
+            evtSource.close();
+            runBtn.disabled = false;
+            terminal.scrollTop = terminal.scrollHeight;
+            return;
+        }
+
+        if (raw.includes('[DONE]'))       div.className = 't-done';
+        else if (raw.includes('[INFO]'))  div.className = 't-info';
+        else if (raw.includes('[WARN]') || raw.includes('WARNING')) div.className = 't-warn';
+        else if (raw.includes('[ERROR]') || raw.includes('Error'))  div.className = 't-err';
+        else                              div.className = 't-line';
+
+        div.textContent = raw;
+        terminal.appendChild(div);
+        terminal.appendChild(cursor);
+        terminal.scrollTop = terminal.scrollHeight;
+    };
+
+    evtSource.onerror = () => {
+        if (terminal.contains(cursor)) terminal.removeChild(cursor);
+        const div = document.createElement('div');
+        div.className = 't-err';
+        div.textContent = '✗ Connection lost or server error.';
+        terminal.appendChild(div);
+        evtSource.close();
+        runBtn.disabled = false;
+    };
+}
+</script>
+
+</body>
+</html>
