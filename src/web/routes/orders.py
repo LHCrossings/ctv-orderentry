@@ -672,16 +672,17 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 for cod_user, nome in stations:
                     market_name = _MARKET_NAMES.get(cod_user, nome or str(cod_user))
                     try:
-                        cursor.execute(
+                        cur = conn.cursor()  # fresh cursor per market avoids stale result-set state
+                        cur.execute(
                             "EXEC dbo.rpt_trf_missing_material_list ?, ?, ?, ?, ?, ?, ?, ?",
                             cod_user, dt_from, dt_to, "1", "1", "1", "0", None
                         )
                         # SP may produce multiple result sets; advance to one with columns
-                        while cursor.description is None:
-                            if not cursor.nextset():
+                        while cur.description is None:
+                            if not cur.nextset():
                                 break
-                        if cursor.description:
-                            for row in cursor.fetchall():
+                        if cur.description:
+                            for row in cur.fetchall():
                                 results.append({
                                     "market":        market_name,
                                     "customer":      row[0],
