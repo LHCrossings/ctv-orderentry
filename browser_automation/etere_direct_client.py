@@ -139,7 +139,7 @@ def etere_web_login() -> dict:
 
 FRAMES_PER_SECOND = 29.97  # NTSC broadcast frame rate
 
-# Market code → Etere Users.cod_user (also CONTRATTITESTATA.COD_USER)
+# Market code -> Etere Users.cod_user (also CONTRATTITESTATA.COD_USER)
 MARKET_USER_IDS: dict[str, int] = {
     "NYC": 1,
     "CMP": 2,
@@ -196,7 +196,7 @@ def _minutes_to_frames(minutes: int) -> int:
 
 
 def _parse_hhmm(time_str: str) -> tuple[int, int]:
-    """Parse 'HH:MM' → (h, m)."""
+    """Parse 'HH:MM' -> (h, m)."""
     h, m = time_str.strip().split(":")
     return int(h), int(m)
 
@@ -213,8 +213,8 @@ def _duration_str_to_seconds(duration: str) -> int:
     """
     Convert Etere duration string to integer seconds.
     Accepts:
-        "00:00:30:00"  (HH:MM:SS:FF)  → 30
-        "30"           (bare seconds)  → 30
+        "00:00:30:00"  (HH:MM:SS:FF)  -> 30
+        "30"           (bare seconds)  -> 30
     """
     if ":" in duration:
         parts = duration.split(":")
@@ -224,7 +224,7 @@ def _duration_str_to_seconds(duration: str) -> int:
 
 # ── Day-pattern parser ──────────────────────────────────────────────────────────
 
-_DAY_KEYS = ("lun", "mar", "mer", "gio", "ven", "sab", "dom")  # Mon–Sun
+_DAY_KEYS = ("lun", "mar", "mer", "gio", "ven", "sab", "dom")  # Mon-Sun
 
 # Tokens recognised as individual days
 _TOKEN_MAP: dict[str, str] = {
@@ -544,7 +544,7 @@ EXEC web_sales_savecontractgeneral
 
         newtype = NEWTYPE_BONUS if is_bonus else NEWTYPE_PAID
 
-        # Convert date → datetime for legacy ODBC driver
+        # Convert date -> datetime for legacy ODBC driver
         datefrom_dt = datetime(date_from.year, date_from.month, date_from.day)
         dateto_dt   = datetime(date_to.year,   date_to.month,   date_to.day)
 
@@ -700,7 +700,7 @@ EXEC web_sales_InsertContractLine
 
         label = "BNS" if is_bonus else "PAID"
         print(f"[DIRECT]   Line #{line_id} [{label}] {days} {time_range} | "
-              f"{date_from}–{date_to} | {total_spots} spots @ ${rate:.2f}")
+              f"{date_from}-{date_to} | {total_spots} spots @ ${rate:.2f}")
         return line_id
 
     def _assign_blocks(
@@ -758,7 +758,7 @@ EXEC web_sales_InsertContractLine
         )
         deleted = cursor.rowcount
         if deleted:
-            print(f"[DIRECT]     → {deleted} existing block(s) cleared")
+            print(f"[DIRECT]     -> {deleted} existing block(s) cleared")
 
         cursor.execute(f"""
             INSERT INTO CONTRATTIFASCE (ID_CONTRATTIRIGHE, ID_FASCE, PRICELIST, SELECTEDSEGMENTS)
@@ -779,7 +779,7 @@ EXEC web_sales_InsertContractLine
         if self._autocommit:
             self._conn.commit()
         if count:
-            print(f"[DIRECT]     → {count} block(s) assigned")
+            print(f"[DIRECT]     -> {count} block(s) assigned")
         return count
 
     def _assign_blocks_http(
@@ -813,11 +813,11 @@ EXEC web_sales_InsertContractLine
         try:
             import requests as _requests
         except ImportError:
-            print("[DIRECT]     ⚠ requests not installed — skipping HTTP block assignment")
+            print("[DIRECT]     ! requests not installed — skipping HTTP block assignment")
             return -1
 
         if not self._session_cookies:
-            print("[DIRECT]     ⚠ No session cookies — call set_session_cookies() first")
+            print("[DIRECT]     ! No session cookies — call set_session_cookies() first")
             return -1
 
         time_from = _frames_to_hhmm(start_frames)
@@ -850,7 +850,7 @@ EXEC web_sales_InsertContractLine
             resp = _requests.post(url, json=payload, cookies=self._session_cookies, timeout=30)
             resp.raise_for_status()
         except Exception as exc:
-            print(f"[DIRECT]     ✗ Block assignment HTTP error: {exc}")
+            print(f"[DIRECT]     X Block assignment HTTP error: {exc}")
             return -1
 
         # Response is a JSON envelope: {"Result": {...}, "Value": "<html...>"}
@@ -886,7 +886,7 @@ EXEC web_sales_InsertContractLine
         count = len(block_ids)
 
         if not block_ids:
-            print("[DIRECT]     ⚠ No blocks returned from HTTP")
+            print("[DIRECT]     ! No blocks returned from HTTP")
             return 0
 
         # Write to CONTRATTIFASCE: clear stale entries then insert the new set
@@ -904,9 +904,9 @@ EXEC web_sales_InsertContractLine
                 )
             if self._autocommit:
                 self._conn.commit()
-            print(f"[DIRECT]     → {count} block(s) assigned (HTTP)")
+            print(f"[DIRECT]     -> {count} block(s) assigned (HTTP)")
         else:
-            print(f"[DIRECT]     ⚠ {count} block(s) found but no line_id — not saved")
+            print(f"[DIRECT]     ! {count} block(s) found but no line_id — not saved")
 
         return count
 
