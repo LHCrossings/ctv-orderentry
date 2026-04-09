@@ -614,6 +614,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 out["stations"] = [{"cod_user": c, "nome": n} for c, n in stations]
                 out["markets"] = []
 
+                # Test: call rpt_loadEnv first (SSRS does this before the data SP)
+                try:
+                    env_cur = conn.cursor()
+                    env_cur.execute("EXEC dbo.rpt_loadEnv ?, ?", stations[0][0], None)
+                    env_cur.fetchall()
+                    out["loadEnv"] = "called OK"
+                except Exception as e:
+                    out["loadEnv"] = f"error: {e}"
+
                 for cod_user, nome in stations:
                     try:
                         mc = conn.cursor()
