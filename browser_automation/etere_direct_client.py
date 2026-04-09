@@ -975,7 +975,6 @@ EXEC web_sales_InsertContractLine
             return -1
 
         start_frames, end_frames = row[0], row[1]
-        print(f"[DIRECT]     DB raw: ORA_INIZIO={start_frames}, ORA_FINE={end_frames} -> {_frames_to_hhmm(start_frames)}-{_frames_to_hhmm(end_frames)}")
         day_bits = {
             "lun": bool(row[2]),
             "mar": bool(row[3]),
@@ -990,21 +989,12 @@ EXEC web_sales_InsertContractLine
         user_id     = row[11]
         contract_id = row[12]
 
-        # Replicated market lines store ORA_INIZIO = ORA_FINE = 0 (no independent
-        # time range). Borrow the time from the first line in the same contract
-        # that has a valid (non-zero) time range — that is the "master" NYC line.
-        if start_frames == 0 and end_frames == 0:
-            cursor.execute("""
-                SELECT TOP 1 ORA_INIZIO, ORA_FINE
-                FROM   CONTRATTIRIGHE
-                WHERE  ID_CONTRATTITESTATA = ?
-                  AND  (ORA_INIZIO != 0 OR ORA_FINE != 0)
-                ORDER  BY ID_CONTRATTIRIGHE
-            """, [int(contract_id)])
-            ref = cursor.fetchone()
-            if ref:
-                start_frames, end_frames = ref[0], ref[1]
-                print(f"[DIRECT]     Borrowed time from master line: {_frames_to_hhmm(start_frames)}-{_frames_to_hhmm(end_frames)}")
+        # Etere only stores the start time in ORA_INIZIO; ORA_FINE equals ORA_INIZIO
+        # (or is 0 for replicated market lines). Use a full broadcast-day window
+        # (06:00-23:59) so Etere finds all blocks matching the day/date pattern,
+        # which matches the behaviour of "Add Blocks Automatically" in the UI.
+        start_frames = _to_frames(6, 0)
+        end_frames   = _to_frames(23, 59)
 
         # Strip trailing asterisks Etere appends after block operations
         cursor.execute("""
