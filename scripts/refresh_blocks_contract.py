@@ -12,7 +12,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from browser_automation.etere_direct_client import EtereDirectClient, connect, etere_web_login
+from browser_automation.etere_direct_client import EtereDirectClient, connect, etere_web_login, etere_web_logout
 
 
 def main():
@@ -21,22 +21,25 @@ def main():
     print(f"[INFO] Logging into Etere web UI ...")
     session = etere_web_login()
 
-    with connect() as conn:
-        client = EtereDirectClient(conn, autocommit=False)
-        client.set_http_session(session)
+    try:
+        with connect() as conn:
+            client = EtereDirectClient(conn, autocommit=False)
+            client.set_http_session(session)
 
-        line_ids = client.get_all_line_ids(contract_id)
-        print(f"[INFO] Contract {contract_id}: {len(line_ids)} line(s) found")
+            line_ids = client.get_all_line_ids(contract_id)
+            print(f"[INFO] Contract {contract_id}: {len(line_ids)} line(s) found")
 
-        total_blocks = 0
-        for line_id in line_ids:
-            print(f"[INFO] Processing line {line_id} ...")
-            n = client.assign_blocks_for_existing_line(line_id)
-            if n >= 0:
-                total_blocks += n
+            total_blocks = 0
+            for line_id in line_ids:
+                print(f"[INFO] Processing line {line_id} ...")
+                n = client.assign_blocks_for_existing_line(line_id)
+                if n >= 0:
+                    total_blocks += n
 
-        conn.commit()
-        print(f"\n[DONE] {len(line_ids)} line(s) refreshed, {total_blocks} block(s) assigned total.")
+            conn.commit()
+            print(f"\n[DONE] {len(line_ids)} line(s) refreshed, {total_blocks} block(s) assigned total.")
+    finally:
+        etere_web_logout(session)
 
 
 if __name__ == "__main__":

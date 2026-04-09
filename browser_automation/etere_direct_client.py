@@ -154,6 +154,20 @@ def etere_web_login():
     return session
 
 
+def etere_web_logout(session) -> None:
+    """Log out of the Etere web UI, releasing the license seat.
+
+    Must be called after every headless session — orphaned sessions consume
+    license slots until IIS session timeout.
+    """
+    try:
+        logout_url = f"{ETERE_WEB_URL}/index/logout"
+        session.get(logout_url, timeout=10, allow_redirects=True)
+        print("[LOGOUT] Logged out of Etere.")
+    except Exception as exc:
+        print(f"[LOGOUT] Warning: could not log out cleanly: {exc}")
+
+
 # ── Constants ───────────────────────────────────────────────────────────────────
 
 FRAMES_PER_SECOND = 29.97  # NTSC broadcast frame rate
