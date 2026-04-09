@@ -327,6 +327,7 @@
                     <thead>
                         <tr>
                             <th style="width:32px"></th>
+                            <th style="width:60px">#</th>
                             <th>Description</th>
                             <th>Mkt</th>
                             <th>From</th>
@@ -426,6 +427,7 @@ function renderLines(lines, contractId) {
         tr.dataset.lineId = line.line_id;
         tr.innerHTML = `
             <td><input type="checkbox" class="line-cb" value="${line.line_id}" onchange="rowToggle(this)" /></td>
+            <td style="color:var(--text-muted);font-size:0.8rem">${line.line_id}</td>
             <td>${escHtml(line.description)}</td>
             <td>${escHtml(line.market)}</td>
             <td style="white-space:nowrap">${escHtml(line.date_from)}</td>
