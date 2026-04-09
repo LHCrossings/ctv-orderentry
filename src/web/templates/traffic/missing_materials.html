@@ -271,6 +271,20 @@ let activeMarket = 'ALL';
 let sortCol = 'schedule_time';
 let sortAsc = true;
 
+function toMMDDYYYY(d) {
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${mm}/${dd}/${yyyy}`;
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+    const today    = new Date();
+    const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+    document.getElementById('dateFrom').value = toMMDDYYYY(today);
+    document.getElementById('dateTo').value   = toMMDDYYYY(tomorrow);
+});
+
 function formatDate(el) {
     const d = el.value.replace(/\D/g, '');
     const yr = new Date().getFullYear();
