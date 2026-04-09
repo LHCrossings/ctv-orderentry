@@ -76,7 +76,7 @@ def download_report(session, date_from: str, date_to: str) -> None:
         f"&filters[5]={date_to}"
     )
     print(f"[INFO] Downloading report ({date_from} to {date_to}) ...")
-    resp = session.get(url, timeout=60)
+    resp = session.get(url, timeout=120)
     resp.raise_for_status()
 
     content_type = resp.headers.get("Content-Type", "")
