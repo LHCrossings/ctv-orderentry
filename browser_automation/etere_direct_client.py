@@ -124,6 +124,14 @@ def etere_web_login() -> dict:
     )
     resp.raise_for_status()
 
+    # Navigate to the main app pages to accumulate all session cookies
+    # (Etere sets additional cookies when loading the sales module)
+    for warmup_path in ("/etere/etere.html", "/sales/index"):
+        try:
+            session.get(f"{ETERE_WEB_URL}{warmup_path}", timeout=15)
+        except Exception:
+            pass  # best-effort; don't fail if a page 404s
+
     cookies = dict(session.cookies)
     if not cookies:
         raise RuntimeError(
@@ -886,7 +894,8 @@ EXEC web_sales_InsertContractLine
         count = len(block_ids)
 
         if not block_ids:
-            print("[DIRECT]     ! No blocks returned from HTTP")
+            snippet = body[:300].replace('\n', ' ') if body else "(empty)"
+            print(f"[DIRECT]     ! No blocks returned from HTTP. Response snippet: {snippet}")
             return 0
 
         # Write to CONTRATTIFASCE: clear stale entries then insert the new set
