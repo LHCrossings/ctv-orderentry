@@ -618,9 +618,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 d1 = dt_from.strftime('%Y-%m-%d')
                 d2 = dt_to.strftime('%Y-%m-%d')
                 try:
-                    import pyodbc as _pyodbc
-                    from browser_automation.etere_direct_client import DB_SERVER, DB_DRIVER
                     import os as _os
+
+                    import pyodbc as _pyodbc
+
+                    from browser_automation.etere_direct_client import DB_DRIVER, DB_SERVER
                     user = _os.getenv("ETERE_DB_USER")
                     pwd  = _os.getenv("ETERE_DB_PASSWORD")
                     if user and pwd:
