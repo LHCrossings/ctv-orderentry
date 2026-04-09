@@ -29,48 +29,61 @@ def main():
     with connect() as conn:
         cursor = conn.cursor()
 
-        # Build query — join to CONTRATTIRIGHE to filter by contract header
-        params = [contract_id]
-        date_filter = ""
-        if date_from:
-            date_filter += " AND sl.Date >= ?"
-            params.append(date_from)
-        if date_to:
-            date_filter += " AND sl.Date <= ?"
-            params.append(date_to)
+        def count_rows(table, date_col, line_col):
+            cursor.execute(f"""
+                SELECT COUNT(*)
+                FROM   {table} t
+                JOIN   CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = t.{line_col}
+                WHERE  cr.ID_CONTRATTITESTATA = ?
+            """, [contract_id])
+            return cursor.fetchone()[0]
 
-        cursor.execute(f"""
-            SELECT sl.ID_TrafficScheduleList,
-                   sl.ID_ContrattiRighe,
-                   cr.DESCRIZIONE,
-                   sl.Date,
-                   sl.ExitDate,
-                   sl.ToDate,
-                   sl.PassageMiss,
-                   sl.Notes
-            FROM   Traffic_ScheduleList sl
-            JOIN   CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = sl.ID_ContrattiRighe
-            WHERE  cr.ID_CONTRATTITESTATA = ?
-            {date_filter}
-            ORDER  BY sl.Date, sl.ID_ContrattiRighe
-        """, params)
+        tp_count  = count_rows("trafficPalinse",    "Date",   "ID_ContrattiRighe")
+        ms_count  = count_rows("Traffic_Manualsched", "DATA_P", "ID_CONTRATTIRIGHE")
+        tsl_count = count_rows("Traffic_ScheduleList", "Date",  "ID_ContrattiRighe")
 
-        rows = cursor.fetchall()
+        print(f"[INFO] Contract {contract_id} row counts:")
+        print(f"  trafficPalinse    : {tp_count}")
+        print(f"  Traffic_Manualsched: {ms_count}")
+        print(f"  Traffic_ScheduleList: {tsl_count}")
+        print()
 
-    if not rows:
-        print(f"[INFO] No scheduled entries found for contract {contract_id}"
-              + (f" between {date_from} and {date_to}" if date_from else "") + ".")
-        return
+        # Show sample rows from whichever table has data
+        if tp_count > 0:
+            cursor.execute("""
+                SELECT TOP 10 t.id_trafficPalinse, t.ID_ContrattiRighe, cr.DESCRIZIONE, t.Date, t.scadenza
+                FROM   trafficPalinse t
+                JOIN   CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = t.ID_ContrattiRighe
+                WHERE  cr.ID_CONTRATTITESTATA = ?
+                ORDER  BY t.Date, t.ID_ContrattiRighe
+            """, [contract_id])
+            rows = cursor.fetchall()
+            print(f"[INFO] trafficPalinse sample (first 10):")
+            print(f"{'ID':>10}  {'LineID':>8}  {'Date':>12}  {'Scadenza':>12}  Description")
+            print("-" * 70)
+            for row in rows:
+                rid, lid, desc, date, scad = row
+                print(f"{rid:>10}  {lid:>8}  "
+                      f"{date.strftime('%m/%d/%Y') if date else '—':>12}  "
+                      f"{scad.strftime('%m/%d/%Y') if scad else '—':>12}  {desc or ''}")
+            print()
 
-    print(f"[INFO] {len(rows)} scheduled entry(ies) for contract {contract_id}"
-          + (f" between {date_from} and {date_to}" if date_from else "") + ":\n")
-    print(f"{'ScheduleID':>12}  {'LineID':>8}  {'Date':>12}  {'ExitDate':>12}  Description")
-    print("-" * 80)
-    for row in rows:
-        sl_id, line_id, desc, date, exit_date, to_date, miss, notes = row
-        date_str      = date.strftime("%m/%d/%Y")      if date      else "—"
-        exit_date_str = exit_date.strftime("%m/%d/%Y") if exit_date else "—"
-        print(f"{sl_id:>12}  {line_id:>8}  {date_str:>12}  {exit_date_str:>12}  {desc or ''}")
+        if ms_count > 0:
+            cursor.execute("""
+                SELECT TOP 10 t.ID_MANUALSCHED, t.ID_CONTRATTIRIGHE, cr.DESCRIZIONE, t.DATA_P
+                FROM   Traffic_Manualsched t
+                JOIN   CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = t.ID_CONTRATTIRIGHE
+                WHERE  cr.ID_CONTRATTITESTATA = ?
+                ORDER  BY t.DATA_P, t.ID_CONTRATTIRIGHE
+            """, [contract_id])
+            rows = cursor.fetchall()
+            print(f"[INFO] Traffic_Manualsched sample (first 10):")
+            print(f"{'ID':>10}  {'LineID':>8}  {'Date':>12}  Description")
+            print("-" * 60)
+            for row in rows:
+                rid, lid, desc, date = row
+                print(f"{rid:>10}  {lid:>8}  "
+                      f"{date.strftime('%m/%d/%Y') if date else '—':>12}  {desc or ''}")
 
 
 if __name__ == "__main__":
