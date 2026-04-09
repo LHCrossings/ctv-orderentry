@@ -305,7 +305,12 @@ async function loadMissing() {
             const err = await resp.text();
             throw new Error(err);
         }
-        allRows = await resp.json();
+        const data = await resp.json();
+        allRows = data.rows;
+        if (data.errors && data.errors.length) {
+            document.getElementById('errorArea').innerHTML =
+                `<div class="alert-err" style="margin-bottom:12px">Some markets returned errors:<br>${data.errors.map(e => escHtml(e)).join('<br>')}</div>`;
+        }
         activeMarket = 'ALL';
         renderFilters();
         renderTable();

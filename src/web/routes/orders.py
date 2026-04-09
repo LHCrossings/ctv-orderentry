@@ -596,35 +596,50 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         date_from: str = Query(...),
         date_to:   str = Query(...),
     ):
+        from datetime import datetime as _dt
+
+        def _parse_date(s: str):
+            for fmt in ("%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d"):
+                try:
+                    return _dt.strptime(s.strip(), fmt)
+                except ValueError:
+                    pass
+            raise ValueError(f"Unrecognized date: {s!r}")
+
         def _query():
             from browser_automation.etere_direct_client import connect as _db_connect
+            dt_from = _parse_date(date_from)
+            dt_to   = _parse_date(date_to)
             results = []
+            errors  = []
             with _db_connect() as conn:
                 cursor = conn.cursor()
                 for cod_user, market_name in _MARKET_NAMES.items():
                     try:
                         cursor.execute(
                             "EXEC dbo.rpt_trf_missing_material_list ?, ?, ?, ?, ?, ?, ?, ?",
-                            cod_user, date_from, date_to, "1", "1", "1", "0", None
+                            cod_user, dt_from, dt_to, "1", "1", "1", "0", None
                         )
                         for row in cursor.fetchall():
                             results.append({
                                 "market":        market_name,
-                                "agency":        row.agency,
-                                "salesman":      row.salesman,
-                                "customer":      row.customer,
-                                "description":   row.description,
-                                "duration":      row.duration,
-                                "cod_progra":    row.cod_progra,
-                                "schedule_time": row.schedule_time.isoformat() if row.schedule_time else None,
-                                "status":        row.status,
+                                "agency":        row[0],
+                                "salesman":      row[1],
+                                "customer":      row[2],
+                                "description":   row[3],
+                                "duration":      row[4],
+                                "cod_progra":    row[5],
+                                "schedule_time": row[6].isoformat() if row[6] else None,
+                                "status":        row[7],
                             })
-                    except Exception:
-                        pass  # market may not exist in this DB
-            return results
+                    except Exception as e:
+                        errors.append(f"{market_name}: {e}")
+            return results, errors
 
-        rows = await asyncio.to_thread(_query)
-        return JSONResponse(content=rows)
+        rows, errors = await asyncio.to_thread(_query)
+        if errors and not rows:
+            raise HTTPException(status_code=500, detail="\n".join(errors))
+        return JSONResponse(content={"rows": rows, "errors": errors})
 
     # ------------------------------------------------------------------
     # Customer Database
