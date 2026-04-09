@@ -614,16 +614,32 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 out["stations"] = [{"cod_user": c, "nome": n} for c, n in stations]
                 out["markets"] = []
 
-                # Check which database we're connected to and what others exist
+                # Try SP in Etere_crossing_Doma database
+                d1 = dt_from.strftime('%Y-%m-%d')
+                d2 = dt_to.strftime('%Y-%m-%d')
                 try:
-                    with _db_connect() as conn2:
-                        cur_db = conn2.cursor()
-                        cur_db.execute("SELECT DB_NAME()")
-                        out["current_db"] = cur_db.fetchone()[0]
-                        cur_db.execute("SELECT name FROM sys.databases WHERE name NOT IN ('master','tempdb','model','msdb') ORDER BY name")
-                        out["all_databases"] = [r[0] for r in cur_db.fetchall()]
+                    import pyodbc as _pyodbc
+                    from browser_automation.etere_direct_client import DB_SERVER, DB_DRIVER
+                    import os as _os
+                    user = _os.getenv("ETERE_DB_USER")
+                    pwd  = _os.getenv("ETERE_DB_PASSWORD")
+                    if user and pwd:
+                        cs = f"DRIVER={DB_DRIVER};SERVER={DB_SERVER};DATABASE=Etere_crossing_Doma;UID={user};PWD={pwd};"
+                    else:
+                        cs = f"DRIVER={DB_DRIVER};SERVER={DB_SERVER};DATABASE=Etere_crossing_Doma;Trusted_Connection=yes;"
+                    with _pyodbc.connect(cs) as conn_doma:
+                        sp_doma = conn_doma.cursor()
+                        sp_doma.execute(
+                            f"EXEC dbo.rpt_trf_missing_material_list 7, '{d1}', '{d2}', '1', '1', '1', '0', NULL"
+                        )
+                        while sp_doma.description is None:
+                            if not sp_doma.nextset():
+                                break
+                        rows_doma = sp_doma.fetchall() if sp_doma.description else []
+                        out["doma_sp_cvc_count"] = len(rows_doma)
+                        out["doma_sp_first_row"] = [str(v) for v in rows_doma[0]] if rows_doma else None
                 except Exception as e:
-                    out["db_check_error"] = str(e)
+                    out["doma_sp_error"] = str(e)
 
                 for cod_user, nome in stations:
                     try:
