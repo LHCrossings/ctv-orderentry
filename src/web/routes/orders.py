@@ -620,18 +620,23 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             "EXEC dbo.rpt_trf_missing_material_list ?, ?, ?, ?, ?, ?, ?, ?",
                             cod_user, dt_from, dt_to, "1", "1", "1", "0", None
                         )
-                        for row in cursor.fetchall():
-                            results.append({
-                                "market":        market_name,
-                                "agency":        row[0],
-                                "salesman":      row[1],
-                                "customer":      row[2],
-                                "description":   row[3],
-                                "duration":      row[4],
-                                "cod_progra":    row[5],
-                                "schedule_time": row[6].isoformat() if row[6] else None,
-                                "status":        row[7],
-                            })
+                        # SP may produce multiple result sets; advance to one with columns
+                        while cursor.description is None:
+                            if not cursor.nextset():
+                                break
+                        if cursor.description:
+                            for row in cursor.fetchall():
+                                results.append({
+                                    "market":        market_name,
+                                    "agency":        row[0],
+                                    "salesman":      row[1],
+                                    "customer":      row[2],
+                                    "description":   row[3],
+                                    "duration":      row[4],
+                                    "cod_progra":    row[5],
+                                    "schedule_time": row[6].isoformat() if row[6] else None,
+                                    "status":        row[7],
+                                })
                     except Exception as e:
                         errors.append(f"{market_name}: {e}")
             return results, errors
