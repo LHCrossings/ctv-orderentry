@@ -138,7 +138,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                            DATA_INIZIO, DATA_FINE,
                            ORA_INIZIO, ORA_FINE,
                            LUNEDI, MARTEDI, MERCOLEDI, GIOVEDI, VENERDI, SABATO, DOMENICA,
-                           DURATA, MAX_SETT,
+                           DURATA, PASSAGGI_SETTIMANALI,
                            Interv_Committente, INTERVALLO, INTERV_CONTRATTO,
                            COD_USER
                     FROM   CONTRATTIRIGHE
@@ -154,7 +154,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             for row in rows:
                 (line_id, desc, date_from, date_to, ora_in, ora_out,
                  lun, mar, mer, gio, ven, sab, dom,
-                 durata, max_sett,
+                 durata, spots_pw,
                  sep_cust, sep_ord, sep_evt,
                  cod_user) = row
                 lines.append({
@@ -167,7 +167,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     "time_to":      _frames_to_ampm(ora_out),
                     "days":         _days_str(lun, mar, mer, gio, ven, sab, dom),
                     "duration_sec": _frames_to_sec(durata),
-                    "spots_pw":     max_sett or 0,
+                    "spots_pw":     spots_pw or 0,
                     "sep_customer": _frames_to_min(sep_cust),
                     "sep_order":    _frames_to_min(sep_ord),
                     "sep_event":    _frames_to_min(sep_evt),
