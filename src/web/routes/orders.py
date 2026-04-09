@@ -614,42 +614,34 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 out["stations"] = [{"cod_user": c, "nome": n} for c, n in stations]
                 out["markets"] = []
 
-                def _row_to_str(row):
-                    return [str(v) for v in row] if row else None
-
-                # Inspect TPalinseSpotsInCluster columns and sample CVC data
+                # Query TPalinseSpotsInCluster directly for CVC in date range
                 try:
-                    t1 = conn.cursor()
-                    t1.execute("SELECT TOP 1 * FROM TPalinseSpotsInCluster")
-                    cols = [d[0] for d in t1.description] if t1.description else []
-                    out["tpalins_columns"] = cols
-                    out["tpalins_sample"] = _row_to_str(t1.fetchone())
+                    tc = conn.cursor()
+                    tc.execute("""
+                        SELECT COUNT(*) as total,
+                               SUM(CASE WHEN STATUS_MM != '' AND STATUS_MM IS NOT NULL THEN 1 ELSE 0 END) as has_status_mm
+                        FROM TPalinseSpotsInCluster
+                        WHERE COD_USER = 7
+                          AND DATA BETWEEN ? AND ?
+                    """, dt_from, dt_to)
+                    r = tc.fetchone()
+                    out["cvc_total_spots"] = r[0]
+                    out["cvc_spots_with_status_mm"] = r[1]
                 except Exception as e:
-                    out["tpalins_error"] = str(e)
+                    out["cvc_query_error"] = str(e)
 
-                # Inspect StampaMateriale columns and sample
+                # Get distinct STATUS_MM values for CVC in range
                 try:
-                    t2 = conn.cursor()
-                    t2.execute("SELECT TOP 1 * FROM StampaMateriale")
-                    cols2 = [d[0] for d in t2.description] if t2.description else []
-                    out["stampa_columns"] = cols2
-                    out["stampa_sample"] = _row_to_str(t2.fetchone())
+                    tc2 = conn.cursor()
+                    tc2.execute("""
+                        SELECT DISTINCT STATUS_MM, COUNT(*) as cnt
+                        FROM TPalinseSpotsInCluster
+                        WHERE COD_USER = 7 AND DATA BETWEEN ? AND ?
+                        GROUP BY STATUS_MM
+                    """, dt_from, dt_to)
+                    out["cvc_status_mm_breakdown"] = [[str(r[0]), r[1]] for r in tc2.fetchall()]
                 except Exception as e:
-                    out["stampa_error"] = str(e)
-
-                # Broader table search
-                try:
-                    tbl_cur = conn.cursor()
-                    tbl_cur.execute("""
-                        SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
-                        WHERE TABLE_NAME LIKE '%palins%' OR TABLE_NAME LIKE '%trasmiss%'
-                           OR TABLE_NAME LIKE '%onda%' OR TABLE_NAME LIKE '%schedula%'
-                           OR TABLE_NAME LIKE '%broadcast%' OR TABLE_NAME LIKE '%rundown%'
-                        ORDER BY TABLE_NAME
-                    """)
-                    out["schedule_tables"] = [r[0] for r in tbl_cur.fetchall()]
-                except Exception as e:
-                    out["schedule_tables_error"] = str(e)
+                    out["cvc_status_breakdown_error"] = str(e)
 
                 for cod_user, nome in stations:
                     try:
