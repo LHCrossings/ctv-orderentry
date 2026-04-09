@@ -53,6 +53,10 @@ def main():
 
         line_ids = [row[0] for row in rows]
         placeholders = ",".join("?" * len(line_ids))
+        # Field mapping (current Etere UI):
+        #   Interv_Committente = Customer
+        #   INTERVALLO         = Order   (old Etere web had this swapped with INTERV_CONTRATTO)
+        #   INTERV_CONTRATTO   = Event
         cursor.execute(f"""
             UPDATE CONTRATTIRIGHE
             SET    Interv_Committente = ?,
