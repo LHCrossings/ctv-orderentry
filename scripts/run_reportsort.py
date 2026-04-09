@@ -29,18 +29,32 @@ POST_LOG_BASE = Path(r"K:\!Archives\Post Logs")
 PRE_LOG_BASE  = Path(r"K:\!Archives\Pre Logs")
 
 
+def parse_date(date_str: str) -> datetime:
+    """Parse MM/DD/YYYY, M/DD/YYYY, MM/DD, or M/DD — fills current year if missing."""
+    date_str = date_str.strip()
+    for fmt in ("%m/%d/%Y", "%m/%d"):
+        try:
+            dt = datetime.strptime(date_str, fmt)
+            if fmt == "%m/%d":
+                dt = dt.replace(year=datetime.now().year)
+            return dt
+        except ValueError:
+            continue
+    raise ValueError(f"Unrecognized date format: {date_str!r}")
+
+
 def build_output_folder(log_type: str, date_from: str, date_to: str) -> Path:
     """Return the network output folder.
     Post logs: K:\\!Archives\\Post Logs\\yymmdd  (start date)
     Pre logs:  K:\\!Archives\\Pre Logs\\mmdd-mmdd (from-to)
     """
     if log_type == "post":
-        dt = datetime.strptime(date_from, "%m/%d/%Y")
+        dt = parse_date(date_from)
         folder_name = dt.strftime("%y%m%d")
         return POST_LOG_BASE / folder_name
     else:
-        dt_from = datetime.strptime(date_from, "%m/%d/%Y")
-        dt_to   = datetime.strptime(date_to,   "%m/%d/%Y")
+        dt_from = parse_date(date_from)
+        dt_to   = parse_date(date_to)
         folder_name = f"{dt_from.strftime('%m%d')}-{dt_to.strftime('%m%d')}"
         return PRE_LOG_BASE / folder_name
 
