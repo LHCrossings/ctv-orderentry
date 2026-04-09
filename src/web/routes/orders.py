@@ -684,9 +684,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             for row in cursor.fetchall():
                                 results.append({
                                     "market":        market_name,
-                                    "agency":        row[0],
-                                    "salesman":      row[1],
-                                    "customer":      row[2],
+                                    "customer":      row[0],
+                                    "agency":        row[1],
+                                    "salesman":      row[2],
                                     "description":   row[3],
                                     "duration":      row[4],
                                     "cod_progra":    row[5],
