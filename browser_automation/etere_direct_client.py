@@ -863,6 +863,7 @@ EXEC web_sales_InsertContractLine
         }}
 
         url = f"{ETERE_WEB_URL}/sales/getautomaticcontractlineblockstable"
+        print(f"[DIRECT]     Payload: {payload}")
         try:
             resp = _requests.post(url, json=payload, cookies=self._session_cookies, timeout=30)
             resp.raise_for_status()
