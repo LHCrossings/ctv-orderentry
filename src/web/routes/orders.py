@@ -614,34 +614,18 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 out["stations"] = [{"cod_user": c, "nome": n} for c, n in stations]
                 out["markets"] = []
 
-                # Try SP in Etere_crossing_Doma database
-                d1 = dt_from.strftime('%Y-%m-%d')
-                d2 = dt_to.strftime('%Y-%m-%d')
+                # Check what the SP object actually is (synonym? linked server?)
                 try:
-                    import os as _os
-
-                    import pyodbc as _pyodbc
-
-                    from browser_automation.etere_direct_client import DB_DRIVER, DB_SERVER
-                    user = _os.getenv("ETERE_DB_USER")
-                    pwd  = _os.getenv("ETERE_DB_PASSWORD")
-                    if user and pwd:
-                        cs = f"DRIVER={DB_DRIVER};SERVER={DB_SERVER};DATABASE=Etere_crossing_Doma;UID={user};PWD={pwd};"
-                    else:
-                        cs = f"DRIVER={DB_DRIVER};SERVER={DB_SERVER};DATABASE=Etere_crossing_Doma;Trusted_Connection=yes;"
-                    with _pyodbc.connect(cs) as conn_doma:
-                        sp_doma = conn_doma.cursor()
-                        sp_doma.execute(
-                            f"EXEC dbo.rpt_trf_missing_material_list 7, '{d1}', '{d2}', '1', '1', '1', '0', NULL"
-                        )
-                        while sp_doma.description is None:
-                            if not sp_doma.nextset():
-                                break
-                        rows_doma = sp_doma.fetchall() if sp_doma.description else []
-                        out["doma_sp_cvc_count"] = len(rows_doma)
-                        out["doma_sp_first_row"] = [str(v) for v in rows_doma[0]] if rows_doma else None
+                    obj_cur = conn.cursor()
+                    obj_cur.execute("""
+                        SELECT o.type, o.type_desc, COALESCE(s.base_object_name, '') as base
+                        FROM sys.objects o
+                        LEFT JOIN sys.synonyms s ON s.object_id = o.object_id
+                        WHERE o.name = 'rpt_trf_missing_material_list'
+                    """)
+                    out["sp_object_info"] = [[str(v) for v in r] for r in obj_cur.fetchall()]
                 except Exception as e:
-                    out["doma_sp_error"] = str(e)
+                    out["sp_object_error"] = str(e)
 
                 for cod_user, nome in stations:
                     try:
