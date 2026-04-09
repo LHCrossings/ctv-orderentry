@@ -266,6 +266,40 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
+    @router.get("/scripts/unschedule", response_class=HTMLResponse)
+    async def unschedule_page(request: Request):
+        return templates.TemplateResponse(request, "scripts/unschedule.html")
+
+    @router.get("/api/scripts/unschedule")
+    async def run_unschedule(contract_id: int = Query(..., gt=0)):
+        project_root = Path(__file__).parent.parent.parent.parent
+        script_path = project_root / "scripts" / "unschedule_contract.py"
+
+        python_exe = project_root / ".venv" / "Scripts" / "python.exe"
+        if not python_exe.exists():
+            python_exe = project_root / ".venv" / "bin" / "python"
+        if not python_exe.exists():
+            python_exe = Path(sys.executable)
+
+        async def event_stream():
+            process = await asyncio.create_subprocess_exec(
+                str(python_exe), "-u", str(script_path), str(contract_id),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                cwd=str(project_root),
+            )
+            async for line in process.stdout:
+                text = line.decode(errors="replace").rstrip()
+                yield f"data: {text}\n\n"
+            await process.wait()
+            yield f"data: [EXIT:{process.returncode}]\n\n"
+
+        return StreamingResponse(
+            event_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
     @router.get("/api/scripts/block-refresh")
     async def run_block_refresh(contract_id: int = Query(..., gt=0)):
         project_root = Path(__file__).parent.parent.parent.parent
