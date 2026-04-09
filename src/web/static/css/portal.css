@@ -196,3 +196,37 @@ main {
     color: var(--nord3);
     border: 1px solid var(--border-color);
 }
+
+/* ── Cards with sub-actions (partial modules) ────────────────────────────── */
+
+.module-card.has-sub {
+    opacity: 1;
+    cursor: default;
+}
+
+.module-sub-actions {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.module-sub-btn {
+    display: inline-block;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--nord8);
+    background: rgba(94, 129, 172, 0.1);
+    border: 1px solid rgba(94, 129, 172, 0.3);
+    border-radius: 6px;
+    padding: 5px 12px;
+    text-decoration: none;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.module-sub-btn:hover {
+    background: rgba(94, 129, 172, 0.2);
+    border-color: var(--nord8);
+}
