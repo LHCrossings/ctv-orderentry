@@ -29,12 +29,20 @@ POST_LOG_BASE = Path(r"K:\!Archives\Post Logs")
 PRE_LOG_BASE  = Path(r"K:\!Archives\Pre Logs")
 
 
-def build_output_folder(log_type: str, date_from: str) -> Path:
-    """Return the network output folder: K:\!Archives\<Type> Logs\yymmdd"""
-    dt = datetime.strptime(date_from, "%m/%d/%Y")
-    folder_name = dt.strftime("%y%m%d")
-    base = POST_LOG_BASE if log_type == "post" else PRE_LOG_BASE
-    return base / folder_name
+def build_output_folder(log_type: str, date_from: str, date_to: str) -> Path:
+    """Return the network output folder.
+    Post logs: K:\\!Archives\\Post Logs\\yymmdd  (start date)
+    Pre logs:  K:\\!Archives\\Pre Logs\\mmdd-mmdd (from-to)
+    """
+    if log_type == "post":
+        dt = datetime.strptime(date_from, "%m/%d/%Y")
+        folder_name = dt.strftime("%y%m%d")
+        return POST_LOG_BASE / folder_name
+    else:
+        dt_from = datetime.strptime(date_from, "%m/%d/%Y")
+        dt_to   = datetime.strptime(date_to,   "%m/%d/%Y")
+        folder_name = f"{dt_from.strftime('%m%d')}-{dt_to.strftime('%m%d')}"
+        return PRE_LOG_BASE / folder_name
 
 
 def download_report(session, date_from: str, date_to: str) -> None:
@@ -67,10 +75,10 @@ def download_report(session, date_from: str, date_to: str) -> None:
     print(f"[INFO] Saved {size_kb:.1f} KB to {INPUT_CSV}")
 
 
-def run_sort(log_type: str, date_from: str) -> int:
+def run_sort(log_type: str, date_from: str, date_to: str) -> int:
     """Run ReportSort main.py non-interactively."""
     python_exe = Path(sys.executable)
-    output_folder = build_output_folder(log_type, date_from)
+    output_folder = build_output_folder(log_type, date_from, date_to)
     print(f"[INFO] Running ReportSort ({log_type}logs) ...")
     print(f"[INFO] Output folder: {output_folder}")
     result = subprocess.run(
@@ -106,12 +114,12 @@ def main():
     finally:
         etere_web_logout(session)
 
-    rc = run_sort(log_type, date_from)
+    rc = run_sort(log_type, date_from, date_to)
     if rc != 0:
         print(f"[ERROR] ReportSort exited with code {rc}")
         sys.exit(rc)
 
-    output_folder = build_output_folder(log_type, date_from)
+    output_folder = build_output_folder(log_type, date_from, date_to)
     print(f"\n[DONE] {log_type.capitalize()}logs complete. Output files in {output_folder}")
 
 
