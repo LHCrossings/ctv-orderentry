@@ -614,18 +614,38 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 out["stations"] = [{"cod_user": c, "nome": n} for c, n in stations]
                 out["markets"] = []
 
-                # Check what the SP object actually is (synonym? linked server?)
+                # Check our login and permissions
                 try:
-                    obj_cur = conn.cursor()
-                    obj_cur.execute("""
-                        SELECT o.type, o.type_desc, COALESCE(s.base_object_name, '') as base
-                        FROM sys.objects o
-                        LEFT JOIN sys.synonyms s ON s.object_id = o.object_id
-                        WHERE o.name = 'rpt_trf_missing_material_list'
-                    """)
-                    out["sp_object_info"] = [[str(v) for v in r] for r in obj_cur.fetchall()]
+                    login_cur = conn.cursor()
+                    login_cur.execute("SELECT SUSER_SNAME(), USER_NAME(), IS_MEMBER('db_owner'), IS_MEMBER('db_datareader')")
+                    r = login_cur.fetchone()
+                    out["login"] = {"suser": str(r[0]), "user": str(r[1]), "db_owner": r[2], "db_datareader": r[3]}
                 except Exception as e:
-                    out["sp_object_error"] = str(e)
+                    out["login_error"] = str(e)
+
+                # List tables with 'filmati' or 'material' in name (SP join targets)
+                try:
+                    mat_cur = conn.cursor()
+                    mat_cur.execute("""
+                        SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+                        WHERE TABLE_NAME LIKE '%filmati%' OR TABLE_NAME LIKE '%FILMATI%'
+                           OR TABLE_NAME LIKE '%media%' OR TABLE_NAME LIKE '%MEDIA%'
+                        ORDER BY TABLE_NAME
+                    """)
+                    out["filmati_tables"] = [r[0] for r in mat_cur.fetchall()]
+                except Exception as e:
+                    out["filmati_tables_error"] = str(e)
+
+                # Try SELECT from rpt_loadEnv TVF (may be needed before SP call)
+                try:
+                    env_cur = conn.cursor()
+                    env_cur.execute("SELECT TOP 1 * FROM dbo.rpt_loadEnv(7, NULL)")
+                    env_cols = [d[0] for d in env_cur.description] if env_cur.description else []
+                    env_row = env_cur.fetchone()
+                    out["loadenv_cols"] = env_cols
+                    out["loadenv_row"] = [str(v) for v in env_row] if env_row else None
+                except Exception as e:
+                    out["loadenv_error"] = str(e)
 
                 for cod_user, nome in stations:
                     try:
