@@ -614,7 +614,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             errors  = []
             with _db_connect() as conn:
                 cursor = conn.cursor()
-                for cod_user, market_name in _MARKET_NAMES.items():
+                # Discover stations from users table (same source as the SSRS report)
+                cursor.execute("SELECT DISTINCT cod_user, nome FROM users ORDER BY cod_user")
+                stations = [(row[0], row[1]) for row in cursor.fetchall()]
+                if not stations:
+                    errors.append("No stations found in users table.")
+                    return results, errors
+
+                for cod_user, nome in stations:
+                    market_name = _MARKET_NAMES.get(cod_user, nome or str(cod_user))
                     try:
                         cursor.execute(
                             "EXEC dbo.rpt_trf_missing_material_list ?, ?, ?, ?, ?, ?, ?, ?",
@@ -638,7 +646,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                     "status":        row[7],
                                 })
                     except Exception as e:
-                        errors.append(f"{market_name}: {e}")
+                        errors.append(f"{market_name} (cod_user={cod_user}): {e}")
             return results, errors
 
         rows, errors = await asyncio.to_thread(_query)
