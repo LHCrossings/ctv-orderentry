@@ -614,14 +614,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 out["stations"] = [{"cod_user": c, "nome": n} for c, n in stations]
                 out["markets"] = []
 
-                # Test: call rpt_loadEnv first (SSRS does this before the data SP)
+                # Fetch SP source to understand why it returns 0 rows
                 try:
-                    env_cur = conn.cursor()
-                    env_cur.execute("EXEC dbo.rpt_loadEnv ?, ?", stations[0][0], None)
-                    env_cur.fetchall()
-                    out["loadEnv"] = "called OK"
+                    sp_cur = conn.cursor()
+                    sp_cur.execute(
+                        "SELECT definition FROM sys.sql_modules WHERE object_id = OBJECT_ID('dbo.rpt_trf_missing_material_list')"
+                    )
+                    row = sp_cur.fetchone()
+                    out["sp_source"] = row[0][:3000] if row else "not found"
                 except Exception as e:
-                    out["loadEnv"] = f"error: {e}"
+                    out["sp_source"] = f"error: {e}"
 
                 for cod_user, nome in stations:
                     try:
