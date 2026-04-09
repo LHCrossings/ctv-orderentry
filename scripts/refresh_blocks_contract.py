@@ -1,5 +1,8 @@
 """
-One-off script: clear and re-assign blocks for every line in a contract.
+Clear and re-assign blocks for every line in a contract.
+
+Logs into Etere headlessly (no browser needed) using credentials.env,
+then refreshes blocks via Etere's own HTTP API.
 
 Usage:
     uv run python scripts/refresh_blocks_contract.py 2611
@@ -9,13 +12,19 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from browser_automation.etere_direct_client import EtereDirectClient, connect
+from browser_automation.etere_direct_client import EtereDirectClient, connect, etere_web_login
+
 
 def main():
     contract_id = int(sys.argv[1]) if len(sys.argv) > 1 else 2611
 
+    print(f"[INFO] Logging into Etere web UI ...")
+    cookies = etere_web_login()
+
     with connect() as conn:
         client = EtereDirectClient(conn, autocommit=False)
+        client.set_session_cookies(cookies)
+
         line_ids = client.get_all_line_ids(contract_id)
         print(f"[INFO] Contract {contract_id}: {len(line_ids)} line(s) found")
 
@@ -28,6 +37,7 @@ def main():
 
         conn.commit()
         print(f"\n[DONE] {len(line_ids)} line(s) refreshed, {total_blocks} block(s) assigned total.")
+
 
 if __name__ == "__main__":
     main()

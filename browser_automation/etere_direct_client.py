@@ -86,6 +86,55 @@ def connect() -> pyodbc.Connection:
     )
 
 
+def etere_web_login() -> dict:
+    """Log into the Etere web UI headlessly using requests.
+
+    Reads credentials from credentials.env (same as Selenium login).
+    Returns a cookies dict ready to pass to EtereDirectClient.set_session_cookies().
+
+    Raises RuntimeError if login fails or no cookies are returned.
+    """
+    try:
+        import requests as _req
+    except ImportError:
+        raise RuntimeError("requests package not installed — run: pip install requests")
+
+    import sys
+    import os
+    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if _root not in sys.path:
+        sys.path.insert(0, _root)
+    from credential_loader import load_credentials
+
+    username, password = load_credentials()
+    login_url = f"{ETERE_WEB_URL}/index/login"
+
+    session = _req.Session()
+
+    # GET the login page first — picks up any pre-auth cookies
+    resp = session.get(login_url, timeout=15)
+    resp.raise_for_status()
+
+    # POST credentials using standard form encoding
+    resp = session.post(
+        login_url,
+        data={"LoginUserName": username, "LoginUserPassword": password},
+        timeout=15,
+        allow_redirects=True,
+    )
+    resp.raise_for_status()
+
+    cookies = dict(session.cookies)
+    if not cookies:
+        raise RuntimeError(
+            "Etere login returned no cookies — credentials may be wrong "
+            "or the login endpoint has changed."
+        )
+
+    print(f"[LOGIN] ✓ Logged into Etere as {username} ({len(cookies)} cookie(s))")
+    return cookies
+
+
 # ── Constants ───────────────────────────────────────────────────────────────────
 
 FRAMES_PER_SECOND = 29.97  # NTSC broadcast frame rate
