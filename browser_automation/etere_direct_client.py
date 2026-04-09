@@ -135,7 +135,9 @@ def etere_web_login():
     resp.raise_for_status()
 
     cookies_after_login = {k: v for k, v in session.cookies.items()}
+    snippet = resp.text[:300].replace('\n', ' ').replace('\r', '')
     print(f"[LOGIN] Post-login cookies: {list(cookies_after_login.keys())} final_url={resp.url}")
+    print(f"[LOGIN] POST response ({resp.status_code}): {snippet}")
 
     # Warmup: navigate to the sales module WITHOUT following redirects — a redirect
     # here means the page wants re-authentication and would overwrite our valid cookies.
