@@ -43,7 +43,7 @@ def main():
                     timeout=15,
                 )
                 if resp.ok:
-                    print(f"[INFO] Line {line_id}: unscheduled ✓")
+                    print(f"[INFO] Line {line_id}: unscheduled OK")
                     ok += 1
                 else:
                     print(f"[WARN] Line {line_id}: HTTP {resp.status_code}")
