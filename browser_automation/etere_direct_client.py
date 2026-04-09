@@ -115,20 +115,26 @@ def etere_web_login() -> dict:
     resp = session.get(login_url, timeout=15)
     resp.raise_for_status()
 
-    # Print login form HTML so we can see all field names / hidden tokens
-    import re as _re_login
-    form_match = _re_login.search(r'<form[^>]*>.*?</form>', resp.text, _re_login.DOTALL | _re_login.IGNORECASE)
-    print(f"[LOGIN] Login page form HTML:\n{form_match.group(0)[:1500] if form_match else '(no form found)'}")
-
-    # POST credentials using standard form encoding
+    # POST credentials — form uses AJAX, field names are Login.UserName / Login.Password
     resp = session.post(
         login_url,
-        data={"LoginUserName": username, "LoginUserPassword": password},
+        data={
+            "Login.UserName": username,
+            "Login.Password": password,
+            "Login.Domain":   "ctvetere.local",
+        },
+        headers={
+            "X-Requested-With": "XMLHttpRequest",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "Referer": login_url,
+        },
         timeout=15,
         allow_redirects=True,
     )
     resp.raise_for_status()
-    print(f"[LOGIN] Post-login URL: {resp.url} | Cookies now: {list(session.cookies.keys())}")
+    print(f"[LOGIN] POST status: {resp.status_code} | URL: {resp.url}")
+    print(f"[LOGIN] POST response[:400]: {resp.text[:400]}")
+    print(f"[LOGIN] Cookies after POST: {list(session.cookies.keys())}")
 
     # Navigate to the main app pages to accumulate all session cookies
     # (Etere sets additional cookies when loading the sales module)
