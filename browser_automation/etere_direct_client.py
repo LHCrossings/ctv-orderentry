@@ -939,9 +939,6 @@ EXEC web_sales_InsertContractLine
 
         if not block_ids:
             print("[DIRECT]     ! No blocks found in HTTP response")
-            # Debug: show first 600 chars of the Value so we can see the structure
-            snippet = body[:600].replace('\n', ' ').replace('\r', '')
-            print(f"[DIRECT]     DEBUG response snippet: {snippet}")
             return 0
 
         # Write to CONTRATTIFASCE: clear stale entries then insert the new set
@@ -1026,10 +1023,6 @@ EXEC web_sales_InsertContractLine
 
         if t_from and t_to:
             return t_from, t_to
-
-        # Debug: show a snippet of the page so we can see what was returned
-        snippet = html[:800].replace('\n', ' ').replace('\r', '')
-        print(f"[DIRECT]     DEBUG page snippet (line {line_id}): {snippet}")
         return None
 
     def assign_blocks_for_existing_line(self, line_id: int) -> int:
@@ -1082,12 +1075,10 @@ EXEC web_sales_InsertContractLine
             start_frames = _to_frames(h, m)
             h, m = map(int, t_to.split(":"))
             end_frames = _to_frames(h, m)
-            print(f"[DIRECT]     times from page: {t_from}-{t_to}")
         else:
             # Fallback: use raw DB values if page fetch fails
             start_frames = db_start_frames
             end_frames   = db_end_frames if db_end_frames else db_start_frames
-            print(f"[DIRECT]     times from DB: {_frames_to_hhmm(start_frames)}-{_frames_to_hhmm(end_frames)}")
 
         # Strip trailing asterisks Etere appends after block operations
         cursor.execute("""
