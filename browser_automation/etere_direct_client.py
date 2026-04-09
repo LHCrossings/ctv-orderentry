@@ -863,7 +863,6 @@ EXEC web_sales_InsertContractLine
         }}
 
         url = f"{ETERE_WEB_URL}/sales/getautomaticcontractlineblockstable"
-        print(f"[DIRECT]     Payload: {payload}")
         try:
             resp = _requests.post(url, json=payload, cookies=self._session_cookies, timeout=30)
             resp.raise_for_status()
@@ -989,6 +988,22 @@ EXEC web_sales_InsertContractLine
         date_to     = row[10]
         user_id     = row[11]
         contract_id = row[12]
+
+        # Replicated market lines store ORA_INIZIO = ORA_FINE = 0 (no independent
+        # time range). Borrow the time from the first line in the same contract
+        # that has a valid (non-zero) time range — that is the "master" NYC line.
+        if start_frames == 0 and end_frames == 0:
+            cursor.execute("""
+                SELECT TOP 1 ORA_INIZIO, ORA_FINE
+                FROM   CONTRATTIRIGHE
+                WHERE  ID_CONTRATTITESTATA = ?
+                  AND  (ORA_INIZIO != 0 OR ORA_FINE != 0)
+                ORDER  BY ID_CONTRATTIRIGHE
+            """, [int(contract_id)])
+            ref = cursor.fetchone()
+            if ref:
+                start_frames, end_frames = ref[0], ref[1]
+                print(f"[DIRECT]     Borrowed time from master line: {_frames_to_hhmm(start_frames)}-{_frames_to_hhmm(end_frames)}")
 
         # Strip trailing asterisks Etere appends after block operations
         cursor.execute("""
