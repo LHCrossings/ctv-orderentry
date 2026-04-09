@@ -183,7 +183,10 @@
 <script>
 function formatDate(el) {
     const d = el.value.replace(/\D/g, '');
-    if (d.length === 6) {
+    const yr = new Date().getFullYear();
+    if (d.length === 4) {
+        el.value = d.slice(0,2) + '/' + d.slice(2,4) + '/' + yr;
+    } else if (d.length === 6) {
         el.value = d.slice(0,2) + '/' + d.slice(2,4) + '/20' + d.slice(4,6);
     } else if (d.length === 8) {
         el.value = d.slice(0,2) + '/' + d.slice(2,4) + '/' + d.slice(4,8);
