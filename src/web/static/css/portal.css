@@ -200,17 +200,30 @@ main {
 /* ── Back link ───────────────────────────────────────────────────────────── */
 
 .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     color: var(--nord4);
     text-decoration: none;
-    font-size: 1.1rem;
-    padding: 4px 8px 4px 0;
-    opacity: 0.6;
-    transition: opacity 0.15s;
+    font-size: 0.82rem;
+    font-weight: 500;
+    padding: 5px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.06);
+    transition: background 0.15s, color 0.15s;
     line-height: 1;
+    letter-spacing: 0.01em;
+}
+
+.back-link::before {
+    content: "←";
+    font-size: 1rem;
 }
 
 .back-link:hover {
-    opacity: 1;
+    background: rgba(255,255,255,0.12);
+    color: var(--nord6);
 }
 
 /* ── Cards with sub-actions (partial modules) ────────────────────────────── */
