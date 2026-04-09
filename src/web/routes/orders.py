@@ -614,34 +614,50 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 out["stations"] = [{"cod_user": c, "nome": n} for c, n in stations]
                 out["markets"] = []
 
-                # Query TPalinseSpotsInCluster directly for CVC in date range
+                # Check TPALINSE (main table) STATUS_MM for CVC
                 try:
                     tc = conn.cursor()
                     tc.execute("""
-                        SELECT COUNT(*) as total,
-                               SUM(CASE WHEN STATUS_MM != '' AND STATUS_MM IS NOT NULL THEN 1 ELSE 0 END) as has_status_mm
-                        FROM TPalinseSpotsInCluster
-                        WHERE COD_USER = 7
-                          AND DATA BETWEEN ? AND ?
-                    """, dt_from, dt_to)
-                    r = tc.fetchone()
-                    out["cvc_total_spots"] = r[0]
-                    out["cvc_spots_with_status_mm"] = r[1]
-                except Exception as e:
-                    out["cvc_query_error"] = str(e)
-
-                # Get distinct STATUS_MM values for CVC in range
-                try:
-                    tc2 = conn.cursor()
-                    tc2.execute("""
                         SELECT DISTINCT STATUS_MM, COUNT(*) as cnt
-                        FROM TPalinseSpotsInCluster
+                        FROM TPALINSE
                         WHERE COD_USER = 7 AND DATA BETWEEN ? AND ?
                         GROUP BY STATUS_MM
                     """, dt_from, dt_to)
-                    out["cvc_status_mm_breakdown"] = [[str(r[0]), r[1]] for r in tc2.fetchall()]
+                    out["tpalinse_cvc_status_mm"] = [[str(r[0]), r[1]] for r in tc.fetchall()]
                 except Exception as e:
-                    out["cvc_status_breakdown_error"] = str(e)
+                    out["tpalinse_cvc_error"] = str(e)
+
+                # Try SP with integer params (not strings) for CVC
+                try:
+                    sp2 = conn.cursor()
+                    sp2.execute(
+                        "EXEC dbo.rpt_trf_missing_material_list ?, ?, ?, ?, ?, ?, ?, ?",
+                        7, dt_from, dt_to, 1, 1, 1, 0, None
+                    )
+                    while sp2.description is None:
+                        if not sp2.nextset():
+                            break
+                    rows2 = sp2.fetchall() if sp2.description else []
+                    out["sp_int_params_cvc_count"] = len(rows2)
+                    out["sp_int_params_first_row"] = [str(v) for v in rows2[0]] if rows2 else None
+                except Exception as e:
+                    out["sp_int_params_error"] = str(e)
+
+                # Try SP with named params for CVC
+                try:
+                    sp3 = conn.cursor()
+                    sp3.execute(
+                        "EXEC dbo.rpt_trf_missing_material_list @cod_user=?, @startDate=?, @endDate=?, @viewNM=?, @viewNA=?, @viewNR=?, @orderBy=?, @codeStart=?",
+                        7, dt_from, dt_to, "1", "1", "1", "0", None
+                    )
+                    while sp3.description is None:
+                        if not sp3.nextset():
+                            break
+                    rows3 = sp3.fetchall() if sp3.description else []
+                    out["sp_named_params_cvc_count"] = len(rows3)
+                    out["sp_named_params_first_row"] = [str(v) for v in rows3[0]] if rows3 else None
+                except Exception as e:
+                    out["sp_named_params_error"] = str(e)
 
                 for cod_user, nome in stations:
                     try:
