@@ -131,7 +131,7 @@ def etere_web_login() -> dict:
             "or the login endpoint has changed."
         )
 
-    print(f"[LOGIN] ✓ Logged into Etere as {username} ({len(cookies)} cookie(s))")
+    print(f"[LOGIN] OK - Logged into Etere as {username} ({len(cookies)} cookie(s))")
     return cookies
 
 
