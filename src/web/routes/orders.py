@@ -100,7 +100,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
         async def event_stream():
             process = await asyncio.create_subprocess_exec(
-                str(python_exe), str(script_path), str(contract_id),
+                str(python_exe), "-u", str(script_path), str(contract_id),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 cwd=str(project_root),
