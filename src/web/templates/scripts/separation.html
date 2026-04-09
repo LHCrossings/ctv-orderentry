@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Separation Update — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 720px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+        }
+
+        .tool-card h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+
+        .tool-card p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex: 0 0 140px;
+        }
+
+        .field-group.wide { flex: 0 0 180px; }
+
+        .field-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .field-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 1rem;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            color: var(--text-primary);
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            width: 100%;
+        }
+
+        .field-input:focus {
+            border-color: var(--nord10);
+            box-shadow: 0 0 0 3px rgba(94,129,172,0.15);
+        }
+
+        .sep-group {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+            margin-bottom: 20px;
+        }
+
+        .sep-label-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .sep-section {
+            margin-bottom: 20px;
+        }
+
+        .sep-section-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 8px;
+        }
+
+        .sep-fields {
+            display: flex;
+            gap: 8px;
+        }
+
+        .sep-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex: 1;
+        }
+
+        .sep-field-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-align: center;
+        }
+
+        .sep-field input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px 8px;
+            font-size: 1rem;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            color: var(--text-primary);
+            outline: none;
+            text-align: center;
+            width: 100%;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .sep-field input:focus {
+            border-color: var(--nord10);
+            box-shadow: 0 0 0 3px rgba(94,129,172,0.15);
+        }
+
+        .sep-hint {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 6px;
+        }
+
+        .run-row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .run-btn {
+            padding: 10px 24px;
+            background: var(--nord10);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.15s;
+            white-space: nowrap;
+            height: 42px;
+        }
+
+        .run-btn:hover:not(:disabled) {
+            background: var(--nord9);
+            transform: translateY(-1px);
+        }
+
+        .run-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Terminal output */
+        .terminal {
+            background: var(--nord0);
+            border: 1px solid var(--nord1);
+            border-radius: 10px;
+            padding: 16px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.82rem;
+            line-height: 1.7;
+            min-height: 120px;
+            max-height: 360px;
+            overflow-y: auto;
+            display: none;
+            margin-top: 20px;
+        }
+
+        .terminal.visible { display: block; }
+
+        .t-line { color: var(--nord4); }
+        .t-info  { color: var(--nord8); }
+        .t-done  { color: var(--nord14); font-weight: 600; }
+        .t-err   { color: var(--nord11); }
+        .t-warn  { color: var(--nord13); }
+        .t-cursor {
+            display: inline-block;
+            width: 8px;
+            height: 14px;
+            background: var(--nord8);
+            animation: blink 1s step-end infinite;
+            vertical-align: middle;
+            margin-left: 2px;
+        }
+
+        @keyframes blink { 50% { opacity: 0; } }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/scripts" class="back-link">&#8592;</a>
+            <div class="logo-icon">⏱️</div>
+            <div>
+                <h1>Separation <span>Update</span></h1>
+                <div class="logo-sub">Scripts · Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="tool-card">
+        <h2>Update Contract Line Separation</h2>
+        <p>Sets customer, event, and order separation intervals (in minutes) on every line in an Etere contract.</p>
+
+        <div class="input-row">
+            <div class="field-group wide">
+                <label class="field-label" for="contractInput">Contract Number</label>
+                <input id="contractInput" class="field-input" type="number" placeholder="e.g. 2611" min="1" />
+            </div>
+        </div>
+
+        <div class="sep-section">
+            <div class="sep-section-label">Separation (minutes)</div>
+            <div class="sep-fields">
+                <div class="sep-field">
+                    <input id="sepCustomer" type="number" value="15" min="0" max="120" />
+                    <div class="sep-field-label">Customer</div>
+                </div>
+                <div class="sep-field">
+                    <input id="sepEvent" type="number" value="0" min="0" max="120" />
+                    <div class="sep-field-label">Event</div>
+                </div>
+                <div class="sep-field">
+                    <input id="sepOrder" type="number" value="0" min="0" max="120" />
+                    <div class="sep-field-label">Order</div>
+                </div>
+            </div>
+            <div class="sep-hint">Common values: 15/0/0 (standard) · 25/0/0 (30-min rule) · 10/0/0 (TCAA) · 0/0/0 (billboard)</div>
+        </div>
+
+        <div class="run-row">
+            <button id="runBtn" class="run-btn" onclick="runUpdate()">&#9654; Run</button>
+        </div>
+
+        <div id="terminal" class="terminal"></div>
+    </div>
+</main>
+
+<script>
+function runUpdate() {
+    const contractInput = document.getElementById('contractInput');
+    const contractId = contractInput.value.trim();
+    if (!contractId || isNaN(contractId) || parseInt(contractId) < 1) {
+        contractInput.focus();
+        return;
+    }
+
+    const customer = parseInt(document.getElementById('sepCustomer').value) || 0;
+    const event    = parseInt(document.getElementById('sepEvent').value)    || 0;
+    const order    = parseInt(document.getElementById('sepOrder').value)    || 0;
+
+    const terminal = document.getElementById('terminal');
+    const runBtn   = document.getElementById('runBtn');
+
+    terminal.innerHTML = '';
+    terminal.classList.add('visible');
+    runBtn.disabled = true;
+    contractInput.disabled = true;
+
+    const cursor = document.createElement('span');
+    cursor.className = 't-cursor';
+    terminal.appendChild(cursor);
+
+    const url = `/api/scripts/separation?contract_id=${encodeURIComponent(contractId)}`
+              + `&customer=${customer}&event=${event}&order=${order}`;
+    const evtSource = new EventSource(url);
+
+    evtSource.onmessage = (e) => {
+        const raw = e.data;
+        if (terminal.contains(cursor)) terminal.removeChild(cursor);
+
+        const div = document.createElement('div');
+
+        if (raw.startsWith('[EXIT:')) {
+            const code = parseInt(raw.match(/\d+/)[0]);
+            div.className = code === 0 ? 't-done' : 't-err';
+            div.textContent = code === 0 ? '✓ Completed successfully.' : `✗ Exited with code ${code}.`;
+            terminal.appendChild(div);
+            evtSource.close();
+            runBtn.disabled = false;
+            contractInput.disabled = false;
+            terminal.scrollTop = terminal.scrollHeight;
+            return;
+        }
+
+        if (raw.includes('[INFO]'))      div.className = 't-info';
+        else if (raw.includes('[DONE]')) div.className = 't-done';
+        else if (raw.includes('[WARN]')) div.className = 't-warn';
+        else if (raw.includes('Error') || raw.includes('error')) div.className = 't-err';
+        else                             div.className = 't-line';
+
+        div.textContent = raw;
+        terminal.appendChild(div);
+        terminal.appendChild(cursor);
+        terminal.scrollTop = terminal.scrollHeight;
+    };
+
+    evtSource.onerror = () => {
+        if (terminal.contains(cursor)) terminal.removeChild(cursor);
+        const div = document.createElement('div');
+        div.className = 't-err';
+        div.textContent = '✗ Connection lost or server error.';
+        terminal.appendChild(div);
+        evtSource.close();
+        runBtn.disabled = false;
+        contractInput.disabled = false;
+    };
+}
+
+document.getElementById('contractInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') runUpdate();
+});
+</script>
+
+</body>
+</html>

@@ -83,9 +83,51 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def block_refresh(request: Request):
         return templates.TemplateResponse(request, "scripts/block_refresh.html")
 
+    @router.get("/scripts/separation", response_class=HTMLResponse)
+    async def separation(request: Request):
+        return templates.TemplateResponse(request, "scripts/separation.html")
+
     # ------------------------------------------------------------------
     # Scripts API
     # ------------------------------------------------------------------
+
+    @router.get("/api/scripts/separation")
+    async def run_separation(
+        contract_id: int = Query(..., gt=0),
+        customer: int = Query(0, ge=0),
+        event: int = Query(0, ge=0),
+        order: int = Query(0, ge=0),
+    ):
+        project_root = Path(__file__).parent.parent.parent.parent
+        script_path = project_root / "scripts" / "update_separation_contract.py"
+
+        python_exe = project_root / ".venv" / "Scripts" / "python.exe"
+        if not python_exe.exists():
+            python_exe = project_root / ".venv" / "bin" / "python"
+        if not python_exe.exists():
+            python_exe = Path(sys.executable)
+
+        async def event_stream():
+            process = await asyncio.create_subprocess_exec(
+                str(python_exe), "-u", str(script_path), str(contract_id),
+                "--customer", str(customer),
+                "--event", str(event),
+                "--order", str(order),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                cwd=str(project_root),
+            )
+            async for line in process.stdout:
+                text = line.decode(errors="replace").rstrip()
+                yield f"data: {text}\n\n"
+            await process.wait()
+            yield f"data: [EXIT:{process.returncode}]\n\n"
+
+        return StreamingResponse(
+            event_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     @router.get("/api/scripts/block-refresh")
     async def run_block_refresh(contract_id: int = Query(..., gt=0)):
