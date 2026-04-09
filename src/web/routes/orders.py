@@ -612,24 +612,31 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 cur.execute("SELECT DISTINCT cod_user, nome FROM users ORDER BY cod_user")
                 stations = [(row[0], row[1]) for row in cur.fetchall()]
                 out["stations"] = [{"cod_user": c, "nome": n} for c, n in stations]
+                out["markets"] = []
 
-                if stations:
-                    cod_user, nome = stations[0]
-                    cur.execute(
-                        "EXEC dbo.rpt_trf_missing_material_list ?, ?, ?, ?, ?, ?, ?, ?",
-                        cod_user, dt_from, dt_to, "1", "1", "1", "0", None
-                    )
-                    while cur.description is None:
-                        if not cur.nextset():
-                            break
-                    if cur.description:
-                        out["sp_columns"] = [d[0] for d in cur.description]
-                        rows = cur.fetchall()
-                        out["sp_row_count"] = len(rows)
-                        out["sp_first_row"] = list(rows[0]) if rows else None
-                    else:
-                        out["sp_columns"] = None
-                        out["sp_row_count"] = 0
+                for cod_user, nome in stations:
+                    try:
+                        mc = conn.cursor()
+                        mc.execute(
+                            "EXEC dbo.rpt_trf_missing_material_list ?, ?, ?, ?, ?, ?, ?, ?",
+                            cod_user, dt_from, dt_to, "1", "1", "1", "0", None
+                        )
+                        while mc.description is None:
+                            if not mc.nextset():
+                                break
+                        if mc.description:
+                            cols = [d[0] for d in mc.description]
+                            rows = mc.fetchall()
+                            out["markets"].append({
+                                "cod_user": cod_user, "nome": nome,
+                                "columns": cols,
+                                "row_count": len(rows),
+                                "first_row": list(rows[0]) if rows else None,
+                            })
+                        else:
+                            out["markets"].append({"cod_user": cod_user, "nome": nome, "error": "no result set"})
+                    except Exception as e:
+                        out["markets"].append({"cod_user": cod_user, "nome": nome, "error": str(e)})
             return out
 
         result = await asyncio.to_thread(_run)
