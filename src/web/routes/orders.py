@@ -683,21 +683,38 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 except Exception as e:
                     out["cvc_flag_offline_error"] = str(e)
 
-                # Try SP with wider date range (today → 5/31) to check if date range is the issue
+                # Try connecting to the SSRS server (EC2AMAZ-6J2KLLI) directly
+                # to test if it has different data than our Tailscale endpoint
                 try:
-                    wide_cur = conn.cursor()
-                    wide_cur.execute("""
-                        EXEC dbo.rpt_trf_missing_material_list
-                            @cod_user=7, @startDate=?, @endDate=?,
-                            @viewNM='1', @viewNA='1', @viewNR='1',
-                            @orderBy='3', @codeStart=NULL
-                    """, _dt(2026, 1, 1), _dt(2026, 12, 31))
-                    while wide_cur.description is None:
-                        if not wide_cur.nextset():
+                    import os as _os
+
+                    import pyodbc as _pyodbc
+                    user = _os.getenv("ETERE_DB_USER")
+                    pwd  = _os.getenv("ETERE_DB_PASSWORD")
+                    cs = (
+                        f"DRIVER={{SQL Server}};SERVER=EC2AMAZ-6J2KLLI;"
+                        f"DATABASE=Etere_crossing;UID={user};PWD={pwd};"
+                        if user and pwd else
+                        "DRIVER={SQL Server};SERVER=EC2AMAZ-6J2KLLI;"
+                        "DATABASE=Etere_crossing;Trusted_Connection=yes;"
+                    )
+                    ec2_conn = _pyodbc.connect(cs, timeout=5)
+                    ec2_cur = ec2_conn.cursor()
+                    ec2_cur.execute(
+                        "EXEC dbo.rpt_trf_missing_material_list "
+                        "@cod_user=7, @startDate=?, @endDate=?, "
+                        "@viewNM='1', @viewNA='1', @viewNR='1', @orderBy='3', @codeStart=NULL",
+                        dt_from, dt_to,
+                    )
+                    while ec2_cur.description is None:
+                        if not ec2_cur.nextset():
                             break
-                    out["sp_wide_range"] = {"row_count": len(wide_cur.fetchall())} if wide_cur.description else {"error": "no result set"}
+                    rows = ec2_cur.fetchall() if ec2_cur.description else []
+                    out["ec2_sp_row_count"] = len(rows)
+                    out["ec2_sp_first_row"] = [str(v) for v in rows[0]] if rows else None
+                    ec2_conn.close()
                 except Exception as e:
-                    out["sp_wide_range_error"] = str(e)
+                    out["ec2_sp_error"] = str(e)
 
             # --- connection 2: SP calls with ARITHABORT ON (clean slate) ---
             out["markets"] = []
