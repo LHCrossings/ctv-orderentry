@@ -115,7 +115,7 @@ def etere_web_login() -> dict:
     resp = session.get(login_url, timeout=15)
     resp.raise_for_status()
 
-    # POST credentials — form uses AJAX, field names are Login.UserName / Login.Password
+    # POST credentials — AJAX form, field names are Login.UserName / Login.Password
     resp = session.post(
         login_url,
         data={
@@ -132,9 +132,6 @@ def etere_web_login() -> dict:
         allow_redirects=True,
     )
     resp.raise_for_status()
-    print(f"[LOGIN] POST status: {resp.status_code} | URL: {resp.url}")
-    print(f"[LOGIN] POST response[:400]: {resp.text[:400]}")
-    print(f"[LOGIN] Cookies after POST: {list(session.cookies.keys())}")
 
     # Navigate to the main app pages to accumulate all session cookies
     # (Etere sets additional cookies when loading the sales module)
@@ -866,22 +863,26 @@ EXEC web_sales_InsertContractLine
         }}
 
         url = f"{ETERE_WEB_URL}/sales/getautomaticcontractlineblockstable"
-        print(f"[DIRECT]     Cookies being sent: {list(self._session_cookies.keys())}")
         try:
             resp = _requests.post(url, json=payload, cookies=self._session_cookies, timeout=30)
-            print(f"[DIRECT]     HTTP {resp.status_code} | Content-Type: {resp.headers.get('Content-Type','?')} | Body len: {len(resp.text)}")
-            print(f"[DIRECT]     Raw response[:400]: {resp.text[:400]}")
             resp.raise_for_status()
         except Exception as exc:
             print(f"[DIRECT]     X Block assignment HTTP error: {exc}")
             return -1
 
         # Response is a JSON envelope: {"Result": {...}, "Value": "<html...>"}
-        # The HTML block table is inside the "Value" field.
+        # "Value" is HTML when blocks exist, or [] when none are available.
         try:
-            body = resp.json().get("Value", resp.text)
+            value = resp.json().get("Value", resp.text)
         except Exception:
-            body = resp.text
+            value = resp.text
+
+        if not isinstance(value, str):
+            # No blocks available for this line (Etere returned Value:[])
+            print("[DIRECT]     ! No available blocks for this line")
+            return 0
+
+        body = value
 
         # Parse block IDs from the tableSearchBlocksTable JSON object.
         # Structure: {"Code":"BlocksTable","Header":[...],"Body":[[row cells],...]}
@@ -909,8 +910,7 @@ EXEC web_sales_InsertContractLine
         count = len(block_ids)
 
         if not block_ids:
-            snippet = body[:300].replace('\n', ' ') if body else "(empty)"
-            print(f"[DIRECT]     ! No blocks returned from HTTP. Response snippet: {snippet}")
+            print("[DIRECT]     ! No blocks found in HTTP response")
             return 0
 
         # Write to CONTRATTIFASCE: clear stale entries then insert the new set
