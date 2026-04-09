@@ -739,6 +739,54 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             raise HTTPException(status_code=500, detail="\n".join(errors))
         return JSONResponse(content={"rows": rows, "errors": errors})
 
+    @router.get("/api/traffic/no-material")
+    async def get_no_material(
+        date_from: str = Query(...),
+        date_to:   str = Query(...),
+    ):
+        from datetime import datetime as _dt
+
+        def _parse_date(s: str):
+            for fmt in ("%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d"):
+                try:
+                    return _dt.strptime(s.strip(), fmt)
+                except ValueError:
+                    pass
+            raise ValueError(f"Unrecognized date: {s!r}")
+
+        def _query():
+            from browser_automation.etere_direct_client import connect as _db_connect
+            dt_from = _parse_date(date_from)
+            dt_to   = _parse_date(date_to)
+            with _db_connect() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT COD_USER, DATA, ORA, COD_PROGRA, TITLE, DURATION
+                    FROM TPalinseSpotsInCluster
+                    WHERE DATA BETWEEN ? AND ?
+                      AND (ID_FILMATI IS NULL OR ID_FILMATI = 0)
+                    ORDER BY DATA, COD_USER, ORA
+                """, dt_from, dt_to)
+                rows = []
+                for row in cur.fetchall():
+                    cod_user, data, ora, cod_progra, title, duration = row
+                    market = _MARKET_NAMES.get(cod_user, str(cod_user))
+                    date_str = (
+                        f"{data.month}/{data.day:02d}/{str(data.year)[2:]}" if data else ""
+                    )
+                    rows.append({
+                        "market":   market,
+                        "date":     date_str,
+                        "time":     _frames_to_ampm(ora),
+                        "program":  cod_progra or "",
+                        "title":    title or "",
+                        "duration": _frames_to_sec(duration),
+                    })
+            return rows
+
+        rows = await asyncio.to_thread(_query)
+        return JSONResponse(content={"rows": rows, "total": len(rows)})
+
     # ------------------------------------------------------------------
     # Customer Database
     # ------------------------------------------------------------------
