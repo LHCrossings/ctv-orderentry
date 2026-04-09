@@ -951,11 +951,59 @@ EXEC web_sales_InsertContractLine
         """, [int(contract_id)])
         return [row[0] for row in cursor.fetchall()]
 
+    def _fetch_line_times(self, line_id: int) -> tuple[str, str] | None:
+        """
+        GET /sales/modalchangecontractline/{line_id} and extract the displayed
+        start/end times (contractLineGeneralStartTime / contractLineGeneralEndTime).
+
+        Returns (time_from, time_to) as "HH:MM" strings, or None if unavailable.
+        This is exactly the data the browser reads before calling the block API.
+        """
+        import re as _re
+        try:
+            import requests as _requests
+        except ImportError:
+            return None
+
+        if not self._session_cookies:
+            return None
+
+        url = f"{ETERE_WEB_URL}/sales/modalchangecontractline/{line_id}"
+        try:
+            resp = _requests.get(url, cookies=self._session_cookies, timeout=15)
+            resp.raise_for_status()
+        except Exception as exc:
+            print(f"[DIRECT]     ! Could not fetch line page: {exc}")
+            return None
+
+        html = resp.text
+
+        def _extract(field_id: str) -> str:
+            # Match <input ... id="fieldId" ... value="HH:MM" ...> in any attr order
+            m = _re.search(
+                rf'<input\b[^>]*\bid=["\']?{_re.escape(field_id)}["\']?[^>]*>',
+                html, _re.IGNORECASE
+            )
+            if not m:
+                return ""
+            tag = m.group(0)
+            v = _re.search(r'\bvalue=["\']([^"\']*)["\']', tag)
+            return v.group(1).strip() if v else ""
+
+        t_from = _extract("contractLineGeneralStartTime")
+        t_to   = _extract("contractLineGeneralEndTime")
+
+        if t_from and t_to:
+            return t_from, t_to
+        return None
+
     def assign_blocks_for_existing_line(self, line_id: int) -> int:
         """
         Assign blocks to a line that already exists in CONTRATTIRIGHE (e.g. created
-        via Selenium).  Reads ORA_INIZIO/ORA_FINE, day bits, date range, and
-        COD_USER directly from the DB and delegates to _assign_blocks_http().
+        via Selenium or the Etere UI).  Reads day bits, date range, and COD_USER
+        from the DB, and fetches the displayed start/end times from the Etere modal
+        page — exactly the values the browser uses when clicking "Add Blocks
+        Automatically".
 
         Returns the number of blocks assigned, or -1 if the line was not found.
         """
@@ -974,7 +1022,7 @@ EXEC web_sales_InsertContractLine
             print(f"[DIRECT] assign_blocks_for_existing_line: line {line_id} not found")
             return -1
 
-        start_frames, end_frames = row[0], row[1]
+        db_start_frames, db_end_frames = row[0], row[1]
         day_bits = {
             "lun": bool(row[2]),
             "mar": bool(row[3]),
@@ -989,12 +1037,22 @@ EXEC web_sales_InsertContractLine
         user_id     = row[11]
         contract_id = row[12]
 
-        # Etere only stores the start time in ORA_INIZIO; ORA_FINE equals ORA_INIZIO
-        # (or is 0 for replicated market lines). Use a full broadcast-day window
-        # (06:00-23:59) so Etere finds all blocks matching the day/date pattern,
-        # which matches the behaviour of "Add Blocks Automatically" in the UI.
-        start_frames = _to_frames(6, 0)
-        end_frames   = _to_frames(23, 59)
+        # Fetch the actual displayed times from the Etere modal page — this is
+        # exactly what the browser reads before calling the block API when you
+        # click "Add Blocks Automatically". Avoids guessing from ORA frame values.
+        page_times = self._fetch_line_times(line_id)
+        if page_times:
+            t_from, t_to = page_times
+            h, m = map(int, t_from.split(":"))
+            start_frames = _to_frames(h, m)
+            h, m = map(int, t_to.split(":"))
+            end_frames = _to_frames(h, m)
+            print(f"[DIRECT]     times from page: {t_from}-{t_to}")
+        else:
+            # Fallback: use raw DB values if page fetch fails
+            start_frames = db_start_frames
+            end_frames   = db_end_frames if db_end_frames else db_start_frames
+            print(f"[DIRECT]     times from DB: {_frames_to_hhmm(start_frames)}-{_frames_to_hhmm(end_frames)}")
 
         # Strip trailing asterisks Etere appends after block operations
         cursor.execute("""
