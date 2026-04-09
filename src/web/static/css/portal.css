@@ -197,6 +197,22 @@ main {
     border: 1px solid var(--border-color);
 }
 
+/* ── Back link ───────────────────────────────────────────────────────────── */
+
+.back-link {
+    color: var(--nord4);
+    text-decoration: none;
+    font-size: 1.1rem;
+    padding: 4px 8px 4px 0;
+    opacity: 0.6;
+    transition: opacity 0.15s;
+    line-height: 1;
+}
+
+.back-link:hover {
+    opacity: 1;
+}
+
 /* ── Cards with sub-actions (partial modules) ────────────────────────────── */
 
 .module-card.has-sub {

@@ -66,6 +66,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def index(request: Request):
         return templates.TemplateResponse(request, "index.html")
 
+    @router.get("/billing", response_class=HTMLResponse)
+    async def billing(request: Request):
+        return templates.TemplateResponse(request, "billing.html")
+
+    @router.get("/billing/coop-invoicing", response_class=HTMLResponse)
+    async def coop_invoicing(request: Request):
+        return templates.TemplateResponse(request, "billing/coop_invoicing.html")
+
     # ------------------------------------------------------------------
     # Pending orders
     # ------------------------------------------------------------------
