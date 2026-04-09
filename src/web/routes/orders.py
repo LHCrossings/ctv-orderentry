@@ -607,52 +607,75 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             out = {}
             dt_from = _parse_date(date_from)
             dt_to   = _parse_date(date_to)
+
+            # --- connection 1: metadata only ---
             with _db_connect() as conn:
                 cur = conn.cursor()
                 cur.execute("SELECT DISTINCT cod_user, nome FROM users ORDER BY cod_user")
                 stations = [(row[0], row[1]) for row in cur.fetchall()]
                 out["stations"] = [{"cod_user": c, "nome": n} for c, n in stations]
-                out["markets"] = []
 
-                # Check our login and permissions
                 try:
-                    login_cur = conn.cursor()
-                    login_cur.execute("SELECT SUSER_SNAME(), USER_NAME(), IS_MEMBER('db_owner'), IS_MEMBER('db_datareader')")
-                    r = login_cur.fetchone()
+                    cur2 = conn.cursor()
+                    cur2.execute("SELECT SUSER_SNAME(), USER_NAME(), IS_MEMBER('db_owner'), IS_MEMBER('db_datareader')")
+                    r = cur2.fetchone()
                     out["login"] = {"suser": str(r[0]), "user": str(r[1]), "db_owner": r[2], "db_datareader": r[3]}
                 except Exception as e:
                     out["login_error"] = str(e)
 
-                # List tables with 'filmati' or 'material' in name (SP join targets)
+                # Direct table check: spots with ID_FILMATI set but file may be missing
                 try:
-                    mat_cur = conn.cursor()
-                    mat_cur.execute("""
-                        SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
-                        WHERE TABLE_NAME LIKE '%filmati%' OR TABLE_NAME LIKE '%FILMATI%'
-                           OR TABLE_NAME LIKE '%media%' OR TABLE_NAME LIKE '%MEDIA%'
-                        ORDER BY TABLE_NAME
-                    """)
-                    out["filmati_tables"] = [r[0] for r in mat_cur.fetchall()]
+                    raw_cur = conn.cursor()
+                    raw_cur.execute("""
+                        SELECT TOP 20
+                            s.COD_USER, s.DATA, s.ID_FILMATI,
+                            f.CODICE, f.TITOLO, f.STATUS_FILM
+                        FROM TPalinseSpotsInCluster s
+                        LEFT JOIN FILMATI f ON f.ID_FILMATI = s.ID_FILMATI
+                        WHERE s.DATA BETWEEN ? AND ?
+                          AND s.COD_USER = 7
+                          AND s.ID_FILMATI IS NOT NULL AND s.ID_FILMATI <> 0
+                        ORDER BY s.DATA
+                    """, dt_from, dt_to)
+                    raw_cols = [d[0] for d in raw_cur.description] if raw_cur.description else []
+                    raw_rows = raw_cur.fetchall()
+                    out["cvc_spot_sample"] = {
+                        "cols": raw_cols,
+                        "rows": [[str(v) for v in row] for row in raw_rows],
+                    }
                 except Exception as e:
-                    out["filmati_tables_error"] = str(e)
+                    out["cvc_spot_sample_error"] = str(e)
 
-                # Try SELECT from rpt_loadEnv TVF (may be needed before SP call)
+                # Check FILMATI STATUS_FILM values for this date range
                 try:
-                    env_cur = conn.cursor()
-                    env_cur.execute("SELECT TOP 1 * FROM dbo.rpt_loadEnv(7, NULL)")
-                    env_cols = [d[0] for d in env_cur.description] if env_cur.description else []
-                    env_row = env_cur.fetchone()
-                    out["loadenv_cols"] = env_cols
-                    out["loadenv_row"] = [str(v) for v in env_row] if env_row else None
+                    sf_cur = conn.cursor()
+                    sf_cur.execute("""
+                        SELECT DISTINCT f.STATUS_FILM, COUNT(*) as cnt
+                        FROM TPalinseSpotsInCluster s
+                        JOIN FILMATI f ON f.ID_FILMATI = s.ID_FILMATI
+                        WHERE s.DATA BETWEEN ? AND ? AND s.COD_USER = 7
+                        GROUP BY f.STATUS_FILM
+                    """, dt_from, dt_to)
+                    out["cvc_status_film_counts"] = [
+                        {"status": str(r[0]), "count": r[1]} for r in sf_cur.fetchall()
+                    ]
                 except Exception as e:
-                    out["loadenv_error"] = str(e)
+                    out["cvc_status_film_counts_error"] = str(e)
 
+            # --- connection 2: SP calls with ARITHABORT ON (clean slate) ---
+            out["markets"] = []
+            with _db_connect() as sp_conn:
+                _set = sp_conn.cursor()
+                _set.execute("SET ARITHABORT ON")
+                _set.execute("SET ANSI_NULLS ON")
+                _set.execute("SET ANSI_WARNINGS ON")
+                _set.execute("SET QUOTED_IDENTIFIER ON")
                 for cod_user, nome in stations:
                     try:
-                        mc = conn.cursor()
+                        mc = sp_conn.cursor()
                         mc.execute(
                             "EXEC dbo.rpt_trf_missing_material_list ?, ?, ?, ?, ?, ?, ?, ?",
-                            cod_user, dt_from, dt_to, "1", "1", "1", "0", None
+                            cod_user, dt_from, dt_to, "1", "1", "1", "3", None
                         )
                         while mc.description is None:
                             if not mc.nextset():
@@ -664,7 +687,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 "cod_user": cod_user, "nome": nome,
                                 "columns": cols,
                                 "row_count": len(rows),
-                                "first_row": list(rows[0]) if rows else None,
+                                "first_row": [str(v) for v in rows[0]] if rows else None,
                             })
                         else:
                             out["markets"].append({"cod_user": cod_user, "nome": nome, "error": "no result set"})
@@ -709,13 +732,18 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     errors.append("No stations found in users table.")
                     return results, errors
 
+                _set = conn.cursor()
+                _set.execute("SET ARITHABORT ON")
+                _set.execute("SET ANSI_NULLS ON")
+                _set.execute("SET ANSI_WARNINGS ON")
+                _set.execute("SET QUOTED_IDENTIFIER ON")
                 for cod_user, nome in stations:
                     market_name = _MARKET_NAMES.get(cod_user, nome or str(cod_user))
                     try:
                         cur = conn.cursor()  # fresh cursor per market avoids stale result-set state
                         cur.execute(
                             "EXEC dbo.rpt_trf_missing_material_list ?, ?, ?, ?, ?, ?, ?, ?",
-                            cod_user, dt_from, dt_to, "1", "1", "1", "0", None
+                            cod_user, dt_from, dt_to, "1", "1", "1", "3", None
                         )
                         # SP may produce multiple result sets; advance to one with columns
                         while cur.description is None:
