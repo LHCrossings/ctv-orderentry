@@ -854,8 +854,11 @@ EXEC web_sales_InsertContractLine
         }}
 
         url = f"{ETERE_WEB_URL}/sales/getautomaticcontractlineblockstable"
+        print(f"[DIRECT]     Cookies being sent: {list(self._session_cookies.keys())}")
         try:
             resp = _requests.post(url, json=payload, cookies=self._session_cookies, timeout=30)
+            print(f"[DIRECT]     HTTP {resp.status_code} | Content-Type: {resp.headers.get('Content-Type','?')} | Body len: {len(resp.text)}")
+            print(f"[DIRECT]     Raw response[:400]: {resp.text[:400]}")
             resp.raise_for_status()
         except Exception as exc:
             print(f"[DIRECT]     X Block assignment HTTP error: {exc}")
