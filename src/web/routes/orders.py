@@ -623,44 +623,62 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 except Exception as e:
                     out["login_error"] = str(e)
 
-                # Direct table check: spots with ID_FILMATI set but file may be missing
+                # Get FILMATI and FS_FILMATI column names so we know the real schema
                 try:
-                    raw_cur = conn.cursor()
-                    raw_cur.execute("""
-                        SELECT TOP 20
-                            s.COD_USER, s.DATA, s.ID_FILMATI,
-                            f.CODICE, f.TITOLO, f.STATUS_FILM
-                        FROM TPalinseSpotsInCluster s
-                        LEFT JOIN FILMATI f ON f.ID_FILMATI = s.ID_FILMATI
-                        WHERE s.DATA BETWEEN ? AND ?
-                          AND s.COD_USER = 7
-                          AND s.ID_FILMATI IS NOT NULL AND s.ID_FILMATI <> 0
-                        ORDER BY s.DATA
-                    """, dt_from, dt_to)
-                    raw_cols = [d[0] for d in raw_cur.description] if raw_cur.description else []
-                    raw_rows = raw_cur.fetchall()
-                    out["cvc_spot_sample"] = {
-                        "cols": raw_cols,
-                        "rows": [[str(v) for v in row] for row in raw_rows],
-                    }
+                    cols_cur = conn.cursor()
+                    cols_cur.execute("""
+                        SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE
+                        FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_NAME IN ('FILMATI','FS_FILMATI','CONTRATTIFILMATI')
+                        ORDER BY TABLE_NAME, ORDINAL_POSITION
+                    """)
+                    schema = {}
+                    for tbl, col, dtype in cols_cur.fetchall():
+                        schema.setdefault(tbl, []).append(f"{col} ({dtype})")
+                    out["material_schema"] = schema
                 except Exception as e:
-                    out["cvc_spot_sample_error"] = str(e)
+                    out["material_schema_error"] = str(e)
 
-                # Check FILMATI STATUS_FILM values for this date range
+                # Direct spot count for CVC in range (confirms data exists)
                 try:
-                    sf_cur = conn.cursor()
-                    sf_cur.execute("""
-                        SELECT DISTINCT f.STATUS_FILM, COUNT(*) as cnt
-                        FROM TPalinseSpotsInCluster s
-                        JOIN FILMATI f ON f.ID_FILMATI = s.ID_FILMATI
-                        WHERE s.DATA BETWEEN ? AND ? AND s.COD_USER = 7
-                        GROUP BY f.STATUS_FILM
+                    cnt_cur = conn.cursor()
+                    cnt_cur.execute("""
+                        SELECT COUNT(*) as total_spots,
+                               SUM(CASE WHEN ID_FILMATI IS NULL OR ID_FILMATI = 0 THEN 1 ELSE 0 END) as no_material,
+                               SUM(CASE WHEN ID_FILMATI IS NOT NULL AND ID_FILMATI <> 0 THEN 1 ELSE 0 END) as has_material
+                        FROM TPalinseSpotsInCluster
+                        WHERE DATA BETWEEN ? AND ? AND COD_USER = 7
                     """, dt_from, dt_to)
-                    out["cvc_status_film_counts"] = [
-                        {"status": str(r[0]), "count": r[1]} for r in sf_cur.fetchall()
-                    ]
+                    r = cnt_cur.fetchone()
+                    out["cvc_spot_counts"] = {"total": r[0], "no_material": r[1], "has_material": r[2]}
                 except Exception as e:
-                    out["cvc_status_film_counts_error"] = str(e)
+                    out["cvc_spot_counts_error"] = str(e)
+
+                # Try SP with explicit date cast to rule out type mismatch
+                try:
+                    sp2_cur = conn.cursor()
+                    sp2_cur.execute("""
+                        EXEC dbo.rpt_trf_missing_material_list
+                            @cod_user=7,
+                            @startDate=?,
+                            @endDate=?,
+                            @viewNM='1', @viewNA='1', @viewNR='1',
+                            @orderBy='3', @codeStart=NULL
+                    """, dt_from, dt_to)
+                    while sp2_cur.description is None:
+                        if not sp2_cur.nextset():
+                            break
+                    if sp2_cur.description:
+                        cols = [d[0] for d in sp2_cur.description]
+                        rows = sp2_cur.fetchall()
+                        out["sp_named_params"] = {
+                            "cols": cols, "row_count": len(rows),
+                            "first_row": [str(v) for v in rows[0]] if rows else None,
+                        }
+                    else:
+                        out["sp_named_params"] = {"error": "no result set"}
+                except Exception as e:
+                    out["sp_named_params_error"] = str(e)
 
             # --- connection 2: SP calls with ARITHABORT ON (clean slate) ---
             out["markets"] = []
