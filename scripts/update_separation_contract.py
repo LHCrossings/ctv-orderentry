@@ -36,11 +36,11 @@ def main():
     args = parser.parse_args()
 
     customer_frames = minutes_to_frames(args.customer)
-    event_frames    = minutes_to_frames(args.event)
     order_frames    = minutes_to_frames(args.order)
+    event_frames    = minutes_to_frames(args.event)
 
     print(f"[INFO] Contract {args.contract_id}: setting separation "
-          f"({args.customer}, {args.event}, {args.order}) min ...")
+          f"customer={args.customer}, order={args.order}, event={args.event} min ...")
 
     with connect() as conn:
         cursor = conn.cursor()
@@ -57,17 +57,21 @@ def main():
 
         print(f"[INFO] {count} line(s) found.")
 
+        # Field mapping (current Etere UI):
+        #   Interv_Committente = Customer
+        #   INTERVALLO         = Order   (old Etere web had this swapped with INTERV_CONTRATTO)
+        #   INTERV_CONTRATTO   = Event
         cursor.execute("""
             UPDATE CONTRATTIRIGHE
             SET    Interv_Committente = ?,
                    INTERVALLO         = ?,
                    INTERV_CONTRATTO   = ?
             WHERE  ID_CONTRATTITESTATA = ?
-        """, [customer_frames, event_frames, order_frames, args.contract_id])
+        """, [customer_frames, order_frames, event_frames, args.contract_id])
 
         conn.commit()
         print(f"\n[DONE] {cursor.rowcount} line(s) updated — "
-              f"separation ({args.customer}, {args.event}, {args.order}) min.")
+              f"customer={args.customer}, order={args.order}, event={args.event} min.")
 
 
 if __name__ == "__main__":
