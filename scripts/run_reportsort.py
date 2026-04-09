@@ -14,6 +14,7 @@ import sys
 import os
 import subprocess
 from pathlib import Path
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -23,6 +24,17 @@ AGENCY_ID      = 133
 REPORTSORT_DIR = Path(__file__).parent.parent.parent / "ReportSort"
 INPUT_CSV      = REPORTSORT_DIR / "input" / "placement-confirmation.csv"
 MAIN_PY        = REPORTSORT_DIR / "main.py"
+
+POST_LOG_BASE = Path(r"K:\!Archives\Post Logs")
+PRE_LOG_BASE  = Path(r"K:\!Archives\Pre Logs")
+
+
+def build_output_folder(log_type: str, date_from: str) -> Path:
+    """Return the network output folder: K:\!Archives\<Type> Logs\yymmdd"""
+    dt = datetime.strptime(date_from, "%m/%d/%Y")
+    folder_name = dt.strftime("%y%m%d")
+    base = POST_LOG_BASE if log_type == "post" else PRE_LOG_BASE
+    return base / folder_name
 
 
 def download_report(session, date_from: str, date_to: str) -> None:
@@ -55,12 +67,14 @@ def download_report(session, date_from: str, date_to: str) -> None:
     print(f"[INFO] Saved {size_kb:.1f} KB to {INPUT_CSV}")
 
 
-def run_sort(log_type: str) -> int:
+def run_sort(log_type: str, date_from: str) -> int:
     """Run ReportSort main.py non-interactively."""
     python_exe = Path(sys.executable)
+    output_folder = build_output_folder(log_type, date_from)
     print(f"[INFO] Running ReportSort ({log_type}logs) ...")
+    print(f"[INFO] Output folder: {output_folder}")
     result = subprocess.run(
-        [str(python_exe), str(MAIN_PY), "--log-type", log_type],
+        [str(python_exe), str(MAIN_PY), "--log-type", log_type, "--output-folder", str(output_folder)],
         cwd=str(REPORTSORT_DIR),
     )
     return result.returncode
@@ -92,12 +106,13 @@ def main():
     finally:
         etere_web_logout(session)
 
-    rc = run_sort(log_type)
+    rc = run_sort(log_type, date_from)
     if rc != 0:
         print(f"[ERROR] ReportSort exited with code {rc}")
         sys.exit(rc)
 
-    print(f"\n[DONE] {log_type.capitalize()}logs complete. Output files in {REPORTSORT_DIR / 'output'}")
+    output_folder = build_output_folder(log_type, date_from)
+    print(f"\n[DONE] {log_type.capitalize()}logs complete. Output files in {output_folder}")
 
 
 if __name__ == "__main__":
