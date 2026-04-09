@@ -614,16 +614,35 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 out["stations"] = [{"cod_user": c, "nome": n} for c, n in stations]
                 out["markets"] = []
 
-                # Fetch SP source to understand why it returns 0 rows
+                # Check if broadcast schedule (MESSINONDA) has spots for CVC in date range
+                from datetime import datetime as _dt2
                 try:
-                    sp_cur = conn.cursor()
-                    sp_cur.execute(
-                        "SELECT definition FROM sys.sql_modules WHERE object_id = OBJECT_ID('dbo.rpt_trf_missing_material_list')"
-                    )
-                    row = sp_cur.fetchone()
-                    out["sp_source"] = row[0][:3000] if row else "not found"
+                    sch_cur = conn.cursor()
+                    sch_cur.execute("""
+                        SELECT TOP 5 cod_user, data_onda, cod_spot, cod_materiale
+                        FROM MESSINONDA
+                        WHERE cod_user = 7
+                          AND data_onda BETWEEN ? AND ?
+                        ORDER BY data_onda
+                    """, dt_from, dt_to)
+                    rows = sch_cur.fetchall()
+                    out["messinonda_cvc_sample"] = [list(r) for r in rows]
+                    out["messinonda_cvc_count"] = len(rows)
                 except Exception as e:
-                    out["sp_source"] = f"error: {e}"
+                    out["messinonda_error"] = str(e)
+
+                # Also check what tables exist with 'material' or 'messa' in name
+                try:
+                    tbl_cur = conn.cursor()
+                    tbl_cur.execute("""
+                        SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+                        WHERE TABLE_NAME LIKE '%material%' OR TABLE_NAME LIKE '%messa%'
+                           OR TABLE_NAME LIKE '%spot%' OR TABLE_NAME LIKE '%miss%'
+                        ORDER BY TABLE_NAME
+                    """)
+                    out["relevant_tables"] = [r[0] for r in tbl_cur.fetchall()]
+                except Exception as e:
+                    out["relevant_tables_error"] = str(e)
 
                 for cod_user, nome in stations:
                     try:
