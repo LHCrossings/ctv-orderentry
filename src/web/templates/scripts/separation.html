@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/static/css/_variables.css" />
     <link rel="stylesheet" href="/static/css/portal.css" />
     <style>
-        main { max-width: 720px; }
+        main { max-width: 1040px; }
 
         .tool-card {
             background: var(--nord6);
@@ -25,29 +25,26 @@
             margin-bottom: 6px;
         }
 
-        .tool-card p {
+        .tool-card > p {
             font-size: 0.85rem;
             color: var(--text-muted);
             margin-bottom: 24px;
             line-height: 1.5;
         }
 
-        .input-row {
+        /* ── Step 1: contract lookup ── */
+        .lookup-row {
             display: flex;
             gap: 12px;
             align-items: flex-end;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
+            margin-bottom: 0;
         }
 
         .field-group {
             display: flex;
             flex-direction: column;
             gap: 6px;
-            flex: 0 0 140px;
         }
-
-        .field-group.wide { flex: 0 0 180px; }
 
         .field-label {
             font-size: 0.75rem;
@@ -67,8 +64,8 @@
             font-weight: 600;
             color: var(--text-primary);
             outline: none;
+            width: 160px;
             transition: border-color 0.2s, box-shadow 0.2s;
-            width: 100%;
         }
 
         .field-input:focus {
@@ -76,59 +73,149 @@
             box-shadow: 0 0 0 3px rgba(94,129,172,0.15);
         }
 
-        .sep-group {
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            height: 42px;
+            white-space: nowrap;
+            transition: background 0.2s, transform 0.15s;
+        }
+
+        .btn-primary { background: var(--nord10); color: white; }
+        .btn-primary:hover:not(:disabled) { background: var(--nord9); transform: translateY(-1px); }
+        .btn-secondary {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+        .btn-secondary:hover:not(:disabled) { background: var(--border-color); }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+        /* ── Step 2: lines table ── */
+        .lines-section { display: none; margin-top: 28px; }
+        .lines-section.visible { display: block; }
+
+        .section-header {
             display: flex;
-            gap: 8px;
-            align-items: flex-end;
-            margin-bottom: 20px;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
         }
 
-        .sep-label-row {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 8px;
-        }
-
-        .sep-section {
-            margin-bottom: 20px;
-        }
-
-        .sep-section-label {
-            font-size: 0.75rem;
+        .section-title {
+            font-size: 0.78rem;
             font-weight: 600;
             color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 0.06em;
-            margin-bottom: 8px;
         }
+
+        .sel-controls { display: flex; gap: 8px; }
+
+        .sel-btn {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--nord10);
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 2px 0;
+            font-family: 'Inter', sans-serif;
+        }
+        .sel-btn:hover { text-decoration: underline; }
+
+        /* Table */
+        .lines-table-wrap {
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+        }
+
+        table.lines-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+        }
+
+        .lines-table th {
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 8px 10px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            white-space: nowrap;
+        }
+
+        .lines-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+            vertical-align: middle;
+        }
+
+        .lines-table tr:last-child td { border-bottom: none; }
+
+        .lines-table tr:hover td { background: color-mix(in srgb, var(--nord9) 6%, transparent); }
+
+        .lines-table tr.selected td { background: color-mix(in srgb, var(--nord10) 8%, transparent); }
+
+        .sep-badge {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 2px 7px;
+            border-radius: 4px;
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            border: 1px solid var(--border-color);
+            white-space: nowrap;
+        }
+
+        .sep-badge.nonzero {
+            background: color-mix(in srgb, var(--nord10) 12%, var(--nord6));
+            color: var(--nord10);
+            border-color: color-mix(in srgb, var(--nord10) 30%, transparent);
+        }
+
+        /* Checkbox styling */
+        input[type="checkbox"] {
+            width: 15px;
+            height: 15px;
+            cursor: pointer;
+            accent-color: var(--nord10);
+        }
+
+        /* ── Step 3: apply controls ── */
+        .apply-section {
+            display: none;
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border-color);
+        }
+        .apply-section.visible { display: block; }
 
         .sep-fields {
             display: flex;
-            gap: 8px;
+            gap: 12px;
+            align-items: flex-end;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
         }
 
         .sep-field {
             display: flex;
             flex-direction: column;
             gap: 4px;
-            flex: 1;
-        }
-
-        .sep-field-label {
-            font-size: 0.7rem;
-            font-weight: 600;
-            color: var(--text-muted);
-            text-align: center;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-        }
-
-        .sep-field-desc {
-            font-size: 0.7rem;
-            color: var(--text-muted);
-            text-align: center;
-            line-height: 1.4;
-            margin-top: 4px;
+            flex: 0 0 110px;
         }
 
         .sep-field input {
@@ -151,78 +238,47 @@
             box-shadow: 0 0 0 3px rgba(94,129,172,0.15);
         }
 
-        .sep-hint {
-            font-size: 0.75rem;
+        .sep-field-label {
+            font-size: 0.72rem;
+            font-weight: 600;
             color: var(--text-muted);
-            margin-top: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            text-align: center;
         }
 
-        .run-row {
+        .sep-field-desc {
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            text-align: center;
+            line-height: 1.35;
+        }
+
+        .apply-row {
             display: flex;
             gap: 12px;
             align-items: center;
         }
 
-        .run-btn {
-            padding: 10px 24px;
-            background: var(--nord10);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 0.9rem;
+        .apply-status {
+            font-size: 0.85rem;
             font-weight: 600;
-            font-family: 'Inter', sans-serif;
-            cursor: pointer;
-            transition: background 0.2s, transform 0.15s;
-            white-space: nowrap;
-            height: 42px;
+            color: var(--nord14);
         }
 
-        .run-btn:hover:not(:disabled) {
-            background: var(--nord9);
-            transform: translateY(-1px);
+        .apply-status.err { color: var(--nord11); }
+
+        .sep-hint {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            margin-top: 10px;
         }
 
-        .run-btn:disabled {
-            opacity: 0.45;
-            cursor: not-allowed;
-            transform: none;
+        .loading-msg {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 16px;
         }
-
-        /* Terminal output */
-        .terminal {
-            background: var(--nord0);
-            border: 1px solid var(--nord1);
-            border-radius: 10px;
-            padding: 16px;
-            font-family: 'Consolas', 'Courier New', monospace;
-            font-size: 0.82rem;
-            line-height: 1.7;
-            min-height: 120px;
-            max-height: 360px;
-            overflow-y: auto;
-            display: none;
-            margin-top: 20px;
-        }
-
-        .terminal.visible { display: block; }
-
-        .t-line { color: var(--nord4); }
-        .t-info  { color: var(--nord8); }
-        .t-done  { color: var(--nord14); font-weight: 600; }
-        .t-err   { color: var(--nord11); }
-        .t-warn  { color: var(--nord13); }
-        .t-cursor {
-            display: inline-block;
-            width: 8px;
-            height: 14px;
-            background: var(--nord8);
-            animation: blink 1s step-end infinite;
-            vertical-align: middle;
-            margin-left: 2px;
-        }
-
-        @keyframes blink { 50% { opacity: 0; } }
     </style>
 </head>
 <body>
@@ -244,118 +300,229 @@
 <main>
     <div class="tool-card">
         <h2>Update Contract Line Separation</h2>
-        <p>Sets customer, event, and order separation intervals (in minutes) on every line in an Etere contract.</p>
+        <p>Load a contract to see all its lines and current separation values. Select the lines you want to change, set the new values, and apply.</p>
 
-        <div class="input-row">
-            <div class="field-group wide">
+        <!-- Step 1: contract lookup -->
+        <div class="lookup-row">
+            <div class="field-group">
                 <label class="field-label" for="contractInput">Contract Number</label>
-                <input id="contractInput" class="field-input" type="number" placeholder="e.g. 2611" min="1" />
+                <input id="contractInput" class="field-input" type="number" placeholder="e.g. 2551" min="1" />
+            </div>
+            <button id="loadBtn" class="btn btn-primary" onclick="loadLines()">Load Lines</button>
+        </div>
+
+        <div id="loadingMsg" class="loading-msg" style="display:none;">Loading...</div>
+
+        <!-- Step 2: lines table -->
+        <div id="linesSection" class="lines-section">
+            <div class="section-header">
+                <span class="section-title" id="linesTitle">Lines</span>
+                <div class="sel-controls">
+                    <button class="sel-btn" onclick="selectAll()">Select All</button>
+                    <button class="sel-btn" onclick="selectNone()">Deselect All</button>
+                </div>
+            </div>
+            <div class="lines-table-wrap">
+                <table class="lines-table">
+                    <thead>
+                        <tr>
+                            <th style="width:32px"></th>
+                            <th>Description</th>
+                            <th>Mkt</th>
+                            <th>From</th>
+                            <th>To</th>
+                            <th>Time</th>
+                            <th>Days</th>
+                            <th>:Sec</th>
+                            <th>Spt/wk</th>
+                            <th>Customer</th>
+                            <th>Order</th>
+                            <th>Event</th>
+                        </tr>
+                    </thead>
+                    <tbody id="linesBody"></tbody>
+                </table>
             </div>
         </div>
 
-        <div class="sep-section">
-            <div class="sep-section-label">Separation (minutes)</div>
+        <!-- Step 3: apply controls -->
+        <div id="applySection" class="apply-section">
             <div class="sep-fields">
                 <div class="sep-field">
                     <input id="sepCustomer" type="number" value="15" min="0" max="120" />
                     <div class="sep-field-label">Customer</div>
-                    <div class="sep-field-desc">Sets the interval between customers when checking the product code.</div>
+                    <div class="sep-field-desc">Interval between customers by product code.</div>
                 </div>
                 <div class="sep-field">
                     <input id="sepOrder" type="number" value="0" min="0" max="120" />
                     <div class="sep-field-label">Order</div>
-                    <div class="sep-field-desc">Sets the interval between each Order.</div>
+                    <div class="sep-field-desc">Interval between each Order.</div>
                 </div>
                 <div class="sep-field">
                     <input id="sepEvent" type="number" value="0" min="0" max="120" />
                     <div class="sep-field-label">Event</div>
-                    <div class="sep-field-desc">Sets the interval time between events when applying rules.</div>
+                    <div class="sep-field-desc">Interval between events when applying rules.</div>
                 </div>
+                <div style="flex: 1"></div>
             </div>
-            <div class="sep-hint">Common values — Customer/Order/Event: 15/0/0 (standard) · 25/0/0 (30-min rule) · 10/0/0 (TCAA) · 0/0/0 (billboard)</div>
+            <div class="apply-row">
+                <button id="applyBtn" class="btn btn-primary" onclick="applySelected()">Apply to Selected</button>
+                <span id="applyStatus" class="apply-status" style="display:none"></span>
+            </div>
+            <div class="sep-hint">Common — Customer/Order/Event: 15/0/0 (standard) · 25/0/0 (30-min rule) · 10/0/0 (TCAA) · 0/0/0 (billboard)</div>
         </div>
-
-        <div class="run-row">
-            <button id="runBtn" class="run-btn" onclick="runUpdate()">&#9654; Run</button>
-        </div>
-
-        <div id="terminal" class="terminal"></div>
     </div>
 </main>
 
 <script>
-function runUpdate() {
-    const contractInput = document.getElementById('contractInput');
-    const contractId = contractInput.value.trim();
+let loadedLines = [];
+
+function sepBadge(val) {
+    const cls = val !== 0 ? ' nonzero' : '';
+    return `<span class="sep-badge${cls}">${val}</span>`;
+}
+
+async function loadLines() {
+    const input = document.getElementById('contractInput');
+    const contractId = input.value.trim();
     if (!contractId || isNaN(contractId) || parseInt(contractId) < 1) {
-        contractInput.focus();
+        input.focus();
+        return;
+    }
+
+    const loadBtn = document.getElementById('loadBtn');
+    const loadingMsg = document.getElementById('loadingMsg');
+    loadBtn.disabled = true;
+    input.disabled = true;
+    loadingMsg.style.display = '';
+    document.getElementById('linesSection').classList.remove('visible');
+    document.getElementById('applySection').classList.remove('visible');
+
+    try {
+        const resp = await fetch(`/api/scripts/separation/lines?contract_id=${encodeURIComponent(contractId)}`);
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        loadedLines = data.lines;
+        renderLines(data.lines, contractId);
+    } catch (e) {
+        alert(`Failed to load lines: ${e.message}`);
+    } finally {
+        loadBtn.disabled = false;
+        input.disabled = false;
+        loadingMsg.style.display = 'none';
+    }
+}
+
+function renderLines(lines, contractId) {
+    document.getElementById('linesTitle').textContent = `${lines.length} line(s) — Contract ${contractId}`;
+    const tbody = document.getElementById('linesBody');
+    tbody.innerHTML = '';
+
+    lines.forEach(line => {
+        const tr = document.createElement('tr');
+        tr.dataset.lineId = line.line_id;
+        tr.innerHTML = `
+            <td><input type="checkbox" class="line-cb" value="${line.line_id}" onchange="rowToggle(this)" /></td>
+            <td>${escHtml(line.description)}</td>
+            <td>${escHtml(line.market)}</td>
+            <td style="white-space:nowrap">${escHtml(line.date_from)}</td>
+            <td style="white-space:nowrap">${escHtml(line.date_to)}</td>
+            <td style="white-space:nowrap">${escHtml(line.time_from)} – ${escHtml(line.time_to)}</td>
+            <td>${escHtml(line.days)}</td>
+            <td>:${line.duration_sec}</td>
+            <td>${line.spots_pw}</td>
+            <td>${sepBadge(line.sep_customer)}</td>
+            <td>${sepBadge(line.sep_order)}</td>
+            <td>${sepBadge(line.sep_event)}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    document.getElementById('linesSection').classList.add('visible');
+    document.getElementById('applySection').classList.add('visible');
+    document.getElementById('applyStatus').style.display = 'none';
+}
+
+function rowToggle(cb) {
+    const tr = cb.closest('tr');
+    tr.classList.toggle('selected', cb.checked);
+}
+
+function selectAll() {
+    document.querySelectorAll('.line-cb').forEach(cb => {
+        cb.checked = true;
+        cb.closest('tr').classList.add('selected');
+    });
+}
+
+function selectNone() {
+    document.querySelectorAll('.line-cb').forEach(cb => {
+        cb.checked = false;
+        cb.closest('tr').classList.remove('selected');
+    });
+}
+
+async function applySelected() {
+    const lineIds = [...document.querySelectorAll('.line-cb:checked')].map(cb => parseInt(cb.value));
+    if (!lineIds.length) {
+        alert('Select at least one line.');
         return;
     }
 
     const customer = parseInt(document.getElementById('sepCustomer').value) || 0;
-    const event    = parseInt(document.getElementById('sepEvent').value)    || 0;
     const order    = parseInt(document.getElementById('sepOrder').value)    || 0;
+    const event    = parseInt(document.getElementById('sepEvent').value)    || 0;
 
-    const terminal = document.getElementById('terminal');
-    const runBtn   = document.getElementById('runBtn');
+    const applyBtn = document.getElementById('applyBtn');
+    const statusEl = document.getElementById('applyStatus');
+    applyBtn.disabled = true;
+    statusEl.style.display = 'none';
 
-    terminal.innerHTML = '';
-    terminal.classList.add('visible');
-    runBtn.disabled = true;
-    contractInput.disabled = true;
-
-    const cursor = document.createElement('span');
-    cursor.className = 't-cursor';
-    terminal.appendChild(cursor);
-
-    const url = `/api/scripts/separation?contract_id=${encodeURIComponent(contractId)}`
-              + `&customer=${customer}&event=${event}&order=${order}`;
-    const evtSource = new EventSource(url);
-
-    evtSource.onmessage = (e) => {
-        const raw = e.data;
-        if (terminal.contains(cursor)) terminal.removeChild(cursor);
-
-        const div = document.createElement('div');
-
-        if (raw.startsWith('[EXIT:')) {
-            const code = parseInt(raw.match(/\d+/)[0]);
-            div.className = code === 0 ? 't-done' : 't-err';
-            div.textContent = code === 0 ? '✓ Completed successfully.' : `✗ Exited with code ${code}.`;
-            terminal.appendChild(div);
-            evtSource.close();
-            runBtn.disabled = false;
-            contractInput.disabled = false;
-            terminal.scrollTop = terminal.scrollHeight;
-            return;
+    try {
+        const resp = await fetch('/api/scripts/separation/apply', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({line_ids: lineIds, customer, order, event}),
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${resp.status}`);
         }
+        const data = await resp.json();
+        statusEl.textContent = `✓ ${data.updated} line(s) updated — ${customer}/${order}/${event} min`;
+        statusEl.className = 'apply-status';
+        statusEl.style.display = '';
 
-        if (raw.includes('[INFO]'))      div.className = 't-info';
-        else if (raw.includes('[DONE]')) div.className = 't-done';
-        else if (raw.includes('[WARN]')) div.className = 't-warn';
-        else if (raw.includes('Error') || raw.includes('error')) div.className = 't-err';
-        else                             div.className = 't-line';
-
-        div.textContent = raw;
-        terminal.appendChild(div);
-        terminal.appendChild(cursor);
-        terminal.scrollTop = terminal.scrollHeight;
-    };
-
-    evtSource.onerror = () => {
-        if (terminal.contains(cursor)) terminal.removeChild(cursor);
-        const div = document.createElement('div');
-        div.className = 't-err';
-        div.textContent = '✗ Connection lost or server error.';
-        terminal.appendChild(div);
-        evtSource.close();
-        runBtn.disabled = false;
-        contractInput.disabled = false;
-    };
+        // Reload lines to show updated sep values
+        const contractId = document.getElementById('contractInput').value.trim();
+        const r2 = await fetch(`/api/scripts/separation/lines?contract_id=${encodeURIComponent(contractId)}`);
+        if (r2.ok) {
+            const d2 = await r2.json();
+            loadedLines = d2.lines;
+            renderLines(d2.lines, contractId);
+            // Re-show status after re-render
+            document.getElementById('applyStatus').textContent = statusEl.textContent;
+            document.getElementById('applyStatus').className = 'apply-status';
+            document.getElementById('applyStatus').style.display = '';
+        }
+    } catch (e) {
+        statusEl.textContent = `✗ ${e.message}`;
+        statusEl.className = 'apply-status err';
+        statusEl.style.display = '';
+    } finally {
+        applyBtn.disabled = false;
+    }
 }
 
-document.getElementById('contractInput').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') runUpdate();
+function escHtml(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+document.getElementById('contractInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') loadLines();
 });
 </script>
 

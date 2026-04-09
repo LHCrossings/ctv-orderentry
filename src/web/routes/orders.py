@@ -88,8 +88,136 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         return templates.TemplateResponse(request, "scripts/separation.html")
 
     # ------------------------------------------------------------------
-    # Scripts API
+    # Scripts API — Separation
     # ------------------------------------------------------------------
+
+    _FPS = 29.97
+
+    def _frames_to_ampm(frames: int) -> str:
+        if not frames:
+            return "—"
+        total_s = round(frames / _FPS)
+        h, rem = divmod(total_s, 3600)
+        m = rem // 60
+        if h == 0:   return f"12:{m:02d}a"
+        if h < 12:   return f"{h}:{m:02d}a"
+        if h == 12:  return f"12:{m:02d}p"
+        return f"{h-12}:{m:02d}p"
+
+    def _frames_to_min(frames) -> int:
+        return round(frames / _FPS / 60) if frames else 0
+
+    def _frames_to_sec(frames) -> int:
+        return round(frames / _FPS) if frames else 0
+
+    def _days_str(lun, mar, mer, gio, ven, sab, dom) -> str:
+        d = [bool(lun), bool(mar), bool(mer), bool(gio), bool(ven), bool(sab), bool(dom)]
+        if all(d): return "M-Su"
+        if d[:5] == [True]*5 and not d[5] and not d[6]: return "M-F"
+        if d[:6] == [True]*6 and not d[6]: return "M-Sa"
+        if not any(d[:5]) and d[5] and d[6]: return "Sa-Su"
+        if d[5] and not any(d[:5]) and not d[6]: return "Sa"
+        if d[6] and not any(d[:5]) and not d[5]: return "Su"
+        abbr = ["M", "Tu", "W", "Th", "F", "Sa", "Su"]
+        return "/".join(a for a, v in zip(abbr, d) if v) or "—"
+
+    _MARKET_NAMES = {1:"NYC",2:"CMP",3:"HOU",4:"SFO",5:"SEA",6:"LAX",7:"CVC",8:"WDC",9:"MMT",10:"DAL"}
+
+    @router.get("/api/scripts/separation/lines")
+    async def get_separation_lines(contract_id: int = Query(..., gt=0)):
+        try:
+            project_root = Path(__file__).parent.parent.parent.parent
+            if str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
+            from browser_automation.etere_direct_client import connect as _db_connect
+
+            with _db_connect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT ID_CONTRATTIRIGHE, DESCRIZIONE,
+                           DATA_INIZIO, DATA_FINE,
+                           ORA_INIZIO, ORA_FINE,
+                           LUNEDI, MARTEDI, MERCOLEDI, GIOVEDI, VENERDI, SABATO, DOMENICA,
+                           DURATA, MAX_SETT,
+                           Interv_Committente, INTERVALLO, INTERV_CONTRATTO,
+                           COD_USER
+                    FROM   CONTRATTIRIGHE
+                    WHERE  ID_CONTRATTITESTATA = ?
+                    ORDER  BY ID_CONTRATTIRIGHE
+                """, [contract_id])
+                rows = cursor.fetchall()
+
+            if not rows:
+                raise HTTPException(status_code=404, detail=f"No lines found for contract {contract_id}.")
+
+            lines = []
+            for row in rows:
+                (line_id, desc, date_from, date_to, ora_in, ora_out,
+                 lun, mar, mer, gio, ven, sab, dom,
+                 durata, max_sett,
+                 sep_cust, sep_ord, sep_evt,
+                 cod_user) = row
+                lines.append({
+                    "line_id":      line_id,
+                    "description":  desc or "",
+                    "market":       _MARKET_NAMES.get(cod_user, str(cod_user) if cod_user else "—"),
+                    "date_from":    f"{date_from.month}/{date_from.day}/{date_from.year}" if date_from else "",
+                    "date_to":      f"{date_to.month}/{date_to.day}/{date_to.year}" if date_to else "",
+                    "time_from":    _frames_to_ampm(ora_in),
+                    "time_to":      _frames_to_ampm(ora_out),
+                    "days":         _days_str(lun, mar, mer, gio, ven, sab, dom),
+                    "duration_sec": _frames_to_sec(durata),
+                    "spots_pw":     max_sett or 0,
+                    "sep_customer": _frames_to_min(sep_cust),
+                    "sep_order":    _frames_to_min(sep_ord),
+                    "sep_event":    _frames_to_min(sep_evt),
+                })
+            return JSONResponse({"contract_id": contract_id, "lines": lines})
+
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.post("/api/scripts/separation/apply")
+    async def apply_separation_lines(payload: dict = Body(...)):
+        try:
+            project_root = Path(__file__).parent.parent.parent.parent
+            if str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
+            from browser_automation.etere_direct_client import connect as _db_connect
+
+            line_ids = [int(x) for x in payload.get("line_ids", [])]
+            customer = int(payload.get("customer", 0))
+            order    = int(payload.get("order", 0))
+            event    = int(payload.get("event", 0))
+
+            if not line_ids:
+                raise HTTPException(status_code=400, detail="No lines selected.")
+
+            def _to_frames(minutes: int) -> int:
+                return round(minutes * 60 * _FPS)
+
+            placeholders = ",".join("?" * len(line_ids))
+            with _db_connect() as conn:
+                cursor = conn.cursor()
+                # INTERVALLO = Order, INTERV_CONTRATTO = Event (old Etere web had these swapped)
+                cursor.execute(f"""
+                    UPDATE CONTRATTIRIGHE
+                    SET    Interv_Committente = ?,
+                           INTERVALLO         = ?,
+                           INTERV_CONTRATTO   = ?
+                    WHERE  ID_CONTRATTIRIGHE IN ({placeholders})
+                """, [_to_frames(customer), _to_frames(order), _to_frames(event), *line_ids])
+                conn.commit()
+                updated = cursor.rowcount
+
+            return JSONResponse({"updated": updated, "customer": customer, "order": order, "event": event})
+
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
 
     @router.get("/api/scripts/separation")
     async def run_separation(
