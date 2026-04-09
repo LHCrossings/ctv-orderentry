@@ -614,14 +614,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 out["stations"] = [{"cod_user": c, "nome": n} for c, n in stations]
                 out["markets"] = []
 
+                def _row_to_str(row):
+                    return [str(v) for v in row] if row else None
+
                 # Inspect TPalinseSpotsInCluster columns and sample CVC data
                 try:
                     t1 = conn.cursor()
                     t1.execute("SELECT TOP 1 * FROM TPalinseSpotsInCluster")
                     cols = [d[0] for d in t1.description] if t1.description else []
                     out["tpalins_columns"] = cols
-                    row = t1.fetchone()
-                    out["tpalins_sample"] = list(row) if row else None
+                    out["tpalins_sample"] = _row_to_str(t1.fetchone())
                 except Exception as e:
                     out["tpalins_error"] = str(e)
 
@@ -631,8 +633,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     t2.execute("SELECT TOP 1 * FROM StampaMateriale")
                     cols2 = [d[0] for d in t2.description] if t2.description else []
                     out["stampa_columns"] = cols2
-                    row2 = t2.fetchone()
-                    out["stampa_sample"] = list(row2) if row2 else None
+                    out["stampa_sample"] = _row_to_str(t2.fetchone())
                 except Exception as e:
                     out["stampa_error"] = str(e)
 
