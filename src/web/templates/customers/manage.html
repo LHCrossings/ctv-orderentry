@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Manage Database — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 1000px; }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            border-bottom: 2px solid var(--border-color);
+            margin-bottom: 24px;
+        }
+
+        .tab-btn {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: color 0.2s, border-color 0.2s;
+        }
+
+        .tab-btn:hover { color: var(--text-primary); }
+        .tab-btn.active { color: var(--nord10); border-bottom-color: var(--nord10); }
+
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* Cards */
+        .panel-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+            margin-bottom: 20px;
+        }
+
+        .panel-card h3 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 16px;
+        }
+
+        /* Input row */
+        .input-row {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+            margin-bottom: 18px;
+            flex-wrap: wrap;
+        }
+
+        .field-group { display: flex; flex-direction: column; gap: 5px; }
+        .field-group.grow { flex: 1; min-width: 200px; }
+        .field-group.fixed-sm { flex: 0 0 130px; }
+
+        .field-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .field-input, .field-select {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 9px 12px;
+            font-size: 0.9rem;
+            font-family: 'Inter', sans-serif;
+            font-weight: 500;
+            color: var(--text-primary);
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            width: 100%;
+        }
+
+        .field-input:focus, .field-select:focus {
+            border-color: var(--nord10);
+            box-shadow: 0 0 0 3px rgba(94,129,172,0.15);
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 9px 18px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.15s;
+            white-space: nowrap;
+            height: 38px;
+        }
+
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+        .btn:hover:not(:disabled) { transform: translateY(-1px); }
+
+        .btn-primary { background: var(--nord10); color: white; }
+        .btn-primary:hover:not(:disabled) { background: var(--nord9); }
+
+        .btn-sm {
+            padding: 5px 12px;
+            font-size: 0.78rem;
+            height: auto;
+            border-radius: 6px;
+        }
+
+        .btn-edit { background: var(--nord3); color: var(--nord6); }
+        .btn-edit:hover:not(:disabled) { background: var(--nord2); }
+
+        .btn-save { background: var(--nord14); color: var(--nord0); }
+        .btn-save:hover:not(:disabled) { background: #7aab6e; }
+
+        .btn-cancel { background: var(--nord3); color: var(--nord6); }
+        .btn-cancel:hover:not(:disabled) { background: var(--nord2); }
+
+        .btn-danger { background: var(--nord11); color: white; }
+        .btn-danger:hover:not(:disabled) { background: #b34040; }
+
+        /* Tables */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        .data-table th {
+            text-align: left;
+            padding: 8px 12px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .data-table td {
+            padding: 9px 12px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+            vertical-align: middle;
+        }
+
+        .data-table tr:last-child td { border-bottom: none; }
+        .data-table tr:hover td { background: var(--bg-secondary); }
+
+        .badge-yes {
+            display: inline-block;
+            padding: 2px 8px;
+            background: rgba(163,190,140,0.2);
+            color: var(--nord14);
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .badge-no {
+            display: inline-block;
+            padding: 2px 8px;
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-unset {
+            display: inline-block;
+            padding: 2px 8px;
+            background: rgba(235,203,139,0.15);
+            color: var(--nord13);
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        /* Inline edit row */
+        .edit-row td {
+            background: var(--bg-secondary) !important;
+            padding: 12px;
+        }
+
+        .edit-row-inner {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .edit-row-inner label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            cursor: pointer;
+        }
+
+        .edit-row-inner input[type="checkbox"] {
+            accent-color: var(--nord10);
+            width: 15px;
+            height: 15px;
+        }
+
+        /* Order detail */
+        .kv-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .kv-table td { padding: 6px 10px; border-bottom: 1px solid var(--border-color); }
+        .kv-table td:first-child { font-weight: 600; color: var(--text-muted); width: 180px; }
+        .kv-table tr:last-child td { border-bottom: none; }
+
+        /* Status badges for affidavits */
+        .status-draft    { background: rgba(235,203,139,0.15); color: var(--nord13); }
+        .status-reviewed { background: rgba(129,161,193,0.15); color: var(--nord10); }
+        .status-numbered { background: rgba(163,190,140,0.20); color: var(--nord14); }
+
+        .status-pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .empty-state {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            padding: 20px 0;
+            text-align: center;
+        }
+
+        .alert-err {
+            background: rgba(191,97,106,0.1);
+            border: 1px solid rgba(191,97,106,0.3);
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: var(--nord11);
+            font-size: 0.85rem;
+            margin-top: 12px;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/customers" class="back-link">&#8592;</a>
+            <div class="logo-icon">🗃️</div>
+            <div>
+                <h1>Manage <span>Database</span></h1>
+                <div class="logo-sub">Customer Database · Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('search')">Search</button>
+        <button class="tab-btn" onclick="switchTab('orders')">Orders</button>
+        <button class="tab-btn" onclick="switchTab('agencies')">Agencies</button>
+        <button class="tab-btn" onclick="switchTab('advertisers')">Advertisers</button>
+        <button class="tab-btn" onclick="switchTab('affidavits')">Affidavits</button>
+    </div>
+
+    <!-- SEARCH TAB -->
+    <div id="tab-search" class="tab-panel active">
+        <div class="panel-card">
+            <h3>Search Orders</h3>
+            <div class="input-row">
+                <div class="field-group grow">
+                    <label class="field-label" for="searchQ">Search</label>
+                    <input id="searchQ" class="field-input" type="text" placeholder="Client, advertiser, or estimate..." onkeydown="if(event.key==='Enter') doSearch()" />
+                </div>
+                <button class="btn btn-primary" onclick="doSearch()">Search</button>
+            </div>
+            <div id="searchResults"></div>
+        </div>
+    </div>
+
+    <!-- ORDERS TAB -->
+    <div id="tab-orders" class="tab-panel">
+        <div class="panel-card">
+            <h3>Order Detail</h3>
+            <div class="input-row">
+                <div class="field-group fixed-sm">
+                    <label class="field-label" for="orderContract">Contract #</label>
+                    <input id="orderContract" class="field-input" type="number" placeholder="e.g. 2557" onkeydown="if(event.key==='Enter') loadOrder()" />
+                </div>
+                <button class="btn btn-primary" onclick="loadOrder()">Show</button>
+                <button class="btn btn-primary" style="background:var(--nord3);color:var(--nord6)" onclick="loadMonthly()">Monthly</button>
+                <button class="btn btn-danger btn-sm" style="height:38px;padding:0 14px" onclick="removeOrder()">Remove</button>
+            </div>
+            <div id="orderDetail"></div>
+        </div>
+    </div>
+
+    <!-- AGENCIES TAB -->
+    <div id="tab-agencies" class="tab-panel">
+        <div class="panel-card">
+            <h3>Agencies</h3>
+            <div class="input-row">
+                <button class="btn btn-primary" onclick="loadAgencies()">Load Agencies</button>
+            </div>
+            <div id="agenciesResults"></div>
+        </div>
+    </div>
+
+    <!-- ADVERTISERS TAB -->
+    <div id="tab-advertisers" class="tab-panel">
+        <div class="panel-card">
+            <h3>Advertisers</h3>
+            <div class="input-row">
+                <button class="btn btn-primary" onclick="loadAdvertisers()">Load Advertisers</button>
+            </div>
+            <div id="advertisersResults"></div>
+        </div>
+    </div>
+
+    <!-- AFFIDAVITS TAB -->
+    <div id="tab-affidavits" class="tab-panel">
+        <div class="panel-card">
+            <h3>Affidavits by Month</h3>
+            <div class="input-row">
+                <div class="field-group fixed-sm">
+                    <label class="field-label" for="affMonth">Month</label>
+                    <input id="affMonth" class="field-input" type="month" />
+                </div>
+                <button class="btn btn-primary" onclick="loadAffidavits()">Load</button>
+            </div>
+            <div id="affidavitsResults"></div>
+        </div>
+    </div>
+</main>
+
+<script>
+// ── Tab switching ────────────────────────────────────────────────────────────
+function switchTab(name) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    event.target.classList.add('active');
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function errDiv(msg) {
+    const d = document.createElement('div');
+    d.className = 'alert-err';
+    d.textContent = msg;
+    return d;
+}
+
+function flagBadge(val) {
+    if (val === true  || val === 1)  return '<span class="badge-yes">YES</span>';
+    if (val === false || val === 0)  return '<span class="badge-no">No</span>';
+    return '<span class="badge-unset">Not set</span>';
+}
+
+async function apiGet(url) {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+}
+
+async function apiPost(url, body) {
+    const r = await fetch(url, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    return r.json();
+}
+
+// ── Search ───────────────────────────────────────────────────────────────────
+async function doSearch() {
+    const q = document.getElementById('searchQ').value.trim();
+    if (!q) return;
+    const el = document.getElementById('searchResults');
+    el.innerHTML = '<div class="empty-state">Searching...</div>';
+    try {
+        const rows = await apiGet('/api/customers/manage/search?q=' + encodeURIComponent(q));
+        if (!rows.length) { el.innerHTML = '<div class="empty-state">No results found.</div>'; return; }
+        let html = '<table class="data-table"><thead><tr><th>Contract</th><th>Advertiser</th><th>Client / Agency</th><th>Market</th><th>Estimate</th></tr></thead><tbody>';
+        rows.forEach(r => {
+            html += `<tr>
+                <td><a href="#" onclick="jumpToOrder(${r.contract_number});return false;" style="color:var(--nord10);font-weight:600">${r.contract_number}</a></td>
+                <td>${r.advertiser || ''}</td>
+                <td>${r.client || ''}</td>
+                <td>${r.market || ''}</td>
+                <td>${r.estimate || ''}</td>
+            </tr>`;
+        });
+        html += '</tbody></table>';
+        el.innerHTML = html;
+    } catch(e) { el.innerHTML = ''; el.appendChild(errDiv('Error: ' + e.message)); }
+}
+
+function jumpToOrder(cn) {
+    switchTab('orders');
+    document.querySelectorAll('.tab-btn')[1].classList.add('active');
+    document.querySelectorAll('.tab-btn')[0].classList.remove('active');
+    document.getElementById('orderContract').value = cn;
+    loadOrder();
+}
+
+// ── Orders ───────────────────────────────────────────────────────────────────
+async function loadOrder() {
+    const cn = document.getElementById('orderContract').value.trim();
+    if (!cn) return;
+    const el = document.getElementById('orderDetail');
+    el.innerHTML = '<div class="empty-state">Loading...</div>';
+    try {
+        const r = await apiGet('/api/customers/manage/order/' + cn);
+        let emails = r.emails;
+        if (Array.isArray(emails)) emails = emails.join(', ');
+
+        const fields = [
+            ['Advertiser', r.advertiser], ['Agency', r.client],
+            ['Market', r.market], ['Estimate', r.estimate],
+            ['Billing Type', r.billing_type], ['Emails', emails],
+            ['Total Gross', r.total_gross ? '$' + Number(r.total_gross).toLocaleString('en-US',{minimumFractionDigits:2}) : ''],
+            ['Total Net',   r.total_net   ? '$' + Number(r.total_net).toLocaleString('en-US',{minimumFractionDigits:2}) : ''],
+            ['Station Rep', r.station_rep], ['Notes', r.notes],
+            ['Last Updated', r.last_updated], ['File', r.file_path],
+        ];
+
+        let html = '<table class="kv-table">';
+        fields.forEach(([k, v]) => {
+            if (v !== null && v !== undefined && v !== '') {
+                html += `<tr><td>${k}</td><td>${v}</td></tr>`;
+            }
+        });
+        html += '</table>';
+        el.innerHTML = html;
+    } catch(e) { el.innerHTML = ''; el.appendChild(errDiv('Error: ' + e.message)); }
+}
+
+async function loadMonthly() {
+    const cn = document.getElementById('orderContract').value.trim();
+    if (!cn) return;
+    const el = document.getElementById('orderDetail');
+    el.innerHTML = '<div class="empty-state">Loading...</div>';
+    try {
+        const rows = await apiGet('/api/customers/manage/monthly/' + cn);
+        if (!rows.length) { el.innerHTML = '<div class="empty-state">No monthly data for this contract.</div>'; return; }
+        let html = '<table class="data-table"><thead><tr><th>Month</th><th>Market</th><th style="text-align:right">Gross</th><th style="text-align:right">Net</th></tr></thead><tbody>';
+        let totalGross = 0, totalNet = 0;
+        rows.forEach(r => {
+            totalGross += r.gross || 0;
+            totalNet   += r.net   || 0;
+            html += `<tr>
+                <td>${r.year}-${String(r.month).padStart(2,'0')}</td>
+                <td>${r.market || ''}</td>
+                <td style="text-align:right">$${Number(r.gross||0).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+                <td style="text-align:right">$${Number(r.net||0).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+            </tr>`;
+        });
+        html += `<tr style="font-weight:700">
+            <td colspan="2">Total</td>
+            <td style="text-align:right">$${totalGross.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+            <td style="text-align:right">$${totalNet.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+        </tr>`;
+        html += '</tbody></table>';
+        el.innerHTML = html;
+    } catch(e) { el.innerHTML = ''; el.appendChild(errDiv('Error: ' + e.message)); }
+}
+
+async function removeOrder() {
+    const cn = document.getElementById('orderContract').value.trim();
+    if (!cn) return;
+    if (!confirm(`Remove contract ${cn} and all its monthly data from the database? This cannot be undone.`)) return;
+    const el = document.getElementById('orderDetail');
+    try {
+        const r = await apiPost('/api/customers/manage/remove-order', { contract_number: parseInt(cn) });
+        if (r.ok) {
+            el.innerHTML = '<div class="empty-state">Contract removed.</div>';
+        } else {
+            el.innerHTML = ''; el.appendChild(errDiv(r.error || 'Failed to remove.'));
+        }
+    } catch(e) { el.innerHTML = ''; el.appendChild(errDiv('Error: ' + e.message)); }
+}
+
+// ── Agencies ─────────────────────────────────────────────────────────────────
+async function loadAgencies() {
+    const el = document.getElementById('agenciesResults');
+    el.innerHTML = '<div class="empty-state">Loading...</div>';
+    try {
+        const rows = await apiGet('/api/customers/manage/agencies');
+        if (!rows.length) { el.innerHTML = '<div class="empty-state">No agencies found.</div>'; return; }
+        let html = '<table class="data-table" id="agencyTable"><thead><tr><th>Agency</th><th>EDI</th><th>EDI Notes</th><th></th></tr></thead><tbody>';
+        rows.forEach((r, i) => {
+            html += `<tr id="ag-row-${i}">
+                <td>${escHtml(r.agency)}</td>
+                <td>${flagBadge(r.edi)}</td>
+                <td>${escHtml(r.edi_notes || '')}</td>
+                <td><button class="btn btn-edit btn-sm" onclick="editAgency(${i}, ${JSON.stringify(JSON.stringify(r))})">Edit</button></td>
+            </tr>`;
+        });
+        html += '</tbody></table>';
+        el.innerHTML = html;
+    } catch(e) { el.innerHTML = ''; el.appendChild(errDiv('Error: ' + e.message)); }
+}
+
+function editAgency(i, dataStr) {
+    const r = JSON.parse(dataStr);
+    const existingEdit = document.getElementById('ag-edit-' + i);
+    if (existingEdit) { existingEdit.remove(); return; }
+
+    // Remove any other open edit rows
+    document.querySelectorAll('[id^="ag-edit-"]').forEach(el => el.remove());
+
+    const refRow = document.getElementById('ag-row-' + i);
+    const editRow = document.createElement('tr');
+    editRow.id = 'ag-edit-' + i;
+    editRow.className = 'edit-row';
+    editRow.innerHTML = `<td colspan="4">
+        <div class="edit-row-inner">
+            <label><input type="checkbox" id="ag-edi-${i}" ${r.edi ? 'checked' : ''} /> EDI</label>
+            <div class="field-group grow">
+                <input class="field-input" id="ag-notes-${i}" type="text" placeholder="EDI notes..." value="${escHtml(r.edi_notes || '')}" style="height:34px;font-size:0.85rem" />
+            </div>
+            <button class="btn btn-save btn-sm" onclick="saveAgency(${i}, ${JSON.stringify(JSON.stringify(r))})">Save</button>
+            <button class="btn btn-cancel btn-sm" onclick="document.getElementById('ag-edit-${i}').remove()">Cancel</button>
+        </div>
+    </td>`;
+    refRow.insertAdjacentElement('afterend', editRow);
+}
+
+async function saveAgency(i, dataStr) {
+    const r = JSON.parse(dataStr);
+    const edi = document.getElementById('ag-edi-' + i).checked;
+    const ediNotes = document.getElementById('ag-notes-' + i).value.trim();
+    try {
+        const res = await apiPost('/api/customers/manage/set-agency', { agency: r.agency, edi, edi_notes: ediNotes });
+        if (res.ok) {
+            document.getElementById('ag-edit-' + i)?.remove();
+            loadAgencies();
+        } else {
+            alert(res.error || 'Save failed.');
+        }
+    } catch(e) { alert('Error: ' + e.message); }
+}
+
+// ── Advertisers ───────────────────────────────────────────────────────────────
+async function loadAdvertisers() {
+    const el = document.getElementById('advertisersResults');
+    el.innerHTML = '<div class="empty-state">Loading...</div>';
+    try {
+        const rows = await apiGet('/api/customers/manage/advertisers');
+        if (!rows.length) { el.innerHTML = '<div class="empty-state">No advertisers found.</div>'; return; }
+        let html = '<table class="data-table" id="advTable"><thead><tr><th>Advertiser</th><th>Notarized</th><th></th></tr></thead><tbody>';
+        rows.forEach((r, i) => {
+            html += `<tr id="adv-row-${i}">
+                <td>${escHtml(r.advertiser)}</td>
+                <td>${flagBadge(r.notarized)}</td>
+                <td><button class="btn btn-edit btn-sm" onclick="editAdvertiser(${i}, ${JSON.stringify(JSON.stringify(r))})">Edit</button></td>
+            </tr>`;
+        });
+        html += '</tbody></table>';
+        el.innerHTML = html;
+    } catch(e) { el.innerHTML = ''; el.appendChild(errDiv('Error: ' + e.message)); }
+}
+
+function editAdvertiser(i, dataStr) {
+    const r = JSON.parse(dataStr);
+    const existing = document.getElementById('adv-edit-' + i);
+    if (existing) { existing.remove(); return; }
+    document.querySelectorAll('[id^="adv-edit-"]').forEach(el => el.remove());
+
+    const refRow = document.getElementById('adv-row-' + i);
+    const editRow = document.createElement('tr');
+    editRow.id = 'adv-edit-' + i;
+    editRow.className = 'edit-row';
+    editRow.innerHTML = `<td colspan="3">
+        <div class="edit-row-inner">
+            <label><input type="checkbox" id="adv-not-${i}" ${r.notarized ? 'checked' : ''} /> Notarized</label>
+            <button class="btn btn-save btn-sm" onclick="saveAdvertiser(${i}, ${JSON.stringify(JSON.stringify(r))})">Save</button>
+            <button class="btn btn-cancel btn-sm" onclick="document.getElementById('adv-edit-${i}').remove()">Cancel</button>
+        </div>
+    </td>`;
+    refRow.insertAdjacentElement('afterend', editRow);
+}
+
+async function saveAdvertiser(i, dataStr) {
+    const r = JSON.parse(dataStr);
+    const notarized = document.getElementById('adv-not-' + i).checked;
+    try {
+        const res = await apiPost('/api/customers/manage/set-advertiser', { advertiser: r.advertiser, notarized });
+        if (res.ok) {
+            document.getElementById('adv-edit-' + i)?.remove();
+            loadAdvertisers();
+        } else {
+            alert(res.error || 'Save failed.');
+        }
+    } catch(e) { alert('Error: ' + e.message); }
+}
+
+// ── Affidavits ────────────────────────────────────────────────────────────────
+async function loadAffidavits() {
+    const month = document.getElementById('affMonth').value;
+    if (!month) return;
+    const el = document.getElementById('affidavitsResults');
+    el.innerHTML = '<div class="empty-state">Loading...</div>';
+    try {
+        const rows = await apiGet('/api/customers/manage/affidavits?month=' + month);
+        if (!rows.length) { el.innerHTML = `<div class="empty-state">No affidavits for ${month}.</div>`; return; }
+        let html = '<table class="data-table"><thead><tr><th>Number</th><th>Status</th><th>Advertiser</th><th>Market</th><th style="text-align:right">Spots</th><th style="text-align:right">Gross</th><th>Pre-bill</th><th>Update</th></tr></thead><tbody>';
+        rows.forEach(r => {
+            const advertiser = r.advertiser || r.bill_code || '?';
+            const statusCls = 'status-' + (r.status || 'draft');
+            const gross = r.gross_total != null ? '$' + Number(r.gross_total).toLocaleString('en-US',{minimumFractionDigits:2}) : '?';
+            html += `<tr>
+                <td style="font-weight:600">${r.affidavit_number}</td>
+                <td><span class="status-pill ${statusCls}">${r.status}</span></td>
+                <td>${escHtml(advertiser)}</td>
+                <td>${r.market || ''}</td>
+                <td style="text-align:right">${r.spot_count != null ? r.spot_count : '?'}</td>
+                <td style="text-align:right">${gross}</td>
+                <td>${r.pre_bill ? '<span class="badge-yes">YES</span>' : '-'}</td>
+                <td>
+                    <select class="field-select" id="aff-status-${r.affidavit_number}" style="height:30px;padding:4px 8px;font-size:0.8rem;width:auto">
+                        <option value="draft"    ${r.status==='draft'    ? 'selected':''}>Draft</option>
+                        <option value="reviewed" ${r.status==='reviewed' ? 'selected':''}>Reviewed</option>
+                        <option value="numbered" ${r.status==='numbered' ? 'selected':''}>Numbered</option>
+                    </select>
+                    <button class="btn btn-save btn-sm" style="margin-left:4px" onclick="saveAffStatus('${r.affidavit_number}')">Save</button>
+                </td>
+            </tr>`;
+        });
+        html += '</tbody></table>';
+        el.innerHTML = html;
+    } catch(e) { el.innerHTML = ''; el.appendChild(errDiv('Error: ' + e.message)); }
+}
+
+async function saveAffStatus(number) {
+    const status = document.getElementById('aff-status-' + number).value;
+    try {
+        const res = await apiPost('/api/customers/manage/affidavit-status', { number, status });
+        if (!res.ok) alert(res.error || 'Save failed.');
+        else loadAffidavits();
+    } catch(e) { alert('Error: ' + e.message); }
+}
+
+// ── Utility ───────────────────────────────────────────────────────────────────
+function escHtml(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+
+</body>
+</html>

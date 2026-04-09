@@ -3,6 +3,7 @@ Order queue routes: list, upload, move-to-used, history, restore, detail.
 """
 
 import asyncio
+import json
 import shutil
 import subprocess
 import sys
@@ -572,5 +573,133 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         detail["filename"] = filename
         detail["order_type"] = order_type
         return JSONResponse(content=detail)
+
+    # ------------------------------------------------------------------
+    # Customer Database
+    # ------------------------------------------------------------------
+
+    _BILLING_DIR    = Path(r"C:\Users\usrjp\windev\billing")
+    _BILLING_PYTHON = _BILLING_DIR / ".venv" / "Scripts" / "python.exe"
+    _BILLING_MANAGE  = _BILLING_DIR / "manage_db.py"
+    _BILLING_BACKFILL = _BILLING_DIR / "backfill.py"
+
+    async def _run_manage_json(args: list) -> object:
+        cmd = [str(_BILLING_PYTHON), str(_BILLING_MANAGE), "--json"] + [str(a) for a in args]
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=str(_BILLING_DIR),
+        )
+        stdout, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            raise HTTPException(status_code=500, detail=stderr.decode(errors="replace").strip())
+        return json.loads(stdout.decode(errors="replace"))
+
+    async def _run_manage_write(args: list) -> dict:
+        cmd = [str(_BILLING_PYTHON), str(_BILLING_MANAGE)] + [str(a) for a in args]
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=str(_BILLING_DIR),
+        )
+        stdout, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            return {"ok": False, "error": (stderr.decode(errors="replace") or stdout.decode(errors="replace")).strip()}
+        return {"ok": True}
+
+    @router.get("/customers", response_class=HTMLResponse)
+    async def customers_page(request: Request):
+        return templates.TemplateResponse(request, "customers.html")
+
+    @router.get("/customers/backfill", response_class=HTMLResponse)
+    async def customers_backfill_page(request: Request):
+        return templates.TemplateResponse(request, "customers/backfill.html")
+
+    @router.get("/api/customers/backfill")
+    async def run_backfill(
+        since: str = Query(...),
+        dry_run: str = Query("0"),
+    ):
+        args = [str(_BILLING_PYTHON), "-u", str(_BILLING_BACKFILL), "--since", since]
+        if dry_run == "1":
+            args.append("--dry-run")
+
+        async def event_stream():
+            process = await asyncio.create_subprocess_exec(
+                *args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                cwd=str(_BILLING_DIR),
+            )
+            async for line in process.stdout:
+                text = line.decode(errors="replace").rstrip()
+                yield f"data: {text}\n\n"
+            await process.wait()
+            yield f"data: [EXIT:{process.returncode}]\n\n"
+
+        return StreamingResponse(
+            event_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    @router.get("/customers/manage", response_class=HTMLResponse)
+    async def customers_manage_page(request: Request):
+        return templates.TemplateResponse(request, "customers/manage.html")
+
+    @router.get("/api/customers/manage/search")
+    async def manage_search(q: str = Query(...)):
+        return JSONResponse(content=await _run_manage_json(["search", q]))
+
+    @router.get("/api/customers/manage/agencies")
+    async def manage_agencies():
+        return JSONResponse(content=await _run_manage_json(["list-agencies"]))
+
+    @router.get("/api/customers/manage/advertisers")
+    async def manage_advertisers():
+        return JSONResponse(content=await _run_manage_json(["list-advertisers"]))
+
+    @router.get("/api/customers/manage/order/{contract}")
+    async def manage_order(contract: int):
+        return JSONResponse(content=await _run_manage_json(["show", contract]))
+
+    @router.get("/api/customers/manage/monthly/{contract}")
+    async def manage_monthly(contract: int):
+        return JSONResponse(content=await _run_manage_json(["monthly", contract]))
+
+    @router.get("/api/customers/manage/affidavits")
+    async def manage_affidavits(month: str = Query(...)):
+        return JSONResponse(content=await _run_manage_json(["affidavit", "list", month]))
+
+    @router.post("/api/customers/manage/set-agency")
+    async def manage_set_agency(body: dict = Body(...)):
+        args = ["set-agency", body.get("agency", "")]
+        edi = body.get("edi")
+        if edi is True:
+            args.append("--edi")
+        elif edi is False:
+            args.append("--no-edi")
+        notes = body.get("edi_notes")
+        if notes is not None:
+            args += ["--edi-notes", notes]
+        return JSONResponse(content=await _run_manage_write(args))
+
+    @router.post("/api/customers/manage/set-advertiser")
+    async def manage_set_advertiser(body: dict = Body(...)):
+        args = ["set-advertiser", body.get("advertiser", "")]
+        args.append("--notarized" if body.get("notarized") else "--no-notarized")
+        return JSONResponse(content=await _run_manage_write(args))
+
+    @router.post("/api/customers/manage/affidavit-status")
+    async def manage_affidavit_status(body: dict = Body(...)):
+        args = ["affidavit", "status", body.get("number", ""), body.get("status", "")]
+        return JSONResponse(content=await _run_manage_write(args))
+
+    @router.post("/api/customers/manage/remove-order")
+    async def manage_remove_order(body: dict = Body(...)):
+        args = ["remove-order", "--confirm", str(body.get("contract_number", ""))]
+        return JSONResponse(content=await _run_manage_write(args))
 
     return router

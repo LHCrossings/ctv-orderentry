@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Customer Database — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="back-link">&#8592;</a>
+            <div class="logo-icon">👥</div>
+            <div>
+                <h1>Customer <span>Database</span></h1>
+                <div class="logo-sub">Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="portal-intro">
+        <h2>Customer Database</h2>
+        <p>Manage the billing database — backfill order records and update agency/advertiser flags.</p>
+    </div>
+
+    <div class="module-grid">
+
+        <a href="/customers/backfill" class="module-card active">
+            <div class="module-icon">🔁</div>
+            <div class="module-body">
+                <div class="module-name">Backfill Database</div>
+                <div class="module-desc">Scan the client folder and populate the billing database with order records.</div>
+            </div>
+            <span class="module-badge live">Live</span>
+        </a>
+
+        <a href="/customers/manage" class="module-card active">
+            <div class="module-icon">🗃️</div>
+            <div class="module-body">
+                <div class="module-name">Manage Database</div>
+                <div class="module-desc">Search orders, view monthly breakdowns, and manage agency and advertiser flags.</div>
+            </div>
+            <span class="module-badge live">Live</span>
+        </a>
+
+    </div>
+</main>
+
+</body>
+</html>
