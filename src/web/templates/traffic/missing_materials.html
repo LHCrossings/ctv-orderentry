@@ -320,10 +320,11 @@ async function loadMissing() {
             throw new Error(err);
         }
         const data = await resp.json();
-        allRows = data.rows;
-        if (data.errors && data.errors.length) {
+        allRows = Array.isArray(data) ? data : (data.rows || []);
+        const errs = Array.isArray(data) ? [] : (data.errors || []);
+        if (errs.length) {
             document.getElementById('errorArea').innerHTML =
-                `<div class="alert-err" style="margin-bottom:12px">Some markets returned errors:<br>${data.errors.map(e => escHtml(e)).join('<br>')}</div>`;
+                `<div class="alert-err" style="margin-bottom:12px">Some markets returned errors:<br>${errs.map(e => escHtml(e)).join('<br>')}</div>`;
         }
         activeMarket = 'ALL';
         renderFilters();
