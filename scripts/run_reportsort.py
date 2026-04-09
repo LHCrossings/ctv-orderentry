@@ -47,12 +47,12 @@ def download_report(session, date_from: str, date_to: str) -> None:
 
     content_type = resp.headers.get("Content-Type", "")
     if "text/html" in content_type:
-        raise RuntimeError("Got HTML instead of CSV — session may have expired or report returned an error page.")
+        raise RuntimeError("Got HTML instead of CSV - session may have expired or report returned an error page.")
 
     INPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
     INPUT_CSV.write_bytes(resp.content)
     size_kb = len(resp.content) / 1024
-    print(f"[INFO] Saved {size_kb:.1f} KB → {INPUT_CSV}")
+    print(f"[INFO] Saved {size_kb:.1f} KB to {INPUT_CSV}")
 
 
 def run_sort(log_type: str) -> int:
