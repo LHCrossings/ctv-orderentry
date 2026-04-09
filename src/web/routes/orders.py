@@ -575,6 +575,58 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         return JSONResponse(content=detail)
 
     # ------------------------------------------------------------------
+    # Traffic
+    # ------------------------------------------------------------------
+
+    _MARKET_NAMES = {
+        1: "NYC", 2: "CMP", 3: "HOU", 4: "SFO", 5: "SEA",
+        6: "LAX", 7: "CVC", 8: "WDC", 9: "MMT", 10: "DAL",
+    }
+
+    @router.get("/traffic", response_class=HTMLResponse)
+    async def traffic_page(request: Request):
+        return templates.TemplateResponse(request, "traffic.html")
+
+    @router.get("/traffic/missing-materials", response_class=HTMLResponse)
+    async def traffic_missing_materials_page(request: Request):
+        return templates.TemplateResponse(request, "traffic/missing_materials.html")
+
+    @router.get("/api/traffic/missing-materials")
+    async def get_missing_materials(
+        date_from: str = Query(...),
+        date_to:   str = Query(...),
+    ):
+        def _query():
+            from browser_automation.etere_direct_client import connect as _db_connect
+            results = []
+            with _db_connect() as conn:
+                cursor = conn.cursor()
+                for cod_user, market_name in _MARKET_NAMES.items():
+                    try:
+                        cursor.execute(
+                            "EXEC dbo.rpt_trf_missing_material_list ?, ?, ?, ?, ?, ?, ?, ?",
+                            cod_user, date_from, date_to, "1", "1", "1", "0", None
+                        )
+                        for row in cursor.fetchall():
+                            results.append({
+                                "market":        market_name,
+                                "agency":        row.agency,
+                                "salesman":      row.salesman,
+                                "customer":      row.customer,
+                                "description":   row.description,
+                                "duration":      row.duration,
+                                "cod_progra":    row.cod_progra,
+                                "schedule_time": row.schedule_time.isoformat() if row.schedule_time else None,
+                                "status":        row.status,
+                            })
+                    except Exception:
+                        pass  # market may not exist in this DB
+            return results
+
+        rows = await asyncio.to_thread(_query)
+        return JSONResponse(content=rows)
+
+    # ------------------------------------------------------------------
     # Customer Database
     # ------------------------------------------------------------------
 
