@@ -86,11 +86,12 @@ def connect() -> pyodbc.Connection:
     )
 
 
-def etere_web_login() -> dict:
+def etere_web_login():
     """Log into the Etere web UI headlessly using requests.
 
     Reads credentials from credentials.env (same as Selenium login).
-    Returns a cookies dict ready to pass to EtereDirectClient.set_session_cookies().
+    Returns a live requests.Session ready to pass to EtereDirectClient.set_http_session().
+    The session carries all cookies and will reuse them across calls.
 
     Raises RuntimeError if login fails or no cookies are returned.
     """
@@ -141,15 +142,14 @@ def etere_web_login() -> dict:
         except Exception:
             pass  # best-effort; don't fail if a page 404s
 
-    cookies = dict(session.cookies)
-    if not cookies:
+    if not dict(session.cookies):
         raise RuntimeError(
             "Etere login returned no cookies — credentials may be wrong "
             "or the login endpoint has changed."
         )
 
-    print(f"[LOGIN] OK - Logged into Etere as {username} ({len(cookies)} cookie(s))")
-    return cookies
+    print(f"[LOGIN] OK - Logged into Etere as {username} ({len(dict(session.cookies))} cookie(s))")
+    return session
 
 
 # ── Constants ───────────────────────────────────────────────────────────────────
@@ -338,11 +338,23 @@ class EtereDirectClient:
         self._autocommit = autocommit
         self._master_market = "NYC"
         self._contract_id: Optional[int] = None
-        self._session_cookies: dict = {}   # populated via set_session_cookies()
+        self._http_session = None   # populated via set_http_session() or set_session_cookies()
+
+    def set_http_session(self, session) -> None:
+        """Pass a live requests.Session so HTTP calls can authenticate with Etere."""
+        self._http_session = session
 
     def set_session_cookies(self, cookies: dict) -> None:
-        """Pass browser session cookies so _assign_blocks_http can authenticate."""
-        self._session_cookies = cookies
+        """Pass browser session cookies (e.g. from Selenium) so HTTP calls can authenticate.
+        Creates a requests.Session and loads the cookies into it."""
+        try:
+            import requests as _req
+        except ImportError:
+            return
+        session = _req.Session()
+        for name, value in cookies.items():
+            session.cookies.set(name, value)
+        self._http_session = session
 
     # ── Market ──────────────────────────────────────────────────────────────────
 
@@ -833,8 +845,8 @@ EXEC web_sales_InsertContractLine
             print("[DIRECT]     ! requests not installed — skipping HTTP block assignment")
             return -1
 
-        if not self._session_cookies:
-            print("[DIRECT]     ! No session cookies — call set_session_cookies() first")
+        if not self._http_session:
+            print("[DIRECT]     ! No HTTP session — call set_http_session() first")
             return -1
 
         time_from = _frames_to_hhmm(start_frames)
@@ -864,7 +876,7 @@ EXEC web_sales_InsertContractLine
 
         url = f"{ETERE_WEB_URL}/sales/getautomaticcontractlineblockstable"
         try:
-            resp = _requests.post(url, json=payload, cookies=self._session_cookies, timeout=30)
+            resp = self._http_session.post(url, json=payload, timeout=30)
             resp.raise_for_status()
         except Exception as exc:
             print(f"[DIRECT]     X Block assignment HTTP error: {exc}")
@@ -968,12 +980,12 @@ EXEC web_sales_InsertContractLine
         except ImportError:
             return None
 
-        if not self._session_cookies:
+        if not self._http_session:
             return None
 
         url = f"{ETERE_WEB_URL}/sales/modalchangecontractline/{line_id}"
         try:
-            resp = _requests.get(url, cookies=self._session_cookies, timeout=15)
+            resp = self._http_session.get(url, timeout=15)
             resp.raise_for_status()
         except Exception as exc:
             print(f"[DIRECT]     ! Could not fetch line page: {exc}")

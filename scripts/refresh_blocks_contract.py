@@ -19,11 +19,11 @@ def main():
     contract_id = int(sys.argv[1]) if len(sys.argv) > 1 else 2611
 
     print(f"[INFO] Logging into Etere web UI ...")
-    cookies = etere_web_login()
+    session = etere_web_login()
 
     with connect() as conn:
         client = EtereDirectClient(conn, autocommit=False)
-        client.set_session_cookies(cookies)
+        client.set_http_session(session)
 
         line_ids = client.get_all_line_ids(contract_id)
         print(f"[INFO] Contract {contract_id}: {len(line_ids)} line(s) found")
