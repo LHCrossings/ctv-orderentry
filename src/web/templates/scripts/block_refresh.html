@@ -99,17 +99,6 @@
             transform: none;
         }
 
-        .notice-bar {
-            background: color-mix(in srgb, var(--nord13) 12%, var(--nord6));
-            border: 1px solid color-mix(in srgb, var(--nord13) 40%, transparent);
-            border-radius: 8px;
-            padding: 10px 14px;
-            font-size: 0.82rem;
-            color: var(--text-primary);
-            margin-bottom: 20px;
-            line-height: 1.5;
-        }
-
         /* Terminal output */
         .terminal {
             background: var(--nord0);
@@ -165,9 +154,6 @@
     <div class="tool-card">
         <h2>Refresh Contract Blocks</h2>
         <p>Clears and re-assigns programming blocks for every line in an Etere contract. Enter the contract number and click Run.</p>
-        <div class="notice-bar">
-            <strong>Before running:</strong> close your Etere browser session. The script must log in as you — if Etere is already open it will fail with a license error.
-        </div>
 
         <div class="input-row">
             <div class="field-group">
