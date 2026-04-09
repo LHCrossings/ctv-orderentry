@@ -144,7 +144,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 cursor = conn.cursor()
                 cursor.execute("""
                     SELECT ID_CONTRATTIRIGHE, DESCRIZIONE,
-                           COALESCE(DATA_INIZIO, DATESTART), COALESCE(DATA_FINE, DATEEND),
+                           COALESCE(DATESTART, DATA_INIZIO), COALESCE(DATEEND, DATA_FINE),
                            COALESCE(ORA_INIZIOF, ORA_INIZIO), COALESCE(ORA_FINEF, ORA_FINE),
                            LUNEDI, MARTEDI, MERCOLEDI, GIOVEDI, VENERDI, SABATO, DOMENICA,
                            DURATA, PASSAGGI_SETTIMANALI,
