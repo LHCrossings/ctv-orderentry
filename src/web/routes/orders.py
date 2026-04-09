@@ -614,23 +614,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 out["stations"] = [{"cod_user": c, "nome": n} for c, n in stations]
                 out["markets"] = []
 
-                # Try SP with raw SQL string (no pyodbc binding) on a fresh connection
-                d1 = dt_from.strftime('%Y-%m-%d')
-                d2 = dt_to.strftime('%Y-%m-%d')
+                # Check which database we're connected to and what others exist
                 try:
                     with _db_connect() as conn2:
-                        sp_raw = conn2.cursor()
-                        sp_raw.execute(
-                            f"EXEC dbo.rpt_trf_missing_material_list 7, '{d1}', '{d2}', '1', '1', '1', '0', NULL"
-                        )
-                        while sp_raw.description is None:
-                            if not sp_raw.nextset():
-                                break
-                        rows_raw = sp_raw.fetchall() if sp_raw.description else []
-                        out["sp_raw_sql_cvc_count"] = len(rows_raw)
-                        out["sp_raw_sql_first_row"] = [str(v) for v in rows_raw[0]] if rows_raw else None
+                        cur_db = conn2.cursor()
+                        cur_db.execute("SELECT DB_NAME()")
+                        out["current_db"] = cur_db.fetchone()[0]
+                        cur_db.execute("SELECT name FROM sys.databases WHERE name NOT IN ('master','tempdb','model','msdb') ORDER BY name")
+                        out["all_databases"] = [r[0] for r in cur_db.fetchall()]
                 except Exception as e:
-                    out["sp_raw_sql_error"] = str(e)
+                    out["db_check_error"] = str(e)
 
                 for cod_user, nome in stations:
                     try:
