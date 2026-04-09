@@ -201,11 +201,11 @@ main {
 
 .back-link,
 .back-link:visited {
-    color: var(--nord4);
+    color: var(--nord6);
     text-decoration: none;
     font-size: 1.1rem;
     padding: 4px 8px 4px 0;
-    opacity: 0.6;
+    opacity: 0.85;
     transition: opacity 0.15s;
     line-height: 1;
 }
