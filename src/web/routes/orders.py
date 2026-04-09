@@ -587,6 +587,54 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def traffic_page(request: Request):
         return templates.TemplateResponse(request, "traffic.html")
 
+    @router.get("/api/traffic/diagnose-missing")
+    async def diagnose_missing(
+        date_from: str = Query(...),
+        date_to:   str = Query(...),
+    ):
+        from datetime import datetime as _dt
+
+        def _parse_date(s: str):
+            for fmt in ("%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d"):
+                try:
+                    return _dt.strptime(s.strip(), fmt)
+                except ValueError:
+                    pass
+            raise ValueError(f"Unrecognized date: {s!r}")
+
+        def _run():
+            from browser_automation.etere_direct_client import connect as _db_connect
+            out = {}
+            dt_from = _parse_date(date_from)
+            dt_to   = _parse_date(date_to)
+            with _db_connect() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT DISTINCT cod_user, nome FROM users ORDER BY cod_user")
+                stations = [(row[0], row[1]) for row in cur.fetchall()]
+                out["stations"] = [{"cod_user": c, "nome": n} for c, n in stations]
+
+                if stations:
+                    cod_user, nome = stations[0]
+                    cur.execute(
+                        "EXEC dbo.rpt_trf_missing_material_list ?, ?, ?, ?, ?, ?, ?, ?",
+                        cod_user, dt_from, dt_to, "1", "1", "1", "0", None
+                    )
+                    while cur.description is None:
+                        if not cur.nextset():
+                            break
+                    if cur.description:
+                        out["sp_columns"] = [d[0] for d in cur.description]
+                        rows = cur.fetchall()
+                        out["sp_row_count"] = len(rows)
+                        out["sp_first_row"] = list(rows[0]) if rows else None
+                    else:
+                        out["sp_columns"] = None
+                        out["sp_row_count"] = 0
+            return out
+
+        result = await asyncio.to_thread(_run)
+        return JSONResponse(content=result)
+
     @router.get("/traffic/missing-materials", response_class=HTMLResponse)
     async def traffic_missing_materials_page(request: Request):
         return templates.TemplateResponse(request, "traffic/missing_materials.html")
