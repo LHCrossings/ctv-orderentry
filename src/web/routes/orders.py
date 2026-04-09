@@ -639,7 +639,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 except Exception as e:
                     out["material_schema_error"] = str(e)
 
-                # Direct spot count for CVC in range (confirms data exists)
+                # Direct spot count for CVC in range
                 try:
                     cnt_cur = conn.cursor()
                     cnt_cur.execute("""
@@ -654,31 +654,50 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 except Exception as e:
                     out["cvc_spot_counts_error"] = str(e)
 
-                # Try SP with explicit date cast to rule out type mismatch
+                # Check STATUS_MM distribution on linked FILMATI records for CVC
                 try:
-                    sp2_cur = conn.cursor()
-                    sp2_cur.execute("""
+                    smm_cur = conn.cursor()
+                    smm_cur.execute("""
+                        SELECT f.STATUS_MM, COUNT(*) as cnt
+                        FROM TPalinseSpotsInCluster s
+                        JOIN FILMATI f ON f.ID_FILMATI = s.ID_FILMATI
+                        WHERE s.DATA BETWEEN ? AND ? AND s.COD_USER = 7
+                        GROUP BY f.STATUS_MM
+                        ORDER BY cnt DESC
+                    """, dt_from, dt_to)
+                    out["cvc_status_mm"] = [{"status_mm": str(r[0]), "count": r[1]} for r in smm_cur.fetchall()]
+                except Exception as e:
+                    out["cvc_status_mm_error"] = str(e)
+
+                # Check FS_FILMATI.FLAG_OFFLINE for CVC spots
+                try:
+                    off_cur = conn.cursor()
+                    off_cur.execute("""
+                        SELECT fs.FLAG_OFFLINE, COUNT(*) as cnt
+                        FROM TPalinseSpotsInCluster s
+                        JOIN FS_FILMATI fs ON fs.ID_FILMATI = s.ID_FILMATI
+                        WHERE s.DATA BETWEEN ? AND ? AND s.COD_USER = 7
+                        GROUP BY fs.FLAG_OFFLINE
+                    """, dt_from, dt_to)
+                    out["cvc_flag_offline"] = [{"flag_offline": str(r[0]), "count": r[1]} for r in off_cur.fetchall()]
+                except Exception as e:
+                    out["cvc_flag_offline_error"] = str(e)
+
+                # Try SP with wider date range (today → 5/31) to check if date range is the issue
+                try:
+                    wide_cur = conn.cursor()
+                    wide_cur.execute("""
                         EXEC dbo.rpt_trf_missing_material_list
-                            @cod_user=7,
-                            @startDate=?,
-                            @endDate=?,
+                            @cod_user=7, @startDate=?, @endDate=?,
                             @viewNM='1', @viewNA='1', @viewNR='1',
                             @orderBy='3', @codeStart=NULL
-                    """, dt_from, dt_to)
-                    while sp2_cur.description is None:
-                        if not sp2_cur.nextset():
+                    """, _dt(2026, 1, 1), _dt(2026, 12, 31))
+                    while wide_cur.description is None:
+                        if not wide_cur.nextset():
                             break
-                    if sp2_cur.description:
-                        cols = [d[0] for d in sp2_cur.description]
-                        rows = sp2_cur.fetchall()
-                        out["sp_named_params"] = {
-                            "cols": cols, "row_count": len(rows),
-                            "first_row": [str(v) for v in rows[0]] if rows else None,
-                        }
-                    else:
-                        out["sp_named_params"] = {"error": "no result set"}
+                    out["sp_wide_range"] = {"row_count": len(wide_cur.fetchall())} if wide_cur.description else {"error": "no result set"}
                 except Exception as e:
-                    out["sp_named_params_error"] = str(e)
+                    out["sp_wide_range_error"] = str(e)
 
             # --- connection 2: SP calls with ARITHABORT ON (clean slate) ---
             out["markets"] = []
