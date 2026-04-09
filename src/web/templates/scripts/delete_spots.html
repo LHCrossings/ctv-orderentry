@@ -183,11 +183,11 @@
             </div>
             <div class="field-group date">
                 <label class="field-label" for="dateFrom">From Date</label>
-                <input id="dateFrom" class="field-input" type="text" placeholder="MM/DD/YYYY" />
+                <input id="dateFrom" class="field-input" type="text" placeholder="MM/DD/YYYY" onblur="formatDate(this)" />
             </div>
             <div class="field-group date">
                 <label class="field-label" for="dateTo">To Date</label>
-                <input id="dateTo" class="field-input" type="text" placeholder="MM/DD/YYYY" />
+                <input id="dateTo" class="field-input" type="text" placeholder="MM/DD/YYYY" onblur="formatDate(this)" />
             </div>
             <div class="btn-row">
                 <button id="previewBtn" class="run-btn btn-preview" onclick="runScript(false)">&#128269; Preview</button>
@@ -200,6 +200,15 @@
 </main>
 
 <script>
+function formatDate(el) {
+    const d = el.value.replace(/\D/g, '');
+    if (d.length === 6) {
+        el.value = d.slice(0,2) + '/' + d.slice(2,4) + '/20' + d.slice(4,6);
+    } else if (d.length === 8) {
+        el.value = d.slice(0,2) + '/' + d.slice(2,4) + '/' + d.slice(4,8);
+    }
+}
+
 function getInputs() {
     const contractId = document.getElementById('contractInput').value.trim();
     const dateFrom   = document.getElementById('dateFrom').value.trim();
