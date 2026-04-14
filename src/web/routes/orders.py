@@ -23,7 +23,7 @@ from orchestration.config import ApplicationConfig
 from orchestration.order_scanner import OrderScanner
 from web.parser_bridge import get_order_detail
 
-_ALLOWED_EXTENSIONS = {".pdf", ".xml", ".xlsx", ".jpg", ".jpeg", ".png"}
+_ALLOWED_EXTENSIONS = {".pdf", ".xml", ".xlsx", ".xlsm", ".jpg", ".jpeg", ".png"}
 
 
 def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRouter:
