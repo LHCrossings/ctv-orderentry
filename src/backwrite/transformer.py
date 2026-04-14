@@ -23,9 +23,7 @@ from io import BytesIO
 from typing import Dict, List, Optional, Tuple
 
 import openpyxl
-from openpyxl.styles import Alignment, Font
-from openpyxl.utils import get_column_letter
-
+from openpyxl.styles import Font
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONSTANTS
@@ -407,23 +405,31 @@ def _build_sales_confirmation(
     ws.cell(1, 6, "SALES CONFIRMATION - CROSSINGS TV").font = Font(bold=True, size=14)
 
     # ── Contact block (left) / Order block (right) ────────────────────────
-    label(2,  2, "Client");           ws.cell(2,  4, header.agency)
-    label(2,  9, "Advertiser");       ws.cell(2, 12, header.client)
-    label(3,  2, "Contact")
-    label(3,  9, "Estimate");         ws.cell(3, 12, estimate)
-    label(4,  2, "Address");          ws.cell(4,  4, header.address)
-    label(4,  9, "Billing Type");     ws.cell(4, 12, billing_type)
-    ws.cell(5,  4, header.city)
-    label(5,  9, "Market");           ws.cell(5, 12, market)
-    label(6,  2, "Phone")
-    label(6,  9, "Date Order Written")
+    label(2, 2, "Client")
+    ws.cell(2, 4, header.agency)
+    label(2, 9, "Advertiser")
+    ws.cell(2, 12, header.client)
+    label(3, 2, "Contact")
+    label(3, 9, "Estimate")
+    ws.cell(3, 12, estimate)
+    label(4, 2, "Address")
+    ws.cell(4, 4, header.address)
+    label(4, 9, "Billing Type")
+    ws.cell(4, 12, billing_type)
+    ws.cell(5, 4, header.city)
+    label(5, 9, "Market")
+    ws.cell(5, 12, market)
+    label(6, 2, "Phone")
+    label(6, 9, "Date Order Written")
     date_cell = ws.cell(6, 12, datetime.today().date())
     date_cell.number_format = "m/d/yy"
-    label(7,  2, "Fax")
-    label(7,  9, "Contract Number");  ws.cell(7, 12, contract)
-    label(8,  2, "Email")
-    label(8,  9, "Revision");         ws.cell(8, 12, 0)
-    label(9,  9, "Station Representative")
+    label(7, 2, "Fax")
+    label(7, 9, "Contract Number")
+    ws.cell(7, 12, contract)
+    label(8, 2, "Email")
+    label(8, 9, "Revision")
+    ws.cell(8, 12, 0)
+    label(9, 9, "Station Representative")
     ws.cell(9, 11, sales_person)
 
     # ── Line item header (row 10) ─────────────────────────────────────────
@@ -486,7 +492,8 @@ def _build_sales_confirmation(
 
     ws.cell(current_row, 15, "Grand Total").font = bold
     gt = ws.cell(current_row, 16, round(total_gross, 2))
-    gt.font = bold;  gt.number_format = "$#,##0.00"
+    gt.font = bold
+    gt.number_format = "$#,##0.00"
     current_row += 1
 
     if is_agency:
@@ -500,7 +507,8 @@ def _build_sales_confirmation(
 
         ws.cell(current_row, 15, "Net Total").font = bold
         n_cell = ws.cell(current_row, 16, net_tot)
-        n_cell.font = bold;  n_cell.number_format = "$#,##0.00"
+        n_cell.font = bold
+        n_cell.number_format = "$#,##0.00"
         current_row += 1
 
     current_row += 1  # blank
@@ -539,9 +547,11 @@ def _build_sales_confirmation(
 
     ws.cell(current_row, 2, "Total").font = bold
     tg = ws.cell(current_row, 4, round(total_m_gross, 2))
-    tg.font = bold;  tg.number_format = "$#,##0.00"
+    tg.font = bold
+    tg.number_format = "$#,##0.00"
     tn = ws.cell(current_row, 5, round(total_m_net, 2))
-    tn.font = bold;  tn.number_format = "$#,##0.00"
+    tn.font = bold
+    tn.number_format = "$#,##0.00"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
