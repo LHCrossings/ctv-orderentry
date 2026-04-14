@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from orchestration.config import ApplicationConfig
+from web.routes.backwrite import build_backwrite_router
 from web.routes.orders import build_router
 
 # ---------------------------------------------------------------------------
@@ -35,6 +36,7 @@ def create_app(config: ApplicationConfig | None = None) -> FastAPI:
     templates = Jinja2Templates(directory=str(templates_dir))
 
     app.include_router(build_router(config, templates))
+    app.include_router(build_backwrite_router(templates))
 
     return app
 

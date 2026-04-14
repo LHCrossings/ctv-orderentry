@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Backwrite – CTV Order Entry</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/app.css" />
+    <style>
+        .bw-card {
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 28px 32px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+        }
+        .bw-card h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin: 0 0 18px 0;
+        }
+        .upload-zone {
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 32px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            position: relative;
+        }
+        .upload-zone:hover, .upload-zone.drag-over {
+            border-color: var(--accent-primary);
+            background: #f0f4f8;
+        }
+        .upload-zone input[type=file] {
+            position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+        }
+        .upload-zone .upload-icon { font-size: 2rem; margin-bottom: 8px; }
+        .upload-zone p { margin: 4px 0; color: var(--text-secondary); font-size: 0.9rem; }
+        .upload-zone .file-name {
+            margin-top: 10px;
+            font-weight: 600;
+            color: var(--accent-primary);
+            font-size: 0.9rem;
+        }
+        .preview-box {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px 20px;
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+        }
+        .preview-box .preview-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px 24px;
+        }
+        .preview-box .prow { display: flex; gap: 8px; align-items: baseline; }
+        .preview-box .plabel { color: var(--text-secondary); min-width: 100px; font-size: 0.82rem; }
+        .preview-box .pval { font-weight: 600; color: var(--text-primary); }
+        .preview-badge {
+            display: inline-block;
+            background: var(--nord14);
+            color: white;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 12px;
+            margin-left: 6px;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px 28px;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .form-group label {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .form-group input,
+        .form-group select {
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 0.92rem;
+            color: var(--text-primary);
+            background: white;
+            transition: border-color 0.15s;
+        }
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+        }
+        .form-group.full { grid-column: 1 / -1; }
+        #agency-fee-group { transition: opacity 0.2s; }
+        #agency-fee-group.hidden { opacity: 0; pointer-events: none; }
+        .btn-generate {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 11px 28px;
+            background: var(--accent-primary);
+            color: white;
+            border: none;
+            border-radius: 7px;
+            font-family: inherit;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s, opacity 0.15s;
+            margin-top: 8px;
+        }
+        .btn-generate:hover:not(:disabled) { background: var(--nord10); }
+        .btn-generate:disabled { opacity: 0.5; cursor: not-allowed; }
+        .status-msg {
+            font-size: 0.88rem;
+            padding: 8px 14px;
+            border-radius: 6px;
+            margin-top: 12px;
+            display: none;
+        }
+        .status-msg.error { background: #fde8ea; color: var(--accent-danger); display: block; }
+        .status-msg.info  { background: #e6f4ea; color: #2d6a4f; display: block; }
+        .section-divider {
+            height: 1px;
+            background: var(--border-color);
+            margin: 24px 0;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="back-link">&#8592;</a>
+            <div class="logo-icon">📊</div>
+            <div>
+                <h1>CTV <span>Order Entry</span></h1>
+                <div class="logo-sub">Backwrite</div>
+            </div>
+        </div>
+        <span class="header-badge">Sales Confirmation</span>
+    </div>
+</header>
+
+<main style="max-width: 820px; margin: 0 auto; padding: 24px 16px;">
+
+    <!-- Step 1: Upload CSV -->
+    <div class="bw-card" id="upload-card">
+        <h2>Step 1 — Upload Placement CSV</h2>
+        <div class="upload-zone" id="upload-zone">
+            <input type="file" id="csv-input" accept=".csv" />
+            <div class="upload-icon">📂</div>
+            <p>Drop placement confirmation CSV here</p>
+            <p>or click to browse</p>
+            <div class="file-name" id="csv-filename"></div>
+        </div>
+        <div class="status-msg" id="upload-status"></div>
+    </div>
+
+    <!-- Preview panel (hidden until CSV parsed) -->
+    <div class="bw-card" id="preview-card" style="display:none">
+        <h2>Order Summary</h2>
+        <div class="preview-box">
+            <div class="preview-grid" id="preview-grid"></div>
+        </div>
+    </div>
+
+    <!-- Step 2: Form (hidden until CSV parsed) -->
+    <div class="bw-card" id="form-card" style="display:none">
+        <h2>Step 2 — Fill In Details</h2>
+
+        <form id="bw-form" method="POST" action="/backwrite/generate" enctype="multipart/form-data">
+            <!-- Hidden file field mirrors the uploaded CSV -->
+            <input type="file" name="csv_file" id="form-csv-input" style="display:none" />
+
+            <div class="form-grid">
+
+                <div class="form-group">
+                    <label for="estimate">Estimate #</label>
+                    <input type="text" name="estimate" id="estimate" placeholder="e.g. 13932" />
+                </div>
+
+                <div class="form-group">
+                    <label for="contract">Contract #</label>
+                    <input type="text" name="contract" id="contract" placeholder="e.g. 2675" />
+                </div>
+
+                <div class="form-group">
+                    <label for="sales_person">Sales Person</label>
+                    <input type="text" name="sales_person" id="sales_person"
+                           list="sales-people-list" placeholder="Charmaine Lane" />
+                    <datalist id="sales-people-list">
+                        {% for sp in sales_people %}
+                        <option value="{{ sp }}">
+                        {% endfor %}
+                    </datalist>
+                </div>
+
+                <div class="form-group">
+                    <label for="billing_type">Billing Type</label>
+                    <select name="billing_type" id="billing_type">
+                        <option value="Broadcast" selected>Broadcast</option>
+                        <option value="Calendar">Calendar</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="revenue_type">Revenue Type</label>
+                    <select name="revenue_type" id="revenue_type">
+                        {% for rt in revenue_types %}
+                        <option value="{{ rt }}"{% if rt == "Internal Ad Sales" %} selected{% endif %}>{{ rt }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="agency_flag">Agency / Direct</label>
+                    <select name="agency_flag" id="agency_flag" onchange="toggleAgencyFee()">
+                        <option value="Agency" selected>Agency</option>
+                        <option value="Direct">Direct</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="agency-fee-group">
+                    <label for="agency_fee">Agency Fee %</label>
+                    <input type="number" name="agency_fee" id="agency_fee"
+                           value="15" min="0" max="100" step="0.1" />
+                </div>
+
+                <div class="form-group">
+                    <label for="affidavit">Affidavit</label>
+                    <select name="affidavit" id="affidavit">
+                        <option value="Y" selected>Y — Yes</option>
+                        <option value="N">N — No</option>
+                    </select>
+                </div>
+
+            </div>
+
+            <div class="section-divider"></div>
+
+            <button type="submit" class="btn-generate" id="generate-btn" disabled>
+                &#8595; Generate Excel
+            </button>
+            <div class="status-msg" id="form-status"></div>
+        </form>
+    </div>
+
+</main>
+
+<script>
+const csvInput     = document.getElementById('csv-input');
+const csvFilename  = document.getElementById('csv-filename');
+const uploadStatus = document.getElementById('upload-status');
+const previewCard  = document.getElementById('preview-card');
+const formCard     = document.getElementById('form-card');
+const previewGrid  = document.getElementById('preview-grid');
+const generateBtn  = document.getElementById('generate-btn');
+const formStatus   = document.getElementById('form-status');
+const formCsvInput = document.getElementById('form-csv-input');
+const bwForm       = document.getElementById('bw-form');
+
+let uploadedFile = null;
+
+// ── Upload zone drag/drop ────────────────────────────────────────────────
+const uploadZone = document.getElementById('upload-zone');
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadZone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f) handleFile(f);
+});
+
+csvInput.addEventListener('change', () => {
+    if (csvInput.files[0]) handleFile(csvInput.files[0]);
+});
+
+function showStatus(el, msg, type) {
+    el.textContent = msg;
+    el.className = 'status-msg ' + type;
+}
+
+function handleFile(file) {
+    if (!file.name.endsWith('.csv')) {
+        showStatus(uploadStatus, 'Please select a CSV file.', 'error');
+        return;
+    }
+    uploadedFile = file;
+    csvFilename.textContent = file.name;
+    showStatus(uploadStatus, 'Parsing...', 'info');
+    previewCSV(file);
+}
+
+function previewCSV(file) {
+    const fd = new FormData();
+    fd.append('csv_file', file);
+
+    fetch('/backwrite/preview', { method: 'POST', body: fd })
+        .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
+        .then(data => {
+            uploadStatus.style.display = 'none';
+            showPreview(data);
+            prefillForm(data);
+            previewCard.style.display = 'block';
+            formCard.style.display    = 'block';
+            generateBtn.disabled      = false;
+        })
+        .catch(err => {
+            showStatus(uploadStatus, 'Error: ' + err, 'error');
+        });
+}
+
+function showPreview(d) {
+    const items = [
+        ['Agency',     d.agency],
+        ['Client',     d.client],
+        ['Contract',   d.contract_code],
+        ['Markets',    d.markets.join(', ')],
+        ['Air Dates',  d.date_range.start + ' – ' + d.date_range.end],
+        ['Lines',      d.line_count + ' contract lines'],
+        ['Spots',      d.spot_count + ' spots aired'],
+        ['Description',d.description],
+    ];
+    previewGrid.innerHTML = items.map(([k, v]) =>
+        `<div class="prow"><span class="plabel">${k}</span><span class="pval">${v || '—'}</span></div>`
+    ).join('');
+}
+
+function prefillForm(d) {
+    if (d.estimate_hint) document.getElementById('estimate').value = d.estimate_hint;
+}
+
+// ── Agency fee toggle ────────────────────────────────────────────────────
+function toggleAgencyFee() {
+    const isAgency = document.getElementById('agency_flag').value === 'Agency';
+    document.getElementById('agency-fee-group').classList.toggle('hidden', !isAgency);
+}
+
+// ── Form submit → download ───────────────────────────────────────────────
+bwForm.addEventListener('submit', async e => {
+    e.preventDefault();
+
+    if (!uploadedFile) {
+        showStatus(formStatus, 'No CSV file uploaded.', 'error');
+        return;
+    }
+
+    generateBtn.disabled  = true;
+    generateBtn.textContent = '⏳ Generating...';
+
+    const fd = new FormData(bwForm);
+    // Replace the hidden file input with the actual uploaded file
+    fd.set('csv_file', uploadedFile, uploadedFile.name);
+
+    try {
+        const resp = await fetch('/backwrite/generate', { method: 'POST', body: fd });
+        if (!resp.ok) {
+            const err = await resp.text();
+            throw new Error(err);
+        }
+
+        const blob = await resp.blob();
+        const disp  = resp.headers.get('Content-Disposition') || '';
+        const match = disp.match(/filename="([^"]+)"/);
+        const fname = match ? match[1] : 'backwrite.xlsx';
+
+        const url  = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fname;
+        link.click();
+        URL.revokeObjectURL(url);
+
+        showStatus(formStatus, `Downloaded: ${fname}`, 'info');
+    } catch (err) {
+        showStatus(formStatus, 'Error: ' + err.message, 'error');
+    } finally {
+        generateBtn.disabled = false;
+        generateBtn.textContent = '↓ Generate Excel';
+    }
+});
+</script>
+</body>
+</html>
