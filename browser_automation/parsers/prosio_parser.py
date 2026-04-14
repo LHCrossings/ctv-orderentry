@@ -146,7 +146,7 @@ def _station_to_market(station: str) -> str:
 
 def _date_to_mon_dd(dt: datetime) -> str:
     """Convert a datetime to 'Jun 8' format for EtereClient.consolidate_weeks."""
-    return dt.strftime("%b %-d")
+    return dt.strftime("%b") + " " + str(dt.day)  # portable across Linux and Windows
 
 
 def _parse_flight_dates(airtime_str: str) -> tuple[str, str]:
