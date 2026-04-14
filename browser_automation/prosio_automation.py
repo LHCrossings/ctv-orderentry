@@ -290,7 +290,6 @@ def _create_prosio_contract(
                     separation_intervals=separation,
                     is_bookend=False,
                     is_billboard=False,
-                    block_prefixes=line.get_block_prefixes(),
                 )
 
                 if not success:
