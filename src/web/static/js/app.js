@@ -30,7 +30,10 @@ dropZone.addEventListener('drop', e => {
     Array.from(e.dataTransfer.files).forEach(uploadFile);
 });
 
-dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('click', e => {
+    if (e.target.closest('label') || e.target === fileInput) return;
+    fileInput.click();
+});
 fileInput.addEventListener('change', () => {
     Array.from(fileInput.files).forEach(uploadFile);
     fileInput.value = '';
