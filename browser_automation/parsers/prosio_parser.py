@@ -314,7 +314,8 @@ def parse_prosio_excel(file_path: str) -> ProsioOrder:
         is_bonus = str(col_b or "").strip().upper() == "BONUS"
         language = str(col_c or "").strip()
         length   = str(col_d or ":30").strip()
-        daypart  = str(col_e or "").strip()
+        # Normalise "M- Sun 8p-9p" → "M-Sun 8p-9p" (Excel sometimes adds a space after dash)
+        daypart  = re.sub(r'([A-Za-z])-\s+', r'\1-', str(col_e or "").strip())
 
         try:
             rate = Decimal(str(col_f or "0")).quantize(Decimal("0.01"))

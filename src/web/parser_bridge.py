@@ -43,6 +43,7 @@ _REGISTRY = {
     "TIMEADVERTISING":  ("browser_automation.parsers.timeadvertising_parser",  "parse_timeadvertising_pdf"),
     "WORLDLINK":        ("browser_automation.parsers.worldlink_parser",        "parse_worldlink_pdf"),
     "XML":              ("browser_automation.parsers.aaaa_xml_parser",         "parse_aaaa_xml"),
+    "PROSIO":           ("browser_automation.parsers.prosio_parser",           "parse_prosio_excel"),
 }
 
 _MISSING = object()
