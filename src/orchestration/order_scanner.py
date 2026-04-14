@@ -33,6 +33,9 @@ def _detect_xlsx_content(file_path: Path) -> OrderType:
                 if "IMPRENTA" in v:
                     wb.close()
                     return OrderType.IMPRENTA
+                if "PROSIO" in v:
+                    wb.close()
+                    return OrderType.PROSIO
         wb.close()
     except Exception:
         pass
@@ -188,7 +191,8 @@ class OrderScanner:
         image_xlsx_files: list[Path] = []
         seen: set[Path] = set()
         for pattern in ("*.jpg", "*.JPG", "*.jpeg", "*.JPEG",
-                         "*.png", "*.PNG", "*.xlsx", "*.XLSX"):
+                         "*.png", "*.PNG", "*.xlsx", "*.XLSX",
+                         "*.xlsm", "*.XLSM"):
             for p in self._incoming_dir.glob(pattern):
                 if p not in seen and not p.name.startswith("~$"):
                     seen.add(p)
@@ -199,8 +203,8 @@ class OrderScanner:
             try:
                 order_type = detect_from_filename(file_path.name)
 
-                # For XLSX files not identified by filename, peek inside for agency markers
-                if order_type == OrderType.UNKNOWN and file_path.suffix.lower() == ".xlsx":
+                # For XLSX/XLSM files not identified by filename, peek inside for agency markers
+                if order_type == OrderType.UNKNOWN and file_path.suffix.lower() in {".xlsx", ".xlsm"}:
                     order_type = _detect_xlsx_content(file_path)
 
                 if order_type == OrderType.UNKNOWN:
@@ -212,6 +216,8 @@ class OrderScanner:
                     customer_name = "Lexus"
                 elif order_type == OrderType.IMPRENTA:
                     customer_name = "PG&E"
+                elif order_type == OrderType.PROSIO:
+                    customer_name = "AQMD"
                 else:
                     customer_name = "Unknown"
 

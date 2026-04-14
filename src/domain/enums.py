@@ -35,6 +35,7 @@ class OrderType(Enum):
     SACCOUNTYVOTERS = "saccountyvoters"
     SCWA = "scwa"
     HYPHEN = "hyphen"
+    PROSIO = "prosio"
     XML = "xml"
     UNKNOWN = "unknown"
 
@@ -288,6 +289,7 @@ class SeparationInterval(Enum):
     SACCOUNTYVOTERS = (15, 0, 0)
     SCWA = (15, 0, 0)
     HYPHEN = (25, 0, 0)
+    PROSIO = (15, 0, 0)
     DEFAULT = (15, 0, 0)
 
     @classmethod
@@ -315,5 +317,6 @@ class SeparationInterval(Enum):
             OrderType.SACCOUNTYVOTERS: cls.SACCOUNTYVOTERS.value,
             OrderType.SCWA: cls.SCWA.value,
             OrderType.HYPHEN: cls.HYPHEN.value,
+            OrderType.PROSIO: cls.PROSIO.value,
         }
         return mapping.get(order_type, cls.DEFAULT.value)

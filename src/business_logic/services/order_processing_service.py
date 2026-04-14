@@ -86,6 +86,7 @@ class OrderProcessingService:
         OrderType.WORLDLINK:        "_process_worldlink_order",
         OrderType.SACCOUNTYVOTERS:  "_process_saccountyvoters_order",
         OrderType.SCWA:             "_process_scwa_order",
+        OrderType.PROSIO:           "_process_prosio_order",
     }
 
     def __init__(
@@ -159,6 +160,7 @@ class OrderProcessingService:
                     OrderType.IMPRENTA,
                     OrderType.SACCOUNTYVOTERS,
                     OrderType.SCWA,
+                    OrderType.PROSIO,
                 ]
                 for order in orders
             )
@@ -1020,6 +1022,79 @@ class OrderProcessingService:
             print(f"\n✗ Hyphen processing failed: {exc}")
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.HYPHEN,
+                error_message=error_detail,
+            )
+
+    def _run_prosio_with_driver(
+        self, order: Order, driver: Any, session: Any, pre_gathered_inputs: Any, process_fn: Any
+    ) -> ProcessingResult:
+        """Call Prosio processor with an already-open driver and build ProcessingResult."""
+        success = process_fn(
+            driver,
+            str(order.pdf_path),
+            shared_session=session,
+            pre_gathered_inputs=pre_gathered_inputs,
+        )
+        if success:
+            print("\n✓ Prosio order processed successfully")
+            return ProcessingResult(success=True, contracts=[], order_type=OrderType.PROSIO)
+        print("\n✗ Prosio order processing failed")
+        return ProcessingResult(
+            success=False, contracts=[], order_type=OrderType.PROSIO,
+            error_message="Prosio processing failed - check browser output for details",
+        )
+
+    def _process_prosio_order(
+        self,
+        order: Order,
+        shared_session: Any,
+    ) -> ProcessingResult:
+        """
+        Process a Prosio Media Contract Excel order.
+
+        Single-market orders (typically CVC for Sacramento). Master market is NYC.
+        """
+        try:
+            from prosio_automation import process_prosio_order
+
+            print(f"\n{'='*70}")
+            print("PROCESSING PROSIO ORDER")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            print(f"{'='*70}\n")
+
+            pre_gathered_inputs = order.order_input if order.order_input else None
+
+            if shared_session is None:
+                try:
+                    from etere_session import EtereSession
+                except ImportError:
+                    print("[ERROR] Could not import EtereSession")
+                    return ProcessingResult(
+                        success=False, contracts=[], order_type=OrderType.PROSIO,
+                        error_message="EtereSession import failed",
+                    )
+                print("[SESSION] Creating browser session for Prosio order...")
+                with EtereSession() as session:
+                    session.set_market("NYC")
+                    print("[SESSION] Master market set to NYC")
+                    return self._run_prosio_with_driver(
+                        order, session.driver, session, pre_gathered_inputs, process_prosio_order
+                    )
+
+            if hasattr(shared_session, 'set_market'):
+                print("[SESSION] ✓ Using shared browser session (market pre-set to NYC)")
+            driver = shared_session.driver if hasattr(shared_session, 'driver') else shared_session
+            return self._run_prosio_with_driver(
+                order, driver, shared_session, pre_gathered_inputs, process_prosio_order
+            )
+
+        except Exception as exc:
+            import traceback
+            error_detail = f"Prosio processing error: {str(exc)}\n{traceback.format_exc()}"
+            print(f"\n✗ Prosio processing failed: {exc}")
+            return ProcessingResult(
+                success=False, contracts=[], order_type=OrderType.PROSIO,
                 error_message=error_detail,
             )
 
