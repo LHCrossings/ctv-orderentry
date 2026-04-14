@@ -64,6 +64,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def portal(request: Request):
         return templates.TemplateResponse(request, "portal.html")
 
+    @router.get("/orders", response_class=HTMLResponse)
+    async def orders_hub(request: Request):
+        return templates.TemplateResponse(request, "orders_hub.html")
+
     @router.get("/order-entry", response_class=HTMLResponse)
     async def index(request: Request):
         return templates.TemplateResponse(request, "index.html")
