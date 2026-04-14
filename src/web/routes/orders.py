@@ -466,8 +466,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     @router.post("/api/run")
     async def run_queue(files: list[str] = Body(default=[])):
-        if not any(config.incoming_dir.glob("*.pdf")):
-            raise HTTPException(status_code=400, detail="No PDF orders in queue.")
+        _order_patterns = ("*.pdf", "*.xml", "*.xlsx", "*.xlsm", "*.jpg", "*.jpeg", "*.png")
+        if not any(f for pat in _order_patterns for f in config.incoming_dir.glob(pat)):
+            raise HTTPException(status_code=400, detail="No orders in queue.")
 
         project_root = Path(__file__).parent.parent.parent.parent
         main_py = project_root / "main.py"
