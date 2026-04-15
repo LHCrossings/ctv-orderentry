@@ -15,7 +15,12 @@ _src_path = Path(__file__).parent.parent.parent
 if str(_src_path) not in sys.path:
     sys.path.insert(0, str(_src_path))
 
-from backwrite.transformer import REVENUE_TYPES, generate_excel, parse_csv
+from backwrite.transformer import (
+    REVENUE_TYPES,
+    generate_excel,
+    parse_csv,
+    read_existing_order_fields,
+)
 
 SALES_PEOPLE = [
     "Charmaine Lane",
@@ -33,6 +38,18 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             "revenue_types": REVENUE_TYPES,
             "sales_people":  SALES_PEOPLE,
         })
+
+    @router.post("/parse-existing")
+    async def backwrite_parse_existing(existing_file: UploadFile):
+        """Read header fields from an existing Sales Confirmation Excel."""
+        try:
+            data = await existing_file.read()
+            fields = read_existing_order_fields(data)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Could not read file: {exc}")
+        return JSONResponse(fields)
 
     @router.post("/preview")
     async def backwrite_preview(csv_file: UploadFile):
@@ -72,15 +89,27 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
 
     @router.post("/generate")
     async def backwrite_generate(
-        csv_file:     UploadFile,
-        sales_person: str = Form(...),
-        billing_type: str = Form(...),
-        revenue_type: str = Form(...),
-        agency_flag:  str = Form(...),
-        agency_fee:   str = Form("15"),
-        estimate:     str = Form(""),
-        contract:     str = Form(""),
-        affidavit:    str = Form("Y"),
+        csv_file:       UploadFile,
+        sales_person:   str = Form(...),
+        billing_type:   str = Form(...),
+        revenue_type:   str = Form(...),
+        agency_flag:    str = Form(...),
+        agency_fee:     str = Form("15"),
+        estimate:       str = Form(""),
+        contract:       str = Form(""),
+        affidavit:      str = Form("Y"),
+        order_date:     str = Form(""),
+        contact_person: str = Form(""),
+        phone:          str = Form(""),
+        fax:            str = Form(""),
+        email_1:        str = Form(""),
+        email_2:        str = Form(""),
+        email_3:        str = Form(""),
+        email_4:        str = Form(""),
+        address:        str = Form(""),
+        city:           str = Form(""),
+        state:          str = Form(""),
+        zip_code:       str = Form(""),
     ):
         """Generate backwrite Excel from CSV + user inputs, return as download."""
         try:
@@ -101,14 +130,26 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             fee = 0.15
 
         user_inputs = {
-            "sales_person": sales_person,
-            "billing_type": billing_type,
-            "revenue_type": revenue_type,
-            "agency_flag":  agency_flag,
-            "agency_fee":   fee,
-            "estimate":     estimate,
-            "contract":     contract,
-            "affidavit":    affidavit,
+            "sales_person":   sales_person,
+            "billing_type":   billing_type,
+            "revenue_type":   revenue_type,
+            "agency_flag":    agency_flag,
+            "agency_fee":     fee,
+            "estimate":       estimate,
+            "contract":       contract,
+            "affidavit":      affidavit,
+            "order_date":     order_date,
+            "contact_person": contact_person,
+            "phone":          phone,
+            "fax":            fax,
+            "email_1":        email_1,
+            "email_2":        email_2,
+            "email_3":        email_3,
+            "email_4":        email_4,
+            "address":        address,
+            "city":           city,
+            "state":          state,
+            "zip":            zip_code,
         }
 
         try:

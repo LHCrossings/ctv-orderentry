@@ -650,6 +650,50 @@ def _fill_pivot(ws, run_rows: List[dict]) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# EXISTING ORDER READER
+# ─────────────────────────────────────────────────────────────────────────────
+
+def read_existing_order_fields(data: bytes) -> dict:
+    """Extract header field values from an existing Sales Confirmation Excel.
+
+    Returns a dict of field names → string values.  Unknown fields are "".
+    Raises ValueError if no 'Sales Confirmation' tab is found.
+    """
+    wb = openpyxl.load_workbook(BytesIO(data))
+    if "Sales Confirmation" not in wb.sheetnames:
+        raise ValueError("No 'Sales Confirmation' tab found in uploaded file.")
+    ws = wb["Sales Confirmation"]
+
+    def cv(row: int, col: int) -> str:
+        v = ws.cell(row=row, column=col).value
+        return str(v).strip() if v is not None else ""
+
+    # Header section rows 3–13 at fixed column positions (these rows never expand)
+    # D=4, F=6, G=7, K=11, L=12
+    return {
+        "agency":          cv(3,  4),
+        "client":          cv(3, 12),
+        "contact_person":  cv(4,  4),
+        "estimate":        cv(4, 12),
+        "address":         cv(5,  4),
+        "billing_type":    cv(5, 12),
+        "city":            cv(6,  4),
+        "state":           cv(6,  6),
+        "zip":             cv(6,  7),
+        "market":          cv(6, 12),
+        "phone":           cv(8,  4),
+        "order_date":      cv(8, 12),
+        "fax":             cv(9,  4),
+        "contract":        cv(9, 12),
+        "email_1":         cv(10, 4),
+        "email_2":         cv(11, 4),
+        "sales_person":    cv(11, 11),
+        "email_3":         cv(12, 4),
+        "email_4":         cv(13, 4),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # MAIN ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -744,10 +788,10 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
         "contract_code":    header.contract_code,
         "description":      header.description,
         "estimate":         estimate,
-        "address":          header.address,
+        "address":          user_inputs.get("address") or header.address,
         "billing_type":     billing_type,
-        "city":             header.city,
-        "order_date":       header.order_date,
+        "city":             user_inputs.get("city") or header.city,
+        "order_date":       user_inputs.get("order_date") or date.today().strftime("%m/%d/%Y"),
         "contract":         contract,
         "sales_person":     sales_person,
         "revenue_type":     revenue_type,
@@ -760,16 +804,16 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
         "total_net":        total_net,
         "market":           ", ".join(markets),
         "bill_code":        bill_code,
-        # Fields not sourced from the CSV — left blank
-        "contact_person":   "",
-        "phone":            "",
-        "fax":              "",
-        "email_1":          "",
-        "email_2":          "",
-        "email_3":          "",
-        "email_4":          "",
-        "state":            "",
-        "zip":              "",
+        # Contact / address fields supplied by user (or pre-filled from existing order)
+        "contact_person":   user_inputs.get("contact_person", ""),
+        "phone":            user_inputs.get("phone", ""),
+        "fax":              user_inputs.get("fax", ""),
+        "email_1":          user_inputs.get("email_1", ""),
+        "email_2":          user_inputs.get("email_2", ""),
+        "email_3":          user_inputs.get("email_3", ""),
+        "email_4":          user_inputs.get("email_4", ""),
+        "state":            user_inputs.get("state", ""),
+        "zip":              user_inputs.get("zip", ""),
         "per":              "Wk",
     }
 

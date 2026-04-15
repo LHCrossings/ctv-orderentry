@@ -64,20 +64,15 @@
         .preview-box .prow { display: flex; gap: 8px; align-items: baseline; }
         .preview-box .plabel { color: var(--text-secondary); min-width: 100px; font-size: 0.82rem; }
         .preview-box .pval { font-weight: 600; color: var(--text-primary); }
-        .preview-badge {
-            display: inline-block;
-            background: var(--nord14);
-            color: white;
-            font-size: 0.75rem;
-            font-weight: 600;
-            padding: 2px 8px;
-            border-radius: 12px;
-            margin-left: 6px;
-        }
         .form-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 16px 28px;
+            gap: 14px 28px;
+        }
+        .form-grid-3 {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 14px 28px;
         }
         .form-group {
             display: flex;
@@ -110,6 +105,45 @@
         .form-group.full { grid-column: 1 / -1; }
         #agency-fee-group { transition: opacity 0.2s; }
         #agency-fee-group.hidden { opacity: 0; pointer-events: none; }
+        .section-label {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin: 22px 0 10px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .load-existing-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 0.88rem;
+        }
+        .load-existing-bar label.btn-load {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            transition: border-color 0.15s, color 0.15s;
+            white-space: nowrap;
+        }
+        .load-existing-bar label.btn-load:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+        .load-existing-bar input[type=file] { display: none; }
+        #existing-filename { color: var(--accent-primary); font-weight: 600; }
         .btn-generate {
             display: inline-flex;
             align-items: center;
@@ -137,11 +171,6 @@
         }
         .status-msg.error { background: #fde8ea; color: var(--accent-danger); display: block; }
         .status-msg.info  { background: #e6f4ea; color: #2d6a4f; display: block; }
-        .section-divider {
-            height: 1px;
-            background: var(--border-color);
-            margin: 24px 0;
-        }
     </style>
 </head>
 <body>
@@ -187,22 +216,89 @@
     <div class="bw-card" id="form-card" style="display:none">
         <h2>Step 2 — Fill In Details</h2>
 
+        <!-- Load existing order -->
+        <div class="load-existing-bar">
+            <label class="btn-load" for="existing-input">
+                📁 Load existing order
+            </label>
+            <input type="file" id="existing-input" accept=".xlsx,.xlsm,.xls" />
+            <span id="existing-filename" style="display:none"></span>
+            <span id="existing-hint" style="color:var(--text-secondary)">Optional — pre-fills contact & address fields from a previous order for this client</span>
+        </div>
+
         <form id="bw-form" method="POST" action="/backwrite/generate" enctype="multipart/form-data">
             <!-- Hidden file field mirrors the uploaded CSV -->
             <input type="file" name="csv_file" id="form-csv-input" style="display:none" />
 
+            <!-- Contact Information -->
+            <div class="section-label">Contact Information</div>
             <div class="form-grid">
+                <div class="form-group">
+                    <label for="contact_person">Contact Person</label>
+                    <input type="text" name="contact_person" id="contact_person" placeholder="e.g. Jane Smith" />
+                </div>
+                <div class="form-group">
+                    <label for="phone">Phone</label>
+                    <input type="text" name="phone" id="phone" placeholder="e.g. (415) 555-1234" />
+                </div>
+                <div class="form-group">
+                    <label for="fax">Fax</label>
+                    <input type="text" name="fax" id="fax" placeholder="" />
+                </div>
+                <div class="form-group">
+                    <label for="email_1">Email 1</label>
+                    <input type="text" name="email_1" id="email_1" placeholder="" />
+                </div>
+                <div class="form-group">
+                    <label for="email_2">Email 2</label>
+                    <input type="text" name="email_2" id="email_2" placeholder="" />
+                </div>
+                <div class="form-group">
+                    <label for="email_3">Email 3</label>
+                    <input type="text" name="email_3" id="email_3" placeholder="" />
+                </div>
+                <div class="form-group full">
+                    <label for="email_4">Email 4</label>
+                    <input type="text" name="email_4" id="email_4" placeholder="" />
+                </div>
+            </div>
 
+            <!-- Address -->
+            <div class="section-label">Address</div>
+            <div class="form-group full" style="margin-bottom:14px">
+                <label for="address">Street Address</label>
+                <input type="text" name="address" id="address" placeholder="" />
+            </div>
+            <div class="form-grid-3">
+                <div class="form-group">
+                    <label for="city">City</label>
+                    <input type="text" name="city" id="city" placeholder="" />
+                </div>
+                <div class="form-group">
+                    <label for="state">State</label>
+                    <input type="text" name="state" id="state" placeholder="e.g. CA" maxlength="2" />
+                </div>
+                <div class="form-group">
+                    <label for="zip_code">Zip</label>
+                    <input type="text" name="zip_code" id="zip_code" placeholder="" />
+                </div>
+            </div>
+
+            <!-- Order Details -->
+            <div class="section-label">Order Details</div>
+            <div class="form-grid">
                 <div class="form-group">
                     <label for="estimate">Estimate #</label>
                     <input type="text" name="estimate" id="estimate" placeholder="e.g. 13932" />
                 </div>
-
                 <div class="form-group">
                     <label for="contract">Contract #</label>
                     <input type="text" name="contract" id="contract" placeholder="e.g. 2675" />
                 </div>
-
+                <div class="form-group">
+                    <label for="order_date">Date Order Written</label>
+                    <input type="text" name="order_date" id="order_date" placeholder="MM/DD/YYYY" />
+                </div>
                 <div class="form-group">
                     <label for="sales_person">Sales Person</label>
                     <input type="text" name="sales_person" id="sales_person"
@@ -213,7 +309,11 @@
                         {% endfor %}
                     </datalist>
                 </div>
+            </div>
 
+            <!-- Broadcast Settings -->
+            <div class="section-label">Broadcast Settings</div>
+            <div class="form-grid">
                 <div class="form-group">
                     <label for="billing_type">Billing Type</label>
                     <select name="billing_type" id="billing_type">
@@ -221,7 +321,6 @@
                         <option value="Calendar">Calendar</option>
                     </select>
                 </div>
-
                 <div class="form-group">
                     <label for="revenue_type">Revenue Type</label>
                     <select name="revenue_type" id="revenue_type">
@@ -230,7 +329,6 @@
                         {% endfor %}
                     </select>
                 </div>
-
                 <div class="form-group">
                     <label for="agency_flag">Agency / Direct</label>
                     <select name="agency_flag" id="agency_flag" onchange="toggleAgencyFee()">
@@ -238,13 +336,11 @@
                         <option value="Direct">Direct</option>
                     </select>
                 </div>
-
                 <div class="form-group" id="agency-fee-group">
                     <label for="agency_fee">Agency Fee %</label>
                     <input type="number" name="agency_fee" id="agency_fee"
                            value="15" min="0" max="100" step="0.1" />
                 </div>
-
                 <div class="form-group">
                     <label for="affidavit">Affidavit</label>
                     <select name="affidavit" id="affidavit">
@@ -252,12 +348,9 @@
                         <option value="N">N — No</option>
                     </select>
                 </div>
-
             </div>
 
-            <div class="section-divider"></div>
-
-            <button type="submit" class="btn-generate" id="generate-btn" disabled>
+            <button type="submit" class="btn-generate" id="generate-btn" disabled style="margin-top:24px">
                 &#8595; Generate Excel
             </button>
             <div class="status-msg" id="form-status"></div>
@@ -267,20 +360,31 @@
 </main>
 
 <script>
-const csvInput     = document.getElementById('csv-input');
-const csvFilename  = document.getElementById('csv-filename');
-const uploadStatus = document.getElementById('upload-status');
-const previewCard  = document.getElementById('preview-card');
-const formCard     = document.getElementById('form-card');
-const previewGrid  = document.getElementById('preview-grid');
-const generateBtn  = document.getElementById('generate-btn');
-const formStatus   = document.getElementById('form-status');
-const formCsvInput = document.getElementById('form-csv-input');
-const bwForm       = document.getElementById('bw-form');
+const csvInput       = document.getElementById('csv-input');
+const csvFilename    = document.getElementById('csv-filename');
+const uploadStatus   = document.getElementById('upload-status');
+const previewCard    = document.getElementById('preview-card');
+const formCard       = document.getElementById('form-card');
+const previewGrid    = document.getElementById('preview-grid');
+const generateBtn    = document.getElementById('generate-btn');
+const formStatus     = document.getElementById('form-status');
+const bwForm         = document.getElementById('bw-form');
+const existingInput  = document.getElementById('existing-input');
+const existingFn     = document.getElementById('existing-filename');
+const existingHint   = document.getElementById('existing-hint');
 
 let uploadedFile = null;
 
-// ── Upload zone drag/drop ────────────────────────────────────────────────
+// ── Today's date ─────────────────────────────────────────────────────────────
+function todayMDY() {
+    const d = new Date();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${m}/${day}/${d.getFullYear()}`;
+}
+document.getElementById('order_date').value = todayMDY();
+
+// ── Upload zone drag/drop ─────────────────────────────────────────────────────
 const uploadZone = document.getElementById('upload-zone');
 uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
 uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
@@ -290,10 +394,7 @@ uploadZone.addEventListener('drop', e => {
     const f = e.dataTransfer.files[0];
     if (f) handleFile(f);
 });
-
-csvInput.addEventListener('change', () => {
-    if (csvInput.files[0]) handleFile(csvInput.files[0]);
-});
+csvInput.addEventListener('change', () => { if (csvInput.files[0]) handleFile(csvInput.files[0]); });
 
 function showStatus(el, msg, type) {
     el.textContent = msg;
@@ -301,7 +402,7 @@ function showStatus(el, msg, type) {
 }
 
 function handleFile(file) {
-    if (!file.name.endsWith('.csv')) {
+    if (!file.name.toLowerCase().endsWith('.csv')) {
         showStatus(uploadStatus, 'Please select a CSV file.', 'error');
         return;
     }
@@ -314,20 +415,17 @@ function handleFile(file) {
 function previewCSV(file) {
     const fd = new FormData();
     fd.append('csv_file', file);
-
     fetch('/backwrite/preview', { method: 'POST', body: fd })
         .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
         .then(data => {
             uploadStatus.style.display = 'none';
             showPreview(data);
-            prefillForm(data);
+            prefillFromCSV(data);
             previewCard.style.display = 'block';
             formCard.style.display    = 'block';
             generateBtn.disabled      = false;
         })
-        .catch(err => {
-            showStatus(uploadStatus, 'Error: ' + err, 'error');
-        });
+        .catch(err => showStatus(uploadStatus, 'Error: ' + err, 'error'));
 }
 
 function showPreview(d) {
@@ -346,51 +444,89 @@ function showPreview(d) {
     ).join('');
 }
 
-function prefillForm(d) {
-    if (d.estimate_hint) document.getElementById('estimate').value = d.estimate_hint;
+function prefillFromCSV(d) {
+    if (d.estimate_hint) setIfEmpty('estimate', d.estimate_hint);
+    if (d.address)       setIfEmpty('address',  d.address);
+    if (d.city)          setIfEmpty('city',     d.city);
 }
 
-// ── Agency fee toggle ────────────────────────────────────────────────────
+function setIfEmpty(id, val) {
+    const el = document.getElementById(id);
+    if (el && !el.value) el.value = val;
+}
+
+function fill(id, val) {
+    const el = document.getElementById(id);
+    if (el && val) el.value = val;
+}
+
+// ── Load existing order ───────────────────────────────────────────────────────
+existingInput.addEventListener('change', () => {
+    const f = existingInput.files[0];
+    if (!f) return;
+
+    existingFn.textContent = f.name;
+    existingFn.style.display = 'inline';
+    existingHint.style.display = 'none';
+
+    const fd = new FormData();
+    fd.append('existing_file', f);
+    fetch('/backwrite/parse-existing', { method: 'POST', body: fd })
+        .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
+        .then(d => {
+            fill('contact_person', d.contact_person);
+            fill('phone',         d.phone);
+            fill('fax',           d.fax);
+            fill('email_1',       d.email_1);
+            fill('email_2',       d.email_2);
+            fill('email_3',       d.email_3);
+            fill('email_4',       d.email_4);
+            fill('address',       d.address);
+            fill('city',          d.city);
+            fill('state',         d.state);
+            fill('zip_code',      d.zip);
+            fill('sales_person',  d.sales_person);
+            fill('contract',      d.contract);
+            // estimate and billing_type only if not already set from CSV hint
+            setIfEmpty('estimate', d.estimate);
+            // order_date stays as today — never copy from old order
+            existingFn.textContent += ' — fields loaded';
+        })
+        .catch(err => { existingFn.textContent = 'Error: ' + err; });
+});
+
+// ── Agency fee toggle ─────────────────────────────────────────────────────────
 function toggleAgencyFee() {
     const isAgency = document.getElementById('agency_flag').value === 'Agency';
     document.getElementById('agency-fee-group').classList.toggle('hidden', !isAgency);
 }
 
-// ── Form submit → download ───────────────────────────────────────────────
+// ── Form submit → download ────────────────────────────────────────────────────
 bwForm.addEventListener('submit', async e => {
     e.preventDefault();
-
     if (!uploadedFile) {
         showStatus(formStatus, 'No CSV file uploaded.', 'error');
         return;
     }
-
-    generateBtn.disabled  = true;
+    generateBtn.disabled = true;
     generateBtn.textContent = '⏳ Generating...';
 
     const fd = new FormData(bwForm);
-    // Replace the hidden file input with the actual uploaded file
     fd.set('csv_file', uploadedFile, uploadedFile.name);
 
     try {
         const resp = await fetch('/backwrite/generate', { method: 'POST', body: fd });
-        if (!resp.ok) {
-            const err = await resp.text();
-            throw new Error(err);
-        }
+        if (!resp.ok) throw new Error(await resp.text());
 
-        const blob = await resp.blob();
+        const blob  = await resp.blob();
         const disp  = resp.headers.get('Content-Disposition') || '';
         const match = disp.match(/filename="([^"]+)"/);
         const fname = match ? match[1] : 'backwrite.xlsx';
 
         const url  = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.href = url;
-        link.download = fname;
-        link.click();
+        link.href = url; link.download = fname; link.click();
         URL.revokeObjectURL(url);
-
         showStatus(formStatus, `Downloaded: ${fname}`, 'info');
     } catch (err) {
         showStatus(formStatus, 'Error: ' + err.message, 'error');
