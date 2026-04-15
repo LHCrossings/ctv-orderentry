@@ -330,19 +330,29 @@ def _fill_sales_confirmation(ws, ctx: dict, sc_lines: List[dict]) -> None:
     # Expand: insert rows after the last template line row when we have more lines
     if n_lines > n_tmpl and n_tmpl > 0:
         ref_row = line_rows[0]
+        max_col = ws.max_column
         for _ in range(n_lines - n_tmpl):
             new_row = line_rows[-1] + 1
             ws.insert_rows(new_row)
-            src = list(ws.iter_rows(min_row=ref_row, max_row=ref_row))[0]
-            dst = list(ws.iter_rows(min_row=new_row, max_row=new_row))[0]
-            for s, d in zip(src, dst):
-                d.value = s.value  # copy placeholder pattern
-                if s.has_style:
-                    d.font         = copy.copy(s.font)
-                    d.border       = copy.copy(s.border)
-                    d.fill         = copy.copy(s.fill)
-                    d.number_format = s.number_format
-                    d.alignment    = copy.copy(s.alignment)
+            # Use explicit cell access — iter_rows on a just-inserted row may truncate
+            for col_idx in range(1, max_col + 1):
+                src_cell = ws.cell(row=ref_row, column=col_idx)
+                dst_cell = ws.cell(row=new_row, column=col_idx)
+                # Copy value; update any formula row references to point to new_row
+                if isinstance(src_cell.value, str) and src_cell.value.startswith('='):
+                    dst_cell.value = re.sub(
+                        r'([A-Z]+)' + str(ref_row),
+                        lambda m, nr=new_row: f'{m.group(1)}{nr}',
+                        src_cell.value,
+                    )
+                else:
+                    dst_cell.value = src_cell.value
+                if src_cell.has_style:
+                    dst_cell.font         = copy.copy(src_cell.font)
+                    dst_cell.border       = copy.copy(src_cell.border)
+                    dst_cell.fill         = copy.copy(src_cell.fill)
+                    dst_cell.number_format = src_cell.number_format
+                    dst_cell.alignment    = copy.copy(src_cell.alignment)
             line_rows.append(new_row)
 
     # Update any SUM formulas that span the line range
@@ -372,6 +382,8 @@ def _fill_sales_confirmation(ws, ctx: dict, sc_lines: List[dict]) -> None:
                 # Write computed weeks directly into the "# of days, wks, mos" column
                 if weeks_col is not None and cell.column == weeks_col:
                     cell.value = sc_lines[i].get('weeks', 1)
+            # Ensure line number in column B is sequential (handles hardcoded "1" in template)
+            ws.cell(row=row_num, column=2).value = i + 1
         else:
             # Clear unused template rows
             for cell in ws[row_num]:
@@ -583,7 +595,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict) -
         groups.setdefault(s.line_id, []).append(s)
 
     sc_lines: List[dict] = []
-    for line_id, group in groups.items():
+    for idx, (line_id, group) in enumerate(groups.items()):
         d_start     = min(s.air_date for s in group)
         d_end       = max(s.air_date for s in group)
         total_spots = len(group)
@@ -591,6 +603,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict) -
         spw         = max(1, round(total_spots / weeks))
         first       = group[0]
         sc_lines.append({
+            "line_number":      idx + 1,
             "date_range_start": d_start.strftime("%m/%d/%Y"),
             "date_range_end":   d_end.strftime("%m/%d/%Y"),
             "spot_count":       spw,         # spots per week → F column
@@ -646,6 +659,14 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict) -
 
     # ── Load template and fill ────────────────────────────────────────────────
     wb = openpyxl.load_workbook(str(TEMPLATE_PATH))
+    # Clear hyperlinks (e.g. mailto: links in email cells) so placeholders are visible
+    for ws_name in wb.sheetnames:
+        for row in wb[ws_name].iter_rows():
+            for cell in row:
+                if cell.hyperlink:
+                    cell.hyperlink = None
+                if isinstance(cell.value, str) and cell.value.lower().startswith('mailto:'):
+                    cell.value = ""
     _fill_sales_confirmation(wb["Sales Confirmation"], ctx, sc_lines)
     _fill_run_sheet(wb["Run Sheet"], run_rows)
     _fill_pivot(wb["Sheet1"], run_rows)
