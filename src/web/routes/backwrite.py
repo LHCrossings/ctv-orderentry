@@ -69,10 +69,15 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
         est_match = re.search(r'(\d{4,})', header.description)
         estimate_hint = est_match.group(1) if est_match else ""
 
+        # Extract contract number from contract_code field (e.g. "Contract 2675" → "2675")
+        contract_match = re.search(r'\d+', header.contract_code or "")
+        contract_hint = contract_match.group(0) if contract_match else ""
+
         return JSONResponse({
             "agency":        header.agency,
             "client":        header.client,
             "contract_code": header.contract_code,
+            "contract_hint": contract_hint,
             "description":   header.description,
             "order_date":    header.order_date,
             "address":       header.address,

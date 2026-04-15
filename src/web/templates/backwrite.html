@@ -446,6 +446,7 @@ function showPreview(d) {
 
 function prefillFromCSV(d) {
     if (d.estimate_hint) setIfEmpty('estimate', d.estimate_hint);
+    if (d.contract_hint) setIfEmpty('contract', d.contract_hint);
     if (d.address)       setIfEmpty('address',  d.address);
     if (d.city)          setIfEmpty('city',     d.city);
 }

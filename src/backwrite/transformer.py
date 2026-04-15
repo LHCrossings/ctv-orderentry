@@ -724,7 +724,11 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
     revenue_type = user_inputs.get("revenue_type", "Internal Ad Sales")
     affidavit    = user_inputs.get("affidavit",    "Y")
     estimate     = user_inputs.get("estimate",     "")
-    contract     = user_inputs.get("contract",     "")
+    contract     = user_inputs.get("contract",     "") or (
+        re.search(r'\d+', header.contract_code).group(0)
+        if header.contract_code and re.search(r'\d+', header.contract_code)
+        else ""
+    )
 
     is_agency = agency_flag == "Agency"
     bill_code = f"{header.agency}:{header.client}" if header.agency else header.client
