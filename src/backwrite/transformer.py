@@ -259,6 +259,19 @@ TEMPLATE_PATH = Path(__file__).parent / "template.xlsx"
 # PLACEHOLDER HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _phone_to_int(val: str) -> object:
+    """Strip non-digits and return int so Excel phone-number formats apply."""
+    if not val:
+        return ""
+    digits = re.sub(r'\D', '', str(val))
+    if len(digits) >= 7:
+        try:
+            return int(digits)
+        except ValueError:
+            pass
+    return val
+
+
 def _replace_placeholder(cell, ctx: dict) -> bool:
     """Replace <field> in a single cell using ctx. Returns True if modified.
 
@@ -478,11 +491,31 @@ def _fill_sales_confirmation(
 
     # Expand: insert rows when we need more lines than template provides
     if n_lines > n_tmpl and n_tmpl > 0:
-        for _ in range(n_lines - n_tmpl):
+        insert_start = line_rows[-1] + 1
+        n_inserts    = n_lines - n_tmpl
+
+        # Explicitly manage merges that sit at or after the insertion zone.
+        # openpyxl's auto-shift is unreliable near merged areas, so we
+        # unmerge them first, insert rows, then re-merge at the correct rows.
+        saved_merges = [
+            (mr.min_row, mr.max_row, mr.min_col, mr.max_col)
+            for mr in list(ws.merged_cells.ranges)
+            if mr.min_row >= insert_start
+        ]
+        for min_r, max_r, min_c, max_c in saved_merges:
+            ws.unmerge_cells(start_row=min_r, start_column=min_c,
+                             end_row=max_r,   end_column=max_c)
+
+        for _ in range(n_inserts):
             new_row = line_rows[-1] + 1
             ws.insert_rows(new_row)
             _apply_snapshot(ws, snapshot, new_row, ref_row)
             line_rows.append(new_row)
+
+        # Re-merge at shifted positions
+        for min_r, max_r, min_c, max_c in saved_merges:
+            ws.merge_cells(start_row=min_r + n_inserts, start_column=min_c,
+                           end_row=max_r + n_inserts,   end_column=max_c)
 
     # Update SUM formulas that span the line range
     if line_rows:
@@ -724,11 +757,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
     revenue_type = user_inputs.get("revenue_type", "Internal Ad Sales")
     affidavit    = user_inputs.get("affidavit",    "Y")
     estimate     = user_inputs.get("estimate",     "")
-    contract     = user_inputs.get("contract",     "") or (
-        re.search(r'\d+', header.contract_code).group(0)
-        if header.contract_code and re.search(r'\d+', header.contract_code)
-        else ""
-    )
+    contract     = user_inputs.get("contract",     "")
 
     is_agency = agency_flag == "Agency"
     bill_code = f"{header.agency}:{header.client}" if header.agency else header.client
@@ -813,7 +842,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
         "address":          user_inputs.get("address") or header.address,
         "billing_type":     billing_type,
         "city":             user_inputs.get("city") or header.city,
-        "order_date":       user_inputs.get("order_date") or date.today().strftime("%m/%d/%Y"),
+        "order_date":       user_inputs.get("order_date") or f"{date.today().day}/{date.today().month}/{date.today().year}",
         "contract":         contract,
         "sales_person":     sales_person,
         "revenue_type":     revenue_type,
@@ -828,8 +857,8 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
         "bill_code":        bill_code,
         # Contact / address fields supplied by user (or pre-filled from existing order)
         "contact_person":   user_inputs.get("contact_person", ""),
-        "phone":            user_inputs.get("phone", ""),
-        "fax":              user_inputs.get("fax", ""),
+        "phone":            _phone_to_int(user_inputs.get("phone", "")),
+        "fax":              _phone_to_int(user_inputs.get("fax", "")),
         "email_1":          user_inputs.get("email_1", ""),
         "email_2":          user_inputs.get("email_2", ""),
         "email_3":          user_inputs.get("email_3", ""),

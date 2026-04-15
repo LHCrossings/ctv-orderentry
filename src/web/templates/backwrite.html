@@ -297,7 +297,7 @@
                 </div>
                 <div class="form-group">
                     <label for="order_date">Date Order Written</label>
-                    <input type="text" name="order_date" id="order_date" placeholder="MM/DD/YYYY" />
+                    <input type="text" name="order_date" id="order_date" placeholder="D/M/YYYY" />
                 </div>
                 <div class="form-group">
                     <label for="sales_person">Sales Person</label>
@@ -378,9 +378,7 @@ let uploadedFile = null;
 // ── Today's date ─────────────────────────────────────────────────────────────
 function todayMDY() {
     const d = new Date();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${m}/${day}/${d.getFullYear()}`;
+    return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
 }
 document.getElementById('order_date').value = todayMDY();
 
@@ -446,7 +444,6 @@ function showPreview(d) {
 
 function prefillFromCSV(d) {
     if (d.estimate_hint) setIfEmpty('estimate', d.estimate_hint);
-    if (d.contract_hint) setIfEmpty('contract', d.contract_hint);
     if (d.address)       setIfEmpty('address',  d.address);
     if (d.city)          setIfEmpty('city',     d.city);
 }
