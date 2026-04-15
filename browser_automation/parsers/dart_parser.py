@@ -34,6 +34,19 @@ class DartLine:
     def total_spots(self) -> int:
         return sum(self.spot_counts)
 
+    # Aliases used by the generic parser_bridge normalizer
+    @property
+    def program(self) -> str:
+        return self.programming
+
+    @property
+    def daypart(self) -> str:
+        return self.schedule
+
+    @property
+    def weekly_spots(self) -> List[int]:
+        return self.spot_counts
+
 
 @dataclass
 class DartOrder:
@@ -53,6 +66,10 @@ class DartOrder:
     @property
     def flight_end(self) -> date:
         return max(self.week_start_dates) + timedelta(days=6)
+
+    @property
+    def markets(self) -> List[str]:
+        return ["DAL"]
 
     @property
     def paid_lines(self) -> List[DartLine]:
