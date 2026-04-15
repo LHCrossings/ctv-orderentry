@@ -49,6 +49,7 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
     OrderType.SCWA:              ("browser_automation.scwa_automation",              "gather_scwa_inputs",              "Sacramento County Water Agency"),
     OrderType.IMPRENTA:          ("browser_automation.imprenta_automation",          "gather_imprenta_inputs",          "Imprenta / PG&E"),
     OrderType.PROSIO:            ("browser_automation.prosio_automation",             "gather_prosio_inputs",            "Prosio"),
+    OrderType.DART:              ("browser_automation.dart_automation",                "gather_dart_inputs",               "DART / Asian Channel Dallas"),
 }
 
 

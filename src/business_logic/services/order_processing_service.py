@@ -87,6 +87,7 @@ class OrderProcessingService:
         OrderType.SACCOUNTYVOTERS:  "_process_saccountyvoters_order",
         OrderType.SCWA:             "_process_scwa_order",
         OrderType.PROSIO:           "_process_prosio_order",
+        OrderType.DART:             "_process_dart_order",
     }
 
     def __init__(
@@ -161,6 +162,7 @@ class OrderProcessingService:
                     OrderType.SACCOUNTYVOTERS,
                     OrderType.SCWA,
                     OrderType.PROSIO,
+                    OrderType.DART,
                 ]
                 for order in orders
             )
@@ -2053,6 +2055,74 @@ class OrderProcessingService:
                 contracts=[],
                 order_type=OrderType.WORLDLINK,
                 error_message=error_detail
+            )
+
+    def _process_dart_order(
+        self,
+        order: Order,
+        shared_session: Any = None,
+    ) -> ProcessingResult:
+        """
+        Process DART (Dallas Area Rapid Transit) order using dart_automation.
+
+        DART orders are direct-client xlsx insertion orders for
+        The Asian Channel (KLEG 44.3 Dallas). Master market: DAL.
+        """
+        try:
+            from browser_automation.dart_automation import process_dart_order
+
+            print(f"\n{'='*70}")
+            print("PROCESSING DART ORDER")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            print(f"{'='*70}\n")
+
+            if shared_session is None:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.DART,
+                    error_message="Browser session required for DART orders",
+                )
+
+            if not order.order_input:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.DART,
+                    error_message="Order inputs not collected",
+                )
+
+            print("[SESSION] ✓ Using shared browser session")
+
+            contract_num = process_dart_order(
+                driver=shared_session.driver,
+                xlsx_path=str(order.pdf_path),
+                user_input=order.order_input,
+            )
+
+            success = contract_num is not None
+            if success:
+                print("\n✓ DART order processed successfully")
+            else:
+                print("\n✗ DART order processing failed")
+
+            return ProcessingResult(
+                success=success,
+                contracts=[],
+                order_type=OrderType.DART,
+                error_message=None if success else "Processing failed",
+            )
+
+        except Exception as e:
+            import traceback
+            error_detail = f"DART processing error: {str(e)}\n{traceback.format_exc()}"
+            print(f"\n✗ DART processing failed: {e}")
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.DART,
+                error_message=error_detail,
             )
 
     def _run_saccountyvoters_with_driver(

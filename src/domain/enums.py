@@ -36,6 +36,7 @@ class OrderType(Enum):
     SCWA = "scwa"
     HYPHEN = "hyphen"
     PROSIO = "prosio"
+    DART = "dart"
     XML = "xml"
     UNKNOWN = "unknown"
 
