@@ -112,7 +112,7 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
         }
 
         try:
-            xlsx_bytes = generate_excel(header, spots, user_inputs)
+            xlsx_bytes = generate_excel(header, spots, user_inputs, raw_csv=data)
         except Exception as exc:
             import traceback
             traceback.print_exc()

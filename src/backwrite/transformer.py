@@ -398,63 +398,49 @@ def _fill_sales_confirmation(ws, ctx: dict, sc_lines: List[dict]) -> None:
             _replace_placeholder(cell, ctx)
 
 
-def _fill_run_sheet(ws, run_rows: List[dict]) -> None:
-    """Fill the Run Sheet with one row per spot."""
-    # Find template rows (rows 2+ that contain any <placeholder>)
-    tmpl_rows: List[int] = []
-    for row in ws.iter_rows(min_row=2):
-        if any(isinstance(c.value, str) and '<' in c.value for c in row):
-            tmpl_rows.append(row[0].row)
+def _extract_raw_csv_rows(data: bytes) -> Tuple[List[str], List[List[str]]]:
+    """Return (col_headers, data_rows) from the raw EtereBridge CSV bytes.
 
-    if not tmpl_rows:
-        return
+    Finds the data section that starts with the COD_CONTRATTO1 / dateschedule
+    header row and returns it as plain string lists — no type conversion.
+    """
+    text  = data.decode("utf-8-sig")
+    lines = text.splitlines()
 
-    ref_row = tmpl_rows[0]
+    data_start: Optional[int] = None
+    for i, line in enumerate(lines):
+        if "COD_CONTRATTO1" in line or "dateschedule" in line.lower():
+            data_start = i
+            break
 
-    # Build col→field map from the first template row
-    # Entries: col_idx (0-based) → field name  OR  ('formula', template_str)
-    col_map: dict = {}
-    for i, cell in enumerate(list(ws.iter_rows(min_row=ref_row, max_row=ref_row))[0]):
-        if isinstance(cell.value, str):
-            m = re.search(r'<([^>]+)>', cell.value)
-            if m:
-                col_map[i] = m.group(1)
-            elif re.match(r'=([A-Z]+)\d+$', cell.value.strip()):
-                col_map[i] = ('formula', cell.value)
+    if data_start is None:
+        return [], []
 
-    n_tmpl  = len(tmpl_rows)
-    n_spots = len(run_rows)
+    reader      = csv.reader(lines[data_start:])
+    col_headers = next(reader, [])
+    data_rows   = [row for row in reader if any(cell.strip() for cell in row)]
+    return col_headers, data_rows
 
-    # Expand template rows if we have more spots than pre-filled rows
-    if n_spots > n_tmpl:
-        for _ in range(n_spots - n_tmpl):
-            new_row = tmpl_rows[-1] + 1
-            ws.insert_rows(new_row)
-            _copy_row_format(ws, ref_row, new_row)
-            tmpl_rows.append(new_row)
 
-    # Fill data
-    for spot_idx, rr in enumerate(run_rows):
-        row_num   = tmpl_rows[spot_idx]
-        row_cells = list(ws.iter_rows(min_row=row_num, max_row=row_num))[0]
-        for col_idx, cell in enumerate(row_cells):
-            spec = col_map.get(col_idx)
-            if spec is None:
-                continue
-            if isinstance(spec, tuple) and spec[0] == 'formula':
-                # Update row number: '=B2' → '=B{row_num}'
-                cell.value = re.sub(
-                    r'([A-Z]+)\d+',
-                    lambda m: f'{m.group(1)}{row_num}',
-                    spec[1],
-                )
-            elif spec in rr:
-                cell.value = rr[spec]
+def _fill_run_sheet(ws, col_headers: List[str], raw_rows: List[List[str]]) -> None:
+    """Copy raw EtereBridge data directly into the Run Sheet.
 
-    # Clear unused template rows
-    for row_num in tmpl_rows[n_spots:]:
-        for cell in ws[row_num]:
+    Row 1 gets the CSV column headers; rows 2+ get the raw spot data.
+    All existing content from row 1 onwards is replaced.
+    """
+    # Clear existing content (keep sheet, remove all values)
+    for row in ws.iter_rows():
+        for cell in row:
             cell.value = None
+
+    # Write column headers at row 1
+    for col_idx, header in enumerate(col_headers, start=1):
+        ws.cell(row=1, column=col_idx).value = header
+
+    # Write raw data rows starting at row 2
+    for row_idx, row_data in enumerate(raw_rows, start=2):
+        for col_idx, value in enumerate(row_data, start=1):
+            ws.cell(row=row_idx, column=col_idx).value = value
 
 
 def _fill_pivot(ws, run_rows: List[dict]) -> None:
@@ -537,7 +523,7 @@ def _fill_pivot(ws, run_rows: List[dict]) -> None:
 # MAIN ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────────────
 
-def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict) -> bytes:
+def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, raw_csv: bytes = b"") -> bytes:
     """Generate backwrite Excel from template and return raw bytes."""
     billing_type = user_inputs.get("billing_type", "Broadcast")
     agency_flag  = user_inputs.get("agency_flag",  "Agency")
@@ -667,8 +653,10 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict) -
                     cell.hyperlink = None
                 if isinstance(cell.value, str) and cell.value.lower().startswith('mailto:'):
                     cell.value = ""
+    col_headers, raw_rows = _extract_raw_csv_rows(raw_csv) if raw_csv else ([], [])
+
     _fill_sales_confirmation(wb["Sales Confirmation"], ctx, sc_lines)
-    _fill_run_sheet(wb["Run Sheet"], run_rows)
+    _fill_run_sheet(wb["Run Sheet"], col_headers, raw_rows)
     _fill_pivot(wb["Sheet1"], run_rows)
 
     buf = BytesIO()
