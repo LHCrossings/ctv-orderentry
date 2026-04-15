@@ -110,6 +110,7 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
         city:           str = Form(""),
         state:          str = Form(""),
         zip_code:       str = Form(""),
+        notes:          str = Form(""),
     ):
         """Generate backwrite Excel from CSV + user inputs, return as download."""
         try:
@@ -150,6 +151,7 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             "city":           city,
             "state":          state,
             "zip":            zip_code,
+            "notes":          notes,
         }
 
         try:

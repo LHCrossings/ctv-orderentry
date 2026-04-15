@@ -865,6 +865,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
         "email_4":          user_inputs.get("email_4", ""),
         "state":            user_inputs.get("state", ""),
         "zip":              user_inputs.get("zip", ""),
+        "notes":            user_inputs.get("notes", ""),
         "per":              "Wk",
     }
 
