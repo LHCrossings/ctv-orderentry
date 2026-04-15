@@ -14,10 +14,11 @@ CSV format expected (Etere export):
   Row 5+: one row per spot
 """
 
+import calendar
 import copy
 import csv
 import re
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from io import BytesIO
@@ -350,8 +351,6 @@ def _fill_monthly_breakdown(
     ws, monthly_gross: dict, monthly_net: dict, last_line_row: int
 ) -> None:
     """Replace the hardcoded monthly breakdown table with actual monthly totals."""
-    import calendar as _cal
-
     # Find "Month" header row below the data lines
     month_hdr_row: Optional[int] = None
     for row in ws.iter_rows(min_row=last_line_row + 1):
@@ -392,7 +391,7 @@ def _fill_monthly_breakdown(
         return
 
     # Sort months in calendar order
-    month_order = {m: i for i, m in enumerate(_cal.month_name) if m}
+    month_order = {m: i for i, m in enumerate(calendar.month_name) if m}
     sorted_months = sorted(monthly_gross.keys(), key=lambda m: month_order.get(m, 99))
     n_needed   = len(sorted_months)
     n_existing = len(data_rows)
@@ -426,8 +425,6 @@ def _fill_monthly_breakdown(
 
     # Update Total row
     if total_row and n_needed > 0:
-        first_data = data_rows[0]
-        last_data  = data_rows[n_needed - 1]
         if gross_col:
             ws.cell(row=total_row, column=gross_col).value = round(sum(monthly_gross.values()), 2)
         if net_col:
@@ -787,10 +784,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
                 if isinstance(cell.value, str) and cell.value.lower().startswith('mailto:'):
                     cell.value = ""
     # Monthly totals for Sales Confirmation breakdown
-    from collections import defaultdict as _dd
-    import calendar as _cal
-    _month_order = {m: i for i, m in enumerate(_cal.month_name) if m}
-    _mg: dict = _dd(float)
+    _mg: dict = defaultdict(float)
     for rr in run_rows:
         m = rr.get('month')
         if isinstance(m, datetime):
