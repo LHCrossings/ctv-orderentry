@@ -323,11 +323,21 @@ def _snapshot_row(ws, row_num: int) -> List[dict]:
             'number_format': cell.number_format        if cell.has_style else None,
             'alignment':     copy.copy(cell.alignment) if cell.has_style else None,
         })
-    return snaps
+
+    # Capture intra-row merged ranges (e.g. B16:G16) so inserted rows stay consistent
+    row_merges = []
+    for mr in ws.merged_cells.ranges:
+        if mr.min_row == mr.max_row == row_num:
+            row_merges.append((mr.min_col, mr.max_col))
+
+    return snaps, row_merges
 
 
-def _apply_snapshot(ws, snapshot: List[dict], new_row: int, ref_row: int) -> None:
+def _apply_snapshot(
+    ws, snapshot_pair, new_row: int, ref_row: int
+) -> None:
     """Write a row snapshot to new_row, updating formula row references."""
+    snapshot, row_merges = snapshot_pair
     for snap in snapshot:
         col_idx  = snap['col']
         val      = snap['value']
@@ -345,6 +355,13 @@ def _apply_snapshot(ws, snapshot: List[dict], new_row: int, ref_row: int) -> Non
             dst_cell.fill          = copy.copy(snap['fill'])
             dst_cell.number_format = snap['number_format']
             dst_cell.alignment     = copy.copy(snap['alignment'])
+
+    # Re-apply same intra-row merges to the new row
+    for col_start, col_end in row_merges:
+        ws.merge_cells(
+            start_row=new_row, start_column=col_start,
+            end_row=new_row,   end_column=col_end,
+        )
 
 
 def _fill_monthly_breakdown(
@@ -457,7 +474,7 @@ def _fill_sales_confirmation(
 
     # Snapshot first template row BEFORE any insertions (avoids read-after-insert issues)
     ref_row  = line_rows[0] if line_rows else None
-    snapshot = _snapshot_row(ws, ref_row) if ref_row else []
+    snapshot = _snapshot_row(ws, ref_row) if ref_row else ([], [])
 
     # Expand: insert rows when we need more lines than template provides
     if n_lines > n_tmpl and n_tmpl > 0:
@@ -528,10 +545,11 @@ def _fill_run_sheet(ws, run_rows: List[dict]) -> None:
     ref_row  = tmpl_rows[0]
     max_col  = ws.max_column
     snapshot = _snapshot_row(ws, ref_row)
+    snaps, _ = snapshot
 
     # Build col → field map from the first template row
     col_map: dict = {}
-    for snap in snapshot:
+    for snap in snaps:
         val = snap['value']
         if isinstance(val, str):
             m = re.search(r'<([^>]+)>', val)
