@@ -14,16 +14,17 @@ CSV format expected (Etere export):
   Row 5+: one row per spot
 """
 
+import copy
 import csv
 import re
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from io import BytesIO
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import openpyxl
-from openpyxl.styles import Font
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONSTANTS
@@ -250,25 +251,282 @@ def parse_csv(data: bytes) -> Tuple[CsvHeader, List[SpotRow]]:
 # EXCEL GENERATION
 # ─────────────────────────────────────────────────────────────────────────────
 
-_RUN_SHEET_COLS = [
-    "Bill Code", "Air Date", "End Date", "Day",
-    "Time In", "Time out", "Length",
-    "Media", "Program", "Lang.", "Format",
-    "#", "Line", "Type", "Estimate",
-    "Gross Rate", "Make Good", "Spot Value", "Month",
-    "Broker Fees", "Priority", "Station Net",
-    "Sales Person", "Revenue Type", "Billing Type",
-    "Agency?", "Affidavit?", "Contract", "Market",
-]
+TEMPLATE_PATH = Path(__file__).parent / "template.xlsx"
 
 
-def generate_excel(
-    header: CsvHeader,
-    spots: List[SpotRow],
-    user_inputs: dict,
-) -> bytes:
-    """Generate three-tab backwrite Excel and return raw bytes."""
+# ─────────────────────────────────────────────────────────────────────────────
+# PLACEHOLDER HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
 
+def _replace_placeholder(cell, ctx: dict) -> bool:
+    """Replace <field> in a single cell using ctx. Returns True if modified.
+
+    If cell value is exactly '<field>' → replace with the typed Python value.
+    If '<field>' is embedded in a larger string → replace with str(value).
+    """
+    if not isinstance(cell.value, str):
+        return False
+    text = cell.value
+    keys = re.findall(r'<([^>]+)>', text)
+    if not keys:
+        return False
+    stripped = text.strip()
+    if len(keys) == 1 and stripped == f'<{keys[0]}>' and keys[0] in ctx:
+        cell.value = ctx[keys[0]]
+        return True
+    changed = False
+    for k in keys:
+        if k in ctx:
+            v = ctx[k]
+            if isinstance(v, (date, datetime)):
+                v = v.strftime('%m/%d/%Y')
+            elif v is None:
+                v = ''
+            text = text.replace(f'<{k}>', str(v))
+            changed = True
+    if changed:
+        cell.value = text.strip()
+    return changed
+
+
+def _copy_row_format(ws, src_row: int, dst_row: int) -> None:
+    """Copy cell styles from src_row to dst_row."""
+    src = list(ws.iter_rows(min_row=src_row, max_row=src_row))[0]
+    dst = list(ws.iter_rows(min_row=dst_row, max_row=dst_row))[0]
+    for s, d in zip(src, dst):
+        if s.has_style:
+            d.font         = copy.copy(s.font)
+            d.border       = copy.copy(s.border)
+            d.fill         = copy.copy(s.fill)
+            d.number_format = s.number_format
+            d.alignment    = copy.copy(s.alignment)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SHEET FILLERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _fill_sales_confirmation(ws, ctx: dict, sc_lines: List[dict]) -> None:
+    """Fill the Sales Confirmation sheet using placeholder replacement."""
+    # Detect line template rows: any row that contains '<date_range_start>'
+    line_rows: List[int] = []
+    for row in ws.iter_rows():
+        if any(isinstance(c.value, str) and '<date_range_start>' in c.value for c in row):
+            line_rows.append(row[0].row)
+
+    n_tmpl  = len(line_rows)
+    n_lines = len(sc_lines)
+
+    # Detect which column holds "# of days, wks, mos" (the weeks/periods column).
+    # Look for the column header in the row above the first line template row.
+    weeks_col: Optional[int] = None
+    if line_rows:
+        hdr_row_num = line_rows[0] - 1
+        for cell in ws[hdr_row_num]:
+            if isinstance(cell.value, str) and 'days' in cell.value.lower():
+                weeks_col = cell.column
+                break
+
+    # Expand: insert rows after the last template line row when we have more lines
+    if n_lines > n_tmpl and n_tmpl > 0:
+        ref_row = line_rows[0]
+        for _ in range(n_lines - n_tmpl):
+            new_row = line_rows[-1] + 1
+            ws.insert_rows(new_row)
+            src = list(ws.iter_rows(min_row=ref_row, max_row=ref_row))[0]
+            dst = list(ws.iter_rows(min_row=new_row, max_row=new_row))[0]
+            for s, d in zip(src, dst):
+                d.value = s.value  # copy placeholder pattern
+                if s.has_style:
+                    d.font         = copy.copy(s.font)
+                    d.border       = copy.copy(s.border)
+                    d.fill         = copy.copy(s.fill)
+                    d.number_format = s.number_format
+                    d.alignment    = copy.copy(s.alignment)
+            line_rows.append(new_row)
+
+    # Update any SUM formulas that span the line range
+    if line_rows:
+        first_line = line_rows[0]
+        last_line  = line_rows[-1]
+        line_row_set = set(line_rows)
+        for row in ws.iter_rows():
+            if row[0].row in line_row_set:
+                continue
+            for cell in row:
+                if isinstance(cell.value, str) and '=SUM(' in cell.value:
+                    cell.value = re.sub(
+                        r'([A-Z]+)\d+:([A-Z]+)\d+',
+                        lambda m: f'{m.group(1)}{first_line}:{m.group(2)}{last_line}',
+                        cell.value,
+                    )
+
+    line_row_set = set(line_rows)
+
+    # Fill line rows
+    for i, row_num in enumerate(line_rows):
+        if i < n_lines:
+            line_ctx = {**ctx, **sc_lines[i]}
+            for cell in ws[row_num]:
+                _replace_placeholder(cell, line_ctx)
+                # Write computed weeks directly into the "# of days, wks, mos" column
+                if weeks_col is not None and cell.column == weeks_col:
+                    cell.value = sc_lines[i].get('weeks', 1)
+        else:
+            # Clear unused template rows
+            for cell in ws[row_num]:
+                if isinstance(cell.value, str) and '<' in cell.value:
+                    cell.value = None
+
+    # Fill all non-line rows with single-value context
+    for row in ws.iter_rows():
+        if row[0].row in line_row_set:
+            continue
+        for cell in row:
+            _replace_placeholder(cell, ctx)
+
+
+def _fill_run_sheet(ws, run_rows: List[dict]) -> None:
+    """Fill the Run Sheet with one row per spot."""
+    # Find template rows (rows 2+ that contain any <placeholder>)
+    tmpl_rows: List[int] = []
+    for row in ws.iter_rows(min_row=2):
+        if any(isinstance(c.value, str) and '<' in c.value for c in row):
+            tmpl_rows.append(row[0].row)
+
+    if not tmpl_rows:
+        return
+
+    ref_row = tmpl_rows[0]
+
+    # Build col→field map from the first template row
+    # Entries: col_idx (0-based) → field name  OR  ('formula', template_str)
+    col_map: dict = {}
+    for i, cell in enumerate(list(ws.iter_rows(min_row=ref_row, max_row=ref_row))[0]):
+        if isinstance(cell.value, str):
+            m = re.search(r'<([^>]+)>', cell.value)
+            if m:
+                col_map[i] = m.group(1)
+            elif re.match(r'=([A-Z]+)\d+$', cell.value.strip()):
+                col_map[i] = ('formula', cell.value)
+
+    n_tmpl  = len(tmpl_rows)
+    n_spots = len(run_rows)
+
+    # Expand template rows if we have more spots than pre-filled rows
+    if n_spots > n_tmpl:
+        for _ in range(n_spots - n_tmpl):
+            new_row = tmpl_rows[-1] + 1
+            ws.insert_rows(new_row)
+            _copy_row_format(ws, ref_row, new_row)
+            tmpl_rows.append(new_row)
+
+    # Fill data
+    for spot_idx, rr in enumerate(run_rows):
+        row_num   = tmpl_rows[spot_idx]
+        row_cells = list(ws.iter_rows(min_row=row_num, max_row=row_num))[0]
+        for col_idx, cell in enumerate(row_cells):
+            spec = col_map.get(col_idx)
+            if spec is None:
+                continue
+            if isinstance(spec, tuple) and spec[0] == 'formula':
+                # Update row number: '=B2' → '=B{row_num}'
+                cell.value = re.sub(
+                    r'([A-Z]+)\d+',
+                    lambda m: f'{m.group(1)}{row_num}',
+                    spec[1],
+                )
+            elif spec in rr:
+                cell.value = rr[spec]
+
+    # Clear unused template rows
+    for row_num in tmpl_rows[n_spots:]:
+        for cell in ws[row_num]:
+            cell.value = None
+
+
+def _fill_pivot(ws, run_rows: List[dict]) -> None:
+    """Fill the Sheet1 pivot with monthly gross/net totals."""
+    from collections import defaultdict
+    monthly_gross: dict = defaultdict(float)
+    monthly_net:   dict = defaultdict(float)
+    for rr in run_rows:
+        m = rr.get('month')
+        if isinstance(m, datetime):
+            key = m.strftime('%B %Y')
+            monthly_gross[key] += rr.get('gross_rate', 0) or 0
+            monthly_net[key]   += rr.get('station_net', 0) or 0
+
+    months = sorted(monthly_gross)
+    if not months:
+        return
+
+    # Find the <month> placeholder row
+    month_row: Optional[int] = None
+    for row in ws.iter_rows():
+        if any(isinstance(c.value, str) and '<month>' in c.value for c in row):
+            month_row = row[0].row
+            break
+    if month_row is None:
+        return
+
+    # Determine column positions from the placeholder row
+    ph_cells  = list(ws.iter_rows(min_row=month_row, max_row=month_row))[0]
+    month_col = gross_col = net_col = None
+    for cell in ph_cells:
+        if cell.value is None:
+            continue
+        if isinstance(cell.value, str) and '<month>' in cell.value:
+            month_col = cell.column - 1
+        elif month_col is not None and gross_col is None:
+            gross_col = cell.column - 1
+        elif gross_col is not None and net_col is None:
+            net_col = cell.column - 1
+
+    # Find the Grand Total row (first row after month_row with 'Grand' in month_col)
+    grand_row: Optional[int] = None
+    for row in ws.iter_rows(min_row=month_row + 1):
+        cell = row[month_col] if month_col is not None else row[0]
+        if isinstance(cell.value, str) and 'Grand' in cell.value:
+            grand_row = cell.row
+            break
+
+    # Insert extra rows for additional months (copy format from month_row)
+    extra = len(months) - 1
+    for i in range(extra):
+        ws.insert_rows(month_row + i + 1)
+        _copy_row_format(ws, month_row, month_row + i + 1)
+
+    # Fill month rows
+    for i, month_name in enumerate(months):
+        rn    = month_row + i
+        cells = list(ws.iter_rows(min_row=rn, max_row=rn))[0]
+        for cell in cells:
+            col = cell.column - 1
+            if col == month_col:
+                cell.value = month_name
+            elif col == gross_col:
+                cell.value = round(monthly_gross[month_name], 2)
+            elif col == net_col:
+                cell.value = round(monthly_net[month_name], 2)
+
+    # Update Grand Total row
+    if grand_row is not None:
+        grand_row += extra
+        for cell in list(ws.iter_rows(min_row=grand_row, max_row=grand_row))[0]:
+            col = cell.column - 1
+            if col == gross_col:
+                cell.value = round(sum(monthly_gross.values()), 2)
+            elif col == net_col:
+                cell.value = round(sum(monthly_net.values()), 2)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MAIN ENTRY POINT
+# ─────────────────────────────────────────────────────────────────────────────
+
+def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict) -> bytes:
+    """Generate backwrite Excel from template and return raw bytes."""
     billing_type = user_inputs.get("billing_type", "Broadcast")
     agency_flag  = user_inputs.get("agency_flag",  "Agency")
     agency_fee   = float(user_inputs.get("agency_fee", 0.15) or 0)
@@ -281,309 +539,118 @@ def generate_excel(
     is_agency = agency_flag == "Agency"
     bill_code = f"{header.agency}:{header.client}" if header.agency else header.client
 
-    # ── Compute derived fields for every spot ─────────────────────────────
+    # ── Per-spot run rows ─────────────────────────────────────────────────────
     run_rows: List[dict] = []
     for s in spots:
         if billing_type == "Broadcast":
             month_date = compute_broadcast_month(s.air_date)
         else:
             month_date = date(s.air_date.year, s.air_date.month, 1)
-        month_dt = datetime(month_date.year, month_date.month, month_date.day)
-
+        month_dt    = datetime(month_date.year, month_date.month, month_date.day)
         broker_fees = round(s.gross_rate * agency_fee, 2) if is_agency else 0.0
         station_net = round(s.gross_rate - broker_fees, 2)
-        spot_type   = "BNS" if s.gross_rate == 0 else "COM"
-        lang        = detect_language(s.row_description)
-
         run_rows.append({
-            "Bill Code":    bill_code,
-            "Air Date":     s.air_date,
-            "End Date":     s.air_date,
-            "Day":          s.air_date.strftime("%A"),
-            "Time In":      _hhmm_to_timedelta(s.time_from),
-            "Time out":     _hhmm_to_timedelta(s.time_to),
-            "Length":       timedelta(seconds=s.duration_s),
-            "Media":        s.copy_code,
-            "Program":      s.air_time,
-            "Lang.":        lang,
-            "Format":       None,
-            "#":            s.priority,
-            "Line":         s.line_id,
-            "Type":         spot_type,
-            "Estimate":     estimate,
-            "Gross Rate":   s.gross_rate,
-            "Make Good":    None,
-            "Spot Value":   s.gross_rate,
-            "Month":        month_dt,
-            "Broker Fees":  broker_fees,
-            "Priority":     4,
-            "Station Net":  station_net,
-            "Sales Person": sales_person,
-            "Revenue Type": revenue_type,
-            "Billing Type": billing_type,
-            "Agency?":      agency_flag,
-            "Affidavit?":   affidavit,
-            "Contract":     contract,
-            "Market":       s.market,
+            "bill_code":    bill_code,
+            "air_date":     s.air_date,
+            "day":          s.air_date.strftime("%A"),
+            "time_in":      _hhmm_to_timedelta(s.time_from),
+            "time_out":     _hhmm_to_timedelta(s.time_to),
+            "length":       timedelta(seconds=s.duration_s),
+            "media":        s.copy_code,
+            "program":      s.air_time,
+            "lang":         detect_language(s.row_description),
+            "line":         s.line_id,
+            "type":         "BNS" if s.gross_rate == 0 else "COM",
+            "estimate":     estimate,
+            "gross_rate":   s.gross_rate,
+            "spot_value":   s.gross_rate,
+            "month":        month_dt,
+            "broker_fees":  broker_fees,
+            "priority":     4,
+            "station_net":  station_net,
+            "sales_person": sales_person,
+            "revenue_type": revenue_type,
+            "billing_type": billing_type,
+            "agency_flag":  agency_flag,
+            "affidavit":    affidavit,
+            "contract":     contract,
+            "market":       s.market,
         })
 
-    # ── Build workbook ────────────────────────────────────────────────────
-    wb = openpyxl.Workbook()
+    # ── Sales Confirmation lines (grouped by line_id) ─────────────────────────
+    groups: Dict[int, List[SpotRow]] = OrderedDict()
+    for s in spots:
+        groups.setdefault(s.line_id, []).append(s)
 
-    ws_sc  = wb.active
-    ws_sc.title = "Sales Confirmation"
-    ws_run = wb.create_sheet("Run Sheet")
-    ws_piv = wb.create_sheet("Sheet1")
+    sc_lines: List[dict] = []
+    for line_id, group in groups.items():
+        d_start     = min(s.air_date for s in group)
+        d_end       = max(s.air_date for s in group)
+        total_spots = len(group)
+        weeks       = max(1, round((d_end - d_start).days / 7) + 1)
+        spw         = max(1, round(total_spots / weeks))
+        first       = group[0]
+        sc_lines.append({
+            "date_range_start": d_start.strftime("%m/%d/%Y"),
+            "date_range_end":   d_end.strftime("%m/%d/%Y"),
+            "spot_count":       spw,         # spots per week → F column
+            "per":              "Wk",
+            "weeks":            weeks,        # # of weeks   → I column (computed, not a placeholder)
+            "line_description": _strip_line_prefix(first.row_description),
+            "type":             "BNS" if first.gross_rate == 0 else "COM",
+            "length":           f":{first.duration_s}",
+            "gross_rate":       first.gross_rate,
+        })
 
-    _build_run_sheet(ws_run, run_rows)
-    _build_sales_confirmation(
-        ws_sc, header, spots, run_rows,
-        estimate=estimate, contract=contract,
-        is_agency=is_agency, agency_fee=agency_fee,
-        sales_person=sales_person, billing_type=billing_type,
-    )
-    _build_pivot(ws_piv, run_rows)
+    # ── Single-value context ──────────────────────────────────────────────────
+    total_gross = sum(s.gross_rate for s in spots) if spots else 0.0
+    total_net   = round(total_gross * (1 - agency_fee), 2) if is_agency else total_gross
+    markets     = sorted(set(s.market for s in spots))
+    d_start_all = min(s.air_date for s in spots) if spots else date.today()
+    d_end_all   = max(s.air_date for s in spots) if spots else date.today()
+
+    ctx: dict = {
+        "agency":           header.agency,
+        "client":           header.client,
+        "contract_code":    header.contract_code,
+        "description":      header.description,
+        "estimate":         estimate,
+        "address":          header.address,
+        "billing_type":     billing_type,
+        "city":             header.city,
+        "order_date":       header.order_date,
+        "contract":         contract,
+        "sales_person":     sales_person,
+        "revenue_type":     revenue_type,
+        "agency_flag":      agency_flag,
+        "affidavit":        affidavit,
+        "date_range_start": d_start_all.strftime("%m/%d/%Y"),
+        "date_range_end":   d_end_all.strftime("%m/%d/%Y"),
+        "spot_count":       len(spots),
+        "total_gross":      total_gross,
+        "total_net":        total_net,
+        "market":           ", ".join(markets),
+        "bill_code":        bill_code,
+        # Fields not sourced from the CSV — left blank
+        "contact_person":   "",
+        "phone":            "",
+        "fax":              "",
+        "email_1":          "",
+        "email_2":          "",
+        "email_3":          "",
+        "email_4":          "",
+        "state":            "",
+        "zip":              "",
+        "per":              "Wk",
+    }
+
+    # ── Load template and fill ────────────────────────────────────────────────
+    wb = openpyxl.load_workbook(str(TEMPLATE_PATH))
+    _fill_sales_confirmation(wb["Sales Confirmation"], ctx, sc_lines)
+    _fill_run_sheet(wb["Run Sheet"], run_rows)
+    _fill_pivot(wb["Sheet1"], run_rows)
 
     buf = BytesIO()
     wb.save(buf)
     buf.seek(0)
     return buf.read()
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# RUN SHEET
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _build_run_sheet(ws, run_rows: List[dict]) -> None:
-    ws.append(_RUN_SHEET_COLS)
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-
-    for rr in run_rows:
-        ws.append([rr[c] for c in _RUN_SHEET_COLS])
-
-    _TIME_COLS  = {"Time In", "Time out", "Length"}
-    _DATE_COLS  = {"Air Date", "End Date", "Month"}
-    _MONEY_COLS = {"Gross Rate", "Spot Value", "Broker Fees", "Station Net"}
-
-    for row in ws.iter_rows(min_row=2, max_row=len(run_rows) + 1):
-        for cell in row:
-            col_name = _RUN_SHEET_COLS[cell.column - 1]
-            if col_name in _TIME_COLS:
-                cell.number_format = "HH:MM:SS"
-            elif col_name in _DATE_COLS:
-                cell.number_format = "m/d/yy"
-            elif col_name in _MONEY_COLS:
-                cell.number_format = "$#,##0.00"
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# SALES CONFIRMATION
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _build_sales_confirmation(
-    ws,
-    header: CsvHeader,
-    spots: List[SpotRow],
-    run_rows: List[dict],
-    *,
-    estimate: str,
-    contract: str,
-    is_agency: bool,
-    agency_fee: float,
-    sales_person: str,
-    billing_type: str,
-) -> None:
-
-    market = spots[0].market if spots else ""
-    bold   = Font(bold=True)
-
-    def label(row, col, text):
-        ws.cell(row, col, text).font = bold
-
-    # ── Title ─────────────────────────────────────────────────────────────
-    ws.cell(1, 6, "SALES CONFIRMATION - CROSSINGS TV").font = Font(bold=True, size=14)
-
-    # ── Contact block (left) / Order block (right) ────────────────────────
-    label(2, 2, "Client")
-    ws.cell(2, 4, header.agency)
-    label(2, 9, "Advertiser")
-    ws.cell(2, 12, header.client)
-    label(3, 2, "Contact")
-    label(3, 9, "Estimate")
-    ws.cell(3, 12, estimate)
-    label(4, 2, "Address")
-    ws.cell(4, 4, header.address)
-    label(4, 9, "Billing Type")
-    ws.cell(4, 12, billing_type)
-    ws.cell(5, 4, header.city)
-    label(5, 9, "Market")
-    ws.cell(5, 12, market)
-    label(6, 2, "Phone")
-    label(6, 9, "Date Order Written")
-    date_cell = ws.cell(6, 12, datetime.today().date())
-    date_cell.number_format = "m/d/yy"
-    label(7, 2, "Fax")
-    label(7, 9, "Contract Number")
-    ws.cell(7, 12, contract)
-    label(8, 2, "Email")
-    label(8, 9, "Revision")
-    ws.cell(8, 12, 0)
-    label(9, 9, "Station Representative")
-    ws.cell(9, 11, sales_person)
-
-    # ── Line item header (row 10) ─────────────────────────────────────────
-    _SC_HDR = [
-        None, "Line Number", None, "Start Date", "End Date",
-        "# spt per", "Per ____", "TP/Program/Lang Ordered",
-        "# of days, wks, mos", "Spot type", None,
-        "Total # of Units", None, "Length",
-        "Gross Unit Rate", "Gross Line Total",
-    ]
-    for c, val in enumerate(_SC_HDR, 1):
-        if val:
-            ws.cell(10, c, val).font = bold
-
-    # ── Line items ────────────────────────────────────────────────────────
-    # Group spots by line_id, preserving first-appearance order
-    groups: Dict[int, List[SpotRow]] = OrderedDict()
-    for s in spots:
-        groups.setdefault(s.line_id, []).append(s)
-
-    current_row = 11
-    total_gross = 0.0
-
-    for line_num, (line_id, group) in enumerate(groups.items(), start=1):
-        total_spots = len(group)
-        start_date  = min(s.air_date for s in group)
-        end_date    = max(s.air_date for s in group)
-        gross_rate  = group[0].gross_rate
-        duration_s  = group[0].duration_s
-        desc        = _strip_line_prefix(group[0].row_description)
-        spot_type   = "BNS" if gross_rate == 0 else "COM"
-        gross_total = round(gross_rate * total_spots, 2)
-        total_gross += gross_total
-
-        ws.cell(current_row, 2, line_num)
-
-        sd = ws.cell(current_row, 4, datetime(start_date.year, start_date.month, start_date.day))
-        sd.number_format = "m/d/yy"
-        ed = ws.cell(current_row, 5, datetime(end_date.year, end_date.month, end_date.day))
-        ed.number_format = "m/d/yy"
-
-        ws.cell(current_row, 6, total_spots)    # # spt per
-        ws.cell(current_row, 7, "order")         # Per ____
-        ws.cell(current_row, 8, desc)            # TP/Program/Lang Ordered
-        ws.cell(current_row, 9, 1)               # # of days, wks, mos
-        ws.cell(current_row, 10, spot_type)
-        ws.cell(current_row, 12, total_spots)    # Total # of Units
-        ws.cell(current_row, 14, f":{duration_s}")   # Length
-
-        gr_cell = ws.cell(current_row, 15, gross_rate)
-        gr_cell.number_format = "$#,##0.00"
-
-        gt_cell = ws.cell(current_row, 16, gross_total)
-        gt_cell.number_format = "$#,##0.00"
-
-        current_row += 1
-
-    # ── Totals ────────────────────────────────────────────────────────────
-    current_row += 1  # blank row
-
-    ws.cell(current_row, 15, "Grand Total").font = bold
-    gt = ws.cell(current_row, 16, round(total_gross, 2))
-    gt.font = bold
-    gt.number_format = "$#,##0.00"
-    current_row += 1
-
-    if is_agency:
-        disc     = round(total_gross * agency_fee, 2)
-        net_tot  = round(total_gross - disc, 2)
-
-        ws.cell(current_row, 15, f"Agency Discount ({int(agency_fee * 100)}%)")
-        d_cell = ws.cell(current_row, 16, -disc)
-        d_cell.number_format = "$#,##0.00"
-        current_row += 1
-
-        ws.cell(current_row, 15, "Net Total").font = bold
-        n_cell = ws.cell(current_row, 16, net_tot)
-        n_cell.font = bold
-        n_cell.number_format = "$#,##0.00"
-        current_row += 1
-
-    current_row += 1  # blank
-
-    ws.cell(current_row, 9, "Station Rep Signature")
-    current_row += 2
-
-    # ── Monthly breakdown ─────────────────────────────────────────────────
-    monthly: Dict[str, dict] = OrderedDict()
-    for rr in run_rows:
-        m_dt = rr["Month"]
-        key  = m_dt.strftime("%b") if isinstance(m_dt, datetime) else str(m_dt)
-        if key not in monthly:
-            monthly[key] = {"gross": 0.0, "net": 0.0}
-        monthly[key]["gross"] += rr["Gross Rate"]
-        monthly[key]["net"]   += rr["Station Net"]
-
-    ws.cell(current_row, 2, "MONTHLY BREAKDOWN").font = bold
-    current_row += 1
-
-    label(current_row, 2, "Month")
-    label(current_row, 4, "Gross")
-    label(current_row, 5, "Net")
-    current_row += 1
-
-    total_m_gross = total_m_net = 0.0
-    for month_name, totals in monthly.items():
-        ws.cell(current_row, 2, month_name)
-        g = ws.cell(current_row, 4, round(totals["gross"], 2))
-        g.number_format = "$#,##0.00"
-        n = ws.cell(current_row, 5, round(totals["net"], 2))
-        n.number_format = "$#,##0.00"
-        total_m_gross += totals["gross"]
-        total_m_net   += totals["net"]
-        current_row += 1
-
-    ws.cell(current_row, 2, "Total").font = bold
-    tg = ws.cell(current_row, 4, round(total_m_gross, 2))
-    tg.font = bold
-    tg.number_format = "$#,##0.00"
-    tn = ws.cell(current_row, 5, round(total_m_net, 2))
-    tn.font = bold
-    tn.number_format = "$#,##0.00"
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# SHEET1 PIVOT
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _build_pivot(ws, run_rows: List[dict]) -> None:
-    bold = Font(bold=True)
-    ws.append(["Row Labels", "Sum of Gross Rate", "Sum of Station Net"])
-    for cell in ws[1]:
-        cell.font = bold
-
-    ws.append(["(blank)", None, None])
-
-    monthly: Dict[datetime, dict] = OrderedDict()
-    for rr in run_rows:
-        m = rr["Month"]
-        if not isinstance(m, datetime):
-            continue
-        key = datetime(m.year, m.month, 1)
-        if key not in monthly:
-            monthly[key] = {"gross": 0.0, "net": 0.0}
-        monthly[key]["gross"] += rr["Gross Rate"]
-        monthly[key]["net"]   += rr["Station Net"]
-
-    total_gross = total_net = 0.0
-    for month_dt, totals in sorted(monthly.items()):
-        ws.append([month_dt, round(totals["gross"], 2), round(totals["net"], 2)])
-        ws.cell(ws.max_row, 1).number_format = "m/d/yy"
-        total_gross += totals["gross"]
-        total_net   += totals["net"]
-
-    ws.append(["Grand Total", round(total_gross, 2), round(total_net, 2)])
-    for cell in ws[ws.max_row]:
-        cell.font = bold
