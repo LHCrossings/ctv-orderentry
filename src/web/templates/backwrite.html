@@ -353,7 +353,7 @@ let uploadedFile = null;
 // ── Today's date ─────────────────────────────────────────────────────────────
 function todayMDY() {
     const d = new Date();
-    return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+    return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
 }
 document.getElementById('order_date').value = todayMDY();
 
@@ -467,8 +467,7 @@ function handleExistingFile(f) {
             fill('state',         d.state);
             fill('zip_code',      d.zip);
             fill('sales_person',  d.sales_person);
-            setIfEmpty('contract', d.contract);   // CSV contract number always wins
-            // estimate and billing_type only if not already set from CSV hint
+            // estimate only if not already set from CSV hint (contract left blank)
             setIfEmpty('estimate', d.estimate);
             // order_date stays as today — never copy from old order
             existingFn.textContent += ' ✓';

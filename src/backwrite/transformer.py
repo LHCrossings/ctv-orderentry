@@ -842,7 +842,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
         "address":          user_inputs.get("address") or header.address,
         "billing_type":     billing_type,
         "city":             user_inputs.get("city") or header.city,
-        "order_date":       user_inputs.get("order_date") or f"{date.today().day}/{date.today().month}/{date.today().year}",
+        "order_date":       user_inputs.get("order_date") or f"{date.today().month}/{date.today().day}/{date.today().year}",
         "contract":         contract,
         "sales_person":     sales_person,
         "revenue_type":     revenue_type,
