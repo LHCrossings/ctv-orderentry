@@ -29,8 +29,7 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
 
     @router.get("", response_class=HTMLResponse)
     async def backwrite_page(request: Request):
-        return templates.TemplateResponse("backwrite.html", {
-            "request":      request,
+        return templates.TemplateResponse(request, "backwrite.html", {
             "revenue_types": REVENUE_TYPES,
             "sales_people":  SALES_PEOPLE,
         })
