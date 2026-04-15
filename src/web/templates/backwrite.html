@@ -115,35 +115,12 @@
             padding-bottom: 6px;
             border-bottom: 1px solid var(--border-color);
         }
-        .load-existing-bar {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px 16px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
+        .upload-zone-sm {
+            padding: 18px 24px;
             margin-bottom: 20px;
-            font-size: 0.88rem;
         }
-        .load-existing-bar label.btn-load {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 7px 16px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: var(--text-secondary);
-            transition: border-color 0.15s, color 0.15s;
-            white-space: nowrap;
-        }
-        .load-existing-bar label.btn-load:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
-        .load-existing-bar input[type=file] { display: none; }
-        #existing-filename { color: var(--accent-primary); font-weight: 600; }
+        .upload-zone-sm .upload-icon { font-size: 1.4rem; margin-bottom: 4px; }
+        .upload-zone-sm p { margin: 2px 0; }
         .btn-generate {
             display: inline-flex;
             align-items: center;
@@ -216,14 +193,13 @@
     <div class="bw-card" id="form-card" style="display:none">
         <h2>Step 2 — Fill In Details</h2>
 
-        <!-- Load existing order -->
-        <div class="load-existing-bar">
-            <label class="btn-load" for="existing-input">
-                📁 Load existing order
-            </label>
+        <!-- Load existing order drop zone -->
+        <div class="upload-zone upload-zone-sm" id="existing-zone">
             <input type="file" id="existing-input" accept=".xlsx,.xlsm,.xls" />
-            <span id="existing-filename" style="display:none"></span>
-            <span id="existing-hint" style="color:var(--text-secondary)">Optional — pre-fills contact & address fields from a previous order for this client</span>
+            <div class="upload-icon">📁</div>
+            <p>Optional — drop an existing Sales Confirmation here to pre-fill fields</p>
+            <p>or click to browse</p>
+            <div class="file-name" id="existing-filename"></div>
         </div>
 
         <form id="bw-form" method="POST" action="/backwrite/generate" enctype="multipart/form-data">
@@ -371,7 +347,6 @@ const formStatus     = document.getElementById('form-status');
 const bwForm         = document.getElementById('bw-form');
 const existingInput  = document.getElementById('existing-input');
 const existingFn     = document.getElementById('existing-filename');
-const existingHint   = document.getElementById('existing-hint');
 
 let uploadedFile = null;
 
@@ -382,7 +357,7 @@ function todayMDY() {
 }
 document.getElementById('order_date').value = todayMDY();
 
-// ── Upload zone drag/drop ─────────────────────────────────────────────────────
+// ── CSV upload zone drag/drop ─────────────────────────────────────────────────
 const uploadZone = document.getElementById('upload-zone');
 uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
 uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
@@ -393,6 +368,18 @@ uploadZone.addEventListener('drop', e => {
     if (f) handleFile(f);
 });
 csvInput.addEventListener('change', () => { if (csvInput.files[0]) handleFile(csvInput.files[0]); });
+
+// ── Existing order drop zone ──────────────────────────────────────────────────
+const existingZone = document.getElementById('existing-zone');
+existingZone.addEventListener('dragover', e => { e.preventDefault(); existingZone.classList.add('drag-over'); });
+existingZone.addEventListener('dragleave', () => existingZone.classList.remove('drag-over'));
+existingZone.addEventListener('drop', e => {
+    e.preventDefault();
+    existingZone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f) handleExistingFile(f);
+});
+existingInput.addEventListener('change', () => { if (existingInput.files[0]) handleExistingFile(existingInput.files[0]); });
 
 function showStatus(el, msg, type) {
     el.textContent = msg;
@@ -459,13 +446,9 @@ function fill(id, val) {
 }
 
 // ── Load existing order ───────────────────────────────────────────────────────
-existingInput.addEventListener('change', () => {
-    const f = existingInput.files[0];
-    if (!f) return;
-
+function handleExistingFile(f) {
     existingFn.textContent = f.name;
     existingFn.style.display = 'inline';
-    existingHint.style.display = 'none';
 
     const fd = new FormData();
     fd.append('existing_file', f);
@@ -488,10 +471,10 @@ existingInput.addEventListener('change', () => {
             // estimate and billing_type only if not already set from CSV hint
             setIfEmpty('estimate', d.estimate);
             // order_date stays as today — never copy from old order
-            existingFn.textContent += ' — fields loaded';
+            existingFn.textContent += ' ✓';
         })
-        .catch(err => { existingFn.textContent = 'Error: ' + err; });
-});
+        .catch(err => { existingFn.textContent = f.name + ' — Error: ' + err; });
+}
 
 // ── Agency fee toggle ─────────────────────────────────────────────────────────
 function toggleAgencyFee() {
