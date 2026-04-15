@@ -59,6 +59,19 @@ def build_output_folder(log_type: str, date_from: str, date_to: str) -> Path:
         return PRE_LOG_BASE / folder_name
 
 
+def set_master_market(session, coduser: int) -> None:
+    """Set the Etere master market (station) for this session.
+
+    Must be called before downloading any report that filters by market.
+    For Worldlink/TAC reports, coduser=10 (Dallas) is required or TAC spots
+    will be excluded from results.
+    """
+    url = f"{ETERE_WEB_URL}/StationS/Save"
+    resp = session.post(url, data={"coduser": coduser}, timeout=15)
+    resp.raise_for_status()
+    print(f"[MARKET] Master market set to coduser={coduser}")
+
+
 def download_report(session, date_from: str, date_to: str) -> None:
     """Download placement confirmation CSV from Etere."""
     url = (
@@ -122,6 +135,7 @@ def main():
 
     print(f"[INFO] Logging into Etere ...")
     session = etere_web_login()
+    set_master_market(session, coduser=10)  # DAL (Dallas) — required for TAC spots
 
     try:
         download_report(session, date_from, date_to)
