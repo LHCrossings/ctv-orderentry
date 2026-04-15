@@ -447,11 +447,12 @@ def _fill_monthly_breakdown(
         if net_col:
             ws.cell(row=rn, column=net_col).value = round(monthly_net.get(month_name_str, 0), 2)
 
-    # Clear unused rows
-    for rn in data_rows[n_needed:]:
-        for col in (month_col, gross_col, net_col):
-            if col:
-                ws.cell(row=rn, column=col).value = None
+    # Delete extra template rows (shrink to exactly n_needed data rows)
+    extra_rows = data_rows[n_needed:]
+    for rn in reversed(extra_rows):
+        ws.delete_rows(rn)
+        if total_row and total_row > rn:
+            total_row -= 1
 
     # Update Total row
     if total_row and n_needed > 0:
