@@ -487,7 +487,7 @@ existingInput.addEventListener('change', () => {
             fill('state',         d.state);
             fill('zip_code',      d.zip);
             fill('sales_person',  d.sales_person);
-            fill('contract',      d.contract);
+            setIfEmpty('contract', d.contract);   // CSV contract number always wins
             // estimate and billing_type only if not already set from CSV hint
             setIfEmpty('estimate', d.estimate);
             // order_date stays as today — never copy from old order
