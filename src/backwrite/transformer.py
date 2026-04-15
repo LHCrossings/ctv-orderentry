@@ -306,7 +306,138 @@ def _copy_row_format(ws, src_row: int, dst_row: int) -> None:
 # SHEET FILLERS
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _fill_sales_confirmation(ws, ctx: dict, sc_lines: List[dict]) -> None:
+def _snapshot_row(ws, row_num: int) -> List[dict]:
+    """Capture all cells in a row into a list of dicts before any insertions."""
+    max_col = ws.max_column
+    snaps = []
+    for col_idx in range(1, max_col + 1):
+        cell = ws.cell(row=row_num, column=col_idx)
+        snaps.append({
+            'col':           col_idx,
+            'value':         cell.value,
+            'has_style':     cell.has_style,
+            'font':          copy.copy(cell.font)      if cell.has_style else None,
+            'border':        copy.copy(cell.border)    if cell.has_style else None,
+            'fill':          copy.copy(cell.fill)      if cell.has_style else None,
+            'number_format': cell.number_format        if cell.has_style else None,
+            'alignment':     copy.copy(cell.alignment) if cell.has_style else None,
+        })
+    return snaps
+
+
+def _apply_snapshot(ws, snapshot: List[dict], new_row: int, ref_row: int) -> None:
+    """Write a row snapshot to new_row, updating formula row references."""
+    for snap in snapshot:
+        col_idx  = snap['col']
+        val      = snap['value']
+        dst_cell = ws.cell(row=new_row, column=col_idx)
+        if isinstance(val, str) and val.startswith('='):
+            val = re.sub(
+                r'([A-Z]+)' + str(ref_row),
+                lambda m, nr=new_row: f'{m.group(1)}{nr}',
+                val,
+            )
+        dst_cell.value = val
+        if snap['has_style']:
+            dst_cell.font          = copy.copy(snap['font'])
+            dst_cell.border        = copy.copy(snap['border'])
+            dst_cell.fill          = copy.copy(snap['fill'])
+            dst_cell.number_format = snap['number_format']
+            dst_cell.alignment     = copy.copy(snap['alignment'])
+
+
+def _fill_monthly_breakdown(
+    ws, monthly_gross: dict, monthly_net: dict, last_line_row: int
+) -> None:
+    """Replace the hardcoded monthly breakdown table with actual monthly totals."""
+    import calendar as _cal
+
+    # Find "Month" header row below the data lines
+    month_hdr_row: Optional[int] = None
+    for row in ws.iter_rows(min_row=last_line_row + 1):
+        for cell in row:
+            if isinstance(cell.value, str) and cell.value.strip().lower() == 'month':
+                month_hdr_row = row[0].row
+                break
+        if month_hdr_row:
+            break
+    if month_hdr_row is None:
+        return
+
+    # Determine column positions from header row
+    month_col = gross_col = net_col = None
+    for cell in ws[month_hdr_row]:
+        v = str(cell.value or '').strip().lower()
+        if v == 'month':
+            month_col = cell.column
+        elif v == 'gross' and month_col is not None and gross_col is None:
+            gross_col = cell.column
+        elif v == 'net' and gross_col is not None and net_col is None:
+            net_col = cell.column
+
+    if month_col is None:
+        return
+
+    # Find existing data rows and the Total row
+    data_rows: List[int] = []
+    total_row: Optional[int] = None
+    for row in ws.iter_rows(min_row=month_hdr_row + 1):
+        cell = ws.cell(row=row[0].row, column=month_col)
+        if isinstance(cell.value, str) and 'total' in cell.value.lower():
+            total_row = row[0].row
+            break
+        data_rows.append(row[0].row)
+
+    if not data_rows:
+        return
+
+    # Sort months in calendar order
+    month_order = {m: i for i, m in enumerate(_cal.month_name) if m}
+    sorted_months = sorted(monthly_gross.keys(), key=lambda m: month_order.get(m, 99))
+    n_needed   = len(sorted_months)
+    n_existing = len(data_rows)
+    ref_snap   = _snapshot_row(ws, data_rows[0])
+
+    # Expand rows if needed
+    if n_needed > n_existing:
+        for _ in range(n_needed - n_existing):
+            new_r = data_rows[-1] + 1
+            ws.insert_rows(new_r)
+            _apply_snapshot(ws, ref_snap, new_r, data_rows[0])
+            data_rows.append(new_r)
+            if total_row:
+                total_row += 1
+
+    # Fill month rows
+    for i, month_name_str in enumerate(sorted_months):
+        rn = data_rows[i]
+        if month_col:
+            ws.cell(row=rn, column=month_col).value = month_name_str
+        if gross_col:
+            ws.cell(row=rn, column=gross_col).value = round(monthly_gross[month_name_str], 2)
+        if net_col:
+            ws.cell(row=rn, column=net_col).value = round(monthly_net.get(month_name_str, 0), 2)
+
+    # Clear unused rows
+    for rn in data_rows[n_needed:]:
+        for col in (month_col, gross_col, net_col):
+            if col:
+                ws.cell(row=rn, column=col).value = None
+
+    # Update Total row
+    if total_row and n_needed > 0:
+        first_data = data_rows[0]
+        last_data  = data_rows[n_needed - 1]
+        if gross_col:
+            ws.cell(row=total_row, column=gross_col).value = round(sum(monthly_gross.values()), 2)
+        if net_col:
+            ws.cell(row=total_row, column=net_col).value = round(sum(monthly_net.values()), 2)
+
+
+def _fill_sales_confirmation(
+    ws, ctx: dict, sc_lines: List[dict],
+    monthly_gross: dict, monthly_net: dict,
+) -> None:
     """Fill the Sales Confirmation sheet using placeholder replacement."""
     # Detect line template rows: any row that contains '<date_range_start>'
     line_rows: List[int] = []
@@ -316,9 +447,9 @@ def _fill_sales_confirmation(ws, ctx: dict, sc_lines: List[dict]) -> None:
 
     n_tmpl  = len(line_rows)
     n_lines = len(sc_lines)
+    max_col = ws.max_column
 
-    # Detect which column holds "# of days, wks, mos" (the weeks/periods column).
-    # Look for the column header in the row above the first line template row.
+    # Detect weeks column from header row above the first line row
     weeks_col: Optional[int] = None
     if line_rows:
         hdr_row_num = line_rows[0] - 1
@@ -327,38 +458,22 @@ def _fill_sales_confirmation(ws, ctx: dict, sc_lines: List[dict]) -> None:
                 weeks_col = cell.column
                 break
 
-    # Expand: insert rows after the last template line row when we have more lines
+    # Snapshot first template row BEFORE any insertions (avoids read-after-insert issues)
+    ref_row  = line_rows[0] if line_rows else None
+    snapshot = _snapshot_row(ws, ref_row) if ref_row else []
+
+    # Expand: insert rows when we need more lines than template provides
     if n_lines > n_tmpl and n_tmpl > 0:
-        ref_row = line_rows[0]
-        max_col = ws.max_column
         for _ in range(n_lines - n_tmpl):
             new_row = line_rows[-1] + 1
             ws.insert_rows(new_row)
-            # Use explicit cell access — iter_rows on a just-inserted row may truncate
-            for col_idx in range(1, max_col + 1):
-                src_cell = ws.cell(row=ref_row, column=col_idx)
-                dst_cell = ws.cell(row=new_row, column=col_idx)
-                # Copy value; update any formula row references to point to new_row
-                if isinstance(src_cell.value, str) and src_cell.value.startswith('='):
-                    dst_cell.value = re.sub(
-                        r'([A-Z]+)' + str(ref_row),
-                        lambda m, nr=new_row: f'{m.group(1)}{nr}',
-                        src_cell.value,
-                    )
-                else:
-                    dst_cell.value = src_cell.value
-                if src_cell.has_style:
-                    dst_cell.font         = copy.copy(src_cell.font)
-                    dst_cell.border       = copy.copy(src_cell.border)
-                    dst_cell.fill         = copy.copy(src_cell.fill)
-                    dst_cell.number_format = src_cell.number_format
-                    dst_cell.alignment    = copy.copy(src_cell.alignment)
+            _apply_snapshot(ws, snapshot, new_row, ref_row)
             line_rows.append(new_row)
 
-    # Update any SUM formulas that span the line range
+    # Update SUM formulas that span the line range
     if line_rows:
-        first_line = line_rows[0]
-        last_line  = line_rows[-1]
+        first_line   = line_rows[0]
+        last_line    = line_rows[-1]
         line_row_set = set(line_rows)
         for row in ws.iter_rows():
             if row[0].row in line_row_set:
@@ -373,20 +488,20 @@ def _fill_sales_confirmation(ws, ctx: dict, sc_lines: List[dict]) -> None:
 
     line_row_set = set(line_rows)
 
-    # Fill line rows
+    # Fill line rows — use explicit ws.cell() to avoid row-iteration truncation
     for i, row_num in enumerate(line_rows):
         if i < n_lines:
             line_ctx = {**ctx, **sc_lines[i]}
-            for cell in ws[row_num]:
+            for col_idx in range(1, max_col + 1):
+                cell = ws.cell(row=row_num, column=col_idx)
                 _replace_placeholder(cell, line_ctx)
-                # Write computed weeks directly into the "# of days, wks, mos" column
-                if weeks_col is not None and cell.column == weeks_col:
+                if weeks_col is not None and col_idx == weeks_col:
                     cell.value = sc_lines[i].get('weeks', 1)
-            # Ensure line number in column B is sequential (handles hardcoded "1" in template)
+            # Sequential line number in column B (handles hardcoded "1" in template)
             ws.cell(row=row_num, column=2).value = i + 1
         else:
-            # Clear unused template rows
-            for cell in ws[row_num]:
+            for col_idx in range(1, max_col + 1):
+                cell = ws.cell(row=row_num, column=col_idx)
                 if isinstance(cell.value, str) and '<' in cell.value:
                     cell.value = None
 
@@ -397,50 +512,68 @@ def _fill_sales_confirmation(ws, ctx: dict, sc_lines: List[dict]) -> None:
         for cell in row:
             _replace_placeholder(cell, ctx)
 
+    # Fill the monthly breakdown section
+    last_line_row = line_rows[-1] if line_rows else 20
+    _fill_monthly_breakdown(ws, monthly_gross, monthly_net, last_line_row)
 
-def _extract_raw_csv_rows(data: bytes) -> Tuple[List[str], List[List[str]]]:
-    """Return (col_headers, data_rows) from the raw EtereBridge CSV bytes.
 
-    Finds the data section that starts with the COD_CONTRATTO1 / dateschedule
-    header row and returns it as plain string lists — no type conversion.
-    """
-    text  = data.decode("utf-8-sig")
-    lines = text.splitlines()
+def _fill_run_sheet(ws, run_rows: List[dict]) -> None:
+    """Fill the Run Sheet with one row per spot using the template."""
+    # Find template rows (rows 2+ that contain any <placeholder>)
+    tmpl_rows: List[int] = []
+    for row in ws.iter_rows(min_row=2):
+        if any(isinstance(c.value, str) and '<' in c.value for c in row):
+            tmpl_rows.append(row[0].row)
 
-    data_start: Optional[int] = None
-    for i, line in enumerate(lines):
-        if "COD_CONTRATTO1" in line or "dateschedule" in line.lower():
-            data_start = i
+    if not tmpl_rows:
+        return
+
+    ref_row  = tmpl_rows[0]
+    max_col  = ws.max_column
+    snapshot = _snapshot_row(ws, ref_row)
+
+    # Build col → field map from the first template row
+    col_map: dict = {}
+    for snap in snapshot:
+        val = snap['value']
+        if isinstance(val, str):
+            m = re.search(r'<([^>]+)>', val)
+            if m:
+                col_map[snap['col']] = m.group(1)
+            elif re.match(r'=([A-Z]+)\d+$', val.strip()):
+                col_map[snap['col']] = ('formula', val)
+
+    n_tmpl  = len(tmpl_rows)
+    n_spots = len(run_rows)
+
+    # Expand using snapshot
+    if n_spots > n_tmpl:
+        for _ in range(n_spots - n_tmpl):
+            new_row = tmpl_rows[-1] + 1
+            ws.insert_rows(new_row)
+            _apply_snapshot(ws, snapshot, new_row, ref_row)
+            tmpl_rows.append(new_row)
+
+    # Fill data rows
+    for spot_idx, rr in enumerate(run_rows):
+        if spot_idx >= len(tmpl_rows):
             break
+        row_num = tmpl_rows[spot_idx]
+        for col_idx, spec in col_map.items():
+            cell = ws.cell(row=row_num, column=col_idx)
+            if isinstance(spec, tuple) and spec[0] == 'formula':
+                cell.value = re.sub(
+                    r'([A-Z]+)\d+',
+                    lambda m, nr=row_num: f'{m.group(1)}{nr}',
+                    spec[1],
+                )
+            elif spec in rr:
+                cell.value = rr[spec]
 
-    if data_start is None:
-        return [], []
-
-    reader      = csv.reader(lines[data_start:])
-    col_headers = next(reader, [])
-    data_rows   = [row for row in reader if any(cell.strip() for cell in row)]
-    return col_headers, data_rows
-
-
-def _fill_run_sheet(ws, col_headers: List[str], raw_rows: List[List[str]]) -> None:
-    """Copy raw EtereBridge data directly into the Run Sheet.
-
-    Row 1 gets the CSV column headers; rows 2+ get the raw spot data.
-    All existing content from row 1 onwards is replaced.
-    """
-    # Clear existing content (keep sheet, remove all values)
-    for row in ws.iter_rows():
-        for cell in row:
-            cell.value = None
-
-    # Write column headers at row 1
-    for col_idx, header in enumerate(col_headers, start=1):
-        ws.cell(row=1, column=col_idx).value = header
-
-    # Write raw data rows starting at row 2
-    for row_idx, row_data in enumerate(raw_rows, start=2):
-        for col_idx, value in enumerate(row_data, start=1):
-            ws.cell(row=row_idx, column=col_idx).value = value
+    # Clear unused template rows
+    for row_num in tmpl_rows[n_spots:]:
+        for col_idx in range(1, max_col + 1):
+            ws.cell(row=row_num, column=col_idx).value = None
 
 
 def _fill_pivot(ws, run_rows: List[dict]) -> None:
@@ -523,7 +656,7 @@ def _fill_pivot(ws, run_rows: List[dict]) -> None:
 # MAIN ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────────────
 
-def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, raw_csv: bytes = b"") -> bytes:
+def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, raw_csv: bytes = b"") -> bytes:  # noqa: ARG001 (raw_csv reserved for future use)
     """Generate backwrite Excel from template and return raw bytes."""
     billing_type = user_inputs.get("billing_type", "Broadcast")
     agency_flag  = user_inputs.get("agency_flag",  "Agency")
@@ -564,7 +697,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
             "spot_value":   s.gross_rate,
             "month":        month_dt,
             "broker_fees":  broker_fees,
-            "priority":     4,
+            "priority":     s.priority,
             "station_net":  station_net,
             "sales_person": sales_person,
             "revenue_type": revenue_type,
@@ -653,10 +786,20 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
                     cell.hyperlink = None
                 if isinstance(cell.value, str) and cell.value.lower().startswith('mailto:'):
                     cell.value = ""
-    col_headers, raw_rows = _extract_raw_csv_rows(raw_csv) if raw_csv else ([], [])
+    # Monthly totals for Sales Confirmation breakdown
+    from collections import defaultdict as _dd
+    import calendar as _cal
+    _month_order = {m: i for i, m in enumerate(_cal.month_name) if m}
+    _mg: dict = _dd(float)
+    for rr in run_rows:
+        m = rr.get('month')
+        if isinstance(m, datetime):
+            _mg[m.strftime('%B')] += rr.get('gross_rate', 0) or 0
+    monthly_gross = {k: round(v, 2) for k, v in _mg.items()}
+    monthly_net   = {k: round(v * (1 - agency_fee), 2) for k, v in monthly_gross.items()}
 
-    _fill_sales_confirmation(wb["Sales Confirmation"], ctx, sc_lines)
-    _fill_run_sheet(wb["Run Sheet"], col_headers, raw_rows)
+    _fill_sales_confirmation(wb["Sales Confirmation"], ctx, sc_lines, monthly_gross, monthly_net)
+    _fill_run_sheet(wb["Run Sheet"], run_rows)
     _fill_pivot(wb["Sheet1"], run_rows)
 
     buf = BytesIO()
