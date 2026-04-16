@@ -29,8 +29,16 @@ Data row columns (0-indexed):
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
-from typing import List, Optional
+from typing import List
 import re
+import sys
+from pathlib import Path
+
+_project_root = Path(__file__).parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+from browser_automation.day_utils import to_etere
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -56,119 +64,8 @@ def _detect_market(cell_text: str) -> str:
     for keyword, code in _MARKET_KEYWORDS:
         if keyword in upper:
             return code
-    return "SFO"  # default if unrecognised
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# DAY NORMALIZATION
-# ─────────────────────────────────────────────────────────────────────────────
-
-def normalize_days(raw: str) -> str:
-    """
-    Normalize Polaris day strings to Etere format.
-
-    Examples:
-      "M-F"        → "M-F"
-      "Sat"        → "Sa"
-      "Sat- Sun "  → "Sa-Su"
-      "Sat& Sun"   → "Sa-Su"
-      "M-Su"       → "M-Su"
-    """
-    s = raw.strip()
-    # Collapse any separator (space-hyphen-space, ampersand, etc.) to a plain dash
-    s = re.sub(r'\s*[-&]\s*', '-', s)
-    # Map full day names / Polaris abbreviations to Etere tokens (longest first to avoid
-    # partial replacements, e.g. "Saturday" before "Sat")
-    replacements = [
-        ("Saturday", "Sa"), ("Sunday", "Su"),
-        ("Monday",   "M"),  ("Tuesday", "Tu"), ("Wednesday", "W"),
-        ("Thursday", "Th"), ("Friday",  "F"),
-        ("Sat",      "Sa"), ("Sun",     "Su"),
-        ("Mon",      "M"),  ("Tue",     "Tu"), ("Wed",       "W"),
-        ("Thu",      "Th"), ("Fri",     "F"),
-    ]
-    for src, dst in replacements:
-        s = s.replace(src, dst)
-    return s
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# TIME PARSING
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _to_24h(time_val: str, ampm: str) -> str:
-    """
-    Convert "5:30" + "p" → "17:30", "10" + "a" → "10:00".
-
-    Special cases following Etere broadcast conventions:
-      12a / 12:00a  → "23:59"  (midnight = end of broadcast day)
-      12p / 12:00p  → "12:00"  (noon)
-      anything < 06:00 → "06:00"  (floor)
-    """
-    if ":" in time_val:
-        h_str, m_str = time_val.split(":", 1)
-        h, m = int(h_str), int(m_str)
-    else:
-        h, m = int(time_val), 0
-
-    lower = ampm.lower()
-
-    # Midnight: 12a = end of broadcast day → 23:59
-    if h == 12 and lower in ("a", "am"):
-        return "23:59"
-
-    if lower in ("p", "pm") and h != 12:
-        h += 12
-    elif lower in ("a", "am") and h == 12:
-        h = 0  # 12:xxam would be caught above; this handles other 12am variants
-
-    # Etere floor/ceiling
-    if h < 6:
-        h, m = 6, 0
-    if h > 23 or (h == 23 and m > 59):
-        h, m = 23, 59
-
-    return f"{h:02d}:{m:02d}"
-
-
-def parse_time_range(time_str: str) -> tuple[str, str]:
-    """
-    Parse a Polaris time string into (time_from, time_to) in 24-hour format.
-
-    Examples:
-      "6a-7a"       → ("06:00", "07:00")
-      "7p-7:30p"    → ("19:00", "19:30")
-      "11:30p-12a"  → ("23:30", "23:59")
-      "9p-12a"      → ("21:00", "23:59")
-      "8p-9p"       → ("20:00", "21:00")
-    """
-    time_str = time_str.strip()
-
-    # Normalize noon shorthand: 12n → 12p
-    time_str = re.sub(r'\b12n\b', '12p', time_str, flags=re.IGNORECASE)
-
-    # Each token: numeric part + optional a/p/n suffix
-    tokens = re.findall(r'(\d+(?::\d+)?)([aApPnN]?)', time_str)
-    tokens = [(v, s) for v, s in tokens if v]
-
-    if len(tokens) < 2:
-        return ("06:00", "23:59")
-
-    start_val, start_ampm = tokens[0]
-    end_val,   end_ampm   = tokens[-1]
-
-    # If end has a/p but start doesn't, infer start period from end
-    # Exception: if start hour > end hour numerically they span different periods
-    if end_ampm and not start_ampm:
-        try:
-            sh = int(start_val.split(":")[0])
-            eh = int(end_val.split(":")[0])
-            if sh <= eh:
-                start_ampm = end_ampm
-        except ValueError:
-            start_ampm = end_ampm
-
-    return (_to_24h(start_val, start_ampm), _to_24h(end_val, end_ampm))
+    print(f"[POLARIS PARSER] ⚠ Unrecognised market cell: {cell_text!r} — defaulting to SFO")
+    return "SFO"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -253,7 +150,8 @@ class PolarisLine:
 
     def get_time_from_to(self) -> tuple[str, str]:
         """Return (time_from, time_to) in HH:MM 24-hour format."""
-        return parse_time_range(self.time_str)
+        from browser_automation.etere_client import EtereClient
+        return EtereClient.parse_time_range(self.time_str)
 
     def get_description(self) -> str:
         """Build Etere line description: '[BNS ]Days Program'."""
@@ -404,7 +302,7 @@ def parse_polaris_xlsx(path: str) -> PolarisOrder:
         if total_spots <= 0:
             continue
 
-        days = normalize_days(days_str)
+        days = to_etere(days_str)
         line = PolarisLine(
             days=days,
             time_str=time_str,

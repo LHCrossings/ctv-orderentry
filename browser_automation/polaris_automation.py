@@ -30,20 +30,6 @@ _MARKET_SHORT = {
     "NYC": "NYC",
 }
 
-_DAY_COUNTS = {
-    "M-Su": 7,
-    "M-F":  5,
-    "M-Sa": 6,
-    "Sa-Su": 2,
-    "Sa":   1,
-    "Su":   1,
-    "Th-Su": 4,
-}
-
-
-def _count_active_days(days: str) -> int:
-    return _DAY_COUNTS.get(days, 7)
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Customer DB helpers
@@ -297,14 +283,14 @@ def process_polaris_order(driver, xlsx_path: str, user_input: dict) -> Optional[
         # ── Add contract lines ─────────────────────────────────────────────
         for idx, ln in enumerate(market_lines, start=1):
             time_from, time_to = ln.get_time_from_to()
-            spot_code = 10 if ln.is_bonus else 2   # 10=BNS, 2=Paid Commercial
+            spot_code = EtereClient.SPOT_CODES["BNS"] if ln.is_bonus else EtereClient.SPOT_CODES["Paid Commercial"]
             rate = float(ln.rate)
             label = "BNS" if ln.is_bonus else "PAY"
 
             # Apply Sunday 6-7am rule
             days, _ = etere.check_sunday_6_7a_rule(ln.days, ln.time_str)
 
-            active_days = _count_active_days(days)
+            active_days = EtereClient._count_active_days(days)
             max_daily = math.ceil(ln.total_spots / active_days) if active_days > 0 else 1
 
             ok = etere.add_contract_line(
@@ -319,7 +305,7 @@ def process_polaris_order(driver, xlsx_path: str, user_input: dict) -> Optional[
                 spot_code=spot_code,
                 duration_seconds=30,
                 total_spots=ln.total_spots,
-                spots_per_week=ln.total_spots,
+                spots_per_week=ln.total_spots,  # single-flight: spots_per_week == total_spots
                 max_daily_run=max_daily,
                 rate=rate,
                 separation_intervals=separation,
