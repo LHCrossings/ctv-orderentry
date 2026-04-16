@@ -870,7 +870,7 @@ def _eb_df_to_run_rows(df, agency_fee: float, is_agency: bool) -> List[dict]:
             "agency_flag":  _clean(row.get("Agency?")),
             "affidavit":    _clean(row.get("Affidavit?")),
             "contract":     _clean(row.get("Contract")),
-            "market":       _clean(row.get("Market")),
+            "market":       _normalise_market(str(_clean(row.get("Market")) or "")),
         })
     return rows
 
