@@ -168,14 +168,15 @@
         .toggle-row { display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
         .toggle-row input[type=checkbox] { width: 15px; height: 15px; cursor: pointer; }
         .lang-verify-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+        .lang-verify-table thead { background: transparent; color: inherit; }
         .lang-verify-table th {
             text-align: left; padding: 6px 10px; font-size: 0.75rem; font-weight: 700;
             text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary);
             border-bottom: 1px solid var(--border-color);
         }
-        .lang-verify-table td { padding: 6px 10px; border-bottom: 1px solid var(--bg-secondary); }
+        .lang-verify-table td { padding: 6px 10px; border-bottom: 1px solid var(--border-color); color: var(--text-primary); }
         .lang-verify-table tr:last-child td { border-bottom: none; }
-        .lang-verify-table .desc-cell { color: var(--text-primary); }
+        .lang-verify-table .desc-cell { font-weight: 500; }
         .lang-verify-table .count-cell { color: var(--text-secondary); text-align: right; width: 60px; }
         .lang-verify-table select {
             padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 5px;
@@ -596,7 +597,7 @@ function showLanguageVerification(details, options) {
         const optHtml = opts.map(code =>
             `<option value="${code}"${code === item.lang ? ' selected' : ''}>${code}</option>`
         ).join('');
-        return `<tr data-desc="${item.description.replace(/"/g, '&quot;')}">
+        return `<tr data-desc="${item.description.replace(/"/g, '&quot;')}" data-orig-lang="${item.lang}">
             <td class="desc-cell">${escHtml(item.description)}</td>
             <td><select class="lang-sel" onchange="onLangChange(this)">${optHtml}</select></td>
             <td class="count-cell">${item.count}</td>
@@ -608,10 +609,8 @@ function showLanguageVerification(details, options) {
 }
 
 function onLangChange(sel) {
-    const row  = sel.closest('tr');
-    const desc = row.dataset.desc;
-    const orig = _langDetails.find(d => d.description === desc);
-    if (orig && sel.value !== orig.lang) {
+    const row = sel.closest('tr');
+    if (sel.value !== row.dataset.origLang) {
         row.classList.add('changed');
     } else {
         row.classList.remove('changed');
@@ -625,10 +624,10 @@ function escHtml(s) {
 function serializeLangCorrections() {
     const map = {};
     document.querySelectorAll('#lang-verify-tbody tr').forEach(row => {
-        const desc = row.dataset.desc;
-        const sel  = row.querySelector('.lang-sel');
-        const orig = _langDetails.find(d => d.description === desc);
-        if (sel && orig && sel.value !== orig.lang) {
+        const desc     = row.dataset.desc;
+        const sel      = row.querySelector('.lang-sel');
+        const origLang = row.dataset.origLang;
+        if (sel && origLang && sel.value !== origLang) {
             map[desc] = sel.value;
         }
     });

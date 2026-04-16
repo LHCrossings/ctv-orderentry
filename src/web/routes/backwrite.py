@@ -169,6 +169,8 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             lang_corrections_dict = json.loads(language_corrections) if language_corrections else {}
         except (ValueError, TypeError):
             lang_corrections_dict = {}
+        if lang_corrections_dict:
+            print(f"[backwrite/generate] Language corrections: {lang_corrections_dict}")
 
         user_inputs = {
             "sales_person":   sales_person,

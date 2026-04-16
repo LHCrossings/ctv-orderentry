@@ -150,9 +150,12 @@ def run_eterebridge_pipeline(
         # 3a. Apply user corrections over auto-detected languages
         language_corrections = user_inputs.get("language_corrections") or {}
         if language_corrections:
+            applied = 0
             for idx, desc in df["rowdescription"].items():
                 if isinstance(desc, str) and desc in language_corrections:
-                    row_languages[idx] = language_corrections[desc]
+                    row_languages.at[idx] = language_corrections[desc]
+                    applied += 1
+            logging.info("[EtereBridge] Applied %d language correction(s): %s", applied, language_corrections)
 
         # 4. Transformations: bill code, market replacements, gross rate, length
         df = _file_processor.apply_transformations(df, tb180, tb171)
