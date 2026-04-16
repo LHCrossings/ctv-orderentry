@@ -371,6 +371,11 @@ def _apply_snapshot(
             dst_cell.fill          = copy.copy(snap['fill'])
             dst_cell.number_format = snap['number_format']
             dst_cell.alignment     = copy.copy(snap['alignment'])
+        else:
+            # Explicitly clear any formatting insert_rows may have inherited
+            # from the row that was pushed down (e.g. thick right borders).
+            from openpyxl.styles import Border
+            dst_cell.border = Border()
 
     # Restore row height so cloned rows match the template row exactly
     if row_height is not None:
