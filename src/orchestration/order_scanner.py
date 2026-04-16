@@ -36,6 +36,9 @@ def _detect_xlsx_content(file_path: Path) -> OrderType:
                 if "PROSIO" in v:
                     wb.close()
                     return OrderType.PROSIO
+                if "POLARIS" in v:
+                    wb.close()
+                    return OrderType.POLARIS
         wb.close()
     except Exception:
         pass

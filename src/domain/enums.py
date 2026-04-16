@@ -37,6 +37,7 @@ class OrderType(Enum):
     HYPHEN = "hyphen"
     PROSIO = "prosio"
     DART = "dart"
+    POLARIS = "polaris"
     XML = "xml"
     UNKNOWN = "unknown"
 
@@ -291,6 +292,7 @@ class SeparationInterval(Enum):
     SCWA = (15, 0, 0)
     HYPHEN = (25, 0, 0)
     PROSIO = (15, 0, 0)
+    POLARIS = (15, 0, 0)
     DEFAULT = (15, 0, 0)
 
     @classmethod
@@ -319,5 +321,6 @@ class SeparationInterval(Enum):
             OrderType.SCWA: cls.SCWA.value,
             OrderType.HYPHEN: cls.HYPHEN.value,
             OrderType.PROSIO: cls.PROSIO.value,
+            OrderType.POLARIS: cls.POLARIS.value,
         }
         return mapping.get(order_type, cls.DEFAULT.value)
