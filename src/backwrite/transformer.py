@@ -881,7 +881,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
                 "spot_value":   s.gross_rate,
                 "month":        month_dt,
                 "broker_fees":  broker_fees,
-                "priority":     s.priority,
+                "priority":     4,
                 "station_net":  station_net,
                 "sales_person": sales_person,
                 "revenue_type": revenue_type,

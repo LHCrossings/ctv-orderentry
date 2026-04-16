@@ -46,6 +46,56 @@ def is_available() -> bool:
     return _AVAILABLE
 
 
+def get_language_options() -> list:
+    """Return the list of valid language codes from EtereBridge config."""
+    if not _AVAILABLE:
+        return ["E", "C", "M", "V", "T", "K", "J", "SA", "Hm"]
+    return list(_eb_app_config.language_options)
+
+
+def get_language_details(csv_bytes: bytes) -> list:
+    """
+    Run language detection and return per-unique-description results.
+
+    Returns [{"description": str, "lang": str, "count": int}, ...] sorted by
+    (lang, description).  Returns [] if EtereBridge is unavailable.
+    """
+    if not _AVAILABLE:
+        return []
+
+    with tempfile.NamedTemporaryFile(
+        suffix=".csv", prefix="eterebridge_lang_", delete=False
+    ) as tmp:
+        tmp.write(csv_bytes)
+        tmp_path = tmp.name
+
+    try:
+        df = _file_processor.load_and_clean_data(tmp_path)
+        _detected_counts, row_languages = _file_processor.detect_languages(df)
+
+        unique: dict = {}
+        for idx, desc in df["rowdescription"].items():
+            if not isinstance(desc, str):
+                desc = str(desc) if desc is not None else ""
+            lang = row_languages.get(idx, "E")
+            if desc not in unique:
+                unique[desc] = {"lang": lang, "count": 0}
+            unique[desc]["count"] += 1
+
+        return sorted(
+            [
+                {"description": d, "lang": info["lang"], "count": info["count"]}
+                for d, info in unique.items()
+            ],
+            key=lambda x: (x["lang"], x["description"]),
+        )
+    except Exception as exc:
+        logging.warning("[EtereBridge] Language details failed: %s", exc)
+        return []
+    finally:
+        os.unlink(tmp_path)
+
+
 def run_eterebridge_pipeline(
     csv_bytes: bytes,
     user_inputs: dict,
@@ -59,7 +109,8 @@ def run_eterebridge_pipeline(
     Expected user_inputs keys (same as the backwrite web form):
         sales_person, billing_type, revenue_type, agency_flag, agency_fee,
         estimate, contract, affidavit,
-        gross_up_rates  (optional dict {str(rounded_gross): str(net_rate)})
+        gross_up_rates        (optional dict {str(rounded_gross): str(net_rate)})
+        language_corrections  (optional dict {description: lang_code})
     """
     if not _AVAILABLE:
         return None
@@ -80,6 +131,13 @@ def run_eterebridge_pipeline(
 
         # 3. Language detection — auto, no stdin prompt
         _detected_counts, row_languages = _file_processor.detect_languages(df)
+
+        # 3a. Apply user corrections over auto-detected languages
+        language_corrections = user_inputs.get("language_corrections") or {}
+        if language_corrections:
+            for idx, desc in df["rowdescription"].items():
+                if isinstance(desc, str) and desc in language_corrections:
+                    row_languages[idx] = language_corrections[desc]
 
         # 4. Transformations: bill code, market replacements, gross rate, length
         df = _file_processor.apply_transformations(df, tb180, tb171)

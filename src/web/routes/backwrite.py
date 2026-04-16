@@ -75,32 +75,42 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             s.gross_rate for s in spots if s.gross_rate > 0
         ))
 
-        # Language detection counts via EtereBridge (best-effort)
+        # Language info via EtereBridge (best-effort)
         language_counts: dict = {}
+        language_details: list = []
+        language_options: list = []
         try:
-            from backwrite.eterebridge_runner import get_language_counts
-            language_counts = get_language_counts(data)
+            from backwrite.eterebridge_runner import (
+                get_language_counts,
+                get_language_details,
+                get_language_options,
+            )
+            language_counts  = get_language_counts(data)
+            language_details = get_language_details(data)
+            language_options = get_language_options()
         except Exception:
             pass
 
         return JSONResponse({
-            "agency":           header.agency,
-            "client":           header.client,
-            "contract_code":    header.contract_code,
-            "description":      header.description,
-            "order_date":       header.order_date,
-            "address":          header.address,
-            "city":             header.city,
-            "markets":          markets,
-            "spot_count":       len(spots),
-            "line_count":       len(set(s.line_id for s in spots)),
+            "agency":            header.agency,
+            "client":            header.client,
+            "contract_code":     header.contract_code,
+            "description":       header.description,
+            "order_date":        header.order_date,
+            "address":           header.address,
+            "city":              header.city,
+            "markets":           markets,
+            "spot_count":        len(spots),
+            "line_count":        len(set(s.line_id for s in spots)),
             "date_range": {
                 "start": min(s.air_date for s in spots).strftime("%m/%d/%Y"),
                 "end":   max(s.air_date for s in spots).strftime("%m/%d/%Y"),
             },
-            "estimate_hint":    estimate_hint,
-            "unique_rates":     unique_rates,
-            "language_counts":  language_counts,
+            "estimate_hint":     estimate_hint,
+            "unique_rates":      unique_rates,
+            "language_counts":   language_counts,
+            "language_details":  language_details,
+            "language_options":  language_options,
         })
 
     @router.post("/generate")
@@ -126,8 +136,9 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
         city:           str = Form(""),
         state:          str = Form(""),
         zip_code:       str = Form(""),
-        notes:          str = Form(""),
-        gross_up_rates: str = Form("{}"),
+        notes:                str = Form(""),
+        gross_up_rates:       str = Form("{}"),
+        language_corrections: str = Form("{}"),
     ):
         """Generate backwrite Excel from CSV + user inputs, return as download."""
         try:
@@ -152,6 +163,11 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
         except (ValueError, TypeError):
             gross_up_dict = {}
 
+        try:
+            lang_corrections_dict = json.loads(language_corrections) if language_corrections else {}
+        except (ValueError, TypeError):
+            lang_corrections_dict = {}
+
         user_inputs = {
             "sales_person":   sales_person,
             "billing_type":   billing_type,
@@ -173,8 +189,9 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             "city":           city,
             "state":          state,
             "zip":            zip_code,
-            "notes":          notes,
-            "gross_up_rates": gross_up_dict,
+            "notes":                notes,
+            "gross_up_rates":       gross_up_dict,
+            "language_corrections": lang_corrections_dict,
         }
 
         try:

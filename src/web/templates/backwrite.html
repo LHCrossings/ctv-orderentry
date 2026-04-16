@@ -167,6 +167,21 @@
         #grossup-section { display: none; margin-top: 14px; }
         .toggle-row { display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
         .toggle-row input[type=checkbox] { width: 15px; height: 15px; cursor: pointer; }
+        .lang-verify-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+        .lang-verify-table th {
+            text-align: left; padding: 6px 10px; font-size: 0.75rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary);
+            border-bottom: 1px solid var(--border-color);
+        }
+        .lang-verify-table td { padding: 6px 10px; border-bottom: 1px solid var(--bg-secondary); }
+        .lang-verify-table tr:last-child td { border-bottom: none; }
+        .lang-verify-table .desc-cell { color: var(--text-primary); }
+        .lang-verify-table .count-cell { color: var(--text-secondary); text-align: right; width: 60px; }
+        .lang-verify-table select {
+            padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 5px;
+            font-family: inherit; font-size: 0.85rem; background: white; cursor: pointer;
+        }
+        .lang-verify-table .changed select { border-color: var(--accent-primary); font-weight: 600; }
     </style>
 </head>
 <body>
@@ -210,6 +225,24 @@
             <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Detected Languages</div>
             <div class="lang-pills" id="lang-pills"></div>
         </div>
+    </div>
+
+    <!-- Language Verification (hidden until CSV parsed with EtereBridge) -->
+    <div class="bw-card" id="lang-verify-card" style="display:none">
+        <h2>Language Verification</h2>
+        <p style="font-size:0.88rem;color:var(--text-secondary);margin:0 0 14px 0;">
+            Review the detected language for each contract line. Change any that are incorrect.
+        </p>
+        <table class="lang-verify-table">
+            <thead>
+                <tr>
+                    <th>Line Description</th>
+                    <th style="width:120px">Language</th>
+                    <th class="count-cell">Spots</th>
+                </tr>
+            </thead>
+            <tbody id="lang-verify-tbody"></tbody>
+        </table>
     </div>
 
     <!-- Step 2: Form (hidden until CSV parsed) -->
@@ -364,6 +397,7 @@
                 </div>
             </div>
             <input type="hidden" name="gross_up_rates" id="gross_up_rates" value="{}" />
+            <input type="hidden" name="language_corrections" id="language_corrections" value="{}" />
 
             <!-- Notes -->
             <div class="section-label" style="margin-top:20px">Notes</div>
@@ -395,8 +429,10 @@ const bwForm         = document.getElementById('bw-form');
 const existingInput  = document.getElementById('existing-input');
 const existingFn     = document.getElementById('existing-filename');
 
-let uploadedFile  = null;
-let _uniqueRates  = [];  // non-zero gross rates from preview
+let uploadedFile     = null;
+let _uniqueRates     = [];   // non-zero gross rates from preview
+let _langOptions     = [];   // valid language codes from EtereBridge config
+let _langDetails     = [];   // [{description, lang, count}, ...]
 
 // ── Today's date ─────────────────────────────────────────────────────────────
 function todayMDY() {
@@ -454,9 +490,12 @@ function previewCSV(file) {
             uploadStatus.style.display = 'none';
             showPreview(data);
             showLanguageCounts(data.language_counts || {});
-            _uniqueRates = data.unique_rates || [];
+            _uniqueRates = data.unique_rates     || [];
+            _langOptions = data.language_options || [];
+            _langDetails = data.language_details || [];
             prefillFromCSV(data);
             updateGrossupSection();
+            showLanguageVerification(_langDetails, _langOptions);
             previewCard.style.display = 'block';
             formCard.style.display    = 'block';
             generateBtn.disabled      = false;
@@ -539,6 +578,63 @@ function showLanguageCounts(counts) {
     wrap.style.display = 'block';
 }
 
+// ── Language verification table ───────────────────────────────────────────────
+function showLanguageVerification(details, options) {
+    const card  = document.getElementById('lang-verify-card');
+    const tbody = document.getElementById('lang-verify-tbody');
+
+    if (!details || !details.length) {
+        card.style.display = 'none';
+        return;
+    }
+
+    const opts = (options && options.length)
+        ? options
+        : ['E','C','M','V','T','K','J','SA','Hm'];
+
+    tbody.innerHTML = details.map(item => {
+        const optHtml = opts.map(code =>
+            `<option value="${code}"${code === item.lang ? ' selected' : ''}>${code}</option>`
+        ).join('');
+        return `<tr data-desc="${item.description.replace(/"/g, '&quot;')}">
+            <td class="desc-cell">${escHtml(item.description)}</td>
+            <td><select class="lang-sel" onchange="onLangChange(this)">${optHtml}</select></td>
+            <td class="count-cell">${item.count}</td>
+        </tr>`;
+    }).join('');
+
+    card.style.display = 'block';
+    document.getElementById('language_corrections').value = '{}';
+}
+
+function onLangChange(sel) {
+    const row  = sel.closest('tr');
+    const desc = row.dataset.desc;
+    const orig = _langDetails.find(d => d.description === desc);
+    if (orig && sel.value !== orig.lang) {
+        row.classList.add('changed');
+    } else {
+        row.classList.remove('changed');
+    }
+}
+
+function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function serializeLangCorrections() {
+    const map = {};
+    document.querySelectorAll('#lang-verify-tbody tr').forEach(row => {
+        const desc = row.dataset.desc;
+        const sel  = row.querySelector('.lang-sel');
+        const orig = _langDetails.find(d => d.description === desc);
+        if (sel && orig && sel.value !== orig.lang) {
+            map[desc] = sel.value;
+        }
+    });
+    document.getElementById('language_corrections').value = JSON.stringify(map);
+}
+
 // ── Gross-up section ──────────────────────────────────────────────────────────
 function updateGrossupSection() {
     const isAgency = document.getElementById('agency_flag').value === 'Agency';
@@ -582,6 +678,9 @@ bwForm.addEventListener('submit', async e => {
     }
     generateBtn.disabled = true;
     generateBtn.textContent = '⏳ Generating...';
+
+    // Serialize language corrections
+    serializeLangCorrections();
 
     // Serialize gross-up rates if toggle is on
     if (document.getElementById('grossup-toggle').checked) {
