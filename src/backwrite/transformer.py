@@ -754,6 +754,7 @@ def _eb_df_to_run_rows(df, agency_fee: float, is_agency: bool) -> List[dict]:
     expected by _fill_run_sheet().  Computes broker_fees/station_net/spot_value
     directly since EtereBridge leaves those as None (formula-driven in its own Excel)."""
     import math
+
     import pandas as pd
 
     def _clean(val):

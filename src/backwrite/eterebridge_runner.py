@@ -29,10 +29,10 @@ if _EB_DIR not in sys.path:
     sys.path.insert(0, _EB_DIR)
 
 try:
-    from config_manager import config_manager as _eb_config      # type: ignore[import]
+    from config_manager import config_manager as _eb_config  # type: ignore[import]
     from file_processor import FileProcessor, transform_month_column  # type: ignore[import]
-    from monetary_utils import standardize_monetary_columns       # type: ignore[import]
-    from time_utils import transform_times                        # type: ignore[import]
+    from monetary_utils import standardize_monetary_columns  # type: ignore[import]
+    from time_utils import transform_times  # type: ignore[import]
 
     _eb_app_config   = _eb_config.get_config()
     _file_processor  = FileProcessor(_eb_app_config)
