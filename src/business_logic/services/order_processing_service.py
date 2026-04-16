@@ -164,6 +164,7 @@ class OrderProcessingService:
                     OrderType.SCWA,
                     OrderType.PROSIO,
                     OrderType.DART,
+                    OrderType.POLARIS,
                 ]
                 for order in orders
             )

@@ -211,12 +211,6 @@ def gather_polaris_inputs(xlsx_path: str) -> Optional[dict]:
     else:
         separation = (15, 0, 0)
 
-    print(f"\n  Separation: {separation[0]} min customer / "
-          f"{separation[1]} event / {separation[2]} order")
-    sep_input = input("  Change separation? [Enter=keep / type new customer minutes]: ").strip()
-    if sep_input.isdigit():
-        separation = (int(sep_input), separation[1], separation[2])
-
     return {
         "order":        order,
         "customer_id":  customer_id,
