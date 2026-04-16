@@ -613,6 +613,13 @@ def _fill_sales_confirmation(
     last_line_row = line_rows[-1] if line_rows else 20
     _fill_monthly_breakdown(ws, monthly_gross, monthly_net, last_line_row)
 
+    # Auto-size column H (line description) based on content
+    max_len = max(
+        (len(str(ws.cell(row=r, column=8).value or "")) for r in range(1, ws.max_row + 1)),
+        default=10,
+    )
+    ws.column_dimensions["H"].width = min(max_len + 2, 80)
+
 
 def _fill_run_sheet(ws, run_rows: List[dict]) -> None:
     """Fill the Run Sheet with one row per spot using the template."""
