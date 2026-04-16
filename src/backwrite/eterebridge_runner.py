@@ -5,9 +5,10 @@ Runs EtereBridge's CSV processing pipeline (language detection, bill-code
 generation, market standardisation, user-input stamping) and returns a
 pandas DataFrame suitable for the Run Sheet tab.
 
-Requires /home/scrib/dev/EtereBridge to be present with its config.ini.
-If EtereBridge is unavailable, run_eterebridge_pipeline() returns None and
-the caller falls back to the built-in transformer logic.
+Requires EtereBridge to be present alongside this repo (dev/EtereBridge or
+windev/EtereBridge relative to the home directory).  If EtereBridge is
+unavailable, run_eterebridge_pipeline() returns None and the caller falls
+back to the built-in transformer logic.
 """
 
 import csv
@@ -20,12 +21,18 @@ from typing import Optional
 
 import pandas as pd
 
-_EB_DIR = str(Path("/home/scrib/dev/EtereBridge").resolve())
+# Locate EtereBridge: try common sibling-repo paths on both Linux and Windows.
+_EB_CANDIDATES = [
+    Path.home() / "dev"    / "EtereBridge",
+    Path.home() / "windev" / "EtereBridge",
+]
+_eb_path = next((p for p in _EB_CANDIDATES if p.exists()), None)
+_EB_DIR  = str(_eb_path.resolve()) if _eb_path else ""
 
 # Add EtereBridge source dir to path so its modules can be imported.
 # config_manager.py resolves config.ini relative to its own __file__, so it
 # works correctly regardless of our working directory.
-if _EB_DIR not in sys.path:
+if _EB_DIR and _EB_DIR not in sys.path:
     sys.path.insert(0, _EB_DIR)
 
 try:
