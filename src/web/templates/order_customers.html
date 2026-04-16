@@ -317,8 +317,9 @@ async function saveCustomer() {
     }
     let resp;
     if (_editKey) {
+        const qp = `?customer_name=${encodeURIComponent(_editKey.customer_name)}&order_type=${encodeURIComponent(_editKey.order_type)}`;
         resp = await fetch(
-            `/api/orders/customers/${encodeURIComponent(_editKey.customer_name)}/${encodeURIComponent(_editKey.order_type)}`,
+            `/api/orders/customers${qp}`,
             { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }
         );
     } else {
@@ -338,7 +339,7 @@ async function saveCustomer() {
 async function deleteCustomer(name, type) {
     if (!confirm(`Delete "${name}" (${type})?`)) return;
     const resp = await fetch(
-        `/api/orders/customers/${encodeURIComponent(name)}/${encodeURIComponent(type)}`,
+        `/api/orders/customers?customer_name=${encodeURIComponent(name)}&order_type=${encodeURIComponent(type)}`,
         { method: 'DELETE' }
     );
     if (resp.ok) loadCustomers(document.getElementById('search-input').value);

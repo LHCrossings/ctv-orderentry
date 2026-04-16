@@ -1067,7 +1067,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             conn.close()
         return JSONResponse({"ok": True})
 
-    @router.put("/api/orders/customers/{customer_name}/{order_type}")
+    @router.put("/api/orders/customers")
     async def update_order_customer(customer_name: str, order_type: str, body: dict = Body(...)):
         conn = _cdb()
         try:
@@ -1098,7 +1098,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             conn.close()
         return JSONResponse({"ok": True})
 
-    @router.delete("/api/orders/customers/{customer_name}/{order_type}")
+    @router.delete("/api/orders/customers")
     async def delete_order_customer(customer_name: str, order_type: str):
         conn = _cdb()
         try:
