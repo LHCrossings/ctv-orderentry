@@ -524,9 +524,11 @@ class OrderProcessingService:
         )
 
         if order.order_input:
+            inp = order.order_input
+            get = inp.get if isinstance(inp, dict) else lambda k, d="": getattr(inp, k, d)
             message += (
-                f"  Order Code: {order.order_input.order_code}\n"
-                f"  Description: {order.order_input.description}\n"
+                f"  Order Code: {get('order_code')}\n"
+                f"  Description: {get('description')}\n"
             )
 
         message += (
