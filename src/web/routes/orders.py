@@ -1018,7 +1018,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     @router.get("/api/orders/customers")
     async def list_order_customers(q: str = ""):
-        import sqlite3 as _sq
         conn = _cdb()
         try:
             if q:
