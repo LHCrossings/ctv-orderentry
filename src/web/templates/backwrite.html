@@ -558,6 +558,7 @@ function handleExistingFile(f) {
             fill('state',         d.state);
             fill('zip_code',      d.zip);
             fill('sales_person',  d.sales_person);
+            fill('notes',         d.notes);
             // estimate only if not already set from CSV hint (contract left blank)
             setIfEmpty('estimate', d.estimate);
             // order_date stays as today — never copy from old order

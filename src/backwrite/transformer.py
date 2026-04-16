@@ -771,7 +771,7 @@ def read_existing_order_fields(data: bytes) -> dict:
 
     # Header section rows 3–13 at fixed column positions (these rows never expand)
     # D=4, F=6, G=7, K=11, L=12
-    return {
+    fields = {
         "agency":          cv(3,  4),
         "client":          cv(3, 12),
         "contact_person":  cv(4,  4),
@@ -791,7 +791,18 @@ def read_existing_order_fields(data: bytes) -> dict:
         "sales_person":    cv(11, 11),
         "email_3":         cv(12, 4),
         "email_4":         cv(13, 4),
+        "notes":           "",
     }
+
+    # Notes row shifts down when extra line rows are inserted — find it by label
+    for row in ws.iter_rows():
+        label = str(row[1].value or "").strip()  # column B
+        if label == "Additional Notes":
+            notes_val = ws.cell(row=row[0].row + 1, column=2).value
+            fields["notes"] = str(notes_val).strip() if notes_val is not None else ""
+            break
+
+    return fields
 
 
 # ─────────────────────────────────────────────────────────────────────────────
