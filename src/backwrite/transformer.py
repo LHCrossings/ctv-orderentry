@@ -461,6 +461,17 @@ def _fill_monthly_breakdown(
         if total_row and total_row > rn:
             total_row -= 1
 
+    # Add double-bottom border to the last data row (separates months from Total)
+    if n_needed > 0:
+        from openpyxl.styles import Border, Side
+        double = Side(border_style="double")
+        last_data_row = data_rows[n_needed - 1]
+        for col in (month_col, gross_col, net_col):
+            if col is not None:
+                cell = ws.cell(row=last_data_row, column=col)
+                b = cell.border
+                cell.border = Border(left=b.left, right=b.right, top=b.top, bottom=double)
+
     # Update Total row
     if total_row and n_needed > 0:
         if gross_col:
