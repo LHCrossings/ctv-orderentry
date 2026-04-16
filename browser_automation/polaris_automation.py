@@ -303,7 +303,6 @@ def process_polaris_order(driver, xlsx_path: str, user_input: dict) -> Optional[
                 max_daily_run=max_daily,
                 rate=rate,
                 separation_intervals=separation,
-                block_prefixes=ln.get_block_prefixes(),
             )
 
             status = "✓" if ok else "✗"
