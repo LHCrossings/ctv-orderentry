@@ -88,6 +88,7 @@ class OrderProcessingService:
         OrderType.SCWA:             "_process_scwa_order",
         OrderType.PROSIO:           "_process_prosio_order",
         OrderType.DART:             "_process_dart_order",
+        OrderType.POLARIS:          "_process_polaris_order",
     }
 
     def __init__(
@@ -2124,6 +2125,73 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.DART,
+                error_message=error_detail,
+            )
+
+    def _process_polaris_order(
+        self,
+        order: Order,
+        shared_session: Any = None,
+    ) -> ProcessingResult:
+        """
+        Process Polaris Media Group order using polaris_automation.
+
+        Polaris orders are agency xlsx insertion orders. Master market: NYC.
+        """
+        try:
+            from browser_automation.polaris_automation import process_polaris_order
+
+            print(f"\n{'='*70}")
+            print("PROCESSING POLARIS ORDER")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            print(f"{'='*70}\n")
+
+            if shared_session is None:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.POLARIS,
+                    error_message="Browser session required for Polaris orders",
+                )
+
+            if not order.order_input:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.POLARIS,
+                    error_message="Order inputs not collected",
+                )
+
+            print("[SESSION] ✓ Using shared browser session")
+
+            contract_num = process_polaris_order(
+                driver=shared_session.driver,
+                xlsx_path=str(order.pdf_path),
+                user_input=order.order_input,
+            )
+
+            success = contract_num is not None
+            if success:
+                print("\n✓ Polaris order processed successfully")
+            else:
+                print("\n✗ Polaris order processing failed")
+
+            return ProcessingResult(
+                success=success,
+                contracts=[],
+                order_type=OrderType.POLARIS,
+                error_message=None if success else "Processing failed",
+            )
+
+        except Exception as e:
+            import traceback
+            error_detail = f"Polaris processing error: {str(e)}\n{traceback.format_exc()}"
+            print(f"\n✗ Polaris processing failed: {e}")
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.POLARIS,
                 error_message=error_detail,
             )
 
