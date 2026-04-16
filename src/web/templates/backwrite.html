@@ -148,6 +148,25 @@
         }
         .status-msg.error { background: #fde8ea; color: var(--accent-danger); display: block; }
         .status-msg.info  { background: #e6f4ea; color: #2d6a4f; display: block; }
+        .lang-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+        .lang-pill {
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+        .grossup-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.88rem; }
+        .grossup-table th { text-align: left; padding: 4px 8px; font-size: 0.75rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
+        .grossup-table td { padding: 5px 8px; }
+        .grossup-table input[type=number] { width: 100px; padding: 5px 7px; border: 1px solid var(--border-color);
+            border-radius: 5px; font-size: 0.88rem; font-family: inherit; }
+        #grossup-section { display: none; margin-top: 14px; }
+        .toggle-row { display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+        .toggle-row input[type=checkbox] { width: 15px; height: 15px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -186,6 +205,10 @@
         <h2>Order Summary</h2>
         <div class="preview-box">
             <div class="preview-grid" id="preview-grid"></div>
+        </div>
+        <div id="lang-counts-wrap" style="display:none; margin-top:10px;">
+            <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Detected Languages</div>
+            <div class="lang-pills" id="lang-pills"></div>
         </div>
     </div>
 
@@ -326,6 +349,22 @@
                 </div>
             </div>
 
+            <!-- Gross-up (Agency only, shown when unique_rates exist) -->
+            <div id="grossup-section">
+                <div class="section-label" style="margin-top:20px">Rate Precision</div>
+                <label class="toggle-row">
+                    <input type="checkbox" id="grossup-toggle" onchange="toggleGrossup()" />
+                    <span style="font-size:0.88rem;color:var(--text-secondary);">Etere rates are gross-up (rounded) — enter net rates below for full precision</span>
+                </label>
+                <div id="grossup-inputs" style="display:none; margin-top:10px;">
+                    <table class="grossup-table">
+                        <thead><tr><th>Rounded Gross Rate</th><th>Actual Net Rate</th></tr></thead>
+                        <tbody id="grossup-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <input type="hidden" name="gross_up_rates" id="gross_up_rates" value="{}" />
+
             <!-- Notes -->
             <div class="section-label" style="margin-top:20px">Notes</div>
             <div class="form-group full">
@@ -356,7 +395,8 @@ const bwForm         = document.getElementById('bw-form');
 const existingInput  = document.getElementById('existing-input');
 const existingFn     = document.getElementById('existing-filename');
 
-let uploadedFile = null;
+let uploadedFile  = null;
+let _uniqueRates  = [];  // non-zero gross rates from preview
 
 // ── Today's date ─────────────────────────────────────────────────────────────
 function todayMDY() {
@@ -413,7 +453,10 @@ function previewCSV(file) {
         .then(data => {
             uploadStatus.style.display = 'none';
             showPreview(data);
+            showLanguageCounts(data.language_counts || {});
+            _uniqueRates = data.unique_rates || [];
             prefillFromCSV(data);
+            updateGrossupSection();
             previewCard.style.display = 'block';
             formCard.style.display    = 'block';
             generateBtn.disabled      = false;
@@ -483,10 +526,51 @@ function handleExistingFile(f) {
         .catch(err => { existingFn.textContent = f.name + ' — Error: ' + err; });
 }
 
+// ── Language counts display ───────────────────────────────────────────────────
+function showLanguageCounts(counts) {
+    const wrap  = document.getElementById('lang-counts-wrap');
+    const pills = document.getElementById('lang-pills');
+    const entries = Object.entries(counts).filter(([, n]) => n > 0)
+                          .sort((a, b) => b[1] - a[1]);
+    if (!entries.length) { wrap.style.display = 'none'; return; }
+    pills.innerHTML = entries.map(([lang, n]) =>
+        `<span class="lang-pill">${lang}: ${n}</span>`
+    ).join('');
+    wrap.style.display = 'block';
+}
+
+// ── Gross-up section ──────────────────────────────────────────────────────────
+function updateGrossupSection() {
+    const isAgency = document.getElementById('agency_flag').value === 'Agency';
+    const section  = document.getElementById('grossup-section');
+    section.style.display = (isAgency && _uniqueRates.length > 0) ? 'block' : 'none';
+    if (isAgency && _uniqueRates.length > 0) {
+        buildGrossupTable();
+    }
+}
+
+function buildGrossupTable() {
+    const tbody = document.getElementById('grossup-tbody');
+    tbody.innerHTML = _uniqueRates.map(rate =>
+        `<tr>
+           <td>$${rate.toFixed(2)}</td>
+           <td><input type="number" step="0.01" min="0" class="grossup-net"
+                      data-rate="${rate}" placeholder="net rate" /></td>
+         </tr>`
+    ).join('');
+}
+
+function toggleGrossup() {
+    const on = document.getElementById('grossup-toggle').checked;
+    document.getElementById('grossup-inputs').style.display = on ? 'block' : 'none';
+    if (!on) document.getElementById('gross_up_rates').value = '{}';
+}
+
 // ── Agency fee toggle ─────────────────────────────────────────────────────────
 function toggleAgencyFee() {
     const isAgency = document.getElementById('agency_flag').value === 'Agency';
     document.getElementById('agency-fee-group').classList.toggle('hidden', !isAgency);
+    updateGrossupSection();
 }
 
 // ── Form submit → download ────────────────────────────────────────────────────
@@ -498,6 +582,17 @@ bwForm.addEventListener('submit', async e => {
     }
     generateBtn.disabled = true;
     generateBtn.textContent = '⏳ Generating...';
+
+    // Serialize gross-up rates if toggle is on
+    if (document.getElementById('grossup-toggle').checked) {
+        const map = {};
+        document.querySelectorAll('.grossup-net').forEach(inp => {
+            if (inp.value) map[inp.dataset.rate] = inp.value;
+        });
+        document.getElementById('gross_up_rates').value = JSON.stringify(map);
+    } else {
+        document.getElementById('gross_up_rates').value = '{}';
+    }
 
     const fd = new FormData(bwForm);
     fd.set('csv_file', uploadedFile, uploadedFile.name);

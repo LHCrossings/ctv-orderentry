@@ -3,6 +3,7 @@ Backwrite routes: placement CSV → three-tab Excel download.
 """
 
 import io
+import json
 import re
 import sys
 from pathlib import Path
@@ -69,22 +70,37 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
         est_match = re.search(r'(\d{4,})', header.description)
         estimate_hint = est_match.group(1) if est_match else ""
 
+        # Unique non-zero gross rates for gross-up UI
+        unique_rates = sorted(set(
+            s.gross_rate for s in spots if s.gross_rate > 0
+        ))
+
+        # Language detection counts via EtereBridge (best-effort)
+        language_counts: dict = {}
+        try:
+            from backwrite.eterebridge_runner import get_language_counts
+            language_counts = get_language_counts(data)
+        except Exception:
+            pass
+
         return JSONResponse({
-            "agency":        header.agency,
-            "client":        header.client,
-            "contract_code": header.contract_code,
-            "description":   header.description,
-            "order_date":    header.order_date,
-            "address":       header.address,
-            "city":          header.city,
-            "markets":       markets,
-            "spot_count":    len(spots),
-            "line_count":    len(set(s.line_id for s in spots)),
+            "agency":           header.agency,
+            "client":           header.client,
+            "contract_code":    header.contract_code,
+            "description":      header.description,
+            "order_date":       header.order_date,
+            "address":          header.address,
+            "city":             header.city,
+            "markets":          markets,
+            "spot_count":       len(spots),
+            "line_count":       len(set(s.line_id for s in spots)),
             "date_range": {
                 "start": min(s.air_date for s in spots).strftime("%m/%d/%Y"),
                 "end":   max(s.air_date for s in spots).strftime("%m/%d/%Y"),
             },
-            "estimate_hint": estimate_hint,
+            "estimate_hint":    estimate_hint,
+            "unique_rates":     unique_rates,
+            "language_counts":  language_counts,
         })
 
     @router.post("/generate")
@@ -111,6 +127,7 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
         state:          str = Form(""),
         zip_code:       str = Form(""),
         notes:          str = Form(""),
+        gross_up_rates: str = Form("{}"),
     ):
         """Generate backwrite Excel from CSV + user inputs, return as download."""
         try:
@@ -129,6 +146,11 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
                 fee = fee / 100
         except ValueError:
             fee = 0.15
+
+        try:
+            gross_up_dict = json.loads(gross_up_rates) if gross_up_rates else {}
+        except (ValueError, TypeError):
+            gross_up_dict = {}
 
         user_inputs = {
             "sales_person":   sales_person,
@@ -152,6 +174,7 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             "state":          state,
             "zip":            zip_code,
             "notes":          notes,
+            "gross_up_rates": gross_up_dict,
         }
 
         try:

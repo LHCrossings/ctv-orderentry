@@ -746,10 +746,90 @@ def read_existing_order_fields(data: bytes) -> dict:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ETEREBRIDGE INTEGRATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _eb_df_to_run_rows(df, agency_fee: float, is_agency: bool) -> List[dict]:
+    """Convert an EtereBridge output DataFrame into the run_rows format
+    expected by _fill_run_sheet().  Computes broker_fees/station_net/spot_value
+    directly since EtereBridge leaves those as None (formula-driven in its own Excel)."""
+    import math
+    import pandas as pd
+
+    def _clean(val):
+        """Return None for pandas NA / float NaN, otherwise the value as-is."""
+        if val is None:
+            return None
+        try:
+            if isinstance(val, float) and math.isnan(val):
+                return None
+        except TypeError:
+            pass
+        if isinstance(val, float) and pd.isna(val):
+            return None
+        return val
+
+    rows: List[dict] = []
+    for _, row in df.iterrows():
+        gross  = float(_clean(row.get("Gross Rate")) or 0)
+        broker = round(gross * agency_fee, 2) if is_agency else 0.0
+        net    = round(gross - broker, 2)
+
+        air_dt = row.get("Air Date")
+        if isinstance(air_dt, pd.Timestamp):
+            air_date = air_dt.date()
+        elif isinstance(air_dt, datetime):
+            air_date = air_dt.date()
+        elif isinstance(air_dt, date):
+            air_date = air_dt
+        else:
+            air_date = None
+
+        month_val = row.get("Month")
+        if isinstance(month_val, pd.Timestamp):
+            month_dt = datetime(month_val.year, month_val.month, month_val.day)
+        elif isinstance(month_val, datetime):
+            month_dt = month_val
+        elif isinstance(month_val, date):
+            month_dt = datetime(month_val.year, month_val.month, month_val.day)
+        else:
+            month_dt = None
+
+        rows.append({
+            "bill_code":    _clean(row.get("Bill Code")),
+            "air_date":     air_date,
+            "day":          air_date.strftime("%A") if air_date else "",
+            "time_in":      _hhmm_to_timedelta(str(_clean(row.get("Time In")) or "")),
+            "time_out":     _hhmm_to_timedelta(str(_clean(row.get("Time Out")) or "")),
+            "length":       timedelta(seconds=int(_clean(row.get("Length")) or 0)),
+            "media":        _clean(row.get("Media")),
+            "program":      _clean(row.get("Program")),
+            "lang":         _clean(row.get("Lang.")),
+            "line":         _clean(row.get("Line")),
+            "type":         _clean(row.get("Type")),
+            "estimate":     _clean(row.get("Estimate")),
+            "gross_rate":   gross,
+            "spot_value":   gross,
+            "month":        month_dt,
+            "broker_fees":  broker,
+            "priority":     4,
+            "station_net":  net,
+            "sales_person": _clean(row.get("Sales Person")),
+            "revenue_type": _clean(row.get("Revenue Type")),
+            "billing_type": _clean(row.get("Billing Type")),
+            "agency_flag":  _clean(row.get("Agency?")),
+            "affidavit":    _clean(row.get("Affidavit?")),
+            "contract":     _clean(row.get("Contract")),
+            "market":       _clean(row.get("Market")),
+        })
+    return rows
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # MAIN ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────────────
 
-def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, raw_csv: bytes = b"") -> bytes:  # noqa: ARG001 (raw_csv reserved for future use)
+def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, raw_csv: bytes = b"") -> bytes:
     """Generate backwrite Excel from template and return raw bytes."""
     billing_type = user_inputs.get("billing_type", "Broadcast")
     agency_flag  = user_inputs.get("agency_flag",  "Agency")
@@ -763,43 +843,53 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
     is_agency = agency_flag == "Agency"
     bill_code = f"{header.agency}:{header.client}" if header.agency else header.client
 
-    # ── Per-spot run rows ─────────────────────────────────────────────────────
+    # ── Per-spot run rows: try EtereBridge pipeline first ────────────────────
     run_rows: List[dict] = []
-    for s in spots:
-        if billing_type == "Broadcast":
-            month_date = compute_broadcast_month(s.air_date)
-        else:
-            month_date = date(s.air_date.year, s.air_date.month, 1)
-        month_dt    = datetime(month_date.year, month_date.month, month_date.day)
-        broker_fees = round(s.gross_rate * agency_fee, 2) if is_agency else 0.0
-        station_net = round(s.gross_rate - broker_fees, 2)
-        run_rows.append({
-            "bill_code":    bill_code,
-            "air_date":     s.air_date,
-            "day":          s.air_date.strftime("%A"),
-            "time_in":      _hhmm_to_timedelta(s.time_from),
-            "time_out":     _hhmm_to_timedelta(s.time_to),
-            "length":       timedelta(seconds=s.duration_s),
-            "media":        s.copy_code,
-            "program":      s.air_time,
-            "lang":         detect_language(s.row_description),
-            "line":         s.line_id,
-            "type":         "BNS" if s.gross_rate == 0 else "COM",
-            "estimate":     estimate,
-            "gross_rate":   s.gross_rate,
-            "spot_value":   s.gross_rate,
-            "month":        month_dt,
-            "broker_fees":  broker_fees,
-            "priority":     s.priority,
-            "station_net":  station_net,
-            "sales_person": sales_person,
-            "revenue_type": revenue_type,
-            "billing_type": billing_type,
-            "agency_flag":  agency_flag,
-            "affidavit":    affidavit,
-            "contract":     contract,
-            "market":       s.market,
-        })
+    if raw_csv:
+        try:
+            from .eterebridge_runner import run_eterebridge_pipeline
+            eb_df = run_eterebridge_pipeline(raw_csv, user_inputs)
+            if eb_df is not None and not eb_df.empty:
+                run_rows = _eb_df_to_run_rows(eb_df, agency_fee, is_agency)
+        except Exception as _eb_exc:
+            print(f"[EtereBridge] Falling back to built-in pipeline: {_eb_exc}")
+
+    if not run_rows:
+        for s in spots:
+            if billing_type == "Broadcast":
+                month_date = compute_broadcast_month(s.air_date)
+            else:
+                month_date = date(s.air_date.year, s.air_date.month, 1)
+            month_dt    = datetime(month_date.year, month_date.month, month_date.day)
+            broker_fees = round(s.gross_rate * agency_fee, 2) if is_agency else 0.0
+            station_net = round(s.gross_rate - broker_fees, 2)
+            run_rows.append({
+                "bill_code":    bill_code,
+                "air_date":     s.air_date,
+                "day":          s.air_date.strftime("%A"),
+                "time_in":      _hhmm_to_timedelta(s.time_from),
+                "time_out":     _hhmm_to_timedelta(s.time_to),
+                "length":       timedelta(seconds=s.duration_s),
+                "media":        s.copy_code,
+                "program":      s.air_time,
+                "lang":         detect_language(s.row_description),
+                "line":         s.line_id,
+                "type":         "BNS" if s.gross_rate == 0 else "COM",
+                "estimate":     estimate,
+                "gross_rate":   s.gross_rate,
+                "spot_value":   s.gross_rate,
+                "month":        month_dt,
+                "broker_fees":  broker_fees,
+                "priority":     s.priority,
+                "station_net":  station_net,
+                "sales_person": sales_person,
+                "revenue_type": revenue_type,
+                "billing_type": billing_type,
+                "agency_flag":  agency_flag,
+                "affidavit":    affidavit,
+                "contract":     contract,
+                "market":       s.market,
+            })
 
     # ── Sales Confirmation lines (grouped by line_id) ─────────────────────────
     groups: Dict[int, List[SpotRow]] = OrderedDict()
