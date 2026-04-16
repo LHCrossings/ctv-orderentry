@@ -1006,4 +1006,110 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         args = ["remove-order", "--confirm", str(body.get("contract_number", ""))]
         return JSONResponse(content=await _run_manage_write(args))
 
+    # ── Order-entry customer database (data/customers.db) ─────────────────────
+
+    def _cdb():
+        import sqlite3 as _sq
+        return _sq.connect(str(config.customer_db_path))
+
+    @router.get("/orders/customers", response_class=HTMLResponse)
+    async def order_customers_page(request: Request):
+        return templates.TemplateResponse(request, "order_customers.html", {})
+
+    @router.get("/api/orders/customers")
+    async def list_order_customers(q: str = ""):
+        import sqlite3 as _sq
+        conn = _cdb()
+        try:
+            if q:
+                rows = conn.execute(
+                    "SELECT * FROM customers WHERE LOWER(customer_name) LIKE ? OR LOWER(order_type) LIKE ? ORDER BY customer_name",
+                    (f"%{q.lower()}%", f"%{q.lower()}%"),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM customers ORDER BY customer_name"
+                ).fetchall()
+            cols = [d[0] for d in conn.execute("SELECT * FROM customers LIMIT 0").description]
+            return JSONResponse([dict(zip(cols, r)) for r in rows])
+        finally:
+            conn.close()
+
+    @router.post("/api/orders/customers")
+    async def create_order_customer(body: dict = Body(...)):
+        import sqlite3 as _sq
+        conn = _cdb()
+        try:
+            conn.execute(
+                """INSERT INTO customers
+                   (customer_id, customer_name, order_type, code_name, description_name,
+                    billing_type, default_market, separation_customer, separation_event,
+                    separation_order, include_market_in_code, abbreviation)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    body.get("customer_id", ""),
+                    body.get("customer_name", ""),
+                    body.get("order_type", ""),
+                    body.get("code_name", ""),
+                    body.get("description_name", ""),
+                    body.get("billing_type", "agency"),
+                    body.get("default_market") or None,
+                    int(body.get("separation_customer", 15)),
+                    int(body.get("separation_event", 0)),
+                    int(body.get("separation_order", 0)),
+                    int(bool(body.get("include_market_in_code", False))),
+                    body.get("abbreviation", ""),
+                ),
+            )
+            conn.commit()
+        except _sq.IntegrityError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        finally:
+            conn.close()
+        return JSONResponse({"ok": True})
+
+    @router.put("/api/orders/customers/{customer_name}/{order_type}")
+    async def update_order_customer(customer_name: str, order_type: str, body: dict = Body(...)):
+        conn = _cdb()
+        try:
+            conn.execute(
+                """UPDATE customers SET
+                   customer_id=?, code_name=?, description_name=?,
+                   billing_type=?, default_market=?, separation_customer=?,
+                   separation_event=?, separation_order=?, include_market_in_code=?,
+                   abbreviation=?
+                   WHERE customer_name=? AND order_type=?""",
+                (
+                    body.get("customer_id", ""),
+                    body.get("code_name", ""),
+                    body.get("description_name", ""),
+                    body.get("billing_type", "agency"),
+                    body.get("default_market") or None,
+                    int(body.get("separation_customer", 15)),
+                    int(body.get("separation_event", 0)),
+                    int(body.get("separation_order", 0)),
+                    int(bool(body.get("include_market_in_code", False))),
+                    body.get("abbreviation", ""),
+                    customer_name,
+                    order_type,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        return JSONResponse({"ok": True})
+
+    @router.delete("/api/orders/customers/{customer_name}/{order_type}")
+    async def delete_order_customer(customer_name: str, order_type: str):
+        conn = _cdb()
+        try:
+            conn.execute(
+                "DELETE FROM customers WHERE customer_name=? AND order_type=?",
+                (customer_name, order_type),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        return JSONResponse({"ok": True})
+
     return router

@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Customer Database — Order Entry</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/app.css" />
+    <style>
+        .toolbar {
+            display: flex; align-items: center; gap: 12px; margin-bottom: 18px;
+        }
+        .toolbar input[type=search] {
+            flex: 1; padding: 8px 12px; border: 1px solid var(--border-color);
+            border-radius: 6px; font-family: inherit; font-size: 0.9rem;
+            background: var(--bg-secondary); color: var(--text-primary);
+        }
+        .btn-primary {
+            padding: 8px 16px; background: var(--accent-primary); color: white;
+            border: none; border-radius: 6px; font-family: inherit; font-size: 0.88rem;
+            font-weight: 600; cursor: pointer; white-space: nowrap;
+        }
+        .btn-primary:hover { opacity: 0.88; }
+        .btn-danger {
+            padding: 4px 10px; background: var(--nord11, #BF616A); color: white;
+            border: none; border-radius: 5px; font-size: 0.78rem; cursor: pointer;
+        }
+        .btn-danger:hover { opacity: 0.85; }
+        .table-wrap { border-radius: 10px; overflow: hidden; border: 1px solid var(--border-color); }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        thead { background: var(--nord1); color: var(--nord4); }
+        thead th { padding: 9px 12px; text-align: left; font-weight: 500;
+                   font-size: 0.78rem; letter-spacing: 0.03em; text-transform: uppercase; }
+        tbody tr { border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background 0.1s; }
+        tbody tr:last-child { border-bottom: none; }
+        tbody tr:hover { background: var(--bg-secondary); }
+        tbody td { padding: 9px 12px; vertical-align: middle; }
+        .tag {
+            display: inline-block; padding: 2px 7px; border-radius: 4px;
+            font-size: 0.75rem; font-weight: 600;
+        }
+        .tag-agency  { background: #EBCB8B22; color: #D08770; }
+        .tag-direct  { background: #A3BE8C22; color: #7aab5b; }
+        .sep-cell    { font-family: monospace; font-size: 0.8rem; color: var(--text-secondary); }
+        .muted       { color: var(--text-secondary); font-style: italic; }
+
+        /* Modal */
+        .modal-backdrop {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.45); z-index: 100;
+            align-items: center; justify-content: center;
+        }
+        .modal-backdrop.open { display: flex; }
+        .modal {
+            background: white; border-radius: 12px; width: 560px; max-width: 95vw;
+            max-height: 90vh; overflow-y: auto; padding: 28px 32px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+        }
+        .modal h3 { margin: 0 0 20px 0; font-size: 1.05rem; color: var(--text-primary); }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+        .form-row.full { grid-template-columns: 1fr; }
+        .form-row.three { grid-template-columns: 1fr 1fr 1fr; }
+        .form-group label { display: block; font-size: 0.76rem; font-weight: 600;
+                            color: var(--text-secondary); text-transform: uppercase;
+                            letter-spacing: 0.04em; margin-bottom: 4px; }
+        .form-group input, .form-group select {
+            width: 100%; padding: 7px 10px; border: 1px solid var(--border-color);
+            border-radius: 6px; font-family: inherit; font-size: 0.88rem;
+            background: var(--bg-secondary); color: var(--text-primary); box-sizing: border-box;
+        }
+        .form-group input:focus, .form-group select:focus {
+            outline: none; border-color: var(--accent-primary);
+        }
+        .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+        .btn-cancel {
+            padding: 8px 16px; background: var(--bg-secondary); color: var(--text-secondary);
+            border: 1px solid var(--border-color); border-radius: 6px; font-family: inherit;
+            font-size: 0.88rem; cursor: pointer;
+        }
+        .btn-cancel:hover { background: var(--border-color); }
+        .status-bar { font-size: 0.82rem; color: var(--text-secondary); margin-top: 8px; }
+        .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+        .checkbox-row input[type=checkbox] { width: 15px; height: 15px; cursor: pointer; }
+        .checkbox-row label { font-size: 0.85rem; color: var(--text-primary); cursor: pointer; margin: 0; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/orders" class="back-link">&#8592;</a>
+            <div class="logo-icon">🗂️</div>
+            <div>
+                <h1>Customer <span>Database</span></h1>
+                <div class="logo-sub">Order Entry</div>
+            </div>
+        </div>
+        <span class="header-badge">data/customers.db</span>
+    </div>
+</header>
+
+<main>
+    <div class="toolbar">
+        <input type="search" id="search-input" placeholder="Search by name or order type…" />
+        <button class="btn-primary" id="new-btn">+ New Customer</button>
+    </div>
+
+    <div class="table-wrap">
+        <table id="cust-table">
+            <thead>
+                <tr>
+                    <th>Customer Name</th>
+                    <th>Order Type</th>
+                    <th>Etere ID</th>
+                    <th>Code Name</th>
+                    <th>Desc Name</th>
+                    <th>Billing</th>
+                    <th>Market</th>
+                    <th>Separation</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="cust-tbody"></tbody>
+        </table>
+    </div>
+    <div class="status-bar" id="status-bar"></div>
+</main>
+
+<!-- Edit / New Modal -->
+<div class="modal-backdrop" id="modal-backdrop">
+    <div class="modal">
+        <h3 id="modal-title">Edit Customer</h3>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Customer Name *</label>
+                <input type="text" id="f-customer_name" />
+            </div>
+            <div class="form-group">
+                <label>Order Type *</label>
+                <input type="text" id="f-order_type" placeholder="e.g. POLARIS, RPM" />
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Etere Customer ID *</label>
+                <input type="text" id="f-customer_id" placeholder="e.g. 427" />
+            </div>
+            <div class="form-group">
+                <label>Billing Type</label>
+                <select id="f-billing_type">
+                    <option value="agency">Agency</option>
+                    <option value="direct">Direct</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Code Name</label>
+                <input type="text" id="f-code_name" placeholder="e.g. POLARIS" />
+            </div>
+            <div class="form-group">
+                <label>Description Name</label>
+                <input type="text" id="f-description_name" placeholder="e.g. Polaris" />
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Abbreviation</label>
+                <input type="text" id="f-abbreviation" placeholder="e.g. SRCF" />
+            </div>
+            <div class="form-group">
+                <label>Default Market</label>
+                <select id="f-default_market">
+                    <option value="">(none)</option>
+                    <option value="SFO">SFO – San Francisco</option>
+                    <option value="CVC">CVC – Sacramento</option>
+                    <option value="LAX">LAX – Los Angeles</option>
+                    <option value="SEA">SEA – Seattle</option>
+                    <option value="HOU">HOU – Houston</option>
+                    <option value="CMP">CMP – Chicago/Minneapolis</option>
+                    <option value="WDC">WDC – Washington DC</option>
+                    <option value="NYC">NYC – New York</option>
+                    <option value="DAL">DAL – Dallas</option>
+                    <option value="MMT">MMT – Multimarket</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row three">
+            <div class="form-group">
+                <label>Sep. Customer (min)</label>
+                <input type="number" id="f-separation_customer" value="15" min="0" />
+            </div>
+            <div class="form-group">
+                <label>Sep. Event (min)</label>
+                <input type="number" id="f-separation_event" value="0" min="0" />
+            </div>
+            <div class="form-group">
+                <label>Sep. Order (min)</label>
+                <input type="number" id="f-separation_order" value="0" min="0" />
+            </div>
+        </div>
+        <div class="checkbox-row">
+            <input type="checkbox" id="f-include_market_in_code" />
+            <label for="f-include_market_in_code">Append market code to contract code</label>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-cancel" id="modal-cancel">Cancel</button>
+            <button class="btn-primary" id="modal-save">Save</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let _rows = [];
+let _editKey = null;   // {customer_name, order_type} or null for new
+
+async function loadCustomers(q = '') {
+    const url = '/api/orders/customers' + (q ? `?q=${encodeURIComponent(q)}` : '');
+    const resp = await fetch(url);
+    _rows = await resp.json();
+    renderTable();
+    document.getElementById('status-bar').textContent = `${_rows.length} record(s)`;
+}
+
+function renderTable() {
+    const tbody = document.getElementById('cust-tbody');
+    tbody.innerHTML = _rows.map(r => `
+        <tr data-name="${esc(r.customer_name)}" data-type="${esc(r.order_type)}">
+            <td><strong>${esc(r.customer_name)}</strong></td>
+            <td>${esc(r.order_type)}</td>
+            <td>${esc(r.customer_id || '')}</td>
+            <td>${esc(r.code_name || '')}</td>
+            <td>${esc(r.description_name || '')}</td>
+            <td><span class="tag tag-${r.billing_type === 'agency' ? 'agency' : 'direct'}">${esc(r.billing_type || 'agency')}</span></td>
+            <td>${r.default_market ? esc(r.default_market) : '<span class="muted">—</span>'}</td>
+            <td class="sep-cell">${r.separation_customer}/${r.separation_event}/${r.separation_order}</td>
+            <td><button class="btn-danger del-btn" data-name="${esc(r.customer_name)}" data-type="${esc(r.order_type)}">Delete</button></td>
+        </tr>
+    `).join('');
+
+    tbody.querySelectorAll('tr').forEach(tr => {
+        tr.addEventListener('click', e => {
+            if (e.target.classList.contains('del-btn')) return;
+            openModal(tr.dataset.name, tr.dataset.type);
+        });
+    });
+    tbody.querySelectorAll('.del-btn').forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            deleteCustomer(btn.dataset.name, btn.dataset.type);
+        });
+    });
+}
+
+function openModal(name, type) {
+    const row = _rows.find(r => r.customer_name === name && r.order_type === type);
+    if (!row) return;
+    _editKey = { customer_name: name, order_type: type };
+    document.getElementById('modal-title').textContent = 'Edit Customer';
+    fillForm(row);
+    document.getElementById('f-customer_name').readOnly = true;
+    document.getElementById('f-order_type').readOnly = true;
+    document.getElementById('modal-backdrop').classList.add('open');
+}
+
+function openNewModal() {
+    _editKey = null;
+    document.getElementById('modal-title').textContent = 'New Customer';
+    fillForm({ customer_id: '', customer_name: '', order_type: '', code_name: '',
+                description_name: '', billing_type: 'agency', default_market: '',
+                separation_customer: 15, separation_event: 0, separation_order: 0,
+                include_market_in_code: 0, abbreviation: '' });
+    document.getElementById('f-customer_name').readOnly = false;
+    document.getElementById('f-order_type').readOnly = false;
+    document.getElementById('modal-backdrop').classList.add('open');
+}
+
+function fillForm(r) {
+    document.getElementById('f-customer_name').value = r.customer_name || '';
+    document.getElementById('f-order_type').value = r.order_type || '';
+    document.getElementById('f-customer_id').value = r.customer_id || '';
+    document.getElementById('f-code_name').value = r.code_name || '';
+    document.getElementById('f-description_name').value = r.description_name || '';
+    document.getElementById('f-billing_type').value = r.billing_type || 'agency';
+    document.getElementById('f-default_market').value = r.default_market || '';
+    document.getElementById('f-separation_customer').value = r.separation_customer ?? 15;
+    document.getElementById('f-separation_event').value = r.separation_event ?? 0;
+    document.getElementById('f-separation_order').value = r.separation_order ?? 0;
+    document.getElementById('f-include_market_in_code').checked = !!r.include_market_in_code;
+    document.getElementById('f-abbreviation').value = r.abbreviation || '';
+}
+
+function collectForm() {
+    return {
+        customer_name:        document.getElementById('f-customer_name').value.trim(),
+        order_type:           document.getElementById('f-order_type').value.trim(),
+        customer_id:          document.getElementById('f-customer_id').value.trim(),
+        code_name:            document.getElementById('f-code_name').value.trim(),
+        description_name:     document.getElementById('f-description_name').value.trim(),
+        billing_type:         document.getElementById('f-billing_type').value,
+        default_market:       document.getElementById('f-default_market').value || null,
+        separation_customer:  parseInt(document.getElementById('f-separation_customer').value) || 0,
+        separation_event:     parseInt(document.getElementById('f-separation_event').value) || 0,
+        separation_order:     parseInt(document.getElementById('f-separation_order').value) || 0,
+        include_market_in_code: document.getElementById('f-include_market_in_code').checked,
+        abbreviation:         document.getElementById('f-abbreviation').value.trim(),
+    };
+}
+
+async function saveCustomer() {
+    const data = collectForm();
+    if (!data.customer_name || !data.order_type || !data.customer_id) {
+        alert('Customer Name, Order Type, and Etere Customer ID are required.');
+        return;
+    }
+    let resp;
+    if (_editKey) {
+        resp = await fetch(
+            `/api/orders/customers/${encodeURIComponent(_editKey.customer_name)}/${encodeURIComponent(_editKey.order_type)}`,
+            { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }
+        );
+    } else {
+        resp = await fetch('/api/orders/customers',
+            { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }
+        );
+    }
+    if (!resp.ok) {
+        const err = await resp.text();
+        alert('Error: ' + err);
+        return;
+    }
+    closeModal();
+    loadCustomers(document.getElementById('search-input').value);
+}
+
+async function deleteCustomer(name, type) {
+    if (!confirm(`Delete "${name}" (${type})?`)) return;
+    const resp = await fetch(
+        `/api/orders/customers/${encodeURIComponent(name)}/${encodeURIComponent(type)}`,
+        { method: 'DELETE' }
+    );
+    if (resp.ok) loadCustomers(document.getElementById('search-input').value);
+}
+
+function closeModal() {
+    document.getElementById('modal-backdrop').classList.remove('open');
+}
+
+function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.getElementById('new-btn').addEventListener('click', openNewModal);
+document.getElementById('modal-cancel').addEventListener('click', closeModal);
+document.getElementById('modal-save').addEventListener('click', saveCustomer);
+document.getElementById('modal-backdrop').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal();
+});
+
+let _debounce;
+document.getElementById('search-input').addEventListener('input', e => {
+    clearTimeout(_debounce);
+    _debounce = setTimeout(() => loadCustomers(e.target.value), 250);
+});
+
+loadCustomers();
+</script>
+</body>
+</html>
