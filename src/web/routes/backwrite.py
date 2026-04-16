@@ -88,8 +88,10 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             language_counts  = get_language_counts(data)
             language_details = get_language_details(data)
             language_options = get_language_options()
-        except Exception:
-            pass
+        except Exception as _eb_err:
+            import traceback
+            traceback.print_exc()
+            print(f"[backwrite/preview] EtereBridge language info failed: {_eb_err}")
 
         return JSONResponse({
             "agency":            header.agency,

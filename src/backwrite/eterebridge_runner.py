@@ -73,6 +73,14 @@ def get_language_details(csv_bytes: bytes) -> list:
         df = _file_processor.load_and_clean_data(tmp_path)
         _detected_counts, row_languages = _file_processor.detect_languages(df)
 
+        # rowdescription stays unrenamed by load_and_clean_data
+        if "rowdescription" not in df.columns:
+            logging.warning(
+                "[EtereBridge] rowdescription column missing from DataFrame — "
+                "available: %s", list(df.columns)
+            )
+            return []
+
         unique: dict = {}
         for idx, desc in df["rowdescription"].items():
             if not isinstance(desc, str):
@@ -90,7 +98,7 @@ def get_language_details(csv_bytes: bytes) -> list:
             key=lambda x: (x["lang"], x["description"]),
         )
     except Exception as exc:
-        logging.warning("[EtereBridge] Language details failed: %s", exc)
+        logging.warning("[EtereBridge] Language details failed: %s", exc, exc_info=True)
         return []
     finally:
         os.unlink(tmp_path)
