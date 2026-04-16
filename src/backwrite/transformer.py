@@ -223,9 +223,9 @@ def parse_csv(data: bytes) -> Tuple[CsvHeader, List[SpotRow]]:
             line_id = 0
 
         try:
-            priority = int(row.get("Textbox14", 1) or 1)
+            priority = int(row.get("Textbox14", 4) or 4)
         except (ValueError, TypeError):
-            priority = 1
+            priority = 4
 
         spots.append(SpotRow(
             contract_code   = row.get("COD_CONTRATTO1", "").strip(),
