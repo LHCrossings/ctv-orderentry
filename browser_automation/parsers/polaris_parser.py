@@ -101,31 +101,6 @@ def _parse_flight_dates(raw: str) -> tuple[str, str]:
     return (f"{start.month}/{start.day}/{year}", f"{end.month}/{end.day}/{year}")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# BLOCK PREFIX HELPERS
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _get_block_prefixes(program: str) -> List[str]:
-    """Infer Etere block prefixes from program name."""
-    p = program.lower()
-    if "mandarin" in p:
-        return ["M"]
-    if "cantonese" in p:
-        return ["C"]
-    if "vietnamese" in p:
-        return ["V"]
-    if "korean" in p:
-        return ["K"]
-    if "filipino" in p or "tagalog" in p:
-        return ["T"]
-    if "punjabi" in p or "south asian" in p:
-        return ["SA"]
-    if "hmong" in p:
-        return ["Hm"]
-    if "japanese" in p:
-        return ["J"]
-    return []
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DATACLASSES
@@ -144,9 +119,6 @@ class PolarisLine:
     @property
     def is_bonus(self) -> bool:
         return self.rate == Decimal("0") and self.total_spots > 0
-
-    def get_block_prefixes(self) -> List[str]:
-        return _get_block_prefixes(self.program)
 
     def get_time_from_to(self) -> tuple[str, str]:
         """Return (time_from, time_to) in HH:MM 24-hour format."""

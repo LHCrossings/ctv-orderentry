@@ -85,9 +85,6 @@ in Etere (format: `"<PREFIX> - <Block Name>"`).
 | J    | Japanese    |
 | K    | Korean      |
 
-Pass `block_prefixes=["M", "C"]` to `add_contract_line()` to select only
-Mandarin and Cantonese blocks. `None` or empty list skips block filtering.
-
 ---
 
 ## Spot Codes
