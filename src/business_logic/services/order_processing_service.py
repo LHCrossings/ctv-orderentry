@@ -149,23 +149,10 @@ class OrderProcessingService:
         """
         # If no session provided and we have processable orders, create ONE shared session
         if browser_session is None and orders:
-            # Check if any orders need browser automation
+            # Check if any orders need browser automation.
+            # Any type with a dedicated processor requires a live browser session.
             needs_browser = any(
-                order.order_type in [
-                    OrderType.TCAA, OrderType.MISFIT, OrderType.WORLDLINK,
-                    OrderType.DAVISELEN, OrderType.SAGENT, OrderType.GALEFORCE, OrderType.HYPHEN,
-                    OrderType.TIMEADVERTISING,
-                    OrderType.CHARMAINE, OrderType.ADMERASIA,
-                    OrderType.OPAD, OrderType.HL, OrderType.HL_BDR, OrderType.IGRAPHIX,
-                    OrderType.IMPACT, OrderType.RPM,
-                    OrderType.LEXUS,
-                    OrderType.IMPRENTA,
-                    OrderType.SACCOUNTYVOTERS,
-                    OrderType.SCWA,
-                    OrderType.PROSIO,
-                    OrderType.DART,
-                    OrderType.POLARIS,
-                ]
+                order.order_type in self._PROCESSOR_DISPATCH
                 for order in orders
             )
 

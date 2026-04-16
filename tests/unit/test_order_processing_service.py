@@ -211,18 +211,12 @@ class TestProcessorDispatch:
     def service(self, temp_orders_dir):
         return OrderProcessingService({}, temp_orders_dir)
 
-    def test_dispatch_dict_covers_all_automated_types(self, service):
-        """_PROCESSOR_DISPATCH must contain exactly the dedicated-handler types."""
-        expected = {
-            OrderType.TCAA, OrderType.MISFIT, OrderType.DAVISELEN,
-            OrderType.SAGENT, OrderType.GALEFORCE, OrderType.TIMEADVERTISING,
-            OrderType.CHARMAINE, OrderType.ADMERASIA, OrderType.HL, OrderType.HL_BDR,
-            OrderType.OPAD, OrderType.IGRAPHIX, OrderType.IMPACT, OrderType.RPM,
-            OrderType.WORLDLINK, OrderType.SACCOUNTYVOTERS, OrderType.LEXUS,
-            OrderType.IMPRENTA, OrderType.SCWA, OrderType.HYPHEN,
-            OrderType.PROSIO, OrderType.DART, OrderType.POLARIS,
-        }
-        assert set(service._PROCESSOR_DISPATCH.keys()) == expected
+    def test_dispatch_dict_has_no_duplicate_method_names(self, service):
+        """No two order types should map to the same processor method."""
+        method_names = list(service._PROCESSOR_DISPATCH.values())
+        assert len(method_names) == len(set(method_names)), (
+            "Duplicate method names in _PROCESSOR_DISPATCH"
+        )
 
     def test_dispatch_method_names_exist_on_class(self, service):
         """Every method name in _PROCESSOR_DISPATCH must exist on the service class."""
