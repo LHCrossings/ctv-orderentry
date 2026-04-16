@@ -343,14 +343,17 @@ def _snapshot_row(ws, row_num: int) -> List[dict]:
         if mr.min_row == mr.max_row == row_num:
             row_merges.append((mr.min_col, mr.max_col))
 
-    return snaps, row_merges
+    # Capture row height so cloned rows match the template row exactly
+    row_height = ws.row_dimensions[row_num].height
+
+    return snaps, row_merges, row_height
 
 
 def _apply_snapshot(
     ws, snapshot_pair, new_row: int, ref_row: int
 ) -> None:
     """Write a row snapshot to new_row, updating formula row references."""
-    snapshot, row_merges = snapshot_pair
+    snapshot, row_merges, row_height = snapshot_pair
     for snap in snapshot:
         col_idx  = snap['col']
         val      = snap['value']
@@ -368,6 +371,10 @@ def _apply_snapshot(
             dst_cell.fill          = copy.copy(snap['fill'])
             dst_cell.number_format = snap['number_format']
             dst_cell.alignment     = copy.copy(snap['alignment'])
+
+    # Restore row height so cloned rows match the template row exactly
+    if row_height is not None:
+        ws.row_dimensions[new_row].height = row_height
 
     # Re-apply same intra-row merges to the new row
     for col_start, col_end in row_merges:
@@ -579,7 +586,7 @@ def _fill_run_sheet(ws, run_rows: List[dict]) -> None:
     ref_row  = tmpl_rows[0]
     max_col  = ws.max_column
     snapshot = _snapshot_row(ws, ref_row)
-    snaps, _ = snapshot
+    snaps, *_ = snapshot
 
     # Build col → field map from the first template row
     col_map: dict = {}
