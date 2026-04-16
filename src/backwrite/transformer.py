@@ -54,6 +54,32 @@ _LANG_KEYWORDS: List[Tuple[str, str]] = [
     ("japanese",    "J"),
 ]
 
+# Etere placement CSVs may use full market names in nome2; normalise to codes.
+_MARKET_NORMALISE: List[Tuple[str, str]] = [
+    ("san francisco", "SFO"),
+    ("sacramento",    "CVC"),
+    ("central valley","CVC"),
+    ("los angeles",   "LAX"),
+    ("seattle",       "SEA"),
+    ("houston",       "HOU"),
+    ("chicago",       "CMP"),
+    ("minneapolis",   "CMP"),
+    ("washington",    "WDC"),
+    ("new york",      "NYC"),
+    ("new jersey",    "NYC"),
+    ("dallas",        "DAL"),
+    ("multimarket",   "MMT"),
+]
+
+def _normalise_market(raw: str) -> str:
+    """Convert Etere market name variants to standard codes (e.g. 'San Francisco' → 'SFO').
+    Passes through values that already look like codes or have no match."""
+    lower = raw.lower()
+    for keyword, code in _MARKET_NORMALISE:
+        if keyword in lower:
+            return code
+    return raw  # already a code, or unknown — pass through as-is
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DATA CLASSES
@@ -238,7 +264,7 @@ def parse_csv(data: bytes) -> Tuple[CsvHeader, List[SpotRow]]:
             time_to         = time_to,
             gross_rate      = gross_rate,
             days_pattern    = row.get("Textbox25", "").strip(),
-            market          = row.get("nome2",       "").strip(),
+            market          = _normalise_market(row.get("nome2", "").strip()),
             air_date        = air_date,
             air_time        = row.get("airtimep",    "").strip(),
             copy_code       = row.get("bookingcode2","").strip(),
