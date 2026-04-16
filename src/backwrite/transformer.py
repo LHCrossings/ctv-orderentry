@@ -975,7 +975,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
     d_end_all   = max(s.air_date for s in spots) if spots else date.today()
 
     ctx: dict = {
-        "agency":           header.agency,
+        "agency":           header.agency if agency_flag == "Agency" else header.client,
         "client":           header.client,
         "contract_code":    header.contract_code,
         "description":      header.description,
