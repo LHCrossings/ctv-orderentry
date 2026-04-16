@@ -514,6 +514,7 @@ def _fill_monthly_breakdown(
 def _fill_sales_confirmation(
     ws, ctx: dict, sc_lines: List[dict],
     monthly_gross: dict, monthly_net: dict,
+    agency_fee: float = 0.15,
 ) -> None:
     """Fill the Sales Confirmation sheet using placeholder replacement."""
     # Detect line template rows: any row that contains '<date_range_start>'
@@ -584,6 +585,23 @@ def _fill_sales_confirmation(
                     )
 
     line_row_set = set(line_rows)
+
+    # Fix P-column dollar-total formulas in the totals section.
+    # P20 is empty in the template (missing SUM), and P21's agency-discount formula
+    # references fixed row numbers that shift when extra lines are inserted.
+    # Rebuild all three formulas using the actual post-insertion row positions.
+    if line_rows:
+        gross_row = last_line + 1   # Gross Amount row
+        disc_row  = last_line + 2   # Agency Discount row
+        net_row   = last_line + 3   # Net Amount of Contract row
+        # P(gross_row): sum of per-line dollar amounts (=L*O per line)
+        ws.cell(row=gross_row, column=16).value = f'=SUM(P{first_line}:P{last_line})'
+        # L(disc_row): stamp actual agency fee (replaces hardcoded 0.15 in template)
+        ws.cell(row=disc_row, column=12).value = round(agency_fee, 4)
+        # P(disc_row): agency discount dollar amount (negative)
+        ws.cell(row=disc_row, column=16).value = f'=-1*(L{disc_row}*P{gross_row})'
+        # P(net_row): net amount = gross + discount (discount is negative)
+        ws.cell(row=net_row, column=16).value = f'=P{gross_row}+P{disc_row}'
 
     # Fill line rows — use explicit ws.cell() to avoid row-iteration truncation
     for i, row_num in enumerate(line_rows):
@@ -1047,7 +1065,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
     monthly_gross = {k: round(v, 2) for k, v in _mg.items()}
     monthly_net   = {k: round(v * (1 - agency_fee), 2) for k, v in monthly_gross.items()}
 
-    _fill_sales_confirmation(wb["Sales Confirmation"], ctx, sc_lines, monthly_gross, monthly_net)
+    _fill_sales_confirmation(wb["Sales Confirmation"], ctx, sc_lines, monthly_gross, monthly_net, agency_fee)
     _fill_run_sheet(wb["Run Sheet"], run_rows)
     _fill_pivot(wb["Sheet1"], run_rows)
 
