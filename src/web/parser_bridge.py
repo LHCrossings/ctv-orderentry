@@ -21,6 +21,33 @@ for p in [str(_src_path), str(_project_root)]:
 # Parser registry: OrderType.value -> (module, function)
 # ---------------------------------------------------------------------------
 
+_DISPLAY_NAMES = {
+    "ADMERASIA":       "Admerasia",
+    "CHARMAINE":       "Charmaine",
+    "DART":            "DART",
+    "DAVISELEN":       "Davis Elen",
+    "GALEFORCE":       "GaleForce Media",
+    "HL":              "H&L Partners",
+    "HL_BDR":          "H&L BDR",
+    "HYPHEN":          "Hyphen (DPR)",
+    "IGRAPHIX":        "iGraphix",
+    "IMPACT":          "Impact Marketing",
+    "IMPRENTA":        "Imprenta",
+    "LEXUS":           "Lexus",
+    "MISFIT":          "Misfit",
+    "OPAD":            "OPAD",
+    "POLARIS":         "Polaris",
+    "PROSIO":          "Prosio",
+    "RPM":             "RPM",
+    "SACCOUNTYVOTERS": "Sac County Voters",
+    "SAGENT":          "Sagent Marketing",
+    "SCWA":            "SCWA",
+    "TCAA":            "TCAA",
+    "TIMEADVERTISING": "Time Advertising",
+    "WORLDLINK":       "WorldLink",
+    "XML":             "AAAA XML",
+}
+
 _REGISTRY = {
     "HYPHEN":           ("browser_automation.parsers.hyphen_parser",          "parse_hyphen_pdf"),
     "HL":               ("browser_automation.parsers.hl_parser",               "parse_hl_pdf"),
@@ -329,6 +356,14 @@ def _normalize_admerasia(order) -> dict:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+def list_parsers() -> list[dict]:
+    """Return display info for every registered parser, sorted by display name."""
+    return sorted(
+        [{"key": k, "name": _DISPLAY_NAMES.get(k, k)} for k in _REGISTRY],
+        key=lambda x: x["name"].lower(),
+    )
+
 
 def get_order_detail(file_path: Path, order_type: str) -> dict:
     """

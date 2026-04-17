@@ -38,6 +38,16 @@
         <div id="upload-status" class="upload-status"></div>
     </div>
 
+    <!-- Supported Parsers -->
+    <details class="parsers-disclosure">
+        <summary>Supported formats <span class="parsers-count">{{ parsers | length }}</span></summary>
+        <div class="parsers-grid">
+            {% for p in parsers %}
+            <span class="parser-chip">{{ p.name }}</span>
+            {% endfor %}
+        </div>
+    </details>
+
     <!-- Tab bar -->
     <div class="tab-bar">
         <button id="tab-pending"  class="tab-btn active" onclick="switchTab('pending')">

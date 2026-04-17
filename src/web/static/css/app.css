@@ -338,6 +338,69 @@ tbody td {
     font-size: 0.9rem;
 }
 
+/* ── Supported parsers disclosure ───────────────────────────────────────── */
+
+.parsers-disclosure {
+    margin: 0.75rem 0 0.25rem;
+    border: 1px solid var(--nord4);
+    border-radius: 8px;
+    background: var(--nord6);
+    padding: 0.5rem 0.75rem;
+}
+
+.parsers-disclosure summary {
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    user-select: none;
+}
+
+.parsers-disclosure summary::-webkit-details-marker { display: none; }
+
+.parsers-disclosure summary::before {
+    content: '▶';
+    font-size: 0.6rem;
+    transition: transform 0.15s;
+}
+
+.parsers-disclosure[open] summary::before {
+    transform: rotate(90deg);
+}
+
+.parsers-count {
+    background: var(--nord9);
+    color: #fff;
+    border-radius: 10px;
+    padding: 0 0.45rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.6;
+}
+
+.parsers-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    padding-top: 0.6rem;
+}
+
+.parser-chip {
+    background: var(--nord5);
+    border: 1px solid var(--nord4);
+    border-radius: 20px;
+    padding: 0.2rem 0.65rem;
+    font-size: 0.78rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
 /* ── Tab bar ─────────────────────────────────────────────────────────────── */
 
 .tab-bar {

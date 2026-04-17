@@ -21,7 +21,7 @@ if str(_src_path) not in sys.path:
 from business_logic.services.pdf_order_detector import PDFOrderDetector
 from orchestration.config import ApplicationConfig
 from orchestration.order_scanner import OrderScanner
-from web.parser_bridge import get_order_detail
+from web.parser_bridge import get_order_detail, list_parsers
 
 _ALLOWED_EXTENSIONS = {".pdf", ".xml", ".xlsx", ".xlsm", ".jpg", ".jpeg", ".png"}
 
@@ -70,7 +70,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     @router.get("/order-entry", response_class=HTMLResponse)
     async def index(request: Request):
-        return templates.TemplateResponse(request, "index.html")
+        return templates.TemplateResponse(request, "index.html", {"parsers": list_parsers()})
 
     @router.get("/billing", response_class=HTMLResponse)
     async def billing(request: Request):
