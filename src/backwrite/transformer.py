@@ -1019,6 +1019,11 @@ def _sc_lines_from_io(io_detail: dict) -> List[dict]:
         dur_m   = re.search(r'\d+', dur_raw)
         length  = f":{dur_m.group()}" if dur_m else ":30"
 
+        # If weekly_spots is a per-day schedule (one entry per calendar day,
+        # values 0/1), it's not a weekly cadence — treat as order-basis.
+        if isinstance(weekly_spots, list) and len(weekly_spots) > 7:
+            weekly_spots = []
+
         # Weeks + per-week spot count
         if weekly_spots:
             weeks = len(weekly_spots)
@@ -1039,6 +1044,10 @@ def _sc_lines_from_io(io_detail: dict) -> List[dict]:
         description = ln.get("description") or f"Line {idx + 1}"
         days  = (ln.get("days") or "").strip()
         time_ = (ln.get("time") or "").strip()
+        # Normalize 3-digit minutes: "10:300p" → "10:30p" (PDF OCR artifact)
+        _fix3 = lambda s: re.sub(r'(\d+):(\d{2})\d+([aApPnN])', r'\1:\2\3', s)
+        time_        = _fix3(time_)
+        description  = _fix3(description)
         if days and time_ and days not in description and time_ not in description:
             line_desc = f"{days} {time_}  {description}".strip()
         else:
