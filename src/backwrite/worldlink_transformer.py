@@ -26,6 +26,7 @@ YELLOW_FILL  = PatternFill("solid", fgColor="FFFFFF00")
 GREEN_FILL   = PatternFill("solid", fgColor="FF92D050")
 AGENCY_FEE   = 0.15
 _DATA_FONT   = Font(name="Calibri", size=11)
+_BOLD_FONT   = Font(name="Calibri", size=11, bold=True)
 _TEMPLATE    = Path(__file__).parent / "templates" / "worldlink_template.xlsx"
 _CURRENCY_NF = '_("$"* #,##0.00_);_("$"* \\(#,##0.00\\);_("$"* "-"??_);_(@_)'
 _MONTH_NF    = '[$-409]mmm\\-yy;@'   # "Apr-26" — MLBF column S
@@ -185,12 +186,12 @@ def _broadcast_month_formula(r: int) -> str:
     )
 
 
-def _wc(ws, row: int, col: int, val, nf: str = "General") -> None:
-    """Write a value to a data cell with standard font; always sets number_format
-    to prevent inheriting column-level styles (e.g. date format on col L)."""
+def _wc(ws, row: int, col: int, val, nf: str = "General", font=None) -> None:
+    """Write a value to a data cell; always sets number_format to prevent
+    inheriting column-level styles (e.g. date format on col L)."""
     cell = ws.cell(row=row, column=col)
     cell.value         = val
-    cell.font          = copy(_DATA_FONT)
+    cell.font          = copy(font if font is not None else _DATA_FONT)
     cell.number_format = nf
 
 
@@ -276,19 +277,19 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
     net_row   = disc_row + 1
 
     # ── Summary block ─────────────────────────────────────────────────────────
-    _wc(ws, sum_row,  9,  "Gross Amount")
-    _wc(ws, sum_row,  12, f"=SUM(L{DATA_START}:L{last_data})", _INT_NF)
+    _wc(ws, sum_row,  9,  "Gross Amount",                          font=_BOLD_FONT)
+    _wc(ws, sum_row,  12, f"=SUM(L{DATA_START}:L{last_data})",    _INT_NF)
     _wc(ws, sum_row,  14, "spots")
-    _wc(ws, sum_row,  16, f"=SUM(P{DATA_START}:P{last_data})", _CURRENCY_NF)
+    _wc(ws, sum_row,  16, f"=SUM(P{DATA_START}:P{last_data})",    _CURRENCY_NF)
 
     _wc(ws, disc_row, 2,  "Additional Notes")
-    _wc(ws, disc_row, 9,  "Agency Discount")
-    _wc(ws, disc_row, 12, AGENCY_FEE, _PCT_NF)
-    _wc(ws, disc_row, 16, f"=-1*(L{disc_row}*P{sum_row})", _CURRENCY_NF)
+    _wc(ws, disc_row, 9,  "Agency Discount",                      font=_BOLD_FONT)
+    _wc(ws, disc_row, 12, AGENCY_FEE,                             _PCT_NF)
+    _wc(ws, disc_row, 16, f"=-1*(L{disc_row}*P{sum_row})",        _CURRENCY_NF)
 
     _wc(ws, net_row,  2,  order_comment)
-    _wc(ws, net_row,  9,  "Net Amount of Contract")
-    _wc(ws, net_row,  16, f"=SUM(P{sum_row}:P{disc_row})", _CURRENCY_NF)
+    _wc(ws, net_row,  9,  "Net Amount of Contract",               font=_BOLD_FONT)
+    _wc(ws, net_row,  16, f"=SUM(P{sum_row}:P{disc_row})",        _CURRENCY_NF)
 
     # Ensure column P is wide enough for currency display
     ws.column_dimensions["P"].width = 14
