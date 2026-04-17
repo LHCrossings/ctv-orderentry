@@ -495,10 +495,45 @@ ioZone.addEventListener('drop', e => {
 });
 ioInput.addEventListener('change', () => { if (ioInput.files[0]) handleIOFile(ioInput.files[0]); });
 
+let _ioNetRates = [];   // net rates returned from /parse-io
+
 function handleIOFile(f) {
     ioFile = f;
     ioFn.textContent = f.name;
     ioFn.style.display = 'inline';
+
+    const fd = new FormData();
+    fd.append('io_file', f);
+    fetch('/backwrite/parse-io', { method: 'POST', body: fd })
+        .then(r => r.ok ? r.json() : Promise.reject(r.statusText))
+        .then(d => {
+            _ioNetRates = d.io_net_rates || [];
+            if (d.rates_are_net && _ioNetRates.length) {
+                ioFn.textContent += ' (net rates detected)';
+                applyAutoGrossup();
+            }
+        })
+        .catch(() => { /* silent — IO parse is best-effort */ });
+}
+
+function applyAutoGrossup() {
+    if (!_ioNetRates.length) return;
+    const inputs = document.querySelectorAll('.grossup-net');
+    if (!inputs.length) return;   // table not built yet — will be applied in buildGrossupTable()
+    let filled = 0;
+    inputs.forEach(inp => {
+        const csvRate = parseFloat(inp.dataset.rate);
+        const match   = _ioNetRates.find(r => Math.abs(r - csvRate) < 0.03);
+        if (match !== undefined && !inp.value) {
+            inp.value = match.toFixed(2);
+            inp.title = 'Auto-detected from IO';
+            filled++;
+        }
+    });
+    if (filled > 0) {
+        document.getElementById('grossup-toggle').checked = true;
+        document.getElementById('grossup-inputs').style.display = 'block';
+    }
 }
 
 // ── Existing order drop zone ──────────────────────────────────────────────────
@@ -741,6 +776,7 @@ function buildGrossupTable() {
                       data-rate="${rate}" placeholder="net rate" /></td>
          </tr>`
     ).join('');
+    applyAutoGrossup();   // pre-fill if IO already uploaded
 }
 
 function toggleGrossup() {

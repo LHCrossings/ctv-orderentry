@@ -91,6 +91,7 @@ class AdmerasiaOrder:
     language: str  # "Chinese" or "Vietnamese" based on ISCI section
     lines: List[AdmerasiaLine] = field(default_factory=list)
     week_start_dates: List[date] = field(default_factory=list)
+    rates_are_net: bool = True   # Admerasia IOs are always quoted net
     
     def get_estimate_number(self) -> str:
         """

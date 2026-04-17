@@ -281,6 +281,7 @@ def _normalize_order(order_obj) -> dict:
         "total_cost": round(total_cost, 2),
         "lines": normalized_lines,
         "warnings": warnings,
+        "rates_are_net": getattr(order_obj, "rates_are_net", False),
     }
 
 

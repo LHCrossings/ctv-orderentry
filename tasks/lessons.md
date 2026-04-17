@@ -1,5 +1,29 @@
 # Lessons Learned
 
+## All Parsers Must Set `rates_are_net` on Their Order Object
+
+**Session:** Backwrite gross-up automation (2026-04-17)
+
+**Rule:** Every parser's order dataclass must carry a `rates_are_net: bool` field.
+
+- `False` (default) — rates in the IO are Gross; no gross-up needed
+- `True` — rates in the IO are Net; backwrite will auto-gross-up by dividing by `(1 - agency_fee)`
+
+**Current state:**
+- Admerasia: hardcoded `rates_are_net = True` (Admerasia IOs are always net)
+- HL: detected per-file from column header (`"Net"` present, `"Gross"` absent)
+- All others: should default to `False` unless detection logic is added
+
+**How the system uses it:**
+1. `parser_bridge.get_order_detail()` propagates the flag as `"rates_are_net"` in its return dict
+2. `/backwrite/parse-io` endpoint returns `{rates_are_net, io_net_rates}` so the JS can pre-fill the gross-up table
+3. If the user uploads an IO before clicking Generate, gross-up inputs are auto-checked and pre-filled
+4. Server-side fallback in `/generate`: if `io_detail.rates_are_net` and Agency order and no manual gross_up, auto-injects `gross_up_rates = {net_rate: net_rate}` for each IO rate
+
+**How to apply:** When writing a new parser, add `rates_are_net: bool = False` to the order dataclass. If the format is always net, set it `True`. If it depends on a column header, detect it the same way HL does (`bool(re.search(r'\bNet\b', header) and not re.search(r'\bGross\b', header))`).
+
+
+
 ## Master Market Is Always NYC — Never Override It in Agency Automations
 
 **Session:** SCWA implementation (2026-03-26)

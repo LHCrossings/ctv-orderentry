@@ -55,6 +55,38 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             raise HTTPException(status_code=400, detail=f"Could not read file: {exc}")
         return JSONResponse(fields)
 
+    @router.post("/parse-io")
+    async def backwrite_parse_io(io_file: UploadFile):
+        """Detect whether an IO file has net rates; return net rates for auto gross-up."""
+        suffix = Path(io_file.filename).suffix.lower() or ".pdf"
+        fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+        try:
+            data = await io_file.read()
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
+            from business_logic.services.pdf_order_detector import PDFOrderDetector
+            from web.parser_bridge import get_order_detail
+            detected = PDFOrderDetector().detect_order_type(tmp_path, silent=True)
+            if not detected:
+                return JSONResponse({"rates_are_net": False, "io_net_rates": []})
+            detail = get_order_detail(Path(tmp_path), detected.value)
+            if detail.get("error"):
+                return JSONResponse({"rates_are_net": False, "io_net_rates": []})
+            rates_are_net = bool(detail.get("rates_are_net", False))
+            io_net_rates = sorted(set(
+                round(float(ln.get("rate") or 0), 2)
+                for ln in detail.get("lines", [])
+                if ln.get("rate")
+            ))
+            return JSONResponse({"rates_are_net": rates_are_net, "io_net_rates": io_net_rates})
+        except Exception as exc:
+            return JSONResponse({"rates_are_net": False, "io_net_rates": [], "warning": str(exc)})
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
     @router.post("/preview")
     async def backwrite_preview(csv_file: UploadFile):
         """Parse uploaded CSV and return extracted fields as JSON."""
@@ -232,6 +264,21 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
                         os.unlink(tmp_path)
                     except Exception:
                         pass
+
+        # Server-side fallback: auto-inject gross_up_rates when IO indicates net rates
+        # and the user didn't manually provide them via the UI.
+        if (io_detail and io_detail.get("rates_are_net")
+                and user_inputs.get("agency_flag") == "Agency"
+                and not gross_up_dict):
+            io_nets = {
+                round(float(ln.get("rate") or 0), 4)
+                for ln in io_detail.get("lines", [])
+                if ln.get("rate")
+            }
+            if io_nets:
+                gross_up_dict = {r: r for r in io_nets}
+                user_inputs["gross_up_rates"] = gross_up_dict
+                print(f"[backwrite/generate] Auto gross-up from IO net rates: {gross_up_dict}")
 
         try:
             xlsx_bytes = generate_excel(header, spots, user_inputs, raw_csv=data, io_detail=io_detail)
