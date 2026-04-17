@@ -87,6 +87,114 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             except Exception:
                 pass
 
+    # ── WorldLink endpoints ───────────────────────────────────────────────────
+
+    @router.post("/worldlink/parse-io")
+    async def worldlink_parse_io(io_file: UploadFile):
+        """Parse a WorldLink IO PDF and return preview data for the WL backwrite form."""
+        suffix = Path(io_file.filename).suffix.lower() or ".pdf"
+        fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+        try:
+            data = await io_file.read()
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
+            import sys as _sys
+            _proj = Path(__file__).parent.parent.parent.parent
+            for _p in [str(_proj), str(_proj / "browser_automation")]:
+                if _p not in _sys.path:
+                    _sys.path.insert(0, _p)
+            from browser_automation.parsers.worldlink_parser import parse_worldlink_pdf  # noqa: I001
+            from backwrite.worldlink_transformer import _compute_monthly_revenue, _MONTH_NAMES
+            io_data = parse_worldlink_pdf(tmp_path)
+            if not io_data:
+                raise HTTPException(status_code=400, detail="Could not parse WorldLink PDF")
+            lines = io_data.get("lines", [])
+            monthly_rev = _compute_monthly_revenue(lines)
+            monthly_breakdown = [
+                {
+                    "month":      _MONTH_NAMES[bm.month],
+                    "gross":      gross,
+                    "net":        round(gross * 0.85, 2),
+                    "broker_fee": round(-gross * 0.85 * 0.10, 2),
+                }
+                for bm, gross in sorted(monthly_rev.items())
+            ]
+            total_gross = sum(monthly_rev.values())
+            return JSONResponse({
+                "agency":           io_data.get("agency", ""),
+                "advertiser":       io_data.get("advertiser", ""),
+                "tracking_number":  io_data.get("tracking_number", ""),
+                "buyer":            io_data.get("buyer", ""),
+                "order_comment":    io_data.get("order_comment", ""),
+                "order_type":       io_data.get("order_type", "new"),
+                "revision_hint":    0 if io_data.get("order_type") == "new" else 1,
+                "line_count":       len(lines),
+                "total_gross":      round(total_gross, 2),
+                "monthly_breakdown": monthly_breakdown,
+            })
+        except HTTPException:
+            raise
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status_code=400, detail=f"Parse error: {exc}")
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
+    @router.post("/worldlink/generate")
+    async def worldlink_generate(
+        io_file:         UploadFile,
+        contract_number: str = Form(""),
+        revision:        str = Form("0"),
+    ):
+        """Generate WorldLink backwrite Excel from IO PDF + user inputs."""
+        suffix = Path(io_file.filename).suffix.lower() or ".pdf"
+        fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+        try:
+            data = await io_file.read()
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
+            import sys as _sys
+            _proj = Path(__file__).parent.parent.parent.parent
+            for _p in [str(_proj), str(_proj / "browser_automation")]:
+                if _p not in _sys.path:
+                    _sys.path.insert(0, _p)
+            from browser_automation.parsers.worldlink_parser import parse_worldlink_pdf  # noqa: I001
+            from backwrite.worldlink_transformer import generate_worldlink_excel
+            io_data = parse_worldlink_pdf(tmp_path)
+            if not io_data:
+                raise HTTPException(status_code=400, detail="Could not parse WorldLink PDF")
+            user_inputs = {
+                "contract_number": contract_number,
+                "revision":        int(revision) if str(revision).isdigit() else 0,
+            }
+            xlsx_bytes = generate_worldlink_excel(io_data, user_inputs)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=f"Generation error: {exc}")
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
+        tracking = io_data.get("tracking_number", "")
+        advertiser = io_data.get("advertiser", "")
+        adv_short = re.sub(r'[\\/:*?"<>|,]', "", advertiser[:20]).strip()
+        filename = f"WorldLink - {adv_short} {tracking}.xlsx" if adv_short else f"WorldLink {tracking}.xlsx"
+
+        return StreamingResponse(
+            io.BytesIO(xlsx_bytes),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
     @router.post("/preview")
     async def backwrite_preview(csv_file: UploadFile):
         """Parse uploaded CSV and return extracted fields as JSON."""
