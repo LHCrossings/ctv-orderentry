@@ -1045,9 +1045,8 @@ def _sc_lines_from_io(io_detail: dict) -> List[dict]:
         days  = (ln.get("days") or "").strip()
         time_ = (ln.get("time") or "").strip()
         # Normalize 3-digit minutes: "10:300p" → "10:30p" (PDF OCR artifact)
-        _fix3 = lambda s: re.sub(r'(\d+):(\d{2})\d+([aApPnN])', r'\1:\2\3', s)
-        time_        = _fix3(time_)
-        description  = _fix3(description)
+        time_       = re.sub(r'(\d+):(\d{2})\d+([aApPnN])', r'\1:\2\3', time_)
+        description = re.sub(r'(\d+):(\d{2})\d+([aApPnN])', r'\1:\2\3', description)
         if days and time_ and days not in description and time_ not in description:
             line_desc = f"{days} {time_}  {description}".strip()
         else:
