@@ -522,33 +522,41 @@ def _apply_direct_mode(ws) -> None:
       - Net Amount row: P column set to reference gross total directly
       - Monthly breakdown: "Gross" header renamed "Net", Net column cleared
     """
+    from openpyxl.cell.cell import MergedCell as _MergedCell
+
+    def _safe_set(ws, row, col, val):
+        """Write val only if the cell is not part of a merge."""
+        c = ws.cell(row=row, column=col)
+        if not isinstance(c, _MergedCell):
+            c.value = val
+
     max_col = ws.max_column
-    gross_p_row: Optional[int] = None   # row holding "Gross Amount" → P = gross total
+    gross_p_row: Optional[int] = None
     disc_row:    Optional[int] = None
     net_p_row:   Optional[int] = None
 
     for row in ws.iter_rows():
         for cell in row:
-            if not isinstance(cell.value, str):
+            if isinstance(cell, _MergedCell) or not isinstance(cell.value, str):
                 continue
             v = cell.value.strip()
             if v == 'Gross Amount':
                 gross_p_row = cell.row
             elif v == 'Agency Discount':
                 disc_row = cell.row
-                # Clear entire agency discount row
                 for col in range(1, max_col + 1):
-                    ws.cell(row=disc_row, column=col).value = None
+                    _safe_set(ws, disc_row, col, None)
             elif v == 'Net Amount of Contract':
                 net_p_row = cell.row
-                # Replace net formula with a direct reference to gross total
                 if gross_p_row:
-                    ws.cell(row=net_p_row, column=16).value = f'=P{gross_p_row}'
+                    _safe_set(ws, net_p_row, 16, f'=P{gross_p_row}')
 
     # Monthly breakdown: rename "Gross" → "Net", clear the Net column
     for row in ws.iter_rows():
         row_has_month = any(
-            isinstance(c.value, str) and c.value.strip().lower() == 'month'
+            not isinstance(c, _MergedCell)
+            and isinstance(c.value, str)
+            and c.value.strip().lower() == 'month'
             for c in row
         )
         if not row_has_month:
@@ -556,16 +564,17 @@ def _apply_direct_mode(ws) -> None:
         month_hdr_row = row[0].row
         gross_col = net_col = None
         for cell in row:
+            if isinstance(cell, _MergedCell):
+                continue
             v = str(cell.value or '').strip().lower()
             if v == 'gross':
                 gross_col = cell.column
-                cell.value = 'Net'          # rename header
+                cell.value = 'Net'
             elif v == 'net' and gross_col is not None:
                 net_col = cell.column
-        # Clear net_col from header row to end of sheet
         if net_col:
             for r in range(month_hdr_row, ws.max_row + 1):
-                ws.cell(row=r, column=net_col).value = None
+                _safe_set(ws, r, net_col, None)
         break
 
 
