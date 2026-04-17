@@ -372,7 +372,36 @@ def parse_admerasia_pdf(pdf_path: str, time_overrides: dict = None) -> Admerasia
         
         # Parse line items from table (with time overrides)
         lines = _parse_line_items(pdf, week_start_dates, time_overrides)
-        
+
+        # Vietnamese time-window validation (10:00a–1:00p is the only valid window as of 2026)
+        if 'vietnamese' in language.lower() and lines:
+            _VIE_WINDOW_START = (10, 0)
+            _VIE_WINDOW_END   = (13, 0)
+
+            def _hhmm24(t: str):
+                """'10:00a' / '1:00p' / '13:00' → (hour24, minute) or None."""
+                m = re.match(r'(\d+):(\d+)\s*([ap])?', t.strip(), re.IGNORECASE)
+                if not m:
+                    return None
+                h, mn, sfx = int(m.group(1)), int(m.group(2)), (m.group(3) or '').lower()
+                if sfx == 'p' and h != 12:
+                    h += 12
+                elif sfx == 'a' and h == 12:
+                    h = 0
+                return (h, mn)
+
+            for ln in lines:
+                parts = (ln.time or '').split('-', 1)
+                if len(parts) == 2:
+                    start_t = _hhmm24(parts[0])
+                    end_t   = _hhmm24(parts[1])
+                    if (start_t and start_t < _VIE_WINDOW_START) or \
+                       (end_t   and end_t   > _VIE_WINDOW_END):
+                        print(
+                            f"[WARNING] Vietnamese time outside expected 10:00a–1:00p window: "
+                            f"{ln.time!r} — verify before entry"
+                        )
+
         order = AdmerasiaOrder(
             order_number=order_number,
             order_date=order_date,
