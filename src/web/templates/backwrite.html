@@ -191,6 +191,12 @@
         .mode-btn.active {
             background: var(--accent-primary); color: white; border-color: var(--accent-primary);
         }
+        #wl-monthly-wrap {
+            background: var(--bg-card, var(--bg-primary, #fff));
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px 16px;
+        }
         .wl-monthly-table th {
             text-align: left; padding: 5px 10px; font-size: 0.78rem; font-weight: 700;
             color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;
@@ -486,7 +492,7 @@
         <div class="preview-box">
             <div class="preview-grid" id="wl-preview-grid"></div>
         </div>
-        <div id="wl-monthly-wrap" style="display:none; margin-top:16px;">
+        <div id="wl-monthly-wrap" style="display:none; margin-top:4px;">
             <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Monthly Breakdown</div>
             <table class="wl-monthly-table" style="width:100%;border-collapse:collapse;">
                 <thead><tr>
