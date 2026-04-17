@@ -1068,6 +1068,11 @@ def _parse_line_items_table_based(pdf: pdfplumber.PDF, week_start_dates: List[da
                 salvaged = re.match(r'(\d+:\d+[aApP]?-\d+:\d+[aApP])', stripped)
             if salvaged:
                 time_str = salvaged.group(1).lower()
+                # Correct 12:00a → 12:00p when start is a daytime AM hour (6–11).
+                # Garbled strings like '11:30a-12:00apa' produce 12:00a because the
+                # regex captures the stray 'a' before seeing the 'p' that follows it.
+                if time_str.endswith('-12:00a') and re.match(r'^(6|7|8|9|10|11):', time_str):
+                    time_str = time_str[:-1] + 'p'
                 print(f"[INFO] Row {row_idx}: salvaged time from garbled column: {time_str}")
             else:
                 print(f"[ERROR] Row {row_idx} has garbled time but no user override provided")
