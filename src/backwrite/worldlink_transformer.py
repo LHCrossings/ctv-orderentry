@@ -28,6 +28,10 @@ AGENCY_FEE   = 0.15
 _DATA_FONT   = Font(name="Calibri", size=11)
 _TEMPLATE    = Path(__file__).parent / "templates" / "worldlink_template.xlsx"
 _CURRENCY_NF = '_("$"* #,##0.00_);_("$"* \\(#,##0.00\\);_("$"* "-"??_);_(@_)'
+_MONTH_NF    = '[$-409]mmm\\-yy;@'   # "Apr-26" — MLBF column S
+_TIME_NF     = '[h]:mm:ss;@'          # MLBF time columns E/F/G
+_INT_NF      = "0"                    # integer (spots counts)
+_PCT_NF      = "0%"                   # agency fee (0.15 → 15%)
 
 _MONTH_NAMES = {
     1: "January",  2: "February",  3: "March",    4: "April",
@@ -181,13 +185,13 @@ def _broadcast_month_formula(r: int) -> str:
     )
 
 
-def _wc(ws, row: int, col: int, val, nf: str = None) -> None:
-    """Write a value to a data cell with standard data font and optional number format."""
+def _wc(ws, row: int, col: int, val, nf: str = "General") -> None:
+    """Write a value to a data cell with standard font; always sets number_format
+    to prevent inheriting column-level styles (e.g. date format on col L)."""
     cell = ws.cell(row=row, column=col)
-    cell.value = val
-    cell.font  = copy(_DATA_FONT)
-    if nf:
-        cell.number_format = nf
+    cell.value         = val
+    cell.font          = copy(_DATA_FONT)
+    cell.number_format = nf
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -272,24 +276,27 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
     net_row   = disc_row + 1
 
     # ── Summary block ─────────────────────────────────────────────────────────
-    ws.cell(sum_row,  9).value  = "Gross Amount"
-    ws.cell(sum_row,  12).value = f"=SUM(L{DATA_START}:L{last_data})"
-    ws.cell(sum_row,  14).value = "spots"
+    _wc(ws, sum_row,  9,  "Gross Amount")
+    _wc(ws, sum_row,  12, f"=SUM(L{DATA_START}:L{last_data})", _INT_NF)
+    _wc(ws, sum_row,  14, "spots")
     _wc(ws, sum_row,  16, f"=SUM(P{DATA_START}:P{last_data})", _CURRENCY_NF)
 
-    ws.cell(disc_row, 2).value  = "Additional Notes"
-    ws.cell(disc_row, 9).value  = "Agency Discount"
-    ws.cell(disc_row, 12).value = AGENCY_FEE
+    _wc(ws, disc_row, 2,  "Additional Notes")
+    _wc(ws, disc_row, 9,  "Agency Discount")
+    _wc(ws, disc_row, 12, AGENCY_FEE, _PCT_NF)
     _wc(ws, disc_row, 16, f"=-1*(L{disc_row}*P{sum_row})", _CURRENCY_NF)
 
-    ws.cell(net_row,  2).value  = order_comment
-    ws.cell(net_row,  9).value  = "Net Amount of Contract"
+    _wc(ws, net_row,  2,  order_comment)
+    _wc(ws, net_row,  9,  "Net Amount of Contract")
     _wc(ws, net_row,  16, f"=SUM(P{sum_row}:P{disc_row})", _CURRENCY_NF)
+
+    # Ensure column P is wide enough for currency display
+    ws.column_dimensions["P"].width = 14
 
     sig1 = net_row + 2
     sig2 = sig1 + 2
-    ws.cell(sig1, 9).value = "Client Signature"
-    ws.cell(sig2, 9).value = "Station Rep Signature"
+    _wc(ws, sig1, 9, "Client Signature")
+    _wc(ws, sig2, 9, "Station Rep Signature")
 
     # ── Monthly Breakdown ─────────────────────────────────────────────────────
     mbr_title = sig2 + 4
@@ -361,19 +368,19 @@ def _fill_mlbf_tab(ws, io_data: dict, user_inputs: dict) -> None:
         _wc(ws, r,  2, billing_date,                  "m/d/yy")
         _wc(ws, r,  3, f"=B{r}")
         _wc(ws, r,  4, f'=TEXT(B{r},"dddd")')
-        _wc(ws, r,  5, timedelta(0))
-        _wc(ws, r,  6, timedelta(0))
-        _wc(ws, r,  7, timedelta(0))
+        _wc(ws, r,  5, timedelta(0),               _TIME_NF)
+        _wc(ws, r,  6, timedelta(0),               _TIME_NF)
+        _wc(ws, r,  7, timedelta(0),               _TIME_NF)
         _wc(ws, r,  8, f"{tracking} Monthly Charges")
         _wc(ws, r,  9, "BILLING LINE")
         _wc(ws, r, 11, "NX")
-        _wc(ws, r, 12, 1)
+        _wc(ws, r, 12, 1,                          _INT_NF)
         _wc(ws, r, 14, "COM")
         _wc(ws, r, 15, tracking_val)
-        _wc(ws, r, 16, gross)
-        _wc(ws, r, 18, f"=P{r}")
-        _wc(ws, r, 19, _broadcast_month_formula(r))
-        _wc(ws, r, 20, f"=P{r}*0.15")
+        _wc(ws, r, 16, gross,                      _CURRENCY_NF)
+        _wc(ws, r, 18, f"=P{r}",                   _CURRENCY_NF)
+        _wc(ws, r, 19, _broadcast_month_formula(r), _MONTH_NF)
+        _wc(ws, r, 20, f"=P{r}*0.15",              _CURRENCY_NF)
         _wc(ws, r, 21, 4)
         _wc(ws, r, 22, f"=P{r}-T{r}")
         _wc(ws, r, 23, "House")
@@ -402,18 +409,18 @@ def _fill_mlbf_tab(ws, io_data: dict, user_inputs: dict) -> None:
         _wc(ws, r,  2, billing_date,                  "m/d/yy")
         _wc(ws, r,  3, f"=B{r}")
         _wc(ws, r,  4, f'=TEXT(B{r},"dddd")')
-        _wc(ws, r,  5, timedelta(0))
-        _wc(ws, r,  6, timedelta(0))
-        _wc(ws, r,  7, timedelta(0))
+        _wc(ws, r,  5, timedelta(0),               _TIME_NF)
+        _wc(ws, r,  6, timedelta(0),               _TIME_NF)
+        _wc(ws, r,  7, timedelta(0),               _TIME_NF)
         _wc(ws, r,  8, f"{tracking} Broker Fees")
         _wc(ws, r,  9, "BILLING LINE")
         _wc(ws, r, 11, "NX")
-        _wc(ws, r, 12, 1)
+        _wc(ws, r, 12, 1,                          _INT_NF)
         _wc(ws, r, 14, "COM")
         _wc(ws, r, 15, tracking_val)
-        _wc(ws, r, 16, broker_fee)
-        _wc(ws, r, 18, f"=P{r}")
-        _wc(ws, r, 19, _broadcast_month_formula(r))
+        _wc(ws, r, 16, broker_fee,                 _CURRENCY_NF)
+        _wc(ws, r, 18, f"=P{r}",                   _CURRENCY_NF)
+        _wc(ws, r, 19, _broadcast_month_formula(r), _MONTH_NF)
         _wc(ws, r, 20, 0)
         _wc(ws, r, 21, 4)
         _wc(ws, r, 22, f"=P{r}-T{r}")
