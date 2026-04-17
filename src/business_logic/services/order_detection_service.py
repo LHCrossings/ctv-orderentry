@@ -431,23 +431,19 @@ class OrderDetectionService:
         """
         Check if text matches Admerasia order patterns.
 
-        Primary: "Admerasia" present with McDonald's or TV-MD order number.
-        Fallback: TV-MD order number format alone is sufficient — Admerasia
-        is the only agency that uses the TV-MD[YY]-... numbering convention.
+        Primary: "Admerasia" present with McDonald's branding.
+        Fallback: Order Number + -MD pattern (e.g. "07-MD10-...") without
+        requiring "Admerasia" text — covers clean McDonald's-branded IOs.
         """
         text_upper = text.upper()
         has_admerasia = "Admerasia" in text or "ADMERASIA" in text_upper
 
-        # McDonald's + Admerasia branding → definitive
+        # Admerasia name + McDonald's → definitive
         if has_admerasia and ("McDonald" in text or "Ref: McDonald" in text):
             return True
 
-        # TV-MD order number format (e.g. "TV-MD26-...") — unique to Admerasia
+        # Order Number + -MD pattern — unique to Admerasia (no "Admerasia" required)
         if "Order Number:" in text and "-MD" in text:
-            return True
-
-        # Admerasia name present even without McDonald's text
-        if has_admerasia:
             return True
 
         return False
@@ -593,6 +589,13 @@ class OrderDetectionService:
             # PDF is two-column; address follows on same line — stop at "Address:"
             m = re.search(r'Advertiser\s+(.*?)\s+Address:', first_page_text)
             return m.group(1).strip() if m else "Sacramento County Water Agency"
+
+        elif order_type == OrderType.ADMERASIA:
+            # "Ref: McDonald's" is always present on Admerasia IOs
+            m = re.search(r"Ref:\s*(.+)", first_page_text)
+            if m:
+                return m.group(1).strip()
+            return "McDonald's"
 
         # Fallback: try common patterns
         return self._extract_generic_client(first_page_text)
