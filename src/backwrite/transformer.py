@@ -887,22 +887,26 @@ def read_existing_order_fields(data: bytes) -> dict:
     }
 
     # Content-search rows for fields that shift position after line insertion
+    from openpyxl.cell.cell import MergedCell as _MC
     fields["agency_flag"] = "Direct"
     fields["agency_fee"]  = ""
     for row in ws.iter_rows():
-        label = str(row[1].value or "").strip()  # column B
-        if label == "Additional Notes":
-            notes_val = ws.cell(row=row[0].row + 1, column=2).value
-            fields["notes"] = str(notes_val).strip() if notes_val is not None else ""
-        elif label == "Agency Discount":
-            fields["agency_flag"] = "Agency"
-            fee_val = ws.cell(row=row[0].row, column=12).value
-            if fee_val is not None:
-                try:
-                    pct = float(fee_val) * 100
-                    fields["agency_fee"] = str(int(pct)) if pct == int(pct) else str(round(pct, 1))
-                except (ValueError, TypeError):
-                    pass
+        for cell in row:
+            if isinstance(cell, _MC) or not isinstance(cell.value, str):
+                continue
+            label = cell.value.strip()
+            if label == "Additional Notes":
+                notes_val = ws.cell(row=cell.row + 1, column=cell.column).value
+                fields["notes"] = str(notes_val).strip() if notes_val is not None else ""
+            elif label == "Agency Discount":
+                fields["agency_flag"] = "Agency"
+                fee_val = ws.cell(row=cell.row, column=12).value
+                if fee_val is not None:
+                    try:
+                        pct = float(fee_val) * 100
+                        fields["agency_fee"] = str(int(pct)) if pct == int(pct) else str(round(pct, 1))
+                    except (ValueError, TypeError):
+                        pass
 
     return fields
 
