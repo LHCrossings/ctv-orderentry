@@ -199,9 +199,16 @@ def gather_scwa_inputs(pdf_path: str) -> Optional[dict]:
                 _upsert_customer(customer_id, order.advertiser)
     print()
 
-    # Build yymm from flight start of first line
-    fs = order.lines[0].start_date   # MM/DD/YYYY
-    yymm = fs[8:10] + fs[0:2]        # "26" + "04" = "2604"
+    # Build yymm from flight dates — covers multi-month orders (e.g. May-June → "2605-06")
+    from datetime import datetime as _dt
+    _starts = sorted(order.lines, key=lambda l: _dt.strptime(l.start_date, '%m/%d/%Y'))
+    _ends   = sorted(order.lines, key=lambda l: _dt.strptime(l.end_date,   '%m/%d/%Y'))
+    fs = _starts[0].start_date   # earliest start (MM/DD/YYYY)
+    fe = _ends[-1].end_date      # latest end
+    yy = fs[8:10]
+    start_mm = fs[0:2]
+    end_mm   = fe[0:2]
+    yymm = f"{yy}{start_mm}" if start_mm == end_mm else f"{yy}{start_mm}-{end_mm}"
 
     # ── Contract code ──────────────────────────────────────────────────────
     print("[1/3] Contract Code")
@@ -302,9 +309,15 @@ def process_scwa_order(
         description = inputs.get('description', order.advertiser)
 
         # ── Create contract header ─────────────────────────────────────────
-        # Flight spans the full range across all lines (they're all the same dates for SCWA)
-        flight_start = order.lines[0].start_date
-        flight_end   = order.lines[0].end_date
+        # Flight spans the full range across all lines (handles multi-month orders)
+        flight_start = min(
+            (l.start_date for l in order.lines),
+            key=lambda d: datetime.strptime(d, '%m/%d/%Y')
+        )
+        flight_end = max(
+            (l.end_date for l in order.lines),
+            key=lambda d: datetime.strptime(d, '%m/%d/%Y')
+        )
 
         # NOTE: master market is ALWAYS NYC — set once by EtereSession before the
         # browser automation runs. Never override it here.

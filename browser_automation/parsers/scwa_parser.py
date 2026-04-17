@@ -133,21 +133,25 @@ def parse_scwa_pdf(pdf_path: str) -> SCWAOrder:
     print(f"[SCWA PARSER] Campaign:    {campaign}")
     print(f"[SCWA PARSER] Market:      {market}")
 
-    # ── Find airtime table ─────────────────────────────────────────────────
-    # Table 0 is the airtime table; it has "Language Block" in the header row
-    airtime_table = None
+    # ── Find all airtime tables ────────────────────────────────────────────
+    # PDFs may have one table per month (e.g. May + June = two tables).
+    # Collect all tables that have "Language Block" and "Total Unit" headers.
+    airtime_tables = []
     for table in tables:
         if not table or not table[0]:
             continue
         header_text = " ".join(str(c or "") for c in table[0])
         if "Language Block" in header_text and "Total Unit" in header_text:
-            airtime_table = table
-            break
+            airtime_tables.append(table)
 
-    if airtime_table is None:
+    if not airtime_tables:
         raise ValueError("[SCWA PARSER] Could not find airtime table in PDF.")
 
-    header = airtime_table[0]
+    if len(airtime_tables) > 1:
+        print(f"[SCWA PARSER] Found {len(airtime_tables)} airtime tables — combining into one order")
+
+    # Column indices come from the first table's header (all tables share the same structure)
+    header = airtime_tables[0][0]
 
     # Map column names to indices
     def _col(name: str) -> Optional[int]:
@@ -175,53 +179,54 @@ def parse_scwa_pdf(pdf_path: str) -> SCWAOrder:
     if missing:
         raise ValueError(f"[SCWA PARSER] Missing columns: {missing}")
 
-    # ── Parse rows ─────────────────────────────────────────────────────────
+    # ── Parse rows from all matching tables ────────────────────────────────
     lines: List[SCWALine] = []
 
-    for row in airtime_table[1:]:
-        if not row:
-            continue
+    for airtime_table in airtime_tables:
+        for row in airtime_table[1:]:
+            if not row:
+                continue
 
-        def cell(idx: Optional[int]) -> str:
-            if idx is None or idx >= len(row):
-                return ""
-            return (row[idx] or "").strip()
+            def cell(idx: Optional[int]) -> str:
+                if idx is None or idx >= len(row):
+                    return ""
+                return (row[idx] or "").strip()
 
-        language = cell(col_language)
+            language = cell(col_language)
 
-        # Skip blank / subtotal rows
-        if not language or "subtotal" in language.lower():
-            continue
+            # Skip blank / subtotal rows
+            if not language or "subtotal" in language.lower():
+                continue
 
-        fix_ros      = cell(col_fix_ros) or "ROS"
-        duration_str = cell(col_length)
-        start_raw    = cell(col_start)
-        end_raw      = cell(col_end)
-        spot_type    = cell(col_spot_type) or "COM"
-        total_raw    = cell(col_total)
-        rate_raw     = cell(col_rate)
+            fix_ros      = cell(col_fix_ros) or "ROS"
+            duration_str = cell(col_length)
+            start_raw    = cell(col_start)
+            end_raw      = cell(col_end)
+            spot_type    = cell(col_spot_type) or "COM"
+            total_raw    = cell(col_total)
+            rate_raw     = cell(col_rate)
 
-        try:
-            total_spots = int(total_raw) if total_raw else 0
-        except ValueError:
-            total_spots = 0
+            try:
+                total_spots = int(total_raw) if total_raw else 0
+            except ValueError:
+                total_spots = 0
 
-        if total_spots == 0:
-            print(f"[SCWA PARSER]   Skipping '{language}' — 0 spots")
-            continue
+            if total_spots == 0:
+                print(f"[SCWA PARSER]   Skipping '{language}' — 0 spots")
+                continue
 
-        line = SCWALine(
-            language_block=language,
-            fix_ros=fix_ros,
-            duration_seconds=_parse_duration(duration_str),
-            start_date=_normalize_date(start_raw),
-            end_date=_normalize_date(end_raw),
-            spot_type=spot_type,
-            total_spots=total_spots,
-            rate=_parse_rate(rate_raw),
-        )
-        lines.append(line)
-        print(f"[SCWA PARSER]   {language!r}  {fix_ros}  {total_spots} spots  ${line.rate}")
+            line = SCWALine(
+                language_block=language,
+                fix_ros=fix_ros,
+                duration_seconds=_parse_duration(duration_str),
+                start_date=_normalize_date(start_raw),
+                end_date=_normalize_date(end_raw),
+                spot_type=spot_type,
+                total_spots=total_spots,
+                rate=_parse_rate(rate_raw),
+            )
+            lines.append(line)
+            print(f"[SCWA PARSER]   {language!r}  {fix_ros}  {total_spots} spots  ${line.rate}")
 
     if not lines:
         raise ValueError("[SCWA PARSER] No airtime lines parsed from PDF.")
