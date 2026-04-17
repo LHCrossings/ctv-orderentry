@@ -184,10 +184,18 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             except Exception:
                 pass
 
-        tracking = io_data.get("tracking_number", "")
-        advertiser = io_data.get("advertiser", "")
-        adv_short = re.sub(r'[\\/:*?"<>|,]', "", advertiser[:20]).strip()
-        filename = f"WorldLink - {adv_short} {tracking}.xlsx" if adv_short else f"WorldLink {tracking}.xlsx"
+        tracking    = io_data.get("tracking_number", "")
+        agency      = io_data.get("agency", "")
+        advertiser  = io_data.get("advertiser", "")
+        agency_w1   = re.sub(r'[\\/:*?"<>|,]', "", (agency.split()[0]   if agency    else "")).strip()
+        adv_w1      = re.sub(r'[\\/:*?"<>|,]', "", (advertiser.split()[0] if advertiser else "")).strip()
+        lines       = io_data.get("lines", [])
+        spot_length = lines[0].get("duration", "") if lines else ""
+        revision    = user_inputs.get("revision", 0)
+        parts       = ["WorldLink -", agency_w1, adv_w1, spot_length, tracking]
+        if revision:
+            parts.append(f"(Rev{revision})")
+        filename = re.sub(r'[\\/:*?"<>|]', "", " ".join(p for p in parts if p)) + ".xlsx"
 
         return StreamingResponse(
             io.BytesIO(xlsx_bytes),

@@ -115,7 +115,7 @@ def _parse_header(text):
     order_data = {}
 
     # Extract tracking number - handle both "WL Tracking No." and "Unwired Tracking No."
-    tracking_match = re.search(r'(?:WL|Unwired)\s+Tracking\s+No\.\s*(\d+)', text, re.IGNORECASE)
+    tracking_match = re.search(r'(?:WL|Unwired)\s+Tracking\s+No\.\s*([\w-]+)', text, re.IGNORECASE)
     tracking_no = tracking_match.group(1) if tracking_match else "Unknown"
     order_data['tracking_number'] = tracking_no
 
