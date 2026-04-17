@@ -22,11 +22,12 @@ if str(_src) not in sys.path:
 
 from backwrite.transformer import compute_broadcast_month
 
-YELLOW_FILL = PatternFill("solid", fgColor="FFFFFF00")
-GREEN_FILL  = PatternFill("solid", fgColor="FF92D050")
-AGENCY_FEE  = 0.15
-_DATA_FONT  = Font(name="Calibri", size=11)
-_TEMPLATE   = Path(__file__).parent / "templates" / "worldlink_template.xlsx"
+YELLOW_FILL  = PatternFill("solid", fgColor="FFFFFF00")
+GREEN_FILL   = PatternFill("solid", fgColor="FF92D050")
+AGENCY_FEE   = 0.15
+_DATA_FONT   = Font(name="Calibri", size=11)
+_TEMPLATE    = Path(__file__).parent / "templates" / "worldlink_template.xlsx"
+_CURRENCY_NF = '_("$"* #,##0.00_);_("$"* \\(#,##0.00\\);_("$"* "-"??_);_(@_)'
 
 _MONTH_NAMES = {
     1: "January",  2: "February",  3: "March",    4: "April",
@@ -256,8 +257,8 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
         _wc(ws, r, 10, "COM")
         _wc(ws, r, 12, f"=F{r}*I{r}")
         _wc(ws, r, 14, f":{line.get('duration', '30')}")
-        _wc(ws, r, 15, rate)
-        _wc(ws, r, 16, f"=L{r}*O{r}")
+        _wc(ws, r, 15, rate,           _CURRENCY_NF)
+        _wc(ws, r, 16, f"=L{r}*O{r}", _CURRENCY_NF)
 
         ws.row_dimensions[r].height = 16.5
 
@@ -274,16 +275,16 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
     ws.cell(sum_row,  9).value  = "Gross Amount"
     ws.cell(sum_row,  12).value = f"=SUM(L{DATA_START}:L{last_data})"
     ws.cell(sum_row,  14).value = "spots"
-    ws.cell(sum_row,  16).value = f"=SUM(P{DATA_START}:P{last_data})"
+    _wc(ws, sum_row,  16, f"=SUM(P{DATA_START}:P{last_data})", _CURRENCY_NF)
 
     ws.cell(disc_row, 2).value  = "Additional Notes"
     ws.cell(disc_row, 9).value  = "Agency Discount"
     ws.cell(disc_row, 12).value = AGENCY_FEE
-    ws.cell(disc_row, 16).value = f"=-1*(L{disc_row}*P{sum_row})"
+    _wc(ws, disc_row, 16, f"=-1*(L{disc_row}*P{sum_row})", _CURRENCY_NF)
 
     ws.cell(net_row,  2).value  = order_comment
     ws.cell(net_row,  9).value  = "Net Amount of Contract"
-    ws.cell(net_row,  16).value = f"=SUM(P{sum_row}:P{disc_row})"
+    _wc(ws, net_row,  16, f"=SUM(P{sum_row}:P{disc_row})", _CURRENCY_NF)
 
     sig1 = net_row + 2
     sig2 = sig1 + 2
@@ -310,8 +311,9 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
         ws.cell(r, 2).value = _MONTH_NAMES[bm.month]
         for col, val in ((4, gross), (5, f"=D{r}*0.85"), (6, f"=E{r}*0.1*-1")):
             cell = ws.cell(r, col)
-            cell.value = val
-            cell.fill  = YELLOW_FILL
+            cell.value         = val
+            cell.fill          = YELLOW_FILL
+            cell.number_format = _CURRENCY_NF
 
     if sorted_months:
         mbr_last  = mbr_first + len(sorted_months) - 1
@@ -322,8 +324,9 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
             (5, f"=SUM(E{mbr_first}:E{mbr_last})"),
         ):
             cell = ws.cell(total_row, col)
-            cell.value = val
-            cell.fill  = YELLOW_FILL
+            cell.value         = val
+            cell.fill          = YELLOW_FILL
+            cell.number_format = _CURRENCY_NF
 
 
 # ──────────────────────────────────────────────────────────────────────────────
