@@ -43,7 +43,7 @@
         <summary>Supported formats <span class="parsers-count">{{ parsers | length }}</span></summary>
         <div class="parsers-grid">
             {% for p in parsers %}
-            <span class="parser-chip">{{ p.name }}</span>
+            <span class="parser-chip">{{ p.name }}{% if not loop.last %},{% endif %}</span>
             {% endfor %}
         </div>
     </details>
