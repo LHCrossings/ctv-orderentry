@@ -921,12 +921,16 @@ def _sc_lines_from_io(io_detail: dict) -> List[dict]:
 
     Uses IO lines (one row per language block / daypart) instead of the
     Etere CSV spot-group breakdown.  Each IO line becomes one SC row.
+
+    Duplicate descriptions (e.g. SCWA May + June = same language twice)
+    are merged: spot counts summed, dates span the full order flight.
     """
     lines        = io_detail.get("lines") or []
     flight_start = io_detail.get("flight_start") or ""
     flight_end   = io_detail.get("flight_end")   or ""
 
-    sc: List[dict] = []
+    # First pass: build one entry per IO line
+    raw: List[dict] = []
     for idx, ln in enumerate(lines):
         total_spots  = int(ln.get("total_spots") or 0)
         weekly_spots = ln.get("weekly_spots") or []
@@ -940,22 +944,15 @@ def _sc_lines_from_io(io_detail: dict) -> List[dict]:
 
         # Weeks + per-week spot count
         if weekly_spots:
-            weeks    = len(weekly_spots)
+            weeks = len(weekly_spots)
             non_zero = [w for w in weekly_spots if w]
-            spw      = round(sum(non_zero) / len(non_zero)) if non_zero else (total_spots or 0)
-            per      = "Wk"
+            spw   = round(sum(non_zero) / len(non_zero)) if non_zero else (total_spots or 0)
+            per   = "Wk"
         else:
-            if flight_start and flight_end:
-                try:
-                    d0    = datetime.strptime(flight_start, "%m/%d/%Y")
-                    d1    = datetime.strptime(flight_end,   "%m/%d/%Y")
-                    weeks = max(1, round((d1 - d0).days / 7) + 1)
-                except Exception:
-                    weeks = 1
-            else:
-                weeks = 1
-            spw = total_spots
-            per = "Flt"
+            # Order-basis: one flight total, not a weekly cadence
+            spw   = total_spots
+            per   = "Order"
+            weeks = 1
 
         # Description: prefix with days + time when they're not already embedded
         description = ln.get("description") or f"Line {idx + 1}"
@@ -966,18 +963,31 @@ def _sc_lines_from_io(io_detail: dict) -> List[dict]:
         else:
             line_desc = description
 
-        sc.append({
-            "line_number":      idx + 1,
+        raw.append({
+            "line_description": line_desc,
             "date_range_start": flight_start,
             "date_range_end":   flight_end,
             "spot_count":       spw,
             "per":              per,
             "weeks":            weeks,
-            "line_description": line_desc,
             "type":             "BNS" if is_bonus else "COM",
             "length":           length,
             "gross_rate":       rate,
         })
+
+    # Second pass: merge duplicate descriptions (same language, multiple months)
+    seen: Dict[str, dict] = {}
+    for item in raw:
+        key = item["line_description"]
+        if key in seen:
+            seen[key]["spot_count"] += item["spot_count"]
+        else:
+            seen[key] = dict(item)
+
+    sc = []
+    for idx, item in enumerate(seen.values()):
+        item["line_number"] = idx + 1
+        sc.append(item)
 
     return sc
 
