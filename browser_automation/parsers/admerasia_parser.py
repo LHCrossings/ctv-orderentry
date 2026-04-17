@@ -984,11 +984,18 @@ def _parse_line_items_table_based(pdf: pdfplumber.PDF, week_start_dates: List[da
     
     for i in range(calendar_start_col, len(day_numbers_row)):
         if day_numbers_row[i] and day_numbers_row[i].strip():
-            try:
-                day_num = int(day_numbers_row[i].strip())
-                if 1 <= day_num <= 31:
-                    calendar_days.append(day_num)
-            except ValueError:
+            # Handle both single-day cells ('27') and merged cells ('21 22 23 24 25 26')
+            parts = day_numbers_row[i].strip().split()
+            parsed_any = False
+            for part in parts:
+                try:
+                    day_num = int(part)
+                    if 1 <= day_num <= 31:
+                        calendar_days.append(day_num)
+                        parsed_any = True
+                except ValueError:
+                    pass
+            if not parsed_any:
                 break  # Stop when we hit non-numeric columns (Total Spots, etc.)
     
     print(f"[PARSE] Found {len(calendar_days)} calendar days: {calendar_days}")
@@ -1080,8 +1087,15 @@ def _parse_line_items_table_based(pdf: pdfplumber.PDF, week_start_dates: List[da
         try:
             net_rate = Decimal(rate_str_clean)
         except:
-            print(f"[WARNING] Could not parse rate: {rate_str}")
-            continue
+            # Try salvaging from garbled/interleaved text — same approach as time salvage.
+            # e.g. "ve$l S h o w s / ( F ) T e c 2 h5 i.n5 0Ou" → strip non-digits/dots → "25.50"
+            salvaged_rate = re.sub(r'[^0-9.]', '', rate_str.replace('$', '', 1)).strip('.')
+            try:
+                net_rate = Decimal(salvaged_rate)
+                print(f"[INFO] Row {row_idx}: salvaged rate from garbled column: ${net_rate}")
+            except:
+                print(f"[WARNING] Could not parse rate: {rate_str}")
+                continue
         
         # Extract daily spot counts from calendar columns (starting at column 6)
         daily_spots = []
@@ -1095,7 +1109,15 @@ def _parse_line_items_table_based(pdf: pdfplumber.PDF, week_start_dates: List[da
                     except ValueError:
                         daily_spots.append(0)
                 else:
-                    daily_spots.append(0)
+                    # Try to salvage a spot count from garbled cells (overflow text + digit).
+                    # e.g. 'e1' → 1, 'r L1if' → 1, 'r Lif' → 0.
+                    # Only accept exactly one digit run of 1-2 chars (avoids multi-digit
+                    # program names like "CBS 11 News" producing false spot counts).
+                    digit_runs = re.findall(r'\d+', (cell_value or '').strip())
+                    if len(digit_runs) == 1 and len(digit_runs[0]) <= 2:
+                        daily_spots.append(int(digit_runs[0]))
+                    else:
+                        daily_spots.append(0)
             else:
                 daily_spots.append(0)
         
