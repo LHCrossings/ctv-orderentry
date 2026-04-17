@@ -348,30 +348,16 @@ tbody td {
     padding: 0.5rem 0.75rem;
 }
 
-.parsers-disclosure summary {
-    cursor: pointer;
+.parsers-label {
     font-size: 0.8rem;
     font-weight: 600;
     color: var(--text-muted);
     letter-spacing: 0.03em;
     text-transform: uppercase;
-    list-style: none;
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    user-select: none;
-}
-
-.parsers-disclosure summary::-webkit-details-marker { display: none; }
-
-.parsers-disclosure summary::before {
-    content: '▶';
-    font-size: 0.6rem;
-    transition: transform 0.15s;
-}
-
-.parsers-disclosure[open] summary::before {
-    transform: rotate(90deg);
+    margin-bottom: 0.1rem;
 }
 
 .parsers-count {

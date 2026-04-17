@@ -39,14 +39,14 @@
     </div>
 
     <!-- Supported Parsers -->
-    <details class="parsers-disclosure">
-        <summary>Supported formats <span class="parsers-count">{{ parsers | length }}</span></summary>
+    <div class="parsers-disclosure">
+        <div class="parsers-label">Supported formats <span class="parsers-count">{{ parsers | length }}</span></div>
         <div class="parsers-grid">
             {% for p in parsers %}
             <span class="parser-chip">{{ p.name }}{% if not loop.last %},{% endif %}</span>
             {% endfor %}
         </div>
-    </details>
+    </div>
 
     <!-- Tab bar -->
     <div class="tab-bar">
