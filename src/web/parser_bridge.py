@@ -183,6 +183,8 @@ def _normalize_line(line, idx: int) -> dict:
     is_bonus = bool(_get(line, "is_bonus", "bonus", default=False))
     market = _str(_get(line, "market", "market_code"))
     language = _str(_get(line, "language", "language_code"))
+    start_date = _str(_get(line, "start_date", "flight_start", "start"))
+    end_date   = _str(_get(line, "end_date",   "flight_end",   "end"))
 
     return {
         "description": description,
@@ -195,6 +197,8 @@ def _normalize_line(line, idx: int) -> dict:
         "is_bonus": is_bonus,
         "market": market,
         "language": language,
+        "start_date": start_date,
+        "end_date": end_date,
     }
 
 

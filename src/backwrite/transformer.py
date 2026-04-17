@@ -511,6 +511,64 @@ def _fill_monthly_breakdown(
             ws.cell(row=total_row, column=net_col).value = round(sum(monthly_net.values()), 2)
 
 
+def _apply_direct_mode(ws) -> None:
+    """
+    Strip agency-specific cells from the Sales Confirmation sheet for
+    Direct (non-agency) billing.  Finds rows by content, not fixed numbers,
+    so it works correctly after extra line rows are inserted.
+
+    Changes:
+      - Agency Discount row: cleared entirely
+      - Net Amount row: P column set to reference gross total directly
+      - Monthly breakdown: "Gross" header renamed "Net", Net column cleared
+    """
+    max_col = ws.max_column
+    gross_p_row: Optional[int] = None   # row holding "Gross Amount" → P = gross total
+    disc_row:    Optional[int] = None
+    net_p_row:   Optional[int] = None
+
+    for row in ws.iter_rows():
+        for cell in row:
+            if not isinstance(cell.value, str):
+                continue
+            v = cell.value.strip()
+            if v == 'Gross Amount':
+                gross_p_row = cell.row
+            elif v == 'Agency Discount':
+                disc_row = cell.row
+                # Clear entire agency discount row
+                for col in range(1, max_col + 1):
+                    ws.cell(row=disc_row, column=col).value = None
+            elif v == 'Net Amount of Contract':
+                net_p_row = cell.row
+                # Replace net formula with a direct reference to gross total
+                if gross_p_row:
+                    ws.cell(row=net_p_row, column=16).value = f'=P{gross_p_row}'
+
+    # Monthly breakdown: rename "Gross" → "Net", clear the Net column
+    for row in ws.iter_rows():
+        row_has_month = any(
+            isinstance(c.value, str) and c.value.strip().lower() == 'month'
+            for c in row
+        )
+        if not row_has_month:
+            continue
+        month_hdr_row = row[0].row
+        gross_col = net_col = None
+        for cell in row:
+            v = str(cell.value or '').strip().lower()
+            if v == 'gross':
+                gross_col = cell.column
+                cell.value = 'Net'          # rename header
+            elif v == 'net' and gross_col is not None:
+                net_col = cell.column
+        # Clear net_col from header row to end of sheet
+        if net_col:
+            for r in range(month_hdr_row, ws.max_row + 1):
+                ws.cell(row=r, column=net_col).value = None
+        break
+
+
 def _fill_sales_confirmation(
     ws, ctx: dict, sc_lines: List[dict],
     monthly_gross: dict, monthly_net: dict,
@@ -919,18 +977,14 @@ def _sc_lines_from_io(io_detail: dict) -> List[dict]:
     """
     Build Sales Confirmation sc_lines from a parser_bridge io_detail dict.
 
-    Uses IO lines (one row per language block / daypart) instead of the
-    Etere CSV spot-group breakdown.  Each IO line becomes one SC row.
-
-    Duplicate descriptions (e.g. SCWA May + June = same language twice)
-    are merged: spot counts summed, dates span the full order flight.
+    One SC row per IO line, preserving per-line flight dates when available
+    (e.g. SCWA May and June appear as separate rows with their own date ranges).
     """
     lines        = io_detail.get("lines") or []
     flight_start = io_detail.get("flight_start") or ""
     flight_end   = io_detail.get("flight_end")   or ""
 
-    # First pass: build one entry per IO line
-    raw: List[dict] = []
+    sc: List[dict] = []
     for idx, ln in enumerate(lines):
         total_spots  = int(ln.get("total_spots") or 0)
         weekly_spots = ln.get("weekly_spots") or []
@@ -954,6 +1008,10 @@ def _sc_lines_from_io(io_detail: dict) -> List[dict]:
             per   = "Order"
             weeks = 1
 
+        # Per-line dates when available (e.g. SCWA per-month); fall back to order flight
+        line_start = ln.get("start_date") or flight_start
+        line_end   = ln.get("end_date")   or flight_end
+
         # Description: prefix with days + time when they're not already embedded
         description = ln.get("description") or f"Line {idx + 1}"
         days  = (ln.get("days") or "").strip()
@@ -963,31 +1021,18 @@ def _sc_lines_from_io(io_detail: dict) -> List[dict]:
         else:
             line_desc = description
 
-        raw.append({
-            "line_description": line_desc,
-            "date_range_start": flight_start,
-            "date_range_end":   flight_end,
+        sc.append({
+            "line_number":      idx + 1,
+            "date_range_start": line_start,
+            "date_range_end":   line_end,
             "spot_count":       spw,
             "per":              per,
             "weeks":            weeks,
+            "line_description": line_desc,
             "type":             "BNS" if is_bonus else "COM",
             "length":           length,
             "gross_rate":       rate,
         })
-
-    # Second pass: merge duplicate descriptions (same language, multiple months)
-    seen: Dict[str, dict] = {}
-    for item in raw:
-        key = item["line_description"]
-        if key in seen:
-            seen[key]["spot_count"] += item["spot_count"]
-        else:
-            seen[key] = dict(item)
-
-    sc = []
-    for idx, item in enumerate(seen.values()):
-        item["line_number"] = idx + 1
-        sc.append(item)
 
     return sc
 
@@ -1151,6 +1196,8 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
     monthly_net   = {k: round(v * (1 - agency_fee), 2) for k, v in monthly_gross.items()}
 
     _fill_sales_confirmation(wb["Sales Confirmation"], ctx, sc_lines, monthly_gross, monthly_net, agency_fee)
+    if not is_agency:
+        _apply_direct_mode(wb["Sales Confirmation"])
     _fill_run_sheet(wb["Run Sheet"], run_rows)
     _fill_pivot(wb["Sheet1"], run_rows)
 
