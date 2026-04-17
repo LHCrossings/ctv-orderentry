@@ -231,12 +231,23 @@
     <!-- Language Verification (hidden until CSV parsed with EtereBridge) -->
     <div class="bw-card" id="lang-verify-card" style="display:none">
         <h2>Language Verification</h2>
-        <p style="font-size:0.88rem;color:var(--text-secondary);margin:0 0 14px 0;">
+        <p style="font-size:0.88rem;color:var(--text-secondary);margin:0 0 12px 0;">
             Review the detected language for each contract line. Change any that are incorrect.
         </p>
+        <!-- Bulk action bar -->
+        <div id="bulk-lang-bar" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;">
+            <span style="font-size:0.82rem;color:var(--text-secondary);white-space:nowrap;">Set selected to:</span>
+            <select id="bulk-lang-select" style="font-size:0.85rem;padding:3px 6px;border:1px solid var(--border-color);border-radius:4px;background:var(--bg-primary);color:var(--text-primary);"></select>
+            <button type="button" id="bulk-lang-apply" onclick="applyBulkLang()"
+                style="font-size:0.82rem;padding:4px 12px;border:1px solid var(--border-color);border-radius:4px;background:var(--bg-primary);color:var(--text-primary);cursor:pointer;white-space:nowrap;">
+                Apply to selected
+            </button>
+            <span id="bulk-selected-count" style="font-size:0.78rem;color:var(--text-secondary);margin-left:4px;"></span>
+        </div>
         <table class="lang-verify-table">
             <thead>
                 <tr>
+                    <th style="width:32px"><input type="checkbox" id="lang-select-all" onclick="toggleSelectAll(this)" title="Select all" /></th>
                     <th>Line Description</th>
                     <th style="width:120px">Language</th>
                     <th class="count-cell">Spots</th>
@@ -626,19 +637,55 @@ function showLanguageVerification(details, options) {
         ? options
         : ['E','C','M','V','T','K','J','SA','Hm'];
 
+    // Populate bulk-apply dropdown with same options
+    const bulkSel = document.getElementById('bulk-lang-select');
+    bulkSel.innerHTML = opts.map(code => `<option value="${code}">${code}</option>`).join('');
+
     tbody.innerHTML = details.map(item => {
         const optHtml = opts.map(code =>
             `<option value="${code}"${code === item.lang ? ' selected' : ''}>${code}</option>`
         ).join('');
         return `<tr data-desc="${item.description.replace(/"/g, '&quot;')}" data-orig-lang="${item.lang}">
+            <td style="text-align:center"><input type="checkbox" class="lang-row-chk" onchange="updateBulkCount()" /></td>
             <td class="desc-cell">${escHtml(item.description)}</td>
             <td><select class="lang-sel" onchange="onLangChange(this)">${optHtml}</select></td>
             <td class="count-cell">${item.count}</td>
         </tr>`;
     }).join('');
 
+    // Reset select-all checkbox
+    document.getElementById('lang-select-all').checked = false;
+    updateBulkCount();
     card.style.display = 'block';
     document.getElementById('language_corrections').value = '{}';
+}
+
+function toggleSelectAll(chk) {
+    document.querySelectorAll('.lang-row-chk').forEach(c => c.checked = chk.checked);
+    updateBulkCount();
+}
+
+function updateBulkCount() {
+    const total    = document.querySelectorAll('.lang-row-chk').length;
+    const selected = document.querySelectorAll('.lang-row-chk:checked').length;
+    const el = document.getElementById('bulk-selected-count');
+    el.textContent = selected > 0 ? `${selected} of ${total} selected` : '';
+    // Keep select-all in sync
+    const allChk = document.getElementById('lang-select-all');
+    if (allChk) allChk.checked = selected === total && total > 0;
+}
+
+function applyBulkLang() {
+    const lang = document.getElementById('bulk-lang-select').value;
+    document.querySelectorAll('#lang-verify-tbody tr').forEach(row => {
+        const chk = row.querySelector('.lang-row-chk');
+        if (!chk || !chk.checked) return;
+        const sel = row.querySelector('.lang-sel');
+        if (sel) {
+            sel.value = lang;
+            onLangChange(sel);
+        }
+    });
 }
 
 function onLangChange(sel) {
