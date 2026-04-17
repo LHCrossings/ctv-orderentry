@@ -343,8 +343,12 @@
             <div class="section-label">Order Details</div>
             <div class="form-grid">
                 <div class="form-group">
-                    <label for="estimate">Estimate #</label>
+                    <label for="estimate">Estimate # <span style="font-size:0.75rem;color:var(--text-secondary)">(Sales Confirmation)</span></label>
                     <input type="text" name="estimate" id="estimate" placeholder="e.g. 13932" />
+                </div>
+                <div class="form-group">
+                    <label for="estimate_run">Estimate # <span style="font-size:0.75rem;color:var(--text-secondary)">(Run Sheet — blank = same)</span></label>
+                    <input type="text" name="estimate_run" id="estimate_run" placeholder="Leave blank to use SC estimate" />
                 </div>
                 <div class="form-group">
                     <label for="contract">Contract #</label>
@@ -602,6 +606,10 @@ function handleExistingFile(f) {
             fill('zip_code',      d.zip);
             fill('sales_person',  d.sales_person);
             fill('notes',         d.notes);
+            fill('billing_type',  d.billing_type);
+            fill('agency_flag',   d.agency_flag);
+            if (d.agency_fee) document.getElementById('agency_fee').value = d.agency_fee;
+            toggleAgencyFee();
             // estimate only if not already set from CSV hint (contract left blank)
             setIfEmpty('estimate', d.estimate);
             // order_date stays as today — never copy from old order

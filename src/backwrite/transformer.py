@@ -886,13 +886,23 @@ def read_existing_order_fields(data: bytes) -> dict:
         "notes":           "",
     }
 
-    # Notes row shifts down when extra line rows are inserted — find it by label
+    # Content-search rows for fields that shift position after line insertion
+    fields["agency_flag"] = "Direct"
+    fields["agency_fee"]  = ""
     for row in ws.iter_rows():
         label = str(row[1].value or "").strip()  # column B
         if label == "Additional Notes":
             notes_val = ws.cell(row=row[0].row + 1, column=2).value
             fields["notes"] = str(notes_val).strip() if notes_val is not None else ""
-            break
+        elif label == "Agency Discount":
+            fields["agency_flag"] = "Agency"
+            fee_val = ws.cell(row=row[0].row, column=12).value
+            if fee_val is not None:
+                try:
+                    pct = float(fee_val) * 100
+                    fields["agency_fee"] = str(int(pct)) if pct == int(pct) else str(round(pct, 1))
+                except (ValueError, TypeError):
+                    pass
 
     return fields
 
@@ -1057,9 +1067,10 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
     agency_fee   = float(user_inputs.get("agency_fee", 0.15) or 0)
     sales_person = user_inputs.get("sales_person", "")
     revenue_type = user_inputs.get("revenue_type", "Internal Ad Sales")
-    affidavit    = user_inputs.get("affidavit",    "Y")
-    estimate     = user_inputs.get("estimate",     "")
-    contract     = user_inputs.get("contract",     "")
+    affidavit     = user_inputs.get("affidavit",     "Y")
+    estimate      = user_inputs.get("estimate",      "")
+    estimate_run  = user_inputs.get("estimate_run",  "") or estimate   # falls back to SC estimate
+    contract      = user_inputs.get("contract",      "")
 
     is_agency = agency_flag == "Agency"
     bill_code = f"{header.agency}:{header.client}" if header.agency else header.client
@@ -1097,6 +1108,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
                 "line":         s.line_id,
                 "type":         "BNS" if s.gross_rate == 0 else "COM",
                 "estimate":     estimate,
+                "estimate_run": estimate_run,
                 "gross_rate":   s.gross_rate,
                 "spot_value":   s.gross_rate,
                 "month":        month_dt,
@@ -1111,6 +1123,10 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
                 "contract":     contract,
                 "market":       s.market,
             })
+
+    # Ensure estimate_run is present on every run row (EtereBridge rows lack it)
+    for rr in run_rows:
+        rr.setdefault("estimate_run", estimate_run)
 
     # ── Sales Confirmation lines ──────────────────────────────────────────────
     if io_detail and io_detail.get("lines"):
@@ -1181,7 +1197,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
         "email_4":          user_inputs.get("email_4", ""),
         "state":            user_inputs.get("state", ""),
         "zip":              user_inputs.get("zip", ""),
-        "notes":            user_inputs.get("notes", ""),
+        "notes":            user_inputs.get("notes", "").replace('\r\n', '\n').replace('\r', '\n'),
         "per":              "Wk",
     }
 
