@@ -259,9 +259,20 @@
             <div class="file-name" id="existing-filename"></div>
         </div>
 
+        <!-- IO file upload zone -->
+        <div class="upload-zone upload-zone-sm" id="io-zone" style="margin-bottom:18px">
+            <input type="file" id="io-input" accept=".pdf,.xml,.xlsx,.xls,.jpg,.jpeg,.png" />
+            <div class="upload-icon">📋</div>
+            <p>Optional — drop original IO here to use IO lines in Sales Confirmation tab</p>
+            <p style="font-size:0.78rem;color:var(--text-secondary)">PDF, XML, XLSX, XLS, JPG, PNG</p>
+            <div class="file-name" id="io-filename"></div>
+        </div>
+
         <form id="bw-form" method="POST" action="/backwrite/generate" enctype="multipart/form-data">
             <!-- Hidden file field mirrors the uploaded CSV -->
             <input type="file" name="csv_file" id="form-csv-input" style="display:none" />
+            <!-- Hidden file field mirrors the uploaded IO -->
+            <input type="file" name="io_file" id="form-io-input" style="display:none" />
 
             <!-- Contact Information -->
             <div class="section-label">Contact Information</div>
@@ -431,6 +442,7 @@ const existingInput  = document.getElementById('existing-input');
 const existingFn     = document.getElementById('existing-filename');
 
 let uploadedFile     = null;
+let ioFile           = null;   // optional IO file for SC tab lines
 let _uniqueRates     = [];   // non-zero gross rates from preview
 let _langOptions     = [];   // valid language codes from EtereBridge config
 let _langDetails     = [];   // [{description, lang, count}, ...]
@@ -453,6 +465,26 @@ uploadZone.addEventListener('drop', e => {
     if (f) handleFile(f);
 });
 csvInput.addEventListener('change', () => { if (csvInput.files[0]) handleFile(csvInput.files[0]); });
+
+// ── IO file drop zone ─────────────────────────────────────────────────────────
+const ioZone   = document.getElementById('io-zone');
+const ioInput  = document.getElementById('io-input');
+const ioFn     = document.getElementById('io-filename');
+ioZone.addEventListener('dragover', e => { e.preventDefault(); ioZone.classList.add('drag-over'); });
+ioZone.addEventListener('dragleave', () => ioZone.classList.remove('drag-over'));
+ioZone.addEventListener('drop', e => {
+    e.preventDefault();
+    ioZone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f) handleIOFile(f);
+});
+ioInput.addEventListener('change', () => { if (ioInput.files[0]) handleIOFile(ioInput.files[0]); });
+
+function handleIOFile(f) {
+    ioFile = f;
+    ioFn.textContent = f.name;
+    ioFn.style.display = 'inline';
+}
 
 // ── Existing order drop zone ──────────────────────────────────────────────────
 const existingZone = document.getElementById('existing-zone');
@@ -695,6 +727,7 @@ bwForm.addEventListener('submit', async e => {
 
     const fd = new FormData(bwForm);
     fd.set('csv_file', uploadedFile, uploadedFile.name);
+    if (ioFile) fd.set('io_file', ioFile, ioFile.name);
 
     try {
         const resp = await fetch('/backwrite/generate', { method: 'POST', body: fd });

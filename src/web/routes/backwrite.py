@@ -4,11 +4,14 @@ Backwrite routes: placement CSV → three-tab Excel download.
 
 import io
 import json
+import os
 import re
 import sys
+import tempfile
 from pathlib import Path
+from typing import Optional
 
-from fastapi import APIRouter, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
@@ -118,6 +121,7 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
     @router.post("/generate")
     async def backwrite_generate(
         csv_file:       UploadFile,
+        io_file:        Optional[UploadFile] = File(None),
         sales_person:   str = Form(...),
         billing_type:   str = Form(...),
         revenue_type:   str = Form(...),
@@ -198,8 +202,37 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             "language_corrections": lang_corrections_dict,
         }
 
+        # ── Parse optional IO file for IO-sourced SC lines ────────────────────
+        io_detail = None
+        if io_file and io_file.filename:
+            io_bytes = await io_file.read()
+            if io_bytes:
+                suffix = Path(io_file.filename).suffix.lower() or ".pdf"
+                fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+                try:
+                    with os.fdopen(fd, "wb") as f:
+                        f.write(io_bytes)
+                    from business_logic.services.pdf_order_detector import PDFOrderDetector
+                    from web.parser_bridge import get_order_detail
+                    detected = PDFOrderDetector().detect_order_type(tmp_path, silent=True)
+                    if detected:
+                        io_detail = get_order_detail(Path(tmp_path), detected.value)
+                        if io_detail.get("error"):
+                            print(f"[IO] Parse error: {io_detail['error']}")
+                            io_detail = None
+                        else:
+                            print(f"[IO] Parsed {detected.value}: {len(io_detail.get('lines', []))} lines")
+                except Exception as _io_exc:
+                    print(f"[IO] Failed to parse IO file: {_io_exc}")
+                    io_detail = None
+                finally:
+                    try:
+                        os.unlink(tmp_path)
+                    except Exception:
+                        pass
+
         try:
-            xlsx_bytes = generate_excel(header, spots, user_inputs, raw_csv=data)
+            xlsx_bytes = generate_excel(header, spots, user_inputs, raw_csv=data, io_detail=io_detail)
         except Exception as exc:
             import traceback
             traceback.print_exc()

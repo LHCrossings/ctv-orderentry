@@ -912,10 +912,81 @@ def _eb_df_to_run_rows(df, agency_fee: float, is_agency: bool) -> List[dict]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# IO-SOURCED SALES CONFIRMATION LINES
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _sc_lines_from_io(io_detail: dict) -> List[dict]:
+    """
+    Build Sales Confirmation sc_lines from a parser_bridge io_detail dict.
+
+    Uses IO lines (one row per language block / daypart) instead of the
+    Etere CSV spot-group breakdown.  Each IO line becomes one SC row.
+    """
+    lines        = io_detail.get("lines") or []
+    flight_start = io_detail.get("flight_start") or ""
+    flight_end   = io_detail.get("flight_end")   or ""
+
+    sc: List[dict] = []
+    for idx, ln in enumerate(lines):
+        total_spots  = int(ln.get("total_spots") or 0)
+        weekly_spots = ln.get("weekly_spots") or []
+        is_bonus     = bool(ln.get("is_bonus"))
+        rate         = float(ln.get("rate") or 0)
+
+        # Duration: "30" / ":30" / "30 seconds" → ":30"
+        dur_raw = str(ln.get("duration") or "30")
+        dur_m   = re.search(r'\d+', dur_raw)
+        length  = f":{dur_m.group()}" if dur_m else ":30"
+
+        # Weeks + per-week spot count
+        if weekly_spots:
+            weeks    = len(weekly_spots)
+            non_zero = [w for w in weekly_spots if w]
+            spw      = round(sum(non_zero) / len(non_zero)) if non_zero else (total_spots or 0)
+            per      = "Wk"
+        else:
+            if flight_start and flight_end:
+                try:
+                    d0    = datetime.strptime(flight_start, "%m/%d/%Y")
+                    d1    = datetime.strptime(flight_end,   "%m/%d/%Y")
+                    weeks = max(1, round((d1 - d0).days / 7) + 1)
+                except Exception:
+                    weeks = 1
+            else:
+                weeks = 1
+            spw = total_spots
+            per = "Flt"
+
+        # Description: prefix with days + time when they're not already embedded
+        description = ln.get("description") or f"Line {idx + 1}"
+        days  = (ln.get("days") or "").strip()
+        time_ = (ln.get("time") or "").strip()
+        if days and time_ and days not in description and time_ not in description:
+            line_desc = f"{days} {time_}  {description}".strip()
+        else:
+            line_desc = description
+
+        sc.append({
+            "line_number":      idx + 1,
+            "date_range_start": flight_start,
+            "date_range_end":   flight_end,
+            "spot_count":       spw,
+            "per":              per,
+            "weeks":            weeks,
+            "line_description": line_desc,
+            "type":             "BNS" if is_bonus else "COM",
+            "length":           length,
+            "gross_rate":       rate,
+        })
+
+    return sc
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # MAIN ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────────────
 
-def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, raw_csv: bytes = b"") -> bytes:
+def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, raw_csv: bytes = b"", io_detail: dict = None) -> bytes:
     """Generate backwrite Excel from template and return raw bytes."""
     billing_type = user_inputs.get("billing_type", "Broadcast")
     agency_flag  = user_inputs.get("agency_flag",  "Agency")
@@ -977,31 +1048,35 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
                 "market":       s.market,
             })
 
-    # ── Sales Confirmation lines (grouped by line_id) ─────────────────────────
-    groups: Dict[int, List[SpotRow]] = OrderedDict()
-    for s in spots:
-        groups.setdefault(s.line_id, []).append(s)
+    # ── Sales Confirmation lines ──────────────────────────────────────────────
+    if io_detail and io_detail.get("lines"):
+        sc_lines = _sc_lines_from_io(io_detail)
+        print(f"[backwrite] IO-sourced SC lines: {len(sc_lines)}")
+    else:
+        groups: Dict[int, List[SpotRow]] = OrderedDict()
+        for s in spots:
+            groups.setdefault(s.line_id, []).append(s)
 
-    sc_lines: List[dict] = []
-    for idx, (line_id, group) in enumerate(groups.items()):
-        d_start     = min(s.air_date for s in group)
-        d_end       = max(s.air_date for s in group)
-        total_spots = len(group)
-        weeks       = max(1, round((d_end - d_start).days / 7) + 1)
-        spw         = max(1, round(total_spots / weeks))
-        first       = group[0]
-        sc_lines.append({
-            "line_number":      idx + 1,
-            "date_range_start": d_start.strftime("%m/%d/%Y"),
-            "date_range_end":   d_end.strftime("%m/%d/%Y"),
-            "spot_count":       spw,         # spots per week → F column
-            "per":              "Wk",
-            "weeks":            weeks,        # # of weeks   → I column (computed, not a placeholder)
-            "line_description": _strip_line_prefix(first.row_description),
-            "type":             "BNS" if first.gross_rate == 0 else "COM",
-            "length":           f":{first.duration_s}",
-            "gross_rate":       first.gross_rate,
-        })
+        sc_lines: List[dict] = []
+        for idx, (line_id, group) in enumerate(groups.items()):
+            d_start     = min(s.air_date for s in group)
+            d_end       = max(s.air_date for s in group)
+            total_spots = len(group)
+            weeks       = max(1, round((d_end - d_start).days / 7) + 1)
+            spw         = max(1, round(total_spots / weeks))
+            first       = group[0]
+            sc_lines.append({
+                "line_number":      idx + 1,
+                "date_range_start": d_start.strftime("%m/%d/%Y"),
+                "date_range_end":   d_end.strftime("%m/%d/%Y"),
+                "spot_count":       spw,
+                "per":              "Wk",
+                "weeks":            weeks,
+                "line_description": _strip_line_prefix(first.row_description),
+                "type":             "BNS" if first.gross_rate == 0 else "COM",
+                "length":           f":{first.duration_s}",
+                "gross_rate":       first.gross_rate,
+            })
 
     # ── Single-value context ──────────────────────────────────────────────────
     total_gross = sum(s.gross_rate for s in spots) if spots else 0.0

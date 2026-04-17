@@ -199,7 +199,7 @@ def gather_scwa_inputs(pdf_path: str) -> Optional[dict]:
                 _upsert_customer(customer_id, order.advertiser)
     print()
 
-    # Build yymm from flight dates — covers multi-month orders (e.g. May-June → "2605-06")
+    # Build yymm from flight dates
     from datetime import datetime as _dt
     _starts = sorted(order.lines, key=lambda l: _dt.strptime(l.start_date, '%m/%d/%Y'))
     _ends   = sorted(order.lines, key=lambda l: _dt.strptime(l.end_date,   '%m/%d/%Y'))
@@ -208,12 +208,13 @@ def gather_scwa_inputs(pdf_path: str) -> Optional[dict]:
     yy = fs[8:10]
     start_mm = fs[0:2]
     end_mm   = fe[0:2]
-    yymm = f"{yy}{start_mm}" if start_mm == end_mm else f"{yy}{start_mm}-{end_mm}"
+    code_yymm = f"{yy}{start_mm}"                                          # first month only
+    desc_yymm = code_yymm if start_mm == end_mm else f"{yy}{start_mm}-{yy}{end_mm}"  # full range
 
     # ── Contract code ──────────────────────────────────────────────────────
     print("[1/3] Contract Code")
     print("-" * 70)
-    default_code = f"SCWA {yymm}"
+    default_code = f"SCWA {code_yymm}"
     print(f"Default: {default_code}")
     code = default_code if input("Use default? (y/n): ").strip().lower() == 'y' \
            else input("Enter contract code: ").strip()
@@ -222,7 +223,7 @@ def gather_scwa_inputs(pdf_path: str) -> Optional[dict]:
     # ── Contract description ───────────────────────────────────────────────
     print("[2/3] Contract Description")
     print("-" * 70)
-    default_desc = f"Sacramento County Water Agency {yymm}"
+    default_desc = f"Sacramento County Water Agency {desc_yymm}"
     print(f"Default: {default_desc}")
     description = default_desc if input("Use default? (y/n): ").strip().lower() == 'y' \
                   else input("Enter description: ").strip()

@@ -431,22 +431,23 @@ class OrderDetectionService:
         """
         Check if text matches Admerasia order patterns.
 
-        Admerasia patterns:
-        - "Admerasia" or "ADMERASIA"
-        Must have McDonald's or Order Number format (XX-MDXX-XXXXXX)
+        Primary: "Admerasia" present with McDonald's or TV-MD order number.
+        Fallback: TV-MD order number format alone is sufficient — Admerasia
+        is the only agency that uses the TV-MD[YY]-... numbering convention.
         """
         text_upper = text.upper()
         has_admerasia = "Admerasia" in text or "ADMERASIA" in text_upper
 
-        if not has_admerasia:
-            return False
-
-        # Check for McDonald's
-        if "McDonald" in text or "Ref: McDonald" in text:
+        # McDonald's + Admerasia branding → definitive
+        if has_admerasia and ("McDonald" in text or "Ref: McDonald" in text):
             return True
 
-        # Check for order number format with MD
+        # TV-MD order number format (e.g. "TV-MD26-...") — unique to Admerasia
         if "Order Number:" in text and "-MD" in text:
+            return True
+
+        # Admerasia name present even without McDonald's text
+        if has_admerasia:
             return True
 
         return False
