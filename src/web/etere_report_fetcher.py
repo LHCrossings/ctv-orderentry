@@ -3,9 +3,9 @@ Fetch reports from Etere web headlessly using an authenticated requests.Session.
 Reuses the same login mechanism as block refresh.
 """
 
+import sys
 from datetime import date
 from pathlib import Path
-import sys
 
 
 def _ensure_path():
