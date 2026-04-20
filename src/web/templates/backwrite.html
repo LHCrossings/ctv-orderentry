@@ -717,10 +717,11 @@ function handleExistingFile(f) {
             fill('contact_person', d.contact_person);
             fill('phone',         d.phone);
             fill('fax',           d.fax);
-            fill('email_1',       d.email_1);
-            fill('email_2',       d.email_2);
-            fill('email_3',       d.email_3);
-            fill('email_4',       d.email_4);
+            const isEmail = v => v && /\S+@\S+\.\S+/.test(v);
+            if (isEmail(d.email_1)) fill('email_1', d.email_1);
+            if (isEmail(d.email_2)) fill('email_2', d.email_2);
+            if (isEmail(d.email_3)) fill('email_3', d.email_3);
+            if (isEmail(d.email_4)) fill('email_4', d.email_4);
             fill('address',       d.address);
             fill('city',          d.city);
             fill('state',         d.state);
