@@ -527,6 +527,27 @@
 
 </div><!-- /wl-section -->
 
+<!-- Etere Report Puller -->
+<div class="bw-card" style="margin-top:24px">
+    <h2>Pull Etere Report</h2>
+    <div class="form-grid">
+        <div class="form-group">
+            <label for="report-contract">Contract #</label>
+            <input type="text" id="report-contract" placeholder="e.g. 2675" />
+        </div>
+        <div class="form-group">
+            <label for="report-code">Report</label>
+            <select id="report-code">
+                <option value="R100018_C0000_placement_confirmation">Placement Confirmation</option>
+            </select>
+        </div>
+    </div>
+    <button type="button" class="btn-generate" id="report-btn" style="margin-top:16px">
+        &#8595; Pull Report
+    </button>
+    <div class="status-msg" id="report-status"></div>
+</div>
+
 </main>
 
 <script>
@@ -1035,6 +1056,55 @@ document.getElementById('wl-generate-btn').addEventListener('click', async funct
     } finally {
         this.disabled    = false;
         this.textContent = '↓ Generate Excel';
+    }
+});
+
+// ── Pull Etere Report ─────────────────────────────────────────────────────────
+// Pre-fill contract number from the main form field when focused
+document.getElementById('report-contract').addEventListener('focus', function() {
+    if (!this.value) {
+        const mainContract = document.getElementById('contract');
+        if (mainContract && mainContract.value.trim())
+            this.value = mainContract.value.trim();
+    }
+});
+
+document.getElementById('report-btn').addEventListener('click', async function() {
+    const contractNum = document.getElementById('report-contract').value.trim();
+    const reportCode  = document.getElementById('report-code').value;
+    const status      = document.getElementById('report-status');
+
+    if (!contractNum) {
+        showStatus(status, 'Enter a contract number.', 'error');
+        return;
+    }
+
+    this.disabled    = true;
+    this.textContent = '⏳ Fetching...';
+    status.textContent = '';
+
+    const fd = new FormData();
+    fd.append('contract_number', contractNum);
+    fd.append('report_code', reportCode);
+
+    try {
+        const resp = await fetch('/backwrite/fetch-report', { method: 'POST', body: fd });
+        if (!resp.ok) throw new Error(await resp.text());
+        const blob = await resp.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href = url;
+        const cd = resp.headers.get('Content-Disposition') || '';
+        const fnMatch = cd.match(/filename="([^"]+)"/);
+        a.download = fnMatch ? fnMatch[1] : 'etere_report.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+        showStatus(status, '✓ Downloaded.', 'ok');
+    } catch (e) {
+        showStatus(status, 'Error: ' + e.message, 'error');
+    } finally {
+        this.disabled    = false;
+        this.textContent = '↓ Pull Report';
     }
 });
 </script>
