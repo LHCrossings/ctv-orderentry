@@ -358,6 +358,50 @@ def _normalize_admerasia(order) -> dict:
     }
 
 
+def _normalize_igraphix(order) -> dict:
+    """iGraphix: lines live in ad_codes; days/time/rate come from the order header."""
+    market = _str(getattr(order, "market", ""))
+    paid_days = _str(getattr(order, "paid_days", "M-Su"))
+    paid_time = _str(getattr(order, "paid_time", ""))
+    duration  = _str(getattr(order, "spot_duration", ""))
+    rate      = _float(getattr(order, "rate_per_spot", 0.0))
+
+    lines = []
+    for i, ac in enumerate(getattr(order, "ad_codes", []) or []):
+        is_bonus = bool(getattr(ac, "is_bonus", False))
+        lines.append({
+            "description": f"{_str(getattr(ac, 'description', ''))} (#{_str(getattr(ac, 'ad_code', ''))})",
+            "days":        paid_days,
+            "time":        paid_time,
+            "duration":    duration,
+            "weekly_spots": [],
+            "total_spots": _int(getattr(ac, "spots", 0)),
+            "rate":        0.0 if is_bonus else rate,
+            "is_bonus":    is_bonus,
+            "market":      market,
+            "language":    _str(getattr(order, "language", "")),
+            "start_date":  _str(getattr(ac, "start_date", "")),
+            "end_date":    _str(getattr(ac, "end_date", "")),
+        })
+
+    total_spots = sum(ln["total_spots"] for ln in lines)
+    total_cost  = sum(ln["rate"] * ln["total_spots"] for ln in lines if not ln["is_bonus"])
+
+    return {
+        "client":          _str(getattr(order, "client", "")),
+        "estimate_number": _str(getattr(order, "purchase_number", "")),
+        "description":     _str(getattr(order, "language", "")),
+        "markets":         [market] if market else [],
+        "flight_start":    _str(getattr(order, "flight_start", "")),
+        "flight_end":      _str(getattr(order, "flight_end", "")),
+        "buyer":           "",
+        "total_spots":     total_spots,
+        "total_cost":      round(total_cost, 2),
+        "lines":           lines,
+        "warnings":        [],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -448,6 +492,8 @@ def get_order_detail(file_path: Path, order_type: str) -> dict:
     # Single object — agency-specific normalizers where needed
     if order_type == "ADMERASIA":
         result = _normalize_admerasia(raw)
+    elif order_type == "IGRAPHIX":
+        result = _normalize_igraphix(raw)
     else:
         result = _normalize_order(raw)
     result["lines"] = _apply_ros_overrides(result["lines"])
