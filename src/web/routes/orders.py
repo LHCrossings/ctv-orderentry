@@ -951,6 +951,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
         _SKIP = {"created_at"}
         target_path = Path("data/customers.db")
+        if not target_path.exists():
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=400, content={"error": f"Target database not found: {target_path.resolve()}"})
 
         # Save upload to temp file
         tmp_fd, tmp_path = tempfile.mkstemp(suffix=".db")
@@ -977,6 +980,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
             # Compare columns that exist in BOTH (skip metadata)
             common_cols = [c for c in src_cols if c in tgt_cols and c not in _SKIP]
+            if "customer_name" not in common_cols or "order_type" not in common_cols:
+                raise ValueError(f"Uploaded DB is missing required columns. Found: {src_cols}")
 
             new_records = []
             conflicts = []
