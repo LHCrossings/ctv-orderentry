@@ -269,6 +269,17 @@ def _normalize_order(order_obj) -> dict:
     if getattr(order_obj, "rate_missing", False):
         warnings.append("One or more lines have a missing rate.")
 
+    # Per-line field validation — flag anything that can't be entered in Etere as-is
+    for i, ln in enumerate(normalized_lines, 1):
+        label = ln.get("description") or f"Line {i}"
+        spots = ln.get("total_spots") or sum(ln.get("weekly_spots") or [])
+        if spots <= 0:
+            continue
+        if not ln.get("time"):
+            warnings.append(f"Line {i} ({label}): missing time range — cannot enter in Etere without it.")
+        if not ln.get("days"):
+            warnings.append(f"Line {i} ({label}): missing day pattern — cannot enter in Etere without it.")
+
     return {
         "client": client,
         "estimate_number": estimate,
