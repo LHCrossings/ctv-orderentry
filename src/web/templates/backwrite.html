@@ -1092,15 +1092,12 @@ document.getElementById('report-btn').addEventListener('click', async function()
         const resp = await fetch('/backwrite/fetch-report', { method: 'POST', body: fd });
         if (!resp.ok) throw new Error(await resp.text());
         const blob = await resp.blob();
-        const url  = URL.createObjectURL(blob);
-        const a    = document.createElement('a');
-        a.href = url;
         const cd = resp.headers.get('Content-Disposition') || '';
         const fnMatch = cd.match(/filename="([^"]+)"/);
-        a.download = fnMatch ? fnMatch[1] : 'etere_report.csv';
-        a.click();
-        URL.revokeObjectURL(url);
-        showStatus(status, '✓ Downloaded.', 'ok');
+        const filename = fnMatch ? fnMatch[1] : 'etere_report.csv';
+        const file = new File([blob], filename, { type: 'text/csv' });
+        handleFile(file);
+        showStatus(status, '✓ Report loaded.', 'ok');
     } catch (e) {
         showStatus(status, 'Error: ' + e.message, 'error');
     } finally {
