@@ -944,7 +944,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         Compare an uploaded customers.db against the live one.
         Returns new records and conflicts (same PK, differing field values).
         """
-        import sqlite3, tempfile, os
+        import os
+        import sqlite3
+        import tempfile
         from pathlib import Path
 
         _SKIP = {"created_at"}
