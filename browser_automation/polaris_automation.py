@@ -189,10 +189,7 @@ def gather_polaris_inputs(xlsx_path: str) -> Optional[dict]:
     for market in order.markets:
         suffix = _MARKET_SHORT.get(market, market) if include_market else ""
         default_code = f"{code_name}{suffix}" if code_name else market
-        default_desc = (
-            f"{description_name} {order.advertiser}"
-            if description_name else order.advertiser
-        )
+        default_desc = description_name if description_name else order.advertiser
 
         print(f"\n  Market: {market}")
         code_in = input(f"  Contract code [{default_code}]: ").strip()
