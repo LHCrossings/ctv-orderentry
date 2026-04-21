@@ -49,7 +49,8 @@ def fetch_etere_report(
         etere_web_logout,
     )
 
-    today = date.today().strftime("%-m/%-d/%Y")
+    _d = date.today()
+    today = f"{_d.month}/{_d.day}/{_d.year}"
     params = {
         "reportCode":  report_code,
         "isSystem":    is_system,
