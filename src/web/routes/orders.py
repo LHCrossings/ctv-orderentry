@@ -934,6 +934,119 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def customers_page(request: Request):
         return templates.TemplateResponse(request, "customers.html")
 
+    @router.get("/customers/import-db", response_class=HTMLResponse)
+    async def customers_import_db_page(request: Request):
+        return templates.TemplateResponse(request, "customers/import_db.html")
+
+    @router.post("/api/customers/import-db/preview")
+    async def preview_import_db(file: UploadFile):
+        """
+        Compare an uploaded customers.db against the live one.
+        Returns new records and conflicts (same PK, differing field values).
+        """
+        import sqlite3, tempfile, os
+        from pathlib import Path
+
+        _SKIP = {"created_at"}
+        target_path = Path("data/customers.db")
+
+        # Save upload to temp file
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".db")
+        try:
+            with os.fdopen(tmp_fd, "wb") as f:
+                f.write(await file.read())
+
+            # Read source DB
+            src_conn = sqlite3.connect(tmp_path)
+            src_conn.row_factory = sqlite3.Row
+            src_rows = src_conn.execute("SELECT * FROM customers").fetchall()
+            src_cols = [d[0] for d in src_conn.execute("PRAGMA table_info(customers)").fetchall()]
+            src_conn.close()
+
+            # Read target DB
+            tgt_conn = sqlite3.connect(str(target_path))
+            tgt_conn.row_factory = sqlite3.Row
+            tgt_cols = [d[0] for d in tgt_conn.execute("PRAGMA table_info(customers)").fetchall()]
+            tgt_index = {
+                (r["customer_name"], r["order_type"]): dict(r)
+                for r in tgt_conn.execute("SELECT * FROM customers").fetchall()
+            }
+            tgt_conn.close()
+
+            # Compare columns that exist in BOTH (skip metadata)
+            common_cols = [c for c in src_cols if c in tgt_cols and c not in _SKIP]
+
+            new_records = []
+            conflicts = []
+
+            for src_row in src_rows:
+                row_dict = {c: src_row[c] for c in src_cols if c in common_cols}
+                key = (row_dict["customer_name"], row_dict["order_type"])
+
+                if key not in tgt_index:
+                    new_records.append(row_dict)
+                else:
+                    tgt_row = {c: tgt_index[key].get(c) for c in common_cols}
+                    diff_fields = [
+                        c for c in common_cols
+                        if c not in ("customer_name", "order_type")
+                        and str(row_dict.get(c) or "") != str(tgt_row.get(c) or "")
+                    ]
+                    if diff_fields:
+                        conflicts.append({
+                            "customer_name": key[0],
+                            "order_type":    key[1],
+                            "current":  tgt_row,
+                            "incoming": row_dict,
+                            "diff":     diff_fields,
+                        })
+
+        finally:
+            os.unlink(tmp_path)
+
+        return {
+            "new":       new_records,
+            "conflicts": conflicts,
+            "columns":   common_cols,
+        }
+
+    @router.post("/api/customers/import-db/apply")
+    async def apply_import_db(body: Any = Body(default={})):
+        """
+        Apply the user-resolved merge.
+        Body: { insert: [row_dicts], upsert: [row_dicts] }
+        """
+        import sqlite3
+        from pathlib import Path
+
+        insert_rows = body.get("insert", [])
+        upsert_rows = body.get("upsert", [])
+        target_path = Path("data/customers.db")
+
+        inserted = updated = 0
+        with sqlite3.connect(str(target_path)) as conn:
+            for row in insert_rows:
+                cols = list(row.keys())
+                placeholders = ",".join(["?"] * len(cols))
+                conn.execute(
+                    f"INSERT OR IGNORE INTO customers ({','.join(cols)}) VALUES ({placeholders})",
+                    [row[c] for c in cols],
+                )
+                inserted += conn.total_changes
+
+            for row in upsert_rows:
+                cols = [c for c in row if c not in ("customer_name", "order_type")]
+                if not cols:
+                    continue
+                set_clause = ", ".join(f"{c}=?" for c in cols)
+                conn.execute(
+                    f"UPDATE customers SET {set_clause} WHERE customer_name=? AND order_type=?",
+                    [row[c] for c in cols] + [row["customer_name"], row["order_type"]],
+                )
+                updated += 1
+
+        return {"inserted": inserted, "updated": updated}
+
     @router.get("/customers/backfill", response_class=HTMLResponse)
     async def customers_backfill_page(request: Request):
         return templates.TemplateResponse(request, "customers/backfill.html")

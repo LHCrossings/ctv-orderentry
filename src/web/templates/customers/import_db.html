@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Import Customer DB — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        .import-card {
+            background: var(--nord1);
+            border: 1px solid var(--nord3);
+            border-radius: 10px;
+            padding: 28px 32px;
+            margin-bottom: 24px;
+        }
+        .import-card h3 {
+            margin: 0 0 16px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--nord4);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+        .drop-zone {
+            border: 2px dashed var(--nord3);
+            border-radius: 8px;
+            padding: 36px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+            color: var(--nord4);
+            font-size: 0.9rem;
+        }
+        .drop-zone.drag-over, .drop-zone:hover {
+            border-color: var(--nord8);
+            background: rgba(136,192,208,0.07);
+        }
+        .drop-zone input[type=file] { display: none; }
+        .drop-zone .drop-icon { font-size: 2rem; margin-bottom: 8px; }
+        .drop-zone .drop-hint { color: var(--nord5); font-size: 0.8rem; margin-top: 6px; }
+        #selected-file {
+            margin-top: 12px;
+            font-size: 0.85rem;
+            color: var(--nord7);
+        }
+        .btn-primary {
+            background: var(--nord8);
+            color: var(--nord0);
+            border: none;
+            padding: 10px 24px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            margin-top: 16px;
+        }
+        .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-apply {
+            background: var(--nord14);
+            color: var(--nord0);
+            border: none;
+            padding: 10px 28px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        .btn-apply:disabled { opacity: 0.4; cursor: not-allowed; }
+        .status-msg {
+            margin-top: 12px;
+            font-size: 0.85rem;
+            padding: 8px 14px;
+            border-radius: 6px;
+            display: none;
+        }
+        .status-msg.info    { background: rgba(136,192,208,0.15); color: var(--nord8); display: block; }
+        .status-msg.success { background: rgba(163,190,140,0.15); color: var(--nord14); display: block; }
+        .status-msg.error   { background: rgba(191,97,106,0.15);  color: var(--nord11); display: block; }
+
+        /* Results tables */
+        .section-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+        .badge-new      { background: rgba(163,190,140,0.2); color: var(--nord14); }
+        .badge-conflict { background: rgba(235,203,139,0.2); color: var(--nord13); }
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.83rem;
+            margin-top: 12px;
+        }
+        .results-table th {
+            background: var(--nord2);
+            color: var(--nord5);
+            padding: 8px 12px;
+            text-align: left;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.72rem;
+            letter-spacing: 0.05em;
+        }
+        .results-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--nord2);
+            color: var(--nord4);
+            vertical-align: top;
+        }
+        .results-table tr:last-child td { border-bottom: none; }
+        .cb-include { width: 16px; height: 16px; cursor: pointer; }
+
+        /* Conflict rows */
+        .conflict-row { cursor: pointer; }
+        .conflict-row:hover td { background: rgba(136,192,208,0.05); }
+        .conflict-expand { display: none; }
+        .conflict-expand td { padding: 0; }
+        .conflict-expand.open { display: table-row; }
+        .field-grid {
+            display: grid;
+            grid-template-columns: 160px 1fr 1fr;
+            gap: 0;
+            font-size: 0.82rem;
+            border-top: 1px solid var(--nord2);
+        }
+        .field-grid-header {
+            background: var(--nord2);
+            padding: 6px 14px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--nord5);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .field-cell {
+            padding: 7px 14px;
+            border-bottom: 1px solid rgba(67,76,94,0.5);
+            color: var(--nord4);
+        }
+        .field-cell.field-name { color: var(--nord5); font-weight: 500; }
+        .field-cell.diff-current  { background: rgba(191,97,106,0.08); }
+        .field-cell.diff-incoming { background: rgba(163,190,140,0.08); }
+        .field-cell.selectable { cursor: pointer; transition: background 0.12s; }
+        .field-cell.selectable:hover { background: rgba(136,192,208,0.12); }
+        .field-cell.chosen { outline: 2px solid var(--nord8); outline-offset: -2px; }
+        .field-cell.chosen.current  { background: rgba(191,97,106,0.18); }
+        .field-cell.chosen.incoming { background: rgba(163,190,140,0.18); }
+        .choose-hint {
+            font-size: 0.75rem;
+            color: var(--nord5);
+            padding: 8px 14px;
+            grid-column: 1 / -1;
+            border-bottom: 1px solid var(--nord2);
+        }
+        .include-conflict { display: flex; align-items: center; gap: 8px; font-size: 0.83rem; color: var(--nord5); }
+        .expand-arrow { font-size: 0.75rem; transition: transform 0.15s; display: inline-block; }
+        .expand-arrow.open { transform: rotate(90deg); }
+        #apply-section { margin-top: 28px; display: none; }
+        #apply-section.visible { display: block; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/customers" class="back-link">&#8592;</a>
+            <div class="logo-icon">📥</div>
+            <div>
+                <h1>Import <span>Customer DB</span></h1>
+                <div class="logo-sub">Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="portal-intro">
+        <h2>Merge Customer Records</h2>
+        <p>Upload a <code>customers.db</code> from another machine to merge its records into this one. New records are added automatically; conflicting records let you choose which field values to keep.</p>
+    </div>
+
+    <!-- Upload -->
+    <div class="import-card">
+        <h3>Upload Source Database</h3>
+        <div class="drop-zone" id="drop-zone">
+            <div class="drop-icon">📂</div>
+            <div>Drop <strong>customers.db</strong> here or click to browse</div>
+            <div class="drop-hint">.db files only</div>
+            <input type="file" id="db-file" accept=".db" />
+        </div>
+        <div id="selected-file"></div>
+        <button class="btn-primary" id="preview-btn" disabled>Preview Import</button>
+        <div class="status-msg" id="status-msg"></div>
+    </div>
+
+    <!-- Results -->
+    <div id="results" style="display:none">
+
+        <!-- New records -->
+        <div class="import-card" id="new-section">
+            <h3>New Records <span class="section-badge badge-new" id="new-count">0</span></h3>
+            <p style="font-size:0.85rem;color:var(--nord5);margin:0 0 12px">
+                These records don't exist in the current database and will be inserted.
+            </p>
+            <table class="results-table" id="new-table">
+                <thead>
+                    <tr>
+                        <th style="width:28px"><input type="checkbox" id="new-select-all" checked /></th>
+                        <th>Customer Name</th>
+                        <th>Order Type</th>
+                        <th>Customer ID</th>
+                        <th>Market</th>
+                        <th>Billing</th>
+                    </tr>
+                </thead>
+                <tbody id="new-body"></tbody>
+            </table>
+        </div>
+
+        <!-- Conflicts -->
+        <div class="import-card" id="conflict-section" style="display:none">
+            <h3>Conflicts <span class="section-badge badge-conflict" id="conflict-count">0</span></h3>
+            <p style="font-size:0.85rem;color:var(--nord5);margin:0 0 12px">
+                These records exist in both databases with different values.
+                Click a row to expand and choose which value to keep for each field.
+                <strong style="color:var(--nord4)">Current values are kept by default.</strong>
+            </p>
+            <table class="results-table" id="conflict-table">
+                <thead>
+                    <tr>
+                        <th style="width:28px"></th>
+                        <th>Customer Name</th>
+                        <th>Order Type</th>
+                        <th>Changed Fields</th>
+                        <th style="width:28px"></th>
+                    </tr>
+                </thead>
+                <tbody id="conflict-body"></tbody>
+            </table>
+        </div>
+
+        <!-- Apply -->
+        <div id="apply-section">
+            <button class="btn-apply" id="apply-btn">Apply Import</button>
+            <div class="status-msg" id="apply-msg"></div>
+        </div>
+    </div>
+</main>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let _previewData = null;   // {new, conflicts, columns}
+// For each conflict: {customer_name, order_type} → {field: 'current'|'incoming'}
+const _resolutions = {};
+
+// ── Drop zone ──────────────────────────────────────────────────────────────
+const dropZone   = document.getElementById('drop-zone');
+const fileInput  = document.getElementById('db-file');
+const previewBtn = document.getElementById('preview-btn');
+const selFile    = document.getElementById('selected-file');
+
+dropZone.addEventListener('dragenter', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f) setFile(f);
+});
+dropZone.addEventListener('click', e => {
+    if (e.target === fileInput) return;
+    fileInput.click();
+});
+fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) setFile(fileInput.files[0]);
+});
+
+function setFile(f) {
+    fileInput._file = f;
+    selFile.textContent = `Selected: ${f.name} (${(f.size/1024).toFixed(1)} KB)`;
+    previewBtn.disabled = false;
+    document.getElementById('status-msg').className = 'status-msg';
+}
+
+// ── Preview ────────────────────────────────────────────────────────────────
+previewBtn.addEventListener('click', async () => {
+    const f = fileInput._file || (fileInput.files[0]);
+    if (!f) return;
+    setStatus('Analyzing...', 'info');
+    previewBtn.disabled = true;
+
+    const form = new FormData();
+    form.append('file', f);
+    try {
+        const res  = await fetch('/api/customers/import-db/preview', { method: 'POST', body: form });
+        const data = await res.json();
+        if (!res.ok) { setStatus(data.detail || 'Preview failed.', 'error'); return; }
+        _previewData = data;
+        renderResults(data);
+        setStatus(`Found ${data.new.length} new record(s) and ${data.conflicts.length} conflict(s).`, 'info');
+        document.getElementById('apply-section').classList.add('visible');
+    } catch (e) {
+        setStatus('Error: ' + e.message, 'error');
+    } finally {
+        previewBtn.disabled = false;
+    }
+});
+
+function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Render results ─────────────────────────────────────────────────────────
+function renderResults(data) {
+    document.getElementById('results').style.display = '';
+
+    // New records
+    document.getElementById('new-count').textContent = data.new.length;
+    const newBody = document.getElementById('new-body');
+    newBody.innerHTML = data.new.length === 0
+        ? '<tr><td colspan="6" style="color:var(--nord5);padding:14px">No new records.</td></tr>'
+        : data.new.map((r, i) => `<tr>
+            <td><input type="checkbox" class="cb-include new-cb" data-idx="${i}" checked /></td>
+            <td>${esc(r.customer_name)}</td>
+            <td>${esc(r.order_type)}</td>
+            <td>${esc(r.customer_id)}</td>
+            <td>${esc(r.default_market)}</td>
+            <td>${esc(r.billing_type)}</td>
+          </tr>`).join('');
+
+    // Select-all for new records
+    document.getElementById('new-select-all').addEventListener('change', function() {
+        document.querySelectorAll('.new-cb').forEach(cb => cb.checked = this.checked);
+    });
+
+    // Conflicts
+    const conflictSection = document.getElementById('conflict-section');
+    document.getElementById('conflict-count').textContent = data.conflicts.length;
+    conflictSection.style.display = data.conflicts.length === 0 ? 'none' : '';
+
+    const conflictBody = document.getElementById('conflict-body');
+    conflictBody.innerHTML = '';
+
+    data.conflicts.forEach((c, ci) => {
+        const key = c.customer_name + '|' + c.order_type;
+        // Default: keep current for all diff fields
+        _resolutions[key] = {};
+        c.diff.forEach(f => _resolutions[key][f] = 'current');
+
+        // Summary row
+        const summaryRow = document.createElement('tr');
+        summaryRow.className = 'conflict-row';
+        summaryRow.dataset.key = key;
+        summaryRow.innerHTML = `
+            <td><input type="checkbox" class="cb-include conflict-cb" data-key="${esc(key)}" checked /></td>
+            <td>${esc(c.customer_name)}</td>
+            <td>${esc(c.order_type)}</td>
+            <td style="color:var(--nord13)">${esc(c.diff.join(', '))}</td>
+            <td><span class="expand-arrow" id="arrow-${ci}">▶</span></td>`;
+        conflictBody.appendChild(summaryRow);
+
+        // Expand row
+        const expandRow = document.createElement('tr');
+        expandRow.className = 'conflict-expand';
+        expandRow.id = `expand-${ci}`;
+        const expandTd = document.createElement('td');
+        expandTd.colSpan = 5;
+        expandTd.style.padding = '0';
+
+        const grid = document.createElement('div');
+        grid.className = 'field-grid';
+
+        // Header
+        grid.innerHTML = `
+            <div class="field-grid-header">Field</div>
+            <div class="field-grid-header">Current (this machine)</div>
+            <div class="field-grid-header">Incoming (imported)</div>
+            <div class="choose-hint">Click a value cell to select it. Highlighted = will be written.</div>`;
+
+        c.diff.forEach(field => {
+            const curVal  = esc(c.current[field]  ?? '—');
+            const inVal   = esc(c.incoming[field] ?? '—');
+
+            const nameEl = document.createElement('div');
+            nameEl.className = 'field-cell field-name';
+            nameEl.textContent = field;
+
+            const curEl = document.createElement('div');
+            curEl.className = 'field-cell diff-current selectable chosen current';
+            curEl.dataset.key   = key;
+            curEl.dataset.field = field;
+            curEl.dataset.side  = 'current';
+            curEl.innerHTML = curVal;
+
+            const inEl = document.createElement('div');
+            inEl.className = 'field-cell diff-incoming selectable incoming';
+            inEl.dataset.key   = key;
+            inEl.dataset.field = field;
+            inEl.dataset.side  = 'incoming';
+            inEl.innerHTML = inVal;
+
+            grid.appendChild(nameEl);
+            grid.appendChild(curEl);
+            grid.appendChild(inEl);
+
+            [curEl, inEl].forEach(el => {
+                el.addEventListener('click', () => {
+                    const chosen = el.dataset.side;
+                    _resolutions[key][field] = chosen;
+                    // Update visual
+                    curEl.classList.toggle('chosen', chosen === 'current');
+                    inEl.classList.toggle('chosen', chosen === 'incoming');
+                });
+            });
+        });
+
+        expandTd.appendChild(grid);
+        expandRow.appendChild(expandTd);
+        conflictBody.appendChild(expandRow);
+
+        // Toggle expand on row click (not on checkbox)
+        summaryRow.addEventListener('click', e => {
+            if (e.target.closest('input')) return;
+            expandRow.classList.toggle('open');
+            document.getElementById(`arrow-${ci}`).classList.toggle('open');
+        });
+    });
+}
+
+// ── Apply ──────────────────────────────────────────────────────────────────
+document.getElementById('apply-btn').addEventListener('click', async () => {
+    if (!_previewData) return;
+
+    // Collect selected new rows
+    const insertRows = [];
+    document.querySelectorAll('.new-cb:checked').forEach(cb => {
+        insertRows.push(_previewData.new[parseInt(cb.dataset.idx)]);
+    });
+
+    // Collect conflict rows where checkbox is checked, applying field resolutions
+    const upsertRows = [];
+    document.querySelectorAll('.conflict-cb:checked').forEach(cb => {
+        const key = cb.dataset.key;
+        const conflict = _previewData.conflicts.find(
+            c => c.customer_name + '|' + c.order_type === key
+        );
+        if (!conflict) return;
+        const res = _resolutions[key] || {};
+        const merged = Object.assign({}, conflict.current);
+        conflict.diff.forEach(f => {
+            if (res[f] === 'incoming') merged[f] = conflict.incoming[f];
+        });
+        upsertRows.push(merged);
+    });
+
+    if (insertRows.length === 0 && upsertRows.length === 0) {
+        setApplyStatus('Nothing selected to import.', 'error');
+        return;
+    }
+
+    document.getElementById('apply-btn').disabled = true;
+    setApplyStatus('Applying...', 'info');
+
+    try {
+        const res  = await fetch('/api/customers/import-db/apply', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ insert: insertRows, upsert: upsertRows }),
+        });
+        const data = await res.json();
+        if (!res.ok) { setApplyStatus(data.detail || 'Apply failed.', 'error'); return; }
+        setApplyStatus(
+            `Done — ${data.inserted} record(s) inserted, ${data.updated} updated.`,
+            'success'
+        );
+        document.getElementById('apply-btn').disabled = true;
+    } catch (e) {
+        setApplyStatus('Error: ' + e.message, 'error');
+        document.getElementById('apply-btn').disabled = false;
+    }
+});
+
+function setStatus(msg, type) {
+    const el = document.getElementById('status-msg');
+    el.textContent = msg;
+    el.className = 'status-msg ' + type;
+}
+function setApplyStatus(msg, type) {
+    const el = document.getElementById('apply-msg');
+    el.textContent = msg;
+    el.className = 'status-msg ' + type;
+}
+</script>
+</body>
+</html>
