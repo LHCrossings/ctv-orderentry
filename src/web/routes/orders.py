@@ -10,6 +10,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from typing import Any
+
 from fastapi import APIRouter, Body, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
@@ -469,10 +471,26 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     # ------------------------------------------------------------------
 
     @router.post("/api/run")
-    async def run_queue(files: list[str] = Body(default=[])):
+    async def run_queue(body: Any = Body(default=[])):
+        # Accept both legacy list format and new {files, overrides} format
+        if isinstance(body, list):
+            files: list[str] = body
+            overrides: dict = {}
+        else:
+            files = body.get("files", [])
+            overrides = body.get("overrides", {})
+
         _order_patterns = ("*.pdf", "*.xml", "*.xlsx", "*.xlsm", "*.jpg", "*.jpeg", "*.png")
         if not any(f for pat in _order_patterns for f in config.incoming_dir.glob(pat)):
             raise HTTPException(status_code=400, detail="No orders in queue.")
+
+        # Write per-file override sidecars so the automation can consume them
+        for filename, file_overrides in overrides.items():
+            sidecar = config.incoming_dir / (filename + ".overrides.json")
+            try:
+                sidecar.write_text(json.dumps(file_overrides))
+            except Exception:
+                pass
 
         project_root = Path(__file__).parent.parent.parent.parent
         main_py = project_root / "main.py"

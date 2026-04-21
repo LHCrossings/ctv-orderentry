@@ -178,11 +178,16 @@ async function runQueue() {
     btn.disabled = true;
     btn.textContent = '⏳ Starting...';
     const selected = getSelectedFiles();
+    const overrides = {};
+    selected.forEach(fn => {
+        if (pendingOverrides[fn] && Object.keys(pendingOverrides[fn]).length > 0)
+            overrides[fn] = pendingOverrides[fn];
+    });
     try {
         const res  = await fetch('/api/run', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(selected),
+            body: JSON.stringify({ files: selected, overrides }),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -248,6 +253,31 @@ function esc(str) {
         .replace(/"/g, '&quot;');
 }
 
+// ── Pending field overrides keyed by filename (market, etc.) ──────────────
+
+const pendingOverrides = {};
+
+function setOverride(filename, field, value) {
+    if (!pendingOverrides[filename]) pendingOverrides[filename] = {};
+    if (value) {
+        pendingOverrides[filename][field] = value;
+    } else {
+        delete pendingOverrides[filename][field];
+    }
+    // Live-update the meta row so the user sees the change immediately
+    if (field === 'market') {
+        const labels = detailMeta.querySelectorAll('.meta-label');
+        const values = detailMeta.querySelectorAll('.meta-value');
+        for (let i = 0; i < labels.length; i++) {
+            if (labels[i].textContent === 'Market(s)') {
+                values[i].textContent = value || '—';
+                values[i].className = 'meta-value' + (value ? '' : ' empty');
+                break;
+            }
+        }
+    }
+}
+
 // ── Detail Modal ───────────────────────────────────────────────────────────
 
 const detailOverlay  = document.getElementById('detail-overlay');
@@ -286,6 +316,29 @@ async function showDetail(filename, orderType, detailBase) {
 
         if (d.warnings && d.warnings.length > 0) {
             detailWarnings.innerHTML = '⚠️ ' + d.warnings.join('<br>⚠️ ');
+            detailWarnings.classList.remove('hidden');
+        }
+
+        if (d.required_fields && d.required_fields.length > 0) {
+            const existing = pendingOverrides[filename] || {};
+            const fieldsHtml = d.required_fields.map(f => {
+                if (f.type === 'select') {
+                    const opts = f.options.map(o =>
+                        `<option value="${esc(o)}"${o === existing[f.field] ? ' selected' : ''}>${esc(o)}</option>`
+                    ).join('');
+                    return `<div class="req-field-row">
+                        <label class="req-field-label">${esc(f.label)}</label>
+                        <select class="req-field-select"
+                            onchange="setOverride(${JSON.stringify(filename)},${JSON.stringify(f.field)},this.value)">
+                            <option value="">— Select —</option>${opts}
+                        </select>
+                    </div>`;
+                }
+                return '';
+            }).join('');
+            detailWarnings.insertAdjacentHTML('beforeend',
+                `<div class="req-fields-block">${fieldsHtml}</div>`
+            );
             detailWarnings.classList.remove('hidden');
         }
 

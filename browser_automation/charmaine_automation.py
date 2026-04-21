@@ -25,10 +25,12 @@ IMPORTS - Universal utilities, no duplication
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
+import json
 import sqlite3
 import os
 import math
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Optional
 
 from browser_automation.etere_client import EtereClient
@@ -349,6 +351,24 @@ def normalize_language(language: str) -> str:
 # USER INPUT COLLECTION
 # ═══════════════════════════════════════════════════════════════════════════════
 
+_VALID_MARKETS = ["CVC", "SFO", "LAX", "SEA", "HOU", "CMP", "WDC", "NYC", "MMT", "DAL"]
+
+
+def _read_overrides(pdf_path: str) -> dict:
+    """Read per-file override sidecar written by the web UI run endpoint."""
+    if not pdf_path:
+        return {}
+    sidecar = Path(pdf_path + ".overrides.json")
+    if sidecar.exists():
+        try:
+            data = json.loads(sidecar.read_text())
+            sidecar.unlink(missing_ok=True)  # consume once
+            return data
+        except Exception:
+            return {}
+    return {}
+
+
 def collect_user_input(order: CharmaineOrder) -> dict:
     """
     Collect all user input BEFORE starting browser automation.
@@ -371,6 +391,26 @@ def collect_user_input(order: CharmaineOrder) -> dict:
     print(f"  Flight:     {order.flight_start} - {order.flight_end}")
     print(f"  Lines:      {len(order.lines)} ({sum(1 for l in order.lines if not l.is_bonus)} paid + {sum(1 for l in order.lines if l.is_bonus)} bonus)")
     print("=" * 70)
+
+    # ═══════════════════════════════════════════════════════════════
+    # MARKET — prompt if unknown (may be pre-filled by web UI override)
+    # ═══════════════════════════════════════════════════════════════
+
+    overrides = _read_overrides(order.pdf_path)
+
+    if order.market in ("UNKNOWN", "", None):
+        if "market" in overrides:
+            order.market = overrides["market"]
+            print(f"\n[MARKET] Using web override: {order.market}")
+        else:
+            print(f"\n[MARKET] ⚠ Market not detected in PDF.")
+            print(f"  Valid markets: {', '.join(_VALID_MARKETS)}")
+            while True:
+                m = input("  Enter market code: ").strip().upper()
+                if m in _VALID_MARKETS:
+                    order.market = m
+                    break
+                print(f"  Invalid. Choose from: {', '.join(_VALID_MARKETS)}")
 
     # ═══════════════════════════════════════════════════════════════
     # FLIGHT DATE CHECK (start date in the past)

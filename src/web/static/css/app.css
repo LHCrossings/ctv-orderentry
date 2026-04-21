@@ -578,6 +578,36 @@ tbody tr.clickable {
 
 .detail-warnings.hidden { display: none; }
 
+.req-fields-block {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(235, 203, 139, 0.3);
+}
+
+.req-field-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+}
+
+.req-field-label {
+    font-weight: 600;
+    min-width: 70px;
+    color: var(--nord0);
+    font-size: 0.83rem;
+}
+
+.req-field-select {
+    background: var(--nord6);
+    border: 1px solid var(--accent-warning);
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-size: 0.83rem;
+    color: var(--nord0);
+    cursor: pointer;
+}
+
 .detail-error {
     margin: 16px 24px 0;
     padding: 10px 14px;

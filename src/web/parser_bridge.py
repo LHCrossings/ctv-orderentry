@@ -280,6 +280,18 @@ def _normalize_order(order_obj) -> dict:
         if not ln.get("days"):
             warnings.append(f"Line {i} ({label}): missing day pattern — cannot enter in Etere without it.")
 
+    # Required fields — things that must be supplied by the user before entry
+    _MARKET_OPTIONS = ["CVC", "SFO", "LAX", "SEA", "HOU", "CMP", "WDC", "NYC", "MMT", "DAL"]
+    required_fields = []
+    if not markets or all(m in ("", "UNKNOWN") for m in markets):
+        warnings.append("Market is unknown — select the correct market before entry.")
+        required_fields.append({
+            "field": "market",
+            "label": "Market",
+            "type": "select",
+            "options": _MARKET_OPTIONS,
+        })
+
     return {
         "client": client,
         "estimate_number": estimate,
@@ -292,6 +304,7 @@ def _normalize_order(order_obj) -> dict:
         "total_cost": round(total_cost, 2),
         "lines": normalized_lines,
         "warnings": warnings,
+        "required_fields": required_fields,
         "rates_are_net": getattr(order_obj, "rates_are_net", False),
     }
 
