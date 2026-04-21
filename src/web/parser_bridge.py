@@ -153,12 +153,11 @@ def _normalize_line(line, idx: int) -> dict:
     time = _str(_get(line, "time_str", "time", "time_period", "time_range", "time_slot"))
 
     # Charmaine: split combined daypart string into days + time when not separately stored
-    # e.g. "M-Sun 8p-9p" → days="M-Sun", time="8p-9p"
+    # Handles both spaced ("M-Sun 8p-9p") and merged ("M-F7p-8p") OCR formats.
     if not days and not time and daypart_val and not getattr(line, "is_bonus", False):
         import re as _re
         _dp_match = _re.match(
-            r'^((?:M(?:on)?[-–]?(?:Sun?|Sat?|F(?:ri)?|Tu?|W(?:ed)?|Th?)?|'
-            r'Sa(?:t)?[-–]?Su(?:n)?|Su(?:n)?|Mon?|Fri?)\S*)\s+(.+)$',
+            r'^([A-Za-z][-–A-Za-z]*?)(?:\s+|(?=\d))(\d.+)$',
             daypart_val.strip(), _re.IGNORECASE
         )
         if _dp_match:
@@ -275,6 +274,8 @@ def _normalize_order(order_obj) -> dict:
         spots = ln.get("total_spots") or sum(ln.get("weekly_spots") or [])
         if spots <= 0:
             continue
+        if ln.get("is_bonus"):
+            continue  # Bonus spots are ROS — no specific time/day placement required
         if not ln.get("time"):
             warnings.append(f"Line {i} ({label}): missing time range — cannot enter in Etere without it.")
         if not ln.get("days"):
