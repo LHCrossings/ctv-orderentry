@@ -949,7 +949,8 @@ def process_charmaine_order(
                     }] if line.total_spots > 0 else []
                 else:
                     week_groups = EtereClient.consolidate_weeks(
-                        line.weekly_spots, order.week_columns, order.flight_end
+                        line.weekly_spots, order.week_columns, order.flight_end,
+                        flight_start=order.flight_start,
                     )
 
                 # Rate (only for paid lines)
