@@ -1003,14 +1003,17 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             "diff":     diff_fields,
                         })
 
+            return {
+                "new":       new_records,
+                "conflicts": conflicts,
+                "columns":   common_cols,
+            }
+
+        except Exception as exc:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=500, content={"error": str(exc)})
         finally:
             os.unlink(tmp_path)
-
-        return {
-            "new":       new_records,
-            "conflicts": conflicts,
-            "columns":   common_cols,
-        }
 
     @router.post("/api/customers/import-db/apply")
     async def apply_import_db(body: Any = Body(default={})):

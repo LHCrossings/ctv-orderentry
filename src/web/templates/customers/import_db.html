@@ -302,8 +302,12 @@ previewBtn.addEventListener('click', async () => {
     form.append('file', f);
     try {
         const res  = await fetch('/api/customers/import-db/preview', { method: 'POST', body: form });
+        if (!res.ok) {
+            let msg = 'Preview failed.';
+            try { const err = await res.json(); msg = err.error || err.detail || msg; } catch {}
+            setStatus(msg, 'error'); return;
+        }
         const data = await res.json();
-        if (!res.ok) { setStatus(data.detail || 'Preview failed.', 'error'); return; }
         _previewData = data;
         renderResults(data);
         setStatus(`Found ${data.new.length} new record(s) and ${data.conflicts.length} conflict(s).`, 'info');
