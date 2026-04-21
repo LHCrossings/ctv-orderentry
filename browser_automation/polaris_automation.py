@@ -15,7 +15,7 @@ from decimal import Decimal
 from typing import Optional
 
 from browser_automation.etere_client import EtereClient
-from browser_automation.parsers.polaris_parser import PolarisOrder, PolarisLine, parse_polaris_xlsx
+from browser_automation.parsers.polaris_parser import PolarisOrder, PolarisLine, parse_polaris_file as parse_polaris_xlsx
 
 CUSTOMER_DB_PATH = os.path.join("data", "customers.db")
 
