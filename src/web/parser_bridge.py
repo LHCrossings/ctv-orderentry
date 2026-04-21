@@ -44,6 +44,7 @@ _DISPLAY_NAMES = {
     "SCWA":            "SCWA",
     "TCAA":            "TCAA",
     "TIMEADVERTISING": "Time Advertising",
+    "WALLRICH":        "Wallrich",
     "WORLDLINK":       "WorldLink",
     "XML":             "AAAA XML",
 }
@@ -68,6 +69,7 @@ _REGISTRY = {
     "SACCOUNTYVOTERS":  ("browser_automation.parsers.saccountyvoters_parser",  "parse_saccountyvoters_pdf"),
     "SCWA":             ("browser_automation.parsers.scwa_parser",             "parse_scwa_pdf"),
     "TIMEADVERTISING":  ("browser_automation.parsers.timeadvertising_parser",  "parse_timeadvertising_pdf"),
+    "WALLRICH":         ("browser_automation.parsers.wallrich_parser",          "parse_wallrich_pdf"),
     "WORLDLINK":        ("browser_automation.parsers.worldlink_parser",        "parse_worldlink_pdf"),
     "XML":              ("browser_automation.parsers.aaaa_xml_parser",         "parse_aaaa_xml"),
     "PROSIO":           ("browser_automation.parsers.prosio_parser",           "parse_prosio_excel"),

@@ -44,6 +44,7 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
     OrderType.LEXUS:     ("browser_automation.lexus_automation",     "gather_lexus_inputs",           "IW Group / Lexus"),
     OrderType.GALEFORCE:         ("browser_automation.galeforce_automation",         "gather_galeforce_inputs",         "GaleForceMedia"),
     OrderType.HYPHEN:            ("browser_automation.hyphen_automation",            "gather_hyphen_inputs",            "Hyphen"),
+    OrderType.WALLRICH:          ("browser_automation.wallrich_automation",          "gather_wallrich_inputs",          "Wallrich"),
     OrderType.TIMEADVERTISING:   ("browser_automation.timeadvertising_automation",   "gather_timeadvertising_inputs",   "Time Advertising"),
     OrderType.SACCOUNTYVOTERS:   ("browser_automation.saccountyvoters_automation",   "gather_saccountyvoters_inputs",   "Sacramento County Voters"),
     OrderType.SCWA:              ("browser_automation.scwa_automation",              "gather_scwa_inputs",              "Sacramento County Water Agency"),

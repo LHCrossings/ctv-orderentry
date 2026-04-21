@@ -90,6 +90,10 @@ class OrderDetectionService:
         if self._is_tcaa(first_page_text):
             return OrderType.TCAA
 
+        # Wallrich (Strata IO for Sacramento/CVC, KBTV station — check before opAD)
+        if self._is_wallrich(first_page_text):
+            return OrderType.WALLRICH
+
         # opAD
         if self._is_opad(first_page_text):
             return OrderType.OPAD
@@ -361,6 +365,19 @@ class OrderDetectionService:
         unique_estimates = sorted(set(all_estimates))
         return [{'estimate': est, 'text': full_text} for est in unique_estimates]
 
+
+    def _is_wallrich(self, text: str) -> bool:
+        """
+        Check if text matches Wallrich agency order (Strata IO, KBTV station).
+
+        Wallrich uses the same "# of SPOTS PER WEEK" Strata format as opAD,
+        but the station is KBTV (Sacramento CTV) rather than CROSSINGS TV-TV.
+        """
+        return (
+            "# of SPOTS PER WEEK" in text and
+            "Estimate:" in text and
+            "KBTV" in text
+        )
 
     def _is_opad(self, text: str) -> bool:
         """

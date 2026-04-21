@@ -35,6 +35,7 @@ class OrderType(Enum):
     SACCOUNTYVOTERS = "saccountyvoters"
     SCWA = "scwa"
     HYPHEN = "hyphen"
+    WALLRICH = "wallrich"
     PROSIO = "prosio"
     DART = "dart"
     POLARIS = "polaris"
@@ -291,6 +292,7 @@ class SeparationInterval(Enum):
     SACCOUNTYVOTERS = (15, 0, 0)
     SCWA = (15, 0, 0)
     HYPHEN = (25, 0, 0)
+    WALLRICH = (25, 0, 0)
     PROSIO = (15, 0, 0)
     POLARIS = (15, 0, 0)
     DEFAULT = (15, 0, 0)
@@ -320,6 +322,7 @@ class SeparationInterval(Enum):
             OrderType.SACCOUNTYVOTERS: cls.SACCOUNTYVOTERS.value,
             OrderType.SCWA: cls.SCWA.value,
             OrderType.HYPHEN: cls.HYPHEN.value,
+            OrderType.WALLRICH: cls.WALLRICH.value,
             OrderType.PROSIO: cls.PROSIO.value,
             OrderType.POLARIS: cls.POLARIS.value,
         }
