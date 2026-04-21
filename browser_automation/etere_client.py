@@ -1499,8 +1499,12 @@ class EtereClient:
         """
         from datetime import datetime, timedelta
 
-        # Normalise week_start_dates → List[date]
+        # Normalise week_start_dates → List[date], filtering unparseable entries.
+        # Paired filtering keeps weekly_spots in sync: a non-date column like
+        # "RATE PER 30s" that the Charmaine parser occasionally includes must be
+        # dropped from BOTH lists or the index alignment breaks.
         parsed_dates: List[date] = []
+        filtered_spots: List[int] = []
         year = int(flight_end.split('/')[-1])
 
         month_map = {
@@ -1509,10 +1513,14 @@ class EtereClient:
             'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12,
         }
 
-        for item in week_start_dates:
+        for idx, item in enumerate(week_start_dates):
+            spot = weekly_spots[idx] if idx < len(weekly_spots) else 0
             # CharmaineWeekColumn or any object with start_date attribute
             if hasattr(item, 'start_date'):
+                if not item.start_date:
+                    continue  # skip non-date columns (e.g. "RATE PER 30s")
                 parsed_dates.append(datetime.strptime(item.start_date, '%m/%d/%Y').date())
+                filtered_spots.append(spot)
             elif isinstance(item, str):
                 # "Apr 27" format
                 parts = item.strip().split()
@@ -1522,14 +1530,18 @@ class EtereClient:
                     # Year-crossing: if the date is before Jan 01 of flight_end year,
                     # use year+1 (unlikely but defensive).
                     parsed_dates.append(date(year, m, d))
+                    filtered_spots.append(spot)
                 else:
                     # Try MM/DD/YYYY
                     try:
                         parsed_dates.append(datetime.strptime(item, '%m/%d/%Y').date())
+                        filtered_spots.append(spot)
                     except ValueError:
                         print(f"[CONSOLIDATE] ⚠ Cannot parse week date '{item}', skipping")
             else:
                 print(f"[CONSOLIDATE] ⚠ Unknown week date type {type(item)}, skipping")
+
+        weekly_spots = filtered_spots
 
         flight_end_date = datetime.strptime(flight_end, '%m/%d/%Y').date()
         flight_start_date = (
