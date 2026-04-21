@@ -188,10 +188,11 @@ class PDFOrderDetector:
         """
         text_lower = text.lower()
 
-        # Marker 1: Crossings TV title (various formats)
+        # Marker 1: Crossings TV title (various formats, incl. no-space PDF artifact)
         has_crossings_title = (
             "crossings tv:" in text_lower
             or "crossings tv media proposal" in text_lower
+            or "crossingstv" in text_lower
         )
 
         # Marker 2: Airtime/Schedule keywords
