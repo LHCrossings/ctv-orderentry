@@ -153,6 +153,11 @@ class PDFOrderDetector:
                 if response in ['y', 'yes']:
                     return OrderType.HL
 
+            # Filename-based fallback for PDFs whose content doesn't carry agency markers
+            if order_type == OrderType.UNKNOWN:
+                from business_logic.services.order_detection_service import detect_from_filename
+                order_type = detect_from_filename(pdf_path.name)
+
             return order_type
 
         except Exception as e:
