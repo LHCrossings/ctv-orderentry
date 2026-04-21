@@ -302,6 +302,11 @@ class PDFOrderDetector:
                     count = self._count_charmaine_orders(pdf)
                     return (order_type, count)
 
+                # Filename fallback for PDFs with no agency text markers
+                if order_type == OrderType.UNKNOWN:
+                    from business_logic.services.order_detection_service import detect_from_filename
+                    order_type = detect_from_filename(pdf_path.name)
+
                 # All other types: assume single order
                 return (order_type, 1)
 
