@@ -80,6 +80,7 @@ class OrderProcessingService:
         OrderType.LEXUS:     "_process_lexus_order",
         OrderType.IMPRENTA:  "_process_imprenta_order",
         OrderType.OPAD:      "_process_opad_order",
+        OrderType.WALLRICH:  "_process_wallrich_order",
         OrderType.IGRAPHIX:  "_process_igraphix_order",
         OrderType.IMPACT:    "_process_impact_order",
         OrderType.RPM:              "_process_rpm_order",
@@ -1873,6 +1874,53 @@ class OrderProcessingService:
                 contracts=[],
                 order_type=OrderType.OPAD,
                 error_message=error_detail
+            )
+
+    def _process_wallrich_order(
+        self,
+        order: Order,
+        shared_session: any
+    ) -> ProcessingResult:
+        """Process Wallrich order using wallrich_automation."""
+        try:
+            from browser_automation.wallrich_automation import process_wallrich_order
+
+            if shared_session is None:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.WALLRICH,
+                    error_message="Browser session required for Wallrich orders"
+                )
+
+            if not order.order_input:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.WALLRICH,
+                    error_message="Order inputs not collected"
+                )
+
+            success = process_wallrich_order(
+                driver=shared_session.driver,
+                pdf_path=str(order.pdf_path),
+                user_input=order.order_input,
+            )
+
+            return ProcessingResult(
+                success=success,
+                contracts=[],
+                order_type=OrderType.WALLRICH,
+                error_message=None if success else "Processing failed",
+            )
+
+        except Exception as e:
+            import traceback
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.WALLRICH,
+                error_message=f"Wallrich processing error: {str(e)}\n{traceback.format_exc()}",
             )
 
     def _process_rpm_order(
