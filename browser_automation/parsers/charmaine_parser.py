@@ -838,7 +838,10 @@ def _parse_page(
             # Skip summary/total rows
             lang_lower = lang_cell.lower()
             if lang_lower in ['total paid', 'total bonus', 'total units', 'total bonuses',
+                              'paid', 'bonuses',
                               'production', 'production ( talent hosting)']:
+                continue
+            if lang_lower.startswith('total airtime'):
                 continue
             if not lang_cell and not bonus_marker:
                 continue
@@ -850,6 +853,7 @@ def _parse_page(
             is_bonus = (
                 "ros bonus" in daypart.lower()
                 or "bonus" in daypart.lower()
+                or daypart.upper() == "ROS"
                 or bonus_marker == "BONUS"
                 or (has_spot_type_col and (col_offset + 2) < len(row)
                     and row[col_offset + 2] and "bonus" in str(row[col_offset + 2]).lower())
