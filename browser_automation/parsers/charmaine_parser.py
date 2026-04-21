@@ -288,23 +288,23 @@ def parse_week_column_dates(
 def parse_rate(rate_str: str) -> float:
     """
     Parse rate from table cell.
-    
-    Handles: "$ 30.00", "$30", "$ -", "$-", "-", ""
-    
-    Args:
-        rate_str: Rate string from table cell
-        
-    Returns:
-        Float rate value (0.0 for bonus/missing)
+
+    Handles: "$ 30.00", "$30", "$ -", "$-", "-", "", "35,00" (European decimal)
     """
     if not rate_str:
         return 0.0
-    
-    cleaned = rate_str.replace('$', '').replace(',', '').replace(' ', '').strip()
-    
+
+    cleaned = rate_str.replace('$', '').replace(' ', '').strip()
+
     if cleaned in ['-', '', '–', '—']:
         return 0.0
-    
+
+    # "35,00" → European decimal (comma + exactly 2 digits, no period) → 35.00
+    if re.match(r'^\d+,\d{2}$', cleaned):
+        cleaned = cleaned.replace(',', '.')
+    else:
+        cleaned = cleaned.replace(',', '')
+
     try:
         return float(cleaned)
     except ValueError:
@@ -338,28 +338,221 @@ def parse_spots(spots_str: str) -> int:
 # MAIN PARSER
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _split_text_language_daypart(text: str) -> tuple[str, str]:
+    """
+    Split a combined OCR text token into (language, daypart).
+
+    "Chinese(Cantonese)News M—F7p-8p" → ("Chinese(Cantonese)News", "M-F 7p-8p")
+    "Chinese ROSBonus" → ("Chinese", "ROS Bonus")
+    """
+    ros = re.search(r'(?i)ros\s*bonus', text)
+    if ros:
+        return text[:ros.start()].strip(), "ROS Bonus"
+
+    # Day-range start: day letter → separator → day/month letter
+    # Handles M-F, M—F, M~Sat, Sa-Su, etc.
+    day_start = re.search(r'(?<![A-Za-z])[MWFSTRU][-—–~][MWFSTRU]', text)
+    if day_start:
+        lang = text[: day_start.start()].strip()
+        daypart = text[day_start.start():]
+        daypart = re.sub(r'[—–~]', '-', daypart)
+        daypart = re.sub(r'[»›]', '-', daypart)
+        return lang, daypart.strip()
+
+    return text.strip(), ""
+
+
+def _parse_page_text_fallback(
+    text: str,
+    pdf_path: str,
+    page_num: int,
+) -> Optional[CharmaineOrder]:
+    """
+    Text-based fallback for Charmaine PDFs where pdfplumber finds no tables.
+
+    Handles OCR-heavy or image-based PDFs. Parses the structured text
+    layout: header row with week columns, then data rows with rate + spot
+    counts.
+    """
+    MONTHS = r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)'
+    lines = text.split('\n')
+
+    # ── 1. Find column-header line (≥2 week date tokens) ──────────────────
+    header_idx = -1
+    week_labels: list[str] = []
+    duration_seconds = 30
+
+    for idx, raw_line in enumerate(lines):
+        # Normalize OCR artifact 'l' → '1' before a dash; em-dash → hyphen
+        cleaned = re.sub(r'\bl(?=[-—–])', '1', raw_line)
+        cleaned = re.sub(r'[—–]', '-', cleaned)
+        wk = re.findall(rf'\d{{1,2}}-{MONTHS}', cleaned)
+        if len(wk) >= 2:
+            header_idx = idx
+            week_labels = wk
+            dm = re.search(r':(\d+)\s*seconds?', raw_line, re.IGNORECASE)
+            if dm:
+                duration_seconds = int(dm.group(1))
+            break
+
+    if header_idx == -1:
+        return None
+
+    # ── 2. Parse metadata from lines above the header ─────────────────────
+    advertiser = ""
+    flight_start = ""
+    flight_end = ""
+    year = datetime.now().year
+
+    for raw_line in lines[:header_idx]:
+        ls = raw_line.strip()
+        yr_m = re.search(r'20\d{2}', ls)
+        if yr_m:
+            year = int(yr_m.group())
+        dm = re.search(r':(\d+)\s*seconds?', ls, re.IGNORECASE)
+        if dm and duration_seconds == 30:
+            duration_seconds = int(dm.group(1))
+        # Client / Advertiser field (handles "Client:", "Clien1z" OCR artifact)
+        m = re.match(r'(?:[Cc]lien[t1]|[Aa]dvertiser)\s*[:z\s]\s*(.+)', ls)
+        if m and not advertiser:
+            val = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', m.group(1).strip())
+            advertiser = val
+        # Flight dates: "5/5through6/2"
+        fm = re.search(r'(\d{1,2}/\d{1,2})\s*through\s*(\d{1,2}/\d{1,2})', ls)
+        if fm and not flight_start:
+            flight_start = _parse_flexible_date(fm.group(1), year)
+            flight_end   = _parse_flexible_date(fm.group(2), year)
+
+    # Title-line advertiser fallback
+    if not advertiser:
+        for raw_line in lines:
+            ls = raw_line.strip()
+            if ls and len(ls) > 3:
+                ls = re.sub(r'\s*[Mm]edia\s+[Cc]ampaign\b.*', '', ls).strip()
+                if ls:
+                    advertiser = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', ls)
+                break
+
+    # ── 3. Parse data rows ─────────────────────────────────────────────────
+    DATA_RE = re.compile(
+        r'\$\s*([\d,]+\.?\d*|-|[–—])\s+'
+        r'((?:[\d%\'"?]+\s+){2,}[\d%\'"?]+)'
+    )
+    SKIP_PREFIXES = (
+        'paid', 'bonuses', 'total', 'airtime', 'editing',
+        'amount', 'production', 'airtimecost',
+    )
+
+    parsed_lines: list[CharmaineLine] = []
+    pending: list[str] = []
+
+    for raw_line in lines[header_idx + 1:]:
+        ls = raw_line.strip()
+        if not ls or ls in ("'", '"', '—', '─', '–', '-'):
+            continue
+        ls_norm = ls.lower().replace(' ', '')
+        if any(ls_norm.startswith(p.replace(' ', '')) for p in SKIP_PREFIXES):
+            pending = []
+            continue
+
+        m = DATA_RE.search(ls)
+        if m:
+            rate_str  = m.group(1)
+            spots_raw = m.group(2).strip()
+            prefix    = ls[: m.start()].strip()
+            full_label = ' '.join(pending + ([prefix] if prefix else []))
+            pending = []
+
+            # Parse spot numbers; strip OCR noise like %, ', ?
+            spot_nums: list[int] = []
+            for tok in spots_raw.split():
+                digits = re.sub(r'\D', '', tok)
+                spot_nums.append(int(digits) if digits else 0)
+
+            n_weeks = len(week_labels)
+            if len(spot_nums) > n_weeks:
+                weekly = spot_nums[:n_weeks]
+                total  = spot_nums[-1]
+            elif len(spot_nums) == n_weeks:
+                weekly = spot_nums
+                total  = sum(spot_nums)
+            else:
+                weekly = spot_nums + [0] * (n_weeks - len(spot_nums))
+                total  = sum(spot_nums)
+
+            if total == 0 and all(s == 0 for s in weekly):
+                continue
+
+            is_bonus = (
+                'rosbonus' in full_label.lower().replace(' ', '')
+                or rate_str.strip() in ('-', '–', '—')
+            )
+            rate = parse_rate(rate_str)
+            lang, daypart = _split_text_language_daypart(full_label)
+
+            parsed_lines.append(CharmaineLine(
+                language=lang,
+                daypart=daypart,
+                is_bonus=is_bonus,
+                rate=rate,
+                weekly_spots=weekly,
+                total_spots=total,
+                total_amount=0.0,
+            ))
+        else:
+            if ls:
+                pending.append(ls)
+
+    if not parsed_lines:
+        return None
+
+    week_columns = parse_week_column_dates(week_labels, year)
+    market       = detect_market_from_text(text)
+
+    return CharmaineOrder(
+        advertiser=advertiser,
+        contact="",
+        email="",
+        campaign="",
+        station="Crossings TV",
+        languages="",
+        market=market,
+        duration_seconds=duration_seconds,
+        flight_start=flight_start,
+        flight_end=flight_end,
+        week_columns=week_columns,
+        lines=parsed_lines,
+        pdf_path=pdf_path,
+        year=year,
+        is_single_flight=False,
+    )
+
+
 def parse_charmaine_pdf(pdf_path: str) -> list[CharmaineOrder]:
     """
     Parse a Charmaine-style insertion order PDF.
-    
+
     Each page may represent a separate order (if multi-page with different
     markets or campaigns). Currently handles single-page orders.
-    
+
     Args:
         pdf_path: Path to the PDF file
-        
+
     Returns:
         List of CharmaineOrder objects (one per page/order)
     """
     orders: list[CharmaineOrder] = []
-    
+
     with pdfplumber.open(pdf_path) as pdf:
         for page_num, page in enumerate(pdf.pages):
             text = page.extract_text() or ""
             tables = page.extract_tables()
-            
-            # Skip pages with no meaningful content (e.g., signature audit pages)
+
+            # No tables: try text-based fallback (OCR-heavy or unstructured PDFs)
             if not tables:
+                order = _parse_page_text_fallback(text, pdf_path, page_num)
+                if order and order.lines:
+                    orders.append(order)
                 continue
             
             # Check if this page has actual order data
