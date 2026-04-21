@@ -422,12 +422,13 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
     @router.post("/fetch-report")
     async def fetch_report(
         contract_number: str = Form(...),
-        report_code: str = Form("R100018_C0000_placement_confirmation"),
+        report_code: str = Form("R100018_C18236_new_pc_with_contract_no"),
     ):
         """Fetch a report from Etere web by contract number and return as CSV download."""
         try:
             from web.etere_report_fetcher import fetch_etere_report
-            csv_bytes = fetch_etere_report(contract_number.strip(), report_code)
+            is_system = "True" if "C0000" in report_code else "False"
+            csv_bytes = fetch_etere_report(contract_number.strip(), report_code, is_system=is_system)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Report fetch error: {exc}")
 

@@ -17,7 +17,8 @@ def _ensure_path():
 
 def fetch_etere_report(
     contract_number,
-    report_code: str = "R100018_C0000_placement_confirmation",
+    report_code: str = "R100018_C18236_new_pc_with_contract_no",
+    is_system: str = "False",
     print_times: bool = True,
     use_date_range: bool = False,
     start_date: str = None,
@@ -51,7 +52,7 @@ def fetch_etere_report(
     today = date.today().strftime("%-m/%-d/%Y")
     params = {
         "reportCode":  report_code,
-        "isSystem":    "True",
+        "isSystem":    is_system,
         "reportType":  "DOWNLOADCSV",
         "customerid":  customer_id,
         "agencyid":    agency_id,
