@@ -161,6 +161,153 @@ class PolarisOrder:
 # MAIN PARSER
 # ─────────────────────────────────────────────────────────────────────────────
 
+def parse_polaris_pdf(path: str) -> PolarisOrder:
+    """
+    Parse a Polaris insertion order PDF file.
+
+    The PDF layout mirrors the Excel format: a header block followed by a
+    table with columns Media/MARKET | DAYS | Time | Programming |
+    Gross Rate per :30s | Unit | GROSS.
+    """
+    import pdfplumber
+
+    print(f"\n[POLARIS PARSER] Reading PDF: {path}")
+
+    with pdfplumber.open(str(path)) as pdf:
+        page = pdf.pages[0]
+        raw_text = page.extract_text() or ""
+        tables = page.extract_tables()
+
+    # ── Header fields from raw text ────────────────────────────────────────
+    advertiser   = ""
+    prepared_by  = ""
+    flight_raw   = ""
+    gross_budget = Decimal("0")
+
+    for line in raw_text.splitlines():
+        stripped = line.strip()
+        upper = stripped.upper()
+        if upper.startswith("ADVERTISER"):
+            advertiser = re.sub(r"(?i)^ADVERTISER\s*", "", stripped).strip()
+        elif upper.startswith("PREPARED BY"):
+            prepared_by = re.sub(r"(?i)^PREPARED BY:?\s*", "", stripped).strip()
+        elif upper.startswith("FLIGHT DATE"):
+            flight_raw = re.sub(r"(?i)^FLIGHT DATE:?\s*", "", stripped).strip()
+        elif "TOTAL GROSS BUDGET" in upper:
+            m = re.search(r"[\$]?([\d,]+\.?\d*)", stripped)
+            if m:
+                try:
+                    gross_budget = Decimal(m.group(1).replace(",", "")).quantize(
+                        Decimal("0.01"), ROUND_HALF_UP
+                    )
+                except Exception:
+                    pass
+
+    flight_start, flight_end = _parse_flight_dates(flight_raw)
+
+    print(f"[POLARIS PARSER] Advertiser:  {advertiser}")
+    print(f"[POLARIS PARSER] Prepared by: {prepared_by}")
+    print(f"[POLARIS PARSER] Flight:      {flight_start} – {flight_end}")
+    print(f"[POLARIS PARSER] Budget:      ${gross_budget:,}")
+
+    # ── Table rows ─────────────────────────────────────────────────────────
+    lines: List[PolarisLine] = []
+    current_market = "SFO"
+
+    if not tables:
+        raise ValueError(f"No tables found in Polaris PDF: {path}")
+
+    table = tables[0]
+    for row in table:
+        if row is None or all(c is None or str(c).strip() == "" for c in row):
+            continue
+
+        cells = [str(c or "").strip() for c in row]
+
+        # Market header cell (col 0) — update market, but still process row data
+        if cells[0] and "CROSSINGS TV" in cells[0].upper():
+            current_market = _detect_market(cells[0])
+
+        # Column-header row
+        if cells[1].upper() in ("DAYS", "DAY"):
+            continue
+
+        # TOTAL row signals end
+        if "TOTAL" in cells[4].upper() or "TOTAL" in cells[1].upper():
+            break
+
+        days_str  = cells[1]
+        time_str  = cells[2]
+        units_str = cells[5]
+
+        if not days_str or not time_str:
+            continue
+
+        # Program name may overflow into the rate cell — recombine and extract
+        program = cells[3]
+        rate_cell = cells[4]
+        m_rate = re.search(r'\$\s*([\d,]+(?:\.\d+)?)', rate_cell)
+        if not m_rate:
+            continue
+        if not program:
+            continue
+        overflow = rate_cell[:m_rate.start()].strip()
+        if overflow:
+            program = program + overflow
+
+        try:
+            rate = Decimal(m_rate.group(1).replace(",", "")).quantize(
+                Decimal("0.01"), ROUND_HALF_UP
+            )
+        except Exception:
+            continue
+
+        try:
+            total_spots = int(units_str.replace(",", "").strip() or "0")
+        except (TypeError, ValueError):
+            continue
+
+        if total_spots <= 0:
+            continue
+
+        days = to_etere(days_str)
+        line = PolarisLine(
+            days=days,
+            time_str=time_str,
+            program=program,
+            rate=rate,
+            total_spots=total_spots,
+            market=current_market,
+        )
+        lines.append(line)
+
+        rate_label = "BONUS" if line.is_bonus else f"${rate}"
+        print(f"[POLARIS PARSER]   {days:<8s}  {time_str:<15s}  "
+              f"{program:<30s}  {rate_label}/spot  {total_spots} spots  [{current_market}]")
+
+    if not lines:
+        raise ValueError(f"No lines parsed from Polaris PDF: {path}")
+
+    print(f"[POLARIS PARSER] Total: {len(lines)} lines, "
+          f"{sum(l.total_spots for l in lines)} spots")
+
+    return PolarisOrder(
+        advertiser=advertiser,
+        prepared_by=prepared_by,
+        flight_start=flight_start,
+        flight_end=flight_end,
+        gross_budget=gross_budget,
+        lines=lines,
+    )
+
+
+def parse_polaris_file(path: str) -> PolarisOrder:
+    """Dispatch to PDF or xlsx parser based on file extension."""
+    if str(path).lower().endswith(".pdf"):
+        return parse_polaris_pdf(path)
+    return parse_polaris_xlsx(path)
+
+
 def parse_polaris_xlsx(path: str) -> PolarisOrder:
     """
     Parse a Polaris insertion order Excel file.
@@ -317,7 +464,7 @@ if __name__ == "__main__":
         _sys.exit(1)
 
     try:
-        order = parse_polaris_xlsx(_sys.argv[1])
+        order = parse_polaris_file(_sys.argv[1])
 
         print("\n" + "=" * 70)
         print("POLARIS ORDER SUMMARY")
@@ -339,7 +486,6 @@ if __name__ == "__main__":
             print(f"  Program:  {ln.program}")
             print(f"  Rate:     {'BONUS' if ln.is_bonus else f'${ln.rate}'}")
             print(f"  Spots:    {ln.total_spots}")
-            print(f"  Blocks:   {ln.get_block_prefixes()}")
             print(f"  Desc:     {ln.get_description()}")
 
     except Exception as exc:

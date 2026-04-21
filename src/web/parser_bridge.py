@@ -72,7 +72,7 @@ _REGISTRY = {
     "XML":              ("browser_automation.parsers.aaaa_xml_parser",         "parse_aaaa_xml"),
     "PROSIO":           ("browser_automation.parsers.prosio_parser",           "parse_prosio_excel"),
     "DART":             ("browser_automation.parsers.dart_parser",             "parse_dart_xlsx"),
-    "POLARIS":          ("browser_automation.parsers.polaris_parser",          "parse_polaris_xlsx"),
+    "POLARIS":          ("browser_automation.parsers.polaris_parser",          "parse_polaris_file"),
 }
 
 _MISSING = object()
