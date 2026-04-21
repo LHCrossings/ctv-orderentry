@@ -6,7 +6,9 @@ Usage:
     uv run python scripts/list_etere_reports.py
 """
 
+import re
 import sys
+from html import unescape
 from pathlib import Path
 
 root = Path(__file__).parent.parent
@@ -14,12 +16,17 @@ for p in [str(root), str(root / "browser_automation")]:
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from bs4 import BeautifulSoup
 from browser_automation.etere_direct_client import (
     ETERE_WEB_URL,
     etere_web_login,
     etere_web_logout,
 )
+
+_LI_RE = re.compile(
+    r'<li[^>]+id="([^"]+)"[^>]+data-obj-rsystem="([^"]+)"[^>]*>(.*?)</li>',
+    re.DOTALL | re.IGNORECASE,
+)
+_TAG_RE = re.compile(r"<[^>]+>")
 
 
 def list_reports():
@@ -32,16 +39,13 @@ def list_reports():
     finally:
         etere_web_logout(session)
 
-    soup = BeautifulSoup(html, "html.parser")
-
-    # Each report leaf is an <li> with data-obj-rsystem attribute
     system_reports = []
     custom_reports = []
 
-    for li in soup.find_all("li", attrs={"data-obj-rsystem": True}):
-        rdl_file = li.get("id", "").strip()
-        is_system = li.get("data-obj-rsystem", "").strip()
-        title = li.get_text(strip=True)
+    for m in _LI_RE.finditer(html):
+        rdl_file = m.group(1).strip()
+        is_system = m.group(2).strip()
+        title = unescape(_TAG_RE.sub("", m.group(3))).strip()
         entry = (rdl_file, title)
         if is_system.lower() == "true":
             system_reports.append(entry)
