@@ -335,7 +335,7 @@ def normalize_language(language: str) -> str:
         return "Korean"
     elif 'hmong' in lang.lower():
         return "Hmong"
-    elif 'south asian' in lang.lower() or 'hindi' in lang.lower() or 'punjabi' in lang.lower():
+    elif 'southasian' in lang.lower().replace(' ', '') or 'hindi' in lang.lower() or 'punjabi' in lang.lower():
         return "South Asian"
     elif 'japanese' in lang.lower():
         return "Japanese"
