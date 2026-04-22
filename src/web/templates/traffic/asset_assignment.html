@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Assign Traffic — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 1200px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px 28px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+            margin-bottom: 20px;
+        }
+        .tool-card h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 16px;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+        .field-group { display: flex; flex-direction: column; gap: 5px; }
+        .field-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+        .field-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 9px 12px;
+            font-size: 0.9rem;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            color: var(--text-primary);
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .field-input:focus {
+            border-color: var(--nord10);
+            box-shadow: 0 0 0 3px rgba(94,129,172,0.15);
+        }
+        .run-btn {
+            padding: 9px 20px;
+            background: var(--nord10);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.15s;
+            white-space: nowrap;
+            height: 38px;
+        }
+        .run-btn:hover:not(:disabled) { background: var(--nord9); transform: translateY(-1px); }
+        .run-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+        .run-btn.apply { background: var(--nord14); }
+        .run-btn.apply:hover:not(:disabled) { background: #88c0a3; }
+
+        /* Contract info banner */
+        .contract-banner {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 14px 18px;
+            margin-top: 16px;
+            display: none;
+        }
+        .contract-banner.visible { display: block; }
+        .contract-code {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .contract-meta {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin-top: 3px;
+        }
+        .contract-lines-summary {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin-top: 6px;
+        }
+
+        /* Current rotation */
+        .rotation-section { margin-top: 16px; }
+        .rotation-section h3 {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 10px;
+        }
+        .rotation-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+        .rotation-code {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            min-width: 180px;
+            font-family: 'Courier New', monospace;
+        }
+        .rotation-bar-wrap {
+            flex: 1;
+            height: 8px;
+            background: var(--border-color);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .rotation-bar {
+            height: 100%;
+            background: var(--nord10);
+            border-radius: 4px;
+            transition: width 0.4s ease;
+        }
+        .rotation-pct {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            min-width: 65px;
+            text-align: right;
+        }
+
+        /* Two-column layout for search + builder */
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            align-items: start;
+        }
+        @media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
+
+        /* Duration pills */
+        .pill-group {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+        .dur-pill {
+            padding: 5px 12px;
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.15s;
+            font-family: 'Inter', sans-serif;
+        }
+        .dur-pill.active {
+            background: var(--nord10);
+            border-color: var(--nord10);
+            color: white;
+        }
+        .dur-pill:hover:not(.active) { border-color: var(--nord10); color: var(--nord10); }
+
+        /* Spot results table */
+        .spot-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 14px;
+            font-size: 0.85rem;
+        }
+        .spot-table th {
+            text-align: left;
+            padding: 6px 8px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .spot-table td {
+            padding: 7px 8px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        .spot-table tr:last-child td { border-bottom: none; }
+        .spot-table tr:hover td { background: var(--bg-secondary); }
+        .spot-code { font-family: 'Courier New', monospace; font-weight: 600; }
+        .spot-title { color: var(--text-muted); font-size: 0.8rem; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .dur-badge {
+            display: inline-block;
+            padding: 2px 7px;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+        }
+        .spot-results-empty {
+            text-align: center;
+            padding: 24px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        /* Rotation builder */
+        .rotation-builder { margin-top: 4px; }
+        .builder-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .builder-row:last-of-type { border-bottom: none; }
+        .builder-code {
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .builder-title {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .weight-input {
+            width: 62px;
+            text-align: center;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 5px 6px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            color: var(--text-primary);
+            outline: none;
+        }
+        .weight-input:focus { border-color: var(--nord10); box-shadow: 0 0 0 2px rgba(94,129,172,0.15); }
+        .weight-pct { font-size: 0.85rem; color: var(--text-muted); }
+        .remove-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 1rem;
+            padding: 2px 4px;
+            border-radius: 4px;
+            line-height: 1;
+        }
+        .remove-btn:hover { color: var(--nord11); background: rgba(191,97,106,0.1); }
+
+        .builder-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 14px;
+            margin-top: 4px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .weight-total {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+        .weight-total.ok { color: var(--nord14); }
+        .weight-total.warn { color: var(--nord13); }
+
+        .builder-actions { display: flex; gap: 8px; }
+
+        .balance-btn {
+            padding: 7px 14px;
+            background: transparent;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .balance-btn:hover { border-color: var(--nord10); color: var(--nord10); }
+
+        .empty-builder {
+            text-align: center;
+            padding: 28px 16px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            border: 1px dashed var(--border-color);
+            border-radius: 8px;
+        }
+
+        /* Result toast */
+        .result-toast {
+            display: none;
+            padding: 12px 18px;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-top: 14px;
+        }
+        .result-toast.ok { background: rgba(163,190,140,0.15); border: 1px solid var(--nord14); color: var(--nord14); display: block; }
+        .result-toast.err { background: rgba(191,97,106,0.1); border: 1px solid var(--nord11); color: var(--nord11); display: block; }
+
+        /* Search results dropdown */
+        .search-dropdown {
+            position: absolute;
+            z-index: 100;
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 4px 16px var(--shadow-color);
+            min-width: 360px;
+            max-height: 280px;
+            overflow-y: auto;
+        }
+        .dropdown-item {
+            padding: 10px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover { background: var(--bg-secondary); }
+        .dropdown-code { font-weight: 700; font-size: 0.88rem; color: var(--text-primary); }
+        .dropdown-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 1px; }
+        .search-wrap { position: relative; }
+    </style>
+</head>
+<body class="portal-body">
+<header class="portal-header">
+    <div class="header-inner">
+        <div class="header-left">
+            <a href="/" class="portal-logo">Control Room</a>
+            <span class="header-sep">/</span>
+            <a href="/traffic" class="header-crumb">Traffic</a>
+            <span class="header-sep">/</span>
+            <span class="header-crumb active">Assign Traffic</span>
+        </div>
+    </div>
+</header>
+
+<main>
+    <div class="page-title">Assign Traffic</div>
+
+    <!-- Contract search -->
+    <div class="tool-card">
+        <h2>Contract</h2>
+        <div class="input-row">
+            <div class="field-group search-wrap" style="flex:1; max-width:360px;">
+                <label class="field-label">Search</label>
+                <input id="contractSearch" class="field-input" placeholder="KCM 2606, Lexus…" autocomplete="off" />
+                <div id="contractDropdown" class="search-dropdown" style="display:none;"></div>
+            </div>
+            <button class="run-btn" onclick="searchContracts()">Search</button>
+        </div>
+
+        <div id="contractBanner" class="contract-banner">
+            <div class="contract-code" id="bannerCode"></div>
+            <div class="contract-meta" id="bannerMeta"></div>
+            <div class="contract-lines-summary" id="bannerLines"></div>
+
+            <div class="rotation-section" id="rotationSection" style="display:none;">
+                <h3>Current Rotation</h3>
+                <div id="rotationRows"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Spot library + Rotation builder -->
+    <div class="two-col">
+
+        <!-- Spot library -->
+        <div class="tool-card">
+            <h2>Spot Library</h2>
+            <div class="input-row">
+                <div class="field-group" style="flex:1;">
+                    <label class="field-label">Code starts with</label>
+                    <input id="spotSearch" class="field-input" placeholder="TYIW26TL, LEXUS…"
+                           onkeydown="if(event.key==='Enter') searchSpots()" />
+                </div>
+                <button class="run-btn" onclick="searchSpots()">Search</button>
+            </div>
+            <div class="pill-group" style="margin-top:12px;">
+                <span class="field-label" style="margin-right:4px;">Duration:</span>
+                <button class="dur-pill active" data-dur="" onclick="setDur(this, '')">All</button>
+                <button class="dur-pill" data-dur="450" onclick="setDur(this, 450)">:15</button>
+                <button class="dur-pill" data-dur="900" onclick="setDur(this, 900)">:30</button>
+                <button class="dur-pill" data-dur="1800" onclick="setDur(this, 1800)">:60</button>
+            </div>
+            <div id="spotResults">
+                <div class="spot-results-empty">Enter a code prefix above to search the media library.</div>
+            </div>
+        </div>
+
+        <!-- Rotation builder -->
+        <div class="tool-card">
+            <h2>Rotation</h2>
+            <div id="rotationBuilder">
+                <div class="empty-builder">Select spots from the library to build a rotation.</div>
+            </div>
+            <div id="builderToast" class="result-toast"></div>
+        </div>
+
+    </div>
+</main>
+
+<script>
+    let selectedContractId = null;
+    let selectedDur = '';
+    let selectedSpots = {};  // filmati_id → {id, code, title, duration_sec}
+
+    // ── Contract search ─────────────────────────────────────────────────────
+
+    const contractInput = document.getElementById('contractSearch');
+    const dropdown = document.getElementById('contractDropdown');
+
+    contractInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') searchContracts();
+    });
+    contractInput.addEventListener('input', () => {
+        if (!contractInput.value.trim()) dropdown.style.display = 'none';
+    });
+    document.addEventListener('click', e => {
+        if (!e.target.closest('.search-wrap')) dropdown.style.display = 'none';
+    });
+
+    async function searchContracts() {
+        const q = contractInput.value.trim();
+        if (!q) return;
+        const resp = await fetch(`/api/traffic/contract-search?q=${encodeURIComponent(q)}`);
+        const rows = await resp.json();
+        if (!rows.length) {
+            dropdown.innerHTML = '<div class="dropdown-item"><span class="dropdown-desc">No contracts found.</span></div>';
+        } else {
+            dropdown.innerHTML = rows.map(r => `
+                <div class="dropdown-item" onclick="selectContract(${r.id}, '${esc(r.code)}', '${esc(r.description)}')">
+                    <div class="dropdown-code">${esc(r.code)}</div>
+                    <div class="dropdown-desc">${esc(r.description || '')} &nbsp;·&nbsp; ${r.date_start} – ${r.date_end}</div>
+                </div>`).join('');
+        }
+        dropdown.style.display = 'block';
+    }
+
+    async function selectContract(id, code, description) {
+        selectedContractId = id;
+        contractInput.value = code;
+        dropdown.style.display = 'none';
+        document.getElementById('bannerCode').textContent = code;
+        document.getElementById('bannerMeta').textContent = description;
+        document.getElementById('contractBanner').classList.add('visible');
+        document.getElementById('bannerLines').textContent = 'Loading…';
+        document.getElementById('rotationSection').style.display = 'none';
+
+        const resp = await fetch(`/api/traffic/contract/${id}/assignment`);
+        if (!resp.ok) {
+            document.getElementById('bannerLines').textContent = 'Could not load contract details.';
+            return;
+        }
+        const data = await resp.json();
+        const hdr = data.header;
+        document.getElementById('bannerMeta').textContent =
+            `${hdr.description || ''} · ${hdr.date_start} – ${hdr.date_end}`;
+        document.getElementById('bannerLines').textContent =
+            `${data.total_spots} scheduled spots across ${data.lines.length} line${data.lines.length !== 1 ? 's' : ''}`;
+
+        renderRotation(data.rotation, data.total_spots);
+    }
+
+    function renderRotation(rotation, total) {
+        const section = document.getElementById('rotationSection');
+        const container = document.getElementById('rotationRows');
+        if (!rotation.length) { section.style.display = 'none'; return; }
+        const colors = ['var(--nord10)', 'var(--nord14)', 'var(--nord13)', 'var(--nord12)', 'var(--nord15)'];
+        container.innerHTML = rotation.map((r, i) => `
+            <div class="rotation-row">
+                <span class="rotation-code">${esc(r.code || '—')}</span>
+                <div class="rotation-bar-wrap">
+                    <div class="rotation-bar" style="width:${r.pct}%; background:${colors[i % colors.length]};"></div>
+                </div>
+                <span class="rotation-pct">${r.count} (${r.pct}%)</span>
+            </div>`).join('');
+        section.style.display = 'block';
+    }
+
+    // ── Spot library search ─────────────────────────────────────────────────
+
+    function setDur(el, val) {
+        document.querySelectorAll('.dur-pill').forEach(p => p.classList.remove('active'));
+        el.classList.add('active');
+        selectedDur = val;
+    }
+
+    async function searchSpots() {
+        const q = document.getElementById('spotSearch').value.trim();
+        if (!q) return;
+        const url = `/api/traffic/spots/search?q=${encodeURIComponent(q)}` +
+                    (selectedDur ? `&duration=${selectedDur}` : '');
+        const resp = await fetch(url);
+        const spots = await resp.json();
+        renderSpotResults(spots);
+    }
+
+    function renderSpotResults(spots) {
+        const el = document.getElementById('spotResults');
+        if (!spots.length) {
+            el.innerHTML = '<div class="spot-results-empty">No spots found.</div>';
+            return;
+        }
+        el.innerHTML = `
+            <table class="spot-table">
+                <thead>
+                    <tr>
+                        <th style="width:28px;"></th>
+                        <th>Code</th>
+                        <th>Title</th>
+                        <th>Dur</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${spots.map(s => `
+                    <tr>
+                        <td><input type="checkbox" ${selectedSpots[s.id] ? 'checked' : ''}
+                               onchange="toggleSpot(${s.id}, this.checked, ${JSON.stringify(s).replace(/"/g, '&quot;')})" /></td>
+                        <td class="spot-code">${esc(s.code)}</td>
+                        <td class="spot-title" title="${esc(s.title || '')}">${esc(s.title || '')}</td>
+                        <td><span class="dur-badge">:${s.duration_sec}</span></td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>`;
+    }
+
+    function toggleSpot(id, checked, spot) {
+        if (checked) {
+            selectedSpots[id] = spot;
+        } else {
+            delete selectedSpots[id];
+        }
+        renderBuilder();
+    }
+
+    // ── Rotation builder ────────────────────────────────────────────────────
+
+    function renderBuilder() {
+        const el = document.getElementById('rotationBuilder');
+        const spots = Object.values(selectedSpots);
+        if (!spots.length) {
+            el.innerHTML = '<div class="empty-builder">Select spots from the library to build a rotation.</div>';
+            return;
+        }
+        const defaultWeight = Math.floor(100 / spots.length);
+        el.innerHTML = `
+            <div id="builderRows">
+                ${spots.map((s, i) => `
+                <div class="builder-row" data-id="${s.id}">
+                    <div>
+                        <div class="builder-code">${esc(s.code)}</div>
+                        <div class="builder-title">${esc(s.title || '')}</div>
+                    </div>
+                    <input type="number" class="weight-input" min="1" max="100"
+                           value="${getWeight(s.id, defaultWeight)}"
+                           oninput="updateWeightTotal()"
+                           data-id="${s.id}" />
+                    <span class="weight-pct">%</span>
+                    <button class="remove-btn" onclick="removeSpot(${s.id})" title="Remove">✕</button>
+                </div>`).join('')}
+            </div>
+            <div class="builder-footer">
+                <span class="weight-total" id="weightTotal"></span>
+                <div class="builder-actions">
+                    <button class="balance-btn" onclick="balanceWeights()">Balance</button>
+                    <button class="run-btn apply" onclick="applyRotation()"
+                            ${!selectedContractId ? 'disabled title="Select a contract first"' : ''}>
+                        Apply Rotation
+                    </button>
+                </div>
+            </div>`;
+        updateWeightTotal();
+    }
+
+    // Per-spot weights survive re-renders
+    const weights = {};
+    function getWeight(id, defaultVal) {
+        return weights[id] !== undefined ? weights[id] : defaultVal;
+    }
+
+    function updateWeightTotal() {
+        let total = 0;
+        document.querySelectorAll('.weight-input').forEach(inp => {
+            const id = inp.dataset.id;
+            const v = parseInt(inp.value) || 0;
+            weights[id] = v;
+            total += v;
+        });
+        const el = document.getElementById('weightTotal');
+        if (!el) return;
+        el.textContent = `Total: ${total}%`;
+        el.className = 'weight-total ' + (total === 100 ? 'ok' : 'warn');
+    }
+
+    function balanceWeights() {
+        const inputs = document.querySelectorAll('.weight-input');
+        const n = inputs.length;
+        if (!n) return;
+        const base = Math.floor(100 / n);
+        const rem  = 100 - base * n;
+        inputs.forEach((inp, i) => {
+            const v = base + (i === 0 ? rem : 0);
+            inp.value = v;
+            weights[inp.dataset.id] = v;
+        });
+        updateWeightTotal();
+    }
+
+    function removeSpot(id) {
+        delete selectedSpots[id];
+        delete weights[id];
+        // Uncheck in the spot results table
+        document.querySelectorAll('.weight-input, input[type=checkbox]').forEach(el => {
+            if (el.dataset && el.dataset.id == id) el.checked = false;
+        });
+        // Also uncheck in spot table
+        document.querySelectorAll(`input[type=checkbox]`).forEach(cb => {
+            const row = cb.closest('tr');
+            if (row) {
+                const codeCell = row.querySelector('.spot-code');
+                if (codeCell && selectedSpots[id] === undefined) {
+                    // Try to match by re-checking state
+                }
+            }
+        });
+        renderBuilder();
+        // Re-render spot table to sync checkboxes
+        const spotRows = document.querySelectorAll('.spot-table tbody tr');
+        spotRows.forEach(tr => {
+            const cb = tr.querySelector('input[type=checkbox]');
+            if (cb) {
+                const onchg = cb.getAttribute('onchange') || '';
+                const match = onchg.match(/toggleSpot\((\d+)/);
+                if (match && parseInt(match[1]) === id) cb.checked = false;
+            }
+        });
+    }
+
+    async function applyRotation() {
+        if (!selectedContractId) {
+            showToast('err', 'No contract selected.');
+            return;
+        }
+        const spots = Object.values(selectedSpots).map(s => ({
+            id: s.id,
+            weight: weights[s.id] !== undefined ? weights[s.id] : Math.floor(100 / Object.keys(selectedSpots).length),
+        }));
+        if (!spots.length) {
+            showToast('err', 'No spots selected.');
+            return;
+        }
+        const total = spots.reduce((a, s) => a + s.weight, 0);
+        if (total <= 0) {
+            showToast('err', 'Weights must sum to more than 0.');
+            return;
+        }
+
+        const applyBtn = document.querySelector('.run-btn.apply');
+        applyBtn.disabled = true;
+        applyBtn.textContent = 'Applying…';
+        showToast('', '');
+
+        try {
+            const resp = await fetch(`/api/traffic/contract/${selectedContractId}/assign`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({spots}),
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.detail || 'Unknown error');
+            showToast('ok', `✓ Applied to ${data.spots_updated} spots across ${data.lines_updated} lines.`);
+            // Refresh current rotation display
+            const r2 = await fetch(`/api/traffic/contract/${selectedContractId}/assignment`);
+            const d2 = await r2.json();
+            renderRotation(d2.rotation, d2.total_spots);
+        } catch (e) {
+            showToast('err', `Error: ${e.message}`);
+        } finally {
+            applyBtn.disabled = false;
+            applyBtn.textContent = 'Apply Rotation';
+        }
+    }
+
+    function showToast(type, msg) {
+        const el = document.getElementById('builderToast');
+        el.className = 'result-toast' + (type ? ' ' + type : '');
+        el.textContent = msg;
+    }
+
+    function esc(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+</script>
+</body>
+</html>

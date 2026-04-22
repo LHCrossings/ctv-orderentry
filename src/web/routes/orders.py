@@ -9,7 +9,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
@@ -1250,5 +1250,230 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         finally:
             conn.close()
         return JSONResponse({"ok": True})
+
+    # ── Assign Traffic ─────────────────────────────────────────────────────────
+
+    @router.get("/traffic/assign-assets", response_class=HTMLResponse)
+    async def traffic_assign_assets_page(request: Request):
+        return templates.TemplateResponse(request, "traffic/asset_assignment.html")
+
+    @router.get("/api/traffic/contract-search")
+    async def traffic_contract_search(q: str = Query("")):
+        def _run():
+            from browser_automation.etere_direct_client import connect as _db_connect
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                term = f"%{q.upper()}%"
+                cur.execute("""
+                    SELECT TOP 20
+                        ct.ID_CONTRATTITESTATA                      AS id,
+                        ct.COD_CONTRATTO                            AS code,
+                        ct.DESCRIZIONE                              AS description,
+                        CONVERT(VARCHAR(10), ct.DATA_INIZIO,   101) AS date_start,
+                        CONVERT(VARCHAR(10), ct.DATA_TERMINE,  101) AS date_end
+                    FROM CONTRATTITESTATA ct
+                    WHERE UPPER(ct.COD_CONTRATTO) LIKE %s
+                       OR UPPER(ct.DESCRIZIONE)   LIKE %s
+                    ORDER BY ct.DATA_INIZIO DESC
+                """, (term, term))
+                return [dict(r) for r in cur.fetchall()]
+        try:
+            rows = await asyncio.get_event_loop().run_in_executor(None, _run)
+            return JSONResponse(rows)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.get("/api/traffic/contract/{contract_id}/assignment")
+    async def traffic_contract_assignment(contract_id: int):
+        def _run():
+            from browser_automation.etere_direct_client import connect as _db_connect
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                cur.execute("""
+                    SELECT COD_CONTRATTO AS code, DESCRIZIONE AS description,
+                           CONVERT(VARCHAR(10), DATA_INIZIO,  101) AS date_start,
+                           CONVERT(VARCHAR(10), DATA_TERMINE, 101) AS date_end
+                    FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = %d
+                """ % contract_id)
+                hdr = cur.fetchone()
+                if not hdr:
+                    return None
+
+                cur.execute("""
+                    SELECT cr.ID_CONTRATTIRIGHE AS line_id,
+                           cr.DESCRIZIONE       AS description,
+                           COUNT(tp.ID_TPALINSE) AS spot_count
+                    FROM CONTRATTIRIGHE cr
+                    JOIN trafficPalinse tpa ON tpa.id_contrattirighe = cr.ID_CONTRATTIRIGHE
+                    JOIN TPALINSE tp        ON tp.ID_TPALINSE = tpa.id_tpalinse
+                    WHERE cr.ID_CONTRATTITESTATA = %d
+                    GROUP BY cr.ID_CONTRATTIRIGHE, cr.DESCRIZIONE
+                    ORDER BY cr.ID_CONTRATTIRIGHE
+                """ % contract_id)
+                lines = [dict(r) for r in cur.fetchall()]
+
+                cur.execute("""
+                    SELECT f.ID_FILMATI AS filmati_id, f.COD_PROGRA AS code,
+                           f.DESCRIZIO  AS title,      f.DURATA     AS durata,
+                           COUNT(*)     AS count
+                    FROM TPALINSE tp
+                    JOIN trafficPalinse tpa ON tpa.id_tpalinse       = tp.ID_TPALINSE
+                    JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE  = tpa.id_contrattirighe
+                    LEFT JOIN FILMATI f     ON f.ID_FILMATI = tp.ID_FILMATI
+                    WHERE cr.ID_CONTRATTITESTATA = %d
+                    GROUP BY f.ID_FILMATI, f.COD_PROGRA, f.DESCRIZIO, f.DURATA
+                    ORDER BY COUNT(*) DESC
+                """ % contract_id)
+                rotation_rows = cur.fetchall()
+                total = sum(r["count"] for r in rotation_rows) if rotation_rows else 0
+
+                return {
+                    "header": dict(hdr),
+                    "lines": lines,
+                    "rotation": [
+                        {**dict(r), "pct": round(r["count"] / total * 100, 1) if total else 0}
+                        for r in rotation_rows
+                    ],
+                    "total_spots": total,
+                }
+
+        result = await asyncio.get_event_loop().run_in_executor(None, _run)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Contract not found")
+        return JSONResponse(result)
+
+    @router.get("/api/traffic/spots/search")
+    async def traffic_spots_search(
+        q: str = Query(""),
+        duration: Optional[int] = Query(None),
+    ):
+        if len(q) < 2:
+            return JSONResponse([])
+
+        def _run():
+            from browser_automation.etere_direct_client import connect as _db_connect
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                term = f"{q.upper()}%"
+                if duration is not None:
+                    cur.execute("""
+                        SELECT TOP 100 ID_FILMATI AS id, COD_PROGRA AS code,
+                               DESCRIZIO AS title, DURATA AS durata
+                        FROM FILMATI
+                        WHERE UPPER(COD_PROGRA) LIKE %s
+                          AND DURATA BETWEEN %s AND %s
+                          AND TIPO = 'T'
+                        ORDER BY COD_PROGRA
+                    """, (term, duration - 5, duration + 5))
+                else:
+                    cur.execute("""
+                        SELECT TOP 100 ID_FILMATI AS id, COD_PROGRA AS code,
+                               DESCRIZIO AS title, DURATA AS durata
+                        FROM FILMATI
+                        WHERE UPPER(COD_PROGRA) LIKE %s
+                          AND TIPO = 'T'
+                          AND DURATA <= 1800
+                        ORDER BY COD_PROGRA
+                    """, (term,))
+                rows = cur.fetchall()
+            for r in rows:
+                r["duration_sec"] = round(r["durata"] / 30) if r["durata"] else 0
+            return rows
+
+        try:
+            rows = await asyncio.get_event_loop().run_in_executor(None, _run)
+            return JSONResponse(rows)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.post("/api/traffic/contract/{contract_id}/assign")
+    async def traffic_contract_assign(contract_id: int, body: dict = Body(...)):
+        import random
+        spots = body.get("spots", [])
+        if not spots:
+            raise HTTPException(status_code=400, detail="No spots provided")
+        total_weight = sum(s["weight"] for s in spots)
+        if total_weight <= 0:
+            raise HTTPException(status_code=400, detail="Weights must be > 0")
+
+        def _run():
+            from collections import defaultdict
+            from browser_automation.etere_direct_client import (
+                connect as _db_connect,
+                etere_web_login,
+                etere_web_logout,
+                ETERE_WEB_URL,
+            )
+
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                cur.execute("""
+                    SELECT tpa.id_contrattirighe AS line_id,
+                           tp.ID_TPALINSE        AS tp_id
+                    FROM TPALINSE tp
+                    JOIN trafficPalinse tpa ON tpa.id_tpalinse       = tp.ID_TPALINSE
+                    JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE  = tpa.id_contrattirighe
+                    WHERE cr.ID_CONTRATTITESTATA = %d
+                    ORDER BY tp.DATA, tp.ORA
+                """ % contract_id)
+                all_rows = cur.fetchall()
+
+            if not all_rows:
+                raise ValueError("No scheduled spots found for this contract")
+
+            line_tp_map = defaultdict(list)
+            for r in all_rows:
+                line_tp_map[r["line_id"]].append(r["tp_id"])
+
+            total_spots = len(all_rows)
+            filmati_ids = [s["id"] for s in spots]
+
+            # Build weighted rotation list then shuffle
+            rotation_list = []
+            for s in spots:
+                count = round(total_spots * s["weight"] / total_weight)
+                rotation_list.extend([s["id"]] * count)
+            while len(rotation_list) < total_spots:
+                rotation_list.append(filmati_ids[0])
+            rotation_list = rotation_list[:total_spots]
+            random.shuffle(rotation_list)
+
+            session = etere_web_login()
+            lines_updated = spots_updated = 0
+            try:
+                session.post(
+                    f"{ETERE_WEB_URL}/Sales/MaterialAddToAssetListC",
+                    data={"idFilmatiList": ",".join(str(i) for i in filmati_ids), "idct": contract_id},
+                    headers={"X-Requested-With": "XMLHttpRequest"},
+                    timeout=30,
+                ).raise_for_status()
+
+                offset = 0
+                for line_id, tp_ids in line_tp_map.items():
+                    n = len(tp_ids)
+                    slice_ = rotation_list[offset: offset + n]
+                    offset += n
+                    session.post(
+                        f"{ETERE_WEB_URL}/Sales/MaterialAssignAssetRotation",
+                        data={
+                            "idp": ",".join(str(i) for i in tp_ids),
+                            "idf": ",".join(str(i) for i in slice_),
+                            "idcr": line_id,
+                        },
+                        headers={"X-Requested-With": "XMLHttpRequest"},
+                        timeout=30,
+                    ).raise_for_status()
+                    lines_updated += 1
+                    spots_updated += n
+            finally:
+                etere_web_logout(session)
+
+            return {"ok": True, "spots_updated": spots_updated, "lines_updated": lines_updated}
+
+        try:
+            result = await asyncio.get_event_loop().run_in_executor(None, _run)
+            return JSONResponse(result)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
 
     return router
