@@ -310,12 +310,23 @@ def _execute_order(
     est = estimates[0]
     print(f"[PARSE] ✓ {est.estimate_number} / {est.client} / {len(est.lines)} lines")
 
+    # True contract start = first week that has at least one spot on any line.
+    # The PDF flight_start is the order effective date, which often precedes airing.
+    flight_year = datetime.strptime(est.flight_start, "%m/%d/%Y").year
+    contract_start = est.flight_start
+    for i, ws in enumerate(est.week_starts):
+        if any(i < len(ln.weekly_spots) and ln.weekly_spots[i] > 0 for ln in est.lines):
+            contract_start = f"{ws}/{flight_year}"
+            break
+    if contract_start != est.flight_start:
+        print(f"[PARSE] ✓ Contract start: {contract_start} (first airing week; PDF says {est.flight_start})")
+
     # ── Contract header ──
     contract_number = etere.create_contract_header(
         customer_id=customer_id,
         code=order_code,
         description=description,
-        contract_start=est.flight_start,
+        contract_start=contract_start,
         contract_end=est.flight_end,
         customer_order_ref=est.estimate_number,
         notes=est.description,
@@ -332,7 +343,6 @@ def _execute_order(
         _upsert_customer(est.client, customer_id, market_code)
 
     # ── Contract lines ──
-    flight_year = datetime.strptime(est.flight_start, "%m/%d/%Y").year
     all_success = True
     line_count  = 0
 
