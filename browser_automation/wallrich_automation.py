@@ -414,10 +414,8 @@ def _build_etere_lines(
 
     etere_days = days_to_etere(ln.days)
 
-    # Time split: "7:00p-8:00p" → time_from="7:00p", time_to="8:00p"
-    time_parts = ln.time.split("-", 1)
-    time_from  = time_parts[0] if time_parts else ln.time
-    time_to    = time_parts[1] if len(time_parts) > 1 else ln.time
+    # Parse time to 24-hour format: "4:00p-7:00p" → ("16:00", "19:00")
+    time_from, time_to = EtereClient.parse_time_range(ln.time)
 
     language  = extract_language_from_program(ln.program) or ln.program
     spot_code = SPOT_CODE_BONUS if ln.is_bonus else SPOT_CODE_PAID
