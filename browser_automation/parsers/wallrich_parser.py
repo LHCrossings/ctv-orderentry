@@ -206,6 +206,8 @@ def _parse_data_lines(page1: str, n_weeks: int) -> List[WallrichLine]:
         parsed = _parse_data_line(stripped, n_weeks)
         if parsed:
             results.append(parsed)
+        elif stripped:
+            print(f"[WALLRICH] ⚠ Skipped line: {stripped!r}")
 
     return results
 
@@ -276,14 +278,21 @@ def _parse_data_line(line: str, n_weeks: int) -> Optional[WallrichLine]:
             program_fragment = leftover
         idx += 1
 
-    # --- Program name ---
+    # --- Program name (greedy — consume tokens until we hit the integer duration) ---
     if program_fragment:
         program = program_fragment
     else:
-        if idx >= len(parts):
+        program_parts = []
+        while idx < len(parts):
+            try:
+                int(parts[idx])
+                break  # found the duration
+            except ValueError:
+                program_parts.append(parts[idx])
+                idx += 1
+        if not program_parts:
             return None
-        program = parts[idx]
-        idx += 1
+        program = " ".join(program_parts)
 
     # --- Duration ---
     if idx >= len(parts):
