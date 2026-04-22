@@ -78,6 +78,7 @@ def get_language_details(csv_bytes: bytes) -> list:
 
     try:
         df = _file_processor.load_and_clean_data(tmp_path)
+        df.columns = df.columns.str.strip()
         _detected_counts, row_languages = _file_processor.detect_languages(df)
 
         # rowdescription stays unrenamed by load_and_clean_data
@@ -143,6 +144,12 @@ def run_eterebridge_pipeline(
 
         # 2. Load and clean: skip 3 header rows, rename Etere columns
         df = _file_processor.load_and_clean_data(tmp_path)
+
+        # Strip whitespace from any column names the rename left untouched
+        # (Etere CSVs sometimes have leading/trailing spaces in headers)
+        df.columns = df.columns.str.strip()
+        if "Media" not in df.columns and "bookingcode2" in df.columns:
+            df = df.rename(columns={"bookingcode2": "Media"})
 
         # 3. Language detection — auto, no stdin prompt
         _detected_counts, row_languages = _file_processor.detect_languages(df)

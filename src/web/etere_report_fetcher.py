@@ -55,14 +55,19 @@ def _enrich_bookingcode(csv_bytes: bytes, contract_number) -> bytes:
                 WHERE cr.ID_CONTRATTITESTATA = %d
                   AND f.COD_PROGRA IS NOT NULL
                   AND f.COD_PROGRA != ''
+                ORDER BY tpa.id_contrattirighe, tp.DATA, tp.ORA
             """ % contract_id)
             rows = cur.fetchall()
 
-        # Build lookup: (str(line_id), air_date, air_time) → spot_code
-        lookup: dict[tuple, str] = {}
+        # Build lookup: (str(line_id), air_date) → [spot_code, ...] ordered by ORA
+        # airtimep in the CSV is the program name, not the exact airtime, so we
+        # match positionally: Nth CSV row for a (line, date) pair → Nth DB spot.
+        from collections import defaultdict as _dd
+
+        lookup: dict[tuple, list] = _dd(list)
         for r in rows:
-            key = (str(r["line_id"]), r["air_date"], r["air_time"])
-            lookup[key] = r["spot_code"]
+            key = (str(r["line_id"]), r["air_date"])
+            lookup[key].append(r["spot_code"])
 
         if not lookup:
             return csv_bytes
@@ -87,20 +92,32 @@ def _enrich_bookingcode(csv_bytes: bytes, contract_number) -> bytes:
     data_block = "".join(lines[header_idx:])
 
     reader = csv.DictReader(io.StringIO(data_block))
-    if "bookingcode2" not in (reader.fieldnames or []):
+
+    # Build a stripped→original field name map to handle whitespace in headers
+    field_map = {(f.strip().lower() if f else ""): f for f in (reader.fieldnames or [])}
+    bc2_key = field_map.get("bookingcode2")      # original key in the row dict
+    id_key  = field_map.get("id_contrattirighe")
+    dt_key  = field_map.get("dateschedule")
+
+    if bc2_key is None:
         return csv_bytes
+
+    from collections import defaultdict as _dd2
+    consumed: dict[tuple, int] = _dd2(int)
 
     enriched_rows = []
     for row in reader:
-        line_id  = str(row.get("id_contrattirighe", "")).strip()
-        air_date = str(row.get("dateschedule", "")).strip()
-        air_time = str(row.get("airtimep", "")).strip()
-        current  = str(row.get("bookingcode2", "")).strip()
+        line_id  = str(row.get(id_key, "")).strip()  if id_key  else ""
+        air_date = str(row.get(dt_key, "")).strip()  if dt_key  else ""
+        current  = str(row.get(bc2_key, "")).strip()
 
         if current in ("", "NEED COPY"):
-            spot = lookup.get((line_id, air_date, air_time))
-            if spot:
-                row["bookingcode2"] = spot
+            key = (line_id, air_date)
+            codes = lookup.get(key, [])
+            idx   = consumed[key]
+            if idx < len(codes):
+                row[bc2_key] = codes[idx]
+            consumed[key] = idx + 1
 
         enriched_rows.append(row)
 

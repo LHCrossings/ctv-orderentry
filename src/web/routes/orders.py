@@ -1408,6 +1408,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 connect as _db_connect,
             )
 
+            filmati_ids = [s["id"] for s in spots]
+
             with _db_connect() as conn:
                 cur = conn.cursor(as_dict=True)
                 cur.execute("""
@@ -1421,6 +1423,12 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 """ % contract_id)
                 all_rows = cur.fetchall()
 
+                placeholders = ",".join(str(i) for i in filmati_ids)
+                cur.execute(
+                    f"SELECT ID_FILMATI, COD_PROGRA FROM FILMATI WHERE ID_FILMATI IN ({placeholders})"
+                )
+                filmati_cod_map = {r["ID_FILMATI"]: (r["COD_PROGRA"] or "") for r in cur.fetchall()}
+
             if not all_rows:
                 raise ValueError("No scheduled spots found for this contract")
 
@@ -1429,7 +1437,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 line_tp_map[r["line_id"]].append(r["tp_id"])
 
             total_spots = len(all_rows)
-            filmati_ids = [s["id"] for s in spots]
 
             # Build weighted rotation list then shuffle
             rotation_list = []
@@ -1443,33 +1450,55 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
             session = etere_web_login()
             lines_updated = spots_updated = 0
+            tp_assignments = []  # (tp_id, filmati_id) pairs
             try:
-                session.post(
+                r = session.post(
                     f"{ETERE_WEB_URL}/Sales/MaterialAddToAssetListC",
-                    data={"idFilmatiList": ",".join(str(i) for i in filmati_ids), "idct": contract_id},
+                    json={"idFilmatiList": filmati_ids, "idct": contract_id},
                     headers={"X-Requested-With": "XMLHttpRequest"},
                     timeout=30,
-                ).raise_for_status()
+                )
+                r.raise_for_status()
+                add_result = r.json()
+                if not add_result.get("IsOk"):
+                    raise ValueError(f"MaterialAddToAssetListC failed: {add_result}")
 
                 offset = 0
                 for line_id, tp_ids in line_tp_map.items():
                     n = len(tp_ids)
                     slice_ = rotation_list[offset: offset + n]
                     offset += n
-                    session.post(
+                    r = session.post(
                         f"{ETERE_WEB_URL}/Sales/MaterialAssignAssetRotation",
-                        data={
+                        json={
                             "idp": ",".join(str(i) for i in tp_ids),
                             "idf": ",".join(str(i) for i in slice_),
                             "idcr": line_id,
                         },
                         headers={"X-Requested-With": "XMLHttpRequest"},
                         timeout=30,
-                    ).raise_for_status()
+                    )
+                    r.raise_for_status()
+                    assign_result = r.json()
+                    if not assign_result.get("IsOk"):
+                        raise ValueError(f"MaterialAssignAssetRotation line {line_id} failed: {assign_result}")
                     lines_updated += 1
                     spots_updated += n
+                    tp_assignments.extend(zip(tp_ids, slice_))
             finally:
                 etere_web_logout(session)
+
+            # Sync COD_PROGRA so Windows app shows the correct rotation
+            if tp_assignments:
+                with _db_connect() as conn:
+                    cur = conn.cursor()
+                    for tp_id, filmati_id in tp_assignments:
+                        cod = filmati_cod_map.get(filmati_id, "")
+                        cur.execute(
+                            "UPDATE TPALINSE SET COD_PROGRA = %s WHERE ID_TPALINSE = %d",
+                            (cod, tp_id),
+                        )
+                    conn.commit()
 
             return {"ok": True, "spots_updated": spots_updated, "lines_updated": lines_updated}
 
