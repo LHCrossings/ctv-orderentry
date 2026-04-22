@@ -68,7 +68,7 @@ def fetch_etere_report(
     session = etere_web_login()
     try:
         url = f"{ETERE_WEB_URL}/reportsetere/report"
-        resp = session.get(url, params=params, timeout=60)
+        resp = session.get(url, params=params, timeout=180)
         resp.raise_for_status()
         return resp.content
     finally:
