@@ -239,16 +239,7 @@ def gather_wallrich_inputs(pdf_path: str) -> Optional[dict]:
     desc_input = input(f"  Description   [{default_desc}]: ").strip()
     description = desc_input or default_desc
 
-    # ── Separation confirmation ──
     print(f"\n[SEPARATION] PDF: {est.separation} min → Etere: {etere_sep}")
-    sep_input = input("  Override? (Enter to accept, or type e.g. '25 0 0'): ").strip()
-    if sep_input:
-        try:
-            parts = [int(x) for x in sep_input.split()]
-            if len(parts) == 3:
-                etere_sep = tuple(parts)
-        except ValueError:
-            print("  Invalid — using calculated value.")
 
     print("\n[CONFIRM] Ready to process.")
     confirm = input("  Start automation? [Y/n]: ").strip().lower()
