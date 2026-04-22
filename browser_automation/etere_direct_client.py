@@ -43,7 +43,15 @@ from typing import Optional
 
 import os
 
-import pyodbc  # noqa: F401 — caller imports this module for type hints
+try:
+    import pyodbc  # noqa: F401 — only needed on Windows for DB access
+except ImportError:
+    pyodbc = None
+
+try:
+    import pymssql as _pymssql
+except ImportError:
+    _pymssql = None
 try:
     from dotenv import load_dotenv
     _env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
@@ -53,38 +61,44 @@ except ImportError:
 
 # ── Connection ──────────────────────────────────────────────────────────────────
 
-DB_SERVER   = "etere-sql-server.tail98be.ts.net"
+DB_SERVER   = "100.85.38.72"
 DB_DATABASE = "Etere_crossing"
 DB_DRIVER   = "{SQL Server}"
 ETERE_WEB_URL = "http://100.102.206.113"
 
 
-def connect() -> pyodbc.Connection:
-    """Return a new pyodbc connection.
+def connect():
+    """Return a live DB connection (pymssql on Linux, pyodbc on Windows).
 
-    Credentials are read from environment variables (set in .env):
+    SQL auth credentials are read from .env:
         ETERE_DB_USER     — SQL Server login name
         ETERE_DB_PASSWORD — SQL Server login password
 
-    If neither is set, falls back to Windows Authentication (Trusted_Connection).
+    Falls back to Windows Authentication via pyodbc if no credentials set.
     """
     user = os.getenv("ETERE_DB_USER")
     password = os.getenv("ETERE_DB_PASSWORD")
 
-    if user and password:
-        return pyodbc.connect(
-            f"DRIVER={DB_DRIVER};"
-            f"SERVER={DB_SERVER};"
-            f"DATABASE={DB_DATABASE};"
-            f"UID={user};"
-            f"PWD={password};"
+    if user and password and _pymssql is not None:
+        return _pymssql.connect(
+            server=DB_SERVER,
+            user=user,
+            password=password,
+            database=DB_DATABASE,
         )
-    return pyodbc.connect(
-        f"DRIVER={DB_DRIVER};"
-        f"SERVER={DB_SERVER};"
-        f"DATABASE={DB_DATABASE};"
-        "Trusted_Connection=yes;"
-    )
+
+    if pyodbc is not None:
+        if user and password:
+            return pyodbc.connect(
+                f"DRIVER={DB_DRIVER};SERVER={DB_SERVER};"
+                f"DATABASE={DB_DATABASE};UID={user};PWD={password};"
+            )
+        return pyodbc.connect(
+            f"DRIVER={DB_DRIVER};SERVER={DB_SERVER};"
+            f"DATABASE={DB_DATABASE};Trusted_Connection=yes;"
+        )
+
+    raise RuntimeError("No DB driver available — install pymssql or pyodbc")
 
 
 def etere_web_login():
