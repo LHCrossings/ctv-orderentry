@@ -555,9 +555,10 @@
         if (!raw) { renderSpotResults(lastSpotResults); return; }
         const serials = raw.split(/[\s,]+/).filter(Boolean).map(s => s.toUpperCase());
         const filtered = lastSpotResults.filter(s => {
-            const m = /(\d+)$/.exec((s.code || '').toUpperCase());
+            const haystack = ((s.code || '') + ' ' + (s.title || '')).toUpperCase();
+            const m = /(\d+)/.exec(s.title || '');
             const serial = m ? m[1] : '';
-            return serials.some(sn => serial === sn || (s.code || '').toUpperCase().includes(sn));
+            return serials.some(sn => serial === sn || haystack.includes(sn));
         });
         renderSpotResults(filtered);
     }
