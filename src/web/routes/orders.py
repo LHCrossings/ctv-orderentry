@@ -1479,16 +1479,18 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             lines_updated = spots_updated = 0
             tp_assignments = []  # (tp_id, filmati_id) pairs
             try:
-                r = session.post(
-                    f"{ETERE_WEB_URL}/Sales/MaterialAddToAssetListC",
-                    json={"idFilmatiList": filmati_ids, "idct": contract_id},
-                    headers={"X-Requested-With": "XMLHttpRequest"},
-                    timeout=30,
-                )
-                r.raise_for_status()
-                add_result = r.json()
-                if not add_result.get("IsOk"):
-                    raise ValueError(f"MaterialAddToAssetListC failed: {add_result}")
+                # Etere only processes the first element per call — add one filmati at a time
+                for fid in filmati_ids:
+                    r = session.post(
+                        f"{ETERE_WEB_URL}/Sales/MaterialAddToAssetListC",
+                        json={"idFilmatiList": [fid], "idct": contract_id},
+                        headers={"X-Requested-With": "XMLHttpRequest"},
+                        timeout=30,
+                    )
+                    r.raise_for_status()
+                    add_result = r.json()
+                    if not add_result.get("IsOk"):
+                        raise ValueError(f"MaterialAddToAssetListC failed for {fid}: {add_result}")
 
                 offset = 0
                 for line_id, tp_ids in line_tp_map.items():
