@@ -229,7 +229,7 @@ def _parse_single_line(line_text):
     # (\d+) - Total spots
     # (\$[\d,]+\.\d{2}) - Total amount
 
-    pattern = r'^(\d+)\s+(ADD|CHANGE|CANCEL)\s+(\d{1,2}/\d{1,2}/\d{4})\s+(\S+)\s+([X0\s]+?)\s+(\d{1,2}/\d{1,2}/\d{4}\s*-\s*\d{1,2}/\d{1,2}/\d{4})\s+(\d{1,2}:\d{2}\s*[AP]M\s*-\s*\d{1,2}:\d{2}\s*[AP]M)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\$[\d,]+\.\d{2})\s+(\d+)\s+(\$[\d,]+\.\d{2})'
+    pattern = r'^(\d+)\s+(ADD|CHANGE|CANCEL)\s*(\d{1,2}/\d{1,2}/\d{4})\s+(\S+)\s+([X0\s]+?)\s+(\d{1,2}/\d{1,2}/\d{4}\s*-\s*\d{1,2}/\d{1,2}/\d{4})\s+(\d{1,2}:\d{2}\s*[AP]M\s*-\s*\d{1,2}:\d{2}\s*[AP]M)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\$[\d,]+\.\d{2})\s+(\d+)\s+(\$[\d,]+\.\d{2})'
 
     match = re.search(pattern, line_text)
 
