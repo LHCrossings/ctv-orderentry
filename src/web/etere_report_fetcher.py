@@ -169,10 +169,18 @@ def fetch_media_library(code_prefix: str) -> list[dict]:
         etere_web_logout(session)
 
     text = raw.decode("utf-8-sig", errors="replace")
+
+    # Detect HTML response (report failed / redirected to login or error page)
+    stripped = text.lstrip()
+    if stripped.startswith("<") or "<!DOCTYPE" in text[:200]:
+        raise RuntimeError(
+            f"Etere report returned HTML instead of CSV. "
+            f"First 300 chars: {text[:300]!r}"
+        )
+
     lines = text.splitlines(keepends=True)
 
     # Skip any preamble rows — find first row that looks like a CSV header
-    # (heuristic: first row with more than 1 comma-separated non-numeric field)
     header_idx = 0
     for i, ln in enumerate(lines):
         parts = next(csv.reader([ln]), [])
