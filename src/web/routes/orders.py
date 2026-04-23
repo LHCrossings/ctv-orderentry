@@ -1362,20 +1362,20 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         SELECT ID_FILMATI AS id, COD_PROGRA AS code,
                                DESCRIZIO AS title, DURATA AS durata
                         FROM FILMATI
-                        WHERE UPPER(COD_PROGRA) LIKE %s
+                        WHERE UPPER(DESCRIZIO) LIKE %s
                           AND DURATA BETWEEN %s AND %s
                           AND TIPO = 'T'
-                        ORDER BY COD_PROGRA
+                        ORDER BY DESCRIZIO
                     """, (term, duration - 5, duration + 5))
                 else:
                     cur.execute("""
                         SELECT ID_FILMATI AS id, COD_PROGRA AS code,
                                DESCRIZIO AS title, DURATA AS durata
                         FROM FILMATI
-                        WHERE UPPER(COD_PROGRA) LIKE %s
+                        WHERE UPPER(DESCRIZIO) LIKE %s
                           AND TIPO = 'T'
                           AND DURATA <= 1800
-                        ORDER BY COD_PROGRA
+                        ORDER BY DESCRIZIO
                     """, (term,))
                 rows = cur.fetchall()
             for r in rows:
