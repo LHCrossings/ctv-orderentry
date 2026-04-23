@@ -1,6 +1,6 @@
 """
-Interactive test: fetch R100177_C0000_MediaData from Etere and show raw output.
-Run on Windows: python scripts/test_media_report.py
+Interactive test: probe R100177_C0000_MediaData variants.
+Run: python scripts/test_media_report.py
 """
 import sys
 from pathlib import Path
@@ -13,34 +13,35 @@ from browser_automation.etere_direct_client import ETERE_WEB_URL, etere_web_logi
 
 CODE_PREFIX = "lexus"
 
-params = {
-    "reportCode": "R100177_C0000_MediaData",
-    "isSystem":   "True",
-    "reportType": "DOWNLOADCSV",
-    "customerid": 0,
-    "agencyid":   0,
-    "filters[0]": CODE_PREFIX,
-    "filters[1]": "1",
-    "filters[2]": "",
-    "filters[3]": "",
-    "filters[4]": "",
-    "filters[5]": "",
-}
+VARIANTS = [
+    {"isSystem": "False", "reportCode": "R100177_C0000_MediaData"},
+    {"isSystem": "True",  "reportCode": "R100177_C0000_MediaData"},
+    {"isSystem": "false", "reportCode": "R100177_C0000_MediaData"},
+    {"isSystem": "true",  "reportCode": "R100177_C0000_MediaData"},
+    {"isSystem": "False", "reportCode": "R100177_C0000_mediadata"},
+]
 
-print(f"Connecting to {ETERE_WEB_URL} ...")
 session = etere_web_login()
 try:
-    url = f"{ETERE_WEB_URL}/reportsetere/report"
-    resp = session.get(url, params=params, timeout=60)
-    print(f"HTTP {resp.status_code}  Content-Type: {resp.headers.get('Content-Type')}")
-    raw = resp.content
+    for v in VARIANTS:
+        params = {
+            "reportCode": v["reportCode"],
+            "isSystem":   v["isSystem"],
+            "reportType": "DOWNLOADCSV",
+            "customerid": 0,
+            "agencyid":   0,
+            "filters[0]": CODE_PREFIX,
+            "filters[1]": "1",
+            "filters[2]": "",
+            "filters[3]": "",
+            "filters[4]": "",
+            "filters[5]": "",
+        }
+        url = f"{ETERE_WEB_URL}/reportsetere/report"
+        resp = session.get(url, params=params, timeout=30)
+        text = resp.content.decode("utf-8-sig", errors="replace")
+        is_html = text.lstrip().startswith("<")
+        snippet = text[:80].replace("\r\n", " ").replace("\n", " ")
+        print(f"isSystem={v['isSystem']:6s} code={v['reportCode']:30s} -> {resp.status_code} html={is_html} | {snippet!r}")
 finally:
     etere_web_logout(session)
-
-text = raw.decode("utf-8-sig", errors="replace")
-
-print("\n--- FIRST 800 CHARS OF RESPONSE ---")
-print(repr(text[:800]))
-print("\n--- FIRST 5 LINES (readable) ---")
-for ln in text.splitlines()[:5]:
-    print(ln)

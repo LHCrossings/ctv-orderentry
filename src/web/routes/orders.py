@@ -1431,32 +1431,37 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 )
                 filmati_cod_map = {r["ID_FILMATI"]: (r["COD_PROGRA"] or "") for r in cur.fetchall()}
 
-                # Snapshot current pool before we add new spots — used later to purge stale entries.
-                # Discover the actual FK column name first (Etere versions differ).
-                old_pool_ids: set = set()
-                try:
-                    cur.execute("""
-                        SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-                        WHERE TABLE_NAME = 'CONTRATTIFILMATI'
-                          AND COLUMN_NAME NOT IN ('ID_FILMATI','ID_CONTRATTIFILMATI')
-                        ORDER BY ORDINAL_POSITION
-                    """)
-                    fk_row = cur.fetchone()
-                    fk_col = fk_row["COLUMN_NAME"] if fk_row else None
-                    if fk_col:
-                        cur.execute(
-                            f"SELECT ID_FILMATI FROM CONTRATTIFILMATI WHERE {fk_col} = {contract_id}"
-                        )
-                        old_pool_ids = {r["ID_FILMATI"] for r in cur.fetchall()}
-                except Exception:
-                    pass  # non-fatal — pool cleanup will be skipped this run
-
             if not all_rows:
                 raise ValueError("No scheduled spots found for this contract")
 
             line_tp_map = defaultdict(list)
             for r in all_rows:
                 line_tp_map[r["line_id"]].append(r["tp_id"])
+
+            # Snapshot current CONTRATTIFILMATI pool (keyed by ID_CONTRATTIRIGHE, not header ID)
+            line_id_placeholders = ",".join(str(i) for i in line_tp_map.keys())
+            old_pool_ids: set = set()
+            try:
+                with _db_connect() as conn2:
+                    cur2 = conn2.cursor(as_dict=True)
+                    cur2.execute(
+                        f"SELECT DISTINCT ID_FILMATI FROM CONTRATTIFILMATI"
+                        f" WHERE ID_CONTRATTIRIGHE IN ({line_id_placeholders})"
+                    )
+                    old_pool_ids = {r["ID_FILMATI"] for r in cur2.fetchall()}
+            except Exception:
+                pass  # non-fatal — pool cleanup will be skipped this run
+
+            # Calculate rotation % per filmati (sum = 100, last spot absorbs rounding remainder)
+            perc_map: dict = {}
+            remaining = 100
+            for i, s in enumerate(spots):
+                if i == len(spots) - 1:
+                    perc_map[s["id"]] = remaining
+                else:
+                    p = round(s["weight"] / total_weight * 100)
+                    perc_map[s["id"]] = p
+                    remaining -= p
 
             total_spots = len(all_rows)
 
@@ -1523,7 +1528,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             finally:
                 etere_web_logout(session)
 
-            # Sync COD_PROGRA so Windows app shows the correct rotation
+            # Sync COD_PROGRA and PERCROTATION so the native app reflects the rotation
             if tp_assignments:
                 with _db_connect() as conn:
                     cur = conn.cursor()
@@ -1533,6 +1538,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             "UPDATE TPALINSE SET COD_PROGRA = %s WHERE ID_TPALINSE = %d",
                             (cod, tp_id),
                         )
+                    # Update PERCROTATION per (line, filmati) so native app shows correct %
+                    for line_id in line_tp_map.keys():
+                        for filmati_id, perc in perc_map.items():
+                            cur.execute(
+                                "UPDATE CONTRATTIFILMATI SET PERCROTATION = %d"
+                                " WHERE ID_CONTRATTIRIGHE = %d AND ID_FILMATI = %d",
+                                (perc, line_id, filmati_id),
+                            )
                     conn.commit()
 
             return {"ok": True, "spots_updated": spots_updated, "lines_updated": lines_updated}
