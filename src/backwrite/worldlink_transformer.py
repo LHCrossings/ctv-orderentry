@@ -126,7 +126,7 @@ def merge_revision_lines(prev_lines: list, rev_lines: list) -> list:
     CANCEL  → remove line; CHANGE/ADD → full replacement (parser gives complete data).
     Untouched prev lines keep action=None (no yellow).
     """
-    prev_by_no = {l["line_number"]: dict(l) for l in prev_lines}
+    prev_by_no = {ln["line_number"]: dict(ln) for ln in prev_lines}
     for line in rev_lines:
         no     = line.get("line_number")
         action = line.get("action", "ADD")
@@ -134,7 +134,7 @@ def merge_revision_lines(prev_lines: list, rev_lines: list) -> list:
             prev_by_no.pop(no, None)
         else:
             prev_by_no[no] = dict(line)
-    return sorted(prev_by_no.values(), key=lambda l: l.get("line_number", 0))
+    return sorted(prev_by_no.values(), key=lambda ln: ln.get("line_number", 0))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
