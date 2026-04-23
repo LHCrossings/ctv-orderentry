@@ -1283,7 +1283,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             rows = await asyncio.get_running_loop().run_in_executor(None, _run)
             return JSONResponse(rows)
         except Exception as exc:
-            import traceback; traceback.print_exc()
             raise HTTPException(status_code=500, detail=str(exc))
 
     @router.get("/api/traffic/contract/{contract_id}/assignment")
