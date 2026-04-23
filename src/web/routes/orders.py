@@ -1353,8 +1353,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             return JSONResponse([])
 
         def _run():
-            from src.web.etere_report_fetcher import fetch_media_library
             from browser_automation.etere_direct_client import connect as _db_connect
+            from src.web.etere_report_fetcher import fetch_media_library
 
             rows = fetch_media_library(q)
 
