@@ -584,7 +584,7 @@
                     <tr>
                         <td><input type="checkbox" ${selectedSpots[s.id] ? 'checked' : ''}
                                onchange="toggleSpot(${s.id}, this.checked, ${JSON.stringify(s).replace(/"/g, '&quot;')})" /></td>
-                        <td class="spot-code">${esc(s.agency_code || s.code)}</td>
+                        <td class="spot-code">${esc(s.agency_code || '')}</td>
                         <td class="spot-title" title="${esc(s.title || '')}">${esc(s.title || '')}</td>
                         <td><span class="dur-badge">:${s.duration_sec}</span></td>
                     </tr>`).join('')}
