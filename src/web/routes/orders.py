@@ -1280,7 +1280,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 """, (term, term))
                 return [dict(r) for r in cur.fetchall()]
         try:
-            rows = await asyncio.get_event_loop().run_in_executor(None, _run)
+            rows = await asyncio.get_running_loop().run_in_executor(None, _run)
             return JSONResponse(rows)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
@@ -1339,7 +1339,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     "total_spots": total,
                 }
 
-        result = await asyncio.get_event_loop().run_in_executor(None, _run)
+        result = await asyncio.get_running_loop().run_in_executor(None, _run)
         if result is None:
             raise HTTPException(status_code=404, detail="Contract not found")
         return JSONResponse(result)
@@ -1383,7 +1383,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             return rows
 
         try:
-            rows = await asyncio.get_event_loop().run_in_executor(None, _run)
+            rows = await asyncio.get_running_loop().run_in_executor(None, _run)
             return JSONResponse(rows)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
@@ -1505,7 +1505,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             return {"ok": True, "spots_updated": spots_updated, "lines_updated": lines_updated}
 
         try:
-            result = await asyncio.get_event_loop().run_in_executor(None, _run)
+            result = await asyncio.get_running_loop().run_in_executor(None, _run)
             return JSONResponse(result)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
