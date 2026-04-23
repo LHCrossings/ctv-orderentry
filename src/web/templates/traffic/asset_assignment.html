@@ -409,6 +409,7 @@
                 <div class="field-group" style="flex:1;">
                     <label class="field-label">Code starts with</label>
                     <input id="spotSearch" class="field-input" placeholder="TYIW26TL, LEXUS…"
+                           oninput="debouncedSearch()"
                            onkeydown="if(event.key==='Enter') searchSpots()" />
                 </div>
                 <button class="run-btn" onclick="searchSpots()">Search</button>
@@ -531,6 +532,11 @@
     }
 
     let lastSpotResults = [];
+    let _spotSearchTimer = null;
+    function debouncedSearch() {
+        clearTimeout(_spotSearchTimer);
+        _spotSearchTimer = setTimeout(searchSpots, 350);
+    }
 
     async function searchSpots() {
         const q = document.getElementById('spotSearch').value.trim();
@@ -575,7 +581,7 @@
                     <tr>
                         <td><input type="checkbox" ${selectedSpots[s.id] ? 'checked' : ''}
                                onchange="toggleSpot(${s.id}, this.checked, ${JSON.stringify(s).replace(/"/g, '&quot;')})" /></td>
-                        <td class="spot-code">${esc(s.code)}</td>
+                        <td class="spot-code">${esc(s.agency_code || s.code)}</td>
                         <td class="spot-title" title="${esc(s.title || '')}">${esc(s.title || '')}</td>
                         <td><span class="dur-badge">:${s.duration_sec}</span></td>
                     </tr>`).join('')}

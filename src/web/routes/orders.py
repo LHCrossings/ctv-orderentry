@@ -1357,25 +1357,33 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             with _db_connect() as conn:
                 cur = conn.cursor(as_dict=True)
                 term = f"{q.upper()}%"
+                agency_subq = (
+                    "(SELECT TOP 1 tp.COD_PROGRA FROM TPALINSE tp"
+                    " WHERE tp.ID_FILMATI = f.ID_FILMATI"
+                    " AND tp.COD_PROGRA IS NOT NULL AND tp.COD_PROGRA <> ''"
+                    " ORDER BY tp.ID_TPALINSE DESC) AS agency_code"
+                )
                 if duration is not None:
-                    cur.execute("""
-                        SELECT TOP 100 ID_FILMATI AS id, COD_PROGRA AS code,
-                               DESCRIZIO AS title, DURATA AS durata
-                        FROM FILMATI
-                        WHERE UPPER(COD_PROGRA) LIKE %s
-                          AND DURATA BETWEEN %s AND %s
-                          AND TIPO = 'T'
-                        ORDER BY COD_PROGRA
+                    cur.execute(f"""
+                        SELECT TOP 100 f.ID_FILMATI AS id, f.COD_PROGRA AS code,
+                               f.DESCRIZIO AS title, f.DURATA AS durata,
+                               {agency_subq}
+                        FROM FILMATI f
+                        WHERE UPPER(f.COD_PROGRA) LIKE %s
+                          AND f.DURATA BETWEEN %s AND %s
+                          AND f.TIPO = 'T'
+                        ORDER BY f.COD_PROGRA
                     """, (term, duration - 5, duration + 5))
                 else:
-                    cur.execute("""
-                        SELECT TOP 100 ID_FILMATI AS id, COD_PROGRA AS code,
-                               DESCRIZIO AS title, DURATA AS durata
-                        FROM FILMATI
-                        WHERE UPPER(COD_PROGRA) LIKE %s
-                          AND TIPO = 'T'
-                          AND DURATA <= 1800
-                        ORDER BY COD_PROGRA
+                    cur.execute(f"""
+                        SELECT TOP 100 f.ID_FILMATI AS id, f.COD_PROGRA AS code,
+                               f.DESCRIZIO AS title, f.DURATA AS durata,
+                               {agency_subq}
+                        FROM FILMATI f
+                        WHERE UPPER(f.COD_PROGRA) LIKE %s
+                          AND f.TIPO = 'T'
+                          AND f.DURATA <= 1800
+                        ORDER BY f.COD_PROGRA
                     """, (term,))
                 rows = cur.fetchall()
             for r in rows:
