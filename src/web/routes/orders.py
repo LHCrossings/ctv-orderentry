@@ -1465,15 +1465,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
             total_spots = len(all_rows)
 
-            # Build weighted rotation list then shuffle
+            # Build chronologically-interleaved rotation list (Bresenham-style)
+            # e.g. 50/50 → A,B,A,B,...  70/30 → A,A,A,B,A,A,A,B,...
             rotation_list = []
-            for s in spots:
-                count = round(total_spots * s["weight"] / total_weight)
-                rotation_list.extend([s["id"]] * count)
-            while len(rotation_list) < total_spots:
-                rotation_list.append(filmati_ids[0])
-            rotation_list = rotation_list[:total_spots]
-            random.shuffle(rotation_list)
+            accum = {s["id"]: 0.0 for s in spots}
+            for _ in range(total_spots):
+                for s in spots:
+                    accum[s["id"]] += s["weight"] / total_weight
+                chosen = max(accum, key=accum.__getitem__)
+                rotation_list.append(chosen)
+                accum[chosen] -= 1.0
 
             session = etere_web_login()
             lines_updated = spots_updated = 0
