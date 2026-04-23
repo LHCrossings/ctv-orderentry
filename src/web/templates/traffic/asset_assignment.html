@@ -535,6 +535,7 @@
     }
 
     let lastSpotResults = [];
+    let currentFilteredSpots = [];
     let _spotSearchTimer = null;
     function debouncedSearch() {
         clearTimeout(_spotSearchTimer);
@@ -570,16 +571,24 @@
     }
 
     function renderSpotResults(spots) {
+        currentFilteredSpots = spots;
         const el = document.getElementById('spotResults');
         if (!spots.length) {
             el.innerHTML = '<div class="spot-results-empty">No spots found.</div>';
             return;
         }
+        const allChecked  = spots.length > 0 && spots.every(s => selectedSpots[s.id]);
+        const someChecked = spots.some(s => selectedSpots[s.id]);
         el.innerHTML = `
             <table class="spot-table">
                 <thead>
                     <tr>
-                        <th style="width:28px;"></th>
+                        <th style="width:28px;">
+                            <input type="checkbox" id="selectAllChk"
+                                   onchange="toggleSelectAll(this.checked)"
+                                   ${allChecked ? 'checked' : ''}
+                                   title="Select all visible" />
+                        </th>
                         <th>Code</th>
                         <th>Title</th>
                         <th>Dur</th>
@@ -596,13 +605,29 @@
                     </tr>`).join('')}
                 </tbody>
             </table>`;
+        const chk = document.getElementById('selectAllChk');
+        if (chk && someChecked && !allChecked) chk.indeterminate = true;
+    }
+
+    function toggleSelectAll(checked) {
+        currentFilteredSpots.forEach(s => {
+            if (checked) selectedSpots[s.id] = s;
+            else delete selectedSpots[s.id];
+        });
+        renderSpotResults(currentFilteredSpots);
+        renderBuilder();
     }
 
     function toggleSpot(id, checked, spot) {
-        if (checked) {
-            selectedSpots[id] = spot;
-        } else {
-            delete selectedSpots[id];
+        if (checked) selectedSpots[id] = spot;
+        else delete selectedSpots[id];
+        // Sync the select-all checkbox state
+        const allChk = document.getElementById('selectAllChk');
+        if (allChk) {
+            const allChecked  = currentFilteredSpots.every(s => selectedSpots[s.id]);
+            const someChecked = currentFilteredSpots.some(s => selectedSpots[s.id]);
+            allChk.checked       = allChecked;
+            allChk.indeterminate = someChecked && !allChecked;
         }
         renderBuilder();
     }
