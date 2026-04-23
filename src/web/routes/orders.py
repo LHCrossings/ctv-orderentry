@@ -1354,37 +1354,33 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
         def _run():
             from browser_automation.etere_direct_client import connect as _db_connect
-            from src.web.etere_report_fetcher import fetch_media_library
-
-            rows = fetch_media_library(q)
-
-            # Apply duration filter post-report (report has no duration filter)
-            if duration is not None:
-                rows = [r for r in rows if abs(r["duration_sec"] - duration) <= 5]
-
-            # Look up FILMATI ID by col1 (code) so the assign endpoint can use it
-            codes = [r["col1"] for r in rows if r["col1"]]
-            id_map: dict[str, int] = {}
-            if codes:
-                placeholders = ",".join(["%s"] * len(codes))
-                with _db_connect() as conn:
-                    cur = conn.cursor(as_dict=True)
-                    cur.execute(
-                        f"SELECT ID_FILMATI, COD_PROGRA FROM FILMATI WHERE COD_PROGRA IN ({placeholders})",
-                        codes,
-                    )
-                    for r in cur.fetchall():
-                        id_map[r["COD_PROGRA"]] = r["ID_FILMATI"]
-
-            result = []
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                term = f"{q.upper()}%"
+                if duration is not None:
+                    cur.execute("""
+                        SELECT ID_FILMATI AS id, COD_PROGRA AS code,
+                               DESCRIZIO AS title, DURATA AS durata
+                        FROM FILMATI
+                        WHERE UPPER(COD_PROGRA) LIKE %s
+                          AND DURATA BETWEEN %s AND %s
+                          AND TIPO = 'T'
+                        ORDER BY COD_PROGRA
+                    """, (term, duration - 5, duration + 5))
+                else:
+                    cur.execute("""
+                        SELECT ID_FILMATI AS id, COD_PROGRA AS code,
+                               DESCRIZIO AS title, DURATA AS durata
+                        FROM FILMATI
+                        WHERE UPPER(COD_PROGRA) LIKE %s
+                          AND TIPO = 'T'
+                          AND DURATA <= 1800
+                        ORDER BY COD_PROGRA
+                    """, (term,))
+                rows = cur.fetchall()
             for r in rows:
-                result.append({
-                    "id":           id_map.get(r["col1"], 0),
-                    "code":         r["col1"],
-                    "title":        r["col2"],
-                    "duration_sec": r["duration_sec"],
-                })
-            return result
+                r["duration_sec"] = round(r["durata"] / 30) if r["durata"] else 0
+            return rows
 
         try:
             rows = await asyncio.get_running_loop().run_in_executor(None, _run)
