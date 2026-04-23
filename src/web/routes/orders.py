@@ -1264,7 +1264,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             with _db_connect() as conn:
                 cur = conn.cursor(as_dict=True)
                 term = f"%{q.upper()}%"
-                cur.execute("""
+                id_clause = "OR ct.ID_CONTRATTITESTATA = %d" % int(q) if q.isdigit() else ""
+                cur.execute(f"""
                     SELECT TOP 20
                         ct.ID_CONTRATTITESTATA                      AS id,
                         ct.COD_CONTRATTO                            AS code,
@@ -1274,6 +1275,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     FROM CONTRATTITESTATA ct
                     WHERE UPPER(ct.COD_CONTRATTO) LIKE %s
                        OR UPPER(ct.DESCRIZIONE)   LIKE %s
+                       {id_clause}
                     ORDER BY ct.DATA_INIZIO DESC
                 """, (term, term))
                 return [dict(r) for r in cur.fetchall()]
