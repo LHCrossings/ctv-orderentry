@@ -101,12 +101,15 @@ def connect():
     raise RuntimeError("No DB driver available — install pymssql or pyodbc")
 
 
-def etere_web_login():
+def etere_web_login(retries: int = 3, retry_delay: float = 12.0):
     """Log into the Etere web UI headlessly using requests.
 
     Reads credentials from credentials.env (same as Selenium login).
     Returns a live requests.Session ready to pass to EtereDirectClient.set_http_session().
     The session carries all cookies and will reuse them across calls.
+
+    When the license seat limit is hit, automatically retries up to `retries` times
+    with `retry_delay` seconds between attempts (orphaned sessions expire quickly).
 
     Raises RuntimeError if login fails or no cookies are returned.
     """
@@ -117,6 +120,7 @@ def etere_web_login():
 
     import sys
     import os
+    import time as _time
     _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if _root not in sys.path:
         sys.path.insert(0, _root)
@@ -125,39 +129,54 @@ def etere_web_login():
     username, password = load_credentials()
     login_url = f"{ETERE_WEB_URL}/index/login"
 
-    session = _req.Session()
+    last_error = None
+    for attempt in range(1 + retries):
+        session = _req.Session()
 
-    # GET the login page first — picks up any pre-auth cookies
-    resp = session.get(login_url, timeout=15)
-    resp.raise_for_status()
+        # GET the login page first — picks up any pre-auth cookies
+        resp = session.get(login_url, timeout=15)
+        resp.raise_for_status()
 
-    # POST credentials — AJAX form, field names are Login.UserName / Login.Password
-    resp = session.post(
-        login_url,
-        data={
-            "Login.UserName": username,
-            "Login.Password": password,
-            "Login.Domain":   "ctvetere.local",
-        },
-        headers={
-            "X-Requested-With": "XMLHttpRequest",
-            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-            "Referer": login_url,
-        },
-        timeout=15,
-        allow_redirects=True,
-    )
-    resp.raise_for_status()
+        # POST credentials — AJAX form, field names are Login.UserName / Login.Password
+        resp = session.post(
+            login_url,
+            data={
+                "Login.UserName": username,
+                "Login.Password": password,
+                "Login.Domain":   "ctvetere.local",
+            },
+            headers={
+                "X-Requested-With": "XMLHttpRequest",
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "Referer": login_url,
+            },
+            timeout=15,
+            allow_redirects=True,
+        )
+        resp.raise_for_status()
 
-    # Parse login response — Etere returns JSON: {"IsOk": true/false, "Message": "..."}
-    try:
-        login_result = resp.json()
-    except Exception:
-        login_result = {}
+        # Parse login response — Etere returns JSON: {"IsOk": true/false, "Message": "..."}
+        try:
+            login_result = resp.json()
+        except Exception:
+            login_result = {}
 
-    if not login_result.get("IsOk", False):
+        if login_result.get("IsOk", False):
+            break
+
         msg = login_result.get("Message", "Login failed (unknown reason)")
-        raise RuntimeError(f"Etere login failed: {msg}")
+        last_error = msg
+
+        # Retry only for license-exhaustion errors — all others fail immediately
+        is_license_error = "license" in msg.lower() or "exceeded" in msg.lower()
+        if not is_license_error or attempt >= retries:
+            raise RuntimeError(f"Etere login failed: {msg}")
+
+        print(
+            f"[LOGIN] License seats exhausted (attempt {attempt + 1}/{1 + retries}) — "
+            f"retrying in {retry_delay:.0f}s..."
+        )
+        _time.sleep(retry_delay)
 
     if not dict(session.cookies):
         raise RuntimeError(

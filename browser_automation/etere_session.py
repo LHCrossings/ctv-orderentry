@@ -211,23 +211,23 @@ class EtereSession:
         
         choice = input("\nClose browser now? (Y/n): ").strip().lower()
         
+        # Always log out to release the Etere license seat — regardless of whether
+        # the browser window stays open (orphaned sessions exhaust concurrent-user limit).
+        try:
+            from browser_automation.etere_client import EtereClient
+            etere = EtereClient(self.driver)
+            etere.logout()
+            self.is_logged_in = False
+        except Exception as e:
+            print(f"[LOGOUT] ⚠ Logout failed: {e}")
+
         if choice in ['', 'y', 'yes']:
-            # Logout before closing
-            try:
-                from browser_automation.etere_client import EtereClient
-                etere = EtereClient(self.driver)
-                etere.logout()
-            except Exception as e:
-                print(f"[LOGOUT] ⚠ Logout failed: {e}")
-            
             print("[BROWSER] Closing browser...")
             self.driver.quit()
             self.driver = None
-            self.is_logged_in = False
             print("[BROWSER] ✓ Browser closed")
         else:
-            print("[BROWSER] Browser left open - close manually when done")
-            print("[BROWSER] ⚠ Remember to logout manually to prevent session conflicts")
+            print("[BROWSER] Browser left open (logged out — license seat released)")
     
     def __enter__(self):
         """
