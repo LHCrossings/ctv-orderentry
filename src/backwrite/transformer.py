@@ -1024,17 +1024,10 @@ def _sc_lines_from_io(io_detail: dict) -> List[dict]:
         if isinstance(weekly_spots, list) and len(weekly_spots) > 7:
             weekly_spots = []
 
-        # Weeks + per-week spot count
-        if weekly_spots:
-            weeks = len(weekly_spots)
-            non_zero = [w for w in weekly_spots if w]
-            spw   = round(sum(non_zero) / len(non_zero)) if non_zero else (total_spots or 0)
-            per   = "Wk"
-        else:
-            # Order-basis: one flight total, not a weekly cadence
-            spw   = total_spots
-            per   = "Order"
-            weeks = 1
+        # Always order-basis: total spots × 1 order
+        spw   = total_spots
+        per   = "Order"
+        weeks = 1
 
         # Per-line dates when available (e.g. SCWA per-month); fall back to order flight
         line_start = ln.get("start_date") or flight_start
@@ -1145,26 +1138,30 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
         sc_lines = _sc_lines_from_io(io_detail)
         print(f"[backwrite] IO-sourced SC lines: {len(sc_lines)}")
     else:
-        groups: Dict[int, List[SpotRow]] = OrderedDict()
+        # Group by description: Etere splits one IO line across months/weeks into
+        # separate contract lines with the same description — merge them back.
+        groups: Dict[str, List[SpotRow]] = OrderedDict()
         for s in spots:
-            groups.setdefault(s.line_id, []).append(s)
+            key = _strip_line_prefix(s.row_description)
+            groups.setdefault(key, []).append(s)
 
         sc_lines: List[dict] = []
-        for idx, (line_id, group) in enumerate(groups.items()):
+        for idx, (desc, group) in enumerate(groups.items()):
             d_start     = min(s.air_date for s in group)
             d_end       = max(s.air_date for s in group)
             total_spots = len(group)
-            weeks       = max(1, round((d_end - d_start).days / 7) + 1)
-            spw         = max(1, round(total_spots / weeks))
+            spw         = total_spots
+            weeks       = 1
+            per         = "Order"
             first       = group[0]
             sc_lines.append({
                 "line_number":      idx + 1,
                 "date_range_start": d_start.strftime("%m/%d/%Y"),
                 "date_range_end":   d_end.strftime("%m/%d/%Y"),
                 "spot_count":       spw,
-                "per":              "Wk",
+                "per":              per,
                 "weeks":            weeks,
-                "line_description": _strip_line_prefix(first.row_description),
+                "line_description": desc,
                 "type":             "BNS" if first.gross_rate == 0 else "COM",
                 "length":           f":{first.duration_s}",
                 "gross_rate":       first.gross_rate,
