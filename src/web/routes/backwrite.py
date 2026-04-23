@@ -144,6 +144,23 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             except Exception:
                 pass
 
+    @router.post("/worldlink/read-prev-excel")
+    async def worldlink_read_prev_excel(prev_excel: UploadFile = File(...)):
+        """Read contract number and revision from a prior WorldLink backwrite Excel."""
+        try:
+            data = await prev_excel.read()
+            import io as _io  # noqa: I001
+            from openpyxl import load_workbook
+            from backwrite.worldlink_transformer import read_sc_lines_from_excel
+            _, prev_rev = read_sc_lines_from_excel(data)
+            wb = load_workbook(_io.BytesIO(data), data_only=True)
+            ws = wb["Sales Confirmation"]
+            contract_val = ws.cell(9, 12).value
+            contract_number = str(int(contract_val)) if contract_val else ""
+            return JSONResponse({"contract_number": contract_number, "revision": prev_rev})
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Could not read Excel: {exc}")
+
     @router.post("/worldlink/generate")
     async def worldlink_generate(
         io_file:         UploadFile = File(...),

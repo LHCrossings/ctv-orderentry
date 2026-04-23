@@ -997,11 +997,19 @@ document.getElementById('wl-io-input').addEventListener('change', function () {
     if (this.files[0]) handleWlFile(this.files[0]);
 });
 
-document.getElementById('wl-prev-input').addEventListener('change', function () {
-    if (this.files[0]) {
-        wlPrevFile = this.files[0];
-        document.getElementById('wl-prev-filename').textContent = this.files[0].name;
-    }
+document.getElementById('wl-prev-input').addEventListener('change', async function () {
+    if (!this.files[0]) return;
+    wlPrevFile = this.files[0];
+    document.getElementById('wl-prev-filename').textContent = this.files[0].name;
+    try {
+        const fd = new FormData();
+        fd.append('prev_excel', wlPrevFile, wlPrevFile.name);
+        const resp = await fetch('/backwrite/worldlink/read-prev-excel', { method: 'POST', body: fd });
+        if (resp.ok) {
+            const d = await resp.json();
+            if (d.contract_number) document.getElementById('wl-contract').value = d.contract_number;
+        }
+    } catch (_) { /* non-critical — user can still type it */ }
 });
 
 async function handleWlFile(file) {
