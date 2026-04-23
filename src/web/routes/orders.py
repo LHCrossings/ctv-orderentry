@@ -1537,8 +1537,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     for tp_id, filmati_id in tp_assignments:
                         cod = filmati_cod_map.get(filmati_id, "")
                         cur.execute(
-                            "UPDATE TPALINSE SET COD_PROGRA = %s WHERE ID_TPALINSE = %d",
-                            (cod, tp_id),
+                            "UPDATE TPALINSE SET COD_PROGRA = %s, ID_FILMATI = %d"
+                            " WHERE ID_TPALINSE = %d",
+                            (cod, filmati_id, tp_id),
                         )
                     # Update PERCROTATION per (line, filmati) so native app shows correct %
                     for line_id in line_tp_map.keys():
