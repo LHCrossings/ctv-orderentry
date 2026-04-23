@@ -455,11 +455,14 @@
     const contractInput = document.getElementById('contractSearch');
     const dropdown = document.getElementById('contractDropdown');
 
+    let _contractSearchTimer = null;
     contractInput.addEventListener('keydown', e => {
-        if (e.key === 'Enter') searchContracts();
+        if (e.key === 'Enter') { clearTimeout(_contractSearchTimer); searchContracts(); }
     });
     contractInput.addEventListener('input', () => {
-        if (!contractInput.value.trim()) dropdown.style.display = 'none';
+        if (!contractInput.value.trim()) { dropdown.style.display = 'none'; return; }
+        clearTimeout(_contractSearchTimer);
+        _contractSearchTimer = setTimeout(searchContracts, 350);
     });
     document.addEventListener('click', e => {
         if (!e.target.closest('.search-wrap')) dropdown.style.display = 'none';
