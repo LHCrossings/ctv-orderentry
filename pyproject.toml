@@ -17,7 +17,6 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "pandas>=3.0.2",
     "pymssql>=2.3.13",
-    "anthropic>=0.40.0",
 ]
 
 [project.optional-dependencies]

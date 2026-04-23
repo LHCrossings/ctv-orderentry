@@ -381,19 +381,6 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
                     except Exception:
                         pass
 
-                # Claude fallback when no registered parser handles this IO format
-                if io_detail is None:
-                    try:
-                        from web.io_parser_claude import parse_io_with_claude
-                        io_detail = parse_io_with_claude(io_bytes)
-                        if io_detail:
-                            print(f"[IO] Claude fallback: {len(io_detail.get('lines', []))} lines")
-                        else:
-                            print("[IO] Claude fallback returned nothing — SC will use CSV grouping")
-                    except Exception as _claude_exc:
-                        print(f"[IO] Claude fallback error: {_claude_exc}")
-                        io_detail = None
-
         # Server-side fallback: auto-inject gross_up_rates when IO indicates net rates
         # and the user didn't manually provide them via the UI.
         if (io_detail and io_detail.get("rates_are_net")
