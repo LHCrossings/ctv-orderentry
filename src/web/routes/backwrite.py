@@ -146,7 +146,8 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
 
     @router.post("/worldlink/generate")
     async def worldlink_generate(
-        io_file:         UploadFile,
+        io_file:         UploadFile = File(...),
+        prev_excel:      Optional[UploadFile] = File(None),
         contract_number: str = Form(""),
         revision:        str = Form("0"),
     ):
@@ -163,10 +164,23 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
                 if _p not in _sys.path:
                     _sys.path.insert(0, _p)
             from browser_automation.parsers.worldlink_parser import parse_worldlink_pdf  # noqa: I001
-            from backwrite.worldlink_transformer import generate_worldlink_excel
+            from backwrite.worldlink_transformer import (  # noqa: I001
+                generate_worldlink_excel,
+                merge_revision_lines,
+                read_sc_lines_from_excel,
+            )
             io_data = parse_worldlink_pdf(tmp_path)
             if not io_data:
                 raise HTTPException(status_code=400, detail="Could not parse WorldLink PDF")
+
+            # Revision: merge prev Excel lines with PDF revision lines; auto-increment revision #
+            order_type = io_data.get("order_type", "new")
+            if prev_excel and getattr(prev_excel, "filename", None) and order_type != "new":
+                prev_bytes = await prev_excel.read()
+                prev_lines, prev_rev = read_sc_lines_from_excel(prev_bytes)
+                io_data["lines"] = merge_revision_lines(prev_lines, io_data.get("lines", []))
+                revision = str(prev_rev + 1)
+
             user_inputs = {
                 "contract_number": contract_number,
                 "revision":        int(revision) if str(revision).isdigit() else 0,

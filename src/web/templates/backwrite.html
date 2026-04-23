@@ -487,6 +487,21 @@
         <div class="status-msg" id="wl-upload-status"></div>
     </div>
 
+    <!-- WL Previous Excel upload (revisions only, hidden until revision detected) -->
+    <div class="bw-card" id="wl-prev-card" style="display:none">
+        <h2>Step 1b — Upload Previous Excel (Revision)</h2>
+        <p style="color:#bf616a;font-size:0.85rem;margin-bottom:12px;">
+            This PDF is a revision. Upload the most recent Excel for this order so the unchanged lines can be carried forward. The revision number will be auto-incremented from the previous file.
+        </p>
+        <div class="upload-zone" id="wl-prev-zone">
+            <input type="file" id="wl-prev-input" accept=".xlsx" />
+            <div class="upload-icon">📊</div>
+            <p>Drop previous Excel here</p>
+            <p>or click to browse</p>
+            <div class="file-name" id="wl-prev-filename"></div>
+        </div>
+    </div>
+
     <!-- WL Preview (hidden until parsed) -->
     <div class="bw-card" id="wl-preview-card" style="display:none">
         <h2>Order Preview</h2>
@@ -955,6 +970,7 @@ bwForm.addEventListener('submit', async e => {
 // ── WorldLink mode ────────────────────────────────────────────────────────────
 
 let wlIoFile = null;
+let wlPrevFile = null;
 
 function setMode(mode) {
     document.getElementById('mode-standard').classList.toggle('active', mode === 'standard');
@@ -980,6 +996,13 @@ document.getElementById('wl-io-input').addEventListener('change', function () {
     if (this.files[0]) handleWlFile(this.files[0]);
 });
 
+document.getElementById('wl-prev-input').addEventListener('change', function () {
+    if (this.files[0]) {
+        wlPrevFile = this.files[0];
+        document.getElementById('wl-prev-filename').textContent = this.files[0].name;
+    }
+});
+
 async function handleWlFile(file) {
     wlIoFile = file;
     document.getElementById('wl-io-filename').textContent = file.name;
@@ -995,8 +1018,12 @@ async function handleWlFile(file) {
         showStatus(status, 'Parsed successfully', 'info');
         renderWlPreview(d);
         document.getElementById('wl-preview-card').style.display = '';
-        document.getElementById('wl-form-card').style.display    = '';
-        document.getElementById('wl-revision').value = d.revision_hint ?? 0;
+        const isRevision = d.order_type && d.order_type !== 'new';
+        document.getElementById('wl-prev-card').style.display  = isRevision ? '' : 'none';
+        document.getElementById('wl-form-card').style.display  = '';
+        document.getElementById('wl-revision').value           = d.revision_hint ?? 0;
+        document.getElementById('wl-revision').readOnly        = isRevision;
+        if (isRevision) document.getElementById('wl-revision').title = 'Auto-incremented from previous Excel';
     } catch (e) {
         showStatus(status, 'Error: ' + e.message, 'error');
     }
@@ -1038,6 +1065,7 @@ document.getElementById('wl-generate-btn').addEventListener('click', async funct
 
     const fd = new FormData();
     fd.append('io_file',         wlIoFile, wlIoFile.name);
+    if (wlPrevFile) fd.append('prev_excel', wlPrevFile, wlPrevFile.name);
     fd.append('contract_number', document.getElementById('wl-contract').value);
     fd.append('revision',        document.getElementById('wl-revision').value);
 

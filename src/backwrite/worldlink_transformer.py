@@ -66,6 +66,78 @@ def generate_worldlink_excel(io_data: dict, user_inputs: dict) -> bytes:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Revision helpers — read back a prior Excel and merge with revision PDF lines
+# ──────────────────────────────────────────────────────────────────────────────
+
+def read_sc_lines_from_excel(xlsx_bytes: bytes):
+    """Read order lines and revision number from a prior Sales Confirmation tab.
+
+    Returns (lines: list[dict], prev_revision: int).
+    Lines have action=None (untouched — no yellow highlight).
+    """
+    wb = load_workbook(io.BytesIO(xlsx_bytes), data_only=True)
+    ws = wb["Sales Confirmation"]
+
+    rev_val = ws.cell(10, 12).value
+    try:
+        prev_revision = int(rev_val or 0)
+    except (TypeError, ValueError):
+        prev_revision = 0
+
+    def _d(v):
+        if v is None:
+            return ""
+        if hasattr(v, "month"):
+            return f"{v.month}/{v.day}/{v.year}"
+        return str(v)
+
+    lines = []
+    r = 14
+    while r <= ws.max_row:
+        line_no_val = ws.cell(r, 2).value
+        try:
+            line_no = int(line_no_val)
+        except (TypeError, ValueError):
+            break
+        rate = 0.0
+        try:
+            rate = float(ws.cell(r, 15).value or 0)
+        except (TypeError, ValueError):
+            pass
+        dur_raw = ws.cell(r, 14).value or ":30"
+        lines.append({
+            "line_number":   line_no,
+            "action":        None,
+            "start_date":    _d(ws.cell(r, 4).value),
+            "end_date":      _d(ws.cell(r, 5).value),
+            "spots":         int(ws.cell(r, 6).value or 0),
+            "rate":          rate,
+            "program_label": str(ws.cell(r, 8).value or ""),
+            "duration":      str(dur_raw).lstrip(":"),
+        })
+        r += 1
+
+    return lines, prev_revision
+
+
+def merge_revision_lines(prev_lines: list, rev_lines: list) -> list:
+    """Merge revision PDF lines into the full prev line set.
+
+    CANCEL  → remove line; CHANGE/ADD → full replacement (parser gives complete data).
+    Untouched prev lines keep action=None (no yellow).
+    """
+    prev_by_no = {l["line_number"]: dict(l) for l in prev_lines}
+    for line in rev_lines:
+        no     = line.get("line_number")
+        action = line.get("action", "ADD")
+        if action == "CANCEL":
+            prev_by_no.pop(no, None)
+        else:
+            prev_by_no[no] = dict(line)
+    return sorted(prev_by_no.values(), key=lambda l: l.get("line_number", 0))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -288,7 +360,7 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
         _wc(ws, r, 5,  end_dt,   "mm-dd-yy")
         _wc(ws, r, 6,  spots)
         _wc(ws, r, 7,  "week")
-        _wc(ws, r, 8,  _fmt_program(line))
+        _wc(ws, r, 8,  line.get("program_label") or _fmt_program(line))
         _wc(ws, r, 9,  weeks)
         _wc(ws, r, 10, "COM")
         _wc(ws, r, 12, f"=F{r}*I{r}")
