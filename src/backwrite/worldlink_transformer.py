@@ -319,6 +319,23 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
     monthly_rev   = _compute_monthly_revenue(lines)
     sorted_months = sorted(monthly_rev.keys())
 
+    # Broadcast months touched by ADD/CHANGE lines — drives yellow fill on revisions
+    affected_months: set = set()
+    if is_revision:
+        for line in lines:
+            if line.get("action", "ADD") not in ("ADD", "CHANGE"):
+                continue
+            rate  = float(line.get("rate", 0) or 0)
+            spw   = line.get("spots", 0) or 0
+            start = _parse_date_str(line.get("start_date", ""))
+            end   = _parse_date_str(line.get("end_date",   ""))
+            if not start or not end or spw == 0 or rate == 0:
+                continue
+            wk = start
+            while wk <= end:
+                affected_months.add(compute_broadcast_month(wk))
+                wk += timedelta(days=7)
+
     # Scan for "MONTHLY BREAKDOWN" title (position shifts with each inserted row)
     mbr_title = None
     for r in range(net_row + 1, ws.max_row + 1):
@@ -340,6 +357,10 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
             if val is None or str(val).strip().lower() == "total":
                 break
             existing += 1
+
+        # Snapshot the Total row BEFORE deleting sample rows (preserves italics + double border)
+        total_snap = _snapshot_row(ws, mbr_data_start + existing)
+
         if existing > 0:
             ws.delete_rows(mbr_data_start, existing)
 
@@ -355,17 +376,20 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
             ws.cell(r, 5).value = f"=D{r}*0.85"
             ws.cell(r, 6).value = f"=E{r}*0.1*-1"
             for col in [4, 5, 6]:
-                ws.cell(r, col).fill          = YELLOW_FILL
+                if is_revision and bm in affected_months:
+                    ws.cell(r, col).fill = YELLOW_FILL
                 ws.cell(r, col).number_format = _CURRENCY_NF
 
-        # Fix Total row label and SUM formulas
+        # Restore Total row formatting from template snapshot, then fix values/formulas
         mbr_last  = mbr_data_start + len(sorted_months) - 1
         total_row = mbr_last + 1
+        _apply_snapshot(ws, total_snap, total_row, mbr_data_start + existing)
         ws.cell(total_row, 2).value = "Total"
         ws.cell(total_row, 4).value = f"=SUM(D{mbr_data_start}:D{mbr_last})"
         ws.cell(total_row, 5).value = f"=SUM(E{mbr_data_start}:E{mbr_last})"
         for col in [4, 5]:
-            ws.cell(total_row, col).fill          = YELLOW_FILL
+            if is_revision and affected_months:
+                ws.cell(total_row, col).fill = YELLOW_FILL
             ws.cell(total_row, col).number_format = _CURRENCY_NF
 
 
