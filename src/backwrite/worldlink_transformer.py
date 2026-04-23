@@ -20,7 +20,7 @@ _src = Path(__file__).parent.parent
 if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
-from backwrite.transformer import compute_broadcast_month
+from backwrite.transformer import _apply_snapshot, _snapshot_row, compute_broadcast_month
 
 YELLOW_FILL  = PatternFill("solid", fgColor="FFFFFF00")
 GREEN_FILL   = PatternFill("solid", fgColor="FF92D050")
@@ -236,12 +236,43 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
     sv(10, 12, str(revision))
     # K11 "House (Worldlink)" stays from template
 
-    # ── Delete rows 14+ and rebuild dynamically ───────────────────────────────
-    ws.delete_rows(14, ws.max_row)
+    # ── Snapshot row 14 before any insertions ────────────────────────────────
+    row_snapshot = _snapshot_row(ws, 14)
 
+    # ── Insert extra rows for additional lines, pushing footer/summary down ───
     DATA_START = 14
+    n_lines    = max(len(lines), 1)
+    n_inserts  = n_lines - 1
+    line_rows  = [DATA_START]
+
+    if n_inserts > 0:
+        # Save and unmerge all merged ranges that will be pushed down
+        insert_start = DATA_START + 1
+        saved_merges = [
+            (mr.min_row, mr.max_row, mr.min_col, mr.max_col)
+            for mr in list(ws.merged_cells.ranges)
+            if mr.min_row >= insert_start
+        ]
+        for min_r, max_r, min_c, max_c in saved_merges:
+            ws.unmerge_cells(start_row=min_r, start_column=min_c,
+                             end_row=max_r,   end_column=max_c)
+
+        for _ in range(n_inserts):
+            new_row = line_rows[-1] + 1
+            ws.insert_rows(new_row)
+            _apply_snapshot(ws, row_snapshot, new_row, DATA_START)
+            line_rows.append(new_row)
+
+        # Re-merge at shifted positions
+        for min_r, max_r, min_c, max_c in saved_merges:
+            ws.merge_cells(start_row=min_r + n_inserts, start_column=min_c,
+                           end_row=max_r   + n_inserts, end_column=max_c)
+
+    last_data = line_rows[-1]
+
+    # ── Write order lines into rows 14..last_data ─────────────────────────────
     for i, line in enumerate(lines):
-        r         = DATA_START + i
+        r         = line_rows[i]
         action    = line.get("action", "ADD")
         is_cancel = action == "CANCEL"
         spots     = 0 if is_cancel else (line.get("spots", 0) or 0)
@@ -271,70 +302,71 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
             for col in range(1, 23):
                 ws.cell(row=r, column=col).fill = YELLOW_FILL
 
-    last_data = DATA_START + len(lines) - 1
-    sum_row   = last_data + 1
-    disc_row  = sum_row + 1
-    net_row   = disc_row + 1
+    # ── Fix summary row formulas (rows shifted by inserts but refs not updated) ─
+    sum_row  = last_data + 1
+    disc_row = sum_row + 1
+    net_row  = disc_row + 1
 
-    # ── Summary block ─────────────────────────────────────────────────────────
-    _wc(ws, sum_row,  9,  "Gross Amount",                          font=_BOLD_FONT)
-    _wc(ws, sum_row,  12, f"=SUM(L{DATA_START}:L{last_data})",    _INT_NF)
-    _wc(ws, sum_row,  14, "spots")
-    _wc(ws, sum_row,  16, f"=SUM(P{DATA_START}:P{last_data})",    _CURRENCY_NF)
+    ws.cell(sum_row,  12).value = f"=SUM(L{DATA_START}:L{last_data})"
+    ws.cell(sum_row,  16).value = f"=SUM(P{DATA_START}:P{last_data})"
+    ws.cell(disc_row, 16).value = f"=-1*(L{disc_row}*P{sum_row})"
+    ws.cell(net_row,   2).value = order_comment
+    ws.cell(net_row,  16).value = f"=SUM(P{sum_row}:P{disc_row})"
 
-    _wc(ws, disc_row, 2,  "Additional Notes")
-    _wc(ws, disc_row, 9,  "Agency Discount",                      font=_BOLD_FONT)
-    _wc(ws, disc_row, 12, AGENCY_FEE,                             _PCT_NF)
-    _wc(ws, disc_row, 16, f"=-1*(L{disc_row}*P{sum_row})",        _CURRENCY_NF)
-
-    _wc(ws, net_row,  2,  order_comment)
-    _wc(ws, net_row,  9,  "Net Amount of Contract",               font=_BOLD_FONT)
-    _wc(ws, net_row,  16, f"=SUM(P{sum_row}:P{disc_row})",        _CURRENCY_NF)
-
-    # Ensure column P is wide enough for currency display
     ws.column_dimensions["P"].width = 14
 
-    sig1 = net_row + 2
-    sig2 = sig1 + 2
-    _wc(ws, sig1, 9, "Client Signature")
-    _wc(ws, sig2, 9, "Station Rep Signature")
-
-    # ── Monthly Breakdown ─────────────────────────────────────────────────────
-    mbr_title = sig2 + 4
-    ws.cell(mbr_title, 2).value = "MONTHLY BREAKDOWN"
-
-    mbr_hdr = mbr_title + 2
-    ws.cell(mbr_hdr, 2).value = "Month"
-    ws.cell(mbr_hdr, 4).value = "Gross"
-    ws.cell(mbr_hdr, 5).value = "Net"
-    ws.cell(mbr_hdr, 6).value = "Broker Fee"
-
+    # ── Rewrite monthly breakdown with actual computed data ───────────────────
     monthly_rev   = _compute_monthly_revenue(lines)
     sorted_months = sorted(monthly_rev.keys())
-    mbr_first     = mbr_hdr + 1
 
-    for j, bm in enumerate(sorted_months):
-        r     = mbr_first + j
-        gross = round(monthly_rev[bm], 2)
-        ws.cell(r, 2).value = _MONTH_NAMES[bm.month]
-        for col, val in ((4, gross), (5, f"=D{r}*0.85"), (6, f"=E{r}*0.1*-1")):
-            cell = ws.cell(r, col)
-            cell.value         = val
-            cell.fill          = YELLOW_FILL
-            cell.number_format = _CURRENCY_NF
+    # Scan for "MONTHLY BREAKDOWN" title (position shifts with each inserted row)
+    mbr_title = None
+    for r in range(net_row + 1, ws.max_row + 1):
+        if ws.cell(r, 2).value == "MONTHLY BREAKDOWN":
+            mbr_title = r
+            break
 
-    if sorted_months:
-        mbr_last  = mbr_first + len(sorted_months) - 1
+    if mbr_title is not None and sorted_months:
+        mbr_hdr        = mbr_title + 2
+        mbr_data_start = mbr_hdr + 1
+
+        # Snapshot first existing month row for formatting
+        month_snap = _snapshot_row(ws, mbr_data_start)
+
+        # Remove sample month rows (stop at "Total" or blank col B)
+        existing = 0
+        while True:
+            val = ws.cell(mbr_data_start + existing, 2).value
+            if val is None or str(val).strip().lower() == "total":
+                break
+            existing += 1
+        if existing > 0:
+            ws.delete_rows(mbr_data_start, existing)
+
+        # Insert and fill actual month rows
+        for j, bm in enumerate(sorted_months):
+            r = mbr_data_start + j
+            if j > 0:
+                ws.insert_rows(r)
+            _apply_snapshot(ws, month_snap, r, mbr_data_start)
+            gross = round(monthly_rev[bm], 2)
+            ws.cell(r, 2).value = _MONTH_NAMES[bm.month]
+            ws.cell(r, 4).value = gross
+            ws.cell(r, 5).value = f"=D{r}*0.85"
+            ws.cell(r, 6).value = f"=E{r}*0.1*-1"
+            for col in [4, 5, 6]:
+                ws.cell(r, col).fill          = YELLOW_FILL
+                ws.cell(r, col).number_format = _CURRENCY_NF
+
+        # Fix Total row label and SUM formulas
+        mbr_last  = mbr_data_start + len(sorted_months) - 1
         total_row = mbr_last + 1
         ws.cell(total_row, 2).value = "Total"
-        for col, val in (
-            (4, f"=SUM(D{mbr_first}:D{mbr_last})"),
-            (5, f"=SUM(E{mbr_first}:E{mbr_last})"),
-        ):
-            cell = ws.cell(total_row, col)
-            cell.value         = val
-            cell.fill          = YELLOW_FILL
-            cell.number_format = _CURRENCY_NF
+        ws.cell(total_row, 4).value = f"=SUM(D{mbr_data_start}:D{mbr_last})"
+        ws.cell(total_row, 5).value = f"=SUM(E{mbr_data_start}:E{mbr_last})"
+        for col in [4, 5]:
+            ws.cell(total_row, col).fill          = YELLOW_FILL
+            ws.cell(total_row, col).number_format = _CURRENCY_NF
 
 
 # ──────────────────────────────────────────────────────────────────────────────
