@@ -1431,11 +1431,25 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 )
                 filmati_cod_map = {r["ID_FILMATI"]: (r["COD_PROGRA"] or "") for r in cur.fetchall()}
 
-                # Snapshot current pool before we add new spots — used later to purge stale entries
-                cur.execute(
-                    "SELECT ID_FILMATI FROM CONTRATTIFILMATI WHERE ID_CONTRATTITESTATA = %d" % contract_id
-                )
-                old_pool_ids = {r["ID_FILMATI"] for r in cur.fetchall()}
+                # Snapshot current pool before we add new spots — used later to purge stale entries.
+                # Discover the actual FK column name first (Etere versions differ).
+                old_pool_ids: set = set()
+                try:
+                    cur.execute("""
+                        SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_NAME = 'CONTRATTIFILMATI'
+                          AND COLUMN_NAME NOT IN ('ID_FILMATI','ID_CONTRATTIFILMATI')
+                        ORDER BY ORDINAL_POSITION
+                    """)
+                    fk_row = cur.fetchone()
+                    fk_col = fk_row["COLUMN_NAME"] if fk_row else None
+                    if fk_col:
+                        cur.execute(
+                            f"SELECT ID_FILMATI FROM CONTRATTIFILMATI WHERE {fk_col} = {contract_id}"
+                        )
+                        old_pool_ids = {r["ID_FILMATI"] for r in cur.fetchall()}
+                except Exception:
+                    pass  # non-fatal — pool cleanup will be skipped this run
 
             if not all_rows:
                 raise ValueError("No scheduled spots found for this contract")
