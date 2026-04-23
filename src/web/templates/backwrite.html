@@ -1008,6 +1008,7 @@ document.getElementById('wl-prev-input').addEventListener('change', async functi
         if (resp.ok) {
             const d = await resp.json();
             if (d.contract_number) document.getElementById('wl-contract').value = d.contract_number;
+            if (d.revision != null) document.getElementById('wl-revision').value = d.revision + 1;
         }
     } catch (_) { /* non-critical — user can still type it */ }
 });
