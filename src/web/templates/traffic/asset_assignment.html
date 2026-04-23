@@ -531,6 +531,7 @@
         document.querySelectorAll('.dur-pill').forEach(p => p.classList.remove('active'));
         el.classList.add('active');
         selectedDur = val;
+        applySpotFilter();
     }
 
     let lastSpotResults = [];
@@ -543,8 +544,7 @@
     async function searchSpots() {
         const q = document.getElementById('spotSearch').value.trim();
         if (!q) return;
-        const url = `/api/traffic/spots/search?q=${encodeURIComponent(q)}` +
-                    (selectedDur ? `&duration=${selectedDur}` : '');
+        const url = `/api/traffic/spots/search?q=${encodeURIComponent(q)}`;
         const resp = await fetch(url);
         lastSpotResults = await resp.json();
         applySpotFilter();
@@ -552,14 +552,20 @@
 
     function applySpotFilter() {
         const raw = document.getElementById('serialFilter').value.trim();
-        if (!raw) { renderSpotResults(lastSpotResults); return; }
-        const serials = raw.split(/[\s,]+/).filter(Boolean).map(s => s.toUpperCase());
-        const filtered = lastSpotResults.filter(s => {
-            const haystack = ((s.code || '') + ' ' + (s.title || '')).toUpperCase();
-            const m = /(\d+)/.exec(s.title || '');
-            const serial = m ? m[1] : '';
-            return serials.some(sn => serial === sn || haystack.includes(sn));
-        });
+        const serials = raw ? raw.split(/[\s,]+/).filter(Boolean).map(s => s.toUpperCase()) : [];
+        let filtered = lastSpotResults;
+        if (selectedDur) {
+            const target = Math.round(selectedDur / 30);
+            filtered = filtered.filter(s => Math.abs(s.duration_sec - target) <= 1);
+        }
+        if (serials.length) {
+            filtered = filtered.filter(s => {
+                const haystack = ((s.code || '') + ' ' + (s.title || '')).toUpperCase();
+                const m = /(\d+)/.exec(s.title || '');
+                const serial = m ? m[1] : '';
+                return serials.some(sn => serial === sn || haystack.includes(sn));
+            });
+        }
         renderSpotResults(filtered);
     }
 
