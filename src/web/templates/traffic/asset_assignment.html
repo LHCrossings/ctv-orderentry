@@ -420,6 +420,13 @@
                 <button class="dur-pill" data-dur="900" onclick="setDur(this, 900)">:30</button>
                 <button class="dur-pill" data-dur="1800" onclick="setDur(this, 1800)">:60</button>
             </div>
+            <div class="input-row" style="margin-top:12px;">
+                <div class="field-group" style="flex:1;">
+                    <label class="field-label">Filter by serial # (comma or space separated)</label>
+                    <input id="serialFilter" class="field-input" placeholder="107, 108, 109…"
+                           oninput="applySpotFilter()" />
+                </div>
+            </div>
             <div id="spotResults">
                 <div class="spot-results-empty">Enter a code prefix above to search the media library.</div>
             </div>
@@ -523,14 +530,28 @@
         selectedDur = val;
     }
 
+    let lastSpotResults = [];
+
     async function searchSpots() {
         const q = document.getElementById('spotSearch').value.trim();
         if (!q) return;
         const url = `/api/traffic/spots/search?q=${encodeURIComponent(q)}` +
                     (selectedDur ? `&duration=${selectedDur}` : '');
         const resp = await fetch(url);
-        const spots = await resp.json();
-        renderSpotResults(spots);
+        lastSpotResults = await resp.json();
+        applySpotFilter();
+    }
+
+    function applySpotFilter() {
+        const raw = document.getElementById('serialFilter').value.trim();
+        if (!raw) { renderSpotResults(lastSpotResults); return; }
+        const serials = raw.split(/[\s,]+/).filter(Boolean).map(s => s.toUpperCase());
+        const filtered = lastSpotResults.filter(s => {
+            const m = /(\d+)$/.exec((s.code || '').toUpperCase());
+            const serial = m ? m[1] : '';
+            return serials.some(sn => serial === sn || (s.code || '').toUpperCase().includes(sn));
+        });
+        renderSpotResults(filtered);
     }
 
     function renderSpotResults(spots) {
