@@ -133,6 +133,81 @@ def _enrich_bookingcode(csv_bytes: bytes, contract_number) -> bytes:
     return result.encode("utf-8-sig")
 
 
+def fetch_media_library(code_prefix: str) -> list[dict]:
+    """
+    Call R100177_C0000_MediaData with 'starts with' filter and return
+    every row as a dict with keys col1, col2, and duration_sec.
+    """
+    _ensure_path()
+    from browser_automation.etere_direct_client import (  # noqa: E402
+        ETERE_WEB_URL,
+        etere_web_login,
+        etere_web_logout,
+    )
+
+    params = {
+        "reportCode": "R100177_C0000_MediaData",
+        "isSystem":   "True",
+        "reportType": "DOWNLOADCSV",
+        "customerid": 0,
+        "agencyid":   0,
+        "filters[0]": code_prefix,
+        "filters[1]": "1",   # starts with
+        "filters[2]": "",
+        "filters[3]": "",
+        "filters[4]": "",
+        "filters[5]": "",
+    }
+
+    session = etere_web_login()
+    try:
+        url = f"{ETERE_WEB_URL}/reportsetere/report"
+        resp = session.get(url, params=params, timeout=60)
+        resp.raise_for_status()
+        raw = resp.content
+    finally:
+        etere_web_logout(session)
+
+    text = raw.decode("utf-8-sig", errors="replace")
+    lines = text.splitlines(keepends=True)
+
+    # Skip any preamble rows — find first row that looks like a CSV header
+    # (heuristic: first row with more than 1 comma-separated non-numeric field)
+    header_idx = 0
+    for i, ln in enumerate(lines):
+        parts = next(csv.reader([ln]), [])
+        if len(parts) >= 2 and not parts[0].strip().lstrip("-").isdigit():
+            header_idx = i
+            break
+
+    reader = csv.reader(io.StringIO("".join(lines[header_idx:])))
+    headers = next(reader, [])
+
+    # Locate duration column by name (case-insensitive, first match)
+    dur_idx = next(
+        (i for i, h in enumerate(headers) if "dura" in h.lower()),
+        None,
+    )
+
+    results = []
+    for row in reader:
+        if len(row) < 2:
+            continue
+        col1 = row[0].strip()
+        col2 = row[1].strip()
+        if not col1 and not col2:
+            continue
+        dur_raw = row[dur_idx].strip() if (dur_idx is not None and dur_idx < len(row)) else ""
+        try:
+            dur_frames = int(dur_raw)
+            dur_sec = round(dur_frames / 30)
+        except (ValueError, TypeError):
+            dur_sec = 0
+        results.append({"col1": col1, "col2": col2, "duration_sec": dur_sec})
+
+    return results
+
+
 def fetch_etere_report(
     contract_number,
     report_code: str = "R100018_C18236_new_pc_with_contract_no",
