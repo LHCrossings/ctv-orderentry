@@ -543,8 +543,8 @@
 
 </div><!-- /wl-section -->
 
-<!-- Etere Report Puller -->
-<div class="bw-card" style="margin-top:24px">
+<!-- Etere Report Puller (standard mode only) -->
+<div class="bw-card" id="report-puller-card" style="margin-top:24px">
     <h2>Pull Etere Report</h2>
     <div class="form-grid">
         <div class="form-group">
@@ -975,8 +975,9 @@ let wlPrevFile = null;
 function setMode(mode) {
     document.getElementById('mode-standard').classList.toggle('active', mode === 'standard');
     document.getElementById('mode-worldlink').classList.toggle('active', mode === 'worldlink');
-    document.getElementById('standard-section').style.display = mode === 'standard' ? '' : 'none';
-    document.getElementById('wl-section').style.display       = mode === 'worldlink' ? '' : 'none';
+    document.getElementById('standard-section').style.display    = mode === 'standard' ? '' : 'none';
+    document.getElementById('wl-section').style.display          = mode === 'worldlink' ? '' : 'none';
+    document.getElementById('report-puller-card').style.display  = mode === 'standard' ? '' : 'none';
 }
 
 // Drag-and-drop for WL upload zone
