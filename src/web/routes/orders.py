@@ -1431,6 +1431,12 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 )
                 filmati_cod_map = {r["ID_FILMATI"]: (r["COD_PROGRA"] or "") for r in cur.fetchall()}
 
+                # Snapshot current pool before we add new spots — used later to purge stale entries
+                cur.execute(
+                    "SELECT ID_FILMATI FROM CONTRATTIFILMATI WHERE ID_CONTRATTITESTATA = %d" % contract_id
+                )
+                old_pool_ids = {r["ID_FILMATI"] for r in cur.fetchall()}
+
             if not all_rows:
                 raise ValueError("No scheduled spots found for this contract")
 
@@ -1487,6 +1493,19 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     lines_updated += 1
                     spots_updated += n
                     tp_assignments.extend(zip(tp_ids, slice_))
+
+                # Remove stale spots from the contract pool so native app stays in sync
+                new_filmati_set = set(filmati_ids)
+                for stale_id in old_pool_ids - new_filmati_set:
+                    try:
+                        session.post(
+                            f"{ETERE_WEB_URL}/Sales/MaterialRemoveToAssetListC",
+                            json={"idct": contract_id, "idfilm": stale_id},
+                            headers={"X-Requested-With": "XMLHttpRequest"},
+                            timeout=15,
+                        )
+                    except Exception:
+                        pass  # non-fatal — schedule is already correct
             finally:
                 etere_web_logout(session)
 
