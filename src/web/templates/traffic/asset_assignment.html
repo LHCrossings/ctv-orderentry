@@ -556,9 +556,9 @@
         if (!raw) { renderSpotResults(lastSpotResults); return; }
         const serials = raw.split(/[\s,]+/).filter(Boolean).map(s => s.toUpperCase());
         const filtered = lastSpotResults.filter(s => {
-            const m = /(\d+)$/.exec((s.code || '').toUpperCase());
+            const m = /(\d+)$/.exec((s.agency_code || '').toUpperCase());
             const serial = m ? m[1] : '';
-            return serials.some(sn => serial === sn || (s.code || '').toUpperCase().includes(sn));
+            return serials.some(sn => serial === sn || (s.agency_code || '').toUpperCase().includes(sn));
         });
         renderSpotResults(filtered);
     }
@@ -616,7 +616,7 @@
                 ${spots.map((s, i) => `
                 <div class="builder-row" data-id="${s.id}">
                     <div>
-                        <div class="builder-code">${esc(s.code)}</div>
+                        <div class="builder-code">${esc(s.agency_code)}</div>
                         <div class="builder-title">${esc(s.title || '')}</div>
                     </div>
                     <input type="number" class="weight-input" min="1" max="100"
