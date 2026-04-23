@@ -1473,8 +1473,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     r = session.post(
                         f"{ETERE_WEB_URL}/Sales/MaterialAssignAssetRotation",
                         json={
-                            "idp": ",".join(str(i) for i in tp_ids),
-                            "idf": ",".join(str(i) for i in slice_),
+                            "idp": list(tp_ids),
+                            "idf": list(slice_),
                             "idcr": line_id,
                         },
                         headers={"X-Requested-With": "XMLHttpRequest"},
