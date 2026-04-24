@@ -1619,6 +1619,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 rotation_list.append(chosen)
                 accum[chosen] -= 1.0
 
+            # Map each tp_id to its rotation filmati using global chronological order
+            # so the A,B,A,B interleave is correct across the whole contract, not per-line
+            tp_filmati_map = {row["tp_id"]: rotation_list[i] for i, row in enumerate(all_rows)}
+
             session = etere_web_login()
             lines_updated = spots_updated = 0
             tp_assignments = []  # (tp_id, filmati_id) pairs
@@ -1636,11 +1640,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     if not add_result.get("IsOk"):
                         raise ValueError(f"MaterialAddToAssetListC failed for {fid}: {add_result}")
 
-                offset = 0
                 for line_id, tp_ids in line_tp_map.items():
                     n = len(tp_ids)
-                    slice_ = rotation_list[offset: offset + n]
-                    offset += n
+                    slice_ = [tp_filmati_map[tp_id] for tp_id in tp_ids]
                     r = session.post(
                         f"{ETERE_WEB_URL}/Sales/MaterialAssignAssetRotation",
                         json={
