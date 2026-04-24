@@ -463,6 +463,20 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             })
         return JSONResponse({"files": result})
 
+    @router.delete("/api/logs/cleanup")
+    async def cleanup_logs():
+        import time
+        logs_dir = Path(__file__).parent.parent.parent.parent / "logs"
+        if not logs_dir.exists():
+            return JSONResponse({"deleted": 0})
+        cutoff = time.time() - 30 * 24 * 3600
+        deleted = 0
+        for f in logs_dir.glob("*.log"):
+            if f.stat().st_mtime < cutoff:
+                f.unlink()
+                deleted += 1
+        return JSONResponse({"deleted": deleted})
+
     @router.get("/api/logs/{filename}")
     async def get_log(filename: str):
         # Prevent path traversal — only .log files, no slashes or dots in name

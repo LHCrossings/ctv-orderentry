@@ -79,6 +79,40 @@
             text-align: center;
         }
 
+        .sidebar-footer {
+            flex-shrink: 0;
+            padding-top: 8px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .btn-cleanup {
+            width: 100%;
+            padding: 8px 12px;
+            background: none;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+            text-align: left;
+        }
+
+        .btn-cleanup:hover {
+            background: color-mix(in srgb, var(--nord11) 8%, transparent);
+            border-color: color-mix(in srgb, var(--nord11) 35%, transparent);
+            color: var(--nord11);
+        }
+
+        .cleanup-status {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            margin-top: 6px;
+            min-height: 1em;
+        }
+
         /* ── Right pane: log content ── */
         .log-viewer {
             flex: 1;
@@ -169,6 +203,10 @@
         <div class="sidebar-title">Run History</div>
         <div class="log-list" id="logList">
             <div class="log-empty">Loading…</div>
+        </div>
+        <div class="sidebar-footer">
+            <button class="btn-cleanup" onclick="cleanupLogs()">🗑 Delete logs older than 30 days</button>
+            <div class="cleanup-status" id="cleanupStatus"></div>
         </div>
     </div>
 
@@ -263,6 +301,24 @@ function renderLog(pre, raw) {
         span.textContent = line + '\n';
         pre.appendChild(span);
     });
+}
+
+async function cleanupLogs() {
+    const statusEl = document.getElementById('cleanupStatus');
+    statusEl.textContent = 'Deleting…';
+    try {
+        const resp = await fetch('/api/logs/cleanup', {method: 'DELETE'});
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        if (data.deleted === 0) {
+            statusEl.textContent = 'No logs older than 30 days.';
+        } else {
+            statusEl.textContent = `Deleted ${data.deleted} log(s).`;
+            await loadList();
+        }
+    } catch (e) {
+        statusEl.textContent = `Error: ${e.message}`;
+    }
 }
 
 function escHtml(str) {
