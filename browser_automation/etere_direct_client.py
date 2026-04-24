@@ -1098,20 +1098,10 @@ EXEC web_sales_InsertContractLine
         user_id     = row[11]
         contract_id = row[12]
 
-        # Fetch the actual displayed times from the Etere modal page — this is
-        # exactly what the browser reads before calling the block API when you
-        # click "Add Blocks Automatically". Avoids guessing from ORA frame values.
-        page_times = self._fetch_line_times(line_id)
-        if page_times:
-            t_from, t_to = page_times
-            h, m = map(int, t_from.split(":"))
-            start_frames = _to_frames(h, m)
-            h, m = map(int, t_to.split(":"))
-            end_frames = _to_frames(h, m)
-        else:
-            # Fallback: use raw DB values if page fetch fails
-            start_frames = db_start_frames
-            end_frames   = db_end_frames if db_end_frames else db_start_frames
+        # Use ORA_INIZIO/ORA_FINE directly — these are the authoritative values
+        # Etere stores; the previous HTTP fetch of the modal page was redundant.
+        start_frames = db_start_frames
+        end_frames   = db_end_frames if db_end_frames else db_start_frames
 
         # Strip trailing asterisks Etere appends after block operations
         cursor.execute(f"""
