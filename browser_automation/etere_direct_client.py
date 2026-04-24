@@ -36,12 +36,11 @@ Usage (Windows, from the project root):
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import date, datetime
 from math import ceil
 from typing import Optional
-
-import os
 
 try:
     import pyodbc  # noqa: F401 — only needed on Windows for DB access
@@ -118,8 +117,8 @@ def etere_web_login(retries: int = 3, retry_delay: float = 12.0):
     except ImportError:
         raise RuntimeError("requests package not installed — run: pip install requests")
 
-    import sys
     import os
+    import sys
     import time as _time
     _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if _root not in sys.path:
@@ -129,7 +128,6 @@ def etere_web_login(retries: int = 3, retry_delay: float = 12.0):
     username, password = load_credentials()
     login_url = f"{ETERE_WEB_URL}/index/login"
 
-    last_error = None
     for attempt in range(1 + retries):
         session = _req.Session()
 
@@ -165,7 +163,6 @@ def etere_web_login(retries: int = 3, retry_delay: float = 12.0):
             break
 
         msg = login_result.get("Message", "Login failed (unknown reason)")
-        last_error = msg
 
         # Retry only for license-exhaustion errors — all others fail immediately
         is_license_error = "license" in msg.lower() or "exceeded" in msg.lower()
@@ -384,6 +381,8 @@ class EtereDirectClient:
     def __init__(self, conn: pyodbc.Connection, owner: str = "Charmaine Lane",
                  autocommit: bool = True):
         self._conn = conn
+        # '%s' for pymssql (used when SQL auth creds are set), '?' for pyodbc (Windows Auth)
+        self._ph = '%s' if type(conn).__module__.startswith('pymssql') else '?'
         self.owner = owner
         self._autocommit = autocommit
         self._master_market = "NYC"
@@ -550,8 +549,8 @@ EXEC web_sales_savecontractgeneral
 
         # Retrieve the ID the SP just inserted
         cursor.execute(
-            "SELECT ID_CONTRATTITESTATA FROM CONTRATTITESTATA "
-            "WHERE COD_CONTRATTO = ?", [code]
+            f"SELECT ID_CONTRATTITESTATA FROM CONTRATTITESTATA WHERE COD_CONTRATTO = {self._ph}",
+            [code]
         )
         row = cursor.fetchone()
         if not row:
@@ -758,8 +757,8 @@ EXEC web_sales_InsertContractLine
 
         # Retrieve the ID the SP just inserted
         cursor.execute(
-            "SELECT MAX(ID_CONTRATTIRIGHE) FROM CONTRATTIRIGHE "
-            "WHERE ID_CONTRATTITESTATA = ?", [cid]
+            f"SELECT MAX(ID_CONTRATTIRIGHE) FROM CONTRATTIRIGHE WHERE ID_CONTRATTITESTATA = {self._ph}",
+            [cid]
         )
         row = cursor.fetchone()
         line_id = row[0] if row else 0
@@ -827,13 +826,13 @@ EXEC web_sales_InsertContractLine
         else:
             ub = end_frames - PREROLL
 
-        dw_placeholders = ",".join("?" * len(active_dw))
+        dw_placeholders = ",".join([self._ph] * len(active_dw))
 
         cursor = self._conn.cursor()
 
         # Clear existing blocks so duplicated-line inherited blocks don't persist
         cursor.execute(
-            "DELETE FROM CONTRATTIFASCE WHERE ID_CONTRATTIRIGHE = ?", [line_id]
+            f"DELETE FROM CONTRATTIFASCE WHERE ID_CONTRATTIRIGHE = {self._ph}", [line_id]
         )
         deleted = cursor.rowcount
         if deleted:
@@ -841,15 +840,15 @@ EXEC web_sales_InsertContractLine
 
         cursor.execute(f"""
             INSERT INTO CONTRATTIFASCE (ID_CONTRATTIRIGHE, ID_FASCE, PRICELIST, SELECTEDSEGMENTS)
-            SELECT DISTINCT ?, sub.id_fascia, '', ''
+            SELECT DISTINCT {self._ph}, sub.id_fascia, '', ''
             FROM (
                 SELECT tp.id_fascia
                 FROM trafficPalinse tp
-                WHERE tp.Cod_User = ?
-                  AND tp.Date >= ? AND tp.Date <= ?
+                WHERE tp.Cod_User = {self._ph}
+                  AND tp.Date >= {self._ph} AND tp.Date <= {self._ph}
                   AND DATEPART(dw, tp.Date) IN ({dw_placeholders})
                 GROUP BY tp.id_fascia, tp.Date
-                HAVING MIN(tp.offset) >= ? AND MIN(tp.offset) < ?
+                HAVING MIN(tp.offset) >= {self._ph} AND MIN(tp.offset) < {self._ph}
             ) sub
         """, [line_id, user_id, date_from, date_to,
               *active_dw, lb, ub])
@@ -890,7 +889,7 @@ EXEC web_sales_InsertContractLine
         import json as _json
         import re as _re
         try:
-            import requests as _requests
+            import requests as _requests  # noqa: F401
         except ImportError:
             print("[DIRECT]     ! requests not installed — skipping HTTP block assignment")
             return -1
@@ -979,13 +978,13 @@ EXEC web_sales_InsertContractLine
         if line_id:
             cursor = self._conn.cursor()
             cursor.execute(
-                "DELETE FROM CONTRATTIFASCE WHERE ID_CONTRATTIRIGHE = ?", [line_id]
+                f"DELETE FROM CONTRATTIFASCE WHERE ID_CONTRATTIRIGHE = {self._ph}", [line_id]
             )
             for bid in block_ids:
                 cursor.execute(
-                    "INSERT INTO CONTRATTIFASCE "
-                    "(ID_CONTRATTIRIGHE, ID_FASCE, PRICELIST, SELECTEDSEGMENTS) "
-                    "VALUES (?, ?, '', '')",
+                    f"INSERT INTO CONTRATTIFASCE "
+                    f"(ID_CONTRATTIRIGHE, ID_FASCE, PRICELIST, SELECTEDSEGMENTS) "
+                    f"VALUES ({self._ph}, {self._ph}, '', '')",
                     [line_id, bid],
                 )
             if self._autocommit:
@@ -1005,10 +1004,10 @@ EXEC web_sales_InsertContractLine
         ID_CONTRATTITESTATA primary key used in the Etere URL (/sales/contract/NNN).
         """
         cursor = self._conn.cursor()
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT ID_CONTRATTIRIGHE
             FROM   CONTRATTIRIGHE
-            WHERE  ID_CONTRATTITESTATA = ?
+            WHERE  ID_CONTRATTITESTATA = {self._ph}
             ORDER  BY ID_CONTRATTIRIGHE
         """, [int(contract_id)])
         return [row[0] for row in cursor.fetchall()]
@@ -1023,7 +1022,7 @@ EXEC web_sales_InsertContractLine
         """
         import re as _re
         try:
-            import requests as _requests
+            import requests as _requests  # noqa: F401
         except ImportError:
             return None
 
@@ -1070,14 +1069,14 @@ EXEC web_sales_InsertContractLine
         Returns the number of blocks assigned, or -1 if the line was not found.
         """
         cursor = self._conn.cursor()
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT ORA_INIZIO, ORA_FINE,
                    LUNEDI, MARTEDI, MERCOLEDI, GIOVEDI,
                    VENERDI, SABATO, DOMENICA,
                    DATA_INIZIO, DATA_FINE,
                    COD_USER, ID_CONTRATTITESTATA
             FROM   CONTRATTIRIGHE
-            WHERE  ID_CONTRATTIRIGHE = ?
+            WHERE  ID_CONTRATTIRIGHE = {self._ph}
         """, [line_id])
         row = cursor.fetchone()
         if not row:
@@ -1115,12 +1114,12 @@ EXEC web_sales_InsertContractLine
             end_frames   = db_end_frames if db_end_frames else db_start_frames
 
         # Strip trailing asterisks Etere appends after block operations
-        cursor.execute("""
+        cursor.execute(f"""
             UPDATE CONTRATTIRIGHE
             SET    DESCRIZIONE = RTRIM(REPLACE(DESCRIZIONE, '*', ''))
-            WHERE  ID_CONTRATTIRIGHE = ?
-              AND  DESCRIZIONE LIKE '%*%'
-        """, [line_id])
+            WHERE  ID_CONTRATTIRIGHE = {self._ph}
+              AND  DESCRIZIONE LIKE {self._ph}
+        """, [line_id, '%*%'])
         if self._autocommit:
             self._conn.commit()
 
