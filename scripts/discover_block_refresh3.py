@@ -4,6 +4,7 @@ Run from Windows: py scripts/discover_block_refresh3.py
 """
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from browser_automation.etere_direct_client import connect
 
@@ -86,7 +87,7 @@ try:
     else:
         print("  (no matches on id_tlfasceorarie)")
         # Try first column
-        cursor.execute(f"SELECT TOP 1 * FROM tlfasceorarie")
+        cursor.execute("SELECT TOP 1 * FROM tlfasceorarie")
         first_col = cursor.description[0][0]
         cursor.execute(f"SELECT TOP 5 * FROM tlfasceorarie WHERE {first_col} IN ({KNOWN_IDS_STR})")
         rows = cursor.fetchall()

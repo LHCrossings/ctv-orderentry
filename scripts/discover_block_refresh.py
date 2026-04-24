@@ -4,6 +4,7 @@ Run from Windows: py scripts/discover_block_refresh.py
 """
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from browser_automation.etere_direct_client import connect
 

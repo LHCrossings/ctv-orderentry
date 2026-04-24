@@ -10,15 +10,15 @@ Arguments:
     date_from  : MM/DD/YYYY
     date_to    : MM/DD/YYYY
 """
-import sys
 import os
 import subprocess
-from pathlib import Path
+import sys
 from datetime import datetime
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from browser_automation.etere_direct_client import etere_web_login, etere_web_logout, ETERE_WEB_URL
+from browser_automation.etere_direct_client import ETERE_WEB_URL, etere_web_login, etere_web_logout
 
 AGENCY_ID      = 133
 REPORTSORT_DIR = Path(__file__).parent.parent.parent / "ReportSort"
@@ -133,7 +133,7 @@ def main():
         print(f"[ERROR] ReportSort not found at {REPORTSORT_DIR}")
         sys.exit(1)
 
-    print(f"[INFO] Logging into Etere ...")
+    print("[INFO] Logging into Etere ...")
     session = etere_web_login()
     set_master_market(session, coduser=10)  # DAL (Dallas) — required for TAC spots
 

@@ -4,6 +4,7 @@ Run from Windows: py scripts/discover_block_refresh2.py
 """
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from browser_automation.etere_direct_client import connect
 
@@ -76,7 +77,6 @@ for row in cursor.fetchall():
     print(" ", dict(zip(cols, row)))
 
 # ── 5b. FASCE that overlap with a 2PM-3PM window (frames) ────────────────────
-import math
 FRAMES = 29.97
 start_f = round(14 * 3600 * FRAMES)  # 14:00
 end_f   = round(15 * 3600 * FRAMES)  # 15:00

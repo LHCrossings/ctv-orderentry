@@ -15,12 +15,12 @@ sys.path.insert(0, str(src_path))
 
 def run_tests():
     """Run all tests and display summary."""
-    
+
     print("=" * 70)
     print("RUNNING ALL TESTS")
     print("=" * 70)
     print()
-    
+
     # Test suites by phase
     test_suites = [
         ("Phase 1: Domain Layer", "tests/unit/test_domain.py"),
@@ -40,29 +40,27 @@ def run_tests():
             "tests/unit/test_orchestrator.py"
         ]),
     ]
-    
+
     total_passed = 0
-    total_failed = 0
     phase_results = []
-    
+
     for phase_name, test_paths in test_suites:
         print(f"\n{phase_name}")
         print("-" * 70)
-        
+
         # Handle both single path and list of paths
         if isinstance(test_paths, str):
             test_paths = [test_paths]
-        
+
         phase_passed = 0
-        phase_failed = 0
-        
+
         for test_path in test_paths:
             result = subprocess.run(
                 ["pytest", test_path, "-v", "--tb=no", "-q"],
                 capture_output=True,
                 text=True
             )
-            
+
             # Parse output for pass/fail counts
             output = result.stdout
             if "passed" in output:
@@ -77,23 +75,23 @@ def run_tests():
                                     phase_passed += count
                                 except (ValueError, IndexError):
                                     pass
-        
+
         print(f"✓ {phase_passed} tests passed")
         phase_results.append((phase_name, phase_passed))
         total_passed += phase_passed
-    
+
     # Summary
     print("\n" + "=" * 70)
     print("SUMMARY")
     print("=" * 70)
-    
+
     for phase_name, count in phase_results:
         print(f"{phase_name:.<50} {count:>3} tests")
-    
+
     print("-" * 70)
     print(f"{'TOTAL':.<50} {total_passed:>3} tests")
     print("=" * 70)
-    
+
     return total_passed
 
 

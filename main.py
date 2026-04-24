@@ -9,20 +9,20 @@ Usage:
     python main.py --scan           # Just scan and show orders
 """
 
-import sys
 import argparse
+import sys
 from pathlib import Path
 
 # Add src to path - must be done before any local imports
 _src_path = Path(__file__).parent / "src"
 sys.path.insert(0, str(_src_path))
 
-from orchestration import create_orchestrator, ApplicationConfig
+from orchestration import ApplicationConfig, create_orchestrator
 
 
 def main():
     """Main entry point."""
-    
+
     # Parse command line arguments
     parser = argparse.ArgumentParser(
         description="Order Processing Application",
@@ -35,31 +35,31 @@ Modes:
   scan                   - Just scan and display available orders
         """
     )
-    
+
     parser.add_argument(
         "--batch",
         action="store_true",
         help="Run in batch mode (collect all inputs upfront)"
     )
-    
+
     parser.add_argument(
         "--auto",
         action="store_true",
         help="Run in automatic mode (no user input)"
     )
-    
+
     parser.add_argument(
         "--scan",
         action="store_true",
         help="Scan and display orders without processing"
     )
-    
+
     parser.add_argument(
         "--incoming",
         type=Path,
         help="Override incoming directory path"
     )
-    
+
     parser.add_argument(
         "--config",
         type=Path,
@@ -74,11 +74,11 @@ Modes:
     )
 
     args = parser.parse_args()
-    
+
     try:
         # Create configuration
         config = ApplicationConfig.from_defaults()
-        
+
         # Override incoming directory if provided
         if args.incoming:
             config = ApplicationConfig(
@@ -92,7 +92,7 @@ Modes:
                 headless=config.headless,
                 browser_timeout=config.browser_timeout
             )
-        
+
         # Create orchestrator
         orchestrator = create_orchestrator(config)
 
@@ -107,40 +107,40 @@ Modes:
         # Run in appropriate mode
         if args.scan:
             # Just scan and display
-            from orchestration.order_scanner import OrderScanner
             from business_logic.services.pdf_order_detector import PDFOrderDetector
+            from orchestration.order_scanner import OrderScanner
             from presentation.formatters import order_formatter
-            
+
             scanner = OrderScanner(
                 PDFOrderDetector(),
                 config.incoming_dir
             )
             orders = scanner.scan_for_orders()
-            
+
             if orders:
                 print(order_formatter.format_order_list(orders))
             else:
                 print("\n[INFO] No orders found")
-                
+
         elif args.auto:
             # Automatic mode
             orchestrator.run_auto()
-            
+
         elif args.batch:
             # Batch mode
             orchestrator.run_batch()
-            
+
         else:
             # Interactive mode (default)
             orchestrator.run_interactive()
-        
+
         print("\n[COMPLETE] Application finished")
         sys.exit(0)
-        
+
     except KeyboardInterrupt:
         print("\n\n[CANCELLED] Application interrupted by user")
         sys.exit(1)
-        
+
     except Exception as e:
         print(f"\n[ERROR] Application failed: {e}")
         import traceback

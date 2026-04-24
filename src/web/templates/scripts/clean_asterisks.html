@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clean Line Asterisks — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 900px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+        }
+
+        .tool-card h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+
+        .tool-card > p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+
+        .lookup-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .field-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .field-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 1rem;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            color: var(--text-primary);
+            outline: none;
+            width: 160px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .field-input:focus {
+            border-color: var(--nord10);
+            box-shadow: 0 0 0 3px rgba(94,129,172,0.15);
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            height: 42px;
+            white-space: nowrap;
+            transition: background 0.2s, transform 0.15s;
+        }
+
+        .btn-primary { background: var(--nord10); color: white; }
+        .btn-primary:hover:not(:disabled) { background: var(--nord9); transform: translateY(-1px); }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+        .loading-msg {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 16px;
+        }
+
+        .lines-section { display: none; margin-top: 28px; }
+        .lines-section.visible { display: block; }
+
+        .section-title {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 10px;
+        }
+
+        .lines-table-wrap {
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+        }
+
+        table.lines-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+        }
+
+        .lines-table th {
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 8px 10px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            white-space: nowrap;
+        }
+
+        .lines-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+            vertical-align: middle;
+        }
+
+        .lines-table tr:last-child td { border-bottom: none; }
+        .lines-table tr:hover td { background: color-mix(in srgb, var(--nord9) 6%, transparent); }
+
+        .desc-before {
+            color: var(--nord11);
+            font-family: monospace;
+        }
+
+        .desc-after {
+            color: var(--nord14);
+            font-family: monospace;
+        }
+
+        .apply-section {
+            display: none;
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border-color);
+        }
+        .apply-section.visible { display: flex; align-items: center; gap: 16px; }
+
+        .apply-status {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--nord14);
+        }
+
+        .apply-status.err { color: var(--nord11); }
+
+        .none-msg {
+            display: none;
+            margin-top: 20px;
+            font-size: 0.85rem;
+            color: var(--nord14);
+            font-weight: 600;
+        }
+        .none-msg.visible { display: block; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/scripts" class="back-link">&#8592;</a>
+            <div class="logo-icon">✳️</div>
+            <div>
+                <h1>Clean Line <span>Asterisks</span></h1>
+                <div class="logo-sub">Scripts · Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="tool-card">
+        <h2>Remove Asterisks from Line Descriptions</h2>
+        <p>Etere appends <code>*</code> characters to line descriptions after block operations. Enter a contract number to preview and clean all affected lines.</p>
+
+        <div class="lookup-row">
+            <div class="field-group">
+                <label class="field-label" for="contractInput">Contract Number</label>
+                <input id="contractInput" class="field-input" type="number" placeholder="e.g. 2551" min="1" />
+            </div>
+            <button id="loadBtn" class="btn btn-primary" onclick="loadLines()">Load Lines</button>
+        </div>
+
+        <div id="loadingMsg" class="loading-msg" style="display:none;">Loading...</div>
+
+        <div id="noneMsg" class="none-msg"></div>
+
+        <div id="linesSection" class="lines-section">
+            <div class="section-title" id="linesTitle"></div>
+            <div class="lines-table-wrap">
+                <table class="lines-table">
+                    <thead>
+                        <tr>
+                            <th style="width:60px">#</th>
+                            <th>Current Description</th>
+                            <th>After Clean</th>
+                        </tr>
+                    </thead>
+                    <tbody id="linesBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="applySection" class="apply-section">
+            <button id="applyBtn" class="btn btn-primary" onclick="applyClean()">Clean All</button>
+            <span id="applyStatus" class="apply-status" style="display:none"></span>
+        </div>
+    </div>
+</main>
+
+<script>
+async function loadLines() {
+    const input = document.getElementById('contractInput');
+    const contractId = input.value.trim();
+    if (!contractId || isNaN(contractId) || parseInt(contractId) < 1) {
+        input.focus();
+        return;
+    }
+
+    const loadBtn = document.getElementById('loadBtn');
+    const loadingMsg = document.getElementById('loadingMsg');
+    loadBtn.disabled = true;
+    input.disabled = true;
+    loadingMsg.style.display = '';
+    document.getElementById('linesSection').classList.remove('visible');
+    document.getElementById('applySection').classList.remove('visible');
+    document.getElementById('noneMsg').classList.remove('visible');
+    document.getElementById('applyStatus').style.display = 'none';
+
+    try {
+        const resp = await fetch(`/api/scripts/clean-asterisks/lines?contract_id=${encodeURIComponent(contractId)}`);
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+
+        if (data.lines.length === 0) {
+            const msg = document.getElementById('noneMsg');
+            msg.textContent = `✓ Contract ${contractId}: no lines with asterisks found.`;
+            msg.classList.add('visible');
+        } else {
+            renderLines(data.lines, contractId);
+        }
+    } catch (e) {
+        alert(`Failed to load lines: ${e.message}`);
+    } finally {
+        loadBtn.disabled = false;
+        input.disabled = false;
+        loadingMsg.style.display = 'none';
+    }
+}
+
+function renderLines(lines, contractId) {
+    document.getElementById('linesTitle').textContent =
+        `${lines.length} line(s) with asterisks — Contract ${contractId}`;
+    const tbody = document.getElementById('linesBody');
+    tbody.innerHTML = '';
+
+    lines.forEach(line => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="color:var(--text-muted);font-size:0.8rem">${line.line_id}</td>
+            <td><span class="desc-before">${escHtml(line.description)}</span></td>
+            <td><span class="desc-after">${escHtml(line.cleaned)}</span></td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    document.getElementById('linesSection').classList.add('visible');
+    document.getElementById('applySection').classList.add('visible');
+}
+
+async function applyClean() {
+    const contractId = parseInt(document.getElementById('contractInput').value);
+    const applyBtn = document.getElementById('applyBtn');
+    const statusEl = document.getElementById('applyStatus');
+    applyBtn.disabled = true;
+    statusEl.style.display = 'none';
+
+    try {
+        const resp = await fetch('/api/scripts/clean-asterisks/apply', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({contract_id: contractId}),
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        statusEl.textContent = `✓ ${data.updated} line(s) cleaned`;
+        statusEl.className = 'apply-status';
+        statusEl.style.display = '';
+
+        document.getElementById('linesSection').classList.remove('visible');
+        document.getElementById('linesTitle').textContent = '';
+    } catch (e) {
+        statusEl.textContent = `✗ ${e.message}`;
+        statusEl.className = 'apply-status err';
+        statusEl.style.display = '';
+    } finally {
+        applyBtn.disabled = false;
+    }
+}
+
+function escHtml(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+document.getElementById('contractInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') loadLines();
+});
+</script>
+
+</body>
+</html>

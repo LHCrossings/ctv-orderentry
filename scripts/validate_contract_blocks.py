@@ -17,7 +17,8 @@ sys.path.insert(0, str(_root))
 
 CONTRACT_ID = int(sys.argv[1]) if len(sys.argv) > 1 else 2646
 
-from browser_automation.etere_direct_client import connect as db_connect, MARKET_USER_IDS
+from browser_automation.etere_direct_client import MARKET_USER_IDS
+from browser_automation.etere_direct_client import connect as db_connect
 
 USER_ID_TO_MARKET = {v: k for k, v in MARKET_USER_IDS.items()}
 
@@ -55,7 +56,6 @@ with db_connect() as conn:
         sys.exit(0)
 
     # Group by line, then check each block
-    from collections import defaultdict
     lines: dict[int, dict] = {}
     for row in rows:
         line_id, line_mkt_id, desc, df, dt, block_id = row

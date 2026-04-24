@@ -12,7 +12,8 @@ from pathlib import Path
 _root = Path(__file__).parent.parent
 sys.path.insert(0, str(_root))
 
-from browser_automation.etere_direct_client import connect as db_connect, MARKET_USER_IDS
+from browser_automation.etere_direct_client import MARKET_USER_IDS
+from browser_automation.etere_direct_client import connect as db_connect
 
 USER_ID_TO_MARKET = {v: k for k, v in MARKET_USER_IDS.items()}
 

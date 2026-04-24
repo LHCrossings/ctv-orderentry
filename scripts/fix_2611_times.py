@@ -5,8 +5,8 @@ and those same lines get separation (5, 0, 5).
 Usage:
     uv run python scripts/fix_2611_times.py
 """
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 

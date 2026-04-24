@@ -19,9 +19,7 @@ Usage:
 """
 
 import sqlite3
-import sys
 from pathlib import Path
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # KNOWN CUSTOMER TEMPLATES
@@ -134,7 +132,7 @@ def seed_templates(db_path: Path) -> None:
     """
     if not db_path.exists():
         print(f"✗ Database not found: {db_path}")
-        print(f"  Run init_customers.py first to create the database.")
+        print("  Run init_customers.py first to create the database.")
         return
 
     # Ensure columns exist

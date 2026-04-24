@@ -8,9 +8,8 @@ Run from Windows:
     git pull && py scripts/test_lexus_direct.py
 """
 import sys
-import os
-from pathlib import Path
 from datetime import date
+from pathlib import Path
 
 # ── Path setup ───────────────────────────────────────────────────────────────
 project_root = Path(__file__).parent.parent
@@ -18,10 +17,13 @@ sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "browser_automation"))
 
 from browser_automation.etere_direct_client import (
-    EtereDirectClient, connect, AGENCY_IDS, MEDIA_CENTER_IDS,
+    AGENCY_IDS,
+    MEDIA_CENTER_IDS,
+    EtereDirectClient,
+    connect,
 )
+from browser_automation.lexus_automation import LEXUS_CUSTOMER_ID, _build_etere_lines
 from browser_automation.parsers.lexus_parser import parse_lexus_file
-from browser_automation.lexus_automation import _build_etere_lines, LEXUS_CUSTOMER_ID
 
 # ── File ─────────────────────────────────────────────────────────────────────
 _FILENAME = "NEW ORDER Lexus CY26 LDA - AI - NY EST 202 -Crossings r1.xlsx"
@@ -56,7 +58,7 @@ if not etere_lines:
     sys.exit(1)
 
 # ── Connect ───────────────────────────────────────────────────────────────────
-print(f"\n[DB] Connecting...")
+print("\n[DB] Connecting...")
 conn = connect()
 conn.autocommit = False
 print("[DB] Connected.")
@@ -85,7 +87,7 @@ try:
     client.set_master_market("NYC")
 
     # ── Contract header ───────────────────────────────────────────────────────
-    print(f"\n[HEADER] Creating test contract...")
+    print("\n[HEADER] Creating test contract...")
     contract_id = client.create_contract_header(
         code=TEST_CODE,
         description=TEST_DESC,

@@ -5,11 +5,16 @@ Creates ONE contract with ONE line, prints the IDs, then rolls back.
 Run from Windows: py scripts/test_direct_client.py
 """
 import sys
+
 sys.path.insert(0, '.')
 
 from datetime import date
+
 from browser_automation.etere_direct_client import (
-    EtereDirectClient, connect, AGENCY_IDS, MEDIA_CENTER_IDS
+    AGENCY_IDS,
+    MEDIA_CENTER_IDS,
+    EtereDirectClient,
+    connect,
 )
 
 print("Connecting to Etere SQL Server...")

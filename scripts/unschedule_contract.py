@@ -7,13 +7,17 @@ After editing, use Block Refresh to re-assign blocks.
 Usage:
     uv run python scripts/unschedule_contract.py 2611
 """
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from browser_automation.etere_direct_client import (
-    EtereDirectClient, connect, etere_web_login, etere_web_logout, ETERE_WEB_URL,
+    ETERE_WEB_URL,
+    EtereDirectClient,
+    connect,
+    etere_web_login,
+    etere_web_logout,
 )
 
 
@@ -23,7 +27,7 @@ def main():
         print("Usage: uv run python scripts/unschedule_contract.py <contract_id>")
         sys.exit(1)
 
-    print(f"[INFO] Logging into Etere web UI ...")
+    print("[INFO] Logging into Etere web UI ...")
     session = etere_web_login()
 
     try:

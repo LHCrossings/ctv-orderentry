@@ -15,8 +15,8 @@ Example (dry run):
 Example (delete):
     uv run python scripts/delete_scheduled_spots.py 2551 06/01/2026 06/21/2026 --confirm
 """
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 

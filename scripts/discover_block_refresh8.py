@@ -2,11 +2,12 @@
 Call web_getPriceListBlocks to see what it returns, then compare to CONTRATTIFASCE.
 Run from Windows: py scripts/discover_block_refresh8.py
 """
-import sys, math
-from pathlib import Path
+import sys
 from datetime import datetime
+from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from browser_automation.etere_direct_client import connect, NEWTYPE_PAID
+from browser_automation.etere_direct_client import NEWTYPE_PAID, connect
 
 FRAMES = 29.97
 

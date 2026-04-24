@@ -7,6 +7,7 @@ Run from Windows: py scripts/discover_block_refresh16.py
 """
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from browser_automation.etere_direct_client import connect
 
@@ -70,11 +71,13 @@ for lid, day_pat, ora_ini_h, ora_fin_h, cod_user, d_from, d_to, is_point in LINE
     print(f"  lb={lb}  ub={ub}  (window: {lb/FRAMES/3600:.4f}h – {ub/FRAMES/3600:.4f}h)")
     print(f"  Assigned:  {sorted(assigned)}")
     print(f"  Predicted: {sorted(predicted)}")
-    if missed: print(f"  MISSED:    {sorted(missed)}")
-    if extra:  print(f"  EXTRA:     {sorted(extra)}")
+    if missed:
+        print(f"  MISSED:    {sorted(missed)}")
+    if extra:
+        print(f"  EXTRA:     {sorted(extra)}")
     # Show ORA detail for EXTRA blocks
     if extra:
-        print(f"  EXTRA detail:")
+        print("  EXTRA detail:")
         for fid in sorted(extra)[:5]:
             cursor.execute(f"""
                 SELECT DISTINCT t.ORA, DATEPART(dw, tp.Date) as dw
@@ -90,7 +93,7 @@ for lid, day_pat, ora_ini_h, ora_fin_h, cod_user, d_from, d_to, is_point in LINE
             print(f"    id_fascia={fid}: {[(r[0], ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][r[1]-1]) for r in rows[:4]]}")
     # Show ORA detail for MISSED blocks
     if missed:
-        print(f"  MISSED detail (ORA in broader window):")
+        print("  MISSED detail (ORA in broader window):")
         for fid in sorted(missed)[:5]:
             cursor.execute("""
                 SELECT DISTINCT t.ORA, DATEPART(dw, tp.Date) as dw, t.NEWTYPE

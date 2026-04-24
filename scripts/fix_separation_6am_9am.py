@@ -4,8 +4,8 @@ Set separation to (5, 0, 5) on all 06:00-09:00 lines for a given contract.
 Usage:
     uv run python scripts/fix_separation_6am_9am.py 2611
 """
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 

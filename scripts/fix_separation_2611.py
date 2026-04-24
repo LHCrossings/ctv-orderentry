@@ -4,8 +4,8 @@ Set separation to (0, 5, 0) on all 06:00-09:00 and 22:00-23:59 lines for contrac
 Usage:
     uv run python scripts/fix_separation_2611.py
 """
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -45,7 +45,6 @@ def main():
 
         print(f"[INFO] Found {len(rows)} line(s) to update:")
         for row in rows:
-            from browser_automation.etere_direct_client import _to_frames
             h_start = row[1] / FPS / 3600
             h_end   = row[2] / FPS / 3600
             print(f"  line {row[0]}: {row[1]}({h_start:.1f}h) – {row[2]}({h_end:.1f}h)  "

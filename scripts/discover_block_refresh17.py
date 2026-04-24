@@ -5,6 +5,7 @@ Run from Windows: py scripts/discover_block_refresh17.py
 """
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from browser_automation.etere_direct_client import connect
 
@@ -66,7 +67,8 @@ for lid, day_pat, ora_ini_h, ora_fin_h, cod_user, d_from, d_to, is_point in LINE
     print(f"  lb={lb} ({lb/FRAMES/3600:.4f}h)  ub={ub} ({ub/FRAMES/3600:.4f}h)")
     print(f"  Assigned:  {sorted(assigned)}")
     print(f"  Predicted: {sorted(predicted)}")
-    if missed: print(f"  MISSED:    {sorted(missed)}")
+    if missed:
+        print(f"  MISSED:    {sorted(missed)}")
     if extra:
         print(f"  EXTRA:     {sorted(extra)}")
         # Show MIN(offset) for extras to understand why they were included

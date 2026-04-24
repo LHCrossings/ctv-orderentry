@@ -4,6 +4,7 @@ Run from Windows: py scripts/discover_block_refresh6.py
 """
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from browser_automation.etere_direct_client import connect
 
@@ -82,11 +83,10 @@ for row in cursor.fetchall():
 print("\n" + "=" * 60)
 print("Distinct id_fascia for Cod_User=1 (NYC), offset≈14:00-15:00, future dates")
 print("=" * 60)
-import math
 FRAMES = 29.97
 start_f = round(14 * 3600 * FRAMES)
 end_f   = round(15 * 3600 * FRAMES)
-cursor.execute(f"""
+cursor.execute("""
     SELECT DISTINCT TOP 20 id_fascia, id_palinsesto, Cod_User, MIN(Date) as first_date, MAX(Date) as last_date
     FROM trafficPalinse
     WHERE Cod_User = 1

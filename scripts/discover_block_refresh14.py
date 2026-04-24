@@ -5,6 +5,7 @@ Run from Windows: py scripts/discover_block_refresh14.py
 """
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from browser_automation.etere_direct_client import connect
 
@@ -69,8 +70,10 @@ for lid, day_pat, ora_ini_h, ora_fin_h, cod_user, d_from, d_to, is_point in LINE
     print(f"\nLine {lid} {label}  [{status}]")
     print(f"  Assigned:  {sorted(assigned)}")
     print(f"  Predicted: {sorted(predicted)}")
-    if missed: print(f"  MISSED:    {sorted(missed)}")
-    if extra:  print(f"  EXTRA:     {sorted(extra)}")
+    if missed:
+        print(f"  MISSED:    {sorted(missed)}")
+    if extra:
+        print(f"  EXTRA:     {sorted(extra)}")
 
 # ── Also verify: what DW does each id_fascia occur on for 9940/11229 in Jan? ──
 print("\n" + "=" * 70)

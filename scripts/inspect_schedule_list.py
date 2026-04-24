@@ -9,8 +9,8 @@ Examples:
     uv run python scripts/inspect_schedule_list.py 2551
     uv run python scripts/inspect_schedule_list.py 2551 04/01/2025 04/30/2025
 """
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -23,8 +23,8 @@ def main():
         print("Usage: uv run python scripts/inspect_schedule_list.py <contract_id> [from_date] [to_date]")
         sys.exit(1)
 
-    date_from = sys.argv[2] if len(sys.argv) > 2 else None
-    date_to   = sys.argv[3] if len(sys.argv) > 3 else None
+    sys.argv[2] if len(sys.argv) > 2 else None
+    sys.argv[3] if len(sys.argv) > 3 else None
 
     with connect() as conn:
         cursor = conn.cursor()
@@ -58,7 +58,7 @@ def main():
                 ORDER  BY t.Date, t.ID_ContrattiRighe
             """, [contract_id])
             rows = cursor.fetchall()
-            print(f"[INFO] trafficPalinse sample (first 10):")
+            print("[INFO] trafficPalinse sample (first 10):")
             print(f"{'ID':>10}  {'LineID':>8}  {'Date':>12}  {'Scadenza':>12}  Description")
             print("-" * 70)
             for row in rows:
@@ -77,7 +77,7 @@ def main():
                 ORDER  BY t.DATA_P, t.ID_CONTRATTIRIGHE
             """, [contract_id])
             rows = cursor.fetchall()
-            print(f"[INFO] Traffic_Manualsched sample (first 10):")
+            print("[INFO] Traffic_Manualsched sample (first 10):")
             print(f"{'ID':>10}  {'LineID':>8}  {'Date':>12}  Description")
             print("-" * 60)
             for row in rows:

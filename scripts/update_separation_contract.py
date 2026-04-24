@@ -12,9 +12,9 @@ Examples:
     uv run python scripts/update_separation_contract.py 2611 --customer 15
     uv run python scripts/update_separation_contract.py 2611 --customer 25 --event 0 --order 0
 """
-import sys
-import os
 import argparse
+import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 

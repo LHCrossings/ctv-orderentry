@@ -14,9 +14,10 @@ sys.path.insert(0, str(_root / "browser_automation"))
 
 CONTRACT_ID = int(sys.argv[1]) if len(sys.argv) > 1 else 2646
 
-from browser_automation.etere_session import EtereSession
 from browser_automation.etere_client import EtereClient
-from browser_automation.etere_direct_client import EtereDirectClient, connect as db_connect
+from browser_automation.etere_direct_client import EtereDirectClient
+from browser_automation.etere_direct_client import connect as db_connect
+from browser_automation.etere_session import EtereSession
 
 with EtereSession() as session:
     etere = EtereClient(session.driver)

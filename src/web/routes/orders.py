@@ -418,6 +418,72 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
+    @router.get("/scripts/clean-asterisks", response_class=HTMLResponse)
+    async def clean_asterisks_page(request: Request):
+        return templates.TemplateResponse(request, "scripts/clean_asterisks.html")
+
+    @router.get("/api/scripts/clean-asterisks/lines")
+    async def get_asterisk_lines(contract_id: int = Query(..., gt=0)):
+        try:
+            project_root = Path(__file__).parent.parent.parent.parent
+            if str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
+            from browser_automation.etere_direct_client import connect as _db_connect
+
+            with _db_connect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT ID_CONTRATTIRIGHE, DESCRIZIONE
+                    FROM   CONTRATTIRIGHE
+                    WHERE  ID_CONTRATTITESTATA = ?
+                      AND  DESCRIZIONE LIKE '%*%'
+                    ORDER  BY ID_CONTRATTIRIGHE
+                """, [contract_id])
+                rows = cursor.fetchall()
+
+            lines = [
+                {
+                    "line_id":     row[0],
+                    "description": row[1] or "",
+                    "cleaned":     (row[1] or "").replace("*", "").strip(),
+                }
+                for row in rows
+            ]
+            return JSONResponse({"contract_id": contract_id, "lines": lines})
+
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.post("/api/scripts/clean-asterisks/apply")
+    async def apply_clean_asterisks(payload: dict = Body(...)):
+        try:
+            project_root = Path(__file__).parent.parent.parent.parent
+            if str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
+            from browser_automation.etere_direct_client import connect as _db_connect
+
+            contract_id = int(payload.get("contract_id", 0))
+            if not contract_id:
+                raise HTTPException(status_code=400, detail="contract_id required.")
+
+            with _db_connect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE CONTRATTIRIGHE
+                    SET    DESCRIZIONE = RTRIM(LTRIM(REPLACE(DESCRIZIONE, '*', '')))
+                    WHERE  ID_CONTRATTITESTATA = ?
+                      AND  DESCRIZIONE LIKE '%*%'
+                """, [contract_id])
+                conn.commit()
+                updated = cursor.rowcount
+
+            return JSONResponse({"updated": updated})
+
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     # ------------------------------------------------------------------
     # Pending orders
     # ------------------------------------------------------------------
@@ -1390,7 +1456,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     @router.post("/api/traffic/contract/{contract_id}/assign")
     async def traffic_contract_assign(contract_id: int, body: dict = Body(...)):
-        import random
         spots = body.get("spots", [])
         if not spots:
             raise HTTPException(status_code=400, detail="No spots provided")
