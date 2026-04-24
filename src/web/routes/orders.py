@@ -7,6 +7,8 @@ import json
 import shutil
 import subprocess
 import sys
+import threading as _threading
+import time as _time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -18,6 +20,32 @@ from fastapi.templating import Jinja2Templates
 _src_path = Path(__file__).parent.parent.parent
 if str(_src_path) not in sys.path:
     sys.path.insert(0, str(_src_path))
+
+# ── Etere web session cache ──────────────────────────────────────────────────
+# One persistent login shared across all traffic-assign calls.
+# Re-logs in only after 20 minutes of idle so we never burn multiple seats.
+_etere_session_lock = _threading.Lock()
+_etere_session_state: dict = {"session": None, "born_at": 0.0}
+_ETERE_SESSION_TTL = 20 * 60  # seconds
+
+
+def _get_etere_session():
+    from browser_automation.etere_direct_client import etere_web_login
+    now = _time.monotonic()
+    with _etere_session_lock:
+        s = _etere_session_state
+        if s["session"] is not None and (now - s["born_at"]) < _ETERE_SESSION_TTL:
+            return s["session"]
+        session = etere_web_login()
+        s["session"] = session
+        s["born_at"] = now
+        return session
+
+
+def _invalidate_etere_session():
+    with _etere_session_lock:
+        _etere_session_state["session"] = None
+        _etere_session_state["born_at"] = 0.0
 
 from business_logic.services.pdf_order_detector import PDFOrderDetector
 from orchestration.config import ApplicationConfig
@@ -1697,8 +1725,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
             from browser_automation.etere_direct_client import (
                 ETERE_WEB_URL,
-                etere_web_login,
-                etere_web_logout,
             )
             from browser_automation.etere_direct_client import (
                 connect as _db_connect,
@@ -1774,7 +1800,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 )
                 existing_pool = {r["ID_FILMATI"] for r in cur_pool.fetchall()}
 
-            session = etere_web_login()
+            session = _get_etere_session()
             lines_updated = spots_updated = 0
             tp_assignments = []  # (tp_id, filmati_id) pairs
             try:
@@ -1814,8 +1840,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     spots_updated += n
                     tp_assignments.extend(zip(tp_ids, slice_))
 
-            finally:
-                etere_web_logout(session)
+            except Exception:
+                # Invalidate cache so next call gets a fresh login
+                _invalidate_etere_session()
+                raise
 
             # Sync COD_PROGRA and PERCROTATION so the native app reflects the rotation
             if tp_assignments:
