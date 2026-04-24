@@ -631,8 +631,19 @@ class EtereClient:
         """
         try:
             print(f"\n[SCAN] Scanning lines for contract {contract_number}...")
+            # Navigate via /sales/ first to guarantee a fresh SPA state.
+            # If the browser is already on this contract URL (e.g. after extend_contract_end_date),
+            # a direct re-navigation is a SPA no-op and the Lines tab won't load its data.
+            self.driver.get(f"{self.BASE_URL}/sales/")
+            time.sleep(1)
             self.driver.get(f"{self.BASE_URL}/sales/contract/{contract_number}")
-            time.sleep(3)
+            # Wait for General tab to confirm SPA has fully initialized
+            try:
+                WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.ID, "date"))
+                )
+            except Exception:
+                time.sleep(3)
 
             def _click_lines_tab_and_wait():
                 try:
