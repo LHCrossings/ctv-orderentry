@@ -634,22 +634,27 @@ class EtereClient:
             self.driver.get(f"{self.BASE_URL}/sales/contract/{contract_number}")
             time.sleep(3)
 
-            # Click Lines tab
-            try:
-                tab = self.wait.until(EC.element_to_be_clickable(
-                    (By.XPATH, "//a[contains(text(), 'Lines')]")
-                ))
-                tab.click()
-                time.sleep(3)
-            except Exception:
+            def _click_lines_tab_and_wait():
                 try:
-                    tab = self.driver.find_element(By.CSS_SELECTOR, 'a[href="#Lines"]')
+                    tab = self.wait.until(EC.element_to_be_clickable(
+                        (By.XPATH, "//a[contains(text(), 'Lines')]")
+                    ))
                     tab.click()
-                    time.sleep(3)
                 except Exception:
-                    pass
+                    try:
+                        tab = self.driver.find_element(By.CSS_SELECTOR, 'a[href="#Lines"]')
+                        tab.click()
+                    except Exception:
+                        pass
+                # Wait for table rows to appear (up to 10s); fall through if genuinely empty
+                try:
+                    WebDriverWait(self.driver, 10).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "table tbody tr"))
+                    )
+                except Exception:
+                    time.sleep(2)
 
-            time.sleep(2)
+            _click_lines_tab_and_wait()
             lines_data = []
 
             for row in self.driver.find_elements(By.CSS_SELECTOR, "table tbody tr"):
@@ -674,6 +679,33 @@ class EtereClient:
                     lines_data.append((line_id, line_number))
                 except Exception:
                     continue
+
+            # If 0 rows, the page may have been slow — retry once
+            if not lines_data:
+                print("[SCAN] ⚠ 0 rows on first pass — retrying...")
+                self.driver.get(f"{self.BASE_URL}/sales/contract/{contract_number}")
+                time.sleep(2)
+                _click_lines_tab_and_wait()
+                for row in self.driver.find_elements(By.CSS_SELECTOR, "table tbody tr"):
+                    try:
+                        link = row.find_element(
+                            By.CSS_SELECTOR, "a[onclick*='openModalChangeContractLine']"
+                        )
+                        onclick = link.get_attribute('onclick')
+                        if not onclick:
+                            continue
+                        line_id = onclick.split('(')[1].split(')')[0]
+                        cells = row.find_elements(By.TAG_NAME, "td")
+                        line_number = None
+                        for cell in cells[:3]:
+                            try:
+                                line_number = int(cell.text.strip())
+                                break
+                            except ValueError:
+                                continue
+                        lines_data.append((line_id, line_number))
+                    except Exception:
+                        continue
 
             print(f"[SCAN] ✓ Found {len(lines_data)} lines")
 
