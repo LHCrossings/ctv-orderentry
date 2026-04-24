@@ -1819,6 +1819,20 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 " WHERE ID_CONTRATTIRIGHE = %d AND ID_FILMATI = %d",
                                 (perc, line_id, filmati_id),
                             )
+                    # Remove spurious pool rows: MaterialAddToAssetListC adds each filmati
+                    # to every line in the contract; delete rows where PERCROTATION=0
+                    # so only lines that actually use the filmati remain in the pool.
+                    if filmati_ids:
+                        fid_str = ",".join(str(f) for f in filmati_ids)
+                        cur.execute(
+                            f"DELETE FROM CONTRATTIFILMATI"
+                            f" WHERE ID_FILMATI IN ({fid_str})"
+                            f" AND PERCROTATION = 0"
+                            f" AND ID_CONTRATTIRIGHE IN ("
+                            f"   SELECT ID_CONTRATTIRIGHE FROM CONTRATTIRIGHE"
+                            f"   WHERE ID_CONTRATTITESTATA = {contract_id}"
+                            f" )"
+                        )
                     conn.commit()
 
             return {"ok": True, "spots_updated": spots_updated, "lines_updated": lines_updated}
