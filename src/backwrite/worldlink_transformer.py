@@ -27,7 +27,8 @@ GREEN_FILL   = PatternFill("solid", fgColor="FF92D050")
 AGENCY_FEE   = 0.15
 _DATA_FONT   = Font(name="Calibri", size=11)
 _BOLD_FONT   = Font(name="Calibri", size=11, bold=True)
-_TEMPLATE    = Path(__file__).parent / "templates" / "worldlink_template.xlsx"
+_TEMPLATE       = Path(__file__).parent / "templates" / "worldlink_template.xlsx"
+_TEMPLATE_BYTES = _TEMPLATE.read_bytes()   # read once at import; avoid disk I/O on every generate
 _CURRENCY_NF = '_("$"* #,##0.00_);_("$"* \\(#,##0.00\\);_("$"* "-"??_);_(@_)'
 _MONTH_NF    = '[$-409]mmm\\-yy;@'   # "Apr-26" — MLBF column S
 _TIME_NF     = '[h]:mm:ss;@'          # MLBF time columns E/F/G
@@ -51,7 +52,7 @@ def generate_worldlink_excel(io_data: dict, user_inputs: dict) -> bytes:
     user_inputs: {"contract_number": str, "revision": int|str}
     Returns xlsx bytes.
     """
-    wb = load_workbook(_TEMPLATE)
+    wb = load_workbook(io.BytesIO(_TEMPLATE_BYTES))
 
     for name in ("Run Sheet", "Monthly Totals"):
         if name in wb.sheetnames:
