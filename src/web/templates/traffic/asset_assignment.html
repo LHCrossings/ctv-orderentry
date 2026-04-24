@@ -463,6 +463,50 @@
         </div>
     </div>
 
+    <!-- Spot library + Rotation builder -->
+    <div class="two-col">
+
+        <!-- Spot library -->
+        <div class="tool-card">
+            <h2>Spot Library</h2>
+            <div class="input-row">
+                <div class="field-group" style="flex:1;">
+                    <label class="field-label">Title starts with</label>
+                    <input id="spotSearch" class="field-input" placeholder="TYIW26TL, LEXUS…"
+                           onkeydown="if(event.key==='Enter') searchSpots()" />
+                </div>
+                <button class="run-btn" onclick="searchSpots()">Search</button>
+            </div>
+            <div class="pill-group" style="margin-top:12px;">
+                <span class="field-label" style="margin-right:4px;">Duration:</span>
+                <button class="dur-pill active" data-dur="" onclick="setDur(this, '')">All</button>
+                <button class="dur-pill" data-dur="450" onclick="setDur(this, 450)">:15</button>
+                <button class="dur-pill" data-dur="900" onclick="setDur(this, 900)">:30</button>
+                <button class="dur-pill" data-dur="1800" onclick="setDur(this, 1800)">:60</button>
+            </div>
+            <div class="input-row" style="margin-top:12px;">
+                <div class="field-group" style="flex:1;">
+                    <label class="field-label">Filter by serial # (comma or space separated)</label>
+                    <input id="serialFilter" class="field-input" placeholder="107, 108, 109…"
+                           oninput="applySpotFilter()" />
+                </div>
+            </div>
+            <div id="spotResults">
+                <div class="spot-results-empty">Enter a code prefix above to search the media library.</div>
+            </div>
+        </div>
+
+        <!-- Rotation builder -->
+        <div class="tool-card">
+            <h2>Rotation</h2>
+            <div id="rotationBuilder">
+                <div class="empty-builder">Select spots from the library to build a rotation.</div>
+            </div>
+            <div id="builderToast" class="result-toast"></div>
+        </div>
+
+    </div>
+
     <!-- Filters -->
     <div class="tool-card filter-card" id="filterCard">
         <h2>Filters <span style="font-weight:400; color:var(--text-muted); font-size:0.82rem;">— all optional; unset = entire contract</span></h2>
@@ -527,49 +571,6 @@
         </div>
     </div>
 
-    <!-- Spot library + Rotation builder -->
-    <div class="two-col">
-
-        <!-- Spot library -->
-        <div class="tool-card">
-            <h2>Spot Library</h2>
-            <div class="input-row">
-                <div class="field-group" style="flex:1;">
-                    <label class="field-label">Title starts with</label>
-                    <input id="spotSearch" class="field-input" placeholder="TYIW26TL, LEXUS…"
-                           onkeydown="if(event.key==='Enter') searchSpots()" />
-                </div>
-                <button class="run-btn" onclick="searchSpots()">Search</button>
-            </div>
-            <div class="pill-group" style="margin-top:12px;">
-                <span class="field-label" style="margin-right:4px;">Duration:</span>
-                <button class="dur-pill active" data-dur="" onclick="setDur(this, '')">All</button>
-                <button class="dur-pill" data-dur="450" onclick="setDur(this, 450)">:15</button>
-                <button class="dur-pill" data-dur="900" onclick="setDur(this, 900)">:30</button>
-                <button class="dur-pill" data-dur="1800" onclick="setDur(this, 1800)">:60</button>
-            </div>
-            <div class="input-row" style="margin-top:12px;">
-                <div class="field-group" style="flex:1;">
-                    <label class="field-label">Filter by serial # (comma or space separated)</label>
-                    <input id="serialFilter" class="field-input" placeholder="107, 108, 109…"
-                           oninput="applySpotFilter()" />
-                </div>
-            </div>
-            <div id="spotResults">
-                <div class="spot-results-empty">Enter a code prefix above to search the media library.</div>
-            </div>
-        </div>
-
-        <!-- Rotation builder -->
-        <div class="tool-card">
-            <h2>Rotation</h2>
-            <div id="rotationBuilder">
-                <div class="empty-builder">Select spots from the library to build a rotation.</div>
-            </div>
-            <div id="builderToast" class="result-toast"></div>
-        </div>
-
-    </div>
 </main>
 
 <script>
