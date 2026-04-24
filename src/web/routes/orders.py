@@ -26,6 +26,45 @@ from web.parser_bridge import get_order_detail, list_parsers
 
 _ALLOWED_EXTENSIONS = {".pdf", ".xml", ".xlsx", ".xlsm", ".jpg", ".jpeg", ".png"}
 
+# Market code → COD_USER integer (must match EtereClient.MARKET_CODES)
+_MARKET_CODES = {
+    "NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4, "SEA": 5,
+    "LAX": 6, "CVC": 7, "WDC": 8, "MMT": 9, "DAL": 10,
+}
+_VALID_DAYS = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
+_FPS_GLOBAL = 29.97
+
+
+def _build_spot_filter(filters: dict) -> str:
+    """Return extra AND clauses for TPALINSE spot queries based on optional filter dict."""
+    import re
+    clauses = []
+    if filters.get("date_from") and re.match(r"^\d{4}-\d{2}-\d{2}$", filters["date_from"]):
+        clauses.append(f"tp.DATA >= '{filters['date_from']}'")
+    if filters.get("date_to") and re.match(r"^\d{4}-\d{2}-\d{2}$", filters["date_to"]):
+        clauses.append(f"tp.DATA <= '{filters['date_to']}'")
+    if filters.get("days"):
+        safe = [d for d in filters["days"] if d in _VALID_DAYS]
+        if safe:
+            clauses.append(f"DATENAME(weekday, tp.DATA) IN ({','.join(repr(d) for d in safe)})")
+    if filters.get("time_from"):
+        try:
+            h, m = map(int, filters["time_from"].split(":"))
+            clauses.append(f"tp.ORA >= {round((h * 3600 + m * 60) * _FPS_GLOBAL)}")
+        except (ValueError, AttributeError):
+            pass
+    if filters.get("time_to"):
+        try:
+            h, m = map(int, filters["time_to"].split(":"))
+            clauses.append(f"tp.ORA <= {round((h * 3600 + m * 60) * _FPS_GLOBAL)}")
+        except (ValueError, AttributeError):
+            pass
+    if filters.get("markets"):
+        ids = [_MARKET_CODES[k] for k in filters["markets"] if k in _MARKET_CODES]
+        if ids:
+            clauses.append(f"tp.COD_USER IN ({','.join(str(i) for i in ids)})")
+    return (" AND " + " AND ".join(clauses)) if clauses else ""
+
 
 def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRouter:
     router = APIRouter()
@@ -1533,6 +1572,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     @router.post("/api/traffic/contract/{contract_id}/assign")
     async def traffic_contract_assign(contract_id: int, body: dict = Body(...)):
         spots = body.get("spots", [])
+        filters = body.get("filters", {})
         if not spots:
             raise HTTPException(status_code=400, detail="No spots provided")
         total_weight = sum(s["weight"] for s in spots)
@@ -1552,18 +1592,20 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             )
 
             filmati_ids = [s["id"] for s in spots]
+            filter_sql = _build_spot_filter(filters)
 
             with _db_connect() as conn:
                 cur = conn.cursor(as_dict=True)
-                cur.execute("""
+                cur.execute(f"""
                     SELECT tpa.id_contrattirighe AS line_id,
                            tp.ID_TPALINSE        AS tp_id
                     FROM TPALINSE tp
                     JOIN trafficPalinse tpa ON tpa.id_tpalinse       = tp.ID_TPALINSE
                     JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE  = tpa.id_contrattirighe
-                    WHERE cr.ID_CONTRATTITESTATA = %d
+                    WHERE cr.ID_CONTRATTITESTATA = {contract_id}
+                    {filter_sql}
                     ORDER BY tp.DATA, tp.ORA
-                """ % contract_id)
+                """)
                 all_rows = cur.fetchall()
 
                 placeholders = ",".join(str(i) for i in filmati_ids)
@@ -1575,25 +1617,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 filmati_title_map = {r["ID_FILMATI"]: (r["DESCRIZIO"] or "") for r in filmati_rows}
 
             if not all_rows:
-                raise ValueError("No scheduled spots found for this contract")
-
-            line_tp_map = defaultdict(list)
-            for r in all_rows:
-                line_tp_map[r["line_id"]].append(r["tp_id"])
-
-            # Snapshot current CONTRATTIFILMATI pool (keyed by ID_CONTRATTIRIGHE, not header ID)
-            line_id_placeholders = ",".join(str(i) for i in line_tp_map.keys())
-            old_pool_ids: set = set()
-            try:
-                with _db_connect() as conn2:
-                    cur2 = conn2.cursor(as_dict=True)
-                    cur2.execute(
-                        f"SELECT DISTINCT ID_FILMATI FROM CONTRATTIFILMATI"
-                        f" WHERE ID_CONTRATTIRIGHE IN ({line_id_placeholders})"
-                    )
-                    old_pool_ids = {r["ID_FILMATI"] for r in cur2.fetchall()}
-            except Exception:
-                pass  # non-fatal — pool cleanup will be skipped this run
+                raise ValueError("No scheduled spots found matching the selected filters")
 
             # Calculate rotation % per filmati (sum = 100, last spot absorbs rounding remainder)
             perc_map: dict = {}
@@ -1661,18 +1685,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     spots_updated += n
                     tp_assignments.extend(zip(tp_ids, slice_))
 
-                # Remove stale spots from the contract pool so native app stays in sync
-                new_filmati_set = set(filmati_ids)
-                for stale_id in old_pool_ids - new_filmati_set:
-                    try:
-                        session.post(
-                            f"{ETERE_WEB_URL}/Sales/MaterialRemoveToAssetListC",
-                            json={"idct": contract_id, "idfilm": stale_id},
-                            headers={"X-Requested-With": "XMLHttpRequest"},
-                            timeout=15,
-                        )
-                    except Exception:
-                        pass  # non-fatal — schedule is already correct
             finally:
                 etere_web_logout(session)
 
@@ -1699,6 +1711,59 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     conn.commit()
 
             return {"ok": True, "spots_updated": spots_updated, "lines_updated": lines_updated}
+
+        try:
+            result = await asyncio.get_running_loop().run_in_executor(None, _run)
+            return JSONResponse(result)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.post("/api/traffic/contract/{contract_id}/preview")
+    async def traffic_contract_preview(contract_id: int, body: dict = Body({})):
+        filters = body.get("filters", {})
+
+        def _run():
+            from browser_automation.etere_direct_client import connect as _db_connect
+            filter_sql = _build_spot_filter(filters)
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                cur.execute(f"""
+                    SELECT COUNT(*) AS n
+                    FROM TPALINSE tp
+                    JOIN trafficPalinse tpa ON tpa.id_tpalinse      = tp.ID_TPALINSE
+                    JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
+                    WHERE cr.ID_CONTRATTITESTATA = {contract_id}
+                    {filter_sql}
+                """)
+                return {"count": cur.fetchone()["n"]}
+
+        try:
+            result = await asyncio.get_running_loop().run_in_executor(None, _run)
+            return JSONResponse(result)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.post("/api/traffic/contract/{contract_id}/clear")
+    async def traffic_contract_clear(contract_id: int, body: dict = Body({})):
+        filters = body.get("filters", {})
+
+        def _run():
+            from browser_automation.etere_direct_client import connect as _db_connect
+            filter_sql = _build_spot_filter(filters)
+            with _db_connect() as conn:
+                cur = conn.cursor()
+                cur.execute(f"""
+                    UPDATE tp
+                    SET tp.COD_PROGRA = '', tp.TITLE = '', tp.ID_FILMATI = 0
+                    FROM TPALINSE tp
+                    JOIN trafficPalinse tpa ON tpa.id_tpalinse      = tp.ID_TPALINSE
+                    JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
+                    WHERE cr.ID_CONTRATTITESTATA = {contract_id}
+                    {filter_sql}
+                """)
+                cleared = cur.rowcount
+                conn.commit()
+            return {"ok": True, "cleared": cleared}
 
         try:
             result = await asyncio.get_running_loop().run_in_executor(None, _run)

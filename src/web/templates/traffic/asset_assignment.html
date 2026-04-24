@@ -73,6 +73,8 @@
         .run-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
         .run-btn.apply { background: var(--nord14); }
         .run-btn.apply:hover:not(:disabled) { background: #88c0a3; }
+        .run-btn.danger { background: var(--nord11); }
+        .run-btn.danger:hover:not(:disabled) { background: #c0616a; }
 
         /* Contract info banner */
         .contract-banner {
@@ -142,6 +144,68 @@
             min-width: 65px;
             text-align: right;
         }
+
+        /* ── Filter card ──────────────────────────────────────────── */
+        .filter-card { display: none; }
+        .filter-card.visible { display: block; }
+
+        .filter-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 16px 20px;
+            align-items: start;
+        }
+
+        .filter-row-full {
+            grid-column: 1 / -1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+        }
+
+        /* pill toggles — days + markets */
+        .pill-toggle-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            align-items: center;
+        }
+        .pill-toggle {
+            padding: 4px 11px;
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.15s;
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+        }
+        .pill-toggle.active {
+            background: var(--nord10);
+            border-color: var(--nord10);
+            color: white;
+        }
+        .pill-toggle:hover:not(.active) { border-color: var(--nord10); color: var(--nord10); }
+
+        .filter-footer {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 16px;
+            padding-top: 14px;
+            border-top: 1px solid var(--border-color);
+            flex-wrap: wrap;
+        }
+        .preview-count {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+        .preview-count.loaded { color: var(--nord10); font-weight: 600; }
 
         /* Two-column layout for search + builder */
         .two-col {
@@ -294,7 +358,7 @@
         .weight-total.ok { color: var(--nord14); }
         .weight-total.warn { color: var(--nord13); }
 
-        .builder-actions { display: flex; gap: 8px; }
+        .builder-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
         .balance-btn {
             padding: 7px 14px;
@@ -399,6 +463,70 @@
         </div>
     </div>
 
+    <!-- Filters -->
+    <div class="tool-card filter-card" id="filterCard">
+        <h2>Filters <span style="font-weight:400; color:var(--text-muted); font-size:0.82rem;">— all optional; unset = entire contract</span></h2>
+
+        <div class="filter-grid">
+            <!-- Date range -->
+            <div class="field-group">
+                <label class="field-label">Date From</label>
+                <input type="date" id="filterDateFrom" class="field-input" style="font-size:0.85rem;" oninput="clearPreview()" />
+            </div>
+            <div class="field-group">
+                <label class="field-label">Date To</label>
+                <input type="date" id="filterDateTo" class="field-input" style="font-size:0.85rem;" oninput="clearPreview()" />
+            </div>
+
+            <!-- Time range -->
+            <div class="field-group">
+                <label class="field-label">Time From</label>
+                <input type="time" id="filterTimeFrom" class="field-input" style="font-size:0.85rem;" oninput="clearPreview()" />
+            </div>
+            <div class="field-group">
+                <label class="field-label">Time To</label>
+                <input type="time" id="filterTimeTo" class="field-input" style="font-size:0.85rem;" oninput="clearPreview()" />
+            </div>
+
+            <!-- Days of week -->
+            <div class="field-group filter-row-full">
+                <label class="field-label" style="margin-bottom:6px;">Days of Week <span style="font-weight:400;">(none = all)</span></label>
+                <div class="pill-toggle-group" id="dayPills">
+                    <button class="pill-toggle" data-day="Monday"    onclick="toggleDay(this)">Mon</button>
+                    <button class="pill-toggle" data-day="Tuesday"   onclick="toggleDay(this)">Tue</button>
+                    <button class="pill-toggle" data-day="Wednesday" onclick="toggleDay(this)">Wed</button>
+                    <button class="pill-toggle" data-day="Thursday"  onclick="toggleDay(this)">Thu</button>
+                    <button class="pill-toggle" data-day="Friday"    onclick="toggleDay(this)">Fri</button>
+                    <button class="pill-toggle" data-day="Saturday"  onclick="toggleDay(this)">Sat</button>
+                    <button class="pill-toggle" data-day="Sunday"    onclick="toggleDay(this)">Sun</button>
+                </div>
+            </div>
+
+            <!-- Markets -->
+            <div class="field-group filter-row-full">
+                <label class="field-label" style="margin-bottom:6px;">Market <span style="font-weight:400;">(none = all)</span></label>
+                <div class="pill-toggle-group" id="marketPills">
+                    <button class="pill-toggle" data-mkt="NYC" onclick="toggleMarket(this)">NYC</button>
+                    <button class="pill-toggle" data-mkt="CMP" onclick="toggleMarket(this)">CMP</button>
+                    <button class="pill-toggle" data-mkt="HOU" onclick="toggleMarket(this)">HOU</button>
+                    <button class="pill-toggle" data-mkt="SFO" onclick="toggleMarket(this)">SFO</button>
+                    <button class="pill-toggle" data-mkt="SEA" onclick="toggleMarket(this)">SEA</button>
+                    <button class="pill-toggle" data-mkt="LAX" onclick="toggleMarket(this)">LAX</button>
+                    <button class="pill-toggle" data-mkt="CVC" onclick="toggleMarket(this)">CVC</button>
+                    <button class="pill-toggle" data-mkt="WDC" onclick="toggleMarket(this)">WDC</button>
+                    <button class="pill-toggle" data-mkt="MMT" onclick="toggleMarket(this)">MMT</button>
+                    <button class="pill-toggle" data-mkt="DAL" onclick="toggleMarket(this)">DAL</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="filter-footer">
+            <button class="run-btn" onclick="previewSpots()" style="height:34px; padding:7px 16px; font-size:0.82rem;">Preview</button>
+            <span class="preview-count" id="previewCount">—</span>
+            <button class="balance-btn" onclick="clearFilters()" style="margin-left:auto;">Clear Filters</button>
+        </div>
+    </div>
+
     <!-- Spot library + Rotation builder -->
     <div class="two-col">
 
@@ -493,6 +621,8 @@
         document.getElementById('contractBanner').classList.add('visible');
         document.getElementById('bannerLines').textContent = 'Loading…';
         document.getElementById('rotationSection').style.display = 'none';
+        document.getElementById('filterCard').classList.add('visible');
+        clearPreview();
 
         const resp = await fetch(`/api/traffic/contract/${id}/assignment`);
         if (!resp.ok) {
@@ -525,6 +655,71 @@
         section.style.display = 'block';
     }
 
+    // ── Filters ─────────────────────────────────────────────────────────────
+
+    function toggleDay(btn) {
+        btn.classList.toggle('active');
+        clearPreview();
+    }
+
+    function toggleMarket(btn) {
+        btn.classList.toggle('active');
+        clearPreview();
+    }
+
+    function clearFilters() {
+        document.getElementById('filterDateFrom').value = '';
+        document.getElementById('filterDateTo').value = '';
+        document.getElementById('filterTimeFrom').value = '';
+        document.getElementById('filterTimeTo').value = '';
+        document.querySelectorAll('#dayPills .pill-toggle').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('#marketPills .pill-toggle').forEach(b => b.classList.remove('active'));
+        clearPreview();
+    }
+
+    function clearPreview() {
+        const el = document.getElementById('previewCount');
+        el.textContent = '—';
+        el.className = 'preview-count';
+    }
+
+    function collectFilters() {
+        const f = {};
+        const df = document.getElementById('filterDateFrom').value;
+        const dt = document.getElementById('filterDateTo').value;
+        const tf = document.getElementById('filterTimeFrom').value;
+        const tt = document.getElementById('filterTimeTo').value;
+        if (df) f.date_from = df;
+        if (dt) f.date_to = dt;
+        if (tf) f.time_from = tf;
+        if (tt) f.time_to = tt;
+        const days = [...document.querySelectorAll('#dayPills .pill-toggle.active')].map(b => b.dataset.day);
+        if (days.length) f.days = days;
+        const mkts = [...document.querySelectorAll('#marketPills .pill-toggle.active')].map(b => b.dataset.mkt);
+        if (mkts.length) f.markets = mkts;
+        return f;
+    }
+
+    async function previewSpots() {
+        if (!selectedContractId) return;
+        const el = document.getElementById('previewCount');
+        el.textContent = 'Loading…';
+        el.className = 'preview-count';
+        try {
+            const resp = await fetch(`/api/traffic/contract/${selectedContractId}/preview`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({filters: collectFilters()}),
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.detail || 'Error');
+            el.textContent = `${data.count} spot${data.count !== 1 ? 's' : ''} match`;
+            el.className = 'preview-count loaded';
+        } catch (e) {
+            el.textContent = `Error: ${e.message}`;
+        }
+    }
+
     // ── Spot library search ─────────────────────────────────────────────────
 
     function setDur(el, val) {
@@ -537,10 +732,6 @@
     let lastSpotResults = [];
     let currentFilteredSpots = [];
     let _spotSearchTimer = null;
-    function debouncedSearch() {
-        clearTimeout(_spotSearchTimer);
-        _spotSearchTimer = setTimeout(searchSpots, 350);
-    }
 
     async function searchSpots() {
         const q = document.getElementById('spotSearch').value.trim();
@@ -621,7 +812,6 @@
     function toggleSpot(id, checked, spot) {
         if (checked) selectedSpots[id] = spot;
         else delete selectedSpots[id];
-        // Sync the select-all checkbox state
         const allChk = document.getElementById('selectAllChk');
         if (allChk) {
             const allChecked  = currentFilteredSpots.every(s => selectedSpots[s.id]);
@@ -644,7 +834,7 @@
         const defaultWeight = Math.floor(100 / spots.length);
         el.innerHTML = `
             <div id="builderRows">
-                ${spots.map((s, i) => `
+                ${spots.map(s => `
                 <div class="builder-row" data-id="${s.id}">
                     <div>
                         <div class="builder-code">${esc(s.code)}</div>
@@ -662,6 +852,10 @@
                 <span class="weight-total" id="weightTotal"></span>
                 <div class="builder-actions">
                     <button class="balance-btn" onclick="balanceWeights()">Balance</button>
+                    <button class="run-btn danger" onclick="clearAssignments()"
+                            ${!selectedContractId ? 'disabled title="Select a contract first"' : ''}>
+                        Clear
+                    </button>
                     <button class="run-btn apply" onclick="applyRotation()"
                             ${!selectedContractId ? 'disabled title="Select a contract first"' : ''}>
                         Apply Rotation
@@ -671,7 +865,6 @@
         updateWeightTotal();
     }
 
-    // Per-spot weights survive re-renders
     const weights = {};
     function getWeight(id, defaultVal) {
         return weights[id] !== undefined ? weights[id] : defaultVal;
@@ -708,22 +901,7 @@
     function removeSpot(id) {
         delete selectedSpots[id];
         delete weights[id];
-        // Uncheck in the spot results table
-        document.querySelectorAll('.weight-input, input[type=checkbox]').forEach(el => {
-            if (el.dataset && el.dataset.id == id) el.checked = false;
-        });
-        // Also uncheck in spot table
-        document.querySelectorAll(`input[type=checkbox]`).forEach(cb => {
-            const row = cb.closest('tr');
-            if (row) {
-                const codeCell = row.querySelector('.spot-code');
-                if (codeCell && selectedSpots[id] === undefined) {
-                    // Try to match by re-checking state
-                }
-            }
-        });
         renderBuilder();
-        // Re-render spot table to sync checkboxes
         const spotRows = document.querySelectorAll('.spot-table tbody tr');
         spotRows.forEach(tr => {
             const cb = tr.querySelector('input[type=checkbox]');
@@ -736,23 +914,13 @@
     }
 
     async function applyRotation() {
-        if (!selectedContractId) {
-            showToast('err', 'No contract selected.');
-            return;
-        }
+        if (!selectedContractId) { showToast('err', 'No contract selected.'); return; }
         const spots = Object.values(selectedSpots).map(s => ({
             id: s.id,
             weight: weights[s.id] !== undefined ? weights[s.id] : Math.floor(100 / Object.keys(selectedSpots).length),
         }));
-        if (!spots.length) {
-            showToast('err', 'No spots selected.');
-            return;
-        }
-        const total = spots.reduce((a, s) => a + s.weight, 0);
-        if (total <= 0) {
-            showToast('err', 'Weights must sum to more than 0.');
-            return;
-        }
+        if (!spots.length) { showToast('err', 'No spots selected.'); return; }
+        if (spots.reduce((a, s) => a + s.weight, 0) <= 0) { showToast('err', 'Weights must sum > 0.'); return; }
 
         const applyBtn = document.querySelector('.run-btn.apply');
         applyBtn.disabled = true;
@@ -763,12 +931,11 @@
             const resp = await fetch(`/api/traffic/contract/${selectedContractId}/assign`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({spots}),
+                body: JSON.stringify({spots, filters: collectFilters()}),
             });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.detail || 'Unknown error');
             showToast('ok', `✓ Applied to ${data.spots_updated} spots across ${data.lines_updated} lines.`);
-            // Refresh current rotation display
             const r2 = await fetch(`/api/traffic/contract/${selectedContractId}/assignment`);
             const d2 = await r2.json();
             renderRotation(d2.rotation, d2.total_spots);
@@ -777,6 +944,40 @@
         } finally {
             applyBtn.disabled = false;
             applyBtn.textContent = 'Apply Rotation';
+        }
+    }
+
+    async function clearAssignments() {
+        if (!selectedContractId) { showToast('err', 'No contract selected.'); return; }
+        const filters = collectFilters();
+        const hasFilter = Object.keys(filters).length > 0;
+        const msg = hasFilter
+            ? 'Clear assignments for the filtered spots?'
+            : 'Clear ALL assignments on this contract?';
+        if (!confirm(msg)) return;
+
+        const clearBtn = document.querySelector('.run-btn.danger');
+        clearBtn.disabled = true;
+        clearBtn.textContent = 'Clearing…';
+        showToast('', '');
+
+        try {
+            const resp = await fetch(`/api/traffic/contract/${selectedContractId}/clear`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({filters}),
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.detail || 'Unknown error');
+            showToast('ok', `✓ Cleared ${data.cleared} spot${data.cleared !== 1 ? 's' : ''}.`);
+            const r2 = await fetch(`/api/traffic/contract/${selectedContractId}/assignment`);
+            const d2 = await r2.json();
+            renderRotation(d2.rotation, d2.total_spots);
+        } catch (e) {
+            showToast('err', `Error: ${e.message}`);
+        } finally {
+            clearBtn.disabled = false;
+            clearBtn.textContent = 'Clear';
         }
     }
 
