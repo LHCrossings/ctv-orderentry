@@ -1771,7 +1771,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 cur = conn.cursor()
                 cur.execute(f"""
                     UPDATE tp
-                    SET tp.COD_PROGRA = '', tp.TITLE = '', tp.ID_FILMATI = 0
+                    SET tp.COD_PROGRA = '', tp.TITLE = cr.DESCRIZIONE, tp.ID_FILMATI = 0
                     FROM TPALINSE tp
                     JOIN trafficPalinse tpa ON tpa.id_tpalinse      = tp.ID_TPALINSE
                     JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
