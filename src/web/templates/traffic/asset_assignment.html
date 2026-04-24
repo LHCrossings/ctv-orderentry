@@ -659,6 +659,14 @@
             `${data.total_spots} scheduled spots across ${data.lines.length} line${data.lines.length !== 1 ? 's' : ''}`;
 
         renderRotation(data.rotation, data.total_spots);
+
+        // Pre-select market pills based on the contract's scheduled lines
+        document.querySelectorAll('#marketPills .pill-toggle').forEach(b => b.classList.remove('active'));
+        (data.markets || []).forEach(mkt => {
+            const pill = document.querySelector(`#marketPills .pill-toggle[data-mkt="${mkt}"]`);
+            if (pill) pill.classList.add('active');
+        });
+        clearPreview();
     }
 
     function renderRotation(rotation, total) {

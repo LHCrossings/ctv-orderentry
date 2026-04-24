@@ -1590,9 +1590,23 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 rotation_rows = cur.fetchall()
                 total = sum(r["count"] for r in rotation_rows) if rotation_rows else 0
 
+                cur.execute("""
+                    SELECT DISTINCT cr.COD_USER AS cod_user
+                    FROM CONTRATTIRIGHE cr
+                    JOIN trafficPalinse tpa ON tpa.id_contrattirighe = cr.ID_CONTRATTIRIGHE
+                    WHERE cr.ID_CONTRATTITESTATA = %d
+                """ % contract_id)
+                _code_by_id = {v: k for k, v in _MARKET_CODES.items()}
+                markets = [
+                    _code_by_id[r["cod_user"]]
+                    for r in cur.fetchall()
+                    if r["cod_user"] in _code_by_id
+                ]
+
                 return {
                     "header": dict(hdr),
                     "lines": lines,
+                    "markets": markets,
                     "rotation": [
                         {**dict(r), "pct": round(r["count"] / total * 100, 1) if total else 0}
                         for r in rotation_rows
