@@ -515,11 +515,13 @@
             <!-- Date range -->
             <div class="field-group">
                 <label class="field-label">Date From</label>
-                <input type="date" id="filterDateFrom" class="field-input" style="font-size:0.85rem;" oninput="clearPreview()" />
+                <input type="text" id="filterDateFrom" class="field-input" placeholder="06/20" maxlength="10"
+                       style="font-size:0.85rem; width:110px;" oninput="clearPreview()" />
             </div>
             <div class="field-group">
                 <label class="field-label">Date To</label>
-                <input type="date" id="filterDateTo" class="field-input" style="font-size:0.85rem;" oninput="clearPreview()" />
+                <input type="text" id="filterDateTo" class="field-input" placeholder="06/30" maxlength="10"
+                       style="font-size:0.85rem; width:110px;" oninput="clearPreview()" />
             </div>
 
             <!-- Time range -->
@@ -686,6 +688,23 @@
         el.className = 'preview-count';
     }
 
+    function parseDateInput(val) {
+        val = val.trim().replace(/[\/\-]/g, '');
+        if (!val) return null;
+        const year = new Date().getFullYear();
+        let m, d, y;
+        if (/^\d{4}$/.test(val)) {           // MMDD
+            m = val.slice(0, 2); d = val.slice(2); y = year;
+        } else if (/^\d{6}$/.test(val)) {    // MMDDYY
+            m = val.slice(0, 2); d = val.slice(2, 4); y = 2000 + parseInt(val.slice(4));
+        } else if (/^\d{8}$/.test(val)) {    // MMDDYYYY
+            m = val.slice(0, 2); d = val.slice(2, 4); y = val.slice(4);
+        } else {
+            return null;
+        }
+        return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    }
+
     function parseTimeInput(val) {
         val = val.trim().replace(':', '');
         if (!val || !/^\d{3,4}$/.test(val)) return null;
@@ -695,8 +714,8 @@
 
     function collectFilters() {
         const f = {};
-        const df = document.getElementById('filterDateFrom').value;
-        const dt = document.getElementById('filterDateTo').value;
+        const df = parseDateInput(document.getElementById('filterDateFrom').value);
+        const dt = parseDateInput(document.getElementById('filterDateTo').value);
         const tf = parseTimeInput(document.getElementById('filterTimeFrom').value);
         const tt = parseTimeInput(document.getElementById('filterTimeTo').value);
         if (df) f.date_from = df;
