@@ -550,6 +550,23 @@
                 </div>
             </div>
 
+            <!-- Language -->
+            <div class="field-group filter-row-full">
+                <label class="field-label" style="margin-bottom:6px;">Language <span style="font-weight:400;">(none = all · Chinese = Mand+Cant · South Asian = Hindi+Punjabi)</span></label>
+                <div class="pill-toggle-group" id="langPills">
+                    <button class="pill-toggle" data-lang="Chinese"    onclick="toggleLang(this)">Chinese</button>
+                    <button class="pill-toggle" data-lang="Mandarin"   onclick="toggleLang(this)">Mandarin</button>
+                    <button class="pill-toggle" data-lang="Cantonese"  onclick="toggleLang(this)">Cantonese</button>
+                    <button class="pill-toggle" data-lang="Korean"     onclick="toggleLang(this)">Korean</button>
+                    <button class="pill-toggle" data-lang="Vietnamese" onclick="toggleLang(this)">Vietnamese</button>
+                    <button class="pill-toggle" data-lang="SouthAsian" onclick="toggleLang(this)">South Asian</button>
+                    <button class="pill-toggle" data-lang="Hindi"      onclick="toggleLang(this)">Hindi</button>
+                    <button class="pill-toggle" data-lang="Punjabi"    onclick="toggleLang(this)">Punjabi</button>
+                    <button class="pill-toggle" data-lang="Filipino"   onclick="toggleLang(this)">Filipino</button>
+                    <button class="pill-toggle" data-lang="Hmong"      onclick="toggleLang(this)">Hmong</button>
+                </div>
+            </div>
+
             <!-- Markets -->
             <div class="field-group filter-row-full">
                 <label class="field-label" style="margin-bottom:6px;">Market <span style="font-weight:400;">(none = all)</span></label>
@@ -672,12 +689,18 @@
         clearPreview();
     }
 
+    function toggleLang(btn) {
+        btn.classList.toggle('active');
+        clearPreview();
+    }
+
     function clearFilters() {
         document.getElementById('filterDateFrom').value = '';
         document.getElementById('filterDateTo').value = '';
         document.getElementById('filterTimeFrom').value = '';
         document.getElementById('filterTimeTo').value = '';
         document.querySelectorAll('#dayPills .pill-toggle').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('#langPills .pill-toggle').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('#marketPills .pill-toggle').forEach(b => b.classList.remove('active'));
         clearPreview();
     }
@@ -724,6 +747,8 @@
         if (tt) f.time_to = tt;
         const days = [...document.querySelectorAll('#dayPills .pill-toggle.active')].map(b => b.dataset.day);
         if (days.length) f.days = days;
+        const langs = [...document.querySelectorAll('#langPills .pill-toggle.active')].map(b => b.dataset.lang);
+        if (langs.length) f.languages = langs;
         const mkts = [...document.querySelectorAll('#marketPills .pill-toggle.active')].map(b => b.dataset.mkt);
         if (mkts.length) f.markets = mkts;
         return f;

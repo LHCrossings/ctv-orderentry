@@ -34,6 +34,45 @@ _MARKET_CODES = {
 _VALID_DAYS = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
 _FPS_GLOBAL = 29.97
 
+# Crossings TV language → list of (days_set, time_from HH:MM, time_to HH:MM)
+# DAL (The Asian Channel) has different mappings — add separately when needed.
+_WD  = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday"}
+_WE  = {"Saturday", "Sunday"}
+_ALL = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
+_MSA = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
+
+_CTV_LANG_WINDOWS: dict = {
+    "Mandarin": [
+        (_MSA, "06:00", "07:00"),
+        (_ALL, "07:00", "08:00"),
+        (_WD,  "20:00", "23:30"),
+        (_WE,  "20:00", "23:59"),
+    ],
+    "Cantonese": [
+        (_WD, "19:00", "20:00"),
+        (_WD, "23:30", "23:59"),
+    ],
+    "Korean":     [(_ALL, "08:00", "10:00")],
+    "Vietnamese": [(_ALL, "10:00", "13:00")],
+    "Hindi": [
+        (_WD, "13:00", "14:00"),
+        (_WE, "13:00", "16:00"),
+    ],
+    "Punjabi":  [(_WD, "14:00", "16:00")],
+    "Filipino": [
+        (_WD, "16:00", "19:00"),
+        (_WE, "16:00", "18:00"),
+    ],
+    "Hmong": [(_WE, "18:00", "20:00")],
+}
+_CTV_LANG_WINDOWS["Chinese"]    = _CTV_LANG_WINDOWS["Mandarin"] + _CTV_LANG_WINDOWS["Cantonese"]
+_CTV_LANG_WINDOWS["SouthAsian"] = _CTV_LANG_WINDOWS["Hindi"]    + _CTV_LANG_WINDOWS["Punjabi"]
+
+
+def _hhmm_to_frames(hhmm: str) -> int:
+    h, m = map(int, hhmm.split(":"))
+    return round((h * 3600 + m * 60) * _FPS_GLOBAL)
+
 
 def _build_spot_filter(filters: dict) -> str:
     """Return extra AND clauses for TPALINSE spot queries based on optional filter dict."""
@@ -49,20 +88,31 @@ def _build_spot_filter(filters: dict) -> str:
             clauses.append(f"DATENAME(weekday, tp.DATA) IN ({','.join(repr(d) for d in safe)})")
     if filters.get("time_from"):
         try:
-            h, m = map(int, filters["time_from"].split(":"))
-            clauses.append(f"tp.ORA >= {round((h * 3600 + m * 60) * _FPS_GLOBAL)}")
+            clauses.append(f"tp.ORA >= {_hhmm_to_frames(filters['time_from'])}")
         except (ValueError, AttributeError):
             pass
     if filters.get("time_to"):
         try:
-            h, m = map(int, filters["time_to"].split(":"))
-            clauses.append(f"tp.ORA <= {round((h * 3600 + m * 60) * _FPS_GLOBAL)}")
+            clauses.append(f"tp.ORA <= {_hhmm_to_frames(filters['time_to'])}")
         except (ValueError, AttributeError):
             pass
     if filters.get("markets"):
         ids = [_MARKET_CODES[k] for k in filters["markets"] if k in _MARKET_CODES]
         if ids:
             clauses.append(f"tp.COD_USER IN ({','.join(str(i) for i in ids)})")
+    if filters.get("languages"):
+        lang_subclauses = []
+        for lang in filters["languages"]:
+            for days_set, t_from, t_to in _CTV_LANG_WINDOWS.get(lang, []):
+                day_list = ",".join(f"'{d}'" for d in sorted(days_set))
+                f_from = _hhmm_to_frames(t_from)
+                f_to   = _hhmm_to_frames(t_to)
+                lang_subclauses.append(
+                    f"(DATENAME(weekday, tp.DATA) IN ({day_list})"
+                    f" AND tp.ORA >= {f_from} AND tp.ORA <= {f_to})"
+                )
+        if lang_subclauses:
+            clauses.append("(" + " OR ".join(lang_subclauses) + ")")
     return (" AND " + " AND ".join(clauses)) if clauses else ""
 
 
