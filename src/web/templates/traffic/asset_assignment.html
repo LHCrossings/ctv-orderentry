@@ -525,11 +525,13 @@
             <!-- Time range -->
             <div class="field-group">
                 <label class="field-label">Time From</label>
-                <input type="time" id="filterTimeFrom" class="field-input" style="font-size:0.85rem;" oninput="clearPreview()" />
+                <input type="text" id="filterTimeFrom" class="field-input" placeholder="1000" maxlength="5"
+                       style="font-size:0.85rem; width:90px;" oninput="clearPreview()" />
             </div>
             <div class="field-group">
                 <label class="field-label">Time To</label>
-                <input type="time" id="filterTimeTo" class="field-input" style="font-size:0.85rem;" oninput="clearPreview()" />
+                <input type="text" id="filterTimeTo" class="field-input" placeholder="1300" maxlength="5"
+                       style="font-size:0.85rem; width:90px;" oninput="clearPreview()" />
             </div>
 
             <!-- Days of week -->
@@ -684,12 +686,19 @@
         el.className = 'preview-count';
     }
 
+    function parseTimeInput(val) {
+        val = val.trim().replace(':', '');
+        if (!val || !/^\d{3,4}$/.test(val)) return null;
+        const padded = val.padStart(4, '0');
+        return padded.slice(0, 2) + ':' + padded.slice(2);
+    }
+
     function collectFilters() {
         const f = {};
         const df = document.getElementById('filterDateFrom').value;
         const dt = document.getElementById('filterDateTo').value;
-        const tf = document.getElementById('filterTimeFrom').value;
-        const tt = document.getElementById('filterTimeTo').value;
+        const tf = parseTimeInput(document.getElementById('filterTimeFrom').value);
+        const tt = parseTimeInput(document.getElementById('filterTimeTo').value);
         if (df) f.date_from = df;
         if (dt) f.date_to = dt;
         if (tf) f.time_from = tf;
