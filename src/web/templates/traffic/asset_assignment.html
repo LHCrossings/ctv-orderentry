@@ -854,7 +854,7 @@
                     <button class="balance-btn" onclick="balanceWeights()">Balance</button>
                     <button class="run-btn danger" onclick="clearAssignments()"
                             ${!selectedContractId ? 'disabled title="Select a contract first"' : ''}>
-                        Clear
+                        Unbook Spots
                     </button>
                     <button class="run-btn apply" onclick="applyRotation()"
                             ${!selectedContractId ? 'disabled title="Select a contract first"' : ''}>
@@ -952,13 +952,13 @@
         const filters = collectFilters();
         const hasFilter = Object.keys(filters).length > 0;
         const msg = hasFilter
-            ? 'Clear assignments for the filtered spots?'
-            : 'Clear ALL assignments on this contract?';
+            ? 'Unbook spots matching the current filters?'
+            : 'Unbook ALL spots on this contract?';
         if (!confirm(msg)) return;
 
         const clearBtn = document.querySelector('.run-btn.danger');
         clearBtn.disabled = true;
-        clearBtn.textContent = 'Clearing…';
+        clearBtn.textContent = 'Unbooking…';
         showToast('', '');
 
         try {
@@ -969,7 +969,7 @@
             });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.detail || 'Unknown error');
-            showToast('ok', `✓ Cleared ${data.cleared} spot${data.cleared !== 1 ? 's' : ''}.`);
+            showToast('ok', `✓ Unbooked ${data.cleared} spot${data.cleared !== 1 ? 's' : ''}.`);
             const r2 = await fetch(`/api/traffic/contract/${selectedContractId}/assignment`);
             const d2 = await r2.json();
             renderRotation(d2.rotation, d2.total_spots);
@@ -977,7 +977,7 @@
             showToast('err', `Error: ${e.message}`);
         } finally {
             clearBtn.disabled = false;
-            clearBtn.textContent = 'Clear';
+            clearBtn.textContent = 'Unbook Spots';
         }
     }
 
