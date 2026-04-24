@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Order Logs — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        body { overflow: hidden; }
+        main {
+            max-width: none;
+            padding: 20px 24px;
+            display: flex;
+            gap: 20px;
+            height: calc(100vh - 64px);
+            box-sizing: border-box;
+        }
+
+        /* ── Left pane: file list ── */
+        .log-sidebar {
+            width: 260px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .sidebar-title {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 0 4px;
+        }
+
+        .log-list {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .log-item {
+            padding: 10px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            transition: background 0.15s, border-color 0.15s;
+        }
+
+        .log-item:hover { background: var(--bg-secondary); }
+
+        .log-item.active {
+            background: color-mix(in srgb, var(--nord10) 10%, var(--nord6));
+            border-color: color-mix(in srgb, var(--nord10) 35%, transparent);
+        }
+
+        .log-date {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .log-meta {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .log-empty {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            padding: 12px;
+            text-align: center;
+        }
+
+        /* ── Right pane: log content ── */
+        .log-viewer {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .viewer-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            flex-shrink: 0;
+        }
+
+        .viewer-filename {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            font-family: monospace;
+        }
+
+        .viewer-actions { display: flex; gap: 8px; align-items: center; }
+
+        .tail-toggle {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .tail-toggle input { accent-color: var(--nord10); cursor: pointer; }
+
+        .log-pre {
+            flex: 1;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 16px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 0.78rem;
+            line-height: 1.55;
+            color: var(--text-primary);
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .log-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        /* Colour key lines */
+        .line-error   { color: var(--nord11); }
+        .line-warn    { color: var(--nord13); }
+        .line-ok      { color: var(--nord14); }
+        .line-section { color: var(--nord10); font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="back-link">&#8592;</a>
+            <div class="logo-icon">🗂️</div>
+            <div>
+                <h1>Order <span>Logs</span></h1>
+                <div class="logo-sub">Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <!-- Left: file list -->
+    <div class="log-sidebar">
+        <div class="sidebar-title">Run History</div>
+        <div class="log-list" id="logList">
+            <div class="log-empty">Loading…</div>
+        </div>
+    </div>
+
+    <!-- Right: viewer -->
+    <div class="log-viewer">
+        <div class="viewer-header">
+            <span class="viewer-filename" id="viewerFilename">—</span>
+            <div class="viewer-actions">
+                <label class="tail-toggle">
+                    <input type="checkbox" id="tailCheck" checked />
+                    Scroll to bottom
+                </label>
+            </div>
+        </div>
+        <div class="log-pre" id="logContent">
+            <div class="log-placeholder">Select a run from the list to view its log.</div>
+        </div>
+    </div>
+</main>
+
+<script>
+let currentFile = null;
+
+async function loadList() {
+    const resp = await fetch('/api/logs');
+    const data = await resp.json();
+    const list = document.getElementById('logList');
+
+    if (!data.files || data.files.length === 0) {
+        list.innerHTML = '<div class="log-empty">No logs yet — run an order first.</div>';
+        return;
+    }
+
+    list.innerHTML = '';
+    data.files.forEach(f => {
+        const item = document.createElement('div');
+        item.className = 'log-item';
+        item.dataset.filename = f.filename;
+        item.innerHTML = `
+            <div class="log-date">${escHtml(f.display_date)}</div>
+            <div class="log-meta">${escHtml(f.display_time)} &nbsp;·&nbsp; ${escHtml(f.size_label)}</div>
+        `;
+        item.addEventListener('click', () => loadLog(f.filename, item));
+        list.appendChild(item);
+    });
+
+    // Auto-load the newest
+    const first = list.querySelector('.log-item');
+    if (first) first.click();
+}
+
+async function loadLog(filename, itemEl) {
+    currentFile = filename;
+
+    document.querySelectorAll('.log-item').forEach(el => el.classList.remove('active'));
+    if (itemEl) itemEl.classList.add('active');
+    document.getElementById('viewerFilename').textContent = filename;
+
+    const pre = document.getElementById('logContent');
+    pre.textContent = 'Loading…';
+
+    try {
+        const resp = await fetch(`/api/logs/${encodeURIComponent(filename)}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const text = await resp.text();
+        renderLog(pre, text);
+        if (document.getElementById('tailCheck').checked) {
+            pre.scrollTop = pre.scrollHeight;
+        }
+    } catch (e) {
+        pre.textContent = `Error loading log: ${e.message}`;
+    }
+}
+
+function renderLog(pre, raw) {
+    // Strip ANSI escape codes
+    const clean = raw.replace(/\x1b\[[0-9;]*m/g, '');
+    pre.innerHTML = '';
+
+    clean.split('\n').forEach(line => {
+        const span = document.createElement('span');
+        const lower = line.toLowerCase();
+        if (lower.includes('[error]') || lower.includes('traceback') || lower.includes('exception'))
+            span.className = 'line-error';
+        else if (lower.includes('[warn') || lower.includes('warning'))
+            span.className = 'line-warn';
+        else if (lower.includes('[complete]') || lower.includes('[done]') || lower.includes('✓') || lower.includes('success'))
+            span.className = 'line-ok';
+        else if (line.startsWith('===') || line.startsWith('---') || lower.includes('[info]'))
+            span.className = 'line-section';
+
+        span.textContent = line + '\n';
+        pre.appendChild(span);
+    });
+}
+
+function escHtml(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+loadList();
+</script>
+
+</body>
+</html>

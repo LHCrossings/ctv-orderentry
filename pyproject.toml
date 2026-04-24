@@ -34,7 +34,7 @@ pythonpath = ["src"]
 
 [tool.ruff]
 line-length = 100
-exclude = ["Old Code", "archived scripts", "browser_automation"]
+exclude = ["Old Code", "archived scripts", "browser_automation", "**/*.html"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]

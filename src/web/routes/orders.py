@@ -418,6 +418,65 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
+    # ------------------------------------------------------------------
+    # Order run logs
+    # ------------------------------------------------------------------
+
+    @router.get("/logs", response_class=HTMLResponse)
+    async def logs_page(request: Request):
+        return templates.TemplateResponse(request, "logs.html")
+
+    @router.get("/api/logs")
+    async def list_logs():
+        logs_dir = Path(__file__).parent.parent.parent.parent / "logs"
+        if not logs_dir.exists():
+            return JSONResponse({"files": []})
+
+        files = sorted(
+            logs_dir.glob("*.log"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+
+        result = []
+        for f in files:
+            stat = f.stat()
+            # Parse date/time from filename: YYYY-MM-DD_HH-MM-SS.log
+            try:
+                dt = datetime.strptime(f.stem, "%Y-%m-%d_%H-%M-%S")
+                display_date = dt.strftime("%b %d, %Y")
+                display_time = dt.strftime("%I:%M %p").lstrip("0")
+            except ValueError:
+                display_date = f.stem
+                display_time = ""
+            size_bytes = stat.st_size
+            if size_bytes >= 1024:
+                size_label = f"{size_bytes / 1024:.1f} KB"
+            else:
+                size_label = f"{size_bytes} B"
+            result.append({
+                "filename":     f.name,
+                "display_date": display_date,
+                "display_time": display_time,
+                "size_label":   size_label,
+                "mtime":        stat.st_mtime,
+            })
+        return JSONResponse({"files": result})
+
+    @router.get("/api/logs/{filename}")
+    async def get_log(filename: str):
+        # Prevent path traversal — only .log files, no slashes or dots in name
+        if "/" in filename or "\\" in filename or not filename.endswith(".log"):
+            raise HTTPException(status_code=400, detail="Invalid filename.")
+        logs_dir = Path(__file__).parent.parent.parent.parent / "logs"
+        log_path = (logs_dir / filename).resolve()
+        if not str(log_path).startswith(str(logs_dir.resolve())):
+            raise HTTPException(status_code=403, detail="Forbidden.")
+        if not log_path.exists():
+            raise HTTPException(status_code=404, detail="Log not found.")
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(log_path.read_text(encoding="utf-8", errors="replace"))
+
     @router.get("/scripts/clean-asterisks", response_class=HTMLResponse)
     async def clean_asterisks_page(request: Request):
         return templates.TemplateResponse(request, "scripts/clean_asterisks.html")

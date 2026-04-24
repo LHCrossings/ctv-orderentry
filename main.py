@@ -10,6 +10,7 @@ Usage:
 """
 
 import argparse
+import datetime
 import sys
 from pathlib import Path
 
@@ -20,8 +21,45 @@ sys.path.insert(0, str(_src_path))
 from orchestration import ApplicationConfig, create_orchestrator
 
 
+class _Tee:
+    """Write to multiple streams simultaneously (terminal + log file)."""
+    def __init__(self, *streams):
+        self._streams = streams
+
+    def write(self, data):
+        for s in self._streams:
+            s.write(data)
+
+    def flush(self):
+        for s in self._streams:
+            s.flush()
+
+    def isatty(self):
+        return False
+
+
 def main():
     """Main entry point."""
+
+    # Tee stdout/stderr to a timestamped log file in logs/
+    _logs_dir = Path(__file__).parent / "logs"
+    _logs_dir.mkdir(exist_ok=True)
+    _log_path = _logs_dir / datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S.log")
+    _log_fh = _log_path.open("w", encoding="utf-8", buffering=1)
+    _orig_out, _orig_err = sys.stdout, sys.stderr
+    sys.stdout = _Tee(_orig_out, _log_fh)
+    sys.stderr = _Tee(_orig_err, _log_fh)
+
+    try:
+        _run()
+    finally:
+        sys.stdout = _orig_out
+        sys.stderr = _orig_err
+        _log_fh.close()
+
+
+def _run():
+    """Inner main — all real logic lives here so the Tee finally-block always fires."""
 
     # Parse command line arguments
     parser = argparse.ArgumentParser(
