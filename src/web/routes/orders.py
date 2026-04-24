@@ -1619,6 +1619,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             if not all_rows:
                 raise ValueError("No scheduled spots found matching the selected filters")
 
+            line_tp_map = defaultdict(list)
+            for r in all_rows:
+                line_tp_map[r["line_id"]].append(r["tp_id"])
+
             # Calculate rotation % per filmati (sum = 100, last spot absorbs rounding remainder)
             perc_map: dict = {}
             remaining = 100
