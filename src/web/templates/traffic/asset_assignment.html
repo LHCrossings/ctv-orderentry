@@ -550,6 +550,12 @@
                 </div>
             </div>
 
+            <!-- Duration (dynamic, hidden until contract with multiple lengths loaded) -->
+            <div class="field-group filter-row-full" id="durationPillsRow" style="display:none;">
+                <label class="field-label" style="margin-bottom:6px;">Duration <span style="font-weight:400;">(none = all)</span></label>
+                <div class="pill-toggle-group" id="durationPills"></div>
+            </div>
+
             <!-- Language -->
             <div class="field-group filter-row-full">
                 <label class="field-label" style="margin-bottom:6px;">Language <span style="font-weight:400;">(none = all · Chinese = Mand+Cant · South Asian = Hindi+Punjabi)</span></label>
@@ -666,6 +672,26 @@
             const pill = document.querySelector(`#marketPills .pill-toggle[data-mkt="${mkt}"]`);
             if (pill) pill.classList.add('active');
         });
+
+        // Duration pills: render dynamically; only show if contract has multiple spot lengths
+        const durRow = document.getElementById('durationPillsRow');
+        const durPills = document.getElementById('durationPills');
+        durPills.innerHTML = '';
+        const durations = data.durations || [];
+        if (durations.length > 1) {
+            durations.forEach(d => {
+                const btn = document.createElement('button');
+                btn.className = 'pill-toggle';
+                btn.dataset.dur = d.frames;
+                btn.textContent = d.label;
+                btn.addEventListener('click', () => toggleDuration(btn));
+                durPills.appendChild(btn);
+            });
+            durRow.style.display = '';
+        } else {
+            durRow.style.display = 'none';
+        }
+
         clearPreview();
     }
 
@@ -697,6 +723,11 @@
         clearPreview();
     }
 
+    function toggleDuration(btn) {
+        btn.classList.toggle('active');
+        clearPreview();
+    }
+
     function toggleLang(btn) {
         btn.classList.toggle('active');
         clearPreview();
@@ -710,6 +741,7 @@
         document.querySelectorAll('#dayPills .pill-toggle').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('#langPills .pill-toggle').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('#marketPills .pill-toggle').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('#durationPills .pill-toggle').forEach(b => b.classList.remove('active'));
         clearPreview();
     }
 
@@ -759,6 +791,8 @@
         if (langs.length) f.languages = langs;
         const mkts = [...document.querySelectorAll('#marketPills .pill-toggle.active')].map(b => b.dataset.mkt);
         if (mkts.length) f.markets = mkts;
+        const durs = [...document.querySelectorAll('#durationPills .pill-toggle.active')].map(b => parseInt(b.dataset.dur));
+        if (durs.length) f.durations = durs;
         return f;
     }
 

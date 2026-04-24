@@ -123,6 +123,10 @@ def _build_spot_filter(filters: dict) -> str:
             clauses.append(f"tp.ORA <= {_hhmm_to_frames(filters['time_to'])}")
         except (ValueError, AttributeError):
             pass
+    if filters.get("durations"):
+        frames = [int(f) for f in filters["durations"] if str(f).lstrip("-").isdigit()]
+        if frames:
+            clauses.append(f"tp.DURATA IN ({','.join(str(f) for f in frames)})")
     if filters.get("markets"):
         ids = [_MARKET_CODES[k] for k in filters["markets"] if k in _MARKET_CODES]
         if ids:
@@ -1603,10 +1607,24 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     if r["cod_user"] in _code_by_id
                 ]
 
+                cur.execute("""
+                    SELECT DISTINCT tp.DURATA AS durata
+                    FROM TPALINSE tp
+                    JOIN trafficPalinse tpa ON tpa.id_tpalinse = tp.ID_TPALINSE
+                    JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
+                    WHERE cr.ID_CONTRATTITESTATA = %d AND tp.DURATA > 0
+                    ORDER BY tp.DURATA
+                """ % contract_id)
+                durations = [
+                    {"frames": r["durata"], "label": f":{round(r['durata'] / _FPS_GLOBAL)}"}
+                    for r in cur.fetchall()
+                ]
+
                 return {
                     "header": dict(hdr),
                     "lines": lines,
                     "markets": markets,
+                    "durations": durations,
                     "rotation": [
                         {**dict(r), "pct": round(r["count"] / total * 100, 1) if total else 0}
                         for r in rotation_rows
