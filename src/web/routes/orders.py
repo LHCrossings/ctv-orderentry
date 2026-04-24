@@ -1568,9 +1568,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
                 placeholders = ",".join(str(i) for i in filmati_ids)
                 cur.execute(
-                    f"SELECT ID_FILMATI, COD_PROGRA FROM FILMATI WHERE ID_FILMATI IN ({placeholders})"
+                    f"SELECT ID_FILMATI, COD_PROGRA, DESCRIZIO FROM FILMATI WHERE ID_FILMATI IN ({placeholders})"
                 )
-                filmati_cod_map = {r["ID_FILMATI"]: (r["COD_PROGRA"] or "") for r in cur.fetchall()}
+                filmati_rows = cur.fetchall()
+                filmati_cod_map = {r["ID_FILMATI"]: (r["COD_PROGRA"] or "") for r in filmati_rows}
+                filmati_title_map = {r["ID_FILMATI"]: (r["DESCRIZIO"] or "") for r in filmati_rows}
 
             if not all_rows:
                 raise ValueError("No scheduled spots found for this contract")
@@ -1678,10 +1680,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     cur = conn.cursor()
                     for tp_id, filmati_id in tp_assignments:
                         cod = filmati_cod_map.get(filmati_id, "")
+                        title = filmati_title_map.get(filmati_id, "")
                         cur.execute(
-                            "UPDATE TPALINSE SET COD_PROGRA = %s, ID_FILMATI = %d"
+                            "UPDATE TPALINSE SET COD_PROGRA = %s, TITLE = %s, ID_FILMATI = %d"
                             " WHERE ID_TPALINSE = %d",
-                            (cod, filmati_id, tp_id),
+                            (cod, title, filmati_id, tp_id),
                         )
                     # Update PERCROTATION per (line, filmati) so native app shows correct %
                     for line_id in line_tp_map.keys():
