@@ -191,6 +191,46 @@
         .mode-btn.active {
             background: var(--accent-primary); color: white; border-color: var(--accent-primary);
         }
+        /* ── Mode picker ── */
+        .mode-picker {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .picker-card {
+            background: white;
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            padding: 28px 24px;
+            cursor: pointer;
+            transition: border-color 0.18s, box-shadow 0.18s, transform 0.12s;
+            text-align: center;
+            user-select: none;
+        }
+        .picker-card:hover {
+            border-color: var(--accent-primary);
+            box-shadow: 0 4px 16px rgba(94,129,172,0.18);
+            transform: translateY(-2px);
+        }
+        .picker-icon { font-size: 2.2rem; margin-bottom: 12px; }
+        .picker-name { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; }
+        .picker-desc { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.45; }
+        .mode-breadcrumb {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+        .mode-breadcrumb.visible { display: flex; }
+        .mode-breadcrumb strong { color: var(--text-primary); font-weight: 600; }
+        .breadcrumb-change {
+            background: none; border: none; padding: 0; cursor: pointer;
+            font-size: 0.82rem; color: var(--accent-primary); font-family: inherit;
+            text-decoration: underline; text-underline-offset: 2px;
+        }
         #wl-monthly-wrap {
             background: #ffffff;
             border: 1px solid #d8dee9;
@@ -225,13 +265,31 @@
 
 <main style="max-width: 820px; margin: 0 auto; padding: 24px 16px;">
 
-    <!-- Mode selector -->
-    <div style="display:flex; gap:8px; margin-bottom:16px;">
-        <button type="button" class="mode-btn active" id="mode-standard" onclick="setMode('standard')">Standard</button>
-        <button type="button" class="mode-btn" id="mode-worldlink" onclick="setMode('worldlink')">WorldLink</button>
+    <!-- Mode picker (shown on first load) -->
+    <div class="mode-picker" id="mode-picker">
+        <div class="picker-card" onclick="setMode('standard')">
+            <div class="picker-icon">📋</div>
+            <div class="picker-name">Standard Order</div>
+            <div class="picker-desc">Agency or direct order backwrite using a placement confirmation CSV.</div>
+        </div>
+        <div class="picker-card" onclick="setMode('worldlink')">
+            <div class="picker-icon">🌐</div>
+            <div class="picker-name">WorldLink Order</div>
+            <div class="picker-desc">WorldLink Entertainment order backwrite using the WorldLink IO PDF.</div>
+        </div>
     </div>
 
-<div id="standard-section">
+    <!-- Breadcrumb shown after mode is chosen -->
+    <div class="mode-breadcrumb" id="mode-breadcrumb">
+        <strong id="breadcrumb-label"></strong>
+        <button class="breadcrumb-change" onclick="resetMode()">← Change order type</button>
+    </div>
+
+    <!-- Hidden mode toggle buttons (kept for JS compatibility) -->
+    <button type="button" class="mode-btn" id="mode-standard" style="display:none" onclick="setMode('standard')">Standard</button>
+    <button type="button" class="mode-btn" id="mode-worldlink" style="display:none" onclick="setMode('worldlink')">WorldLink</button>
+
+<div id="standard-section" style="display:none">
     <!-- Step 1: Upload CSV -->
     <div class="bw-card" id="upload-card">
         <h2>Step 1 — Upload Placement CSV</h2>
@@ -544,7 +602,7 @@
 </div><!-- /wl-section -->
 
 <!-- Etere Report Puller (standard mode only) -->
-<div class="bw-card" id="report-puller-card" style="margin-top:24px">
+<div class="bw-card" id="report-puller-card" style="margin-top:24px;display:none">
     <h2>Pull Etere Report</h2>
     <div class="form-grid">
         <div class="form-group">
@@ -978,6 +1036,21 @@ function setMode(mode) {
     document.getElementById('standard-section').style.display    = mode === 'standard' ? '' : 'none';
     document.getElementById('wl-section').style.display          = mode === 'worldlink' ? '' : 'none';
     document.getElementById('report-puller-card').style.display  = mode === 'standard' ? '' : 'none';
+
+    // Hide picker, show breadcrumb
+    document.getElementById('mode-picker').style.display = 'none';
+    const bc = document.getElementById('mode-breadcrumb');
+    bc.classList.add('visible');
+    document.getElementById('breadcrumb-label').textContent =
+        mode === 'worldlink' ? 'WorldLink Order' : 'Standard Order';
+}
+
+function resetMode() {
+    document.getElementById('mode-picker').style.display = '';
+    document.getElementById('mode-breadcrumb').classList.remove('visible');
+    document.getElementById('standard-section').style.display   = 'none';
+    document.getElementById('wl-section').style.display         = 'none';
+    document.getElementById('report-puller-card').style.display = 'none';
 }
 
 // Drag-and-drop for WL upload zone
