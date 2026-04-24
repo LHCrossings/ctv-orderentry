@@ -68,6 +68,33 @@ _CTV_LANG_WINDOWS: dict = {
 _CTV_LANG_WINDOWS["Chinese"]    = _CTV_LANG_WINDOWS["Mandarin"] + _CTV_LANG_WINDOWS["Cantonese"]
 _CTV_LANG_WINDOWS["SouthAsian"] = _CTV_LANG_WINDOWS["Hindi"]    + _CTV_LANG_WINDOWS["Punjabi"]
 
+# The Asian Channel (DAL) — broadcast day runs 0600–0559 (wraps past midnight)
+_DAL_LANG_WINDOWS: dict = {
+    "Mandarin": [
+        (_WD,  "06:00", "09:30"),
+        (_WE,  "06:00", "10:00"),
+        (_ALL, "13:00", "17:00"),
+        (_ALL, "18:00", "22:00"),
+        (_ALL, "00:00", "01:00"),
+        (_WD,  "02:00", "05:30"),
+        (_WE,  "02:00", "05:59"),
+    ],
+    "Cantonese": [
+        (_WD,  "09:30", "10:00"),
+        (_ALL, "17:00", "18:00"),
+        (_ALL, "01:00", "02:00"),
+        (_WD,  "05:30", "05:59"),
+    ],
+    "Vietnamese": [(_ALL, "10:00", "11:00")],
+    "Korean": [
+        (_WD,  "11:00", "12:00"),
+        (_WE,  "11:00", "13:00"),
+        (_WD,  "22:00", "23:00"),
+        (_WE,  "22:00", "23:59"),
+    ],
+}
+_DAL_LANG_WINDOWS["Chinese"] = _DAL_LANG_WINDOWS["Mandarin"] + _DAL_LANG_WINDOWS["Cantonese"]
+
 
 def _hhmm_to_frames(hhmm: str) -> int:
     h, m = map(int, hhmm.split(":"))
@@ -101,9 +128,12 @@ def _build_spot_filter(filters: dict) -> str:
         if ids:
             clauses.append(f"tp.COD_USER IN ({','.join(str(i) for i in ids)})")
     if filters.get("languages"):
+        # Use DAL windows if DAL is the only market selected; otherwise CTV windows
+        mkts = filters.get("markets", [])
+        lang_table = _DAL_LANG_WINDOWS if mkts == ["DAL"] else _CTV_LANG_WINDOWS
         lang_subclauses = []
         for lang in filters["languages"]:
-            for days_set, t_from, t_to in _CTV_LANG_WINDOWS.get(lang, []):
+            for days_set, t_from, t_to in lang_table.get(lang, []):
                 day_list = ",".join(f"'{d}'" for d in sorted(days_set))
                 f_from = _hhmm_to_frames(t_from)
                 f_to   = _hhmm_to_frames(t_to)
