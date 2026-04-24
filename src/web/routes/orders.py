@@ -490,14 +490,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             from browser_automation.etere_direct_client import connect as _db_connect
 
             with _db_connect() as conn:
+                # pymssql uses %s paramstyle; pyodbc uses ?
+                ph = '%s' if type(conn).__module__.startswith('pymssql') else '?'
                 cursor = conn.cursor()
-                cursor.execute("""
+                cursor.execute(f"""
                     SELECT ID_CONTRATTIRIGHE, DESCRIZIONE
                     FROM   CONTRATTIRIGHE
-                    WHERE  ID_CONTRATTITESTATA = ?
-                      AND  DESCRIZIONE LIKE '%*%'
+                    WHERE  ID_CONTRATTITESTATA = {ph}
+                      AND  DESCRIZIONE LIKE {ph}
                     ORDER  BY ID_CONTRATTIRIGHE
-                """, [contract_id])
+                """, [contract_id, '%*%'])
                 rows = cursor.fetchall()
 
             lines = [
@@ -526,13 +528,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 raise HTTPException(status_code=400, detail="contract_id required.")
 
             with _db_connect() as conn:
+                ph = '%s' if type(conn).__module__.startswith('pymssql') else '?'
                 cursor = conn.cursor()
-                cursor.execute("""
+                cursor.execute(f"""
                     UPDATE CONTRATTIRIGHE
                     SET    DESCRIZIONE = RTRIM(LTRIM(REPLACE(DESCRIZIONE, '*', '')))
-                    WHERE  ID_CONTRATTITESTATA = ?
-                      AND  DESCRIZIONE LIKE '%*%'
-                """, [contract_id])
+                    WHERE  ID_CONTRATTITESTATA = {ph}
+                      AND  DESCRIZIONE LIKE {ph}
+                """, [contract_id, '%*%'])
                 conn.commit()
                 updated = cursor.rowcount
 
