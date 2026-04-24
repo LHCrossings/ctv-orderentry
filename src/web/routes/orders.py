@@ -1573,6 +1573,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def traffic_contract_assign(contract_id: int, body: dict = Body(...)):
         spots = body.get("spots", [])
         filters = body.get("filters", {})
+        spots = [s for s in spots if s.get("weight", 0) > 0]
         if not spots:
             raise HTTPException(status_code=400, detail="No spots provided")
         total_weight = sum(s["weight"] for s in spots)
