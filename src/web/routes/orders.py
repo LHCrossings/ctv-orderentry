@@ -126,7 +126,7 @@ def _build_spot_filter(filters: dict) -> str:
     if filters.get("durations"):
         frames = [int(f) for f in filters["durations"] if str(f).lstrip("-").isdigit()]
         if frames:
-            clauses.append(f"tp.DURATA IN ({','.join(str(f) for f in frames)})")
+            clauses.append(f"cr.DURATA IN ({','.join(str(f) for f in frames)})")
     if filters.get("markets"):
         ids = [_MARKET_CODES[k] for k in filters["markets"] if k in _MARKET_CODES]
         if ids:
@@ -1608,12 +1608,12 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 ]
 
                 cur.execute("""
-                    SELECT DISTINCT tp.DURATA AS durata
+                    SELECT DISTINCT cr.DURATA AS durata
                     FROM TPALINSE tp
                     JOIN trafficPalinse tpa ON tpa.id_tpalinse = tp.ID_TPALINSE
                     JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
-                    WHERE cr.ID_CONTRATTITESTATA = %d AND tp.DURATA > 0
-                    ORDER BY tp.DURATA
+                    WHERE cr.ID_CONTRATTITESTATA = %d AND cr.DURATA > 0
+                    ORDER BY cr.DURATA
                 """ % contract_id)
                 durations = [
                     {"frames": r["durata"], "label": f":{round(r['durata'] / _FPS_GLOBAL)}"}
