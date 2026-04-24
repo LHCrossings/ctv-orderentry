@@ -1652,12 +1652,24 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             # so the A,B,A,B interleave is correct across the whole contract, not per-line
             tp_filmati_map = {row["tp_id"]: rotation_list[i] for i, row in enumerate(all_rows)}
 
+            # Check which filmati are already in the pool so we don't create duplicates
+            line_ids_str = ",".join(str(lid) for lid in line_tp_map.keys())
+            with _db_connect() as conn_pool:
+                cur_pool = conn_pool.cursor(as_dict=True)
+                cur_pool.execute(
+                    f"SELECT DISTINCT ID_FILMATI FROM CONTRATTIFILMATI"
+                    f" WHERE ID_CONTRATTIRIGHE IN ({line_ids_str})"
+                )
+                existing_pool = {r["ID_FILMATI"] for r in cur_pool.fetchall()}
+
             session = etere_web_login()
             lines_updated = spots_updated = 0
             tp_assignments = []  # (tp_id, filmati_id) pairs
             try:
-                # Etere only processes the first element per call — add one filmati at a time
+                # Only add filmati not already in the pool — MaterialAddToAssetListC is not idempotent
                 for fid in filmati_ids:
+                    if fid in existing_pool:
+                        continue
                     r = session.post(
                         f"{ETERE_WEB_URL}/Sales/MaterialAddToAssetListC",
                         json={"idFilmatiList": [fid], "idct": contract_id},
