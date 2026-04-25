@@ -227,14 +227,13 @@ def _to_int_if_numeric(val) -> object:
 def _compute_monthly_revenue(lines: list) -> Dict[date, float]:
     """
     Iterate each IO line week-by-week; bucket (spots_per_week × rate) into
-    broadcast months.  Zero-rate lines (bonus/free) are skipped.
+    broadcast months.  Zero-rate lines still register their months so the
+    breakdown shows $0 rather than carrying over template values.
     Returns {broadcast_month_first_of_month: gross_amount}.
     """
     monthly: Dict[date, float] = defaultdict(float)
     for line in lines:
         rate = float(line.get("rate", 0) or 0)
-        if rate == 0:
-            continue
         spw   = line.get("spots", 0) or 0
         start = _parse_date_str(line.get("start_date", ""))
         end   = _parse_date_str(line.get("end_date",   ""))
