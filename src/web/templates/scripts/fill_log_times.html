@@ -109,7 +109,8 @@
         }
 
         .download-btn:hover { background: #81b58b; transform: translateY(-1px); }
-        .download-btn.visible { display: inline-block; }
+
+        #downloads { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 
         .terminal {
             background: var(--nord0);
@@ -153,20 +154,20 @@
 <main>
     <div class="tool-card">
         <h2>Fill Spot Times from Etere Schedule</h2>
-        <p>Upload a weekly traffic log (.xlsm). Any non-PRG spot row with a blank time will be
-           filled from TPALINSE using the asset code and date. The market is detected automatically
-           from the filename (e.g. "LAX Log…").</p>
+        <p>Upload one or more weekly traffic logs (.xlsm). Any non-PRG spot row with a blank time
+           will be filled from TPALINSE using the asset code and date. The market is detected
+           automatically from each filename (e.g. "LAX Log…").</p>
 
         <div class="upload-area">
             <div class="field-group">
-                <label class="field-label" for="fileInput">Log File (.xlsm)</label>
-                <input id="fileInput" class="field-input" type="file" accept=".xlsm,.xlsx" />
+                <label class="field-label" for="fileInput">Log Files (.xlsm)</label>
+                <input id="fileInput" class="field-input" type="file" accept=".xlsm,.xlsx" multiple />
             </div>
             <button id="runBtn" class="run-btn" onclick="runFill()">&#9654; Run</button>
         </div>
 
         <div id="terminal" class="terminal"></div>
-        <a id="downloadBtn" class="download-btn" href="#" download>&#8659; Download Filled Log</a>
+        <div id="downloads"></div>
     </div>
 </main>
 
@@ -175,17 +176,13 @@ async function runFill() {
     const fileInput = document.getElementById('fileInput');
     const terminal  = document.getElementById('terminal');
     const runBtn    = document.getElementById('runBtn');
-    const dlBtn     = document.getElementById('downloadBtn');
+    const downloads = document.getElementById('downloads');
 
     if (!fileInput.files.length) { fileInput.focus(); return; }
 
-    const file = fileInput.files[0];
-    const formData = new FormData();
-    formData.append('file', file);
-
     terminal.innerHTML = '';
     terminal.classList.add('visible');
-    dlBtn.classList.remove('visible');
+    downloads.innerHTML = '';
     runBtn.disabled = true;
     fileInput.disabled = true;
 
@@ -197,40 +194,49 @@ async function runFill() {
         terminal.scrollTop = terminal.scrollHeight;
     }
 
-    addLine(`Processing ${file.name}…`, 't-info');
+    for (const file of fileInput.files) {
+        addLine(`— ${file.name} —`, 't-info');
 
-    try {
-        const resp = await fetch('/api/scripts/fill-log-times', {
-            method: 'POST',
-            body: formData,
-        });
+        const formData = new FormData();
+        formData.append('file', file);
 
-        const data = await resp.json();
+        try {
+            const resp = await fetch('/api/scripts/fill-log-times', {
+                method: 'POST',
+                body: formData,
+            });
+            const data = await resp.json();
 
-        if (!resp.ok) {
-            addLine('✗ ' + (data.detail || 'Server error.'), 't-err');
-        } else {
+            if (!resp.ok) {
+                addLine('  ✗ ' + (data.detail || 'Server error.'), 't-err');
+                continue;
+            }
+
             for (const msg of (data.messages || [])) {
-                const cls = msg.startsWith('  WARNING') || msg.includes('WARNING') ? 't-warn'
-                          : msg.startsWith('  No TPALINSE')                        ? 't-warn'
-                          : msg.includes('filled')                                  ? 't-info'
+                const cls = msg.includes('WARNING')      ? 't-warn'
+                          : msg.includes('No TPALINSE')  ? 't-warn'
+                          : msg.includes('filled')        ? 't-info'
                           : 't-line';
                 addLine(msg, cls);
             }
 
             if (data.filled === 0) {
-                addLine('Nothing to fill — all spot times already present.', 't-done');
+                addLine('  Nothing to fill.', 't-done');
             } else {
-                addLine(`✓ Done. ${data.filled} spot time(s) filled.`, 't-done');
-                dlBtn.href = `/api/scripts/fill-log-times/download/${data.token}`;
-                dlBtn.download = data.filename;
-                dlBtn.classList.add('visible');
+                addLine(`  ✓ ${data.filled} spot time(s) filled.`, 't-done');
+                const a = document.createElement('a');
+                a.className = 'download-btn';
+                a.href = `/api/scripts/fill-log-times/download/${data.token}`;
+                a.download = data.filename;
+                a.textContent = `⬇ ${data.filename}`;
+                downloads.appendChild(a);
             }
+        } catch (err) {
+            addLine('  ✗ ' + err.message, 't-err');
         }
-    } catch (err) {
-        addLine('✗ ' + err.message, 't-err');
     }
 
+    addLine('All done.', 't-done');
     runBtn.disabled = false;
     fileInput.disabled = false;
 }
