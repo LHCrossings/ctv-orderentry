@@ -551,14 +551,21 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     @router.post("/api/scripts/fill-log-times")
     async def run_fill_log_times(file: UploadFile):
-        import io, re, uuid, datetime as _dt, tempfile
+        import datetime as _dt
+        import io
+        import re
+        import tempfile
+        import uuid
         from collections import defaultdict
 
         MARKET_IDS = {
             "NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4,
             "SEA": 5, "LAX": 6, "CVC": 7, "WDC": 8, "DAL": 10,
         }
-        COL_DATE = 2; COL_SHOW = 8; COL_COMMENTS = 9; COL_TYPE = 14
+        COL_DATE = 2
+        COL_SHOW = 8
+        COL_COMMENTS = 9
+        COL_TYPE = 14
         FPS = 29.97
 
         filename = file.filename or "log.xlsm"
