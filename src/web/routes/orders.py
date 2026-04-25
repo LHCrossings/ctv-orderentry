@@ -1737,7 +1737,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 cur = conn.cursor(as_dict=True)
                 cur.execute(f"""
                     SELECT tpa.id_contrattirighe AS line_id,
-                           tp.ID_TPALINSE        AS tp_id
+                           tp.ID_TPALINSE        AS tp_id,
+                           cr.ID_BOOKINGCODE     AS booking_code
                     FROM TPALINSE tp
                     JOIN trafficPalinse tpa ON tpa.id_tpalinse       = tp.ID_TPALINSE
                     JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE  = tpa.id_contrattirighe
@@ -1755,12 +1756,38 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 filmati_cod_map = {r["ID_FILMATI"]: (r["COD_PROGRA"] or "") for r in filmati_rows}
                 filmati_title_map = {r["ID_FILMATI"]: (r["DESCRIZIO"] or "") for r in filmati_rows}
 
+                # Build SUPPORTO string per filmati from FS_FILMATI + FS_METADEVICE.
+                # Format: LEGACY_BASESUPP + FILE_ID  (e.g. "0ETX      TOY30M1206")
+                cur.execute(f"""
+                    SELECT ff.ID_FILMATI, ff.FILE_ID, ff.VIDEOSTANDARD, ff.DUR,
+                           ISNULL(d.LEGACY_BASESUPP,
+                                  CAST(d.LEGACY_MEDIAID AS VARCHAR) + 'ETX      ') AS supporto_prefix
+                    FROM FS_FILMATI ff
+                    JOIN FS_METADEVICE d ON d.ID_METADEVICE = ff.ID_METADEVICE
+                    WHERE ff.ID_FILMATI IN ({placeholders})
+                      AND d.LEGACY_MEDIAID IS NOT NULL
+                """)
+                # VIDEOSTANDARD "D" (digital HD) and null both map to ASPECT "H"
+                _VS_TO_ASPECT = {"D": "H"}
+                filmati_supporto_map: dict = {}
+                filmati_aspect_map: dict = {}
+                filmati_duration_map: dict = {}
+                for r in cur.fetchall():
+                    fid = r["ID_FILMATI"]
+                    if fid not in filmati_supporto_map:
+                        filmati_supporto_map[fid] = (r["supporto_prefix"] or "") + (r["FILE_ID"] or "")
+                        filmati_aspect_map[fid] = _VS_TO_ASPECT.get(r["VIDEOSTANDARD"], "H")
+                        filmati_duration_map[fid] = r["DUR"] or 0
+
             if not all_rows:
                 raise ValueError("No scheduled spots found matching the selected filters")
 
+            _BOOKINGCODE_TO_NEWTYPE = {2: "COM", 10: "BNS"}
             line_tp_map = defaultdict(list)
+            tp_newtype_map: dict = {}
             for r in all_rows:
                 line_tp_map[r["line_id"]].append(r["tp_id"])
+                tp_newtype_map[r["tp_id"]] = _BOOKINGCODE_TO_NEWTYPE.get(r["booking_code"], "COM")
 
             # Calculate rotation % per filmati (sum = 100, last spot absorbs rounding remainder)
             perc_map: dict = {}
@@ -1852,10 +1879,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     for tp_id, filmati_id in tp_assignments:
                         cod = filmati_cod_map.get(filmati_id, "")
                         title = filmati_title_map.get(filmati_id, "")
+                        newtype = tp_newtype_map.get(tp_id, "COM")
+                        supporto = filmati_supporto_map.get(filmati_id, "")
+                        aspect = filmati_aspect_map.get(filmati_id, "H")
+                        duration_p = filmati_duration_map.get(filmati_id, 0)
                         cur.execute(
-                            "UPDATE TPALINSE SET COD_PROGRA = %s, TITLE = %s, ID_FILMATI = %d"
+                            "UPDATE TPALINSE SET COD_PROGRA = %s, TITLE = %s, ID_FILMATI = %d,"
+                            " NEWTYPE = %s, SUPPORTO = %s, ASPECT = %s, DURATION_P = %d"
                             " WHERE ID_TPALINSE = %d",
-                            (cod, title, filmati_id, tp_id),
+                            (cod, title, filmati_id, newtype, supporto, aspect, duration_p, tp_id),
                         )
                     # Update PERCROTATION per (line, filmati) so native app shows correct %
                     for line_id in line_tp_map.keys():
