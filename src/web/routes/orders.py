@@ -539,6 +539,136 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
+    # ------------------------------------------------------------------
+    # Fill Log Times
+    # ------------------------------------------------------------------
+
+    _fill_log_pending: dict = {}  # token -> (Path, filename)
+
+    @router.get("/scripts/fill-log-times", response_class=HTMLResponse)
+    async def fill_log_times_page(request: Request):
+        return templates.TemplateResponse(request, "scripts/fill_log_times.html")
+
+    @router.post("/api/scripts/fill-log-times")
+    async def run_fill_log_times(file: UploadFile):
+        import io, re, uuid, datetime as _dt, tempfile
+        from collections import defaultdict
+
+        MARKET_IDS = {
+            "NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4,
+            "SEA": 5, "LAX": 6, "CVC": 7, "WDC": 8, "DAL": 10,
+        }
+        COL_DATE = 2; COL_SHOW = 8; COL_COMMENTS = 9; COL_TYPE = 14
+        FPS = 29.97
+
+        filename = file.filename or "log.xlsm"
+        name_upper = filename.upper()
+        market_id = next((mid for code, mid in MARKET_IDS.items() if code in name_upper), None)
+        if market_id is None:
+            raise HTTPException(status_code=400,
+                detail=f"Could not detect market from filename '{filename}'. "
+                       f"Expected one of: {', '.join(MARKET_IDS)}.")
+
+        raw = await file.read()
+
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(raw), keep_vba=True)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Could not open workbook: {exc}")
+
+        market_code = next(k for k, v in MARKET_IDS.items() if v == market_id)
+        messages = [f"Market: {market_code} (station {market_id})"]
+        total_filled = 0
+
+        project_root = Path(__file__).parent.parent.parent.parent
+        sys.path.insert(0, str(project_root))
+        from browser_automation.etere_direct_client import connect
+
+        with connect() as conn:
+            for sheet_name in wb.sheetnames:
+                ws = wb[sheet_name]
+                pending = defaultdict(list)
+
+                for row in ws.iter_rows(min_row=2):
+                    spot_type = row[COL_TYPE - 1].value
+                    if not spot_type or str(spot_type).upper() == "PRG":
+                        continue
+                    comment = row[COL_COMMENTS - 1].value
+                    if comment:
+                        continue
+                    date_val = row[COL_DATE - 1].value
+                    if not isinstance(date_val, _dt.datetime):
+                        continue
+                    show_name = row[COL_SHOW - 1].value or ""
+                    m = re.match(r"^([^:]+):", show_name.strip())
+                    if not m:
+                        continue
+                    asset_code = m.group(1).strip()
+                    pending[(date_val.date(), asset_code)].append(row[0].row)
+
+                if not pending:
+                    continue
+
+                cur = conn.cursor(as_dict=True)
+                sheet_filled = 0
+                for (date, asset_code), row_nums in pending.items():
+                    cur.execute(
+                        "SELECT ORA FROM TPALINSE"
+                        " WHERE DATA = %s AND TITLE LIKE %s AND COD_USER = %d"
+                        " ORDER BY ORA",
+                        (date, f"%{asset_code}%", market_id),
+                    )
+                    oras = [r["ORA"] for r in cur.fetchall()]
+                    if not oras:
+                        messages.append(f"  No TPALINSE match: {asset_code} on {date}")
+                        continue
+                    if len(oras) < len(row_nums):
+                        messages.append(
+                            f"  WARNING: {asset_code} on {date} — "
+                            f"{len(row_nums)} log rows but only {len(oras)} Etere entries"
+                        )
+                    for i, row_num in enumerate(row_nums):
+                        if i >= len(oras):
+                            break
+                        secs = round(oras[i] / FPS)
+                        ws.cell(row_num, COL_COMMENTS).value = _dt.timedelta(seconds=secs)
+                        sheet_filled += 1
+
+                if sheet_filled:
+                    messages.append(f"  {sheet_name}: filled {sheet_filled} spot time(s)")
+                total_filled += sheet_filled
+
+        if total_filled == 0:
+            return JSONResponse({"filled": 0, "messages": messages})
+
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+
+        token = str(uuid.uuid4())
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsm")
+        tmp.write(out.read())
+        tmp.close()
+        _fill_log_pending[token] = (Path(tmp.name), filename)
+
+        return JSONResponse({"filled": total_filled, "messages": messages,
+                             "token": token, "filename": filename})
+
+    @router.get("/api/scripts/fill-log-times/download/{token}")
+    async def download_filled_log(token: str):
+        entry = _fill_log_pending.pop(token, None)
+        if entry is None:
+            raise HTTPException(status_code=404, detail="Download expired or not found.")
+        tmp_path, filename = entry
+        data = tmp_path.read_bytes()
+        tmp_path.unlink(missing_ok=True)
+        return StreamingResponse(
+            iter([data]),
+            media_type="application/vnd.ms-excel.sheet.macroEnabled.12",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
     @router.get("/api/scripts/block-refresh")
     async def run_block_refresh(contract_id: int = Query(..., gt=0)):
         project_root = Path(__file__).parent.parent.parent.parent
