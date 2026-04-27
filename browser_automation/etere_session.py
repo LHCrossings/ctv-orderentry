@@ -10,6 +10,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
+import os
 import time
 from pathlib import Path
 import sys
@@ -23,8 +24,8 @@ from credential_loader import load_credentials
 from src.domain.enums import Market
 
 
-# Etere Configuration
-ETERE_URL = "http://100.102.206.113"
+# Etere Configuration — override via ETERE_WEB_URL in credentials.env
+ETERE_URL = os.getenv("ETERE_WEB_URL", "http://100.102.206.113")
 LOGIN_URL = f"{ETERE_URL}/index/login"
 
 

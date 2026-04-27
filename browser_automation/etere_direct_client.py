@@ -60,10 +60,11 @@ except ImportError:
 
 # ── Connection ──────────────────────────────────────────────────────────────────
 
-DB_SERVER   = "100.85.38.72"
-DB_DATABASE = "Etere_crossing"
-DB_DRIVER   = "{SQL Server}"
-ETERE_WEB_URL = "http://100.102.206.113"
+# Override via ETERE_DB_SERVER / ETERE_WEB_URL in credentials.env
+DB_SERVER     = os.getenv("ETERE_DB_SERVER", "100.85.38.72")
+DB_DATABASE   = "Etere_crossing"
+DB_DRIVER     = "{SQL Server}"
+ETERE_WEB_URL = os.getenv("ETERE_WEB_URL", "http://100.102.206.113")
 
 
 def connect():
