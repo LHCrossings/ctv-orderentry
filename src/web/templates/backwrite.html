@@ -455,7 +455,12 @@
                         {% endfor %}
                     </datalist>
                 </div>
+                <div class="form-group">
+                    <label for="revision">Revision #</label>
+                    <input type="number" name="revision" id="revision" min="0" placeholder="e.g. 1" />
+                </div>
             </div>
+            <input type="hidden" name="base_filename" id="base_filename" value="" />
 
             <!-- Broadcast Settings -->
             <div class="section-label">Broadcast Settings</div>
@@ -823,13 +828,20 @@ function handleExistingFile(f) {
             fill('state',         d.state);
             fill('zip_code',      d.zip);
             fill('sales_person',  d.sales_person);
+            fill('contract',      d.contract);
             fill('notes',         d.notes);
             fill('billing_type',  d.billing_type);
             fill('agency_flag',   d.agency_flag);
             if (d.agency_fee) document.getElementById('agency_fee').value = d.agency_fee;
             toggleAgencyFee();
-            // estimate only if not already set from CSV hint (contract left blank)
-            setIfEmpty('estimate', d.estimate);
+            // estimates only if not already set from CSV hint
+            setIfEmpty('estimate',     d.estimate);
+            setIfEmpty('estimate_run', d.estimate_run);
+            // revision: increment from previous, store base filename for output naming
+            const prevRev = parseInt(d.revision) || 0;
+            document.getElementById('revision').value = prevRev + 1;
+            const baseName = f.name.replace(/\.xlsx$/i, '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+            document.getElementById('base_filename').value = baseName;
             // order_date stays as today — never copy from old order
             existingFn.textContent += ' ✓';
         })

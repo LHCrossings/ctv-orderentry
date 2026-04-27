@@ -694,6 +694,13 @@ def _fill_sales_confirmation(
         for cell in row:
             _replace_placeholder(cell, ctx)
 
+    # Revision is hardcoded 0 in template (not a placeholder) — overwrite directly
+    rev = ctx.get("revision")
+    try:
+        ws.cell(row=10, column=12).value = int(rev) if rev else 0
+    except (ValueError, TypeError):
+        ws.cell(row=10, column=12).value = rev or 0
+
     # Fill the monthly breakdown section
     last_line_row = line_rows[-1] if line_rows else 20
     _fill_monthly_breakdown(ws, monthly_gross, monthly_net, last_line_row)
@@ -879,12 +886,20 @@ def read_existing_order_fields(data: bytes) -> dict:
         "fax":             cv(9,  4),
         "contract":        cv(9, 12),
         "email_1":         cv(10, 4),
+        "revision":        cv(10, 12),
         "email_2":         cv(11, 4),
         "sales_person":    cv(11, 11),
         "email_3":         cv(12, 4),
         "email_4":         cv(13, 4),
         "notes":           "",
     }
+
+    # Read estimate_run from Run Sheet tab (col 15 = "Estimate", row 2 = first data row)
+    fields["estimate_run"] = ""
+    if "Run Sheet" in wb.sheetnames:
+        rs = wb["Run Sheet"]
+        v = rs.cell(row=2, column=15).value
+        fields["estimate_run"] = str(v).strip() if v is not None else ""
 
     # Content-search rows for fields that shift position after line insertion
     from openpyxl.cell.cell import MergedCell as _MC
@@ -1076,6 +1091,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
     estimate      = user_inputs.get("estimate",      "")
     estimate_run  = user_inputs.get("estimate_run",  "")
     contract      = user_inputs.get("contract",      "")
+    revision      = user_inputs.get("revision",      "")
 
     is_agency = agency_flag == "Agency"
     bill_code = f"{header.agency}:{header.client}" if header.agency else header.client
@@ -1207,6 +1223,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
         "state":            user_inputs.get("state", ""),
         "zip":              user_inputs.get("zip", ""),
         "notes":            user_inputs.get("notes", "").replace('\r\n', '\n').replace('\r', '\n'),
+        "revision":         revision,
         "per":              "Wk",
     }
 

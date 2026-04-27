@@ -325,6 +325,8 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
         notes:                str = Form(""),
         gross_up_rates:       str = Form("{}"),
         language_corrections: str = Form("{}"),
+        revision:             str = Form(""),
+        base_filename:        str = Form(""),
     ):
         """Generate backwrite Excel from CSV + user inputs, return as download."""
         try:
@@ -381,6 +383,7 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             "notes":                notes,
             "gross_up_rates":       gross_up_dict,
             "language_corrections": lang_corrections_dict,
+            "revision":             revision,
         }
 
         # ── Parse optional IO file for IO-sourced SC lines ────────────────────
@@ -434,15 +437,23 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             traceback.print_exc()
             raise HTTPException(status_code=500, detail=f"Excel generation error: {exc}")
 
-        # Build output filename: "MKT - Client Est NNNNN.xlsx"
-        markets = sorted(set(s.market for s in spots))
-        mkt = markets[0] if markets else "CTV"
-        client_short = header.client[:30].strip()
-        if estimate:
-            raw_name = f"{mkt} - {client_short} Est {estimate}.xlsx"
+        # Build output filename
+        rev_num = int(revision) if str(revision).isdigit() and int(revision) > 0 else 0
+        if base_filename:
+            # Use uploaded file's base name with updated revision suffix
+            safe_base = re.sub(r'[\\/:*?"<>|]', "", base_filename).strip()
+            filename = f"{safe_base} (rev{rev_num}).xlsx" if rev_num else f"{safe_base}.xlsx"
         else:
-            raw_name = f"{header.contract_code}.xlsx"
-        filename = re.sub(r'[\\/:*?"<>|]', "", raw_name)
+            markets = sorted(set(s.market for s in spots))
+            mkt = markets[0] if markets else "CTV"
+            client_short = header.client[:30].strip()
+            if estimate:
+                raw_name = f"{mkt} - {client_short} Est {estimate}"
+            else:
+                raw_name = header.contract_code
+            if rev_num:
+                raw_name += f" rev{rev_num}"
+            filename = re.sub(r'[\\/:*?"<>|]', "", raw_name) + ".xlsx"
 
         return StreamingResponse(
             io.BytesIO(xlsx_bytes),
