@@ -831,7 +831,7 @@ EXEC web_sales_InsertContractLine
             INSERT INTO CONTRATTIFASCE (ID_CONTRATTIRIGHE, ID_FASCE, PRICELIST, SELECTEDSEGMENTS)
             SELECT {self._ph}, sub.ID_TrafficBlock, '', ''
             FROM (
-                SELECT DISTINCT ts.Offset AS ts_offset, tb.ID_TrafficBlock
+                SELECT DISTINCT ts.Offset AS ts_offset, tb.ID_TrafficBlock, tb.Name AS block_name
                 FROM Traffic_Calendar tc
                 JOIN traffic_scheduleblock ts ON tc.id_trafficschedule = ts.id_trafficschedule
                 JOIN traffic_block tb ON ts.id_trafficblock = tb.id_trafficblock
@@ -845,6 +845,7 @@ EXEC web_sales_InsertContractLine
                   AND tseg.visible = 1
                   AND DATENAME(WEEKDAY, tc.Date) IN ({day_placeholders})
             ) sub
+            ORDER BY sub.block_name
         """, [line_id, date_from, date_to, user_id,
               start_frames, end_frames, *active_days])
 
