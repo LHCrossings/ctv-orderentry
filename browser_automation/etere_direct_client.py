@@ -1059,7 +1059,7 @@ EXEC web_sales_InsertContractLine
             return t_from, t_to
         return None
 
-    def assign_blocks_for_existing_line(self, line_id: int) -> int:
+    def assign_blocks_for_existing_line(self, line_id: int, use_sql: bool = False) -> int:
         """
         Assign blocks to a line that already exists in CONTRATTIRIGHE (e.g. created
         via Selenium or the Etere UI).  Reads day bits, date range, and COD_USER
@@ -1067,11 +1067,17 @@ EXEC web_sales_InsertContractLine
         page — exactly the values the browser uses when clicking "Add Blocks
         Automatically".
 
+        use_sql=True: use ORA_INIZIOF/ORA_FINEF (the normalized frame values the
+        DLL's loadBlock() actually uses) and write blocks via pure SQL — no HTTP
+        login required.  Use this path to test the SQL method before replacing HTTP
+        globally.
+
         Returns the number of blocks assigned, or -1 if the line was not found.
         """
         cursor = self._conn.cursor()
         cursor.execute(f"""
             SELECT ORA_INIZIO, ORA_FINE,
+                   ORA_INIZIOF, ORA_FINEF,
                    LUNEDI, MARTEDI, MERCOLEDI, GIOVEDI,
                    VENERDI, SABATO, DOMENICA,
                    DATA_INIZIO, DATA_FINE,
@@ -1084,25 +1090,19 @@ EXEC web_sales_InsertContractLine
             print(f"[DIRECT] assign_blocks_for_existing_line: line {line_id} not found")
             return -1
 
-        db_start_frames, db_end_frames = row[0], row[1]
         day_bits = {
-            "lun": bool(row[2]),
-            "mar": bool(row[3]),
-            "mer": bool(row[4]),
-            "gio": bool(row[5]),
-            "ven": bool(row[6]),
-            "sab": bool(row[7]),
-            "dom": bool(row[8]),
+            "lun": bool(row[4]),
+            "mar": bool(row[5]),
+            "mer": bool(row[6]),
+            "gio": bool(row[7]),
+            "ven": bool(row[8]),
+            "sab": bool(row[9]),
+            "dom": bool(row[10]),
         }
-        date_from   = row[9]
-        date_to     = row[10]
-        user_id     = row[11]
-        contract_id = row[12]
-
-        # Use ORA_INIZIO/ORA_FINE directly — these are the authoritative values
-        # Etere stores; the previous HTTP fetch of the modal page was redundant.
-        start_frames = db_start_frames
-        end_frames   = db_end_frames if db_end_frames else db_start_frames
+        date_from   = row[11]
+        date_to     = row[12]
+        user_id     = row[13]
+        contract_id = row[14]
 
         # Strip trailing asterisks Etere appends after block operations
         cursor.execute(f"""
@@ -1114,6 +1114,25 @@ EXEC web_sales_InsertContractLine
         if self._autocommit:
             self._conn.commit()
 
+        if use_sql:
+            # ORA_INIZIOF/ORA_FINEF are the normalized frame values loadBlock() uses.
+            # ORA_FINE equals ORA_INIZIO (only start stored there); ORA_FINEF has
+            # the actual end time.
+            start_frames = row[2]
+            end_frames   = row[3] if row[3] else row[2]
+            print(f"[DIRECT]   SQL mode: start={start_frames} end={end_frames}")
+            return self._assign_blocks(
+                line_id=line_id,
+                user_id=user_id,
+                start_frames=start_frames,
+                end_frames=end_frames,
+                day_bits=day_bits,
+                date_from=date_from,
+                date_to=date_to,
+            )
+
+        start_frames = row[0]
+        end_frames   = row[1] if row[1] else row[0]
         return self._assign_blocks_http(
             contract_id=contract_id,
             user_id=user_id,
