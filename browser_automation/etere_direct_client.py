@@ -1054,18 +1054,12 @@ EXEC web_sales_InsertContractLine
             return t_from, t_to
         return None
 
-    def assign_blocks_for_existing_line(self, line_id: int, use_sql: bool = False) -> int:
+    def assign_blocks_for_existing_line(self, line_id: int, use_sql: bool = True) -> int:
         """
-        Assign blocks to a line that already exists in CONTRATTIRIGHE (e.g. created
-        via Selenium or the Etere UI).  Reads day bits, date range, and COD_USER
-        from the DB, and fetches the displayed start/end times from the Etere modal
-        page — exactly the values the browser uses when clicking "Add Blocks
-        Automatically".
-
-        use_sql=True: use ORA_INIZIOF/ORA_FINEF (the normalized frame values the
-        DLL's loadBlock() actually uses) and write blocks via pure SQL — no HTTP
-        login required.  Use this path to test the SQL method before replacing HTTP
-        globally.
+        Assign blocks to a line that already exists in CONTRATTIRIGHE.
+        Uses ORA_INIZIOF/ORA_FINEF and the DLL-confirmed Traffic_Calendar query
+        by default (use_sql=True).  Pass use_sql=False to fall back to the HTTP
+        path (requires an active Etere web session).
 
         Returns the number of blocks assigned, or -1 if the line was not found.
         """
