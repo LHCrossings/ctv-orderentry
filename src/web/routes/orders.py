@@ -1916,15 +1916,17 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         filmati_aspect_map[fid] = _VS_TO_ASPECT.get(r["VIDEOSTANDARD"], "H")
                         filmati_duration_map[fid] = r["DUR"] or 0
 
+                cur.execute("SELECT id_bookingcode, code FROM trf_bookingcode")
+                bookingcode_to_newtype = {r["id_bookingcode"]: r["code"] for r in cur.fetchall()}
+
             if not all_rows:
                 raise ValueError("No scheduled spots found matching the selected filters")
 
-            _BOOKINGCODE_TO_NEWTYPE = {2: "COM", 10: "BNS"}
             line_tp_map = defaultdict(list)
             tp_newtype_map: dict = {}
             for r in all_rows:
                 line_tp_map[r["line_id"]].append(r["tp_id"])
-                tp_newtype_map[r["tp_id"]] = _BOOKINGCODE_TO_NEWTYPE.get(r["booking_code"], "COM")
+                tp_newtype_map[r["tp_id"]] = bookingcode_to_newtype.get(r["booking_code"], "COM")
 
             # Calculate rotation % per filmati (sum = 100, last spot absorbs rounding remainder)
             perc_map: dict = {}
