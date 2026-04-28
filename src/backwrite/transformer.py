@@ -607,11 +607,32 @@ def _fill_sales_confirmation(
     ref_row  = line_rows[0] if line_rows else None
     snapshot = _snapshot_row(ws, ref_row) if ref_row else ([], [])
 
-    # Shrink: delete surplus template rows when we have fewer lines than the template
+    # Shrink: delete surplus template rows when we have fewer lines than the template.
+    # Use the same save/unmerge/delete/remerge pattern as the expand branch;
+    # openpyxl's auto-shift of merged cells on delete is unreliable.
     if n_lines < n_tmpl and n_lines > 0:
-        rows_to_delete = line_rows[n_lines:]  # extra rows (bottom ones)
-        for row_num in reversed(rows_to_delete):
-            ws.delete_rows(row_num)
+        first_delete = line_rows[n_lines]     # first row to remove
+        n_deletes    = n_tmpl - n_lines       # number of rows to remove
+
+        saved_merges = [
+            (mr.min_row, mr.max_row, mr.min_col, mr.max_col)
+            for mr in list(ws.merged_cells.ranges)
+            if mr.min_row >= first_delete
+        ]
+        for min_r, max_r, min_c, max_c in saved_merges:
+            ws.unmerge_cells(start_row=min_r, start_column=min_c,
+                             end_row=max_r,   end_column=max_c)
+
+        ws.delete_rows(first_delete, n_deletes)
+
+        # Re-merge only ranges that lived below the deleted zone (now shifted up)
+        for min_r, max_r, min_c, max_c in saved_merges:
+            if min_r >= first_delete + n_deletes:
+                ws.merge_cells(
+                    start_row=min_r - n_deletes, start_column=min_c,
+                    end_row=max_r   - n_deletes, end_column=max_c,
+                )
+
         line_rows = line_rows[:n_lines]
         n_tmpl = n_lines
 
