@@ -793,45 +793,30 @@ EXEC web_sales_InsertContractLine
         date_to,
     ) -> int:
         """
-        Populate CONTRATTIFASCE for a contract line by finding matching
-        trafficPalinse blocks (same market, date range, time window, day pattern).
+        Populate CONTRATTIFASCE for a contract line using Etere's own block-loading
+        logic (source-confirmed from loadAvailableBlocks() in Etere.Web.Sales.dll).
 
-        Algorithm (reverse-engineered from Etere's "Add Blocks Automatically"):
-          - For each (id_fascia, Date) in the date range, compute MIN(offset).
-          - Include id_fascia if MIN(offset) falls in [lb, ub) on at least one day.
-          - lb = start_frames - PREROLL  (Etere stores program starts 9 frames
-            before the hour boundary, e.g. 22h stored as 22*107892-9)
-          - ub = end_frames - PREROLL    (exclusive upper bound)
-          - For point-in-time lines (start == end): ub = lb + FPH (1-hour window)
-
-        SQL Server DATEPART(dw): 1=Sun, 2=Mon, 3=Tue, 4=Wed, 5=Thu, 6=Fri, 7=Sat
+        Joins: Traffic_Calendar → traffic_scheduleblock → traffic_block → traffic_segment
+        Filters: date range, market, time window (ts.Offset + tseg.Offset), day-of-week,
+                 Expired=0, Level=0 (published schedules only), visible=1.
         """
-        _DAY_BITS_TO_DW = {
-            "dom": 1,  # Sunday
-            "lun": 2,  # Monday
-            "mar": 3,  # Tuesday
-            "mer": 4,  # Wednesday
-            "gio": 5,  # Thursday
-            "ven": 6,  # Friday
-            "sab": 7,  # Saturday
+        _DAY_BITS_TO_NAME = {
+            "dom": "Sunday",
+            "lun": "Monday",
+            "mar": "Tuesday",
+            "mer": "Wednesday",
+            "gio": "Thursday",
+            "ven": "Friday",
+            "sab": "Saturday",
         }
-        active_dw = [dw for key, dw in _DAY_BITS_TO_DW.items() if day_bits.get(key)]
-        if not active_dw:
+        active_days = [name for key, name in _DAY_BITS_TO_NAME.items() if day_bits.get(key)]
+        if not active_days:
             return 0
 
-        PREROLL = 9          # frames before hour boundary
-        FPH = round(29.97 * 3600)   # 107892 frames per hour
-        lb = start_frames - PREROLL
-        if start_frames == end_frames:
-            ub = lb + FPH    # point-in-time: 1-hour window
-        else:
-            ub = end_frames - PREROLL
-
-        dw_placeholders = ",".join([self._ph] * len(active_dw))
+        day_placeholders = ",".join([self._ph] * len(active_days))
 
         cursor = self._conn.cursor()
 
-        # Clear existing blocks so duplicated-line inherited blocks don't persist
         cursor.execute(
             f"DELETE FROM CONTRATTIFASCE WHERE ID_CONTRATTIRIGHE = {self._ph}", [line_id]
         )
@@ -841,18 +826,21 @@ EXEC web_sales_InsertContractLine
 
         cursor.execute(f"""
             INSERT INTO CONTRATTIFASCE (ID_CONTRATTIRIGHE, ID_FASCE, PRICELIST, SELECTEDSEGMENTS)
-            SELECT DISTINCT {self._ph}, sub.id_fascia, '', ''
-            FROM (
-                SELECT tp.id_fascia
-                FROM trafficPalinse tp
-                WHERE tp.Cod_User = {self._ph}
-                  AND tp.Date >= {self._ph} AND tp.Date <= {self._ph}
-                  AND DATEPART(dw, tp.Date) IN ({dw_placeholders})
-                GROUP BY tp.id_fascia, tp.Date
-                HAVING MIN(tp.offset) >= {self._ph} AND MIN(tp.offset) < {self._ph}
-            ) sub
-        """, [line_id, user_id, date_from, date_to,
-              *active_dw, lb, ub])
+            SELECT DISTINCT {self._ph}, tb.ID_TrafficBlock, '', ''
+            FROM Traffic_Calendar tc
+            JOIN traffic_scheduleblock ts ON tc.id_trafficschedule = ts.id_trafficschedule
+            JOIN traffic_block tb ON ts.id_trafficblock = tb.id_trafficblock
+            JOIN traffic_segment tseg ON tb.ID_TrafficBlock = tseg.ID_TrafficBlock
+            WHERE tc.Date BETWEEN {self._ph} AND {self._ph}
+              AND tb.Cod_User = {self._ph}
+              AND (ts.Offset + tseg.Offset) >= {self._ph}
+              AND (ts.Offset + tseg.Offset) < {self._ph}
+              AND tb.Expired = 0
+              AND tc.Level = 0
+              AND tseg.visible = 1
+              AND DATENAME(WEEKDAY, tc.Date) IN ({day_placeholders})
+        """, [line_id, date_from, date_to, user_id,
+              start_frames, end_frames, *active_days])
 
         count = cursor.rowcount
         if self._autocommit:
