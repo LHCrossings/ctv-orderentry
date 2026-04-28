@@ -235,6 +235,10 @@ def _build_excel(pivot: dict) -> bytes:
 def build_reports_router(templates: Jinja2Templates) -> APIRouter:
     router = APIRouter()
 
+    @router.get("/reports", response_class=HTMLResponse)
+    async def reports_hub(request: Request):
+        return templates.TemplateResponse(request, "reports.html")
+
     @router.get("/reports/placement-by-week", response_class=HTMLResponse)
     async def placement_by_week_page(request: Request):
         return templates.TemplateResponse(request, "reports/placement_by_week.html")
