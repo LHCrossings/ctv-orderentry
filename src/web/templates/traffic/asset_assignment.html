@@ -488,6 +488,21 @@
             <button class="run-btn" onclick="searchContracts()">Search</button>
         </div>
 
+        <!-- Auto-assign row — shown after contract selected -->
+        <div id="autoAssignRow" class="input-row" style="display:none; margin-top:12px; padding-top:12px; border-top:1px solid var(--border-color);">
+            <div class="field-group">
+                <label class="field-label">Auto-Assign</label>
+                <select id="autoClient" class="field-input" style="min-width:200px;"
+                        onchange="document.getElementById('scanBtn').disabled = !this.value;">
+                    <option value="">— Select client —</option>
+                    <option value="sky_river">Sky River Casino</option>
+                </select>
+            </div>
+            <button class="run-btn" id="scanBtn" onclick="runAutoScan()" disabled>Scan Lines</button>
+        </div>
+
+        <div id="autoScanResults" style="margin-top:14px;"></div>
+
         <div id="contractBanner" class="contract-banner">
             <div class="contract-code" id="bannerCode"></div>
             <div class="contract-meta" id="bannerMeta"></div>
@@ -635,22 +650,6 @@
         </div>
     </div>
 
-    <!-- Auto-assign by client -->
-    <div class="tool-card" id="autoAssignCard" style="display:none;">
-        <h2>Auto-Assign by Client</h2>
-        <div class="input-row">
-            <div class="field-group">
-                <label class="field-label">Client Process</label>
-                <select id="autoClient" class="field-input" style="min-width:200px;"
-                        onchange="document.getElementById('scanBtn').disabled = !this.value;">
-                    <option value="">— Select client —</option>
-                    <option value="sky_river">Sky River Casino</option>
-                </select>
-            </div>
-            <button class="run-btn" id="scanBtn" onclick="runAutoScan()" disabled>Scan Lines</button>
-        </div>
-        <div id="autoScanResults" style="margin-top:16px;"></div>
-    </div>
 
 </main>
 
@@ -748,8 +747,8 @@
 
         clearPreview();
 
-        // Reset auto-assign card for the new contract
-        document.getElementById('autoAssignCard').style.display = 'block';
+        // Reset auto-assign row for the new contract
+        document.getElementById('autoAssignRow').style.display = '';
         document.getElementById('autoScanResults').innerHTML = '';
         document.getElementById('autoClient').value = '';
         document.getElementById('scanBtn').disabled = true;
