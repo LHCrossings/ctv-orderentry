@@ -25,7 +25,7 @@ def _week_start(d) -> date:
 
 def _fmt_week(ws: date) -> str:
     we = ws + timedelta(days=6)
-    return f"{ws.strftime('%b %-d')}–{we.strftime('%b %-d')}"
+    return f"{ws.strftime('%b')} {ws.day}–{we.strftime('%b')} {we.day}"
 
 
 def _fetch_placements_sync(contract_id: int):
