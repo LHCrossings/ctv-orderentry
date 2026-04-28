@@ -1191,6 +1191,8 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
     # ── Sales Confirmation lines ──────────────────────────────────────────────
     if io_detail and io_detail.get("lines"):
         sc_lines = _sc_lines_from_io(io_detail)
+        for _ln in sc_lines:
+            _ln["gross_rate"] = _grossed_up(_ln["gross_rate"])
         print(f"[backwrite] IO-sourced SC lines: {len(sc_lines)}")
     else:
         # Group by description: Etere splits one IO line across months/weeks into
