@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Order Placement by Week — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 1400px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px 28px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+            margin-bottom: 20px;
+        }
+        .tool-card h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 16px;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+        .field-group { display: flex; flex-direction: column; gap: 5px; }
+        .field-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+        .field-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 9px 12px;
+            font-size: 0.9rem;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            color: var(--text-primary);
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .field-input:focus {
+            border-color: var(--nord10);
+            box-shadow: 0 0 0 3px rgba(94,129,172,0.15);
+        }
+        .run-btn {
+            padding: 9px 20px;
+            background: var(--nord10);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.15s;
+            white-space: nowrap;
+            height: 38px;
+        }
+        .run-btn:hover:not(:disabled) { background: var(--nord9); transform: translateY(-1px); }
+        .run-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+        .run-btn.dl { background: var(--nord14); }
+        .run-btn.dl:hover:not(:disabled) { background: #88c0a3; }
+
+        /* Search dropdown */
+        .search-wrap { position: relative; }
+        .search-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            z-index: 100;
+            min-width: 360px;
+            max-height: 280px;
+            overflow-y: auto;
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 4px 16px var(--shadow-color);
+            margin-top: 4px;
+        }
+        .dropdown-item {
+            padding: 10px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover { background: var(--bg-secondary); }
+        .dropdown-code { font-weight: 700; font-size: 0.88rem; color: var(--text-primary); }
+        .dropdown-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
+
+        /* Contract banner */
+        .contract-banner {
+            display: none;
+            margin-top: 16px;
+            padding: 14px 18px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+        }
+        .contract-banner.visible { display: block; }
+        .contract-code { font-weight: 700; font-size: 1rem; color: var(--text-primary); }
+        .contract-meta { font-size: 0.82rem; color: var(--text-muted); margin-top: 3px; }
+
+        /* Report table */
+        .report-header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+        .report-header-row h2 { margin-bottom: 0; }
+
+        .table-scroll { overflow-x: auto; }
+
+        table.spot-table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 0.875rem;
+            white-space: nowrap;
+        }
+        table.spot-table th {
+            background: var(--nord10);
+            color: #fff;
+            font-weight: 600;
+            padding: 9px 14px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+        table.spot-table th.desc-col { text-align: left; }
+        table.spot-table th.total-col { background: #1f3864; }
+
+        table.spot-table td {
+            padding: 8px 14px;
+            border: 1px solid var(--border-color);
+            text-align: center;
+            color: var(--text-primary);
+        }
+        table.spot-table td.desc-col { text-align: left; font-weight: 500; }
+        table.spot-table td.zero { color: var(--text-muted); }
+        table.spot-table td.row-total {
+            background: #d6e4f0;
+            font-weight: 700;
+        }
+
+        table.spot-table tr.even td { background: #f5f7fa; }
+        table.spot-table tr.odd  td { background: #fff; }
+        table.spot-table tr.bonus td { background: #fff8e1; font-style: italic; }
+
+        table.spot-table tr.totals-row td {
+            background: #1f3864;
+            color: #fff;
+            font-weight: 700;
+            border-color: rgba(255,255,255,0.15);
+        }
+
+        .loading-msg {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            padding: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <header class="page-header">
+        <a class="back-link" href="/traffic">← Traffic</a>
+        <div class="page-title">Order Placement by Week</div>
+    </header>
+
+    <main>
+
+        <!-- Contract search -->
+        <div class="tool-card">
+            <h2>Contract</h2>
+            <div class="input-row">
+                <div class="field-group search-wrap" style="flex:1; max-width:360px;">
+                    <label class="field-label">Search</label>
+                    <input id="contractSearch" class="field-input" placeholder="PACO BMO 27, BMO…" autocomplete="off" />
+                    <div id="contractDropdown" class="search-dropdown" style="display:none;"></div>
+                </div>
+                <button class="run-btn" onclick="searchContracts()">Search</button>
+            </div>
+            <div id="contractBanner" class="contract-banner">
+                <div class="contract-code" id="bannerCode"></div>
+                <div class="contract-meta" id="bannerMeta"></div>
+            </div>
+        </div>
+
+        <!-- Report card (hidden until a contract is loaded) -->
+        <div id="reportCard" class="tool-card" style="display:none;">
+            <div class="report-header-row">
+                <h2>Placement by Week</h2>
+                <button class="run-btn dl" id="downloadBtn" onclick="downloadExcel()">Download Excel</button>
+            </div>
+            <div id="loadingMsg" class="loading-msg" style="display:none;">Loading…</div>
+            <div class="table-scroll">
+                <div id="tableWrap"></div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+    (function () {
+        let selectedContractId = null;
+
+        const contractInput = document.getElementById('contractSearch');
+        const dropdown      = document.getElementById('contractDropdown');
+
+        function esc(s) {
+            return String(s ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        // ── Contract search ─────────────────────────────────────────────────
+
+        let _searchTimer = null;
+        contractInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { clearTimeout(_searchTimer); searchContracts(); }
+        });
+        contractInput.addEventListener('input', () => {
+            if (!contractInput.value.trim()) { dropdown.style.display = 'none'; return; }
+            clearTimeout(_searchTimer);
+            _searchTimer = setTimeout(searchContracts, 350);
+        });
+        document.addEventListener('click', e => {
+            if (!e.target.closest('.search-wrap')) dropdown.style.display = 'none';
+        });
+
+        window.searchContracts = async function () {
+            const q = contractInput.value.trim();
+            if (!q) return;
+            const resp = await fetch(`/api/traffic/contract-search?q=${encodeURIComponent(q)}`);
+            const rows = await resp.json();
+            if (!rows.length) {
+                dropdown.innerHTML = '<div class="dropdown-item"><span class="dropdown-desc">No contracts found.</span></div>';
+            } else {
+                dropdown.innerHTML = rows.map(r => `
+                    <div class="dropdown-item" onclick="selectContract(${r.id}, '${esc(r.code)}', '${esc(r.description)}', '${esc(r.date_start)}', '${esc(r.date_end)}')">
+                        <div class="dropdown-code">${esc(r.code)}</div>
+                        <div class="dropdown-desc">${esc(r.description || '')} &nbsp;·&nbsp; ${r.date_start} – ${r.date_end}</div>
+                    </div>`).join('');
+            }
+            dropdown.style.display = 'block';
+        };
+
+        window.selectContract = async function (id, code, description, dateStart, dateEnd) {
+            selectedContractId = id;
+            contractInput.value = code;
+            dropdown.style.display = 'none';
+
+            document.getElementById('bannerCode').textContent = code;
+            document.getElementById('bannerMeta').textContent =
+                `${description} · ${dateStart} – ${dateEnd}`;
+            document.getElementById('contractBanner').classList.add('visible');
+
+            loadReport(id);
+        };
+
+        // ── Report loading ───────────────────────────────────────────────────
+
+        async function loadReport(contractId) {
+            const reportCard = document.getElementById('reportCard');
+            const loadingMsg = document.getElementById('loadingMsg');
+            const tableWrap  = document.getElementById('tableWrap');
+
+            reportCard.style.display = 'block';
+            loadingMsg.style.display = 'block';
+            tableWrap.innerHTML = '';
+
+            const resp = await fetch(`/api/reports/placement-by-week/${contractId}`);
+            loadingMsg.style.display = 'none';
+            if (!resp.ok) {
+                tableWrap.innerHTML = `<div class="loading-msg">Error loading report: ${resp.status}</div>`;
+                return;
+            }
+            const data = await resp.json();
+            tableWrap.innerHTML = buildTable(data);
+        }
+
+        function buildTable(data) {
+            const { weeks, rows, week_totals, grand_total } = data;
+
+            let html = '<table class="spot-table"><thead><tr>';
+            html += '<th class="desc-col">Description</th>';
+            weeks.forEach(w => { html += `<th>${esc(w)}</th>`; });
+            html += '<th class="total-col">Total</th>';
+            html += '</tr></thead><tbody>';
+
+            rows.forEach((row, ri) => {
+                const cls = row.is_bonus ? 'bonus' : (ri % 2 === 0 ? 'even' : 'odd');
+                html += `<tr class="${cls}">`;
+                html += `<td class="desc-col">${esc(row.description)}</td>`;
+                row.spots.forEach(v => {
+                    if (v) {
+                        html += `<td>${v}</td>`;
+                    } else {
+                        html += `<td class="zero">—</td>`;
+                    }
+                });
+                html += `<td class="row-total">${row.total}</td>`;
+                html += '</tr>';
+            });
+
+            // Totals row
+            html += '<tr class="totals-row"><td class="desc-col">Total</td>';
+            week_totals.forEach(v => { html += `<td>${v}</td>`; });
+            html += `<td>${grand_total}</td>`;
+            html += '</tr></tbody></table>';
+
+            return html;
+        }
+
+        // ── Excel download ───────────────────────────────────────────────────
+
+        window.downloadExcel = function () {
+            if (!selectedContractId) return;
+            window.location.href = `/api/reports/placement-by-week/${selectedContractId}/excel`;
+        };
+
+    })();
+    </script>
+</body>
+</html>
