@@ -1120,6 +1120,21 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
     is_agency = agency_flag == "Agency"
     bill_code = f"{header.agency}:{header.client}" if header.agency else header.client
 
+    # Build a gross-up lookup so SC lines and totals match the run sheet.
+    # gross_up_rates maps {csv_gross_rate_str: net_rate_str}; full gross = net / (1 - fee).
+    _gross_up_map: dict = {}
+    _gross_up_dict = user_inputs.get("gross_up_rates") or {}
+    if _gross_up_dict and is_agency and (1 - agency_fee) > 0:
+        _gross_up_map = {
+            round(float(k), 4): round(float(v) / (1 - agency_fee), 4)
+            for k, v in _gross_up_dict.items()
+        }
+
+    def _grossed_up(rate: float) -> float:
+        if not _gross_up_map:
+            return rate
+        return _gross_up_map.get(round(rate, 4), _gross_up_map.get(round(rate, 2), rate))
+
     # ── Per-spot run rows: try EtereBridge pipeline first ────────────────────
     run_rows: List[dict] = []
     if raw_csv:
@@ -1204,11 +1219,11 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
                 "line_description": desc,
                 "type":             "BNS" if first.gross_rate == 0 else "COM",
                 "length":           f":{first.duration_s}",
-                "gross_rate":       first.gross_rate,
+                "gross_rate":       _grossed_up(first.gross_rate),
             })
 
     # ── Single-value context ──────────────────────────────────────────────────
-    total_gross = sum(s.gross_rate for s in spots) if spots else 0.0
+    total_gross = sum(_grossed_up(s.gross_rate) for s in spots) if spots else 0.0
     total_net   = round(total_gross * (1 - agency_fee), 2) if is_agency else total_gross
     markets     = sorted(set(s.market for s in spots))
     d_start_all = min(s.air_date for s in spots) if spots else date.today()
