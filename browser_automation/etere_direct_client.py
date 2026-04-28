@@ -824,21 +824,27 @@ EXEC web_sales_InsertContractLine
         if deleted:
             print(f"[DIRECT]     -> {deleted} existing block(s) cleared")
 
+        # One CONTRATTIFASCE row per distinct schedule-offset the block appears at within
+        # the time window — matches Etere's loadAvailableBlocks() behaviour where a block
+        # that occupies two schedule slots (different ts.Offset values) gets two rows.
         cursor.execute(f"""
             INSERT INTO CONTRATTIFASCE (ID_CONTRATTIRIGHE, ID_FASCE, PRICELIST, SELECTEDSEGMENTS)
-            SELECT DISTINCT {self._ph}, tb.ID_TrafficBlock, '', ''
-            FROM Traffic_Calendar tc
-            JOIN traffic_scheduleblock ts ON tc.id_trafficschedule = ts.id_trafficschedule
-            JOIN traffic_block tb ON ts.id_trafficblock = tb.id_trafficblock
-            JOIN traffic_segment tseg ON tb.ID_TrafficBlock = tseg.ID_TrafficBlock
-            WHERE tc.Date BETWEEN {self._ph} AND {self._ph}
-              AND tb.Cod_User = {self._ph}
-              AND (ts.Offset + tseg.Offset) >= {self._ph}
-              AND (ts.Offset + tseg.Offset) < {self._ph}
-              AND tb.Expired = 0
-              AND tc.Level = 0
-              AND tseg.visible = 1
-              AND DATENAME(WEEKDAY, tc.Date) IN ({day_placeholders})
+            SELECT {self._ph}, sub.ID_TrafficBlock, '', ''
+            FROM (
+                SELECT DISTINCT ts.Offset AS ts_offset, tb.ID_TrafficBlock
+                FROM Traffic_Calendar tc
+                JOIN traffic_scheduleblock ts ON tc.id_trafficschedule = ts.id_trafficschedule
+                JOIN traffic_block tb ON ts.id_trafficblock = tb.id_trafficblock
+                JOIN traffic_segment tseg ON tb.ID_TrafficBlock = tseg.ID_TrafficBlock
+                WHERE tc.Date BETWEEN {self._ph} AND {self._ph}
+                  AND tb.Cod_User = {self._ph}
+                  AND (ts.Offset + tseg.Offset) >= {self._ph}
+                  AND (ts.Offset + tseg.Offset) < {self._ph}
+                  AND tb.Expired = 0
+                  AND tc.Level = 0
+                  AND tseg.visible = 1
+                  AND DATENAME(WEEKDAY, tc.Date) IN ({day_placeholders})
+            ) sub
         """, [line_id, date_from, date_to, user_id,
               start_frames, end_frames, *active_days])
 
