@@ -607,6 +607,14 @@ def _fill_sales_confirmation(
     ref_row  = line_rows[0] if line_rows else None
     snapshot = _snapshot_row(ws, ref_row) if ref_row else ([], [])
 
+    # Shrink: delete surplus template rows when we have fewer lines than the template
+    if n_lines < n_tmpl and n_lines > 0:
+        rows_to_delete = line_rows[n_lines:]  # extra rows (bottom ones)
+        for row_num in reversed(rows_to_delete):
+            ws.delete_rows(row_num)
+        line_rows = line_rows[:n_lines]
+        n_tmpl = n_lines
+
     # Expand: insert rows when we need more lines than template provides
     if n_lines > n_tmpl and n_tmpl > 0:
         insert_start = line_rows[-1] + 1
@@ -681,11 +689,6 @@ def _fill_sales_confirmation(
                     cell.value = sc_lines[i].get('weeks', 1)
             # Sequential line number in column B (handles hardcoded "1" in template)
             ws.cell(row=row_num, column=2).value = i + 1
-        else:
-            for col_idx in range(1, max_col + 1):
-                cell = ws.cell(row=row_num, column=col_idx)
-                if isinstance(cell.value, str) and '<' in cell.value:
-                    cell.value = None
 
     # Fill all non-line rows with single-value context
     for row in ws.iter_rows():
