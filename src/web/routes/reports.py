@@ -11,7 +11,6 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -31,6 +30,7 @@ def _fmt_week(ws: date) -> str:
 
 def _fetch_placements_sync(contract_id: int):
     from browser_automation.etere_direct_client import connect as _db_connect
+
     with _db_connect() as conn:
         cur = conn.cursor(as_dict=True)
         cur.execute("""
@@ -115,8 +115,12 @@ def _build_excel(pivot: dict) -> bytes:
     week_totals = pivot["week_totals"]
     grand_total = pivot["grand_total"]
 
-    NAVY = "1F3864"; BLUE = "2E75B6"; LTBLUE = "D6E4F0"
-    YELLOW = "FFF2CC"; GREY = "F2F2F2"; WHITE = "FFFFFF"
+    NAVY = "1F3864"
+    BLUE = "2E75B6"
+    LTBLUE = "D6E4F0"
+    YELLOW = "FFF2CC"
+    GREY = "F2F2F2"
+    WHITE = "FFFFFF"
 
     def fill(c):
         return PatternFill("solid", fgColor=c)
@@ -149,38 +153,69 @@ def _build_excel(pivot: dict) -> bytes:
 
     r = 3
     ws.row_dimensions[r].height = 18
+
     c = ws.cell(r, 1, "Description")
-    c.font = Font(bold=True, color="FFFFFF"); c.fill = fill(BLUE); c.alignment = lft
+    c.font = Font(bold=True, color="FFFFFF")
+    c.fill = fill(BLUE)
+    c.alignment = lft
+
     for i, wl in enumerate(weeks):
         c = ws.cell(r, i + 2, wl)
-        c.font = Font(bold=True, color="FFFFFF"); c.fill = fill(BLUE); c.alignment = ctr
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = fill(BLUE)
+        c.alignment = ctr
+
     c = ws.cell(r, total_col, "TOTAL")
-    c.font = Font(bold=True, color="FFFFFF"); c.fill = fill(NAVY); c.alignment = ctr
+    c.font = Font(bold=True, color="FFFFFF")
+    c.fill = fill(NAVY)
+    c.alignment = ctr
 
     for ri, row in enumerate(rows):
         dr = r + 1 + ri
         is_bns = row["is_bonus"]
         bg = YELLOW if is_bns else (GREY if ri % 2 == 0 else WHITE)
+
         c = ws.cell(dr, 1, row["description"])
-        c.fill = fill(bg); c.alignment = lft; c.border = bdr()
+        c.fill = fill(bg)
+        c.alignment = lft
+        c.border = bdr()
         if is_bns:
             c.font = Font(italic=True)
+
         for i, v in enumerate(row["spots"]):
             c = ws.cell(dr, i + 2, v if v else "—")
-            c.fill = fill(bg); c.alignment = ctr; c.border = bdr()
+            c.fill = fill(bg)
+            c.alignment = ctr
+            c.border = bdr()
             if is_bns and v:
                 c.font = Font(italic=True)
+
         c = ws.cell(dr, total_col, row["total"])
-        c.font = Font(bold=True); c.fill = fill(LTBLUE); c.alignment = ctr; c.border = bdr()
+        c.font = Font(bold=True)
+        c.fill = fill(LTBLUE)
+        c.alignment = ctr
+        c.border = bdr()
 
     tr = r + 1 + len(rows)
+
     c = ws.cell(tr, 1, "TOTAL")
-    c.font = Font(bold=True, color="FFFFFF"); c.fill = fill(NAVY); c.alignment = lft; c.border = bdr()
+    c.font = Font(bold=True, color="FFFFFF")
+    c.fill = fill(NAVY)
+    c.alignment = lft
+    c.border = bdr()
+
     for i, v in enumerate(week_totals):
         c = ws.cell(tr, i + 2, v)
-        c.font = Font(bold=True, color="FFFFFF"); c.fill = fill(NAVY); c.alignment = ctr; c.border = bdr()
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = fill(NAVY)
+        c.alignment = ctr
+        c.border = bdr()
+
     c = ws.cell(tr, total_col, grand_total)
-    c.font = Font(bold=True, color="FFFFFF"); c.fill = fill(NAVY); c.alignment = ctr; c.border = bdr()
+    c.font = Font(bold=True, color="FFFFFF")
+    c.fill = fill(NAVY)
+    c.alignment = ctr
+    c.border = bdr()
 
     ws.column_dimensions["A"].width = 38
     for i in range(len(weeks)):
