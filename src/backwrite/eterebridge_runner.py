@@ -270,6 +270,13 @@ def build_placement_csv_from_db(contract_id: int) -> bytes:
         total_s = int(round(frames / FPS))
         return f"{total_s // 3600:02d}:{(total_s % 3600) // 60:02d}"
 
+    def _frames_to_hhmmss(frames: int) -> str:
+        total_s = int(round(frames / FPS))
+        h = total_s // 3600
+        m = (total_s % 3600) // 60
+        s = total_s % 60
+        return f"{h:02d}:{m:02d}:{s:02d}"
+
     import sys as _sys
     from pathlib import Path as _Path
     _proj = _Path(__file__).parent.parent.parent
@@ -283,10 +290,16 @@ def build_placement_csv_from_db(contract_id: int) -> bytes:
         cur = conn.cursor(as_dict=True)
 
         cur.execute("""
-            SELECT COD_CONTRATTO AS contract_code,
-                   DESCRIZIONE   AS description
-            FROM CONTRATTITESTATA
-            WHERE ID_CONTRATTITESTATA = %d
+            SELECT ct.COD_CONTRATTO         AS contract_code,
+                   ct.DESCRIZIONE           AS description,
+                   RTRIM(ag.RAG_SOCIAL)     AS agency_name,
+                   RTRIM(comm.RAG_SOCIAL)   AS client_name,
+                   ISNULL(ag.VIA,   '')     AS agency_address,
+                   ISNULL(ag.CITTA, '')     AS agency_city
+            FROM CONTRATTITESTATA ct
+            LEFT JOIN ANAGRAF ag   ON ag.ID_ANAGRAF   = ct.AGENZIA
+            LEFT JOIN ANAGRAF comm ON comm.ID_ANAGRAF = ct.COMMITTENTE
+            WHERE ct.ID_CONTRATTITESTATA = %d
         """ % contract_id)
         hdr = cur.fetchone()
         if not hdr:
@@ -298,16 +311,16 @@ def build_placement_csv_from_db(contract_id: int) -> bytes:
                    cr.DURATA               AS dur_frames,
                    cr.IMPORTO              AS gross_rate,
                    cr.COD_USER             AS market_id,
+                   cr.ORA_INIZIOF          AS daypart_start,
+                   cr.ORA_FINEF            AS daypart_end,
                    CAST(tp.DATA AS DATE)   AS air_date,
                    tp.ORA                  AS airtime_frames,
-                   bc.code                 AS booking_code,
-                   tb.Name                 AS block_name
+                   ISNULL(f.COD_PROGRA, 'NEED COPY') AS copy_code
             FROM TPALINSE tp
-            JOIN trafficPalinse tpa ON tpa.id_tpalinse       = tp.ID_TPALINSE
-            JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE  = tpa.id_contrattirighe
+            JOIN trafficPalinse tpa ON tpa.id_tpalinse         = tp.ID_TPALINSE
+            JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE    = tpa.id_contrattirighe
             JOIN CONTRATTITESTATA ct ON ct.ID_CONTRATTITESTATA = cr.ID_CONTRATTITESTATA
-            JOIN trf_bookingcode bc  ON bc.id_bookingcode    = cr.ID_BOOKINGCODE
-            LEFT JOIN traffic_block tb ON tb.ID_TrafficBlock = tpa.id_fascia
+            LEFT JOIN FILMATI f ON f.ID_FILMATI = tp.ID_FILMATI
             WHERE ct.ID_CONTRATTITESTATA = %d
             ORDER BY CAST(tp.DATA AS DATE), tp.ORA
         """ % contract_id)
@@ -316,18 +329,24 @@ def build_placement_csv_from_db(contract_id: int) -> bytes:
     if not spots:
         raise ValueError(f"No placed spots found for contract {contract_id}")
 
-    contract_code = hdr["contract_code"] or ""
-    description   = hdr["description"]   or ""
+    contract_code   = hdr["contract_code"]   or ""
+    description     = hdr["description"]     or ""
+    agency_name     = hdr["agency_name"]     or description
+    client_name     = hdr["client_name"]     or ""
+    agency_address  = hdr["agency_address"]  or ""
+    agency_city     = hdr["agency_city"]     or ""
 
     buf = _io.StringIO()
     w   = _csv.writer(buf)
 
     # Row 0: dummy (skipped by parser)
     w.writerow([""] * 10)
-    # Row 1: bill-code row — description in col 0, contract code in col 1 and col 5
-    # parse_csv reads: agency=col0, contract_code=col1, description=col3, client=col5
-    # _extract_header_values reads: tb180=col0, tb171=col5
-    w.writerow([description, contract_code, "", description, "", contract_code, "", "", "", ""])
+    # Row 1: bill-code / header values row.
+    # parse_csv reads: agency=col0, contract_code=col1, description=col3,
+    #                  address=col4, client=col5, city=col6
+    # _extract_header_values reads: tb180=col0, tb171=col5 (for EtereBridge bill code)
+    w.writerow([agency_name, contract_code, "", description,
+                agency_address, client_name, agency_city, "", "", ""])
     # Row 2: dummy (skipped by parser)
     w.writerow([""] * 10)
     # Row 3: column headers (triggers data-section detection via "dateschedule")
@@ -336,25 +355,26 @@ def build_placement_csv_from_db(contract_id: int) -> bytes:
                 "timerange2", "rowdescription"])
 
     for s in spots:
-        dur_frames   = int(s["dur_frames"] or 0)
-        dur_sec      = int(round(dur_frames / FPS))
-        market_name  = _COD_USER_TO_MARKET.get(s["market_id"], "")
-        air_date     = s["air_date"]
-        date_str     = air_date.isoformat() if hasattr(air_date, "isoformat") else str(air_date)
-        start_frames = int(s["airtime_frames"] or 0)
-        end_frames   = start_frames + dur_frames
-        time_range   = f"{_frames_to_hhmm(start_frames)}-{_frames_to_hhmm(end_frames)}"
+        dur_frames    = int(s["dur_frames"] or 0)
+        dur_sec       = int(round(dur_frames / FPS))
+        market_name   = _COD_USER_TO_MARKET.get(s["market_id"], "")
+        air_date      = s["air_date"]
+        date_str      = air_date.isoformat() if hasattr(air_date, "isoformat") else str(air_date)
+        airtime_frames = int(s["airtime_frames"] or 0)
+        daypart_start  = int(s["daypart_start"] or 0)
+        daypart_end    = int(s["daypart_end"]   or 0)
+        daypart_range  = f"{_frames_to_hhmm(daypart_start)}-{_frames_to_hhmm(daypart_end)}"
 
         w.writerow([
             s["line_id"],
-            4,                          # Textbox14 = spot priority (default 4)
+            4,                                   # Textbox14 = spot priority
             dur_sec,
             s["gross_rate"] or 0,
             market_name,
             date_str,
-            s["block_name"] or "",
-            s["booking_code"] or "COM",
-            time_range,
+            _frames_to_hhmmss(airtime_frames),   # airtimep = actual airtime HH:MM:SS
+            s["copy_code"],                       # bookingcode2 = creative code
+            daypart_range,                        # timerange2 = contract line daypart
             s["line_desc"] or "",
         ])
 
