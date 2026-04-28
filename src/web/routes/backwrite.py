@@ -249,7 +249,8 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc))
         except Exception as exc:
-            import traceback; traceback.print_exc()
+            import traceback
+            traceback.print_exc()
             raise HTTPException(status_code=500, detail=f"DB error: {exc}")
 
         try:
@@ -270,7 +271,9 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
         language_options: list = []
         try:
             from backwrite.eterebridge_runner import (
-                get_language_counts, get_language_details, get_language_options,
+                get_language_counts,
+                get_language_details,
+                get_language_options,
             )
             language_counts  = get_language_counts(csv_bytes)
             language_details = get_language_details(csv_bytes)
