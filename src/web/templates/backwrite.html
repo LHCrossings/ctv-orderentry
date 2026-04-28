@@ -191,6 +191,18 @@
         .mode-btn.active {
             background: var(--accent-primary); color: white; border-color: var(--accent-primary);
         }
+        .src-tab {
+            padding: 6px 18px; border: 1px solid var(--border-color); border-radius: 6px;
+            background: white; cursor: pointer; font-family: inherit; font-size: 0.85rem;
+            font-weight: 500; color: var(--text-secondary); transition: all 0.15s;
+        }
+        .src-tab.active {
+            background: var(--accent-primary); color: white; border-color: var(--accent-primary);
+        }
+        .db-fetch-row {
+            display: flex; gap: 12px; align-items: flex-end;
+        }
+        .db-fetch-row .form-group { flex: 0 0 180px; }
         /* ── Mode picker ── */
         .mode-picker {
             display: grid;
@@ -290,15 +302,37 @@
     <button type="button" class="mode-btn" id="mode-worldlink" style="display:none" onclick="setMode('worldlink')">WorldLink</button>
 
 <div id="standard-section" style="display:none">
-    <!-- Step 1: Upload CSV -->
+    <!-- Step 1: Get Placement Data (upload or DB fetch) -->
     <div class="bw-card" id="upload-card">
-        <h2>Step 1 — Upload Placement CSV</h2>
-        <div class="upload-zone" id="upload-zone">
-            <input type="file" id="csv-input" accept=".csv" />
-            <div class="upload-icon">📂</div>
-            <p>Drop placement confirmation CSV here</p>
-            <p>or click to browse</p>
-            <div class="file-name" id="csv-filename"></div>
+        <h2>Step 1 — Get Placement Data</h2>
+        <div style="display:flex;gap:8px;margin-bottom:16px;">
+            <button type="button" class="src-tab active" id="src-tab-upload" onclick="setSrcMode('upload')">Upload CSV</button>
+            <button type="button" class="src-tab" id="src-tab-db" onclick="setSrcMode('db')">Fetch from DB</button>
+        </div>
+        <!-- Upload mode -->
+        <div id="src-upload-section">
+            <div class="upload-zone" id="upload-zone">
+                <input type="file" id="csv-input" accept=".csv" />
+                <div class="upload-icon">📂</div>
+                <p>Drop placement confirmation CSV here</p>
+                <p>or click to browse</p>
+                <div class="file-name" id="csv-filename"></div>
+            </div>
+        </div>
+        <!-- DB fetch mode -->
+        <div id="src-db-section" style="display:none">
+            <div class="db-fetch-row">
+                <div class="form-group">
+                    <label for="db-contract-id">Contract Number</label>
+                    <input type="text" id="db-contract-id" placeholder="e.g. 2553" />
+                </div>
+                <button type="button" class="btn-generate" id="db-fetch-btn" onclick="fetchFromDB()" style="margin-top:0">
+                    &#8595; Fetch
+                </button>
+            </div>
+            <p style="font-size:0.8rem;color:var(--text-secondary);margin:10px 0 0">
+                Reads directly from the Etere database — faster than pulling from Etere web.
+            </p>
         </div>
         <div class="status-msg" id="upload-status"></div>
     </div>
@@ -1036,6 +1070,59 @@ bwForm.addEventListener('submit', async e => {
         generateBtn.textContent = '↓ Generate Excel';
     }
 });
+
+// ── Source mode (upload vs DB fetch) ─────────────────────────────────────────
+function setSrcMode(mode) {
+    document.getElementById('src-tab-upload').classList.toggle('active', mode === 'upload');
+    document.getElementById('src-tab-db').classList.toggle('active', mode === 'db');
+    document.getElementById('src-upload-section').style.display = mode === 'upload' ? '' : 'none';
+    document.getElementById('src-db-section').style.display     = mode === 'db'     ? '' : 'none';
+}
+
+async function fetchFromDB() {
+    const contractId = document.getElementById('db-contract-id').value.trim();
+    if (!contractId) {
+        showStatus(uploadStatus, 'Enter a contract number.', 'error');
+        return;
+    }
+    const btn = document.getElementById('db-fetch-btn');
+    btn.disabled    = true;
+    btn.textContent = '⏳ Fetching...';
+    showStatus(uploadStatus, 'Querying database...', 'info');
+
+    const fd = new FormData();
+    fd.append('contract_id', contractId);
+
+    try {
+        const resp = await fetch('/backwrite/preview-from-db', { method: 'POST', body: fd });
+        if (!resp.ok) throw new Error(await resp.text());
+        const data = await resp.json();
+
+        // Reconstruct a File from the base64 CSV so the generate step works unchanged
+        const csvBytes = Uint8Array.from(atob(data.csv_b64), c => c.charCodeAt(0));
+        uploadedFile = new File([new Blob([csvBytes], { type: 'text/csv' })],
+                                `contract_${contractId}.csv`, { type: 'text/csv' });
+
+        uploadStatus.style.display = 'none';
+        showPreview(data);
+        showLanguageCounts(data.language_counts || {});
+        _uniqueRates = data.unique_rates     || [];
+        _langOptions = data.language_options || [];
+        _langDetails = data.language_details || [];
+        prefillFromCSV(data);
+        updateGrossupSection();
+        showLanguageVerification(_langDetails, _langOptions);
+        previewCard.style.display = 'block';
+        formCard.style.display    = 'block';
+        generateBtn.disabled      = false;
+        if (data.contract_id) setIfEmpty('contract', String(data.contract_id));
+    } catch (e) {
+        showStatus(uploadStatus, 'Error: ' + e.message, 'error');
+    } finally {
+        btn.disabled    = false;
+        btn.textContent = '↓ Fetch';
+    }
+}
 
 // ── WorldLink mode ────────────────────────────────────────────────────────────
 

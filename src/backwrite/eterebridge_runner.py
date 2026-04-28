@@ -238,6 +238,129 @@ def get_language_counts(csv_bytes: bytes) -> dict:
 # Private helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+def build_placement_csv_from_db(contract_id: int) -> bytes:
+    """
+    Generate an EtereBridge-compatible placement confirmation CSV directly
+    from the database, bypassing the slow Etere web report fetch.
+
+    Produces the same 4-row header + data structure the Etere web report
+    emits so the result can be fed straight into run_eterebridge_pipeline()
+    or parse_csv().
+    """
+    import csv as _csv
+    import io as _io
+
+    # Etere COD_USER integer → human-readable market name understood by
+    # transformer._normalise_market() (keyword match, case-insensitive).
+    _COD_USER_TO_MARKET = {
+        1:  "New York",
+        2:  "Chicago",
+        3:  "Houston",
+        4:  "San Francisco",
+        5:  "Seattle",
+        6:  "Los Angeles",
+        7:  "Central Valley",
+        8:  "Washington DC",
+        9:  "Multimarket",
+        10: "Dallas",
+    }
+    FPS = 29.97
+
+    def _frames_to_hhmm(frames: int) -> str:
+        total_s = int(round(frames / FPS))
+        return f"{total_s // 3600:02d}:{(total_s % 3600) // 60:02d}"
+
+    import sys as _sys
+    from pathlib import Path as _Path
+    _proj = _Path(__file__).parent.parent.parent
+    for _p in [str(_proj), str(_proj / "browser_automation")]:
+        if _p not in _sys.path:
+            _sys.path.insert(0, _p)
+
+    from browser_automation.etere_direct_client import connect as _db_connect
+
+    with _db_connect() as conn:
+        cur = conn.cursor(as_dict=True)
+
+        cur.execute("""
+            SELECT COD_CONTRATTO AS contract_code,
+                   DESCRIZIONE   AS description
+            FROM CONTRATTITESTATA
+            WHERE ID_CONTRATTITESTATA = %d
+        """ % contract_id)
+        hdr = cur.fetchone()
+        if not hdr:
+            raise ValueError(f"Contract {contract_id} not found")
+
+        cur.execute("""
+            SELECT tpa.id_contrattirighe   AS line_id,
+                   cr.DESCRIZIONE          AS line_desc,
+                   cr.DURATA               AS dur_frames,
+                   cr.IMPORTO              AS gross_rate,
+                   cr.COD_USER             AS market_id,
+                   CAST(tp.DATA AS DATE)   AS air_date,
+                   tp.ORA                  AS airtime_frames,
+                   bc.code                 AS booking_code,
+                   tb.Name                 AS block_name
+            FROM TPALINSE tp
+            JOIN trafficPalinse tpa ON tpa.id_tpalinse       = tp.ID_TPALINSE
+            JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE  = tpa.id_contrattirighe
+            JOIN CONTRATTITESTATA ct ON ct.ID_CONTRATTITESTATA = cr.ID_CONTRATTITESTATA
+            JOIN trf_bookingcode bc  ON bc.id_bookingcode    = cr.ID_BOOKINGCODE
+            LEFT JOIN traffic_block tb ON tb.ID_TrafficBlock = tpa.id_fascia
+            WHERE ct.ID_CONTRATTITESTATA = %d
+            ORDER BY CAST(tp.DATA AS DATE), tp.ORA
+        """ % contract_id)
+        spots = cur.fetchall()
+
+    if not spots:
+        raise ValueError(f"No placed spots found for contract {contract_id}")
+
+    contract_code = hdr["contract_code"] or ""
+    description   = hdr["description"]   or ""
+
+    buf = _io.StringIO()
+    w   = _csv.writer(buf)
+
+    # Row 0: dummy (skipped by parser)
+    w.writerow([""] * 10)
+    # Row 1: bill-code row — description in col 0, contract code in col 1 and col 5
+    # parse_csv reads: agency=col0, contract_code=col1, description=col3, client=col5
+    # _extract_header_values reads: tb180=col0, tb171=col5
+    w.writerow([description, contract_code, "", description, "", contract_code, "", "", "", ""])
+    # Row 2: dummy (skipped by parser)
+    w.writerow([""] * 10)
+    # Row 3: column headers (triggers data-section detection via "dateschedule")
+    w.writerow(["id_contrattirighe", "Textbox14", "duration3", "IMPORTO2",
+                "nome2", "dateschedule", "airtimep", "bookingcode2",
+                "timerange2", "rowdescription"])
+
+    for s in spots:
+        dur_frames   = int(s["dur_frames"] or 0)
+        dur_sec      = int(round(dur_frames / FPS))
+        market_name  = _COD_USER_TO_MARKET.get(s["market_id"], "")
+        air_date     = s["air_date"]
+        date_str     = air_date.isoformat() if hasattr(air_date, "isoformat") else str(air_date)
+        start_frames = int(s["airtime_frames"] or 0)
+        end_frames   = start_frames + dur_frames
+        time_range   = f"{_frames_to_hhmm(start_frames)}-{_frames_to_hhmm(end_frames)}"
+
+        w.writerow([
+            s["line_id"],
+            4,                          # Textbox14 = spot priority (default 4)
+            dur_sec,
+            s["gross_rate"] or 0,
+            market_name,
+            date_str,
+            s["block_name"] or "",
+            s["booking_code"] or "COM",
+            time_range,
+            s["line_desc"] or "",
+        ])
+
+    return buf.getvalue().encode("utf-8")
+
+
 def _extract_header_values(file_path: str) -> tuple[str, str]:
     """
     Read CSV row 2 (zero-indexed row 1) to extract bill-code parts.

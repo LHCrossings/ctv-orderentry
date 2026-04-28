@@ -236,6 +236,50 @@ and market are identical.
 
 ---
 
+## Scheduling Types (source-confirmed from Etere.Web.Sales.dll)
+
+Each contract line has a `selectedSchedulingType` (0–6) that maps to three DB
+columns: `PRENOTAZIONE`, `CONTROLLACAPOFILA` (`capofila`), and
+`CONTROLLAFINEFILA` (`finefila`). Source: `setDBSchedulingType()` in
+`Etere.Web.Sales.dll`.
+
+| # | UI Label | `prenotazione` | `capofila` | `finefila` | `priorita` |
+|---|---|---|---|---|---|
+| 0 | Priority | 0 | 0 | 0 | user-set (default 500) |
+| 1 | **Rotation** | 1 | 0 | 0 | user-set (default 500) |
+| 2 | Optimization | 2 | 0 | 0 | user-set (default 500) |
+| 3 | Fixed time | 3 | 0 | 0 | user-set (default 500) |
+| 4 | **Top** (billboard) | 0 | 1 | 0 | **3 — forced, not user-set** |
+| 5 | Bottom | 0 | 0 | 1 | **997 — forced, not user-set** |
+| 6 | **Top and Bottom** (bookend) | 0 | 1 | 1 | **3 — forced, not user-set** |
+
+Additional flags:
+- `CONTROLLAMIDDLE=1` with type 6 → "Top middle Bottom" (third placement mode,
+  not currently used by us)
+- `uniquetopbottom` — bookend must be placed as a unique pair (not split across
+  separate breaks)
+- `ignora_regole` — bypass separation rule checks on insert (the "Ignore rules"
+  checkbox); use with caution
+
+**Reserved priority values:** 3 (top of break) and 997 (bottom of break) are
+reserved by Etere. Using them on types 0–3 triggers a validation error. Normal
+rotation/priority spots must use 1–999 excluding 3 and 997; default is 500.
+
+**Separation stored in frames in the DB.** The web UI and SP convert
+automatically: `frames = minutes × 60 × fps`. If writing directly via
+`EtereDirectClient`, convert minutes to frames before passing to
+`web_sales_InsertContractLine`. The SP parameter order is:
+1. `intervalloCommittente` (customer separation)
+2. `intervalloRigheContratto` (order/contract-line separation)
+3. `intervalloEvento` (event separation)
+
+DB column → C# field → meaning:
+- `Interv_Committente` → `intervalloCommittente` → customer separation
+- `INTERVALLO` → `intervalloEvento` → event separation
+- `INTERV_CONTRATTO` → `intervalloRigheContratto` → order separation
+
+---
+
 ## Time Parsing Rules
 
 `EtereClient.parse_time_range(time_str)` normalizes any common format to
@@ -346,6 +390,114 @@ Example with `"7/28–8/31"`:
   on concurrent sessions; skipping logout causes the next run to fail.
 - **Separation defaults come from the customer DB** — always check
   `separation_customer/event/order` fields before falling back to `(15, 0, 0)`.
+
+---
+
+## Block Loading and Auto-Attachment (source-confirmed)
+
+When a contract line is saved via `web_sales_InsertContractLine`, Etere
+auto-loads available blocks if none were explicitly provided (`autoAddBlocks=true`).
+Source: `SaveContractLine()` / `loadAvailableBlocks()` in `Etere.Web.Sales.dll`.
+
+### Tables queried by `loadBlock()`
+
+```
+Traffic_Calendar tc
+  → traffic_scheduleblock ts  (tc.id_trafficschedule = ts.id_trafficschedule)
+  → traffic_block tb          (ts.id_trafficblock = tb.id_trafficblock)
+  → trf_priceblock pb         (tb.id_trafficblock = pb.id_trafficblock AND pb.date = tc.Date)
+  → traffic_segment tseg      (tb.ID_TrafficBlock = tseg.ID_TrafficBlock)
+```
+
+### Filter criteria
+
+| Condition | Detail |
+|---|---|
+| Date range | `tc.Date` between `fromDate` and `toDate` |
+| Day of week | `DATENAME(WEEKDAY, tc.date) IN (...)` — built from mon/tue/wed/thu/fri/sat/sun flags |
+| Station | `tb.cod_user = codUser` (market integer ID) |
+| Time range | `(ts.Offset + tseg.Offset)` between `fromTimeFrames` and `toTimeFrames` |
+| Block type | `dbo.type_PropertiesExist(tb.types, prop_defblockstype) = 1` — filters to ad-eligible blocks only (value from `inifiles` key `sales.ini/parameters/prop_defblockstype`, default `"oiSpot"`) |
+| Not expired | `tb.expired = 0` |
+| Schedule level | `tc.Level = 0` (published schedules only) |
+| Segment visible | `tseg.visible = 1` |
+| Price list | Block only added if `pb.pricelist` contains the customer's price list color. This is why some blocks don't appear for certain customers. |
+
+Block associations are stored in `contrattifasce` (columns: `id_contrattirighe`,
+`id_fasce` = `id_trafficblock`, `SELECTEDSEGMENTS`).
+
+When time or days change on an existing line, Etere deletes all rows from
+`contrattifasce` for that line and re-runs `loadAvailableBlocks()` automatically
+(controlled by `sales.ini/parameters/prop_autoupdateblocklist`).
+
+---
+
+## `web_sales_InsertContractLine` SP Parameter Order (source-confirmed)
+
+Complete positional parameter list from `saveContractLineData()` in
+`Etere.Web.Sales.dll`. All time values in **frames**; all money values as SQL
+decimal strings.
+
+| # | Field | Notes |
+|---|---|---|
+| 1 | `idContract` | Contract header ID |
+| 2 | `idContractLine` | 0 for new line; existing ID to update |
+| 3 | `selectedschedStation` | Station/market integer ID |
+| 4 | `fromSchedule` | Flight start date (SQL date string) |
+| 5 | `toSchedule` | Flight end date (SQL date string) |
+| 6 | `description` | Line description (quoted string, max ~255) |
+| 7 | `durationFrameHHMMSSFF` → frames | Spot duration in frames |
+| 8 | `fromTimeFrameHHMM` → frames | Daypart start time in frames (normalized) |
+| 9 | `selectedType` | Booking code type string (commas → semicolons) |
+| 10 | `percAge1` | Agency % from contract header |
+| 11 | `totSchedule` | Total spots across entire flight |
+| 12 | `capofila` | Top-of-break flag (0/1, from scheduling type) |
+| 13 | `finefila` | Bottom-of-break flag (0/1) |
+| 14 | `maxDailySchedule` | Max spots per day |
+| 15 | `priorita` | Priority (3=top, 997=bottom, 500=normal default) |
+| 16 | `prenotazione` | Scheduling type (0=Priority,1=Rotation,2=Opt,3=Fixed) |
+| 17 | `selectedPriceMode==3 ? 1 : 0` | Filler flag |
+| 18 | Rate | `priceValueCalc` (mode 0/1), `priceValue` (mode 2), `0` (mode 3) |
+| 19 | `productCode` | Product code string |
+| 20–26 | `dayMon`…`daySun` | Day flags (1/0), Monday through Sunday |
+| 27 | `productionCost` | Production cost |
+| 28 | `dubbingCost` | Dubbing cost |
+| 29 | `"Production"` | Translated label string |
+| 30 | `"Dubbing"` | Translated label string |
+| 31 | `selectedPriceMode==2 ? 1 : 0` | Manual price flag |
+| 32 | `scUniqueTopBottom ? 1 : 0` | Unique top/bottom pair required |
+| 33 | `selectedFillerType==1 ? 1 : 0` | Filler type 1 |
+| 34 | `selectedBookingCode` | Booking code ID (spot type integer) |
+| 35 | `rulesProductCode ? 1 : 0` | Apply product code separation rules |
+| 36 | `selectedPriceMode==1 ? 1 : 0` | Price mode 1 flag |
+| 37 | `selectedFillerType==2 ? 1 : 0` | Filler type 2 |
+| 38 | `hideFromScheduler ? 1 : 0` | Hide from scheduler |
+| 39 | `eventLevel` | Event level |
+| 40 | `toTimeFrameHHMM` → frames | Daypart end time in frames (normalized) |
+| 41 | `viewGuidGroup` | View group GUID |
+| 42 | `rowType` | Row interface type |
+| 43 | `@id output` | Output: new/updated contract line ID |
+| 44 | `prioritawl` | Whitelist priority |
+| 45 | `rulesIgnoreInsert ? 1 : 0` | Bypass separation rules on insert |
+| 46 | `rulesIgnoreInsertLog ? 1 : 0` | Skip rule violation log |
+| 47 | `rowStatus` | Row status |
+| 48 | `scMiddle ? 1 : 0` | Top-middle-bottom flag (`controllamiddle`) |
+| 49 | `selectedADInsertion` | AD insertion mode |
+| 50 | `accountId` | Account ID |
+| 51 | `note` (≤399 chars) | Contract line notes |
+| 52 | `intervalloCommittente × 60` → frames | Customer separation |
+| 53 | `intervalloRigheContratto × 60` → frames | Order separation |
+| 54 | `intervalloEvento × 60` → frames | Event separation |
+| 55 | `productCodeId` | Product code ID |
+| 56 | `selectedinvoiceDescription` | Invoice description ID |
+| 57 | `maxWeekSchedule` | Max spots per week |
+| 58 | `selectedLinkedSpotType` | Linked spot type (0 = none) |
+| 59 | `selectedIdLinkedSpot` or `0` | Linked spot ID |
+
+After the SP returns the new line ID, three follow-up calls fire:
+1. `saveContractBlock()` — writes `contrattifasce` rows (block associations)
+2. `saveContractAssetList()` — writes asset/creative assignments
+3. `saveContractCharges()` — writes line-level charges
 
 ---
 

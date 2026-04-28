@@ -234,6 +234,74 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
+    @router.post("/preview-from-db")
+    async def backwrite_preview_from_db(contract_id: str = Form(...)):
+        """Build placement CSV from DB and return preview JSON + base64 CSV bytes."""
+        import base64
+        try:
+            cid = int(contract_id.strip())
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid contract ID")
+
+        try:
+            from backwrite.eterebridge_runner import build_placement_csv_from_db
+            csv_bytes = build_placement_csv_from_db(cid)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except Exception as exc:
+            import traceback; traceback.print_exc()
+            raise HTTPException(status_code=500, detail=f"DB error: {exc}")
+
+        try:
+            header, spots = parse_csv(csv_bytes)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"CSV parse error: {exc}")
+
+        if not spots:
+            raise HTTPException(status_code=400, detail="No spot data found")
+
+        markets       = sorted(set(s.market for s in spots))
+        est_match     = re.search(r'(\d{4,})', header.description)
+        estimate_hint = est_match.group(1) if est_match else ""
+        unique_rates  = sorted(set(s.gross_rate for s in spots if s.gross_rate > 0))
+
+        language_counts: dict = {}
+        language_details: list = []
+        language_options: list = []
+        try:
+            from backwrite.eterebridge_runner import (
+                get_language_counts, get_language_details, get_language_options,
+            )
+            language_counts  = get_language_counts(csv_bytes)
+            language_details = get_language_details(csv_bytes)
+            language_options = get_language_options()
+        except Exception:
+            pass
+
+        return JSONResponse({
+            "agency":           header.agency,
+            "client":           header.client,
+            "contract_code":    header.contract_code,
+            "description":      header.description,
+            "order_date":       header.order_date,
+            "address":          header.address,
+            "city":             header.city,
+            "markets":          markets,
+            "spot_count":       len(spots),
+            "line_count":       len(set(s.line_id for s in spots)),
+            "date_range": {
+                "start": min(s.air_date for s in spots).strftime("%m/%d/%Y"),
+                "end":   max(s.air_date for s in spots).strftime("%m/%d/%Y"),
+            },
+            "estimate_hint":    estimate_hint,
+            "unique_rates":     unique_rates,
+            "language_counts":  language_counts,
+            "language_details": language_details,
+            "language_options": language_options,
+            "csv_b64":          base64.b64encode(csv_bytes).decode("ascii"),
+            "contract_id":      cid,
+        })
+
     @router.post("/preview")
     async def backwrite_preview(csv_file: UploadFile):
         """Parse uploaded CSV and return extracted fields as JSON."""
