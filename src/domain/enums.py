@@ -17,6 +17,7 @@ class OrderType(Enum):
     """
     WORLDLINK = "worldlink"
     TCAA = "tcaa"
+    TCAA_AV = "tcaa_av"
     OPAD = "opad"
     RPM = "rpm"
     HL = "hl"

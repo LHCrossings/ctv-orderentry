@@ -67,6 +67,7 @@ class OrderProcessingService:
 
     _PROCESSOR_DISPATCH: dict[OrderType, str] = {
         OrderType.TCAA:      "_process_tcaa_order",
+        OrderType.TCAA_AV:   "_process_tcaa_av_order",
         OrderType.MISFIT:    "_process_misfit_order",
         OrderType.DAVISELEN: "_process_daviselen_order",
         OrderType.SAGENT:    "_process_sagent_order",
@@ -109,6 +110,7 @@ class OrderProcessingService:
 
         # TCAA processor components (lazy loaded)
         self._tcaa_processor = None
+        self._tcaa_av_processor = None
 
         # Misfit processor components (lazy loaded)
         self._misfit_processor = None
@@ -609,6 +611,57 @@ class OrderProcessingService:
             print(f"\n✗ TCAA processing failed: {e}")
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.TCAA, error_message=error_detail
+            )
+
+    def _process_tcaa_av_order(self, order: Order, shared_session: Any = None) -> ProcessingResult:
+        """Process a Toyota AAPI Added Value flight schedule order."""
+        try:
+            if self._tcaa_av_processor is None:
+                from etere_session import EtereSession
+                from tcaa_av_automation import process_toyota_av_order
+
+                self._tcaa_av_processor = {
+                    'process': process_toyota_av_order,
+                    'session_class': EtereSession,
+                }
+
+            print(f"\n{'='*70}")
+            print("TOYOTA AAPI AV — BROWSER AUTOMATION")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            print(f"{'='*70}\n")
+
+            def _run(driver):
+                success = self._tcaa_av_processor['process'](
+                    driver=driver,
+                    pdf_path=str(order.pdf_path),
+                )
+                if success:
+                    return ProcessingResult(
+                        success=True,
+                        contracts=[Contract(contract_number="TCAA-AV", order_type=OrderType.TCAA_AV)],
+                        order_type=OrderType.TCAA_AV,
+                        error_message=None,
+                    )
+                return ProcessingResult(
+                    success=False, contracts=[], order_type=OrderType.TCAA_AV,
+                    error_message="TCAA AV processing failed — check browser output for details"
+                )
+
+            if shared_session:
+                return _run(shared_session.driver)
+            else:
+                with self._tcaa_av_processor['session_class']() as session:
+                    session.set_market("NYC")
+                    return _run(session.driver)
+
+        except Exception as e:
+            import traceback
+            error_detail = f"TCAA AV processing error: {str(e)}\n{traceback.format_exc()}"
+            print(f"\n✗ TCAA AV processing failed: {e}")
+            return ProcessingResult(
+                success=False, contracts=[], order_type=OrderType.TCAA_AV,
+                error_message=error_detail
             )
 
     def _run_misfit_with_driver(self, order: Order, driver: Any) -> ProcessingResult:

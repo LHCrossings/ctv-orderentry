@@ -86,6 +86,10 @@ class OrderDetectionService:
         if self._is_hl_partners(first_page_text):
             return OrderType.HL
 
+        # TCAA AV — Toyota AAPI flight schedule (check before regular TCAA)
+        if self._is_tcaa_av(first_page_text):
+            return OrderType.TCAA_AV
+
         # TCAA (specific CRTV-Cable marker)
         if self._is_tcaa(first_page_text):
             return OrderType.TCAA
@@ -265,6 +269,10 @@ class OrderDetectionService:
                     return True
 
         return False
+
+    def _is_tcaa_av(self, text: str) -> bool:
+        """Toyota AAPI Added Value flight schedule — distinctive header line."""
+        return "AAPI Heritage Month" in text and "Month Sponsorship" in text
 
     def _is_tcaa(self, text: str) -> bool:
         """
