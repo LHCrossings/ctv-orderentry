@@ -27,7 +27,7 @@ class ToyotaAVLine:
     time: str               # time range string, e.g. "7p-9p", "4p-5p; 6p-7p"
     weekly_spots: List[int] # per-week spot counts (5 values)
     total_spots: int
-    is_ros: bool = False
+    is_bonus: bool = False
 
 
 @dataclass
@@ -277,9 +277,9 @@ def parse_toyota_av_pdf(pdf_path: str) -> ToyotaAVOrder:
     # --- Step 4: Parse each row ---
     lines = []
     for i, (desc_text, weekly_spots, total_spots) in enumerate(data_rows):
-        is_ros = i >= 10  # last 5 rows are ROS
+        is_bonus = i >= 10  # last 5 rows are ROS
 
-        if is_ros:
+        if is_bonus:
             language, days, time = _parse_ros_desc(desc_text)
             description = f"BNS {language} ROS"
         else:
@@ -293,7 +293,7 @@ def parse_toyota_av_pdf(pdf_path: str) -> ToyotaAVOrder:
             time=time,
             weekly_spots=weekly_spots,
             total_spots=total_spots,
-            is_ros=is_ros,
+            is_bonus=is_bonus,
         ))
 
     return ToyotaAVOrder(

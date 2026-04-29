@@ -47,7 +47,7 @@ def gather_inputs(order: ToyotaAVOrder) -> dict:
     print(f"  Title   : {order.title}")
     print(f"  Flight  : {order.flight_start} – {order.flight_end}")
     print(f"  Weeks   : {', '.join(order.week_dates)}")
-    print(f"  Lines   : {len(order.lines)} ({sum(1 for l in order.lines if l.is_ros)} ROS)")
+    print(f"  Lines   : {len(order.lines)} ({sum(1 for l in order.lines if l.is_bonus)} ROS)")
     print()
 
     # Contract code
