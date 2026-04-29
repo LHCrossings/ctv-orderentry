@@ -2377,4 +2377,302 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+    # ── Admerasia IO traffic ─────────────────────────────────────────────────
+
+    @router.post("/api/traffic/admerasia/parse-io")
+    async def admerasia_parse_io(file: UploadFile):
+        """Parse ISCI key from an Admerasia IO PDF and resolve filmati IDs."""
+        pdf_bytes = await file.read()
+
+        def _run():
+            from browser_automation.parsers.admerasia_traffic_parser import (
+                parse_admerasia_io_iscis,
+            )
+            from browser_automation.etere_direct_client import connect as _db_connect
+
+            raw = parse_admerasia_io_iscis(pdf_bytes)
+            if not raw:
+                raise ValueError("No ISCI codes found in PDF")
+
+            isci_codes   = [r["isci_code"] for r in raw]
+            placeholders = ",".join(f"'{c}'" for c in isci_codes)
+
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                cur.execute(
+                    f"SELECT ID_FILMATI, COD_PROGRA, DESCRIZIO FROM FILMATI"
+                    f" WHERE COD_PROGRA IN ({placeholders})"
+                )
+                rows = cur.fetchall()
+
+            filmati_map = {
+                r["COD_PROGRA"]: {"filmati_id": r["ID_FILMATI"], "db_title": r["DESCRIZIO"] or ""}
+                for r in rows
+            }
+
+            isci_options: dict = {"15": [], "30": []}
+            not_found: list = []
+            for item in raw:
+                code    = item["isci_code"]
+                dur_key = str(item["duration_sec"])
+                if dur_key not in isci_options:
+                    isci_options[dur_key] = []
+                if code in filmati_map:
+                    isci_options[dur_key].append({
+                        "title":      item["title"] or filmati_map[code]["db_title"],
+                        "isci":       code,
+                        "filmati_id": filmati_map[code]["filmati_id"],
+                    })
+                else:
+                    not_found.append(code)
+
+            return {"isci_options": isci_options, "not_found": not_found}
+
+        try:
+            result = await asyncio.get_running_loop().run_in_executor(None, _run)
+            return JSONResponse(result)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.get("/api/traffic/contract/{contract_id}/tpalinse-spots")
+    async def traffic_tpalinse_spots(contract_id: int):
+        """Return all individual TPALINSE entries for a contract, ordered by date/time."""
+        def _run():
+            from browser_automation.etere_direct_client import connect as _db_connect
+            from datetime import datetime as _dt
+
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                cur.execute(f"""
+                    SELECT
+                        tp.ID_TPALINSE          AS tp_id,
+                        tp.DATA                 AS spot_date,
+                        tp.ORA                  AS spot_time_frames,
+                        tpa.id_contrattirighe   AS line_id,
+                        cr.DURATA               AS duration_frames,
+                        tp.COD_PROGRA           AS current_filmati_code,
+                        tp.ID_FILMATI           AS current_filmati_id,
+                        tp.TITLE                AS current_filmati_title
+                    FROM TPALINSE tp
+                    JOIN trafficPalinse tpa ON tpa.id_tpalinse      = tp.ID_TPALINSE
+                    JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
+                    WHERE cr.ID_CONTRATTITESTATA = {contract_id}
+                    ORDER BY tp.DATA, tp.ORA
+                """)
+                rows = cur.fetchall()
+
+            FPS = 25
+            result = []
+            for r in rows:
+                d        = r["spot_date"]
+                date_str = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)[:10]
+                frames   = r["spot_time_frames"] or 0
+                hours    = frames // (FPS * 3600)
+                minutes  = (frames % (FPS * 3600)) // (FPS * 60)
+                time_str = f"{hours:02d}:{minutes:02d}"
+                dur_sec  = (r["duration_frames"] or 0) // FPS
+                try:
+                    day_name = _dt.strptime(date_str, "%Y-%m-%d").strftime("%A")
+                except Exception:
+                    day_name = ""
+
+                result.append({
+                    "tp_id":                 r["tp_id"],
+                    "spot_date":             date_str,
+                    "spot_time":             time_str,
+                    "day_name":              day_name,
+                    "line_id":               r["line_id"],
+                    "duration_sec":          dur_sec,
+                    "current_filmati_id":    r["current_filmati_id"],
+                    "current_filmati_code":  r["current_filmati_code"],
+                    "current_filmati_title": r["current_filmati_title"],
+                })
+            return result
+
+        try:
+            result = await asyncio.get_running_loop().run_in_executor(None, _run)
+            return JSONResponse(result)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.post("/api/traffic/contract/{contract_id}/assign-spots")
+    async def traffic_assign_spots(contract_id: int, body: dict = Body(...)):
+        """
+        Assign specific filmati to individual TPALINSE spots.
+        Body: {assignments: [{tp_id: int, filmati_id: int}, ...]}
+        Each tp_id gets exactly the filmati_id specified — no round-robin.
+        """
+        assignments = body.get("assignments", [])
+        if not assignments:
+            raise HTTPException(status_code=400, detail="No assignments provided")
+
+        def _run():
+            from collections import defaultdict, Counter
+            from browser_automation.etere_direct_client import ETERE_WEB_URL
+            from browser_automation.etere_direct_client import connect as _db_connect
+
+            tp_ids_list  = [a["tp_id"]      for a in assignments]
+            fid_list_raw = [a["filmati_id"] for a in assignments]
+            all_filmati  = list(set(fid_list_raw))
+            tp_ph        = ",".join(str(t) for t in tp_ids_list)
+            fid_ph       = ",".join(str(f) for f in all_filmati)
+
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+
+                cur.execute(
+                    f"SELECT ID_FILMATI, COD_PROGRA, DESCRIZIO FROM FILMATI"
+                    f" WHERE ID_FILMATI IN ({fid_ph})"
+                )
+                frows = cur.fetchall()
+                filmati_cod_map   = {r["ID_FILMATI"]: (r["COD_PROGRA"] or "") for r in frows}
+                filmati_title_map = {r["ID_FILMATI"]: (r["DESCRIZIO"] or "") for r in frows}
+
+                cur.execute(f"""
+                    SELECT ff.ID_FILMATI, ff.FILE_ID, ff.VIDEOSTANDARD, ff.DUR,
+                           ISNULL(d.LEGACY_BASESUPP,
+                                  CAST(d.LEGACY_MEDIAID AS VARCHAR) + 'ETX      ') AS supporto_prefix
+                    FROM FS_FILMATI ff
+                    JOIN FS_METADEVICE d ON d.ID_METADEVICE = ff.ID_METADEVICE
+                    WHERE ff.ID_FILMATI IN ({fid_ph})
+                      AND d.LEGACY_MEDIAID IS NOT NULL
+                """)
+                _VS_TO_ASPECT: dict = {"D": "H"}
+                filmati_supporto_map: dict = {}
+                filmati_aspect_map:   dict = {}
+                filmati_duration_map: dict = {}
+                for r in cur.fetchall():
+                    fid = r["ID_FILMATI"]
+                    if fid not in filmati_supporto_map:
+                        filmati_supporto_map[fid] = (r["supporto_prefix"] or "") + (r["FILE_ID"] or "")
+                        filmati_aspect_map[fid]   = _VS_TO_ASPECT.get(r["VIDEOSTANDARD"], "H")
+                        filmati_duration_map[fid] = r["DUR"] or 0
+
+                cur.execute("SELECT id_bookingcode, code FROM trf_bookingcode")
+                bookingcode_to_newtype = {r["id_bookingcode"]: r["code"] for r in cur.fetchall()}
+
+                cur.execute(f"""
+                    SELECT tp.ID_TPALINSE        AS tp_id,
+                           tpa.id_contrattirighe AS line_id,
+                           cr.ID_BOOKINGCODE     AS booking_code
+                    FROM TPALINSE tp
+                    JOIN trafficPalinse tpa ON tpa.id_tpalinse      = tp.ID_TPALINSE
+                    JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
+                    WHERE tp.ID_TPALINSE IN ({tp_ph})
+                """)
+                tp_line_map:    dict = {}
+                tp_newtype_map: dict = {}
+                for r in cur.fetchall():
+                    tp_line_map[r["tp_id"]]    = r["line_id"]
+                    tp_newtype_map[r["tp_id"]] = bookingcode_to_newtype.get(r["booking_code"], "COM")
+
+                line_ids    = list({tp_line_map[t] for t in tp_ids_list if t in tp_line_map})
+                line_ids_ph = ",".join(str(l) for l in line_ids)
+                cur.execute(
+                    f"SELECT DISTINCT ID_FILMATI FROM CONTRATTIFILMATI"
+                    f" WHERE ID_CONTRATTIRIGHE IN ({line_ids_ph})"
+                )
+                existing_pool = {r["ID_FILMATI"] for r in cur.fetchall()}
+
+            # Group by line: line_id → [(tp_id, filmati_id)]
+            line_tp_filmati: dict = defaultdict(list)
+            for a in assignments:
+                tp_id      = a["tp_id"]
+                filmati_id = a["filmati_id"]
+                line_id    = tp_line_map.get(tp_id)
+                if line_id:
+                    line_tp_filmati[line_id].append((tp_id, filmati_id))
+
+            session      = _get_etere_session()
+            lines_updated = spots_updated = 0
+            tp_assignments: list = []
+
+            try:
+                for fid in all_filmati:
+                    if fid in existing_pool:
+                        continue
+                    r = session.post(
+                        f"{ETERE_WEB_URL}/Sales/MaterialAddToAssetListC",
+                        json={"idFilmatiList": [fid], "idct": contract_id},
+                        headers={"X-Requested-With": "XMLHttpRequest"},
+                        timeout=30,
+                    )
+                    r.raise_for_status()
+                    if not r.json().get("IsOk"):
+                        raise ValueError(f"MaterialAddToAssetListC failed for filmati {fid}: {r.json()}")
+
+                for line_id, pairs in line_tp_filmati.items():
+                    idp = [p[0] for p in pairs]
+                    idf = [p[1] for p in pairs]
+                    r = session.post(
+                        f"{ETERE_WEB_URL}/Sales/MaterialAssignAssetRotation",
+                        json={"idp": idp, "idf": idf, "idcr": line_id},
+                        headers={"X-Requested-With": "XMLHttpRequest"},
+                        timeout=30,
+                    )
+                    r.raise_for_status()
+                    if not r.json().get("IsOk"):
+                        raise ValueError(
+                            f"MaterialAssignAssetRotation failed for line {line_id}: {r.json()}"
+                        )
+                    lines_updated += 1
+                    spots_updated += len(idp)
+                    tp_assignments.extend(pairs)
+
+            except Exception:
+                _invalidate_etere_session()
+                raise
+
+            if tp_assignments:
+                with _db_connect() as conn:
+                    cur = conn.cursor()
+                    for tp_id, filmati_id in tp_assignments:
+                        cur.execute(
+                            "UPDATE TPALINSE SET COD_PROGRA = %s, TITLE = %s, ID_FILMATI = %d,"
+                            " NEWTYPE = %s, SUPPORTO = %s, ASPECT = %s, DURATION_P = %d"
+                            " WHERE ID_TPALINSE = %d",
+                            (
+                                filmati_cod_map.get(filmati_id, ""),
+                                filmati_title_map.get(filmati_id, ""),
+                                filmati_id,
+                                tp_newtype_map.get(tp_id, "COM"),
+                                filmati_supporto_map.get(filmati_id, ""),
+                                filmati_aspect_map.get(filmati_id, "H"),
+                                filmati_duration_map.get(filmati_id, 0),
+                                tp_id,
+                            ),
+                        )
+                    # PERCROTATION: proportional to usage count per line
+                    for line_id, pairs in line_tp_filmati.items():
+                        total  = len(pairs)
+                        counts = Counter(p[1] for p in pairs)
+                        fids   = list(counts.keys())
+                        percs  = [round(100 * c / total) for c in counts.values()]
+                        percs[0] += 100 - sum(percs)
+                        for fid, perc in zip(fids, percs):
+                            cur.execute(
+                                "UPDATE CONTRATTIFILMATI SET PERCROTATION = %d"
+                                " WHERE ID_CONTRATTIRIGHE = %d AND ID_FILMATI = %d",
+                                (perc, line_id, fid),
+                            )
+                    # Remove pool entries that weren't assigned to any spot on any line
+                    cur.execute(
+                        f"DELETE FROM CONTRATTIFILMATI"
+                        f" WHERE ID_FILMATI IN ({fid_ph})"
+                        f" AND PERCROTATION = 0"
+                        f" AND ID_CONTRATTIRIGHE IN ("
+                        f"   SELECT ID_CONTRATTIRIGHE FROM CONTRATTIRIGHE"
+                        f"   WHERE ID_CONTRATTITESTATA = {contract_id}"
+                        f" )"
+                    )
+                    conn.commit()
+
+            return {"ok": True, "assigned": spots_updated, "lines_updated": lines_updated}
+
+        try:
+            result = await asyncio.get_running_loop().run_in_executor(None, _run)
+            return JSONResponse(result)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     return router

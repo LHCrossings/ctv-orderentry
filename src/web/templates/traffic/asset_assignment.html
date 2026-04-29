@@ -432,6 +432,25 @@
         .result-toast.ok { background: rgba(163,190,140,0.15); border: 1px solid var(--nord14); color: var(--nord14); display: block; }
         .result-toast.err { background: rgba(191,97,106,0.1); border: 1px solid var(--nord11); color: var(--nord11); display: block; }
 
+        /* Admerasia spot grid */
+        .adm-table { width:100%; border-collapse:collapse; font-size:0.85rem; margin-top:4px; }
+        .adm-table th {
+            text-align:left; padding:6px 10px;
+            font-size:0.72rem; font-weight:600; color:var(--text-muted);
+            text-transform:uppercase; letter-spacing:0.05em;
+            border-bottom:1px solid var(--border-color);
+        }
+        .adm-table td { padding:6px 10px; border-bottom:1px solid var(--border-color); color:var(--text-primary); }
+        .adm-table tr:last-child td { border-bottom:none; }
+        .adm-table tr:hover td { background:var(--bg-secondary); }
+        .adm-select {
+            background:var(--bg-secondary); border:1px solid var(--border-color);
+            border-radius:6px; padding:5px 8px; font-size:0.82rem;
+            font-family:'Inter',sans-serif; color:var(--text-primary); outline:none; min-width:220px;
+        }
+        .adm-select:focus { border-color:var(--nord10); }
+        .adm-auto-label { font-size:0.82rem; color:var(--text-muted); font-style:italic; }
+
         /* Search results dropdown */
         .search-dropdown {
             position: absolute;
@@ -493,16 +512,28 @@
             <div class="field-group">
                 <label class="field-label">Auto-Assign</label>
                 <select id="autoClient" class="field-input" style="min-width:200px;"
-                        onchange="document.getElementById('scanBtn').disabled = !this.value;">
+                        onchange="onAutoClientChange(this.value)">
                     <option value="">— Select client —</option>
                     <option value="sky_river">Sky River Casino</option>
                     <option value="pechanga">Pechanga</option>
+                    <option value="admerasia">Admerasia (McDonald's)</option>
                 </select>
             </div>
             <button class="run-btn" id="scanBtn" onclick="runAutoScan()" disabled>Scan Lines</button>
         </div>
 
+        <div id="admerasiaIoRow" class="input-row" style="display:none; margin-top:10px;">
+            <div class="field-group">
+                <label class="field-label">IO File</label>
+                <input type="file" id="admerasiaIoFile" accept=".pdf" class="field-input"
+                       style="font-size:0.82rem; padding:6px 10px;" />
+            </div>
+            <button class="run-btn" id="parseIoBtn" onclick="parseAdmerasiaIo()">Parse IO</button>
+        </div>
+
         <div id="autoScanResults" style="margin-top:14px;"></div>
+
+        <div id="admerasiaGrid" style="display:none; margin-top:14px;"></div>
 
         <div id="contractBanner" class="contract-banner">
             <div class="contract-code" id="bannerCode"></div>
@@ -753,6 +784,12 @@
         document.getElementById('autoScanResults').innerHTML = '';
         document.getElementById('autoClient').value = '';
         document.getElementById('scanBtn').disabled = true;
+        document.getElementById('scanBtn').style.display = '';
+        document.getElementById('admerasiaIoRow').style.display = 'none';
+        document.getElementById('admerasiaGrid').style.display = 'none';
+        if (document.getElementById('admerasiaIoFile')) document.getElementById('admerasiaIoFile').value = '';
+        window.admerasiaIscis = null;
+        window.admerasiaSpots = null;
     }
 
     function renderRotation(rotation, total) {
@@ -1145,6 +1182,171 @@
 
     function esc(s) {
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ── Admerasia traffic ────────────────────────────────────────────────────
+
+    function onAutoClientChange(val) {
+        const scanBtn = document.getElementById('scanBtn');
+        const ioRow   = document.getElementById('admerasiaIoRow');
+        const grid    = document.getElementById('admerasiaGrid');
+        if (val === 'admerasia') {
+            scanBtn.style.display = 'none';
+            ioRow.style.display   = '';
+        } else {
+            scanBtn.style.display = '';
+            scanBtn.disabled      = !val;
+            ioRow.style.display   = 'none';
+            grid.style.display    = 'none';
+        }
+    }
+
+    async function parseAdmerasiaIo() {
+        const fileInput = document.getElementById('admerasiaIoFile');
+        if (!fileInput.files.length) { alert('Please select an IO PDF file.'); return; }
+        if (!selectedContractId)     { alert('Please select a contract first.'); return; }
+
+        const btn = document.getElementById('parseIoBtn');
+        btn.disabled    = true;
+        btn.textContent = 'Parsing…';
+
+        try {
+            const fd = new FormData();
+            fd.append('file', fileInput.files[0]);
+            const r1 = await fetch('/api/traffic/admerasia/parse-io', { method: 'POST', body: fd });
+            if (!r1.ok) throw new Error((await r1.json()).detail || 'Parse failed');
+            window.admerasiaIscis = await r1.json();
+
+            const r2 = await fetch(`/api/traffic/contract/${selectedContractId}/tpalinse-spots`);
+            if (!r2.ok) throw new Error((await r2.json()).detail || 'Could not load spots');
+            window.admerasiaSpots = await r2.json();
+
+            if (!window.admerasiaSpots.length) { alert('No scheduled spots found for this contract.'); return; }
+            renderAdmerasiaGrid();
+        } catch (e) {
+            alert(`Error: ${e.message}`);
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = 'Parse IO';
+        }
+    }
+
+    function renderAdmerasiaGrid() {
+        const grid  = document.getElementById('admerasiaGrid');
+        const iscis = window.admerasiaIscis;
+        const spots = window.admerasiaSpots;
+        if (!iscis || !spots) return;
+
+        const opts15  = iscis.isci_options['15'] || [];
+        const opts30  = iscis.isci_options['30'] || [];
+        const notFound = iscis.not_found || [];
+
+        const opts15Html = opts15.map(o =>
+            `<option value="${o.filmati_id}">${esc(o.title)}</option>`
+        ).join('');
+        const auto30Title = opts30.length ? esc(opts30[0].title) : '—';
+        const auto30Id    = opts30.length ? opts30[0].filmati_id : '';
+
+        let notFoundHtml = '';
+        if (notFound.length) {
+            notFoundHtml = `<p style="color:var(--nord13);font-size:0.82rem;margin-bottom:10px;">
+                ⚠ ISCI codes not found in library: ${notFound.map(esc).join(', ')}
+            </p>`;
+        }
+
+        let rows = '';
+        for (const s of spots) {
+            const dur      = s.duration_sec;
+            const isThirty = dur >= 28 && dur <= 32;
+            const isFifteen = dur >= 13 && dur <= 17;
+            let assignCell;
+            if (isThirty && auto30Id) {
+                assignCell = `<span class="adm-auto-label">${auto30Title}</span>
+                    <input type="hidden" class="adm-tp-assign" data-tp="${s.tp_id}" value="${auto30Id}" />`;
+            } else if (isFifteen && opts15Html) {
+                assignCell = `<select class="adm-select adm-tp-assign" data-tp="${s.tp_id}">
+                    <option value="">— pick spot —</option>${opts15Html}</select>`;
+            } else {
+                assignCell = `<span class="adm-auto-label">—</span>`;
+            }
+            rows += `<tr>
+                <td>${esc(s.spot_date)}</td>
+                <td>${esc(s.day_name.slice(0,3))}</td>
+                <td>${esc(s.spot_time)}</td>
+                <td><span class="dur-badge">:${dur}</span></td>
+                <td>${assignCell}</td>
+            </tr>`;
+        }
+
+        grid.innerHTML = `
+            <div class="tool-card" style="margin-bottom:0;">
+                <h2>Spot Assignments <span style="font-weight:400;color:var(--text-muted);font-size:0.82rem;">— ${spots.length} spot${spots.length!==1?'s':''}</span></h2>
+                ${notFoundHtml}
+                <table class="adm-table">
+                    <thead><tr>
+                        <th>Date</th><th>Day</th><th>Time</th><th>Dur</th><th>ISCI</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+                <div style="margin-top:14px;display:flex;align-items:center;gap:12px;">
+                    <button class="run-btn apply" onclick="applyAdmerasiaTraffic()">Apply Traffic</button>
+                    <span id="admTrafficToast" style="font-size:0.85rem;"></span>
+                </div>
+            </div>`;
+        grid.style.display = 'block';
+
+        // Pre-select current assignments for :15 dropdowns
+        for (const s of spots) {
+            if (s.current_filmati_id) {
+                const sel = grid.querySelector(`select.adm-tp-assign[data-tp="${s.tp_id}"]`);
+                if (sel) sel.value = s.current_filmati_id;
+            }
+        }
+    }
+
+    async function applyAdmerasiaTraffic() {
+        const grid = document.getElementById('admerasiaGrid');
+        const assignments = [];
+        grid.querySelectorAll('.adm-tp-assign').forEach(el => {
+            const tp_id      = parseInt(el.dataset.tp);
+            const filmati_id = parseInt(el.value || el.getAttribute('value') || '0');
+            if (tp_id && filmati_id) assignments.push({ tp_id, filmati_id });
+        });
+
+        let missing = 0;
+        grid.querySelectorAll('select.adm-tp-assign').forEach(sel => { if (!sel.value) missing++; });
+        if (missing && !confirm(`${missing} spot${missing!==1?'s':''} have no ISCI selected. Continue anyway?`)) return;
+        if (!assignments.length) {
+            document.getElementById('admTrafficToast').textContent = 'No assignments to apply.';
+            return;
+        }
+
+        const btn   = grid.querySelector('.run-btn.apply');
+        const toast = document.getElementById('admTrafficToast');
+        btn.disabled    = true;
+        btn.textContent = 'Applying…';
+        toast.textContent = '';
+        toast.style.color = '';
+
+        try {
+            const resp = await fetch(`/api/traffic/contract/${selectedContractId}/assign-spots`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ assignments }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.detail || 'Error');
+            toast.style.color = 'var(--nord14)';
+            toast.textContent = `✓ Assigned ${data.assigned} spot${data.assigned!==1?'s':''} across ${data.lines_updated} line${data.lines_updated!==1?'s':''}.`;
+            const r2 = await fetch(`/api/traffic/contract/${selectedContractId}/assignment`);
+            if (r2.ok) { const d2 = await r2.json(); renderRotation(d2.rotation, d2.total_spots); }
+        } catch (e) {
+            toast.style.color = 'var(--nord11)';
+            toast.textContent = `Error: ${e.message}`;
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = 'Apply Traffic';
+        }
     }
 
     // ── Auto-assign by client ────────────────────────────────────────────────
