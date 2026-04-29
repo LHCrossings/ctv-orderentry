@@ -2385,10 +2385,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         pdf_bytes = await file.read()
 
         def _run():
+            from browser_automation.etere_direct_client import connect as _db_connect
             from browser_automation.parsers.admerasia_traffic_parser import (
                 parse_admerasia_io_iscis,
             )
-            from browser_automation.etere_direct_client import connect as _db_connect
 
             raw = parse_admerasia_io_iscis(pdf_bytes)
             if not raw:
@@ -2438,8 +2438,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def traffic_tpalinse_spots(contract_id: int):
         """Return all individual TPALINSE entries for a contract, ordered by date/time."""
         def _run():
-            from browser_automation.etere_direct_client import connect as _db_connect
             from datetime import datetime as _dt
+
+            from browser_automation.etere_direct_client import connect as _db_connect
 
             with _db_connect() as conn:
                 cur = conn.cursor(as_dict=True)
@@ -2507,7 +2508,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             raise HTTPException(status_code=400, detail="No assignments provided")
 
         def _run():
-            from collections import defaultdict, Counter
+            from collections import Counter, defaultdict
+
             from browser_automation.etere_direct_client import ETERE_WEB_URL
             from browser_automation.etere_direct_client import connect as _db_connect
 
@@ -2567,7 +2569,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     tp_newtype_map[r["tp_id"]] = bookingcode_to_newtype.get(r["booking_code"], "COM")
 
                 line_ids    = list({tp_line_map[t] for t in tp_ids_list if t in tp_line_map})
-                line_ids_ph = ",".join(str(l) for l in line_ids)
+                line_ids_ph = ",".join(str(lid) for lid in line_ids)
                 cur.execute(
                     f"SELECT DISTINCT ID_FILMATI FROM CONTRATTIFILMATI"
                     f" WHERE ID_CONTRATTIRIGHE IN ({line_ids_ph})"
