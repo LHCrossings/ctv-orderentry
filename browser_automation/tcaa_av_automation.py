@@ -173,9 +173,10 @@ def create_toyota_av_contract(
                 spots_pw = rng["spots_per_week"]
                 if isinstance(spots_pw, list):
                     spots_pw = spots_pw[0]
+                total = spots_pw * rng["weeks"]
 
                 print(f"    [{line_count}] {rng['start_date']} – {rng['end_date']}  "
-                      f"spw={spots_pw}  total={rng['spots']}")
+                      f"spw={spots_pw}  weeks={rng['weeks']}  total={total}")
 
                 success = etere.add_contract_line(
                     contract_number=contract_number,
@@ -188,7 +189,7 @@ def create_toyota_av_contract(
                     description=line.description,
                     spot_code=10,           # BNS
                     duration_seconds=duration,
-                    total_spots=rng["spots"],
+                    total_spots=total,
                     spots_per_week=spots_pw,
                     rate=0.0,
                     separation_intervals=separation,
