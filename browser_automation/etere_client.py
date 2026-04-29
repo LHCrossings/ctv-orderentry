@@ -877,6 +877,8 @@ class EtereClient:
         separation_intervals: Tuple[int, int, int] = (15, 0, 0),  # DEFAULT: Customer=15, Event=0, Order=0
         is_bookend: bool = False,
         is_billboard: bool = False,
+        is_added_value: bool = False,
+        is_barter: bool = False,
         is_priority: bool = False,
         is_optimization: bool = False,
         is_bottom: bool = False,
@@ -1087,6 +1089,10 @@ class EtereClient:
                 _line_types.append("BOOK")
             else:
                 _line_types.append("COM")
+            if is_added_value:
+                _line_types.append("AV")
+            if is_barter:
+                _line_types.append("BAR")
             _types_js = "[" + ", ".join(f'"{t}"' for t in _line_types) + "]"
             try:
                 self.driver.execute_script(

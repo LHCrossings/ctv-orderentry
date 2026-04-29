@@ -251,12 +251,12 @@ def _build_newtype(
         types.append("BB")
     elif is_bookend:
         types.append("BOOK")
-    elif is_added_value:
-        types.append("AV")
-    elif is_barter:
-        types.append("BAR")
     else:
         types.append("COM")
+    if is_added_value:
+        types.append("AV")
+    if is_barter:
+        types.append("BAR")
     return ";".join(types)
 
 # Default Nielsen target ID (Adults 35-64)
@@ -600,6 +600,7 @@ EXEC web_sales_savecontractgeneral
         is_billboard: bool = False,
         is_added_value: bool = False,
         is_barter: bool = False,
+        note: str = "",
         separation_intervals: tuple[int, int, int] = (15, 0, 0),
         contract_id: Optional[int] = None,
         # Unused kwargs kept for interface compatibility with EtereClient
@@ -768,7 +769,7 @@ EXEC web_sales_InsertContractLine
             False,              # @controllamiddle
             0,                  # @split
             0,                  # @idpianoconti
-            "",                 # @note
+            note,               # @note
             0,                  # @linkedspotpos
             0,                  # @linkedspotid
         ]
