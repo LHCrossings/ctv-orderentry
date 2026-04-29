@@ -199,6 +199,11 @@ def run_eterebridge_pipeline(
         # 7. Compute Month column (Calendar vs. Broadcast logic)
         df = transform_month_column(df)
 
+        # 8. Sort: Line (M) → Air Date (B) → Program/airtime (I)
+        sort_cols = [c for c in ["Line", "Air Date", "Program"] if c in df.columns]
+        if sort_cols:
+            df = df.sort_values(sort_cols).reset_index(drop=True)
+
         return df
 
     except Exception as exc:
