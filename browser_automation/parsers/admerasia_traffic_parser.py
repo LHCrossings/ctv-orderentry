@@ -23,6 +23,9 @@ def parse_admerasia_io_iscis(pdf_bytes: bytes) -> list:
         if not m:
             continue
         isci_code = m.group(1)
+        # McDonald's ISCIs are 4 letters + 6 digits + 2 letters; 'O' at position 4 is a typo for '0'
+        if len(isci_code) >= 5 and isci_code[4] == 'O':
+            isci_code = isci_code[:4] + '0' + isci_code[5:]
         if isci_code in seen:
             continue
         seen.add(isci_code)
