@@ -277,6 +277,14 @@ def build_placement_csv_from_db(contract_id: int) -> bytes:
         s = total_s % 60
         return f"{h:02d}:{m:02d}:{s:02d}"
 
+    def _format_copy(title: str, code: str) -> str:
+        if not title:
+            return code
+        prefix = title.split(":")[0].strip() if ":" in title else ""
+        if prefix == code:
+            return title
+        return f"{title} ({code})"
+
     import sys as _sys
     from pathlib import Path as _Path
     _proj = _Path(__file__).parent.parent.parent
@@ -315,7 +323,8 @@ def build_placement_csv_from_db(contract_id: int) -> bytes:
                    cr.ORA_FINEF            AS daypart_end,
                    CAST(tp.DATA AS DATE)   AS air_date,
                    tp.ORA                  AS airtime_frames,
-                   ISNULL(f.COD_PROGRA, 'NEED COPY') AS copy_code
+                   ISNULL(f.COD_PROGRA, 'NEED COPY') AS copy_code,
+                   ISNULL(tp.TITLE, '')    AS copy_title
             FROM TPALINSE tp
             JOIN trafficPalinse tpa ON tpa.id_tpalinse         = tp.ID_TPALINSE
             JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE    = tpa.id_contrattirighe
@@ -373,7 +382,7 @@ def build_placement_csv_from_db(contract_id: int) -> bytes:
             market_name,
             date_str,
             _frames_to_hhmmss(airtime_frames),   # airtimep = actual airtime HH:MM:SS
-            s["copy_code"],                       # bookingcode2 = creative code
+            _format_copy(s.get("copy_title", ""), s["copy_code"]),  # bookingcode2
             daypart_range,                        # timerange2 = contract line daypart
             s["line_desc"] or "",
         ])
