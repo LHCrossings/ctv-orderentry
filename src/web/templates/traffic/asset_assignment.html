@@ -717,7 +717,7 @@
             dropdown.innerHTML = '<div class="dropdown-item"><span class="dropdown-desc">No contracts found.</span></div>';
         } else {
             dropdown.innerHTML = rows.map(r => `
-                <div class="dropdown-item" onclick="selectContract(${r.id}, '${esc(r.code)}', '${esc(r.description)}')">
+                <div class="dropdown-item" onclick="selectContract(${r.id}, ${JSON.stringify(r.code || '')}, ${JSON.stringify(r.description || '')})">
                     <div class="dropdown-code">${esc(r.code)}</div>
                     <div class="dropdown-desc">${esc(r.description || '')} &nbsp;·&nbsp; ${r.date_start} – ${r.date_end}</div>
                 </div>`).join('');
