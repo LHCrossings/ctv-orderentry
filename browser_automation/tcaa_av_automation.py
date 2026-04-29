@@ -76,12 +76,9 @@ def gather_inputs(order: ToyotaAVOrder) -> dict:
 
     # Separation
     from separation_utils import confirm_separation_intervals
-    print(f"\nSeparation intervals (default: {DEFAULT_SEPARATION[0]}-min customer / "
-          f"{DEFAULT_SEPARATION[1]}-min event / {DEFAULT_SEPARATION[2]}-min order):")
     separation = confirm_separation_intervals(
-        default_customer=DEFAULT_SEPARATION[0],
-        default_event=DEFAULT_SEPARATION[1],
-        default_order=DEFAULT_SEPARATION[2],
+        detected_separation=DEFAULT_SEPARATION[0],
+        order_type="TCAA_AV",
     )
 
     print(f"\n{'='*70}")
