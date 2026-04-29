@@ -236,9 +236,28 @@ MEDIA_CENTER_IDS: dict[str, int] = {
     "SAGENT":   316,
 }
 
-# NEWTYPE values for paid vs bonus lines
-NEWTYPE_PAID  = "BART;COMS;AV;BB;BNS;BOOK;COM;ID;INT;PER;PSA"
-NEWTYPE_BONUS = "BNS"
+def _build_newtype(
+    is_bonus: bool = False,
+    is_billboard: bool = False,
+    is_bookend: bool = False,
+    is_added_value: bool = False,
+    is_barter: bool = False,
+) -> str:
+    """Build semicolon-delimited NEWTYPE string. Always includes COMS; adds one specific type."""
+    types = ["COMS"]
+    if is_bonus:
+        types.append("BNS")
+    elif is_billboard:
+        types.append("BB")
+    elif is_bookend:
+        types.append("BOOK")
+    elif is_added_value:
+        types.append("AV")
+    elif is_barter:
+        types.append("BAR")
+    else:
+        types.append("COM")
+    return ";".join(types)
 
 # Default Nielsen target ID (Adults 35-64)
 DEFAULT_NIELSEN_ID   = 728
@@ -578,6 +597,9 @@ EXEC web_sales_savecontractgeneral
         duration: str = "00:00:30:00",
         is_bonus: bool = False,
         is_bookend: bool = False,
+        is_billboard: bool = False,
+        is_added_value: bool = False,
+        is_barter: bool = False,
         separation_intervals: tuple[int, int, int] = (15, 0, 0),
         contract_id: Optional[int] = None,
         # Unused kwargs kept for interface compatibility with EtereClient
@@ -621,7 +643,7 @@ EXEC web_sales_savecontractgeneral
         intevent = _minutes_to_frames(separation_intervals[1])
         intsrighe = _minutes_to_frames(separation_intervals[2])
 
-        newtype = NEWTYPE_BONUS if is_bonus else NEWTYPE_PAID
+        newtype = _build_newtype(is_bonus, is_billboard, is_bookend, is_added_value, is_barter)
 
         # Convert date -> datetime for legacy ODBC driver
         datefrom_dt = datetime(date_from.year, date_from.month, date_from.day)

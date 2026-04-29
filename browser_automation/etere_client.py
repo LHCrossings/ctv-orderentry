@@ -1077,6 +1077,26 @@ class EtereClient:
                 except Exception as e:
                     print(f"[LINE] ⚠ Bottom: {e}")
 
+            # Type (Tipologia) — clear all then set only the correct type(s)
+            _line_types = ["COMS"]
+            if spot_code == 10:       # BNS
+                _line_types.append("BNS")
+            elif is_billboard:
+                _line_types.append("BB")
+            elif is_bookend:
+                _line_types.append("BOOK")
+            else:
+                _line_types.append("COM")
+            _types_js = "[" + ", ".join(f'"{t}"' for t in _line_types) + "]"
+            try:
+                self.driver.execute_script(
+                    f"$('#ddpselectedType').val(null).trigger('change');"
+                    f"$('#ddpselectedType').val({_types_js}).trigger('change');"
+                )
+                print(f"[LINE] ✓ Type: {', '.join(_line_types)}")
+            except Exception as e:
+                print(f"[LINE] ⚠ Type: {e}")
+
             # Duration
             duration_formatted = self._format_duration(duration_seconds)
             duration_field = self.driver.find_element(By.ID, "contractLineGeneralDuration")
