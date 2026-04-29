@@ -196,7 +196,6 @@ def create_toyota_av_contract(
                     rate=0.0,
                     separation_intervals=separation,
                     is_billboard=True,      # Top-of-break scheduling
-                    is_added_value=True,    # AV type tag
                     is_bookend=False,
                 )
 
