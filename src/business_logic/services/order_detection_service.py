@@ -150,6 +150,10 @@ class OrderDetectionService:
         if self._is_imprenta(first_page_text):
             return OrderType.IMPRENTA
 
+        # 3 Olives Media (Riverside County Voters and similar)
+        if self._is_threeolives(first_page_text):
+            return OrderType.THREEOLIVES
+
         return OrderType.UNKNOWN
 
     def _is_sierra_donor(self, text: str) -> bool:
@@ -552,6 +556,14 @@ class OrderDetectionService:
         """
         return "Buy Detail Report" in text and "HYPHEN" in text
 
+    def _is_threeolives(self, text: str) -> bool:
+        """
+        Check if text matches a 3 Olives Media insertion order.
+
+        Definitive marker: "3olivesmedia" appears in the agency email domain.
+        """
+        return "3olivesmedia" in text.lower()
+
     def _is_galeforce(self, text: str) -> bool:
         """
         Check if text matches generic GaleForceMedia order (not Sagent).
@@ -799,6 +811,8 @@ def detect_from_filename(filename: str) -> OrderType:
         return OrderType.DART
     if "POLARIS" in name_upper:
         return OrderType.POLARIS
+    if "3OLIVES" in name_upper:
+        return OrderType.THREEOLIVES
     # Imprenta XLSX files don't carry "Imprenta" in the filename —
     # fall through to content-based detection in the scanner.
     return OrderType.UNKNOWN
