@@ -1088,6 +1088,27 @@ def _parse_line_items_table_based(pdf: pdfplumber.PDF, week_start_dates: List[da
             _row_idx_to_y = {row_offset + 2 + i: y for i, y in enumerate(_dollar_ys)}
         print(f"[PARSE] Program row y-positions (via $ signs): {_row_idx_to_y}")
 
+    # Find the section divider LINE between the two label y-positions.
+    # Some Chinese IOs render the :30 label mid-section (below the first :30 row),
+    # so comparing a row's y against the label y gives the wrong section.
+    # A visible horizontal rule drawn across the table at the true cut point IS
+    # reliable — it's the widest horizontal edge between the two labels.
+    _section_cut_y = None
+    if len(_length_boundaries) > 1:
+        page0 = pdf.pages[0]
+        label_top = _length_boundaries[0][0]
+        label_bot = _length_boundaries[-1][0]
+        h_candidates = [
+            (e['x1'] - e['x0'], e['top'])
+            for e in (page0.edges or [])
+            if e.get('orientation') == 'h'
+            and label_top < e.get('top', 0) < label_bot
+            and (e.get('x1', 0) - e.get('x0', 0)) > 300
+        ]
+        if h_candidates:
+            _, _section_cut_y = max(h_candidates)
+            print(f"[PARSE] Section divider at y={_section_cut_y:.1f} (labels at y={label_top:.1f} / y={label_bot:.1f})")
+
     # Build a combined list of data rows from the main table plus any continuation
     # tables that follow it (e.g. :30 section split off by a horizontal rule or page break).
     data_rows = list(broadcast_table[row_offset + 2:])
@@ -1124,9 +1145,16 @@ def _parse_line_items_table_based(pdf: pdfplumber.PDF, week_start_dates: List[da
         if len(_length_boundaries) > 1 and row_idx in _row_idx_to_y:
             row_y = _row_idx_to_y[row_idx]
             new_sl = _length_boundaries[0][1]  # default = first (topmost) section
-            for bound_y, bound_len in _length_boundaries:
-                if bound_y <= row_y:
-                    new_sl = bound_len
+            if _section_cut_y is not None:
+                # Use the horizontal rule as the true section boundary.
+                # Rows at or below the line belong to the next length section.
+                for i in range(1, len(_length_boundaries)):
+                    if row_y >= _section_cut_y:
+                        new_sl = _length_boundaries[i][1]
+            else:
+                for bound_y, bound_len in _length_boundaries:
+                    if bound_y <= row_y:
+                        new_sl = bound_len
             if new_sl != spot_length:
                 print(f"[PARSE] Row {row_idx}: spot length → :{new_sl}s (coord y={row_y})")
                 spot_length = new_sl
