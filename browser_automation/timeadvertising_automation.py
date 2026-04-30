@@ -197,7 +197,21 @@ def _gather_inputs(order: TimeAdvertisingOrder) -> Optional[dict]:
 
 
 def _yymm(order: TimeAdvertisingOrder) -> str:
-    """Return 'yymm' tag from order date, e.g. 3/2/2026 → '2603'."""
+    """Return 'yymm' from the broadcast month of the flight.
+
+    Uses the Sunday of the first flight week — per broadcast calendar rules
+    a week beginning in late month N belongs to month N+1 when its Sunday
+    falls in N+1.  e.g. week of 4/27 → Sunday 5/3 → '2605'.
+    Falls back to order_date when flight_start is unavailable.
+    """
+    from datetime import datetime, timedelta
+    if order.flight_start:
+        try:
+            wk_start = datetime.strptime(order.flight_start, '%m/%d/%Y')
+            ref = wk_start + timedelta(days=6)  # Sunday of that week
+            return f"{ref.year % 100:02d}{ref.month:02d}"
+        except ValueError:
+            pass
     if order.order_date:
         parts = order.order_date.split('/')
         if len(parts) == 3:
