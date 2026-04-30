@@ -1,8 +1,34 @@
 import io
 import re
 
-_ISCI_RE = re.compile(r'([A-Z]{4,6}\d{5}[A-Z]{2})')
+_ISCI_RE = re.compile(r'([A-Z]{4,6}\d{5,6}[A-Z]{2})')
 _DUR_RE  = re.compile(r':(\d+)')
+
+
+def parse_admerasia_io_lines(pdf_bytes: bytes) -> list:
+    """
+    Parse the IO traffic grid lines in order of appearance.
+    Returns [{description, duration_sec}] deduped by (duration_sec, time).
+    Used as group headers in the traffic assignment UI.
+    """
+    try:
+        from browser_automation.parsers.admerasia_parser import parse_admerasia_pdf
+        order = parse_admerasia_pdf(pdf_bytes)
+    except Exception:
+        return []
+
+    seen = set()
+    result = []
+    for line in order.lines:
+        key = (line.spot_length, line.time)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append({
+            "description":  line.time,
+            "duration_sec": line.spot_length,
+        })
+    return result
 
 
 def parse_admerasia_io_iscis(pdf_bytes: bytes) -> list:

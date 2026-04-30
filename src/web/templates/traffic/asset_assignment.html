@@ -1260,11 +1260,6 @@
         const opts30   = iscis.isci_options['30'] || [];
         const notFound = iscis.not_found || [];
 
-        const opts15Html = opts15.map(o =>
-            `<option value="${o.filmati_id}">${esc(o.title)}</option>`
-        ).join('');
-        const auto30 = opts30.length ? opts30[0] : null;
-
         let notFoundHtml = '';
         if (notFound.length) {
             notFoundHtml = `<p style="color:var(--nord13);font-size:0.82rem;margin-bottom:10px;">
@@ -1276,55 +1271,144 @@
         const spots15 = spots.filter(s => s.duration_sec === 15);
         const spots30 = spots.filter(s => s.duration_sec === 30);
 
-        // Group an array of spots by line_description, preserving order
-        function groupByLine(spotList) {
+        const _LANG_MAP = { M: 'Mandarin', C: 'Cantonese', V: 'Vietnamese', T: 'Tagalog' };
+        function isciLang(isci) {
+            return isci && isci.length >= 4 ? (_LANG_MAP[isci[3].toUpperCase()] || '') : '';
+        }
+        function isciOptHtml(o) {
+            const lang  = isciLang(o.isci);
+            const label = lang
+                ? `${o.title || o.isci} (${lang})`
+                : `${o.title || o.isci} — ${o.isci}`;
+            return `<option value="${o.filmati_id}">${esc(label)}</option>`;
+        }
+        const opts15Html = opts15.map(isciOptHtml).join('');
+        const opts30Html = opts30.map(isciOptHtml).join('');
+        const ioLines = iscis.io_lines || [];
+
+        // Normalize a single time token to HH:MM (24-hour).
+        // Handles: "11:30a", "1130", "12p", "1200p", "6", "12:00p"
+        function normTimeToken(t) {
+            t = t.trim();
+            // 4-digit compact form: "1130", "1200p", "630a" etc.
+            const compact = t.match(/^(\d{3,4})([ap]m?)?$/i);
+            if (compact) {
+                const raw = compact[1];
+                const h4  = raw.length === 4 ? parseInt(raw.slice(0, 2)) : parseInt(raw.slice(0, 1));
+                const m4  = raw.length === 4 ? parseInt(raw.slice(2))    : parseInt(raw.slice(1));
+                const suf = (compact[2] || '').toLowerCase().charAt(0);
+                let h = h4;
+                if (suf === 'p' && h !== 12) h += 12;
+                if (suf === 'a' && h === 12) h = 0;
+                return `${String(h).padStart(2,'0')}:${String(m4).padStart(2,'0')}`;
+            }
+            // Standard form: "11:30", "11:30a", "12p", "6"
+            const m = t.match(/^(\d+)(?::(\d+))?\s*([ap]m?|n)?$/i);
+            if (!m) return '';
+            let h = parseInt(m[1]);
+            const min = parseInt(m[2] || '0');
+            const suf = (m[3] || '').toLowerCase().charAt(0);
+            if (suf === 'p' && h !== 12) h += 12;
+            if (suf === 'a' && h === 12) h = 0;
+            return `${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}`;
+        }
+
+        // Extract "from" HH:MM from an IO description like "PST1130-1200p" or "PST11:00a-12:00p"
+        function ioTimeFrom(desc) {
+            const s = desc.replace(/^(PST|CST|EST|MST|MT|PT|EDT|CDT|MDT|PDT|CT|ET)\s*/i, '').trim();
+            return normTimeToken(s.split('-')[0].trim());
+        }
+
+        function spotRow(s) {
+            const isThirty = s.duration_sec === 30;
+            const optsHtml = isThirty ? opts30Html : opts15Html;
+            let assignCell;
+            if (optsHtml) {
+                assignCell = `<select class="adm-select adm-tp-assign" data-tp="${s.tp_id}">
+                    <option value="">— pick spot —</option>${optsHtml}</select>`;
+            } else {
+                assignCell = `<span class="adm-auto-label">—</span>`;
+            }
+            return `<tr>
+                <td>${esc(s.spot_date)}</td>
+                <td>${esc(s.day_name.slice(0,3))}</td>
+                <td>${esc(s.spot_time)}</td>
+                <td><span class="dur-badge">:${s.duration_sec}</span></td>
+                <td>${assignCell}</td>
+            </tr>`;
+        }
+
+        function chronoSort(list) {
+            return list.slice().sort((a, b) => {
+                if (a.spot_date !== b.spot_date) return a.spot_date.localeCompare(b.spot_date);
+                return a.spot_time.localeCompare(b.spot_time);
+            });
+        }
+
+        // Group spots by (line_time_from, duration_sec) — keeps :15 and :30 at same time separate.
+        // Returns {groups, order, ioLabelByKey}
+        function groupSpotsByDaypart() {
+            // IO label map keyed by "time_from:duration_sec"
+            const ioLabelByKey = {};
+            for (const iol of ioLines) {
+                const tf  = ioTimeFrom(iol.description);
+                const key = `${tf}:${iol.duration_sec}`;
+                if (tf && !ioLabelByKey[key]) ioLabelByKey[key] = iol.description;
+            }
+
             const groups = {};
             const order  = [];
-            for (const s of spotList) {
-                const key = s.line_description || 'Line';
+            for (const s of spots) {
+                const key = s.line_time_from
+                    ? `${s.line_time_from}:${s.duration_sec}`
+                    : (s.line_description || '—');
                 if (!groups[key]) { groups[key] = []; order.push(key); }
                 groups[key].push(s);
             }
-            return { groups, order };
+            return { groups, order, ioLabelByKey };
         }
 
-        // Build one duration section's HTML
-        function buildSection(sectionSpots, dur) {
-            if (!sectionSpots.length) return '';
-            const isThirty   = dur === 30;
-            const { groups, order } = groupByLine(sectionSpots);
-            let html = `<div class="adm-section-header">:${dur} Spots</div>`;
-            for (const lineDesc of order) {
-                const lineSpots = groups[lineDesc];
-                html += `<div class="adm-line-header">${esc(lineDesc)}</div>`;
-                html += `<table class="adm-table">
-                    <thead><tr><th>Date</th><th>Day</th><th>Time</th><th>Dur</th><th>ISCI</th></tr></thead>
-                    <tbody>`;
-                for (const s of lineSpots) {
-                    let assignCell;
-                    if (isThirty && auto30) {
-                        assignCell = `<span class="adm-auto-label">${esc(auto30.title)}</span>
-                            <input type="hidden" class="adm-tp-assign" data-tp="${s.tp_id}" value="${auto30.filmati_id}" />`;
-                    } else if (!isThirty && opts15Html) {
-                        assignCell = `<select class="adm-select adm-tp-assign" data-tp="${s.tp_id}">
-                            <option value="">— pick spot —</option>${opts15Html}</select>`;
-                    } else {
-                        assignCell = `<span class="adm-auto-label">—</span>`;
+        function buildAllSections() {
+            const { groups, order, ioLabelByKey } = groupSpotsByDaypart();
+
+            // Re-sort to IO order when io_lines available
+            let sortedOrder = order;
+            if (ioLines.length) {
+                const ioOrder = [];
+                const seen = new Set();
+                for (const iol of ioLines) {
+                    const tf  = ioTimeFrom(iol.description);
+                    const key = `${tf}:${iol.duration_sec}`;
+                    if (tf && !seen.has(key) && groups[key]) {
+                        seen.add(key);
+                        ioOrder.push(key);
                     }
-                    html += `<tr>
-                        <td>${esc(s.spot_date)}</td>
-                        <td>${esc(s.day_name.slice(0,3))}</td>
-                        <td>${esc(s.spot_time)}</td>
-                        <td><span class="dur-badge">:${s.duration_sec}</span></td>
-                        <td>${assignCell}</td>
-                    </tr>`;
                 }
-                html += `</tbody></table>`;
+                for (const k of order) {
+                    if (!seen.has(k)) ioOrder.push(k);
+                }
+                sortedOrder = ioOrder;
             }
-            return html;
+
+            return sortedOrder.map(key => {
+                const grp = chronoSort(groups[key] || []);
+                if (!grp.length) return '';
+                // Header: IO description if matched, else "HH:MM–HH:MM :dur", else fallback
+                const baseLabel = ioLabelByKey[key]
+                    || (grp[0].line_time_from
+                        ? `${grp[0].line_time_from}–${grp[0].line_time_to} :${grp[0].duration_sec}`
+                        : (grp[0].line_description || key));
+                const lang = grp[0].line_language || '';
+                const label = lang ? `${baseLabel} — ${lang}` : baseLabel;
+                return `<div class="adm-section-header">${esc(label)}</div>
+                    <table class="adm-table">
+                    <thead><tr><th>Date</th><th>Day</th><th>Time</th><th>Dur</th><th>ISCI</th></tr></thead>
+                    <tbody>${grp.map(spotRow).join('')}</tbody></table>`;
+            }).join('');
         }
 
-        const sectionsHtml = buildSection(spots15, 15) + buildSection(spots30, 30);
+
+        const sectionsHtml = buildAllSections();
 
         grid.innerHTML = `
             <div class="tool-card" style="margin-bottom:0;">

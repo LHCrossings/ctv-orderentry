@@ -2388,11 +2388,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             from browser_automation.etere_direct_client import connect as _db_connect
             from browser_automation.parsers.admerasia_traffic_parser import (
                 parse_admerasia_io_iscis,
+                parse_admerasia_io_lines,
             )
 
             raw = parse_admerasia_io_iscis(pdf_bytes)
             if not raw:
                 raise ValueError("No ISCI codes found in PDF")
+
+            io_lines = parse_admerasia_io_lines(pdf_bytes)
 
             isci_codes   = [r["isci_code"] for r in raw]
             placeholders = ",".join(f"'{c}'" for c in isci_codes)
@@ -2426,7 +2429,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 else:
                     not_found.append(code)
 
-            return {"isci_options": isci_options, "not_found": not_found}
+            return {"isci_options": isci_options, "not_found": not_found, "io_lines": io_lines}
 
         try:
             result = await asyncio.get_running_loop().run_in_executor(None, _run)
@@ -2452,6 +2455,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         tpa.id_contrattirighe   AS line_id,
                         cr.DURATA               AS duration_frames,
                         cr.DESCRIZIONE          AS line_description,
+                        cr.COD_USER             AS market_id,
+                        COALESCE(cr.ORA_INIZIOF, cr.ORA_INIZIO) AS line_time_from_frames,
+                        COALESCE(cr.ORA_FINEF,   cr.ORA_FINE)   AS line_time_to_frames,
                         tp.ID_FILMATI           AS current_filmati_id,
                         f.COD_PROGRA            AS current_filmati_code,
                         ISNULL(NULLIF(f.DESCRIZIO, ''), f.COD_PROGRA) AS current_filmati_title
@@ -2460,11 +2466,34 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
                     LEFT JOIN FILMATI f     ON f.ID_FILMATI          = tp.ID_FILMATI
                     WHERE cr.ID_CONTRATTITESTATA = {contract_id}
-                    ORDER BY cr.DURATA DESC, cr.DESCRIZIONE, tp.DATA, tp.ORA
+                    ORDER BY cr.ID_CONTRATTIRIGHE ASC, tp.DATA, tp.ORA
                 """)
                 rows = cur.fetchall()
 
             FPS = 29.97
+
+            def _frames_to_hhmm(frames):
+                if not frames:
+                    return ""
+                secs = frames / FPS
+                h = int(secs // 3600)
+                m = int((secs % 3600) // 60)
+                return f"{h:02d}:{m:02d}"
+
+            _SKIP_COMPOSITE = {"Chinese", "SouthAsian"}
+
+            def _get_language_for_time(time_from: str, mkt_id: int) -> str:
+                if not time_from:
+                    return ""
+                lang_table = _DAL_LANG_WINDOWS if mkt_id == 10 else _CTV_LANG_WINDOWS
+                for lang, windows in lang_table.items():
+                    if lang in _SKIP_COMPOSITE:
+                        continue
+                    for _days, w_from, w_to in windows:
+                        if w_from <= time_from < w_to:
+                            return lang
+                return ""
+
             result = []
             for r in rows:
                 d            = r["spot_date"]
@@ -2491,6 +2520,12 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     "day_name":              day_name,
                     "line_id":               r["line_id"],
                     "line_description":      r["line_description"] or "",
+                    "line_time_from":        _frames_to_hhmm(r["line_time_from_frames"]),
+                    "line_time_to":          _frames_to_hhmm(r["line_time_to_frames"]),
+                    "line_language":         _get_language_for_time(
+                                                _frames_to_hhmm(r["line_time_from_frames"]),
+                                                r["market_id"] or 0,
+                                             ),
                     "duration_sec":          dur_sec,
                     "current_filmati_id":    r["current_filmati_id"],
                     "current_filmati_code":  r["current_filmati_code"],
