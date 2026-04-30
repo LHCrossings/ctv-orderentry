@@ -2451,6 +2451,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         tp.ORA                  AS spot_time_frames,
                         tpa.id_contrattirighe   AS line_id,
                         cr.DURATA               AS duration_frames,
+                        cr.DESCRIZIONE          AS line_description,
                         tp.ID_FILMATI           AS current_filmati_id,
                         f.COD_PROGRA            AS current_filmati_code,
                         ISNULL(NULLIF(f.DESCRIZIO, ''), f.COD_PROGRA) AS current_filmati_title
@@ -2459,7 +2460,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
                     LEFT JOIN FILMATI f     ON f.ID_FILMATI          = tp.ID_FILMATI
                     WHERE cr.ID_CONTRATTITESTATA = {contract_id}
-                    ORDER BY tp.DATA, tp.ORA
+                    ORDER BY cr.DURATA DESC, cr.DESCRIZIONE, tp.DATA, tp.ORA
                 """)
                 rows = cur.fetchall()
 
@@ -2489,6 +2490,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     "spot_time":             time_str,
                     "day_name":              day_name,
                     "line_id":               r["line_id"],
+                    "line_description":      r["line_description"] or "",
                     "duration_sec":          dur_sec,
                     "current_filmati_id":    r["current_filmati_id"],
                     "current_filmati_code":  r["current_filmati_code"],

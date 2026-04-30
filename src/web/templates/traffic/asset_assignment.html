@@ -450,6 +450,16 @@
         }
         .adm-select:focus { border-color:var(--nord10); }
         .adm-auto-label { font-size:0.82rem; color:var(--text-muted); font-style:italic; }
+        .adm-section-header {
+            font-size:0.9rem; font-weight:700; color:var(--text-primary);
+            margin:18px 0 6px; padding:6px 0; border-bottom:2px solid var(--nord10);
+        }
+        .adm-section-header:first-child { margin-top:0; }
+        .adm-line-header {
+            font-size:0.78rem; font-weight:600; color:var(--text-muted);
+            text-transform:uppercase; letter-spacing:0.05em;
+            margin:12px 0 4px; padding:4px 0;
+        }
 
         /* Search results dropdown */
         .search-dropdown {
@@ -1246,15 +1256,14 @@
         const spots = window.admerasiaSpots;
         if (!iscis || !spots) return;
 
-        const opts15  = iscis.isci_options['15'] || [];
-        const opts30  = iscis.isci_options['30'] || [];
+        const opts15   = iscis.isci_options['15'] || [];
+        const opts30   = iscis.isci_options['30'] || [];
         const notFound = iscis.not_found || [];
 
         const opts15Html = opts15.map(o =>
             `<option value="${o.filmati_id}">${esc(o.title)}</option>`
         ).join('');
-        const auto30Title = opts30.length ? esc(opts30[0].title) : '—';
-        const auto30Id    = opts30.length ? opts30[0].filmati_id : '';
+        const auto30 = opts30.length ? opts30[0] : null;
 
         let notFoundHtml = '';
         if (notFound.length) {
@@ -1263,40 +1272,65 @@
             </p>`;
         }
 
-        let rows = '';
-        for (const s of spots) {
-            const dur      = s.duration_sec;
-            const isThirty = dur >= 28 && dur <= 32;
-            const isFifteen = dur >= 13 && dur <= 17;
-            let assignCell;
-            if (isThirty && auto30Id) {
-                assignCell = `<span class="adm-auto-label">${auto30Title}</span>
-                    <input type="hidden" class="adm-tp-assign" data-tp="${s.tp_id}" value="${auto30Id}" />`;
-            } else if (isFifteen && opts15Html) {
-                assignCell = `<select class="adm-select adm-tp-assign" data-tp="${s.tp_id}">
-                    <option value="">— pick spot —</option>${opts15Html}</select>`;
-            } else {
-                assignCell = `<span class="adm-auto-label">—</span>`;
+        // Split spots into :15 and :30 groups
+        const spots15 = spots.filter(s => s.duration_sec === 15);
+        const spots30 = spots.filter(s => s.duration_sec === 30);
+
+        // Group an array of spots by line_description, preserving order
+        function groupByLine(spotList) {
+            const groups = {};
+            const order  = [];
+            for (const s of spotList) {
+                const key = s.line_description || 'Line';
+                if (!groups[key]) { groups[key] = []; order.push(key); }
+                groups[key].push(s);
             }
-            rows += `<tr>
-                <td>${esc(s.spot_date)}</td>
-                <td>${esc(s.day_name.slice(0,3))}</td>
-                <td>${esc(s.spot_time)}</td>
-                <td><span class="dur-badge">:${dur}</span></td>
-                <td>${assignCell}</td>
-            </tr>`;
+            return { groups, order };
         }
+
+        // Build one duration section's HTML
+        function buildSection(sectionSpots, dur) {
+            if (!sectionSpots.length) return '';
+            const isThirty   = dur === 30;
+            const { groups, order } = groupByLine(sectionSpots);
+            let html = `<div class="adm-section-header">:${dur} Spots</div>`;
+            for (const lineDesc of order) {
+                const lineSpots = groups[lineDesc];
+                html += `<div class="adm-line-header">${esc(lineDesc)}</div>`;
+                html += `<table class="adm-table">
+                    <thead><tr><th>Date</th><th>Day</th><th>Time</th><th>Dur</th><th>ISCI</th></tr></thead>
+                    <tbody>`;
+                for (const s of lineSpots) {
+                    let assignCell;
+                    if (isThirty && auto30) {
+                        assignCell = `<span class="adm-auto-label">${esc(auto30.title)}</span>
+                            <input type="hidden" class="adm-tp-assign" data-tp="${s.tp_id}" value="${auto30.filmati_id}" />`;
+                    } else if (!isThirty && opts15Html) {
+                        assignCell = `<select class="adm-select adm-tp-assign" data-tp="${s.tp_id}">
+                            <option value="">— pick spot —</option>${opts15Html}</select>`;
+                    } else {
+                        assignCell = `<span class="adm-auto-label">—</span>`;
+                    }
+                    html += `<tr>
+                        <td>${esc(s.spot_date)}</td>
+                        <td>${esc(s.day_name.slice(0,3))}</td>
+                        <td>${esc(s.spot_time)}</td>
+                        <td><span class="dur-badge">:${s.duration_sec}</span></td>
+                        <td>${assignCell}</td>
+                    </tr>`;
+                }
+                html += `</tbody></table>`;
+            }
+            return html;
+        }
+
+        const sectionsHtml = buildSection(spots15, 15) + buildSection(spots30, 30);
 
         grid.innerHTML = `
             <div class="tool-card" style="margin-bottom:0;">
                 <h2>Spot Assignments <span style="font-weight:400;color:var(--text-muted);font-size:0.82rem;">— ${spots.length} spot${spots.length!==1?'s':''}</span></h2>
                 ${notFoundHtml}
-                <table class="adm-table">
-                    <thead><tr>
-                        <th>Date</th><th>Day</th><th>Time</th><th>Dur</th><th>ISCI</th>
-                    </tr></thead>
-                    <tbody>${rows}</tbody>
-                </table>
+                ${sectionsHtml}
                 <div style="margin-top:14px;display:flex;align-items:center;gap:12px;">
                     <button class="run-btn apply" onclick="applyAdmerasiaTraffic()">Apply Traffic</button>
                     <span id="admTrafficToast" style="font-size:0.85rem;"></span>
@@ -1304,7 +1338,7 @@
             </div>`;
         grid.style.display = 'block';
 
-        // Pre-select current assignments for :15 dropdowns
+        // Pre-select any already-assigned :15 dropdowns
         for (const s of spots) {
             if (s.current_filmati_id) {
                 const sel = grid.querySelector(`select.adm-tp-assign[data-tp="${s.tp_id}"]`);
