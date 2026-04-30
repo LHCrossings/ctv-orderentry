@@ -1195,6 +1195,16 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
         sc_lines = _sc_lines_from_io(io_detail)
         for _ln in sc_lines:
             _ln["gross_rate"] = _grossed_up(_ln["gross_rate"])
+        # Etere is authoritative for spot duration. If all spots share one duration,
+        # override the IO-sourced length (which may reflect the original buy, not
+        # the actual aired duration, e.g. :30 IO → :25 billboard spots in Etere).
+        if spots:
+            _spot_durations = {s.duration_s for s in spots}
+            if len(_spot_durations) == 1:
+                _d = next(iter(_spot_durations))
+                _d = _d + 1 if _d % 5 == 4 else _d  # snap :14→:15, :29→:30, etc.
+                for _ln in sc_lines:
+                    _ln["length"] = f":{_d}"
         print(f"[backwrite] IO-sourced SC lines: {len(sc_lines)}")
     else:
         # Group by description: Etere splits one IO line across months/weeks into

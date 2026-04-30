@@ -2451,27 +2451,33 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         tp.ORA                  AS spot_time_frames,
                         tpa.id_contrattirighe   AS line_id,
                         cr.DURATA               AS duration_frames,
-                        tp.COD_PROGRA           AS current_filmati_code,
                         tp.ID_FILMATI           AS current_filmati_id,
-                        tp.TITLE                AS current_filmati_title
+                        f.COD_PROGRA            AS current_filmati_code,
+                        ISNULL(NULLIF(f.DESCRIZIO, ''), f.COD_PROGRA) AS current_filmati_title
                     FROM TPALINSE tp
                     JOIN trafficPalinse tpa ON tpa.id_tpalinse      = tp.ID_TPALINSE
                     JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
+                    LEFT JOIN FILMATI f     ON f.ID_FILMATI          = tp.ID_FILMATI
                     WHERE cr.ID_CONTRATTITESTATA = {contract_id}
                     ORDER BY tp.DATA, tp.ORA
                 """)
                 rows = cur.fetchall()
 
-            FPS = 25
+            FPS = 29.97
             result = []
             for r in rows:
-                d        = r["spot_date"]
-                date_str = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)[:10]
-                frames   = r["spot_time_frames"] or 0
-                hours    = frames // (FPS * 3600)
-                minutes  = (frames % (FPS * 3600)) // (FPS * 60)
-                time_str = f"{hours:02d}:{minutes:02d}"
-                dur_sec  = (r["duration_frames"] or 0) // FPS
+                d            = r["spot_date"]
+                date_str     = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)[:10]
+                total_secs   = (r["spot_time_frames"] or 0) / FPS
+                hours        = int(total_secs // 3600)
+                minutes      = int((total_secs % 3600) // 60)
+                time_str     = f"{hours:02d}:{minutes:02d}"
+                raw_dur_sec  = round((r["duration_frames"] or 0) / FPS)
+                # Snap to nearest 15s — Etere Selenium path stores duration at
+                # a different fps than 29.97 (web UI uses ~36fps), so raw_dur_sec
+                # lands at :18 instead of :15. Snapping mirrors EtereBridge's
+                # round_to_nearest_increment behaviour.
+                dur_sec      = round(raw_dur_sec / 15) * 15 if raw_dur_sec > 0 else 0
                 try:
                     day_name = _dt.strptime(date_str, "%Y-%m-%d").strftime("%A")
                 except Exception:
