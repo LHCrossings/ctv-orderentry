@@ -39,6 +39,9 @@ def _detect_xlsx_content(file_path: Path) -> OrderType:
                 if "POLARIS" in v:
                     wb.close()
                     return OrderType.POLARIS
+                if "SIERRA DONOR" in v:
+                    wb.close()
+                    return OrderType.SIERRADONOR
         wb.close()
     except Exception:
         pass

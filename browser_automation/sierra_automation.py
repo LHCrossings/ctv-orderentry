@@ -29,7 +29,7 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from browser_automation.etere_client import EtereClient
-from browser_automation.parsers.sierra_parser import SierraOrder, SierraLine, parse_sierra_pdf
+from browser_automation.parsers.sierra_parser import SierraOrder, SierraLine, parse_sierra
 from src.domain.enums import BillingType, OrderType
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -123,7 +123,7 @@ def gather_sierra_inputs(pdf_path: str) -> Optional[dict]:
 
     print("\n[PARSE] Reading PDF…")
     try:
-        order = parse_sierra_pdf(pdf_path)
+        order = parse_sierra(pdf_path)
     except Exception as exc:
         print(f"[ERROR] Failed to parse PDF: {exc}")
         return None
@@ -229,7 +229,7 @@ def process_sierra_order(
     Returns True on success, False on failure.
     """
     try:
-        order = parse_sierra_pdf(pdf_path)
+        order = parse_sierra(pdf_path)
 
         print(f"\n{'=' * 70}")
         print("SIERRA DONOR SERVICES PROCESSING")

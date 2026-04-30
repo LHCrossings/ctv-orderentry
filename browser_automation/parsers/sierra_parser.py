@@ -227,6 +227,187 @@ def _col_index(header_row: list, *candidates) -> Optional[int]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# XLSX PARSER
+# ─────────────────────────────────────────────────────────────────────────────
+
+def parse_sierra_xlsx(xlsx_path: str) -> SierraOrder:
+    """
+    Parse a Crossings TV Media Plan Excel file for Sierra Donor Services.
+
+    The Excel format has the same structure as the PDF but with clean
+    datetime objects for dates and numeric values for spots/rates.
+    """
+    print(f"\n[SIERRA PARSER] Reading Excel: {xlsx_path}")
+
+    import openpyxl
+    wb = openpyxl.load_workbook(str(xlsx_path), data_only=True)
+    ws = wb.active
+
+    rows = [
+        [cell.value for cell in row]
+        for row in ws.iter_rows()
+    ]
+
+    # ── Header fields ──────────────────────────────────────────────────────
+    advertiser = acct_rep = market_raw = date_raw = ""
+
+    for row in rows[:10]:
+        row_str = " ".join(str(v or "") for v in row)
+        if not advertiser:
+            m = re.search(r'[Aa]d[ev]?ertiser[:\s]+(.+?)(?:\s{2,}|Acct Rep|$)', row_str)
+            if m:
+                advertiser = m.group(1).strip()
+        if not acct_rep:
+            m = re.search(r'Acct Rep[:\s]+(.+)', row_str)
+            if m:
+                acct_rep = m.group(1).strip()
+        if not market_raw:
+            m = re.search(r'Market\s+(\w[\w ]+)', row_str)
+            if m:
+                market_raw = m.group(1).strip()
+
+        # Date cell may be a datetime object
+        for cell_val in row:
+            if hasattr(cell_val, 'strftime') and not date_raw:
+                date_raw = cell_val.strftime('%m/%d/%Y')
+
+    market = _normalize_market(market_raw) if market_raw else "CVC"
+
+    # Direct cell lookup for advertiser/acct_rep if regex missed
+    for row in rows[:10]:
+        for i, v in enumerate(row):
+            v_str = str(v or "")
+            if "Adertiser" in v_str or "Advertiser" in v_str:
+                # Value is in the next non-None cell
+                for nv in row[i+1:]:
+                    if nv:
+                        advertiser = str(nv).strip()
+                        break
+            if "Acct Rep" in v_str:
+                for nv in row[i+1:]:
+                    if nv:
+                        acct_rep = str(nv).strip()
+                        break
+
+    print(f"[SIERRA PARSER] Advertiser: {advertiser}")
+    print(f"[SIERRA PARSER] Acct Rep:   {acct_rep}")
+    print(f"[SIERRA PARSER] Market:     {market}")
+
+    # ── Find header row (contains "Language Block") ─────────────────────────
+    header_idx = None
+    header_row = None
+    for i, row in enumerate(rows):
+        if any("Language" in str(v or "") for v in row):
+            header_idx = i
+            header_row = row
+            break
+
+    if header_row is None:
+        raise ValueError("[SIERRA PARSER] Could not find Language Block header row in xlsx")
+
+    col_lang    = _col_index(header_row, "language")
+    col_daypart = _col_index(header_row, "day part", "daypart", "program")
+    col_length  = _col_index(header_row, "length")
+    col_start   = _col_index(header_row, "start")
+    col_end     = _col_index(header_row, "end")
+    col_type    = _col_index(header_row, "spot type", "type")
+    col_spots   = _col_index(header_row, "total spot", "spot #")
+    col_cost    = _col_index(header_row, "spot cost")
+
+    missing = [name for name, idx in [
+        ("Language Block", col_lang), ("Day Part/Program", col_daypart),
+        ("Start Date", col_start), ("End Date", col_end),
+        ("Spot Type", col_type), ("Total Spot #", col_spots), ("Spot Cost", col_cost),
+    ] if idx is None]
+    if missing:
+        raise ValueError(f"[SIERRA PARSER] Missing xlsx columns: {missing}")
+
+    # ── Parse data rows ────────────────────────────────────────────────────
+    sierra_lines: List[SierraLine] = []
+    _SKIP = {"subtotal", "airtime summary", "airtime summary:", "none", ""}
+
+    for row in rows[header_idx + 1:]:
+        if not row or all(v is None for v in row):
+            continue
+
+        lang_raw = str(row[col_lang] or "").strip()
+        if not lang_raw or lang_raw.lower() in _SKIP:
+            continue
+
+        daypart_raw  = str(row[col_daypart] or "").strip()
+        length_raw   = str(row[col_length]  or "30 seconds").strip() if col_length is not None else "30 seconds"
+        start_val    = row[col_start]
+        end_val      = row[col_end]
+        type_raw     = str(row[col_type]    or "COM").strip().upper()
+        spots_val    = row[col_spots]
+        cost_val     = row[col_cost]
+
+        # Dates: may be datetime objects or strings
+        if hasattr(start_val, 'strftime'):
+            start = start_val.strftime('%m/%d/%Y')
+        else:
+            start = _normalize_date(str(start_val or ""))
+
+        if hasattr(end_val, 'strftime'):
+            end = end_val.strftime('%m/%d/%Y')
+        else:
+            end = _normalize_date(str(end_val or ""))
+
+        # Skip summary/formula rows: must have valid MM/DD/YYYY dates
+        if not re.match(r'^\d{2}/\d{2}/\d{4}$', start) or not re.match(r'^\d{2}/\d{2}/\d{4}$', end):
+            continue
+
+        # Skip rows where language is numeric or a summary label
+        if re.match(r'^\d+\.?\d*$', lang_raw) or lang_raw.lower().startswith("total"):
+            continue
+
+        duration  = _parse_duration(length_raw)
+        spot_type = type_raw
+        is_bonus  = spot_type == "BON"
+
+        try:
+            total_spots = int(spots_val) if spots_val is not None else 0
+        except (ValueError, TypeError):
+            total_spots = 0
+
+        try:
+            rate = 0.0 if is_bonus else float(cost_val or 0)
+        except (ValueError, TypeError):
+            rate = 0.0
+
+        days, time_str = _parse_daypart(daypart_raw)
+        sierra_lines.append(SierraLine(
+            language_block=lang_raw,
+            days=days,
+            time_str=time_str,
+            duration_seconds=duration,
+            start_date=start,
+            end_date=end,
+            spot_type=spot_type,
+            total_spots=total_spots,
+            rate=rate,
+            is_bonus=is_bonus,
+        ))
+
+    if not sierra_lines:
+        raise ValueError("[SIERRA PARSER] No data lines found in xlsx")
+
+    print(f"[SIERRA PARSER] Parsed {len(sierra_lines)} Etere lines")
+    for sl in sierra_lines:
+        flag = "BONUS" if sl.is_bonus else f"${sl.rate:.2f}"
+        print(f"  {sl.language_block:<30} {sl.days:<8} {sl.time_str:<15} "
+              f"{sl.spot_type:<4} {sl.total_spots:>4} spots  {flag}")
+
+    return SierraOrder(
+        advertiser=advertiser,
+        market=market,
+        date=date_raw,
+        acct_rep=acct_rep,
+        lines=sierra_lines,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # MAIN PARSER
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -372,6 +553,13 @@ def parse_sierra_pdf(pdf_path: str) -> SierraOrder:
         acct_rep=acct_rep,
         lines=sierra_lines,
     )
+
+
+def parse_sierra(path: str) -> SierraOrder:
+    """Dispatch to PDF or Excel parser based on file extension."""
+    if Path(path).suffix.lower() in {".xlsx", ".xlsm"}:
+        return parse_sierra_xlsx(path)
+    return parse_sierra_pdf(path)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
