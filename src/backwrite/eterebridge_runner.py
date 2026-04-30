@@ -53,6 +53,55 @@ def is_available() -> bool:
     return _AVAILABLE
 
 
+def _snap_duration(seconds) -> int:
+    """Snap durations that are 1 second below a 5-second commercial boundary.
+
+    Etere stores :25/:15/:30 spots with frame-count rounding that can land
+    1 second short (e.g. 749 frames / 29.97fps = 24.99 → 25, but EtereBridge
+    rounds 25 → 30 via nearest-15 logic).  We capture raw seconds before
+    EtereBridge touches them and apply this correction instead.
+
+    :14 → :15, :24 → :25, :29 → :30, :59 → :60, etc.
+    """
+    try:
+        val = int(float(seconds) if seconds is not None else 0)
+        return val + 1 if val % 5 == 4 else val
+    except (ValueError, TypeError):
+        return int(seconds) if seconds else 0
+
+
+def _parse_raw_durations_from_csv(csv_bytes: bytes) -> list:
+    """Return the raw duration3 values (in seconds) from every data row.
+
+    Called before load_and_clean_data so we get the original values before
+    EtereBridge's nearest-15 rounding overwrites them.
+    """
+    import io as _io_mod
+    text = csv_bytes.decode("utf-8", errors="replace")
+    reader = csv.reader(_io_mod.StringIO(text))
+    rows = list(reader)
+    dur_col = None
+    data_start = None
+    for i, row in enumerate(rows):
+        for j, cell in enumerate(row):
+            if str(cell).strip().lower() == "duration3":
+                dur_col = j
+                data_start = i + 1
+                break
+        if dur_col is not None:
+            break
+    if dur_col is None or data_start is None:
+        return []
+    durations = []
+    for row in rows[data_start:]:
+        if len(row) > dur_col:
+            try:
+                durations.append(float(row[dur_col]))
+            except (ValueError, TypeError):
+                pass
+    return durations
+
+
 def get_language_options() -> list:
     """Return the list of valid language codes from EtereBridge config."""
     if not _AVAILABLE:
@@ -142,6 +191,10 @@ def run_eterebridge_pipeline(
         # 1. Extract bill-code parts from CSV row 2 (agency col 1, venue col 6)
         tb180, tb171 = _extract_header_values(tmp_path)
 
+        # Capture raw duration3 values before EtereBridge rounds them to nearest 15.
+        # EtereBridge maps :25 → :30 (round(25/15)*15), which is wrong for billboard spots.
+        _raw_durations = _parse_raw_durations_from_csv(csv_bytes)
+
         # 2. Load and clean: skip 3 header rows, rename Etere columns
         df = _file_processor.load_and_clean_data(tmp_path)
 
@@ -203,6 +256,11 @@ def run_eterebridge_pipeline(
         sort_cols = [c for c in ["Line", "Air Date", "Program"] if c in df.columns]
         if sort_cols:
             df = df.sort_values(sort_cols).reset_index(drop=True)
+
+        # 9. Restore correctly-snapped durations, overriding EtereBridge's nearest-15
+        #    rounding (:25 → :30, etc.).  Only applied when row counts match exactly.
+        if _raw_durations and "Length" in df.columns and len(_raw_durations) == len(df):
+            df["Length"] = [_snap_duration(d) for d in _raw_durations]
 
         return df
 
