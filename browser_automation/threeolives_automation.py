@@ -318,8 +318,8 @@ def _create_threeolives_contract(
         code=contract_code,
         description=description,
         customer_id=customer_id,
-        flight_start=order.flight_start,
-        flight_end=order.flight_end,
+        contract_start=order.flight_start,
+        contract_end=order.flight_end,
         charge_to=billing.get_charge_to(),
         invoice_header=billing.get_invoice_header(),
     )
@@ -329,11 +329,6 @@ def _create_threeolives_contract(
         return False
 
     print(f'[CONTRACT] ✓ Created: {contract_number}\n')
-
-    try:
-        from browser_automation.etere_client import consolidate_weeks
-    except ImportError:
-        from browser_automation.parsers.sagent_parser import consolidate_weeks
 
     line_count = 0
 
@@ -355,7 +350,7 @@ def _create_threeolives_contract(
         description_line = line.get_description(adjusted_days, etere_time)
 
         # Consolidate weekly spots into contiguous date ranges
-        ranges = consolidate_weeks(
+        ranges = etere.consolidate_weeks(
             weekly_spots=line.weekly_spots,
             week_start_dates=line.week_start_dates,
             flight_end=order.flight_end,
