@@ -155,6 +155,18 @@ class TimeAdvertisingLine:
             block_week_start = datetime.strptime(wk.week_start, '%m/%d/%Y')
             last_week_start = block_week_start
 
+            # If the week began in the past, advance start_date to the first
+            # actual spot day so Etere's scheduler won't reject the line.
+            today_dt = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+            effective_start = block_week_start
+            if block_week_start < today_dt and wk.day_spots:
+                _day_offset = {d: idx for idx, d in enumerate(DAY_ORDER)}
+                first_day = min(wk.day_spots, key=lambda d: _day_offset.get(d, 0))
+                trimmed = block_week_start + timedelta(days=_day_offset.get(first_day, 0))
+                if trimmed >= today_dt:
+                    effective_start = trimmed
+                    print(f"[TA] Week of {wk.week_start} is in the past — trimming start to {trimmed.strftime('%m/%d/%Y')}")
+
             # Extend block while consecutive weeks have the same day pattern
             j = i + 1
             while j < n:
@@ -176,7 +188,7 @@ class TimeAdvertisingLine:
 
             etere_lines.append({
                 'days': pattern,
-                'start_date': block_week_start.strftime('%m/%d/%Y'),
+                'start_date': effective_start.strftime('%m/%d/%Y'),
                 'end_date': block_end.strftime('%m/%d/%Y'),
                 'total_spots': block_total,
                 'per_day_max': 1,
