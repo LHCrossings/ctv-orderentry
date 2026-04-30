@@ -250,11 +250,9 @@ def _line_description(program: str) -> str:
 
 def _line_times(program: str, is_thematic: bool) -> tuple:
     """Return (time_from, time_to) in HH:MM 24h.
-    Thematic/ROS has no time constraint → 06:00–23:59.
-    Paid lines: extract trailing 'Xpm-Ypm' from program name.
+    Always try to extract a trailing 'Xpm-Ypm' range from the program name.
+    Falls back to 06:00–23:59 for ROS/thematic lines with no time specified.
     """
-    if is_thematic:
-        return ("06:00", "23:59")
     m = re.search(r'(\d+(?::\d+)?[ap]m-\d+(?::\d+)?[ap]m)\s*$', program, re.IGNORECASE)
     if m:
         return EtereClient.parse_time_range(m.group(1))
