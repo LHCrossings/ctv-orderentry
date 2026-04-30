@@ -94,6 +94,9 @@ def _parse_raw_durations_from_csv(csv_bytes: bytes) -> list:
         return []
     durations = []
     for row in rows[data_start:]:
+        # Blank line separates data rows from the footer summary — stop here.
+        if not any(str(cell).strip() for cell in row):
+            break
         if len(row) > dur_col:
             try:
                 durations.append(float(row[dur_col]))
