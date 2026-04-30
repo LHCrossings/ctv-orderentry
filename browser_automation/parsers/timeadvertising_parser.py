@@ -226,12 +226,16 @@ class TimeAdvertisingOrder:
     @property
     def flight_start(self) -> str:
         dates = [w.week_start for ln in self.paid_lines for w in ln.weeks]
+        if not dates:
+            dates = [w.week_start for ln in self.thematic_lines for w in ln.weeks]
         return min(dates) if dates else ""
 
     @property
     def flight_end(self) -> str:
-        """Saturday of the last paid week."""
+        """Sunday of the last week (covers all lines including thematic-only orders)."""
         dates = [w.week_start for ln in self.paid_lines for w in ln.weeks]
+        if not dates:
+            dates = [w.week_start for ln in self.thematic_lines for w in ln.weeks]
         if not dates:
             return ""
         last_wk = datetime.strptime(max(dates), '%m/%d/%Y')
