@@ -321,17 +321,21 @@ def build_placement_csv_from_db(contract_id: int) -> bytes:
             raise ValueError(f"Contract {contract_id} not found")
 
         cur.execute("""
-            SELECT tpa.id_contrattirighe   AS line_id,
-                   cr.DESCRIZIONE          AS line_desc,
-                   cr.DURATA               AS dur_frames,
-                   cr.IMPORTO              AS gross_rate,
-                   cr.COD_USER             AS market_id,
-                   cr.ORA_INIZIOF          AS daypart_start,
-                   cr.ORA_FINEF            AS daypart_end,
-                   CAST(tp.DATA AS DATE)   AS air_date,
-                   tp.ORA                  AS airtime_frames,
+            SELECT tpa.id_contrattirighe        AS line_id,
+                   cr.DESCRIZIONE               AS line_desc,
+                   ISNULL(f.DURATA, cr.DURATA)  AS dur_frames,
+                   cr.IMPORTO                   AS gross_rate,
+                   cr.COD_USER                  AS market_id,
+                   cr.ORA_INIZIOF               AS daypart_start,
+                   cr.ORA_FINEF                 AS daypart_end,
+                   CAST(tp.DATA AS DATE)         AS air_date,
+                   tp.ORA                        AS airtime_frames,
                    ISNULL(f.COD_PROGRA, 'NEED COPY') AS copy_code,
-                   ISNULL(tp.TITLE, '')    AS copy_title
+                   CASE
+                       WHEN ISNULL(f.DESCRIZIO, '') != ''
+                       THEN f.COD_PROGRA + ': ' + f.DESCRIZIO
+                       ELSE ISNULL(f.COD_PROGRA, '')
+                   END                           AS copy_title
             FROM TPALINSE tp
             JOIN trafficPalinse tpa ON tpa.id_tpalinse         = tp.ID_TPALINSE
             JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE    = tpa.id_contrattirighe
