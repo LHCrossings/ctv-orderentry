@@ -138,6 +138,10 @@ class OrderDetectionService:
         if self._is_saccountyvoters(first_page_text, second_page_text):
             return OrderType.SACCOUNTYVOTERS
 
+        # Sierra Donor Services (Crossings TV Media Plan — check before SCWA)
+        if self._is_sierra_donor(first_page_text):
+            return OrderType.SIERRADONOR
+
         # Sacramento County Water Agency (Crossings TV house template)
         if self._is_scwa(first_page_text):
             return OrderType.SCWA
@@ -147,6 +151,16 @@ class OrderDetectionService:
             return OrderType.IMPRENTA
 
         return OrderType.UNKNOWN
+
+    def _is_sierra_donor(self, text: str) -> bool:
+        """
+        Check if text matches a Sierra Donor Services Crossings TV Media Plan.
+
+        Markers:
+        - "Sierra Donor Services" (advertiser name, highly specific)
+        - "Crossings TV Media Plan" (house template title, distinct from SCWA's "Media Proposal")
+        """
+        return "Sierra Donor Services" in text and "Crossings TV Media Plan" in text
 
     def _is_scwa(self, text: str) -> bool:
         """

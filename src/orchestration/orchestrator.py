@@ -52,6 +52,7 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
     OrderType.PROSIO:            ("browser_automation.prosio_automation",             "gather_prosio_inputs",            "Prosio"),
     OrderType.DART:              ("browser_automation.dart_automation",                "gather_dart_inputs",               "DART / Asian Channel Dallas"),
     OrderType.POLARIS:           ("browser_automation.polaris_automation",             "gather_polaris_inputs",            "Polaris Media Group"),
+    OrderType.SIERRADONOR:       ("browser_automation.sierra_automation",              "gather_sierra_inputs",             "Sierra Donor Services"),
 }
 
 

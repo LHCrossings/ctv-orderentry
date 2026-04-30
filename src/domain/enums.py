@@ -41,6 +41,7 @@ class OrderType(Enum):
     DART = "dart"
     POLARIS = "polaris"
     XML = "xml"
+    SIERRADONOR = "sierradonor"
     UNKNOWN = "unknown"
 
     def requires_block_refresh(self) -> bool:
@@ -296,6 +297,7 @@ class SeparationInterval(Enum):
     WALLRICH = (25, 0, 0)
     PROSIO = (15, 0, 0)
     POLARIS = (15, 0, 0)
+    SIERRADONOR = (15, 0, 0)
     DEFAULT = (15, 0, 0)
 
     @classmethod
@@ -326,5 +328,6 @@ class SeparationInterval(Enum):
             OrderType.WALLRICH: cls.WALLRICH.value,
             OrderType.PROSIO: cls.PROSIO.value,
             OrderType.POLARIS: cls.POLARIS.value,
+            OrderType.SIERRADONOR: cls.SIERRADONOR.value,
         }
         return mapping.get(order_type, cls.DEFAULT.value)
