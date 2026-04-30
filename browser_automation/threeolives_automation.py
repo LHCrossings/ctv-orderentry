@@ -346,7 +346,6 @@ def _create_threeolives_contract(
         rate = float(line.rate)
         duration_s = 30
 
-        block_pfx = line.get_block_prefixes()
         description_line = line.get_description(adjusted_days, etere_time)
 
         # Consolidate weekly spots into contiguous date ranges
@@ -365,7 +364,7 @@ def _create_threeolives_contract(
 
             print(f'  Line {line_count}: {description_line!r}')
             print(f'    Rate=${rate:.2f}  {"[BONUS]" if line.is_bonus else ""}')
-            print(f'    Days={adjusted_days}  Time={etere_time}  Blocks={block_pfx}')
+            print(f'    Days={adjusted_days}  Time={etere_time}')
             print(f'    {rng["start_date"]} – {rng["end_date"]}  '
                   f'{spw} spots/wk × {weeks} wks = {total_spots}')
 
@@ -387,7 +386,6 @@ def _create_threeolives_contract(
                 is_bookend=False,
                 is_billboard=False,
                 max_daily_run=max_daily,
-                block_prefixes=block_pfx,
             )
 
             if not ok:
