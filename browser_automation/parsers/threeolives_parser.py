@@ -168,6 +168,16 @@ class ThreeOlivesLine:
         _, time = parse_daypart(self.time_str)
         return time
 
+    @property
+    def days(self) -> str:
+        """Parsed day pattern — exposed for the parser bridge normalizer."""
+        return self.get_etere_days()
+
+    @property
+    def time(self) -> str:
+        """Parsed time range — exposed for the parser bridge normalizer."""
+        return self.get_etere_time()
+
     def get_block_prefixes(self) -> List[str]:
         return _block_prefixes(self.program)
 

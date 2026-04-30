@@ -47,6 +47,7 @@ _DISPLAY_NAMES = {
     "TIMEADVERTISING": "Time Advertising",
     "WALLRICH":        "Wallrich",
     "WORLDLINK":       "WorldLink",
+    "THREEOLIVES":     "3 Olives Media",
     "XML":             "AAAA XML",
 }
 
@@ -77,6 +78,7 @@ _REGISTRY = {
     "PROSIO":           ("browser_automation.parsers.prosio_parser",           "parse_prosio_excel"),
     "DART":             ("browser_automation.parsers.dart_parser",             "parse_dart_xlsx"),
     "POLARIS":          ("browser_automation.parsers.polaris_parser",          "parse_polaris_file"),
+    "THREEOLIVES":      ("browser_automation.parsers.threeolives_parser",      "parse_threeolives"),
 }
 
 _MISSING = object()
