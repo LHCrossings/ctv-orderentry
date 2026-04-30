@@ -248,7 +248,9 @@ def _week_dates_to_flight(week_dates: List[str]) -> Tuple[str, str]:
     starts = parsed
     flight_start = starts[0]
     flight_end = starts[-1] + datetime.timedelta(days=6)
-    return (flight_start.strftime('%-m/%-d/%Y'), flight_end.strftime('%-m/%-d/%Y'))
+    def _fmt(d: datetime.datetime) -> str:
+        return f"{d.month}/{d.day}/{d.year}"
+    return (_fmt(flight_start), _fmt(flight_end))
 
 
 def _parse_dollar(val) -> Decimal:
