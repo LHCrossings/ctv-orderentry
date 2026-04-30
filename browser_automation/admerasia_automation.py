@@ -402,9 +402,9 @@ def gather_admerasia_inputs(pdf_path: str) -> Optional[dict]:
         print("[LINES] ✗ No valid lines found in PDF")
         return None
 
-    # Show line summary
+    # Show line summary — spot_length shown so operator can catch duration mismatches before entry
     for i, line_spec in enumerate(etere_lines, 1):
-        print(f"  Line {i}: {line_spec['days']} {line_spec['time']} "
+        print(f"  Line {i}: :{line_spec.get('spot_length', '?')}s  {line_spec['days']} {line_spec['time']} "
               f"| {line_spec['start_date']} - {line_spec['end_date']} "
               f"| {line_spec['total_spots']}x @ ${line_spec['rate']}")
 

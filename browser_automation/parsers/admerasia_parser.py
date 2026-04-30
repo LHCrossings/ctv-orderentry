@@ -974,15 +974,18 @@ def _parse_line_items_table_based(pdf: pdfplumber.PDF, week_start_dates: List[da
     if time_overrides is None:
         time_overrides = {}
     
-    # Extract tables from PDF
-    page = pdf.pages[0]
-    tables = page.extract_tables()
-    
+    # Extract tables from all pages so that :30 sections on a continuation table
+    # (split by a horizontal rule in the PDF) or on page 2+ are not missed.
+    tables = []
+    for p in pdf.pages:
+        tables.extend(p.extract_tables())
+
     if not tables:
         raise ValueError("Could not find any tables in PDF")
-    
+
     # Find the broadcast order table and its row offset
     broadcast_table, row_offset = _find_broadcast_table(tables)
+    main_table_idx = next((i for i, t in enumerate(tables) if t is broadcast_table), 0)
     
     if len(broadcast_table) < row_offset + 3:
         raise ValueError("Broadcast order table has insufficient rows")
@@ -1043,9 +1046,29 @@ def _parse_line_items_table_based(pdf: pdfplumber.PDF, week_start_dates: List[da
     
     spot_length = 15  # Default — updated per-row when a length marker (":15", ":30") appears in col 0
 
-    # Parse data rows (starting from first data row)
-    for row_idx in range(row_offset + 2, len(broadcast_table)):
-        row = broadcast_table[row_idx]
+    # Build a combined list of data rows from the main table plus any continuation
+    # tables that follow it (e.g. :30 section split off by a horizontal rule or page break).
+    data_rows = list(broadcast_table[row_offset + 2:])
+    for cont_table in tables[main_table_idx + 1:]:
+        if not cont_table:
+            continue
+        # Skip tables that are unrelated (e.g. a fresh broadcast order on a later page)
+        cont_text = ' '.join(str(c) for row in cont_table for c in row if c)
+        if 'Broadcast Order' in cont_text:
+            break
+        # Determine where data starts in the continuation table.
+        # If it repeats the column headers, skip past them + day-numbers row.
+        sub_data_start = 0
+        for sub_idx, sub_row in enumerate(cont_table):
+            sub_row_text = ' '.join(str(c) for c in sub_row if c)
+            if 'Program' in sub_row_text and 'Day Part' in sub_row_text:
+                sub_data_start = sub_idx + 2  # skip header + day-numbers row
+                break
+        data_rows.extend(cont_table[sub_data_start:])
+        print(f"[PARSE] Appended {len(cont_table) - sub_data_start} rows from continuation table")
+
+    # Parse data rows
+    for row_idx, row in enumerate(data_rows, start=row_offset + 2):
 
         # Stop at footer/totals row
         if len(row) < 6:
