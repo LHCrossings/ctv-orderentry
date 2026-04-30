@@ -92,6 +92,7 @@ class OrderProcessingService:
         OrderType.DART:             "_process_dart_order",
         OrderType.POLARIS:          "_process_polaris_order",
         OrderType.SIERRADONOR:      "_process_sierra_order",
+        OrderType.THREEOLIVES:      "_process_threeolives_order",
     }
 
     def __init__(
@@ -2476,6 +2477,65 @@ class OrderProcessingService:
             print(f"\n✗ Sierra Donor processing failed: {exc}")
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.SIERRADONOR,
+                error_message=error_detail,
+            )
+
+    def _process_threeolives_order(
+        self,
+        order: Any,
+        shared_session: Any,
+    ) -> "ProcessingResult":
+        """Process 3 Olives Media order."""
+        try:
+            from browser_automation.threeolives_automation import process_threeolives_order
+
+            print(f"\n{'='*70}")
+            print("PROCESSING 3 OLIVES MEDIA ORDER")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            if order.customer_name:
+                print(f"Customer: {order.customer_name}")
+            print(f"{'='*70}\n")
+
+            pre_gathered_inputs = order.order_input if order.order_input else None
+
+            def _run(driver, session):
+                success = process_threeolives_order(
+                    driver,
+                    str(order.pdf_path),
+                    shared_session=session,
+                    pre_gathered_inputs=pre_gathered_inputs,
+                )
+                if success:
+                    print("\n✓ 3 Olives Media order processed successfully")
+                    return ProcessingResult(success=True, contracts=[], order_type=OrderType.THREEOLIVES)
+                print("\n✗ 3 Olives Media order processing failed")
+                return ProcessingResult(
+                    success=False, contracts=[], order_type=OrderType.THREEOLIVES,
+                    error_message="3 Olives Media processing failed - check browser output for details",
+                )
+
+            if shared_session is None:
+                try:
+                    from etere_session import EtereSession
+                except ImportError:
+                    return ProcessingResult(
+                        success=False, contracts=[], order_type=OrderType.THREEOLIVES,
+                        error_message="EtereSession import failed",
+                    )
+                with EtereSession() as session:
+                    session.set_market("NYC")
+                    return _run(session.driver, session)
+
+            driver = shared_session.driver if hasattr(shared_session, 'driver') else shared_session
+            return _run(driver, shared_session)
+
+        except Exception as exc:
+            import traceback
+            error_detail = f"3 Olives Media processing error: {str(exc)}\n{traceback.format_exc()}"
+            print(f"\n✗ 3 Olives Media processing failed: {exc}")
+            return ProcessingResult(
+                success=False, contracts=[], order_type=OrderType.THREEOLIVES,
                 error_message=error_detail,
             )
 
