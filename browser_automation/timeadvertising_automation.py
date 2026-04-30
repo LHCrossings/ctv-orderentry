@@ -303,12 +303,13 @@ def _create_timeadvertising_contract(
         line_count = 0
 
         for ln in order.lines:
-            spot_code  = 10 if ln.is_thematic else 2
+            spot_code  = 10 if ln.rate == 0 else 2   # BNS if free, COMS if paid
             time_from, time_to = _line_times(ln.program, ln.is_thematic)
             desc = _line_description(ln.program)
             etere_specs = ln.get_etere_lines()
 
-            print(f"\n  {'THEMATIC' if ln.is_thematic else 'PAID'}: {desc}")
+            kind = "FREE" if ln.rate == 0 else "PAID"
+            print(f"\n  {kind}: {desc}")
             print(f"    Time: {time_from}–{time_to}  |  Splits into {len(etere_specs)} Etere line(s)")
 
             for spec in etere_specs:
