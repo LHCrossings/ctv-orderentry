@@ -301,8 +301,6 @@ def _create_threeolives_contract(
     inputs: dict,
 ) -> bool:
     """Create the Etere contract header and all lines."""
-    from browser_automation.etere_client import SPOT_CODES
-
     contract_code = inputs['contract_code']
     description = inputs['description']
     market = inputs['market']
@@ -310,8 +308,8 @@ def _create_threeolives_contract(
     separation = inputs.get('separation', THREEOLIVES_SEPARATION)
 
     billing = BillingType.CUSTOMER_SHARE_AGENCY  # 3 Olives is an agency
-    spot_code_paid = SPOT_CODES.get('Paid Commercial', 2)
-    spot_code_bns = SPOT_CODES.get('BNS / Bonus Spot', 10)
+    spot_code_paid = EtereClient.SPOT_CODES.get('Paid Commercial', 2)
+    spot_code_bns = EtereClient.SPOT_CODES.get('BNS / Bonus Spot', 10)
 
     print(f'[CONTRACT] Creating: {contract_code}')
     print(f'[CONTRACT] Market: {market}  Customer ID: {customer_id}')
