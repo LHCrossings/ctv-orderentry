@@ -1046,6 +1046,48 @@ def _parse_line_items_table_based(pdf: pdfplumber.PDF, week_start_dates: List[da
     
     spot_length = 15  # Default — updated per-row when a length marker (":15", ":30") appears in col 0
 
+    # Coordinate-based length section detection.
+    # pdfplumber sometimes merges ':15' and ':30' labels into one cell (e.g. ':15\n:30')
+    # when the PDF's horizontal divider between sections is thin.  In that case the
+    # col0 sticky regex only picks up the first match (':15') and every subsequent row
+    # inherits it — even rows that visually sit below the ':30' label.
+    #
+    # Fix: extract word y-positions from the page.  If multiple length markers are
+    # found in the Length column, determine each program row's section by comparing
+    # the y-position of its opening '(' character (e.g. '(M)', '(S-U)') against the
+    # y-positions of the ':15' / ':30' labels.
+    _page0_words = pdf.pages[0].extract_words()
+
+    # Find all ':XX' labels in the Length column (x < 80)
+    _length_boundaries = sorted(
+        [(w['top'], int(re.match(r'^:(\d+)', w['text']).group(1)))
+         for w in _page0_words
+         if w['x0'] < 80 and re.match(r'^:(\d+)', w['text'])],
+        key=lambda x: x[0]
+    )
+    print(f"[PARSE] Length section y-boundaries: {_length_boundaries}")
+
+    # If there are multiple length markers, build a row_idx → y lookup.
+    # Use '$' signs in the rate column as row anchors — each program row has exactly
+    # one '$' in that column, at a consistent x across the page.  Find the modal x
+    # of all '$' signs in the data area (= rate column x), then collect all '$' y-values
+    # at that x.  This works regardless of the program column position.
+    _row_idx_to_y: dict = {}
+    if len(_length_boundaries) > 1:
+        from collections import Counter
+        _dollar_pairs = [
+            (round(w['top'], 1), round(w['x0'], 0))
+            for w in _page0_words
+            if w['text'] == '$' and w['top'] > 260 and w['top'] < 360
+        ]
+        if _dollar_pairs:
+            _rate_x = Counter(x for _, x in _dollar_pairs).most_common(1)[0][0]
+            _dollar_ys = sorted(set(
+                y for y, x in _dollar_pairs if abs(x - _rate_x) <= 5
+            ))
+            _row_idx_to_y = {row_offset + 2 + i: y for i, y in enumerate(_dollar_ys)}
+        print(f"[PARSE] Program row y-positions (via $ signs): {_row_idx_to_y}")
+
     # Build a combined list of data rows from the main table plus any continuation
     # tables that follow it (e.g. :30 section split off by a horizontal rule or page break).
     data_rows = list(broadcast_table[row_offset + 2:])
@@ -1074,9 +1116,21 @@ def _parse_line_items_table_based(pdf: pdfplumber.PDF, week_start_dates: List[da
         if len(row) < 6:
             continue
 
-        # Update spot_length whenever col 0 has a new length marker (:15, :30, etc.)
+        # Determine spot_length for this row.
+        # If multiple length markers exist (e.g. ':15' and ':30' in the same Length
+        # column), use y-coordinate comparison to pick the correct section.
+        # Otherwise fall back to the col0 sticky approach.
         col0 = str(row[0] or "").strip()
-        if col0:
+        if len(_length_boundaries) > 1 and row_idx in _row_idx_to_y:
+            row_y = _row_idx_to_y[row_idx]
+            new_sl = _length_boundaries[0][1]  # default = first (topmost) section
+            for bound_y, bound_len in _length_boundaries:
+                if bound_y <= row_y:
+                    new_sl = bound_len
+            if new_sl != spot_length:
+                print(f"[PARSE] Row {row_idx}: spot length → :{new_sl}s (coord y={row_y})")
+                spot_length = new_sl
+        elif col0:
             m = re.search(r':(\d+)', col0)
             if m:
                 spot_length = int(m.group(1))
