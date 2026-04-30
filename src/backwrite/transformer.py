@@ -240,6 +240,8 @@ def parse_csv(data: bytes) -> Tuple[CsvHeader, List[SpotRow]]:
 
         try:
             duration_s = int(row.get("duration3", 30) or 30)
+            if duration_s % 5 == 4:   # snap 1-frame-short: :14→:15, :29→:30, :59→:60
+                duration_s += 1
         except (ValueError, TypeError):
             duration_s = 30
 
