@@ -285,7 +285,7 @@ def build_placement_csv_from_db(contract_id: int) -> bytes:
     def _format_copy(title: str, code: str) -> str:
         if not code:
             return "NEED COPY"
-        if not title:
+        if not title or title == code:
             return code
         prefix = title.split(":")[0].strip() if ":" in title else ""
         if prefix == code:
