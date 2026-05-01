@@ -250,6 +250,7 @@ def run_eterebridge_pipeline(
             estimate     = user_inputs.get("estimate",     ""),
             contract     = user_inputs.get("contract",     ""),
             language     = language_dict,
+            is_worldlink = user_inputs.get("is_worldlink", False),
         )
 
         # 7. Compute Month column (Calendar vs. Broadcast logic)
@@ -304,14 +305,19 @@ def get_language_counts(csv_bytes: bytes) -> dict:
 # Private helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-def build_placement_csv_from_db(contract_id: int) -> bytes:
+def build_placement_csv_from_db(
+    contract_id: int,
+    date_from: str = None,
+    date_to: str = None,
+    isci_only: bool = False,
+) -> bytes:
     """
     Generate an EtereBridge-compatible placement confirmation CSV directly
     from the database, bypassing the slow Etere web report fetch.
 
-    Produces the same 4-row header + data structure the Etere web report
-    emits so the result can be fed straight into run_eterebridge_pipeline()
-    or parse_csv().
+    date_from / date_to: ISO date strings (YYYY-MM-DD) to filter airings.
+    isci_only: write just the ISCI code in the Media/bookingcode2 column
+               instead of the formatted "title (code)" string.
     """
     import csv as _csv
     import io as _io
@@ -399,8 +405,12 @@ def build_placement_csv_from_db(contract_id: int) -> bytes:
             JOIN CONTRATTITESTATA ct ON ct.ID_CONTRATTITESTATA = cr.ID_CONTRATTITESTATA
             LEFT JOIN FILMATI f ON f.ID_FILMATI = tp.ID_FILMATI
             WHERE ct.ID_CONTRATTITESTATA = %d
+            %s
             ORDER BY CAST(tp.DATA AS DATE), tp.ORA
-        """ % contract_id)
+        """ % (contract_id, (
+            f"AND CAST(tp.DATA AS DATE) >= '{date_from}' AND CAST(tp.DATA AS DATE) <= '{date_to}'"
+            if date_from and date_to else ""
+        )))
         spots = cur.fetchall()
 
     if not spots:
@@ -450,7 +460,7 @@ def build_placement_csv_from_db(contract_id: int) -> bytes:
             market_name,
             date_str,
             _frames_to_hhmmss(airtime_frames),   # airtimep = actual airtime HH:MM:SS
-            _format_copy(s.get("copy_title", ""), s["copy_code"]),  # bookingcode2
+            (s["copy_code"] or "NEED COPY") if isci_only else _format_copy(s.get("copy_title", ""), s["copy_code"]),  # bookingcode2
             daypart_range,                        # timerange2 = contract line daypart
             s["line_desc"] or "",
         ])
@@ -490,11 +500,12 @@ def _apply_user_inputs(
     estimate:     str,
     contract:     str,
     language:     dict,
+    is_worldlink: bool = False,
 ) -> pd.DataFrame:
     """
     Stamp user-provided metadata onto every row and reorder columns to
     EtereBridge's final_columns order.  Mirrors EtereBridge's apply_user_inputs()
-    but without the WorldLink branch and without calling verify_languages().
+    without calling verify_languages().
     """
     df["Billing Type"] = billing_type
     df["Revenue Type"] = revenue_type
@@ -508,6 +519,10 @@ def _apply_user_inputs(
     df["Type"] = df["Gross Rate"].apply(
         lambda r: "BNS" if (pd.isna(r) or float(r) == 0) else "COM"
     )
+
+    # WorldLink: copy Market → Make Good (per EtereBridge WorldLink branch)
+    if is_worldlink and "Market" in df.columns:
+        df["Make Good"] = df["Market"]
 
     # Ensure every final column exists before reordering
     for col in _eb_app_config.final_columns:

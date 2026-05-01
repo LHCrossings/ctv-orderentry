@@ -232,6 +232,103 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def coop_invoicing(request: Request):
         return templates.TemplateResponse(request, "billing/coop_invoicing.html")
 
+    @router.get("/billing/worldlink-placement", response_class=HTMLResponse)
+    async def worldlink_placement(request: Request):
+        return templates.TemplateResponse(request, "billing/worldlink_placement.html")
+
+    @router.post("/billing/worldlink-placement/generate")
+    async def worldlink_placement_generate(request: Request):
+        import re
+        import io as _io
+        import pandas as pd
+        from fastapi.responses import StreamingResponse
+        from browser_automation.etere_direct_client import connect as _db_connect
+        from src.backwrite.eterebridge_runner import build_placement_csv_from_db, run_eterebridge_pipeline
+
+        body = await request.json()
+        date_from    = body.get("date_from")
+        date_to      = body.get("date_to")
+        sales_person = body.get("sales_person", "House")
+        agency_fee   = float(body.get("agency_fee", 0.15))
+
+        if not date_from or not date_to:
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"error": "date_from and date_to are required"}, status_code=400)
+
+        # Find all agency 133 contracts with active lines in the date range
+        with _db_connect() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT DISTINCT ct.ID_CONTRATTITESTATA, ct.COD_CONTRATTO, ct.DESCRIZIONE
+                FROM CONTRATTITESTATA ct
+                JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTITESTATA = ct.ID_CONTRATTITESTATA
+                WHERE ct.AGENZIA = 133
+                  AND cr.DATA_INIZIO <= %s
+                  AND cr.DATA_FINE   >= %s
+                  AND ct.COD_CONTRATTO != 'TESTORDERFORLEE'
+                ORDER BY ct.ID_CONTRATTITESTATA
+            """, (date_to, date_from))
+            contracts = cur.fetchall()
+
+        if not contracts:
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"error": "No WorldLink contracts found for that date range"}, status_code=404)
+
+        frames = []
+        skipped = []
+        for row in contracts:
+            contract_id, cod_contratto, description = row[0], row[1], row[2]
+            try:
+                m = re.search(r'(\d+)\s*$', str(cod_contratto))
+                wl_tracking = m.group(1) if m else ""
+
+                csv_bytes = build_placement_csv_from_db(
+                    contract_id,
+                    date_from=date_from,
+                    date_to=date_to,
+                    isci_only=True,
+                )
+                user_inputs = {
+                    "sales_person":  sales_person,
+                    "billing_type":  "Broadcast",
+                    "revenue_type":  "Direct Response Sales",
+                    "agency_flag":   "Agency",
+                    "agency_fee":    agency_fee,
+                    "estimate":      wl_tracking,
+                    "contract":      str(cod_contratto),
+                    "affidavit":     "Y",
+                    "is_worldlink":  True,
+                }
+                df = run_eterebridge_pipeline(csv_bytes, user_inputs)
+                if df is not None and not df.empty:
+                    frames.append(df)
+            except Exception as exc:
+                skipped.append(f"{cod_contratto}: {exc}")
+
+        if not frames:
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"error": "No spot data found", "skipped": skipped}, status_code=404)
+
+        combined   = pd.concat(frames, ignore_index=True)
+        total_rows = len(combined)
+
+        buf = _io.BytesIO()
+        with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+            combined.to_excel(writer, index=False, sheet_name="Run Sheet")
+        buf.seek(0)
+
+        filename = f"WL_Placement_{date_from}_{date_to}.xlsx"
+        headers = {
+            "Content-Disposition":  f"attachment; filename={filename}",
+            "X-Contract-Count":     str(len(frames)),
+            "X-Spot-Count":         str(total_rows),
+        }
+        return StreamingResponse(
+            buf,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers=headers,
+        )
+
     @router.get("/scripts", response_class=HTMLResponse)
     async def scripts(request: Request):
         return templates.TemplateResponse(request, "scripts.html")

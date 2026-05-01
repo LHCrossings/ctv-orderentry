@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>WorldLink Placement — Control Room</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"/>
+<link rel="stylesheet" href="/static/css/_variables.css"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg-secondary);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:var(--text-primary);min-height:100vh;}
+.cr-header{background:linear-gradient(135deg,var(--nord0) 0%,var(--nord1) 100%);padding:0 24px;box-shadow:0 2px 8px rgba(46,52,64,0.25);}
+.cr-header-inner{max-width:960px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:20px 0;}
+.cr-logo{display:flex;align-items:center;gap:14px;}
+.cr-back{color:var(--nord4);font-size:1.1rem;text-decoration:none;line-height:1;margin-right:4px;transition:color 0.15s;}
+.cr-back:hover{color:var(--nord6);}
+.cr-logo-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--nord13) 0%,var(--nord12) 100%);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.cr-logo h1{font-size:1.1rem;font-weight:700;color:var(--nord6);letter-spacing:-0.02em;line-height:1.2;}
+.cr-logo h1 span{color:var(--nord13);}
+.cr-logo-sub{font-size:0.7rem;color:var(--nord4);font-weight:400;letter-spacing:0.06em;text-transform:uppercase;margin-top:1px;}
+.cr-badge{font-size:0.7rem;font-weight:500;color:var(--nord4);background:rgba(255,255,255,0.08);padding:4px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.12);letter-spacing:0.04em;}
+.container{max-width:680px;margin:0 auto;padding:40px 24px;}
+.page-header{text-align:center;margin-bottom:32px;}
+.page-header h2{font-size:22px;font-weight:700;color:var(--text-primary);letter-spacing:-0.02em;margin-bottom:6px;}
+.page-header p{color:var(--text-muted);font-size:13px;line-height:1.5;}
+.panel{background:var(--nord6);border:1px solid var(--border-color);border-radius:12px;padding:24px;margin-bottom:16px;box-shadow:0 1px 4px var(--shadow-color);}
+.panel-title{font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-muted);margin-bottom:16px;}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+.field-row.three{grid-template-columns:1fr 1fr 1fr;}
+.field-group{display:flex;flex-direction:column;gap:5px;}
+.field-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;font-weight:500;}
+.field-input{background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;padding:8px 10px;color:var(--text-primary);font-size:13px;font-family:inherit;outline:none;transition:border-color 0.2s;width:100%;}
+.field-input:focus{border-color:var(--nord10);box-shadow:0 0 0 3px rgba(94,129,172,0.12);}
+.field-input::placeholder{color:var(--nord3);}
+.btn-generate{width:100%;padding:12px;background:var(--nord10);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:opacity 0.15s;margin-top:6px;}
+.btn-generate:hover{opacity:0.88;}
+.btn-generate:disabled{opacity:0.5;cursor:not-allowed;}
+.status-area{margin-top:20px;padding:14px 18px;border-radius:8px;font-size:13px;display:none;}
+.status-area.info{background:rgba(94,129,172,0.1);border:1px solid rgba(94,129,172,0.25);color:var(--nord10);}
+.status-area.success{background:rgba(163,190,140,0.12);border:1px solid rgba(163,190,140,0.35);color:var(--nord14);}
+.status-area.error{background:rgba(191,97,106,0.1);border:1px solid rgba(191,97,106,0.3);color:var(--nord11);}
+.status-area.visible{display:block;}
+.progress-detail{font-size:11px;color:var(--text-muted);margin-top:6px;}
+.hint{font-size:11px;color:var(--text-muted);margin-top:4px;}
+</style>
+</head>
+<body>
+
+<div class="cr-header">
+  <div class="cr-header-inner">
+    <div class="cr-logo">
+      <a href="/billing" class="cr-back">&#8592;</a>
+      <div class="cr-logo-icon">📋</div>
+      <div>
+        <h1>WorldLink <span>Placement</span></h1>
+        <div class="cr-logo-sub">Control Room · Billing</div>
+      </div>
+    </div>
+    <span class="cr-badge">WorldLink · Agency 133</span>
+  </div>
+</div>
+
+<div class="container">
+  <div class="page-header">
+    <h2>WorldLink Placement Report</h2>
+    <p>Generates a single aggregated Run Sheet for all WorldLink orders active in the selected broadcast month.</p>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Broadcast Month Date Range</div>
+    <div class="field-row">
+      <div class="field-group">
+        <label class="field-label">Date From</label>
+        <input type="text" id="dateFrom" class="field-input" placeholder="03/30/2026" maxlength="10"
+               onblur="formatDateInput(this)"/>
+        <div class="hint">Type 330 → 03/30/2026</div>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Date To</label>
+        <input type="text" id="dateTo" class="field-input" placeholder="04/26/2026" maxlength="10"
+               onblur="formatDateInput(this)"/>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Output Settings</div>
+    <div class="field-row">
+      <div class="field-group">
+        <label class="field-label">Sales Person</label>
+        <input type="text" id="salesPerson" class="field-input" placeholder="House" value="House"/>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Agency Fee</label>
+        <input type="number" id="agencyFee" class="field-input" value="15" min="0" max="100" step="0.5"/>
+        <div class="hint">Percent (15 = 15%)</div>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn-generate" id="btnGenerate" onclick="generate()">Generate WorldLink Placement</button>
+
+  <div class="status-area" id="statusArea"></div>
+</div>
+
+<script>
+function parseDateInput(val) {
+    val = val.trim().replace(/[\/\-]/g, '');
+    if (!val) return null;
+    const year = new Date().getFullYear();
+    let m, d, y;
+    if (/^\d{3}$/.test(val)) {
+        m = '0' + val.slice(0, 1); d = val.slice(1); y = year;
+    } else if (/^\d{4}$/.test(val)) {
+        m = val.slice(0, 2); d = val.slice(2); y = year;
+    } else if (/^\d{6}$/.test(val)) {
+        m = val.slice(0, 2); d = val.slice(2, 4); y = 2000 + parseInt(val.slice(4));
+    } else if (/^\d{8}$/.test(val)) {
+        m = val.slice(0, 2); d = val.slice(2, 4); y = val.slice(4);
+    } else {
+        return null;
+    }
+    return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+function formatDateInput(el) {
+    const parsed = parseDateInput(el.value);
+    if (parsed) {
+        const [y, m, d] = parsed.split('-');
+        el.value = `${m}/${d}/${y}`;
+    }
+}
+
+function setStatus(msg, type, detail) {
+    const el = document.getElementById('statusArea');
+    el.className = `status-area visible ${type}`;
+    el.innerHTML = msg + (detail ? `<div class="progress-detail">${detail}</div>` : '');
+}
+
+async function generate() {
+    const dateFrom = parseDateInput(document.getElementById('dateFrom').value);
+    const dateTo   = parseDateInput(document.getElementById('dateTo').value);
+
+    if (!dateFrom || !dateTo) {
+        setStatus('Please enter valid From and To dates.', 'error');
+        return;
+    }
+
+    const salesPerson = document.getElementById('salesPerson').value.trim() || 'House';
+    const agencyFee   = parseFloat(document.getElementById('agencyFee').value) / 100;
+
+    const btn = document.getElementById('btnGenerate');
+    btn.disabled = true;
+    btn.textContent = 'Generating…';
+    setStatus('Finding WorldLink contracts and pulling placement data…', 'info',
+              'This may take 30–60 seconds for a full broadcast month.');
+
+    try {
+        const resp = await fetch('/billing/worldlink-placement/generate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({date_from: dateFrom, date_to: dateTo,
+                                  sales_person: salesPerson, agency_fee: agencyFee})
+        });
+
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({error: resp.statusText}));
+            throw new Error(err.error || resp.statusText);
+        }
+
+        // Trigger download
+        const blob = await resp.blob();
+        const cd   = resp.headers.get('Content-Disposition') || '';
+        const fnMatch = cd.match(/filename=(.+)/);
+        const filename = fnMatch ? fnMatch[1] : 'WL_Placement.xlsx';
+
+        const url = URL.createObjectURL(blob);
+        const a   = document.createElement('a');
+        a.href = url; a.download = filename; a.click();
+        URL.revokeObjectURL(url);
+
+        const contractCount = resp.headers.get('X-Contract-Count') || '?';
+        const spotCount     = resp.headers.get('X-Spot-Count')     || '?';
+        setStatus(`Done — ${contractCount} contracts, ${spotCount} spots exported.`, 'success');
+    } catch (e) {
+        setStatus(`Error: ${e.message}`, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Generate WorldLink Placement';
+    }
+}
+</script>
+
+</body>
+</html>
