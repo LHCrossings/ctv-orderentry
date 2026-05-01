@@ -308,7 +308,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                            Interv_Committente, INTERVALLO, INTERV_CONTRATTO,
                            COD_USER
                     FROM   CONTRATTIRIGHE
-                    WHERE  ID_CONTRATTITESTATA = ?
+                    WHERE  ID_CONTRATTITESTATA = %s
                     ORDER  BY ID_CONTRATTIRIGHE
                 """, [contract_id])
                 rows = cursor.fetchall()
@@ -364,15 +364,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             def _to_frames(minutes: int) -> int:
                 return round(minutes * 60 * _FPS)
 
-            placeholders = ",".join("?" * len(line_ids))
+            placeholders = ",".join(["%s"] * len(line_ids))
             with _db_connect() as conn:
                 cursor = conn.cursor()
                 # INTERVALLO = Order, INTERV_CONTRATTO = Event (old Etere web had these swapped)
                 cursor.execute(f"""
                     UPDATE CONTRATTIRIGHE
-                    SET    Interv_Committente = ?,
-                           INTERVALLO         = ?,
-                           INTERV_CONTRATTO   = ?
+                    SET    Interv_Committente = %s,
+                           INTERVALLO         = %s,
+                           INTERV_CONTRATTO   = %s
                     WHERE  ID_CONTRATTIRIGHE IN ({placeholders})
                 """, [_to_frames(customer), _to_frames(order), _to_frames(event), *line_ids])
                 conn.commit()
