@@ -238,12 +238,18 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     @router.post("/billing/worldlink-placement/generate")
     async def worldlink_placement_generate(request: Request):
-        import re
         import io as _io
+        import re
+
         import pandas as pd
         from fastapi.responses import StreamingResponse
+
         from browser_automation.etere_direct_client import connect as _db_connect
-        from src.backwrite.eterebridge_runner import build_placement_csv_from_db, run_eterebridge_pipeline
+        from src.backwrite.eterebridge_runner import (
+            build_placement_csv_from_db,
+            run_eterebridge_pipeline,
+            save_to_excel_with_template,
+        )
 
         body = await request.json()
         date_from    = body.get("date_from")
@@ -277,7 +283,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         frames = []
         skipped = []
         for row in contracts:
-            contract_id, cod_contratto, description = row[0], row[1], row[2]
+            contract_id, cod_contratto = row[0], row[1]
             try:
                 m = re.search(r'(\d+)\s*$', str(cod_contratto))
                 wl_tracking = m.group(1) if m else ""
@@ -295,7 +301,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     "agency_flag":   "Agency",
                     "agency_fee":    agency_fee,
                     "estimate":      wl_tracking,
-                    "contract":      str(cod_contratto),
+                    "contract":      str(contract_id),
                     "affidavit":     "Y",
                     "is_worldlink":  True,
                 }
@@ -312,10 +318,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         combined   = pd.concat(frames, ignore_index=True)
         total_rows = len(combined)
 
-        buf = _io.BytesIO()
-        with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-            combined.to_excel(writer, index=False, sheet_name="Run Sheet")
-        buf.seek(0)
+        xlsx_bytes = save_to_excel_with_template(combined, agency_fee=agency_fee)
+        buf = _io.BytesIO(xlsx_bytes)
 
         filename = f"WL_Placement_{date_from}_{date_to}.xlsx"
         headers = {

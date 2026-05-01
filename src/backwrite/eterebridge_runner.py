@@ -12,14 +12,19 @@ back to the built-in transformer logic.
 """
 
 import csv
+import io
 import logging
 import os
 import sys
 import tempfile
+from copy import copy
 from pathlib import Path
 from typing import Optional
 
 import pandas as pd
+from openpyxl import load_workbook
+from openpyxl.styles import Alignment
+from openpyxl.utils import get_column_letter
 
 # Locate EtereBridge: try common sibling-repo paths on both Linux and Windows.
 _EB_CANDIDATES = [
@@ -38,8 +43,12 @@ if _EB_DIR and _EB_DIR not in sys.path:
 try:
     from config_manager import config_manager as _eb_config  # type: ignore[import]
     from file_processor import FileProcessor, transform_month_column  # type: ignore[import]
-    from monetary_utils import standardize_monetary_columns  # type: ignore[import]
+    from monetary_utils import (  # type: ignore[import]
+        format_excel_monetary_columns,
+        standardize_monetary_columns,
+    )
     from time_utils import transform_times  # type: ignore[import]
+    from utils import safe_convert_date  # type: ignore[import]
 
     _eb_app_config   = _eb_config.get_config()
     _file_processor  = FileProcessor(_eb_app_config)
@@ -466,6 +475,148 @@ def build_placement_csv_from_db(
         ])
 
     return buf.getvalue().encode("utf-8")
+
+
+def save_to_excel_with_template(df: pd.DataFrame, agency_fee: float = 0.15) -> bytes:
+    """
+    Write df to an xlsx workbook using EtereBridge's template file, applying
+    its row-2 formulas and formatting to every data row.  Returns raw bytes
+    suitable for streaming as a download.  Mirrors EtereBridge's save_to_excel().
+    """
+    if not _AVAILABLE:
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine="openpyxl") as w:
+            df.to_excel(w, index=False, sheet_name="Run Sheet")
+        buf.seek(0)
+        return buf.read()
+
+    template_path = _eb_app_config.paths.template_path
+    workbook = load_workbook(template_path, data_only=False)
+    sheet    = workbook.active
+    columns  = _eb_app_config.final_columns
+
+    # Extract formulas + formatting from template row 2
+    template_formulas   = {}
+    template_formatting = {}
+    for col in range(1, len(columns) + 1):
+        cell = sheet.cell(row=2, column=col)
+        if cell.value and str(cell.value).startswith("="):
+            template_formulas[col] = cell.value
+        template_formatting[col] = {
+            "style":         cell.style,
+            "number_format": cell.number_format,
+            "border":        copy(cell.border),
+            "fill":          copy(cell.fill),
+            "font":          copy(cell.font),
+            "alignment":     copy(cell.alignment),
+        }
+
+    # Write headers in row 1
+    for col_num, col_title in enumerate(columns, start=1):
+        sheet.cell(row=1, column=col_num, value=col_title)
+
+    monetary_columns = ["Gross Rate", "Spot Value", "Station Net", "Broker Fees"]
+    gross_col_letter  = get_column_letter(columns.index("Gross Rate") + 1)  if "Gross Rate"  in columns else None
+    air_date_letter   = get_column_letter(columns.index("Air Date") + 1)     if "Air Date"    in columns else None
+    agency_col_data   = df[columns[columns.index("Agency?")]]                if "Agency?"     in columns else None
+
+    def _parse_time(time_str):
+        if not time_str:
+            return None
+        try:
+            dt = pd.to_datetime(time_str, format="%H:%M:%S", errors="raise")
+        except ValueError:
+            try:
+                dt = pd.to_datetime(time_str, format="%I:%M:%S %p", errors="raise")
+            except ValueError:
+                return None
+        return (dt.hour * 3600 + dt.minute * 60 + dt.second) / 86400.0
+
+    # Write data rows starting at row 2
+    for row_num, row_data in enumerate(df.values, start=2):
+        for col_num, cell_value in enumerate(row_data, start=1):
+            cell     = sheet.cell(row=row_num, column=col_num)
+            col_name = columns[col_num - 1]
+
+            if col_name in ("Time In", "Time Out"):
+                ts = _parse_time(cell_value)
+                if ts is not None:
+                    cell.value = ts
+                    cell.number_format = "[h]:mm:ss"
+                else:
+                    cell.value = cell_value
+            elif col_name == "End Date":
+                if air_date_letter:
+                    cell.value = f"={air_date_letter}{row_num}"
+                    cell.number_format = "m/d/yy"
+                else:
+                    cell.value = cell_value
+            elif col_name == "Length":
+                try:
+                    cell.value = float(cell_value) / 86400 if pd.notna(cell_value) else 0
+                    cell.number_format = "[h]:mm:ss"
+                    cell.alignment = Alignment(horizontal="center")
+                except Exception:
+                    cell.value = cell_value
+            elif col_name == "Broker Fees" and gross_col_letter and agency_col_data is not None:
+                if agency_col_data.iloc[row_num - 2] == "Agency":
+                    cell.value = f"={gross_col_letter}{row_num}*{agency_fee}"
+                else:
+                    cell.value = None
+            elif col_name in monetary_columns:
+                cell.value = cell_value if pd.notna(cell_value) else 0
+            elif col_num in template_formulas and col_name not in ("Time In", "Time Out", "Length", "End Date", "Broker Fees"):
+                cell.value = template_formulas[col_num].replace("2", str(row_num))
+            else:
+                cell.value = cell_value
+
+            # Apply template formatting
+            if col_num in template_formatting:
+                fmt = template_formatting[col_num]
+                cell.fill      = fmt["fill"]
+                cell.border    = fmt["border"]
+                cell.font      = fmt["font"]
+                cell.alignment = fmt["alignment"]
+                if col_name not in ("Time In", "Time Out", "Length", "End Date") + tuple(monetary_columns):
+                    cell.style         = fmt["style"]
+                    cell.number_format = fmt["number_format"]
+
+    format_excel_monetary_columns(sheet, df, monetary_columns)
+
+    # Air Date formatting
+    if "Air Date" in columns:
+        air_date_col = columns.index("Air Date") + 1
+        for row_num in range(2, len(df) + 2):
+            cell = sheet.cell(row=row_num, column=air_date_col)
+            if cell.value:
+                dt = safe_convert_date(cell.value)
+                if dt is not None:
+                    cell.value = dt
+                    cell.number_format = "m/d/yy"
+
+    # Month formatting
+    if "Month" in columns:
+        month_col = columns.index("Month") + 1
+        for row_num in range(2, len(df) + 2):
+            cell = sheet.cell(row=row_num, column=month_col)
+            mv   = df["Month"].iloc[row_num - 2]
+            cell.value         = mv if pd.notna(mv) else None
+            cell.number_format = "mmm-yy"
+
+    # Priority = 4
+    if "Priority" in columns:
+        pri_col = columns.index("Priority") + 1
+        for row_num in range(2, len(df) + 2):
+            sheet.cell(row=row_num, column=pri_col, value=4)
+
+    # Remove leftover template rows
+    if sheet.max_row > len(df) + 1:
+        sheet.delete_rows(len(df) + 2, sheet.max_row - (len(df) + 1))
+
+    buf = io.BytesIO()
+    workbook.save(buf)
+    buf.seek(0)
+    return buf.read()
 
 
 def _extract_header_values(file_path: str) -> tuple[str, str]:
