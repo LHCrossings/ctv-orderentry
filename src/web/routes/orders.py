@@ -318,6 +318,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         combined   = pd.concat(frames, ignore_index=True)
         total_rows = len(combined)
 
+        dal_mask      = combined["Market"] == "DAL"
+        dal_broker    = -combined.loc[dal_mask,   "Broker Fees"].sum()
+        nondal_broker = -combined.loc[~dal_mask,  "Broker Fees"].sum()
+
         xlsx_bytes = save_to_excel_with_template(combined, agency_fee=agency_fee)
         buf = _io.BytesIO(xlsx_bytes)
 
@@ -326,6 +330,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             "Content-Disposition":  f"attachment; filename={filename}",
             "X-Contract-Count":     str(len(frames)),
             "X-Spot-Count":         str(total_rows),
+            "X-DAL-Broker-Fees":    f"{dal_broker:.2f}",
+            "X-NonDAL-Broker-Fees": f"{nondal_broker:.2f}",
         }
         return StreamingResponse(
             buf,

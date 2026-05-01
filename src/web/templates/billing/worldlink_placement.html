@@ -42,6 +42,13 @@ body{background:var(--bg-secondary);font-family:'Inter',-apple-system,BlinkMacSy
 .status-area.visible{display:block;}
 .progress-detail{font-size:11px;color:var(--text-muted);margin-top:6px;}
 .hint{font-size:11px;color:var(--text-muted);margin-top:4px;}
+.broker-fees{margin-top:14px;border-top:1px solid rgba(163,190,140,0.3);padding-top:12px;display:flex;flex-direction:column;gap:8px;}
+.broker-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;}
+.broker-label{color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:0.08em;}
+.broker-value{font-weight:600;font-variant-numeric:tabular-nums;cursor:pointer;padding:3px 8px;border-radius:4px;transition:background 0.15s;}
+.broker-value:hover{background:rgba(163,190,140,0.2);}
+.broker-value.negative{color:var(--nord11);}
+.broker-value.positive{color:var(--nord14);}
 </style>
 </head>
 <body>
@@ -131,10 +138,21 @@ function formatDateInput(el) {
     }
 }
 
-function setStatus(msg, type, detail) {
+function setStatus(msg, type, detail, extra) {
     const el = document.getElementById('statusArea');
     el.className = `status-area visible ${type}`;
-    el.innerHTML = msg + (detail ? `<div class="progress-detail">${detail}</div>` : '');
+    el.innerHTML = msg
+        + (detail ? `<div class="progress-detail">${detail}</div>` : '')
+        + (extra  ? extra : '');
+}
+
+function copyVal(el) {
+    const raw = el.textContent.replace(/[^0-9.\-]/g, '');
+    navigator.clipboard.writeText(raw).then(() => {
+        const orig = el.textContent;
+        el.textContent = 'Copied!';
+        setTimeout(() => { el.textContent = orig; }, 1200);
+    });
 }
 
 async function generate() {
@@ -179,9 +197,27 @@ async function generate() {
         a.href = url; a.download = filename; a.click();
         URL.revokeObjectURL(url);
 
-        const contractCount = resp.headers.get('X-Contract-Count') || '?';
-        const spotCount     = resp.headers.get('X-Spot-Count')     || '?';
-        setStatus(`Done — ${contractCount} contracts, ${spotCount} spots exported.`, 'success');
+        const contractCount = resp.headers.get('X-Contract-Count')    || '?';
+        const spotCount     = resp.headers.get('X-Spot-Count')        || '?';
+        const dalFee        = parseFloat(resp.headers.get('X-DAL-Broker-Fees')    || '0');
+        const nondalFee     = parseFloat(resp.headers.get('X-NonDAL-Broker-Fees') || '0');
+
+        const fmt = n => n.toLocaleString('en-US', {style:'currency', currency:'USD', minimumFractionDigits:2});
+
+        const brokerHtml = `
+          <div class="broker-fees">
+            <div class="broker-row">
+              <span class="broker-label">Non-DAL Broker Fees</span>
+              <span class="broker-value negative" title="Click to copy" onclick="copyVal(this)">${fmt(nondalFee)}</span>
+            </div>
+            <div class="broker-row">
+              <span class="broker-label">DAL Broker Fees</span>
+              <span class="broker-value negative" title="Click to copy" onclick="copyVal(this)">${fmt(dalFee)}</span>
+            </div>
+          </div>`;
+
+        setStatus(`Done — ${contractCount} contracts, ${spotCount} spots exported.`, 'success',
+                  null, brokerHtml);
     } catch (e) {
         setStatus(`Error: ${e.message}`, 'error');
     } finally {
