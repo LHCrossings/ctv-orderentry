@@ -319,8 +319,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         total_rows = len(combined)
 
         dal_mask      = combined["Market"] == "DAL"
-        dal_broker    = -combined.loc[dal_mask,   "Broker Fees"].sum()
-        nondal_broker = -combined.loc[~dal_mask,  "Broker Fees"].sum()
+        gross_dal     = combined.loc[dal_mask,  "Gross Rate"].sum()
+        gross_nondal  = combined.loc[~dal_mask, "Gross Rate"].sum()
+        dal_broker    = -(gross_dal    * (1 - agency_fee) * 0.10)
+        nondal_broker = -(gross_nondal * (1 - agency_fee) * 0.10)
 
         xlsx_bytes = save_to_excel_with_template(combined, agency_fee=agency_fee)
         buf = _io.BytesIO(xlsx_bytes)
