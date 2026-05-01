@@ -342,8 +342,8 @@ def build_placement_csv_from_db(
         5:  "SEATTLE",
         6:  "LOS ANGELES",
         7:  "Central Valley",
-        8:  "Washington DC",
-        9:  "Multimarket",
+        8:  "WDC",
+        9:  "MMT",
         10: "DALLAS",
     }
     FPS = 29.97
