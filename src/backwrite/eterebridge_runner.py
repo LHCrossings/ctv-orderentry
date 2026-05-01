@@ -333,17 +333,18 @@ def build_placement_csv_from_db(
 
     # Etere COD_USER integer → human-readable market name understood by
     # transformer._normalise_market() (keyword match, case-insensitive).
+    # Keys must match EtereBridge's market_replacements dict (case-sensitive).
     _COD_USER_TO_MARKET = {
-        1:  "New York",
-        2:  "Chicago",
-        3:  "Houston",
-        4:  "San Francisco",
-        5:  "Seattle",
-        6:  "Los Angeles",
+        1:  "NEW YORK",
+        2:  "CHI MSP",
+        3:  "HOUSTON",
+        4:  "SAN FRANCISCO",
+        5:  "SEATTLE",
+        6:  "LOS ANGELES",
         7:  "Central Valley",
         8:  "Washington DC",
         9:  "Multimarket",
-        10: "Dallas",
+        10: "DALLAS",
     }
     FPS = 29.97
 
@@ -463,7 +464,7 @@ def build_placement_csv_from_db(
 
         w.writerow([
             s["line_id"],
-            4,                                   # Textbox14 = spot priority
+            1 if isci_only else 4,               # Textbox14 → # column (1 for WorldLink)
             dur_sec,
             s["gross_rate"] or 0,
             market_name,
@@ -563,10 +564,10 @@ def save_to_excel_with_template(df: pd.DataFrame, agency_fee: float = 0.15) -> b
                     cell.value = f"={gross_col_letter}{row_num}*{agency_fee}"
                 else:
                     cell.value = None
-            elif col_name in monetary_columns:
-                cell.value = cell_value if pd.notna(cell_value) else 0
             elif col_num in template_formulas and col_name not in ("Time In", "Time Out", "Length", "End Date", "Broker Fees"):
                 cell.value = template_formulas[col_num].replace("2", str(row_num))
+            elif col_name in monetary_columns:
+                cell.value = cell_value if pd.notna(cell_value) else 0
             else:
                 cell.value = cell_value
 
