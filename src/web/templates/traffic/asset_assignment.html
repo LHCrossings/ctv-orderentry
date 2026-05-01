@@ -610,24 +610,24 @@
             <div class="field-group">
                 <label class="field-label">Date From</label>
                 <input type="text" id="filterDateFrom" class="field-input" placeholder="06/20/2026" maxlength="10"
-                       style="font-size:0.85rem; width:120px;" oninput="clearPreview()" />
+                       style="font-size:0.85rem; width:120px;" oninput="clearPreview()" onblur="formatDateInput(this)" />
             </div>
             <div class="field-group">
                 <label class="field-label">Date To</label>
                 <input type="text" id="filterDateTo" class="field-input" placeholder="06/30/2026" maxlength="10"
-                       style="font-size:0.85rem; width:120px;" oninput="clearPreview()" />
+                       style="font-size:0.85rem; width:120px;" oninput="clearPreview()" onblur="formatDateInput(this)" />
             </div>
 
             <!-- Time range -->
             <div class="field-group">
                 <label class="field-label">Time From</label>
                 <input type="text" id="filterTimeFrom" class="field-input" placeholder="06:00" maxlength="5"
-                       style="font-size:0.85rem; width:90px;" oninput="clearPreview()" />
+                       style="font-size:0.85rem; width:90px;" oninput="clearPreview()" onblur="formatTimeInput(this)" />
             </div>
             <div class="field-group">
                 <label class="field-label">Time To</label>
                 <input type="text" id="filterTimeTo" class="field-input" placeholder="23:59" maxlength="5"
-                       style="font-size:0.85rem; width:90px;" oninput="clearPreview()" />
+                       style="font-size:0.85rem; width:90px;" oninput="clearPreview()" onblur="formatTimeInput(this)" />
             </div>
 
             <!-- Days of week -->
@@ -872,7 +872,9 @@
         if (!val) return null;
         const year = new Date().getFullYear();
         let m, d, y;
-        if (/^\d{4}$/.test(val)) {           // MMDD
+        if (/^\d{3}$/.test(val)) {           // MDD  e.g. 501 → May 1
+            m = '0' + val.slice(0, 1); d = val.slice(1); y = year;
+        } else if (/^\d{4}$/.test(val)) {    // MMDD
             m = val.slice(0, 2); d = val.slice(2); y = year;
         } else if (/^\d{6}$/.test(val)) {    // MMDDYY
             m = val.slice(0, 2); d = val.slice(2, 4); y = 2000 + parseInt(val.slice(4));
@@ -882,6 +884,19 @@
             return null;
         }
         return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    }
+
+    function formatDateInput(el) {
+        const parsed = parseDateInput(el.value);
+        if (parsed) {
+            const [y, m, d] = parsed.split('-');
+            el.value = `${m}/${d}/${y}`;
+        }
+    }
+
+    function formatTimeInput(el) {
+        const parsed = parseTimeInput(el.value);
+        if (parsed) el.value = parsed;
     }
 
     function parseTimeInput(val) {
