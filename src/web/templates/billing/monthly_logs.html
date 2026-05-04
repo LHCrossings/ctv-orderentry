@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Check Monthly Logs — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        .upload-card {
+            background: var(--nord1);
+            border: 1px solid var(--nord3);
+            border-radius: 10px;
+            padding: 1.5rem 2rem;
+            max-width: 560px;
+            margin: 0 auto 2rem;
+        }
+        .upload-card label {
+            display: block;
+            font-size: .85rem;
+            font-weight: 600;
+            color: var(--nord4);
+            margin-bottom: .5rem;
+        }
+        .upload-row {
+            display: flex;
+            gap: .75rem;
+            align-items: center;
+        }
+        .upload-row input[type=file] {
+            flex: 1;
+            background: var(--nord0);
+            border: 1px solid var(--nord3);
+            border-radius: 6px;
+            color: var(--nord4);
+            padding: .45rem .75rem;
+            font-size: .9rem;
+        }
+        .btn-check {
+            background: var(--nord10);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: .5rem 1.25rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .btn-check:disabled { opacity: .5; cursor: not-allowed; }
+
+        #results { max-width: 900px; margin: 0 auto; }
+
+        .summary-bar {
+            display: flex;
+            gap: 1.5rem;
+            margin-bottom: 1.25rem;
+            font-size: .85rem;
+            color: var(--text-muted);
+        }
+        .summary-bar strong { color: var(--nord4); }
+
+        table.log-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: .875rem;
+        }
+        .log-table th {
+            text-align: left;
+            padding: .55rem .75rem;
+            background: var(--nord1);
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: .78rem;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            border-bottom: 1px solid var(--nord3);
+        }
+        .log-table td {
+            padding: .6rem .75rem;
+            border-bottom: 1px solid var(--nord2);
+            vertical-align: top;
+            color: var(--nord4);
+        }
+        .log-table tr:last-child td { border-bottom: none; }
+        .log-table tr.row-ok td:first-child { border-left: 3px solid var(--nord14); }
+        .log-table tr.row-missing td:first-child { border-left: 3px solid var(--nord11); }
+
+        .badge-ok {
+            display: inline-block;
+            background: rgba(163,190,140,.15);
+            color: var(--nord14);
+            border-radius: 4px;
+            padding: .15rem .5rem;
+            font-size: .8rem;
+            font-weight: 600;
+        }
+        .badge-missing {
+            display: inline-block;
+            background: rgba(191,97,106,.15);
+            color: var(--nord11);
+            border-radius: 4px;
+            padding: .15rem .5rem;
+            font-size: .8rem;
+            font-weight: 600;
+        }
+        .missing-days {
+            margin-top: .35rem;
+            font-size: .8rem;
+            color: var(--nord11);
+            line-height: 1.6;
+        }
+        .missing-run {
+            display: inline-block;
+            background: rgba(191,97,106,.1);
+            border: 1px solid rgba(191,97,106,.3);
+            border-radius: 4px;
+            padding: .1rem .4rem;
+            margin: .1rem .15rem .1rem 0;
+            white-space: nowrap;
+        }
+        #error-msg {
+            background: rgba(191,97,106,.15);
+            border: 1px solid var(--nord11);
+            color: var(--nord11);
+            border-radius: 6px;
+            padding: .75rem 1rem;
+            font-size: .9rem;
+            margin-bottom: 1rem;
+        }
+        .spinner {
+            display: inline-block;
+            width: 16px; height: 16px;
+            border: 2px solid rgba(255,255,255,.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+            vertical-align: middle;
+            margin-right: .4rem;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/billing" class="back-link">&#8592;</a>
+            <div class="logo-icon">📅</div>
+            <div>
+                <h1>Check Monthly <span>Logs</span></h1>
+                <div class="logo-sub">Control Room · Billing</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="portal-intro">
+        <h2>Check Monthly Logs</h2>
+        <p>Upload a billing book to verify every day is present in each market's MASTER log. Missing days are flagged so you can identify any accidentally skipped weeks.</p>
+    </div>
+
+    <div class="upload-card">
+        <label for="billingBookFile">Billing Book (.xlsm / .xlsx)</label>
+        <div class="upload-row">
+            <input type="file" id="billingBookFile" accept=".xlsm,.xlsx" />
+            <button class="btn-check" id="checkBtn" onclick="runCheck()">Check Logs</button>
+        </div>
+    </div>
+
+    <div id="error-msg" style="display:none; max-width:900px; margin:0 auto 1rem;"></div>
+    <div id="results" style="display:none;"></div>
+</main>
+
+<script>
+async function runCheck() {
+    const fileInput = document.getElementById('billingBookFile');
+    const btn = document.getElementById('checkBtn');
+    const errDiv = document.getElementById('error-msg');
+    const resultsDiv = document.getElementById('results');
+
+    if (!fileInput.files.length) {
+        errDiv.textContent = 'Please select a billing book file first.';
+        errDiv.style.display = 'block';
+        return;
+    }
+
+    errDiv.style.display = 'none';
+    resultsDiv.style.display = 'none';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Checking…';
+
+    const fd = new FormData();
+    fd.append('billing_book', fileInput.files[0]);
+
+    try {
+        const res = await fetch('/api/billing/monthly-logs/check', { method: 'POST', body: fd });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({ detail: res.statusText }));
+            throw new Error(err.detail || 'Server error');
+        }
+        const data = await res.json();
+        renderResults(data);
+    } catch (e) {
+        errDiv.textContent = e.message;
+        errDiv.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Check Logs';
+    }
+}
+
+function formatDate(iso) {
+    const [y, m, d] = iso.split('-');
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${months[parseInt(m)-1]} ${parseInt(d)}, ${y}`;
+}
+
+function groupConsecutive(dates) {
+    // dates: sorted array of ISO strings → returns array of {start, end} runs
+    if (!dates.length) return [];
+    const runs = [];
+    let runStart = dates[0], runEnd = dates[0];
+    for (let i = 1; i < dates.length; i++) {
+        const prev = new Date(runEnd);
+        prev.setDate(prev.getDate() + 1);
+        const curr = new Date(dates[i]);
+        if (prev.toISOString().slice(0,10) === dates[i]) {
+            runEnd = dates[i];
+        } else {
+            runs.push({ start: runStart, end: runEnd });
+            runStart = dates[i];
+            runEnd = dates[i];
+        }
+    }
+    runs.push({ start: runStart, end: runEnd });
+    return runs;
+}
+
+function renderResults(data) {
+    const resultsDiv = document.getElementById('results');
+    const totalMarkets = data.length;
+    const okMarkets = data.filter(r => r.missing.length === 0).length;
+    const totalMissing = data.reduce((s, r) => s + r.missing.length, 0);
+
+    let html = `<div class="summary-bar">
+        <span><strong>${totalMarkets}</strong> markets</span>
+        <span style="color:var(--nord14)"><strong>${okMarkets}</strong> complete</span>
+        ${totalMissing > 0 ? `<span style="color:var(--nord11)"><strong>${totalMissing}</strong> missing day${totalMissing !== 1 ? 's' : ''}</span>` : ''}
+    </div>
+    <table class="log-table">
+        <thead>
+            <tr>
+                <th>Market</th>
+                <th>First Date</th>
+                <th>Last Date</th>
+                <th>Days Found / Expected</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>`;
+
+    for (const row of data) {
+        const ok = row.missing.length === 0;
+        const rowClass = ok ? 'row-ok' : 'row-missing';
+        const badge = ok
+            ? `<span class="badge-ok">&#10003; Complete</span>`
+            : `<span class="badge-missing">&#9888; ${row.missing.length} missing</span>`;
+
+        let missingHtml = '';
+        if (!ok) {
+            const runs = groupConsecutive(row.missing);
+            const chips = runs.map(r => {
+                const label = r.start === r.end
+                    ? formatDate(r.start)
+                    : `${formatDate(r.start)} – ${formatDate(r.end)}`;
+                return `<span class="missing-run">${label}</span>`;
+            }).join('');
+            missingHtml = `<div class="missing-days">${chips}</div>`;
+        }
+
+        html += `<tr class="${rowClass}">
+            <td><strong>${row.market}</strong></td>
+            <td>${formatDate(row.first_date)}</td>
+            <td>${formatDate(row.last_date)}</td>
+            <td>${row.days_found} / ${row.days_expected}</td>
+            <td>${badge}${missingHtml}</td>
+        </tr>`;
+    }
+
+    html += '</tbody></table>';
+    resultsDiv.innerHTML = html;
+    resultsDiv.style.display = 'block';
+}
+</script>
+
+</body>
+</html>

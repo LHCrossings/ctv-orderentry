@@ -341,6 +341,83 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             headers=headers,
         )
 
+    @router.get("/billing/monthly-logs", response_class=HTMLResponse)
+    async def monthly_logs(request: Request):
+        return templates.TemplateResponse(request, "billing/monthly_logs.html")
+
+    @router.post("/api/billing/monthly-logs/check")
+    async def monthly_logs_check(billing_book: UploadFile = File(...)):
+        import io as _io
+        from datetime import date as _date
+        from datetime import timedelta
+
+        import openpyxl
+
+        data = await billing_book.read()
+        try:
+            wb = openpyxl.load_workbook(
+                _io.BytesIO(data), read_only=True, keep_vba=False, data_only=True
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Could not open workbook: {exc}")
+
+        if "MASTER" not in wb.sheetnames:
+            raise HTTPException(status_code=400, detail="No MASTER tab found in workbook")
+
+        ws = wb["MASTER"]
+        rows = list(ws.iter_rows(values_only=True))
+        if not rows:
+            raise HTTPException(status_code=400, detail="MASTER tab is empty")
+
+        header = list(rows[0])
+        try:
+            date_col   = header.index("Start Date")
+            market_col = header.index("Market")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Column not found in MASTER: {exc}")
+
+        market_dates: dict[str, set] = {}
+        for row in rows[1:]:
+            if len(row) <= max(date_col, market_col):
+                continue
+            market  = row[market_col]
+            raw_dt  = row[date_col]
+            if not market or not raw_dt:
+                continue
+            if hasattr(raw_dt, "date"):
+                d = raw_dt.date()
+            elif isinstance(raw_dt, _date):
+                d = raw_dt
+            else:
+                continue
+            mkt = str(market).strip()
+            if mkt not in market_dates:
+                market_dates[mkt] = set()
+            market_dates[mkt].add(d)
+
+        results = []
+        for mkt in sorted(market_dates):
+            dates    = market_dates[mkt]
+            first    = min(dates)
+            last     = max(dates)
+            expected = set()
+            cur = first
+            while cur <= last:
+                expected.add(cur)
+                cur += timedelta(days=1)
+            missing = sorted(expected - dates)
+            results.append({
+                "market":        mkt,
+                "first_date":    first.isoformat(),
+                "last_date":     last.isoformat(),
+                "days_found":    len(dates),
+                "days_expected": len(expected),
+                "missing":       [d.isoformat() for d in missing],
+            })
+
+        from fastapi.responses import JSONResponse as _JSONResponse
+        return _JSONResponse(results)
+
     @router.get("/scripts", response_class=HTMLResponse)
     async def scripts(request: Request):
         return templates.TemplateResponse(request, "scripts.html")
