@@ -527,6 +527,7 @@
                     <option value="sky_river">Sky River Casino</option>
                     <option value="pechanga">Pechanga</option>
                     <option value="admerasia">Admerasia (McDonald's)</option>
+                    <option value="daviselen">Daviselen (Toyota)</option>
                 </select>
             </div>
             <button class="run-btn" id="scanBtn" onclick="runAutoScan()" disabled>Scan Lines</button>
@@ -541,9 +542,19 @@
             <button class="run-btn" id="parseIoBtn" onclick="parseAdmerasiaIo()">Parse IO</button>
         </div>
 
+        <div id="daviselenRow" class="input-row" style="display:none; margin-top:10px; align-items:flex-end; gap:10px;">
+            <div class="field-group">
+                <label class="field-label">Traffic Instructions (1 PDF per language)</label>
+                <input type="file" id="daviselenFiles" accept=".pdf" multiple class="field-input"
+                       style="font-size:0.82rem; padding:6px 10px;" />
+            </div>
+            <button class="run-btn" id="daviselenParseBtn" onclick="parseDaviselenInstructions()">Parse &amp; Find</button>
+        </div>
+
         <div id="autoScanResults" style="margin-top:14px;"></div>
 
         <div id="admerasiaGrid" style="display:none; margin-top:14px;"></div>
+        <div id="daviselenGrid" style="display:none; margin-top:14px;"></div>
 
         <div id="contractBanner" class="contract-banner">
             <div class="contract-code" id="bannerCode"></div>
@@ -1221,18 +1232,191 @@
     // ── Admerasia traffic ────────────────────────────────────────────────────
 
     function onAutoClientChange(val) {
-        const scanBtn = document.getElementById('scanBtn');
-        const ioRow   = document.getElementById('admerasiaIoRow');
-        const grid    = document.getElementById('admerasiaGrid');
+        const scanBtn      = document.getElementById('scanBtn');
+        const ioRow        = document.getElementById('admerasiaIoRow');
+        const admGrid      = document.getElementById('admerasiaGrid');
+        const davRow       = document.getElementById('daviselenRow');
+        const davGrid      = document.getElementById('daviselenGrid');
         if (val === 'admerasia') {
             scanBtn.style.display = 'none';
             ioRow.style.display   = '';
+            davRow.style.display  = 'none';
+            davGrid.style.display = 'none';
+        } else if (val === 'daviselen') {
+            scanBtn.style.display = 'none';
+            ioRow.style.display   = 'none';
+            admGrid.style.display = 'none';
+            davRow.style.display  = '';
         } else {
             scanBtn.style.display = '';
             scanBtn.disabled      = !val;
             ioRow.style.display   = 'none';
-            grid.style.display    = 'none';
+            admGrid.style.display = 'none';
+            davRow.style.display  = 'none';
+            davGrid.style.display = 'none';
         }
+    }
+
+    // ── Daviselen traffic ─────────────────────────────────────────────────────
+
+    async function parseDaviselenInstructions() {
+        const input = document.getElementById('daviselenFiles');
+        if (!input.files.length) { alert('Please select one or more traffic instruction PDFs.'); return; }
+
+        const btn = document.getElementById('daviselenParseBtn');
+        btn.disabled    = true;
+        btn.textContent = 'Parsing…';
+
+        const grid = document.getElementById('daviselenGrid');
+        grid.style.display = 'none';
+        grid.innerHTML     = '';
+
+        try {
+            const fd = new FormData();
+            for (const f of input.files) fd.append('files', f);
+
+            const resp = await fetch('/api/traffic/daviselen/parse-instructions', { method: 'POST', body: fd });
+            if (!resp.ok) throw new Error((await resp.json()).detail || 'Parse failed');
+            const results = await resp.json();
+
+            window.daviselenResults = results;
+            renderDaviselenGrid(results);
+        } catch (e) {
+            alert(`Error: ${e.message}`);
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = 'Parse & Find';
+        }
+    }
+
+    function renderDaviselenGrid(results) {
+        const grid = document.getElementById('daviselenGrid');
+
+        const allReady = results.every(r =>
+            !r.error && r.contract && r.spots.length && r.spots.every(s => s.found) && r.lines.length
+        );
+
+        const rows = results.map(r => {
+            if (r.error) {
+                return `<tr><td>${esc(r.filename)}</td><td colspan="5" style="color:var(--nord11);">${esc(r.error)}</td></tr>`;
+            }
+            const contractCell = r.contract
+                ? `<span style="color:var(--nord14);">${esc(r.contract.code)}</span><br>
+                   <span style="font-size:0.78rem;color:var(--text-muted);">#${r.contract.id} · ${r.contract.date_start}–${r.contract.date_end}</span>`
+                : `<span style="color:var(--nord11);">Not found</span>`;
+
+            const spotsCell = r.spots.map(s => {
+                const icon = s.found ? '✓' : '✗';
+                const col  = s.found ? 'var(--nord14)' : 'var(--nord11)';
+                return `<span style="color:${col};">${icon} ${esc(s.isci)}</span> ${esc(s.title)} <span style="color:var(--text-muted);">${s.rotation_pct}%</span>`;
+            }).join('<br>');
+
+            const linesCell = r.lines.length
+                ? `${r.lines.length} line${r.lines.length !== 1 ? 's' : ''}, ${r.lines.reduce((a,l)=>a+l.spot_count,0)} spots`
+                : `<span style="color:var(--nord11);">No :${r.duration_sec}s lines found</span>`;
+
+            return `<tr>
+                <td style="font-size:0.8rem;color:var(--text-muted);">${esc(r.filename)}</td>
+                <td><strong>${esc(r.estimate)}</strong><br><span style="font-size:0.78rem;color:var(--text-muted);">${esc(r.product)}</span></td>
+                <td>${contractCell}</td>
+                <td>${spotsCell}</td>
+                <td>${linesCell}</td>
+            </tr>`;
+        }).join('');
+
+        grid.innerHTML = `
+            <div class="tool-card" style="margin-bottom:0;">
+                <h2>Traffic Instructions</h2>
+                <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+                    <thead>
+                        <tr style="text-align:left;border-bottom:1px solid var(--border-color);">
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">File</th>
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Estimate</th>
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Contract</th>
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">ISCI / Spot</th>
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Lines</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+                <div style="margin-top:14px;display:flex;align-items:center;gap:12px;">
+                    <button class="run-btn apply" onclick="applyDaviselenTraffic()"
+                            ${allReady ? '' : 'disabled title="Resolve all contracts and ISCI codes first"'}>
+                        Assign All
+                    </button>
+                    <span id="daviselenToast" style="font-size:0.85rem;"></span>
+                </div>
+            </div>`;
+        grid.style.display = 'block';
+    }
+
+    async function applyDaviselenTraffic() {
+        const results = window.daviselenResults || [];
+        const toast   = document.getElementById('daviselenToast');
+        const btn     = document.getElementById('daviselenGrid').querySelector('.run-btn.apply');
+        btn.disabled    = true;
+        btn.textContent = 'Assigning…';
+        toast.textContent = '';
+        toast.style.color = '';
+
+        let totalLines = 0, totalSpots = 0, errors = [];
+
+        try {
+            for (const r of results) {
+                if (!r.contract || !r.lines.length || !r.spots.some(s => s.found)) continue;
+
+                // Build filmati_ids list proportional to rotation percentages
+                const foundSpots = r.spots.filter(s => s.found);
+                const filmatiIds = buildRotationList(foundSpots);
+
+                const assignments = r.lines.map(l => ({
+                    line_id:     l.line_id,
+                    filmati_ids: filmatiIds,
+                }));
+
+                const resp = await fetch(`/api/traffic/contract/${r.contract.id}/auto-assign`, {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ assignments }),
+                });
+                if (!resp.ok) {
+                    const detail = (await resp.json()).detail || 'Unknown error';
+                    errors.push(`Est ${r.estimate}: ${detail}`);
+                    continue;
+                }
+                const data = await resp.json();
+                totalLines += data.lines_updated || 0;
+                totalSpots += data.spots_updated || 0;
+            }
+
+            if (errors.length) {
+                toast.style.color = 'var(--nord11)';
+                toast.textContent = errors.join(' | ');
+            } else {
+                toast.style.color = 'var(--nord14)';
+                toast.textContent = `Done — ${totalLines} line${totalLines!==1?'s':''}, ${totalSpots} spot${totalSpots!==1?'s':''} assigned.`;
+            }
+        } catch (e) {
+            toast.style.color  = 'var(--nord11)';
+            toast.textContent  = `Error: ${e.message}`;
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = 'Assign All';
+        }
+    }
+
+    // Convert spot list with rotation_pct into a round-robin filmati_ids array.
+    // E.g. [{filmati_id:1, rotation_pct:67}, {filmati_id:2, rotation_pct:33}] → [1,1,2]
+    function buildRotationList(spots) {
+        if (spots.length === 1) return [spots[0].filmati_id];
+        // Scale to integer weights summing to ~10
+        const total = spots.reduce((a, s) => a + s.rotation_pct, 0) || 100;
+        const list  = [];
+        for (const s of spots) {
+            const count = Math.max(1, Math.round(s.rotation_pct / total * 10));
+            for (let i = 0; i < count; i++) list.push(s.filmati_id);
+        }
+        return list;
     }
 
     async function parseAdmerasiaIo() {

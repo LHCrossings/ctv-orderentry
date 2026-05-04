@@ -11,9 +11,9 @@ import threading as _threading
 import time as _time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, List, Optional
 
-from fastapi import APIRouter, Body, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
@@ -2539,6 +2539,128 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     not_found.append(code)
 
             return {"isci_options": isci_options, "not_found": not_found, "io_lines": io_lines}
+
+        try:
+            result = await asyncio.get_running_loop().run_in_executor(None, _run)
+            return JSONResponse(result)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.post("/api/traffic/daviselen/parse-instructions")
+    async def daviselen_parse_instructions(files: List[UploadFile] = File(...)):
+        """Parse one or more Davis Elen traffic instruction PDFs.
+
+        For each PDF: extracts the estimate number and ISCI codes, searches
+        CONTRATTITESTATA for a matching contract, resolves FILMATI records, and
+        returns all contract line IDs so the caller can immediately assign.
+        """
+        parsed_files = []
+        for f in files:
+            parsed_files.append((f.filename, await f.read()))
+
+        def _run():
+            from browser_automation.etere_direct_client import connect as _db_connect
+            from browser_automation.parsers.daviselen_traffic_parser import (
+                parse_daviselen_traffic_pdf,
+            )
+
+            results = []
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+
+                for filename, pdf_bytes in parsed_files:
+                    instr = parse_daviselen_traffic_pdf(pdf_bytes)
+                    if not instr.estimate:
+                        results.append({"filename": filename, "error": "No estimate number found"})
+                        continue
+
+                    # Find matching contract by estimate number
+                    term = f"%{instr.estimate}%"
+                    cur.execute("""
+                        SELECT TOP 5
+                            ct.ID_CONTRATTITESTATA AS id,
+                            ct.COD_CONTRATTO       AS code,
+                            ct.DESCRIZIONE         AS description,
+                            CONVERT(VARCHAR(10), ct.DATA_INIZIO,  101) AS date_start,
+                            CONVERT(VARCHAR(10), ct.DATA_TERMINE, 101) AS date_end
+                        FROM CONTRATTITESTATA ct
+                        WHERE UPPER(ct.COD_CONTRATTO) LIKE %s
+                           OR UPPER(ct.DESCRIZIONE)   LIKE %s
+                        ORDER BY ct.DATA_INIZIO DESC
+                    """, (term, term))
+                    contracts = [dict(r) for r in cur.fetchall()]
+
+                    contract_id = contracts[0]["id"] if contracts else None
+
+                    # Resolve FILMATI for each ISCI code
+                    isci_codes   = [s.isci for s in instr.spots]
+                    placeholders = ",".join(f"'{c}'" for c in isci_codes)
+                    filmati_map  = {}
+                    if isci_codes:
+                        cur.execute(
+                            f"SELECT ID_FILMATI, COD_PROGRA, DESCRIZIO FROM FILMATI"
+                            f" WHERE COD_PROGRA IN ({placeholders})"
+                        )
+                        for r in cur.fetchall():
+                            filmati_map[r["COD_PROGRA"]] = {
+                                "filmati_id": r["ID_FILMATI"],
+                                "db_title":   r["DESCRIZIO"] or "",
+                            }
+
+                    spots_out = []
+                    not_found = []
+                    for s in instr.spots:
+                        if s.isci in filmati_map:
+                            spots_out.append({
+                                "isci":         s.isci,
+                                "title":        s.title or filmati_map[s.isci]["db_title"],
+                                "rotation_pct": s.rotation_pct,
+                                "filmati_id":   filmati_map[s.isci]["filmati_id"],
+                                "found":        True,
+                            })
+                        else:
+                            not_found.append(s.isci)
+                            spots_out.append({
+                                "isci":         s.isci,
+                                "title":        s.title,
+                                "rotation_pct": s.rotation_pct,
+                                "filmati_id":   None,
+                                "found":        False,
+                            })
+
+                    # Fetch line IDs for this contract (filtered by duration)
+                    line_ids = []
+                    if contract_id:
+                        dur_frames = instr.duration_sec * _FPS_GLOBAL
+                        cur.execute(f"""
+                            SELECT cr.ID_CONTRATTIRIGHE AS line_id,
+                                   cr.DESCRIZIONE       AS description,
+                                   COUNT(tp.ID_TPALINSE) AS spot_count
+                            FROM CONTRATTIRIGHE cr
+                            JOIN trafficPalinse tpa ON tpa.id_contrattirighe = cr.ID_CONTRATTIRIGHE
+                            JOIN TPALINSE tp        ON tp.ID_TPALINSE = tpa.id_tpalinse
+                            WHERE cr.ID_CONTRATTITESTATA = {contract_id}
+                              AND cr.DURATA = {dur_frames}
+                            GROUP BY cr.ID_CONTRATTIRIGHE, cr.DESCRIZIONE
+                            ORDER BY cr.ID_CONTRATTIRIGHE
+                        """)
+                        line_ids = [{"line_id": r["line_id"], "description": r["description"],
+                                     "spot_count": r["spot_count"]} for r in cur.fetchall()]
+
+                    results.append({
+                        "filename":    filename,
+                        "estimate":    instr.estimate,
+                        "product":     f"{instr.product_code} {instr.product_name}".strip(),
+                        "duration_sec": instr.duration_sec,
+                        "date_range":  f"{instr.start_date}–{instr.end_date}",
+                        "contract":    contracts[0] if contracts else None,
+                        "contract_candidates": contracts,
+                        "spots":       spots_out,
+                        "not_found":   not_found,
+                        "lines":       line_ids,
+                    })
+
+            return results
 
         try:
             result = await asyncio.get_running_loop().run_in_executor(None, _run)
