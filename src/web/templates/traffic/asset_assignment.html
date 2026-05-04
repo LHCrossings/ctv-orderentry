@@ -1374,10 +1374,14 @@
                     filmati_ids: filmatiIds,
                 }));
 
+                const payload = { assignments };
+                if (r.date_from_sql) payload.date_from = r.date_from_sql;
+                if (r.date_to_sql)   payload.date_to   = r.date_to_sql;
+
                 const resp = await fetch(`/api/traffic/contract/${r.contract.id}/auto-assign`, {
                     method:  'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify({ assignments }),
+                    body:    JSON.stringify(payload),
                 });
                 if (!resp.ok) {
                     const detail = (await resp.json()).detail || 'Unknown error';

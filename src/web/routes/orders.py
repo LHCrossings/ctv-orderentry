@@ -2314,6 +2314,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         HTTP flow as the manual rotation builder, then syncs TPALINSE directly.
         """
         assignments = body.get("assignments", [])
+        date_from   = body.get("date_from")   # optional 'YYYY-MM-DD' — restrict to instruction period
+        date_to     = body.get("date_to")
         if not assignments:
             raise HTTPException(status_code=400, detail="No assignments provided")
 
@@ -2368,6 +2370,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 cur.execute("SELECT id_bookingcode, code FROM trf_bookingcode")
                 bookingcode_to_newtype = {r["id_bookingcode"]: r["code"] for r in cur.fetchall()}
 
+                date_clause = ""
+                if date_from:
+                    date_clause += f" AND tp.DATA >= '{date_from}'"
+                if date_to:
+                    date_clause += f" AND tp.DATA <= '{date_to}'"
                 cur.execute(f"""
                     SELECT tpa.id_contrattirighe AS line_id,
                            tp.ID_TPALINSE        AS tp_id,
@@ -2376,6 +2383,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     JOIN trafficPalinse tpa ON tpa.id_tpalinse      = tp.ID_TPALINSE
                     JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
                     WHERE tpa.id_contrattirighe IN ({line_ids_str})
+                    {date_clause}
                     ORDER BY tp.DATA, tp.ORA
                 """)
                 line_tp_map: dict = defaultdict(list)
@@ -2653,11 +2661,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                      "spot_count": r["spot_count"]} for r in cur.fetchall()]
 
                     results.append({
-                        "filename":    filename,
-                        "estimate":    instr.estimate,
-                        "product":     f"{instr.product_code} {instr.product_name}".strip(),
+                        "filename":     filename,
+                        "estimate":     instr.estimate,
+                        "product":      f"{instr.product_code} {instr.product_name}".strip(),
                         "duration_sec": instr.duration_sec,
-                        "date_range":  f"{instr.start_date}–{instr.end_date}",
+                        "date_range":   f"{instr.start_date}–{instr.end_date}",
+                        "date_from_sql": instr.date_from_sql,
+                        "date_to_sql":   instr.date_to_sql,
                         "contract":    contracts[0] if contracts else None,
                         "contract_candidates": contracts,
                         "spots":       spots_out,

@@ -7,9 +7,27 @@ and all ISCI codes with their rotation percentages.
 import io
 import re
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 
 import pdfplumber
+
+_MONTHS = {
+    "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
+    "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12,
+}
+
+
+def _date_to_sql(date_str: str) -> Optional[str]:
+    """Convert 'MAY05/26' → '2026-05-05' for SQL WHERE clauses."""
+    m = re.match(r'^([A-Z]{3})(\d{2})/(\d{2})$', date_str)
+    if not m:
+        return None
+    month = _MONTHS.get(m.group(1))
+    if not month:
+        return None
+    day  = int(m.group(2))
+    year = 2000 + int(m.group(3))
+    return f"{year:04d}-{month:02d}-{day:02d}"
 
 
 @dataclass
@@ -27,6 +45,8 @@ class DaviselenTrafficInstruction:
     duration_sec: int
     start_date: str
     end_date: str
+    date_from_sql: Optional[str] = None
+    date_to_sql: Optional[str] = None
     spots: List[DaviselenTrafficSpot] = field(default_factory=list)
 
 
@@ -96,11 +116,13 @@ def parse_daviselen_traffic_pdf(pdf_bytes: bytes) -> DaviselenTrafficInstruction
             rotation_pct   = float(full_m.group(8))
 
             if not result.product_code:
-                result.product_code = last_prod_code
-                result.product_name = last_prod_name
-                result.duration_sec = last_duration
-                result.start_date   = last_start
-                result.end_date     = last_end
+                result.product_code  = last_prod_code
+                result.product_name  = last_prod_name
+                result.duration_sec  = last_duration
+                result.start_date    = last_start
+                result.end_date      = last_end
+                result.date_from_sql = _date_to_sql(last_start)
+                result.date_to_sql   = _date_to_sql(last_end)
 
             result.spots.append(DaviselenTrafficSpot(
                 isci=isci, title=title, rotation_pct=rotation_pct,
