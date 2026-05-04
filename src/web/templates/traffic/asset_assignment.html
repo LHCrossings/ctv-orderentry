@@ -517,17 +517,25 @@
             <button class="run-btn" onclick="searchContracts()">Search</button>
         </div>
 
-        <!-- Auto-assign row — shown after contract selected -->
+        <!-- Traffic instructions PDF upload — always visible -->
+        <div class="input-row" style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border-color);">
+            <div class="field-group" style="flex:1;">
+                <label class="field-label">Traffic Instructions PDF</label>
+                <input type="file" id="trafficPdfFiles" accept=".pdf" multiple class="field-input"
+                       style="font-size:0.82rem; padding:6px 10px;" />
+            </div>
+            <button class="run-btn" id="trafficPdfBtn" onclick="parseTrafficPdfUpload()">Parse &amp; Find</button>
+        </div>
+
+        <!-- Auto-assign row — shown after contract selected, for scan-based agencies -->
         <div id="autoAssignRow" class="input-row" style="display:none; margin-top:12px; padding-top:12px; border-top:1px solid var(--border-color);">
             <div class="field-group">
                 <label class="field-label">Auto-Assign</label>
                 <select id="autoClient" class="field-input" style="min-width:200px;"
                         onchange="onAutoClientChange(this.value)">
-                    <option value="">— Select client —</option>
-                    <option value="sky_river">Sky River Casino</option>
-                    <option value="pechanga">Pechanga</option>
+                    <option value="">— Select agency —</option>
+                    <option value="igraphix">iGraphix</option>
                     <option value="admerasia">Admerasia (McDonald's)</option>
-                    <option value="daviselen">Daviselen (Toyota)</option>
                 </select>
             </div>
             <button class="run-btn" id="scanBtn" onclick="runAutoScan()" disabled>Scan Lines</button>
@@ -540,15 +548,6 @@
                        style="font-size:0.82rem; padding:6px 10px;" />
             </div>
             <button class="run-btn" id="parseIoBtn" onclick="parseAdmerasiaIo()">Parse IO</button>
-        </div>
-
-        <div id="daviselenRow" class="input-row" style="display:none; margin-top:10px; align-items:flex-end; gap:10px;">
-            <div class="field-group">
-                <label class="field-label">Traffic Instructions (1 PDF per language)</label>
-                <input type="file" id="daviselenFiles" accept=".pdf" multiple class="field-input"
-                       style="font-size:0.82rem; padding:6px 10px;" />
-            </div>
-            <button class="run-btn" id="daviselenParseBtn" onclick="parseDaviselenInstructions()">Parse &amp; Find</button>
         </div>
 
         <div id="autoScanResults" style="margin-top:14px;"></div>
@@ -1232,38 +1231,27 @@
     // ── Admerasia traffic ────────────────────────────────────────────────────
 
     function onAutoClientChange(val) {
-        const scanBtn      = document.getElementById('scanBtn');
-        const ioRow        = document.getElementById('admerasiaIoRow');
-        const admGrid      = document.getElementById('admerasiaGrid');
-        const davRow       = document.getElementById('daviselenRow');
-        const davGrid      = document.getElementById('daviselenGrid');
+        const scanBtn = document.getElementById('scanBtn');
+        const ioRow   = document.getElementById('admerasiaIoRow');
+        const admGrid = document.getElementById('admerasiaGrid');
         if (val === 'admerasia') {
             scanBtn.style.display = 'none';
             ioRow.style.display   = '';
-            davRow.style.display  = 'none';
-            davGrid.style.display = 'none';
-        } else if (val === 'daviselen') {
-            scanBtn.style.display = 'none';
-            ioRow.style.display   = 'none';
-            admGrid.style.display = 'none';
-            davRow.style.display  = '';
         } else {
             scanBtn.style.display = '';
             scanBtn.disabled      = !val;
             ioRow.style.display   = 'none';
             admGrid.style.display = 'none';
-            davRow.style.display  = 'none';
-            davGrid.style.display = 'none';
         }
     }
 
     // ── Daviselen traffic ─────────────────────────────────────────────────────
 
-    async function parseDaviselenInstructions() {
-        const input = document.getElementById('daviselenFiles');
+    async function parseTrafficPdfUpload() {
+        const input = document.getElementById('trafficPdfFiles');
         if (!input.files.length) { alert('Please select one or more traffic instruction PDFs.'); return; }
 
-        const btn = document.getElementById('daviselenParseBtn');
+        const btn = document.getElementById('trafficPdfBtn');
         btn.disabled    = true;
         btn.textContent = 'Parsing…';
 
@@ -1285,7 +1273,7 @@
             alert(`Error: ${e.message}`);
         } finally {
             btn.disabled    = false;
-            btn.textContent = 'Parse & Find';
+            btn.textContent = 'Parse &amp; Find';
         }
     }
 
