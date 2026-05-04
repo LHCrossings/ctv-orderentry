@@ -1263,12 +1263,28 @@
             const fd = new FormData();
             for (const f of input.files) fd.append('files', f);
 
-            const resp = await fetch('/api/traffic/daviselen/parse-instructions', { method: 'POST', body: fd });
+            const resp = await fetch('/api/traffic/parse-instructions', { method: 'POST', body: fd });
             if (!resp.ok) throw new Error((await resp.json()).detail || 'Parse failed');
-            const results = await resp.json();
+            const items = await resp.json();
 
-            window.daviselenResults = results;
-            renderDaviselenGrid(results);
+            // Route by format — mixed uploads are allowed; each item declares its own format
+            const daviselen = items.filter(i => i.format === 'daviselen');
+            const lexus     = items.filter(i => i.format === 'lexus');
+            const unknown   = items.filter(i => i.format === 'unknown' || i.error);
+
+            if (unknown.length) {
+                const msg = unknown.map(i => `${i.filename}: ${i.error || 'unknown format'}`).join('\n');
+                alert(`Could not parse:\n${msg}`);
+            }
+
+            if (daviselen.length) {
+                window.daviselenResults = daviselen;
+                renderDaviselenGrid(daviselen);
+            }
+            if (lexus.length) {
+                window.lexusResults = lexus;
+                renderLexusGrid(lexus);
+            }
         } catch (e) {
             alert(`Error: ${e.message}`);
         } finally {
@@ -1416,6 +1432,162 @@
             for (let i = 0; i < count; i++) list.push(s.filmati_id);
         }
         return list;
+    }
+
+    // ── Lexus / IW Group traffic ──────────────────────────────────────────────
+
+    function renderLexusGrid(results) {
+        const grid = document.getElementById('daviselenGrid'); // reuse same container
+
+        const cards = results.map(r => {
+            const header = `
+                <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+                    <div>
+                        <strong>${esc(r.advertiser)}</strong>
+                        <span style="color:var(--text-muted);margin:0 6px;">·</span>
+                        <span>${esc(r.campaign)}</span>
+                        <span style="color:var(--text-muted);margin:0 6px;">·</span>
+                        <span style="font-family:monospace;">${esc(r.market_code)}</span>
+                        <span style="color:var(--text-muted);font-size:0.8rem;margin-left:6px;">(${esc(r.coverage_area)})</span>
+                    </div>
+                    <div style="font-size:0.82rem;color:var(--text-muted);">${esc(r.filename)}</div>
+                </div>
+                <div style="font-size:0.82rem;margin-bottom:12px;padding:8px 10px;background:var(--nord1);border-radius:4px;">
+                    🔍 Search for this contract: <strong>${esc(r.search_suggestion)}</strong>
+                </div>`;
+
+            const periodRows = r.periods.map(p => {
+                const statusCells = p.spots.map(s => {
+                    if (s.found) {
+                        const notesHtml = s.notes
+                            ? `<span style="color:var(--nord13);font-size:0.75rem;margin-left:6px;">⚠ ${esc(s.notes)}</span>`
+                            : '';
+                        return `<div><span style="color:var(--nord14);">✓</span> <span style="font-family:monospace;">${esc(s.isci)}</span> ${esc(s.rotation_pct)}%${notesHtml}</div>`;
+                    } else {
+                        return `<div><span style="color:var(--nord11);">✗</span> <span style="font-family:monospace;">${esc(s.isci)}</span>
+                            <span style="color:var(--nord11);font-size:0.8rem;">— not in media library yet</span></div>`;
+                    }
+                }).join('');
+
+                const readyBadge = p.all_found
+                    ? `<span style="color:var(--nord14);font-size:0.78rem;">ready</span>`
+                    : `<span style="color:var(--nord13);font-size:0.78rem;">pending library</span>`;
+
+                return `<tr>
+                    <td style="padding:8px 10px;font-family:monospace;">:${p.duration_sec}</td>
+                    <td style="padding:8px 10px;font-family:monospace;">${esc(p.date_label)}</td>
+                    <td style="padding:8px 10px;">${statusCells}</td>
+                    <td style="padding:8px 10px;">${readyBadge}</td>
+                </tr>`;
+            }).join('');
+
+            return `<div style="margin-bottom:20px;">
+                ${header}
+                <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+                    <thead>
+                        <tr style="text-align:left;border-bottom:1px solid var(--border-color);">
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Dur</th>
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Period</th>
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">ISCI / Spot</th>
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>${periodRows}</tbody>
+                </table>
+            </div>`;
+        }).join('<hr style="border:none;border-top:1px solid var(--border-color);margin:16px 0;">');
+
+        const anyReady = results.some(r => r.periods.some(p => p.all_found));
+
+        grid.innerHTML = `
+            <div class="tool-card" style="margin-bottom:0;">
+                <h2>Lexus Traffic Instructions</h2>
+                <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:14px;">
+                    Select the contract above, then click <strong>Assign Ready Periods</strong>.
+                    Periods marked <em>pending library</em> will be skipped.
+                </p>
+                ${cards}
+                <div style="margin-top:14px;display:flex;align-items:center;gap:12px;">
+                    <button class="run-btn apply" onclick="applyLexusTraffic()"
+                            ${anyReady ? '' : 'disabled title="No periods ready to assign"'}>
+                        Assign Ready Periods
+                    </button>
+                    <span id="lexusToast" style="font-size:0.85rem;"></span>
+                </div>
+            </div>`;
+        grid.style.display = 'block';
+    }
+
+    async function applyLexusTraffic() {
+        if (!selectedContractId) { alert('Please select a contract first using the search above.'); return; }
+
+        const results = window.lexusResults || [];
+        const toast   = document.getElementById('lexusToast');
+        const btn     = document.getElementById('daviselenGrid').querySelector('.run-btn.apply');
+        btn.disabled    = true;
+        btn.textContent = 'Assigning…';
+        toast.textContent = '';
+
+        // Fetch contract lines grouped by duration
+        let linesByDur = {};
+        try {
+            const r = await fetch(`/api/traffic/contract/${selectedContractId}/assignment`);
+            if (!r.ok) throw new Error('Could not load contract lines');
+            const data = await r.json();
+            // Group line_ids by duration_sec
+            for (const line of data.lines) {
+                const dur = Math.round((line.duration_frames || 0) / 29.97) || 0;
+                if (!linesByDur[dur]) linesByDur[dur] = [];
+                linesByDur[dur].push(line.line_id);
+            }
+        } catch (e) {
+            toast.style.color = 'var(--nord11)';
+            toast.textContent = `Error loading contract: ${e.message}`;
+            btn.disabled = false; btn.textContent = 'Assign Ready Periods';
+            return;
+        }
+
+        let totalPeriods = 0, skipped = 0, errors = [];
+
+        try {
+            for (const r of results) {
+                for (const p of r.periods) {
+                    if (!p.all_found) { skipped++; continue; }
+
+                    const lineIds = linesByDur[p.duration_sec] || [];
+                    if (!lineIds.length) { skipped++; continue; }
+
+                    const filmatiIds  = buildRotationList(p.spots.filter(s => s.found));
+                    const assignments = lineIds.map(lid => ({ line_id: lid, filmati_ids: filmatiIds }));
+                    const payload     = { assignments, date_from: p.date_from_sql, date_to: p.date_to_sql };
+
+                    const resp = await fetch(`/api/traffic/contract/${selectedContractId}/auto-assign`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                    if (!resp.ok) {
+                        errors.push(`${p.date_label} :${p.duration_sec}s — ${(await resp.json()).detail || 'error'}`);
+                        continue;
+                    }
+                    totalPeriods++;
+                }
+            }
+
+            if (errors.length) {
+                toast.style.color = 'var(--nord11)';
+                toast.textContent = errors.join(' | ');
+            } else {
+                toast.style.color = 'var(--nord14)';
+                toast.textContent = `Done — ${totalPeriods} period${totalPeriods !== 1 ? 's' : ''} assigned` +
+                    (skipped ? `, ${skipped} skipped (not in library or no lines)` : '') + '.';
+            }
+        } catch (e) {
+            toast.style.color = 'var(--nord11)';
+            toast.textContent = `Error: ${e.message}`;
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = 'Assign Ready Periods';
+        }
     }
 
     async function parseAdmerasiaIo() {

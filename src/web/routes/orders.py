@@ -1843,12 +1843,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 cur.execute("""
                     SELECT cr.ID_CONTRATTIRIGHE AS line_id,
                            cr.DESCRIZIONE       AS description,
+                           cr.DURATA            AS duration_frames,
                            COUNT(tp.ID_TPALINSE) AS spot_count
                     FROM CONTRATTIRIGHE cr
                     JOIN trafficPalinse tpa ON tpa.id_contrattirighe = cr.ID_CONTRATTIRIGHE
                     JOIN TPALINSE tp        ON tp.ID_TPALINSE = tpa.id_tpalinse
                     WHERE cr.ID_CONTRATTITESTATA = %d
-                    GROUP BY cr.ID_CONTRATTIRIGHE, cr.DESCRIZIONE
+                    GROUP BY cr.ID_CONTRATTIRIGHE, cr.DESCRIZIONE, cr.DURATA
                     ORDER BY cr.ID_CONTRATTIRIGHE
                 """ % contract_id)
                 lines = [dict(r) for r in cur.fetchall()]
@@ -2682,6 +2683,201 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     })
 
             return results
+
+        try:
+            result = await asyncio.get_running_loop().run_in_executor(None, _run)
+            return JSONResponse(result)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.post("/api/traffic/parse-instructions")
+    async def parse_traffic_instructions(files: List[UploadFile] = File(...)):
+        """Auto-detect agency format and parse one or more traffic instruction PDFs.
+
+        Supports:
+          - Davis Elen  → auto-finds contract by estimate number
+          - IW Group (Lexus) → returns ISCI periods; contract selected by user
+        """
+        parsed_files = []
+        for f in files:
+            parsed_files.append((f.filename, await f.read()))
+
+        def _detect_format(text: str) -> str:
+            upper = text.upper()
+            if "DAVIS ELEN ADVERTISING" in upper:
+                return "daviselen"
+            if "IW GROUP" in upper and "TRAFFIC SHEET" in upper:
+                return "lexus"
+            return "unknown"
+
+        def _run():
+            import io as _io
+
+            import pdfplumber
+            from browser_automation.etere_direct_client import connect as _db_connect
+            from browser_automation.parsers.daviselen_traffic_parser import (
+                parse_daviselen_traffic_pdf,
+            )
+            from browser_automation.parsers.lexus_traffic_parser import (
+                parse_lexus_traffic_pdf,
+            )
+
+            items = []
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+
+                for filename, pdf_bytes in parsed_files:
+                    # Detect format from text
+                    with pdfplumber.open(_io.BytesIO(pdf_bytes)) as pdf:
+                        text = "\n".join(p.extract_text() or "" for p in pdf.pages)
+                    fmt = _detect_format(text)
+
+                    if fmt == "daviselen":
+                        instr = parse_daviselen_traffic_pdf(pdf_bytes)
+                        if not instr.estimate:
+                            items.append({"filename": filename, "format": "daviselen",
+                                          "error": "No estimate number found"})
+                            continue
+
+                        term = f"%{instr.estimate}%"
+                        cur.execute("""
+                            SELECT TOP 5
+                                ct.ID_CONTRATTITESTATA AS id,
+                                ct.COD_CONTRATTO       AS code,
+                                ct.DESCRIZIONE         AS description,
+                                CONVERT(VARCHAR(10), ct.DATA_INIZIO,  101) AS date_start,
+                                CONVERT(VARCHAR(10), ct.DATA_TERMINE, 101) AS date_end
+                            FROM CONTRATTITESTATA ct
+                            WHERE UPPER(ct.COD_CONTRATTO) LIKE %s
+                               OR UPPER(ct.DESCRIZIONE)   LIKE %s
+                            ORDER BY ct.DATA_INIZIO DESC
+                        """, (term, term))
+                        contracts = [dict(r) for r in cur.fetchall()]
+                        contract_id = contracts[0]["id"] if contracts else None
+
+                        isci_codes   = [s.isci for s in instr.spots]
+                        placeholders = ",".join(f"'{c}'" for c in isci_codes)
+                        filmati_map  = {}
+                        if isci_codes:
+                            cur.execute(
+                                f"SELECT ID_FILMATI, COD_PROGRA, DESCRIZIO FROM FILMATI"
+                                f" WHERE COD_PROGRA IN ({placeholders})"
+                            )
+                            for r in cur.fetchall():
+                                filmati_map[r["COD_PROGRA"]] = {
+                                    "filmati_id": r["ID_FILMATI"],
+                                    "db_title":   r["DESCRIZIO"] or "",
+                                }
+
+                        spots_out, not_found = [], []
+                        for s in instr.spots:
+                            if s.isci in filmati_map:
+                                spots_out.append({
+                                    "isci": s.isci, "title": s.title or filmati_map[s.isci]["db_title"],
+                                    "rotation_pct": s.rotation_pct,
+                                    "filmati_id": filmati_map[s.isci]["filmati_id"], "found": True,
+                                })
+                            else:
+                                not_found.append(s.isci)
+                                spots_out.append({
+                                    "isci": s.isci, "title": s.title, "rotation_pct": s.rotation_pct,
+                                    "filmati_id": None, "found": False,
+                                })
+
+                        line_ids = []
+                        if contract_id:
+                            date_filter = ""
+                            if instr.date_from_sql:
+                                date_filter += f" AND tp.DATA >= '{instr.date_from_sql}'"
+                            if instr.date_to_sql:
+                                date_filter += f" AND tp.DATA <= '{instr.date_to_sql}'"
+                            cur.execute(f"""
+                                SELECT cr.ID_CONTRATTIRIGHE AS line_id,
+                                       cr.DESCRIZIONE       AS description,
+                                       ISNULL(sc.spot_count, 0) AS spot_count
+                                FROM CONTRATTIRIGHE cr
+                                LEFT JOIN (
+                                    SELECT tpa.id_contrattirighe, COUNT(*) AS spot_count
+                                    FROM trafficPalinse tpa
+                                    JOIN TPALINSE tp ON tp.ID_TPALINSE = tpa.id_tpalinse
+                                    WHERE 1=1 {date_filter}
+                                    GROUP BY tpa.id_contrattirighe
+                                ) sc ON sc.id_contrattirighe = cr.ID_CONTRATTIRIGHE
+                                WHERE cr.ID_CONTRATTITESTATA = {contract_id}
+                                  AND CAST(ROUND(CAST(cr.DURATA AS FLOAT) / {_FPS_GLOBAL}, 0) AS INT)
+                                      = {instr.duration_sec}
+                                ORDER BY cr.ID_CONTRATTIRIGHE
+                            """)
+                            line_ids = [{"line_id": r["line_id"], "description": r["description"],
+                                         "spot_count": r["spot_count"]} for r in cur.fetchall()]
+
+                        items.append({
+                            "filename": filename, "format": "daviselen",
+                            "estimate": instr.estimate,
+                            "product":  f"{instr.product_code} {instr.product_name}".strip(),
+                            "duration_sec": instr.duration_sec,
+                            "date_range":   f"{instr.start_date}–{instr.end_date}",
+                            "date_from_sql": instr.date_from_sql,
+                            "date_to_sql":   instr.date_to_sql,
+                            "contract":  contracts[0] if contracts else None,
+                            "contract_candidates": contracts,
+                            "spots":     spots_out,
+                            "not_found": not_found,
+                            "lines":     line_ids,
+                        })
+
+                    elif fmt == "lexus":
+                        instr = parse_lexus_traffic_pdf(pdf_bytes)
+                        all_isci = list({s.isci for p in instr.periods for s in p.spots})
+                        placeholders = ",".join(f"'{c}'" for c in all_isci) if all_isci else "''"
+                        cur.execute(
+                            f"SELECT ID_FILMATI, COD_PROGRA, DESCRIZIO FROM FILMATI"
+                            f" WHERE COD_PROGRA IN ({placeholders})"
+                        )
+                        filmati_map = {
+                            r["COD_PROGRA"]: {"filmati_id": r["ID_FILMATI"],
+                                              "db_title":   r["DESCRIZIO"] or ""}
+                            for r in cur.fetchall()
+                        }
+
+                        periods_out = []
+                        for p in instr.periods:
+                            spots_out = []
+                            for s in p.spots:
+                                found = s.isci in filmati_map
+                                spots_out.append({
+                                    "isci":         s.isci,
+                                    "title":        s.title or (filmati_map[s.isci]["db_title"] if found else ""),
+                                    "rotation_pct": s.rotation_pct,
+                                    "filmati_id":   filmati_map[s.isci]["filmati_id"] if found else None,
+                                    "found":        found,
+                                    "notes":        s.notes,
+                                })
+                            periods_out.append({
+                                "duration_sec":  p.duration_sec,
+                                "date_from_sql": p.date_from_sql,
+                                "date_to_sql":   p.date_to_sql,
+                                "date_label":    p.date_label,
+                                "spots":         spots_out,
+                                "all_found":     all(s["found"] for s in spots_out),
+                            })
+
+                        items.append({
+                            "filename":         filename,
+                            "format":           "lexus",
+                            "advertiser":       instr.advertiser,
+                            "campaign":         instr.campaign,
+                            "coverage_area":    instr.coverage_area,
+                            "market_code":      instr.market_code,
+                            "search_suggestion": instr.search_suggestion,
+                            "periods":          periods_out,
+                        })
+
+                    else:
+                        items.append({"filename": filename, "format": "unknown",
+                                      "error": "Unrecognised traffic instruction format"})
+
+            return items
 
         try:
             result = await asyncio.get_running_loop().run_in_executor(None, _run)
