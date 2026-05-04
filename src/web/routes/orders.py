@@ -2637,10 +2637,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             })
 
                     # Fetch line IDs for this contract (filtered by duration).
-                    # Use ROUND to handle float FPS (29.97 × 30 = 899.1, stored as 899/900).
-                    # LEFT JOIN so lines without scheduled spots are still returned.
+                    # Spot count is restricted to the instruction date range so the
+                    # UI shows exactly how many spots will be touched.
                     line_ids = []
                     if contract_id:
+                        date_filter = ""
+                        if instr.date_from_sql:
+                            date_filter += f" AND tp.DATA >= '{instr.date_from_sql}'"
+                        if instr.date_to_sql:
+                            date_filter += f" AND tp.DATA <= '{instr.date_to_sql}'"
                         cur.execute(f"""
                             SELECT cr.ID_CONTRATTIRIGHE AS line_id,
                                    cr.DESCRIZIONE       AS description,
@@ -2650,6 +2655,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 SELECT tpa.id_contrattirighe, COUNT(*) AS spot_count
                                 FROM trafficPalinse tpa
                                 JOIN TPALINSE tp ON tp.ID_TPALINSE = tpa.id_tpalinse
+                                WHERE 1=1 {date_filter}
                                 GROUP BY tpa.id_contrattirighe
                             ) sc ON sc.id_contrattirighe = cr.ID_CONTRATTIRIGHE
                             WHERE cr.ID_CONTRATTITESTATA = {contract_id}

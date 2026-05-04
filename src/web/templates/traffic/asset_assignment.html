@@ -1272,8 +1272,8 @@
         } catch (e) {
             alert(`Error: ${e.message}`);
         } finally {
-            btn.disabled    = false;
-            btn.textContent = 'Parse &amp; Find';
+            btn.disabled   = false;
+            btn.innerHTML  = 'Parse &amp; Find';
         }
     }
 
@@ -1286,7 +1286,7 @@
 
         const rows = results.map(r => {
             if (r.error) {
-                return `<tr><td>${esc(r.filename)}</td><td colspan="5" style="color:var(--nord11);">${esc(r.error)}</td></tr>`;
+                return `<tr><td>${esc(r.filename)}</td><td colspan="6" style="color:var(--nord11);">${esc(r.error)}</td></tr>`;
             }
             const contractCell = r.contract
                 ? `<span style="color:var(--nord14);">${esc(r.contract.code)}</span><br>
@@ -1303,10 +1303,16 @@
                 ? `${r.lines.length} line${r.lines.length !== 1 ? 's' : ''}, ${r.lines.reduce((a,l)=>a+l.spot_count,0)} spots`
                 : `<span style="color:var(--nord11);">No :${r.duration_sec}s lines found</span>`;
 
+            const periodCell = r.date_from_sql
+                ? `<span style="font-family:monospace;">${esc(r.date_from_sql)}</span> –
+                   <span style="font-family:monospace;">${esc(r.date_to_sql)}</span>`
+                : `<span style="color:var(--text-muted);">—</span>`;
+
             return `<tr>
                 <td style="font-size:0.8rem;color:var(--text-muted);">${esc(r.filename)}</td>
                 <td><strong>${esc(r.estimate)}</strong><br><span style="font-size:0.78rem;color:var(--text-muted);">${esc(r.product)}</span></td>
                 <td>${contractCell}</td>
+                <td>${periodCell}</td>
                 <td>${spotsCell}</td>
                 <td>${linesCell}</td>
             </tr>`;
@@ -1321,8 +1327,9 @@
                             <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">File</th>
                             <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Estimate</th>
                             <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Contract</th>
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Instruction Period</th>
                             <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">ISCI / Spot</th>
-                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Lines</th>
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Spots in Period</th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
