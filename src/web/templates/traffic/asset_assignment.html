@@ -1540,11 +1540,20 @@
         if (!rows.length) { drop.style.display = 'none'; return; }
 
         drop.innerHTML = rows.map(r =>
-            `<div class="search-item" onclick="lexusSelectContract(${idx}, ${r.id}, ${JSON.stringify(r.code)}, ${JSON.stringify(r.date_start + '–' + r.date_end)})">
-                <strong>${esc(r.code)}</strong>
-                <span style="color:var(--text-muted);font-size:0.8rem;margin-left:6px;">${esc(r.date_start)}–${esc(r.date_end)}</span>
+            `<div class="dropdown-item"
+                  data-id="${r.id}"
+                  data-code="${esc(r.code || '')}"
+                  data-range="${esc(r.date_start + '–' + r.date_end)}">
+                <div class="dropdown-code">${esc(r.code)}</div>
+                <div class="dropdown-desc">${esc(r.description || '')} &nbsp;·&nbsp; ${esc(r.date_start)}–${esc(r.date_end)}</div>
             </div>`
         ).join('');
+        // Wire click listener fresh each time results render
+        drop.onclick = e => {
+            const item = e.target.closest('.dropdown-item[data-id]');
+            if (!item) return;
+            lexusSelectContract(idx, parseInt(item.dataset.id), item.dataset.code, item.dataset.range);
+        };
         drop.style.display = 'block';
     }
 
