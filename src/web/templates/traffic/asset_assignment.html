@@ -1436,12 +1436,38 @@
 
     // ── Lexus / IW Group traffic ──────────────────────────────────────────────
 
-    function renderLexusGrid(results) {
-        const grid = document.getElementById('daviselenGrid'); // reuse same container
+    // Per-card state: {idx → {id, code}} populated when user picks a contract
+    window.lexusCardContracts = {};
 
-        const cards = results.map(r => {
-            const header = `
-                <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+    function renderLexusGrid(results) {
+        window.lexusCardContracts = {};
+        const grid = document.getElementById('daviselenGrid');
+
+        const cards = results.map((r, idx) => {
+            const periodRows = r.periods.map(p => {
+                const statusCells = p.spots.map(s => {
+                    if (s.found) {
+                        const notesHtml = s.notes
+                            ? `<span style="color:var(--nord13);font-size:0.75rem;margin-left:6px;">⚠ ${esc(s.notes)}</span>`
+                            : '';
+                        return `<div><span style="color:var(--nord14);">✓</span> <span style="font-family:monospace;">${esc(s.isci)}</span> ${esc(s.rotation_pct)}%${notesHtml}</div>`;
+                    }
+                    return `<div><span style="color:var(--nord11);">✗</span> <span style="font-family:monospace;">${esc(s.isci)}</span>
+                        <span style="color:var(--nord11);font-size:0.8rem;">— not in media library yet</span></div>`;
+                }).join('');
+                const readyBadge = p.all_found
+                    ? `<span style="color:var(--nord14);font-size:0.78rem;">ready</span>`
+                    : `<span style="color:var(--nord13);font-size:0.78rem;">pending library</span>`;
+                return `<tr>
+                    <td style="padding:8px 10px;font-family:monospace;">:${p.duration_sec}</td>
+                    <td style="padding:8px 10px;font-family:monospace;">${esc(p.date_label)}</td>
+                    <td style="padding:8px 10px;">${statusCells}</td>
+                    <td style="padding:8px 10px;">${readyBadge}</td>
+                </tr>`;
+            }).join('');
+
+            return `<div style="margin-bottom:20px;" data-lexus-card="${idx}">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
                     <div>
                         <strong>${esc(r.advertiser)}</strong>
                         <span style="color:var(--text-muted);margin:0 6px;">·</span>
@@ -1452,37 +1478,30 @@
                     </div>
                     <div style="font-size:0.82rem;color:var(--text-muted);">${esc(r.filename)}</div>
                 </div>
-                <div style="font-size:0.82rem;margin-bottom:12px;padding:8px 10px;background:var(--nord1);border-radius:4px;color:var(--nord4);">
-                    🔍 Search for this contract: <strong>${esc(r.search_suggestion)}</strong>
-                </div>`;
 
-            const periodRows = r.periods.map(p => {
-                const statusCells = p.spots.map(s => {
-                    if (s.found) {
-                        const notesHtml = s.notes
-                            ? `<span style="color:var(--nord13);font-size:0.75rem;margin-left:6px;">⚠ ${esc(s.notes)}</span>`
-                            : '';
-                        return `<div><span style="color:var(--nord14);">✓</span> <span style="font-family:monospace;">${esc(s.isci)}</span> ${esc(s.rotation_pct)}%${notesHtml}</div>`;
-                    } else {
-                        return `<div><span style="color:var(--nord11);">✗</span> <span style="font-family:monospace;">${esc(s.isci)}</span>
-                            <span style="color:var(--nord11);font-size:0.8rem;">— not in media library yet</span></div>`;
-                    }
-                }).join('');
+                <!-- Per-card contract search -->
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+                    <div class="field-group search-wrap" style="flex:1;max-width:400px;">
+                        <input class="field-input" id="lexusSearch-${idx}"
+                               value="${esc(r.search_suggestion)}"
+                               placeholder="Search contract…"
+                               autocomplete="off"
+                               oninput="lexusContractSearch(${idx})"
+                               onkeydown="if(event.key==='Enter') lexusContractSearch(${idx})"
+                               style="font-size:0.82rem;" />
+                        <div id="lexusDrop-${idx}" class="search-dropdown" style="display:none;"></div>
+                    </div>
+                    <div id="lexusContractBadge-${idx}" style="font-size:0.82rem;color:var(--text-muted);">
+                        — no contract selected
+                    </div>
+                    <button class="run-btn" style="padding:6px 14px;"
+                            onclick="assignLexusCard(${idx})"
+                            id="lexusAssignBtn-${idx}" disabled>
+                        Assign
+                    </button>
+                    <span id="lexusCardToast-${idx}" style="font-size:0.82rem;"></span>
+                </div>
 
-                const readyBadge = p.all_found
-                    ? `<span style="color:var(--nord14);font-size:0.78rem;">ready</span>`
-                    : `<span style="color:var(--nord13);font-size:0.78rem;">pending library</span>`;
-
-                return `<tr>
-                    <td style="padding:8px 10px;font-family:monospace;">:${p.duration_sec}</td>
-                    <td style="padding:8px 10px;font-family:monospace;">${esc(p.date_label)}</td>
-                    <td style="padding:8px 10px;">${statusCells}</td>
-                    <td style="padding:8px 10px;">${readyBadge}</td>
-                </tr>`;
-            }).join('');
-
-            return `<div style="margin-bottom:20px;">
-                ${header}
                 <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
                     <thead>
                         <tr style="text-align:left;border-bottom:1px solid var(--border-color);">
@@ -1497,96 +1516,109 @@
             </div>`;
         }).join('<hr style="border:none;border-top:1px solid var(--border-color);margin:16px 0;">');
 
-        const anyReady = results.some(r => r.periods.some(p => p.all_found));
-
         grid.innerHTML = `
             <div class="tool-card" style="margin-bottom:0;">
                 <h2>Lexus Traffic Instructions</h2>
                 <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:14px;">
-                    Select the contract above, then click <strong>Assign Ready Periods</strong>.
-                    Periods marked <em>pending library</em> will be skipped.
+                    Search for each contract, select it, then click <strong>Assign</strong>.
+                    Periods marked <em>pending library</em> are skipped automatically.
                 </p>
                 ${cards}
-                <div style="margin-top:14px;display:flex;align-items:center;gap:12px;">
-                    <button class="run-btn apply" onclick="applyLexusTraffic()"
-                            ${anyReady ? '' : 'disabled title="No periods ready to assign"'}>
-                        Assign Ready Periods
-                    </button>
-                    <span id="lexusToast" style="font-size:0.85rem;"></span>
-                </div>
             </div>`;
         grid.style.display = 'block';
     }
 
-    async function applyLexusTraffic() {
-        if (!selectedContractId) { alert('Please select a contract first using the search above.'); return; }
+    async function lexusContractSearch(idx) {
+        const input = document.getElementById(`lexusSearch-${idx}`);
+        const drop  = document.getElementById(`lexusDrop-${idx}`);
+        const q     = input.value.trim();
+        if (q.length < 2) { drop.style.display = 'none'; return; }
+
+        const resp = await fetch(`/api/traffic/contracts/search?q=${encodeURIComponent(q)}`);
+        if (!resp.ok) return;
+        const rows = await resp.json();
+        if (!rows.length) { drop.style.display = 'none'; return; }
+
+        drop.innerHTML = rows.map(r =>
+            `<div class="search-item" onclick="lexusSelectContract(${idx}, ${r.id}, ${JSON.stringify(r.code)}, ${JSON.stringify(r.date_start + '–' + r.date_end)})">
+                <strong>${esc(r.code)}</strong>
+                <span style="color:var(--text-muted);font-size:0.8rem;margin-left:6px;">${esc(r.date_start)}–${esc(r.date_end)}</span>
+            </div>`
+        ).join('');
+        drop.style.display = 'block';
+    }
+
+    function lexusSelectContract(idx, contractId, contractCode, dateRange) {
+        window.lexusCardContracts[idx] = { id: contractId, code: contractCode };
+        document.getElementById(`lexusSearch-${idx}`).value = contractCode;
+        document.getElementById(`lexusDrop-${idx}`).style.display = 'none';
+        document.getElementById(`lexusContractBadge-${idx}`).innerHTML =
+            `<span style="color:var(--nord14);">✓ #${contractId}</span>
+             <span style="color:var(--text-muted);margin-left:6px;">${esc(dateRange)}</span>`;
+        document.getElementById(`lexusAssignBtn-${idx}`).disabled = false;
+    }
+
+    async function assignLexusCard(idx) {
+        const contract = window.lexusCardContracts[idx];
+        if (!contract) { alert('Please select a contract first.'); return; }
 
         const results = window.lexusResults || [];
-        const toast   = document.getElementById('lexusToast');
-        const btn     = document.getElementById('daviselenGrid').querySelector('.run-btn.apply');
+        const r       = results[idx];
+        if (!r) return;
+
+        const btn   = document.getElementById(`lexusAssignBtn-${idx}`);
+        const toast = document.getElementById(`lexusCardToast-${idx}`);
         btn.disabled    = true;
-        btn.textContent = 'Assigning…';
+        btn.textContent = '…';
         toast.textContent = '';
 
-        // Fetch contract lines grouped by duration
-        let linesByDur = {};
         try {
-            const r = await fetch(`/api/traffic/contract/${selectedContractId}/assignment`);
-            if (!r.ok) throw new Error('Could not load contract lines');
-            const data = await r.json();
-            // Group line_ids by duration_sec
+            // Fetch lines for this contract grouped by duration_sec
+            const assignResp = await fetch(`/api/traffic/contract/${contract.id}/assignment`);
+            if (!assignResp.ok) throw new Error('Could not load contract lines');
+            const data = await assignResp.json();
+            const linesByDur = {};
             for (const line of data.lines) {
-                const dur = Math.round((line.duration_frames || 0) / 29.97) || 0;
+                const dur = Math.round((line.duration_frames || 0) / 29.97);
                 if (!linesByDur[dur]) linesByDur[dur] = [];
                 linesByDur[dur].push(line.line_id);
             }
-        } catch (e) {
-            toast.style.color = 'var(--nord11)';
-            toast.textContent = `Error loading contract: ${e.message}`;
-            btn.disabled = false; btn.textContent = 'Assign Ready Periods';
-            return;
-        }
 
-        let totalPeriods = 0, skipped = 0, errors = [];
+            let assigned = 0, skipped = 0, errors = [];
+            for (const p of r.periods) {
+                if (!p.all_found) { skipped++; continue; }
+                const lineIds = linesByDur[p.duration_sec] || [];
+                if (!lineIds.length) { skipped++; continue; }
 
-        try {
-            for (const r of results) {
-                for (const p of r.periods) {
-                    if (!p.all_found) { skipped++; continue; }
+                const filmatiIds  = buildRotationList(p.spots.filter(s => s.found));
+                const assignments = lineIds.map(lid => ({ line_id: lid, filmati_ids: filmatiIds }));
+                const payload     = { assignments, date_from: p.date_from_sql, date_to: p.date_to_sql };
 
-                    const lineIds = linesByDur[p.duration_sec] || [];
-                    if (!lineIds.length) { skipped++; continue; }
-
-                    const filmatiIds  = buildRotationList(p.spots.filter(s => s.found));
-                    const assignments = lineIds.map(lid => ({ line_id: lid, filmati_ids: filmatiIds }));
-                    const payload     = { assignments, date_from: p.date_from_sql, date_to: p.date_to_sql };
-
-                    const resp = await fetch(`/api/traffic/contract/${selectedContractId}/auto-assign`, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload),
-                    });
-                    if (!resp.ok) {
-                        errors.push(`${p.date_label} :${p.duration_sec}s — ${(await resp.json()).detail || 'error'}`);
-                        continue;
-                    }
-                    totalPeriods++;
+                const resp = await fetch(`/api/traffic/contract/${contract.id}/auto-assign`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                if (!resp.ok) {
+                    errors.push(`${p.date_label} :${p.duration_sec}s`);
+                } else {
+                    assigned++;
                 }
             }
 
             if (errors.length) {
                 toast.style.color = 'var(--nord11)';
-                toast.textContent = errors.join(' | ');
+                toast.textContent = `Errors: ${errors.join(', ')}`;
             } else {
                 toast.style.color = 'var(--nord14)';
-                toast.textContent = `Done — ${totalPeriods} period${totalPeriods !== 1 ? 's' : ''} assigned` +
-                    (skipped ? `, ${skipped} skipped (not in library or no lines)` : '') + '.';
+                toast.textContent = `Done — ${assigned} period${assigned !== 1 ? 's' : ''} assigned` +
+                    (skipped ? `, ${skipped} skipped` : '') + '.';
             }
         } catch (e) {
             toast.style.color = 'var(--nord11)';
             toast.textContent = `Error: ${e.message}`;
         } finally {
             btn.disabled    = false;
-            btn.textContent = 'Assign Ready Periods';
+            btn.textContent = 'Assign';
         }
     }
 
