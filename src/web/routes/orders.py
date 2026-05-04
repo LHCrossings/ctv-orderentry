@@ -2714,6 +2714,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             import io as _io
 
             import pdfplumber
+
             from browser_automation.etere_direct_client import connect as _db_connect
             from browser_automation.parsers.daviselen_traffic_parser import (
                 parse_daviselen_traffic_pdf,
