@@ -2628,20 +2628,25 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 "found":        False,
                             })
 
-                    # Fetch line IDs for this contract (filtered by duration)
+                    # Fetch line IDs for this contract (filtered by duration).
+                    # Use ROUND to handle float FPS (29.97 × 30 = 899.1, stored as 899/900).
+                    # LEFT JOIN so lines without scheduled spots are still returned.
                     line_ids = []
                     if contract_id:
-                        dur_frames = instr.duration_sec * _FPS_GLOBAL
                         cur.execute(f"""
                             SELECT cr.ID_CONTRATTIRIGHE AS line_id,
                                    cr.DESCRIZIONE       AS description,
-                                   COUNT(tp.ID_TPALINSE) AS spot_count
+                                   ISNULL(sc.spot_count, 0) AS spot_count
                             FROM CONTRATTIRIGHE cr
-                            JOIN trafficPalinse tpa ON tpa.id_contrattirighe = cr.ID_CONTRATTIRIGHE
-                            JOIN TPALINSE tp        ON tp.ID_TPALINSE = tpa.id_tpalinse
+                            LEFT JOIN (
+                                SELECT tpa.id_contrattirighe, COUNT(*) AS spot_count
+                                FROM trafficPalinse tpa
+                                JOIN TPALINSE tp ON tp.ID_TPALINSE = tpa.id_tpalinse
+                                GROUP BY tpa.id_contrattirighe
+                            ) sc ON sc.id_contrattirighe = cr.ID_CONTRATTIRIGHE
                             WHERE cr.ID_CONTRATTITESTATA = {contract_id}
-                              AND cr.DURATA = {dur_frames}
-                            GROUP BY cr.ID_CONTRATTIRIGHE, cr.DESCRIZIONE
+                              AND CAST(ROUND(CAST(cr.DURATA AS FLOAT) / {_FPS_GLOBAL}, 0) AS INT)
+                                  = {instr.duration_sec}
                             ORDER BY cr.ID_CONTRATTIRIGHE
                         """)
                         line_ids = [{"line_id": r["line_id"], "description": r["description"],
