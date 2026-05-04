@@ -485,6 +485,33 @@
         .dropdown-code { font-weight: 700; font-size: 0.88rem; color: var(--text-primary); }
         .dropdown-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 1px; }
         .search-wrap { position: relative; }
+        .pdf-drop-zone {
+            border: 2px dashed var(--border-color);
+            border-radius: 6px;
+            padding: .5rem .75rem;
+            cursor: pointer;
+            transition: border-color .2s, background .2s;
+            background: var(--bg-secondary);
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            min-height: 38px;
+        }
+        .pdf-drop-zone.drag-over {
+            border-color: var(--nord10);
+            background: rgba(94,129,172,.08);
+        }
+        .pdf-drop-zone input[type=file] {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+            width: 100%;
+        }
+        .pdf-drop-label { font-size: .82rem; color: var(--text-muted); }
+        .pdf-drop-label strong { color: var(--nord10); }
+        .pdf-drop-name { font-size: .82rem; font-weight: 600; color: var(--text-primary); }
     </style>
 </head>
 <body>
@@ -521,8 +548,11 @@
         <div class="input-row" style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border-color);">
             <div class="field-group" style="flex:1;">
                 <label class="field-label">Traffic Instructions PDF</label>
-                <input type="file" id="trafficPdfFiles" accept=".pdf" multiple class="field-input"
-                       style="font-size:0.82rem; padding:6px 10px;" />
+                <div class="pdf-drop-zone" id="trafficPdfDropZone">
+                    <input type="file" id="trafficPdfFiles" accept=".pdf" multiple />
+                    <span class="pdf-drop-label"><strong>Click to browse</strong> or drag &amp; drop PDFs</span>
+                    <span class="pdf-drop-name" id="trafficPdfName"></span>
+                </div>
             </div>
             <button class="run-btn" id="trafficPdfBtn" onclick="parseTrafficPdfUpload()">Parse &amp; Find</button>
         </div>
@@ -1997,6 +2027,32 @@
             btn.textContent = 'Apply Auto-Assign';
         }
     }
+
+// Traffic PDF drag-and-drop
+(function() {
+    const zone = document.getElementById('trafficPdfDropZone');
+    const input = document.getElementById('trafficPdfFiles');
+    const nameLabel = document.getElementById('trafficPdfName');
+
+    function updateLabel() {
+        if (!input.files.length) { nameLabel.textContent = ''; return; }
+        const names = [...input.files].map(f => f.name);
+        nameLabel.textContent = names.length === 1 ? names[0] : `${names.length} files`;
+    }
+
+    input.addEventListener('change', updateLabel);
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', e => {
+        e.preventDefault();
+        zone.classList.remove('drag-over');
+        const dt = new DataTransfer();
+        [...e.dataTransfer.files].filter(f => /\.pdf$/i.test(f.name)).forEach(f => dt.items.add(f));
+        if (!dt.files.length) return;
+        input.files = dt.files;
+        updateLabel();
+    });
+})();
 </script>
 </body>
 </html>

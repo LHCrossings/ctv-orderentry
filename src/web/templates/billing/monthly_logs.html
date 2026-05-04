@@ -9,8 +9,8 @@
     <link rel="stylesheet" href="/static/css/portal.css" />
     <style>
         .upload-card {
-            background: var(--nord1);
-            border: 1px solid var(--nord3);
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
             border-radius: 10px;
             padding: 1.5rem 2rem;
             max-width: 560px;
@@ -20,7 +20,7 @@
             display: block;
             font-size: .85rem;
             font-weight: 600;
-            color: var(--nord4);
+            color: var(--text-primary);
             margin-bottom: .5rem;
         }
         .upload-row {
@@ -30,10 +30,10 @@
         }
         .upload-row input[type=file] {
             flex: 1;
-            background: var(--nord0);
-            border: 1px solid var(--nord3);
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
             border-radius: 6px;
-            color: var(--nord4);
+            color: var(--text-primary);
             padding: .45rem .75rem;
             font-size: .9rem;
         }
@@ -58,29 +58,33 @@
             font-size: .85rem;
             color: var(--text-muted);
         }
-        .summary-bar strong { color: var(--nord4); }
+        .summary-bar strong { color: var(--text-primary); }
 
         table.log-table {
             width: 100%;
             border-collapse: collapse;
             font-size: .875rem;
+            background: var(--nord6);
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
         }
         .log-table th {
             text-align: left;
             padding: .55rem .75rem;
-            background: var(--nord1);
+            background: var(--bg-secondary);
             color: var(--text-muted);
             font-weight: 600;
             font-size: .78rem;
             text-transform: uppercase;
             letter-spacing: .04em;
-            border-bottom: 1px solid var(--nord3);
+            border-bottom: 1px solid var(--border-color);
         }
         .log-table td {
             padding: .6rem .75rem;
-            border-bottom: 1px solid var(--nord2);
+            border-bottom: 1px solid var(--border-color);
             vertical-align: top;
-            color: var(--nord4);
+            color: var(--text-primary);
         }
         .log-table tr:last-child td { border-bottom: none; }
         .log-table tr.row-ok td:first-child { border-left: 3px solid var(--nord14); }
@@ -88,8 +92,8 @@
 
         .badge-ok {
             display: inline-block;
-            background: rgba(163,190,140,.15);
-            color: var(--nord14);
+            background: rgba(163,190,140,.2);
+            color: #3d6b25;
             border-radius: 4px;
             padding: .15rem .5rem;
             font-size: .8rem;
@@ -139,6 +143,40 @@
             margin-right: .4rem;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        .drop-zone {
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 1.25rem 1rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color .2s, background .2s;
+            background: var(--bg-secondary);
+            position: relative;
+        }
+        .drop-zone.drag-over {
+            border-color: var(--nord10);
+            background: rgba(94,129,172,.08);
+        }
+        .drop-zone input[type=file] {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+            width: 100%;
+        }
+        .drop-zone-icon { font-size: 1.5rem; margin-bottom: .25rem; }
+        .drop-zone-label {
+            font-size: .85rem;
+            color: var(--text-muted);
+        }
+        .drop-zone-label strong { color: var(--nord10); }
+        .drop-zone-filename {
+            margin-top: .4rem;
+            font-size: .82rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
     </style>
 </head>
 <body>
@@ -164,9 +202,14 @@
     </div>
 
     <div class="upload-card">
-        <label for="billingBookFile">Billing Book (.xlsm / .xlsx)</label>
-        <div class="upload-row">
+        <div class="drop-zone" id="billingDropZone">
             <input type="file" id="billingBookFile" accept=".xlsm,.xlsx" />
+            <div class="drop-zone-icon">📂</div>
+            <div class="drop-zone-label"><strong>Click to browse</strong> or drag &amp; drop</div>
+            <div class="drop-zone-label">Billing Book (.xlsm / .xlsx)</div>
+            <div class="drop-zone-filename" id="billingFileName"></div>
+        </div>
+        <div style="margin-top:.85rem; text-align:right;">
             <button class="btn-check" id="checkBtn" onclick="runCheck()">Check Logs</button>
         </div>
     </div>
@@ -295,6 +338,30 @@ function renderResults(data) {
     resultsDiv.innerHTML = html;
     resultsDiv.style.display = 'block';
 }
+
+// Drag-and-drop setup
+(function() {
+    const zone = document.getElementById('billingDropZone');
+    const input = document.getElementById('billingBookFile');
+    const nameLabel = document.getElementById('billingFileName');
+
+    input.addEventListener('change', () => {
+        nameLabel.textContent = input.files.length ? input.files[0].name : '';
+    });
+
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', e => {
+        e.preventDefault();
+        zone.classList.remove('drag-over');
+        const dt = new DataTransfer();
+        const files = [...e.dataTransfer.files].filter(f => /\.(xlsx?m?)$/i.test(f.name));
+        if (!files.length) return;
+        dt.items.add(files[0]);
+        input.files = dt.files;
+        nameLabel.textContent = files[0].name;
+    });
+})();
 </script>
 
 </body>
