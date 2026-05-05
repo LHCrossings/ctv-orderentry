@@ -109,10 +109,11 @@ def _parse_csv_totals(filename: str, csv_bytes: bytes) -> dict:
     """
     Extract total spots and gross from an Etere post-log CSV.
 
-    Spots  = number of data rows after the header.
-    Gross  = sum of a detected rate/amount column (None if not found).
-    Contract number extracted from filename pattern *_12345_postlog.csv
-    or from a content column.
+    The report's last non-empty line is a totals row:
+      col 0 = gross amount  (e.g. "9,975.00")
+      col 1 = spot count    (e.g. 549)
+
+    Contract number comes from filename pattern *_12345_postlog.csv.
     """
     contract_no = None
     fn_match = re.search(r'_(\d+)_postlog', filename, re.IGNORECASE)
@@ -120,65 +121,40 @@ def _parse_csv_totals(filename: str, csv_bytes: bytes) -> dict:
         contract_no = fn_match.group(1)
 
     text = csv_bytes.decode("utf-8-sig", errors="replace")
-    lines = text.splitlines(keepends=True)
-
-    HEADER_SIGNALS = {
-        'id_contrattirighe', 'dateschedule', 'contract', 'contractno',
-        'airdate', 'air_date', 'date',
-    }
-    header_idx = None
-    for i, line in enumerate(lines):
-        parts = next(csv_mod.reader([line]), [])
-        lower_parts = {p.strip().lower() for p in parts if p.strip()}
-        if lower_parts & HEADER_SIGNALS:
-            header_idx = i
+    # Find the last non-empty line
+    last_line = None
+    for line in reversed(text.splitlines()):
+        if line.strip():
+            last_line = line
             break
 
-    if header_idx is None:
+    if not last_line:
         return {
             "contract_no": contract_no,
             "total_spots": None,
             "gross_amount": None,
-            "error": "Could not locate data header row in CSV",
+            "error": "CSV appears empty",
         }
 
-    reader = csv_mod.DictReader(io.StringIO("".join(lines[header_idx:])))
-    headers_lower = {(h or "").strip().lower(): h for h in (reader.fieldnames or [])}
+    parts = next(csv_mod.reader([last_line]), [])
 
-    # Find a gross/rate column
-    AMOUNT_KEYS = [
-        'gross', 'grossamount', 'gross_amount', 'rate', 'netrate',
-        'amount', 'revenue', 'cost', 'spotrate',
-    ]
-    amount_col = None
-    for key in AMOUNT_KEYS:
-        if key in headers_lower:
-            amount_col = headers_lower[key]
-            break
-    if not amount_col:
-        for stripped, original in headers_lower.items():
-            if any(kw in stripped for kw in ('gross', 'rate', 'amount', 'revenue')):
-                amount_col = original
-                break
+    def _clean_num(s):
+        return s.replace(',', '').replace('$', '').strip()
 
-    total_spots = 0
-    gross_amount = 0.0
+    try:
+        gross_amount = round(float(_clean_num(parts[0])), 2)
+    except (ValueError, IndexError):
+        gross_amount = None
 
-    for row in reader:
-        if not any((v or "").strip() for v in row.values()):
-            continue
-        total_spots += 1
-        if amount_col:
-            raw = (row.get(amount_col) or "").replace(',', '').replace('$', '').strip()
-            try:
-                gross_amount += float(raw)
-            except ValueError:
-                pass
+    try:
+        total_spots = int(_clean_num(parts[1]))
+    except (ValueError, IndexError):
+        total_spots = None
 
     return {
         "contract_no": contract_no,
         "total_spots": total_spots,
-        "gross_amount": round(gross_amount, 2) if amount_col else None,
+        "gross_amount": gross_amount,
         "error": None,
     }
 
