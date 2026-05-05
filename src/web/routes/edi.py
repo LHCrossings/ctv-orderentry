@@ -177,8 +177,6 @@ def _diff_pdf_csv(pdf_bytes: bytes, csv_bytes: bytes) -> dict:
     Match key: (normalised air date, actual airtime HH:MM:SS).
     Returns missing_from_csv and extra_in_csv spot lists.
     """
-    from collections import Counter
-
     import pdfplumber
 
     SPOT_RE = re.compile(
@@ -254,19 +252,53 @@ def _diff_pdf_csv(pdf_bytes: bytes, csv_bytes: bytes) -> dict:
                 "description": (row.get(desc_col) or "").strip(),
             })
 
-    # --- Diff ---
-    pdf_keys = Counter((s["date"], s["airtime"]) for s in pdf_spots)
-    csv_keys = Counter((s["date"], s["airtime"]) for s in csv_spots)
+    # --- Diff (±5 s tolerance on airtime) ---
+    from collections import defaultdict
+
+    def _secs(t: str) -> int:
+        h, m, s = t.split(":")
+        return int(h) * 3600 + int(m) * 60 + int(s)
+
+    pdf_by_date: dict[str, list] = defaultdict(list)
+    for s in pdf_spots:
+        pdf_by_date[s["date"]].append(s)
+
+    csv_by_date: dict[str, list] = defaultdict(list)
+    for s in csv_spots:
+        csv_by_date[s["date"]].append(s)
 
     missing, extra = [], []
-    for (date, airtime), cnt in pdf_keys.items():
-        for _ in range(cnt - csv_keys.get((date, airtime), 0)):
-            s = next(x for x in pdf_spots if x["date"] == date and x["airtime"] == airtime)
-            missing.append(dict(s))
-    for (date, airtime), cnt in csv_keys.items():
-        for _ in range(cnt - pdf_keys.get((date, airtime), 0)):
-            s = next(x for x in csv_spots if x["date"] == date and x["airtime"] == airtime)
-            extra.append(dict(s))
+    for date in sorted(set(pdf_by_date) | set(csv_by_date)):
+        pdf_day = list(pdf_by_date[date])
+        csv_day = list(csv_by_date[date])
+        used_csv = [False] * len(csv_day)
+        used_pdf = [False] * len(pdf_day)
+
+        for pi, ps in enumerate(pdf_day):
+            try:
+                ps_secs = _secs(ps["airtime"])
+            except ValueError:
+                continue
+            best_dist, best_ci = 6, -1  # sentinel > 5 s
+            for ci, cs in enumerate(csv_day):
+                if used_csv[ci]:
+                    continue
+                try:
+                    dist = abs(_secs(cs["airtime"]) - ps_secs)
+                except ValueError:
+                    continue
+                if dist <= 5 and dist < best_dist:
+                    best_dist, best_ci = dist, ci
+            if best_ci >= 0:
+                used_csv[best_ci] = True
+                used_pdf[pi] = True
+
+        for pi, ps in enumerate(pdf_day):
+            if not used_pdf[pi]:
+                missing.append(dict(ps))
+        for ci, cs in enumerate(csv_day):
+            if not used_csv[ci]:
+                extra.append(dict(cs))
 
     missing.sort(key=lambda s: (s["date"], s["airtime"]))
     extra.sort(key=lambda s:   (s["date"], s["airtime"]))
