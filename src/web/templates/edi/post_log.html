@@ -258,6 +258,56 @@
             color: var(--accent-danger);
             font-weight: 600;
         }
+        .btn-inspect {
+            font-size: 0.75rem;
+            padding: 3px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            background: white;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: 600;
+            color: var(--text-secondary);
+            transition: background 0.15s, color 0.15s;
+            white-space: nowrap;
+        }
+        .btn-inspect:hover { background: var(--accent-primary); color: white; border-color: var(--accent-primary); }
+        .btn-inspect:disabled { opacity: 0.5; cursor: not-allowed; }
+        .diff-detail td { padding: 0 !important; border: none !important; }
+        .diff-panel {
+            padding: 14px 16px;
+            background: #fafbfc;
+            border-top: 1px solid var(--border-color);
+        }
+        .diff-panel h4 {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-secondary);
+            margin: 0 0 8px;
+        }
+        .diff-panel h4.missing { color: var(--accent-danger); }
+        .diff-panel h4.extra   { color: #2d6a4f; }
+        .diff-mini {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+            margin-bottom: 14px;
+        }
+        .diff-mini th {
+            text-align: left;
+            padding: 4px 8px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border-color);
+        }
+        .diff-mini td { padding: 5px 8px; border-bottom: 1px solid #f0f0f0; }
+        .diff-mini tr:last-child td { border-bottom: none; }
+        .diff-ok { color: #2d6a4f; font-size: 0.82rem; font-style: italic; }
     </style>
 </head>
 <body>
@@ -356,6 +406,7 @@
                         <th></th>
                         <th>PDF Gross</th>
                         <th>CSV Gross</th>
+                        <th></th>
                         <th></th>
                     </tr>
                 </thead>
@@ -662,24 +713,41 @@ btnReconcile.addEventListener('click', async () => {
     }
 });
 
+// Maps from filename → File object (rebuilt when files are set)
+let pdfFileMap = new Map(), csvFileMap = new Map();
+
+const _origSetRecFiles = setRecFiles;
+function setRecFiles(type, files) {
+    _origSetRecFiles(type, files);
+    if (type === 'pdf') { pdfFileMap = new Map(files.map(f => [f.name, f])); }
+    else                { csvFileMap = new Map(files.map(f => [f.name, f])); }
+}
+
 function renderReconcile(results) {
     recTbody.innerHTML = '';
     let allOk = true;
 
     for (const r of results) {
-        const spotsOk  = r.spots_match;
-        const grossOk  = r.gross_match;
-        const rowOk    = spotsOk && (r.csv_gross == null || grossOk);
+        const spotsOk = r.spots_match;
+        const grossOk = r.gross_match;
+        const rowOk   = spotsOk && (r.csv_gross == null || grossOk);
         if (!rowOk) allOk = false;
+
+        const pdfErr = r.pdf_error ? `<span class="missing-tag">PDF error</span>` : '';
+        const csvErr = r.csv_error ? `<span class="missing-tag">CSV error</span>` : '';
+        const noPdf  = !r.has_pdf  ? `<span class="missing-tag">No PDF</span>` : '';
+        const noCsv  = !r.has_csv  ? `<span class="missing-tag">No CSV</span>` : '';
+
+        const inspectBtn = (!rowOk && r.has_pdf && r.has_csv && !r.pdf_error && !r.csv_error)
+            ? `<button class="btn-inspect"
+                   data-contract="${r.contract_no}"
+                   data-pdf="${r.pdf_filename || ''}"
+                   data-csv="${r.csv_filename || ''}">Inspect ▾</button>`
+            : '';
 
         const tr = document.createElement('tr');
         tr.className = rowOk ? 'all-ok' : 'has-issue';
-
-        const pdfErr  = r.pdf_error  ? `<span class="missing-tag">PDF error</span>` : '';
-        const csvErr  = r.csv_error  ? `<span class="missing-tag">CSV error</span>` : '';
-        const noPdf   = !r.has_pdf   ? `<span class="missing-tag">No PDF</span>` : '';
-        const noCsv   = !r.has_csv   ? `<span class="missing-tag">No CSV</span>` : '';
-
+        tr.id = `rec-row-${r.contract_no}`;
         tr.innerHTML = `
             <td>${r.invoice_id || '—'} ${pdfErr}${noPdf}</td>
             <td><strong>${r.contract_no}</strong></td>
@@ -689,8 +757,17 @@ function renderReconcile(results) {
             <td class="num">${fmt$(r.pdf_gross)}</td>
             <td class="num">${fmt$(r.csv_gross)}</td>
             <td>${matchBadge(grossOk, r.pdf_gross != null && r.csv_gross != null)}</td>
+            <td>${inspectBtn}</td>
         `;
         recTbody.appendChild(tr);
+
+        // Placeholder diff row (hidden until inspected)
+        const diffTr = document.createElement('tr');
+        diffTr.className = 'diff-detail';
+        diffTr.id = `diff-${r.contract_no}`;
+        diffTr.style.display = 'none';
+        diffTr.innerHTML = `<td colspan="9"><div class="diff-panel" id="diff-panel-${r.contract_no}">Loading…</div></td>`;
+        recTbody.appendChild(diffTr);
     }
 
     recResults.style.display = 'block';
@@ -698,6 +775,96 @@ function renderReconcile(results) {
     recStatus.textContent = allOk
         ? `All ${results.length} contracts reconciled successfully.`
         : `${results.filter(r => !r.spots_match || (r.csv_gross != null && !r.gross_match)).length} contract(s) have discrepancies — check red rows.`;
+}
+
+// --- Inspect button ---
+recTbody.addEventListener('click', async e => {
+    const btn = e.target.closest('.btn-inspect');
+    if (!btn) return;
+
+    const contract = btn.dataset.contract;
+    const pdfName  = btn.dataset.pdf;
+    const csvName  = btn.dataset.csv;
+    const diffRow  = document.getElementById(`diff-${contract}`);
+    const panel    = document.getElementById(`diff-panel-${contract}`);
+
+    // Toggle
+    if (diffRow.style.display !== 'none') {
+        diffRow.style.display = 'none';
+        btn.textContent = 'Inspect ▾';
+        return;
+    }
+
+    const pdfFile = pdfFileMap.get(pdfName);
+    const csvFile = csvFileMap.get(csvName);
+    if (!pdfFile || !csvFile) {
+        panel.innerHTML = '<span style="color:var(--accent-danger)">Files not found in upload set — re-upload to inspect.</span>';
+        diffRow.style.display = '';
+        btn.textContent = 'Inspect ▴';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = '…';
+    panel.innerHTML = 'Loading…';
+    diffRow.style.display = '';
+
+    try {
+        const fd = new FormData();
+        fd.append('pdf', pdfFile);
+        fd.append('csv', csvFile);
+        const resp = await fetch('/edi/post-log/diff', { method: 'POST', body: fd });
+        if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).detail || resp.statusText);
+        const data = await resp.json();
+        panel.innerHTML = renderDiffPanel(data);
+    } catch (err) {
+        panel.innerHTML = `<span style="color:var(--accent-danger)">Error: ${err.message}</span>`;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Inspect ▴';
+    }
+});
+
+function renderDiffPanel(data) {
+    const { missing_from_csv: missing, extra_in_csv: extra } = data;
+    let html = '';
+
+    if (missing.length === 0 && extra.length === 0) {
+        return '<span class="diff-ok">✓ All individual spots match.</span>';
+    }
+
+    if (missing.length > 0) {
+        html += `<h4 class="missing">In Invoice / Missing from Post-Log (${missing.length})</h4>`;
+        html += `<table class="diff-mini"><thead><tr>
+            <th>Date</th><th>Airtime</th><th>Lang</th><th>Type</th><th>Rate</th>
+        </tr></thead><tbody>`;
+        for (const s of missing) {
+            html += `<tr>
+                <td>${s.date}</td><td>${s.airtime}</td>
+                <td>${s.lang ?? '—'}</td><td>${s.spot_type ?? '—'}</td>
+                <td class="num">$${(s.rate ?? 0).toFixed(2)}</td>
+            </tr>`;
+        }
+        html += '</tbody></table>';
+    }
+
+    if (extra.length > 0) {
+        html += `<h4 class="extra">In Post-Log / Not on Invoice (${extra.length})</h4>`;
+        html += `<table class="diff-mini"><thead><tr>
+            <th>Date</th><th>Airtime</th><th>Spot Code</th><th>Description</th><th>Rate</th>
+        </tr></thead><tbody>`;
+        for (const s of extra) {
+            html += `<tr>
+                <td>${s.date}</td><td>${s.airtime}</td>
+                <td>${s.spot_code ?? '—'}</td>
+                <td style="font-size:0.78rem">${s.description ?? '—'}</td>
+                <td class="num">$${(s.rate ?? 0).toFixed(2)}</td>
+            </tr>`;
+        }
+        html += '</tbody></table>';
+    }
+
+    return html;
 }
 </script>
 

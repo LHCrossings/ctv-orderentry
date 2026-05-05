@@ -55,7 +55,7 @@ def _parse_pdf_affidavit(pdf_bytes: bytes) -> dict:
         r'\s+\w+'
         r'\s+(\d+)'
         r'\s+\S+'
-        r'\s+\d+'
+        r'\s+\S+'          # estimate number — may be alphanumeric (e.g. 13931-SF)
         r'\s+\$\s*([\d,]+\.?\d*)'
     )
 
@@ -156,6 +156,126 @@ def _parse_csv_totals(filename: str, csv_bytes: bytes) -> dict:
         "total_spots": total_spots,
         "gross_amount": gross_amount,
         "error": None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Spot-level diff
+# ---------------------------------------------------------------------------
+
+def _norm_date(s: str) -> str:
+    """Normalise M/D/YY or M/D/YYYY → MM/DD/YYYY."""
+    parts = s.strip().split("/")
+    m, d = parts[0].zfill(2), parts[1].zfill(2)
+    y = parts[2] if len(parts[2]) == 4 else f"20{parts[2]}"
+    return f"{m}/{d}/{y}"
+
+
+def _diff_pdf_csv(pdf_bytes: bytes, csv_bytes: bytes) -> dict:
+    """
+    Compare individual spots between the affidavit PDF and the post-log CSV.
+    Match key: (normalised air date, actual airtime HH:MM:SS).
+    Returns missing_from_csv and extra_in_csv spot lists.
+    """
+    from collections import Counter
+
+    import pdfplumber
+
+    SPOT_RE = re.compile(
+        r'^(\d{1,2}/\d{1,2}/\d{2,4})'   # date
+        r'\s+\w+'                          # day
+        r'\s+\d+:\d+:\d+'                 # time_in
+        r'\s+\d+:\d+:\d+'                 # time_out
+        r'\s+\d+:\d+:\d+'                 # length
+        r'\s+(\d+:\d+:\d+)'               # actual airtime
+        r'\s+(\w+)'                        # language
+        r'\s+\d+'                          # count
+        r'\s+(\S+)'                        # type (COM/BNS)
+        r'\s+\S+'                          # estimate (alphanumeric)
+        r'\s+\$\s*([\d,]+\.?\d*)'         # rate
+    )
+
+    # --- PDF spots ---
+    pdf_spots = []
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+        for page_idx, page in enumerate(pdf.pages):
+            if page_idx == 0:
+                continue
+            for line in (page.extract_text() or "").splitlines():
+                m = SPOT_RE.match(line.strip())
+                if m:
+                    pdf_spots.append({
+                        "date":      _norm_date(m.group(1)),
+                        "airtime":   m.group(2),
+                        "lang":      m.group(3),
+                        "spot_type": m.group(4),
+                        "rate":      float(m.group(5).replace(",", "")),
+                    })
+
+    # --- CSV spots ---
+    text = csv_bytes.decode("utf-8-sig", errors="replace")
+    lines = text.splitlines(keepends=True)
+    header_idx = None
+    for i, line in enumerate(lines):
+        parts = next(csv_mod.reader([line]), [])
+        if "dateschedule" in {p.strip().lower() for p in parts}:
+            header_idx = i
+            break
+
+    csv_spots = []
+    if header_idx is not None:
+        reader = csv_mod.DictReader(io.StringIO("".join(lines[header_idx:])))
+        hl = {(h or "").strip().lower(): h for h in (reader.fieldnames or [])}
+        date_col = hl.get("dateschedule")
+        time_col = hl.get("airtimep")
+        code_col = hl.get("bookingcode2")
+        rate_col = hl.get("importo2")
+        desc_col = hl.get("rowdescription")
+        for row in reader:
+            if not any((v or "").strip() for v in row.values()):
+                continue
+            raw_date = (row.get(date_col) or "").strip()
+            airtime  = (row.get(time_col) or "").strip()
+            if not raw_date or not airtime:
+                continue
+            try:
+                nd = _norm_date(raw_date)
+            except (IndexError, ValueError):
+                nd = raw_date
+            try:
+                rate = float((row.get(rate_col) or "0").replace(",", ""))
+            except ValueError:
+                rate = 0.0
+            csv_spots.append({
+                "date":        nd,
+                "airtime":     airtime,
+                "spot_code":   (row.get(code_col) or "").strip(),
+                "rate":        rate,
+                "description": (row.get(desc_col) or "").strip(),
+            })
+
+    # --- Diff ---
+    pdf_keys = Counter((s["date"], s["airtime"]) for s in pdf_spots)
+    csv_keys = Counter((s["date"], s["airtime"]) for s in csv_spots)
+
+    missing, extra = [], []
+    for (date, airtime), cnt in pdf_keys.items():
+        for _ in range(cnt - csv_keys.get((date, airtime), 0)):
+            s = next(x for x in pdf_spots if x["date"] == date and x["airtime"] == airtime)
+            missing.append(dict(s))
+    for (date, airtime), cnt in csv_keys.items():
+        for _ in range(cnt - pdf_keys.get((date, airtime), 0)):
+            s = next(x for x in csv_spots if x["date"] == date and x["airtime"] == airtime)
+            extra.append(dict(s))
+
+    missing.sort(key=lambda s: (s["date"], s["airtime"]))
+    extra.sort(key=lambda s:   (s["date"], s["airtime"]))
+
+    return {
+        "pdf_total":        len(pdf_spots),
+        "csv_total":        len(csv_spots),
+        "missing_from_csv": missing,
+        "extra_in_csv":     extra,
     }
 
 
@@ -364,5 +484,14 @@ def build_edi_router(templates: Jinja2Templates) -> APIRouter:
             })
 
         return {"results": results}
+
+    @router.post("/post-log/diff")
+    async def diff_spots(
+        pdf: UploadFile = File(...),
+        csv: UploadFile = File(...),
+    ):
+        pdf_bytes = await pdf.read()
+        csv_bytes = await csv.read()
+        return await asyncio.to_thread(_diff_pdf_csv, pdf_bytes, csv_bytes)
 
     return router
