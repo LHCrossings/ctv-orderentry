@@ -100,6 +100,10 @@
             outline: none;
             border-color: var(--accent-primary);
         }
+        .form-group input.date-invalid {
+            border-color: var(--accent-danger);
+            background: #fde8ea;
+        }
         .section-label {
             font-size: 0.78rem;
             font-weight: 700;
@@ -235,11 +239,11 @@
         <div class="form-grid">
             <div class="form-group">
                 <label>Start Date</label>
-                <input type="date" id="start-date" />
+                <input type="text" id="start-date" placeholder="0401 · 4/1 · 4/1/26" autocomplete="off" />
             </div>
             <div class="form-group">
                 <label>End Date</label>
-                <input type="date" id="end-date" />
+                <input type="text" id="end-date" placeholder="0430 · 4/30 · 4/30/26" autocomplete="off" />
             </div>
         </div>
 
@@ -359,23 +363,69 @@ function showContracts(data) {
     step2Card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+// --- Date parsing ---
+function parseShortDate(raw) {
+    if (!raw) return null;
+    const s = raw.trim();
+    const curYear = new Date().getFullYear();
+
+    // ISO: 2026-03-30
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        const [y, mo, d] = s.split('-').map(Number);
+        return new Date(y, mo - 1, d);
+    }
+    // Slashes: M/D, M/D/YY, M/D/YYYY
+    if (s.includes('/')) {
+        const parts = s.split('/').map(Number);
+        const m = parts[0], d = parts[1];
+        let y = curYear;
+        if (parts[2]) y = parts[2] < 100 ? 2000 + parts[2] : parts[2];
+        if (m >= 1 && m <= 12 && d >= 1 && d <= 31) return new Date(y, m - 1, d);
+        return null;
+    }
+    // Pure digits: 330, 0330, 33026, 033026, 03302026
+    const dig = s.replace(/\D/g, '');
+    if (dig.length === 3)  return new Date(curYear, +dig[0] - 1,           +dig.slice(1));
+    if (dig.length === 4)  return new Date(curYear, +dig.slice(0,2) - 1,   +dig.slice(2));
+    if (dig.length === 5)  return new Date(2000 + +dig.slice(3), +dig[0] - 1,         +dig.slice(1,3));
+    if (dig.length === 6)  return new Date(2000 + +dig.slice(4), +dig.slice(0,2) - 1, +dig.slice(2,4));
+    if (dig.length === 8)  return new Date(+dig.slice(4),        +dig.slice(0,2) - 1, +dig.slice(2,4));
+    return null;
+}
+
+function toEtereDate(d) {
+    return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+}
+
+function fmtDisplay(d) {
+    return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}/${d.getFullYear()}`;
+}
+
+['start-date', 'end-date'].forEach(id => {
+    document.getElementById(id).addEventListener('blur', function() {
+        const parsed = parseShortDate(this.value);
+        if (parsed && !isNaN(parsed)) {
+            this.value = fmtDisplay(parsed);
+            this.classList.remove('date-invalid');
+        } else if (this.value.trim()) {
+            this.classList.add('date-invalid');
+        }
+    });
+});
+
 // --- Generate ---
 btnGenerate.addEventListener('click', async () => {
-    const startDate = document.getElementById('start-date').value;
-    const endDate   = document.getElementById('end-date').value;
+    const startRaw = document.getElementById('start-date').value;
+    const endRaw   = document.getElementById('end-date').value;
+    const startDate = parseShortDate(startRaw);
+    const endDate   = parseShortDate(endRaw);
 
-    if (!startDate || !endDate) {
+    if (!startDate || !endDate || isNaN(startDate) || isNaN(endDate)) {
         generateStatus.className = 'status-msg error';
-        generateStatus.textContent = 'Please set a start and end date.';
+        generateStatus.textContent = 'Please enter valid start and end dates.';
         return;
     }
     if (!parsedContracts.length) return;
-
-    // Format dates as M/D/YYYY for Etere
-    function toEtereDate(iso) {
-        const [y, m, d] = iso.split('-');
-        return `${parseInt(m)}/${parseInt(d)}/${y}`;
-    }
 
     btnGenerate.disabled = true;
     btnGenerate.innerHTML = '<span class="spinner"></span> Fetching from Etere…';
