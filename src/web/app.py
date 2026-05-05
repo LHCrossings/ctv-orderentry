@@ -16,6 +16,7 @@ from fastapi.templating import Jinja2Templates
 
 from orchestration.config import ApplicationConfig
 from web.routes.backwrite import build_backwrite_router
+from web.routes.edi import build_edi_router
 from web.routes.orders import build_router
 from web.routes.reports import build_reports_router
 
@@ -39,6 +40,7 @@ def create_app(config: ApplicationConfig | None = None) -> FastAPI:
     app.include_router(build_router(config, templates))
     app.include_router(build_backwrite_router(templates))
     app.include_router(build_reports_router(templates))
+    app.include_router(build_edi_router(templates))
 
     return app
 

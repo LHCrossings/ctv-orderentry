@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EDI Post Log – Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/app.css" />
+    <style>
+        .page-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+        .page-header a {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .page-header a:hover { color: var(--accent-primary); }
+        .page-header h1 {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0;
+        }
+        .bw-card {
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 28px 32px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+        }
+        .bw-card h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin: 0 0 18px 0;
+        }
+        .upload-zone {
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 32px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            position: relative;
+        }
+        .upload-zone:hover, .upload-zone.drag-over {
+            border-color: var(--accent-primary);
+            background: #f0f4f8;
+        }
+        .upload-zone input[type=file] {
+            position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+        }
+        .upload-zone .upload-icon { font-size: 2rem; margin-bottom: 8px; }
+        .upload-zone p { margin: 4px 0; color: var(--text-secondary); font-size: 0.9rem; }
+        .upload-zone .file-name {
+            margin-top: 10px;
+            font-weight: 600;
+            color: var(--accent-primary);
+            font-size: 0.88rem;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px 28px;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .form-group label {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .form-group input {
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 0.92rem;
+            color: var(--text-primary);
+            background: white;
+            transition: border-color 0.15s;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+        }
+        .section-label {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin: 22px 0 10px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .btn-parse {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 20px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 7px;
+            font-family: inherit;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+            margin-top: 14px;
+        }
+        .btn-parse:hover:not(:disabled) {
+            background: var(--border-color);
+            border-color: var(--text-secondary);
+        }
+        .btn-parse:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-generate {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 11px 28px;
+            background: var(--accent-primary);
+            color: white;
+            border: none;
+            border-radius: 7px;
+            font-family: inherit;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s, opacity 0.15s;
+            margin-top: 8px;
+        }
+        .btn-generate:hover:not(:disabled) { background: var(--nord10); }
+        .btn-generate:disabled { opacity: 0.5; cursor: not-allowed; }
+        .status-msg {
+            font-size: 0.88rem;
+            padding: 8px 14px;
+            border-radius: 6px;
+            margin-top: 12px;
+            display: none;
+        }
+        .status-msg.error { background: #fde8ea; color: var(--accent-danger); display: block; }
+        .status-msg.info  { background: #e6f4ea; color: #2d6a4f; display: block; }
+        .contract-list {
+            margin-top: 4px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .contract-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 0.88rem;
+        }
+        .contract-row.error-row {
+            background: #fde8ea;
+            border-color: #f8c4ca;
+        }
+        .contract-row .tag {
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: var(--accent-primary);
+            color: white;
+            white-space: nowrap;
+        }
+        .contract-row .inv-id { color: var(--text-secondary); min-width: 90px; }
+        .contract-row .filename { color: var(--text-secondary); font-size: 0.82rem; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+        .contract-row .err-msg { color: var(--accent-danger); font-size: 0.82rem; }
+        .spinner {
+            display: inline-block;
+            width: 16px; height: 16px;
+            border: 2px solid rgba(255,255,255,0.4);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            flex-shrink: 0;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #results-section { display: none; margin-top: 4px; }
+    </style>
+</head>
+<body>
+
+<div class="container" style="max-width:860px; margin: 0 auto; padding: 36px 24px;">
+
+    <div class="page-header">
+        <a href="/">← Control Room</a>
+        <h1>EDI Post Log Export</h1>
+    </div>
+
+    <!-- Step 1: Upload invoices -->
+    <div class="bw-card">
+        <h2>Step 1 — Upload Invoices</h2>
+
+        <div class="upload-zone" id="drop-zone">
+            <input type="file" id="file-input" accept=".pdf" multiple />
+            <div class="upload-icon">📄</div>
+            <p><strong>Drop PDF invoices here</strong> or click to browse</p>
+            <p>Select all invoices for the billing cycle at once</p>
+            <div class="file-name" id="file-label"></div>
+        </div>
+
+        <button class="btn-parse" id="btn-parse" disabled>Parse Invoices</button>
+        <div class="status-msg" id="parse-status"></div>
+    </div>
+
+    <!-- Step 2: Date range + contract list -->
+    <div class="bw-card" id="step2-card" style="display:none;">
+        <h2>Step 2 — Set Date Range</h2>
+
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Start Date</label>
+                <input type="date" id="start-date" />
+            </div>
+            <div class="form-group">
+                <label>End Date</label>
+                <input type="date" id="end-date" />
+            </div>
+        </div>
+
+        <div class="section-label" style="margin-top: 24px;">Contracts Found</div>
+        <div class="contract-list" id="contract-list"></div>
+
+        <div style="margin-top: 24px;">
+            <button class="btn-generate" id="btn-generate" disabled>
+                Download Post Logs
+            </button>
+        </div>
+        <div class="status-msg" id="generate-status"></div>
+    </div>
+
+</div>
+
+<script>
+const dropZone   = document.getElementById('drop-zone');
+const fileInput  = document.getElementById('file-input');
+const fileLabel  = document.getElementById('file-label');
+const btnParse   = document.getElementById('btn-parse');
+const parseStatus = document.getElementById('parse-status');
+const step2Card  = document.getElementById('step2-card');
+const contractList = document.getElementById('contract-list');
+const btnGenerate  = document.getElementById('btn-generate');
+const generateStatus = document.getElementById('generate-status');
+
+let selectedFiles = [];
+let parsedContracts = [];
+
+// --- Drag-drop ---
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    setFiles([...e.dataTransfer.files].filter(f => f.name.toLowerCase().endsWith('.pdf')));
+});
+fileInput.addEventListener('change', () => setFiles([...fileInput.files]));
+
+function setFiles(files) {
+    selectedFiles = files;
+    if (files.length === 0) {
+        fileLabel.textContent = '';
+        btnParse.disabled = true;
+        return;
+    }
+    fileLabel.textContent = files.length === 1
+        ? files[0].name
+        : `${files.length} files selected`;
+    btnParse.disabled = false;
+    parseStatus.className = 'status-msg';
+    parseStatus.textContent = '';
+}
+
+// --- Parse ---
+btnParse.addEventListener('click', async () => {
+    if (!selectedFiles.length) return;
+    btnParse.disabled = true;
+    btnParse.textContent = 'Parsing…';
+    parseStatus.className = 'status-msg';
+
+    const fd = new FormData();
+    for (const f of selectedFiles) fd.append('files', f);
+
+    try {
+        const resp = await fetch('/edi/post-log/parse', { method: 'POST', body: fd });
+        const data = await resp.json();
+        showContracts(data);
+    } catch (e) {
+        parseStatus.className = 'status-msg error';
+        parseStatus.textContent = 'Parse failed: ' + e.message;
+    } finally {
+        btnParse.disabled = false;
+        btnParse.textContent = 'Parse Invoices';
+    }
+});
+
+function showContracts(data) {
+    parsedContracts = data.contracts || [];
+    const errors = data.errors || [];
+
+    contractList.innerHTML = '';
+
+    for (const c of parsedContracts) {
+        const row = document.createElement('div');
+        row.className = 'contract-row';
+        row.innerHTML = `
+            <span class="tag">${c.contract_no}</span>
+            <span class="inv-id">${c.invoice_id}</span>
+            <span class="filename" title="${c.filename}">${c.filename}</span>
+        `;
+        contractList.appendChild(row);
+    }
+
+    for (const e of errors) {
+        const row = document.createElement('div');
+        row.className = 'contract-row error-row';
+        row.innerHTML = `
+            <span class="err-msg">⚠ ${e.filename}: ${e.error}</span>
+        `;
+        contractList.appendChild(row);
+    }
+
+    step2Card.style.display = 'block';
+    btnGenerate.disabled = parsedContracts.length === 0;
+
+    if (parsedContracts.length > 0) {
+        parseStatus.className = 'status-msg info';
+        parseStatus.textContent = `Found ${parsedContracts.length} contract${parsedContracts.length !== 1 ? 's' : ''}` +
+            (errors.length ? ` (${errors.length} failed to parse)` : '') + '.';
+    } else {
+        parseStatus.className = 'status-msg error';
+        parseStatus.textContent = 'No contracts found. Check that the PDFs are CTV invoices.';
+    }
+
+    step2Card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// --- Generate ---
+btnGenerate.addEventListener('click', async () => {
+    const startDate = document.getElementById('start-date').value;
+    const endDate   = document.getElementById('end-date').value;
+
+    if (!startDate || !endDate) {
+        generateStatus.className = 'status-msg error';
+        generateStatus.textContent = 'Please set a start and end date.';
+        return;
+    }
+    if (!parsedContracts.length) return;
+
+    // Format dates as M/D/YYYY for Etere
+    function toEtereDate(iso) {
+        const [y, m, d] = iso.split('-');
+        return `${parseInt(m)}/${parseInt(d)}/${y}`;
+    }
+
+    btnGenerate.disabled = true;
+    btnGenerate.innerHTML = '<span class="spinner"></span> Fetching from Etere…';
+    generateStatus.className = 'status-msg';
+
+    try {
+        const resp = await fetch('/edi/post-log/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contracts: parsedContracts,
+                start_date: toEtereDate(startDate),
+                end_date:   toEtereDate(endDate),
+            }),
+        });
+
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+            throw new Error(err.detail || resp.statusText);
+        }
+
+        const blob = await resp.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = 'postlogs.zip';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        generateStatus.className = 'status-msg info';
+        generateStatus.textContent = `Downloaded postlogs.zip — ${parsedContracts.length} file${parsedContracts.length !== 1 ? 's' : ''} inside.`;
+    } catch (e) {
+        generateStatus.className = 'status-msg error';
+        generateStatus.textContent = 'Error: ' + e.message;
+    } finally {
+        btnGenerate.disabled = false;
+        btnGenerate.innerHTML = 'Download Post Logs';
+    }
+});
+</script>
+
+</body>
+</html>
