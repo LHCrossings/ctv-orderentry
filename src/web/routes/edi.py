@@ -12,7 +12,6 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
-
 # ---------------------------------------------------------------------------
 # PDF helpers
 # ---------------------------------------------------------------------------
@@ -213,7 +212,9 @@ def _fetch_all_reports_sync(contracts: list[dict], start_date: str, end_date: st
             sys.path.insert(0, p)
 
     from browser_automation.etere_direct_client import (
-        ETERE_WEB_URL, etere_web_login, etere_web_logout,
+        ETERE_WEB_URL,
+        etere_web_login,
+        etere_web_logout,
     )
 
     session = etere_web_login()
