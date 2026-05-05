@@ -1,8 +1,9 @@
 """
-EDI Tool routes: post-log CSV batch download.
+EDI Tool routes: post-log CSV batch download and invoice reconciliation.
 """
 
 import asyncio
+import csv as csv_mod
 import io
 import re
 import zipfile
@@ -12,15 +13,15 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 
+# ---------------------------------------------------------------------------
+# PDF helpers
+# ---------------------------------------------------------------------------
+
 def _extract_contract_number(pdf_bytes: bytes) -> tuple[str, str]:
-    """
-    Parse a CTV invoice PDF and return (invoice_id, contract_number).
-    The affidavit page contains 'Contract Number <digits>' in the header block.
-    """
+    """Return (invoice_id, contract_no) from the affidavit page (page 2)."""
     import pdfplumber
 
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        # Affidavit is always page 2; fall back to full scan if layout changes
         pages = [pdf.pages[1]] if len(pdf.pages) >= 2 else pdf.pages
         for page in pages:
             text = page.extract_text() or ""
@@ -34,6 +35,159 @@ def _extract_contract_number(pdf_bytes: bytes) -> tuple[str, str]:
     raise ValueError("Contract number not found in affidavit (page 2)")
 
 
+def _parse_pdf_affidavit(pdf_bytes: bytes) -> dict:
+    """
+    Extract total spots and gross amount from the CTV invoice affidavit.
+
+    Primary source: 'COPY LIST Subtotals N $ X.XX' summary line.
+    Fallback: sum individual spot rows.
+
+    Returns: {invoice_id, contract_no, total_spots, gross_amount}
+    """
+    import pdfplumber
+
+    SUBTOTAL_RE = re.compile(
+        r'COPY LIST Subtotals\s+(\d+)\s+\$\s*([\d,]+\.?\d*)'
+    )
+    ROW_RE = re.compile(
+        r'^\d{1,2}/\d{1,2}/\d{2,4}'
+        r'\s+\w+'
+        r'(?:\s+\d+:\d+:\d+){4}'
+        r'\s+\w+'
+        r'\s+(\d+)'
+        r'\s+\S+'
+        r'\s+\d+'
+        r'\s+\$\s*([\d,]+\.?\d*)'
+    )
+
+    total_spots = None
+    gross_amount = None
+    contract_no = None
+    invoice_id = None
+    row_spots = 0
+    row_gross = 0.0
+
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+        for page_idx, page in enumerate(pdf.pages):
+            text = page.extract_text() or ""
+
+            if page_idx == 1:
+                m = re.search(r'Contract\s+Number\s+(\d+)', text)
+                if m:
+                    contract_no = m.group(1)
+                inv_m = re.search(r'Affidavit\s+([\w-]+)', text)
+                if inv_m:
+                    invoice_id = inv_m.group(1)
+
+            if page_idx >= 1:
+                sub_m = SUBTOTAL_RE.search(text)
+                if sub_m:
+                    total_spots = int(sub_m.group(1))
+                    gross_amount = float(sub_m.group(2).replace(',', ''))
+
+                for line in text.splitlines():
+                    row_m = ROW_RE.match(line.strip())
+                    if row_m:
+                        cnt = int(row_m.group(1))
+                        rate = float(row_m.group(2).replace(',', ''))
+                        row_spots += cnt
+                        if rate > 0:
+                            row_gross += cnt * rate
+
+    return {
+        "invoice_id": invoice_id or "unknown",
+        "contract_no": contract_no,
+        "total_spots": total_spots if total_spots is not None else row_spots,
+        "gross_amount": round(gross_amount if gross_amount is not None else row_gross, 2),
+    }
+
+
+# ---------------------------------------------------------------------------
+# CSV helper
+# ---------------------------------------------------------------------------
+
+def _parse_csv_totals(filename: str, csv_bytes: bytes) -> dict:
+    """
+    Extract total spots and gross from an Etere post-log CSV.
+
+    Spots  = number of data rows after the header.
+    Gross  = sum of a detected rate/amount column (None if not found).
+    Contract number extracted from filename pattern *_12345_postlog.csv
+    or from a content column.
+    """
+    contract_no = None
+    fn_match = re.search(r'_(\d+)_postlog', filename, re.IGNORECASE)
+    if fn_match:
+        contract_no = fn_match.group(1)
+
+    text = csv_bytes.decode("utf-8-sig", errors="replace")
+    lines = text.splitlines(keepends=True)
+
+    HEADER_SIGNALS = {
+        'id_contrattirighe', 'dateschedule', 'contract', 'contractno',
+        'airdate', 'air_date', 'date',
+    }
+    header_idx = None
+    for i, line in enumerate(lines):
+        parts = next(csv_mod.reader([line]), [])
+        lower_parts = {p.strip().lower() for p in parts if p.strip()}
+        if lower_parts & HEADER_SIGNALS:
+            header_idx = i
+            break
+
+    if header_idx is None:
+        return {
+            "contract_no": contract_no,
+            "total_spots": None,
+            "gross_amount": None,
+            "error": "Could not locate data header row in CSV",
+        }
+
+    reader = csv_mod.DictReader(io.StringIO("".join(lines[header_idx:])))
+    headers_lower = {(h or "").strip().lower(): h for h in (reader.fieldnames or [])}
+
+    # Find a gross/rate column
+    AMOUNT_KEYS = [
+        'gross', 'grossamount', 'gross_amount', 'rate', 'netrate',
+        'amount', 'revenue', 'cost', 'spotrate',
+    ]
+    amount_col = None
+    for key in AMOUNT_KEYS:
+        if key in headers_lower:
+            amount_col = headers_lower[key]
+            break
+    if not amount_col:
+        for stripped, original in headers_lower.items():
+            if any(kw in stripped for kw in ('gross', 'rate', 'amount', 'revenue')):
+                amount_col = original
+                break
+
+    total_spots = 0
+    gross_amount = 0.0
+
+    for row in reader:
+        if not any((v or "").strip() for v in row.values()):
+            continue
+        total_spots += 1
+        if amount_col:
+            raw = (row.get(amount_col) or "").replace(',', '').replace('$', '').strip()
+            try:
+                gross_amount += float(raw)
+            except ValueError:
+                pass
+
+    return {
+        "contract_no": contract_no,
+        "total_spots": total_spots,
+        "gross_amount": round(gross_amount, 2) if amount_col else None,
+        "error": None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Etere fetch (single session for whole batch)
+# ---------------------------------------------------------------------------
+
 def _fetch_report_sync(contract_no: str, start_date: str, end_date: str) -> bytes:
     from web.etere_report_fetcher import fetch_etere_report
     return fetch_etere_report(
@@ -46,6 +200,64 @@ def _fetch_report_sync(contract_no: str, start_date: str, end_date: str) -> byte
     )
 
 
+def _fetch_all_reports_sync(contracts: list[dict], start_date: str, end_date: str) -> list[dict]:
+    """
+    Fetch all post-log reports in a single Etere session to avoid
+    exhausting the limited concurrent license seats.
+    """
+    import sys
+    from pathlib import Path
+    root = Path(__file__).parent.parent.parent
+    for p in [str(root), str(root / "browser_automation")]:
+        if p not in sys.path:
+            sys.path.insert(0, p)
+
+    from browser_automation.etere_direct_client import (
+        ETERE_WEB_URL, etere_web_login, etere_web_logout,
+    )
+
+    session = etere_web_login()
+    results = []
+    try:
+        for c in contracts:
+            try:
+                params = {
+                    "reportCode": "R100018_C18236_postlog_with_contract_no",
+                    "isSystem":   "False",
+                    "reportType": "DOWNLOADCSV",
+                    "customerid": 0,
+                    "agencyid":   0,
+                    "filters[0]": str(c["contract_no"]),
+                    "filters[1]": "",
+                    "filters[2]": "true",
+                    "filters[3]": "true",
+                    "filters[4]": start_date,
+                    "filters[5]": end_date,
+                }
+                resp = session.get(
+                    f"{ETERE_WEB_URL}/reportsetere/report",
+                    params=params,
+                    timeout=180,
+                )
+                resp.raise_for_status()
+                stem = c["filename"].rsplit(".", 1)[0] if "." in c["filename"] else c["filename"]
+                results.append({
+                    "name":  f"{stem}_{c['contract_no']}_postlog.csv",
+                    "data":  resp.content,
+                    "error": None,
+                })
+            except Exception as e:
+                results.append({"name": None, "data": None, "error": f"{c['filename']}: {e}"})
+    finally:
+        etere_web_logout(session)
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Router
+# ---------------------------------------------------------------------------
+
 def build_edi_router(templates: Jinja2Templates) -> APIRouter:
     router = APIRouter(prefix="/edi")
 
@@ -55,15 +267,14 @@ def build_edi_router(templates: Jinja2Templates) -> APIRouter:
 
     @router.post("/post-log/parse")
     async def parse_invoices(files: list[UploadFile] = File(...)):
-        contracts = []
-        errors = []
+        contracts, errors = [], []
         for f in files:
             raw = await f.read()
             try:
                 invoice_id, contract_no = _extract_contract_number(raw)
                 contracts.append({
-                    "filename": f.filename,
-                    "invoice_id": invoice_id,
+                    "filename":    f.filename,
+                    "invoice_id":  invoice_id,
                     "contract_no": contract_no,
                 })
             except Exception as e:
@@ -73,32 +284,20 @@ def build_edi_router(templates: Jinja2Templates) -> APIRouter:
     @router.post("/post-log/generate")
     async def generate_post_logs(request: Request):
         body = await request.json()
-        contracts = body.get("contracts", [])
+        contracts  = body.get("contracts", [])
         start_date = body.get("start_date", "")
-        end_date = body.get("end_date", "")
+        end_date   = body.get("end_date", "")
 
         if not contracts:
             raise HTTPException(400, detail="No contracts provided")
         if not start_date or not end_date:
             raise HTTPException(400, detail="Date range required")
 
-        # Sequential — Etere license seats are limited; concurrent logins exhaust them.
-        results = []
-        for c in contracts:
-            try:
-                csv_bytes = await asyncio.to_thread(
-                    _fetch_report_sync, c["contract_no"], start_date, end_date
-                )
-                stem = c["filename"].rsplit(".", 1)[0] if "." in c["filename"] else c["filename"]
-                results.append({
-                    "name": f"{stem}_{c['contract_no']}_postlog.csv",
-                    "data": csv_bytes,
-                    "error": None,
-                })
-            except Exception as e:
-                results.append({"name": None, "data": None, "error": f"{c['filename']}: {e}"})
+        results = await asyncio.to_thread(
+            _fetch_all_reports_sync, contracts, start_date, end_date
+        )
 
-        failures = [r["error"] for r in results if r["error"]]
+        failures  = [r["error"] for r in results if r["error"]]
         successes = [r for r in results if r["data"]]
 
         if not successes:
@@ -115,5 +314,78 @@ def build_edi_router(templates: Jinja2Templates) -> APIRouter:
             media_type="application/zip",
             headers={"Content-Disposition": "attachment; filename=postlogs.zip"},
         )
+
+    @router.post("/post-log/reconcile")
+    async def reconcile(
+        pdfs: list[UploadFile] = File(...),
+        csvs: list[UploadFile] = File(...),
+    ):
+        # Parse PDFs
+        pdf_data: dict[str, dict] = {}
+        for f in pdfs:
+            raw = await f.read()
+            try:
+                data = await asyncio.to_thread(_parse_pdf_affidavit, raw)
+                data["pdf_filename"] = f.filename
+                key = data.get("contract_no") or f.filename
+                pdf_data[key] = data
+            except Exception as e:
+                pdf_data[f.filename] = {
+                    "pdf_filename": f.filename,
+                    "invoice_id": None,
+                    "contract_no": None,
+                    "total_spots": None,
+                    "gross_amount": None,
+                    "error": str(e),
+                }
+
+        # Parse CSVs
+        csv_data: dict[str, dict] = {}
+        for f in csvs:
+            raw = await f.read()
+            data = _parse_csv_totals(f.filename, raw)
+            data["csv_filename"] = f.filename
+            key = data.get("contract_no") or f.filename
+            csv_data[key] = data
+
+        # Reconcile by contract number
+        all_keys = sorted(set(pdf_data) | set(csv_data))
+        results = []
+        for key in all_keys:
+            pdf = pdf_data.get(key, {})
+            csv = csv_data.get(key, {})
+
+            pdf_spots  = pdf.get("total_spots")
+            pdf_gross  = pdf.get("gross_amount")
+            csv_spots  = csv.get("total_spots")
+            csv_gross  = csv.get("gross_amount")
+
+            spots_match = (
+                pdf_spots is not None and csv_spots is not None
+                and pdf_spots == csv_spots
+            )
+            gross_match = (
+                pdf_gross is not None and csv_gross is not None
+                and abs(pdf_gross - csv_gross) < 0.02
+            )
+
+            results.append({
+                "contract_no":   key,
+                "invoice_id":    pdf.get("invoice_id"),
+                "pdf_filename":  pdf.get("pdf_filename"),
+                "csv_filename":  csv.get("csv_filename"),
+                "pdf_spots":     pdf_spots,
+                "pdf_gross":     pdf_gross,
+                "csv_spots":     csv_spots,
+                "csv_gross":     csv_gross,
+                "spots_match":   spots_match,
+                "gross_match":   gross_match,
+                "has_pdf":       bool(pdf),
+                "has_csv":       bool(csv),
+                "pdf_error":     pdf.get("error"),
+                "csv_error":     csv.get("error"),
+            })
+
+        return {"results": results}
 
     return router

@@ -205,6 +205,59 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
         #results-section { display: none; margin-top: 4px; }
+
+        /* --- Reconcile section --- */
+        .rec-zones {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        .rec-zone-label {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 6px;
+        }
+        .rec-table-wrap { overflow-x: auto; margin-top: 18px; }
+        .rec-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        .rec-table th {
+            text-align: left;
+            padding: 7px 10px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            border-bottom: 2px solid var(--border-color);
+            white-space: nowrap;
+        }
+        .rec-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: middle;
+        }
+        .rec-table tr:last-child td { border-bottom: none; }
+        .rec-table tr.all-ok td { background: #f0faf3; }
+        .rec-table tr.has-issue td { background: #fdf5f5; }
+        .badge-ok   { color: #2d6a4f; font-size: 1rem; }
+        .badge-fail { color: var(--accent-danger); font-size: 1rem; }
+        .badge-na   { color: var(--text-secondary); font-size: 0.8rem; }
+        .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .missing-tag {
+            font-size: 0.72rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #fde8ea;
+            color: var(--accent-danger);
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -256,6 +309,59 @@
             </button>
         </div>
         <div class="status-msg" id="generate-status"></div>
+    </div>
+
+</div>
+
+    <!-- Reconcile section -->
+    <div class="bw-card">
+        <h2>Reconcile — Verify Totals</h2>
+        <p style="color:var(--text-secondary);font-size:0.88rem;margin:0 0 18px;">
+            Drop the invoice PDFs and the post-log CSVs. Each PDF is matched to its CSV by
+            contract number and the spot count + gross amount are compared.
+        </p>
+
+        <div class="rec-zones">
+            <div>
+                <div class="rec-zone-label">Invoice PDFs</div>
+                <div class="upload-zone" id="rec-pdf-zone">
+                    <input type="file" id="rec-pdf-input" accept=".pdf" multiple />
+                    <div class="upload-icon">📄</div>
+                    <p><strong>Drop PDFs here</strong></p>
+                    <div class="file-name" id="rec-pdf-label"></div>
+                </div>
+            </div>
+            <div>
+                <div class="rec-zone-label">Post-Log CSVs</div>
+                <div class="upload-zone" id="rec-csv-zone">
+                    <input type="file" id="rec-csv-input" accept=".csv" multiple />
+                    <div class="upload-icon">📊</div>
+                    <p><strong>Drop CSVs here</strong></p>
+                    <div class="file-name" id="rec-csv-label"></div>
+                </div>
+            </div>
+        </div>
+
+        <button class="btn-parse" id="btn-reconcile" disabled>Check Totals</button>
+        <div class="status-msg" id="rec-status"></div>
+
+        <div class="rec-table-wrap" id="rec-results" style="display:none;">
+            <table class="rec-table">
+                <thead>
+                    <tr>
+                        <th>Invoice</th>
+                        <th>Contract #</th>
+                        <th>PDF Spots</th>
+                        <th>CSV Spots</th>
+                        <th></th>
+                        <th>PDF Gross</th>
+                        <th>CSV Gross</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="rec-tbody"></tbody>
+            </table>
+        </div>
     </div>
 
 </div>
@@ -467,6 +573,132 @@ btnGenerate.addEventListener('click', async () => {
         btnGenerate.innerHTML = 'Download Post Logs';
     }
 });
+
+// ---- Reconcile ----
+const recPdfZone  = document.getElementById('rec-pdf-zone');
+const recCsvZone  = document.getElementById('rec-csv-zone');
+const recPdfInput = document.getElementById('rec-pdf-input');
+const recCsvInput = document.getElementById('rec-csv-input');
+const recPdfLabel = document.getElementById('rec-pdf-label');
+const recCsvLabel = document.getElementById('rec-csv-label');
+const btnReconcile = document.getElementById('btn-reconcile');
+const recStatus    = document.getElementById('rec-status');
+const recResults   = document.getElementById('rec-results');
+const recTbody     = document.getElementById('rec-tbody');
+
+let recPdfs = [], recCsvs = [];
+
+function bindRecZone(zone, input, label, arr, ext) {
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', e => {
+        e.preventDefault();
+        zone.classList.remove('drag-over');
+        const files = [...e.dataTransfer.files].filter(f => f.name.toLowerCase().endsWith(ext));
+        setRecFiles(files, arr === recPdfs ? 'pdf' : 'csv', files);
+    });
+    input.addEventListener('change', () => {
+        setRecFiles(input === recPdfInput ? 'pdf' : 'csv', [...input.files]);
+    });
+}
+
+function setRecFiles(type, files) {
+    if (type === 'pdf') {
+        recPdfs = files;
+        recPdfLabel.textContent = files.length ? `${files.length} file${files.length!==1?'s':''} selected` : '';
+    } else {
+        recCsvs = files;
+        recCsvLabel.textContent = files.length ? `${files.length} file${files.length!==1?'s':''} selected` : '';
+    }
+    btnReconcile.disabled = !(recPdfs.length && recCsvs.length);
+}
+
+recPdfZone.addEventListener('dragover', e => { e.preventDefault(); recPdfZone.classList.add('drag-over'); });
+recPdfZone.addEventListener('dragleave', () => recPdfZone.classList.remove('drag-over'));
+recPdfZone.addEventListener('drop', e => {
+    e.preventDefault(); recPdfZone.classList.remove('drag-over');
+    setRecFiles('pdf', [...e.dataTransfer.files].filter(f => f.name.toLowerCase().endsWith('.pdf')));
+});
+recPdfInput.addEventListener('change', () => setRecFiles('pdf', [...recPdfInput.files]));
+
+recCsvZone.addEventListener('dragover', e => { e.preventDefault(); recCsvZone.classList.add('drag-over'); });
+recCsvZone.addEventListener('dragleave', () => recCsvZone.classList.remove('drag-over'));
+recCsvZone.addEventListener('drop', e => {
+    e.preventDefault(); recCsvZone.classList.remove('drag-over');
+    setRecFiles('csv', [...e.dataTransfer.files].filter(f => f.name.toLowerCase().endsWith('.csv')));
+});
+recCsvInput.addEventListener('change', () => setRecFiles('csv', [...recCsvInput.files]));
+
+function fmt$(n) { return n == null ? '—' : '$' + n.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+function matchBadge(ok, available) {
+    if (!available) return '<span class="badge-na">N/A</span>';
+    return ok ? '<span class="badge-ok">✓</span>' : '<span class="badge-fail">✗</span>';
+}
+
+btnReconcile.addEventListener('click', async () => {
+    btnReconcile.disabled = true;
+    btnReconcile.textContent = 'Checking…';
+    recStatus.className = 'status-msg';
+    recResults.style.display = 'none';
+
+    const fd = new FormData();
+    for (const f of recPdfs) fd.append('pdfs', f);
+    for (const f of recCsvs) fd.append('csvs', f);
+
+    try {
+        const resp = await fetch('/edi/post-log/reconcile', { method: 'POST', body: fd });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+            throw new Error(err.detail || resp.statusText);
+        }
+        const data = await resp.json();
+        renderReconcile(data.results);
+    } catch (e) {
+        recStatus.className = 'status-msg error';
+        recStatus.textContent = 'Error: ' + e.message;
+    } finally {
+        btnReconcile.disabled = false;
+        btnReconcile.textContent = 'Check Totals';
+    }
+});
+
+function renderReconcile(results) {
+    recTbody.innerHTML = '';
+    let allOk = true;
+
+    for (const r of results) {
+        const spotsOk  = r.spots_match;
+        const grossOk  = r.gross_match;
+        const rowOk    = spotsOk && (r.csv_gross == null || grossOk);
+        if (!rowOk) allOk = false;
+
+        const tr = document.createElement('tr');
+        tr.className = rowOk ? 'all-ok' : 'has-issue';
+
+        const pdfErr  = r.pdf_error  ? `<span class="missing-tag">PDF error</span>` : '';
+        const csvErr  = r.csv_error  ? `<span class="missing-tag">CSV error</span>` : '';
+        const noPdf   = !r.has_pdf   ? `<span class="missing-tag">No PDF</span>` : '';
+        const noCsv   = !r.has_csv   ? `<span class="missing-tag">No CSV</span>` : '';
+
+        tr.innerHTML = `
+            <td>${r.invoice_id || '—'} ${pdfErr}${noPdf}</td>
+            <td><strong>${r.contract_no}</strong></td>
+            <td class="num">${r.pdf_spots ?? '—'}</td>
+            <td class="num">${r.csv_spots ?? '—'} ${csvErr}${noCsv}</td>
+            <td>${matchBadge(spotsOk, r.pdf_spots != null && r.csv_spots != null)}</td>
+            <td class="num">${fmt$(r.pdf_gross)}</td>
+            <td class="num">${fmt$(r.csv_gross)}</td>
+            <td>${matchBadge(grossOk, r.pdf_gross != null && r.csv_gross != null)}</td>
+        `;
+        recTbody.appendChild(tr);
+    }
+
+    recResults.style.display = 'block';
+    recStatus.className = 'status-msg ' + (allOk ? 'info' : 'error');
+    recStatus.textContent = allOk
+        ? `All ${results.length} contracts reconciled successfully.`
+        : `${results.filter(r => !r.spots_match || (r.csv_gross != null && !r.gross_match)).length} contract(s) have discrepancies — check red rows.`;
+}
 </script>
 
 </body>
