@@ -361,8 +361,6 @@
         <div class="status-msg" id="generate-status"></div>
     </div>
 
-</div>
-
     <!-- Reconcile section -->
     <div class="bw-card">
         <h2>Reconcile — Verify Totals</h2>
@@ -639,27 +637,17 @@ const recTbody     = document.getElementById('rec-tbody');
 
 let recPdfs = [], recCsvs = [];
 
-function bindRecZone(zone, input, label, arr, ext) {
-    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
-    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
-    zone.addEventListener('drop', e => {
-        e.preventDefault();
-        zone.classList.remove('drag-over');
-        const files = [...e.dataTransfer.files].filter(f => f.name.toLowerCase().endsWith(ext));
-        setRecFiles(files, arr === recPdfs ? 'pdf' : 'csv', files);
-    });
-    input.addEventListener('change', () => {
-        setRecFiles(input === recPdfInput ? 'pdf' : 'csv', [...input.files]);
-    });
-}
+let pdfFileMap = new Map(), csvFileMap = new Map();
 
 function setRecFiles(type, files) {
     if (type === 'pdf') {
         recPdfs = files;
         recPdfLabel.textContent = files.length ? `${files.length} file${files.length!==1?'s':''} selected` : '';
+        pdfFileMap = new Map(files.map(f => [f.name, f]));
     } else {
         recCsvs = files;
         recCsvLabel.textContent = files.length ? `${files.length} file${files.length!==1?'s':''} selected` : '';
+        csvFileMap = new Map(files.map(f => [f.name, f]));
     }
     btnReconcile.disabled = !(recPdfs.length && recCsvs.length);
 }
@@ -712,16 +700,6 @@ btnReconcile.addEventListener('click', async () => {
         btnReconcile.textContent = 'Check Totals';
     }
 });
-
-// Maps from filename → File object (rebuilt when files are set)
-let pdfFileMap = new Map(), csvFileMap = new Map();
-
-const _origSetRecFiles = setRecFiles;
-function setRecFiles(type, files) {
-    _origSetRecFiles(type, files);
-    if (type === 'pdf') { pdfFileMap = new Map(files.map(f => [f.name, f])); }
-    else                { csvFileMap = new Map(files.map(f => [f.name, f])); }
-}
 
 function renderReconcile(results) {
     recTbody.innerHTML = '';
