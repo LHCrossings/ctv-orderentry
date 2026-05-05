@@ -82,21 +82,21 @@ def build_edi_router(templates: Jinja2Templates) -> APIRouter:
         if not start_date or not end_date:
             raise HTTPException(400, detail="Date range required")
 
-        async def fetch_one(c):
+        # Sequential — Etere license seats are limited; concurrent logins exhaust them.
+        results = []
+        for c in contracts:
             try:
                 csv_bytes = await asyncio.to_thread(
                     _fetch_report_sync, c["contract_no"], start_date, end_date
                 )
                 stem = c["filename"].rsplit(".", 1)[0] if "." in c["filename"] else c["filename"]
-                return {
+                results.append({
                     "name": f"{stem}_{c['contract_no']}_postlog.csv",
                     "data": csv_bytes,
                     "error": None,
-                }
+                })
             except Exception as e:
-                return {"name": None, "data": None, "error": f"{c['filename']}: {e}"}
-
-        results = await asyncio.gather(*[fetch_one(c) for c in contracts])
+                results.append({"name": None, "data": None, "error": f"{c['filename']}: {e}"})
 
         failures = [r["error"] for r in results if r["error"]]
         successes = [r for r in results if r["data"]]
