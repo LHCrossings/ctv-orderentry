@@ -51,7 +51,7 @@ def build_edi_router(templates: Jinja2Templates) -> APIRouter:
 
     @router.get("/post-log", response_class=HTMLResponse)
     async def post_log_page(request: Request):
-        return templates.TemplateResponse("edi/post_log.html", {"request": request})
+        return templates.TemplateResponse(request, "edi/post_log.html")
 
     @router.post("/post-log/parse")
     async def parse_invoices(files: list[UploadFile] = File(...)):
