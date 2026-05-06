@@ -6,15 +6,15 @@
   "representative": "Charmaine Lane",
   "salesperson": "Jeanette Lee",
   "agency_name": "H&L Partners San Francisco",
-  "advertiser_name": "Northern California Dealer's Assocation",
-  "product_name": "Asian Traffic Adult TV (25-54)",
+  "advertiser_name": "No CA Dealer's Assocation",
+  "product_name": "Asian Adult TV (25-54)",
   "agency_address": [
     "100 Webster St",
     "Oakland CA",
     "94607"
   ],
-  "agency_ad_code": "",
-  "agency_prod_code": "",
+  "agency_ad_code": "NCDA",
+  "agency_prod_code": "ACM",
   "payee_name": "Crossings TV",
   "payee_address": [
     "Accounts Receivable",
