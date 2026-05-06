@@ -4,14 +4,9 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>EDI Export — Control Room</title>
-  <link rel="stylesheet" href="/static/css/theme.css"/>
+  <link rel="stylesheet" href="/static/css/_variables.css"/>
+  <link rel="stylesheet" href="/static/css/app.css"/>
   <style>
-    .page-header { margin-bottom: 1.5rem; }
-    .page-header h1 { font-size: 1.4rem; font-weight: 700; color: var(--text-primary); margin: 0 0 .25rem; }
-    .page-header p  { color: var(--text-secondary); margin: 0; font-size: .9rem; }
-    .page-header a  { color: var(--text-secondary); text-decoration: none; font-size: .85rem; }
-    .page-header a:hover { color: var(--accent-primary); }
-
     /* Tabs */
     .tabs { display: flex; gap: .5rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); }
     .tab-btn {
@@ -112,13 +107,29 @@
     .status { font-size: .82rem; color: var(--text-secondary); }
     .status.ok { color: #2d6a4f; }
     .status.err { color: var(--accent-danger); }
-  </style>
+    .page-header { margin-bottom: 1.5rem; }
+  .page-header h1 { font-size: 1.4rem; font-weight: 700; color: var(--text-primary); margin: 0 0 .25rem; }
+  .page-header p  { color: var(--text-secondary); margin: 0; font-size: .9rem; }
+</style>
 </head>
 <body>
-<div class="container">
+
+<header>
+  <div class="header-inner">
+    <div class="logo">
+      <a href="/billing" class="back-link">&#8592;</a>
+      <div class="logo-icon">🧾</div>
+      <div>
+        <h1>Control <span>Room</span></h1>
+        <div class="logo-sub">EDI Export</div>
+      </div>
+    </div>
+    <span class="header-badge">EDI Tools</span>
+  </div>
+</header>
+
+<main style="max-width:900px; margin:0 auto; padding:24px 16px;">
   <div class="page-header">
-    <a href="/billing">&larr; Billing</a>
-    <h1>EDI Export</h1>
     <p>Generate TVB EDI .txt files from Etere post-log CSVs for upload to TVInvoices.com</p>
   </div>
 
@@ -172,7 +183,7 @@
       </div>
     </div>
   </div>
-</div>
+</main>
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
