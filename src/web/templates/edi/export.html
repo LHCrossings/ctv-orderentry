@@ -174,6 +174,13 @@
         <div class="field-group"><label>Payee Name</label><input id="te-payee-name" value="Crossings TV"/></div>
         <div class="field-group tmpl-full"><label>Payee Address (4 lines, comma-separated)</label>
           <input id="te-payee-addr" value="Accounts Receivable, 901 H Street Ste 120 PMB 91, Sacramento CA, 95814"/></div>
+        <div class="field-group tmpl-full" style="border-top:1px solid var(--border-color);padding-top:.8rem;margin-top:.4rem;">
+          <label style="color:var(--accent-primary)">Auto-Match Settings</label>
+        </div>
+        <div class="field-group tmpl-full"><label>Advertiser Match (exact text from PDF affidavit)</label>
+          <input id="te-adv-match" placeholder="e.g. Southern CA Toyota Dealers Association"/></div>
+        <div class="field-group"><label>Market Match (optional, for CVC/SFO disambiguation)</label>
+          <input id="te-mkt-match" placeholder="e.g. CENTRAL VALLEY or SAN FRANCISCO"/></div>
       </div>
       <div style="display:flex;gap:.6rem;margin-top:1rem;">
         <button class="btn btn-primary btn-sm" id="btn-save-tmpl">Save</button>
@@ -257,6 +264,8 @@ function openEditor(editSlug) {
   document.getElementById('te-prod-code').value    = t?.agency_prod_code || '';
   document.getElementById('te-payee-name').value   = t?.payee_name || 'Crossings TV';
   document.getElementById('te-payee-addr').value   = t ? (t.payee_address||[]).join(', ') : 'Accounts Receivable, 901 H Street Ste 120 PMB 91, Sacramento CA, 95814';
+  document.getElementById('te-adv-match').value    = t?.advertiser_match || '';
+  document.getElementById('te-mkt-match').value    = t?.market_match || '';
   document.getElementById('btn-del-tmpl').style.display = editSlug ? '' : 'none';
   ed.classList.add('open');
   ed.scrollIntoView({behavior:'smooth', block:'nearest'});
@@ -284,8 +293,10 @@ document.getElementById('btn-save-tmpl').addEventListener('click', async () => {
     agency_address:  addrSplit(document.getElementById('te-agency-addr').value),
     agency_ad_code:  document.getElementById('te-ad-code').value.trim(),
     agency_prod_code:document.getElementById('te-prod-code').value.trim(),
-    payee_name:      document.getElementById('te-payee-name').value.trim(),
-    payee_address:   addrSplit(document.getElementById('te-payee-addr').value),
+    payee_name:       document.getElementById('te-payee-name').value.trim(),
+    payee_address:    addrSplit(document.getElementById('te-payee-addr').value),
+    advertiser_match: document.getElementById('te-adv-match').value.trim(),
+    market_match:     document.getElementById('te-mkt-match').value.trim(),
   };
   await fetch('/edi/export/templates', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
   document.getElementById('tmpl-editor').classList.remove('open');

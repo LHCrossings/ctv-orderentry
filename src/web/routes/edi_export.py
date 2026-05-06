@@ -70,6 +70,7 @@ def _parse_export_csv(csv_bytes: bytes) -> dict:
         duration    = g("duration3")
         copy_id     = g("bookingcode2")
         rate_str    = g("IMPORTO2")
+        market_raw  = g("nome2")
 
         if not date_str or not airtime_str:
             continue
@@ -99,11 +100,13 @@ def _parse_export_csv(csv_bytes: bytes) -> dict:
             "duration":   dur_secs,
             "copy_id":    copy_id,
             "rate_cents": rate_cents,
+            "market":     market_raw,
         })
 
     dates       = sorted(s["run_date"] for s in spots if s["run_date"])
     gross_cents = sum(s["rate_cents"] for s in spots)
     advertiser  = meta[5].strip() if len(meta) > 5 else ""
+    market      = spots[0]["market"] if spots else ""
 
     return {
         "spots":         spots,
@@ -113,6 +116,7 @@ def _parse_export_csv(csv_bytes: bytes) -> dict:
         "bcast_end":     dates[-1] if dates else "",
         "estimate_code": estimate_code,
         "advertiser":    advertiser,
+        "market":        market,
     }
 
 
@@ -268,30 +272,27 @@ def _invoice_info(filename: str) -> dict:
     }
 
 
-def _suggest_template(filename: str, templates: list[dict], advertiser: str = "") -> str:
+def _suggest_template(filename: str, templates: list[dict],
+                      advertiser: str = "", market: str = "") -> str:
     fn  = filename.lower()
     adv = advertiser.lower()
+    mkt = market.upper()
 
     def _words(s: str) -> list[str]:
         return re.findall(r'[a-z]{3,}', s.lower())
 
-    def _adv_score(t: dict) -> int:
-        """Whole-word matches of template advertiser/product words in the CSV advertiser field."""
-        words = _words(t.get("advertiser_name", "") + " " + t.get("product_name", ""))
-        return sum(1 for w in words if re.search(r'\b' + re.escape(w) + r'\b', adv))
+    # Pass 1: exact advertiser_match + optional market_match (user-configured)
+    for t in templates:
+        am = t.get("advertiser_match", "").strip()
+        mm = t.get("market_match", "").strip().upper()
+        if not am:
+            continue
+        if am.lower() == adv:
+            if mm and mm != mkt:
+                continue
+            return t.get("name", "")
 
-    # Pass 1: agency match + best advertiser score (whole-word)
-    if adv:
-        candidates = [
-            t for t in templates
-            if any(w in fn for w in _words(t.get("agency_name", "")))
-        ]
-        scored = [(t, _adv_score(t)) for t in candidates]
-        scored.sort(key=lambda x: -x[1])
-        if scored and scored[0][1] > 0:
-            return scored[0][0].get("name", "")
-
-    # Pass 2: agency name only
+    # Pass 2: fuzzy fallback (agency name in filename)
     for t in templates:
         if any(w in fn for w in _words(t.get("agency_name", ""))):
             return t.get("name", "")
@@ -349,11 +350,12 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
                     "estimate_code": parsed["estimate_code"],
                 })
                 advertiser = parsed.get("advertiser", "")
+                market     = parsed.get("market", "")
             except Exception:
                 info.update(spot_count=0, gross_cents=0,
                             bcast_start="", bcast_end="", estimate_code="")
-                advertiser = ""
-            info["suggested_template"] = _suggest_template(p["csv"], tmpl_list, advertiser)
+                advertiser = market = ""
+            info["suggested_template"] = _suggest_template(p["csv"], tmpl_list, advertiser, market)
             result.append(info)
         return result
 
