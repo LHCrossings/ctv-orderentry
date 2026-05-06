@@ -130,6 +130,8 @@ Thumbs.db
 
 # Project-specific: ignore data directory contents
 data/*
+!data/edi_templates/
+!data/edi_templates/*.json
 
 # Incoming orders — local only, not synced
 incoming/

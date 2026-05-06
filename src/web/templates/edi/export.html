@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>EDI Export — Control Room</title>
+  <link rel="stylesheet" href="/static/css/theme.css"/>
+  <style>
+    .page-header { margin-bottom: 1.5rem; }
+    .page-header h1 { font-size: 1.4rem; font-weight: 700; color: var(--text-primary); margin: 0 0 .25rem; }
+    .page-header p  { color: var(--text-secondary); margin: 0; font-size: .9rem; }
+    .page-header a  { color: var(--text-secondary); text-decoration: none; font-size: .85rem; }
+    .page-header a:hover { color: var(--accent-primary); }
+
+    /* Tabs */
+    .tabs { display: flex; gap: .5rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); }
+    .tab-btn {
+      padding: .5rem 1.1rem; font-size: .875rem; font-weight: 600;
+      border: none; background: none; color: var(--text-secondary);
+      cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+      transition: color .15s, border-color .15s;
+    }
+    .tab-btn.active { color: var(--accent-primary); border-bottom-color: var(--accent-primary); }
+    .tab-btn:hover:not(.active) { color: var(--text-primary); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Toolbar */
+    .toolbar { display: flex; align-items: center; gap: .75rem; margin-bottom: 1.25rem; }
+    .btn {
+      padding: .45rem .9rem; border-radius: 4px; font-size: .85rem; font-weight: 600;
+      cursor: pointer; border: none; transition: background .15s, opacity .15s;
+    }
+    .btn-primary { background: var(--accent-primary); color: #fff; }
+    .btn-primary:hover { opacity: .88; }
+    .btn-secondary {
+      background: var(--bg-secondary); color: var(--text-primary);
+      border: 1px solid var(--border-color);
+    }
+    .btn-secondary:hover { background: var(--border-color); }
+    .btn-sm { padding: .3rem .65rem; font-size: .8rem; }
+    .btn-danger { background: var(--accent-danger); color: #fff; }
+    .btn-danger:hover { opacity: .88; }
+    .btn:disabled { opacity: .45; cursor: default; }
+
+    /* File cards */
+    .file-list { display: flex; flex-direction: column; gap: 1rem; }
+    .file-card {
+      background: var(--bg-secondary); border: 1px solid var(--border-color);
+      border-radius: 6px; overflow: hidden;
+    }
+    .file-card-header {
+      display: flex; align-items: center; gap: .75rem; padding: .7rem 1rem;
+      border-bottom: 1px solid var(--border-color);
+      background: var(--bg-tertiary, var(--bg-secondary));
+    }
+    .file-card-header .inv-num {
+      font-weight: 700; font-size: .95rem; color: var(--text-primary); min-width: 80px;
+    }
+    .file-card-header .filename {
+      color: var(--text-secondary); font-size: .82rem; flex: 1;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .file-card-header .meta {
+      color: var(--text-secondary); font-size: .82rem; white-space: nowrap;
+    }
+    .file-card-body { padding: .85rem 1rem; display: grid; grid-template-columns: 1fr 1fr; gap: .6rem 1.2rem; }
+    .file-card-footer {
+      padding: .65rem 1rem; border-top: 1px solid var(--border-color);
+      display: flex; align-items: center; gap: .6rem;
+    }
+
+    /* Form fields */
+    .field-group { display: flex; flex-direction: column; gap: .2rem; }
+    .field-group label { font-size: .75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
+    .field-group input, .field-group select {
+      padding: .35rem .6rem; border-radius: 4px; font-size: .85rem;
+      background: var(--bg-primary); color: var(--text-primary);
+      border: 1px solid var(--border-color); transition: border-color .15s;
+    }
+    .field-group input:focus, .field-group select:focus {
+      outline: none; border-color: var(--accent-primary);
+    }
+    .field-group input[readonly] { color: var(--text-secondary); cursor: default; }
+    .field-comment { grid-column: 1 / -1; }
+
+    /* Template list */
+    .tmpl-list { display: flex; flex-direction: column; gap: .6rem; max-width: 700px; }
+    .tmpl-row {
+      display: flex; align-items: center; gap: .75rem; padding: .65rem .9rem;
+      background: var(--bg-secondary); border: 1px solid var(--border-color);
+      border-radius: 5px;
+    }
+    .tmpl-name { font-weight: 600; flex: 1; color: var(--text-primary); font-size: .9rem; }
+    .tmpl-meta { color: var(--text-secondary); font-size: .8rem; }
+
+    /* Template editor */
+    .tmpl-editor {
+      max-width: 680px; background: var(--bg-secondary); border: 1px solid var(--border-color);
+      border-radius: 6px; padding: 1.2rem; margin-top: 1rem; display: none;
+    }
+    .tmpl-editor.open { display: block; }
+    .tmpl-editor h3 { margin: 0 0 1rem; font-size: 1rem; color: var(--text-primary); }
+    .tmpl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem 1rem; }
+    .tmpl-full { grid-column: 1 / -1; }
+    .tmpl-editor .field-group label { color: var(--text-secondary); }
+
+    /* Empty state */
+    .empty { color: var(--text-secondary); font-size: .9rem; padding: 2rem 0; text-align: center; }
+
+    /* Status */
+    .status { font-size: .82rem; color: var(--text-secondary); }
+    .status.ok { color: #2d6a4f; }
+    .status.err { color: var(--accent-danger); }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="page-header">
+    <a href="/">&larr; Control Room</a>
+    <h1>EDI Export</h1>
+    <p>Generate TVB EDI .txt files from Etere post-log CSVs for upload to TVInvoices.com</p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="generate">Generate</button>
+    <button class="tab-btn" data-tab="templates">Templates</button>
+  </div>
+
+  <!-- ── GENERATE TAB ─────────────────────────────────────────────────── -->
+  <div id="tab-generate" class="tab-panel active">
+    <div class="toolbar">
+      <button class="btn btn-primary" id="btn-scan">Scan incoming/EDI</button>
+      <button class="btn btn-primary" id="btn-gen-all" disabled>Generate All (.zip)</button>
+      <span class="status" id="scan-status"></span>
+    </div>
+    <div class="file-list" id="file-list"></div>
+  </div>
+
+  <!-- ── TEMPLATES TAB ────────────────────────────────────────────────── -->
+  <div id="tab-templates" class="tab-panel">
+    <div class="toolbar">
+      <button class="btn btn-primary btn-sm" id="btn-new-tmpl">+ New Template</button>
+    </div>
+    <div class="tmpl-list" id="tmpl-list"><div class="empty">Loading…</div></div>
+
+    <!-- Editor panel -->
+    <div class="tmpl-editor" id="tmpl-editor">
+      <h3 id="editor-title">New Template</h3>
+      <div class="tmpl-grid">
+        <div class="field-group"><label>Template Name *</label><input id="te-name" placeholder="e.g. Davis Elen WA McD"/></div>
+        <div class="field-group"><label>EDI Code *</label><input id="te-edi-code" placeholder="9912567"/></div>
+        <div class="field-group"><label>Call Letters *</label><input id="te-call-letters" maxlength="4" placeholder="CROS"/></div>
+        <div class="field-group"><label>Commission %</label><input id="te-commission" type="number" step="0.1" value="15"/></div>
+        <div class="field-group"><label>Representative</label><input id="te-rep" placeholder="Charmaine Lane"/></div>
+        <div class="field-group"><label>Salesperson</label><input id="te-sales" placeholder=""/></div>
+        <div class="field-group"><label>Agency Name *</label><input id="te-agency-name" placeholder="Davis Elen"/></div>
+        <div class="field-group"><label>Advertiser Name</label><input id="te-advertiser" placeholder=""/></div>
+        <div class="field-group"><label>Product Name</label><input id="te-product" placeholder="QSR"/></div>
+        <div class="field-group tmpl-full"><label>Agency Address (4 lines, comma-separated)</label>
+          <input id="te-agency-addr" placeholder="856 Figueroa Street, 12th Floor, Los Angeles CA, 90017"/></div>
+        <div class="field-group"><label>Agency Ad Code</label><input id="te-ad-code" placeholder="DCBU"/></div>
+        <div class="field-group"><label>Agency Prod Code</label><input id="te-prod-code" placeholder="QSR"/></div>
+        <div class="field-group"><label>Payee Name</label><input id="te-payee-name" value="Crossings TV"/></div>
+        <div class="field-group tmpl-full"><label>Payee Address (4 lines, comma-separated)</label>
+          <input id="te-payee-addr" value="Accounts Receivable, 901 H Street Ste 120 PMB 91, Sacramento CA, 95814"/></div>
+      </div>
+      <div style="display:flex;gap:.6rem;margin-top:1rem;">
+        <button class="btn btn-primary btn-sm" id="btn-save-tmpl">Save</button>
+        <button class="btn btn-secondary btn-sm" id="btn-cancel-tmpl">Cancel</button>
+        <button class="btn btn-danger btn-sm" id="btn-del-tmpl" style="margin-left:auto;display:none;">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let templates = [];
+let fileItems = [];   // [{csv_filename, suggested_template, spot_count, gross_cents, ...invoice_info}]
+let editingSlug = null;
+
+// ── Tabs ───────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+  });
+});
+
+// ── Templates ──────────────────────────────────────────────────────────────
+async function loadTemplates() {
+  const res = await fetch('/edi/export/templates');
+  templates = await res.json();
+  renderTemplateList();
+  // Also refresh any open selectors in generate tab
+  document.querySelectorAll('.tmpl-select').forEach(sel => refreshSelect(sel));
+}
+
+function renderTemplateList() {
+  const el = document.getElementById('tmpl-list');
+  if (!templates.length) { el.innerHTML = '<div class="empty">No templates yet. Click "+ New Template" to create one.</div>'; return; }
+  el.innerHTML = templates.map(t => `
+    <div class="tmpl-row">
+      <span class="tmpl-name">${t.name}</span>
+      <span class="tmpl-meta">${t.call_letters || ''} · ${t.agency_name || ''}</span>
+      <button class="btn btn-secondary btn-sm" onclick="openEditor('${slug(t.name)}')">Edit</button>
+    </div>`).join('');
+}
+
+function refreshSelect(sel) {
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— select template —</option>' +
+    templates.map(t => `<option value="${t.name}" ${t.name===current?'selected':''}>${t.name}</option>`).join('');
+}
+
+document.getElementById('btn-new-tmpl').addEventListener('click', () => openEditor(null));
+
+function openEditor(editSlug) {
+  editingSlug = editSlug;
+  const ed = document.getElementById('tmpl-editor');
+  const t  = editSlug ? templates.find(x => slug(x.name) === editSlug) : null;
+  document.getElementById('editor-title').textContent = t ? `Edit: ${t.name}` : 'New Template';
+  document.getElementById('te-name').value         = t?.name || '';
+  document.getElementById('te-edi-code').value     = t?.edi_code || '';
+  document.getElementById('te-call-letters').value = t?.call_letters || '';
+  document.getElementById('te-commission').value   = t?.commission_pct ?? 15;
+  document.getElementById('te-rep').value          = t?.representative || '';
+  document.getElementById('te-sales').value        = t?.salesperson || '';
+  document.getElementById('te-agency-name').value  = t?.agency_name || '';
+  document.getElementById('te-advertiser').value   = t?.advertiser_name || '';
+  document.getElementById('te-product').value      = t?.product_name || '';
+  document.getElementById('te-agency-addr').value  = t ? (t.agency_address||[]).join(', ') : '';
+  document.getElementById('te-ad-code').value      = t?.agency_ad_code || '';
+  document.getElementById('te-prod-code').value    = t?.agency_prod_code || '';
+  document.getElementById('te-payee-name').value   = t?.payee_name || 'Crossings TV';
+  document.getElementById('te-payee-addr').value   = t ? (t.payee_address||[]).join(', ') : 'Accounts Receivable, 901 H Street Ste 120 PMB 91, Sacramento CA, 95814';
+  document.getElementById('btn-del-tmpl').style.display = editSlug ? '' : 'none';
+  ed.classList.add('open');
+  ed.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+document.getElementById('btn-cancel-tmpl').addEventListener('click', () => {
+  document.getElementById('tmpl-editor').classList.remove('open');
+  editingSlug = null;
+});
+
+document.getElementById('btn-save-tmpl').addEventListener('click', async () => {
+  const name = document.getElementById('te-name').value.trim();
+  if (!name) { alert('Template name is required.'); return; }
+  const addrSplit = s => s.split(',').map(x => x.trim()).filter(Boolean);
+  const data = {
+    name,
+    edi_code:        document.getElementById('te-edi-code').value.trim(),
+    call_letters:    document.getElementById('te-call-letters').value.trim(),
+    commission_pct:  parseFloat(document.getElementById('te-commission').value) || 15,
+    representative:  document.getElementById('te-rep').value.trim(),
+    salesperson:     document.getElementById('te-sales').value.trim(),
+    agency_name:     document.getElementById('te-agency-name').value.trim(),
+    advertiser_name: document.getElementById('te-advertiser').value.trim(),
+    product_name:    document.getElementById('te-product').value.trim(),
+    agency_address:  addrSplit(document.getElementById('te-agency-addr').value),
+    agency_ad_code:  document.getElementById('te-ad-code').value.trim(),
+    agency_prod_code:document.getElementById('te-prod-code').value.trim(),
+    payee_name:      document.getElementById('te-payee-name').value.trim(),
+    payee_address:   addrSplit(document.getElementById('te-payee-addr').value),
+  };
+  await fetch('/edi/export/templates', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+  document.getElementById('tmpl-editor').classList.remove('open');
+  editingSlug = null;
+  await loadTemplates();
+});
+
+document.getElementById('btn-del-tmpl').addEventListener('click', async () => {
+  if (!editingSlug || !confirm('Delete this template?')) return;
+  await fetch(`/edi/export/templates/${editingSlug}`, { method:'DELETE' });
+  document.getElementById('tmpl-editor').classList.remove('open');
+  editingSlug = null;
+  await loadTemplates();
+});
+
+// ── Scan & file cards ──────────────────────────────────────────────────────
+document.getElementById('btn-scan').addEventListener('click', async () => {
+  setScanStatus('Scanning…');
+  const res   = await fetch('/edi/export/scan');
+  fileItems   = await res.json();
+  setScanStatus(fileItems.length ? `${fileItems.length} file${fileItems.length>1?'s':''} found` : 'No CSV files found in incoming/EDI');
+  renderFileList();
+  document.getElementById('btn-gen-all').disabled = fileItems.length === 0;
+});
+
+function setScanStatus(msg) {
+  document.getElementById('scan-status').textContent = msg;
+}
+
+function fmt_date(yymmdd) {
+  if (!yymmdd || yymmdd.length < 6) return yymmdd || '—';
+  return `${yymmdd.slice(2,4)}/${yymmdd.slice(4,6)}/20${yymmdd.slice(0,2)}`;
+}
+
+function fmt_dollars(cents) {
+  return '$' + (cents/100).toLocaleString('en-US', {minimumFractionDigits:2});
+}
+
+function renderFileList() {
+  const el = document.getElementById('file-list');
+  if (!fileItems.length) { el.innerHTML = '<div class="empty">No files found.</div>'; return; }
+  el.innerHTML = fileItems.map((item, idx) => {
+    const gross = fmt_dollars(item.gross_cents || 0);
+    const tmplOpts = '<option value="">— select —</option>' +
+      templates.map(t => `<option value="${t.name}" ${t.name===item.suggested_template?'selected':''}>${t.name}</option>`).join('');
+    return `
+    <div class="file-card" data-idx="${idx}">
+      <div class="file-card-header">
+        <span class="inv-num">${item.invoice_number || '—'}</span>
+        <span class="filename">${item.csv_filename}</span>
+        <span class="meta">${item.spot_count} spots · ${gross}</span>
+      </div>
+      <div class="file-card-body">
+        <div class="field-group" style="grid-column:1/-1">
+          <label>Template</label>
+          <select class="tmpl-select">
+            ${tmplOpts}
+          </select>
+        </div>
+        <div class="field-group">
+          <label>Invoice Number</label>
+          <input class="f-invoice-number" value="${item.invoice_number||''}"/>
+        </div>
+        <div class="field-group">
+          <label>Invoice Date (YYMMDD)</label>
+          <input class="f-invoice-date" value="${item.invoice_date||''}"/>
+        </div>
+        <div class="field-group">
+          <label>Estimate Code</label>
+          <input class="f-estimate-code" value="${item.estimate_code||''}"/>
+        </div>
+        <div class="field-group">
+          <label>Order / Contract #</label>
+          <input class="f-order-number" value="${item.order_number||''}"/>
+        </div>
+        <div class="field-group">
+          <label>Broadcast Month (YYMM)</label>
+          <input class="f-bcast-month" value="${item.broadcast_month||''}" readonly/>
+        </div>
+        <div class="field-group">
+          <label>Start Date</label>
+          <input class="f-bcast-start" value="${item.bcast_start||''}" readonly title="${fmt_date(item.bcast_start)}"/>
+        </div>
+        <div class="field-group">
+          <label>End Date</label>
+          <input class="f-bcast-end" value="${item.bcast_end||''}" readonly title="${fmt_date(item.bcast_end)}"/>
+        </div>
+        <div class="field-group field-comment">
+          <label>Comment Top (32 record)</label>
+          <input class="f-comment-top" placeholder="e.g. 26_04_T__MAN_4FOR$5"/>
+        </div>
+      </div>
+      <div class="file-card-footer">
+        <button class="btn btn-primary btn-sm btn-dl">Download .txt</button>
+        <span class="status card-status"></span>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Attach download handlers
+  document.querySelectorAll('.btn-dl').forEach(btn => {
+    btn.addEventListener('click', () => downloadOne(btn.closest('.file-card')));
+  });
+}
+
+function getCardPayload(card) {
+  const idx  = parseInt(card.dataset.idx);
+  const item = fileItems[idx];
+  return {
+    csv_filename:   item.csv_filename,
+    template_name:  card.querySelector('.tmpl-select').value,
+    invoice_fields: {
+      invoice_number:  card.querySelector('.f-invoice-number').value,
+      invoice_date:    card.querySelector('.f-invoice-date').value,
+      estimate_code:   card.querySelector('.f-estimate-code').value,
+      order_number:    card.querySelector('.f-order-number').value,
+      broadcast_month: card.querySelector('.f-bcast-month').value,
+      bcast_start:     card.querySelector('.f-bcast-start').value,
+      bcast_end:       card.querySelector('.f-bcast-end').value,
+      comment_top:     card.querySelector('.f-comment-top').value,
+    },
+  };
+}
+
+async function downloadOne(card) {
+  const payload = getCardPayload(card);
+  const statusEl = card.querySelector('.card-status');
+  if (!payload.template_name) { statusEl.textContent = 'Select a template first.'; statusEl.className='status err'; return; }
+  statusEl.textContent = 'Generating…'; statusEl.className = 'status';
+  const res = await fetch('/edi/export/generate', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
+  });
+  if (!res.ok) { statusEl.textContent = `Error: ${res.status}`; statusEl.className='status err'; return; }
+  const blob = await res.blob();
+  const cd   = res.headers.get('Content-Disposition') || '';
+  const fn   = (cd.match(/filename="([^"]+)"/) || [])[1] || 'edi.txt';
+  triggerDownload(blob, fn);
+  statusEl.textContent = '✓ Downloaded'; statusEl.className = 'status ok';
+}
+
+document.getElementById('btn-gen-all').addEventListener('click', async () => {
+  const cards   = [...document.querySelectorAll('.file-card')];
+  const payloads = cards.map(c => getCardPayload(c)).filter(p => p.template_name);
+  if (!payloads.length) { alert('Select a template for at least one file.'); return; }
+  setScanStatus('Generating ZIP…');
+  const res = await fetch('/edi/export/generate-batch', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payloads)
+  });
+  if (!res.ok) { setScanStatus('Error generating ZIP.'); return; }
+  triggerDownload(await res.blob(), 'edi_export.zip');
+  setScanStatus(`ZIP ready — ${payloads.length} file${payloads.length>1?'s':''}`);
+});
+
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function slug(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+loadTemplates();
+</script>
+</body>
+</html>

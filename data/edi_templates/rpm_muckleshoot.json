@@ -1,0 +1,26 @@
+{
+  "name": "RPM Muckleshoot",
+  "edi_code": "9913175",
+  "call_letters": "CRTV",
+  "commission_pct": 15.0,
+  "representative": "Charmaine Lane",
+  "salesperson": "Mary Jo Papaleo",
+  "agency_name": "RPM Advertising",
+  "advertiser_name": "Muckleshoot Casino Resort",
+  "product_name": "Branding-TV",
+  "agency_address": [
+    "222 S Morgan St",
+    "Chicago IL",
+    "60607",
+    ""
+  ],
+  "agency_ad_code": "",
+  "agency_prod_code": "",
+  "payee_name": "Crossings TV",
+  "payee_address": [
+    "Accounts Receivable",
+    "901 H Street Ste 120 PMB 91",
+    "Sacramento CA",
+    "95814"
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "TCAA",
+  "edi_code": "TV13271",
+  "call_letters": "CRTV",
+  "commission_pct": 15.0,
+  "representative": "Charmaine Lane",
+  "salesperson": "Jason Murphy",
+  "agency_name": "TCAA Cincinnati, LLC",
+  "advertiser_name": "WWTDAA Seattle Tacoma",
+  "product_name": "Toyota Asian",
+  "agency_address": [
+    "4555 Lake Forest Dr",
+    "Ste 550",
+    "Cincinnati OH",
+    "45242"
+  ],
+  "agency_ad_code": "",
+  "agency_prod_code": "",
+  "payee_name": "Crossings TV",
+  "payee_address": [
+    "Accounts Receivable",
+    "901 H Street Ste 120 PMB 91",
+    "Sacramento CA",
+    "95814"
+  ]
+}

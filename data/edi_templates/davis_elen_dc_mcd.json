@@ -1,0 +1,26 @@
+{
+  "name": "Davis Elen DC McD",
+  "edi_code": "9912567",
+  "call_letters": "CDCN",
+  "commission_pct": 15.0,
+  "representative": "Charmaine Lane",
+  "salesperson": "Rosa Lina Quiones Diaz",
+  "agency_name": "Davis Elen",
+  "advertiser_name": "DCBU Capital Business Unit",
+  "product_name": "QSR",
+  "agency_address": [
+    "856 Figueroa Street",
+    "12th Floor",
+    "Los Angeles CA",
+    "90017"
+  ],
+  "agency_ad_code": "DCBU",
+  "agency_prod_code": "QSR",
+  "payee_name": "Crossings TV",
+  "payee_address": [
+    "Accounts Receivable",
+    "901 H Street Ste 120 PMB 91",
+    "Sacramento CA",
+    "95814"
+  ]
+}

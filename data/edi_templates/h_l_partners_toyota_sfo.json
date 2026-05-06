@@ -1,0 +1,26 @@
+{
+  "name": "H&L Partners Toyota (SFO)",
+  "edi_code": "9913415",
+  "call_letters": "CRTV",
+  "commission_pct": 15.0,
+  "representative": "Charmaine Lane",
+  "salesperson": "Jeanette Lee",
+  "agency_name": "H&L Partners San Francisco",
+  "advertiser_name": "Northern California Dealer's Assocation",
+  "product_name": "Asian Traffic Adult TV (25-54)",
+  "agency_address": [
+    "100 Webster St",
+    "Oakland CA",
+    "94607",
+    ""
+  ],
+  "agency_ad_code": "",
+  "agency_prod_code": "",
+  "payee_name": "Crossings TV",
+  "payee_address": [
+    "Accounts Receivable",
+    "901 H Street Ste 120 PMB 91",
+    "Sacramento CA",
+    "95814"
+  ]
+}
