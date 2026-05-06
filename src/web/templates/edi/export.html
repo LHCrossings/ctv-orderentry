@@ -390,6 +390,7 @@ function renderFileList() {
   if (!fileItems.length) { el.innerHTML = '<div class="empty">No files found.</div>'; return; }
   el.innerHTML = fileItems.map((item, idx) => {
     const gross = fmt_dollars(item.gross_cents || 0);
+    const tmpl = templates.find(t => t.name === item.suggested_template) || {};
     const tmplOpts = '<option value="">— select —</option>' +
       templates.map(t => `<option value="${t.name}" ${t.name===item.suggested_template?'selected':''}>${t.name}</option>`).join('');
     return `
@@ -435,8 +436,28 @@ function renderFileList() {
           <input class="f-bcast-end" value="${item.bcast_end||''}" readonly title="${fmt_date(item.bcast_end)}"/>
         </div>
         <div class="field-group field-comment">
-          <label>Comment Top (32 record)</label>
-          <input class="f-comment-top" placeholder="e.g. 26_04_T__MAN_4FOR$5"/>
+          <label>Record 32 — Market / Comment</label>
+          <input class="f-comment-top" placeholder="e.g. SAN FRANCISCO"/>
+        </div>
+        <div class="field-group">
+          <label>Advertiser Name (R31)</label>
+          <input class="f-advertiser-name" value="${tmpl.advertiser_name||''}"/>
+        </div>
+        <div class="field-group">
+          <label>Product Name (R31)</label>
+          <input class="f-product-name" value="${tmpl.product_name||''}"/>
+        </div>
+        <div class="field-group">
+          <label>Agency Ad Code (R31)</label>
+          <input class="f-ad-code" value="${tmpl.agency_ad_code||''}"/>
+        </div>
+        <div class="field-group">
+          <label>Agency Prod Code (R31)</label>
+          <input class="f-prod-code" value="${tmpl.agency_prod_code||''}"/>
+        </div>
+        <div class="field-group field-comment">
+          <label>Record 33 — Copy / Campaign Description</label>
+          <input class="f-copy-name" placeholder="e.g. Toyota_ 2026 April ACM TV"/>
         </div>
       </div>
       <div class="file-card-footer">
@@ -449,6 +470,18 @@ function renderFileList() {
   // Attach download handlers
   document.querySelectorAll('.btn-dl').forEach(btn => {
     btn.addEventListener('click', () => downloadOne(btn.closest('.file-card')));
+  });
+
+  // Auto-populate template fields when template selection changes
+  document.querySelectorAll('.tmpl-select').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const card = sel.closest('.file-card');
+      const t = templates.find(x => x.name === sel.value) || {};
+      card.querySelector('.f-advertiser-name').value = t.advertiser_name || '';
+      card.querySelector('.f-product-name').value    = t.product_name    || '';
+      card.querySelector('.f-ad-code').value         = t.agency_ad_code  || '';
+      card.querySelector('.f-prod-code').value       = t.agency_prod_code|| '';
+    });
   });
 }
 
@@ -467,6 +500,11 @@ function getCardPayload(card) {
       bcast_start:     card.querySelector('.f-bcast-start').value,
       bcast_end:       card.querySelector('.f-bcast-end').value,
       comment_top:     card.querySelector('.f-comment-top').value,
+      advertiser_name: card.querySelector('.f-advertiser-name').value,
+      product_name:    card.querySelector('.f-product-name').value,
+      agency_ad_code:  card.querySelector('.f-ad-code').value,
+      agency_prod_code:card.querySelector('.f-prod-code').value,
+      copy_name:       card.querySelector('.f-copy-name').value,
     },
   };
 }
