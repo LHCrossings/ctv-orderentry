@@ -6,7 +6,7 @@
   "representative": "Charmaine Lane",
   "salesperson": "Andrea Salvio",
   "agency_name": "HYPHEN",
-  "advertiser_name": "CA Dept of Pesticide Regulation",
+  "advertiser_name": "CA Dept of Pesticide Reg",
   "product_name": "Spray Days",
   "agency_address": [
     "677 W Palmdon Dr",
@@ -22,6 +22,10 @@
     "Sacramento CA",
     "95814"
   ],
+  "comment_top_by_market": {
+    "CVC": "SACRAMENTO MARKET",
+    "LAX": "LOS ANGELES MARKET"
+  },
   "advertiser_match": "CA Dept of Pesticide Regulation",
   "market_match": ""
 }

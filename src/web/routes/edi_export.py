@@ -418,6 +418,12 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
                     if pdf[key]:
                         info[key] = pdf[key]
             info["suggested_template"] = _suggest_template(p["csv"], tmpl_list, advertiser, market)
+            # Apply market-based comment_top from template if not already set
+            if not info.get("comment_top") and market:
+                tmpl = next((t for t in tmpl_list if t["name"] == info["suggested_template"]), {})
+                by_mkt = tmpl.get("comment_top_by_market", {})
+                if market in by_mkt:
+                    info["comment_top"] = by_mkt[market]
             result.append(info)
         return result
 
