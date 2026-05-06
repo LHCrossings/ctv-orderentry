@@ -502,7 +502,7 @@ function renderFileList() {
         </div>
         <div class="field-group field-comment">
           <label>Record 32 — Top Comment (Market, Main Comment, Estimate Details)</label>
-          <input class="f-comment-top" value="${item.comment_top||''}" placeholder="e.g. SAN FRANCISCO"/>
+          <input class="f-comment-top" value="${item.comment_top||tmpl.comment_top||''}" placeholder="e.g. SAN FRANCISCO"/>
         </div>
         <div class="field-group">
           <label>Advertiser Name (R31)</label>
@@ -562,6 +562,7 @@ function renderFileList() {
       card.querySelector('.f-product-name').value    = t.product_name    || '';
       card.querySelector('.f-ad-code').value         = t.agency_ad_code  || '';
       card.querySelector('.f-prod-code').value       = t.agency_prod_code|| '';
+      card.querySelector('.f-comment-top').value     = t.comment_top     || '';
       // Re-run counters after programmatic fill
       card.querySelectorAll('input').forEach(i => i.dispatchEvent(new Event('input')));
     });
