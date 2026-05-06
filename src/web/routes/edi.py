@@ -279,7 +279,7 @@ def _diff_pdf_csv(pdf_bytes: bytes, csv_bytes: bytes) -> dict:
                 ps_secs = _secs(ps["airtime"])
             except ValueError:
                 continue
-            best_dist, best_ci = 6, -1  # sentinel > 5 s
+            best_dist, best_ci = 601, -1  # sentinel > 600 s (10 min)
             for ci, cs in enumerate(csv_day):
                 if used_csv[ci]:
                     continue
@@ -287,7 +287,8 @@ def _diff_pdf_csv(pdf_bytes: bytes, csv_bytes: bytes) -> dict:
                     dist = abs(_secs(cs["airtime"]) - ps_secs)
                 except ValueError:
                     continue
-                if dist <= 5 and dist < best_dist:
+                rate_match = abs(cs.get("rate", 0) - ps.get("rate", 0)) < 0.01
+                if rate_match and dist <= 600 and dist < best_dist:
                     best_dist, best_ci = dist, ci
             if best_ci >= 0:
                 used_csv[best_ci] = True
