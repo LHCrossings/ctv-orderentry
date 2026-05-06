@@ -41,7 +41,17 @@ def _parse_export_csv(csv_bytes: bytes) -> dict:
     est_desc  = meta[3].strip() if len(meta) > 3 else ""
 
     m = re.search(r'\bEst\.?\s+(\S+)', est_desc, re.IGNORECASE)
-    estimate_code = m.group(1).rstrip(",.:") if m else ""
+    if m:
+        estimate_code = m.group(1).rstrip(",.:")
+    else:
+        # Fallback: trailing number in meta[3], then meta[1]
+        for src in [est_desc, meta[1].strip() if len(meta) > 1 else ""]:
+            fb = re.search(r'(\d+)\s*$', src)
+            if fb:
+                estimate_code = fb.group(1)
+                break
+        else:
+            estimate_code = ""
 
     hdr = rows[3] if len(rows) > 3 else []
     col = {name.strip(): i for i, name in enumerate(hdr)}
