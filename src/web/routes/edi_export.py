@@ -211,7 +211,7 @@ def _generate_edi(template: dict, inv: dict, spots: list[dict]) -> str:
     comment = inv.get("comment_top", "").strip()
     if comment:
         lines.append(f"32;{comment};")
-    for spot in spots:
+    for spot in sorted(spots, key=lambda s: (s["run_date"], s["time_hhmm"])):
         lines.append(_r51(spot))
     lines.append(_r34(template, gross, count))
     lines.append(f"12;1;{gross};")
