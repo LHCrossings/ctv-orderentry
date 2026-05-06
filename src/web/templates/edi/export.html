@@ -502,7 +502,7 @@ function renderFileList() {
         </div>
         <div class="field-group field-comment">
           <label>Record 32 — Market / Comment</label>
-          <input class="f-comment-top" placeholder="e.g. SAN FRANCISCO"/>
+          <input class="f-comment-top" value="${item.comment_top||''}" placeholder="e.g. SAN FRANCISCO"/>
         </div>
         <div class="field-group">
           <label>Advertiser Name (R31)</label>
@@ -510,19 +510,19 @@ function renderFileList() {
         </div>
         <div class="field-group">
           <label>Product Name (R31)</label>
-          <input class="f-product-name" value="${tmpl.product_name||''}"/>
+          <input class="f-product-name" value="${item.product_name||tmpl.product_name||''}"/>
         </div>
         <div class="field-group">
           <label>Agency Ad Code (R31)</label>
-          <input class="f-ad-code" value="${tmpl.agency_ad_code||''}"/>
+          <input class="f-ad-code" value="${item.agency_ad_code||tmpl.agency_ad_code||''}"/>
         </div>
         <div class="field-group">
           <label>Agency Prod Code (R31)</label>
-          <input class="f-prod-code" value="${tmpl.agency_prod_code||''}"/>
+          <input class="f-prod-code" value="${item.agency_prod_code||tmpl.agency_prod_code||''}"/>
         </div>
         <div class="field-group">
           <label>Rep Order Number (R31, optional)</label>
-          <input class="f-rep-order" placeholder=""/>
+          <input class="f-rep-order" value="${item.rep_order_number||''}"/>
         </div>
         <div class="field-group field-comment">
           <label>Record 33 — Comment Bottom 1</label>

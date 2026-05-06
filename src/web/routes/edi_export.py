@@ -282,21 +282,42 @@ def _invoice_info(filename: str) -> dict:
     }
 
 
-def _parse_affidavit_pdf(pdf_path: Path) -> tuple[str, str]:
-    """Extract Advertiser and Market from the affidavit page of a PDF."""
+def _parse_affidavit_pdf(pdf_path: Path) -> dict:
+    """Extract fields from the affidavit PDF — header page and comment box."""
+    result = {
+        "advertiser": "", "market": "",
+        "rep_order_number": "", "agency_ad_code": "", "agency_prod_code": "",
+        "product_name": "", "comment_top": "",
+    }
     try:
         import pdfplumber
         with pdfplumber.open(pdf_path) as pdf:
-            # Affidavit is usually page 2 (index 1), fall back to page 1
-            page = pdf.pages[1] if len(pdf.pages) > 1 else pdf.pages[0]
-            text = page.extract_text() or ""
-        adv_m = re.search(r'Advertiser\s+(.+)$', text, re.MULTILINE)
-        mkt_m = re.search(r'Market\s+(\S+)', text)
-        advertiser = adv_m.group(1).strip() if adv_m else ""
-        market     = mkt_m.group(1).strip() if mkt_m else ""
-        return advertiser, market
+            page2_text = (pdf.pages[1] if len(pdf.pages) > 1 else pdf.pages[0]).extract_text() or ""
+            full_text  = "\n".join(p.extract_text() or "" for p in pdf.pages)
+
+        # Advertiser + Market from affidavit header (page 2)
+        adv_m = re.search(r'Advertiser\s+(.+)$', page2_text, re.MULTILINE)
+        mkt_m = re.search(r'Market\s+(\S+)', page2_text)
+        if adv_m:
+            result["advertiser"] = adv_m.group(1).strip()
+        if mkt_m:
+            result["market"] = mkt_m.group(1).strip()
+
+        # Comment box fields (may span pages)
+        if m := re.search(r'Order\s*#:\s*(\d+)', full_text):
+            result["rep_order_number"] = m.group(1).strip()
+        if m := re.search(r'CLIENT\s+(\w+)', full_text):
+            result["agency_ad_code"] = m.group(1).strip()
+        if m := re.search(r'PRODUCT\s+(\w+)\s+(.+?)(?:\s+http|\s+CPE\b|\n|$)', full_text):
+            result["agency_prod_code"] = m.group(1).strip()
+            raw_name = m.group(2).strip().replace("-", " ")
+            result["product_name"] = raw_name.title()
+        if m := re.search(r'ESTIMATE\s+\d+\s+(\S+)', full_text):
+            result["comment_top"] = m.group(1).strip()
+
     except Exception:
-        return "", ""
+        pass
+    return result
 
 
 def _suggest_template(filename: str, templates: list[dict],
@@ -382,13 +403,17 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
                 info.update(spot_count=0, gross_cents=0,
                             bcast_start="", bcast_end="", estimate_code="")
                 advertiser = market = ""
-            # PDF affidavit is authoritative for advertiser/market matching
+            # PDF affidavit is authoritative for advertiser/market matching + pre-fill
             if p.get("pdf"):
-                pdf_adv, pdf_mkt = _parse_affidavit_pdf(INCOMING / p["pdf"])
-                if pdf_adv:
-                    advertiser = pdf_adv
-                if pdf_mkt:
-                    market = pdf_mkt
+                pdf = _parse_affidavit_pdf(INCOMING / p["pdf"])
+                if pdf["advertiser"]:
+                    advertiser = pdf["advertiser"]
+                if pdf["market"]:
+                    market = pdf["market"]
+                for key in ("rep_order_number", "agency_ad_code", "agency_prod_code",
+                            "product_name", "comment_top"):
+                    if pdf[key]:
+                        info[key] = pdf[key]
             info["suggested_template"] = _suggest_template(p["csv"], tmpl_list, advertiser, market)
             result.append(info)
         return result
