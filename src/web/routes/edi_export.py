@@ -156,9 +156,13 @@ def _r31(t: dict, inv: dict) -> str:
 
 def _r51(spot: dict) -> str:
     f = _pad([], 28)
-    f[0] = "51";  f[1] = "Y";  f[2] = spot["run_date"]
-    f[4] = spot["time_hhmm"];  f[5] = str(spot["duration"])
-    f[6] = spot["copy_id"];    f[7] = str(spot["rate_cents"])
+    f[0] = "51"
+    f[1] = "Y"
+    f[2] = spot["run_date"]
+    f[4] = spot["time_hhmm"]
+    f[5] = str(spot["duration"])
+    f[6] = spot["copy_id"]
+    f[7] = str(spot["rate_cents"])
     return ";".join(f) + ";"
 
 
@@ -167,7 +171,10 @@ def _r34(t: dict, gross: int, spot_count: int) -> str:
     comm = int(round(gross * pct / 100))
     net  = gross - comm
     f = _pad([], 16)
-    f[0] = "34"; f[2] = str(gross); f[3] = str(comm); f[4] = str(net)
+    f[0] = "34"
+    f[2] = str(gross)
+    f[3] = str(comm)
+    f[4] = str(net)
     f[13] = str(spot_count)
     return ";".join(f) + ";"
 
