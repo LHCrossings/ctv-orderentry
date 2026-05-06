@@ -103,6 +103,7 @@ def _parse_export_csv(csv_bytes: bytes) -> dict:
 
     dates       = sorted(s["run_date"] for s in spots if s["run_date"])
     gross_cents = sum(s["rate_cents"] for s in spots)
+    advertiser  = meta[5].strip() if len(meta) > 5 else ""
 
     return {
         "spots":         spots,
@@ -111,6 +112,7 @@ def _parse_export_csv(csv_bytes: bytes) -> dict:
         "bcast_start":   dates[0] if dates else "",
         "bcast_end":     dates[-1] if dates else "",
         "estimate_code": estimate_code,
+        "advertiser":    advertiser,
     }
 
 
@@ -266,12 +268,34 @@ def _invoice_info(filename: str) -> dict:
     }
 
 
-def _suggest_template(filename: str, templates: list[dict]) -> str:
-    fn = filename.lower()
+def _suggest_template(filename: str, templates: list[dict], advertiser: str = "") -> str:
+    fn  = filename.lower()
+    adv = advertiser.lower()
+
+    def _words(s: str) -> list[str]:
+        return re.findall(r'[a-z]{3,}', s.lower())
+
+    def _adv_score(t: dict) -> int:
+        """Whole-word matches of template advertiser/product words in the CSV advertiser field."""
+        words = _words(t.get("advertiser_name", "") + " " + t.get("product_name", ""))
+        return sum(1 for w in words if re.search(r'\b' + re.escape(w) + r'\b', adv))
+
+    # Pass 1: agency match + best advertiser score (whole-word)
+    if adv:
+        candidates = [
+            t for t in templates
+            if any(w in fn for w in _words(t.get("agency_name", "")))
+        ]
+        scored = [(t, _adv_score(t)) for t in candidates]
+        scored.sort(key=lambda x: -x[1])
+        if scored and scored[0][1] > 0:
+            return scored[0][0].get("name", "")
+
+    # Pass 2: agency name only
     for t in templates:
-        words = re.findall(r'[a-z]{3,}', t.get("agency_name","").lower())
-        if any(w in fn for w in words):
+        if any(w in fn for w in _words(t.get("agency_name", ""))):
             return t.get("name", "")
+
     return templates[0].get("name", "") if templates else ""
 
 
@@ -315,7 +339,6 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
             info = _invoice_info(p["csv"])
             info["csv_filename"] = p["csv"]
             info["pdf_filename"] = p.get("pdf") or ""
-            info["suggested_template"] = _suggest_template(p["csv"], tmpl_list)
             try:
                 parsed = _parse_export_csv((INCOMING / p["csv"]).read_bytes())
                 info.update({
@@ -325,9 +348,12 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
                     "bcast_end":     parsed["bcast_end"],
                     "estimate_code": parsed["estimate_code"],
                 })
+                advertiser = parsed.get("advertiser", "")
             except Exception:
                 info.update(spot_count=0, gross_cents=0,
                             bcast_start="", bcast_end="", estimate_code="")
+                advertiser = ""
+            info["suggested_template"] = _suggest_template(p["csv"], tmpl_list, advertiser)
             result.append(info)
         return result
 
