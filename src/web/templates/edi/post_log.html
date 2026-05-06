@@ -8,27 +8,6 @@
     <link rel="stylesheet" href="/static/css/_variables.css" />
     <link rel="stylesheet" href="/static/css/app.css" />
     <style>
-        .page-header {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            margin-bottom: 28px;
-        }
-        .page-header a {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            text-decoration: none;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .page-header a:hover { color: var(--accent-primary); }
-        .page-header h1 {
-            font-size: 1.35rem;
-            font-weight: 700;
-            color: var(--text-primary);
-            margin: 0;
-        }
         .bw-card {
             background: white;
             border: 1px solid var(--border-color);
@@ -312,12 +291,21 @@
 </head>
 <body>
 
-<div class="container" style="max-width:860px; margin: 0 auto; padding: 36px 24px;">
-
-    <div class="page-header">
-        <a href="/">← Control Room</a>
-        <h1>EDI Post Log Export</h1>
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="back-link">&#8592;</a>
+            <div class="logo-icon">📋</div>
+            <div>
+                <h1>Control <span>Room</span></h1>
+                <div class="logo-sub">Post Log Export</div>
+            </div>
+        </div>
+        <span class="header-badge">EDI Tools</span>
     </div>
+</header>
+
+<main style="max-width:860px; margin: 0 auto; padding: 24px 16px;">
 
     <!-- Step 1: Upload invoices -->
     <div class="bw-card">
@@ -413,7 +401,7 @@
         </div>
     </div>
 
-</div>
+</main>
 
 <script>
 const dropZone   = document.getElementById('drop-zone');
