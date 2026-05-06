@@ -2344,35 +2344,51 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 result = []
                 for line in lines:
                     desc = line["DESCRIZIONE"] or ""
-                    m = re.search(r'\[([A-Za-z0-9]+)\]', desc)
-                    if not m:
+                    codes = re.findall(r'\[([A-Za-z0-9]+)\]', desc)
+                    if not codes:
                         result.append({"line_id": line["ID_CONTRATTIRIGHE"],
                                        "description": desc, "code": None, "variants": []})
                         continue
 
-                    code = m.group(1)
                     lang = _detect_lang(desc)
                     prefs = LANG_PREFS.get(lang, ["E"])
-                    safe_code = code.replace("'", "''")
+                    all_variants = []
+                    seen_fids: set = set()
+                    for code in codes:
+                        safe_code = code.replace("'", "''")
+                        cur.execute(f"""
+                            SELECT ID_FILMATI, COD_PROGRA, DESCRIZIO
+                            FROM FILMATI
+                            WHERE COD_PROGRA LIKE '{safe_code}%'
+                              AND ANNULLATO = 0 AND SOSPESO = 0
+                            ORDER BY COD_PROGRA
+                        """)
+                        code_has_preferred = False
+                        for f in cur.fetchall():
+                            fid = f["ID_FILMATI"]
+                            if fid in seen_fids:
+                                continue
+                            seen_fids.add(fid)
+                            is_pref = (_suffix(f["COD_PROGRA"]) == prefs[0]) if prefs else False
+                            if is_pref:
+                                code_has_preferred = True
+                            all_variants.append({
+                                "filmati_id": fid,
+                                "cod_progra":  f["COD_PROGRA"],
+                                "descrizio":   f["DESCRIZIO"] or "",
+                                "preferred":   is_pref,
+                            })
+                        # If no variant matched the language preference, pre-check the first one
+                        # for this code so rotation always has something selected per code.
+                        if not code_has_preferred and all_variants:
+                            # find the last-appended group for this code and mark first as preferred
+                            for v in reversed(all_variants):
+                                if v["cod_progra"].startswith(code):
+                                    v["preferred"] = True
+                                    break
 
-                    cur.execute(f"""
-                        SELECT ID_FILMATI, COD_PROGRA, DESCRIZIO
-                        FROM FILMATI
-                        WHERE COD_PROGRA LIKE '{safe_code}%'
-                          AND ANNULLATO = 0 AND SOSPESO = 0
-                        ORDER BY COD_PROGRA
-                    """)
-                    variants = [
-                        {
-                            "filmati_id": f["ID_FILMATI"],
-                            "cod_progra":  f["COD_PROGRA"],
-                            "descrizio":   f["DESCRIZIO"] or "",
-                            "preferred":   (_suffix(f["COD_PROGRA"]) == prefs[0]) if prefs else False,
-                        }
-                        for f in cur.fetchall()
-                    ]
                     result.append({"line_id": line["ID_CONTRATTIRIGHE"],
-                                   "description": desc, "code": code, "variants": variants})
+                                   "description": desc, "code": codes[0], "variants": all_variants})
 
             return result
 

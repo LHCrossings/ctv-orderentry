@@ -1409,6 +1409,9 @@
                 // Build filmati_ids list proportional to rotation percentages
                 const foundSpots = r.spots.filter(s => s.found);
                 const filmatiIds = buildRotationList(foundSpots);
+                console.log('[Daviselen assign]', r.estimate,
+                    'foundSpots:', foundSpots.map(s => ({isci: s.isci, filmati_id: s.filmati_id, pct: s.rotation_pct})),
+                    'filmatiIds:', filmatiIds);
 
                 const assignments = r.lines.map(l => ({
                     line_id:     l.line_id,
@@ -1418,6 +1421,7 @@
                 const payload = { assignments };
                 if (r.date_from_sql) payload.date_from = r.date_from_sql;
                 if (r.date_to_sql)   payload.date_to   = r.date_to_sql;
+                console.log('[Daviselen assign] payload:', JSON.stringify(payload).substring(0, 300));
 
                 const resp = await fetch(`/api/traffic/contract/${r.contract.id}/auto-assign`, {
                     method:  'POST',
@@ -1450,16 +1454,33 @@
         }
     }
 
-    // Convert spot list with rotation_pct into a round-robin filmati_ids array.
-    // E.g. [{filmati_id:1, rotation_pct:67}, {filmati_id:2, rotation_pct:33}] → [1,1,2]
+    // Convert spot list with rotation_pct into a Bresenham-interleaved round-robin array.
+    // E.g. [{filmati_id:1, rotation_pct:50}, {filmati_id:2, rotation_pct:50}] → [1,2]
+    //      [{filmati_id:1, rotation_pct:67}, {filmati_id:2, rotation_pct:33}] → [1,2,1,1,2,1,1,2,1,1] (GCD-reduced, interleaved)
+    // The backend applies filmati_ids[i % n] per spot, so a short line (e.g. 3 spots) must
+    // see a fair mix within the first few positions — grouping all of one filmati first breaks that.
     function buildRotationList(spots) {
         if (spots.length === 1) return [spots[0].filmati_id];
-        // Scale to integer weights summing to ~10
         const total = spots.reduce((a, s) => a + s.rotation_pct, 0) || 100;
-        const list  = [];
-        for (const s of spots) {
-            const count = Math.max(1, Math.round(s.rotation_pct / total * 10));
-            for (let i = 0; i < count; i++) list.push(s.filmati_id);
+        const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+
+        // Scale to integer weights (~10), then GCD-reduce for minimal cycle length
+        const raw    = spots.map(s => Math.max(1, Math.round(s.rotation_pct / total * 10)));
+        const g      = raw.reduce((a, b) => gcd(a, b));
+        const counts = raw.map(c => c / g);
+        const cycle  = counts.reduce((a, b) => a + b, 0);
+
+        // Bresenham fill: each slot picks the filmati most "overdue" relative to its target rate
+        const used = new Array(spots.length).fill(0);
+        const list = [];
+        for (let slot = 0; slot < cycle; slot++) {
+            let best = -1, bestVal = -Infinity;
+            for (let j = 0; j < spots.length; j++) {
+                const val = counts[j] * (slot + 1) / cycle - used[j];
+                if (val > bestVal) { bestVal = val; best = j; }
+            }
+            list.push(spots[best].filmati_id);
+            used[best]++;
         }
         return list;
     }
