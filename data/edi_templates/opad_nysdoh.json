@@ -1,0 +1,28 @@
+{
+  "name": "OpAD NYS Dept of Health",
+  "edi_code": "9912619",
+  "call_letters": "CRTV",
+  "commission_pct": 15,
+  "representative": "Charmaine Lane",
+  "salesperson": "Lonnie Greenberg",
+  "agency_name": "OpAD Media Solutions",
+  "advertiser_name": "NYS Department of Health",
+  "product_name": "NYSDOH",
+  "agency_address": [
+    "275 Madison Avenue",
+    "Suite 2200",
+    "New York, NY",
+    "10016"
+  ],
+  "agency_ad_code": "",
+  "agency_prod_code": "",
+  "payee_name": "Crossings TV",
+  "payee_address": [
+    "Accounts Receivable",
+    "901 H Street Ste 120 PMB 91",
+    "Sacramento CA",
+    "95814"
+  ],
+  "advertiser_match": "",
+  "market_match": ""
+}

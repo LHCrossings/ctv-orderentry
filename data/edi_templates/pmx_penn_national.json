@@ -1,0 +1,28 @@
+{
+  "name": "PMX Penn National Gaming",
+  "edi_code": "TV23682",
+  "call_letters": "CTCH",
+  "commission_pct": 15,
+  "representative": "Ian Kelley",
+  "salesperson": "House",
+  "agency_name": "PMX Assembly LLC DBA Assembly",
+  "advertiser_name": "Penn National Gaming Inc",
+  "product_name": "HW Joliet",
+  "agency_address": [
+    "One World Trade Center",
+    "67th Floor",
+    "New York, NY",
+    "10007"
+  ],
+  "agency_ad_code": "",
+  "agency_prod_code": "",
+  "payee_name": "Crossings TV",
+  "payee_address": [
+    "Accounts Receivable",
+    "901 H Street Ste 120 PMB 91",
+    "Sacramento CA",
+    "95814"
+  ],
+  "advertiser_match": "",
+  "market_match": ""
+}

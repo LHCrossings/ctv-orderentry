@@ -1,0 +1,28 @@
+{
+  "name": "BVK UC Davis Health",
+  "edi_code": "9913227",
+  "call_letters": "CRSE",
+  "commission_pct": 15,
+  "representative": "Charmaine Lane",
+  "salesperson": "Jennifer Murphy",
+  "agency_name": "BVK",
+  "advertiser_name": "UC Davis Health",
+  "product_name": "UC Davis Health",
+  "agency_address": [
+    "250 W Coventry Court",
+    "Ste 300",
+    "Milwaukee, WI",
+    "53217"
+  ],
+  "agency_ad_code": "",
+  "agency_prod_code": "",
+  "payee_name": "Crossings TV",
+  "payee_address": [
+    "Accounts Receivable",
+    "901 H Street Ste 120 PMB 91",
+    "Sacramento CA",
+    "95814"
+  ],
+  "advertiser_match": "",
+  "market_match": ""
+}

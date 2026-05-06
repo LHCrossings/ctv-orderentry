@@ -1,0 +1,28 @@
+{
+  "name": "Ocean Media BetMGM",
+  "edi_code": "9913129",
+  "call_letters": "CRTV",
+  "commission_pct": 15,
+  "representative": "House",
+  "salesperson": "Carol Cordova",
+  "agency_name": "Ocean Media, LLC",
+  "advertiser_name": "BetMGM",
+  "product_name": "90 - MGMCAS22",
+  "agency_address": [
+    "17011 Beach Blvd",
+    "15th Floor",
+    "Huntington Beach, CA",
+    "92647"
+  ],
+  "agency_ad_code": "",
+  "agency_prod_code": "",
+  "payee_name": "Crossings TV",
+  "payee_address": [
+    "Accounts Receivable",
+    "901 H Street Ste 120 PMB 91",
+    "Sacramento CA",
+    "95814"
+  ],
+  "advertiser_match": "",
+  "market_match": ""
+}

@@ -1,0 +1,28 @@
+{
+  "name": "iHeart CA Dept Pesticide Regulation",
+  "edi_code": "9914923",
+  "call_letters": "CRTV",
+  "commission_pct": 15,
+  "representative": "Charmaine Lane",
+  "salesperson": "Sara McClure",
+  "agency_name": "iHeartMedia",
+  "advertiser_name": "CA Dept Pesticide Regulation",
+  "product_name": "CPESTINLBC",
+  "agency_address": [
+    "5180 Golden Foothills Pkwy",
+    "Ste 120",
+    "El Dorado Hills, CA",
+    "95762"
+  ],
+  "agency_ad_code": "",
+  "agency_prod_code": "",
+  "payee_name": "Crossings TV",
+  "payee_address": [
+    "Accounts Receivable",
+    "901 H Street Ste 120 PMB 91",
+    "Sacramento CA",
+    "95814"
+  ],
+  "advertiser_match": "",
+  "market_match": ""
+}

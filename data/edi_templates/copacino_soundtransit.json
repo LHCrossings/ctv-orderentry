@@ -1,0 +1,28 @@
+{
+  "name": "Copacino Sound Transit",
+  "edi_code": "TV12536",
+  "call_letters": "CRTV",
+  "commission_pct": 15,
+  "representative": "Charmaine Lane",
+  "salesperson": "Jessica Doy",
+  "agency_name": "Copacino & Fujikado LLC",
+  "advertiser_name": "Sound Transit",
+  "product_name": "Ridership Diversity TV",
+  "agency_address": [
+    "1425 4th Ave",
+    "Ste 700",
+    "Seattle, WA",
+    "98101"
+  ],
+  "agency_ad_code": "",
+  "agency_prod_code": "",
+  "payee_name": "Crossings TV",
+  "payee_address": [
+    "Accounts Receivable",
+    "901 H Street Ste 120 PMB 91",
+    "Sacramento CA",
+    "95814"
+  ],
+  "advertiser_match": "",
+  "market_match": ""
+}
