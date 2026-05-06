@@ -2482,9 +2482,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 """)
                 line_tp_map: dict = defaultdict(list)
                 tp_newtype_map: dict = {}
+                all_rows_ordered: list = []  # global chronological order preserved
                 for r in cur.fetchall():
                     line_tp_map[r["line_id"]].append(r["tp_id"])
                     tp_newtype_map[r["tp_id"]] = bookingcode_to_newtype.get(r["booking_code"], "COM")
+                    all_rows_ordered.append((r["line_id"], r["tp_id"]))
 
                 cur.execute(
                     f"SELECT DISTINCT ID_FILMATI FROM CONTRATTIFILMATI"
@@ -2510,17 +2512,49 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     if not r.json().get("IsOk"):
                         raise ValueError(f"MaterialAddToAssetListC failed for filmati {fid}: {r.json()}")
 
-                for asgn in assignments:
-                    line_id     = asgn["line_id"]
+                # Build global chronological tp→filmati map when all lines share the same
+                # filmati_ids (the common case for Daviselen/Lexus rotation instructions).
+                # This mirrors the manual rotation path: Bresenham interleave across all
+                # spots sorted by date/time, so the A,B pattern is continuous, not reset
+                # per line.
+                asgn_filmati = [tuple(a.get("filmati_ids", [])) for a in assignments]
+                common_filmati = list(assignments[0].get("filmati_ids", [])) if assignments else []
+                use_global = bool(
+                    common_filmati
+                    and len(set(asgn_filmati)) == 1
+                    and len(all_rows_ordered) > 0
+                )
+                if use_global:
+                    n = len(common_filmati)
+                    accum = {fid: 0.0 for fid in common_filmati}
+                    global_rotation: list = []
+                    for _ in all_rows_ordered:
+                        for fid in common_filmati:
+                            accum[fid] += 1.0 / n
+                        chosen = max(accum, key=accum.__getitem__)
+                        global_rotation.append(chosen)
+                        accum[chosen] -= 1.0
+                    tp_filmati_global = {
+                        tp_id: global_rotation[i]
+                        for i, (_, tp_id) in enumerate(all_rows_ordered)
+                    }
+
+                asgn_map = {a["line_id"]: a for a in assignments}
+                for line_id, tp_ids in line_tp_map.items():
+                    asgn = asgn_map.get(line_id)
+                    if not asgn:
+                        continue
                     filmati_ids = asgn.get("filmati_ids", [])
-                    tp_ids      = line_tp_map.get(line_id, [])
                     if not filmati_ids or not tp_ids:
                         continue
-                    n   = len(filmati_ids)
-                    idf = [filmati_ids[i % n] for i in range(len(tp_ids))]
+                    if use_global:
+                        idf = [tp_filmati_global[tp_id] for tp_id in tp_ids]
+                    else:
+                        n   = len(filmati_ids)
+                        idf = [filmati_ids[i % n] for i in range(len(tp_ids))]
                     r = session.post(
                         f"{ETERE_WEB_URL}/Sales/MaterialAssignAssetRotation",
-                        json={"idp": tp_ids, "idf": idf, "idcr": line_id},
+                        json={"idp": list(tp_ids), "idf": idf, "idcr": line_id},
                         headers={"X-Requested-With": "XMLHttpRequest"},
                         timeout=30,
                     )
