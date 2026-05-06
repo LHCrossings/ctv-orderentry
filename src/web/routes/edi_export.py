@@ -275,7 +275,7 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
     # ── Page ──────────────────────────────────────────────────────────────
     @router.get("", response_class=HTMLResponse)
     async def export_page(request: Request):
-        return jinja.TemplateResponse("edi/export.html", {"request": request})
+        return jinja.TemplateResponse(request, "edi/export.html")
 
     # ── Scan incoming/EDI folder ──────────────────────────────────────────
     @router.get("/scan")
