@@ -163,14 +163,20 @@ def _r31(t: dict, inv: dict) -> str:
     f[14] = inv.get("bcast_start", "")
     f[15] = inv.get("bcast_end", "")
     f[18] = "Y"
+    f[21] = inv.get("rep_order_number", "")
     f[22] = inv.get("order_number", "")
     f[24] = inv.get("agency_ad_code", "")  or t.get("agency_ad_code", "")
     f[26] = inv.get("agency_prod_code", "") or t.get("agency_prod_code", "")
     return ";".join(f) + ";"
 
 
-def _r33(inv: dict) -> str:
-    return f"33;{inv.get('copy_name', '')};"
+def _r33_lines(inv: dict) -> list[str]:
+    out = []
+    for key in ("comment_bottom", "comment_bottom_2", "comment_bottom_3", "comment_bottom_4"):
+        val = inv.get(key, "").strip()
+        if val:
+            out.append(f"33;{val};")
+    return out
 
 
 def _r51(spot: dict) -> str:
@@ -194,7 +200,7 @@ def _r34(t: dict, gross: int, spot_count: int) -> str:
     f[2] = str(gross)
     f[3] = str(comm)
     f[4] = str(net)
-    f[13] = str(spot_count)
+    f[12] = str(spot_count)
     return ";".join(f) + ";"
 
 
@@ -216,7 +222,7 @@ def _generate_edi(template: dict, inv: dict, spots: list[dict]) -> str:
         lines.append(f"32;{comment};")
     for spot in spots:
         lines.append(_r51(spot))
-    lines.append(_r33(inv))
+    lines.extend(_r33_lines(inv))
     lines.append(_r34(template, gross, count))
     lines.append(f"12;1;{gross};")
     return "\n".join(lines)

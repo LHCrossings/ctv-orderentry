@@ -77,6 +77,11 @@
     }
     .field-group input[readonly] { color: var(--text-secondary); cursor: default; }
     .field-comment { grid-column: 1 / -1; }
+    .field-group input.field-error { border-color: var(--accent-danger) !important; }
+    .field-group input.field-warn  { border-color: #d08770 !important; }
+    .char-counter { font-size: .7rem; color: var(--text-secondary); text-align: right; margin-top: 1px; }
+    .char-counter.near { color: #d08770; }
+    .char-counter.over { color: var(--accent-danger); font-weight: 700; }
 
     /* Template list */
     .tmpl-list { display: flex; flex-direction: column; gap: .6rem; max-width: 700px; }
@@ -211,6 +216,66 @@
 let templates = [];
 let fileItems = [];   // [{csv_filename, suggested_template, spot_count, gross_cents, ...invoice_info}]
 let editingSlug = null;
+
+// ── Validation helpers ─────────────────────────────────────────────────────
+function attachCharCounter(input, maxLen) {
+  const counter = document.createElement('span');
+  counter.className = 'char-counter';
+  input.parentNode.appendChild(counter);
+  function update() {
+    const n = input.value.length;
+    counter.textContent = `${n} / ${maxLen}`;
+    if (n > maxLen) {
+      counter.className = 'char-counter over';
+      input.classList.add('field-error'); input.classList.remove('field-warn');
+      input.title = `Too long — max ${maxLen} characters`;
+    } else if (n > Math.floor(maxLen * 0.85)) {
+      counter.className = 'char-counter near';
+      input.classList.remove('field-error'); input.classList.add('field-warn');
+      input.title = '';
+    } else {
+      counter.className = 'char-counter';
+      input.classList.remove('field-error', 'field-warn');
+      input.title = '';
+    }
+  }
+  input.addEventListener('input', update);
+  update();
+}
+
+function attachFormatValidator(input, pattern, hint) {
+  function update() {
+    const val = input.value.trim();
+    if (!val) { input.classList.remove('field-error'); input.title = ''; return; }
+    if (!pattern.test(val)) {
+      input.classList.add('field-error');
+      input.title = hint;
+    } else {
+      input.classList.remove('field-error');
+      input.title = '';
+    }
+  }
+  input.addEventListener('input', update);
+  update();
+}
+
+function attachCardValidation(card) {
+  attachCharCounter(card.querySelector('.f-invoice-number'),   10);
+  attachCharCounter(card.querySelector('.f-estimate-code'),    10);
+  attachCharCounter(card.querySelector('.f-order-number'),     10);
+  attachCharCounter(card.querySelector('.f-rep-order'),        10);
+  attachCharCounter(card.querySelector('.f-advertiser-name'),  25);
+  attachCharCounter(card.querySelector('.f-product-name'),     25);
+  attachCharCounter(card.querySelector('.f-ad-code'),           8);
+  attachCharCounter(card.querySelector('.f-prod-code'),         8);
+  attachCharCounter(card.querySelector('.f-comment-top'),     130);
+  attachCharCounter(card.querySelector('.f-comment-bottom'),  130);
+  attachCharCounter(card.querySelector('.f-comment-bottom-2'),130);
+  attachCharCounter(card.querySelector('.f-comment-bottom-3'),130);
+  attachCharCounter(card.querySelector('.f-comment-bottom-4'),130);
+  attachFormatValidator(card.querySelector('.f-invoice-date'),  /^\d{6}$/, 'Must be YYMMDD — 6 digits');
+  attachFormatValidator(card.querySelector('.f-bcast-month'),   /^\d{4}$/, 'Must be YYMM — 4 digits');
+}
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -455,9 +520,25 @@ function renderFileList() {
           <label>Agency Prod Code (R31)</label>
           <input class="f-prod-code" value="${tmpl.agency_prod_code||''}"/>
         </div>
+        <div class="field-group">
+          <label>Rep Order Number (R31, optional)</label>
+          <input class="f-rep-order" placeholder=""/>
+        </div>
         <div class="field-group field-comment">
-          <label>Record 33 — Copy / Campaign Description</label>
-          <input class="f-copy-name" placeholder="e.g. Toyota_ 2026 April ACM TV"/>
+          <label>Record 33 — Comment Bottom 1</label>
+          <input class="f-comment-bottom" placeholder="e.g. Toyota_ 2026 April ACM TV"/>
+        </div>
+        <div class="field-group field-comment">
+          <label>Record 33 — Comment Bottom 2 (optional)</label>
+          <input class="f-comment-bottom-2" placeholder=""/>
+        </div>
+        <div class="field-group field-comment">
+          <label>Record 33 — Comment Bottom 3 (optional)</label>
+          <input class="f-comment-bottom-3" placeholder=""/>
+        </div>
+        <div class="field-group field-comment">
+          <label>Record 33 — Comment Bottom 4 (optional)</label>
+          <input class="f-comment-bottom-4" placeholder=""/>
         </div>
       </div>
       <div class="file-card-footer">
@@ -481,8 +562,13 @@ function renderFileList() {
       card.querySelector('.f-product-name').value    = t.product_name    || '';
       card.querySelector('.f-ad-code').value         = t.agency_ad_code  || '';
       card.querySelector('.f-prod-code').value       = t.agency_prod_code|| '';
+      // Re-run counters after programmatic fill
+      card.querySelectorAll('input').forEach(i => i.dispatchEvent(new Event('input')));
     });
   });
+
+  // Attach validation to every card
+  document.querySelectorAll('.file-card').forEach(card => attachCardValidation(card));
 }
 
 function getCardPayload(card) {
@@ -502,9 +588,13 @@ function getCardPayload(card) {
       comment_top:     card.querySelector('.f-comment-top').value,
       advertiser_name: card.querySelector('.f-advertiser-name').value,
       product_name:    card.querySelector('.f-product-name').value,
-      agency_ad_code:  card.querySelector('.f-ad-code').value,
-      agency_prod_code:card.querySelector('.f-prod-code').value,
-      copy_name:       card.querySelector('.f-copy-name').value,
+      agency_ad_code:   card.querySelector('.f-ad-code').value,
+      agency_prod_code: card.querySelector('.f-prod-code').value,
+      rep_order_number: card.querySelector('.f-rep-order').value,
+      comment_bottom:   card.querySelector('.f-comment-bottom').value,
+      comment_bottom_2: card.querySelector('.f-comment-bottom-2').value,
+      comment_bottom_3: card.querySelector('.f-comment-bottom-3').value,
+      comment_bottom_4: card.querySelector('.f-comment-bottom-4').value,
     },
   };
 }
@@ -513,6 +603,7 @@ async function downloadOne(card) {
   const payload = getCardPayload(card);
   const statusEl = card.querySelector('.card-status');
   if (!payload.template_name) { statusEl.textContent = 'Select a template first.'; statusEl.className='status err'; return; }
+  if (card.querySelectorAll('input.field-error').length) { statusEl.textContent = 'Fix validation errors before downloading.'; statusEl.className='status err'; return; }
   statusEl.textContent = 'Generating…'; statusEl.className = 'status';
   const res = await fetch('/edi/export/generate', {
     method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
@@ -549,6 +640,13 @@ function triggerDownload(blob, filename) {
 function slug(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 }
+
+// ── Template editor field validation ──────────────────────────────────────
+attachCharCounter(document.getElementById('te-agency-name'), 25);
+attachCharCounter(document.getElementById('te-advertiser'),  25);
+attachCharCounter(document.getElementById('te-product'),     25);
+attachCharCounter(document.getElementById('te-rep'),         25);
+attachCharCounter(document.getElementById('te-sales'),       25);
 
 // ── Init ───────────────────────────────────────────────────────────────────
 loadTemplates();
