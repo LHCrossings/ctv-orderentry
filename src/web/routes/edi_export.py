@@ -287,7 +287,7 @@ def _parse_affidavit_pdf(pdf_path: Path) -> dict:
     result = {
         "advertiser": "", "market": "",
         "rep_order_number": "", "agency_ad_code": "", "agency_prod_code": "",
-        "product_name": "", "comment_top": "",
+        "product_name": "", "comment_top": "", "comment_bottom": "",
     }
     try:
         import pdfplumber
@@ -314,6 +314,9 @@ def _parse_affidavit_pdf(pdf_path: Path) -> dict:
             result["product_name"] = raw_name.title()
         if m := re.search(r'ESTIMATE\s+\d+\s+(\S+)', full_text):
             result["comment_top"] = m.group(1).strip()
+        # HL-style: COMMENTS section — line after "ATTN:" before "Phone:" or URL
+        if m := re.search(r'COMMENTS\s+ATTN:.*?\n(.+?)\s+(?:Phone:|http)', full_text, re.DOTALL):
+            result["comment_bottom"] = m.group(1).strip()
 
     except Exception:
         pass
@@ -411,7 +414,7 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
                 if pdf["market"]:
                     market = pdf["market"]
                 for key in ("rep_order_number", "agency_ad_code", "agency_prod_code",
-                            "product_name", "comment_top"):
+                            "product_name", "comment_top", "comment_bottom"):
                     if pdf[key]:
                         info[key] = pdf[key]
             info["suggested_template"] = _suggest_template(p["csv"], tmpl_list, advertiser, market)
