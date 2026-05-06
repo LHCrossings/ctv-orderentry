@@ -216,6 +216,7 @@ function renderTemplateList() {
     <div class="tmpl-row">
       <span class="tmpl-name">${t.name}</span>
       <span class="tmpl-meta">${t.call_letters || ''} · ${t.agency_name || ''}</span>
+      <button class="btn btn-secondary btn-sm" onclick="duplicateTemplate('${slug(t.name)}')">Duplicate</button>
       <button class="btn btn-secondary btn-sm" onclick="openEditor('${slug(t.name)}')">Edit</button>
     </div>`).join('');
 }
@@ -227,6 +228,15 @@ function refreshSelect(sel) {
 }
 
 document.getElementById('btn-new-tmpl').addEventListener('click', () => openEditor(null));
+
+function duplicateTemplate(srcSlug) {
+  openEditor(srcSlug);           // populate all fields from source
+  editingSlug = null;            // treat as new — save won't overwrite original
+  document.getElementById('editor-title').textContent = 'New Template (Duplicate)';
+  document.getElementById('te-name').value = '';
+  document.getElementById('btn-del-tmpl').style.display = 'none';
+  document.getElementById('te-name').focus();
+}
 
 function openEditor(editSlug) {
   editingSlug = editSlug;
