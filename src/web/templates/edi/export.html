@@ -99,6 +99,16 @@
     .tmpl-full { grid-column: 1 / -1; }
     .tmpl-editor .field-group label { color: var(--text-secondary); }
 
+    /* JSON drop zone */
+    .json-drop-zone {
+      max-width: 700px; border: 2px dashed var(--border-color); border-radius: 6px;
+      padding: 1.2rem; text-align: center; color: var(--text-secondary);
+      font-size: .88rem; cursor: pointer; transition: border-color .15s, background .15s;
+      margin-bottom: .9rem;
+    }
+    .json-drop-zone.drag-over { border-color: var(--accent-primary); background: var(--bg-secondary); }
+    .json-drop-zone input[type=file] { display: none; }
+
     /* Empty state */
     .empty { color: var(--text-secondary); font-size: .9rem; padding: 2rem 0; text-align: center; }
 
@@ -151,6 +161,11 @@
   <div id="tab-templates" class="tab-panel">
     <div class="toolbar">
       <button class="btn btn-primary btn-sm" id="btn-new-tmpl">+ New Template</button>
+    </div>
+    <div class="json-drop-zone" id="json-drop-zone">
+      <input type="file" id="json-file-input" accept=".json" multiple>
+      Drop <strong>.json</strong> template files here to import, or <a href="#" id="json-browse-link">browse</a>
+      <span id="json-drop-status"></span>
     </div>
     <div class="tmpl-list" id="tmpl-list"><div class="empty">Loading…</div></div>
 
@@ -310,6 +325,41 @@ document.getElementById('btn-del-tmpl').addEventListener('click', async () => {
   document.getElementById('tmpl-editor').classList.remove('open');
   editingSlug = null;
   await loadTemplates();
+});
+
+// ── JSON template import (drag & drop / browse) ───────────────────────────
+async function importJsonFiles(files) {
+  const status = document.getElementById('json-drop-status');
+  let ok = 0, fail = 0;
+  for (const file of files) {
+    if (!file.name.endsWith('.json')) { fail++; continue; }
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data.name) { fail++; continue; }
+      const res = await fetch('/edi/export/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (res.ok) ok++; else fail++;
+    } catch { fail++; }
+  }
+  status.textContent = ` — ${ok} imported${fail ? ', ' + fail + ' failed' : ''}`;
+  status.style.color = fail ? 'var(--accent-danger)' : '#2d6a4f';
+  if (ok) await loadTemplates();
+}
+
+const dropZone   = document.getElementById('json-drop-zone');
+const fileInput  = document.getElementById('json-file-input');
+document.getElementById('json-browse-link').addEventListener('click', e => { e.preventDefault(); fileInput.click(); });
+fileInput.addEventListener('change', () => importJsonFiles([...fileInput.files]));
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  importJsonFiles([...e.dataTransfer.files]);
 });
 
 // ── Scan & file cards ──────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
   "name": "Davis Elen LA McD",
   "edi_code": "9912567",
   "call_letters": "CLAN",
-  "commission_pct": 15.0,
+  "commission_pct": 15,
   "representative": "Charmaine Lane",
   "salesperson": "Rosa Lina Quiones Diaz",
   "agency_name": "Davis Elen",
@@ -22,5 +22,7 @@
     "901 H Street Ste 120 PMB 91",
     "Sacramento CA",
     "95814"
-  ]
+  ],
+  "advertiser_match": "McDonald's Operators Assoc. of SoCal",
+  "market_match": "LAX"
 }

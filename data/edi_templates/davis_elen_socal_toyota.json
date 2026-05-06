@@ -2,7 +2,7 @@
   "name": "Davis Elen SoCal Toyota",
   "edi_code": "9912567",
   "call_letters": "CLAN",
-  "commission_pct": 15.0,
+  "commission_pct": 15,
   "representative": "Charmaine Lane",
   "salesperson": "Rosa Lina Quiones Diaz",
   "agency_name": "Davis Elen",
@@ -22,5 +22,7 @@
     "901 H Street Ste 120 PMB 91",
     "Sacramento CA",
     "95814"
-  ]
+  ],
+  "advertiser_match": "Southern CA Toyota Dealers Association",
+  "market_match": "LAX"
 }

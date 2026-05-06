@@ -272,6 +272,23 @@ def _invoice_info(filename: str) -> dict:
     }
 
 
+def _parse_affidavit_pdf(pdf_path: Path) -> tuple[str, str]:
+    """Extract Advertiser and Market from the affidavit page of a PDF."""
+    try:
+        import pdfplumber
+        with pdfplumber.open(pdf_path) as pdf:
+            # Affidavit is usually page 2 (index 1), fall back to page 1
+            page = pdf.pages[1] if len(pdf.pages) > 1 else pdf.pages[0]
+            text = page.extract_text() or ""
+        adv_m = re.search(r'Advertiser\s+(.+)$', text, re.MULTILINE)
+        mkt_m = re.search(r'Market\s+(\S+)', text)
+        advertiser = adv_m.group(1).strip() if adv_m else ""
+        market     = mkt_m.group(1).strip() if mkt_m else ""
+        return advertiser, market
+    except Exception:
+        return "", ""
+
+
 def _suggest_template(filename: str, templates: list[dict],
                       advertiser: str = "", market: str = "") -> str:
     fn  = filename.lower()
@@ -355,6 +372,13 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
                 info.update(spot_count=0, gross_cents=0,
                             bcast_start="", bcast_end="", estimate_code="")
                 advertiser = market = ""
+            # PDF affidavit is authoritative for advertiser/market matching
+            if p.get("pdf"):
+                pdf_adv, pdf_mkt = _parse_affidavit_pdf(INCOMING / p["pdf"])
+                if pdf_adv:
+                    advertiser = pdf_adv
+                if pdf_mkt:
+                    market = pdf_mkt
             info["suggested_template"] = _suggest_template(p["csv"], tmpl_list, advertiser, market)
             result.append(info)
         return result

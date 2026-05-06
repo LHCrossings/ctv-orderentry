@@ -1,13 +1,13 @@
 {
-  "name": "HYPHEN SCVH",
+  "name": "HYPHEN CDPR",
   "edi_code": "9915729",
   "call_letters": "CRTV",
   "commission_pct": 15,
   "representative": "Charmaine Lane",
-  "salesperson": "Drew Cullinan",
+  "salesperson": "Andrea Salvio",
   "agency_name": "HYPHEN",
-  "advertiser_name": "Santa Clara Valley Hospital",
-  "product_name": "Branding-TV",
+  "advertiser_name": "CA Dept of Pesticide Regulation",
+  "product_name": "Spray Days",
   "agency_address": [
     "677 W Palmdon Dr",
     "Fresno CA",
@@ -22,6 +22,6 @@
     "Sacramento CA",
     "95814"
   ],
-  "advertiser_match": "Santa Clara Valley Hospital",
+  "advertiser_match": "CA Dept of Pesticide Regulation",
   "market_match": ""
 }
