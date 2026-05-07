@@ -54,6 +54,7 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
     OrderType.POLARIS:           ("browser_automation.polaris_automation",             "gather_polaris_inputs",            "Polaris Media Group"),
     OrderType.SIERRADONOR:       ("browser_automation.sierra_automation",              "gather_sierra_inputs",             "Sierra Donor Services"),
     OrderType.THREEOLIVES:       ("browser_automation.threeolives_automation",         "gather_threeolives_inputs",        "3 Olives Media"),
+    OrderType.BVK:               ("browser_automation.bvk_automation",                 "gather_bvk_inputs",                "BVK"),
 }
 
 

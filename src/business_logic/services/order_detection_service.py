@@ -154,6 +154,10 @@ class OrderDetectionService:
         if self._is_threeolives(first_page_text):
             return OrderType.THREEOLIVES
 
+        # BVK (Milwaukee agency — "Billing To: BVK" + "CPE:" header)
+        if self._is_bvk(first_page_text):
+            return OrderType.BVK
+
         return OrderType.UNKNOWN
 
     def _is_sierra_donor(self, text: str) -> bool:
@@ -564,6 +568,16 @@ class OrderDetectionService:
         """
         return "3olivesmedia" in text.lower()
 
+    def _is_bvk(self, text: str) -> bool:
+        """
+        Check if text matches a BVK broadcast order.
+
+        Two definitive markers:
+        - "bvk" (agency name in Billing To field or footer)
+        - "CPE:" (unique estimate/order reference field used by BVK)
+        """
+        return "bvk" in text.lower() and "CPE:" in text
+
     def _is_galeforce(self, text: str) -> bool:
         """
         Check if text matches generic GaleForceMedia order (not Sagent).
@@ -640,6 +654,10 @@ class OrderDetectionService:
             # PDF is two-column; address follows on same line — stop at "Address:"
             m = re.search(r'Advertiser\s+(.*?)\s+Address:', first_page_text)
             return m.group(1).strip() if m else "Sacramento County Water Agency"
+
+        elif order_type == OrderType.BVK:
+            m = re.search(r'Client:\s*(.+?)(?:\s{2,}|\n|Demo:)', first_page_text, re.DOTALL)
+            return m.group(1).strip() if m else None
 
         elif order_type == OrderType.ADMERASIA:
             # "Ref: McDonald's" is always present on Admerasia IOs
