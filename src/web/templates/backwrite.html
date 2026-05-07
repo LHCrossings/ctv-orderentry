@@ -1112,6 +1112,7 @@ function resetForm() {
     if (langTbody) langTbody.innerHTML = '';
 
     bwForm.reset();
+    document.getElementById('order_date').value = todayMDY();
     setSrcMode('upload');
 }
 
