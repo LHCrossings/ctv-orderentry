@@ -291,13 +291,14 @@ class BVKOrder:
         code_name: str = '',
         include_market: bool = False,
     ) -> str:
+        cpe_tail = self.estimate.split('/')[-1]
         if code_name:
             parts = [code_name]
             if include_market:
                 short = {'CVC': 'CV', 'SFO': 'SF', 'SEA': 'SEA'}.get(self.market, self.market)
                 parts.append(short)
+            parts.append(cpe_tail)
             return ' '.join(parts)
-        cpe_tail = self.estimate.split('/')[-1]
         return f"BVK {self.client[:8].strip()} {cpe_tail}"
 
     def get_default_description(self, desc_name: str = '') -> str:
