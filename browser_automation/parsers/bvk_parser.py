@@ -302,9 +302,9 @@ class BVKOrder:
         return f"BVK {self.client[:8].strip()} {cpe_tail}"
 
     def get_default_description(self, desc_name: str = '') -> str:
-        if desc_name:
-            return f"{desc_name} {self.description}"
-        return f"{self.client} {self.description}"
+        cpe_tail = self.estimate.split('/')[-1]
+        prefix = desc_name if desc_name else self.client
+        return f"{prefix} - Est {cpe_tail} {self.description}"
 
 
 # ---------------------------------------------------------------------------
