@@ -77,6 +77,173 @@ def _save_customer(customer_id: str, client_name: str, separation: tuple) -> Non
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# TIME VALIDATION AND ROS BONUS REVIEW
+# ─────────────────────────────────────────────────────────────────────────────
+
+_LANG_NAMES = {
+    'C': 'Cantonese', 'M': 'Mandarin', 'V': 'Vietnamese', 'K': 'Korean',
+    'SA': 'South Asian', 'P': 'Punjabi', 'Hm': 'Hmong', 'T': 'Filipino',
+    'J': 'Japanese',
+}
+
+# Expected paid-spot daypart windows per language (minutes from midnight)
+_LANG_WINDOWS = {
+    'C':  (18*60,  24*60),  # Cantonese:   6p–12a
+    'M':  (18*60,  24*60),  # Mandarin:    6p–12a
+    'V':  (10*60,  13*60),  # Vietnamese:  10a–1p
+    'K':  ( 8*60,  10*60),  # Korean:      8a–10a
+    'SA': (13*60,  16*60),  # South Asian: 1p–4p
+    'P':  (13*60,  16*60),  # Punjabi:     1p–4p
+    'Hm': (18*60,  20*60),  # Hmong:       6p–8p (Sa-Su)
+    'T':  (16*60,  19*60),  # Filipino:    4p–7p
+    'J':  (10*60,  11*60),  # Japanese:    10a–11a
+}
+
+# Correct ROS schedule times per language (from CTV language schedule)
+_LANG_ROS_TIMES = {
+    'C':  '6:00A-11:59P',
+    'M':  '6:00A-11:59P',
+    'V':  '11:00A-1:00P',
+    'K':  '8:00A-10:00A',
+    'SA': '1:00P-4:00P',
+    'P':  '1:00P-4:00P',
+    'Hm': '6:00P-8:00P',
+    'T':  '4:00P-7:00P',
+    'J':  '10:00A-11:00A',
+}
+
+# Program name keywords that indicate the language is already explicit
+_EXPLICIT_LANG_KEYWORDS = [
+    'cantonese', 'mandarin', 'chinese', 'vietnamese', 'korean',
+    'hindi', 'hinid', 'punjabi', 'hmong', 'filipino', 'japanese', 'jananese',
+    'south asian',
+]
+
+
+def _parse_time_minutes(t: str) -> Optional[int]:
+    """Convert '11:30A' or '11:30P' to minutes from midnight. 12:00A → 1440."""
+    t = t.strip().upper()
+    if not t or t[-1] not in 'AP':
+        return None
+    try:
+        h, m = map(int, t[:-1].split(':'))
+    except ValueError:
+        return None
+    if t[-1] == 'A':
+        return (24 if h == 12 else h) * 60 + m  # 12:xxA = midnight
+    else:
+        return (h if h == 12 else h + 12) * 60 + m
+
+
+def _time_outside_window(time_str: str, lang: str) -> bool:
+    window = _LANG_WINDOWS.get(lang)
+    if not window:
+        return False
+    parts = time_str.split('-', 1)
+    if len(parts) != 2:
+        return False
+    t_from = _parse_time_minutes(parts[0])
+    t_to   = _parse_time_minutes(parts[1])
+    if t_from is None or t_to is None:
+        return False
+    return t_from < window[0] or t_to > window[1]
+
+
+def _interactive_time_check(order) -> bool:
+    """
+    Interactively validate paid-line times and review ROS bonus lines.
+
+    Paid lines: flags times outside the expected language window and asks
+    the user for a correction.
+
+    Bonus lines: confirms the inferred language (for generic 'ROS Bonus'
+    lines) and offers to apply the correct ROS schedule time from our tables.
+
+    Mutates line objects in place. Returns False if the user cancels.
+    """
+    # ── Paid line time validation ─────────────────────────────────────────────
+    flagged_paid = [
+        l for l in order.lines
+        if not l.is_bonus
+        and l.total_spots > 0
+        and _time_outside_window(l.time_str, l.language)
+    ]
+
+    if flagged_paid:
+        print("\n⚠ TIME RANGE WARNINGS")
+        print("-" * 70)
+        print("  The following paid lines have times outside the expected window.")
+        print("  This usually means a typo on the BVK IO.\n")
+        for line in flagged_paid:
+            lang = _LANG_NAMES.get(line.language, line.language)
+            win  = _LANG_WINDOWS[line.language]
+            win_str = (
+                f"{win[0]//60}:{win[0]%60:02d}{'a' if win[0] < 12*60 else 'p'}–"
+                f"{win[1]//60 % 12 or 12}:{win[1]%60:02d}{'a' if win[1] <= 12*60 else 'p'}"
+            )
+            print(f"  Line {line.line_no:2d} [{lang}]  PDF: '{line.time_str}'  expected window: {win_str}")
+            resp = input("  Corrected time (or Enter to keep as-is): ").strip()
+            if resp:
+                line.time_str = resp
+                print(f"  ✓ Updated to: {line.time_str}")
+        print()
+
+    # ── Bonus line language + ROS time review ────────────────────────────────
+    active_bonus = [l for l in order.lines if l.is_bonus and l.total_spots > 0]
+
+    if active_bonus:
+        print("[BONUS LINE REVIEW] Confirming language and ROS schedule times")
+        print("-" * 70)
+
+        for line in active_bonus:
+            lang     = line.language
+            lang_name = _LANG_NAMES.get(lang, lang)
+            ros_time  = _LANG_ROS_TIMES.get(lang, '')
+
+            # Is the language inferred from context, or explicit in the program name?
+            prog_lower = line.program.lower()
+            is_inferred = not any(kw in prog_lower for kw in _EXPLICIT_LANG_KEYWORDS)
+            label = 'Inferred' if is_inferred else 'Detected'
+
+            print(f"\n  Line {line.line_no:2d}: {label} {lang_name} ({lang})")
+            print(f"           Program:  {line.program}")
+            print(f"           PDF time: {line.time_str}")
+
+            # For inferred language, let user confirm or override
+            if is_inferred:
+                resp = input(
+                    f"  Confirm language [{lang_name}] or enter code"
+                    f" (C/M/V/K/SA/P/Hm/T/J): "
+                ).strip()
+                if resp:
+                    line.language = resp
+                    lang_name = _LANG_NAMES.get(resp, resp)
+                    ros_time  = _LANG_ROS_TIMES.get(resp, '')
+
+            # Offer to apply the correct ROS schedule time
+            if ros_time:
+                print(f"           ROS time: {ros_time}")
+                resp = input(
+                    f"  Apply ROS time? (y/n or type custom): "
+                ).strip()
+                if resp.lower() == 'y':
+                    line.time_str = ros_time
+                    print(f"  ✓ Set to: {line.time_str}")
+                elif resp and resp.lower() != 'n':
+                    line.time_str = resp
+                    print(f"  ✓ Set to: {line.time_str}")
+            else:
+                resp = input(f"  Enter correct time (or Enter to keep '{line.time_str}'): ").strip()
+                if resp:
+                    line.time_str = resp
+                    print(f"  ✓ Set to: {line.time_str}")
+
+        print()
+
+    return True
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # INPUT GATHERING
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -98,6 +265,9 @@ def gather_bvk_inputs(pdf_path: str) -> Optional[dict]:
         order = parse_bvk_pdf(pdf_path)
     except Exception as exc:
         print(f"[PARSE] ✗ Failed: {exc}")
+        return None
+
+    if not _interactive_time_check(order):
         return None
 
     active_lines = [l for l in order.lines if l.total_spots > 0]
