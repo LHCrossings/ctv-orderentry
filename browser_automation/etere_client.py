@@ -1013,19 +1013,19 @@ class EtereClient:
             
             # SCHEDULING TYPE - Priority, Bookend (Top and Bottom), or Billboard (Top)
             # Must be set here on the GENERAL tab, before navigating to OPTIONS tab
-            if is_priority and not is_bookend and not is_billboard:
-                print(f"[LINE] Setting priority scheduling...")
-                try:
-                    radio = self.driver.find_element(
-                        By.CSS_SELECTOR, 'input[name="selectedSchedulingType"][value="0"]'
-                    )
-                    parent = radio.find_element(By.XPATH, "..")
-                    parent.click()
-                    time.sleep(0.5)
-                    print(f"[LINE] ✓ Priority set")
-                except Exception as e:
-                    print(f"[LINE] ⚠ Priority: {e}")
-            elif is_bookend:
+
+            # Force Rotation for: monthly lines (flight > 1 week with no weekly cap),
+            # BNS bonus lines, and AV (added-value) lines.
+            from datetime import datetime as _dt
+            try:
+                _start_d = _dt.fromisoformat(start_date)
+                _end_d = _dt.fromisoformat(end_date)
+                _is_monthly = (_end_d - _start_d).days > 7 and spots_per_week == 0
+            except Exception:
+                _is_monthly = False
+            _force_rotation = _is_monthly or spot_code == 10 or is_added_value
+
+            if is_bookend:
                 print(f"[LINE] Setting bookend scheduling (Top and Bottom)...")
                 try:
                     radio = self.driver.find_element(
@@ -1049,6 +1049,31 @@ class EtereClient:
                     print(f"[LINE] ✓ Billboard set")
                 except Exception as e:
                     print(f"[LINE] ⚠ Billboard: {e}")
+            elif _force_rotation:
+                _rotation_reason = ("BNS" if spot_code == 10 else "AV" if is_added_value else "monthly flight")
+                print(f"[LINE] Setting rotation scheduling ({_rotation_reason})...")
+                try:
+                    radio = self.driver.find_element(
+                        By.CSS_SELECTOR, 'input[name="selectedSchedulingType"][value="1"]'
+                    )
+                    parent = radio.find_element(By.XPATH, "..")
+                    parent.click()
+                    time.sleep(0.5)
+                    print(f"[LINE] ✓ Rotation set")
+                except Exception as e:
+                    print(f"[LINE] ⚠ Rotation: {e}")
+            elif is_priority and not is_bookend and not is_billboard:
+                print(f"[LINE] Setting priority scheduling...")
+                try:
+                    radio = self.driver.find_element(
+                        By.CSS_SELECTOR, 'input[name="selectedSchedulingType"][value="0"]'
+                    )
+                    parent = radio.find_element(By.XPATH, "..")
+                    parent.click()
+                    time.sleep(0.5)
+                    print(f"[LINE] ✓ Priority set")
+                except Exception as e:
+                    print(f"[LINE] ⚠ Priority: {e}")
             elif is_optimization:
                 print(f"[LINE] Setting optimization scheduling...")
                 try:
