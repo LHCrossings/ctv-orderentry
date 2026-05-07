@@ -226,7 +226,7 @@ class Language(Enum):
             Language.CANTONESE: ("M-Su", "6a-11:59p"),
             Language.FILIPINO: ("M-Su", "4p-7p"),
             Language.KOREAN: ("M-Su", "8a-10a"),
-            Language.VIETNAMESE: ("M-Su", "11a-1p"),
+            Language.VIETNAMESE: ("M-Su", "10a-1p"),
             Language.HMONG: ("Sa-Su", "6p-8p"),
             Language.SOUTH_ASIAN: ("M-Su", "1p-4p"),
             Language.PUNJABI: ("M-Su", "1p-4p"),
