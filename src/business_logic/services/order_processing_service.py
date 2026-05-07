@@ -93,6 +93,7 @@ class OrderProcessingService:
         OrderType.POLARIS:          "_process_polaris_order",
         OrderType.SIERRADONOR:      "_process_sierra_order",
         OrderType.THREEOLIVES:      "_process_threeolives_order",
+        OrderType.BVK:              "_process_bvk_order",
     }
 
     def __init__(
@@ -2536,6 +2537,60 @@ class OrderProcessingService:
             print(f"\n✗ 3 Olives Media processing failed: {exc}")
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.THREEOLIVES,
+                error_message=error_detail,
+            )
+
+    def _process_bvk_order(self, order, shared_session=None):
+        try:
+            from browser_automation.bvk_automation import process_bvk_order
+
+            print(f"\n{'='*70}")
+            print("PROCESSING BVK ORDER")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            if order.customer_name:
+                print(f"Customer: {order.customer_name}")
+            print(f"{'='*70}\n")
+
+            pre_gathered_inputs = order.order_input if order.order_input else None
+
+            def _run(driver, session):
+                success = process_bvk_order(
+                    driver,
+                    str(order.pdf_path),
+                    shared_session=session,
+                    pre_gathered_inputs=pre_gathered_inputs,
+                )
+                if success:
+                    print("\n✓ BVK order processed successfully")
+                    return ProcessingResult(success=True, contracts=[], order_type=OrderType.BVK)
+                print("\n✗ BVK order processing failed")
+                return ProcessingResult(
+                    success=False, contracts=[], order_type=OrderType.BVK,
+                    error_message="BVK processing failed - check browser output for details",
+                )
+
+            if shared_session is None:
+                try:
+                    from etere_session import EtereSession
+                except ImportError:
+                    return ProcessingResult(
+                        success=False, contracts=[], order_type=OrderType.BVK,
+                        error_message="EtereSession import failed",
+                    )
+                with EtereSession() as session:
+                    session.set_market("NYC")
+                    return _run(session.driver, session)
+
+            driver = shared_session.driver if hasattr(shared_session, 'driver') else shared_session
+            return _run(driver, shared_session)
+
+        except Exception as exc:
+            import traceback
+            error_detail = f"BVK processing error: {str(exc)}\n{traceback.format_exc()}"
+            print(f"\n✗ BVK processing failed: {exc}")
+            return ProcessingResult(
+                success=False, contracts=[], order_type=OrderType.BVK,
                 error_message=error_detail,
             )
 
