@@ -121,6 +121,14 @@ def _to_month_day(mmdd: str) -> str:
         return mmdd
 
 
+def _expand_year(date_str: str) -> str:
+    """'5/18/26' -> '5/18/2026'  (consolidate_weeks requires 4-digit year)"""
+    parts = date_str.strip().split('/')
+    if len(parts) == 3 and len(parts[2]) == 2:
+        parts[2] = '20' + parts[2]
+    return '/'.join(parts)
+
+
 def _normalize_market(raw: str) -> str:
     return _MARKET_MAP.get(raw.strip().upper(), raw.strip().upper())
 
@@ -338,8 +346,8 @@ def parse_bvk_pdf(pdf_path: str) -> BVKOrder:
         product      = _extract_field(page0_text, r'Product:\s*(.+?)(?:\s{2,}|\n|Separation:)')
         description  = _extract_field(page0_text, r'Description:\s*(.+?)(?:\s{2,}|\n|Flight|Version)')
         market_raw   = _extract_field(page0_text, r'Market:\s*(.+?)(?:\s{2,}|\n|Vendor:)')
-        flight_start = _extract_field(page0_text, r'Flight Start:\s*(\S+)')
-        flight_end   = _extract_field(page0_text, r'Flight End:\s*(\S+)')
+        flight_start = _expand_year(_extract_field(page0_text, r'Flight Start:\s*(\S+)'))
+        flight_end   = _expand_year(_extract_field(page0_text, r'Flight End:\s*(\S+)'))
         estimate     = _extract_field(page0_text, r'CPE:\s*(\S+)')
         sep_str      = _extract_field(page0_text, r'Separation:\s*(\d+)')
 
