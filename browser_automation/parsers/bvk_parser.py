@@ -286,6 +286,10 @@ class BVKOrder:
     lines:          List[BVKLine]
     rates_are_net:  bool = False
 
+    @property
+    def estimate_number(self) -> str:
+        return self.estimate.split('/')[-1]
+
     def get_default_contract_code(
         self,
         code_name: str = '',
