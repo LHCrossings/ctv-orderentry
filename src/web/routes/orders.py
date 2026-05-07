@@ -175,6 +175,13 @@ def _build_spot_filter(filters: dict) -> str:
                 )
         if lang_subclauses:
             clauses.append("(" + " OR ".join(lang_subclauses) + ")")
+    if filters.get("spot_types"):
+        safe = [t for t in filters["spot_types"] if re.match(r'^[A-Z]{1,6}$', t)]
+        if safe:
+            codes = ",".join(f"'{c}'" for c in safe)
+            clauses.append(
+                f"cr.ID_BOOKINGCODE IN (SELECT id_bookingcode FROM trf_bookingcode WHERE code IN ({codes}))"
+            )
     return (" AND " + " AND ".join(clauses)) if clauses else ""
 
 

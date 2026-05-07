@@ -723,6 +723,17 @@
                     <button class="pill-toggle" data-mkt="DAL" onclick="toggleMarket(this)">DAL</button>
                 </div>
             </div>
+
+            <!-- Spot Type -->
+            <div class="field-group filter-row-full">
+                <label class="field-label" style="margin-bottom:6px;">Spot Type <span style="font-weight:400;">(none = all)</span></label>
+                <div class="pill-toggle-group" id="spotTypePills">
+                    <button class="pill-toggle" data-spot-type="BNS" onclick="toggleSpotType(this)">BNS</button>
+                    <button class="pill-toggle" data-spot-type="COM" onclick="toggleSpotType(this)">COM</button>
+                    <button class="pill-toggle" data-spot-type="AV"  onclick="toggleSpotType(this)">AV</button>
+                    <button class="pill-toggle" data-spot-type="BB"  onclick="toggleSpotType(this)">BB</button>
+                </div>
+            </div>
         </div>
 
         <div class="filter-footer">
@@ -889,6 +900,11 @@
         clearPreview();
     }
 
+    function toggleSpotType(btn) {
+        btn.classList.toggle('active');
+        clearPreview();
+    }
+
     function clearFilters() {
         document.getElementById('filterDateFrom').value = '';
         document.getElementById('filterDateTo').value = '';
@@ -898,6 +914,7 @@
         document.querySelectorAll('#langPills .pill-toggle').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('#marketPills .pill-toggle').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('#durationPills .pill-toggle').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('#spotTypePills .pill-toggle').forEach(b => b.classList.remove('active'));
         clearPreview();
     }
 
@@ -964,6 +981,8 @@
         if (mkts.length) f.markets = mkts;
         const durs = [...document.querySelectorAll('#durationPills .pill-toggle.active')].map(b => parseInt(b.dataset.dur));
         if (durs.length) f.durations = durs;
+        const spotTypes = [...document.querySelectorAll('#spotTypePills .pill-toggle.active')].map(b => b.dataset.spotType);
+        if (spotTypes.length) f.spot_types = spotTypes;
         return f;
     }
 
