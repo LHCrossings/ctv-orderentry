@@ -173,7 +173,7 @@ def gather_bvk_inputs(pdf_path: str) -> Optional[dict]:
     # ── Notes (CPE number) ────────────────────────────────────────────────────
     print("[3/3] Notes")
     print("-" * 70)
-    default_notes = f"CPE: {order.estimate}"
+    default_notes = f"CPE: {order.estimate} | {order.description}"
     print(f"Default: {default_notes}")
     notes = (
         default_notes
