@@ -190,7 +190,7 @@ def gather_bvk_inputs(pdf_path: str) -> Optional[dict]:
         'contract_code': contract_code,
         'description':   description,
         'notes':         notes,
-        'order_ref':     order.estimate,
+        'order_ref':     order.estimate.split('/')[-1],
         'customer_id':   customer_id,
         'separation':    separation,
         'parsed_order':  order,
