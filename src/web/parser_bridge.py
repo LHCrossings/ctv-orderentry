@@ -49,6 +49,7 @@ _DISPLAY_NAMES = {
     "WORLDLINK":       "WorldLink",
     "THREEOLIVES":     "3 Olives Media",
     "XML":             "AAAA XML",
+    "BVK":             "BVK",
 }
 
 _REGISTRY = {
@@ -79,6 +80,7 @@ _REGISTRY = {
     "DART":             ("browser_automation.parsers.dart_parser",             "parse_dart_xlsx"),
     "POLARIS":          ("browser_automation.parsers.polaris_parser",          "parse_polaris_file"),
     "THREEOLIVES":      ("browser_automation.parsers.threeolives_parser",      "parse_threeolives"),
+    "BVK":              ("browser_automation.parsers.bvk_parser",              "parse_bvk_pdf"),
 }
 
 _MISSING = object()
