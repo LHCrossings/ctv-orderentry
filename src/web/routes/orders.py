@@ -1932,7 +1932,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 if not any(c is not None for c in row):
                     continue
                 rtype = str(row[13] or "").strip()
-                if rtype not in ("PRG", "COM"):
+                if not rtype:
                     continue
                 r = {
                     "excel_row":   i + 1,

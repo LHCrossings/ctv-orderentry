@@ -90,12 +90,17 @@
         .save-flash.err { color: var(--nord11); opacity: 1; }
 
         /* Badges */
-        .aff-badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 0.72rem; font-weight: 700; }
-        .aff-y { background: rgba(163,190,140,0.2); color: var(--nord14); }
-        .aff-n { background: rgba(191,97,106,0.15); color: var(--nord11); }
-        .aff-blank { background: var(--nord5); color: var(--text-muted); }
+        .type-badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 0.72rem; font-weight: 700; }
+        .type-com  { background: rgba(94,129,172,0.15);  color: var(--nord10); }
+        .type-bns  { background: rgba(163,190,140,0.2);  color: var(--nord14); }
+        .type-bb   { background: rgba(208,135,112,0.2);  color: var(--nord12); }
+        .type-other{ background: var(--nord5); color: var(--text-muted); }
         .lang-badge { font-size: 0.78rem; font-weight: 600; color: var(--nord9); }
         .net-val { font-family: monospace; }
+
+        .save-all-btn { background: var(--nord14); color: var(--nord6); border: none; border-radius: 8px; padding: 8px 20px; font-size: 0.9rem; font-weight: 600; cursor: pointer; font-family: inherit; }
+        .save-all-btn:hover { background: #8fad7a; }
+        .save-all-btn:disabled { opacity: 0.5; cursor: default; }
 
         /* No spots in block */
         .no-spots { padding: 10px 28px; font-size: 0.82rem; color: var(--text-muted); font-style: italic; }
@@ -146,6 +151,7 @@
                 </div>
             </div>
             <button class="load-btn" id="loadBtn" onclick="loadLog()">Load</button>
+            <button class="save-all-btn" id="saveAllBtn" onclick="saveAll()" style="display:none;">Save All</button>
         </div>
     </div>
 
@@ -242,6 +248,7 @@
 
     function renderLog(data) {
         logData = data;
+        document.getElementById('saveAllBtn').style.display = '';
         const totalSpots = data.programs.reduce((s, p) => s + p.spots.length, 0) + data.orphans.length;
         if (!data.programs.length && !totalSpots) {
             document.getElementById('logArea').innerHTML = '<div class="log-empty">No data found for this day.</div>';
@@ -281,7 +288,7 @@
                 html += `<table class="spots-table">
       <thead><tr>
         <th>Air Time</th><th>Client</th><th>Show</th>
-        <th>Len</th><th>Lang</th><th>Net</th><th>Affidavit</th>
+        <th>Len</th><th>Lang</th><th>Net</th><th>Type</th>
       </tr></thead><tbody>`;
                 prg.spots.forEach(s => { html += spotRow(s); });
                 html += `</tbody></table>`;
@@ -296,7 +303,7 @@
     <table class="spots-table">
       <thead><tr>
         <th>Air Time</th><th>Client</th><th>Show</th>
-        <th>Len</th><th>Lang</th><th>Net</th><th>Affidavit</th>
+        <th>Len</th><th>Lang</th><th>Net</th><th>Type</th>
       </tr></thead><tbody>`;
             data.orphans.forEach(s => { html += spotRow(s); });
             html += `</tbody></table></div></div>`;
@@ -305,13 +312,20 @@
         document.getElementById('logArea').innerHTML = html;
     }
 
+    function typeBadge(t) {
+        if (!t) return '';
+        const cls = t === 'COM' ? 'type-com' : t === 'BNS' ? 'type-bns' : t === 'BB' ? 'type-bb' : 'type-other';
+        return `<span class="type-badge ${cls}">${escHtml(t)}</span>`;
+    }
+
     function spotRow(s) {
         const av = escHtml(s.actual_time || '');
         return `<tr>
     <td class="airtime-cell">
       <input class="airtime-input" type="text" value="${av}" placeholder="—"
              data-row="${s.excel_row}"
-             oninput="fmtAirtime(this)"
+             onfocus="this.select();this._clearing=true;"
+             oninput="if(this._clearing){this.value=this.value.slice(-1);this._clearing=false;}fmtAirtime(this)"
              onkeydown="if(event.key==='Enter')this.blur();"
              onblur="normalizeAndSave(this)" />
       <span class="save-flash" id="f-${s.excel_row}"></span>
@@ -321,7 +335,7 @@
     <td style="font-family:monospace;">${fmtLen(s.length)}</td>
     <td><span class="lang-badge">${escHtml(s.language)}</span></td>
     <td class="net-val">${fmtNet(s.net)}</td>
-    <td>${affBadge(s.affidavit)}</td>
+    <td>${typeBadge(s.spot_type || s.type)}</td>
   </tr>`;
     }
 
@@ -395,6 +409,31 @@
         // Strip leading zero from hours: "06:18:58" → "6:18:58"
         input.value = input.value.replace(/^0(\d:)/, '$1');
         saveTime(input);
+    }
+
+    async function saveAll() {
+        const inputs = [...document.querySelectorAll('.airtime-input')].filter(i => i.value.trim());
+        if (!inputs.length) return;
+        const btn = document.getElementById('saveAllBtn');
+        btn.disabled = true;
+        btn.textContent = `Saving ${inputs.length}…`;
+        let ok = 0, fail = 0;
+        for (const input of inputs) {
+            input.value = input.value.replace(/^0(\d:)/, '$1');
+            const excelRow   = parseInt(input.dataset.row);
+            const actualTime = input.value.trim();
+            try {
+                const resp = await fetch('/api/master-control/logs/save-airtime', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ date: currentDate, market: currentMarket, excel_row: excelRow, actual_time: actualTime }),
+                });
+                if (resp.ok) { ok++; } else { fail++; }
+            } catch { fail++; }
+        }
+        btn.disabled = false;
+        btn.textContent = fail ? `✓ ${ok} saved · ✗ ${fail} failed` : `✓ All ${ok} saved`;
+        setTimeout(() => { btn.textContent = 'Save All'; }, 3000);
     }
 
     async function saveTime(input) {
