@@ -9,7 +9,7 @@ import subprocess
 import sys
 import threading as _threading
 import time as _time
-from datetime import datetime
+from datetime import date as _date_cls, datetime, timedelta
 from pathlib import Path
 from typing import Any, List, Optional
 
@@ -1873,6 +1873,135 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         finally:
             conn.close()
         return JSONResponse({"ok": True})
+
+    # ── Master Control ───────────────────────────────────────────────────────────
+
+    @router.get("/master-control", response_class=HTMLResponse)
+    async def master_control_page(request: Request):
+        return templates.TemplateResponse(request, "master_control.html")
+
+    @router.get("/master-control/logs", response_class=HTMLResponse)
+    async def master_control_logs_page(request: Request):
+        return templates.TemplateResponse(request, "master_control/log_viewer.html")
+
+    @router.get("/api/master-control/logs/load")
+    async def load_traffic_log(date: str = Query(...), market: str = Query(...)):
+        import openpyxl
+
+        def _find_log(mkt: str, target: _date_cls) -> Optional[Path]:
+            monday = target - timedelta(days=target.weekday())
+            file_date = monday.strftime("%y%m%d")
+            month_folder = monday.strftime("%m %B %Y")
+            base = Path("/mnt/k/Traffic/logs") / str(monday.year) / month_folder
+            for folder in [base, base / "done"]:
+                p = folder / f"{mkt} Log - {file_date}.xlsm"
+                if p.exists():
+                    return p
+            return None
+
+        def _fmt_t(val) -> str:
+            if val is None:
+                return ""
+            if isinstance(val, timedelta):
+                total = int(val.total_seconds())
+                h, rem = divmod(total, 3600)
+                m, s = divmod(rem, 60)
+                return f"{h}:{m:02d}:{s:02d}"
+            if hasattr(val, "strftime"):
+                return val.strftime("%-H:%M:%S")
+            return str(val)
+
+        def _run():
+            target = _date_cls.fromisoformat(date)
+            log_path = _find_log(market, target)
+            if log_path is None:
+                return None
+            day_name = target.strftime("%A")
+            wb = openpyxl.load_workbook(str(log_path), keep_vba=True, data_only=True)
+            if day_name not in wb.sheetnames:
+                return None
+            ws = wb[day_name]
+            programs: list = []
+            current_prg: Optional[dict] = None
+            orphans: list = []
+            for i, row in enumerate(ws.iter_rows(values_only=True)):
+                if i == 0:
+                    continue
+                if not any(c is not None for c in row):
+                    continue
+                rtype = str(row[13] or "").strip()
+                if rtype not in ("PRG", "COM"):
+                    continue
+                r = {
+                    "excel_row":   i + 1,
+                    "bill_code":   str(row[0] or ""),
+                    "time_in":     _fmt_t(row[4]),
+                    "time_out":    _fmt_t(row[5]),
+                    "length":      _fmt_t(row[6]),
+                    "show_name":   str(row[7] or ""),
+                    "actual_time": str(row[8]) if row[8] is not None else "",
+                    "language":    str(row[9] or ""),
+                    "type":        rtype,
+                    "gross":       float(row[15] or 0),
+                    "net":         float(row[21] or 0),
+                    "affidavit":   str(row[26] or ""),
+                    "revenue_type": str(row[23] or ""),
+                }
+                if rtype == "PRG":
+                    current_prg = {**r, "spots": []}
+                    programs.append(current_prg)
+                else:
+                    if current_prg is not None:
+                        current_prg["spots"].append(r)
+                    else:
+                        orphans.append(r)
+            return {
+                "date": date,
+                "market": market,
+                "day": day_name,
+                "file": log_path.name,
+                "programs": programs,
+                "orphans": orphans,
+            }
+
+        result = await asyncio.get_running_loop().run_in_executor(None, _run)
+        if result is None:
+            return JSONResponse({"error": "Log file not found"}, status_code=404)
+        return JSONResponse(result)
+
+    @router.post("/api/master-control/logs/save-airtime")
+    async def save_airtime(body: dict = Body(...)):
+        import openpyxl
+
+        def _find_log(mkt: str, target: _date_cls) -> Optional[Path]:
+            monday = target - timedelta(days=target.weekday())
+            file_date = monday.strftime("%y%m%d")
+            month_folder = monday.strftime("%m %B %Y")
+            base = Path("/mnt/k/Traffic/logs") / str(monday.year) / month_folder
+            for folder in [base, base / "done"]:
+                p = folder / f"{mkt} Log - {file_date}.xlsm"
+                if p.exists():
+                    return p
+            return None
+
+        def _run():
+            target = _date_cls.fromisoformat(body["date"])
+            log_path = _find_log(body["market"], target)
+            if log_path is None:
+                raise FileNotFoundError(f"Log not found for {body['market']} {body['date']}")
+            day_name = target.strftime("%A")
+            wb = openpyxl.load_workbook(str(log_path), keep_vba=True)
+            ws = wb[day_name]
+            ws.cell(row=int(body["excel_row"]), column=9).value = body["actual_time"]
+            wb.save(str(log_path))
+
+        try:
+            await asyncio.get_running_loop().run_in_executor(None, _run)
+            return JSONResponse({"ok": True})
+        except FileNotFoundError as e:
+            return JSONResponse({"error": str(e)}, status_code=404)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
 
     # ── Assign Traffic ─────────────────────────────────────────────────────────
 

@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Weekly Logs — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 1300px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px 24px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+            margin-bottom: 16px;
+        }
+
+        .controls-row { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+        .field-group { display: flex; flex-direction: column; gap: 4px; }
+        .field-label { font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .field-input { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 7px 12px; font-size: 0.9rem; color: var(--text-primary); outline: none; font-family: inherit; }
+        .field-input:focus { border-color: var(--nord10); }
+
+        .pill-group { display: flex; gap: 6px; flex-wrap: wrap; }
+        .mkt-pill { background: transparent; border: 1px solid var(--border-color); border-radius: 20px; padding: 5px 12px; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); cursor: pointer; transition: all 0.15s; font-family: inherit; }
+        .mkt-pill:hover:not(.active) { border-color: var(--nord10); color: var(--nord10); }
+        .mkt-pill.active { background: var(--nord10); border-color: var(--nord10); color: var(--nord6); }
+
+        .load-btn { background: var(--nord10); color: var(--nord6); border: none; border-radius: 8px; padding: 8px 20px; font-size: 0.9rem; font-weight: 600; cursor: pointer; font-family: inherit; }
+        .load-btn:hover { background: var(--nord9); }
+        .load-btn:disabled { opacity: 0.5; cursor: default; }
+
+        .log-meta { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; }
+
+        /* Program block */
+        .prg-block { margin-bottom: 6px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); }
+
+        .prg-header {
+            display: flex; align-items: center; gap: 12px;
+            background: var(--nord2); color: var(--nord5);
+            padding: 9px 16px; cursor: pointer; user-select: none;
+        }
+        .prg-header:hover { background: var(--nord3); }
+
+        .prg-chevron { font-size: 0.7rem; transition: transform 0.15s; color: var(--nord4); flex-shrink: 0; }
+        .prg-block.collapsed .prg-chevron { transform: rotate(-90deg); }
+        .prg-time { font-family: monospace; font-size: 0.83rem; color: var(--nord8); min-width: 130px; }
+        .prg-name { font-weight: 600; font-size: 0.88rem; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .prg-lang { font-size: 0.72rem; background: rgba(136,192,208,0.18); color: var(--nord8); padding: 2px 8px; border-radius: 10px; font-weight: 700; flex-shrink: 0; }
+        .prg-count { font-size: 0.72rem; color: var(--nord4); min-width: 60px; text-align: right; flex-shrink: 0; }
+
+        .spots-table-wrap { background: var(--nord6); }
+        .prg-block.collapsed .spots-table-wrap { display: none; }
+
+        .spots-table { width: 100%; border-collapse: collapse; }
+        .spots-table th {
+            background: var(--nord5); text-align: left;
+            font-size: 0.68rem; font-weight: 600; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.05em;
+            padding: 5px 10px; border-bottom: 1px solid var(--border-color);
+        }
+        .spots-table td { padding: 6px 10px; border-bottom: 1px solid var(--nord5); font-size: 0.84rem; color: var(--text-primary); vertical-align: middle; }
+        .spots-table tr:last-child td { border-bottom: none; }
+        .spots-table tr:hover td { background: rgba(229,233,240,0.5); }
+        .spots-table td:first-child, .spots-table th:first-child { padding-left: 28px; }
+
+        /* Editable air time */
+        .airtime-cell { position: relative; white-space: nowrap; }
+        .airtime-input {
+            background: var(--bg-secondary); border: 1px solid var(--border-color);
+            border-radius: 6px; padding: 3px 8px; font-size: 0.84rem;
+            font-family: monospace; color: var(--text-primary); width: 88px; outline: none;
+            transition: border-color 0.15s;
+        }
+        .airtime-input:focus { border-color: var(--nord10); background: var(--nord6); }
+        .airtime-input.saved { border-color: var(--nord14); }
+        .airtime-input.err { border-color: var(--nord11); }
+
+        .save-flash { font-size: 0.72rem; margin-left: 6px; opacity: 0; transition: opacity 0.3s; }
+        .save-flash.ok { color: var(--nord14); opacity: 1; }
+        .save-flash.err { color: var(--nord11); opacity: 1; }
+
+        /* Badges */
+        .aff-badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 0.72rem; font-weight: 700; }
+        .aff-y { background: rgba(163,190,140,0.2); color: var(--nord14); }
+        .aff-n { background: rgba(191,97,106,0.15); color: var(--nord11); }
+        .aff-blank { background: var(--nord5); color: var(--text-muted); }
+        .lang-badge { font-size: 0.78rem; font-weight: 600; color: var(--nord9); }
+        .net-val { font-family: monospace; }
+
+        /* No spots in block */
+        .no-spots { padding: 10px 28px; font-size: 0.82rem; color: var(--text-muted); font-style: italic; }
+
+        /* Orphans */
+        .orphans-title { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 16px 0 6px; }
+
+        /* Empty / error */
+        .log-empty { text-align: center; padding: 56px 0; color: var(--text-muted); font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/master-control" class="back-link">&#8592;</a>
+            <div class="logo-icon">📋</div>
+            <div>
+                <h1>Weekly <span>Logs</span></h1>
+                <div class="logo-sub">Master Control</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="tool-card">
+        <div class="controls-row">
+            <div class="field-group">
+                <label class="field-label">Date</label>
+                <input type="date" id="datePicker" class="field-input" />
+            </div>
+            <div class="field-group">
+                <label class="field-label">Market</label>
+                <div class="pill-group">
+                    <button class="mkt-pill" data-market="CVC" onclick="selectMkt(this)">CVC</button>
+                    <button class="mkt-pill" data-market="SFO" onclick="selectMkt(this)">SFO</button>
+                    <button class="mkt-pill" data-market="LAX" onclick="selectMkt(this)">LAX</button>
+                    <button class="mkt-pill" data-market="SEA" onclick="selectMkt(this)">SEA</button>
+                    <button class="mkt-pill" data-market="HOU" onclick="selectMkt(this)">HOU</button>
+                    <button class="mkt-pill" data-market="CMP" onclick="selectMkt(this)">CMP</button>
+                    <button class="mkt-pill" data-market="WDC" onclick="selectMkt(this)">WDC</button>
+                    <button class="mkt-pill" data-market="NYC" onclick="selectMkt(this)">NYC</button>
+                    <button class="mkt-pill" data-market="MMT" onclick="selectMkt(this)">MMT</button>
+                    <button class="mkt-pill" data-market="DAL" onclick="selectMkt(this)">DAL</button>
+                </div>
+            </div>
+            <button class="load-btn" id="loadBtn" onclick="loadLog()">Load</button>
+        </div>
+    </div>
+
+    <div id="logArea"></div>
+</main>
+
+<script>
+    let selectedMarket = null;
+    let currentDate   = null;
+    let currentMarket = null;
+
+    // Default to today
+    (() => {
+        const t = new Date();
+        const y = t.getFullYear();
+        const m = String(t.getMonth() + 1).padStart(2, '0');
+        const d = String(t.getDate()).padStart(2, '0');
+        document.getElementById('datePicker').value = `${y}-${m}-${d}`;
+    })();
+
+    function selectMkt(el) {
+        document.querySelectorAll('.mkt-pill').forEach(p => p.classList.remove('active'));
+        el.classList.add('active');
+        selectedMarket = el.dataset.market;
+    }
+
+    function fmtTime(t) {
+        if (!t) return '—';
+        const parts = t.split(':');
+        if (parts.length >= 2) return `${parseInt(parts[0])}:${parts[1]}`;
+        return t;
+    }
+
+    function fmtLen(t) {
+        if (!t) return '';
+        const parts = t.split(':');
+        if (parts.length === 3) {
+            const secs = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+            return `:${secs}`;
+        }
+        return t;
+    }
+
+    function fmtNet(n) {
+        if (!n) return '';
+        return `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 0 })}`;
+    }
+
+    function affBadge(v) {
+        if (v === 'Y') return '<span class="aff-badge aff-y">Y</span>';
+        if (v === 'N') return '<span class="aff-badge aff-n">N</span>';
+        return '<span class="aff-badge aff-blank">—</span>';
+    }
+
+    function escHtml(s) {
+        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    async function loadLog() {
+        const dateVal = document.getElementById('datePicker').value;
+        if (!dateVal) { alert('Please select a date.'); return; }
+        if (!selectedMarket) { alert('Please select a market.'); return; }
+
+        currentDate   = dateVal;
+        currentMarket = selectedMarket;
+
+        const btn = document.getElementById('loadBtn');
+        btn.disabled = true;
+        btn.textContent = 'Loading…';
+        document.getElementById('logArea').innerHTML = '';
+
+        try {
+            const resp = await fetch(`/api/master-control/logs/load?date=${dateVal}&market=${selectedMarket}`);
+            if (!resp.ok) {
+                const err = await resp.json();
+                document.getElementById('logArea').innerHTML =
+                    `<div class="log-empty">${escHtml(err.error || 'Log file not found.')}</div>`;
+                return;
+            }
+            renderLog(await resp.json());
+        } catch (e) {
+            document.getElementById('logArea').innerHTML = `<div class="log-empty">Error: ${escHtml(e.message)}</div>`;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Load';
+        }
+    }
+
+    function renderLog(data) {
+        const totalSpots = data.programs.reduce((s, p) => s + p.spots.length, 0) + data.orphans.length;
+        if (!data.programs.length && !totalSpots) {
+            document.getElementById('logArea').innerHTML = '<div class="log-empty">No data found for this day.</div>';
+            return;
+        }
+
+        let html = `<div class="log-meta">
+            <strong>${data.day}</strong> &nbsp;·&nbsp; ${data.market} &nbsp;·&nbsp; ${data.date}
+            &nbsp;&nbsp;<span>${data.programs.length} programs &nbsp;·&nbsp; ${totalSpots} spots</span>
+            &nbsp;&nbsp;<span style="opacity:0.5;font-size:0.74rem;">${escHtml(data.file)}</span>
+        </div>`;
+
+        data.programs.forEach((prg, pi) => {
+            const cnt = prg.spots.length;
+            const timeRange = prg.time_in
+                ? `${fmtTime(prg.time_in)}&nbsp;–&nbsp;${fmtTime(prg.time_out)}`
+                : '—';
+            const label = escHtml(prg.show_name || prg.bill_code);
+
+            html += `<div class="prg-block" id="prg-${pi}">
+  <div class="prg-header" onclick="togglePrg(${pi})">
+    <span class="prg-chevron">▾</span>
+    <span class="prg-time">${timeRange}</span>
+    <span class="prg-name">${label}</span>
+    <span class="prg-lang">${escHtml(prg.language) || '—'}</span>
+    <span class="prg-count">${cnt} spot${cnt !== 1 ? 's' : ''}</span>
+  </div>
+  <div class="spots-table-wrap">`;
+
+            if (cnt === 0) {
+                html += `<div class="no-spots">No spots in this block.</div>`;
+            } else {
+                html += `<table class="spots-table">
+      <thead><tr>
+        <th>Air Time</th><th>Client</th><th>Show</th>
+        <th>Len</th><th>Lang</th><th>Net</th><th>Affidavit</th>
+      </tr></thead><tbody>`;
+                prg.spots.forEach(s => { html += spotRow(s); });
+                html += `</tbody></table>`;
+            }
+            html += `</div></div>`;
+        });
+
+        if (data.orphans.length) {
+            html += `<div class="orphans-title">Unplaced Spots (${data.orphans.length})</div>
+<div class="prg-block">
+  <div class="spots-table-wrap">
+    <table class="spots-table">
+      <thead><tr>
+        <th>Air Time</th><th>Client</th><th>Show</th>
+        <th>Len</th><th>Lang</th><th>Net</th><th>Affidavit</th>
+      </tr></thead><tbody>`;
+            data.orphans.forEach(s => { html += spotRow(s); });
+            html += `</tbody></table></div></div>`;
+        }
+
+        document.getElementById('logArea').innerHTML = html;
+    }
+
+    function spotRow(s) {
+        const av = escHtml(s.actual_time || '');
+        return `<tr>
+    <td class="airtime-cell">
+      <input class="airtime-input" type="text" value="${av}" placeholder="—"
+             data-row="${s.excel_row}"
+             onkeydown="if(event.key==='Enter')this.blur();"
+             onblur="saveTime(this)" />
+      <span class="save-flash" id="f-${s.excel_row}"></span>
+    </td>
+    <td>${escHtml(s.bill_code)}</td>
+    <td style="color:var(--text-muted);font-size:0.8rem;">${escHtml(s.show_name)}</td>
+    <td style="font-family:monospace;">${fmtLen(s.length)}</td>
+    <td><span class="lang-badge">${escHtml(s.language)}</span></td>
+    <td class="net-val">${fmtNet(s.net)}</td>
+    <td>${affBadge(s.affidavit)}</td>
+  </tr>`;
+    }
+
+    function togglePrg(pi) {
+        document.getElementById(`prg-${pi}`).classList.toggle('collapsed');
+    }
+
+    async function saveTime(input) {
+        const excelRow  = parseInt(input.dataset.row);
+        const actualTime = input.value.trim();
+        const flash      = document.getElementById(`f-${excelRow}`);
+
+        try {
+            const resp = await fetch('/api/master-control/logs/save-airtime', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    date:        currentDate,
+                    market:      currentMarket,
+                    excel_row:   excelRow,
+                    actual_time: actualTime,
+                }),
+            });
+
+            if (resp.ok) {
+                input.classList.add('saved');
+                input.classList.remove('err');
+                flash.textContent = '✓ saved';
+                flash.className = 'save-flash ok';
+                setTimeout(() => {
+                    flash.style.transition = 'opacity 0.4s';
+                    flash.style.opacity = '0';
+                    setTimeout(() => {
+                        flash.className = 'save-flash';
+                        flash.style.opacity = '';
+                        input.classList.remove('saved');
+                    }, 400);
+                }, 1600);
+            } else {
+                input.classList.add('err');
+                flash.textContent = '✗ error';
+                flash.className = 'save-flash err';
+                setTimeout(() => { flash.className = 'save-flash'; input.classList.remove('err'); }, 3000);
+            }
+        } catch (e) {
+            input.classList.add('err');
+            flash.textContent = '✗';
+            flash.className = 'save-flash err';
+        }
+    }
+</script>
+
+</body>
+</html>
