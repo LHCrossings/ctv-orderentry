@@ -178,8 +178,13 @@
         if (!t) return '';
         const parts = t.split(':');
         if (parts.length === 3) {
-            const secs = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
-            return `:${secs}`;
+            const h = parseInt(parts[0]);
+            const m = parseInt(parts[1]);
+            const s = parseInt(parts[2]);
+            const secs = h * 3600 + m * 60 + s;
+            if (secs <= 300) return `:${secs}`;           // :05 – :300 → spot style
+            if (h === 0) return `${m}:${String(s).padStart(2,'0')}`;  // under 1hr
+            return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
         }
         return t;
     }
