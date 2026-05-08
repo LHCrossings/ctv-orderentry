@@ -2080,9 +2080,17 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             if log_path is None:
                 raise FileNotFoundError(f"Log not found for {body['market']} {body['date']}")
             day_name = target.strftime("%A")
+            import datetime as _dt2
             wb = openpyxl.load_workbook(str(log_path), keep_vba=True)
             ws = wb[day_name]
-            ws.cell(row=int(body["excel_row"]), column=9).value = body["actual_time"]
+            raw = str(body["actual_time"]).strip()
+            try:
+                parts = raw.split(":")
+                h, m, s = int(parts[0]), int(parts[1]), int(parts[2]) if len(parts) > 2 else 0
+                cell_val = _dt2.timedelta(hours=h, minutes=m, seconds=s)
+            except Exception:
+                cell_val = raw
+            ws.cell(row=int(body["excel_row"]), column=9).value = cell_val
             wb.save(str(log_path))
 
         try:
