@@ -151,7 +151,6 @@
                 </div>
             </div>
             <button class="load-btn" id="loadBtn" onclick="loadLog()">Load</button>
-            <button class="save-all-btn" id="saveAllBtn" onclick="saveAll()" style="display:none;">Save All</button>
         </div>
     </div>
 
@@ -248,7 +247,6 @@
 
     function renderLog(data) {
         logData = data;
-        document.getElementById('saveAllBtn').style.display = '';
         const totalSpots = data.programs.reduce((s, p) => s + p.spots.length, 0) + data.orphans.length;
         if (!data.programs.length && !totalSpots) {
             document.getElementById('logArea').innerHTML = '<div class="log-empty">No data found for this day.</div>';
@@ -262,6 +260,8 @@
             &nbsp;&nbsp;
             <button class="expand-btn" onclick="expandAll()">Expand all</button>
             <button class="expand-btn" onclick="collapseAll()">Collapse all</button>
+            &nbsp;&nbsp;
+            <button class="save-all-btn" id="saveAllBtn" onclick="saveAll()" style="padding:4px 14px;font-size:0.8rem;">Save All</button>
         </div>`;
 
         data.programs.forEach((prg, pi) => {
