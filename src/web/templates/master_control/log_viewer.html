@@ -34,7 +34,9 @@
         .load-btn:hover { background: var(--nord9); }
         .load-btn:disabled { opacity: 0.5; cursor: default; }
 
-        .log-meta { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; }
+        .log-meta { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+        .expand-btn { background: transparent; border: 1px solid var(--border-color); border-radius: 6px; padding: 2px 10px; font-size: 0.74rem; color: var(--text-muted); cursor: pointer; font-family: inherit; }
+        .expand-btn:hover { border-color: var(--nord10); color: var(--nord10); }
 
         /* Program block */
         .prg-block { margin-bottom: 6px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); }
@@ -250,6 +252,9 @@
             <strong>${data.day}</strong> &nbsp;·&nbsp; ${data.market} &nbsp;·&nbsp; ${data.date}
             &nbsp;&nbsp;<span>${data.programs.length} programs &nbsp;·&nbsp; ${totalSpots} spots</span>
             &nbsp;&nbsp;<span style="opacity:0.5;font-size:0.74rem;">${escHtml(data.file)}</span>
+            &nbsp;&nbsp;
+            <button class="expand-btn" onclick="expandAll()">Expand all</button>
+            <button class="expand-btn" onclick="collapseAll()">Collapse all</button>
         </div>`;
 
         data.programs.forEach((prg, pi) => {
@@ -373,6 +378,9 @@
     function togglePrg(pi) {
         document.getElementById(`prg-${pi}`).classList.toggle('collapsed');
     }
+
+    function expandAll()   { document.querySelectorAll('.prg-block').forEach(b => b.classList.remove('collapsed')); }
+    function collapseAll() { document.querySelectorAll('.prg-block').forEach(b => b.classList.add('collapsed')); }
 
     function fmtAirtime(input) {
         const digits = input.value.replace(/\D/g, '').slice(0, 6);
