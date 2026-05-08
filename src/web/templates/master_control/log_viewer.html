@@ -324,8 +324,9 @@
     <td class="airtime-cell">
       <input class="airtime-input" type="text" value="${av}" placeholder="—"
              data-row="${s.excel_row}"
-             onfocus="this.select();this._clearing=true;"
-             oninput="if(this._clearing){this.value=this.value.slice(-1);this._clearing=false;}fmtAirtime(this)"
+             onfocus="this.select();this.dataset.clearing='1';"
+             onkeydown="if(this.dataset.clearing==='1'){if(/^\d$/.test(event.key))this.value='';delete this.dataset.clearing;}"
+             oninput="fmtAirtime(this)"
              onkeydown="if(event.key==='Enter')this.blur();"
              onblur="normalizeAndSave(this)" />
       <span class="save-flash" id="f-${s.excel_row}"></span>
