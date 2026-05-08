@@ -1971,6 +1971,95 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             return JSONResponse({"error": "Log file not found"}, status_code=404)
         return JSONResponse(result)
 
+    @router.post("/api/master-control/logs/fill-program")
+    async def fill_program_times(body: dict = Body(...)):
+        import datetime as _dt
+        import re
+        from collections import defaultdict
+
+        import openpyxl
+
+        MARKET_IDS = {
+            "NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4,
+            "SEA": 5, "LAX": 6, "CVC": 7, "WDC": 8, "DAL": 10,
+        }
+        FPS = 29.97
+
+        date_str = body["date"]
+        market   = body["market"]
+        spots    = body["spots"]  # [{excel_row, show_name, actual_time}]
+        market_id = MARKET_IDS.get(market)
+        if market_id is None:
+            return JSONResponse({"error": f"Unknown market: {market}"}, status_code=400)
+
+        target = _date_cls.fromisoformat(date_str)
+
+        def _find_log(mkt: str, d: _date_cls) -> Optional[Path]:
+            monday = d - timedelta(days=d.weekday())
+            file_date = monday.strftime("%y%m%d")
+            month_folder = monday.strftime("%m %B %Y")
+            _log_root = Path("K:/Traffic/logs") if sys.platform == "win32" else Path("/mnt/k/Traffic/logs")
+            base = _log_root / str(monday.year) / month_folder
+            for folder in [base, base / "done"]:
+                p = folder / f"{mkt} Log - {file_date}.xlsm"
+                if p.exists():
+                    return p
+            return None
+
+        def _run():
+            log_path = _find_log(market, target)
+            if log_path is None:
+                raise FileNotFoundError(f"Log not found for {market} {date_str}")
+            day_name = target.strftime("%A")
+            wb = openpyxl.load_workbook(str(log_path), keep_vba=True)
+            ws = wb[day_name]
+
+            by_asset: dict = defaultdict(list)
+            for spot in spots:
+                if spot.get("actual_time"):  # skip already-filled
+                    continue
+                show = spot.get("show_name", "")
+                m = re.match(r"^([^:]+):", show.strip())
+                asset_code = m.group(1).strip() if m else show.strip()
+                by_asset[asset_code].append(spot)
+
+            project_root = Path(__file__).parent.parent.parent.parent
+            sys.path.insert(0, str(project_root))
+            from browser_automation.etere_direct_client import connect
+
+            results = []
+            with connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                for asset_code, asset_spots in by_asset.items():
+                    cur.execute(
+                        "SELECT ORA FROM TPALINSE"
+                        " WHERE DATA = %s AND TITLE LIKE %s AND COD_USER = %d"
+                        " ORDER BY ORA",
+                        (target, f"%{asset_code}%", market_id),
+                    )
+                    oras = [r["ORA"] for r in cur.fetchall()]
+                    for i, spot in enumerate(asset_spots):
+                        if i >= len(oras):
+                            results.append({"excel_row": spot["excel_row"], "status": "no_match", "actual_time": ""})
+                            continue
+                        secs = round(oras[i] / FPS)
+                        h, rem = divmod(secs, 3600)
+                        mn, s = divmod(rem, 60)
+                        time_str = f"{h}:{mn:02d}:{s:02d}"
+                        ws.cell(row=spot["excel_row"], column=9).value = _dt.timedelta(seconds=secs)
+                        results.append({"excel_row": spot["excel_row"], "status": "filled", "actual_time": time_str})
+
+            wb.save(str(log_path))
+            return results
+
+        try:
+            results = await asyncio.get_running_loop().run_in_executor(None, _run)
+            return JSONResponse({"results": results})
+        except FileNotFoundError as e:
+            return JSONResponse({"error": str(e)}, status_code=404)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
     @router.post("/api/master-control/logs/save-airtime")
     async def save_airtime(body: dict = Body(...)):
         import openpyxl

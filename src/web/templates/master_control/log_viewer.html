@@ -52,6 +52,9 @@
         .prg-name { font-weight: 600; font-size: 0.88rem; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .prg-lang { font-size: 0.72rem; background: rgba(136,192,208,0.18); color: var(--nord8); padding: 2px 8px; border-radius: 10px; font-weight: 700; flex-shrink: 0; }
         .prg-count { font-size: 0.72rem; color: var(--nord4); min-width: 60px; text-align: right; flex-shrink: 0; }
+        .prg-fill-btn { background: rgba(163,190,140,0.15); border: 1px solid rgba(163,190,140,0.4); color: var(--nord14); border-radius: 6px; padding: 3px 10px; font-size: 0.72rem; font-weight: 700; cursor: pointer; font-family: inherit; flex-shrink: 0; }
+        .prg-fill-btn:hover { background: rgba(163,190,140,0.3); }
+        .prg-fill-btn:disabled { opacity: 0.5; cursor: default; }
 
         .spots-table-wrap { background: var(--nord6); }
         .prg-block.collapsed .spots-table-wrap { display: none; }
@@ -151,6 +154,7 @@
     let selectedMarket = null;
     let currentDate   = null;
     let currentMarket = null;
+    let logData       = null;
 
     // Default to today
     (() => {
@@ -235,6 +239,7 @@
     }
 
     function renderLog(data) {
+        logData = data;
         const totalSpots = data.programs.reduce((s, p) => s + p.spots.length, 0) + data.orphans.length;
         if (!data.programs.length && !totalSpots) {
             document.getElementById('logArea').innerHTML = '<div class="log-empty">No data found for this day.</div>';
@@ -260,6 +265,7 @@
     <span class="prg-time">${timeRange}</span>
     <span class="prg-name">${label}</span>
     <span class="prg-lang">${escHtml(prg.language) || '—'}</span>
+    <button class="prg-fill-btn" onclick="event.stopPropagation();fillProgram(${pi})" id="fill-${pi}">⚡ Fill</button>
     <span class="prg-count">${cnt} spot${cnt !== 1 ? 's' : ''}</span>
   </div>
   <div class="spots-table-wrap">`;
@@ -312,6 +318,56 @@
     <td class="net-val">${fmtNet(s.net)}</td>
     <td>${affBadge(s.affidavit)}</td>
   </tr>`;
+    }
+
+    async function fillProgram(pi) {
+        const prg = logData.programs[pi];
+        const btn = document.getElementById(`fill-${pi}`);
+        btn.disabled = true;
+        btn.textContent = '…';
+
+        const payload = {
+            date:   currentDate,
+            market: currentMarket,
+            spots:  prg.spots.map(s => ({
+                excel_row:  s.excel_row,
+                show_name:  s.show_name,
+                actual_time: document.querySelector(`input[data-row="${s.excel_row}"]`)?.value || s.actual_time,
+            })),
+        };
+
+        try {
+            const resp = await fetch('/api/master-control/logs/fill-program', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await resp.json();
+            if (!resp.ok) { alert(data.error || 'Fill failed.'); return; }
+
+            let filled = 0, noMatch = 0;
+            for (const r of data.results) {
+                const input = document.querySelector(`input[data-row="${r.excel_row}"]`);
+                if (!input) continue;
+                if (r.status === 'filled') {
+                    input.value = r.actual_time;
+                    // Update logData so future fills see this as already filled
+                    const spot = prg.spots.find(s => s.excel_row === r.excel_row);
+                    if (spot) spot.actual_time = r.actual_time;
+                    input.classList.add('saved');
+                    setTimeout(() => input.classList.remove('saved'), 2000);
+                    filled++;
+                } else {
+                    noMatch++;
+                }
+            }
+            btn.textContent = filled ? `✓ ${filled} filled` : '— no match';
+            if (noMatch) btn.textContent += ` (${noMatch} not found)`;
+            setTimeout(() => { btn.textContent = '⚡ Fill'; btn.disabled = false; }, 3000);
+        } catch (e) {
+            btn.textContent = '✗ error';
+            setTimeout(() => { btn.textContent = '⚡ Fill'; btn.disabled = false; }, 3000);
+        }
     }
 
     function togglePrg(pi) {
