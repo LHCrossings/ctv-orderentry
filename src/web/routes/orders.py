@@ -2016,8 +2016,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
             by_asset: dict = defaultdict(list)
             for spot in spots:
-                if spot.get("actual_time"):  # skip already-filled
-                    continue
                 show = spot.get("show_name", "")
                 m = re.match(r"^([^:]+):", show.strip())
                 asset_code = m.group(1).strip() if m else show.strip()
