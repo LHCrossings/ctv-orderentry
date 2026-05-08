@@ -1893,7 +1893,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             monday = target - timedelta(days=target.weekday())
             file_date = monday.strftime("%y%m%d")
             month_folder = monday.strftime("%m %B %Y")
-            base = Path("/mnt/k/Traffic/logs") / str(monday.year) / month_folder
+            _log_root = Path("K:/Traffic/logs") if sys.platform == "win32" else Path("/mnt/k/Traffic/logs")
+            base = _log_root / str(monday.year) / month_folder
             for folder in [base, base / "done"]:
                 p = folder / f"{mkt} Log - {file_date}.xlsm"
                 if p.exists():
@@ -1978,7 +1979,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             monday = target - timedelta(days=target.weekday())
             file_date = monday.strftime("%y%m%d")
             month_folder = monday.strftime("%m %B %Y")
-            base = Path("/mnt/k/Traffic/logs") / str(monday.year) / month_folder
+            _log_root = Path("K:/Traffic/logs") if sys.platform == "win32" else Path("/mnt/k/Traffic/logs")
+            base = _log_root / str(monday.year) / month_folder
             for folder in [base, base / "done"]:
                 p = folder / f"{mkt} Log - {file_date}.xlsm"
                 if p.exists():
