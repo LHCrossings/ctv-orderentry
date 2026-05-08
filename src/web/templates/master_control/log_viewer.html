@@ -300,8 +300,9 @@
     <td class="airtime-cell">
       <input class="airtime-input" type="text" value="${av}" placeholder="—"
              data-row="${s.excel_row}"
+             oninput="fmtAirtime(this)"
              onkeydown="if(event.key==='Enter')this.blur();"
-             onblur="saveTime(this)" />
+             onblur="normalizeAndSave(this)" />
       <span class="save-flash" id="f-${s.excel_row}"></span>
     </td>
     <td>${escHtml(s.bill_code)}</td>
@@ -315,6 +316,21 @@
 
     function togglePrg(pi) {
         document.getElementById(`prg-${pi}`).classList.toggle('collapsed');
+    }
+
+    function fmtAirtime(input) {
+        const digits = input.value.replace(/\D/g, '').slice(0, 6);
+        let v = digits;
+        if (digits.length > 4)      v = digits.slice(0,2) + ':' + digits.slice(2,4) + ':' + digits.slice(4);
+        else if (digits.length > 2) v = digits.slice(0,2) + ':' + digits.slice(2);
+        input.value = v;
+        input.setSelectionRange(v.length, v.length);
+    }
+
+    function normalizeAndSave(input) {
+        // Strip leading zero from hours: "06:18:58" → "6:18:58"
+        input.value = input.value.replace(/^0(\d:)/, '$1');
+        saveTime(input);
     }
 
     async function saveTime(input) {
