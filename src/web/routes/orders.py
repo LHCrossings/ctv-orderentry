@@ -1941,7 +1941,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     "time_out":    _fmt_t(row[5]),
                     "length":      _fmt_t(row[6]),
                     "show_name":   str(row[7] or ""),
-                    "actual_time": str(row[8]) if row[8] is not None else "",
+                    "actual_time": _fmt_t(row[8]),
                     "language":    str(row[9] or ""),
                     "type":        rtype,
                     "gross":       float(row[15] or 0),
