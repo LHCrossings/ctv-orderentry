@@ -42,9 +42,9 @@ def main():
             SELECT CONVERT(varchar(10), t.Date, 101) AS AirDate, COUNT(*) AS Spots
             FROM   trafficPalinse t
             JOIN   CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = t.ID_ContrattiRighe
-            WHERE  cr.ID_CONTRATTITESTATA = ?
-              AND  t.Date >= ?
-              AND  t.Date < DATEADD(day, 1, CONVERT(datetime, ?, 101))
+            WHERE  cr.ID_CONTRATTITESTATA = %s
+              AND  t.Date >= %s
+              AND  t.Date < DATEADD(day, 1, CONVERT(datetime, %s, 101))
             GROUP  BY CONVERT(varchar(10), t.Date, 101)
             ORDER  BY AirDate
         """, [contract_id, date_from, date_to])
@@ -70,7 +70,7 @@ def main():
 
         # Collect line IDs for this contract then delete by ID list
         cursor.execute(
-            "SELECT ID_CONTRATTIRIGHE FROM CONTRATTIRIGHE WHERE ID_CONTRATTITESTATA = ?",
+            "SELECT ID_CONTRATTIRIGHE FROM CONTRATTIRIGHE WHERE ID_CONTRATTITESTATA = %s",
             [contract_id]
         )
         line_ids = [r[0] for r in cursor.fetchall()]
@@ -78,12 +78,12 @@ def main():
             print("[INFO] No lines found for this contract.")
             return
 
-        placeholders = ",".join("?" * len(line_ids))
+        placeholders = ",".join(["%s"] * len(line_ids))
         cursor.execute(f"""
             DELETE FROM trafficPalinse
             WHERE  ID_ContrattiRighe IN ({placeholders})
-              AND  Date >= ?
-              AND  Date < DATEADD(day, 1, CONVERT(datetime, ?, 101))
+              AND  Date >= %s
+              AND  Date < DATEADD(day, 1, CONVERT(datetime, %s, 101))
         """, [*line_ids, date_from, date_to])
 
         deleted = cursor.rowcount
