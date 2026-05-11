@@ -1892,7 +1892,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     @router.get("/api/master-control/compile-logs/run")
     async def compile_logs_run(date: str = Query(...)):
         import json as _json
-        import subprocess as _sp
 
         MARKETS = ["NYC", "CMP", "HOU", "SFO", "SEA", "LAX", "CVC", "WDC", "MMT", "DAL"]
 
