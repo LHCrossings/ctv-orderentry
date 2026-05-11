@@ -58,7 +58,7 @@ class LexusParseResult:
 # ───────────────────────────────────────────────────────────────────────────
 
 _MARKET_TOKENS: dict[str, str] = {
-    "NYC": "NYC", "NY": "NYC",
+    "NYC": "NYC", "NEW YORK CITY": "NYC", "NEW YORK": "NYC", "NY": "NYC",
     "SF": "SFO", "SFO": "SFO", "SAN FRANCISCO": "SFO",
     "SEA": "SEA", "SEATTLE": "SEA",
     "LA": "LAX", "LAX": "LAX", "LOS ANGELES": "LAX",
