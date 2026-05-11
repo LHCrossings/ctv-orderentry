@@ -1716,11 +1716,11 @@
                 if (y && m && d) effFrom = `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
             }
 
-            let assigned = 0, skipped = 0, errors = [];
+            let assigned = 0, skipped = 0, errors = [], skipReasons = [];
             for (const p of r.periods) {
-                if (!p.all_found) { skipped++; continue; }
+                if (!p.all_found) { skipped++; skipReasons.push(`${p.date_label} :${p.duration_sec}s — spots not found`); continue; }
                 const lineIds = linesByDur[p.duration_sec] || [];
-                if (!lineIds.length) { skipped++; continue; }
+                if (!lineIds.length) { skipped++; skipReasons.push(`${p.date_label} :${p.duration_sec}s — no matching lines`); continue; }
 
                 // Apply effective-from truncation
                 let dateFrom = p.date_from_sql;
@@ -1752,7 +1752,12 @@
                 toast.style.color = 'var(--nord14)';
                 toast.textContent = `Done — ${assigned} period${assigned !== 1 ? 's' : ''} assigned` +
                     (skipped ? `, ${skipped} skipped` : '') + '.';
+                if (skipped && skipReasons.length) {
+                    console.warn('[Lexus assign] skipped:', skipReasons);
+                }
             }
+            // Refresh current rotation if this contract is the one selected in the search bar
+            if (contract.id === selectedContractId) reloadRotation();
         } catch (e) {
             toast.style.color = 'var(--nord11)';
             toast.textContent = `Error: ${e.message}`;
