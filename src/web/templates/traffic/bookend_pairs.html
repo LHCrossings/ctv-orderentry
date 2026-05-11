@@ -237,6 +237,31 @@
             font-weight: 600;
             padding: 3px 10px;
         }
+
+        /* Contract search */
+        .search-wrap { position: relative; }
+        .search-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            z-index: 200;
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 4px 16px var(--shadow-color);
+            min-width: 360px;
+            max-height: 280px;
+            overflow-y: auto;
+        }
+        .dropdown-item {
+            padding: 10px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover { background: var(--bg-secondary); }
+        .dropdown-code { font-weight: 700; font-size: 0.88rem; color: var(--text-primary); }
+        .dropdown-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 1px; }
     </style>
 </head>
 <body>
@@ -261,19 +286,19 @@
     <div class="tool-card">
         <div class="card-title">Contract &amp; Date Range</div>
         <div class="input-row">
-            <div class="field-group">
-                <label class="field-label">Contract ID</label>
-                <input class="field-input" id="contractId" type="number" placeholder="2564" style="width:100px" />
+            <div class="field-group search-wrap" style="flex:1;max-width:380px;">
+                <label class="field-label">Contract</label>
+                <input class="field-input" id="contractSearch" placeholder="Search by code, name, or ID…" autocomplete="off" />
+                <div id="contractDropdown" class="search-dropdown" style="display:none;"></div>
             </div>
             <div class="field-group">
                 <label class="field-label">Date From</label>
-                <input class="field-input" id="dateFrom" type="date" />
+                <input class="field-input" id="dateFrom" type="date" onchange="refreshBreakCount()" />
             </div>
             <div class="field-group">
                 <label class="field-label">Date To</label>
-                <input class="field-input" id="dateTo" type="date" />
+                <input class="field-input" id="dateTo" type="date" onchange="refreshBreakCount()" />
             </div>
-            <button class="run-btn" id="loadBtn" onclick="loadContract()">Load</button>
         </div>
     </div>
 
@@ -307,25 +332,77 @@
 </main>
 
 <script>
-let contractData = null;
-let pairCount    = 0;
+let contractData    = null;
+let selectedContractId = null;
+let pairCount       = 0;
+
+// ── Contract search ───────────────────────────────────────────────────────
+const contractInput    = document.getElementById('contractSearch');
+const contractDropdown = document.getElementById('contractDropdown');
+let _cSearchTimer = null;
+
+contractInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { clearTimeout(_cSearchTimer); searchContracts(); }
+});
+contractInput.addEventListener('input', () => {
+    if (!contractInput.value.trim()) { contractDropdown.style.display = 'none'; return; }
+    clearTimeout(_cSearchTimer);
+    _cSearchTimer = setTimeout(searchContracts, 350);
+});
+document.addEventListener('click', e => {
+    if (!e.target.closest('.search-wrap')) contractDropdown.style.display = 'none';
+});
+
+async function searchContracts() {
+    const q = contractInput.value.trim();
+    if (!q) return;
+    const resp = await fetch(`/api/traffic/contract-search?q=${encodeURIComponent(q)}`);
+    const rows = await resp.json();
+    if (!rows.length) {
+        contractDropdown.innerHTML = '<div class="dropdown-item"><span class="dropdown-desc">No contracts found.</span></div>';
+    } else {
+        contractDropdown.innerHTML = rows.map(r => `
+            <div class="dropdown-item" data-id="${r.id}" data-code="${escHtml(r.code||'')}"
+                 data-start="${r.date_start||''}" data-end="${r.date_end||''}">
+                <div class="dropdown-code">${escHtml(r.code)}</div>
+                <div class="dropdown-desc">${escHtml(r.description||'')} &nbsp;·&nbsp; ${r.date_start} – ${r.date_end}</div>
+            </div>`).join('');
+    }
+    contractDropdown.style.display = 'block';
+}
+
+contractDropdown.addEventListener('click', e => {
+    const item = e.target.closest('.dropdown-item[data-id]');
+    if (!item) return;
+    selectedContractId = parseInt(item.dataset.id);
+    contractInput.value = item.dataset.code;
+    contractDropdown.style.display = 'none';
+
+    // Default date range to contract flight if inputs are empty
+    if (!document.getElementById('dateFrom').value && item.dataset.start)
+        document.getElementById('dateFrom').value = toInputDate(item.dataset.start);
+    if (!document.getElementById('dateTo').value && item.dataset.end)
+        document.getElementById('dateTo').value = toInputDate(item.dataset.end);
+
+    loadContract();
+});
+
+function toInputDate(mmddyyyy) {
+    // Convert "MM/DD/YYYY" → "YYYY-MM-DD"
+    const m = mmddyyyy.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    return m ? `${m[3]}-${m[1]}-${m[2]}` : '';
+}
 
 async function loadContract() {
-    const id       = document.getElementById('contractId').value.trim();
+    if (!selectedContractId) return;
     const dateFrom = document.getElementById('dateFrom').value;
     const dateTo   = document.getElementById('dateTo').value;
-
-    if (!id) { alert('Enter a contract ID.'); return; }
-
-    const btn = document.getElementById('loadBtn');
-    btn.disabled = true;
-    btn.textContent = 'Loading…';
 
     try {
         const params = new URLSearchParams();
         if (dateFrom) params.set('date_from', dateFrom);
         if (dateTo)   params.set('date_to',   dateTo);
-        const resp = await fetch(`/api/traffic/bookend-pairs/${id}?${params}`);
+        const resp = await fetch(`/api/traffic/bookend-pairs/${selectedContractId}?${params}`);
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({ detail: resp.statusText }));
             throw new Error(err.detail || 'Server error');
@@ -341,18 +418,32 @@ async function loadContract() {
             ? '<span class="warn-badge">Odd spot count — check schedule</span>'
             : '';
 
-        document.getElementById('pairList').innerHTML = '';
-        pairCount = 0;
-        addPair();
+        if (!document.getElementById('pairList').children.length) {
+            pairCount = 0;
+            addPair();
+        }
 
         document.getElementById('contractBanner').style.display = 'block';
         document.getElementById('statusMsg').textContent = '';
     } catch (e) {
         alert(e.message);
-    } finally {
-        btn.disabled = false;
-        btn.textContent = 'Load';
     }
+}
+
+async function refreshBreakCount() {
+    if (!selectedContractId) return;
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo   = document.getElementById('dateTo').value;
+    const params = new URLSearchParams();
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo)   params.set('date_to',   dateTo);
+    const resp = await fetch(`/api/traffic/bookend-pairs/${selectedContractId}?${params}`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    document.getElementById('bannerBreaks').textContent = data.break_count;
+    contractData = data;
+    document.getElementById('oddWarning').innerHTML = data.odd_warning
+        ? '<span class="warn-badge">Odd spot count — check schedule</span>' : '';
 }
 
 function addPair() {
@@ -471,9 +562,10 @@ document.addEventListener('click', e => {
 });
 
 async function applyPairs() {
-    const id       = document.getElementById('contractId').value.trim();
+    const id       = selectedContractId;
     const dateFrom = document.getElementById('dateFrom').value;
     const dateTo   = document.getElementById('dateTo').value;
+    if (!id) { alert('Select a contract first.'); return; }
 
     // Collect pairs
     const pairs = [];
