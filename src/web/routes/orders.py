@@ -1931,43 +1931,80 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         async def event_stream():
             yield f"data: {_json.dumps({'type': 'week', 'monday': monday.isoformat()})}\n\n"
 
+            # Resolve all paths first
+            found: list[tuple[str, Path]] = []
             for mkt in MARKETS:
                 log_path = await asyncio.get_running_loop().run_in_executor(None, _find_log, mkt, monday)
                 if log_path is None:
                     fname = f"{mkt} Log - {monday.strftime('%y%m%d')}.xlsm"
                     folder = f"K:\\Traffic\\logs\\{monday.year}\\{monday.strftime('%m %B %Y')}"
                     yield f"data: {_json.dumps({'type': 'market', 'market': mkt, 'status': 'missing', 'file': fname, 'msg': folder})}\n\n"
-                    continue
+                else:
+                    found.append((mkt, log_path))
 
-                win_path = _to_win(log_path)
-                yield f"data: {_json.dumps({'type': 'market', 'market': mkt, 'status': 'running', 'file': log_path.name})}\n\n"
+            if not found:
+                yield f"data: {_json.dumps({'type': 'done'})}\n\n"
+                return
 
-                ps = (
-                    "$ErrorActionPreference='Stop';"
-                    "$xl=New-Object -ComObject Excel.Application;"
-                    "$xl.Visible=$false;$xl.DisplayAlerts=$false;"
-                    "try{"
-                    f"$wb=$xl.Workbooks.Open('{win_path}');"
-                    "$xl.Run('BillingMacro');"
-                    "$wb.Save();$wb.Close($false);"
-                    "Write-Output 'OK'"
-                    "}catch{Write-Output \"ERR: $_\"}"
-                    "finally{$xl.Quit();[System.Runtime.Interopservices.Marshal]::ReleaseComObject($xl)|Out-Null}"
+            # Build one PowerShell script: single Excel instance, loop all files
+            file_entries = ";".join(
+                f"@{{mkt='{mkt}';path='{_to_win(p)}'}}"
+                for mkt, p in found
+            )
+            ps = (
+                "$ErrorActionPreference='Continue';"
+                "$xl=New-Object -ComObject Excel.Application;"
+                "$xl.Visible=$false;$xl.DisplayAlerts=$false;"
+                f"$files=@({file_entries});"
+                "try{"
+                "foreach($f in $files){"
+                "Write-Output \"RUNNING:$($f.mkt)\";"
+                "[Console]::Out.Flush();"
+                "try{"
+                "$wb=$xl.Workbooks.Open($f.path);"
+                "$xl.Run('BillingMacro');"
+                "$wb.Save();$wb.Close($false);"
+                "Write-Output \"OK:$($f.mkt)\""
+                "}catch{Write-Output \"ERR:$($f.mkt):$_\"}"
+                "[Console]::Out.Flush()"
+                "}"
+                "}finally{"
+                "$xl.Quit();"
+                "[System.Runtime.Interopservices.Marshal]::ReleaseComObject($xl)|Out-Null"
+                "}"
+            )
+
+            # Seed all found markets as "waiting" so the UI shows them
+            for mkt, p in found:
+                yield f"data: {_json.dumps({'type': 'market', 'market': mkt, 'status': 'waiting', 'file': p.name})}\n\n"
+
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT,
                 )
-                try:
-                    proc = await asyncio.create_subprocess_exec(
-                        "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.STDOUT,
-                    )
-                    stdout, _ = await proc.communicate()
-                    output = stdout.decode(errors="replace").strip()
-                    if output.startswith("ERR") or proc.returncode != 0:
-                        yield f"data: {_json.dumps({'type': 'market', 'market': mkt, 'status': 'error', 'file': log_path.name, 'msg': output})}\n\n"
-                    else:
-                        yield f"data: {_json.dumps({'type': 'market', 'market': mkt, 'status': 'ok', 'file': log_path.name})}\n\n"
-                except Exception as exc:
-                    yield f"data: {_json.dumps({'type': 'market', 'market': mkt, 'status': 'error', 'file': log_path.name, 'msg': str(exc)})}\n\n"
+                async for raw in proc.stdout:
+                    line = raw.decode(errors="replace").strip()
+                    if not line:
+                        continue
+                    if line.startswith("RUNNING:"):
+                        mkt = line[8:]
+                        fname = next((p.name for m, p in found if m == mkt), "")
+                        yield f"data: {_json.dumps({'type': 'market', 'market': mkt, 'status': 'running', 'file': fname})}\n\n"
+                    elif line.startswith("OK:"):
+                        mkt = line[3:]
+                        fname = next((p.name for m, p in found if m == mkt), "")
+                        yield f"data: {_json.dumps({'type': 'market', 'market': mkt, 'status': 'ok', 'file': fname})}\n\n"
+                    elif line.startswith("ERR:"):
+                        parts = line[4:].split(":", 1)
+                        mkt = parts[0]
+                        msg = parts[1] if len(parts) > 1 else ""
+                        fname = next((p.name for m, p in found if m == mkt), "")
+                        yield f"data: {_json.dumps({'type': 'market', 'market': mkt, 'status': 'error', 'file': fname, 'msg': msg})}\n\n"
+                await proc.wait()
+            except Exception as exc:
+                yield f"data: {_json.dumps({'type': 'error', 'msg': str(exc)})}\n\n"
 
             yield f"data: {_json.dumps({'type': 'done'})}\n\n"
 
