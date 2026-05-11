@@ -1895,7 +1895,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             target = _date_cls.fromisoformat(date)
             monday = target - timedelta(days=target.weekday())
             month_folder = monday.strftime("%m %B %Y")
-            folder = Path("/mnt/k/Traffic/logs") / str(monday.year) / month_folder
+            folder = Path("K:/Traffic/logs") / str(monday.year) / month_folder
             if not folder.exists():
                 return {"error": f"Folder not found: {folder}", "monday": monday.isoformat()}
             files = sorted(f.name for f in folder.iterdir() if f.suffix in (".xlsm", ".xlsx", ".xls"))
@@ -1915,16 +1915,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         def _find_log(mkt: str, monday: _date_cls):
             file_date = monday.strftime("%y%m%d")
             month_folder = monday.strftime("%m %B %Y")
-            base = Path("/mnt/k/Traffic/logs") / str(monday.year) / month_folder
+            base = Path("K:/Traffic/logs") / str(monday.year) / month_folder
             for folder in [base, base / "done"]:
                 p = folder / f"{mkt} Log - {file_date}.xlsm"
                 if p.exists():
                     return p
             return None
 
-        def _wsl_to_win(p: Path) -> str:
-            rel = str(p)[len("/mnt/k"):]
-            return "K:" + rel.replace("/", "\\")
+        def _to_win(p: Path) -> str:
+            return str(p).replace("/", "\\")
 
         target = _date_cls.fromisoformat(date)
         monday = _monday(target)
@@ -1940,7 +1939,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     yield f"data: {_json.dumps({'type': 'market', 'market': mkt, 'status': 'missing', 'file': fname, 'msg': folder})}\n\n"
                     continue
 
-                win_path = _wsl_to_win(log_path)
+                win_path = _to_win(log_path)
                 yield f"data: {_json.dumps({'type': 'market', 'market': mkt, 'status': 'running', 'file': log_path.name})}\n\n"
 
                 ps = (
