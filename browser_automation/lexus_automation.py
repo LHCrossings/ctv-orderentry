@@ -563,6 +563,10 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
 
     _VALID_MARKETS = {"NYC", "CMP", "HOU", "SFO", "SEA", "LAX", "CVC", "WDC", "MMT", "DAL"}
 
+    # Normalize long-form DMA names to Etere market codes (e.g. "NEW YORK" → "NYC")
+    from browser_automation.parsers.lexus_parser import _MARKET_TOKENS as _MT
+    market = _MT.get(market.upper(), market)
+
     # Prompt for missing estimate
     if not estimate:
         estimate = input("\n  Estimate number (e.g. 202): ").strip()
