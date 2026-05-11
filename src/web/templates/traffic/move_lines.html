@@ -75,6 +75,9 @@
         .line-table thead tr { border-bottom: 2px solid var(--border-color); }
         .line-table th { padding: 6px 10px; text-align: left; font-size: 0.72rem; font-weight: 700;
                          text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+        .line-table th.sortable { cursor: pointer; user-select: none; }
+        .line-table th.sortable:hover { color: var(--text-primary); }
+        .sort-arrow { margin-left: 4px; opacity: 0.5; font-size: 0.7rem; }
         .line-table tbody tr { border-bottom: 1px solid var(--border-color); transition: background .1s; }
         .line-table tbody tr:last-child { border-bottom: none; }
         .line-table tbody tr:hover { background: var(--bg-secondary); }
@@ -153,7 +156,7 @@
                     <tr>
                         <th class="td-check"><input type="checkbox" id="masterCheck" onchange="toggleMaster(this)" /></th>
                         <th>Description</th>
-                        <th>Dates</th>
+                        <th class="sortable" id="thDates" onclick="toggleSort()">Dates <span class="sort-arrow" id="sortArrow">↑</span></th>
                         <th>Dur</th>
                         <th>Type</th>
                         <th class="td-spots">Spots</th>
@@ -183,6 +186,8 @@
 <script>
     let srcContractId  = null;
     let dstContractId  = null;
+    let sortAsc        = true;
+    let allLines       = [];
 
     function esc(s) {
         return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -270,6 +275,35 @@
         return ':' + String(secs).padStart(2, '0');
     }
 
+    function renderLines() {
+        const tbody = document.getElementById('lineBody');
+        if (!allLines.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="padding:12px;color:var(--text-muted);">No lines found.</td></tr>';
+            return;
+        }
+        const sorted = [...allLines].sort((a, b) => {
+            const cmp = (a.dt_start || '').localeCompare(b.dt_start || '') ||
+                        (a.dt_end   || '').localeCompare(b.dt_end   || '');
+            return sortAsc ? cmp : -cmp;
+        });
+        tbody.innerHTML = sorted.map(l => `
+            <tr id="row-${l.id}">
+                <td class="td-check"><input type="checkbox" class="line-chk" value="${l.id}" onchange="onCheck()" /></td>
+                <td class="td-desc">${esc(l.description)}</td>
+                <td class="td-dates">${esc(l.dt_start)} – ${esc(l.dt_end)}</td>
+                <td class="td-dur">${durLabel(l.duration_sec)}</td>
+                <td class="td-type"><span class="type-badge type-${lineTypeCss(l)}">${lineTypeLabel(l)}</span></td>
+                <td class="td-spots">${l.spot_count}</td>
+            </tr>`).join('');
+        updateCount();
+    }
+
+    function toggleSort() {
+        sortAsc = !sortAsc;
+        document.getElementById('sortArrow').textContent = sortAsc ? '↑' : '↓';
+        renderLines();
+    }
+
     async function loadLines(contractId) {
         const tbody = document.getElementById('lineBody');
         const lineSection = document.getElementById('lineSection');
@@ -288,20 +322,10 @@
             tbody.innerHTML = `<tr><td colspan="6" style="padding:12px;color:var(--nord11);">Error ${resp.status}: ${msg}</td></tr>`;
             return;
         }
-        const lines = await resp.json();
-        if (!lines.length) {
-            tbody.innerHTML = '<tr><td colspan="6" style="padding:12px;color:var(--text-muted);">No lines found.</td></tr>';
-        } else {
-            tbody.innerHTML = lines.map(l => `
-                <tr id="row-${l.id}">
-                    <td class="td-check"><input type="checkbox" class="line-chk" value="${l.id}" onchange="onCheck()" /></td>
-                    <td class="td-desc">${esc(l.description)}</td>
-                    <td class="td-dates">${esc(l.dt_start)} – ${esc(l.dt_end)}</td>
-                    <td class="td-dur">${durLabel(l.duration_sec)}</td>
-                    <td class="td-type"><span class="type-badge type-${lineTypeCss(l)}">${lineTypeLabel(l)}</span></td>
-                    <td class="td-spots">${l.spot_count}</td>
-                </tr>`).join('');
-        }
+        allLines = await resp.json();
+        sortAsc  = true;
+        document.getElementById('sortArrow').textContent = '↑';
+        renderLines();
 
         document.getElementById('destCard').style.display = 'block';
         updateCount();
