@@ -2446,35 +2446,56 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def traffic_spots_search(
         q: str = Query(""),
         duration: Optional[int] = Query(None),
+        prefix: str = Query(""),
     ):
-        if len(q) < 2:
+        if not prefix and len(q) < 2:
             return JSONResponse([])
 
         def _run():
             from browser_automation.etere_direct_client import connect as _db_connect
             with _db_connect() as conn:
                 cur = conn.cursor(as_dict=True)
-                term = f"{q.upper()}%"
-                if duration is not None:
-                    cur.execute("""
+                if prefix:
+                    # Prefix mode: filter by code prefix, contains-search on title or code suffix
+                    pfx_term  = f"{prefix.upper()}%"
+                    contains  = f"%{q.upper()}%" if q else "%"
+                    dur_clause = (
+                        f" AND DURATA BETWEEN {duration - 5} AND {duration + 5}"
+                        if duration is not None
+                        else " AND DURATA <= 1800"
+                    )
+                    cur.execute(f"""
                         SELECT ID_FILMATI AS id, COD_PROGRA AS code,
                                DESCRIZIO AS title, DURATA AS durata
                         FROM FILMATI
-                        WHERE UPPER(DESCRIZIO) LIKE %s
-                          AND DURATA BETWEEN %s AND %s
+                        WHERE UPPER(COD_PROGRA) LIKE %s
+                          AND (UPPER(DESCRIZIO) LIKE %s OR UPPER(COD_PROGRA) LIKE %s)
                           AND TIPO = 'T'
+                          {dur_clause}
                         ORDER BY DESCRIZIO
-                    """, (term, duration - 5, duration + 5))
+                    """, (pfx_term, contains, contains))
                 else:
-                    cur.execute("""
-                        SELECT ID_FILMATI AS id, COD_PROGRA AS code,
-                               DESCRIZIO AS title, DURATA AS durata
-                        FROM FILMATI
-                        WHERE UPPER(DESCRIZIO) LIKE %s
-                          AND TIPO = 'T'
-                          AND DURATA <= 1800
-                        ORDER BY DESCRIZIO
-                    """, (term,))
+                    term = f"{q.upper()}%"
+                    if duration is not None:
+                        cur.execute("""
+                            SELECT ID_FILMATI AS id, COD_PROGRA AS code,
+                                   DESCRIZIO AS title, DURATA AS durata
+                            FROM FILMATI
+                            WHERE UPPER(DESCRIZIO) LIKE %s
+                              AND DURATA BETWEEN %s AND %s
+                              AND TIPO = 'T'
+                            ORDER BY DESCRIZIO
+                        """, (term, duration - 5, duration + 5))
+                    else:
+                        cur.execute("""
+                            SELECT ID_FILMATI AS id, COD_PROGRA AS code,
+                                   DESCRIZIO AS title, DURATA AS durata
+                            FROM FILMATI
+                            WHERE UPPER(DESCRIZIO) LIKE %s
+                              AND TIPO = 'T'
+                              AND DURATA <= 1800
+                            ORDER BY DESCRIZIO
+                        """, (term,))
                 rows = cur.fetchall()
             for r in rows:
                 r["duration_sec"] = round(r["durata"] / 30) if r["durata"] else 0
