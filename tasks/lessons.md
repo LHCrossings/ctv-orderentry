@@ -1,5 +1,21 @@
 # Lessons Learned
 
+## Time Suffix Inheritance Must Never Produce a Midnight-Crossing Range
+
+**Session:** Lexus EST (2026-05-11)
+
+**What happened:** Program name `Ss 1130-12N Vt Variety` parsed as `23:30–12:00`. Start `1130` had no suffix, so it inherited `PM` from end `12N` (noon→PM). Result: 11:30 PM to noon — crosses midnight.
+
+**Rule:** A valid daypart never crosses midnight. After inheriting the end suffix, compare start vs. end in 24-hour minutes. If `start_minutes > end_minutes`, the inherited suffix is wrong — flip it (PM→AM or AM→PM). Only flip when the suffix was inferred (no explicit suffix on start); never override an explicit user-written suffix.
+
+```python
+if not start_sfx_raw:
+    if _to_mins(start_h, start_sfx) > _to_mins(end_h, end_sfx):
+        start_sfx = 'AM' if start_sfx == 'PM' else 'PM'
+```
+
+**Applies to:** `_extract_time_from_program` in `lexus_parser.py`, and any future parser that infers AM/PM from context. The midnight-crossing test is the universal correctness check.
+
 ## All Parsers Must Set `rates_are_net` on Their Order Object
 
 **Session:** Backwrite gross-up automation (2026-04-17)

@@ -983,6 +983,20 @@ def _extract_time_from_program(program: str) -> str:
         # Inherit end suffix if start has none
         start_sfx = _normalise_suffix(start_sfx_raw) if start_sfx_raw else end_sfx
 
+        # Sanity-check: a valid daypart never crosses midnight.
+        # If inferred start > end in 24h minutes, the inherited suffix was wrong — flip it.
+        if not start_sfx_raw:
+            def _to_mins(h: str, sfx: str) -> int:
+                parts = h.split(':')
+                hh, mm = int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
+                if sfx == 'PM' and hh != 12:
+                    hh += 12
+                elif sfx == 'AM' and hh == 12:
+                    hh = 0
+                return hh * 60 + mm
+            if _to_mins(start_h, start_sfx) > _to_mins(end_h, end_sfx):
+                start_sfx = 'AM' if start_sfx == 'PM' else 'PM'
+
         return f"{start_h}{start_sfx}-{end_h}{end_sfx}"
 
     return ""   # couldn't parse — caller should prompt
