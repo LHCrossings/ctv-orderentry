@@ -113,7 +113,7 @@
 <header>
     <div class="header-inner">
         <div class="logo">
-            <a href="/traffic" class="back-link">&#8592;</a>
+            <a href="/orders" class="back-link">&#8592;</a>
             <div class="logo-icon">↔</div>
             <div>
                 <h1>Move <span>Lines</span></h1>
@@ -249,6 +249,27 @@
         await loadLines(id);
     });
 
+    function lineTypeCss(l) {
+        if (l.capofila && l.finefila) return 'bookend';
+        if (l.capofila)               return 'top';
+        if (l.finefila)               return 'bottom';
+        if (l.prenotazione === 1)     return 'rotation';
+        return 'priority';
+    }
+    function lineTypeLabel(l) {
+        if (l.capofila && l.finefila) return 'Bookend';
+        if (l.capofila)               return 'Top';
+        if (l.finefila)               return 'Bottom';
+        if (l.prenotazione === 1)     return 'Rotation';
+        if (l.prenotazione === 2)     return 'Optimized';
+        if (l.prenotazione === 3)     return 'Fixed';
+        return 'Priority';
+    }
+    function durLabel(secs) {
+        if (!secs) return '—';
+        return ':' + String(secs).padStart(2, '0');
+    }
+
     async function loadLines(contractId) {
         const resp = await fetch(`/api/traffic/contract/${contractId}/lines`);
         if (!resp.ok) return;
@@ -259,12 +280,12 @@
             tbody.innerHTML = '<tr><td colspan="6" style="padding:12px;color:var(--text-muted);">No lines found.</td></tr>';
         } else {
             tbody.innerHTML = lines.map(l => `
-                <tr id="row-${l.line_id}">
-                    <td class="td-check"><input type="checkbox" class="line-chk" value="${l.line_id}" onchange="onCheck()" /></td>
+                <tr id="row-${l.id}">
+                    <td class="td-check"><input type="checkbox" class="line-chk" value="${l.id}" onchange="onCheck()" /></td>
                     <td class="td-desc">${esc(l.description)}</td>
-                    <td class="td-dates">${esc(l.date_from)} – ${esc(l.date_to)}</td>
-                    <td class="td-dur">${esc(l.duration_label)}</td>
-                    <td class="td-type"><span class="type-badge type-${esc(l.type_css)}">${esc(l.type_label)}</span></td>
+                    <td class="td-dates">${esc(l.dt_start)} – ${esc(l.dt_end)}</td>
+                    <td class="td-dur">${durLabel(l.duration_sec)}</td>
+                    <td class="td-type"><span class="type-badge type-${lineTypeCss(l)}">${lineTypeLabel(l)}</span></td>
                     <td class="td-spots">${l.spot_count}</td>
                 </tr>`).join('');
         }
