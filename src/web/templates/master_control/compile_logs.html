@@ -168,7 +168,10 @@
             if (msg.type === 'week') {
                 // week confirmed from server
             } else if (msg.type === 'market') {
-                updateMarket(msg.market, msg.status, msg.file, msg.msg);
+                const display = msg.status === 'missing' && msg.msg
+                    ? `${msg.file} — ${msg.msg}`
+                    : msg.file;
+                updateMarket(msg.market, msg.status, display, msg.msg && msg.status !== 'missing' ? msg.msg : '');
                 if (msg.status === 'ok')      ok++;
                 if (msg.status === 'error')   errors++;
                 if (msg.status === 'missing') missing++;
