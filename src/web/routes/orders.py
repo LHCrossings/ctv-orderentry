@@ -3079,7 +3079,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     @router.get("/traffic/bookend-pairs", response_class=HTMLResponse)
     async def bookend_pairs_page(request: Request):
-        return templates.TemplateResponse("traffic/bookend_pairs.html", {"request": request})
+        return templates.TemplateResponse(request, "traffic/bookend_pairs.html")
 
     @router.get("/api/traffic/bookend-pairs/{contract_id}")
     async def bookend_pairs_load(
