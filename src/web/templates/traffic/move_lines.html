@@ -271,11 +271,24 @@
     }
 
     async function loadLines(contractId) {
-        const resp = await fetch(`/api/traffic/contract/${contractId}/lines`);
-        if (!resp.ok) return;
-        const lines = await resp.json();
-
         const tbody = document.getElementById('lineBody');
+        const lineSection = document.getElementById('lineSection');
+        tbody.innerHTML = '<tr><td colspan="6" style="padding:12px;color:var(--text-muted);">Loading…</td></tr>';
+        lineSection.style.display = 'block';
+
+        let resp;
+        try {
+            resp = await fetch(`/api/traffic/contract/${contractId}/lines`);
+        } catch(e) {
+            tbody.innerHTML = `<tr><td colspan="6" style="padding:12px;color:var(--nord11);">Network error: ${e.message}</td></tr>`;
+            return;
+        }
+        if (!resp.ok) {
+            const msg = await resp.text().catch(() => resp.statusText);
+            tbody.innerHTML = `<tr><td colspan="6" style="padding:12px;color:var(--nord11);">Error ${resp.status}: ${msg}</td></tr>`;
+            return;
+        }
+        const lines = await resp.json();
         if (!lines.length) {
             tbody.innerHTML = '<tr><td colspan="6" style="padding:12px;color:var(--text-muted);">No lines found.</td></tr>';
         } else {
@@ -290,8 +303,7 @@
                 </tr>`).join('');
         }
 
-        document.getElementById('lineSection').style.display = 'block';
-        document.getElementById('destCard').style.display    = 'block';
+        document.getElementById('destCard').style.display = 'block';
         updateCount();
     }
 
