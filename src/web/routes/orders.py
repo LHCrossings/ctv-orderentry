@@ -1988,11 +1988,20 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         date_str = body["date"]
         market   = body["market"]
         spots    = body["spots"]  # [{excel_row, show_name, actual_time}]
+        time_in  = body.get("time_in", "")
+        time_out = body.get("time_out", "")
         market_id = MARKET_IDS.get(market)
         if market_id is None:
             return JSONResponse({"error": f"Unknown market: {market}"}, status_code=400)
 
         target = _date_cls.fromisoformat(date_str)
+
+        def _time_to_frames(t: str) -> int:
+            parts = t.split(":")
+            h = int(parts[0])
+            mn = int(parts[1]) if len(parts) > 1 else 0
+            s  = int(parts[2]) if len(parts) > 2 else 0
+            return round((h * 3600 + mn * 60 + s) * FPS)
 
         def _find_log(mkt: str, d: _date_cls) -> Optional[Path]:
             monday = d - timedelta(days=d.weekday())
@@ -2025,16 +2034,28 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             sys.path.insert(0, str(project_root))
             from browser_automation.etere_direct_client import connect
 
+            from_frames = _time_to_frames(time_in) if time_in else None
+            to_frames   = _time_to_frames(time_out) if time_out else None
+
             results = []
             with connect() as conn:
                 cur = conn.cursor(as_dict=True)
                 for asset_code, asset_spots in by_asset.items():
-                    cur.execute(
-                        "SELECT ORA FROM TPALINSE"
-                        " WHERE DATA = %s AND TITLE LIKE %s AND COD_USER = %d"
-                        " ORDER BY ORA",
-                        (target, f"%{asset_code}%", market_id),
-                    )
+                    if from_frames is not None and to_frames is not None:
+                        cur.execute(
+                            "SELECT ORA FROM TPALINSE"
+                            " WHERE DATA = %s AND TITLE LIKE %s AND COD_USER = %d"
+                            " AND ORA >= %d AND ORA < %d"
+                            " ORDER BY ORA",
+                            (target, f"%{asset_code}%", market_id, from_frames, to_frames),
+                        )
+                    else:
+                        cur.execute(
+                            "SELECT ORA FROM TPALINSE"
+                            " WHERE DATA = %s AND TITLE LIKE %s AND COD_USER = %d"
+                            " ORDER BY ORA",
+                            (target, f"%{asset_code}%", market_id),
+                        )
                     oras = [r["ORA"] for r in cur.fetchall()]
                     for i, spot in enumerate(asset_spots):
                         if i >= len(oras):

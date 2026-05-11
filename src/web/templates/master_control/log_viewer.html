@@ -325,9 +325,8 @@
       <input class="airtime-input" type="text" value="${av}" placeholder="—"
              data-row="${s.excel_row}"
              onfocus="this.select();this.dataset.clearing='1';"
-             onkeydown="if(this.dataset.clearing==='1'){if(/^\d$/.test(event.key))this.value='';delete this.dataset.clearing;}"
+             onkeydown="if(event.key==='Enter'){this.blur();}else if(this.dataset.clearing==='1'){if(/^\d$/.test(event.key))this.value='';delete this.dataset.clearing;}"
              oninput="fmtAirtime(this)"
-             onkeydown="if(event.key==='Enter')this.blur();"
              onblur="normalizeAndSave(this)" />
       <span class="save-flash" id="f-${s.excel_row}"></span>
     </td>
@@ -347,8 +346,10 @@
         btn.textContent = '…';
 
         const payload = {
-            date:   currentDate,
-            market: currentMarket,
+            date:    currentDate,
+            market:  currentMarket,
+            time_in:  prg.time_in,
+            time_out: prg.time_out,
             spots:  prg.spots.map(s => ({
                 excel_row:  s.excel_row,
                 show_name:  s.show_name,
