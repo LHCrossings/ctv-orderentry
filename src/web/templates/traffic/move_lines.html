@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Move Contract Lines — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 960px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px 24px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+            margin-bottom: 16px;
+        }
+        .card-title {
+            font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.07em; color: var(--text-muted); margin-bottom: 14px;
+        }
+        .input-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+        .field-group { display: flex; flex-direction: column; gap: 4px; }
+        .field-label { font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+        .field-input {
+            background: var(--bg-secondary); border: 1px solid var(--border-color);
+            border-radius: 8px; padding: 8px 12px; font-size: 0.9rem;
+            font-family: 'Inter', sans-serif; font-weight: 600;
+            color: var(--text-primary); outline: none; transition: border-color .2s;
+        }
+        .field-input:focus { border-color: var(--nord10); }
+
+        .run-btn {
+            padding: 8px 20px; background: var(--nord10); color: white;
+            border: none; border-radius: 8px; font-size: 0.875rem; font-weight: 600;
+            font-family: 'Inter', sans-serif; cursor: pointer; transition: background .2s;
+            white-space: nowrap; height: 36px;
+        }
+        .run-btn:hover:not(:disabled) { background: var(--nord9); }
+        .run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .run-btn.red { background: var(--nord11); }
+        .run-btn.red:hover:not(:disabled) { background: #b44040; }
+
+        /* Contract search */
+        .search-wrap { position: relative; }
+        .search-dropdown {
+            position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+            background: var(--nord6); border: 1px solid var(--border-color);
+            border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.12);
+            z-index: 200; max-height: 260px; overflow-y: auto; display: none;
+        }
+        .search-dropdown.open { display: block; }
+        .dd-item { padding: 9px 14px; cursor: pointer; border-bottom: 1px solid var(--border-color); }
+        .dd-item:last-child { border-bottom: none; }
+        .dd-item:hover { background: var(--bg-secondary); }
+        .dd-code { font-weight: 700; font-family: monospace; color: var(--nord10); font-size: 0.88rem; }
+        .dd-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
+
+        /* Contract banner */
+        .contract-banner {
+            display: none; align-items: center; gap: 14px; flex-wrap: wrap;
+            background: var(--bg-secondary); border: 1px solid var(--border-color);
+            border-radius: 8px; padding: 10px 14px; margin-top: 10px;
+        }
+        .contract-banner.visible { display: flex; }
+        .banner-code { font-size: 1rem; font-weight: 700; font-family: monospace; color: var(--text-primary); }
+        .banner-desc { font-size: 0.82rem; color: var(--text-muted); flex: 1; }
+        .banner-dates { font-size: 0.8rem; color: var(--text-muted); }
+
+        /* Line table */
+        .line-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 14px; }
+        .line-table thead tr { border-bottom: 2px solid var(--border-color); }
+        .line-table th { padding: 6px 10px; text-align: left; font-size: 0.72rem; font-weight: 700;
+                         text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+        .line-table tbody tr { border-bottom: 1px solid var(--border-color); transition: background .1s; }
+        .line-table tbody tr:last-child { border-bottom: none; }
+        .line-table tbody tr:hover { background: var(--bg-secondary); }
+        .line-table tbody tr.selected { background: rgba(94,129,172,.08); }
+        .line-table td { padding: 8px 10px; }
+        .td-check { width: 32px; }
+        .td-desc { font-weight: 500; }
+        .td-dates { font-family: monospace; white-space: nowrap; color: var(--text-muted); }
+        .td-dur { font-family: monospace; color: var(--text-muted); }
+        .td-type {}
+        .td-spots { text-align: right; color: var(--text-muted); }
+
+        .type-badge {
+            display: inline-block; padding: 2px 7px; border-radius: 4px;
+            font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .type-bookend  { background: rgba(94,129,172,.15); color: var(--nord10); }
+        .type-top      { background: rgba(163,190,140,.2); color: var(--nord14); }
+        .type-bottom   { background: rgba(235,203,139,.2); color: var(--nord13); }
+        .type-rotation { background: rgba(180,180,180,.15); color: var(--text-muted); }
+        .type-priority { background: rgba(180,180,180,.15); color: var(--text-muted); }
+
+        .select-bar {
+            display: flex; align-items: center; gap: 10px; margin-bottom: 4px;
+            font-size: 0.82rem;
+        }
+        .select-bar a { color: var(--nord10); cursor: pointer; text-decoration: underline; }
+
+        .toast { font-size: 0.85rem; padding: 8px 0; }
+        .toast.ok  { color: var(--nord14); }
+        .toast.err { color: var(--nord11); }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/traffic" class="back-link">&#8592;</a>
+            <div class="logo-icon">↔</div>
+            <div>
+                <h1>Move <span>Lines</span></h1>
+                <div class="logo-sub">Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <!-- Source contract -->
+    <div class="tool-card">
+        <div class="card-title">Source Contract</div>
+        <div class="input-row">
+            <div class="field-group search-wrap" style="flex:1; max-width:420px;">
+                <label class="field-label">Contract</label>
+                <input class="field-input" id="srcSearch" placeholder="Search by code or name…" autocomplete="off" style="width:100%;box-sizing:border-box;" />
+                <div id="srcDropdown" class="search-dropdown"></div>
+            </div>
+        </div>
+        <div id="srcBanner" class="contract-banner">
+            <span class="banner-code" id="srcCode"></span>
+            <span class="banner-desc" id="srcDesc"></span>
+            <span class="banner-dates" id="srcDates"></span>
+        </div>
+
+        <!-- Line list -->
+        <div id="lineSection" style="display:none; margin-top:16px;">
+            <div class="select-bar">
+                <span id="selectedCount" style="color:var(--text-muted);">0 selected</span>
+                <a onclick="selectAll()">Select all</a>
+                <a onclick="clearAll()">Clear</a>
+            </div>
+            <table class="line-table">
+                <thead>
+                    <tr>
+                        <th class="td-check"><input type="checkbox" id="masterCheck" onchange="toggleMaster(this)" /></th>
+                        <th>Description</th>
+                        <th>Dates</th>
+                        <th>Dur</th>
+                        <th>Type</th>
+                        <th class="td-spots">Spots</th>
+                    </tr>
+                </thead>
+                <tbody id="lineBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Destination + action -->
+    <div class="tool-card" id="destCard" style="display:none;">
+        <div class="card-title">Destination Contract</div>
+        <div class="input-row" style="align-items:flex-end; gap:16px;">
+            <div class="field-group search-wrap" style="flex:1; max-width:420px;">
+                <label class="field-label">Contract</label>
+                <input class="field-input" id="dstSearch" placeholder="Search by code or name…" autocomplete="off" style="width:100%;box-sizing:border-box;" />
+                <div id="dstDropdown" class="search-dropdown"></div>
+            </div>
+            <div id="dstBadge" style="font-size:0.82rem; color:var(--text-muted);">— not selected</div>
+            <button class="run-btn red" id="moveBtn" onclick="moveLines()" disabled>Move Selected Lines</button>
+        </div>
+        <div id="moveToast" class="toast" style="margin-top:10px;"></div>
+    </div>
+</main>
+
+<script>
+    let srcContractId  = null;
+    let dstContractId  = null;
+
+    function esc(s) {
+        return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ── Generic super-search wiring ───────────────────────────────────────────
+
+    function wireSearch(inputId, dropId, onSelect) {
+        const inp  = document.getElementById(inputId);
+        const drop = document.getElementById(dropId);
+        let timer  = null;
+
+        inp.addEventListener('input', () => {
+            clearTimeout(timer);
+            timer = setTimeout(() => doSearch(inp, drop, onSelect), 300);
+        });
+        inp.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { clearTimeout(timer); doSearch(inp, drop, onSelect); }
+            if (e.key === 'Escape') drop.classList.remove('open');
+        });
+        document.addEventListener('click', e => {
+            if (!inp.contains(e.target) && !drop.contains(e.target)) drop.classList.remove('open');
+        });
+        drop.addEventListener('click', e => {
+            const item = e.target.closest('.dd-item[data-id]');
+            if (!item) return;
+            inp.value = item.dataset.code || item.dataset.id;
+            drop.classList.remove('open');
+            onSelect(parseInt(item.dataset.id), item.dataset.code, item.dataset.desc, item.dataset.range);
+        });
+    }
+
+    async function doSearch(inp, drop, onSelect) {
+        const q = inp.value.trim();
+        if (!q) { drop.classList.remove('open'); return; }
+        const resp = await fetch(`/api/traffic/contract-search?q=${encodeURIComponent(q)}`);
+        if (!resp.ok) return;
+        const rows = await resp.json();
+        if (!rows.length) {
+            drop.innerHTML = '<div style="padding:10px 12px;font-size:0.82rem;color:var(--text-muted);">No contracts found</div>';
+        } else {
+            drop.innerHTML = rows.map(r => `
+                <div class="dd-item" data-id="${r.id}" data-code="${esc(r.code||'')}"
+                     data-desc="${esc(r.description||'')}" data-range="${esc((r.date_start||'')+'–'+(r.date_end||''))}">
+                    <div class="dd-code">${esc(r.code)}</div>
+                    <div class="dd-desc">${esc(r.description||'')} &nbsp;·&nbsp; ${esc(r.date_start||'')}–${esc(r.date_end||'')}</div>
+                </div>`).join('');
+        }
+        drop.classList.add('open');
+    }
+
+    // ── Source contract ───────────────────────────────────────────────────────
+
+    wireSearch('srcSearch', 'srcDropdown', async (id, code, desc, range) => {
+        srcContractId = id;
+        document.getElementById('srcCode').textContent  = code;
+        document.getElementById('srcDesc').textContent  = desc;
+        document.getElementById('srcDates').textContent = range;
+        document.getElementById('srcBanner').classList.add('visible');
+        document.getElementById('lineSection').style.display = 'none';
+        document.getElementById('destCard').style.display    = 'none';
+        document.getElementById('lineBody').innerHTML = '';
+        updateMoveBtn();
+        await loadLines(id);
+    });
+
+    async function loadLines(contractId) {
+        const resp = await fetch(`/api/traffic/contract/${contractId}/lines`);
+        if (!resp.ok) return;
+        const lines = await resp.json();
+
+        const tbody = document.getElementById('lineBody');
+        if (!lines.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="padding:12px;color:var(--text-muted);">No lines found.</td></tr>';
+        } else {
+            tbody.innerHTML = lines.map(l => `
+                <tr id="row-${l.line_id}">
+                    <td class="td-check"><input type="checkbox" class="line-chk" value="${l.line_id}" onchange="onCheck()" /></td>
+                    <td class="td-desc">${esc(l.description)}</td>
+                    <td class="td-dates">${esc(l.date_from)} – ${esc(l.date_to)}</td>
+                    <td class="td-dur">${esc(l.duration_label)}</td>
+                    <td class="td-type"><span class="type-badge type-${esc(l.type_css)}">${esc(l.type_label)}</span></td>
+                    <td class="td-spots">${l.spot_count}</td>
+                </tr>`).join('');
+        }
+
+        document.getElementById('lineSection').style.display = 'block';
+        document.getElementById('destCard').style.display    = 'block';
+        updateCount();
+    }
+
+    function onCheck() {
+        updateCount();
+        updateMoveBtn();
+        // Sync master checkbox
+        const all  = document.querySelectorAll('.line-chk');
+        const chkd = document.querySelectorAll('.line-chk:checked');
+        const master = document.getElementById('masterCheck');
+        master.indeterminate = chkd.length > 0 && chkd.length < all.length;
+        master.checked = chkd.length === all.length && all.length > 0;
+        // Highlight rows
+        all.forEach(c => document.getElementById(`row-${c.value}`)
+            .classList.toggle('selected', c.checked));
+    }
+
+    function toggleMaster(master) {
+        document.querySelectorAll('.line-chk').forEach(c => {
+            c.checked = master.checked;
+            document.getElementById(`row-${c.value}`).classList.toggle('selected', master.checked);
+        });
+        updateCount(); updateMoveBtn();
+    }
+
+    function selectAll() {
+        document.querySelectorAll('.line-chk').forEach(c => { c.checked = true;
+            document.getElementById(`row-${c.value}`).classList.add('selected'); });
+        document.getElementById('masterCheck').checked = true;
+        updateCount(); updateMoveBtn();
+    }
+
+    function clearAll() {
+        document.querySelectorAll('.line-chk').forEach(c => { c.checked = false;
+            document.getElementById(`row-${c.value}`).classList.remove('selected'); });
+        document.getElementById('masterCheck').checked = false;
+        document.getElementById('masterCheck').indeterminate = false;
+        updateCount(); updateMoveBtn();
+    }
+
+    function updateCount() {
+        const n = document.querySelectorAll('.line-chk:checked').length;
+        document.getElementById('selectedCount').textContent = `${n} selected`;
+    }
+
+    function updateMoveBtn() {
+        const n   = document.querySelectorAll('.line-chk:checked').length;
+        const btn = document.getElementById('moveBtn');
+        btn.disabled = !(n > 0 && dstContractId && dstContractId !== srcContractId);
+        btn.textContent = n > 0 ? `Move ${n} Line${n===1?'':'s'}` : 'Move Selected Lines';
+    }
+
+    // ── Destination contract ──────────────────────────────────────────────────
+
+    wireSearch('dstSearch', 'dstDropdown', (id, code, desc) => {
+        dstContractId = id;
+        document.getElementById('dstBadge').innerHTML =
+            `<span style="color:var(--nord14);">✓</span> <strong>${esc(code)}</strong> <span style="color:var(--text-muted);">— ${esc(desc)}</span>`;
+        document.getElementById('moveToast').textContent = '';
+        updateMoveBtn();
+    });
+
+    // ── Move ──────────────────────────────────────────────────────────────────
+
+    async function moveLines() {
+        const lineIds = [...document.querySelectorAll('.line-chk:checked')].map(c => parseInt(c.value));
+        if (!lineIds.length || !dstContractId) return;
+        const btn = document.getElementById('moveBtn');
+        const toast = document.getElementById('moveToast');
+        btn.disabled = true;
+        btn.textContent = '…';
+        toast.className = 'toast';
+        toast.textContent = '';
+
+        const resp = await fetch('/api/traffic/move-lines', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ line_ids: lineIds, to_contract_id: dstContractId }),
+        });
+
+        if (resp.ok) {
+            const data = await resp.json();
+            toast.className = 'toast ok';
+            toast.textContent = `✓ ${data.moved} line${data.moved===1?'':'s'} moved successfully.`;
+            // Reload source lines to reflect the change
+            await loadLines(srcContractId);
+        } else {
+            const err = await resp.text();
+            toast.className = 'toast err';
+            toast.textContent = `✗ Error: ${err}`;
+            updateMoveBtn();
+        }
+    }
+</script>
+</body>
+</html>

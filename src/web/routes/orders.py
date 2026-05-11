@@ -4066,4 +4066,90 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+    # ── Move Contract Lines ────────────────────────────────────────────────
+    @router.get("/traffic/move-lines", response_class=HTMLResponse)
+    async def move_lines_page(request: Request):
+        return templates.TemplateResponse(request, "traffic/move_lines.html")
+
+    @router.get("/api/traffic/contract/{contract_id}/lines")
+    async def traffic_contract_lines(contract_id: int):
+        def _run():
+            from browser_automation.etere_direct_client import connect as _db_connect
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                cur.execute("""
+                    SELECT cr.ID_CONTRATTIRIGHE                         AS id,
+                           cr.DESCRIZIONE                               AS description,
+                           CONVERT(VARCHAR(10), cr.DATA_INIZIO,  101)  AS dt_start,
+                           CONVERT(VARCHAR(10), cr.DATA_TERMINE, 101)  AS dt_end,
+                           cr.DURATA                                    AS duration_frames,
+                           cr.PRENOTAZIONE                             AS prenotazione,
+                           cr.CONTROLLACAPOFILA                        AS capofila,
+                           cr.CONTROLLAFINEFILA                        AS finefila,
+                           COUNT(tp.ID_TPALINSE)                       AS spot_count
+                    FROM CONTRATTIRIGHE cr
+                    LEFT JOIN trafficPalinse tpa
+                           ON tpa.id_contrattirighe = cr.ID_CONTRATTIRIGHE
+                    LEFT JOIN TPALINSE tp
+                           ON tp.ID_TPALINSE = tpa.id_tpalinse
+                    WHERE cr.ID_CONTRATTITESTATA = %d
+                    GROUP BY cr.ID_CONTRATTIRIGHE, cr.DESCRIZIONE,
+                             cr.DATA_INIZIO, cr.DATA_TERMINE, cr.DURATA,
+                             cr.PRENOTAZIONE, cr.CONTROLLACAPOFILA, cr.CONTROLLAFINEFILA
+                    ORDER BY cr.ID_CONTRATTIRIGHE
+                """ % contract_id)
+                rows = cur.fetchall()
+                result = []
+                for r in rows:
+                    frames = r["duration_frames"] or 0
+                    secs = round(frames / 30)
+                    result.append({
+                        "id":           r["id"],
+                        "description":  r["description"] or "",
+                        "dt_start":     r["dt_start"] or "",
+                        "dt_end":       r["dt_end"] or "",
+                        "duration_sec": secs,
+                        "prenotazione": r["prenotazione"],
+                        "capofila":     r["capofila"],
+                        "finefila":     r["finefila"],
+                        "spot_count":   r["spot_count"],
+                    })
+                return result
+
+        try:
+            rows = await asyncio.get_running_loop().run_in_executor(None, _run)
+            return JSONResponse(rows)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.post("/api/traffic/move-lines")
+    async def traffic_move_lines(body: dict = Body(...)):
+        line_ids      = body.get("line_ids", [])
+        to_contract   = body.get("to_contract_id")
+
+        if not line_ids:
+            raise HTTPException(status_code=400, detail="No lines selected")
+        if not to_contract:
+            raise HTTPException(status_code=400, detail="No destination contract specified")
+
+        def _run():
+            from browser_automation.etere_direct_client import connect as _db_connect
+            with _db_connect() as conn:
+                cur = conn.cursor()
+                ids_ph = ",".join(str(int(i)) for i in line_ids)
+                cur.execute(
+                    f"UPDATE CONTRATTIRIGHE"
+                    f" SET ID_CONTRATTITESTATA = {int(to_contract)}"
+                    f" WHERE ID_CONTRATTIRIGHE IN ({ids_ph})"
+                )
+                moved = cur.rowcount
+                conn.commit()
+            return {"ok": True, "moved": moved}
+
+        try:
+            result = await asyncio.get_running_loop().run_in_executor(None, _run)
+            return JSONResponse(result)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     return router
