@@ -1919,10 +1919,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             yield f"data: {_json.dumps({'type': 'week', 'monday': monday.isoformat()})}\n\n"
 
             for mkt in MARKETS:
-                log_path = _find_log(mkt, monday)
+                log_path = await asyncio.get_running_loop().run_in_executor(None, _find_log, mkt, monday)
                 if log_path is None:
                     fname = f"{mkt} Log - {monday.strftime('%y%m%d')}.xlsm"
-                    yield f"data: {_json.dumps({'type': 'market', 'market': mkt, 'status': 'missing', 'file': fname})}\n\n"
+                    folder = f"/mnt/k/Traffic/logs/{monday.year}/{monday.strftime('%m %B %Y')}"
+                    yield f"data: {_json.dumps({'type': 'market', 'market': mkt, 'status': 'missing', 'file': fname, 'msg': folder})}\n\n"
                     continue
 
                 win_path = _wsl_to_win(log_path)
