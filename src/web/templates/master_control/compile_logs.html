@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Compile Weekly Logs — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 800px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px 24px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+            margin-bottom: 16px;
+        }
+
+        .controls-row { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+        .field-group { display: flex; flex-direction: column; gap: 4px; }
+        .field-label { font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .field-input { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 7px 12px; font-size: 0.9rem; color: var(--text-primary); outline: none; font-family: inherit; }
+        .field-input:focus { border-color: var(--nord10); }
+
+        .run-btn { background: var(--nord10); color: var(--nord6); border: none; border-radius: 8px; padding: 8px 22px; font-size: 0.9rem; font-weight: 600; cursor: pointer; font-family: inherit; }
+        .run-btn:hover { background: var(--nord9); }
+        .run-btn:disabled { opacity: 0.5; cursor: default; }
+
+        .week-label { font-size: 0.8rem; color: var(--text-muted); margin-top: 8px; }
+
+        .market-list { display: flex; flex-direction: column; gap: 8px; }
+
+        .market-row {
+            display: flex; align-items: center; gap: 14px;
+            background: var(--nord6); border: 1px solid var(--border-color);
+            border-radius: 10px; padding: 12px 18px;
+        }
+
+        .mkt-name { font-weight: 700; font-size: 0.95rem; min-width: 48px; color: var(--text-primary); }
+        .mkt-file { font-size: 0.8rem; color: var(--text-muted); font-family: monospace; flex: 1; }
+        .mkt-msg  { font-size: 0.78rem; color: var(--nord11); font-family: monospace; }
+
+        .status-badge {
+            font-size: 0.72rem; font-weight: 700; padding: 3px 10px;
+            border-radius: 10px; min-width: 64px; text-align: center; flex-shrink: 0;
+        }
+        .s-waiting  { background: var(--nord5); color: var(--text-muted); }
+        .s-running  { background: rgba(136,192,208,0.2); color: var(--nord8); }
+        .s-ok       { background: rgba(163,190,140,0.2); color: var(--nord14); }
+        .s-error    { background: rgba(191,97,106,0.15); color: var(--nord11); }
+        .s-missing  { background: rgba(235,203,139,0.2); color: var(--nord13); }
+
+        .summary { margin-top: 16px; font-size: 0.85rem; color: var(--text-muted); }
+        .summary strong { color: var(--text-primary); }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/master-control" class="back-link">&#8592;</a>
+            <div class="logo-icon">⚙️</div>
+            <div>
+                <h1>Compile <span>Weekly Logs</span></h1>
+                <div class="logo-sub">Master Control</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="tool-card">
+        <div class="controls-row">
+            <div class="field-group">
+                <label class="field-label">Any date in the target week</label>
+                <input type="date" id="datePicker" class="field-input" />
+            </div>
+            <button class="run-btn" id="runBtn" onclick="runCompile()">Run BillingMacro</button>
+        </div>
+        <div class="week-label" id="weekLabel"></div>
+    </div>
+
+    <div class="market-list" id="marketList"></div>
+    <div class="summary" id="summary"></div>
+</main>
+
+<script>
+    const MARKETS = ['NYC','CMP','HOU','SFO','SEA','LAX','CVC','WDC','MMT','DAL'];
+
+    (() => {
+        const t = new Date();
+        // Default to last week's Monday
+        const day = t.getDay(); // 0=Sun, 1=Mon
+        const daysBack = day === 0 ? 6 : day - 1; // days since last Monday
+        const lastMon = new Date(t);
+        lastMon.setDate(t.getDate() - daysBack - 7);
+        document.getElementById('datePicker').value = lastMon.toISOString().slice(0,10);
+        updateWeekLabel(lastMon.toISOString().slice(0,10));
+    })();
+
+    document.getElementById('datePicker').addEventListener('change', e => updateWeekLabel(e.target.value));
+
+    function getMondayOf(dateStr) {
+        const d = new Date(dateStr + 'T12:00:00');
+        const day = d.getDay();
+        const daysBack = day === 0 ? 6 : day - 1;
+        const mon = new Date(d);
+        mon.setDate(d.getDate() - daysBack);
+        return mon;
+    }
+
+    function updateWeekLabel(dateStr) {
+        if (!dateStr) return;
+        const mon = getMondayOf(dateStr);
+        const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+        const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        document.getElementById('weekLabel').textContent = `Week of ${fmt(mon)} – ${fmt(sun)}`;
+    }
+
+    function renderMarkets(statuses) {
+        const list = document.getElementById('marketList');
+        list.innerHTML = MARKETS.map(mkt => {
+            const s = statuses[mkt] || { status: 'waiting' };
+            return `<div class="market-row" id="row-${mkt}">
+  <span class="mkt-name">${mkt}</span>
+  <span class="mkt-file" id="file-${mkt}">${s.file || ''}</span>
+  <span class="mkt-msg"  id="msg-${mkt}">${s.msg  || ''}</span>
+  <span class="status-badge ${badgeClass(s.status)}" id="badge-${mkt}">${badgeText(s.status)}</span>
+</div>`;
+        }).join('');
+    }
+
+    function updateMarket(mkt, status, file, msg) {
+        const badge = document.getElementById(`badge-${mkt}`);
+        if (badge) { badge.className = `status-badge ${badgeClass(status)}`; badge.textContent = badgeText(status); }
+        if (file) { const el = document.getElementById(`file-${mkt}`); if (el) el.textContent = file; }
+        if (msg)  { const el = document.getElementById(`msg-${mkt}`);  if (el) el.textContent = msg; }
+    }
+
+    function badgeClass(s) {
+        return { waiting:'s-waiting', running:'s-running', ok:'s-ok', error:'s-error', missing:'s-missing' }[s] || 's-waiting';
+    }
+    function badgeText(s) {
+        return { waiting:'Waiting', running:'Running…', ok:'Done', error:'Error', missing:'Not Found' }[s] || s;
+    }
+
+    async function runCompile() {
+        const dateVal = document.getElementById('datePicker').value;
+        if (!dateVal) { alert('Select a date.'); return; }
+
+        const btn = document.getElementById('runBtn');
+        btn.disabled = true;
+        document.getElementById('summary').textContent = '';
+
+        renderMarkets({});
+
+        const es = new EventSource(`/api/master-control/compile-logs/run?date=${dateVal}`);
+        let ok = 0, errors = 0, missing = 0;
+
+        es.onmessage = e => {
+            const msg = JSON.parse(e.data);
+            if (msg.type === 'week') {
+                // week confirmed from server
+            } else if (msg.type === 'market') {
+                updateMarket(msg.market, msg.status, msg.file, msg.msg);
+                if (msg.status === 'ok')      ok++;
+                if (msg.status === 'error')   errors++;
+                if (msg.status === 'missing') missing++;
+            } else if (msg.type === 'done') {
+                es.close();
+                btn.disabled = false;
+                const parts = [];
+                if (ok)      parts.push(`<strong>${ok}</strong> compiled`);
+                if (missing) parts.push(`<strong>${missing}</strong> not found`);
+                if (errors)  parts.push(`<strong>${errors}</strong> errors`);
+                document.getElementById('summary').innerHTML = parts.join(' &nbsp;·&nbsp; ');
+            }
+        };
+
+        es.onerror = () => {
+            es.close();
+            btn.disabled = false;
+            document.getElementById('summary').textContent = 'Connection error.';
+        };
+    }
+</script>
+
+</body>
+</html>

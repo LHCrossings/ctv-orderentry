@@ -1885,6 +1885,84 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def master_control_logs_page(request: Request):
         return templates.TemplateResponse(request, "master_control/log_viewer.html")
 
+    @router.get("/master-control/compile-logs", response_class=HTMLResponse)
+    async def compile_logs_page(request: Request):
+        return templates.TemplateResponse(request, "master_control/compile_logs.html")
+
+    @router.get("/api/master-control/compile-logs/run")
+    async def compile_logs_run(date: str = Query(...)):
+        import json as _json
+        import subprocess as _sp
+
+        MARKETS = ["NYC", "CMP", "HOU", "SFO", "SEA", "LAX", "CVC", "WDC", "MMT", "DAL"]
+
+        def _monday(d: _date_cls) -> _date_cls:
+            return d - timedelta(days=d.weekday())
+
+        def _find_log(mkt: str, monday: _date_cls):
+            file_date = monday.strftime("%y%m%d")
+            month_folder = monday.strftime("%m %B %Y")
+            base = Path("/mnt/k/Traffic/logs") / str(monday.year) / month_folder
+            for folder in [base, base / "done"]:
+                p = folder / f"{mkt} Log - {file_date}.xlsm"
+                if p.exists():
+                    return p
+            return None
+
+        def _wsl_to_win(p: Path) -> str:
+            rel = str(p)[len("/mnt/k"):]
+            return "K:" + rel.replace("/", "\\")
+
+        target = _date_cls.fromisoformat(date)
+        monday = _monday(target)
+
+        async def event_stream():
+            yield f"data: {_json.dumps({'type': 'week', 'monday': monday.isoformat()})}\n\n"
+
+            for mkt in MARKETS:
+                log_path = _find_log(mkt, monday)
+                if log_path is None:
+                    yield f"data: {_json.dumps({'type': 'market', 'market': mkt, 'status': 'missing'})}\n\n"
+                    continue
+
+                win_path = _wsl_to_win(log_path)
+                yield f"data: {_json.dumps({'type': 'market', 'market': mkt, 'status': 'running', 'file': log_path.name})}\n\n"
+
+                ps = (
+                    "$ErrorActionPreference='Stop';"
+                    "$xl=New-Object -ComObject Excel.Application;"
+                    "$xl.Visible=$false;$xl.DisplayAlerts=$false;"
+                    "try{"
+                    f"$wb=$xl.Workbooks.Open('{win_path}');"
+                    "$xl.Run('BillingMacro');"
+                    "$wb.Save();$wb.Close($false);"
+                    "Write-Output 'OK'"
+                    "}catch{Write-Output \"ERR: $_\"}"
+                    "finally{$xl.Quit();[System.Runtime.Interopservices.Marshal]::ReleaseComObject($xl)|Out-Null}"
+                )
+                try:
+                    proc = await asyncio.create_subprocess_exec(
+                        "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.STDOUT,
+                    )
+                    stdout, _ = await proc.communicate()
+                    output = stdout.decode(errors="replace").strip()
+                    if output.startswith("ERR") or proc.returncode != 0:
+                        yield f"data: {_json.dumps({'type': 'market', 'market': mkt, 'status': 'error', 'file': log_path.name, 'msg': output})}\n\n"
+                    else:
+                        yield f"data: {_json.dumps({'type': 'market', 'market': mkt, 'status': 'ok', 'file': log_path.name})}\n\n"
+                except Exception as exc:
+                    yield f"data: {_json.dumps({'type': 'market', 'market': mkt, 'status': 'error', 'file': log_path.name, 'msg': str(exc)})}\n\n"
+
+            yield f"data: {_json.dumps({'type': 'done'})}\n\n"
+
+        return StreamingResponse(
+            event_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
     @router.get("/api/master-control/logs/load")
     async def load_traffic_log(date: str = Query(...), market: str = Query(...)):
         import openpyxl
