@@ -94,13 +94,14 @@
 
     (() => {
         const t = new Date();
-        // Default to last week's Monday
-        const day = t.getDay(); // 0=Sun, 1=Mon
-        const daysBack = day === 0 ? 6 : day - 1; // days since last Monday
-        const lastMon = new Date(t);
-        lastMon.setDate(t.getDate() - daysBack - 7);
-        document.getElementById('datePicker').value = lastMon.toISOString().slice(0,10);
-        updateWeekLabel(lastMon.toISOString().slice(0,10));
+        const day = t.getDay(); // 0=Sun … 6=Sat
+        const daysBack = day === 0 ? 6 : day - 1; // days since this week's Monday
+        // On Monday go back 7 to get last week; any other day use this week's Monday
+        const offset = day === 1 ? 7 : daysBack;
+        const mon = new Date(t);
+        mon.setDate(t.getDate() - offset);
+        document.getElementById('datePicker').value = mon.toISOString().slice(0,10);
+        updateWeekLabel(mon.toISOString().slice(0,10));
     })();
 
     document.getElementById('datePicker').addEventListener('change', e => updateWeekLabel(e.target.value));

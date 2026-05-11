@@ -1922,7 +1922,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             for mkt in MARKETS:
                 log_path = _find_log(mkt, monday)
                 if log_path is None:
-                    yield f"data: {_json.dumps({'type': 'market', 'market': mkt, 'status': 'missing'})}\n\n"
+                    fname = f"{mkt} Log - {monday.strftime('%y%m%d')}.xlsm"
+                    yield f"data: {_json.dumps({'type': 'market', 'market': mkt, 'status': 'missing', 'file': fname})}\n\n"
                     continue
 
                 win_path = _wsl_to_win(log_path)
