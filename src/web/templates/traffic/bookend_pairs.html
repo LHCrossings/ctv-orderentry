@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bookend Traffic — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 900px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px 24px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+            margin-bottom: 16px;
+        }
+        .card-title {
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--text-muted);
+            margin-bottom: 14px;
+        }
+
+        .input-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+        .field-group { display: flex; flex-direction: column; gap: 4px; }
+        .field-label { font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+        .field-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 0.9rem;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            color: var(--text-primary);
+            outline: none;
+            transition: border-color .2s;
+        }
+        .field-input:focus { border-color: var(--nord10); }
+
+        .run-btn {
+            padding: 8px 20px;
+            background: var(--nord10);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: background .2s;
+            white-space: nowrap;
+            height: 36px;
+        }
+        .run-btn:hover:not(:disabled) { background: var(--nord9); }
+        .run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .run-btn.green { background: var(--nord14); }
+        .run-btn.green:hover:not(:disabled) { background: #88c0a3; }
+
+        /* Contract banner */
+        .contract-banner {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 14px 18px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .banner-code { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); }
+        .banner-desc { font-size: 0.85rem; color: var(--text-muted); flex: 1; }
+        .banner-stat { text-align: right; }
+        .banner-count { font-size: 1.6rem; font-weight: 700; color: var(--nord10); line-height: 1; }
+        .banner-label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+        /* Pair rows */
+        .pair-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+        .pair-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 12px 14px;
+        }
+        .pair-label {
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            letter-spacing: 0.07em;
+            min-width: 14px;
+        }
+        .spot-wrap { position: relative; flex: 1; min-width: 160px; }
+        .spot-input {
+            width: 100%;
+            box-sizing: border-box;
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 7px;
+            padding: 7px 10px;
+            font-size: 0.82rem;
+            font-family: 'Inter', sans-serif;
+            color: var(--text-primary);
+            outline: none;
+            transition: border-color .2s;
+        }
+        .spot-input:focus { border-color: var(--nord10); }
+        .spot-dropdown {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0; right: 0;
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,.12);
+            z-index: 100;
+            max-height: 220px;
+            overflow-y: auto;
+            display: none;
+        }
+        .spot-dropdown.open { display: block; }
+        .sd-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 0.82rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }
+        .sd-item:last-child { border-bottom: none; }
+        .sd-item:hover { background: var(--bg-secondary); }
+        .sd-code { font-weight: 700; font-family: monospace; color: var(--nord10); flex-shrink: 0; }
+        .sd-title { color: var(--text-muted); font-size: 0.78rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sd-dur { font-size: 0.72rem; color: var(--text-muted); flex-shrink: 0; }
+        .sd-empty { padding: 10px 12px; font-size: 0.82rem; color: var(--text-muted); font-style: italic; }
+
+        .spot-badge {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            background: rgba(94,129,172,.1);
+            border: 1px solid rgba(94,129,172,.3);
+            border-radius: 6px;
+            padding: 5px 8px;
+            font-size: 0.8rem;
+        }
+        .spot-badge.visible { display: flex; }
+        .badge-code { font-weight: 700; color: var(--nord10); font-family: monospace; }
+        .badge-title { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
+        .badge-clear {
+            margin-left: auto;
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            padding: 0 2px;
+            line-height: 1;
+        }
+        .badge-clear:hover { color: var(--nord11); }
+
+        .pct-input {
+            width: 60px;
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 7px;
+            padding: 7px 8px;
+            font-size: 0.88rem;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            color: var(--text-primary);
+            text-align: right;
+            outline: none;
+            transition: border-color .2s;
+        }
+        .pct-input:focus { border-color: var(--nord10); }
+        .pct-sign { font-size: 0.85rem; color: var(--text-muted); font-weight: 600; }
+
+        .remove-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            padding: 4px 6px;
+            border-radius: 6px;
+            transition: color .15s, background .15s;
+        }
+        .remove-btn:hover { color: var(--nord11); background: rgba(191,97,106,.1); }
+
+        .action-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+        .pct-total {
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        .pct-total.ok   { color: var(--nord14); }
+        .pct-total.over { color: var(--nord11); }
+        .pct-total.low  { color: var(--text-muted); }
+
+        .status-msg { font-size: 0.85rem; }
+        .status-msg.ok  { color: var(--nord14); }
+        .status-msg.err { color: var(--nord11); }
+        .spinner {
+            display: inline-block; width: 14px; height: 14px;
+            border: 2px solid rgba(255,255,255,.3); border-top-color: #fff;
+            border-radius: 50%; animation: spin .7s linear infinite;
+            vertical-align: middle; margin-right: 5px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .sep { color: var(--text-muted); font-weight: 700; }
+
+        .warn-badge {
+            display: inline-block;
+            background: rgba(235,203,139,.2);
+            color: var(--nord13);
+            border: 1px solid rgba(235,203,139,.4);
+            border-radius: 6px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            padding: 3px 10px;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/traffic" class="back-link">&#8592;</a>
+            <div class="logo-icon">🔀</div>
+            <div>
+                <h1>Bookend <span>Traffic</span></h1>
+                <div class="logo-sub">Traffic · Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+
+    <!-- Step 1: Contract + date range -->
+    <div class="tool-card">
+        <div class="card-title">Contract &amp; Date Range</div>
+        <div class="input-row">
+            <div class="field-group">
+                <label class="field-label">Contract ID</label>
+                <input class="field-input" id="contractId" type="number" placeholder="2564" style="width:100px" />
+            </div>
+            <div class="field-group">
+                <label class="field-label">Date From</label>
+                <input class="field-input" id="dateFrom" type="date" />
+            </div>
+            <div class="field-group">
+                <label class="field-label">Date To</label>
+                <input class="field-input" id="dateTo" type="date" />
+            </div>
+            <button class="run-btn" id="loadBtn" onclick="loadContract()">Load</button>
+        </div>
+    </div>
+
+    <!-- Contract banner (hidden until loaded) -->
+    <div id="contractBanner" style="display:none">
+        <div class="contract-banner">
+            <div>
+                <div class="banner-code" id="bannerCode"></div>
+                <div class="banner-desc" id="bannerDesc"></div>
+            </div>
+            <div class="banner-stat">
+                <div class="banner-count" id="bannerBreaks">—</div>
+                <div class="banner-label">Breaks</div>
+            </div>
+            <div id="oddWarning"></div>
+        </div>
+
+        <!-- Step 2: Pair builder -->
+        <div class="tool-card">
+            <div class="card-title">Spot Pairs</div>
+            <div class="pair-list" id="pairList"></div>
+            <div class="action-row">
+                <button class="run-btn" onclick="addPair()">+ Add Pair</button>
+                <span class="pct-total low" id="pctTotal">0%</span>
+                <button class="run-btn green" id="applyBtn" disabled onclick="applyPairs()">Apply</button>
+                <span class="status-msg" id="statusMsg"></span>
+            </div>
+        </div>
+    </div>
+
+</main>
+
+<script>
+let contractData = null;
+let pairCount    = 0;
+
+async function loadContract() {
+    const id       = document.getElementById('contractId').value.trim();
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo   = document.getElementById('dateTo').value;
+
+    if (!id) { alert('Enter a contract ID.'); return; }
+
+    const btn = document.getElementById('loadBtn');
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+
+    try {
+        const params = new URLSearchParams();
+        if (dateFrom) params.set('date_from', dateFrom);
+        if (dateTo)   params.set('date_to',   dateTo);
+        const resp = await fetch(`/api/traffic/bookend-pairs/${id}?${params}`);
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+            throw new Error(err.detail || 'Server error');
+        }
+        contractData = await resp.json();
+
+        document.getElementById('bannerCode').textContent   = contractData.header.code;
+        document.getElementById('bannerDesc').textContent   = contractData.header.description || '';
+        document.getElementById('bannerBreaks').textContent = contractData.break_count;
+
+        const warn = document.getElementById('oddWarning');
+        warn.innerHTML = contractData.odd_warning
+            ? '<span class="warn-badge">Odd spot count — check schedule</span>'
+            : '';
+
+        document.getElementById('pairList').innerHTML = '';
+        pairCount = 0;
+        addPair();
+
+        document.getElementById('contractBanner').style.display = 'block';
+        document.getElementById('statusMsg').textContent = '';
+    } catch (e) {
+        alert(e.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Load';
+    }
+}
+
+function addPair() {
+    const idx  = pairCount++;
+    const row  = document.createElement('div');
+    row.className = 'pair-row';
+    row.id = `pair-${idx}`;
+    row.innerHTML = `
+        <span class="pair-label">${idx + 1}</span>
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1">
+            <span style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em">A — First (Top)</span>
+            <div class="spot-wrap" id="wrapA-${idx}">
+                <input class="spot-input" id="inputA-${idx}" placeholder="Search by code or title…" oninput="searchSpot('A',${idx},this.value)" autocomplete="off" />
+                <div class="spot-dropdown" id="ddA-${idx}"></div>
+                <div class="spot-badge" id="badgeA-${idx}">
+                    <span class="badge-code" id="bcodeA-${idx}"></span>
+                    <span class="badge-title" id="btitleA-${idx}"></span>
+                    <button class="badge-clear" onclick="clearSpot('A',${idx})">×</button>
+                </div>
+                <input type="hidden" id="fidA-${idx}" />
+            </div>
+        </div>
+        <span class="sep">→</span>
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1">
+            <span style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em">B — Last (Bottom)</span>
+            <div class="spot-wrap" id="wrapB-${idx}">
+                <input class="spot-input" id="inputB-${idx}" placeholder="Search by code or title…" oninput="searchSpot('B',${idx},this.value)" autocomplete="off" />
+                <div class="spot-dropdown" id="ddB-${idx}"></div>
+                <div class="spot-badge" id="badgeB-${idx}">
+                    <span class="badge-code" id="bcodeB-${idx}"></span>
+                    <span class="badge-title" id="btitleB-${idx}"></span>
+                    <button class="badge-clear" onclick="clearSpot('B',${idx})">×</button>
+                </div>
+                <input type="hidden" id="fidB-${idx}" />
+            </div>
+        </div>
+        <input class="pct-input" id="pct-${idx}" type="number" min="0" max="100" step="1" value=""
+               placeholder="%" oninput="updateTotal()" />
+        <span class="pct-sign">%</span>
+        <button class="remove-btn" onclick="removePair(${idx})" title="Remove">×</button>
+    `;
+    document.getElementById('pairList').appendChild(row);
+    updateTotal();
+}
+
+function removePair(idx) {
+    const row = document.getElementById(`pair-${idx}`);
+    if (row) row.remove();
+    updateTotal();
+}
+
+const _searchTimers = {};
+function searchSpot(side, idx, q) {
+    clearTimeout(_searchTimers[`${side}${idx}`]);
+    const dd = document.getElementById(`dd${side}-${idx}`);
+    if (q.length < 2) { dd.classList.remove('open'); return; }
+    _searchTimers[`${side}${idx}`] = setTimeout(async () => {
+        const resp = await fetch(`/api/traffic/spots/search?q=${encodeURIComponent(q)}`);
+        const items = await resp.json();
+        if (!items.length) {
+            dd.innerHTML = '<div class="sd-empty">No spots found</div>';
+        } else {
+            dd.innerHTML = items.slice(0, 12).map(f =>
+                `<div class="sd-item" onclick="selectSpot('${side}',${idx},${f.id},'${escHtml(f.code)}','${escHtml(f.title)}',${f.duration_sec})">
+                    <span class="sd-code">${escHtml(f.code)}</span>
+                    <span class="sd-title">${escHtml(f.title)}</span>
+                    <span class="sd-dur">:${String(f.duration_sec).padStart(2,'0')}</span>
+                </div>`
+            ).join('');
+        }
+        dd.classList.add('open');
+    }, 250);
+}
+
+function selectSpot(side, idx, filmatiId, code, title, dur) {
+    document.getElementById(`fid${side}-${idx}`).value = filmatiId;
+    document.getElementById(`bcode${side}-${idx}`).textContent = code;
+    document.getElementById(`btitle${side}-${idx}`).textContent = `${title} :${String(dur).padStart(2,'0')}`;
+    document.getElementById(`badge${side}-${idx}`).classList.add('visible');
+    document.getElementById(`input${side}-${idx}`).style.display = 'none';
+    document.getElementById(`dd${side}-${idx}`).classList.remove('open');
+}
+
+function clearSpot(side, idx) {
+    document.getElementById(`fid${side}-${idx}`).value = '';
+    document.getElementById(`badge${side}-${idx}`).classList.remove('visible');
+    const inp = document.getElementById(`input${side}-${idx}`);
+    inp.style.display = '';
+    inp.value = '';
+    inp.focus();
+}
+
+function escHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function updateTotal() {
+    const rows = document.querySelectorAll('.pair-row');
+    let total = 0;
+    rows.forEach(row => {
+        const idx = row.id.replace('pair-', '');
+        const v = parseFloat(document.getElementById(`pct-${idx}`)?.value || 0);
+        if (!isNaN(v)) total += v;
+    });
+    const el = document.getElementById('pctTotal');
+    el.textContent = `${total}%`;
+    el.className = 'pct-total ' + (total === 100 ? 'ok' : total > 100 ? 'over' : 'low');
+    document.getElementById('applyBtn').disabled = (total !== 100);
+}
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', e => {
+    if (!e.target.closest('.spot-wrap')) {
+        document.querySelectorAll('.spot-dropdown.open').forEach(d => d.classList.remove('open'));
+    }
+});
+
+async function applyPairs() {
+    const id       = document.getElementById('contractId').value.trim();
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo   = document.getElementById('dateTo').value;
+
+    // Collect pairs
+    const pairs = [];
+    const rows  = document.querySelectorAll('.pair-row');
+    for (const row of rows) {
+        const idx = row.id.replace('pair-', '');
+        const aId  = parseInt(document.getElementById(`fidA-${idx}`)?.value || '0');
+        const bId  = parseInt(document.getElementById(`fidB-${idx}`)?.value || '0');
+        const pct  = parseFloat(document.getElementById(`pct-${idx}`)?.value || '0');
+        if (!aId) { alert(`Pair ${parseInt(idx)+1}: select an A spot.`); return; }
+        if (!bId) { alert(`Pair ${parseInt(idx)+1}: select a B spot.`); return; }
+        pairs.push({ a_id: aId, b_id: bId, pct });
+    }
+
+    const total = pairs.reduce((s, p) => s + p.pct, 0);
+    if (Math.abs(total - 100) > 0.01) { alert('Percentages must sum to 100%.'); return; }
+
+    const breakCount = contractData?.break_count || 0;
+    if (!confirm(`Assign ${pairs.length} spot pair(s) across ${breakCount} break(s) for contract ${id}?`)) return;
+
+    const btn    = document.getElementById('applyBtn');
+    const status = document.getElementById('statusMsg');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Applying…';
+    status.className = 'status-msg';
+    status.textContent = '';
+
+    try {
+        const resp = await fetch(`/api/traffic/bookend-pairs/${id}/assign`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ date_from: dateFrom, date_to: dateTo, pairs }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || resp.statusText);
+        status.className = 'status-msg ok';
+        status.textContent = `Done — ${data.breaks_assigned} break(s), ${data.spots_updated} spot(s) assigned.`;
+    } catch (e) {
+        status.className = 'status-msg err';
+        status.textContent = e.message;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Apply';
+        updateTotal();
+    }
+}
+</script>
+
+</body>
+</html>
