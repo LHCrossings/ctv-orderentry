@@ -591,7 +591,21 @@
             <div class="contract-lines-summary" id="bannerLines"></div>
 
             <div class="rotation-section" id="rotationSection" style="display:none;">
-                <h3>Current Rotation</h3>
+                <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px;">
+                    <h3 style="margin:0;">Current Rotation</h3>
+                    <div style="display:flex; align-items:center; gap:6px; margin-left:auto;">
+                        <label class="field-label" style="white-space:nowrap;">From</label>
+                        <input type="text" id="rotDateFrom" class="field-input" placeholder="05/12/2026" maxlength="10"
+                               style="font-size:0.82rem; width:105px; padding:5px 8px;"
+                               onblur="formatDateInput(this)" onchange="reloadRotation()" />
+                        <label class="field-label" style="white-space:nowrap;">To</label>
+                        <input type="text" id="rotDateTo" class="field-input" placeholder="05/31/2026" maxlength="10"
+                               style="font-size:0.82rem; width:105px; padding:5px 8px;"
+                               onblur="formatDateInput(this)" onchange="reloadRotation()" />
+                        <button class="run-btn" style="height:30px; padding:0 12px; font-size:0.8rem;" onclick="reloadRotation()">Refresh</button>
+                        <button class="run-btn" style="height:30px; padding:0 10px; font-size:0.8rem; background:var(--text-muted);" onclick="clearRotationDates()">All</button>
+                    </div>
+                </div>
                 <div id="rotationRows"></div>
             </div>
         </div>
@@ -862,6 +876,25 @@
         if (document.getElementById('admerasiaIoFile')) document.getElementById('admerasiaIoFile').value = '';
         window.admerasiaIscis = null;
         window.admerasiaSpots = null;
+    }
+
+    async function reloadRotation() {
+        if (!selectedContractId) return;
+        const df = document.getElementById('rotDateFrom').value.trim();
+        const dt = document.getElementById('rotDateTo').value.trim();
+        const params = new URLSearchParams();
+        if (df) params.set('date_from', df);
+        if (dt) params.set('date_to', dt);
+        const resp = await fetch(`/api/traffic/contract/${selectedContractId}/assignment?${params}`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        renderRotation(data.rotation, data.total_spots);
+    }
+
+    function clearRotationDates() {
+        document.getElementById('rotDateFrom').value = '';
+        document.getElementById('rotDateTo').value = '';
+        reloadRotation();
     }
 
     function renderRotation(rotation, total) {

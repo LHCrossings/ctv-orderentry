@@ -2355,7 +2355,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             raise HTTPException(status_code=500, detail=str(exc))
 
     @router.get("/api/traffic/contract/{contract_id}/assignment")
-    async def traffic_contract_assignment(contract_id: int):
+    async def traffic_contract_assignment(
+        contract_id: int,
+        date_from: str = Query(""),
+        date_to: str = Query(""),
+    ):
         def _run():
             from browser_automation.etere_direct_client import connect as _db_connect
             with _db_connect() as conn:
@@ -2384,6 +2388,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 """ % contract_id)
                 lines = [dict(r) for r in cur.fetchall()]
 
+                date_clause = ""
+                if date_from and date_to:
+                    date_clause = f" AND tp.DATA BETWEEN '{date_from}' AND '{date_to}'"
+                elif date_from:
+                    date_clause = f" AND tp.DATA >= '{date_from}'"
+                elif date_to:
+                    date_clause = f" AND tp.DATA <= '{date_to}'"
+
                 cur.execute("""
                     SELECT f.ID_FILMATI AS filmati_id, f.COD_PROGRA AS code,
                            f.DESCRIZIO  AS title,      f.DURATA     AS durata,
@@ -2392,10 +2404,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     JOIN trafficPalinse tpa ON tpa.id_tpalinse       = tp.ID_TPALINSE
                     JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE  = tpa.id_contrattirighe
                     LEFT JOIN FILMATI f     ON f.ID_FILMATI = tp.ID_FILMATI
-                    WHERE cr.ID_CONTRATTITESTATA = %d
+                    WHERE cr.ID_CONTRATTITESTATA = %d%s
                     GROUP BY f.ID_FILMATI, f.COD_PROGRA, f.DESCRIZIO, f.DURATA
                     ORDER BY COUNT(*) DESC
-                """ % contract_id)
+                """ % (contract_id, date_clause))
                 rotation_rows = cur.fetchall()
                 total = sum(r["count"] for r in rotation_rows) if rotation_rows else 0
 
