@@ -349,6 +349,74 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             headers=headers,
         )
 
+    @router.get("/billing/compile-logs", response_class=HTMLResponse)
+    async def billing_compile_logs_page(request: Request):
+        return templates.TemplateResponse(request, "billing/compile_logs.html")
+
+    @router.post("/api/billing/compile-logs/aggregate")
+    async def billing_compile_logs_aggregate(
+        billing_book: UploadFile = File(...),
+        log_files: List[UploadFile] = File(...),
+    ):
+        import io as _io
+        import re as _re
+
+        import openpyxl
+
+        MARKET_ORDER = ["NYC","CMP","HOU","SFO","SEA","LAX","CVC","WDC","MMT","DAL"]
+
+        def _market_of(name: str) -> str:
+            m = _re.match(r"^([A-Z]+)\s", name)
+            return m.group(1) if m else name
+
+        def _run(book_bytes: bytes, logs: list[tuple[str, bytes]]) -> bytes:
+            # Sort logs by market order
+            logs.sort(key=lambda x: (
+                MARKET_ORDER.index(_market_of(x[0]))
+                if _market_of(x[0]) in MARKET_ORDER else 99
+            ))
+
+            wb = openpyxl.load_workbook(_io.BytesIO(book_bytes), keep_vba=True)
+            if "Master" not in wb.sheetnames:
+                raise ValueError("Billing book has no 'Master' tab")
+            master = wb["Master"]
+
+            for fname, log_bytes in logs:
+                log_wb = openpyxl.load_workbook(_io.BytesIO(log_bytes), data_only=True, keep_vba=False)
+                tab_name = "Master for Billing"
+                if tab_name not in log_wb.sheetnames:
+                    continue
+                log_ws = log_wb[tab_name]
+                for row in log_ws.iter_rows(min_row=2, values_only=True):
+                    if any(c is not None for c in row):
+                        master.append(list(row))
+                log_wb.close()
+
+            out = _io.BytesIO()
+            wb.save(out)
+            return out.getvalue()
+
+        book_bytes = await billing_book.read()
+        log_data = [(f.filename or f"log_{i}.xlsm", await f.read()) for i, f in enumerate(log_files)]
+
+        try:
+            result = await asyncio.get_running_loop().run_in_executor(
+                None, _run, book_bytes, log_data
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+        fname = (billing_book.filename or "billing_book.xlsm").replace(
+            ".xlsm", "_compiled.xlsm"
+        ).replace(".xlsx", "_compiled.xlsx")
+        return StreamingResponse(
+            _io.BytesIO(result),
+            media_type="application/vnd.ms-excel.sheet.macroEnabled.12",
+            headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+        )
+
     @router.get("/billing/monthly-logs", response_class=HTMLResponse)
     async def monthly_logs(request: Request):
         return templates.TemplateResponse(request, "billing/monthly_logs.html")

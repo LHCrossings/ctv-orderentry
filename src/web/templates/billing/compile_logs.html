@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Compile Weekly Logs — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 800px; }
+
+        .upload-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        @media (max-width: 600px) { .upload-grid { grid-template-columns: 1fr; } }
+
+        .upload-panel {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+        }
+        .panel-label {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 10px;
+        }
+
+        .drop-zone {
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 28px 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color .2s, background .2s;
+            background: var(--bg-secondary);
+            position: relative;
+            min-height: 120px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .drop-zone.drag-over { border-color: var(--nord10); background: rgba(94,129,172,.08); }
+        .drop-zone.has-files { border-color: var(--nord14); }
+        .drop-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+        .dz-icon { font-size: 1.6rem; margin-bottom: 6px; }
+        .dz-hint { font-size: 0.82rem; color: var(--text-muted); }
+        .dz-hint strong { color: var(--nord10); }
+        .dz-files { margin-top: 8px; font-size: 0.8rem; font-weight: 600; color: var(--nord14); }
+
+        .action-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+        .run-btn {
+            background: var(--nord10); color: var(--nord6);
+            border: none; border-radius: 8px;
+            padding: 10px 28px; font-size: 0.95rem; font-weight: 700;
+            cursor: pointer; font-family: inherit;
+        }
+        .run-btn:hover { background: var(--nord9); }
+        .run-btn:disabled { opacity: 0.5; cursor: default; }
+
+        .dl-btn {
+            background: var(--nord14); color: var(--nord6);
+            border: none; border-radius: 8px;
+            padding: 10px 22px; font-size: 0.9rem; font-weight: 700;
+            cursor: pointer; font-family: inherit; text-decoration: none;
+            display: inline-block;
+        }
+        .dl-btn:hover { background: #8fad7a; }
+
+        .status-msg { font-size: 0.85rem; color: var(--text-muted); }
+        .status-msg.ok  { color: var(--nord14); }
+        .status-msg.err { color: var(--nord11); }
+
+        .spinner {
+            display: inline-block; width: 16px; height: 16px;
+            border: 2px solid rgba(255,255,255,.3); border-top-color: #fff;
+            border-radius: 50%; animation: spin .7s linear infinite;
+            vertical-align: middle; margin-right: 6px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .log-list { margin-top: 10px; font-size: 0.78rem; color: var(--text-muted); line-height: 1.7; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/billing" class="back-link">&#8592;</a>
+            <div class="logo-icon">📊</div>
+            <div>
+                <h1>Compile <span>Weekly Logs</span></h1>
+                <div class="logo-sub">Control Room · Billing</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="portal-intro">
+        <h2>Compile Weekly Logs</h2>
+        <p>Drop the billing book and all 10 market log files. Each log's <strong>Master for Billing</strong> tab is appended (row 2 onward) into the billing book's <strong>Master</strong> tab, in market order.</p>
+    </div>
+
+    <div class="upload-grid">
+        <div class="upload-panel">
+            <div class="panel-label">Billing Book</div>
+            <div class="drop-zone" id="dzBook">
+                <input type="file" id="fileBook" accept=".xlsm,.xlsx" />
+                <div class="dz-icon">📒</div>
+                <div class="dz-hint"><strong>Click</strong> or drag &amp; drop</div>
+                <div class="dz-hint">Billing Book (.xlsm)</div>
+                <div class="dz-files" id="bookName"></div>
+            </div>
+        </div>
+
+        <div class="upload-panel">
+            <div class="panel-label">Market Log Files</div>
+            <div class="drop-zone" id="dzLogs">
+                <input type="file" id="fileLogs" accept=".xlsm,.xlsx" multiple />
+                <div class="dz-icon">📋</div>
+                <div class="dz-hint"><strong>Click</strong> or drag &amp; drop</div>
+                <div class="dz-hint">All 10 market logs</div>
+                <div class="dz-files" id="logsName"></div>
+            </div>
+            <div class="log-list" id="logList"></div>
+        </div>
+    </div>
+
+    <div class="action-row">
+        <button class="run-btn" id="runBtn" onclick="runAggregate()">Aggregate</button>
+        <a class="dl-btn" id="dlBtn" style="display:none;">Download</a>
+        <span class="status-msg" id="statusMsg"></span>
+    </div>
+</main>
+
+<script>
+    const MARKET_ORDER = ['NYC','CMP','HOU','SFO','SEA','LAX','CVC','WDC','MMT','DAL'];
+
+    function setupZone(zoneId, inputId, nameId, multi, onFiles) {
+        const zone  = document.getElementById(zoneId);
+        const input = document.getElementById(inputId);
+        const label = document.getElementById(nameId);
+
+        function applyFiles(files) {
+            input._files = files;
+            onFiles(files, label, zone);
+        }
+
+        input.addEventListener('change', () => applyFiles([...input.files]));
+        zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
+        zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+        zone.addEventListener('drop', e => {
+            e.preventDefault();
+            zone.classList.remove('drag-over');
+            const files = [...e.dataTransfer.files].filter(f => /\.xlsm?x?$/i.test(f.name));
+            if (!files.length) return;
+            applyFiles(multi ? files : [files[0]]);
+        });
+    }
+
+    setupZone('dzBook', 'fileBook', 'bookName', false, (files, label, zone) => {
+        label.textContent = files[0]?.name || '';
+        zone.classList.toggle('has-files', files.length > 0);
+    });
+
+    setupZone('dzLogs', 'fileLogs', 'logsName', true, (files, label, zone) => {
+        label.textContent = files.length ? `${files.length} file${files.length !== 1 ? 's' : ''} selected` : '';
+        zone.classList.toggle('has-files', files.length > 0);
+        // Show sorted list
+        const sorted = sortLogs(files);
+        document.getElementById('logList').innerHTML = sorted
+            .map(f => `<div>${marketOf(f.name)} — ${f.name}</div>`)
+            .join('');
+    });
+
+    function marketOf(name) {
+        const m = name.match(/^([A-Z]+)\s/);
+        return m ? m[1] : name;
+    }
+
+    function sortLogs(files) {
+        return [...files].sort((a, b) => {
+            const ai = MARKET_ORDER.indexOf(marketOf(a.name));
+            const bi = MARKET_ORDER.indexOf(marketOf(b.name));
+            return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+        });
+    }
+
+    async function runAggregate() {
+        const bookInput = document.getElementById('fileBook');
+        const logsInput = document.getElementById('fileLogs');
+        const bookFiles = bookInput._files || [...(bookInput.files || [])];
+        const logFiles  = logsInput._files || [...(logsInput.files  || [])];
+
+        const status = document.getElementById('statusMsg');
+        const dlBtn  = document.getElementById('dlBtn');
+        const btn    = document.getElementById('runBtn');
+
+        if (!bookFiles.length) { status.className = 'status-msg err'; status.textContent = 'Please drop the billing book.'; return; }
+        if (!logFiles.length)  { status.className = 'status-msg err'; status.textContent = 'Please drop the log files.'; return; }
+
+        dlBtn.style.display = 'none';
+        status.className = 'status-msg';
+        status.innerHTML = '<span class="spinner"></span>Aggregating…';
+        btn.disabled = true;
+
+        const fd = new FormData();
+        fd.append('billing_book', bookFiles[0]);
+        const sorted = sortLogs(logFiles);
+        sorted.forEach(f => fd.append('log_files', f));
+
+        try {
+            const resp = await fetch('/api/billing/compile-logs/aggregate', { method: 'POST', body: fd });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+                throw new Error(err.detail || 'Server error');
+            }
+            const blob = await resp.blob();
+            const url  = URL.createObjectURL(blob);
+            const fname = bookFiles[0].name.replace(/(\.\w+)$/, '_compiled$1');
+            dlBtn.href     = url;
+            dlBtn.download = fname;
+            dlBtn.style.display = 'inline-block';
+            status.className = 'status-msg ok';
+            status.textContent = `Done — ${sorted.length} logs aggregated.`;
+        } catch (e) {
+            status.className = 'status-msg err';
+            status.textContent = e.message;
+        } finally {
+            btn.disabled = false;
+        }
+    }
+</script>
+
+</body>
+</html>
