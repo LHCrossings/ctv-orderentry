@@ -52,7 +52,6 @@ Melissa Check:
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
-import calendar
 import math
 import os
 import re
@@ -67,8 +66,6 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from etere_client import EtereClient
-from src.domain.enums import BillingType
-
 from parsers.lexus_parser import (
     LexusLine,
     LexusParseResult,
@@ -77,8 +74,9 @@ from parsers.lexus_parser import (
     melissa_check,
     parse_lexus_file,
     parse_lexus_filename,
-    resolve_week_dates,
 )
+
+from src.domain.enums import BillingType
 
 # ───────────────────────────────────────────────────────────────────────────
 # CONSTANTS
@@ -198,7 +196,6 @@ def _build_etere_lines(
     """
     etere_lines: list[dict] = []
 
-    week_date_ranges = parse_result.lines[0].week_date_ranges if parse_result.lines else []
 
     for line in parse_result.lines:
         if not include_bns and line.is_bonus:
@@ -537,7 +534,6 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
     # ── Parse filename ───────────────────────────────────────────────────
     meta = parse_lexus_filename(file_path.name)
     order_flow = meta["order_type"]     # "new" or "revision"
-    is_revision = (order_flow == "revision")
     estimate = meta["estimate"]
     market = meta["market"]
 
@@ -644,7 +640,6 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
         qkey = _date_to_quarter(ln["start_date"])   # (quarter_code, quarter_label)
         quarter_buckets[qkey].append(ln)
 
-    tomorrow = date.today() + timedelta(days=1)
     contracts = []
 
     for qkey in sorted(quarter_buckets.keys()):
@@ -674,10 +669,10 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
                 )
 
         if start_day_issues:
-            print(f"\n  ⚠ START DATE WARNING(S) — cutoff trimming left these lines starting on an invalid day:")
+            print("\n  ⚠ START DATE WARNING(S) — cutoff trimming left these lines starting on an invalid day:")
             for msg in start_day_issues:
                 print(f"    • {msg}")
-            print(f"  Lines will be entered as-is — adjust day pattern to M-Su in Etere if needed.")
+            print("  Lines will be entered as-is — adjust day pattern to M-Su in Etere if needed.")
 
         flow_input = input("\n  New contract or add to existing? [N=new / A=add / S=skip]: ").strip().upper()
         if flow_input == 'S':
@@ -859,7 +854,7 @@ def process_lexus_order(driver, file_path: str, user_input: dict = None) -> bool
                     is_priority=is_priority,
                 )
                 if not success:
-                    print(f"    ✗ Failed")
+                    print("    ✗ Failed")
                     all_success = False
 
             print(f"\n[{quarter_label}] ✓ Contract {contract_number} — {len(etere_lines)} line(s) complete")

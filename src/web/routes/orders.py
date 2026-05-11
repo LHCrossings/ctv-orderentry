@@ -3149,6 +3149,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
             from browser_automation.etere_direct_client import (
                 ETERE_WEB_URL,
+            )
+            from browser_automation.etere_direct_client import (
                 connect as _db_connect,
             )
 
