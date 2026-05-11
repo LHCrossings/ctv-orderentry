@@ -3074,14 +3074,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 tp_id,
                             ),
                         )
-                    # Only update PERCROTATION for lines that actually received
-                    # spots in this period. Leaving other lines at PERCROTATION=0
-                    # is intentional — a later period call will set them, and
-                    # TPALINSE.ID_FILMATI is the scheduling truth anyway.
-                    # Do NOT delete PERCROTATION=0 rows here: MaterialAddToAssetListC
-                    # adds the filmati to all lines once and is idempotent-guarded by
-                    # existing_pool. Deleting those rows would leave later periods
-                    # with no pool entry to update.
+                    # Upsert CONTRATTIFILMATI for every line that received spots.
+                    # UPDATE first; INSERT if the row is missing (happens when a prior
+                    # period's MaterialAddToAssetListC ran and existing_pool already
+                    # contained this filmati, so the HTTP call was skipped and the new
+                    # line never got a pool row added).
                     for line_id in line_tp_map.keys():
                         asgn = asgn_map.get(line_id)
                         if not asgn:
@@ -3098,6 +3095,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 " WHERE ID_CONTRATTIRIGHE = %d AND ID_FILMATI = %d",
                                 (perc, line_id, fid),
                             )
+                            if cur.rowcount == 0:
+                                cur.execute(
+                                    "INSERT INTO CONTRATTIFILMATI"
+                                    " (ID_CONTRATTIRIGHE, ID_FILMATI, PERCROTATION)"
+                                    " VALUES (%d, %d, %d)",
+                                    (line_id, fid, perc),
+                                )
                     conn.commit()
 
             return {"ok": True, "lines_updated": lines_updated, "spots_updated": spots_updated}
