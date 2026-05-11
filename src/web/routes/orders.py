@@ -1922,7 +1922,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 log_path = await asyncio.get_running_loop().run_in_executor(None, _find_log, mkt, monday)
                 if log_path is None:
                     fname = f"{mkt} Log - {monday.strftime('%y%m%d')}.xlsm"
-                    folder = f"/mnt/k/Traffic/logs/{monday.year}/{monday.strftime('%m %B %Y')}"
+                    folder = f"K:\\Traffic\\logs\\{monday.year}\\{monday.strftime('%m %B %Y')}"
                     yield f"data: {_json.dumps({'type': 'market', 'market': mkt, 'status': 'missing', 'file': fname, 'msg': folder})}\n\n"
                     continue
 
