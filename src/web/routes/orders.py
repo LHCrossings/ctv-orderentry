@@ -1889,6 +1889,20 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def compile_logs_page(request: Request):
         return templates.TemplateResponse(request, "master_control/compile_logs.html")
 
+    @router.get("/api/master-control/compile-logs/ls")
+    async def compile_logs_ls(date: str = Query(...)):
+        def _run():
+            target = _date_cls.fromisoformat(date)
+            monday = target - timedelta(days=target.weekday())
+            month_folder = monday.strftime("%m %B %Y")
+            folder = Path("/mnt/k/Traffic/logs") / str(monday.year) / month_folder
+            if not folder.exists():
+                return {"error": f"Folder not found: {folder}", "monday": monday.isoformat()}
+            files = sorted(f.name for f in folder.iterdir() if f.suffix in (".xlsm", ".xlsx", ".xls"))
+            return {"folder": str(folder), "monday": monday.isoformat(), "files": files}
+        result = await asyncio.get_running_loop().run_in_executor(None, _run)
+        return JSONResponse(result)
+
     @router.get("/api/master-control/compile-logs/run")
     async def compile_logs_run(date: str = Query(...)):
         import json as _json
