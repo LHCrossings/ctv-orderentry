@@ -638,7 +638,13 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
         except ValueError:
             pass
     else:
-        print("  ⚠ Couldn't parse date — no cutoff applied")
+        # Try bare m/d — attach year from suggested date
+        try:
+            parsed = datetime.strptime(cutoff_str, "%m/%d")
+            cutoff_date = parsed.replace(year=_tmr.year).date()
+            print(f"  ✓ First entry date: {cutoff_date}")
+        except ValueError:
+            print("  ⚠ Couldn't parse date — no cutoff applied")
 
     # ── Build all Etere lines ────────────────────────────────────────────
     all_etere_lines = _build_etere_lines(parse_result=result, include_bns=True, cutoff_date=cutoff_date)
