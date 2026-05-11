@@ -208,7 +208,24 @@
         .db-fetch-row {
             display: flex; gap: 12px; align-items: flex-end;
         }
-        .db-fetch-row .form-group { flex: 0 0 180px; }
+        .db-fetch-row .form-group { flex: 1; max-width: 400px; }
+        .db-search-wrap { position: relative; }
+        .db-search-wrap input { width: 100%; box-sizing: border-box; }
+        .db-contract-dropdown {
+            position: absolute; top: calc(100% + 3px); left: 0; right: 0;
+            background: var(--nord6); border: 1px solid var(--border-color);
+            border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.12);
+            z-index: 200; max-height: 260px; overflow-y: auto; display: none;
+        }
+        .db-contract-dropdown.open { display: block; }
+        .dc-item {
+            padding: 9px 12px; cursor: pointer; border-bottom: 1px solid var(--border-color);
+            font-size: 0.85rem;
+        }
+        .dc-item:last-child { border-bottom: none; }
+        .dc-item:hover { background: var(--bg-secondary); }
+        .dc-code { font-weight: 700; color: var(--nord10); font-family: monospace; }
+        .dc-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 1px; }
         /* ── Mode picker ── */
         .mode-picker {
             display: grid;
@@ -312,12 +329,12 @@
     <div class="bw-card" id="upload-card">
         <h2>Step 1 — Get Placement Data</h2>
         <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center;">
-            <button type="button" class="src-tab active" id="src-tab-upload" onclick="setSrcMode('upload')">Upload CSV</button>
-            <button type="button" class="src-tab" id="src-tab-db" onclick="setSrcMode('db')">Fetch from DB</button>
+            <button type="button" class="src-tab" id="src-tab-upload" onclick="setSrcMode('upload')">Upload CSV</button>
+            <button type="button" class="src-tab active" id="src-tab-db" onclick="setSrcMode('db')">Fetch from DB</button>
             <button type="button" class="btn-reset" onclick="resetForm()">↺ Reset Form</button>
         </div>
         <!-- Upload mode -->
-        <div id="src-upload-section">
+        <div id="src-upload-section" style="display:none">
             <div class="upload-zone" id="upload-zone">
                 <input type="file" id="csv-input" accept=".csv" />
                 <div class="upload-icon">📂</div>
@@ -327,11 +344,14 @@
             </div>
         </div>
         <!-- DB fetch mode -->
-        <div id="src-db-section" style="display:none">
+        <div id="src-db-section">
             <div class="db-fetch-row">
                 <div class="form-group">
-                    <label for="db-contract-id">Contract Number</label>
-                    <input type="text" id="db-contract-id" placeholder="e.g. 2553" />
+                    <label for="db-contract-search">Contract</label>
+                    <div class="db-search-wrap">
+                        <input type="text" id="db-contract-search" placeholder="Search by code or name…" autocomplete="off" />
+                        <div id="db-contract-dropdown" class="db-contract-dropdown"></div>
+                    </div>
                 </div>
                 <button type="button" class="btn-generate" id="db-fetch-btn" onclick="fetchFromDB()" style="margin-top:0">
                     &#8595; Fetch
@@ -1098,7 +1118,8 @@ function resetForm() {
     uploadStatus.textContent   = '';
     formStatus.textContent     = '';
 
-    document.getElementById('db-contract-id').value = '';
+    document.getElementById('db-contract-search').value = '';
+    window._dbSelectedContractId = null;
 
     previewCard.style.display = 'none';
     formCard.style.display    = 'none';
@@ -1113,8 +1134,62 @@ function resetForm() {
 
     bwForm.reset();
     document.getElementById('order_date').value = todayMDY();
-    setSrcMode('upload');
+    setSrcMode('db');
 }
+
+// ── DB contract super-search ─────────────────────────────────────────────────
+
+window._dbSelectedContractId = null;
+
+(function () {
+    const inp  = document.getElementById('db-contract-search');
+    const drop = document.getElementById('db-contract-dropdown');
+    let timer  = null;
+
+    inp.addEventListener('input', () => {
+        clearTimeout(timer);
+        window._dbSelectedContractId = null;
+        timer = setTimeout(doSearch, 300);
+    });
+
+    inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { clearTimeout(timer); doSearch(); }
+        if (e.key === 'Escape') { drop.classList.remove('open'); }
+    });
+
+    document.addEventListener('click', e => {
+        if (!e.target.closest('#db-contract-search') && !e.target.closest('#db-contract-dropdown'))
+            drop.classList.remove('open');
+    });
+
+    async function doSearch() {
+        const q = inp.value.trim();
+        if (!q) { drop.classList.remove('open'); return; }
+        try {
+            const resp = await fetch(`/api/traffic/contract-search?q=${encodeURIComponent(q)}`);
+            const results = await resp.json();
+            if (!results.length) {
+                drop.innerHTML = '<div style="padding:10px 12px;font-size:0.82rem;color:var(--text-muted);">No contracts found</div>';
+            } else {
+                drop.innerHTML = results.map(r => `
+                    <div class="dc-item" data-id="${r.id}" data-code="${r.code || ''}">
+                        <div class="dc-code">${r.code || r.id}</div>
+                        <div class="dc-desc">${r.description || ''} &nbsp;·&nbsp; ${r.date_start || ''} – ${r.date_end || ''}</div>
+                    </div>`).join('');
+            }
+            drop.classList.add('open');
+        } catch {}
+    }
+
+    drop.addEventListener('click', e => {
+        const item = e.target.closest('.dc-item[data-id]');
+        if (!item) return;
+        window._dbSelectedContractId = parseInt(item.dataset.id);
+        inp.value = item.dataset.code || item.dataset.id;
+        drop.classList.remove('open');
+        fetchFromDB();
+    });
+})();
 
 function setSrcMode(mode) {
     document.getElementById('src-tab-upload').classList.toggle('active', mode === 'upload');
@@ -1124,9 +1199,9 @@ function setSrcMode(mode) {
 }
 
 async function fetchFromDB() {
-    const contractId = document.getElementById('db-contract-id').value.trim();
+    const contractId = window._dbSelectedContractId;
     if (!contractId) {
-        showStatus(uploadStatus, 'Enter a contract number.', 'error');
+        showStatus(uploadStatus, 'Select a contract from the search results.', 'error');
         return;
     }
     const btn = document.getElementById('db-fetch-btn');
