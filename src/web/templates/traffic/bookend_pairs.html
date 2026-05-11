@@ -311,7 +311,7 @@
             </div>
             <div class="banner-stat">
                 <div class="banner-count" id="bannerBreaks">—</div>
-                <div class="banner-label" id="bannerBreaksLabel">Breaks (pairs)</div>
+                <div class="banner-label" id="bannerBreaksLabel">Bookends</div>
             </div>
             <div id="oddWarning"></div>
         </div>
@@ -413,7 +413,7 @@ async function loadContract() {
         document.getElementById('bannerDesc').textContent   = contractData.header.description || '';
         document.getElementById('bannerBreaks').textContent = contractData.break_count;
         document.getElementById('bannerBreaksLabel').textContent =
-            `Breaks × 2 = ${contractData.total_spots} spots`;
+            `Bookends × 2 = ${contractData.total_spots} spots`;
 
         const warn = document.getElementById('oddWarning');
         warn.innerHTML = contractData.odd_warning
@@ -587,8 +587,8 @@ async function applyPairs() {
     const total = pairs.reduce((s, p) => s + p.pct, 0);
     if (Math.abs(total - 100) > 0.01) { alert('Percentages must sum to 100%.'); return; }
 
-    const breakCount = contractData?.break_count || 0;
-    if (!confirm(`Assign ${pairs.length} spot pair(s) across ${breakCount} break(s) for contract ${id}?`)) return;
+    const bookendCount = contractData?.break_count || 0;
+    if (!confirm(`Assign ${pairs.length} rotation pair(s) across ${bookendCount} bookend(s) for contract ${id}?`)) return;
 
     const btn    = document.getElementById('applyBtn');
     const status = document.getElementById('statusMsg');
@@ -606,7 +606,7 @@ async function applyPairs() {
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.detail || resp.statusText);
         status.className = 'status-msg ok';
-        status.textContent = `Done — ${data.breaks_assigned} break(s), ${data.spots_updated} spot(s) assigned.`;
+        status.textContent = `Done — ${data.breaks_assigned} bookend(s), ${data.spots_updated} spot(s) assigned.`;
     } catch (e) {
         status.className = 'status-msg err';
         status.textContent = e.message;
