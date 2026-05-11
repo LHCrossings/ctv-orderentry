@@ -164,7 +164,13 @@ def _date_to_broadcast_ym(d: date) -> tuple[int, int]:
 def _date_to_quarter(d: date) -> tuple[str, str]:
     """Return (quarter_code, quarter_label) for a given date using broadcast month.
     e.g. 2026-09-28 (broadcast October) → ("2610", "26Q4")
+
+    Lexus exception: all of calendar December stays on Q4, even the last week
+    that broadcast-month rules would push into Q1 of the next year.
     """
+    if d.month == 12:
+        yr2 = str(d.year)[2:]
+        return f"{yr2}10", f"{yr2}Q4"
     bm_year, bm_month = _date_to_broadcast_ym(d)
     yr2 = str(bm_year)[2:]
     if bm_month <= 3:
