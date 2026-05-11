@@ -379,7 +379,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             wb = openpyxl.load_workbook(_io.BytesIO(book_bytes), keep_vba=True)
             master_name = next((s for s in wb.sheetnames if s.upper() == "MASTER"), None)
             if master_name is None:
-                raise ValueError("Billing book has no 'Master' tab")
+                raise ValueError(f"No 'MASTER' tab found. Tabs: {wb.sheetnames}")
             master = wb[master_name]
 
             for fname, log_bytes in logs:
