@@ -136,16 +136,42 @@ def _broadcast_month_to_quarter(broadcast_month: str) -> tuple[str, str]:
 # HELPERS
 # ───────────────────────────────────────────────────────────────────────────
 
-def _date_to_quarter(d: date) -> tuple[str, str]:
-    """Return (quarter_code, quarter_label) for a given date.
-    e.g. 2026-03-16 → ("2601", "26Q1")
+def _broadcast_month_start(year: int, month: int) -> date:
+    """Monday of the week containing the 1st of (year, month)."""
+    first = date(year, month, 1)
+    return first - timedelta(days=first.weekday())
+
+
+def _date_to_broadcast_ym(d: date) -> tuple[int, int]:
+    """Return (broadcast_year, broadcast_month) for a calendar date.
+
+    A broadcast month starts on the Monday of the week containing the 1st
+    of that calendar month.  Dates on or after the *next* month's broadcast
+    start belong to the next broadcast month.
     """
-    yr2 = str(d.year)[2:]
-    if d.month <= 3:
+    year, month = d.year, d.month
+    next_year  = year + 1 if month == 12 else year
+    next_month = 1        if month == 12 else month + 1
+    if d >= _broadcast_month_start(next_year, next_month):
+        return next_year, next_month
+    if d < _broadcast_month_start(year, month):
+        prev_year  = year - 1 if month == 1 else year
+        prev_month = 12       if month == 1 else month - 1
+        return prev_year, prev_month
+    return year, month
+
+
+def _date_to_quarter(d: date) -> tuple[str, str]:
+    """Return (quarter_code, quarter_label) for a given date using broadcast month.
+    e.g. 2026-09-28 (broadcast October) → ("2610", "26Q4")
+    """
+    bm_year, bm_month = _date_to_broadcast_ym(d)
+    yr2 = str(bm_year)[2:]
+    if bm_month <= 3:
         return f"{yr2}01", f"{yr2}Q1"
-    elif d.month <= 6:
+    elif bm_month <= 6:
         return f"{yr2}04", f"{yr2}Q2"
-    elif d.month <= 9:
+    elif bm_month <= 9:
         return f"{yr2}07", f"{yr2}Q3"
     else:
         return f"{yr2}10", f"{yr2}Q4"
