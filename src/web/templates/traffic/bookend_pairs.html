@@ -311,7 +311,7 @@
             </div>
             <div class="banner-stat">
                 <div class="banner-count" id="bannerBreaks">—</div>
-                <div class="banner-label">Breaks</div>
+                <div class="banner-label" id="bannerBreaksLabel">Breaks (pairs)</div>
             </div>
             <div id="oddWarning"></div>
         </div>
@@ -412,6 +412,8 @@ async function loadContract() {
         document.getElementById('bannerCode').textContent   = contractData.header.code;
         document.getElementById('bannerDesc').textContent   = contractData.header.description || '';
         document.getElementById('bannerBreaks').textContent = contractData.break_count;
+        document.getElementById('bannerBreaksLabel').textContent =
+            `Breaks × 2 = ${contractData.total_spots} spots`;
 
         const warn = document.getElementById('oddWarning');
         warn.innerHTML = contractData.odd_warning
@@ -441,6 +443,8 @@ async function refreshBreakCount() {
     if (!resp.ok) return;
     const data = await resp.json();
     document.getElementById('bannerBreaks').textContent = data.break_count;
+    document.getElementById('bannerBreaksLabel').textContent =
+        `Breaks × 2 = ${data.total_spots} spots`;
     contractData = data;
     document.getElementById('oddWarning').innerHTML = data.odd_warning
         ? '<span class="warn-badge">Odd spot count — check schedule</span>' : '';
