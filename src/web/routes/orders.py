@@ -3074,30 +3074,30 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 tp_id,
                             ),
                         )
-                    for asgn in assignments:
-                        line_id     = asgn["line_id"]
-                        filmati_ids = asgn.get("filmati_ids", [])
-                        if not filmati_ids:
+                    # Only update PERCROTATION for lines that actually received
+                    # spots in this period. Leaving other lines at PERCROTATION=0
+                    # is intentional — a later period call will set them, and
+                    # TPALINSE.ID_FILMATI is the scheduling truth anyway.
+                    # Do NOT delete PERCROTATION=0 rows here: MaterialAddToAssetListC
+                    # adds the filmati to all lines once and is idempotent-guarded by
+                    # existing_pool. Deleting those rows would leave later periods
+                    # with no pool entry to update.
+                    for line_id in line_tp_map.keys():
+                        asgn = asgn_map.get(line_id)
+                        if not asgn:
                             continue
-                        n    = len(filmati_ids)
+                        filmati_ids_line = asgn.get("filmati_ids", [])
+                        if not filmati_ids_line:
+                            continue
+                        n     = len(filmati_ids_line)
                         percs = [100 // n] * n
                         percs[0] += 100 - sum(percs)
-                        for fid, perc in zip(filmati_ids, percs):
+                        for fid, perc in zip(filmati_ids_line, percs):
                             cur.execute(
                                 "UPDATE CONTRATTIFILMATI SET PERCROTATION = %d"
                                 " WHERE ID_CONTRATTIRIGHE = %d AND ID_FILMATI = %d",
                                 (perc, line_id, fid),
                             )
-                    # Clean up PERCROTATION=0 pool rows added to unselected lines
-                    cur.execute(
-                        f"DELETE FROM CONTRATTIFILMATI"
-                        f" WHERE ID_FILMATI IN ({placeholders})"
-                        f" AND PERCROTATION = 0"
-                        f" AND ID_CONTRATTIRIGHE IN ("
-                        f"   SELECT ID_CONTRATTIRIGHE FROM CONTRATTIRIGHE"
-                        f"   WHERE ID_CONTRATTITESTATA = {contract_id}"
-                        f" )"
-                    )
                     conn.commit()
 
             return {"ok": True, "lines_updated": lines_updated, "spots_updated": spots_updated}
