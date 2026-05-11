@@ -4081,12 +4081,12 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     SELECT cr.ID_CONTRATTIRIGHE                         AS id,
                            cr.DESCRIZIONE                               AS description,
                            CONVERT(VARCHAR(10), cr.DATA_INIZIO,  101)  AS dt_start,
-                           CONVERT(VARCHAR(10), cr.DATA_TERMINE, 101)  AS dt_end,
+                           CONVERT(VARCHAR(10), cr.DATA_FINE,    101)  AS dt_end,
                            cr.DURATA                                    AS duration_frames,
-                           cr.PRENOTAZIONE                             AS prenotazione,
-                           cr.CONTROLLACAPOFILA                        AS capofila,
-                           cr.CONTROLLAFINEFILA                        AS finefila,
-                           COUNT(tp.ID_TPALINSE)                       AS spot_count
+                           cr.PRENOTAZIONE                              AS prenotazione,
+                           cr.CONTROLLACAPOFILA                         AS capofila,
+                           cr.CONTROLLAFINEFILA                         AS finefila,
+                           COUNT(tp.ID_TPALINSE)                        AS spot_count
                     FROM CONTRATTIRIGHE cr
                     LEFT JOIN trafficPalinse tpa
                            ON tpa.id_contrattirighe = cr.ID_CONTRATTIRIGHE
@@ -4094,7 +4094,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                            ON tp.ID_TPALINSE = tpa.id_tpalinse
                     WHERE cr.ID_CONTRATTITESTATA = %d
                     GROUP BY cr.ID_CONTRATTIRIGHE, cr.DESCRIZIONE,
-                             cr.DATA_INIZIO, cr.DATA_TERMINE, cr.DURATA,
+                             cr.DATA_INIZIO, cr.DATA_FINE, cr.DURATA,
                              cr.PRENOTAZIONE, cr.CONTROLLACAPOFILA, cr.CONTROLLAFINEFILA
                     ORDER BY cr.ID_CONTRATTIRIGHE
                 """ % contract_id)
