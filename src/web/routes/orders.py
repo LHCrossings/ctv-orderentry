@@ -2388,13 +2388,26 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 """ % contract_id)
                 lines = [dict(r) for r in cur.fetchall()]
 
+                def _parse_date(s):
+                    if not s:
+                        return None
+                    from datetime import datetime
+                    for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%m/%d/%y"):
+                        try:
+                            return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
+                        except ValueError:
+                            pass
+                    return None
+
+                df = _parse_date(date_from)
+                dt = _parse_date(date_to)
                 date_clause = ""
-                if date_from and date_to:
-                    date_clause = f" AND tp.DATA BETWEEN '{date_from}' AND '{date_to}'"
-                elif date_from:
-                    date_clause = f" AND tp.DATA >= '{date_from}'"
-                elif date_to:
-                    date_clause = f" AND tp.DATA <= '{date_to}'"
+                if df and dt:
+                    date_clause = f" AND tp.DATA BETWEEN '{df}' AND '{dt}'"
+                elif df:
+                    date_clause = f" AND tp.DATA >= '{df}'"
+                elif dt:
+                    date_clause = f" AND tp.DATA <= '{dt}'"
 
                 cur.execute("""
                     SELECT f.ID_FILMATI AS filmati_id, f.COD_PROGRA AS code,
