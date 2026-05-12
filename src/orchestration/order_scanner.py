@@ -92,18 +92,16 @@ class OrderScanner:
             print(f"[SCAN] Directory does not exist: {self._incoming_dir.resolve()}")
             return []
 
-        all_files = [f for f in self._incoming_dir.iterdir() if f.is_file()]
-        if all_files:
-            print(f"[SCAN] Files found: {[f.name for f in all_files]}")
+        # Use iterdir() instead of glob() — glob() silently fails on Windows
+        # for filenames containing special characters like &.
+        _all = [f for f in self._incoming_dir.iterdir() if f.is_file()]
+        if _all:
+            print(f"[SCAN] Files found: {[f.name for f in _all]}")
         else:
             print("[SCAN] Directory is empty")
 
         orders = []
 
-        # Find all order files (PDF and AAAA SpotTV XML)
-        # Use iterdir() instead of glob() — glob() silently fails on Windows
-        # paths containing special characters like & in filenames.
-        _all = [f for f in self._incoming_dir.iterdir() if f.is_file()]
         pdf_files = sorted(f for f in _all if f.suffix.lower() == ".pdf")
         xml_files = sorted(f for f in _all if f.suffix.lower() == ".xml")
 
@@ -212,28 +210,21 @@ class OrderScanner:
         # Deduplicate via set — case-insensitive filesystems (WSL2/NTFS) return
         # the same file for both *.xlsx and *.XLSX globs.
         # Skip ~$ Excel temp/lock files.
-        print(f"[SCAN] _all suffixes: {[(f.name, repr(f.suffix)) for f in _all]}")
-        print(f"[SCAN] pdf_files: {[f.name for f in pdf_files]}")
         _img_exts = {".jpg", ".jpeg", ".png", ".xlsx", ".xlsm"}
         image_xlsx_files = sorted(
             f for f in _all
             if f.suffix.lower() in _img_exts and not f.name.startswith("~$")
         )
-        print(f"[SCAN] image_xlsx_files: {[f.name for f in image_xlsx_files]}")
 
         for file_path in image_xlsx_files:
-            print("[SCAN] loop entered")
             try:
                 order_type = detect_from_filename(file_path.name)
-                print(f"[SCAN] filename detect: {order_type}")
 
                 # For XLSX/XLSM files not identified by filename, peek inside for agency markers
                 if order_type == OrderType.UNKNOWN and file_path.suffix.lower() in {".xlsx", ".xlsm"}:
                     order_type = _detect_xlsx_content(file_path)
-                    print(f"[SCAN] content detect: {order_type}")
 
                 if order_type == OrderType.UNKNOWN:
-                    print("[SCAN] Skipping (unknown type)")
                     continue
 
                 # Extract customer name hint
@@ -255,13 +246,10 @@ class OrderScanner:
                     estimate_number=None,
                 )
                 orders.append(order)
-                print(f"[SCAN] appended order, total: {len(orders)}")
 
             except Exception as e:
-                print(f"Warning: Failed to process: {e}")
+                print(f"Warning: Failed to process {file_path.name}: {e}")
                 continue
-
-        print(f"[SCAN] returning list_id={id(orders)}, len={len(orders)}, scanner={id(self)}")
 
         return orders
 

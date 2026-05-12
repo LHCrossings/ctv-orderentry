@@ -112,7 +112,6 @@ Modes:
     )
 
     args = parser.parse_args()
-    print(f"[ARGS] {args}")
 
     try:
         # Create configuration
