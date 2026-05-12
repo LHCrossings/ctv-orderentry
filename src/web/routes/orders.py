@@ -4206,6 +4206,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     "duration_sec": _frames_to_sec(durata),
                     "spots_pw":     spots_pw or 0,
                     "max_daily":    max_daily or 0,
+                    "max_weekly":   spots_pw or 0,
                 })
             return JSONResponse({"contract_id": contract_id, "lines": lines})
 
