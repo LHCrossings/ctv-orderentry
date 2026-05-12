@@ -26,8 +26,8 @@ Line Description Format:
     "(Line N) {days} {time} Chinese"        for paid lines
     "(Line N) {days} {time} Chinese BNS"    for bonus lines
 
-Contract Code:    "{client_code} {product_code} {estimate}"  e.g. "CSL LSSC 0028"
-Description:      "Intertrend {client} {estimate}"
+Contract Code:    "Intertrend CALLOT {estimate}"  e.g. "Intertrend CALLOT 28"  (no leading zeros)
+Description:      "CA State Lottery Est {estimate} - {product}"  e.g. "CA State Lottery Est 28 - Late Spring Scratchers"
 
 ═══════════════════════════════════════════════════════════════════════════════
 """
@@ -124,8 +124,9 @@ def gather_intertrend_inputs(pdf_path: str) -> dict:
     customer_id = int(raw) if raw else _CUSTOMER_ID
 
     # ─── Contract code / description ─────────────────────────────────────────
-    default_code = f'{order.client_code} {order.product_code} {order.estimate}'
-    default_desc = f'Intertrend {order.client} {order.estimate}'
+    est_num = str(int(order.estimate)) if order.estimate.isdigit() else order.estimate
+    default_code = f'Intertrend CALLOT {est_num}'
+    default_desc = f'CA State Lottery Est {est_num} - {order.product}'
 
     print(f'\n[CONTRACT] Code [{default_code}]: ', end='')
     raw = input().strip()
@@ -136,7 +137,7 @@ def gather_intertrend_inputs(pdf_path: str) -> dict:
     contract_description = raw if raw else default_desc
 
     # ─── Order ref / notes ───────────────────────────────────────────────────
-    default_ref = f'Order {order.order_number}, Est {order.estimate}'
+    default_ref = f'Order {order.order_number}, Est {est_num}'
     print(f'[REF] Customer order ref [{default_ref}]: ', end='')
     raw = input().strip()
     customer_order_ref = raw if raw else default_ref
