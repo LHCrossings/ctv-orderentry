@@ -250,7 +250,7 @@ function parsePaste() {
             newCode = parenMatch[2].trim();
         } else {
             title   = rest;
-            newCode = null;
+            newCode = code;  // no ISCI — spot code = the asset name (part before colon)
         }
 
         if (code && title) pairs.push({ code, title, new_code: newCode });
@@ -306,9 +306,10 @@ function renderPreview(results) {
                 <td colspan="3"><span class="not-found-badge">Not found in media library</span></td>
             `;
         } else {
-            const codeCell = r.new_code
+            const codeChanging = r.new_code && r.new_code !== r.code;
+            const codeCell = codeChanging
                 ? `<span class="code-cell">${escHtml(r.code)}</span><span class="arrow">→</span><span class="new-code code-cell">${escHtml(r.new_code)}</span>`
-                : `<span class="code-cell" style="color:var(--text-muted)">${escHtml(r.code)} <span style="font-size:0.72rem">(unchanged)</span></span>`;
+                : `<span class="code-cell">${escHtml(r.new_code || r.code)}</span>`;
             tr.innerHTML = `
                 <td class="code-cell">${escHtml(r.code)}</td>
                 <td>${codeCell}</td>
