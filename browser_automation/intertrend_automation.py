@@ -145,18 +145,6 @@ def gather_intertrend_inputs(pdf_path: str) -> dict:
     print(f'[NOTES] Notes (optional): ', end='')
     notes = input().strip()
 
-    # ─── Separation confirm ──────────────────────────────────────────────────
-    cust_sep, evt_sep, ord_sep = _SEPARATION
-    print(f'\n[SEP] Separation: customer={cust_sep}m, event={evt_sep}m, order={ord_sep}m')
-    print(f'Override? (Enter to keep, or "c,e,o"): ', end='')
-    raw = input().strip()
-    if raw:
-        parts = [p.strip() for p in raw.split(',')]
-        separation = (int(parts[0]), int(parts[1]) if len(parts) > 1 else 0,
-                      int(parts[2]) if len(parts) > 2 else 0)
-    else:
-        separation = _SEPARATION
-
     print('\n' + '=' * 70)
     print('READY TO ENTER:')
     print(f'  Code:    {contract_code}')
@@ -181,7 +169,7 @@ def gather_intertrend_inputs(pdf_path: str) -> dict:
         'customer_order_ref': customer_order_ref,
         'notes': notes,
         'billing': _BILLING,
-        'separation': separation,
+        'separation': _SEPARATION,
     }
 
 
