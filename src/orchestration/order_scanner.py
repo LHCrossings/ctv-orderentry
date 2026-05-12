@@ -222,15 +222,18 @@ class OrderScanner:
         print(f"[SCAN] image_xlsx_files: {[f.name for f in image_xlsx_files]}")
 
         for file_path in image_xlsx_files:
+            print("[SCAN] loop entered")
             try:
                 order_type = detect_from_filename(file_path.name)
+                print(f"[SCAN] filename detect: {order_type}")
 
                 # For XLSX/XLSM files not identified by filename, peek inside for agency markers
                 if order_type == OrderType.UNKNOWN and file_path.suffix.lower() in {".xlsx", ".xlsm"}:
                     order_type = _detect_xlsx_content(file_path)
+                    print(f"[SCAN] content detect: {order_type}")
 
                 if order_type == OrderType.UNKNOWN:
-                    print(f"[SCAN] Skipping (unknown type): {file_path.name}")
+                    print("[SCAN] Skipping (unknown type)")
                     continue
 
                 # Extract customer name hint
@@ -252,10 +255,13 @@ class OrderScanner:
                     estimate_number=None,
                 )
                 orders.append(order)
+                print(f"[SCAN] appended order, total: {len(orders)}")
 
             except Exception as e:
-                print(f"Warning: Failed to process {file_path.name}: {e}")
+                print(f"Warning: Failed to process: {e}")
                 continue
+
+        print(f"[SCAN] returning {len(orders)} order(s)")
 
         return orders
 
