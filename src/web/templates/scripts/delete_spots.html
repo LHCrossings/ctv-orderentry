@@ -153,6 +153,19 @@
         }
 
         @keyframes blink { 50% { opacity: 0; } }
+
+        .search-wrap { position: relative; flex: 1; max-width: 340px; }
+        .search-dropdown {
+            position: absolute; top: 100%; left: 0; z-index: 200;
+            background: var(--nord6); border: 1px solid var(--border-color);
+            border-radius: 8px; box-shadow: 0 4px 16px var(--shadow-color);
+            min-width: 360px; max-height: 280px; overflow-y: auto;
+        }
+        .dropdown-item { padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border-color); }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover { background: var(--bg-secondary); }
+        .dropdown-code { font-weight: 700; font-size: 0.88rem; color: var(--text-primary); }
+        .dropdown-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 1px; }
     </style>
 </head>
 <body>
@@ -177,9 +190,10 @@
         <p>Removes scheduled spots from Etere for all lines in a contract within the given date range. Preview first to confirm the count, then delete.</p>
 
         <div class="input-row">
-            <div class="field-group contract">
-                <label class="field-label" for="contractInput">Contract #</label>
-                <input id="contractInput" class="field-input" type="number" placeholder="e.g. 2551" min="1" />
+            <div class="field-group search-wrap">
+                <label class="field-label">Contract</label>
+                <input class="field-input" id="contractSearch" placeholder="Search by code, name, or ID…" autocomplete="off" />
+                <div id="contractDropdown" class="search-dropdown" style="display:none;"></div>
             </div>
             <div class="field-group date">
                 <label class="field-label" for="dateFrom">From Date</label>
@@ -200,6 +214,51 @@
 </main>
 
 <script>
+let selectedContractId = null;
+const contractSearchEl = document.getElementById('contractSearch');
+const contractDropdown = document.getElementById('contractDropdown');
+let _cTimer = null;
+
+contractSearchEl.addEventListener('input', () => {
+    selectedContractId = null;
+    if (!contractSearchEl.value.trim()) { contractDropdown.style.display = 'none'; return; }
+    clearTimeout(_cTimer);
+    _cTimer = setTimeout(searchContracts, 350);
+});
+contractSearchEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { clearTimeout(_cTimer); searchContracts(); }
+});
+document.addEventListener('click', e => {
+    if (!e.target.closest('.search-wrap')) contractDropdown.style.display = 'none';
+});
+
+async function searchContracts() {
+    const q = contractSearchEl.value.trim();
+    if (!q) return;
+    const resp = await fetch(`/api/traffic/contract-search?q=${encodeURIComponent(q)}`);
+    const rows = await resp.json();
+    contractDropdown.innerHTML = rows.length
+        ? rows.map(r => `
+            <div class="dropdown-item" data-id="${r.id}" data-code="${escHtml(r.code||'')}">
+                <div class="dropdown-code">${escHtml(r.code)}</div>
+                <div class="dropdown-desc">${escHtml(r.description||'')} &nbsp;·&nbsp; ${r.date_start} – ${r.date_end}</div>
+            </div>`).join('')
+        : '<div class="dropdown-item"><span class="dropdown-desc">No contracts found.</span></div>';
+    contractDropdown.style.display = 'block';
+}
+
+contractDropdown.addEventListener('click', e => {
+    const item = e.target.closest('.dropdown-item[data-id]');
+    if (!item) return;
+    selectedContractId = parseInt(item.dataset.id);
+    contractSearchEl.value = item.dataset.code;
+    contractDropdown.style.display = 'none';
+});
+
+function escHtml(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
 function formatDate(el) {
     const d = el.value.replace(/\D/g, '');
     const yr = new Date().getFullYear();
@@ -215,18 +274,17 @@ function formatDate(el) {
 }
 
 function getInputs() {
-    const contractId = document.getElementById('contractInput').value.trim();
-    const dateFrom   = document.getElementById('dateFrom').value.trim();
-    const dateTo     = document.getElementById('dateTo').value.trim();
-    if (!contractId || isNaN(contractId) || parseInt(contractId) < 1) {
-        document.getElementById('contractInput').focus();
+    const dateFrom = document.getElementById('dateFrom').value.trim();
+    const dateTo   = document.getElementById('dateTo').value.trim();
+    if (!selectedContractId) {
+        contractSearchEl.focus();
         return null;
     }
     if (!dateFrom || !dateTo) {
         document.getElementById(dateFrom ? 'dateTo' : 'dateFrom').focus();
         return null;
     }
-    return { contractId, dateFrom, dateTo };
+    return { contractId: selectedContractId, dateFrom, dateTo };
 }
 
 function runScript(confirm) {

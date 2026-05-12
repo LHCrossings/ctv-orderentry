@@ -132,6 +132,19 @@
         }
 
         @keyframes blink { 50% { opacity: 0; } }
+
+        .search-wrap { position: relative; flex: 1; max-width: 380px; }
+        .search-dropdown {
+            position: absolute; top: 100%; left: 0; z-index: 200;
+            background: var(--nord6); border: 1px solid var(--border-color);
+            border-radius: 8px; box-shadow: 0 4px 16px var(--shadow-color);
+            min-width: 360px; max-height: 280px; overflow-y: auto;
+        }
+        .dropdown-item { padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border-color); }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover { background: var(--bg-secondary); }
+        .dropdown-code { font-weight: 700; font-size: 0.88rem; color: var(--text-primary); }
+        .dropdown-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 1px; }
     </style>
 </head>
 <body>
@@ -156,9 +169,10 @@
         <p>Clears and re-assigns programming blocks for every line in an Etere contract. Enter the contract number and click Run.</p>
 
         <div class="input-row">
-            <div class="field-group">
-                <label class="field-label" for="contractInput">Contract Number</label>
-                <input id="contractInput" class="field-input" type="number" placeholder="e.g. 2611" min="1" />
+            <div class="field-group search-wrap">
+                <label class="field-label">Contract</label>
+                <input class="field-input" id="contractSearch" placeholder="Search by code, name, or ID…" autocomplete="off" />
+                <div id="contractDropdown" class="search-dropdown" style="display:none;"></div>
             </div>
             <button id="runBtn" class="run-btn" onclick="runRefresh()">&#9654; Run</button>
         </div>
@@ -168,36 +182,72 @@
 </main>
 
 <script>
+let selectedContractId = null;
+const contractSearchEl = document.getElementById('contractSearch');
+const contractDropdown = document.getElementById('contractDropdown');
+let _cTimer = null;
+
+contractSearchEl.addEventListener('input', () => {
+    selectedContractId = null;
+    if (!contractSearchEl.value.trim()) { contractDropdown.style.display = 'none'; return; }
+    clearTimeout(_cTimer);
+    _cTimer = setTimeout(searchContracts, 350);
+});
+contractSearchEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { clearTimeout(_cTimer); searchContracts(); }
+});
+document.addEventListener('click', e => {
+    if (!e.target.closest('.search-wrap')) contractDropdown.style.display = 'none';
+});
+
+async function searchContracts() {
+    const q = contractSearchEl.value.trim();
+    if (!q) return;
+    const resp = await fetch(`/api/traffic/contract-search?q=${encodeURIComponent(q)}`);
+    const rows = await resp.json();
+    contractDropdown.innerHTML = rows.length
+        ? rows.map(r => `
+            <div class="dropdown-item" data-id="${r.id}" data-code="${escHtml(r.code||'')}">
+                <div class="dropdown-code">${escHtml(r.code)}</div>
+                <div class="dropdown-desc">${escHtml(r.description||'')} &nbsp;·&nbsp; ${r.date_start} – ${r.date_end}</div>
+            </div>`).join('')
+        : '<div class="dropdown-item"><span class="dropdown-desc">No contracts found.</span></div>';
+    contractDropdown.style.display = 'block';
+}
+
+contractDropdown.addEventListener('click', e => {
+    const item = e.target.closest('.dropdown-item[data-id]');
+    if (!item) return;
+    selectedContractId = parseInt(item.dataset.id);
+    contractSearchEl.value = item.dataset.code;
+    contractDropdown.style.display = 'none';
+});
+
+function escHtml(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
 function runRefresh() {
-    const input = document.getElementById('contractInput');
-    const contractId = input.value.trim();
-    if (!contractId || isNaN(contractId) || parseInt(contractId) < 1) {
-        input.focus();
-        return;
-    }
+    if (!selectedContractId) { contractSearchEl.focus(); return; }
 
     const terminal = document.getElementById('terminal');
-    const runBtn = document.getElementById('runBtn');
+    const runBtn   = document.getElementById('runBtn');
 
     terminal.innerHTML = '';
     terminal.classList.add('visible');
     runBtn.disabled = true;
-    input.disabled = true;
+    contractSearchEl.disabled = true;
 
     const cursor = document.createElement('span');
     cursor.className = 't-cursor';
     terminal.appendChild(cursor);
 
-    const evtSource = new EventSource(`/api/scripts/block-refresh?contract_id=${encodeURIComponent(contractId)}`);
+    const evtSource = new EventSource(`/api/scripts/block-refresh?contract_id=${encodeURIComponent(selectedContractId)}`);
 
     evtSource.onmessage = (e) => {
         const raw = e.data;
-
-        // Remove cursor, add line, re-add cursor
         if (terminal.contains(cursor)) terminal.removeChild(cursor);
-
         const div = document.createElement('div');
-
         if (raw.startsWith('[EXIT:')) {
             const code = parseInt(raw.match(/\d+/)[0]);
             div.className = code === 0 ? 't-done' : 't-err';
@@ -205,17 +255,15 @@ function runRefresh() {
             terminal.appendChild(div);
             evtSource.close();
             runBtn.disabled = false;
-            input.disabled = false;
+            contractSearchEl.disabled = false;
             terminal.scrollTop = terminal.scrollHeight;
             return;
         }
-
         if (raw.includes('[INFO]'))      div.className = 't-info';
         else if (raw.includes('[DONE]')) div.className = 't-done';
         else if (raw.includes('[WARN]')) div.className = 't-warn';
         else if (raw.includes('Error') || raw.includes('error')) div.className = 't-err';
         else                             div.className = 't-line';
-
         div.textContent = raw;
         terminal.appendChild(div);
         terminal.appendChild(cursor);
@@ -230,13 +278,9 @@ function runRefresh() {
         terminal.appendChild(div);
         evtSource.close();
         runBtn.disabled = false;
-        input.disabled = false;
+        contractSearchEl.disabled = false;
     };
 }
-
-document.getElementById('contractInput').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') runRefresh();
-});
 </script>
 
 </body>
