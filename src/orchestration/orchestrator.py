@@ -32,7 +32,8 @@ from presentation.formatters import OrderFormatter, ProcessingResultFormatter, P
 # for agencies that gather inputs upfront before the browser session opens.
 _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
     OrderType.SAGENT:    ("browser_automation.sagent_automation",   "gather_sagent_inputs_from_pdf", "SAGENT"),
-    OrderType.DAVISELEN: ("browser_automation.daviselen_automation", "gather_daviselen_inputs",       "DAVISELEN"),
+    OrderType.DAVISELEN:   ("browser_automation.daviselen_automation",   "gather_daviselen_inputs",   "DAVISELEN"),
+    OrderType.INTERTREND:  ("browser_automation.intertrend_automation",  "gather_intertrend_inputs",  "Intertrend"),
     OrderType.ADMERASIA: ("browser_automation.admerasia_automation", "gather_admerasia_inputs",       "ADMERASIA"),
     OrderType.HL:        ("browser_automation.hl_automation",        "gather_hl_inputs",              "H&L PARTNERS"),
     OrderType.HL_BDR:    ("browser_automation.hl_bdr_automation",    "gather_hl_bdr_inputs",          "H&L BDR"),

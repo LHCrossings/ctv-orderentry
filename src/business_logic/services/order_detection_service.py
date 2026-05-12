@@ -74,6 +74,10 @@ class OrderDetectionService:
         if self._is_sagent(first_page_text):
             return OrderType.SAGENT
 
+        # Intertrend (check before Daviselen — both use Brand Time Schedule format)
+        if self._is_intertrend(first_page_text):
+            return OrderType.INTERTREND
+
         # Daviselen (check first - has unique markers)
         if self._is_daviselen(first_page_text, second_page_text):
             return OrderType.DAVISELEN
@@ -205,6 +209,16 @@ class OrderDetectionService:
 
         marker_count = sum(1 for marker in sagent_markers if marker in text)
         return marker_count >= 2
+
+    def _is_intertrend(self, text: str) -> bool:
+        """
+        Check if text matches Intertrend Communications order patterns.
+
+        Intertrend patterns:
+        - "INTERTREND" appears in the cover page terms text
+        - "InterTrend Communications" as agency name
+        """
+        return "INTERTREND" in text.upper()
 
     def _is_daviselen(
         self,

@@ -94,6 +94,7 @@ class OrderProcessingService:
         OrderType.SIERRADONOR:      "_process_sierra_order",
         OrderType.THREEOLIVES:      "_process_threeolives_order",
         OrderType.BVK:              "_process_bvk_order",
+        OrderType.INTERTREND:       "_process_intertrend_order",
     }
 
     def __init__(
@@ -838,6 +839,72 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.DAVISELEN,
+                error_message=error_detail
+            )
+
+    def _process_intertrend_order(
+        self,
+        order: Order,
+        shared_session: any
+    ) -> ProcessingResult:
+        """
+        Process Intertrend order using intertrend_automation.
+
+        Intertrend orders have:
+        - California State Lottery as the only known client (ID: 280)
+        - SFO market
+        - Net rates that require agency gross-up (default 15%)
+        - Chinese programming (Mandarin + Cantonese mixed)
+        - RS = paid, AV = bonus lines
+        """
+        try:
+            from intertrend_automation import process_intertrend_order
+
+            print(f"\n{'='*70}")
+            print("PROCESSING INTERTREND ORDER")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            if order.customer_name:
+                print(f"Customer: {order.customer_name}")
+            print(f"{'='*70}\n")
+
+            if not order.order_input:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.INTERTREND,
+                    error_message="Order inputs not collected"
+                )
+
+            print("[SESSION] ✓ Using shared browser session")
+
+            success = process_intertrend_order(
+                driver=shared_session.driver,
+                pdf_path=str(order.pdf_path),
+                user_input=order.order_input
+            )
+
+            contracts = []
+            if success:
+                print("\n✓ Intertrend order processed successfully")
+            else:
+                print("\n✗ Intertrend order processing failed")
+
+            return ProcessingResult(
+                success=success,
+                contracts=contracts,
+                order_type=OrderType.INTERTREND,
+                error_message=None if success else "Processing failed"
+            )
+
+        except Exception as e:
+            import traceback
+            error_detail = f"Intertrend processing error: {str(e)}\n{traceback.format_exc()}"
+            print(f"\n✗ Intertrend processing failed: {e}")
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.INTERTREND,
                 error_message=error_detail
             )
 
