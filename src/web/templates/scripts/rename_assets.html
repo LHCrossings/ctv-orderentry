@@ -240,17 +240,16 @@ function parsePaste() {
         if (colonIdx < 1) continue;
 
         const code = line.slice(0, colonIdx).trim();
-        const rest = line.slice(colonIdx + 1).trim();
 
-        // Extract last (...) as ISCI code
-        const parenMatch = rest.match(/^(.*)\(([^)]+)\)\s*$/);
+        // Extract last (...) from the FULL line as ISCI code
+        const parenMatch = line.match(/^(.*)\(([^)]+)\)\s*$/);
         let title, newCode;
         if (parenMatch) {
-            title   = parenMatch[1].trim();
-            newCode = parenMatch[2].trim();
+            title   = parenMatch[1].trim();   // full line before the parenthetical, e.g. "CALRECYCLE30C07: Animated Composting CAN"
+            newCode = parenMatch[2].trim();   // ISCI, e.g. "25-CVC-4265-C"
         } else {
-            title   = rest;
-            newCode = code;  // no ISCI — spot code = the asset name (part before colon)
+            title   = line;                   // full line as-is, e.g. "TOY30E1216: WW May Camp Toyota 4Runner"
+            newCode = code;                   // no ISCI — spot code = asset name before colon
         }
 
         if (code && title) pairs.push({ code, title, new_code: newCode });
