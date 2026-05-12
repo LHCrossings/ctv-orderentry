@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Max Spots — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 1080px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+        }
+
+        .tool-card h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+
+        .tool-card > p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+
+        .lookup-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            margin-bottom: 0;
+        }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .field-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .field-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 1rem;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            color: var(--text-primary);
+            outline: none;
+            width: 160px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .field-input:focus {
+            border-color: var(--nord10);
+            box-shadow: 0 0 0 3px rgba(94,129,172,0.15);
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            height: 42px;
+            white-space: nowrap;
+            transition: background 0.2s, transform 0.15s;
+        }
+
+        .btn-primary { background: var(--nord10); color: white; }
+        .btn-primary:hover:not(:disabled) { background: var(--nord9); transform: translateY(-1px); }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+        .loading-msg {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 16px;
+        }
+
+        .lines-section { display: none; margin-top: 28px; }
+        .lines-section.visible { display: block; }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .section-title {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .sel-controls { display: flex; gap: 8px; }
+
+        .sel-btn {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--nord10);
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 2px 0;
+            font-family: 'Inter', sans-serif;
+        }
+        .sel-btn:hover { text-decoration: underline; }
+
+        .lines-table-wrap {
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+        }
+
+        table.lines-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+        }
+
+        .lines-table th {
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 8px 10px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            white-space: nowrap;
+        }
+
+        .lines-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+            vertical-align: middle;
+        }
+
+        .lines-table tr:last-child td { border-bottom: none; }
+        .lines-table tr:hover td { background: color-mix(in srgb, var(--nord9) 6%, transparent); }
+        .lines-table tr.selected td { background: color-mix(in srgb, var(--nord10) 8%, transparent); }
+
+        .val-badge {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 2px 7px;
+            border-radius: 4px;
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            border: 1px solid var(--border-color);
+            white-space: nowrap;
+        }
+
+        .val-badge.set {
+            background: color-mix(in srgb, var(--nord10) 12%, var(--nord6));
+            color: var(--nord10);
+            border-color: color-mix(in srgb, var(--nord10) 30%, transparent);
+        }
+
+        input[type="checkbox"] {
+            width: 15px;
+            height: 15px;
+            cursor: pointer;
+            accent-color: var(--nord10);
+        }
+
+        .apply-section {
+            display: none;
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border-color);
+        }
+        .apply-section.visible { display: block; }
+
+        .spot-fields {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .spot-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex: 0 0 130px;
+        }
+
+        .spot-field input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px 8px;
+            font-size: 1rem;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            color: var(--text-primary);
+            outline: none;
+            text-align: center;
+            width: 100%;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .spot-field input:focus {
+            border-color: var(--nord10);
+            box-shadow: 0 0 0 3px rgba(94,129,172,0.15);
+        }
+
+        .spot-field-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            text-align: center;
+        }
+
+        .spot-field-desc {
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            text-align: center;
+            line-height: 1.35;
+        }
+
+        .apply-row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .apply-status {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--nord14);
+        }
+
+        .apply-status.err { color: var(--nord11); }
+
+        .spot-hint {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            margin-top: 10px;
+        }
+
+        .search-wrap { position: relative; flex: 1; max-width: 380px; }
+        .search-dropdown {
+            position: absolute; top: 100%; left: 0; z-index: 200;
+            background: var(--nord6); border: 1px solid var(--border-color);
+            border-radius: 8px; box-shadow: 0 4px 16px var(--shadow-color);
+            min-width: 360px; max-height: 280px; overflow-y: auto;
+        }
+        .dropdown-item { padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border-color); }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover { background: var(--bg-secondary); }
+        .dropdown-code { font-weight: 700; font-size: 0.88rem; color: var(--text-primary); }
+        .dropdown-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 1px; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/scripts" class="back-link">&#8592;</a>
+            <div class="logo-icon">📊</div>
+            <div>
+                <h1>Max <span>Spots</span></h1>
+                <div class="logo-sub">Scripts · Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="tool-card">
+        <h2>Max Spots Per Day / Per Week</h2>
+        <p>Load a contract to see all its lines and current spot limits. Select lines, enter new values, and apply. Leave a field blank to leave that limit unchanged.</p>
+
+        <div class="lookup-row">
+            <div class="field-group search-wrap">
+                <label class="field-label">Contract</label>
+                <input class="field-input" id="contractSearch" placeholder="Search by code, name, or ID…" autocomplete="off" />
+                <div id="contractDropdown" class="search-dropdown" style="display:none;"></div>
+            </div>
+            <button id="loadBtn" class="btn btn-primary" onclick="loadLines()">Load Lines</button>
+        </div>
+
+        <div id="loadingMsg" class="loading-msg" style="display:none;">Loading...</div>
+
+        <div id="linesSection" class="lines-section">
+            <div class="section-header">
+                <span class="section-title" id="linesTitle">Lines</span>
+                <div class="sel-controls">
+                    <button class="sel-btn" onclick="selectAll()">Select All</button>
+                    <button class="sel-btn" onclick="selectNone()">Deselect All</button>
+                </div>
+            </div>
+            <div class="lines-table-wrap">
+                <table class="lines-table">
+                    <thead>
+                        <tr>
+                            <th style="width:32px"></th>
+                            <th style="width:60px">#</th>
+                            <th>Description</th>
+                            <th>Mkt</th>
+                            <th>From</th>
+                            <th>To</th>
+                            <th>Time</th>
+                            <th>Days</th>
+                            <th>:Sec</th>
+                            <th>Spt/wk</th>
+                            <th>Max/Day</th>
+                            <th>Max/Wk</th>
+                        </tr>
+                    </thead>
+                    <tbody id="linesBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="applySection" class="apply-section">
+            <div class="spot-fields">
+                <div class="spot-field">
+                    <input id="newMaxDaily" type="number" placeholder="—" min="0" max="999" />
+                    <div class="spot-field-label">New Max / Day</div>
+                    <div class="spot-field-desc">Leave blank to keep current value.</div>
+                </div>
+                <div class="spot-field">
+                    <input id="newMaxWeekly" type="number" placeholder="—" min="0" max="9999" />
+                    <div class="spot-field-label">New Max / Week</div>
+                    <div class="spot-field-desc">Leave blank to keep current value.</div>
+                </div>
+                <div style="flex: 1"></div>
+            </div>
+            <div class="apply-row">
+                <button id="applyBtn" class="btn btn-primary" onclick="applySelected()">Apply to Selected</button>
+                <span id="applyStatus" class="apply-status" style="display:none"></span>
+            </div>
+            <div class="spot-hint">Tip: 0 = unlimited. Max/Day controls the daily cap per break; Max/Week limits total weekly airings.</div>
+        </div>
+    </div>
+</main>
+
+<script>
+let selectedContractId = null;
+const contractSearchEl = document.getElementById('contractSearch');
+const contractDropdown = document.getElementById('contractDropdown');
+let _cTimer = null;
+
+contractSearchEl.addEventListener('input', () => {
+    selectedContractId = null;
+    if (!contractSearchEl.value.trim()) { contractDropdown.style.display = 'none'; return; }
+    clearTimeout(_cTimer);
+    _cTimer = setTimeout(searchContracts, 350);
+});
+contractSearchEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { clearTimeout(_cTimer); searchContracts(); }
+});
+document.addEventListener('click', e => {
+    if (!e.target.closest('.search-wrap')) contractDropdown.style.display = 'none';
+});
+
+async function searchContracts() {
+    const q = contractSearchEl.value.trim();
+    if (!q) return;
+    const resp = await fetch(`/api/traffic/contract-search?q=${encodeURIComponent(q)}`);
+    const rows = await resp.json();
+    contractDropdown.innerHTML = rows.length
+        ? rows.map(r => `
+            <div class="dropdown-item" data-id="${r.id}" data-code="${escHtml(r.code||'')}">
+                <div class="dropdown-code">${escHtml(r.code)}</div>
+                <div class="dropdown-desc">${escHtml(r.description||'')} &nbsp;·&nbsp; ${r.date_start} – ${r.date_end}</div>
+            </div>`).join('')
+        : '<div class="dropdown-item"><span class="dropdown-desc">No contracts found.</span></div>';
+    contractDropdown.style.display = 'block';
+}
+
+contractDropdown.addEventListener('click', e => {
+    const item = e.target.closest('.dropdown-item[data-id]');
+    if (!item) return;
+    selectedContractId = parseInt(item.dataset.id);
+    contractSearchEl.value = item.dataset.code;
+    contractDropdown.style.display = 'none';
+});
+
+function valBadge(val) {
+    const cls = val > 0 ? ' set' : '';
+    return `<span class="val-badge${cls}">${val}</span>`;
+}
+
+async function loadLines() {
+    if (!selectedContractId) { contractSearchEl.focus(); return; }
+    const contractId = selectedContractId;
+
+    const loadBtn = document.getElementById('loadBtn');
+    const loadingMsg = document.getElementById('loadingMsg');
+    loadBtn.disabled = true;
+    loadingMsg.style.display = '';
+    document.getElementById('linesSection').classList.remove('visible');
+    document.getElementById('applySection').classList.remove('visible');
+    document.getElementById('applyStatus').style.display = 'none';
+
+    try {
+        const resp = await fetch(`/api/scripts/max-spots/lines?contract_id=${encodeURIComponent(contractId)}`);
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        renderLines(data.lines, contractId);
+    } catch (e) {
+        alert(`Failed to load lines: ${e.message}`);
+    } finally {
+        loadBtn.disabled = false;
+        loadingMsg.style.display = 'none';
+    }
+}
+
+function renderLines(lines, contractId) {
+    document.getElementById('linesTitle').textContent = `${lines.length} line(s) — Contract ${contractId}`;
+    const tbody = document.getElementById('linesBody');
+    tbody.innerHTML = '';
+
+    lines.forEach(line => {
+        const tr = document.createElement('tr');
+        tr.dataset.lineId = line.line_id;
+        tr.innerHTML = `
+            <td><input type="checkbox" class="line-cb" value="${line.line_id}" onchange="rowToggle(this)" /></td>
+            <td style="color:var(--text-muted);font-size:0.8rem">${line.line_id}</td>
+            <td>${escHtml(line.description)}</td>
+            <td>${escHtml(line.market)}</td>
+            <td style="white-space:nowrap">${escHtml(line.date_from)}</td>
+            <td style="white-space:nowrap">${escHtml(line.date_to)}</td>
+            <td style="white-space:nowrap">${escHtml(line.time_from)} – ${escHtml(line.time_to)}</td>
+            <td>${escHtml(line.days)}</td>
+            <td>:${line.duration_sec}</td>
+            <td>${line.spots_pw}</td>
+            <td>${valBadge(line.max_daily)}</td>
+            <td>${valBadge(line.max_weekly)}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    document.getElementById('linesSection').classList.add('visible');
+    document.getElementById('applySection').classList.add('visible');
+}
+
+function rowToggle(cb) {
+    cb.closest('tr').classList.toggle('selected', cb.checked);
+}
+
+function selectAll() {
+    document.querySelectorAll('.line-cb').forEach(cb => {
+        cb.checked = true;
+        cb.closest('tr').classList.add('selected');
+    });
+}
+
+function selectNone() {
+    document.querySelectorAll('.line-cb').forEach(cb => {
+        cb.checked = false;
+        cb.closest('tr').classList.remove('selected');
+    });
+}
+
+async function applySelected() {
+    const lineIds = [...document.querySelectorAll('.line-cb:checked')].map(cb => parseInt(cb.value));
+    if (!lineIds.length) { alert('Select at least one line.'); return; }
+
+    const dailyRaw  = document.getElementById('newMaxDaily').value.trim();
+    const weeklyRaw = document.getElementById('newMaxWeekly').value.trim();
+
+    if (dailyRaw === '' && weeklyRaw === '') {
+        alert('Enter a value for Max/Day, Max/Week, or both.');
+        return;
+    }
+
+    const payload = {
+        line_ids:    lineIds,
+        max_daily:   dailyRaw  !== '' ? parseInt(dailyRaw)  : null,
+        max_weekly:  weeklyRaw !== '' ? parseInt(weeklyRaw) : null,
+    };
+
+    const applyBtn = document.getElementById('applyBtn');
+    const statusEl = document.getElementById('applyStatus');
+    applyBtn.disabled = true;
+    statusEl.style.display = 'none';
+
+    try {
+        const resp = await fetch('/api/scripts/max-spots/apply', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload),
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+
+        const parts = [];
+        if (payload.max_daily  !== null) parts.push(`max/day=${payload.max_daily}`);
+        if (payload.max_weekly !== null) parts.push(`max/wk=${payload.max_weekly}`);
+        statusEl.textContent = `✓ ${data.updated} line(s) updated — ${parts.join(', ')}`;
+        statusEl.className = 'apply-status';
+        statusEl.style.display = '';
+
+        // Reload table to reflect new values
+        const contractId = selectedContractId;
+        const r2 = await fetch(`/api/scripts/max-spots/lines?contract_id=${encodeURIComponent(contractId)}`);
+        if (r2.ok) {
+            const d2 = await r2.json();
+            renderLines(d2.lines, contractId);
+            document.getElementById('applyStatus').textContent = statusEl.textContent;
+            document.getElementById('applyStatus').className = 'apply-status';
+            document.getElementById('applyStatus').style.display = '';
+        }
+    } catch (e) {
+        statusEl.textContent = `✗ ${e.message}`;
+        statusEl.className = 'apply-status err';
+        statusEl.style.display = '';
+    } finally {
+        applyBtn.disabled = false;
+    }
+}
+
+function escHtml(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+
+</body>
+</html>

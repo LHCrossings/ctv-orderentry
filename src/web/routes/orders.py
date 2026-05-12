@@ -4156,4 +4156,107 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+    # ── Max Spots per Day / Week ──────────────────────────────────────────────
+
+    @router.get("/scripts/max-spots", response_class=HTMLResponse)
+    async def scripts_max_spots(request: Request):
+        return templates.TemplateResponse(request, "scripts/max_spots.html")
+
+    @router.get("/api/scripts/max-spots/lines")
+    async def get_max_spots_lines(contract_id: int = Query(..., gt=0)):
+        try:
+            project_root = Path(__file__).parent.parent.parent.parent
+            if str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
+            from browser_automation.etere_direct_client import connect as _db_connect
+
+            with _db_connect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT ID_CONTRATTIRIGHE, DESCRIZIONE,
+                           COALESCE(DATESTART, DATA_INIZIO), COALESCE(DATEEND, DATA_FINE),
+                           COALESCE(ORA_INIZIOF, ORA_INIZIO), COALESCE(ORA_FINEF, ORA_FINE),
+                           LUNEDI, MARTEDI, MERCOLEDI, GIOVEDI, VENERDI, SABATO, DOMENICA,
+                           DURATA, PASSAGGI_SETTIMANALI, PASSAGGI_GIORNALIERI,
+                           COD_USER
+                    FROM   CONTRATTIRIGHE
+                    WHERE  ID_CONTRATTITESTATA = %s
+                    ORDER  BY ID_CONTRATTIRIGHE
+                """, [contract_id])
+                rows = cursor.fetchall()
+
+            if not rows:
+                raise HTTPException(status_code=404, detail=f"No lines found for contract {contract_id}.")
+
+            lines = []
+            for row in rows:
+                (line_id, desc, date_from, date_to, ora_in, ora_out,
+                 lun, mar, mer, gio, ven, sab, dom,
+                 durata, spots_pw, max_daily,
+                 cod_user) = row
+                lines.append({
+                    "line_id":      line_id,
+                    "description":  desc or "",
+                    "market":       _MARKET_NAMES.get(cod_user, str(cod_user) if cod_user else "—"),
+                    "date_from":    f"{date_from.month}/{date_from.day}/{date_from.year}" if date_from else "",
+                    "date_to":      f"{date_to.month}/{date_to.day}/{date_to.year}" if date_to else "",
+                    "time_from":    _frames_to_ampm(ora_in),
+                    "time_to":      _frames_to_ampm(ora_out),
+                    "days":         _days_str(lun, mar, mer, gio, ven, sab, dom),
+                    "duration_sec": _frames_to_sec(durata),
+                    "spots_pw":     spots_pw or 0,
+                    "max_daily":    max_daily or 0,
+                })
+            return JSONResponse({"contract_id": contract_id, "lines": lines})
+
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.post("/api/scripts/max-spots/apply")
+    async def apply_max_spots(payload: dict = Body(...)):
+        try:
+            project_root = Path(__file__).parent.parent.parent.parent
+            if str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
+            from browser_automation.etere_direct_client import connect as _db_connect
+
+            line_ids   = [int(x) for x in payload.get("line_ids", [])]
+            max_daily  = payload.get("max_daily")
+            max_weekly = payload.get("max_weekly")
+
+            if not line_ids:
+                raise HTTPException(status_code=400, detail="No lines selected.")
+            if max_daily is None and max_weekly is None:
+                raise HTTPException(status_code=400, detail="Provide at least one value to update.")
+
+            set_parts, params = [], []
+            if max_daily is not None:
+                set_parts.append("PASSAGGI_GIORNALIERI = %s")
+                params.append(int(max_daily))
+            if max_weekly is not None:
+                set_parts.append("PASSAGGI_SETTIMANALI = %s")
+                params.append(int(max_weekly))
+
+            placeholders = ",".join(["%s"] * len(line_ids))
+            params.extend(line_ids)
+
+            with _db_connect() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    f"UPDATE CONTRATTIRIGHE SET {', '.join(set_parts)}"
+                    f" WHERE ID_CONTRATTIRIGHE IN ({placeholders})",
+                    params
+                )
+                conn.commit()
+                updated = cursor.rowcount
+
+            return JSONResponse({"updated": updated})
+
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     return router
