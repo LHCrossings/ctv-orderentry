@@ -212,11 +212,14 @@ class OrderScanner:
         # Deduplicate via set — case-insensitive filesystems (WSL2/NTFS) return
         # the same file for both *.xlsx and *.XLSX globs.
         # Skip ~$ Excel temp/lock files.
+        print(f"[SCAN] _all suffixes: {[(f.name, repr(f.suffix)) for f in _all]}")
+        print(f"[SCAN] pdf_files: {[f.name for f in pdf_files]}")
         _img_exts = {".jpg", ".jpeg", ".png", ".xlsx", ".xlsm"}
         image_xlsx_files = sorted(
             f for f in _all
             if f.suffix.lower() in _img_exts and not f.name.startswith("~$")
         )
+        print(f"[SCAN] image_xlsx_files: {[f.name for f in image_xlsx_files]}")
 
         for file_path in image_xlsx_files:
             try:
