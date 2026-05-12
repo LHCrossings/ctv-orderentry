@@ -254,9 +254,10 @@ def process_intertrend_order(driver, pdf_path: str, user_input: dict = None) -> 
 
             # Consolidate consecutive equal-count weeks into Etere lines
             # consolidate_weeks accepts "May 11" format and handles flight truncation
-            flight_end_mdy = datetime.strptime(order.flight_end, '%Y-%m-%d').strftime('%m/%d/%Y')
+            flight_end_mdy   = datetime.strptime(order.flight_end,   '%Y-%m-%d').strftime('%m/%d/%Y')
+            flight_start_mdy = datetime.strptime(order.flight_start, '%Y-%m-%d').strftime('%m/%d/%Y')
             week_groups = EtereClient.consolidate_weeks(
-                line.weekly_spots, order.week_start_dates, flight_end_mdy
+                line.weekly_spots, order.week_start_dates, flight_end_mdy, flight_start_mdy
             )
 
             for group in week_groups:
