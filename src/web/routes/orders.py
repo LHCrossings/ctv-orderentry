@@ -4260,4 +4260,71 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+    @router.get("/scripts/spot-validation", response_class=HTMLResponse)
+    async def scripts_spot_validation(request: Request):
+        return templates.TemplateResponse(request, "scripts/spot_validation.html")
+
+    @router.get("/api/scripts/spot-validation/lines")
+    async def get_spot_validation_lines(contract_id: int = Query(..., gt=0)):
+        try:
+            project_root = Path(__file__).parent.parent.parent.parent
+            if str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
+            from browser_automation.etere_direct_client import connect as _db_connect
+
+            with _db_connect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT cr.ID_CONTRATTIRIGHE, cr.DESCRIZIONE, cr.COD_USER,
+                           COALESCE(cr.DATESTART, cr.DATA_INIZIO),
+                           COALESCE(cr.DATEEND, cr.DATA_FINE),
+                           cr.N_PASSAGGI,
+                           COUNT(tp.ID_ContrattiRighe) AS scheduled
+                    FROM   CONTRATTIRIGHE cr
+                    LEFT JOIN trafficTPalinse tp
+                           ON tp.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
+                    WHERE  cr.ID_CONTRATTITESTATA = %s
+                    GROUP  BY cr.ID_CONTRATTIRIGHE, cr.DESCRIZIONE, cr.COD_USER,
+                              cr.DATESTART, cr.DATA_INIZIO, cr.DATEEND, cr.DATA_FINE,
+                              cr.N_PASSAGGI
+                    ORDER  BY cr.ID_CONTRATTIRIGHE
+                """, [contract_id])
+                rows = cursor.fetchall()
+
+            if not rows:
+                raise HTTPException(status_code=404, detail=f"No lines found for contract {contract_id}.")
+
+            lines = []
+            total_ordered = total_scheduled = mismatches = 0
+            for (lid, desc, cod_user, date_from, date_to, n_pass, sched) in rows:
+                ordered = n_pass or 0
+                diff    = sched - ordered
+                total_ordered   += ordered
+                total_scheduled += sched
+                if diff != 0:
+                    mismatches += 1
+                lines.append({
+                    "line_id":    lid,
+                    "description": desc or "",
+                    "market":     _MARKET_NAMES.get(cod_user, str(cod_user) if cod_user else "—"),
+                    "date_from":  f"{date_from.month}/{date_from.day}/{date_from.year}" if date_from else "",
+                    "date_to":    f"{date_to.month}/{date_to.day}/{date_to.year}" if date_to else "",
+                    "ordered":    ordered,
+                    "scheduled":  sched,
+                    "diff":       diff,
+                })
+
+            return JSONResponse({
+                "contract_id":     contract_id,
+                "lines":           lines,
+                "total_ordered":   total_ordered,
+                "total_scheduled": total_scheduled,
+                "mismatches":      mismatches,
+            })
+
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     return router

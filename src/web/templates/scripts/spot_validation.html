@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spot Validation — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 900px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+        }
+
+        .tool-card h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+
+        .tool-card > p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+
+        .lookup-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .field-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .field-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 1rem;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            color: var(--text-primary);
+            outline: none;
+            width: 160px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .field-input:focus {
+            border-color: var(--nord10);
+            box-shadow: 0 0 0 3px rgba(94,129,172,0.15);
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            height: 42px;
+            white-space: nowrap;
+            transition: background 0.2s, transform 0.15s;
+        }
+
+        .btn-primary { background: var(--nord10); color: white; }
+        .btn-primary:hover:not(:disabled) { background: var(--nord9); transform: translateY(-1px); }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+        .loading-msg {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 16px;
+        }
+
+        .results-section { display: none; margin-top: 28px; }
+        .results-section.visible { display: block; }
+
+        .summary-bar {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .summary-stat {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .summary-label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .summary-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .summary-value.ok   { color: var(--nord14); }
+        .summary-value.warn { color: var(--nord11); }
+
+        .summary-divider {
+            width: 1px;
+            height: 32px;
+            background: var(--border-color);
+        }
+
+        .lines-table-wrap {
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+        }
+
+        table.lines-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+        }
+
+        .lines-table th {
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 8px 10px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            white-space: nowrap;
+        }
+
+        .lines-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+            vertical-align: middle;
+        }
+
+        .lines-table tr:last-child td { border-bottom: none; }
+        .lines-table tr:hover td { background: color-mix(in srgb, var(--nord9) 6%, transparent); }
+        .lines-table tr.mismatch td { background: color-mix(in srgb, var(--nord11) 6%, transparent); }
+        .lines-table tr.mismatch:hover td { background: color-mix(in srgb, var(--nord11) 10%, transparent); }
+
+        .diff-badge {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+
+        .diff-ok {
+            background: color-mix(in srgb, var(--nord14) 12%, var(--nord6));
+            color: var(--nord14);
+            border: 1px solid color-mix(in srgb, var(--nord14) 30%, transparent);
+        }
+
+        .diff-err {
+            background: color-mix(in srgb, var(--nord11) 14%, var(--nord6));
+            color: var(--nord11);
+            border: 1px solid color-mix(in srgb, var(--nord11) 35%, transparent);
+        }
+
+        .tfoot-row td {
+            font-weight: 700;
+            background: var(--bg-secondary);
+            border-top: 2px solid var(--border-color);
+            border-bottom: none;
+        }
+
+        .search-wrap { position: relative; flex: 1; max-width: 380px; }
+        .search-dropdown {
+            position: absolute; top: 100%; left: 0; z-index: 200;
+            background: var(--nord6); border: 1px solid var(--border-color);
+            border-radius: 8px; box-shadow: 0 4px 16px var(--shadow-color);
+            min-width: 360px; max-height: 280px; overflow-y: auto;
+        }
+        .dropdown-item { padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border-color); }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover { background: var(--bg-secondary); }
+        .dropdown-code { font-weight: 700; font-size: 0.88rem; color: var(--text-primary); }
+        .dropdown-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 1px; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/scripts" class="back-link">&#8592;</a>
+            <div class="logo-icon">✅</div>
+            <div>
+                <h1>Spot <span>Validation</span></h1>
+                <div class="logo-sub">Scripts · Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="tool-card">
+        <h2>Ordered vs Scheduled Spots</h2>
+        <p>Compares the contracted spot count on each line against the number of spots actually placed in the schedule. Mismatches are highlighted in red.</p>
+
+        <div class="lookup-row">
+            <div class="field-group search-wrap">
+                <label class="field-label">Contract</label>
+                <input class="field-input" id="contractSearch" placeholder="Search by code, name, or ID…" autocomplete="off" />
+                <div id="contractDropdown" class="search-dropdown" style="display:none;"></div>
+            </div>
+            <button id="loadBtn" class="btn btn-primary" onclick="loadLines()">Validate</button>
+        </div>
+
+        <div id="loadingMsg" class="loading-msg" style="display:none;">Loading...</div>
+
+        <div id="resultsSection" class="results-section">
+            <div class="summary-bar" id="summaryBar"></div>
+            <div class="lines-table-wrap">
+                <table class="lines-table">
+                    <thead>
+                        <tr>
+                            <th style="width:60px">#</th>
+                            <th>Description</th>
+                            <th>Mkt</th>
+                            <th>From</th>
+                            <th>To</th>
+                            <th style="text-align:right">Ordered</th>
+                            <th style="text-align:right">Scheduled</th>
+                            <th style="text-align:right">Diff</th>
+                        </tr>
+                    </thead>
+                    <tbody id="linesBody"></tbody>
+                    <tfoot id="tableFooter"></tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+let selectedContractId = null;
+const contractSearchEl = document.getElementById('contractSearch');
+const contractDropdown = document.getElementById('contractDropdown');
+let _cTimer = null;
+
+contractSearchEl.addEventListener('input', () => {
+    selectedContractId = null;
+    if (!contractSearchEl.value.trim()) { contractDropdown.style.display = 'none'; return; }
+    clearTimeout(_cTimer);
+    _cTimer = setTimeout(searchContracts, 350);
+});
+contractSearchEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { clearTimeout(_cTimer); searchContracts(); }
+});
+document.addEventListener('click', e => {
+    if (!e.target.closest('.search-wrap')) contractDropdown.style.display = 'none';
+});
+
+async function searchContracts() {
+    const q = contractSearchEl.value.trim();
+    if (!q) return;
+    const resp = await fetch(`/api/traffic/contract-search?q=${encodeURIComponent(q)}`);
+    const rows = await resp.json();
+    contractDropdown.innerHTML = rows.length
+        ? rows.map(r => `
+            <div class="dropdown-item" data-id="${r.id}" data-code="${escHtml(r.code||'')}">
+                <div class="dropdown-code">${escHtml(r.code)}</div>
+                <div class="dropdown-desc">${escHtml(r.description||'')} &nbsp;·&nbsp; ${r.date_start} – ${r.date_end}</div>
+            </div>`).join('')
+        : '<div class="dropdown-item"><span class="dropdown-desc">No contracts found.</span></div>';
+    contractDropdown.style.display = 'block';
+}
+
+contractDropdown.addEventListener('click', e => {
+    const item = e.target.closest('.dropdown-item[data-id]');
+    if (!item) return;
+    selectedContractId = parseInt(item.dataset.id);
+    contractSearchEl.value = item.dataset.code;
+    contractDropdown.style.display = 'none';
+});
+
+async function loadLines() {
+    if (!selectedContractId) { contractSearchEl.focus(); return; }
+    const contractId = selectedContractId;
+
+    const loadBtn = document.getElementById('loadBtn');
+    const loadingMsg = document.getElementById('loadingMsg');
+    loadBtn.disabled = true;
+    loadingMsg.style.display = '';
+    document.getElementById('resultsSection').classList.remove('visible');
+
+    try {
+        const resp = await fetch(`/api/scripts/spot-validation/lines?contract_id=${encodeURIComponent(contractId)}`);
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        renderResults(data);
+    } catch (e) {
+        alert(`Failed to load: ${e.message}`);
+    } finally {
+        loadBtn.disabled = false;
+        loadingMsg.style.display = 'none';
+    }
+}
+
+function renderResults(data) {
+    // Summary bar
+    const ok = data.mismatches === 0;
+    document.getElementById('summaryBar').innerHTML = `
+        <div class="summary-stat">
+            <div class="summary-label">Lines</div>
+            <div class="summary-value">${data.lines.length}</div>
+        </div>
+        <div class="summary-divider"></div>
+        <div class="summary-stat">
+            <div class="summary-label">Ordered</div>
+            <div class="summary-value">${data.total_ordered}</div>
+        </div>
+        <div class="summary-stat">
+            <div class="summary-label">Scheduled</div>
+            <div class="summary-value">${data.total_scheduled}</div>
+        </div>
+        <div class="summary-divider"></div>
+        <div class="summary-stat">
+            <div class="summary-label">Mismatches</div>
+            <div class="summary-value ${ok ? 'ok' : 'warn'}">${ok ? '✓ None' : data.mismatches}</div>
+        </div>
+    `;
+
+    // Table body
+    const tbody = document.getElementById('linesBody');
+    tbody.innerHTML = '';
+    data.lines.forEach(line => {
+        const tr = document.createElement('tr');
+        if (line.diff !== 0) tr.classList.add('mismatch');
+        const diffHtml = line.diff === 0
+            ? `<span class="diff-badge diff-ok">✓</span>`
+            : `<span class="diff-badge diff-err">${line.diff > 0 ? '+' : ''}${line.diff}</span>`;
+        tr.innerHTML = `
+            <td style="color:var(--text-muted);font-size:0.8rem">${line.line_id}</td>
+            <td>${escHtml(line.description)}</td>
+            <td>${escHtml(line.market)}</td>
+            <td style="white-space:nowrap">${escHtml(line.date_from)}</td>
+            <td style="white-space:nowrap">${escHtml(line.date_to)}</td>
+            <td style="text-align:right">${line.ordered}</td>
+            <td style="text-align:right">${line.scheduled}</td>
+            <td style="text-align:right">${diffHtml}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    // Footer totals
+    const totalDiff = data.total_scheduled - data.total_ordered;
+    const diffHtml = totalDiff === 0
+        ? `<span class="diff-badge diff-ok">✓</span>`
+        : `<span class="diff-badge diff-err">${totalDiff > 0 ? '+' : ''}${totalDiff}</span>`;
+    document.getElementById('tableFooter').innerHTML = `
+        <tr class="tfoot-row">
+            <td colspan="5" style="color:var(--text-muted)">Total</td>
+            <td style="text-align:right">${data.total_ordered}</td>
+            <td style="text-align:right">${data.total_scheduled}</td>
+            <td style="text-align:right">${diffHtml}</td>
+        </tr>
+    `;
+
+    document.getElementById('resultsSection').classList.add('visible');
+}
+
+function escHtml(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+
+</body>
+</html>
