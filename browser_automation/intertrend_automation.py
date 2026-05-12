@@ -97,7 +97,7 @@ def gather_intertrend_inputs(pdf_path: str) -> dict:
     # Show line summary
     print()
     for line in order.lines:
-        tag = ' [BNS]' if line.is_bonus() else ''
+        tag = ' [BNS]' if line.is_bonus else ''
         time_fmt = format_time_for_description(line.time)
         print(f'  Line {line.line_number}: {line.days} {time_fmt} :{line.duration} {line.dp_code}{tag}'
               f'  — {line.total_spots} spots @ ${line.net_rate:.2f} net')
@@ -112,7 +112,7 @@ def gather_intertrend_inputs(pdf_path: str) -> dict:
     print(f'[GROSS-UP] Factor: {gross_up_factor:.6f}  (÷{1 - agency_fee/100:.2f})')
 
     # Verify expected gross amounts
-    paid_lines = [ln for ln in order.lines if not ln.is_bonus()]
+    paid_lines = [ln for ln in order.lines if not ln.is_bonus]
     net_total = sum(ln.net_rate * ln.total_spots for ln in paid_lines)
     gross_total = net_total * gross_up_factor
     print(f'[GROSS-UP] Net total: ${net_total:,.2f}  →  Gross total: ${gross_total:,.2f}')
@@ -231,7 +231,7 @@ def process_intertrend_order(driver, pdf_path: str, user_input: dict = None) -> 
         etere_line_num = 0
 
         for line in order.lines:
-            is_bonus = line.is_bonus()
+            is_bonus = line.is_bonus
             spot_code = 10 if is_bonus else 2
 
             # Gross-up paid lines; bonus lines stay at $0

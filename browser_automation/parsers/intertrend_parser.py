@@ -47,6 +47,7 @@ class IntertrendLine:
     total_spots: int
     net_rate: float
 
+    @property
     def is_bonus(self) -> bool:
         return self.dp_code == 'AV' or self.net_rate == 0.0
 
@@ -433,7 +434,7 @@ if __name__ == '__main__':
         print()
 
         for line in order.lines:
-            tag = ' [BNS]' if line.is_bonus() else ''
+            tag = ' [BNS]' if line.is_bonus else ''
             print(f"  {line.line_number}. {line.days} {line.time} :{line.duration} {line.dp_code}{tag}")
             print(f"     Program:  {line.program}")
             print(f"     Net rate: ${line.net_rate:.2f}  |  Total: {line.total_spots} spots")
