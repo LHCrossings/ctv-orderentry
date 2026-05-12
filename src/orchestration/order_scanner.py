@@ -96,13 +96,16 @@ class OrderScanner:
         if all_files:
             print(f"[SCAN] Files found: {[f.name for f in all_files]}")
         else:
-            print(f"[SCAN] Directory is empty")
+            print("[SCAN] Directory is empty")
 
         orders = []
 
         # Find all order files (PDF and AAAA SpotTV XML)
-        pdf_files = sorted(self._incoming_dir.glob("*.pdf"))
-        xml_files = sorted(self._incoming_dir.glob("*.xml"))
+        # Use iterdir() instead of glob() — glob() silently fails on Windows
+        # paths containing special characters like & in filenames.
+        _all = [f for f in self._incoming_dir.iterdir() if f.is_file()]
+        pdf_files = sorted(f for f in _all if f.suffix.lower() == ".pdf")
+        xml_files = sorted(f for f in _all if f.suffix.lower() == ".xml")
 
         for pdf_path in pdf_files:
             try:
@@ -209,16 +212,11 @@ class OrderScanner:
         # Deduplicate via set — case-insensitive filesystems (WSL2/NTFS) return
         # the same file for both *.xlsx and *.XLSX globs.
         # Skip ~$ Excel temp/lock files.
-        image_xlsx_files: list[Path] = []
-        seen: set[Path] = set()
-        for pattern in ("*.jpg", "*.JPG", "*.jpeg", "*.JPEG",
-                         "*.png", "*.PNG", "*.xlsx", "*.XLSX",
-                         "*.xlsm", "*.XLSM"):
-            for p in self._incoming_dir.glob(pattern):
-                if p not in seen and not p.name.startswith("~$"):
-                    seen.add(p)
-                    image_xlsx_files.append(p)
-        image_xlsx_files.sort()
+        _img_exts = {".jpg", ".jpeg", ".png", ".xlsx", ".xlsm"}
+        image_xlsx_files = sorted(
+            f for f in _all
+            if f.suffix.lower() in _img_exts and not f.name.startswith("~$")
+        )
 
         for file_path in image_xlsx_files:
             try:
@@ -277,15 +275,8 @@ class OrderScanner:
         if not self._incoming_dir.exists():
             return 0
 
-        return (
-            len(list(self._incoming_dir.glob("*.pdf")))
-            + len(list(self._incoming_dir.glob("*.xml")))
-            + len(list(self._incoming_dir.glob("*.jpg")))
-            + len(list(self._incoming_dir.glob("*.JPG")))
-            + len(list(self._incoming_dir.glob("*.jpeg")))
-            + len(list(self._incoming_dir.glob("*.JPEG")))
-            + len(list(self._incoming_dir.glob("*.png")))
-            + len(list(self._incoming_dir.glob("*.PNG")))
-            + len(list(self._incoming_dir.glob("*.xlsx")))
-            + len(list(self._incoming_dir.glob("*.XLSX")))
+        _count_exts = {".pdf", ".xml", ".jpg", ".jpeg", ".png", ".xlsx", ".xlsm"}
+        return sum(
+            1 for f in self._incoming_dir.iterdir()
+            if f.is_file() and f.suffix.lower() in _count_exts
         )
