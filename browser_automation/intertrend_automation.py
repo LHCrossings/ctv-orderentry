@@ -33,6 +33,7 @@ Description:      "CA State Lottery Est {estimate} - {product}"  e.g. "CA State 
 """
 
 import sys
+from datetime import datetime
 from pathlib import Path
 
 # Add project root to sys.path
@@ -52,7 +53,6 @@ from browser_automation.parsers.intertrend_parser import (
     IntertrendLine,
     format_time_for_description,
 )
-from browser_automation.parsers.daviselen_parser import analyze_weekly_distribution
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONSTANTS
@@ -252,19 +252,18 @@ def process_intertrend_order(driver, pdf_path: str, user_input: dict = None) -> 
                   f'{line.total_spots} spots  ${rate:.2f} gross')
 
             # Consolidate consecutive equal-count weeks into Etere lines
-            week_groups = analyze_weekly_distribution(
-                line.weekly_spots, order.week_start_dates, order.flight_end
+            # consolidate_weeks accepts "May 11" format and handles flight truncation
+            flight_end_mdy = datetime.strptime(order.flight_end, '%Y-%m-%d').strftime('%m/%d/%Y')
+            week_groups = EtereClient.consolidate_weeks(
+                line.weekly_spots, order.week_start_dates, flight_end_mdy
             )
 
             for group in week_groups:
-                raw_start = group['start_date']
+                group_start = group['start_date']
                 group_end = group['end_date']
                 spots_per_week = group['spots_per_week']
-                group_total = group['spots']
-                num_weeks = group['num_weeks']
-
-                # Truncate start to flight start (handles week 1 partial weeks)
-                group_start = max(raw_start, order.flight_start)
+                num_weeks = group['weeks']
+                group_total = spots_per_week * num_weeks
 
                 etere_line_num += 1
                 print(f'  [{etere_line_num}] {group_start} – {group_end}  '
