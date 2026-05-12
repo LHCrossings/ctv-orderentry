@@ -4327,4 +4327,88 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+    @router.get("/scripts/rename-assets", response_class=HTMLResponse)
+    async def scripts_rename_assets(request: Request):
+        return templates.TemplateResponse(request, "scripts/rename_assets.html")
+
+    @router.post("/api/scripts/rename-assets/preview")
+    async def rename_assets_preview(payload: dict = Body(...)):
+        try:
+            project_root = Path(__file__).parent.parent.parent.parent
+            if str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
+            from browser_automation.etere_direct_client import connect as _db_connect
+
+            pairs = payload.get("pairs", [])  # [{code, description}]
+            if not pairs:
+                raise HTTPException(status_code=400, detail="No pairs provided.")
+
+            codes = [p["code"] for p in pairs]
+            placeholders = ",".join(["%s"] * len(codes))
+
+            with _db_connect() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    f"SELECT ID_FILMATI, COD_PROGRA, DESCRIZIO FROM FILMATI"
+                    f" WHERE COD_PROGRA IN ({placeholders})",
+                    codes
+                )
+                found = {r[1]: {"id": r[0], "current_desc": r[2] or ""} for r in cursor.fetchall()}
+
+            results = []
+            for p in pairs:
+                code = p["code"]
+                new_desc = p["description"]
+                if code in found:
+                    results.append({
+                        "code":         code,
+                        "new_desc":     new_desc,
+                        "current_desc": found[code]["current_desc"],
+                        "asset_id":     found[code]["id"],
+                        "found":        True,
+                    })
+                else:
+                    results.append({
+                        "code":     code,
+                        "new_desc": new_desc,
+                        "found":    False,
+                    })
+
+            return JSONResponse({"results": results})
+
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.post("/api/scripts/rename-assets/apply")
+    async def rename_assets_apply(payload: dict = Body(...)):
+        try:
+            project_root = Path(__file__).parent.parent.parent.parent
+            if str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
+            from browser_automation.etere_direct_client import connect as _db_connect
+
+            pairs = payload.get("pairs", [])  # [{code, description}] — only found ones
+            if not pairs:
+                raise HTTPException(status_code=400, detail="No pairs to apply.")
+
+            with _db_connect() as conn:
+                cursor = conn.cursor()
+                updated = 0
+                for p in pairs:
+                    cursor.execute(
+                        "UPDATE FILMATI SET DESCRIZIO = %s WHERE COD_PROGRA = %s",
+                        [p["description"], p["code"]]
+                    )
+                    updated += cursor.rowcount
+                conn.commit()
+
+            return JSONResponse({"updated": updated})
+
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     return router
