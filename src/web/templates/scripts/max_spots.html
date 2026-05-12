@@ -267,6 +267,60 @@
             margin-top: 10px;
         }
 
+        .filter-bar {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .filter-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .filter-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 7px 10px;
+            font-size: 0.85rem;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            color: var(--text-primary);
+            outline: none;
+            width: 120px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .filter-input:focus {
+            border-color: var(--nord10);
+            box-shadow: 0 0 0 3px rgba(94,129,172,0.15);
+        }
+
+        .filter-count {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            align-self: flex-end;
+            padding-bottom: 8px;
+        }
+
+        .filter-clear {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--nord10);
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 2px 0;
+            font-family: 'Inter', sans-serif;
+            align-self: flex-end;
+            padding-bottom: 8px;
+        }
+        .filter-clear:hover { text-decoration: underline; }
+
         .search-wrap { position: relative; flex: 1; max-width: 380px; }
         .search-dropdown {
             position: absolute; top: 100%; left: 0; z-index: 200;
@@ -320,6 +374,18 @@
                     <button class="sel-btn" onclick="selectAll()">Select All</button>
                     <button class="sel-btn" onclick="selectNone()">Deselect All</button>
                 </div>
+            </div>
+            <div class="filter-bar" id="filterBar">
+                <div class="filter-field">
+                    <label class="field-label" for="filterFrom">Flight From</label>
+                    <input class="filter-input" id="filterFrom" type="text" placeholder="MM/DD/YYYY" oninput="applyDateFilter()" onblur="formatFilterDate(this)" />
+                </div>
+                <div class="filter-field">
+                    <label class="field-label" for="filterTo">Flight To</label>
+                    <input class="filter-input" id="filterTo" type="text" placeholder="MM/DD/YYYY" oninput="applyDateFilter()" onblur="formatFilterDate(this)" />
+                </div>
+                <button class="filter-clear" onclick="clearFilter()">Clear</button>
+                <span class="filter-count" id="filterCount"></span>
             </div>
             <div class="lines-table-wrap">
                 <table class="lines-table">
@@ -442,14 +508,21 @@ async function loadLines() {
     }
 }
 
+let _allLines = [];
+let _contractId = null;
+
 function renderLines(lines, contractId) {
+    _allLines = lines;
+    _contractId = contractId;
     document.getElementById('linesTitle').textContent = `${lines.length} line(s) — Contract ${contractId}`;
     const tbody = document.getElementById('linesBody');
     tbody.innerHTML = '';
 
     lines.forEach(line => {
         const tr = document.createElement('tr');
-        tr.dataset.lineId = line.line_id;
+        tr.dataset.lineId   = line.line_id;
+        tr.dataset.dateFrom = line.date_from;
+        tr.dataset.dateTo   = line.date_to;
         tr.innerHTML = `
             <td><input type="checkbox" class="line-cb" value="${line.line_id}" onchange="rowToggle(this)" /></td>
             <td style="color:var(--text-muted);font-size:0.8rem">${line.line_id}</td>
@@ -469,6 +542,59 @@ function renderLines(lines, contractId) {
 
     document.getElementById('linesSection').classList.add('visible');
     document.getElementById('applySection').classList.add('visible');
+    document.getElementById('filterFrom').value = '';
+    document.getElementById('filterTo').value   = '';
+    document.getElementById('filterCount').textContent = '';
+}
+
+function parseFilterDate(str) {
+    if (!str) return null;
+    const parts = str.split('/');
+    if (parts.length !== 3) return null;
+    const d = new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1]));
+    return isNaN(d.getTime()) ? null : d;
+}
+
+function parseCellDate(str) {
+    return parseFilterDate(str);
+}
+
+function applyDateFilter() {
+    const fromDate = parseFilterDate(document.getElementById('filterFrom').value.trim());
+    const toDate   = parseFilterDate(document.getElementById('filterTo').value.trim());
+    let visible = 0;
+    document.querySelectorAll('#linesBody tr').forEach(tr => {
+        const lineFrom = parseCellDate(tr.dataset.dateFrom);
+        const lineTo   = parseCellDate(tr.dataset.dateTo);
+        let show = true;
+        if (fromDate && lineTo  && lineTo  < fromDate) show = false;
+        if (toDate   && lineFrom && lineFrom > toDate)  show = false;
+        tr.style.display = show ? '' : 'none';
+        if (show) visible++;
+        if (!show) {
+            const cb = tr.querySelector('.line-cb');
+            if (cb) { cb.checked = false; tr.classList.remove('selected'); }
+        }
+    });
+    const total = _allLines.length;
+    document.getElementById('filterCount').textContent =
+        (fromDate || toDate) ? `${visible} of ${total} shown` : '';
+}
+
+function formatFilterDate(el) {
+    const d = el.value.replace(/\D/g, '');
+    const yr = new Date().getFullYear();
+    if (d.length === 3)      el.value = '0' + d[0] + '/' + d.slice(1,3) + '/' + yr;
+    else if (d.length === 4) el.value = d.slice(0,2) + '/' + d.slice(2,4) + '/' + yr;
+    else if (d.length === 6) el.value = d.slice(0,2) + '/' + d.slice(2,4) + '/20' + d.slice(4,6);
+    else if (d.length === 8) el.value = d.slice(0,2) + '/' + d.slice(2,4) + '/' + d.slice(4,8);
+    applyDateFilter();
+}
+
+function clearFilter() {
+    document.getElementById('filterFrom').value = '';
+    document.getElementById('filterTo').value   = '';
+    applyDateFilter();
 }
 
 function rowToggle(cb) {
@@ -476,7 +602,7 @@ function rowToggle(cb) {
 }
 
 function selectAll() {
-    document.querySelectorAll('.line-cb').forEach(cb => {
+    document.querySelectorAll('#linesBody tr:not([style*="display: none"]) .line-cb').forEach(cb => {
         cb.checked = true;
         cb.closest('tr').classList.add('selected');
     });
