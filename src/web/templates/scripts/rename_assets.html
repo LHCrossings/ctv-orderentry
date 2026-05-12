@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/static/css/_variables.css" />
     <link rel="stylesheet" href="/static/css/portal.css" />
     <style>
-        main { max-width: 900px; }
+        main { max-width: 960px; }
 
         .tool-card {
             background: var(--nord6);
@@ -68,12 +68,7 @@
             color: var(--text-muted);
             margin-top: 6px;
             margin-bottom: 20px;
-        }
-
-        .btn-row {
-            display: flex;
-            gap: 10px;
-            align-items: center;
+            line-height: 1.5;
         }
 
         .btn {
@@ -142,8 +137,12 @@
         .lines-table tr:last-child td { border-bottom: none; }
         .lines-table tr.not-found td { background: color-mix(in srgb, var(--nord11) 6%, transparent); color: var(--text-muted); }
 
+        .code-cell { font-family: monospace; font-weight: 700; font-size: 0.82rem; }
+        .arrow { color: var(--text-muted); margin: 0 6px; }
+        .new-code { color: var(--nord10); }
         .desc-before { color: var(--text-muted); font-family: monospace; font-size: 0.8rem; }
-        .desc-after  { color: var(--nord14);     font-family: monospace; font-size: 0.8rem; }
+        .desc-after  { color: var(--nord14); font-family: monospace; font-size: 0.8rem; }
+
         .not-found-badge {
             font-size: 0.72rem;
             font-weight: 600;
@@ -189,18 +188,20 @@
 
 <main>
     <div class="tool-card">
-        <h2>Update Asset Descriptions in Media Library</h2>
-        <p>Paste a list of <code>CODE: Description</code> pairs (one per line). Preview the changes first, then apply.</p>
+        <h2>Update Spot Code &amp; Title in Media Library</h2>
+        <p>Paste a list of <code>CODE: Title (ISCI)</code> lines. The ISCI in parentheses becomes the new spot code (<code>COD_PROGRA</code>); everything else becomes the title (<code>DESCRIZIO</code>). If no parentheses, only the title is updated and the spot code is left as-is.</p>
 
         <div class="paste-label">Paste List</div>
         <textarea class="paste-area" id="pasteArea" placeholder="CALRECYCLE30C07: Animated Composting CAN (25-CVC-4265-C)
 CALRECYCLE30H07: Animated Composting HMO (25-CVC-4265-H)
-CALRECYCLE30K07: Animated Composting KOR (25-CVC-4265-K)"></textarea>
-        <div class="paste-hint">One entry per line — <code>CODE: Description</code>. Blank lines and lines without a colon are ignored.</div>
-
-        <div class="btn-row">
-            <button id="previewBtn" class="btn btn-primary" onclick="preview()">Preview Changes</button>
+CALRECYCLE30V08: Animated CRV VIE"></textarea>
+        <div class="paste-hint">
+            One entry per line — <code>CODE: Title (ISCI)</code>.<br>
+            With ISCI: spot code → <code>25-CVC-4265-C</code>, title → <code>CALRECYCLE30C07: Animated Composting CAN</code>.<br>
+            Without parentheses: spot code unchanged, title updated only.
         </div>
+
+        <button id="previewBtn" class="btn btn-primary" onclick="preview()">Preview Changes</button>
 
         <div id="previewSection" class="preview-section">
             <div class="section-title" id="previewTitle"></div>
@@ -208,9 +209,10 @@ CALRECYCLE30K07: Animated Composting KOR (25-CVC-4265-K)"></textarea>
                 <table class="lines-table">
                     <thead>
                         <tr>
-                            <th>Code</th>
-                            <th>Current Description</th>
-                            <th>New Description</th>
+                            <th>Search Code</th>
+                            <th>Spot Code (COD_PROGRA)</th>
+                            <th>Current Title</th>
+                            <th>New Title</th>
                         </tr>
                     </thead>
                     <tbody id="previewBody"></tbody>
@@ -234,18 +236,31 @@ function parsePaste() {
     for (const raw of lines) {
         const line = raw.trim();
         if (!line) continue;
-        const idx = line.indexOf(':');
-        if (idx < 1) continue;
-        const code = line.slice(0, idx).trim();
-        const desc = line.slice(idx + 1).trim();
-        if (code && desc) pairs.push({ code, description: desc });
+        const colonIdx = line.indexOf(':');
+        if (colonIdx < 1) continue;
+
+        const code = line.slice(0, colonIdx).trim();
+        const rest = line.slice(colonIdx + 1).trim();
+
+        // Extract last (...) as ISCI code
+        const parenMatch = rest.match(/^(.*)\(([^)]+)\)\s*$/);
+        let title, newCode;
+        if (parenMatch) {
+            title   = parenMatch[1].trim();
+            newCode = parenMatch[2].trim();
+        } else {
+            title   = rest;
+            newCode = null;
+        }
+
+        if (code && title) pairs.push({ code, title, new_code: newCode });
     }
     return pairs;
 }
 
 async function preview() {
     const pairs = parsePaste();
-    if (!pairs.length) { alert('No valid CODE: Description lines found.'); return; }
+    if (!pairs.length) { alert('No valid CODE: Title lines found.'); return; }
 
     const btn = document.getElementById('previewBtn');
     btn.disabled = true;
@@ -278,7 +293,7 @@ function renderPreview(results) {
     document.getElementById('previewTitle').textContent =
         `${found.length} asset(s) found` + (missing.length ? `, ${missing.length} not found` : '');
 
-    _previewPairs = found.map(r => ({ code: r.code, description: r.new_desc }));
+    _previewPairs = found.map(r => ({ code: r.code, title: r.title, new_code: r.new_code }));
 
     const tbody = document.getElementById('previewBody');
     tbody.innerHTML = '';
@@ -287,14 +302,18 @@ function renderPreview(results) {
         if (!r.found) {
             tr.className = 'not-found';
             tr.innerHTML = `
-                <td>${escHtml(r.code)}</td>
-                <td colspan="2"><span class="not-found-badge">Not found in media library</span></td>
+                <td class="code-cell">${escHtml(r.code)}</td>
+                <td colspan="3"><span class="not-found-badge">Not found in media library</span></td>
             `;
         } else {
+            const codeCell = r.new_code
+                ? `<span class="code-cell">${escHtml(r.code)}</span><span class="arrow">→</span><span class="new-code code-cell">${escHtml(r.new_code)}</span>`
+                : `<span class="code-cell" style="color:var(--text-muted)">${escHtml(r.code)} <span style="font-size:0.72rem">(unchanged)</span></span>`;
             tr.innerHTML = `
-                <td style="font-weight:600">${escHtml(r.code)}</td>
+                <td class="code-cell">${escHtml(r.code)}</td>
+                <td>${codeCell}</td>
                 <td><span class="desc-before">${escHtml(r.current_desc)}</span></td>
-                <td><span class="desc-after">${escHtml(r.new_desc)}</span></td>
+                <td><span class="desc-after">${escHtml(r.title)}</span></td>
             `;
         }
         tbody.appendChild(tr);

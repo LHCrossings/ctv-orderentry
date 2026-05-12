@@ -4339,7 +4339,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 sys.path.insert(0, str(project_root))
             from browser_automation.etere_direct_client import connect as _db_connect
 
-            pairs = payload.get("pairs", [])  # [{code, description}]
+            # pairs: [{code, title, new_code}]
+            # new_code is None/null when no ISCI parenthetical was found
+            pairs = payload.get("pairs", [])
             if not pairs:
                 raise HTTPException(status_code=400, detail="No pairs provided.")
 
@@ -4357,12 +4359,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
             results = []
             for p in pairs:
-                code = p["code"]
-                new_desc = p["description"]
+                code     = p["code"]
+                title    = p["title"]
+                new_code = p.get("new_code")  # None = no ISCI, keep COD_PROGRA as-is
                 if code in found:
                     results.append({
                         "code":         code,
-                        "new_desc":     new_desc,
+                        "new_code":     new_code,
+                        "title":        title,
                         "current_desc": found[code]["current_desc"],
                         "asset_id":     found[code]["id"],
                         "found":        True,
@@ -4370,7 +4374,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 else:
                     results.append({
                         "code":     code,
-                        "new_desc": new_desc,
+                        "new_code": new_code,
+                        "title":    title,
                         "found":    False,
                     })
 
@@ -4389,7 +4394,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 sys.path.insert(0, str(project_root))
             from browser_automation.etere_direct_client import connect as _db_connect
 
-            pairs = payload.get("pairs", [])  # [{code, description}] — only found ones
+            pairs = payload.get("pairs", [])
             if not pairs:
                 raise HTTPException(status_code=400, detail="No pairs to apply.")
 
@@ -4397,10 +4402,18 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 cursor = conn.cursor()
                 updated = 0
                 for p in pairs:
-                    cursor.execute(
-                        "UPDATE FILMATI SET DESCRIZIO = %s WHERE COD_PROGRA = %s",
-                        [p["description"], p["code"]]
-                    )
+                    new_code = p.get("new_code")
+                    if new_code:
+                        cursor.execute(
+                            "UPDATE FILMATI SET DESCRIZIO = %s, COD_PROGRA = %s"
+                            " WHERE COD_PROGRA = %s",
+                            [p["title"], new_code, p["code"]]
+                        )
+                    else:
+                        cursor.execute(
+                            "UPDATE FILMATI SET DESCRIZIO = %s WHERE COD_PROGRA = %s",
+                            [p["title"], p["code"]]
+                        )
                     updated += cursor.rowcount
                 conn.commit()
 
