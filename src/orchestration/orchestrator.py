@@ -126,6 +126,7 @@ class ApplicationOrchestrator:
         # Scan for orders
         print("Scanning for orders...")
         orders = self._scanner.scan_for_orders()
+        print(f"[ORCH] received {len(orders)} order(s), bool={bool(orders)}")
 
         if not orders:
             print("\n[INFO] No orders found in incoming directory")
