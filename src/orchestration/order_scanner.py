@@ -92,6 +92,12 @@ class OrderScanner:
             print(f"[SCAN] Directory does not exist: {self._incoming_dir.resolve()}")
             return []
 
+        all_files = [f for f in self._incoming_dir.iterdir() if f.is_file()]
+        if all_files:
+            print(f"[SCAN] Files found: {[f.name for f in all_files]}")
+        else:
+            print(f"[SCAN] Directory is empty")
+
         orders = []
 
         # Find all order files (PDF and AAAA SpotTV XML)
