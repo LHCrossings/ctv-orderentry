@@ -1194,25 +1194,26 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         if not python_exe.exists():
             python_exe = Path(sys.executable)
 
-        # Build --files args if specific files selected
-        files_arg = ""
+        # Validate --files args if specific files selected
+        safe_files = []
         if files:
-            # Validate each filename stays within incoming/
-            safe_files = []
             for f in files:
                 p = (config.incoming_dir / f).resolve()
                 if str(p).startswith(str(config.incoming_dir.resolve())) and p.exists():
                     safe_files.append(f)
-            if safe_files:
-                files_arg = " --files " + " ".join(f'"{f}"' for f in safe_files)
 
         if sys.platform == "win32":
-            # cmd /k requires the entire inner command wrapped in an extra pair of quotes
-            cmd = f'start "CTV Order Entry" cmd /k ""{python_exe}" "{main_py}"{files_arg}"'
-            subprocess.Popen(cmd, shell=True, cwd=str(project_root))
+            # Use argument list + CREATE_NEW_CONSOLE — avoids shell=True which
+            # causes cmd.exe to split filenames containing & at the shell level.
+            args = [str(python_exe), str(main_py)]
+            if safe_files:
+                args += ["--files"] + safe_files
+            subprocess.Popen(args, cwd=str(project_root),
+                             creationflags=subprocess.CREATE_NEW_CONSOLE)
             n = len(files) if files else "all"
             return JSONResponse({"message": f"Terminal opened — processing {n} order(s)."})
         else:
+            files_arg = (" --files " + " ".join(f'"{f}"' for f in safe_files)) if safe_files else ""
             cmd = f"uv run python main.py{files_arg}"
             return JSONResponse({"message": f"Run in your terminal: {cmd}", "manual": True})
 
