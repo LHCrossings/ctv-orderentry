@@ -246,6 +246,7 @@ def process_intertrend_order(driver, pdf_path: str, user_input: dict = None) -> 
 
             # Apply Sunday 6-7a rule
             days, _ = EtereClient.check_sunday_6_7a_rule(line.days, line.time)
+            time_from, time_to = EtereClient.parse_time_range(line.time)
 
             tag = 'BNS' if is_bonus else 'COM'
             print(f'\n[LINE {line.line_number}] {tag}  {line.days} {time_fmt} :{line.duration}  '
@@ -274,14 +275,16 @@ def process_intertrend_order(driver, pdf_path: str, user_input: dict = None) -> 
                     market=market,
                     start_date=group_start,
                     end_date=group_end,
-                    description=description,
-                    duration=line.duration,
                     days=days,
+                    time_from=time_from,
+                    time_to=time_to,
+                    description=description,
+                    spot_code=spot_code,
+                    duration_seconds=line.duration,
                     spots_per_week=spots_per_week,
                     total_spots=group_total,
                     rate=rate,
-                    spot_code=spot_code,
-                    separation=separation,
+                    separation_intervals=separation,
                     max_daily_run=None,
                 )
 
