@@ -261,7 +261,7 @@ class OrderScanner:
                 print(f"Warning: Failed to process: {e}")
                 continue
 
-        print(f"[SCAN] returning {len(orders)} order(s), scanner={id(self)}")
+        print(f"[SCAN] returning list_id={id(orders)}, len={len(orders)}, scanner={id(self)}")
 
         return orders
 
