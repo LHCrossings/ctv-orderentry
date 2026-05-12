@@ -24,7 +24,11 @@ def _detect_xlsx_content(file_path: Path) -> OrderType:
     Used when filename-based detection returns UNKNOWN.
     """
     try:
-        import openpyxl
+        try:
+            import openpyxl
+        except ImportError:
+            print(f"[WARN] openpyxl not installed — cannot detect XLSX order type for {file_path.name}. Run: pip install openpyxl")
+            return OrderType.UNKNOWN
         wb = openpyxl.load_workbook(str(file_path), read_only=True, data_only=True)
         ws = wb.active
         for row in ws.iter_rows(max_row=10):
@@ -83,7 +87,9 @@ class OrderScanner:
         Returns:
             List of Order entities, possibly multiple per PDF
         """
+        print(f"[SCAN] Looking in: {self._incoming_dir.resolve()}")
         if not self._incoming_dir.exists():
+            print(f"[SCAN] Directory does not exist: {self._incoming_dir.resolve()}")
             return []
 
         orders = []
