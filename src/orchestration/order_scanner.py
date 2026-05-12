@@ -50,8 +50,8 @@ def _detect_xlsx_content(file_path: Path) -> OrderType:
                     wb.close()
                     return OrderType.THREEOLIVES
         wb.close()
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[WARN] Could not read {file_path.name}: {e}")
     return OrderType.UNKNOWN
 
 
@@ -229,6 +229,7 @@ class OrderScanner:
                     order_type = _detect_xlsx_content(file_path)
 
                 if order_type == OrderType.UNKNOWN:
+                    print(f"[SCAN] Skipping (unknown type): {file_path.name}")
                     continue
 
                 # Extract customer name hint
