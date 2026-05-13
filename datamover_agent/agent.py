@@ -9,7 +9,7 @@ Run: python agent.py
 import asyncio
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -59,13 +59,38 @@ def _load_db() -> None:
         try:
             data: dict = json.loads(DB_FILE.read_text(encoding="utf-8"))
             for cap in data.values():
-                # Any capture that was mid-flight when the agent stopped is now an error
-                if cap.get("status") in ("recording", "pending", "scheduled"):
+                if cap.get("status") == "recording":
+                    # Was actively recording when agent stopped — genuinely lost
                     cap["status"] = "error"
                     cap["error"] = "Agent restarted during capture"
+                # pending/scheduled captures are re-queued in startup()
             captures.update(data)
         except Exception:
             pass
+
+
+async def _requeue_scheduled() -> None:
+    now = datetime.now()
+    for cap_id, cap in list(captures.items()):
+        if cap.get("status") not in ("pending", "scheduled"):
+            continue
+        start_dt = datetime.fromisoformat(cap["start_time"])
+        window_end = start_dt + timedelta(seconds=cap.get("duration_seconds", 0))
+        if window_end < now:
+            # Window has fully passed — missed it
+            cap["status"] = "error"
+            cap["error"] = "Missed: agent was offline during scheduled window"
+        else:
+            # Still time to record — re-queue (delay=0 if start already passed)
+            delay = max(0.0, (start_dt - now).total_seconds())
+            cap["status"] = "pending"
+            _tasks[cap_id] = asyncio.create_task(_schedule(cap_id, delay))
+    _save_db()
+
+
+@app.on_event("startup")
+async def startup() -> None:
+    await _requeue_scheduled()
 
 
 def _save_db() -> None:
