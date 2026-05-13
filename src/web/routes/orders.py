@@ -130,6 +130,26 @@ def _hhmm_to_frames(hhmm: str) -> int:
     return round((h * 3600 + m * 60) * _FPS_GLOBAL)
 
 
+def _broadcast_month_folder(monday) -> tuple[int, str]:
+    """Return (year, folder_name) for the broadcast month a week's Monday belongs to.
+
+    Logs are filed by broadcast month, which starts on the Monday of the week
+    containing the 1st of that calendar month — so the week of Dec 29 belongs
+    to January if Jan 1 falls within it.
+    """
+    from datetime import timedelta
+    for offset in range(7):
+        day = monday + timedelta(days=offset)
+        if day.day == 1:
+            return day.year, day.strftime("%m %B %Y")
+    first = monday.replace(day=1)
+    bcast_start = first - timedelta(days=first.weekday())
+    if bcast_start <= monday:
+        return first.year, first.strftime("%m %B %Y")
+    first_prev = (first - timedelta(days=1)).replace(day=1)
+    return first_prev.year, first_prev.strftime("%m %B %Y")
+
+
 def _build_spot_filter(filters: dict) -> str:
     """Return extra AND clauses for TPALINSE spot queries based on optional filter dict."""
     import re
@@ -1984,8 +2004,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
         def _find_log(mkt: str, monday: _date_cls):
             file_date = monday.strftime("%y%m%d")
-            month_folder = monday.strftime("%m %B %Y")
-            base = Path("K:/Traffic/logs") / str(monday.year) / month_folder
+            year, month_folder = _broadcast_month_folder(monday)
+            base = Path("K:/Traffic/logs") / str(year) / month_folder
             for folder in [base, base / "done"]:
                 p = folder / f"{mkt} Log - {file_date}.xlsm"
                 if p.exists():
@@ -2091,9 +2111,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         def _find_log(mkt: str, target: _date_cls) -> Optional[Path]:
             monday = target - timedelta(days=target.weekday())
             file_date = monday.strftime("%y%m%d")
-            month_folder = monday.strftime("%m %B %Y")
+            year, month_folder = _broadcast_month_folder(monday)
             _log_root = Path("K:/Traffic/logs") if sys.platform == "win32" else Path("/mnt/k/Traffic/logs")
-            base = _log_root / str(monday.year) / month_folder
+            base = _log_root / str(year) / month_folder
             for folder in [base, base / "done"]:
                 p = folder / f"{mkt} Log - {file_date}.xlsm"
                 if p.exists():
@@ -2205,9 +2225,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         def _find_log(mkt: str, d: _date_cls) -> Optional[Path]:
             monday = d - timedelta(days=d.weekday())
             file_date = monday.strftime("%y%m%d")
-            month_folder = monday.strftime("%m %B %Y")
+            year, month_folder = _broadcast_month_folder(monday)
             _log_root = Path("K:/Traffic/logs") if sys.platform == "win32" else Path("/mnt/k/Traffic/logs")
-            base = _log_root / str(monday.year) / month_folder
+            base = _log_root / str(year) / month_folder
             for folder in [base, base / "done"]:
                 p = folder / f"{mkt} Log - {file_date}.xlsm"
                 if p.exists():
@@ -2285,9 +2305,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         def _find_log(mkt: str, target: _date_cls) -> Optional[Path]:
             monday = target - timedelta(days=target.weekday())
             file_date = monday.strftime("%y%m%d")
-            month_folder = monday.strftime("%m %B %Y")
+            year, month_folder = _broadcast_month_folder(monday)
             _log_root = Path("K:/Traffic/logs") if sys.platform == "win32" else Path("/mnt/k/Traffic/logs")
-            base = _log_root / str(monday.year) / month_folder
+            base = _log_root / str(year) / month_folder
             for folder in [base, base / "done"]:
                 p = folder / f"{mkt} Log - {file_date}.xlsm"
                 if p.exists():
