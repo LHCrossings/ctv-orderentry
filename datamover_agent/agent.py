@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 import uvicorn
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -51,6 +51,7 @@ app.add_middleware(
 )
 
 captures: dict[str, dict] = {}
+_tasks:   dict[str, asyncio.Task] = {}
 
 
 def _load_db() -> None:
@@ -84,6 +85,11 @@ class CaptureRequest(BaseModel):
     duration_seconds: int
     start_time: Optional[str] = None  # ISO local datetime string; None = start immediately
     notes: str = ""
+
+class CaptureUpdate(BaseModel):
+    start_time: Optional[str] = None
+    duration_seconds: Optional[int] = None
+    notes: Optional[str] = None
 
 
 # ── FFmpeg runner ─────────────────────────────────────────────────────────────
@@ -133,14 +139,17 @@ async def _schedule(cap_id: str, delay: float) -> None:
     if delay > 0:
         captures[cap_id]["status"] = "scheduled"
         _save_db()
-        await asyncio.sleep(delay)
+        try:
+            await asyncio.sleep(delay)
+        except asyncio.CancelledError:
+            return  # cancelled by edit or delete
     await _run(cap_id)
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.post("/captures", status_code=201)
-async def create_capture(req: CaptureRequest, bg: BackgroundTasks):
+async def create_capture(req: CaptureRequest):
     if req.network not in NETWORK_PORTS:
         raise HTTPException(400, f"Unknown network: {req.network}")
     if req.duration_seconds < 5 or req.duration_seconds > 7200:
@@ -178,7 +187,7 @@ async def create_capture(req: CaptureRequest, bg: BackgroundTasks):
     }
     _save_db()
 
-    bg.add_task(_schedule, cap_id, delay)
+    _tasks[cap_id] = asyncio.create_task(_schedule(cap_id, delay))
     return captures[cap_id]
 
 
@@ -207,10 +216,57 @@ async def download_capture(cap_id: str):
     return FileResponse(str(path), media_type="video/mp4", filename=cap["filename"])
 
 
+@app.patch("/captures/{cap_id}")
+async def update_capture(cap_id: str, req: CaptureUpdate):
+    if cap_id not in captures:
+        raise HTTPException(404, "Not found")
+    cap = captures[cap_id]
+    if cap["status"] not in ("scheduled", "pending"):
+        raise HTTPException(400, "Can only edit scheduled or pending captures")
+
+    task = _tasks.pop(cap_id, None)
+    if task:
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):
+            pass
+
+    now = datetime.now()
+    if req.start_time is not None:
+        start_dt = datetime.fromisoformat(req.start_time)
+        cap["start_time"] = start_dt.isoformat()
+        net_s    = _safe(cap["network"].replace(" ", "_"))
+        client_s = _safe(cap["client"].replace(" ", "_"))
+        cap["filename"] = f"{net_s}_{client_s}_{start_dt.strftime('%Y%m%d_%H%M')}.mp4"
+    else:
+        start_dt = datetime.fromisoformat(cap["start_time"])
+
+    if req.duration_seconds is not None:
+        if not (5 <= req.duration_seconds <= 7200):
+            raise HTTPException(400, "Duration must be 5–7200 seconds")
+        cap["duration_seconds"] = req.duration_seconds
+    if req.notes is not None:
+        cap["notes"] = req.notes
+
+    delay = max(0.0, (start_dt - now).total_seconds())
+    cap["status"] = "pending"
+    _save_db()
+    _tasks[cap_id] = asyncio.create_task(_schedule(cap_id, delay))
+    return cap
+
+
 @app.delete("/captures/{cap_id}")
 async def delete_capture(cap_id: str):
     if cap_id not in captures:
         raise HTTPException(404, "Not found")
+    task = _tasks.pop(cap_id, None)
+    if task:
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):
+            pass
     cap = captures.pop(cap_id)
     path = OUTPUT_DIR / cap["filename"]
     if path.exists():

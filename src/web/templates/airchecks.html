@@ -167,6 +167,21 @@
         .btn-download:hover { background: rgba(163,190,140,0.3); }
         .btn-delete   { background: rgba(191,97,106,0.1);  border-color: rgba(191,97,106,0.3);  color: var(--nord11); margin-left: 4px; }
         .btn-delete:hover { background: rgba(191,97,106,0.2); }
+        .btn-edit     { background: rgba(129,161,193,0.1);  border-color: rgba(129,161,193,0.3);  color: var(--nord9); }
+        .btn-edit:hover { background: rgba(129,161,193,0.2); }
+
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+        .modal-box { background: var(--nord1); border: 1px solid var(--nord3); border-radius: 12px; padding: 28px 32px; width: 380px; max-width: 95vw; }
+        .modal-box h3 { margin: 0 0 20px; font-size: 1rem; color: var(--nord6); }
+        .modal-row { margin-bottom: 14px; }
+        .modal-row label { display: block; font-size: 0.78rem; color: var(--text-muted); margin-bottom: 5px; }
+        .modal-row input { width: 100%; box-sizing: border-box; background: var(--nord0); border: 1px solid var(--nord3); border-radius: 6px; color: var(--nord6); padding: 7px 10px; font-size: 0.88rem; font-family: inherit; }
+        .modal-row input:focus { outline: none; border-color: var(--nord9); }
+        .modal-actions { display: flex; gap: 10px; margin-top: 22px; justify-content: flex-end; }
+        .modal-save { background: var(--nord10); border: none; color: #fff; padding: 8px 20px; border-radius: 7px; font-size: 0.88rem; font-weight: 600; cursor: pointer; }
+        .modal-save:hover { background: var(--nord9); }
+        .modal-cancel { background: transparent; border: 1px solid var(--nord3); color: var(--text-muted); padding: 8px 16px; border-radius: 7px; font-size: 0.88rem; cursor: pointer; }
+        .modal-cancel:hover { border-color: var(--nord4); color: var(--nord4); }
 
         .empty-state { text-align: center; padding: 40px 0; color: var(--text-muted); font-size: 0.88rem; }
         .file-size { font-size: 0.78rem; color: var(--text-muted); }
@@ -218,6 +233,32 @@
     </style>
 </head>
 <body>
+
+<!-- Edit capture modal -->
+<div id="editModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeEditModal()">
+    <div class="modal-box">
+        <h3>Edit Scheduled Capture</h3>
+        <input type="hidden" id="editId">
+        <div class="modal-row">
+            <label>Start Time</label>
+            <input type="datetime-local" id="editStartTime">
+        </div>
+        <div class="modal-row">
+            <label>Duration (seconds)</label>
+            <input type="number" id="editDuration" min="5" max="7200" step="1">
+        </div>
+        <div class="modal-row">
+            <label>Notes</label>
+            <input type="text" id="editNotes" maxlength="200">
+        </div>
+        <div id="editError" style="color:var(--nord11);font-size:0.8rem;margin-top:6px;display:none"></div>
+        <div class="modal-actions">
+            <button class="modal-cancel" onclick="closeEditModal()">Cancel</button>
+            <button class="modal-save" onclick="saveEdit()">Save Changes</button>
+        </div>
+    </div>
+</div>
+
 
 <header>
     <div class="header-left">
@@ -488,7 +529,10 @@ function statusBadge(s) {
     return `<span class="badge ${cls}">${label}</span>`;
 }
 
+let captureIndex = {};
+
 function renderCaptures(list) {
+    captureIndex = Object.fromEntries(list.map(c => [c.id, c]));
     const body = document.getElementById('capturesBody');
     if (!list.length) {
         body.innerHTML = '<div class="empty-state">No captures yet.</div>';
@@ -507,6 +551,9 @@ function renderCaptures(list) {
                <button class="action-btn btn-delete" onclick="deleteCapture('${cap.id}')">✕</button>`
             : cap.status === 'error'
             ? `<button class="action-btn btn-delete" onclick="deleteCapture('${cap.id}')">✕ Remove</button>`
+            : (cap.status === 'scheduled' || cap.status === 'pending')
+            ? `<button class="action-btn btn-edit" onclick="openEditModal('${cap.id}')">✎ Edit</button>
+               <button class="action-btn btn-delete" onclick="deleteCapture('${cap.id}')">✕</button>`
             : '';
 
         html += `<tr>
@@ -538,6 +585,58 @@ async function deleteCapture(id) {
         await fetch(`${AGENT}/captures/${id}`, { method: 'DELETE' });
         await loadCaptures();
     } catch { alert('Delete failed.'); }
+}
+
+function openEditModal(id) {
+    const cap = captureIndex[id];
+    if (!cap) return;
+    document.getElementById('editId').value = id;
+    // datetime-local expects "YYYY-MM-DDTHH:MM"
+    const dt = new Date(cap.start_time);
+    const pad = n => String(n).padStart(2, '0');
+    const local = `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+    document.getElementById('editStartTime').value = local;
+    document.getElementById('editDuration').value  = cap.duration_seconds;
+    document.getElementById('editNotes').value     = cap.notes || '';
+    document.getElementById('editError').style.display = 'none';
+    document.getElementById('editModal').style.display = 'flex';
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').style.display = 'none';
+}
+
+async function saveEdit() {
+    const id  = document.getElementById('editId').value;
+    const st  = document.getElementById('editStartTime').value;
+    const dur = parseInt(document.getElementById('editDuration').value, 10);
+    const notes = document.getElementById('editNotes').value.trim();
+    const errEl = document.getElementById('editError');
+    errEl.style.display = 'none';
+
+    const body = {};
+    if (st)        body.start_time        = new Date(st).toISOString().slice(0, 19);
+    if (!isNaN(dur)) body.duration_seconds = dur;
+    body.notes = notes;
+
+    try {
+        const r = await fetch(`${AGENT}/captures/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!r.ok) {
+            const d = await r.json().catch(() => ({}));
+            errEl.textContent = d.detail || `Error ${r.status}`;
+            errEl.style.display = 'block';
+            return;
+        }
+        closeEditModal();
+        await loadCaptures();
+    } catch (e) {
+        errEl.textContent = 'Could not reach Datamover.';
+        errEl.style.display = 'block';
+    }
 }
 
 function escHtml(s) {
