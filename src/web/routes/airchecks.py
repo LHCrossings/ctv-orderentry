@@ -36,7 +36,7 @@ def _fetch_etere_spots(contract_id: int) -> list[dict]:
             JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
             JOIN FILMATI f          ON f.ID_FILMATI          = tp.ID_FILMATI
             WHERE cr.ID_CONTRATTITESTATA = %d
-              AND CAST(tp.DATA AS DATE) >= CAST(GETDATE() AS DATE)
+              AND DATEADD(SECOND, tp.ORA/30, CAST(tp.DATA AS DATETIME)) >= DATEADD(HOUR, 4, GETDATE())
               AND f.COD_PROGRA IS NOT NULL
               AND f.COD_PROGRA != ''
               AND tp.NEWTYPE = 'COM'
