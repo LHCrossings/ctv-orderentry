@@ -94,13 +94,13 @@
             <span class="module-badge live">Live</span>
         </a>
 
-        <a href="/airchecks" class="module-card active">
+        <a href="/airchecks" class="module-card active" id="airchecksCard">
             <div class="module-icon">🎬</div>
             <div class="module-body">
                 <div class="module-name">Airchecks</div>
                 <div class="module-desc">Record live network streams to MP4 for client aircheck delivery.</div>
             </div>
-            <span class="module-badge live">Live</span>
+            <span class="module-badge live" id="airchecksBadge">Live</span>
         </a>
 
         <a href="/live-view" class="module-card active">
@@ -115,5 +115,39 @@
     </div>
 </main>
 
+<style>
+#airchecksCard.notify {
+    border-color: rgba(163,190,140,0.6);
+    box-shadow: 0 0 0 2px rgba(163,190,140,0.25);
+}
+#airchecksCard.notify .module-name { color: #a3be8c; }
+#airchecksBadge.ready {
+    background: rgba(163,190,140,0.2);
+    color: #a3be8c;
+    border-color: rgba(163,190,140,0.5);
+}
+</style>
+<script>
+async function checkAirchecks() {
+    try {
+        const r = await fetch('/api/airchecks/status', { signal: AbortSignal.timeout(4000) });
+        if (!r.ok) return;
+        const { complete } = await r.json();
+        const card  = document.getElementById('airchecksCard');
+        const badge = document.getElementById('airchecksBadge');
+        if (complete > 0) {
+            card.classList.add('notify');
+            badge.classList.add('ready');
+            badge.textContent = `${complete} Ready`;
+        } else {
+            card.classList.remove('notify');
+            badge.classList.remove('ready');
+            badge.textContent = 'Live';
+        }
+    } catch {}
+}
+checkAirchecks();
+setInterval(checkAirchecks, 60000);
+</script>
 </body>
 </html>

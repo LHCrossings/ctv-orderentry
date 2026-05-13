@@ -111,8 +111,30 @@ def _fetch_etere_spots(contract_id: int) -> list[dict]:
     return results
 
 
+AGENT_URL = "http://100.102.206.113:8765"
+
+
+def _fetch_agent_status() -> dict:
+    import urllib.request, json as _json
+    try:
+        with urllib.request.urlopen(f"{AGENT_URL}/captures", timeout=3) as resp:
+            caps = _json.loads(resp.read())
+        return {
+            "complete":  sum(1 for c in caps if c.get("status") == "complete"),
+            "scheduled": sum(1 for c in caps if c.get("status") in ("scheduled", "pending", "recording")),
+            "unreachable": False,
+        }
+    except Exception:
+        return {"complete": 0, "scheduled": 0, "unreachable": True}
+
+
 def build_airchecks_router(templates: Jinja2Templates) -> APIRouter:
     router = APIRouter()
+
+    @router.get("/api/airchecks/status")
+    async def aircheck_status():
+        status = await asyncio.get_running_loop().run_in_executor(None, _fetch_agent_status)
+        return JSONResponse(status)
 
     @router.get("/airchecks", response_class=HTMLResponse)
     async def airchecks(request: Request):
