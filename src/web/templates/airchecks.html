@@ -275,7 +275,7 @@
 
     <!-- Schedule form -->
     <div class="card">
-        <div class="card-title">Schedule Aircheck</div>
+        <div class="card-title">Manually Schedule Aircheck</div>
         <div class="form-grid">
 
             <div class="field-row">
@@ -803,11 +803,11 @@ async function scheduleAllSpots() {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body:    JSON.stringify({
-                    client:           s.isci_code,
+                    client:           s.client_name || s.isci_code,
                     network:          s.network,
                     duration_seconds: s.capture_duration_seconds,
                     start_time:       s.capture_start,
-                    notes:            selectedContract.code,
+                    notes:            s.customer_ref || selectedContract.code,
                 }),
             });
             if (resp.ok) { ok++; } else { fail++; }

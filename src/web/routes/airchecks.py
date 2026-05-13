@@ -39,26 +39,30 @@ def _fetch_etere_spots(contract_id: int) -> list[dict]:
     sql = """
         WITH ranked AS (
             SELECT
-                f.COD_PROGRA  AS isci_code,
-                tp.COD_USER   AS market_id,
-                tp.DATA       AS air_date,
-                tp.ORA        AS air_ora,
-                cr.DURATA     AS duration_frames,
+                f.COD_PROGRA   AS isci_code,
+                tp.COD_USER    AS market_id,
+                tp.DATA        AS air_date,
+                tp.ORA         AS air_ora,
+                cr.DURATA      AS duration_frames,
+                ct.CUSTOMERREF AS customer_ref,
+                a.RAG_SOCIAL   AS client_name,
                 ROW_NUMBER() OVER (
                     PARTITION BY f.COD_PROGRA, tp.COD_USER
                     ORDER BY tp.DATA, tp.ORA
                 ) AS rn
             FROM TPALINSE tp
-            JOIN trafficPalinse tpa ON tpa.id_tpalinse      = tp.ID_TPALINSE
-            JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
-            JOIN FILMATI f          ON f.ID_FILMATI          = tp.ID_FILMATI
+            JOIN trafficPalinse tpa  ON tpa.id_tpalinse      = tp.ID_TPALINSE
+            JOIN CONTRATTIRIGHE cr   ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
+            JOIN FILMATI f           ON f.ID_FILMATI          = tp.ID_FILMATI
+            JOIN CONTRATTITESTATA ct ON ct.ID_CONTRATTITESTATA = cr.ID_CONTRATTITESTATA
+            LEFT JOIN ANAGRAF a      ON a.ID_ANAGRAF           = ct.COMMITTENTE
             WHERE cr.ID_CONTRATTITESTATA = %d
               AND DATEADD(SECOND, tp.ORA/30, CAST(tp.DATA AS DATETIME)) >= DATEADD(HOUR, 4, GETDATE())
               AND f.COD_PROGRA IS NOT NULL
               AND f.COD_PROGRA != ''
               AND tp.NEWTYPE = 'COM'
         )
-        SELECT isci_code, market_id, air_date, air_ora, duration_frames
+        SELECT isci_code, market_id, air_date, air_ora, duration_frames, customer_ref, client_name
         FROM ranked
         WHERE rn = 1
         ORDER BY isci_code, market_id
@@ -89,11 +93,16 @@ def _fetch_etere_spots(contract_id: int) -> list[dict]:
 
             dur_secs = max(5, int(row["duration_frames"] or 0) // 30)
 
+            client_name  = (row.get("client_name") or "").strip() or None
+            customer_ref = (row.get("customer_ref") or "").strip() or None
+
             results.append({
                 "isci_code":                row["isci_code"].strip(),
+                "client_name":              client_name,
+                "customer_ref":             customer_ref,
                 "network":                  network,
-                "air_datetime":             air_dt.isoformat(),           # naive PT — for Datamover scheduler
-                "air_datetime_local":       local_display,                # e.g. "5/13 at 2:10:06PM EST"
+                "air_datetime":             air_dt.isoformat(),
+                "air_datetime_local":       local_display,
                 "duration_seconds":         dur_secs,
                 "capture_start":            (air_dt - timedelta(seconds=PRE_ROLL_SECS)).isoformat(),
                 "capture_duration_seconds": dur_secs + PRE_ROLL_SECS + POST_ROLL_SECS,
