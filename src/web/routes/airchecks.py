@@ -79,8 +79,13 @@ def _fetch_etere_spots(contract_id: int) -> list[dict]:
             air_dt_loc = datetime.combine(air_date, datetime.min.time(), tzinfo=market_tz) + timedelta(seconds=air_secs)
             air_dt     = air_dt_loc.astimezone(_PT).replace(tzinfo=None)  # naive PT for Datamover
 
-            tz_abbr      = air_dt_loc.strftime("%Z")  # e.g. "EST", "CDT"
-            local_display = air_dt_loc.strftime(f"%-m/%-d at %-I:%M:%S%p {tz_abbr}")
+            tz_abbr   = air_dt_loc.strftime("%Z")
+            h12       = air_dt_loc.hour % 12 or 12
+            ampm      = "AM" if air_dt_loc.hour < 12 else "PM"
+            local_display = (
+                f"{air_dt_loc.month}/{air_dt_loc.day} at "
+                f"{h12}:{air_dt_loc.strftime('%M:%S')}{ampm} {tz_abbr}"
+            )
 
             dur_secs = max(5, int(row["duration_frames"] or 0) // 30)
 
@@ -106,11 +111,13 @@ def build_airchecks_router(templates: Jinja2Templates) -> APIRouter:
 
     @router.get("/api/airchecks/etere-spots")
     async def etere_spots(contract_id: int):
+        import traceback
         try:
             spots = await asyncio.get_running_loop().run_in_executor(
                 None, lambda: _fetch_etere_spots(contract_id)
             )
         except Exception as exc:
+            traceback.print_exc()
             raise HTTPException(status_code=500, detail=str(exc))
         return JSONResponse(spots)
 
