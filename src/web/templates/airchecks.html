@@ -135,6 +135,12 @@
             border-radius: 6px; padding: 4px 12px; font-family: inherit;
             font-size: 0.78rem; color: var(--text-muted); cursor: pointer;
         }
+        .select-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+        .select-toolbar label { font-size: 0.82rem; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+        .btn-delete-sel { background: rgba(191,97,106,0.1); border: 1px solid rgba(191,97,106,0.3); color: var(--nord11); border-radius: 6px; padding: 4px 14px; font-size: 0.82rem; font-family: inherit; cursor: pointer; }
+        .btn-delete-sel:hover { background: rgba(191,97,106,0.2); }
+        .btn-delete-sel:disabled { opacity: 0.4; cursor: default; }
+        .cb-col { width: 28px; }
         .refresh-btn:hover { border-color: var(--nord10); color: var(--nord10); }
 
         table { width: 100%; border-collapse: collapse; }
@@ -363,6 +369,10 @@
             <div class="card-title" style="margin-bottom:0;">Recent Captures</div>
             <button class="refresh-btn" onclick="loadCaptures()">↻ Refresh</button>
         </div>
+        <div id="selectToolbar" class="select-toolbar" style="display:none">
+            <label><input type="checkbox" id="selectAllCb" onchange="toggleSelectAll(this)"> Select all scheduled</label>
+            <button class="btn-delete-sel" id="deleteSelBtn" disabled onclick="deleteSelected()">Delete Selected (0)</button>
+        </div>
         <div id="capturesBody"></div>
     </div>
 
@@ -539,9 +549,15 @@ function renderCaptures(list) {
         return;
     }
 
+    const hasScheduled = list.some(c => c.status === 'scheduled' || c.status === 'pending');
+    document.getElementById('selectToolbar').style.display = hasScheduled ? 'flex' : 'none';
+    document.getElementById('selectAllCb').checked = false;
+    document.getElementById('deleteSelBtn').disabled = true;
+    document.getElementById('deleteSelBtn').textContent = 'Delete Selected (0)';
+
     let html = `<table>
         <thead><tr>
-            <th>Client</th><th>Network</th><th>Start Time</th>
+            <th class="cb-col"></th><th>Client</th><th>Network</th><th>Start Time</th>
             <th>Duration</th><th>Status</th><th>Size</th><th>Notes</th><th></th>
         </tr></thead><tbody>`;
 
@@ -556,7 +572,13 @@ function renderCaptures(list) {
                <button class="action-btn btn-delete" onclick="deleteCapture('${cap.id}')">✕</button>`
             : '';
 
+        const isSchedulable = cap.status === 'scheduled' || cap.status === 'pending';
+        const cbCell = isSchedulable
+            ? `<td class="cb-col"><input type="checkbox" class="cap-cb" data-id="${cap.id}" onchange="updateDeleteBtn()"></td>`
+            : `<td class="cb-col"></td>`;
+
         html += `<tr>
+            ${cbCell}
             <td><strong>${escHtml(cap.client)}</strong></td>
             <td>${escHtml(cap.network)}</td>
             <td>${fmtDt(cap.start_time)}</td>
@@ -577,6 +599,28 @@ function renderCaptures(list) {
 
     html += '</tbody></table>';
     body.innerHTML = html;
+}
+
+function toggleSelectAll(cb) {
+    document.querySelectorAll('.cap-cb').forEach(el => el.checked = cb.checked);
+    updateDeleteBtn();
+}
+
+function updateDeleteBtn() {
+    const checked = document.querySelectorAll('.cap-cb:checked');
+    const btn = document.getElementById('deleteSelBtn');
+    btn.disabled = checked.length === 0;
+    btn.textContent = `Delete Selected (${checked.length})`;
+    document.getElementById('selectAllCb').checked =
+        checked.length > 0 && checked.length === document.querySelectorAll('.cap-cb').length;
+}
+
+async function deleteSelected() {
+    const ids = [...document.querySelectorAll('.cap-cb:checked')].map(el => el.dataset.id);
+    if (!ids.length) return;
+    if (!confirm(`Delete ${ids.length} scheduled capture${ids.length > 1 ? 's' : ''}?`)) return;
+    await Promise.all(ids.map(id => fetch(`${AGENT}/captures/${id}`, { method: 'DELETE' }).catch(() => {})));
+    await loadCaptures();
 }
 
 async function deleteCapture(id) {
