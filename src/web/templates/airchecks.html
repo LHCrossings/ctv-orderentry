@@ -171,6 +171,50 @@
         .empty-state { text-align: center; padding: 40px 0; color: var(--text-muted); font-size: 0.88rem; }
         .file-size { font-size: 0.78rem; color: var(--text-muted); }
         .notes-cell { font-size: 0.78rem; color: var(--text-muted); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* Contract super-search */
+        .search-wrap { position: relative; max-width: 480px; }
+        .search-dropdown {
+            position: absolute; top: 100%; left: 0; right: 0; z-index: 100;
+            background: var(--nord6); border: 1px solid var(--border-color);
+            border-radius: 8px; box-shadow: 0 4px 16px var(--shadow-color);
+            max-height: 260px; overflow-y: auto; display: none; margin-top: 4px;
+        }
+        .search-dropdown.open { display: block; }
+        .search-item { padding: 9px 14px; cursor: pointer; border-bottom: 1px solid var(--bg-secondary); transition: background 0.1s; }
+        .search-item:last-child { border-bottom: none; }
+        .search-item:hover { background: var(--bg-secondary); }
+        .search-code { font-weight: 700; color: var(--nord10); font-size: 0.8rem; margin-right: 8px; }
+        .search-desc { font-size: 0.82rem; color: var(--text-muted); }
+
+        .selected-contract {
+            display: flex; align-items: center; gap: 10px; margin-top: 8px;
+            padding: 8px 12px; background: var(--bg-secondary); border-radius: 8px;
+        }
+        .sel-code { font-weight: 700; color: var(--nord10); font-size: 0.85rem; }
+        .sel-desc { font-size: 0.82rem; color: var(--text-muted); flex: 1; }
+        .clear-btn { background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 1rem; }
+        .clear-btn:hover { color: var(--nord11); }
+
+        .load-spots-btn {
+            background: var(--nord9); color: var(--nord6); border: none;
+            border-radius: 8px; padding: 8px 20px; font-family: inherit;
+            font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: background 0.15s; margin-top: 14px;
+        }
+        .load-spots-btn:hover { background: var(--nord10); }
+        .load-spots-btn:disabled { opacity: 0.5; cursor: default; }
+
+        .schedule-all-btn {
+            background: var(--nord14); color: var(--nord6); border: none;
+            border-radius: 8px; padding: 8px 20px; font-family: inherit;
+            font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: background 0.15s;
+        }
+        .schedule-all-btn:hover { background: #8fad7a; }
+        .schedule-all-btn:disabled { opacity: 0.5; cursor: default; }
+
+        .spots-empty { text-align: center; padding: 28px 0; color: var(--text-muted); font-size: 0.88rem; }
+        .isci-code { font-weight: 700; font-family: monospace; font-size: 0.85rem; }
+        .capture-window { font-family: monospace; font-size: 0.76rem; color: var(--text-muted); }
     </style>
 </head>
 <body>
@@ -244,6 +288,32 @@
             <button class="submit-btn" id="submitBtn" onclick="scheduleCapture()">⏺ Start Capture</button>
             <span class="submit-msg" id="submitMsg"></span>
         </div>
+    </div>
+
+    <!-- Auto-schedule from Etere -->
+    <div class="card">
+        <div class="card-title">Auto-Schedule from Etere</div>
+
+        <div class="field-group">
+            <label class="field-label">Contract</label>
+            <div class="search-wrap">
+                <input class="field-input" type="text" id="etereSearch"
+                       placeholder="Search by contract number or name…"
+                       autocomplete="off" oninput="onEtereSearch()" style="width:100%;" />
+                <div class="search-dropdown" id="etereDropdown"></div>
+            </div>
+            <div class="selected-contract" id="selectedContractBox" style="display:none;">
+                <span class="sel-code" id="selCode"></span>
+                <span class="sel-desc" id="selDesc"></span>
+                <button class="clear-btn" onclick="clearContract()" title="Clear">✕</button>
+            </div>
+        </div>
+
+        <button class="load-spots-btn" id="loadSpotsBtn" onclick="loadEtereSpots()" disabled>
+            Load Spots from Etere
+        </button>
+
+        <div id="spotsArea" style="margin-top:16px;"></div>
     </div>
 
     <!-- Captures list -->
@@ -497,6 +567,166 @@ function startPolling() {
 function stopPolling() {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
+
+// ── Etere auto-schedule ───────────────────────────────────────────────────────
+let selectedContract = null;
+let etereSpots       = [];
+let etereSearchTimer = null;
+
+function onEtereSearch() {
+    clearTimeout(etereSearchTimer);
+    const q = document.getElementById('etereSearch').value.trim();
+    if (q.length < 2) { closeEtereDropdown(); return; }
+    etereSearchTimer = setTimeout(() => doEtereSearch(q), 300);
+}
+
+async function doEtereSearch(q) {
+    try {
+        const r    = await fetch(`/api/traffic/contract-search?q=${encodeURIComponent(q)}`);
+        const list = await r.json();
+        const dd   = document.getElementById('etereDropdown');
+        if (!list.length) { closeEtereDropdown(); return; }
+        dd.innerHTML = list.map(c => `
+            <div class="search-item"
+                 onclick="selectContract(${c.id}, '${escHtml(c.code)}', '${escHtml(c.description)}')">
+                <span class="search-code">${escHtml(c.code)}</span>
+                <span class="search-desc">${escHtml(c.description)}</span>
+            </div>`).join('');
+        dd.classList.add('open');
+    } catch { closeEtereDropdown(); }
+}
+
+function closeEtereDropdown() {
+    document.getElementById('etereDropdown').classList.remove('open');
+}
+
+function selectContract(id, code, desc) {
+    selectedContract = { id, code, desc };
+    document.getElementById('etereSearch').value = '';
+    closeEtereDropdown();
+    document.getElementById('selectedContractBox').style.display = 'flex';
+    document.getElementById('selCode').textContent = code;
+    document.getElementById('selDesc').textContent = desc;
+    document.getElementById('loadSpotsBtn').disabled = false;
+    document.getElementById('spotsArea').innerHTML = '';
+    etereSpots = [];
+}
+
+function clearContract() {
+    selectedContract = null;
+    etereSpots = [];
+    document.getElementById('etereSearch').value = '';
+    document.getElementById('selectedContractBox').style.display = 'none';
+    document.getElementById('loadSpotsBtn').disabled = true;
+    document.getElementById('spotsArea').innerHTML = '';
+}
+
+async function loadEtereSpots() {
+    if (!selectedContract) return;
+    const btn = document.getElementById('loadSpotsBtn');
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+    document.getElementById('spotsArea').innerHTML = '';
+
+    try {
+        const r = await fetch(`/api/airchecks/etere-spots?contract_id=${selectedContract.id}`);
+        if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'Query failed'); }
+        etereSpots = await r.json();
+        renderSpots();
+    } catch (e) {
+        document.getElementById('spotsArea').innerHTML =
+            `<div class="spots-empty" style="color:var(--nord11);">Error: ${escHtml(e.message)}</div>`;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Load Spots from Etere';
+    }
+}
+
+function fmtAirDt(iso) {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+           ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+}
+
+function renderSpots() {
+    const area = document.getElementById('spotsArea');
+    if (!etereSpots.length) {
+        area.innerHTML = '<div class="spots-empty">No upcoming scheduled spots found for this contract.</div>';
+        return;
+    }
+
+    let html = `<table>
+        <thead><tr>
+            <th>ISCI Code</th><th>Network</th><th>Earliest Air</th>
+            <th>Spot</th><th>Capture Window</th>
+        </tr></thead><tbody>`;
+
+    etereSpots.forEach(s => {
+        const start  = new Date(s.capture_start);
+        const end    = new Date(start.getTime() + s.capture_duration_seconds * 1000);
+        const tFmt   = { hour: 'numeric', minute: '2-digit', second: '2-digit' };
+        const window = `${start.toLocaleTimeString('en-US', tFmt)} – ${end.toLocaleTimeString('en-US', tFmt)}`;
+        html += `<tr>
+            <td><span class="isci-code">${escHtml(s.isci_code)}</span></td>
+            <td>${escHtml(s.network)}</td>
+            <td>${fmtAirDt(s.air_datetime)}</td>
+            <td style="font-family:monospace;">:${String(s.duration_seconds).padStart(2,'0')}</td>
+            <td class="capture-window">${window}</td>
+        </tr>`;
+    });
+
+    html += `</tbody></table>
+        <div style="display:flex;align-items:center;gap:14px;margin-top:14px;">
+            <button class="schedule-all-btn" id="schedAllBtn" onclick="scheduleAllSpots()">
+                ⏺ Schedule All ${etereSpots.length} Aircheck${etereSpots.length !== 1 ? 's' : ''}
+            </button>
+            <span class="submit-msg" id="schedAllMsg"></span>
+        </div>`;
+
+    area.innerHTML = html;
+}
+
+async function scheduleAllSpots() {
+    if (!etereSpots.length || !selectedContract) return;
+    const btn = document.getElementById('schedAllBtn');
+    const msg = document.getElementById('schedAllMsg');
+    btn.disabled = true;
+
+    let ok = 0, fail = 0;
+    for (const s of etereSpots) {
+        btn.textContent = `Scheduling ${ok + fail + 1} of ${etereSpots.length}…`;
+        try {
+            const resp = await fetch(`${AGENT}/captures`, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({
+                    client:           s.isci_code,
+                    network:          s.network,
+                    duration_seconds: s.capture_duration_seconds,
+                    start_time:       s.capture_start,
+                    notes:            `${selectedContract.code} — ${selectedContract.desc}`,
+                }),
+            });
+            if (resp.ok) { ok++; } else { fail++; }
+        } catch { fail++; }
+    }
+
+    btn.textContent = `⏺ Schedule All ${etereSpots.length} Aircheck${etereSpots.length !== 1 ? 's' : ''}`;
+    btn.disabled = false;
+
+    if (!fail) {
+        flash(msg, `✓ ${ok} airchecks scheduled.`, true);
+        await loadCaptures();
+        startPolling();
+    } else {
+        flash(msg, `${ok} scheduled, ${fail} failed — check Datamover connection.`, false);
+    }
+}
+
+// Close dropdown on outside click
+document.addEventListener('click', e => {
+    if (!e.target.closest('.search-wrap')) closeEtereDropdown();
+});
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 checkAgent();
