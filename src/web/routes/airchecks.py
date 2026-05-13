@@ -115,7 +115,8 @@ AGENT_URL = "http://100.102.206.113:8765"
 
 
 def _fetch_agent_status() -> dict:
-    import urllib.request, json as _json
+    import json as _json
+    import urllib.request
     try:
         with urllib.request.urlopen(f"{AGENT_URL}/captures", timeout=3) as resp:
             caps = _json.loads(resp.read())
