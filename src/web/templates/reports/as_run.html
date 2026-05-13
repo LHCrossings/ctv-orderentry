@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>As-Run Report — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 1100px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px 28px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+            margin-bottom: 20px;
+        }
+        .tool-card h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 16px;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+        .field-group { display: flex; flex-direction: column; gap: 5px; }
+        .field-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+        .field-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 9px 12px;
+            font-size: 0.9rem;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            color: var(--text-primary);
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .field-input:focus {
+            border-color: var(--nord10);
+            box-shadow: 0 0 0 3px rgba(94,129,172,0.15);
+        }
+
+        .market-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 4px;
+        }
+        .market-pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            cursor: pointer;
+            user-select: none;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            transition: all 0.15s;
+        }
+        .market-pill input { display: none; }
+        .market-pill.checked {
+            background: var(--nord10);
+            border-color: var(--nord10);
+            color: #fff;
+        }
+
+        .run-btn {
+            padding: 9px 20px;
+            background: var(--nord10);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.15s;
+            white-space: nowrap;
+            height: 38px;
+        }
+        .run-btn:hover:not(:disabled) { background: var(--nord9); transform: translateY(-1px); }
+        .run-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+        .loading-msg {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            padding: 8px 0;
+        }
+
+        /* Results */
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 14px;
+            margin-bottom: 20px;
+        }
+        .market-block {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .market-block-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            background: var(--nord10);
+            color: #fff;
+        }
+        .market-block-header .mkt-code { font-weight: 700; font-size: 0.95rem; }
+        .market-block-header .mkt-count {
+            background: rgba(255,255,255,0.25);
+            border-radius: 12px;
+            padding: 2px 10px;
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+        .market-block-header.zero { background: var(--nord3); }
+        .airing-list {
+            padding: 8px 0;
+            max-height: 260px;
+            overflow-y: auto;
+        }
+        .airing-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 14px;
+            font-size: 0.82rem;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        .airing-row:last-child { border-bottom: none; }
+        .airing-date { font-weight: 600; }
+        .airing-time { color: var(--text-muted); font-family: monospace; }
+
+        .grand-total-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 18px;
+            background: #1f3864;
+            color: #fff;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 1rem;
+        }
+        .grand-total-bar .gt-label { opacity: 0.75; font-size: 0.82rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+
+        .spot-title-banner {
+            padding: 12px 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 700;
+            font-size: 0.92rem;
+            color: var(--text-primary);
+        }
+        .spot-title-banner span { color: var(--text-muted); font-weight: 400; font-size: 0.82rem; margin-left: 8px; }
+    </style>
+</head>
+<body>
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/reports" class="back-link">&#8592;</a>
+            <div class="logo-icon">📋</div>
+            <div>
+                <h1>As-Run <span>Report</span></h1>
+                <div class="logo-sub">Reports · Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+
+    <div class="tool-card">
+        <h2>Search</h2>
+        <div class="input-row" style="margin-bottom:16px;">
+            <div class="field-group" style="flex:1; min-width:200px;">
+                <label class="field-label">Spot Code / Title</label>
+                <input id="spotInput" class="field-input" placeholder="MD15V362" autocomplete="off" />
+            </div>
+            <div class="field-group">
+                <label class="field-label">Date From</label>
+                <input id="dateFrom" type="date" class="field-input" />
+            </div>
+            <div class="field-group">
+                <label class="field-label">Date To</label>
+                <input id="dateTo" type="date" class="field-input" />
+            </div>
+            <button class="run-btn" onclick="runReport()">Run Report</button>
+        </div>
+
+        <div class="field-group">
+            <div class="field-label" style="margin-bottom:6px;">Markets</div>
+            <div class="market-grid" id="marketGrid">
+                <!-- populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <div id="resultsSection" style="display:none;">
+        <div id="loadingMsg" class="loading-msg" style="display:none;">Loading…</div>
+        <div id="resultsBody"></div>
+    </div>
+
+</main>
+
+<script>
+(function () {
+    const MARKETS = [
+        {code:'NYC', id:1}, {code:'CMP', id:2}, {code:'HOU', id:3},
+        {code:'SFO', id:4}, {code:'SEA', id:5}, {code:'LAX', id:6},
+        {code:'CVC', id:7}, {code:'WDC', id:8}, {code:'MMT', id:9},
+        {code:'DAL', id:10},
+    ];
+
+    // Build market pills — all checked by default
+    const grid = document.getElementById('marketGrid');
+    MARKETS.forEach(m => {
+        const pill = document.createElement('label');
+        pill.className = 'market-pill checked';
+        pill.dataset.id = m.id;
+        pill.innerHTML = `<input type="checkbox" value="${m.id}" checked />${m.code}`;
+        pill.addEventListener('click', () => {
+            const cb = pill.querySelector('input');
+            // toggle is handled by browser after click, so check next tick
+            setTimeout(() => pill.classList.toggle('checked', cb.checked), 0);
+        });
+        grid.appendChild(pill);
+    });
+
+    function getCheckedMarkets() {
+        return [...grid.querySelectorAll('input:checked')].map(cb => cb.value).join(',');
+    }
+
+    function esc(s) {
+        return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    window.runReport = async function () {
+        const spot     = document.getElementById('spotInput').value.trim();
+        const dateFrom = document.getElementById('dateFrom').value;
+        const dateTo   = document.getElementById('dateTo').value;
+        const markets  = getCheckedMarkets();
+
+        if (!spot)     { alert('Enter a spot code or title.'); return; }
+        if (!dateFrom) { alert('Enter a start date.'); return; }
+        if (!dateTo)   { alert('Enter an end date.'); return; }
+        if (!markets)  { alert('Select at least one market.'); return; }
+
+        const section  = document.getElementById('resultsSection');
+        const loading  = document.getElementById('loadingMsg');
+        const body     = document.getElementById('resultsBody');
+
+        section.style.display = 'block';
+        loading.style.display = 'block';
+        body.innerHTML = '';
+
+        const url = `/api/reports/as-run?spot=${encodeURIComponent(spot)}&date_from=${dateFrom}&date_to=${dateTo}&markets=${markets}`;
+        const resp = await fetch(url);
+        loading.style.display = 'none';
+
+        if (!resp.ok) {
+            body.innerHTML = `<div class="loading-msg">Error: ${resp.status}</div>`;
+            return;
+        }
+        const data = await resp.json();
+        body.innerHTML = buildResults(data);
+    };
+
+    function buildResults(data) {
+        let html = '';
+
+        // Spot title banner
+        const firstTitle = data.results.flatMap(m => m.airings).map(a => a.title).find(Boolean) || data.spot_query;
+        html += `<div class="spot-title-banner">${esc(firstTitle)}<span>${esc(data.date_from)} — ${esc(data.date_to)}</span></div>`;
+
+        // Market blocks
+        html += '<div class="results-grid">';
+        data.results.forEach(mkt => {
+            const hdrClass = mkt.count === 0 ? 'market-block-header zero' : 'market-block-header';
+            html += `<div class="market-block">`;
+            html += `<div class="${hdrClass}"><span class="mkt-code">${esc(mkt.market)}</span><span class="mkt-count">${mkt.count}</span></div>`;
+            html += `<div class="airing-list">`;
+            if (mkt.airings.length === 0) {
+                html += `<div class="airing-row" style="color:var(--text-muted);">No airings</div>`;
+            } else {
+                mkt.airings.forEach(a => {
+                    html += `<div class="airing-row"><span class="airing-date">${esc(a.date)}</span><span class="airing-time">${esc(a.time)}</span></div>`;
+                });
+            }
+            html += `</div></div>`;
+        });
+        html += '</div>';
+
+        // Grand total
+        html += `<div class="grand-total-bar"><div><div class="gt-label">Total Airings</div><div style="font-size:1.4rem;">${data.total}</div></div><div style="text-align:right;"><div class="gt-label">Markets</div><div>${data.results.filter(m=>m.count>0).length} of ${data.results.length}</div></div></div>`;
+
+        return html;
+    }
+
+    // Default date range: last 30 days
+    const today = new Date();
+    const prior = new Date(today);
+    prior.setDate(prior.getDate() - 30);
+    document.getElementById('dateTo').value   = today.toISOString().slice(0,10);
+    document.getElementById('dateFrom').value = prior.toISOString().slice(0,10);
+
+    // Run on Enter in spot input
+    document.getElementById('spotInput').addEventListener('keydown', e => {
+        if (e.key === 'Enter') runReport();
+    });
+})();
+</script>
+</body>
+</html>

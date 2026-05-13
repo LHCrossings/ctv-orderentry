@@ -1,5 +1,5 @@
 """
-Reports routes: placement-by-week and future report pages.
+Reports routes: placement-by-week, as-run, and future report pages.
 """
 
 import asyncio
@@ -7,7 +7,7 @@ import io
 from collections import defaultdict
 from datetime import date, timedelta
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
@@ -273,5 +273,90 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
+
+    # ── As-Run Report ────────────────────────────────────────────────────────
+
+    MARKET_MAP = {1:"NYC",2:"CMP",3:"HOU",4:"SFO",5:"SEA",6:"LAX",7:"CVC",8:"WDC",9:"MMT",10:"DAL"}
+    FPS = 29.97
+
+    def _frames_to_time(frames: int) -> str:
+        total_sec = round(frames / FPS)
+        h = total_sec // 3600
+        m = (total_sec % 3600) // 60
+        s = total_sec % 60
+        return f"{h:02d}:{m:02d}:{s:02d}"
+
+    def _fetch_asrun_sync(spot: str, date_from: date, date_to: date, market_ids: list[int]):
+        from browser_automation.etere_direct_client import connect as _db_connect
+
+        results = []
+        like_pat = f"%{spot}%"
+        with _db_connect() as conn:
+            cur = conn.cursor(as_dict=True)
+            for mkt_id in market_ids:
+                cur.execute(
+                    """
+                    SELECT CAST(DATA AS DATE) AS air_date, ORA, TITLE
+                    FROM TPALINSE
+                    WHERE COD_USER = %s
+                      AND DATA >= %s
+                      AND DATA <= %s
+                      AND TITLE LIKE %s
+                    ORDER BY DATA, ORA
+                    """,
+                    (mkt_id, date_from.isoformat(), date_to.isoformat(), like_pat)
+                )
+                rows = cur.fetchall()
+                airings = [
+                    {
+                        "date": str(r["air_date"]),
+                        "time": _frames_to_time(r["ORA"]),
+                        "title": r["TITLE"] or "",
+                    }
+                    for r in rows
+                ]
+                results.append({
+                    "market": MARKET_MAP.get(mkt_id, str(mkt_id)),
+                    "count": len(airings),
+                    "airings": airings,
+                })
+        return results
+
+    @router.get("/reports/as-run", response_class=HTMLResponse)
+    async def as_run_page(request: Request):
+        return templates.TemplateResponse(request, "reports/as_run.html")
+
+    @router.get("/api/reports/as-run")
+    async def as_run_data(
+        spot: str = Query(...),
+        date_from: str = Query(...),
+        date_to: str = Query(...),
+        markets: str = Query(...),
+    ):
+        try:
+            d_from = date.fromisoformat(date_from)
+            d_to   = date.fromisoformat(date_to)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format")
+
+        try:
+            mkt_ids = [int(x) for x in markets.split(",") if x.strip()]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid market IDs")
+
+        try:
+            results = await asyncio.get_running_loop().run_in_executor(
+                None, lambda: _fetch_asrun_sync(spot, d_from, d_to, mkt_ids)
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+        return JSONResponse({
+            "spot_query": spot,
+            "date_from": date_from,
+            "date_to": date_to,
+            "results": results,
+            "total": sum(m["count"] for m in results),
+        })
 
     return router
