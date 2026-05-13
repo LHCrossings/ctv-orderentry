@@ -587,11 +587,15 @@ async function doEtereSearch(q) {
         const dd   = document.getElementById('etereDropdown');
         if (!list.length) { closeEtereDropdown(); return; }
         dd.innerHTML = list.map(c => `
-            <div class="search-item"
-                 onclick="selectContract(${c.id}, '${escHtml(c.code)}', '${escHtml(c.description)}')">
+            <div class="search-item">
                 <span class="search-code">${escHtml(c.code)}</span>
                 <span class="search-desc">${escHtml(c.description)}</span>
             </div>`).join('');
+        dd.querySelectorAll('.search-item').forEach((el, i) => {
+            el.addEventListener('click', () => {
+                selectContract(list[i].id, list[i].code, list[i].description);
+            });
+        });
         dd.classList.add('open');
     } catch { closeEtereDropdown(); }
 }
