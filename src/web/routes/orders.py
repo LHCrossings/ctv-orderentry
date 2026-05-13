@@ -2003,13 +2003,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             return d - timedelta(days=d.weekday())
 
         def _find_log(mkt: str, monday: _date_cls):
-            file_date = monday.strftime("%y%m%d")
             year, month_folder = _broadcast_month_folder(monday)
-            base = Path("K:/Traffic/logs") / str(year) / month_folder
-            for folder in [base, base / "done"]:
-                p = folder / f"{mkt} Log - {file_date}.xlsm"
-                if p.exists():
-                    return p
+            _log_root = Path("K:/Traffic/logs") if sys.platform == "win32" else Path("/mnt/k/Traffic/logs")
+            base = _log_root / str(year) / month_folder
+            for file_date in (monday.strftime("%y%m%d"), monday.strftime("%m%d%y")):
+                for subfolder in ("", "done", "Done", "!Done"):
+                    folder = base / subfolder if subfolder else base
+                    p = folder / f"{mkt} Log - {file_date}.xlsm"
+                    if p.exists():
+                        return p
             return None
 
         def _to_win(p: Path) -> str:
@@ -2110,14 +2112,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
         def _find_log(mkt: str, target: _date_cls) -> Optional[Path]:
             monday = target - timedelta(days=target.weekday())
-            file_date = monday.strftime("%y%m%d")
             year, month_folder = _broadcast_month_folder(monday)
             _log_root = Path("K:/Traffic/logs") if sys.platform == "win32" else Path("/mnt/k/Traffic/logs")
             base = _log_root / str(year) / month_folder
-            for folder in [base, base / "done"]:
-                p = folder / f"{mkt} Log - {file_date}.xlsm"
-                if p.exists():
-                    return p
+            for file_date in (monday.strftime("%y%m%d"), monday.strftime("%m%d%y")):
+                for subfolder in ("", "done", "Done", "!Done"):
+                    folder = base / subfolder if subfolder else base
+                    p = folder / f"{mkt} Log - {file_date}.xlsm"
+                    if p.exists():
+                        return p
             return None
 
         def _fmt_t(val) -> str:
@@ -2134,13 +2137,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
         def _run():
             target = _date_cls.fromisoformat(date)
-            monday = target - timedelta(days=target.weekday())
-            year, month_folder = _broadcast_month_folder(monday)
-            _log_root = Path("K:/Traffic/logs") if sys.platform == "win32" else Path("/mnt/k/Traffic/logs")
-            _attempted = str(_log_root / str(year) / month_folder / f"{market} Log - {monday.strftime('%y%m%d')}.xlsm")
             log_path = _find_log(market, target)
             if log_path is None:
-                return {"__not_found": True, "attempted": _attempted, "platform": sys.platform}
+                return None
             day_name = target.strftime("%A")
             wb = openpyxl.load_workbook(str(log_path), keep_vba=True, data_only=True)
             if day_name not in wb.sheetnames:
@@ -2190,9 +2189,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             }
 
         result = await asyncio.get_running_loop().run_in_executor(None, _run)
-        if result is None or (isinstance(result, dict) and result.get("__not_found")):
-            detail = result or {}
-            return JSONResponse({"error": "Log file not found", "attempted": detail.get("attempted"), "platform": detail.get("platform")}, status_code=404)
+        if result is None:
+            return JSONResponse({"error": "Log file not found"}, status_code=404)
         return JSONResponse(result)
 
     @router.post("/api/master-control/logs/fill-program")
@@ -2229,14 +2227,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
         def _find_log(mkt: str, d: _date_cls) -> Optional[Path]:
             monday = d - timedelta(days=d.weekday())
-            file_date = monday.strftime("%y%m%d")
             year, month_folder = _broadcast_month_folder(monday)
             _log_root = Path("K:/Traffic/logs") if sys.platform == "win32" else Path("/mnt/k/Traffic/logs")
             base = _log_root / str(year) / month_folder
-            for folder in [base, base / "done"]:
-                p = folder / f"{mkt} Log - {file_date}.xlsm"
-                if p.exists():
-                    return p
+            for file_date in (monday.strftime("%y%m%d"), monday.strftime("%m%d%y")):
+                for subfolder in ("", "done", "Done", "!Done"):
+                    folder = base / subfolder if subfolder else base
+                    p = folder / f"{mkt} Log - {file_date}.xlsm"
+                    if p.exists():
+                        return p
             return None
 
         def _run():
@@ -2309,14 +2308,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
         def _find_log(mkt: str, target: _date_cls) -> Optional[Path]:
             monday = target - timedelta(days=target.weekday())
-            file_date = monday.strftime("%y%m%d")
             year, month_folder = _broadcast_month_folder(monday)
             _log_root = Path("K:/Traffic/logs") if sys.platform == "win32" else Path("/mnt/k/Traffic/logs")
             base = _log_root / str(year) / month_folder
-            for folder in [base, base / "done"]:
-                p = folder / f"{mkt} Log - {file_date}.xlsm"
-                if p.exists():
-                    return p
+            for file_date in (monday.strftime("%y%m%d"), monday.strftime("%m%d%y")):
+                for subfolder in ("", "done", "Done", "!Done"):
+                    folder = base / subfolder if subfolder else base
+                    p = folder / f"{mkt} Log - {file_date}.xlsm"
+                    if p.exists():
+                        return p
             return None
 
         def _run():
