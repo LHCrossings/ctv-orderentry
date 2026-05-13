@@ -170,6 +170,7 @@ class Customer:
     code_name: str = ""                 # Name token in contract code (e.g., "Muckleshoot", "TVC")
     description_name: str = ""         # Name prefix in description (e.g., "Muckleshoot Casino")
     include_market_in_code: bool = False  # Append market to code and description
+    auto_aircheck: bool = False           # Auto-prompt aircheck scheduling after traffic assignment
 
     def matches_name(self, name: str, threshold: float = 0.8) -> bool:
         """

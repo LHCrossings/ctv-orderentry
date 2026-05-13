@@ -2739,7 +2739,29 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         )
                     conn.commit()
 
-            return {"ok": True, "spots_updated": spots_updated, "lines_updated": lines_updated}
+            # Check if this contract's customer requires airchecks
+            needs_airchecks = False
+            try:
+                import sqlite3 as _sqlite3
+                with _db_connect() as _conn:
+                    _cur = _conn.cursor(as_dict=True)
+                    _cur.execute(
+                        "SELECT COMMITTENTE FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = %d" % contract_id
+                    )
+                    _hdr = _cur.fetchone()
+                if _hdr and _hdr.get("COMMITTENTE"):
+                    _cid = str(int(_hdr["COMMITTENTE"]))
+                    _db_path = Path(__file__).parents[3] / "data" / "customers.db"
+                    if _db_path.exists():
+                        with _sqlite3.connect(str(_db_path)) as _sdb:
+                            _row = _sdb.execute(
+                                "SELECT auto_aircheck FROM customers WHERE customer_id = ?", (_cid,)
+                            ).fetchone()
+                            needs_airchecks = bool(_row and _row[0])
+            except Exception:
+                pass
+
+            return {"ok": True, "spots_updated": spots_updated, "lines_updated": lines_updated, "needs_airchecks": needs_airchecks, "contract_id": contract_id}
 
         try:
             result = await asyncio.get_running_loop().run_in_executor(None, _run)

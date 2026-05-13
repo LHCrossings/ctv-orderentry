@@ -893,6 +893,21 @@ loadCaptures().then(() => {
     if (capturesBody.querySelector('.badge-recording, .badge-scheduled, .badge-pending')) {
         startPolling();
     }
+
+    // Auto-select contract from ?contract_id= URL param (e.g. redirected from traffic assign)
+    const _urlCid = new URLSearchParams(window.location.search).get('contract_id');
+    if (_urlCid) {
+        fetch(`/api/traffic/contract-search?q=${encodeURIComponent(_urlCid)}`)
+            .then(r => r.json())
+            .then(list => {
+                const c = list.find(x => String(x.id) === _urlCid) || list[0];
+                if (c) {
+                    selectContract(c.id, c.code, c.description);
+                    loadEtereSpots();
+                }
+            })
+            .catch(() => {});
+    }
 });
 </script>
 

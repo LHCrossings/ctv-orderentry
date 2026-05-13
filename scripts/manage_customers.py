@@ -23,6 +23,7 @@ EDITABLE_FIELDS = [
     ("abbreviation",            "Abbreviation"),
     ("default_market",          "Default market (SEA / SFO / CVC)"),
     ("billing_type",            "Billing type (agency / client)"),
+    ("auto_aircheck",           "Auto-prompt airchecks after traffic assignment? (1=yes, 0=no)"),
 ]
 
 
@@ -34,7 +35,7 @@ def open_db():
 
 
 def list_customers(conn, order_type_filter=None):
-    query = "SELECT rowid, customer_name, order_type, customer_id, separation_customer, separation_event, separation_order, code_name, description_name, include_market_in_code FROM customers"
+    query = "SELECT rowid, customer_name, order_type, customer_id, separation_customer, separation_event, separation_order, code_name, description_name, include_market_in_code, auto_aircheck FROM customers"
     params = ()
     if order_type_filter:
         query += " WHERE order_type = ?"
@@ -45,12 +46,12 @@ def list_customers(conn, order_type_filter=None):
         print("  (no customers found)")
         return rows
 
-    print(f"\n  {'#':<4} {'Name':<35} {'Type':<10} {'ID':<8} {'Sep (C/E/O)':<14} {'Code Name':<15} {'Mkt?'}")
-    print("  " + "-"*95)
+    print(f"\n  {'#':<4} {'Name':<35} {'Type':<10} {'ID':<8} {'Sep (C/E/O)':<14} {'Code Name':<15} {'Mkt?':<6} {'AC?'}")
+    print("  " + "-"*100)
     for i, r in enumerate(rows, 1):
-        rowid, name, otype, cid, sc, se, so, cn, dn, imk = r
+        rowid, name, otype, cid, sc, se, so, cn, dn, imk, aac = r
         sep = f"{sc}/{se}/{so}"
-        print(f"  [{i:<2}] {name:<35} {otype:<10} {cid:<8} {sep:<14} {(cn or ''):<15} {'yes' if imk else 'no'}")
+        print(f"  [{i:<2}] {name:<35} {otype:<10} {cid:<8} {sep:<14} {(cn or ''):<15} {'yes' if imk else 'no':<6} {'yes' if aac else 'no'}")
     return rows
 
 
@@ -64,7 +65,7 @@ def edit_customer(conn, row):
     cur = conn.execute(
         "SELECT separation_customer, separation_event, separation_order, "
         "code_name, description_name, include_market_in_code, "
-        "abbreviation, default_market, billing_type "
+        "abbreviation, default_market, billing_type, auto_aircheck "
         "FROM customers WHERE rowid = ?", (rowid,)
     ).fetchone()
 
@@ -74,7 +75,7 @@ def edit_customer(conn, row):
         current = values[col]
         raw = input(f"  {label} [{current}]: ").strip()
         if raw:
-            if col == "include_market_in_code":
+            if col in ("include_market_in_code", "auto_aircheck"):
                 values[col] = 1 if raw in ("1", "y", "yes", "true") else 0
             elif col in ("separation_customer", "separation_event", "separation_order"):
                 try:
@@ -95,7 +96,8 @@ def edit_customer(conn, row):
             include_market_in_code = ?,
             abbreviation = ?,
             default_market = ?,
-            billing_type = ?
+            billing_type = ?,
+            auto_aircheck = ?
         WHERE rowid = ?
         """,
         (
@@ -108,6 +110,7 @@ def edit_customer(conn, row):
             values["abbreviation"],
             values["default_market"],
             values["billing_type"],
+            values["auto_aircheck"],
             rowid,
         )
     )
