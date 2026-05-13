@@ -101,6 +101,10 @@ def _save_db() -> None:
 def _safe(s: str) -> str:
     return "".join(c for c in s if c.isalnum() or c in "-_").strip() or "capture"
 
+def _cap_path(cap: dict) -> Path:
+    subfolder = cap.get("subfolder", "")
+    return (OUTPUT_DIR / subfolder / cap["filename"]) if subfolder else (OUTPUT_DIR / cap["filename"])
+
 
 # ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -125,7 +129,7 @@ async def _run(cap_id: str) -> None:
     _save_db()
 
     port   = NETWORK_PORTS[cap["network"]]
-    output = OUTPUT_DIR / cap["filename"]
+    output = _cap_path(cap)
     dur    = cap["duration_seconds"]
 
     # Match the exact pattern the user tested:
@@ -180,9 +184,11 @@ async def create_capture(req: CaptureRequest):
     if req.duration_seconds < 5 or req.duration_seconds > 7200:
         raise HTTPException(400, "Duration must be 5–7200 seconds")
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     now    = datetime.now()
     cap_id = uuid.uuid4().hex[:8]
+    subfolder = _safe(req.notes) if req.notes.strip() else ""
+    cap_dir   = OUTPUT_DIR / subfolder if subfolder else OUTPUT_DIR
+    cap_dir.mkdir(parents=True, exist_ok=True)
 
     if req.start_time:
         start_dt = datetime.fromisoformat(req.start_time)
@@ -204,6 +210,7 @@ async def create_capture(req: CaptureRequest):
         "network":          req.network,
         "duration_seconds": req.duration_seconds,
         "start_time":       start_dt.isoformat(),
+        "subfolder":        subfolder,
         "filename":         filename,
         "notes":            req.notes,
         "status":           "pending",
@@ -237,7 +244,7 @@ async def download_capture(cap_id: str):
     cap = captures[cap_id]
     if cap["status"] != "complete":
         raise HTTPException(400, "Capture not complete yet")
-    path = OUTPUT_DIR / cap["filename"]
+    path = _cap_path(cap)
     if not path.exists():
         raise HTTPException(404, "File missing from disk")
     return FileResponse(str(path), media_type="video/mp4", filename=cap["filename"])
@@ -297,7 +304,7 @@ async def delete_capture(cap_id: str):
         except (asyncio.CancelledError, Exception):
             pass
     cap = captures.pop(cap_id)
-    path = OUTPUT_DIR / cap["filename"]
+    path = _cap_path(cap)
     if path.exists():
         try:
             path.unlink()
