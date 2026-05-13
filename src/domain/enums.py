@@ -45,6 +45,7 @@ class OrderType(Enum):
     THREEOLIVES = "threeolives"
     BVK = "bvk"
     INTERTREND = "intertrend"
+    MEDIASOL = "mediasol"
     UNKNOWN = "unknown"
 
     def requires_block_refresh(self) -> bool:
@@ -112,6 +113,7 @@ KNOWN_AGENCY_KEYWORDS: list[str] = [
     "igraphix", "admerasia", "opad", "rpm", "h&l partners",
     "impact marketing", "sagent", "galeforce", "galeforcemedia",
     "ntooitive", "time advertising", "3olivesmedia", "bvk", "intertrend",
+    "mediasol", "pulsar advertising",
 ]
 """
 If ANY of these keywords appear in the PDF text (case-insensitive),
@@ -304,6 +306,7 @@ class SeparationInterval(Enum):
     THREEOLIVES = (15, 0, 0)
     BVK = (25, 0, 0)
     INTERTREND = (25, 0, 0)
+    MEDIASOL = (25, 0, 0)
     DEFAULT = (15, 0, 0)
 
     @classmethod
@@ -338,5 +341,6 @@ class SeparationInterval(Enum):
             OrderType.THREEOLIVES: cls.THREEOLIVES.value,
             OrderType.BVK:         cls.BVK.value,
             OrderType.INTERTREND:  cls.INTERTREND.value,
+            OrderType.MEDIASOL:    cls.MEDIASOL.value,
         }
         return mapping.get(order_type, cls.DEFAULT.value)

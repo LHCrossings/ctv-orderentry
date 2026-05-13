@@ -51,6 +51,7 @@ _DISPLAY_NAMES = {
     "THREEOLIVES":     "3 Olives Media",
     "XML":             "AAAA XML",
     "BVK":             "BVK",
+    "MEDIASOL":        "Media Solutions",
 }
 
 _REGISTRY = {
@@ -83,6 +84,7 @@ _REGISTRY = {
     "POLARIS":          ("browser_automation.parsers.polaris_parser",          "parse_polaris_file"),
     "THREEOLIVES":      ("browser_automation.parsers.threeolives_parser",      "parse_threeolives"),
     "BVK":              ("browser_automation.parsers.bvk_parser",              "parse_bvk_pdf"),
+    "MEDIASOL":         ("browser_automation.parsers.mediasol_parser",         "parse_mediasol_pdf"),
 }
 
 _MISSING = object()

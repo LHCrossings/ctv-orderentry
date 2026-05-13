@@ -95,6 +95,7 @@ class OrderProcessingService:
         OrderType.THREEOLIVES:      "_process_threeolives_order",
         OrderType.BVK:              "_process_bvk_order",
         OrderType.INTERTREND:       "_process_intertrend_order",
+        OrderType.MEDIASOL:         "_process_mediasol_order",
     }
 
     def __init__(
@@ -2658,6 +2659,56 @@ class OrderProcessingService:
             print(f"\n✗ BVK processing failed: {exc}")
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.BVK,
+                error_message=error_detail,
+            )
+
+    def _process_mediasol_order(self, order: Order, shared_session: any) -> ProcessingResult:
+        """Process a Media Solutions / Pulsar Advertising order."""
+        try:
+            from browser_automation.mediasol_automation import process_mediasol_order
+
+            print(f"\n{'='*70}")
+            print("PROCESSING MEDIA SOLUTIONS ORDER")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            if order.customer_name:
+                print(f"Customer: {order.customer_name}")
+            print(f"{'='*70}\n")
+
+            if shared_session is None:
+                return ProcessingResult(
+                    success=False, contracts=[], order_type=OrderType.MEDIASOL,
+                    error_message="Browser session required for Media Solutions orders",
+                )
+
+            if not order.order_input:
+                return ProcessingResult(
+                    success=False, contracts=[], order_type=OrderType.MEDIASOL,
+                    error_message="Order inputs not collected",
+                )
+
+            success = process_mediasol_order(
+                driver=shared_session.driver,
+                pdf_path=str(order.pdf_path),
+                user_input=order.order_input,
+            )
+
+            if success:
+                print("\n✓ Media Solutions order processed successfully")
+            else:
+                print("\n✗ Media Solutions order processing failed")
+
+            return ProcessingResult(
+                success=success, contracts=[], order_type=OrderType.MEDIASOL,
+                error_message=None if success else "Processing failed",
+            )
+
+        except Exception as e:
+            import traceback
+            error_detail = f"Media Solutions processing error: {str(e)}\n{traceback.format_exc()}"
+            print(f"\n✗ Media Solutions processing failed: {e}")
+            return ProcessingResult(
+                success=False, contracts=[], order_type=OrderType.MEDIASOL,
                 error_message=error_detail,
             )
 

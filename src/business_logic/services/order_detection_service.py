@@ -122,6 +122,11 @@ class OrderDetectionService:
         if self._is_admerasia(first_page_text):
             return OrderType.ADMERASIA
 
+        # Media Solutions / Pulsar Advertising c/o Mediasol — check before RPM
+        # (Mediasol PDFs contain "Sacramento" in billing address, which trips RPM's market check)
+        if self._is_mediasol(first_page_text):
+            return OrderType.MEDIASOL
+
         # RPM
         if self._is_rpm(first_page_text):
             return OrderType.RPM
@@ -592,6 +597,18 @@ class OrderDetectionService:
         """
         return "bvk" in text.lower() and "CPE:" in text
 
+    def _is_mediasol(self, text: str) -> bool:
+        """
+        Check if text matches a Media Solutions / Pulsar Advertising order.
+
+        Definitive markers in "Send Billing To:" field:
+        - "Pulsar Advertising c/o Mediasol"
+        - or simply "Mediasol" anywhere in the text
+        Also uses Strata IO format with "Estimate:" and "Crossings TV-TV".
+        """
+        text_lower = text.lower()
+        return "mediasol" in text_lower or "pulsar advertising" in text_lower
+
     def _is_galeforce(self, text: str) -> bool:
         """
         Check if text matches generic GaleForceMedia order (not Sagent).
@@ -649,7 +666,7 @@ class OrderDetectionService:
         elif order_type == OrderType.OPAD:
             return self._extract_opad_client(first_page_text)
 
-        elif order_type == OrderType.HL:
+        elif order_type in (OrderType.HL, OrderType.MEDIASOL):
             return self._extract_hl_client(first_page_text)
 
         elif order_type == OrderType.DAVISELEN:
