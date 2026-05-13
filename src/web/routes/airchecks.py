@@ -1,5 +1,9 @@
 import asyncio
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+_ET = ZoneInfo("America/New_York")
+_PT = ZoneInfo("America/Los_Angeles")
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -54,11 +58,13 @@ def _fetch_etere_spots(contract_id: int) -> list[dict]:
         for row in cur.fetchall():
             network = MARKET_NAMES.get(int(row["market_id"]), f"MKT{row['market_id']}")
 
-            air_date = row["air_date"]
+            # Etere stores times in Eastern Time — convert to Pacific for Datamover
+            air_date  = row["air_date"]
             if hasattr(air_date, "date"):
                 air_date = air_date.date()
-            air_secs = int(row["air_ora"]) // 30
-            air_dt   = datetime.combine(air_date, datetime.min.time()) + timedelta(seconds=air_secs)
+            air_secs  = int(row["air_ora"]) // 30
+            air_dt_et = datetime.combine(air_date, datetime.min.time(), tzinfo=_ET) + timedelta(seconds=air_secs)
+            air_dt    = air_dt_et.astimezone(_PT).replace(tzinfo=None)  # naive PT for Datamover
 
             dur_secs = max(5, int(row["duration_frames"] or 0) // 30)
 
