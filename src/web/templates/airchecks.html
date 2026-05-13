@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Airchecks — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        header {
+            background: var(--nord1);
+            border-bottom: 1px solid var(--nord2);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header-left { display: flex; align-items: center; gap: 20px; }
+        .back-link { color: var(--nord8); text-decoration: none; font-size: 0.85rem; opacity: 0.8; transition: opacity 0.15s; }
+        .back-link:hover { opacity: 1; }
+        h1 { font-size: 1rem; font-weight: 600; color: var(--nord6); letter-spacing: 0.02em; }
+
+        main { max-width: 1100px; margin: 0 auto; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+
+        /* Card */
+        .card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px 24px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+        }
+        .card-title {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            margin-bottom: 16px;
+        }
+
+        /* Form layout */
+        .form-grid { display: flex; flex-direction: column; gap: 14px; }
+        .field-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+        .field-group { display: flex; flex-direction: column; gap: 5px; }
+        .field-group.grow { flex: 1; min-width: 160px; }
+        .field-label {
+            font-size: 0.72rem; font-weight: 600; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .field-input {
+            background: var(--bg-secondary); border: 1px solid var(--border-color);
+            border-radius: 8px; padding: 7px 12px; font-size: 0.9rem;
+            color: var(--text-primary); outline: none; font-family: inherit;
+            transition: border-color 0.15s;
+        }
+        .field-input:focus { border-color: var(--nord10); }
+
+        /* Network pills */
+        .net-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+        .net-pill {
+            padding: 4px 13px; border-radius: 20px;
+            border: 1px solid var(--border-color);
+            background: transparent; color: var(--text-muted);
+            font-family: inherit; font-size: 0.78rem; font-weight: 700;
+            cursor: pointer; letter-spacing: 0.04em; text-transform: uppercase;
+            transition: all 0.15s;
+        }
+        .net-pill:hover:not(.active) { border-color: var(--nord10); color: var(--nord10); }
+        .net-pill.active { background: var(--nord10); border-color: var(--nord10); color: var(--nord6); }
+
+        /* When toggle */
+        .when-toggle { display: flex; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; width: fit-content; }
+        .toggle-btn {
+            padding: 6px 18px; font-family: inherit; font-size: 0.85rem; font-weight: 500;
+            border: none; background: transparent; color: var(--text-muted); cursor: pointer;
+            transition: all 0.15s;
+        }
+        .toggle-btn.active { background: var(--nord10); color: var(--nord6); }
+
+        /* Duration presets */
+        .dur-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+        .preset-btn {
+            padding: 5px 13px; border-radius: 6px; border: 1px solid var(--border-color);
+            background: transparent; color: var(--text-muted); font-family: inherit;
+            font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.15s;
+        }
+        .preset-btn:hover { border-color: var(--nord10); color: var(--nord10); }
+        .preset-btn.active { background: var(--nord10); border-color: var(--nord10); color: var(--nord6); }
+        .dur-sep { color: var(--text-muted); font-size: 0.8rem; }
+        .dur-custom { display: flex; align-items: center; gap: 6px; }
+        .dur-input {
+            width: 72px; background: var(--bg-secondary); border: 1px solid var(--border-color);
+            border-radius: 6px; padding: 5px 8px; font-size: 0.88rem; font-family: inherit;
+            color: var(--text-primary); outline: none; text-align: center;
+        }
+        .dur-input:focus { border-color: var(--nord10); }
+        .dur-unit { font-size: 0.8rem; color: var(--text-muted); }
+
+        /* Submit */
+        .submit-row { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+        .submit-btn {
+            background: var(--nord10); color: var(--nord6); border: none;
+            border-radius: 8px; padding: 9px 24px; font-family: inherit;
+            font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: background 0.15s;
+        }
+        .submit-btn:hover { background: var(--nord9); }
+        .submit-btn:disabled { opacity: 0.5; cursor: default; }
+        .submit-msg { font-size: 0.82rem; }
+        .submit-msg.ok  { color: var(--nord14); }
+        .submit-msg.err { color: var(--nord11); }
+
+        /* Connection status */
+        .agent-status { font-size: 0.78rem; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+        .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+        .dot.ok  { background: var(--nord14); }
+        .dot.err { background: var(--nord11); }
+        .dot.checking { background: var(--nord13); }
+
+        /* Captures table */
+        .captures-header {
+            display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
+        }
+        .refresh-btn {
+            background: transparent; border: 1px solid var(--border-color);
+            border-radius: 6px; padding: 4px 12px; font-family: inherit;
+            font-size: 0.78rem; color: var(--text-muted); cursor: pointer;
+        }
+        .refresh-btn:hover { border-color: var(--nord10); color: var(--nord10); }
+
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            background: var(--bg-secondary); text-align: left;
+            font-size: 0.68rem; font-weight: 700; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.05em;
+            padding: 7px 12px; border-bottom: 1px solid var(--border-color);
+        }
+        td { padding: 9px 12px; border-bottom: 1px solid var(--bg-secondary); font-size: 0.85rem; vertical-align: middle; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: rgba(229,233,240,0.4); }
+
+        /* Status badges */
+        .badge { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 0.72rem; font-weight: 700; }
+        .badge-pending   { background: rgba(76,86,106,0.15);  color: var(--nord3); }
+        .badge-scheduled { background: rgba(235,203,139,0.25); color: #8a7030; }
+        .badge-recording { background: rgba(208,135,112,0.2);  color: var(--nord12); animation: blink 1.4s infinite; }
+        .badge-complete  { background: rgba(163,190,140,0.2);  color: var(--nord14); }
+        .badge-error     { background: rgba(191,97,106,0.15);  color: var(--nord11); }
+
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+        .action-btn {
+            padding: 3px 11px; border-radius: 6px; font-family: inherit;
+            font-size: 0.78rem; font-weight: 600; cursor: pointer; border: 1px solid;
+            transition: all 0.15s; text-decoration: none; display: inline-block;
+        }
+        .btn-download { background: rgba(163,190,140,0.15); border-color: rgba(163,190,140,0.5); color: var(--nord14); }
+        .btn-download:hover { background: rgba(163,190,140,0.3); }
+        .btn-delete   { background: rgba(191,97,106,0.1);  border-color: rgba(191,97,106,0.3);  color: var(--nord11); margin-left: 4px; }
+        .btn-delete:hover { background: rgba(191,97,106,0.2); }
+
+        .empty-state { text-align: center; padding: 40px 0; color: var(--text-muted); font-size: 0.88rem; }
+        .file-size { font-size: 0.78rem; color: var(--text-muted); }
+        .notes-cell { font-size: 0.78rem; color: var(--text-muted); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-left">
+        <a href="/" class="back-link">← Control Room</a>
+        <h1>Airchecks</h1>
+    </div>
+    <div class="agent-status">
+        <div class="dot checking" id="agentDot"></div>
+        <span id="agentLabel">Connecting to Datamover…</span>
+    </div>
+</header>
+
+<main>
+
+    <!-- Schedule form -->
+    <div class="card">
+        <div class="card-title">Schedule Aircheck</div>
+        <div class="form-grid">
+
+            <div class="field-row">
+                <div class="field-group grow">
+                    <label class="field-label">Client</label>
+                    <input class="field-input" type="text" id="client" placeholder="e.g. McDonald's" />
+                </div>
+                <div class="field-group grow">
+                    <label class="field-label">Notes (optional)</label>
+                    <input class="field-input" type="text" id="notes" placeholder="Spot code, flight dates, etc." />
+                </div>
+            </div>
+
+            <div class="field-group">
+                <label class="field-label">Network</label>
+                <div class="net-pills" id="netPills"></div>
+            </div>
+
+            <div class="field-row">
+                <div class="field-group">
+                    <label class="field-label">Capture</label>
+                    <div class="when-toggle">
+                        <button class="toggle-btn active" id="btnNow" onclick="setWhen('now')">Now</button>
+                        <button class="toggle-btn" id="btnSched" onclick="setWhen('scheduled')">Scheduled</button>
+                    </div>
+                </div>
+                <div class="field-group" id="schedField" style="display:none;">
+                    <label class="field-label">Start Date &amp; Time</label>
+                    <input class="field-input" type="datetime-local" id="startTime" />
+                </div>
+            </div>
+
+            <div class="field-group">
+                <label class="field-label">Duration</label>
+                <div class="dur-row">
+                    <button class="preset-btn" onclick="setDur(30)">30s</button>
+                    <button class="preset-btn" onclick="setDur(60)">1 min</button>
+                    <button class="preset-btn active" onclick="setDur(120)">2 min</button>
+                    <button class="preset-btn" onclick="setDur(300)">5 min</button>
+                    <span class="dur-sep">or</span>
+                    <div class="dur-custom">
+                        <input class="dur-input" type="number" id="durSeconds" value="120" min="5" max="7200" oninput="clearPresets()" />
+                        <span class="dur-unit">seconds</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="submit-row" style="margin-top:16px;">
+            <button class="submit-btn" id="submitBtn" onclick="scheduleCapture()">⏺ Start Capture</button>
+            <span class="submit-msg" id="submitMsg"></span>
+        </div>
+    </div>
+
+    <!-- Captures list -->
+    <div class="card">
+        <div class="captures-header">
+            <div class="card-title" style="margin-bottom:0;">Recent Captures</div>
+            <button class="refresh-btn" onclick="loadCaptures()">↻ Refresh</button>
+        </div>
+        <div id="capturesBody"></div>
+    </div>
+
+</main>
+
+<script>
+const AGENT = 'http://100.102.206.113:8765';
+
+const NETWORKS = [
+    'NYC','WDC','CMP','HOU','SEA','SFO','CVC','LAX','DAL','MMT','SFO OTA','CVC OTA'
+];
+
+let selectedNetwork = null;
+let whenMode = 'now';
+let pollTimer = null;
+
+// ── Build network pills ───────────────────────────────────────────────────────
+const pillRow = document.getElementById('netPills');
+NETWORKS.forEach(net => {
+    const btn = document.createElement('button');
+    btn.className = 'net-pill';
+    btn.textContent = net;
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.net-pill').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        selectedNetwork = net;
+    });
+    pillRow.appendChild(btn);
+});
+
+// ── When toggle ───────────────────────────────────────────────────────────────
+function setWhen(mode) {
+    whenMode = mode;
+    document.getElementById('btnNow').classList.toggle('active', mode === 'now');
+    document.getElementById('btnSched').classList.toggle('active', mode === 'scheduled');
+    document.getElementById('schedField').style.display = mode === 'scheduled' ? 'flex' : 'none';
+}
+
+// ── Duration presets ──────────────────────────────────────────────────────────
+function setDur(secs) {
+    document.getElementById('durSeconds').value = secs;
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+}
+function clearPresets() {
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+}
+
+// ── Agent health check ────────────────────────────────────────────────────────
+async function checkAgent() {
+    const dot   = document.getElementById('agentDot');
+    const label = document.getElementById('agentLabel');
+    try {
+        const r = await fetch(`${AGENT}/health`, { signal: AbortSignal.timeout(3000) });
+        if (r.ok) {
+            dot.className = 'dot ok';
+            label.textContent = 'Datamover connected';
+        } else {
+            throw new Error();
+        }
+    } catch {
+        dot.className = 'dot err';
+        label.textContent = 'Datamover unreachable';
+    }
+}
+
+// ── Schedule capture ──────────────────────────────────────────────────────────
+async function scheduleCapture() {
+    const client = document.getElementById('client').value.trim();
+    const dur    = parseInt(document.getElementById('durSeconds').value);
+    const notes  = document.getElementById('notes').value.trim();
+    const msg    = document.getElementById('submitMsg');
+    const btn    = document.getElementById('submitBtn');
+
+    if (!client)          { flash(msg, 'Enter a client name.', false); return; }
+    if (!selectedNetwork) { flash(msg, 'Select a network.', false); return; }
+    if (!dur || dur < 5)  { flash(msg, 'Duration must be at least 5 seconds.', false); return; }
+
+    let startTime = null;
+    if (whenMode === 'scheduled') {
+        const v = document.getElementById('startTime').value;
+        if (!v) { flash(msg, 'Enter a scheduled start time.', false); return; }
+        startTime = new Date(v).toISOString();
+    }
+
+    btn.disabled = true;
+    btn.textContent = '…';
+
+    try {
+        const resp = await fetch(`${AGENT}/captures`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                client,
+                network:          selectedNetwork,
+                duration_seconds: dur,
+                start_time:       startTime,
+                notes,
+            }),
+        });
+        if (!resp.ok) {
+            const e = await resp.json();
+            throw new Error(e.detail || 'Request failed');
+        }
+        flash(msg, whenMode === 'scheduled' ? 'Capture scheduled.' : 'Capture started.', true);
+        document.getElementById('client').value = '';
+        document.getElementById('notes').value  = '';
+        await loadCaptures();
+        startPolling();
+    } catch (e) {
+        flash(msg, e.message, false);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '⏺ Start Capture';
+    }
+}
+
+function flash(el, text, ok) {
+    el.textContent  = text;
+    el.className    = 'submit-msg ' + (ok ? 'ok' : 'err');
+    setTimeout(() => { el.textContent = ''; el.className = 'submit-msg'; }, 4000);
+}
+
+// ── Captures list ─────────────────────────────────────────────────────────────
+async function loadCaptures() {
+    try {
+        const r = await fetch(`${AGENT}/captures`, { signal: AbortSignal.timeout(4000) });
+        if (!r.ok) throw new Error();
+        renderCaptures(await r.json());
+    } catch {
+        document.getElementById('capturesBody').innerHTML =
+            '<div class="empty-state">Could not reach Datamover agent.</div>';
+    }
+}
+
+function fmtSize(bytes) {
+    if (!bytes) return '';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+function fmtDt(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-US', { month:'short', day:'numeric' }) +
+           ' ' + d.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
+}
+
+function fmtDur(secs) {
+    if (secs < 60) return `${secs}s`;
+    const m = Math.floor(secs / 60), s = secs % 60;
+    return s ? `${m}m ${s}s` : `${m}m`;
+}
+
+function statusBadge(s) {
+    const map = {
+        pending:   ['badge-pending',   'Pending'],
+        scheduled: ['badge-scheduled', 'Scheduled'],
+        recording: ['badge-recording', '● Recording'],
+        complete:  ['badge-complete',  '✓ Complete'],
+        error:     ['badge-error',     '✗ Error'],
+    };
+    const [cls, label] = map[s] || ['badge-pending', s];
+    return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function renderCaptures(list) {
+    const body = document.getElementById('capturesBody');
+    if (!list.length) {
+        body.innerHTML = '<div class="empty-state">No captures yet.</div>';
+        return;
+    }
+
+    let html = `<table>
+        <thead><tr>
+            <th>Client</th><th>Network</th><th>Start Time</th>
+            <th>Duration</th><th>Status</th><th>Size</th><th>Notes</th><th></th>
+        </tr></thead><tbody>`;
+
+    list.forEach(cap => {
+        const actions = cap.status === 'complete'
+            ? `<a class="action-btn btn-download" href="${AGENT}/captures/${cap.id}/download">↓ Download</a>
+               <button class="action-btn btn-delete" onclick="deleteCapture('${cap.id}')">✕</button>`
+            : cap.status === 'error'
+            ? `<button class="action-btn btn-delete" onclick="deleteCapture('${cap.id}')">✕ Remove</button>`
+            : '';
+
+        html += `<tr>
+            <td><strong>${escHtml(cap.client)}</strong></td>
+            <td>${escHtml(cap.network)}</td>
+            <td>${fmtDt(cap.start_time)}</td>
+            <td>${fmtDur(cap.duration_seconds)}</td>
+            <td>${statusBadge(cap.status)}</td>
+            <td class="file-size">${fmtSize(cap.size_bytes)}</td>
+            <td class="notes-cell" title="${escHtml(cap.notes)}">${escHtml(cap.notes)}</td>
+            <td style="white-space:nowrap">${actions}</td>
+        </tr>`;
+
+        if (cap.status === 'error' && cap.error) {
+            html += `<tr>
+                <td colspan="8" style="font-size:0.76rem;color:var(--nord11);padding:4px 12px 8px;">
+                    ${escHtml(cap.error.slice(0, 200))}
+                </td></tr>`;
+        }
+    });
+
+    html += '</tbody></table>';
+    body.innerHTML = html;
+}
+
+async function deleteCapture(id) {
+    if (!confirm('Delete this capture and its file?')) return;
+    try {
+        await fetch(`${AGENT}/captures/${id}`, { method: 'DELETE' });
+        await loadCaptures();
+    } catch { alert('Delete failed.'); }
+}
+
+function escHtml(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Auto-poll while active captures exist ────────────────────────────────────
+async function pollIfNeeded() {
+    try {
+        const r = await fetch(`${AGENT}/captures`, { signal: AbortSignal.timeout(4000) });
+        if (!r.ok) return;
+        const list = await r.json();
+        renderCaptures(list);
+        const hasActive = list.some(c => ['pending','scheduled','recording'].includes(c.status));
+        if (!hasActive) stopPolling();
+    } catch {
+        stopPolling();
+    }
+}
+
+function startPolling() {
+    if (pollTimer) return;
+    pollTimer = setInterval(pollIfNeeded, 5000);
+}
+
+function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+checkAgent();
+loadCaptures().then(() => {
+    const capturesBody = document.getElementById('capturesBody');
+    if (capturesBody.querySelector('.badge-recording, .badge-scheduled, .badge-pending')) {
+        startPolling();
+    }
+});
+</script>
+
+</body>
+</html>

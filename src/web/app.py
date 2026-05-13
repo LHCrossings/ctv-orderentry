@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from orchestration.config import ApplicationConfig
+from web.routes.airchecks import build_airchecks_router
 from web.routes.backwrite import build_backwrite_router
 from web.routes.edi import build_edi_router
 from web.routes.edi_export import build_edi_export_router
@@ -45,6 +46,7 @@ def create_app(config: ApplicationConfig | None = None) -> FastAPI:
     app.include_router(build_edi_router(templates))
     app.include_router(build_edi_export_router(templates))
     app.include_router(build_live_view_router(templates))
+    app.include_router(build_airchecks_router(templates))
 
     return app
 
