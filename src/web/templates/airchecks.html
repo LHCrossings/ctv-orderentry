@@ -367,6 +367,7 @@
     <div class="card">
         <div class="captures-header">
             <div class="card-title" style="margin-bottom:0;">Recent Captures</div>
+            <button class="refresh-btn" id="clearErrorsBtn" onclick="clearAllErrors()" style="display:none;color:var(--nord11);border-color:rgba(191,97,106,0.4);">✕ Clear Errors</button>
             <button class="refresh-btn" onclick="loadCaptures()">↻ Refresh</button>
         </div>
         <div id="selectToolbar" class="select-toolbar" style="display:none">
@@ -549,6 +550,8 @@ function renderCaptures(list) {
         return;
     }
 
+    const hasErrors   = list.some(c => c.status === 'error');
+    document.getElementById('clearErrorsBtn').style.display = hasErrors ? '' : 'none';
     const hasScheduled = list.some(c => c.status === 'scheduled' || c.status === 'pending');
     document.getElementById('selectToolbar').style.display = hasScheduled ? 'flex' : 'none';
     document.getElementById('selectAllCb').checked = false;
@@ -599,6 +602,14 @@ function renderCaptures(list) {
 
     html += '</tbody></table>';
     body.innerHTML = html;
+}
+
+async function clearAllErrors() {
+    const ids = Object.values(captureIndex).filter(c => c.status === 'error').map(c => c.id);
+    if (!ids.length) return;
+    if (!confirm(`Remove ${ids.length} error capture${ids.length > 1 ? 's' : ''}?`)) return;
+    await Promise.all(ids.map(id => fetch(`${AGENT}/captures/${id}`, { method: 'DELETE' }).catch(() => {})));
+    await loadCaptures();
 }
 
 function toggleSelectAll(cb) {
