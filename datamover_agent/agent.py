@@ -161,7 +161,9 @@ async def create_capture(req: CaptureRequest):
 
     if req.start_time:
         start_dt = datetime.fromisoformat(req.start_time)
-        delay    = max(0.0, (start_dt - now).total_seconds())
+        if start_dt.tzinfo is not None:
+            start_dt = start_dt.astimezone().replace(tzinfo=None)
+        delay = max(0.0, (start_dt - now).total_seconds())
     else:
         start_dt = now
         delay    = 0.0
@@ -235,6 +237,8 @@ async def update_capture(cap_id: str, req: CaptureUpdate):
     now = datetime.now()
     if req.start_time is not None:
         start_dt = datetime.fromisoformat(req.start_time)
+        if start_dt.tzinfo is not None:
+            start_dt = start_dt.astimezone().replace(tzinfo=None)
         cap["start_time"] = start_dt.isoformat()
         net_s    = _safe(cap["network"].replace(" ", "_"))
         client_s = _safe(cap["client"].replace(" ", "_"))
