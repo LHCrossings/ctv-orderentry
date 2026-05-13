@@ -101,6 +101,7 @@
                 <div class="module-desc">Record live network streams to MP4 for client aircheck delivery.</div>
             </div>
             <span class="module-badge live" id="airchecksBadge">Live</span>
+            <button id="airchecksClear" onclick="dismissAirchecks(event)">✕ Dismiss</button>
         </a>
 
         <a href="/live-view" class="module-card active">
@@ -126,19 +127,41 @@
     color: #2e3440;
     border-color: #a3be8c;
 }
+#airchecksClear {
+    display: none;
+    position: absolute;
+    bottom: 10px;
+    right: 12px;
+    background: rgba(46,52,64,0.15);
+    border: 1px solid rgba(46,52,64,0.25);
+    border-radius: 6px;
+    color: #2e3440;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 3px 9px;
+    cursor: pointer;
+    letter-spacing: 0.03em;
+}
+#airchecksClear:hover { background: rgba(46,52,64,0.28); }
+#airchecksCard.notify #airchecksClear { display: block; }
 </style>
 <script>
+function _ackedCount() { return parseInt(localStorage.getItem('aircheckAcked') || '0', 10); }
+
 async function checkAirchecks() {
     try {
         const r = await fetch('/api/airchecks/status', { signal: AbortSignal.timeout(4000) });
         if (!r.ok) return;
         const { complete } = await r.json();
+        const acked = _ackedCount();
+        const newCount = complete > acked ? complete - acked : 0;
+        if (complete < acked) localStorage.setItem('aircheckAcked', complete);
         const card  = document.getElementById('airchecksCard');
         const badge = document.getElementById('airchecksBadge');
-        if (complete > 0) {
+        if (newCount > 0) {
             card.classList.add('notify');
             badge.classList.add('ready');
-            badge.textContent = `${complete} Ready`;
+            badge.textContent = `${newCount} Ready`;
         } else {
             card.classList.remove('notify');
             badge.classList.remove('ready');
@@ -146,6 +169,19 @@ async function checkAirchecks() {
         }
     } catch {}
 }
+
+function dismissAirchecks(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    fetch('/api/airchecks/status', { signal: AbortSignal.timeout(4000) })
+        .then(r => r.json())
+        .then(({ complete }) => {
+            localStorage.setItem('aircheckAcked', complete);
+            checkAirchecks();
+        })
+        .catch(() => {});
+}
+
 checkAirchecks();
 setInterval(checkAirchecks, 60000);
 </script>
