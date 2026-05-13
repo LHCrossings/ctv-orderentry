@@ -673,7 +673,7 @@ function renderSpots() {
         html += `<tr>
             <td><span class="isci-code">${escHtml(s.isci_code)}</span></td>
             <td>${escHtml(s.network)}</td>
-            <td>${fmtAirDt(s.air_datetime)}</td>
+            <td>${escHtml(s.air_datetime_local)}</td>
             <td style="font-family:monospace;">:${String(s.duration_seconds).padStart(2,'0')}</td>
             <td class="capture-window">${window}</td>
         </tr>`;

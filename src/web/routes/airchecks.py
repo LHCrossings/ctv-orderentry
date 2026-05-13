@@ -2,8 +2,21 @@ import asyncio
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-_ET = ZoneInfo("America/New_York")
 _PT = ZoneInfo("America/Los_Angeles")
+
+# Etere stores air times in each market's local timezone
+MARKET_TZ = {
+    "NYC": ZoneInfo("America/New_York"),
+    "WDC": ZoneInfo("America/New_York"),
+    "MMT": ZoneInfo("America/New_York"),
+    "CMP": ZoneInfo("America/Chicago"),
+    "HOU": ZoneInfo("America/Chicago"),
+    "DAL": ZoneInfo("America/Chicago"),
+    "SFO": ZoneInfo("America/Los_Angeles"),
+    "SEA": ZoneInfo("America/Los_Angeles"),
+    "LAX": ZoneInfo("America/Los_Angeles"),
+    "CVC": ZoneInfo("America/Los_Angeles"),
+}
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -58,22 +71,26 @@ def _fetch_etere_spots(contract_id: int) -> list[dict]:
         for row in cur.fetchall():
             network = MARKET_NAMES.get(int(row["market_id"]), f"MKT{row['market_id']}")
 
-            # Etere stores times in Eastern Time — convert to Pacific for Datamover
             air_date  = row["air_date"]
             if hasattr(air_date, "date"):
                 air_date = air_date.date()
-            air_secs  = int(row["air_ora"]) // 30
-            air_dt_et = datetime.combine(air_date, datetime.min.time(), tzinfo=_ET) + timedelta(seconds=air_secs)
-            air_dt    = air_dt_et.astimezone(_PT).replace(tzinfo=None)  # naive PT for Datamover
+            air_secs   = int(row["air_ora"]) // 30
+            market_tz  = MARKET_TZ.get(network, _PT)
+            air_dt_loc = datetime.combine(air_date, datetime.min.time(), tzinfo=market_tz) + timedelta(seconds=air_secs)
+            air_dt     = air_dt_loc.astimezone(_PT).replace(tzinfo=None)  # naive PT for Datamover
+
+            tz_abbr      = air_dt_loc.strftime("%Z")  # e.g. "EST", "CDT"
+            local_display = air_dt_loc.strftime(f"%-m/%-d at %-I:%M:%S%p {tz_abbr}")
 
             dur_secs = max(5, int(row["duration_frames"] or 0) // 30)
 
             results.append({
-                "isci_code":              row["isci_code"].strip(),
-                "network":                network,
-                "air_datetime":           air_dt.isoformat(),
-                "duration_seconds":       dur_secs,
-                "capture_start":          (air_dt - timedelta(seconds=PRE_ROLL_SECS)).isoformat(),
+                "isci_code":                row["isci_code"].strip(),
+                "network":                  network,
+                "air_datetime":             air_dt.isoformat(),           # naive PT — for Datamover scheduler
+                "air_datetime_local":       local_display,                # e.g. "5/13 at 2:10:06PM EST"
+                "duration_seconds":         dur_secs,
+                "capture_start":            (air_dt - timedelta(seconds=PRE_ROLL_SECS)).isoformat(),
                 "capture_duration_seconds": dur_secs + PRE_ROLL_SECS + POST_ROLL_SECS,
             })
 
