@@ -2134,9 +2134,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
         def _run():
             target = _date_cls.fromisoformat(date)
+            monday = target - timedelta(days=target.weekday())
+            year, month_folder = _broadcast_month_folder(monday)
+            _log_root = Path("K:/Traffic/logs") if sys.platform == "win32" else Path("/mnt/k/Traffic/logs")
+            _attempted = str(_log_root / str(year) / month_folder / f"{market} Log - {monday.strftime('%y%m%d')}.xlsm")
             log_path = _find_log(market, target)
             if log_path is None:
-                return None
+                return {"__not_found": True, "attempted": _attempted, "platform": sys.platform}
             day_name = target.strftime("%A")
             wb = openpyxl.load_workbook(str(log_path), keep_vba=True, data_only=True)
             if day_name not in wb.sheetnames:
@@ -2186,8 +2190,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             }
 
         result = await asyncio.get_running_loop().run_in_executor(None, _run)
-        if result is None:
-            return JSONResponse({"error": "Log file not found"}, status_code=404)
+        if result is None or (isinstance(result, dict) and result.get("__not_found")):
+            detail = result or {}
+            return JSONResponse({"error": "Log file not found", "attempted": detail.get("attempted"), "platform": detail.get("platform")}, status_code=404)
         return JSONResponse(result)
 
     @router.post("/api/master-control/logs/fill-program")
