@@ -183,7 +183,7 @@
     <div class="network-pills" id="pill-row"></div>
 
     <div class="player-wrapper">
-        <video id="player" controls autoplay muted playsinline></video>
+        <video id="player" controls playsinline></video>
         <div class="player-overlay" id="overlay">
             <span class="overlay-icon">📺</span>
             <span>Select a network above</span>
@@ -253,6 +253,7 @@ function loadStream(network) {
         hls.attachMedia(video);
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            video.muted = false;
             video.play().catch(() => {});
             setStatus('', 'Live');
         });
@@ -270,6 +271,7 @@ function loadStream(network) {
         // Safari native HLS
         video.src = url;
         video.addEventListener('loadedmetadata', () => {
+            video.muted = false;
             video.play().catch(() => {});
             setStatus('', 'Live');
         }, { once: true });
