@@ -708,7 +708,7 @@ async function scheduleAllSpots() {
                     network:          s.network,
                     duration_seconds: s.capture_duration_seconds,
                     start_time:       s.capture_start,
-                    notes:            `${selectedContract.code} — ${selectedContract.desc}`,
+                    notes:            selectedContract.code,
                 }),
             });
             if (resp.ok) { ok++; } else { fail++; }
