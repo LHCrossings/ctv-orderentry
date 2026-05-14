@@ -11,6 +11,7 @@ Run with:
     uv run python scripts/fix_aspect_duration.py
 """
 import sys
+
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
 
 from browser_automation.etere_direct_client import connect

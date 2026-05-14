@@ -13,15 +13,16 @@ Usage:
 The file is updated in-place.  Market is inferred from the filename
 (e.g. "LAX" -> station 6).
 """
-import sys
-import re
 import datetime
-from pathlib import Path
+import re
+import sys
 from collections import defaultdict
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import openpyxl
+
 from browser_automation.etere_direct_client import connect
 
 # Market code → TPALINSE.COD_USER

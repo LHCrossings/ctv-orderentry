@@ -4724,7 +4724,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 if not placed_by_line:
                     return {"ok": True, "trash_deleted": 0, "lines_updated": 0}
 
-                line_ph = ",".join(str(l) for l in placed_by_line)
+                line_ph = ",".join(str(lid) for lid in placed_by_line)
 
                 # Grab trash IDs before deleting (to clean Traffic_Trash)
                 cur.execute(
