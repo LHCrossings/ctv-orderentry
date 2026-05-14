@@ -4620,4 +4620,146 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+    # ── Fix Overscheduled Contract ────────────────────────────────────────────
+
+    @router.get("/orders/fix-overscheduled", response_class=HTMLResponse)
+    async def fix_overscheduled_page(request: Request):
+        return templates.TemplateResponse(request, "fix_overscheduled.html")
+
+    @router.get("/api/orders/fix-overscheduled/search")
+    async def fix_overscheduled_search(q: str = ""):
+        if not q or len(q) < 2:
+            return JSONResponse([])
+
+        def _run():
+            from browser_automation.etere_direct_client import connect as _db_connect
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                cur.execute(
+                    "SELECT TOP 20"
+                    "  ID_CONTRATTITESTATA AS id,"
+                    "  COD_CONTRATTO AS code,"
+                    "  DESCRIZIONE AS description,"
+                    "  CONVERT(VARCHAR(10), DATA_INIZIO, 101) AS date_start,"
+                    "  CONVERT(VARCHAR(10), DATA_TERMINE, 101) AS date_end"
+                    " FROM CONTRATTITESTATA"
+                    " WHERE COD_CONTRATTO LIKE %s OR DESCRIZIONE LIKE %s"
+                    " ORDER BY DATA_INIZIO DESC",
+                    (f"%{q}%", f"%{q}%"),
+                )
+                return [dict(r) for r in cur.fetchall()]
+
+        try:
+            return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.get("/api/orders/fix-overscheduled/{contract_id}/preview")
+    async def fix_overscheduled_preview(contract_id: int):
+        def _run():
+            from browser_automation.etere_direct_client import connect as _db_connect
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                cur.execute(
+                    "SELECT COD_CONTRATTO AS code, DESCRIZIONE AS description,"
+                    " CONVERT(VARCHAR(10), DATA_INIZIO, 101) AS date_start,"
+                    " CONVERT(VARCHAR(10), DATA_TERMINE, 101) AS date_end"
+                    f" FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = {contract_id}"
+                )
+                header = cur.fetchone()
+                if not header:
+                    raise ValueError(f"Contract {contract_id} not found")
+
+                cur.execute(f"""
+                    SELECT
+                        cr.ID_CONTRATTIRIGHE AS line_id,
+                        cr.DESCRIZIONE       AS description,
+                        cr.COD_USER          AS market_id,
+                        cr.N_PASSAGGI        AS ordered,
+                        CONVERT(VARCHAR(10), cr.DATA_INIZIO, 101) AS date_start,
+                        CONVERT(VARCHAR(10), cr.DATA_FINE,  101) AS date_end,
+                        SUM(CASE WHEN tpa.ID_TRAFFICTRASH = 0 THEN 1 ELSE 0 END) AS placed,
+                        SUM(CASE WHEN tpa.ID_TRAFFICTRASH != 0 THEN 1 ELSE 0 END) AS trash
+                    FROM CONTRATTIRIGHE cr
+                    JOIN trafficPalinse tpa ON tpa.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
+                    WHERE cr.ID_CONTRATTITESTATA = {contract_id}
+                    GROUP BY cr.ID_CONTRATTIRIGHE, cr.DESCRIZIONE, cr.COD_USER,
+                             cr.N_PASSAGGI, cr.DATA_INIZIO, cr.DATA_FINE
+                    HAVING SUM(CASE WHEN tpa.ID_TRAFFICTRASH != 0 THEN 1 ELSE 0 END) > 0
+                    ORDER BY cr.COD_USER, cr.ID_CONTRATTIRIGHE
+                """)
+                lines = [dict(r) for r in cur.fetchall()]
+                return {"header": dict(header), "lines": lines}
+
+        try:
+            return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.post("/api/orders/fix-overscheduled/{contract_id}/apply")
+    async def fix_overscheduled_apply(contract_id: int):
+        def _run():
+            from browser_automation.etere_direct_client import connect as _db_connect
+            with _db_connect() as conn:
+                cur = conn.cursor()
+
+                # Lines that have trash spots and how many placed spots each has
+                cur.execute(f"""
+                    SELECT tpa.ID_ContrattiRighe,
+                           SUM(CASE WHEN tpa.ID_TRAFFICTRASH = 0 THEN 1 ELSE 0 END) AS placed
+                    FROM trafficPalinse tpa
+                    JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = tpa.ID_ContrattiRighe
+                    WHERE cr.ID_CONTRATTITESTATA = {contract_id}
+                      AND tpa.ID_ContrattiRighe IN (
+                          SELECT DISTINCT tpa2.ID_ContrattiRighe
+                          FROM trafficPalinse tpa2
+                          JOIN CONTRATTIRIGHE cr2 ON cr2.ID_CONTRATTIRIGHE = tpa2.ID_ContrattiRighe
+                          WHERE cr2.ID_CONTRATTITESTATA = {contract_id}
+                            AND tpa2.ID_TRAFFICTRASH != 0
+                      )
+                    GROUP BY tpa.ID_ContrattiRighe
+                """)
+                placed_by_line = {r[0]: r[1] for r in cur.fetchall()}
+
+                if not placed_by_line:
+                    return {"ok": True, "trash_deleted": 0, "lines_updated": 0}
+
+                line_ph = ",".join(str(l) for l in placed_by_line)
+
+                # Grab trash IDs before deleting (to clean Traffic_Trash)
+                cur.execute(
+                    f"SELECT DISTINCT ID_TRAFFICTRASH FROM trafficPalinse"
+                    f" WHERE ID_ContrattiRighe IN ({line_ph}) AND ID_TRAFFICTRASH != 0"
+                )
+                trash_ids = [r[0] for r in cur.fetchall()]
+
+                # Delete trash rows from trafficPalinse
+                cur.execute(
+                    f"DELETE FROM trafficPalinse"
+                    f" WHERE ID_ContrattiRighe IN ({line_ph}) AND ID_TRAFFICTRASH != 0"
+                )
+                trash_deleted = cur.rowcount
+
+                # Delete corresponding Traffic_Trash records
+                if trash_ids:
+                    trash_ph = ",".join(str(t) for t in trash_ids)
+                    cur.execute(f"DELETE FROM Traffic_Trash WHERE ID_TRAFFICTRASH IN ({trash_ph})")
+
+                # Update N_PASSAGGI on each affected line
+                lines_updated = 0
+                for line_id, placed in placed_by_line.items():
+                    cur.execute(
+                        "UPDATE CONTRATTIRIGHE SET N_PASSAGGI = %d WHERE ID_CONTRATTIRIGHE = %d",
+                        (placed, line_id),
+                    )
+                    lines_updated += 1
+
+                conn.commit()
+                return {"ok": True, "trash_deleted": trash_deleted, "lines_updated": lines_updated}
+
+        try:
+            return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     return router
