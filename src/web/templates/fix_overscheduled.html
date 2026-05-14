@@ -92,7 +92,7 @@
 </header>
 
 <main>
-  <p style="color:var(--nord4); font-size:0.88rem; margin-bottom:24px; line-height:1.6;">
+  <p style="color:var(--text-secondary); font-size:0.88rem; margin-bottom:24px; line-height:1.6;">
     Search for an overscheduled contract. The preview shows lines where spots went to blacklist
     (couldn't place). Applying will clear those blacklisted spots and update each line's ordered
     count to match what actually placed.
@@ -210,7 +210,7 @@ function renderPreview(data) {
         html += `<tr>
           <td><span class="market-badge">${escHtml(market)}</span></td>
           <td>${escHtml(l.description || '—')}</td>
-          <td style="font-size:0.8rem;color:var(--nord4)">${l.date_start || ''} – ${l.date_end || ''}</td>
+          <td style="font-size:0.8rem;color:var(--text-secondary)">${l.date_start || ''} – ${l.date_end || ''}</td>
           <td class="num">${l.ordered}</td>
           <td class="num">${l.placed}</td>
           <td class="num missed-val">${l.missed}</td>
