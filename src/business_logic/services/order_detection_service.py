@@ -147,6 +147,10 @@ class OrderDetectionService:
         if self._is_saccountyvoters(first_page_text, second_page_text):
             return OrderType.SACCOUNTYVOTERS
 
+        # Resorts World New York (check before SCWA — both use "Crossings TV Media Proposal")
+        if self._is_rwny(first_page_text):
+            return OrderType.RWNY
+
         # Sierra Donor Services (Crossings TV Media Plan — check before SCWA)
         if self._is_sierra_donor(first_page_text):
             return OrderType.SIERRADONOR
@@ -168,6 +172,14 @@ class OrderDetectionService:
             return OrderType.BVK
 
         return OrderType.UNKNOWN
+
+    def _is_rwny(self, text: str) -> bool:
+        """
+        Check if text matches a Resorts World New York media proposal.
+
+        Definitive marker: "Resorts World New York" (client name).
+        """
+        return "Resorts World New York" in text
 
     def _is_sierra_donor(self, text: str) -> bool:
         """
@@ -681,6 +693,9 @@ class OrderDetectionService:
         elif order_type == OrderType.SACCOUNTYVOTERS:
             return self._extract_saccountyvoters_client(first_page_text)
 
+        elif order_type == OrderType.RWNY:
+            return "Resorts World New York"
+
         elif order_type == OrderType.SCWA:
             # PDF is two-column; address follows on same line — stop at "Address:"
             m = re.search(r'Advertiser\s+(.*?)\s+Address:', first_page_text)
@@ -854,6 +869,8 @@ def detect_from_filename(filename: str) -> OrderType:
         Detected OrderType, or UNKNOWN if not recognised
     """
     name_upper = filename.upper()
+    if "RESORTS WORLD" in name_upper:
+        return OrderType.RWNY
     if "LEXUS" in name_upper:
         return OrderType.LEXUS
     if "DART" in name_upper:

@@ -96,6 +96,7 @@ class OrderProcessingService:
         OrderType.BVK:              "_process_bvk_order",
         OrderType.INTERTREND:       "_process_intertrend_order",
         OrderType.MEDIASOL:         "_process_mediasol_order",
+        OrderType.RWNY:             "_process_rwny_order",
     }
 
     def __init__(
@@ -2546,6 +2547,63 @@ class OrderProcessingService:
             print(f"\n✗ Sierra Donor processing failed: {exc}")
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.SIERRADONOR,
+                error_message=error_detail,
+            )
+
+    def _process_rwny_order(
+        self,
+        order: Any,
+        shared_session: Any,
+    ) -> "ProcessingResult":
+        """Process Resorts World New York (RWNY) order."""
+        try:
+            from browser_automation.rwny_automation import process_rwny_order
+
+            print(f"\n{'='*70}")
+            print("PROCESSING RESORTS WORLD NEW YORK ORDER")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            print(f"{'='*70}\n")
+
+            pre_gathered_inputs = order.order_input if order.order_input else None
+
+            def _run(driver, session):
+                success = process_rwny_order(
+                    driver,
+                    str(order.pdf_path),
+                    shared_session=session,
+                    pre_gathered_inputs=pre_gathered_inputs,
+                )
+                if success:
+                    print("\n✓ RWNY order processed successfully")
+                    return ProcessingResult(success=True, contracts=[], order_type=OrderType.RWNY)
+                print("\n✗ RWNY order processing failed")
+                return ProcessingResult(
+                    success=False, contracts=[], order_type=OrderType.RWNY,
+                    error_message="RWNY processing failed - check browser output for details",
+                )
+
+            if shared_session is None:
+                try:
+                    from etere_session import EtereSession
+                except ImportError:
+                    return ProcessingResult(
+                        success=False, contracts=[], order_type=OrderType.RWNY,
+                        error_message="EtereSession import failed",
+                    )
+                with EtereSession() as session:
+                    session.set_market("NYC")
+                    return _run(session.driver, session)
+
+            driver = shared_session.driver if hasattr(shared_session, 'driver') else shared_session
+            return _run(driver, shared_session)
+
+        except Exception as exc:
+            import traceback
+            error_detail = f"RWNY processing error: {str(exc)}\n{traceback.format_exc()}"
+            print(f"\n✗ RWNY processing failed: {exc}")
+            return ProcessingResult(
+                success=False, contracts=[], order_type=OrderType.RWNY,
                 error_message=error_detail,
             )
 
