@@ -4497,4 +4497,52 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+    @router.get("/scripts/rename-programming", response_class=HTMLResponse)
+    async def scripts_rename_programming(request: Request):
+        return templates.TemplateResponse(request, "scripts/rename_programming.html")
+
+    @router.post("/api/scripts/rename-programming/search")
+    async def rename_programming_search(payload: dict = Body(...)):
+        try:
+            from browser_automation.etere_direct_client import connect as _db_connect
+            prefix = (payload.get("prefix") or "").strip().upper()
+            if not prefix:
+                raise HTTPException(status_code=400, detail="Prefix required.")
+            with _db_connect() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT TOP 200 ID_FILMATI, COD_PROGRA, DESCRIZIO FROM FILMATI"
+                    " WHERE COD_PROGRA LIKE %s ORDER BY COD_PROGRA",
+                    [prefix + "%"],
+                )
+                assets = [{"id": r[0], "code": r[1] or "", "title": r[2] or ""} for r in cursor.fetchall()]
+            return JSONResponse({"assets": assets})
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.post("/api/scripts/rename-programming/apply")
+    async def rename_programming_apply(payload: dict = Body(...)):
+        try:
+            from browser_automation.etere_direct_client import connect as _db_connect
+            pairs = payload.get("pairs", [])
+            if not pairs:
+                raise HTTPException(status_code=400, detail="No pairs to apply.")
+            with _db_connect() as conn:
+                cursor = conn.cursor()
+                updated = 0
+                for p in pairs:
+                    cursor.execute(
+                        "UPDATE FILMATI SET COD_PROGRA = %s, DESCRIZIO = %s WHERE ID_FILMATI = %d",
+                        (p["new_code"], p["new_title"], p["asset_id"]),
+                    )
+                    updated += cursor.rowcount
+                conn.commit()
+            return JSONResponse({"updated": updated})
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     return router

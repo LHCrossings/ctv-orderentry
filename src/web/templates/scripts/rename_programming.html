@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rename Programming — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 960px; display: flex; flex-direction: column; gap: 20px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+        }
+        .tool-card h2 { font-size: 1rem; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+        .tool-card > p { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5; }
+
+        .btn {
+            padding: 10px 20px; border: none; border-radius: 8px; font-size: 0.88rem;
+            font-weight: 600; font-family: 'Inter', sans-serif; cursor: pointer;
+            height: 42px; white-space: nowrap; transition: background 0.2s, transform 0.15s;
+        }
+        .btn-primary { background: var(--nord10); color: white; }
+        .btn-primary:hover:not(:disabled) { background: var(--nord9); transform: translateY(-1px); }
+        .btn-danger { background: var(--nord11); color: white; }
+        .btn-danger:hover:not(:disabled) { background: #b34040; transform: translateY(-1px); }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+        .search-row { display: flex; gap: 12px; align-items: center; }
+
+        .prefix-input {
+            flex: 1; max-width: 480px;
+            background: var(--bg-secondary); border: 1px solid var(--border-color);
+            border-radius: 8px; padding: 10px 14px; font-size: 0.9rem;
+            font-family: 'Consolas', 'Courier New', monospace; color: var(--text-primary);
+            outline: none; transition: border-color 0.2s;
+        }
+        .prefix-input:focus { border-color: var(--nord10); box-shadow: 0 0 0 3px rgba(94,129,172,0.15); }
+
+        .section-title {
+            font-size: 0.78rem; font-weight: 600; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px;
+        }
+
+        .toolbar {
+            display: flex; align-items: center; gap: 6px;
+            font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;
+        }
+        .toolbar a { color: var(--nord10); text-decoration: none; }
+        .toolbar a:hover { text-decoration: underline; }
+
+        .lines-table-wrap {
+            overflow-x: auto; border: 1px solid var(--border-color);
+            border-radius: 8px; margin-bottom: 20px;
+        }
+        table.lines-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+        .lines-table th {
+            background: var(--bg-secondary); color: var(--text-muted); font-weight: 600;
+            font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em;
+            padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border-color);
+        }
+        .lines-table td {
+            padding: 8px 10px; border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary); vertical-align: middle;
+        }
+        .lines-table tr:last-child td { border-bottom: none; }
+        .lines-table tr.no-match td { background: color-mix(in srgb, var(--nord13) 6%, transparent); }
+
+        .cb-col { width: 36px; }
+        .code-cell { font-family: monospace; font-weight: 700; font-size: 0.82rem; }
+        .arrow { color: var(--text-muted); margin: 0 6px; }
+        .new-code { color: var(--nord10); }
+        .desc-before { color: var(--text-muted); font-family: monospace; font-size: 0.8rem; }
+        .desc-after  { color: var(--nord14); font-family: monospace; font-size: 0.8rem; }
+
+        .no-match-badge {
+            font-size: 0.72rem; font-weight: 600; color: var(--nord13);
+            background: color-mix(in srgb, var(--nord13) 12%, var(--nord6));
+            border: 1px solid color-mix(in srgb, var(--nord13) 30%, transparent);
+            padding: 2px 7px; border-radius: 4px;
+        }
+
+        .replace-section {
+            border-top: 1px solid var(--border-color); padding-top: 20px;
+            display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap;
+        }
+        .field-group { display: flex; flex-direction: column; gap: 5px; }
+        .field-label {
+            font-size: 0.72rem; font-weight: 600; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .replace-input {
+            background: var(--bg-secondary); border: 1px solid var(--border-color);
+            border-radius: 8px; padding: 9px 12px; font-size: 0.9rem;
+            font-family: 'Consolas', 'Courier New', monospace; color: var(--text-primary);
+            outline: none; width: 180px; transition: border-color 0.2s;
+        }
+        .replace-input:focus { border-color: var(--nord10); }
+
+        .arrow-label { font-size: 1.2rem; color: var(--text-muted); padding-bottom: 9px; }
+
+        .apply-row {
+            display: flex; gap: 12px; align-items: center;
+            padding-top: 20px; border-top: 1px solid var(--border-color);
+        }
+        .apply-status { font-size: 0.85rem; font-weight: 600; color: var(--nord14); }
+        .apply-status.err { color: var(--nord11); }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="back-link">🏠</a>
+            <div class="logo-icon">📺</div>
+            <div>
+                <h1>Rename <span>Programming</span></h1>
+                <div class="logo-sub">Scripts · Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+
+    <!-- Step 1: Search -->
+    <div class="tool-card">
+        <h2>Search Media Library</h2>
+        <p>Enter a base code prefix to find all matching programming assets. Narrow your search by including more of the code (e.g. <code>THEONE0105</code> for a specific date).</p>
+        <div class="search-row">
+            <input type="text" id="prefixInput" class="prefix-input"
+                   placeholder="e.g. THEONE, NEWSTODAY, CD-ONEBIGFAMILY"
+                   onkeydown="if(event.key==='Enter') searchAssets()" />
+            <button class="btn btn-primary" id="searchBtn" onclick="searchAssets()">Search</button>
+        </div>
+    </div>
+
+    <!-- Step 2: Results + find/replace -->
+    <div class="tool-card" id="resultsCard" style="display:none">
+        <div class="section-title" id="resultsTitle"></div>
+
+        <div class="toolbar">
+            <a href="#" onclick="selectAll(true);return false;">Select All</a>
+            &nbsp;/&nbsp;
+            <a href="#" onclick="selectAll(false);return false;">Deselect All</a>
+        </div>
+
+        <div class="lines-table-wrap">
+            <table class="lines-table">
+                <thead>
+                    <tr>
+                        <th class="cb-col"><input type="checkbox" id="checkAll" checked onchange="selectAll(this.checked)" /></th>
+                        <th>Code</th>
+                        <th>Title</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsBody"></tbody>
+            </table>
+        </div>
+
+        <div class="replace-section">
+            <div class="field-group">
+                <div class="field-label">Find</div>
+                <input type="text" id="findInput" class="replace-input" placeholder="010526" />
+            </div>
+            <div class="arrow-label">→</div>
+            <div class="field-group">
+                <div class="field-label">Replace with</div>
+                <input type="text" id="replaceInput" class="replace-input" placeholder="060126" />
+            </div>
+            <button class="btn btn-primary" onclick="previewRename()">Preview Rename</button>
+        </div>
+    </div>
+
+    <!-- Step 3: Preview + apply -->
+    <div class="tool-card" id="previewCard" style="display:none">
+        <div class="section-title" id="previewTitle"></div>
+
+        <div class="lines-table-wrap">
+            <table class="lines-table">
+                <thead>
+                    <tr>
+                        <th>Code</th>
+                        <th>Title</th>
+                    </tr>
+                </thead>
+                <tbody id="previewBody"></tbody>
+            </table>
+        </div>
+
+        <div class="apply-row">
+            <button class="btn btn-danger" id="applyBtn" onclick="applyChanges()">Apply Changes</button>
+            <span id="applyStatus" class="apply-status" style="display:none"></span>
+        </div>
+    </div>
+
+</main>
+
+<script>
+let _assets = [];
+let _applyPairs = [];
+
+async function searchAssets() {
+    const prefix = document.getElementById('prefixInput').value.trim();
+    if (!prefix) { alert('Enter a base code prefix to search.'); return; }
+
+    const btn = document.getElementById('searchBtn');
+    btn.disabled = true; btn.textContent = 'Searching…';
+    document.getElementById('resultsCard').style.display = 'none';
+    document.getElementById('previewCard').style.display = 'none';
+
+    try {
+        const resp = await fetch('/api/scripts/rename-programming/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prefix }),
+        });
+        if (!resp.ok) throw new Error((await resp.json().catch(()=>({}))).detail || `HTTP ${resp.status}`);
+        const data = await resp.json();
+        _assets = data.assets;
+        renderResults(_assets);
+    } catch (e) {
+        alert(`Search failed: ${e.message}`);
+    } finally {
+        btn.disabled = false; btn.textContent = 'Search';
+    }
+}
+
+function renderResults(assets) {
+    const titleEl = document.getElementById('resultsTitle');
+    const tbody   = document.getElementById('resultsBody');
+    tbody.innerHTML = '';
+
+    if (!assets.length) {
+        titleEl.textContent = 'No assets found';
+        tbody.innerHTML = '<tr><td colspan="3" style="color:var(--text-muted);padding:20px;text-align:center;">No matching assets in the media library.</td></tr>';
+    } else {
+        titleEl.textContent = `${assets.length} asset${assets.length !== 1 ? 's' : ''} found`;
+        assets.forEach(a => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="cb-col"><input type="checkbox" class="asset-cb" value="${a.id}" checked /></td>
+                <td class="code-cell">${escHtml(a.code)}</td>
+                <td>${escHtml(a.title)}</td>`;
+            tbody.appendChild(tr);
+        });
+        document.getElementById('checkAll').checked = true;
+    }
+    document.getElementById('resultsCard').style.display = 'block';
+}
+
+function selectAll(checked) {
+    document.querySelectorAll('.asset-cb').forEach(cb => cb.checked = checked);
+    document.getElementById('checkAll').checked = checked;
+}
+
+function previewRename() {
+    const find    = document.getElementById('findInput').value;
+    const replace = document.getElementById('replaceInput').value;
+    if (!find) { alert('Enter the string to find.'); return; }
+
+    const selectedIds = new Set([...document.querySelectorAll('.asset-cb:checked')].map(cb => parseInt(cb.value)));
+    if (!selectedIds.size) { alert('Select at least one asset.'); return; }
+
+    const pairs   = [];
+    const noMatch = [];
+
+    for (const a of _assets) {
+        if (!selectedIds.has(a.id)) continue;
+        const newCode  = a.code.split(find).join(replace);
+        const newTitle = a.title.split(find).join(replace);
+        if (newCode === a.code && newTitle === a.title) { noMatch.push(a); continue; }
+        pairs.push({ asset_id: a.id, old_code: a.code, new_code: newCode, old_title: a.title, new_title: newTitle });
+    }
+
+    _applyPairs = pairs;
+
+    const parts = [];
+    if (pairs.length)   parts.push(`${pairs.length} asset${pairs.length !== 1 ? 's' : ''} will be renamed`);
+    if (noMatch.length) parts.push(`${noMatch.length} unchanged (string not found)`);
+    document.getElementById('previewTitle').textContent = parts.join(' · ') || 'No changes';
+
+    const tbody = document.getElementById('previewBody');
+    tbody.innerHTML = '';
+    pairs.forEach(p => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><span class="code-cell">${escHtml(p.old_code)}</span><span class="arrow">→</span><span class="new-code code-cell">${escHtml(p.new_code)}</span></td>
+            <td><span class="desc-before">${escHtml(p.old_title)}</span><span class="arrow">→</span><span class="desc-after">${escHtml(p.new_title)}</span></td>`;
+        tbody.appendChild(tr);
+    });
+    noMatch.forEach(a => {
+        const tr = document.createElement('tr');
+        tr.className = 'no-match';
+        tr.innerHTML = `
+            <td class="code-cell">${escHtml(a.code)}</td>
+            <td><span class="no-match-badge">String not found — skipped</span></td>`;
+        tbody.appendChild(tr);
+    });
+
+    document.getElementById('applyBtn').disabled = pairs.length === 0;
+    document.getElementById('applyStatus').style.display = 'none';
+    document.getElementById('previewCard').style.display = 'block';
+    document.getElementById('previewCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function applyChanges() {
+    if (!_applyPairs.length) return;
+    const btn = document.getElementById('applyBtn');
+    const statusEl = document.getElementById('applyStatus');
+    btn.disabled = true; statusEl.style.display = 'none';
+
+    try {
+        const resp = await fetch('/api/scripts/rename-programming/apply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pairs: _applyPairs }),
+        });
+        if (!resp.ok) throw new Error((await resp.json().catch(()=>({}))).detail || `HTTP ${resp.status}`);
+        const data = await resp.json();
+        statusEl.textContent = `✓ ${data.updated} asset(s) updated`;
+        statusEl.className = 'apply-status';
+        statusEl.style.display = '';
+        _applyPairs = [];
+    } catch (e) {
+        statusEl.textContent = `✗ ${e.message}`;
+        statusEl.className = 'apply-status err';
+        statusEl.style.display = '';
+        btn.disabled = false;
+    }
+}
+
+function escHtml(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+
+</body>
+</html>
