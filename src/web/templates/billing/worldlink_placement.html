@@ -12,8 +12,9 @@ body{background:var(--bg-secondary);font-family:'Inter',-apple-system,BlinkMacSy
 .cr-header{background:linear-gradient(135deg,var(--nord0) 0%,var(--nord1) 100%);padding:0 24px;box-shadow:0 2px 8px rgba(46,52,64,0.25);}
 .cr-header-inner{max-width:960px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:20px 0;}
 .cr-logo{display:flex;align-items:center;gap:14px;}
-.cr-back,.cr-back:visited{color:var(--nord6);text-decoration:none;font-size:0.75rem;font-weight:500;padding:5px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.14);border-radius:8px;opacity:0.85;transition:opacity 0.15s,background 0.15s;letter-spacing:0.03em;line-height:1;}
+.cr-back,.cr-back:visited{color:var(--nord6);text-decoration:none;font-size:0.75rem;font-weight:500;padding:5px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.14);border-radius:8px;opacity:0.85;transition:opacity 0.15s,background 0.15s;letter-spacing:0.03em;line-height:1;display:flex;flex-direction:column;align-items:center;gap:3px;}
 .cr-back:hover{opacity:1;background:rgba(255,255,255,0.14);}
+.cr-back::after{content:"home";font-size:0.55rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;opacity:0.7;}
 .cr-logo-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--nord13) 0%,var(--nord12) 100%);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
 .cr-logo h1{font-size:1.1rem;font-weight:700;color:var(--nord6);letter-spacing:-0.02em;line-height:1.2;}
 .cr-logo h1 span{color:var(--nord13);}
