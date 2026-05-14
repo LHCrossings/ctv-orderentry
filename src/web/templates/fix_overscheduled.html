@@ -203,7 +203,7 @@ function renderPreview(data) {
         <th>Dates</th>
         <th class="num">Ordered</th>
         <th class="num">Placed</th>
-        <th class="num">Trash</th>
+        <th class="num">Missed</th>
         <th class="num">New Ordered</th>
       </tr></thead><tbody>`;
 
@@ -215,7 +215,7 @@ function renderPreview(data) {
           <td style="font-size:0.8rem;color:var(--text-muted)">${l.date_start || ''} – ${l.date_end || ''}</td>
           <td class="num">${l.ordered}</td>
           <td class="num">${l.placed}</td>
-          <td class="num trash-val">${l.trash}</td>
+          <td class="num trash-val">${l.missed}</td>
           <td class="num new-val">${l.placed}</td>
         </tr>`;
     }
@@ -227,8 +227,8 @@ function renderPreview(data) {
 applyBtn.addEventListener('click', async () => {
     if (!_selectedId) return;
     const lines = _previewData?.lines?.length || 0;
-    const totalTrash = (_previewData?.lines || []).reduce((s, l) => s + l.trash, 0);
-    if (!confirm(`Delete ${totalTrash} trash spot(s) and update ${lines} line(s)?\n\nThis cannot be undone.`)) return;
+    const totalMissed = (_previewData?.lines || []).reduce((s, l) => s + l.missed, 0);
+    if (!confirm(`Clear ${totalMissed} missed spot(s) from blacklist and update ${lines} line(s)?\n\nThis cannot be undone.`)) return;
 
     applyBtn.disabled = true;
     applyBtn.textContent = 'Applying…';
@@ -240,7 +240,7 @@ applyBtn.addEventListener('click', async () => {
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.detail || 'Error');
         resultMsg.style.color = 'var(--nord14)';
-        resultMsg.textContent = `✓ Deleted ${data.trash_deleted} trash spot(s), updated ${data.lines_updated} line(s).`;
+        resultMsg.textContent = `✓ Cleared ${data.blacklist_rows_deleted} blacklist entry(s), updated ${data.lines_updated} line(s).`;
         // Reload preview to confirm clean state
         await loadPreview(_selectedId);
     } catch (e) {

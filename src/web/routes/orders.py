@@ -4670,6 +4670,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 if not header:
                     raise ValueError(f"Contract {contract_id} not found")
 
+                # Lines that have Traffic_ScheduleList blacklist entries
                 cur.execute(f"""
                     SELECT
                         cr.ID_CONTRATTIRIGHE AS line_id,
@@ -4678,14 +4679,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         cr.N_PASSAGGI        AS ordered,
                         CONVERT(VARCHAR(10), cr.DATA_INIZIO, 101) AS date_start,
                         CONVERT(VARCHAR(10), cr.DATA_FINE,  101) AS date_end,
-                        SUM(CASE WHEN tpa.ID_TRAFFICTRASH = 0 THEN 1 ELSE 0 END) AS placed,
-                        SUM(CASE WHEN tpa.ID_TRAFFICTRASH != 0 THEN 1 ELSE 0 END) AS trash
+                        (SELECT COUNT(*) FROM trafficPalinse tpa
+                         WHERE tpa.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE) AS placed,
+                        SUM(tsl.PassageMiss) AS missed
                     FROM CONTRATTIRIGHE cr
-                    JOIN trafficPalinse tpa ON tpa.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
+                    JOIN Traffic_ScheduleList tsl ON tsl.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
                     WHERE cr.ID_CONTRATTITESTATA = {contract_id}
+                      AND tsl.BlackList > 0
                     GROUP BY cr.ID_CONTRATTIRIGHE, cr.DESCRIZIONE, cr.COD_USER,
                              cr.N_PASSAGGI, cr.DATA_INIZIO, cr.DATA_FINE
-                    HAVING SUM(CASE WHEN tpa.ID_TRAFFICTRASH != 0 THEN 1 ELSE 0 END) > 0
                     ORDER BY cr.COD_USER, cr.ID_CONTRATTIRIGHE
                 """)
                 lines = [dict(r) for r in cur.fetchall()]
@@ -4703,49 +4705,34 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             with _db_connect() as conn:
                 cur = conn.cursor()
 
-                # Lines that have trash spots and how many placed spots each has
+                # Lines with blacklist entries and their placed counts
                 cur.execute(f"""
-                    SELECT tpa.ID_ContrattiRighe,
-                           SUM(CASE WHEN tpa.ID_TRAFFICTRASH = 0 THEN 1 ELSE 0 END) AS placed
-                    FROM trafficPalinse tpa
-                    JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = tpa.ID_ContrattiRighe
+                    SELECT cr.ID_CONTRATTIRIGHE,
+                           (SELECT COUNT(*) FROM trafficPalinse tpa
+                            WHERE tpa.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE) AS placed
+                    FROM CONTRATTIRIGHE cr
                     WHERE cr.ID_CONTRATTITESTATA = {contract_id}
-                      AND tpa.ID_ContrattiRighe IN (
-                          SELECT DISTINCT tpa2.ID_ContrattiRighe
-                          FROM trafficPalinse tpa2
-                          JOIN CONTRATTIRIGHE cr2 ON cr2.ID_CONTRATTIRIGHE = tpa2.ID_ContrattiRighe
-                          WHERE cr2.ID_CONTRATTITESTATA = {contract_id}
-                            AND tpa2.ID_TRAFFICTRASH != 0
+                      AND EXISTS (
+                          SELECT 1 FROM Traffic_ScheduleList tsl
+                          WHERE tsl.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
+                            AND tsl.BlackList > 0
                       )
-                    GROUP BY tpa.ID_ContrattiRighe
                 """)
                 placed_by_line = {r[0]: r[1] for r in cur.fetchall()}
 
                 if not placed_by_line:
-                    return {"ok": True, "trash_deleted": 0, "lines_updated": 0}
+                    return {"ok": True, "blacklist_rows_deleted": 0, "lines_updated": 0}
 
                 line_ph = ",".join(str(lid) for lid in placed_by_line)
 
-                # Grab trash IDs before deleting (to clean Traffic_Trash)
+                # Delete Traffic_ScheduleList blacklist rows for these lines
                 cur.execute(
-                    f"SELECT DISTINCT ID_TRAFFICTRASH FROM trafficPalinse"
-                    f" WHERE ID_ContrattiRighe IN ({line_ph}) AND ID_TRAFFICTRASH != 0"
+                    f"DELETE FROM Traffic_ScheduleList"
+                    f" WHERE ID_ContrattiRighe IN ({line_ph}) AND BlackList > 0"
                 )
-                trash_ids = [r[0] for r in cur.fetchall()]
+                bl_deleted = cur.rowcount
 
-                # Delete trash rows from trafficPalinse
-                cur.execute(
-                    f"DELETE FROM trafficPalinse"
-                    f" WHERE ID_ContrattiRighe IN ({line_ph}) AND ID_TRAFFICTRASH != 0"
-                )
-                trash_deleted = cur.rowcount
-
-                # Delete corresponding Traffic_Trash records
-                if trash_ids:
-                    trash_ph = ",".join(str(t) for t in trash_ids)
-                    cur.execute(f"DELETE FROM Traffic_Trash WHERE ID_TRAFFICTRASH IN ({trash_ph})")
-
-                # Update N_PASSAGGI on each affected line
+                # Update N_PASSAGGI on each affected line to match placed count
                 lines_updated = 0
                 for line_id, placed in placed_by_line.items():
                     cur.execute(
@@ -4755,7 +4742,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     lines_updated += 1
 
                 conn.commit()
-                return {"ok": True, "trash_deleted": trash_deleted, "lines_updated": lines_updated}
+                return {"ok": True, "blacklist_rows_deleted": bl_deleted, "lines_updated": lines_updated}
 
         try:
             return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
