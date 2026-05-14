@@ -1456,6 +1456,7 @@
         toast.style.color = '';
 
         let totalLines = 0, totalSpots = 0, errors = [];
+        let deNeedsAirchecks = false, deAirchecksContractId = null;
 
         try {
             for (const r of results) {
@@ -1491,6 +1492,7 @@
                 const data = await resp.json();
                 totalLines += data.lines_updated || 0;
                 totalSpots += data.spots_updated || 0;
+                if (data.needs_airchecks) { deNeedsAirchecks = true; deAirchecksContractId = data.contract_id; }
             }
 
             if (errors.length) {
@@ -1500,6 +1502,7 @@
                 toast.style.color = 'var(--nord14)';
                 toast.textContent = `Done — ${totalLines} line${totalLines!==1?'s':''}, ${totalSpots} spot${totalSpots!==1?'s':''} assigned.`;
             }
+            if (deNeedsAirchecks) showAirchecksModal(deAirchecksContractId);
         } catch (e) {
             toast.style.color  = 'var(--nord11)';
             toast.textContent  = `Error: ${e.message}`;
@@ -1717,7 +1720,7 @@
                 if (y && m && d) effFrom = `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
             }
 
-            let assigned = 0, skipped = 0, errors = [], skipReasons = [];
+            let assigned = 0, skipped = 0, errors = [], skipReasons = [], lexusAircheckData = null;
             for (const p of r.periods) {
                 if (!p.all_found) { skipped++; skipReasons.push(`${p.date_label} :${p.duration_sec}s — spots not found`); continue; }
                 const lineIds = linesByDur[p.duration_sec] || [];
@@ -1742,6 +1745,8 @@
                 if (!resp.ok) {
                     errors.push(`${p.date_label} :${p.duration_sec}s`);
                 } else {
+                    const pData = await resp.json();
+                    if (pData.needs_airchecks) lexusAircheckData = pData;
                     assigned++;
                 }
             }
@@ -1757,6 +1762,7 @@
                     console.warn('[Lexus assign] skipped:', skipReasons);
                 }
             }
+            if (lexusAircheckData) showAirchecksModal(lexusAircheckData.contract_id);
             // Refresh current rotation if this contract is the one selected in the search bar
             if (contract.id === selectedContractId) reloadRotation();
         } catch (e) {
@@ -2126,6 +2132,7 @@
             // Refresh rotation display
             const r2 = await fetch(`/api/traffic/contract/${selectedContractId}/assignment`);
             if (r2.ok) { const d2 = await r2.json(); renderRotation(d2.rotation, d2.total_spots); }
+            if (data.needs_airchecks) showAirchecksModal(data.contract_id);
         } catch (e) {
             toast.style.color = 'var(--nord11)';
             toast.textContent = `Error: ${e.message}`;
