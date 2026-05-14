@@ -556,7 +556,7 @@ function renderCaptures(list) {
     let html = `<table>
         <thead><tr>
             <th class="cb-col"></th><th>Client</th><th>Network</th><th>Start Time</th>
-            <th>Duration</th><th>Status</th><th>Size</th><th>Notes</th><th></th>
+            <th>Duration</th><th>Status</th><th>Size</th><th>ISCI</th><th>Notes</th><th></th>
         </tr></thead><tbody>`;
 
     list.forEach(cap => {
@@ -583,13 +583,14 @@ function renderCaptures(list) {
             <td>${fmtDur(cap.duration_seconds)}</td>
             <td>${statusBadge(cap.status)}</td>
             <td class="file-size">${fmtSize(cap.size_bytes)}</td>
+            <td class="notes-cell" style="font-family:monospace;font-size:0.78rem">${escHtml(cap.isci_code || '—')}</td>
             <td class="notes-cell" title="${escHtml(cap.notes)}">${escHtml(cap.notes)}</td>
             <td style="white-space:nowrap">${actions}</td>
         </tr>`;
 
         if (cap.status === 'error' && cap.error) {
             html += `<tr>
-                <td colspan="8" style="font-size:0.76rem;color:var(--nord11);padding:4px 12px 8px;">
+                <td colspan="9" style="font-size:0.76rem;color:var(--nord11);padding:4px 12px 8px;">
                     ${escHtml(cap.error.slice(0, 200))}
                 </td></tr>`;
         }
