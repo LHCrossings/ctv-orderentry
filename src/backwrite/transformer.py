@@ -1131,6 +1131,12 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
             round(float(k), 4): round(float(v) / (1 - agency_fee), 4)
             for k, v in _gross_up_dict.items()
         }
+        # Also index by net rate so IO-sourced SC lines (which carry net rates,
+        # not the CSV gross rates used as keys above) can resolve correctly.
+        for _v in _gross_up_dict.values():
+            _net = round(float(_v), 4)
+            if _net not in _gross_up_map:
+                _gross_up_map[_net] = round(float(_v) / (1 - agency_fee), 4)
 
     def _grossed_up(rate: float) -> float:
         if not _gross_up_map:
