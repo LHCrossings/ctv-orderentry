@@ -2674,7 +2674,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 cur_pool = conn_pool.cursor(as_dict=True)
                 cur_pool.execute(
                     f"SELECT DISTINCT ID_FILMATI FROM CONTRATTIFILMATI"
-                    f" WHERE ID_CONTRATTIRIGHE IN ({line_ids_str})"
+                    f" WHERE ID_CONTRATTIRIGHE IN ("
+                    f"   SELECT ID_CONTRATTIRIGHE FROM CONTRATTIRIGHE"
+                    f"   WHERE ID_CONTRATTITESTATA = {contract_id}"
+                    f" )"
                 )
                 existing_pool = {r["ID_FILMATI"] for r in cur_pool.fetchall()}
 
@@ -3360,7 +3363,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 line_ids_str = ",".join(str(lid) for lid in all_line_ids)
                 cur.execute(
                     f"SELECT DISTINCT ID_FILMATI FROM CONTRATTIFILMATI"
-                    f" WHERE ID_CONTRATTIRIGHE IN ({line_ids_str})"
+                    f" WHERE ID_CONTRATTIRIGHE IN ("
+                    f"   SELECT ID_CONTRATTIRIGHE FROM CONTRATTIRIGHE"
+                    f"   WHERE ID_CONTRATTITESTATA = {contract_id}"
+                    f" )"
                 )
                 existing_pool = {r["ID_FILMATI"] for r in cur.fetchall()}
 
@@ -4032,7 +4038,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 line_ids_ph = ",".join(str(lid) for lid in line_ids)
                 cur.execute(
                     f"SELECT DISTINCT ID_FILMATI FROM CONTRATTIFILMATI"
-                    f" WHERE ID_CONTRATTIRIGHE IN ({line_ids_ph})"
+                    f" WHERE ID_CONTRATTIRIGHE IN ("
+                    f"   SELECT ID_CONTRATTIRIGHE FROM CONTRATTIRIGHE"
+                    f"   WHERE ID_CONTRATTITESTATA = {contract_id}"
+                    f" )"
                 )
                 existing_pool = {r["ID_FILMATI"] for r in cur.fetchall()}
 
