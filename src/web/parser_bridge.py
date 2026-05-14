@@ -193,7 +193,8 @@ def _normalize_line(line, idx: int) -> dict:
         total_spots = sum(weekly_spots)
 
     rate = _float(_get(line, "rate", "gross_rate", "net_rate", "rate_per_spot", "cost"))
-    is_bonus = bool(_get(line, "is_bonus", "bonus", default=False))
+    _is_bonus_raw = _get(line, "is_bonus", "bonus", default=False)
+    is_bonus = bool(_is_bonus_raw() if callable(_is_bonus_raw) else _is_bonus_raw)
     market = _str(_get(line, "market", "market_code"))
     language = _str(_get(line, "language", "language_code"))
     start_date = _str(_get(line, "start_date", "flight_start", "start"))
