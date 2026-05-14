@@ -536,14 +536,49 @@ function statusBadge(s) {
 }
 
 let captureIndex = {};
+let _lastList    = [];
+let _sortKey     = 'start_time';
+let _sortDir     = 1;
+
+function sortCaptures(key) {
+    if (_sortKey === key) { _sortDir *= -1; } else { _sortKey = key; _sortDir = 1; }
+    renderCaptures(_lastList);
+}
+
+function _sortVal(cap, key) {
+    switch (key) {
+        case 'client':   return (cap.client   || '').toLowerCase();
+        case 'network':  return (cap.network  || '').toLowerCase();
+        case 'start_time': return cap.start_time || '';
+        case 'duration': return cap.duration_seconds || 0;
+        case 'status':   return cap.status || '';
+        case 'size':     return cap.size_bytes || 0;
+        case 'isci':     return (cap.isci_code || '').toLowerCase();
+        case 'notes':    return (cap.notes || '').toLowerCase();
+        default:         return '';
+    }
+}
+
+function _th(label, key) {
+    const active = _sortKey === key;
+    const arrow  = active ? (_sortDir === 1 ? ' ↑' : ' ↓') : '';
+    const style  = `cursor:pointer;user-select:none;${active ? 'color:var(--nord8)' : ''}`;
+    return `<th onclick="sortCaptures('${key}')" style="${style}">${label}${arrow}</th>`;
+}
 
 function renderCaptures(list) {
+    _lastList    = list;
     captureIndex = Object.fromEntries(list.map(c => [c.id, c]));
-    const body = document.getElementById('capturesBody');
+    const body   = document.getElementById('capturesBody');
     if (!list.length) {
         body.innerHTML = '<div class="empty-state">No captures yet.</div>';
         return;
     }
+
+    const sorted = [...list].sort((a, b) => {
+        const av = _sortVal(a, _sortKey), bv = _sortVal(b, _sortKey);
+        return av < bv ? -_sortDir : av > bv ? _sortDir : 0;
+    });
 
     const hasErrors   = list.some(c => c.status === 'error');
     document.getElementById('clearErrorsBtn').style.display = hasErrors ? '' : 'none';
@@ -555,11 +590,13 @@ function renderCaptures(list) {
 
     let html = `<table>
         <thead><tr>
-            <th class="cb-col"></th><th>Client</th><th>Network</th><th>Start Time</th>
-            <th>Duration</th><th>Status</th><th>Size</th><th>ISCI</th><th>Notes</th><th></th>
+            <th class="cb-col"></th>
+            ${_th('Client','client')}${_th('Network','network')}${_th('Start Time','start_time')}
+            ${_th('Duration','duration')}${_th('Status','status')}${_th('Size','size')}
+            ${_th('ISCI','isci')}${_th('Notes','notes')}<th></th>
         </tr></thead><tbody>`;
 
-    list.forEach(cap => {
+    sorted.forEach(cap => {
         const actions = cap.status === 'complete'
             ? `<a class="action-btn btn-download" href="${AGENT}/captures/${cap.id}/download">↓ Download</a>
                <button class="action-btn btn-delete" onclick="deleteCapture('${cap.id}')">✕</button>`
