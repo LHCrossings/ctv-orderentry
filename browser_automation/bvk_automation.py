@@ -112,6 +112,19 @@ _LANG_ROS_TIMES = {
     'J':  '10:00A-11:00A',
 }
 
+# Correct ROS days per language (from CTV language schedule)
+_LANG_ROS_DAYS = {
+    'C':  'M-F',
+    'M':  'M-Su',
+    'V':  'M-Su',
+    'K':  'M-Su',
+    'SA': 'M-Su',
+    'P':  'M-F',
+    'Hm': 'Sa-Su',
+    'T':  'M-Su',
+    'J':  'M-Su',
+}
+
 # Program name keywords that indicate the language is already explicit
 _EXPLICIT_LANG_KEYWORDS = [
     'cantonese', 'mandarin', 'chinese', 'vietnamese', 'korean',
@@ -199,6 +212,7 @@ def _interactive_time_check(order) -> bool:
             lang     = line.language
             lang_name = _LANG_NAMES.get(lang, lang)
             ros_time  = _LANG_ROS_TIMES.get(lang, '')
+            ros_days  = _LANG_ROS_DAYS.get(lang, '')
 
             # Is the language inferred from context, or explicit in the program name?
             prog_lower = line.program.lower()
@@ -207,7 +221,7 @@ def _interactive_time_check(order) -> bool:
 
             print(f"\n  Line {line.line_no:2d}: {label} {lang_name} ({lang})")
             print(f"           Program:  {line.program}")
-            print(f"           PDF time: {line.time_str}")
+            print(f"           PDF days: {line.days}  PDF time: {line.time_str}")
 
             # For inferred language, let user confirm or override
             if is_inferred:
@@ -219,12 +233,26 @@ def _interactive_time_check(order) -> bool:
                     line.language = resp
                     lang_name = _LANG_NAMES.get(resp, resp)
                     ros_time  = _LANG_ROS_TIMES.get(resp, '')
+                    ros_days  = _LANG_ROS_DAYS.get(resp, '')
+
+            # Offer to apply the correct ROS schedule days
+            if ros_days and ros_days != line.days:
+                print(f"  ⚠ Days mismatch — PDF: '{line.days}'  ROS table: '{ros_days}'")
+                resp = input(
+                    f"  Apply ROS days '{ros_days}'? (y/n or type custom): "
+                ).strip()
+                if resp.lower() == 'y':
+                    line.days = ros_days
+                    print(f"  ✓ Days set to: {line.days}")
+                elif resp and resp.lower() != 'n':
+                    line.days = resp
+                    print(f"  ✓ Days set to: {line.days}")
 
             # Offer to apply the correct ROS schedule time
             if ros_time:
                 print(f"           ROS time: {ros_time}")
                 resp = input(
-                    f"  Apply ROS time? (y/n or type custom): "
+                    "  Apply ROS time? (y/n or type custom): "
                 ).strip()
                 if resp.lower() == 'y':
                     line.time_str = ros_time
