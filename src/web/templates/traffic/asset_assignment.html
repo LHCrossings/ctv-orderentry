@@ -1456,7 +1456,6 @@
         toast.style.color = '';
 
         let totalLines = 0, totalSpots = 0, errors = [];
-        let deNeedsAirchecks = false, deAirchecksContractId = null;
 
         try {
             for (const r of results) {
@@ -1492,7 +1491,6 @@
                 const data = await resp.json();
                 totalLines += data.lines_updated || 0;
                 totalSpots += data.spots_updated || 0;
-                if (data.needs_airchecks) { deNeedsAirchecks = true; deAirchecksContractId = data.contract_id; }
             }
 
             if (errors.length) {
@@ -1502,7 +1500,6 @@
                 toast.style.color = 'var(--nord14)';
                 toast.textContent = `Done — ${totalLines} line${totalLines!==1?'s':''}, ${totalSpots} spot${totalSpots!==1?'s':''} assigned.`;
             }
-            if (deNeedsAirchecks) showAirchecksModal(deAirchecksContractId);
         } catch (e) {
             toast.style.color  = 'var(--nord11)';
             toast.textContent  = `Error: ${e.message}`;
@@ -2021,6 +2018,7 @@
             toast.textContent = `✓ Assigned ${data.assigned} spot${data.assigned!==1?'s':''} across ${data.lines_updated} line${data.lines_updated!==1?'s':''}.`;
             const r2 = await fetch(`/api/traffic/contract/${selectedContractId}/assignment`);
             if (r2.ok) { const d2 = await r2.json(); renderRotation(d2.rotation, d2.total_spots); }
+            if (data.needs_airchecks) showAirchecksModal(data.contract_id);
         } catch (e) {
             toast.style.color = 'var(--nord11)';
             toast.textContent = `Error: ${e.message}`;
