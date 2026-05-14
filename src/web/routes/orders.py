@@ -2669,7 +2669,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             tp_filmati_map = {row["tp_id"]: rotation_list[i] for i, row in enumerate(all_rows)}
 
             # Check which filmati are already in the pool so we don't create duplicates
-            line_ids_str = ",".join(str(lid) for lid in line_tp_map.keys())
             with _db_connect() as conn_pool:
                 cur_pool = conn_pool.cursor(as_dict=True)
                 cur_pool.execute(
@@ -4034,8 +4033,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     tp_line_map[r["tp_id"]]    = r["line_id"]
                     tp_newtype_map[r["tp_id"]] = bookingcode_to_newtype.get(r["booking_code"], "COM")
 
-                line_ids    = list({tp_line_map[t] for t in tp_ids_list if t in tp_line_map})
-                line_ids_ph = ",".join(str(lid) for lid in line_ids)
                 cur.execute(
                     f"SELECT DISTINCT ID_FILMATI FROM CONTRATTIFILMATI"
                     f" WHERE ID_CONTRATTIRIGHE IN ("
