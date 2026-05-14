@@ -6,6 +6,7 @@
     <title>Customer Database — Order Entry</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
     <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
     <link rel="stylesheet" href="/static/css/app.css" />
     <style>
         .toolbar {
@@ -206,6 +207,10 @@
             <input type="checkbox" id="f-include_market_in_code" />
             <label for="f-include_market_in_code">Append market code to contract code</label>
         </div>
+        <div class="checkbox-row">
+            <input type="checkbox" id="f-auto_aircheck" />
+            <label for="f-auto_aircheck">Auto-prompt aircheck scheduling after traffic assignment</label>
+        </div>
         <div class="modal-footer">
             <button class="btn-cancel" id="modal-cancel">Cancel</button>
             <button class="btn-primary" id="modal-save">Save</button>
@@ -272,7 +277,7 @@ function openNewModal() {
     fillForm({ customer_id: '', customer_name: '', order_type: '', code_name: '',
                 description_name: '', billing_type: 'agency', default_market: '',
                 separation_customer: 15, separation_event: 0, separation_order: 0,
-                include_market_in_code: 0, abbreviation: '' });
+                include_market_in_code: 0, auto_aircheck: 0, abbreviation: '' });
     document.getElementById('f-customer_name').readOnly = false;
     document.getElementById('f-order_type').readOnly = false;
     document.getElementById('modal-backdrop').classList.add('open');
@@ -290,6 +295,7 @@ function fillForm(r) {
     document.getElementById('f-separation_event').value = r.separation_event ?? 0;
     document.getElementById('f-separation_order').value = r.separation_order ?? 0;
     document.getElementById('f-include_market_in_code').checked = !!r.include_market_in_code;
+    document.getElementById('f-auto_aircheck').checked = !!r.auto_aircheck;
     document.getElementById('f-abbreviation').value = r.abbreviation || '';
 }
 
@@ -306,6 +312,7 @@ function collectForm() {
         separation_event:     parseInt(document.getElementById('f-separation_event').value) || 0,
         separation_order:     parseInt(document.getElementById('f-separation_order').value) || 0,
         include_market_in_code: document.getElementById('f-include_market_in_code').checked,
+        auto_aircheck:        document.getElementById('f-auto_aircheck').checked,
         abbreviation:         document.getElementById('f-abbreviation').value.trim(),
     };
 }

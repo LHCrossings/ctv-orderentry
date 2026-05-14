@@ -1897,8 +1897,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 """INSERT INTO customers
                    (customer_id, customer_name, order_type, code_name, description_name,
                     billing_type, default_market, separation_customer, separation_event,
-                    separation_order, include_market_in_code, abbreviation)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    separation_order, include_market_in_code, auto_aircheck, abbreviation)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     body.get("customer_id", ""),
                     body.get("customer_name", ""),
@@ -1911,6 +1911,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     int(body.get("separation_event", 0)),
                     int(body.get("separation_order", 0)),
                     int(bool(body.get("include_market_in_code", False))),
+                    int(bool(body.get("auto_aircheck", False))),
                     body.get("abbreviation", ""),
                 ),
             )
@@ -1930,7 +1931,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                    customer_id=?, code_name=?, description_name=?,
                    billing_type=?, default_market=?, separation_customer=?,
                    separation_event=?, separation_order=?, include_market_in_code=?,
-                   abbreviation=?
+                   auto_aircheck=?, abbreviation=?
                    WHERE customer_name=? AND order_type=?""",
                 (
                     body.get("customer_id", ""),
@@ -1942,6 +1943,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     int(body.get("separation_event", 0)),
                     int(body.get("separation_order", 0)),
                     int(bool(body.get("include_market_in_code", False))),
+                    int(bool(body.get("auto_aircheck", False))),
                     body.get("abbreviation", ""),
                     customer_name,
                     order_type,
