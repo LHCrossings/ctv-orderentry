@@ -1864,7 +1864,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     def _cdb():
         import sqlite3 as _sq
-        return _sq.connect(str(config.customer_db_path))
+        conn = _sq.connect(str(config.customer_db_path))
+        existing = {r[1] for r in conn.execute("PRAGMA table_info(customers)")}
+        for col, defn in [
+            ("auto_aircheck", "INTEGER DEFAULT 0"),
+            ("abbreviation",  "TEXT DEFAULT ''"),
+        ]:
+            if col not in existing:
+                conn.execute(f"ALTER TABLE customers ADD COLUMN {col} {defn}")
+        conn.commit()
+        return conn
 
     @router.get("/orders/customers", response_class=HTMLResponse)
     async def order_customers_page(request: Request):
