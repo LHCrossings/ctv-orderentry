@@ -1,5 +1,22 @@
 # Lessons Learned
 
+## Month-Only Orders Must Use Rotation Scheduling; Week-Column Orders Stay Default
+
+**Session:** Universal rule (2026-05-14)
+
+**Rule:** Scheduling type is determined by how the IO/order is structured:
+
+- **Week columns present** (order lists spots per week) → leave scheduling type at default (Priority, type 0). Pass `spots_per_week > 0` to `add_contract_line()`.
+- **Month column only** (no weekly breakdown, just a total per month) → **Rotation** (type 1). Pass `spots_per_week=0` with the full-month date range.
+
+`EtereClient.add_contract_line()` enforces this automatically: any line where `spots_per_week == 0` AND the flight is longer than 7 days is flagged `_is_monthly = True` and Rotation is selected (etere_client.py ~line 1023). **No extra flag needed from the automation.**
+
+**Applies to:** Any new parser handling a monthly-structure IO (e.g. RWNY). Set `spots_per_week=0` and pass the full-month start/end dates — Rotation fires automatically. Do NOT pass `spots_per_week > 0` for monthly orders or the auto-Rotation will be suppressed.
+
+**Max weekly cap:** For monthly orders, `contractLineGeneralMaxWeekSchedule` must also be 0. `EtereClient` enforces this automatically: if `_is_monthly` is True and `spots_per_week` was passed non-zero, it is clamped to 0 before reaching the form field (`etere_client.py`, just after `_force_rotation` assignment).
+
+---
+
 ## Time Suffix Inheritance Must Never Produce a Midnight-Crossing Range
 
 **Session:** Lexus EST (2026-05-11)

@@ -1025,6 +1025,12 @@ class EtereClient:
                 _is_monthly = False
             _force_rotation = _is_monthly or spot_code == 10 or is_added_value
 
+            # Monthly orders must never carry a weekly spot cap — Etere distributes
+            # spots freely across the month, so spots_per_week has no meaning.
+            if _is_monthly and spots_per_week != 0:
+                print(f"[LINE] ℹ Monthly order: clamping spots_per_week {spots_per_week} → 0")
+                spots_per_week = 0
+
             if is_bookend:
                 print(f"[LINE] Setting bookend scheduling (Top and Bottom)...")
                 try:
