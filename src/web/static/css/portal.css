@@ -203,15 +203,21 @@ main {
 .back-link:visited {
     color: var(--nord6);
     text-decoration: none;
-    font-size: 1.1rem;
-    padding: 4px 8px 4px 0;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 5px 12px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 8px;
     opacity: 0.85;
-    transition: opacity 0.15s;
+    transition: opacity 0.15s, background 0.15s;
+    letter-spacing: 0.03em;
     line-height: 1;
 }
 
 .back-link:hover {
     opacity: 1;
+    background: rgba(255,255,255,0.14);
 }
 
 /* ── Cards with sub-actions (partial modules) ────────────────────────────── */

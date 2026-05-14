@@ -6,6 +6,7 @@
     <title>Airchecks — Control Room</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
     <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -16,18 +17,6 @@
             min-height: 100vh;
         }
 
-        header {
-            background: var(--nord1);
-            border-bottom: 1px solid var(--nord2);
-            padding: 12px 24px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .header-left { display: flex; align-items: center; gap: 20px; }
-        .back-link { color: var(--nord8); text-decoration: none; font-size: 0.85rem; opacity: 0.8; transition: opacity 0.15s; }
-        .back-link:hover { opacity: 1; }
-        h1 { font-size: 1rem; font-weight: 600; color: var(--nord6); letter-spacing: 0.02em; }
 
         main { max-width: 1100px; margin: 0 auto; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
 
@@ -267,13 +256,19 @@
 
 
 <header>
-    <div class="header-left">
-        <a href="/" class="back-link">← Control Room</a>
-        <h1>Airchecks</h1>
-    </div>
-    <div class="agent-status">
-        <div class="dot checking" id="agentDot"></div>
-        <span id="agentLabel">Connecting to Datamover…</span>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="back-link">Home</a>
+            <div class="logo-icon">✅</div>
+            <div>
+                <h1>Control <span>Room</span></h1>
+                <div class="logo-sub">Airchecks</div>
+            </div>
+        </div>
+        <div class="agent-status">
+            <div class="dot checking" id="agentDot"></div>
+            <span id="agentLabel">Connecting to Datamover…</span>
+        </div>
     </div>
 </header>
 

@@ -35,14 +35,21 @@
             gap: 20px;
         }
 
-        .back-link {
-            color: var(--nord8);
+        .back-link,
+        .back-link:visited {
+            color: var(--nord6);
             text-decoration: none;
-            font-size: 0.85rem;
-            opacity: 0.8;
-            transition: opacity 0.15s;
+            font-size: 0.75rem;
+            font-weight: 500;
+            padding: 5px 12px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.14);
+            border-radius: 8px;
+            opacity: 0.85;
+            transition: opacity 0.15s, background 0.15s;
+            letter-spacing: 0.03em;
         }
-        .back-link:hover { opacity: 1; }
+        .back-link:hover { opacity: 1; background: rgba(255,255,255,0.14); }
 
         h1 {
             font-size: 1rem;
@@ -172,7 +179,7 @@
 
 <header>
     <div class="header-left">
-        <a href="/" class="back-link">← Control Room</a>
+        <a href="/" class="back-link">Home</a>
         <h1>Live View</h1>
     </div>
     <span class="current-network" id="header-network">—</span>
