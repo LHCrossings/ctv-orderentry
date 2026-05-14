@@ -8,6 +8,7 @@ Run: python agent.py
 """
 import asyncio
 import json
+import logging
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -19,12 +20,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
 # ── CONFIG ───────────────────────────────────────────────────────────────────
 FFMPEG     = "ffmpeg"                    # update if not in PATH: r"C:\ffmpeg\bin\ffmpeg.exe"
 OUTPUT_DIR = Path(r"C:\Airchecks")
 DB_FILE    = OUTPUT_DIR / "captures.json"
 SRT_HOST   = "44.235.103.12"
 PORT       = 8765
+
+ETERE_DB_SERVER   = "100.85.38.72"      # Etere SQL Server (internal 10.0.0 or Tailscale)
+ETERE_DB_NAME     = "Etere_crossing"
+POLL_INTERVAL_SEC = 600                 # 10 minutes
+RESCHEDULE_MIN_SHIFT_SEC = 30           # ignore sub-30-second drift
 
 NETWORK_PORTS: dict[str, int] = {
     "NYC":     6014,
@@ -90,7 +98,9 @@ async def _requeue_scheduled() -> None:
 
 @app.on_event("startup")
 async def startup() -> None:
+    _load_db()
     await _requeue_scheduled()
+    asyncio.create_task(_poll_spots())
 
 
 def _save_db() -> None:
@@ -114,6 +124,8 @@ class CaptureRequest(BaseModel):
     duration_seconds: int
     start_time: Optional[str] = None  # ISO local datetime string; None = start immediately
     notes: str = ""
+    isci_code: Optional[str] = None   # spot code; enables Etere polling to track schedule moves
+    original_ora: Optional[int] = None  # TPALINSE ORA value (frames) at time of scheduling
 
 class CaptureUpdate(BaseModel):
     start_time: Optional[str] = None
@@ -175,6 +187,92 @@ async def _schedule(cap_id: str, delay: float) -> None:
     await _run(cap_id)
 
 
+# ── Etere polling ─────────────────────────────────────────────────────────────
+
+def _etere_connect():
+    import pyodbc
+    return pyodbc.connect(
+        f"DRIVER={{SQL Server}};SERVER={ETERE_DB_SERVER};"
+        f"DATABASE={ETERE_DB_NAME};Trusted_Connection=yes;"
+    )
+
+
+async def _poll_spots() -> None:
+    """Every 10 min: re-check TPALINSE for any contract-linked captures that have moved."""
+    while True:
+        await asyncio.sleep(POLL_INTERVAL_SEC)
+        now = datetime.now()
+        candidates = [
+            cap for cap in list(captures.values())
+            if cap.get("isci_code")
+            and cap.get("original_ora") is not None
+            and cap.get("status") in ("pending", "scheduled")
+            and datetime.fromisoformat(cap["start_time"]) > now + timedelta(minutes=2)
+        ]
+        if not candidates:
+            continue
+
+        loop = asyncio.get_event_loop()
+        try:
+            conn = await loop.run_in_executor(None, _etere_connect)
+        except Exception as exc:
+            logging.warning("Etere poll: DB connect failed: %s", exc)
+            continue
+
+        try:
+            cur = conn.cursor()
+            for cap in candidates:
+                isci      = cap["isci_code"]
+                start_dt  = datetime.fromisoformat(cap["start_time"])
+                query_date = (start_dt + timedelta(seconds=20)).date()
+                try:
+                    cur.execute(
+                        "SELECT TOP 1 ORA FROM TPALINSE "
+                        "WHERE COD_PROGRA = ? AND DATA = ? AND ORA > 0 "
+                        "ORDER BY ORA",
+                        (isci, query_date),
+                    )
+                    row = cur.fetchone()
+                except Exception as exc:
+                    logging.warning("Poll: TPALINSE query failed for %s: %s", isci, exc)
+                    continue
+
+                if row is None:
+                    logging.warning("Poll: %s not found in TPALINSE on %s — spot may have been pulled", isci, query_date)
+                    continue
+
+                new_ora   = row[0]
+                orig_ora  = cap["original_ora"]
+                shift_sec = (new_ora - orig_ora) / 30
+
+                if abs(shift_sec) < RESCHEDULE_MIN_SHIFT_SEC:
+                    continue
+
+                cap_id    = cap["id"]
+                new_start = start_dt + timedelta(seconds=shift_sec)
+                logging.info("Poll: %s shifted %+.0fs — rescheduling %s to %s", isci, shift_sec, cap_id, new_start)
+
+                task = _tasks.pop(cap_id, None)
+                if task:
+                    task.cancel()
+                    try:
+                        await task
+                    except (asyncio.CancelledError, Exception):
+                        pass
+
+                cap["start_time"]  = new_start.isoformat()
+                cap["original_ora"] = new_ora
+                net_s    = _safe(cap["network"].replace(" ", "_"))
+                client_s = _safe(cap["client"].replace(" ", "_"))
+                cap["filename"] = f"{net_s}_{client_s}_{new_start.strftime('%Y%m%d_%H%M')}.mp4"
+                delay = max(0.0, (new_start - datetime.now()).total_seconds())
+                cap["status"] = "pending"
+                _save_db()
+                _tasks[cap_id] = asyncio.create_task(_schedule(cap_id, delay))
+        finally:
+            conn.close()
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.post("/captures", status_code=201)
@@ -213,6 +311,8 @@ async def create_capture(req: CaptureRequest):
         "subfolder":        subfolder,
         "filename":         filename,
         "notes":            req.notes,
+        "isci_code":        req.isci_code or None,
+        "original_ora":     req.original_ora,
         "status":           "pending",
         "created_at":       now.isoformat(),
         "ended_at":         None,

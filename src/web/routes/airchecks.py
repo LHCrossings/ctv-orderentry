@@ -98,6 +98,7 @@ def _fetch_etere_spots(contract_id: int) -> list[dict]:
 
             results.append({
                 "isci_code":                row["isci_code"].strip(),
+                "air_ora":                  int(row["air_ora"]),
                 "client_name":              client_name,
                 "customer_ref":             customer_ref,
                 "network":                  network,

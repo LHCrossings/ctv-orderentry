@@ -858,6 +858,8 @@ async function scheduleAllSpots() {
                     duration_seconds: s.capture_duration_seconds,
                     start_time:       s.capture_start,
                     notes:            s.customer_ref || selectedContract.code,
+                    isci_code:        s.isci_code,
+                    original_ora:     s.air_ora,
                 }),
             });
             if (resp.ok) { ok++; } else { fail++; }
