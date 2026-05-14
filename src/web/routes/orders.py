@@ -153,7 +153,7 @@ def _broadcast_month_folder(monday) -> tuple[int, str]:
 def _build_spot_filter(filters: dict) -> str:
     """Return extra AND clauses for TPALINSE spot queries based on optional filter dict."""
     import re
-    clauses = []
+    clauses = ["tp.DATA >= CAST(GETDATE() AS DATE)"]
     if filters.get("date_from") and re.match(r"^\d{4}-\d{2}-\d{2}$", filters["date_from"]):
         clauses.append(f"tp.DATA >= '{filters['date_from']}'")
     if filters.get("date_to") and re.match(r"^\d{4}-\d{2}-\d{2}$", filters["date_to"]):
@@ -3013,7 +3013,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 cur.execute("SELECT id_bookingcode, code FROM trf_bookingcode")
                 bookingcode_to_newtype = {r["id_bookingcode"]: r["code"] for r in cur.fetchall()}
 
-                date_clause = ""
+                date_clause = " AND tp.DATA >= CAST(GETDATE() AS DATE)"
                 if date_from:
                     date_clause += f" AND tp.DATA >= '{date_from}'"
                 if date_to:
@@ -3262,7 +3262,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
             weights = [p["pct"] / total_pct for p in pairs]
 
-            dc = ""
+            dc = " AND tp.DATA >= CAST(GETDATE() AS DATE)"
             if date_from and _re2.match(r"^\d{4}-\d{2}-\d{2}$", date_from):
                 dc += f" AND tp.DATA >= '{date_from}'"
             if date_to and _re2.match(r"^\d{4}-\d{2}-\d{2}$", date_to):
@@ -4026,6 +4026,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     JOIN trafficPalinse tpa ON tpa.id_tpalinse      = tp.ID_TPALINSE
                     JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
                     WHERE tp.ID_TPALINSE IN ({tp_ph})
+                      AND tp.DATA >= CAST(GETDATE() AS DATE)
                 """)
                 tp_line_map:    dict = {}
                 tp_newtype_map: dict = {}
