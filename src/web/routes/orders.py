@@ -3035,9 +3035,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     tp_newtype_map[r["tp_id"]] = bookingcode_to_newtype.get(r["booking_code"], "COM")
                     all_rows_ordered.append((r["line_id"], r["tp_id"]))
 
+                # Check the entire contract's pool (not just this batch's lines) so
+                # that when the Lexus JS loop calls us once per duration group on the
+                # same contract, the second call sees filmati already added by the first.
                 cur.execute(
                     f"SELECT DISTINCT ID_FILMATI FROM CONTRATTIFILMATI"
-                    f" WHERE ID_CONTRATTIRIGHE IN ({line_ids_str})"
+                    f" WHERE ID_CONTRATTIRIGHE IN ("
+                    f"   SELECT ID_CONTRATTIRIGHE FROM CONTRATTIRIGHE"
+                    f"   WHERE ID_CONTRATTITESTATA = {contract_id}"
+                    f" )"
                 )
                 existing_pool = {r["ID_FILMATI"] for r in cur.fetchall()}
 
