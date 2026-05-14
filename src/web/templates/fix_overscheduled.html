@@ -189,7 +189,7 @@ async function loadPreview(contractId) {
 
 function renderPreview(data) {
     if (!data.lines.length) {
-        tableWrap.innerHTML = '<p class="empty-msg">No lines with trash spots found. Nothing to fix.</p>';
+        tableWrap.innerHTML = '<p class="empty-msg">No lines with blacklisted spots found. Nothing to fix.</p>';
         applyBtn.disabled = true;
         return;
     }
