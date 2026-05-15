@@ -36,12 +36,6 @@ RESCHEDULE_MIN_SHIFT_SEC = 30           # ignore sub-30-second drift
 
 # ── OneDrive auto-upload ──────────────────────────────────────────────────────
 ONEDRIVE_ROOT = Path(r"C:\Users\usrdm1\OneDrive - crossingstv.com\Airchecks")
-# Map lowercase substring of client name → subfolder under ONEDRIVE_ROOT.
-# Unmatched clients land directly in ONEDRIVE_ROOT.
-ONEDRIVE_CLIENT_FOLDERS: dict[str, str] = {
-    "admerasia": "Admerasia",
-    "lexus":     "Lexus",
-}
 
 NETWORK_PORTS: dict[str, int] = {
     "NYC":     6014,
@@ -165,17 +159,11 @@ class CaptureUpdate(BaseModel):
 
 def _onedrive_upload(cap: dict) -> None:
     import shutil
-    client_key  = cap.get("client", "").lower()
-    folder_name = next(
-        (v for k, v in ONEDRIVE_CLIENT_FOLDERS.items() if k in client_key),
-        None,
-    )
-    dest_dir = ONEDRIVE_ROOT / folder_name if folder_name else ONEDRIVE_ROOT
+    subfolder = cap.get("subfolder", "")
+    dest_dir  = ONEDRIVE_ROOT / subfolder if subfolder else ONEDRIVE_ROOT
     try:
         dest_dir.mkdir(parents=True, exist_ok=True)
-        src  = _cap_path(cap)
-        dest = dest_dir / cap["filename"]
-        shutil.copy2(str(src), str(dest))
+        shutil.copy2(str(_cap_path(cap)), str(dest_dir / cap["filename"]))
         logging.info("OneDrive: copied %s → %s", cap["filename"], dest_dir)
     except Exception as exc:
         logging.warning("OneDrive: upload failed for %s: %s", cap.get("filename"), exc)
