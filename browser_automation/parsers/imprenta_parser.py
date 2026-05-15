@@ -34,12 +34,16 @@ import openpyxl
 
 # ── Market name → Etere code ─────────────────────────────────────────────────
 _MARKET_MAP: dict[str, str] = {
+    "central valley": "CVC",
     "sacramento": "CVC",
+    "cvc": "CVC",
     "san francisco": "SFO",
+    "sfo": "SFO",
     "sf": "SFO",
     "new york": "NYC",
     "nyc": "NYC",
     "los angeles": "LAX",
+    "lax": "LAX",
     "seattle": "SEA",
     "houston": "HOU",
     "chicago": "CMP",
@@ -113,12 +117,23 @@ def _clean_program(raw: str) -> str:
 # ── PDF-specific helpers ──────────────────────────────────────────────────────
 
 def _parse_pdf_date(s: str) -> Optional[date]:
-    """Parse '3/16/26' or '3/16/2026' → date, or None."""
+    """Parse '3/16/26', '3/16/2026', or '11-May' → date, or None."""
+    s = s.strip()
     for fmt in ('%m/%d/%y', '%m/%d/%Y'):
         try:
-            return datetime.strptime(s.strip(), fmt).date()
+            return datetime.strptime(s, fmt).date()
         except ValueError:
             continue
+    # Handle "DD-Mon" format (no year — use current year)
+    import calendar as _cal
+    m = re.match(r'^(\d{1,2})-([A-Za-z]{3,9})$', s)
+    if m:
+        try:
+            mon = list(_cal.month_abbr).index(m.group(2).capitalize()[:3])
+            if mon > 0:
+                return date(datetime.now().year, mon, int(m.group(1)))
+        except (ValueError, IndexError):
+            pass
     return None
 
 
@@ -171,6 +186,141 @@ class ImprentaParseResult:
     gross_up_factor: float
 
 
+# ── Format B detection + parser ──────────────────────────────────────────────
+
+def _is_format_b_sheet(ws) -> bool:
+    """True if worksheet uses Format B layout (Agency: IMPRENTA header)."""
+    for row in ws.iter_rows(max_row=15):
+        for i, cell in enumerate(row):
+            v = str(cell.value or "").strip()
+            if re.match(r'(?i)^Agency\s*:?$', v):
+                if i + 1 < len(row) and str(row[i + 1].value or "").strip().upper() == "IMPRENTA":
+                    return True
+    return False
+
+
+def _parse_imprenta_xlsx_format_b(
+    ws,
+    gross_up_factor: float,
+) -> ImprentaParseResult:
+    """Parse an Imprenta XLSX Format B order (per-row market + daypart columns)."""
+    is_bookend = False
+    campaign = str(ws.cell(row=3, column=4).value or "").strip()
+    client = ""
+    flight_start: Optional[date] = None
+    flight_end: Optional[date] = None
+    duration = 30
+
+    for row in ws.iter_rows(max_row=20):
+        for cell in row:
+            v = str(cell.value or "").strip()
+            vl = v.lower()
+            if "bookend" in vl:
+                is_bookend = True
+            dur_m = re.search(r':(\d+)\s*sec', vl)
+            if dur_m:
+                duration = int(dur_m.group(1))
+            if not flight_start and ("flight" in vl or "estimate" in vl):
+                dates = re.findall(r'\d{1,2}/\d{1,2}/\d{4}', v)
+                if len(dates) >= 2:
+                    try:
+                        flight_start = datetime.strptime(dates[0], "%m/%d/%Y").date()
+                        flight_end   = datetime.strptime(dates[1], "%m/%d/%Y").date()
+                    except ValueError:
+                        pass
+
+    header_row_idx: Optional[int] = None
+    week_start_dates: list[date] = []
+    week_cols: list[int] = []
+
+    for row in ws.iter_rows():
+        date_cells = [
+            (cell.column, cell.value.date())
+            for cell in row
+            if isinstance(cell.value, datetime)
+        ]
+        if len(date_cells) >= 2:
+            date_cells.sort(key=lambda x: x[0])
+            dates_only = [d for _, d in date_cells]
+            if all((dates_only[i + 1] - dates_only[i]).days == 7 for i in range(len(dates_only) - 1)):
+                header_row_idx = row[0].row
+                week_start_dates = dates_only
+                week_cols = [c for c, _ in date_cells]
+                break
+
+    if not week_start_dates:
+        raise ValueError("Could not find weekly date header row in Format B XLSX")
+
+    week_date_ranges: list[tuple[date, date]] = [
+        (s, s + timedelta(days=(6 - s.weekday()) % 7))
+        for s in week_start_dates
+    ]
+    if flight_start is None:
+        flight_start = week_date_ranges[0][0]
+    if flight_end is None:
+        flight_end = week_date_ranges[-1][1]
+
+    lines: list[ImprentaLine] = []
+
+    for row in ws.iter_rows(min_row=header_row_idx + 1):
+        col_c = str(row[2].value or "").strip()  # Language Block / program
+        if not col_c:
+            continue
+        if col_c.lower().startswith("total") or col_c.lower().startswith("approved"):
+            break
+
+        col_d = str(row[3].value or "").strip()   # Market
+        market = _market_code(col_d) if col_d else ""
+
+        col_e = str(row[4].value or "").strip()   # Day Part
+        days    = _extract_days(col_e) if col_e else "M-Su"
+        time_str = _extract_time(col_e) if col_e else ""
+
+        try:
+            rate_net = float(row[5].value or 0)   # NET rate (col F)
+        except (TypeError, ValueError):
+            continue
+
+        spot_vals: list[int] = []
+        for wc in week_cols:
+            try:
+                spot_vals.append(int(row[wc - 1].value or 0))
+            except (TypeError, ValueError):
+                spot_vals.append(0)
+
+        if not any(s > 0 for s in spot_vals):
+            continue
+
+        is_bonus = rate_net == 0 or "bonus" in col_c.lower()
+        rate_gross = 0.0 if is_bonus else round(rate_net * gross_up_factor, 2)
+
+        lines.append(ImprentaLine(
+            program=col_c,
+            days=days,
+            time=time_str,
+            duration=duration,
+            rate_net=rate_net,
+            rate_gross=rate_gross,
+            spots_by_week=list(spot_vals),
+            week_date_ranges=list(week_date_ranges),
+            market=market,
+            is_bonus=is_bonus,
+            is_bookend=is_bookend and not is_bonus,
+        ))
+
+    return ImprentaParseResult(
+        lines=lines,
+        flight_start=flight_start,
+        flight_end=flight_end,
+        campaign=campaign,
+        client=client,
+        market=lines[0].market if lines else "",
+        week_start_dates=week_start_dates,
+        is_bookend=is_bookend,
+        gross_up_factor=gross_up_factor,
+    )
+
+
 # ── XLSX parser ───────────────────────────────────────────────────────────────
 def _parse_imprenta_xlsx(
     file_path: Path,
@@ -178,6 +328,9 @@ def _parse_imprenta_xlsx(
 ) -> ImprentaParseResult:
     """Parse an Imprenta XLSX broadcast order."""
     wb = openpyxl.load_workbook(str(file_path), data_only=True)
+    for sheet_name in wb.sheetnames:
+        if _is_format_b_sheet(wb[sheet_name]):
+            return _parse_imprenta_xlsx_format_b(wb[sheet_name], gross_up_factor)
     ws = wb.active
 
     # ── Scan header area for metadata ────────────────────────────────────────
@@ -340,6 +493,31 @@ def _parse_imprenta_pdf(
     week_start_dates: list[date] = []
     week_date_ranges: list[tuple[date, date]] = []
     primary_market = ""
+    is_format_b = False
+    duration_b = 30  # used only for format B
+
+    # Pre-scan page 1 to detect format B and extract duration
+    with pdfplumber.open(str(file_path)) as _pre:
+        if _pre.pages:
+            _first = _pre.pages[0].extract_text() or ""
+            _lines = _first.splitlines()
+            for _i, _lt in enumerate(_lines):
+                if re.search(r'(?i)^Agency\s*:', _lt.strip()):
+                    _ctx = _lt + (" " + _lines[_i + 1] if _i + 1 < len(_lines) else "")
+                    if "IMPRENTA" in _ctx.upper():
+                        is_format_b = True
+                    break
+            if is_format_b:
+                for _lt in _lines:
+                    _dm = re.search(r':(\d+)\s*sec', _lt.lower())
+                    if _dm:
+                        duration_b = int(_dm.group(1))
+                        break
+                # First non-empty line is the campaign title
+                for _lt in _lines:
+                    if _lt.strip():
+                        campaign = _lt.strip()
+                        break
 
     with pdfplumber.open(str(file_path)) as pdf:
         for page in pdf.pages:
@@ -356,9 +534,9 @@ def _parse_imprenta_pdf(
                     is_bookend = True
                 if "campaign" in vl and not campaign:
                     campaign = re.sub(r'(?i)^campaign\s*:', '', v).strip()
-                if "client" in vl and not client:
-                    client = re.sub(r'(?i)^client\s*:', '', v).strip()
-                if "flight" in vl and not flight_start:
+                if re.search(r'(?i)\bclient\s*:', v) and not client and not is_format_b:
+                    client = re.sub(r'(?i)^.*\bclient\s*:\s*', '', v).strip()
+                if ("flight" in vl or "estimate" in vl) and not flight_start:
                     dates = re.findall(r'\d{1,2}/\d{1,2}/\d{4}', v)
                     if len(dates) >= 2:
                         try:
@@ -427,12 +605,6 @@ def _parse_imprenta_pdf(
                     if col_a.lower().startswith('total'):
                         continue
 
-                    # Market label row inside the table
-                    mcode = _market_code_if_exact(col_a)
-                    if mcode:
-                        table_market = mcode
-                        continue
-
                     # Spot counts per week
                     spot_vals: list[int] = []
                     for col_i in local_week_cols:
@@ -444,27 +616,56 @@ def _parse_imprenta_pdf(
                     if not any(s > 0 for s in spot_vals):
                         continue
 
-                    rate_net = _parse_rate(row[1] if len(row) > 1 else None)
-                    duration = _parse_duration(str(row[2] or '') if len(row) > 2 else '')
-                    is_bonus = rate_net == 0 or 'bonus' in col_a.lower()
-                    days = _extract_days(col_a)
-                    time_str = _extract_time(col_a)
-                    program = _clean_program(col_a)
-                    rate_gross = 0.0 if is_bonus else round(rate_net * gross_up_factor, 2)
-
-                    lines.append(ImprentaLine(
-                        program=program,
-                        days=days,
-                        time=time_str,
-                        duration=duration,
-                        rate_net=rate_net,
-                        rate_gross=rate_gross,
-                        spots_by_week=list(spot_vals),
-                        week_date_ranges=list(week_date_ranges),
-                        market=table_market,
-                        is_bonus=is_bonus,
-                        is_bookend=is_bookend and not is_bonus,
-                    ))
+                    if is_format_b:
+                        # Format B: col0=program, col1=market, col2=daypart, col3=rate
+                        col_a = re.sub(r'\s+', ' ', col_a)  # collapse embedded newlines
+                        col_market = str(row[1] or "").strip() if len(row) > 1 else ""
+                        row_market = _market_code(col_market) if col_market else table_market
+                        col_daypart = str(row[2] or "").strip() if len(row) > 2 else ""
+                        days     = _extract_days(col_daypart) if col_daypart else "M-Su"
+                        time_str = _extract_time(col_daypart) if col_daypart else ""
+                        rate_net = _parse_rate(row[3] if len(row) > 3 else None)
+                        is_bonus = rate_net == 0 or 'bonus' in col_a.lower()
+                        rate_gross = 0.0 if is_bonus else round(rate_net * gross_up_factor, 2)
+                        lines.append(ImprentaLine(
+                            program=col_a,
+                            days=days,
+                            time=time_str,
+                            duration=duration_b,
+                            rate_net=rate_net,
+                            rate_gross=rate_gross,
+                            spots_by_week=list(spot_vals),
+                            week_date_ranges=list(week_date_ranges),
+                            market=row_market,
+                            is_bonus=is_bonus,
+                            is_bookend=is_bookend and not is_bonus,
+                        ))
+                    else:
+                        # Format A: market label rows, col0=program+days+time, col1=rate, col2=duration
+                        mcode = _market_code_if_exact(col_a)
+                        if mcode:
+                            table_market = mcode
+                            continue
+                        rate_net  = _parse_rate(row[1] if len(row) > 1 else None)
+                        duration  = _parse_duration(str(row[2] or '') if len(row) > 2 else '')
+                        is_bonus  = rate_net == 0 or 'bonus' in col_a.lower()
+                        days      = _extract_days(col_a)
+                        time_str  = _extract_time(col_a)
+                        program   = _clean_program(col_a)
+                        rate_gross = 0.0 if is_bonus else round(rate_net * gross_up_factor, 2)
+                        lines.append(ImprentaLine(
+                            program=program,
+                            days=days,
+                            time=time_str,
+                            duration=duration,
+                            rate_net=rate_net,
+                            rate_gross=rate_gross,
+                            spots_by_week=list(spot_vals),
+                            week_date_ranges=list(week_date_ranges),
+                            market=table_market,
+                            is_bonus=is_bonus,
+                            is_bookend=is_bookend and not is_bonus,
+                        ))
 
     if flight_start is None and week_date_ranges:
         flight_start = week_date_ranges[0][0]

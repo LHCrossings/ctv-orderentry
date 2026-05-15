@@ -227,6 +227,7 @@ def _build_etere_lines(
                 "duration":        line.duration,
                 "separation":      separation,
                 "start_day_warning": start_day_warning,
+                "market":          line.market,
             })
 
     return etere_lines
@@ -258,8 +259,13 @@ def gather_imprenta_inputs(file_path: str) -> Optional[dict]:
         return None
 
     print(f"[PARSE] ✓ Campaign:  {result.campaign}")
-    print(f"[PARSE] ✓ Client:    {result.client}")
+    print(f"[PARSE] ✓ Client:    {result.client or '(not found in file)'}")
     print(f"[PARSE] ✓ Market:    {result.market}")
+
+    if not result.client:
+        client_input = input("  Client name (not in file — used for contract code/DB lookup): ").strip()
+        if client_input:
+            result.client = client_input
     print(f"[PARSE] ✓ Bookend:   {result.is_bookend}")
     print(f"[PARSE] ✓ Flight:    {result.flight_start} – {result.flight_end}")
     print(f"[PARSE] ✓ Weeks:     {[str(d) for d in result.week_start_dates]}")
@@ -513,7 +519,7 @@ def process_imprenta_order(driver, file_path: str, user_input: dict = None) -> b
 
             success = etere.add_contract_line(
                 contract_number=contract_number,
-                market=market,
+                market=line_spec.get("market") or market,
                 start_date=start_date_str,
                 end_date=end_date_str,
                 days=days,
