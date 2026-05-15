@@ -42,23 +42,27 @@
             font-size: 0.85rem; font-weight: 600; cursor: pointer;
             border: 1px solid transparent; transition: all 0.15s; white-space: nowrap;
         }
-        .btn-primary { background: var(--nord10); color: var(--nord6); border-color: var(--nord10); }
-        .btn-primary:hover { filter: brightness(1.1); }
-        .btn-ghost { background: transparent; color: var(--text-muted); border-color: var(--border-color); }
-        .btn-ghost:hover { border-color: var(--nord10); color: var(--nord10); }
-        .btn-danger { background: transparent; color: var(--nord11); border-color: var(--nord11); }
-        .btn-danger:hover { background: var(--nord11); color: var(--nord6); }
-        .btn-danger-solid { background: var(--nord11); color: var(--nord6); border-color: var(--nord11); }
+        .btn-primary  { background: var(--nord10); color: var(--nord6); border-color: var(--nord10); }
+        .btn-primary:hover  { filter: brightness(1.1); }
+        .btn-ghost    { background: transparent; color: var(--text-muted); border-color: var(--border-color); }
+        .btn-ghost:hover    { border-color: var(--nord10); color: var(--nord10); }
+        .btn-danger   { background: transparent; color: var(--nord11); border-color: var(--nord11); }
+        .btn-danger:hover   { background: var(--nord11); color: var(--nord6); }
+        .btn-danger-solid   { background: var(--nord11); color: var(--nord6); border-color: var(--nord11); }
         .btn-sm { padding: 4px 11px; font-size: 0.78rem; }
         .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-        /* Stats row */
-        .stats-row {
+        /* Toolbar */
+        .toolbar {
             display: flex; align-items: center; justify-content: space-between;
-            margin-bottom: 12px; min-height: 24px;
+            margin-bottom: 10px; min-height: 30px; gap: 12px;
         }
+        .toolbar-left  { display: flex; align-items: center; gap: 12px; }
+        .toolbar-right { display: flex; align-items: center; gap: 8px; }
         .stats-text { font-size: 0.8rem; color: var(--text-muted); }
         .stats-text strong { color: var(--text-primary); }
+        .sel-count { font-size: 0.8rem; color: var(--text-muted); }
+        .sel-count strong { color: var(--nord11); }
 
         /* Table */
         .table-wrap { overflow-x: auto; }
@@ -68,11 +72,14 @@
             text-transform: uppercase; letter-spacing: 0.06em;
             padding: 6px 12px; border-bottom: 1px solid var(--border-color);
         }
-        thead th:last-child { text-align: right; }
+        thead th.th-cb { width: 36px; padding-left: 14px; }
+        thead th.th-actions { text-align: right; }
         tbody tr { border-bottom: 1px solid var(--border-color); transition: background 0.1s; }
         tbody tr:last-child { border-bottom: none; }
         tbody tr:hover:not(.confirm-row) { background: var(--bg-secondary); }
+        tbody tr.selected { background: rgba(94,129,172,0.08); }
         tbody td { padding: 9px 12px; vertical-align: middle; }
+        td.td-cb { padding-left: 14px; width: 36px; }
         .td-key { font-family: 'Courier New', monospace; font-size: 0.83rem; word-break: break-all; }
         .td-size { color: var(--text-muted); white-space: nowrap; }
         .td-date { color: var(--text-muted); white-space: nowrap; }
@@ -84,6 +91,15 @@
         tr.confirm-row td { padding: 10px 12px; }
         .confirm-msg { font-size: 0.85rem; color: var(--nord11); font-weight: 500; }
 
+        /* Batch confirm banner */
+        .batch-confirm {
+            display: none; background: rgba(191,97,106,0.1); border: 1px solid rgba(191,97,106,0.4);
+            border-radius: 8px; padding: 12px 16px; margin-bottom: 10px;
+            display: none; align-items: center; justify-content: space-between; gap: 12px;
+        }
+        .batch-confirm.visible { display: flex; }
+        .batch-confirm-msg { font-size: 0.87rem; color: var(--nord11); font-weight: 500; }
+
         /* Load more */
         .load-more-row { text-align: center; padding: 16px 0 4px; }
 
@@ -91,7 +107,6 @@
         .empty-state {
             text-align: center; padding: 48px 24px; color: var(--text-muted); font-size: 0.9rem;
         }
-        .empty-state svg { opacity: 0.3; margin-bottom: 12px; }
         .error-banner {
             background: rgba(191, 97, 106, 0.12); border: 1px solid var(--nord11);
             border-radius: 8px; padding: 12px 16px; color: var(--nord11); font-size: 0.87rem;
@@ -99,65 +114,85 @@
 
         /* Spinner */
         .spinner {
-            display: inline-block; width: 16px; height: 16px;
+            display: inline-block; width: 15px; height: 15px;
             border: 2px solid var(--border-color); border-top-color: var(--nord10);
-            border-radius: 50%; animation: spin 0.7s linear infinite;
+            border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
-
-        /* Page header */
-        .page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
-        .page-header h1 { font-size: 1.3rem; font-weight: 700; }
-        .page-sub { font-size: 0.82rem; color: var(--text-muted); }
     </style>
 </head>
 <body>
-<main>
-    <div>
-        <div class="page-header">
-            <h1>Asset Browser</h1>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/traffic" class="back-link">←</a>
+            <div class="logo-icon">🗄️</div>
+            <div>
+                <h1>Asset <span>Browser</span></h1>
+                <div class="logo-sub">S3 · storageforct · us-west-2</div>
+            </div>
         </div>
-        <div class="page-sub">S3 · storageforct · us-west-2</div>
+        <span class="header-badge">CTV · Internal</span>
     </div>
+</header>
+
+<main>
 
     <div class="card">
         <div class="search-row">
             <div class="search-wrap">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 <input id="searchInput" class="search-input" type="text"
-                       placeholder="Search by filename or ISCI code…" autocomplete="off" />
+                       placeholder="Search: newstoday*23  or  newstoday 23  (space = AND, * = wildcard)" autocomplete="off" />
             </div>
-            <button class="btn btn-ghost" id="browseBtn" onclick="browse()">Browse All</button>
+            <button class="btn btn-ghost" onclick="browse()">Browse All</button>
         </div>
     </div>
 
     <div id="errorBanner" class="error-banner" style="display:none"></div>
 
     <div class="card" id="resultsCard" style="display:none">
-        <div class="stats-row">
-            <div class="stats-text" id="statsText"></div>
-            <div id="loadingSpinner" style="display:none"><span class="spinner"></span></div>
+
+        <!-- Batch delete confirm -->
+        <div id="batchConfirm" class="batch-confirm">
+            <span class="batch-confirm-msg" id="batchConfirmMsg"></span>
+            <div style="display:flex;gap:8px;flex-shrink:0">
+                <button class="btn btn-danger-solid btn-sm" id="batchConfirmBtn" onclick="doBatchDelete()">Confirm Delete</button>
+                <button class="btn btn-ghost btn-sm" onclick="cancelBatch()">Cancel</button>
+            </div>
         </div>
+
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <div class="stats-text" id="statsText"></div>
+                <div id="loadingSpinner" style="display:none"><span class="spinner"></span></div>
+            </div>
+            <div class="toolbar-right">
+                <span class="sel-count" id="selCount" style="display:none"></span>
+                <button class="btn btn-danger btn-sm" id="deleteSelBtn" style="display:none" onclick="confirmBatch()">Delete Selected</button>
+            </div>
+        </div>
+
         <div class="table-wrap">
             <table>
                 <thead>
                     <tr>
+                        <th class="th-cb"><input type="checkbox" id="selectAll" title="Select all" onchange="toggleSelectAll(this)"></th>
                         <th>Filename</th>
                         <th>Size</th>
                         <th>Last Modified</th>
-                        <th></th>
+                        <th class="th-actions"></th>
                     </tr>
                 </thead>
                 <tbody id="fileBody"></tbody>
             </table>
         </div>
+
         <div class="load-more-row" id="loadMoreRow" style="display:none">
             <button class="btn btn-ghost" id="loadMoreBtn" onclick="loadMore()">Load More</button>
         </div>
-        <div id="emptyState" class="empty-state" style="display:none">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" display="block" style="margin:0 auto 12px"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            No files found.
-        </div>
+        <div id="emptyState" class="empty-state" style="display:none">No files found.</div>
     </div>
 </main>
 
@@ -166,15 +201,19 @@ let _nextToken = '';
 let _currentSearch = '';
 let _debounce = null;
 
-const searchInput = document.getElementById('searchInput');
-const fileBody    = document.getElementById('fileBody');
-const resultsCard = document.getElementById('resultsCard');
-const statsText   = document.getElementById('statsText');
-const loadMoreRow = document.getElementById('loadMoreRow');
-const loadMoreBtn = document.getElementById('loadMoreBtn');
-const emptyState  = document.getElementById('emptyState');
-const errorBanner = document.getElementById('errorBanner');
-const spinner     = document.getElementById('loadingSpinner');
+const searchInput  = document.getElementById('searchInput');
+const fileBody     = document.getElementById('fileBody');
+const resultsCard  = document.getElementById('resultsCard');
+const statsText    = document.getElementById('statsText');
+const loadMoreRow  = document.getElementById('loadMoreRow');
+const loadMoreBtn  = document.getElementById('loadMoreBtn');
+const emptyState   = document.getElementById('emptyState');
+const errorBanner  = document.getElementById('errorBanner');
+const spinner      = document.getElementById('loadingSpinner');
+const selCount     = document.getElementById('selCount');
+const deleteSelBtn = document.getElementById('deleteSelBtn');
+const selectAllCb  = document.getElementById('selectAll');
+const batchConfirm = document.getElementById('batchConfirm');
 
 searchInput.addEventListener('input', () => {
     clearTimeout(_debounce);
@@ -189,6 +228,7 @@ function clearResults() {
     errorBanner.style.display = 'none';
     _nextToken = '';
     _currentSearch = '';
+    updateSelectionUI();
 }
 
 async function search(q) {
@@ -198,8 +238,10 @@ async function search(q) {
     resultsCard.style.display = '';
     emptyState.style.display = 'none';
     errorBanner.style.display = 'none';
+    batchConfirm.classList.remove('visible');
     statsText.textContent = 'Searching…';
     spinner.style.display = '';
+    updateSelectionUI();
     await fetchFiles(q, '');
 }
 
@@ -211,8 +253,10 @@ async function browse() {
     resultsCard.style.display = '';
     emptyState.style.display = 'none';
     errorBanner.style.display = 'none';
+    batchConfirm.classList.remove('visible');
     statsText.textContent = 'Loading…';
     spinner.style.display = '';
+    updateSelectionUI();
     await fetchFiles('', '');
 }
 
@@ -249,12 +293,9 @@ async function fetchFiles(q, token) {
             ? `<strong>${total}</strong> match${total !== 1 ? 'es' : ''} for <em>"${escHtml(q)}"</em>`
             : `<strong>${total}</strong> file${total !== 1 ? 's' : ''} loaded`;
 
-        if (_nextToken) {
-            loadMoreRow.style.display = '';
-        } else {
-            loadMoreRow.style.display = 'none';
-            if (!q) statsText.innerHTML += ' — all files loaded';
-        }
+        loadMoreRow.style.display = _nextToken ? '' : 'none';
+        if (!_nextToken && !q) statsText.innerHTML += ' — all loaded';
+        updateSelectionUI();
     } catch (err) {
         spinner.style.display = 'none';
         showError(err.message);
@@ -264,16 +305,103 @@ async function fetchFiles(q, token) {
 function appendRow(f) {
     const tr = document.createElement('tr');
     tr.dataset.key = f.key;
+    tr.dataset.size = f.size;
+    tr.dataset.date = f.last_modified;
     tr.innerHTML = `
+        <td class="td-cb"><input type="checkbox" class="row-cb" onchange="onRowCheck()"></td>
         <td class="td-key">${escHtml(f.key)}</td>
         <td class="td-size">${escHtml(f.size)}</td>
         <td class="td-date">${escHtml(f.last_modified)}</td>
         <td class="td-actions">
             <button class="btn btn-ghost btn-sm" onclick="download('${escAttr(f.key)}', this)">Download</button>
+            <button class="btn btn-ghost btn-sm" onclick="startRename(this)">Rename</button>
             <button class="btn btn-danger btn-sm" onclick="confirmDelete(this)">Delete</button>
         </td>`;
     fileBody.appendChild(tr);
 }
+
+/* ── Selection ─────────────────────────────────────────────────────── */
+
+function onRowCheck() {
+    updateSelectionUI();
+    batchConfirm.classList.remove('visible');
+}
+
+function toggleSelectAll(cb) {
+    document.querySelectorAll('.row-cb').forEach(c => {
+        c.checked = cb.checked;
+        c.closest('tr').classList.toggle('selected', cb.checked);
+    });
+    updateSelectionUI();
+    batchConfirm.classList.remove('visible');
+}
+
+function updateSelectionUI() {
+    const cbs  = [...document.querySelectorAll('.row-cb')];
+    const n    = cbs.filter(c => c.checked).length;
+    const total = cbs.length;
+    if (n > 0) {
+        selCount.style.display = '';
+        selCount.innerHTML = `<strong>${n}</strong> of ${total} selected`;
+        deleteSelBtn.style.display = '';
+    } else {
+        selCount.style.display = 'none';
+        deleteSelBtn.style.display = 'none';
+    }
+    selectAllCb.checked = total > 0 && n === total;
+    selectAllCb.indeterminate = n > 0 && n < total;
+    // highlight rows
+    document.querySelectorAll('.row-cb').forEach(c => {
+        c.closest('tr').classList.toggle('selected', c.checked);
+    });
+}
+
+function confirmBatch() {
+    const n = [...document.querySelectorAll('.row-cb')].filter(c => c.checked).length;
+    document.getElementById('batchConfirmMsg').textContent =
+        `Permanently delete ${n} file${n !== 1 ? 's' : ''}? This cannot be undone.`;
+    batchConfirm.classList.add('visible');
+    batchConfirm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function cancelBatch() {
+    batchConfirm.classList.remove('visible');
+}
+
+async function doBatchDelete() {
+    const checked = [...document.querySelectorAll('.row-cb')].filter(c => c.checked);
+    batchConfirm.classList.remove('visible');
+    document.getElementById('batchConfirmBtn').disabled = true;
+
+    let deleted = 0;
+    for (const cb of checked) {
+        const tr  = cb.closest('tr');
+        const key = tr.dataset.key;
+        try {
+            const resp = await fetch('/api/assets/file?key=' + encodeURIComponent(key), { method: 'DELETE' });
+            if (!resp.ok) throw new Error((await resp.json()).detail);
+            tr.style.opacity = '0';
+            tr.style.transition = 'opacity 0.2s';
+            await new Promise(r => setTimeout(r, 200));
+            tr.remove();
+            deleted++;
+        } catch (err) {
+            showError(`Failed to delete ${key}: ${err.message}`);
+        }
+    }
+
+    document.getElementById('batchConfirmBtn').disabled = false;
+    selectAllCb.checked = false;
+    updateSelectionUI();
+    const remaining = fileBody.rows.length;
+    const q = _currentSearch;
+    statsText.innerHTML = q
+        ? `<strong>${remaining}</strong> match${remaining !== 1 ? 'es' : ''} for <em>"${escHtml(q)}"</em>`
+        : `<strong>${remaining}</strong> file${remaining !== 1 ? 's' : ''} loaded`;
+    if (remaining === 0) emptyState.style.display = '';
+}
+
+/* ── Single row actions ────────────────────────────────────────────── */
 
 async function download(key, btn) {
     btn.disabled = true;
@@ -281,8 +409,7 @@ async function download(key, btn) {
     try {
         const resp = await fetch('/api/assets/download-url?key=' + encodeURIComponent(key));
         if (!resp.ok) throw new Error((await resp.json()).detail);
-        const { url } = await resp.json();
-        window.open(url, '_blank');
+        window.open((await resp.json()).url, '_blank');
     } catch (err) {
         showError('Download failed: ' + err.message);
     } finally {
@@ -292,35 +419,36 @@ async function download(key, btn) {
 }
 
 function confirmDelete(btn) {
-    const tr = btn.closest('tr');
+    const tr  = btn.closest('tr');
     const key = tr.dataset.key;
-    tr._origSize = tr.querySelector('.td-size')?.textContent || '';
-    tr._origDate = tr.querySelector('.td-date')?.textContent || '';
+    tr._origSize = tr.dataset.size;
+    tr._origDate = tr.dataset.date;
     tr.classList.add('confirm-row');
     tr.innerHTML = `
-        <td class="td-key confirm-msg" colspan="3">Delete <strong>${escHtml(key)}</strong>?  This cannot be undone.</td>
+        <td></td>
+        <td class="td-key confirm-msg" colspan="3">Delete <strong>${escHtml(key)}</strong>? This cannot be undone.</td>
         <td class="td-actions">
             <button class="btn btn-danger-solid btn-sm" onclick="doDelete('${escAttr(key)}', this)">Confirm</button>
-            <button class="btn btn-ghost btn-sm" onclick="cancelDelete(this)">Cancel</button>
+            <button class="btn btn-ghost btn-sm" onclick="cancelDelete('${escAttr(key)}', this)">Cancel</button>
         </td>`;
 }
 
-function cancelDelete(btn) {
+function cancelDelete(key, btn) {
     const tr = btn.closest('tr');
-    const key = tr.dataset.key;
-    // Rebuild original row from data we already have
-    const sizeEl = document.querySelector(`[data-key="${CSS.escape(key)}"]`);
-    // Easiest: just reload the row by refetching, but simpler to restore via DOM data
-    // Re-render the row from cached data — just remove confirm state
     tr.classList.remove('confirm-row');
-    const size = tr._origSize || '';
-    const date = tr._origDate || '';
+    restoreRow(tr, key, tr._origSize || '', tr._origDate || '');
+}
+
+function restoreRow(tr, key, size, date) {
+    tr.classList.remove('confirm-row');
     tr.innerHTML = `
+        <td class="td-cb"><input type="checkbox" class="row-cb" onchange="onRowCheck()"></td>
         <td class="td-key">${escHtml(key)}</td>
         <td class="td-size">${escHtml(size)}</td>
         <td class="td-date">${escHtml(date)}</td>
         <td class="td-actions">
             <button class="btn btn-ghost btn-sm" onclick="download('${escAttr(key)}', this)">Download</button>
+            <button class="btn btn-ghost btn-sm" onclick="startRename(this)">Rename</button>
             <button class="btn btn-danger btn-sm" onclick="confirmDelete(this)">Delete</button>
         </td>`;
 }
@@ -336,6 +464,7 @@ async function doDelete(key, btn) {
         tr.style.transition = 'opacity 0.3s';
         setTimeout(() => {
             tr.remove();
+            updateSelectionUI();
             const remaining = fileBody.rows.length;
             const q = _currentSearch;
             statsText.innerHTML = q
@@ -345,9 +474,57 @@ async function doDelete(key, btn) {
         }, 300);
     } catch (err) {
         showError('Delete failed: ' + err.message);
-        btn.closest('tr').remove();  // remove stale confirm row
     }
 }
+
+/* ── Rename ────────────────────────────────────────────────────────── */
+
+function startRename(btn) {
+    const tr  = btn.closest('tr');
+    const key = tr.dataset.key;
+    tr._origSize = tr.dataset.size;
+    tr._origDate = tr.dataset.date;
+    tr.innerHTML = `
+        <td></td>
+        <td colspan="3" style="padding:8px 12px">
+            <input class="search-input" id="renameInput_${escAttr(key)}"
+                   value="${escAttr(key)}" style="font-family:monospace;font-size:0.83rem"
+                   onkeydown="if(event.key==='Enter')doRename('${escAttr(key)}');if(event.key==='Escape')cancelRename('${escAttr(key)}',this)">
+        </td>
+        <td class="td-actions">
+            <button class="btn btn-primary btn-sm" onclick="doRename('${escAttr(key)}')">Save</button>
+            <button class="btn btn-ghost btn-sm" onclick="cancelRename('${escAttr(key)}', this)">Cancel</button>
+        </td>`;
+    const inp = document.getElementById('renameInput_' + key);
+    if (inp) { inp.focus(); inp.select(); }
+}
+
+function cancelRename(key, el) {
+    const tr = el.closest('tr');
+    restoreRow(tr, key, tr._origSize || '', tr._origDate || '');
+}
+
+async function doRename(key) {
+    const inp    = document.getElementById('renameInput_' + key);
+    const newKey = inp ? inp.value.trim() : '';
+    if (!newKey || newKey === key) { if (inp) inp.focus(); return; }
+    const tr = inp.closest('tr');
+    inp.disabled = true;
+    try {
+        const params = new URLSearchParams({ key, new_key: newKey });
+        const resp = await fetch('/api/assets/rename?' + params, { method: 'POST' });
+        if (!resp.ok) throw new Error((await resp.json()).detail);
+        tr.dataset.key  = newKey;
+        tr.dataset.size = tr._origSize || '';
+        tr.dataset.date = tr._origDate || '';
+        restoreRow(tr, newKey, tr._origSize || '', tr._origDate || '');
+    } catch (err) {
+        showError('Rename failed: ' + err.message);
+        restoreRow(tr, key, tr._origSize || '', tr._origDate || '');
+    }
+}
+
+/* ── Utilities ─────────────────────────────────────────────────────── */
 
 function showError(msg) {
     errorBanner.textContent = msg;
@@ -358,7 +535,7 @@ function escHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 function escAttr(s) {
-    return String(s).replace(/'/g, "\\'").replace(/\\/g, '\\\\');
+    return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 }
 </script>
 </body>

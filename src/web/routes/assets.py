@@ -52,6 +52,23 @@ def _client():
     )
 
 
+def _matches(key: str, q: str) -> bool:
+    """Match a key against a query.
+
+    Supports two modes:
+      - Glob (*): matched against filename stem (without extension), case-insensitive.
+        e.g. "newstoday*23" matches "Newstoday051123.mp4"
+      - Multi-term AND: space-separated terms, all must be substrings.
+        e.g. "newstoday 23" matches any key containing both words.
+    """
+    import fnmatch as _fnm
+    q_lower = q.strip().lower()
+    if '*' in q_lower:
+        stem = key.lower().rsplit('.', 1)[0] if '.' in key else key.lower()
+        return _fnm.fnmatch(stem, q_lower)
+    return all(t in key.lower() for t in q_lower.split() if t)
+
+
 def _fmt_size(b: int) -> str:
     for unit in ("B", "KB", "MB", "GB"):
         if b < 1024:
@@ -85,7 +102,7 @@ def build_assets_router(templates: Jinja2Templates) -> APIRouter:
                 while True:
                     resp = s3.list_objects_v2(**kwargs)
                     for obj in resp.get("Contents", []):
-                        if q in obj["Key"].lower():
+                        if _matches(obj["Key"], q):
                             files.append({
                                 "key": obj["Key"],
                                 "size": _fmt_size(obj["Size"]),
@@ -151,6 +168,27 @@ def build_assets_router(templates: Jinja2Templates) -> APIRouter:
         try:
             await loop.run_in_executor(None, _delete)
             return JSONResponse({"ok": True})
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.post("/api/assets/rename")
+    async def rename_asset(key: str = Query(...), new_key: str = Query(...)):
+        if not new_key or new_key == key:
+            raise HTTPException(status_code=400, detail="New name must differ from current name.")
+        loop = asyncio.get_running_loop()
+
+        def _rename():
+            s3 = _client()
+            s3.copy_object(
+                Bucket=_BUCKET,
+                CopySource={"Bucket": _BUCKET, "Key": key},
+                Key=new_key,
+            )
+            s3.delete_object(Bucket=_BUCKET, Key=key)
+
+        try:
+            await loop.run_in_executor(None, _rename)
+            return JSONResponse({"ok": True, "new_key": new_key})
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
