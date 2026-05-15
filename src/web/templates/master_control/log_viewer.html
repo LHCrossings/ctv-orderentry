@@ -105,6 +105,9 @@
         /* No spots in block */
         .no-spots { padding: 10px 28px; font-size: 0.82rem; color: var(--text-muted); font-style: italic; }
 
+        /* Compliance */
+        tr.non-compliant td { background: rgba(191,97,106,0.13) !important; }
+
         /* Orphans */
         .orphans-title { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 16px 0 6px; }
 
@@ -290,7 +293,7 @@
         <th>Air Time</th><th>Client</th><th>Show</th>
         <th>Len</th><th>Lang</th><th>Net</th><th>Type</th>
       </tr></thead><tbody>`;
-                prg.spots.forEach(s => { html += spotRow(s); });
+                prg.spots.forEach(s => { html += spotRow(s, prg.time_in, prg.time_out); });
                 html += `</tbody></table>`;
             }
             html += `</div></div>`;
@@ -305,12 +308,31 @@
         <th>Air Time</th><th>Client</th><th>Show</th>
         <th>Len</th><th>Lang</th><th>Net</th><th>Type</th>
       </tr></thead><tbody>`;
-            data.orphans.forEach(s => { html += spotRow(s); });
+            data.orphans.forEach(s => { html += spotRow(s, '', ''); });
             html += `</tbody></table></div></div>`;
         }
 
         document.getElementById('logArea').innerHTML = html;
         collapseAll();
+    }
+
+    function _toSecs(t) {
+        if (!t) return 0;
+        const p = t.split(':');
+        return parseInt(p[0] || 0) * 3600 + parseInt(p[1] || 0) * 60 + parseInt(p[2] || 0);
+    }
+
+    // Mirror Excel: =IF(I>=E, IF(I<=F, "", "NO"), "NO")
+    function isNonCompliant(actualTime, timeIn, timeOut) {
+        if (!actualTime || !timeIn || !timeOut) return false;
+        const a = _toSecs(actualTime), lo = _toSecs(timeIn), hi = _toSecs(timeOut);
+        return a < lo || a > hi;
+    }
+
+    function updateRowCompliance(input) {
+        const tr = input.closest('tr');
+        if (!tr) return;
+        tr.classList.toggle('non-compliant', isNonCompliant(input.value, tr.dataset.timeIn, tr.dataset.timeOut));
     }
 
     function typeBadge(t) {
@@ -319,9 +341,10 @@
         return `<span class="type-badge ${cls}">${escHtml(t)}</span>`;
     }
 
-    function spotRow(s) {
+    function spotRow(s, timeIn = '', timeOut = '') {
         const av = escHtml(s.actual_time || '');
-        return `<tr>
+        const nc = isNonCompliant(s.actual_time, timeIn, timeOut) ? 'non-compliant' : '';
+        return `<tr class="${nc}" data-time-in="${escHtml(timeIn)}" data-time-out="${escHtml(timeOut)}">
     <td class="airtime-cell">
       <input class="airtime-input" type="text" value="${av}" placeholder="—"
              data-row="${s.excel_row}"
@@ -373,9 +396,9 @@
                 if (!input) continue;
                 if (r.status === 'filled') {
                     input.value = r.actual_time;
-                    // Update logData so future fills see this as already filled
                     const spot = prg.spots.find(s => s.excel_row === r.excel_row);
                     if (spot) spot.actual_time = r.actual_time;
+                    updateRowCompliance(input);
                     input.classList.add('saved');
                     setTimeout(() => input.classList.remove('saved'), 2000);
                     filled++;
@@ -409,8 +432,8 @@
     }
 
     function normalizeAndSave(input) {
-        // Strip leading zero from hours: "06:18:58" → "6:18:58"
         input.value = input.value.replace(/^0(\d:)/, '$1');
+        updateRowCompliance(input);
         saveTime(input);
     }
 
