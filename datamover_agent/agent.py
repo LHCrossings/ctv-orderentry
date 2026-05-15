@@ -34,6 +34,14 @@ ETERE_DB_NAME     = "Etere_crossing"
 POLL_INTERVAL_SEC = 600                 # 10 minutes
 RESCHEDULE_MIN_SHIFT_SEC = 30           # ignore sub-30-second drift
 
+# ── OneDrive auto-upload ──────────────────────────────────────────────────────
+ONEDRIVE_ROOT = Path(r"C:\Users\usrdm1\OneDrive - crossingstv.com")
+# Map lowercase substring of client name → subfolder under ONEDRIVE_ROOT.
+# Add entries here to enable auto-upload for additional agencies.
+ONEDRIVE_CLIENT_FOLDERS: dict[str, str] = {
+    "admerasia": "Admerasia",
+}
+
 NETWORK_PORTS: dict[str, int] = {
     "NYC":     6014,
     "WDC":     6017,
@@ -152,6 +160,28 @@ class CaptureUpdate(BaseModel):
     notes: Optional[str] = None
 
 
+# ── OneDrive upload ───────────────────────────────────────────────────────────
+
+def _onedrive_upload(cap: dict) -> None:
+    import shutil
+    client_key  = cap.get("client", "").lower()
+    folder_name = next(
+        (v for k, v in ONEDRIVE_CLIENT_FOLDERS.items() if k in client_key),
+        None,
+    )
+    if not folder_name:
+        return
+    dest_dir = ONEDRIVE_ROOT / folder_name
+    try:
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        src  = _cap_path(cap)
+        dest = dest_dir / cap["filename"]
+        shutil.copy2(str(src), str(dest))
+        logging.info("OneDrive: copied %s → %s", cap["filename"], dest_dir)
+    except Exception as exc:
+        logging.warning("OneDrive: upload failed for %s: %s", cap.get("filename"), exc)
+
+
 # ── FFmpeg runner ─────────────────────────────────────────────────────────────
 
 async def _run(cap_id: str) -> None:
@@ -185,6 +215,7 @@ async def _run(cap_id: str) -> None:
             cap["status"]     = "complete"
             cap["size_bytes"] = output.stat().st_size
             cap["ended_at"]   = datetime.now().isoformat()
+            _onedrive_upload(cap)
         else:
             cap["status"] = "error"
             cap["error"]  = stderr.decode(errors="replace")[-600:]
