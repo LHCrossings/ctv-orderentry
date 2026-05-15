@@ -448,11 +448,13 @@ function _renderPollStatus(poll) {
         el.innerHTML = `<span style="color:var(--nord11);" title="${escHtml(poll.last_error)}">Poll failed ${_fmtAgo(poll.last_attempted) || ''}: ${escHtml(poll.last_error.slice(0,60))}${poll.last_error.length > 60 ? '…' : ''}</span>`;
     } else if (poll.last_succeeded) {
         el.textContent = `Polled ${_fmtAgo(poll.last_succeeded)} (${poll.candidate_count} candidate${poll.candidate_count !== 1 ? 's' : ''})`;
-        el.style.color = 'var(--text-muted)';
+        el.style.color = 'var(--nord4)';
     } else if (poll.last_attempted) {
         el.textContent = `Poll pending…`;
+        el.style.color = 'var(--nord4)';
     } else {
         el.textContent = 'Not yet polled';
+        el.style.color = 'var(--nord4)';
     }
 }
 
@@ -491,7 +493,7 @@ async function triggerPoll() {
             el.innerHTML = `<span style="color:var(--nord11);" title="${escHtml(data.error)}">Poll error: ${escHtml(data.error.slice(0,80))}</span>`;
         } else {
             el.textContent = `Polled — ${data.polled} spot${data.polled !== 1 ? 's' : ''} checked, ${data.rescheduled} rescheduled`;
-            el.style.color = data.rescheduled > 0 ? 'var(--nord13)' : 'var(--text-muted)';
+            el.style.color = data.rescheduled > 0 ? 'var(--nord13)' : 'var(--nord4)';
             if (data.rescheduled > 0) await loadCaptures();
         }
     } catch (e) {
