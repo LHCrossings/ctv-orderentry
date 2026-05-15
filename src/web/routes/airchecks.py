@@ -146,7 +146,8 @@ def build_airchecks_router(templates: Jinja2Templates) -> APIRouter:
 
     @router.get("/api/airchecks/settings")
     async def get_aircheck_settings():
-        import json as _json, urllib.request
+        import json as _json
+        import urllib.request
         try:
             with urllib.request.urlopen(f"{AGENT_URL}/settings", timeout=3) as resp:
                 return JSONResponse(_json.loads(resp.read()))
@@ -155,7 +156,8 @@ def build_airchecks_router(templates: Jinja2Templates) -> APIRouter:
 
     @router.patch("/api/airchecks/settings")
     async def update_aircheck_settings(request: Request):
-        import json as _json, urllib.request
+        import json as _json
+        import urllib.request
         body = await request.body()
         req = urllib.request.Request(f"{AGENT_URL}/settings", data=body, method="PATCH")
         req.add_header("Content-Type", "application/json")

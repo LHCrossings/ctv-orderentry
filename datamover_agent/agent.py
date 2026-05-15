@@ -307,7 +307,6 @@ async def _poll_spots() -> None:
                 isci      = cap["isci_code"]
                 start_dt  = datetime.fromisoformat(cap["start_time"])
                 query_date = (start_dt + timedelta(seconds=20)).date()
-                cod_user = NETWORK_COD_USER.get(cap["network"], 1)
                 try:
                     cur.execute(
                         "SELECT TOP 1 ORA, DATA, "
