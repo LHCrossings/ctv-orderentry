@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Asset Browser — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; }
+        main { max-width: 1200px; margin: 0 auto; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+
+        .card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px 24px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+        }
+        .card-title {
+            font-size: 0.72rem; font-weight: 700; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 16px;
+        }
+
+        /* Search bar */
+        .search-row { display: flex; gap: 10px; align-items: center; }
+        .search-wrap { position: relative; flex: 1; }
+        .search-wrap svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; }
+        .search-input {
+            width: 100%; background: var(--bg-secondary); border: 1px solid var(--border-color);
+            border-radius: 8px; padding: 8px 12px 8px 36px; font-size: 0.9rem;
+            color: var(--text-primary); outline: none; font-family: inherit; transition: border-color 0.15s;
+        }
+        .search-input:focus { border-color: var(--nord10); }
+        .search-input::placeholder { color: var(--text-muted); }
+
+        .btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 7px 16px; border-radius: 8px; font-family: inherit;
+            font-size: 0.85rem; font-weight: 600; cursor: pointer;
+            border: 1px solid transparent; transition: all 0.15s; white-space: nowrap;
+        }
+        .btn-primary { background: var(--nord10); color: var(--nord6); border-color: var(--nord10); }
+        .btn-primary:hover { filter: brightness(1.1); }
+        .btn-ghost { background: transparent; color: var(--text-muted); border-color: var(--border-color); }
+        .btn-ghost:hover { border-color: var(--nord10); color: var(--nord10); }
+        .btn-danger { background: transparent; color: var(--nord11); border-color: var(--nord11); }
+        .btn-danger:hover { background: var(--nord11); color: var(--nord6); }
+        .btn-danger-solid { background: var(--nord11); color: var(--nord6); border-color: var(--nord11); }
+        .btn-sm { padding: 4px 11px; font-size: 0.78rem; }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+        /* Stats row */
+        .stats-row {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 12px; min-height: 24px;
+        }
+        .stats-text { font-size: 0.8rem; color: var(--text-muted); }
+        .stats-text strong { color: var(--text-primary); }
+
+        /* Table */
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.87rem; }
+        thead th {
+            text-align: left; font-size: 0.7rem; font-weight: 700; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.06em;
+            padding: 6px 12px; border-bottom: 1px solid var(--border-color);
+        }
+        thead th:last-child { text-align: right; }
+        tbody tr { border-bottom: 1px solid var(--border-color); transition: background 0.1s; }
+        tbody tr:last-child { border-bottom: none; }
+        tbody tr:hover:not(.confirm-row) { background: var(--bg-secondary); }
+        tbody td { padding: 9px 12px; vertical-align: middle; }
+        .td-key { font-family: 'Courier New', monospace; font-size: 0.83rem; word-break: break-all; }
+        .td-size { color: var(--text-muted); white-space: nowrap; }
+        .td-date { color: var(--text-muted); white-space: nowrap; }
+        .td-actions { text-align: right; white-space: nowrap; }
+        .td-actions .btn + .btn { margin-left: 6px; }
+
+        /* Confirm-delete row */
+        tr.confirm-row { background: rgba(191, 97, 106, 0.08) !important; }
+        tr.confirm-row td { padding: 10px 12px; }
+        .confirm-msg { font-size: 0.85rem; color: var(--nord11); font-weight: 500; }
+
+        /* Load more */
+        .load-more-row { text-align: center; padding: 16px 0 4px; }
+
+        /* Empty / error states */
+        .empty-state {
+            text-align: center; padding: 48px 24px; color: var(--text-muted); font-size: 0.9rem;
+        }
+        .empty-state svg { opacity: 0.3; margin-bottom: 12px; }
+        .error-banner {
+            background: rgba(191, 97, 106, 0.12); border: 1px solid var(--nord11);
+            border-radius: 8px; padding: 12px 16px; color: var(--nord11); font-size: 0.87rem;
+        }
+
+        /* Spinner */
+        .spinner {
+            display: inline-block; width: 16px; height: 16px;
+            border: 2px solid var(--border-color); border-top-color: var(--nord10);
+            border-radius: 50%; animation: spin 0.7s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Page header */
+        .page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+        .page-header h1 { font-size: 1.3rem; font-weight: 700; }
+        .page-sub { font-size: 0.82rem; color: var(--text-muted); }
+    </style>
+</head>
+<body>
+<main>
+    <div>
+        <div class="page-header">
+            <h1>Asset Browser</h1>
+        </div>
+        <div class="page-sub">S3 · storageforct · us-west-2</div>
+    </div>
+
+    <div class="card">
+        <div class="search-row">
+            <div class="search-wrap">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input id="searchInput" class="search-input" type="text"
+                       placeholder="Search by filename or ISCI code…" autocomplete="off" />
+            </div>
+            <button class="btn btn-ghost" id="browseBtn" onclick="browse()">Browse All</button>
+        </div>
+    </div>
+
+    <div id="errorBanner" class="error-banner" style="display:none"></div>
+
+    <div class="card" id="resultsCard" style="display:none">
+        <div class="stats-row">
+            <div class="stats-text" id="statsText"></div>
+            <div id="loadingSpinner" style="display:none"><span class="spinner"></span></div>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Filename</th>
+                        <th>Size</th>
+                        <th>Last Modified</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="fileBody"></tbody>
+            </table>
+        </div>
+        <div class="load-more-row" id="loadMoreRow" style="display:none">
+            <button class="btn btn-ghost" id="loadMoreBtn" onclick="loadMore()">Load More</button>
+        </div>
+        <div id="emptyState" class="empty-state" style="display:none">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" display="block" style="margin:0 auto 12px"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            No files found.
+        </div>
+    </div>
+</main>
+
+<script>
+let _nextToken = '';
+let _currentSearch = '';
+let _debounce = null;
+
+const searchInput = document.getElementById('searchInput');
+const fileBody    = document.getElementById('fileBody');
+const resultsCard = document.getElementById('resultsCard');
+const statsText   = document.getElementById('statsText');
+const loadMoreRow = document.getElementById('loadMoreRow');
+const loadMoreBtn = document.getElementById('loadMoreBtn');
+const emptyState  = document.getElementById('emptyState');
+const errorBanner = document.getElementById('errorBanner');
+const spinner     = document.getElementById('loadingSpinner');
+
+searchInput.addEventListener('input', () => {
+    clearTimeout(_debounce);
+    const q = searchInput.value.trim();
+    if (!q) { clearResults(); return; }
+    _debounce = setTimeout(() => search(q), 300);
+});
+
+function clearResults() {
+    fileBody.innerHTML = '';
+    resultsCard.style.display = 'none';
+    errorBanner.style.display = 'none';
+    _nextToken = '';
+    _currentSearch = '';
+}
+
+async function search(q) {
+    _currentSearch = q;
+    _nextToken = '';
+    fileBody.innerHTML = '';
+    resultsCard.style.display = '';
+    emptyState.style.display = 'none';
+    errorBanner.style.display = 'none';
+    statsText.textContent = 'Searching…';
+    spinner.style.display = '';
+    await fetchFiles(q, '');
+}
+
+async function browse() {
+    searchInput.value = '';
+    _currentSearch = '';
+    _nextToken = '';
+    fileBody.innerHTML = '';
+    resultsCard.style.display = '';
+    emptyState.style.display = 'none';
+    errorBanner.style.display = 'none';
+    statsText.textContent = 'Loading…';
+    spinner.style.display = '';
+    await fetchFiles('', '');
+}
+
+async function loadMore() {
+    loadMoreBtn.disabled = true;
+    spinner.style.display = '';
+    await fetchFiles(_currentSearch, _nextToken);
+    loadMoreBtn.disabled = false;
+}
+
+async function fetchFiles(q, token) {
+    try {
+        const params = new URLSearchParams({ search: q });
+        if (token) params.set('continuation', token);
+        const resp = await fetch('/api/assets/list?' + params);
+        if (!resp.ok) { const e = await resp.json(); throw new Error(e.detail || resp.statusText); }
+        const data = await resp.json();
+
+        spinner.style.display = 'none';
+        _nextToken = data.next_token || '';
+
+        if (data.files.length === 0 && fileBody.rows.length === 0) {
+            emptyState.style.display = '';
+            statsText.textContent = 'No files found.';
+            loadMoreRow.style.display = 'none';
+            return;
+        }
+
+        emptyState.style.display = 'none';
+        data.files.forEach(f => appendRow(f));
+
+        const total = fileBody.rows.length;
+        statsText.innerHTML = q
+            ? `<strong>${total}</strong> match${total !== 1 ? 'es' : ''} for <em>"${escHtml(q)}"</em>`
+            : `<strong>${total}</strong> file${total !== 1 ? 's' : ''} loaded`;
+
+        if (_nextToken) {
+            loadMoreRow.style.display = '';
+        } else {
+            loadMoreRow.style.display = 'none';
+            if (!q) statsText.innerHTML += ' — all files loaded';
+        }
+    } catch (err) {
+        spinner.style.display = 'none';
+        showError(err.message);
+    }
+}
+
+function appendRow(f) {
+    const tr = document.createElement('tr');
+    tr.dataset.key = f.key;
+    tr.innerHTML = `
+        <td class="td-key">${escHtml(f.key)}</td>
+        <td class="td-size">${escHtml(f.size)}</td>
+        <td class="td-date">${escHtml(f.last_modified)}</td>
+        <td class="td-actions">
+            <button class="btn btn-ghost btn-sm" onclick="download('${escAttr(f.key)}', this)">Download</button>
+            <button class="btn btn-danger btn-sm" onclick="confirmDelete(this)">Delete</button>
+        </td>`;
+    fileBody.appendChild(tr);
+}
+
+async function download(key, btn) {
+    btn.disabled = true;
+    btn.textContent = '…';
+    try {
+        const resp = await fetch('/api/assets/download-url?key=' + encodeURIComponent(key));
+        if (!resp.ok) throw new Error((await resp.json()).detail);
+        const { url } = await resp.json();
+        window.open(url, '_blank');
+    } catch (err) {
+        showError('Download failed: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Download';
+    }
+}
+
+function confirmDelete(btn) {
+    const tr = btn.closest('tr');
+    const key = tr.dataset.key;
+    tr._origSize = tr.querySelector('.td-size')?.textContent || '';
+    tr._origDate = tr.querySelector('.td-date')?.textContent || '';
+    tr.classList.add('confirm-row');
+    tr.innerHTML = `
+        <td class="td-key confirm-msg" colspan="3">Delete <strong>${escHtml(key)}</strong>?  This cannot be undone.</td>
+        <td class="td-actions">
+            <button class="btn btn-danger-solid btn-sm" onclick="doDelete('${escAttr(key)}', this)">Confirm</button>
+            <button class="btn btn-ghost btn-sm" onclick="cancelDelete(this)">Cancel</button>
+        </td>`;
+}
+
+function cancelDelete(btn) {
+    const tr = btn.closest('tr');
+    const key = tr.dataset.key;
+    // Rebuild original row from data we already have
+    const sizeEl = document.querySelector(`[data-key="${CSS.escape(key)}"]`);
+    // Easiest: just reload the row by refetching, but simpler to restore via DOM data
+    // Re-render the row from cached data — just remove confirm state
+    tr.classList.remove('confirm-row');
+    const size = tr._origSize || '';
+    const date = tr._origDate || '';
+    tr.innerHTML = `
+        <td class="td-key">${escHtml(key)}</td>
+        <td class="td-size">${escHtml(size)}</td>
+        <td class="td-date">${escHtml(date)}</td>
+        <td class="td-actions">
+            <button class="btn btn-ghost btn-sm" onclick="download('${escAttr(key)}', this)">Download</button>
+            <button class="btn btn-danger btn-sm" onclick="confirmDelete(this)">Delete</button>
+        </td>`;
+}
+
+async function doDelete(key, btn) {
+    btn.disabled = true;
+    btn.textContent = '…';
+    try {
+        const resp = await fetch('/api/assets/file?key=' + encodeURIComponent(key), { method: 'DELETE' });
+        if (!resp.ok) throw new Error((await resp.json()).detail);
+        const tr = btn.closest('tr');
+        tr.style.opacity = '0';
+        tr.style.transition = 'opacity 0.3s';
+        setTimeout(() => {
+            tr.remove();
+            const remaining = fileBody.rows.length;
+            const q = _currentSearch;
+            statsText.innerHTML = q
+                ? `<strong>${remaining}</strong> match${remaining !== 1 ? 'es' : ''} for <em>"${escHtml(q)}"</em>`
+                : `<strong>${remaining}</strong> file${remaining !== 1 ? 's' : ''} loaded`;
+            if (remaining === 0) emptyState.style.display = '';
+        }, 300);
+    } catch (err) {
+        showError('Delete failed: ' + err.message);
+        btn.closest('tr').remove();  // remove stale confirm row
+    }
+}
+
+function showError(msg) {
+    errorBanner.textContent = msg;
+    errorBanner.style.display = '';
+}
+
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s) {
+    return String(s).replace(/'/g, "\\'").replace(/\\/g, '\\\\');
+}
+</script>
+</body>
+</html>
