@@ -40,6 +40,7 @@ ONEDRIVE_ROOT = Path(r"C:\Users\usrdm1\OneDrive - crossingstv.com")
 # Add entries here to enable auto-upload for additional agencies.
 ONEDRIVE_CLIENT_FOLDERS: dict[str, str] = {
     "admerasia": "Admerasia",
+    "lexus":     "Lexus",
 }
 
 NETWORK_PORTS: dict[str, int] = {
