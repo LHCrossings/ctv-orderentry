@@ -35,7 +35,8 @@ POLL_INTERVAL_SEC = 600                 # 10 minutes
 RESCHEDULE_MIN_SHIFT_SEC = 30           # ignore sub-30-second drift
 
 # ── OneDrive auto-upload ──────────────────────────────────────────────────────
-ONEDRIVE_ROOT = Path(r"C:\Users\usrdm1\OneDrive - crossingstv.com\Airchecks")
+ONEDRIVE_ROOT           = Path(r"C:\Users\usrdm1\OneDrive - crossingstv.com\Airchecks")
+ONEDRIVE_RETENTION_DAYS = 90
 
 NETWORK_PORTS: dict[str, int] = {
     "NYC":     6014,
@@ -123,6 +124,33 @@ async def startup() -> None:
     _load_db()
     await _requeue_scheduled()
     asyncio.create_task(_poll_spots())
+    asyncio.create_task(_onedrive_cleanup_loop())
+
+
+async def _onedrive_cleanup_loop() -> None:
+    """Once a day: delete files from OneDrive older than ONEDRIVE_RETENTION_DAYS."""
+    while True:
+        cutoff = datetime.now() - timedelta(days=ONEDRIVE_RETENTION_DAYS)
+        deleted = 0
+        try:
+            for f in ONEDRIVE_ROOT.rglob("*.mp4"):
+                try:
+                    if datetime.fromtimestamp(f.stat().st_mtime) < cutoff:
+                        f.unlink()
+                        deleted += 1
+                        # Remove empty parent dirs (but not ONEDRIVE_ROOT itself)
+                        try:
+                            if f.parent != ONEDRIVE_ROOT and not any(f.parent.iterdir()):
+                                f.parent.rmdir()
+                        except Exception:
+                            pass
+                except Exception as exc:
+                    logging.warning("OneDrive cleanup: could not remove %s: %s", f, exc)
+            if deleted:
+                logging.info("OneDrive cleanup: removed %d file(s) older than %d days", deleted, ONEDRIVE_RETENTION_DAYS)
+        except Exception as exc:
+            logging.warning("OneDrive cleanup: scan failed: %s", exc)
+        await asyncio.sleep(86400)  # run daily
 
 
 def _save_db() -> None:
