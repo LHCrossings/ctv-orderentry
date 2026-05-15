@@ -39,6 +39,11 @@ ONEDRIVE_ROOT           = Path(r"C:\Users\usrdm1\OneDrive - crossingstv.com\Airc
 ONEDRIVE_RETENTION_DAYS = 90        # overridden at runtime by /settings PATCH
 SETTINGS_FILE           = OUTPUT_DIR / "settings.json"
 
+# Client name → agency subfolder inside ONEDRIVE_ROOT
+CLIENT_AGENCY: dict[str, str] = {
+    "McDonald's": "Admerasia",
+}
+
 NETWORK_PORTS: dict[str, int] = {
     "NYC":     6014,
     "WDC":     6017,
@@ -204,8 +209,10 @@ class CaptureUpdate(BaseModel):
 
 def _onedrive_upload(cap: dict) -> None:
     import shutil
+    agency    = CLIENT_AGENCY.get(cap.get("client", ""), "")
     subfolder = cap.get("subfolder", "")
-    dest_dir  = ONEDRIVE_ROOT / subfolder if subfolder else ONEDRIVE_ROOT
+    parts     = [p for p in (agency, subfolder) if p]
+    dest_dir  = ONEDRIVE_ROOT.joinpath(*parts) if parts else ONEDRIVE_ROOT
     try:
         dest_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(str(_cap_path(cap)), str(dest_dir / cap["filename"]))
