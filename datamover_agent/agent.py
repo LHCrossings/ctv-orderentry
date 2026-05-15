@@ -273,10 +273,29 @@ async def _schedule(cap_id: str, delay: float) -> None:
 
 def _etere_connect():
     import pyodbc
-    return pyodbc.connect(
-        f"DRIVER={{SQL Server}};SERVER={ETERE_DB_SERVER};"
-        f"DATABASE={ETERE_DB_NAME};Trusted_Connection=yes;"
-    )
+    db_user = db_pass = None
+    try:
+        env_path = Path(__file__).parent / ".env"
+        if env_path.exists():
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line.startswith("ETERE_DB_USER="):
+                    db_user = line.split("=", 1)[1].strip()
+                elif line.startswith("ETERE_DB_PASSWORD="):
+                    db_pass = line.split("=", 1)[1].strip()
+    except Exception:
+        pass
+    if db_user and db_pass:
+        conn_str = (
+            f"DRIVER={{SQL Server}};SERVER={ETERE_DB_SERVER};"
+            f"DATABASE={ETERE_DB_NAME};UID={db_user};PWD={db_pass};"
+        )
+    else:
+        conn_str = (
+            f"DRIVER={{SQL Server}};SERVER={ETERE_DB_SERVER};"
+            f"DATABASE={ETERE_DB_NAME};Trusted_Connection=yes;"
+        )
+    return pyodbc.connect(conn_str)
 
 
 async def _poll_spots() -> None:
