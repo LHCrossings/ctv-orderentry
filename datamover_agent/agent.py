@@ -273,26 +273,34 @@ async def _schedule(cap_id: str, delay: float) -> None:
 
 def _etere_connect():
     import pyodbc
+    db_server = ETERE_DB_SERVER
     db_user = db_pass = None
     try:
         env_path = Path(__file__).parent / ".env"
         if env_path.exists():
             for line in env_path.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
-                if line.startswith("ETERE_DB_USER="):
-                    db_user = line.split("=", 1)[1].strip()
-                elif line.startswith("ETERE_DB_PASSWORD="):
-                    db_pass = line.split("=", 1)[1].strip()
+                if "=" not in line or line.startswith("#"):
+                    continue
+                key, _, val = line.partition("=")
+                key = key.strip()
+                val = val.strip()
+                if key == "ETERE_DB_SERVER":
+                    db_server = val
+                elif key == "ETERE_DB_USER":
+                    db_user = val
+                elif key == "ETERE_DB_PASSWORD":
+                    db_pass = val
     except Exception:
         pass
     if db_user and db_pass:
         conn_str = (
-            f"DRIVER={{SQL Server}};SERVER={ETERE_DB_SERVER};"
+            f"DRIVER={{SQL Server}};SERVER={db_server};"
             f"DATABASE={ETERE_DB_NAME};UID={db_user};PWD={db_pass};"
         )
     else:
         conn_str = (
-            f"DRIVER={{SQL Server}};SERVER={ETERE_DB_SERVER};"
+            f"DRIVER={{SQL Server}};SERVER={db_server};"
             f"DATABASE={ETERE_DB_NAME};Trusted_Connection=yes;"
         )
     return pyodbc.connect(conn_str)
