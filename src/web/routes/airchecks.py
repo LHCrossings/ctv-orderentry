@@ -43,6 +43,7 @@ def _fetch_etere_spots(contract_id: int) -> list[dict]:
                 tp.COD_USER    AS market_id,
                 tp.DATA        AS air_date,
                 tp.ORA         AS air_ora,
+                dbo.tcFrames2Msec(dbo.getVideoStandard(tp.COD_USER), tp.ORA) AS air_ms,
                 cr.DURATA      AS duration_frames,
                 ct.CUSTOMERREF AS customer_ref,
                 a.RAG_SOCIAL   AS client_name,
@@ -57,12 +58,13 @@ def _fetch_etere_spots(contract_id: int) -> list[dict]:
             JOIN CONTRATTITESTATA ct ON ct.ID_CONTRATTITESTATA = cr.ID_CONTRATTITESTATA
             LEFT JOIN ANAGRAF a      ON a.ID_ANAGRAF           = ct.COMMITTENTE
             WHERE cr.ID_CONTRATTITESTATA = %d
-              AND DATEADD(SECOND, tp.ORA/30, CAST(tp.DATA AS DATETIME)) >= DATEADD(HOUR, 4, GETDATE())
+              AND DATEADD(MILLISECOND, dbo.tcFrames2Msec(dbo.getVideoStandard(tp.COD_USER), tp.ORA) %% 86400000,
+                          CAST(tp.DATA AS DATETIME)) >= DATEADD(HOUR, 4, GETDATE())
               AND f.COD_PROGRA IS NOT NULL
               AND f.COD_PROGRA != ''
               AND tp.NEWTYPE = 'COM'
         )
-        SELECT isci_code, market_id, air_date, air_ora, duration_frames, customer_ref, client_name
+        SELECT isci_code, market_id, air_date, air_ora, air_ms, duration_frames, customer_ref, client_name
         FROM ranked
         WHERE rn = 1
         ORDER BY isci_code, market_id
@@ -78,7 +80,7 @@ def _fetch_etere_spots(contract_id: int) -> list[dict]:
             air_date  = row["air_date"]
             if hasattr(air_date, "date"):
                 air_date = air_date.date()
-            air_secs   = int(row["air_ora"]) // 30
+            air_secs   = int(row["air_ms"]) / 1000
             market_tz  = MARKET_TZ.get(network, _PT)
             air_dt_loc = datetime.combine(air_date, datetime.min.time(), tzinfo=market_tz) + timedelta(seconds=air_secs)
             air_dt     = air_dt_loc.astimezone(_PT).replace(tzinfo=None)  # naive PT for Datamover

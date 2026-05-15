@@ -48,6 +48,22 @@ NETWORK_PORTS: dict[str, int] = {
     "SFO OTA": 6016,
     "CVC OTA": 6018,
 }
+
+# Etere COD_USER integer for each network — used for tcFrames2Msec conversion
+NETWORK_COD_USER: dict[str, int] = {
+    "NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4,
+    "SEA": 5, "LAX": 6, "CVC": 7, "WDC": 8,
+    "MMT": 9, "DAL": 10, "SFO OTA": 4, "CVC OTA": 7,
+}
+
+# Hours to ADD to market-local time to arrive at PT (agent runs in PT).
+# ET is always 3h ahead of PT; CT always 2h ahead; PT markets are 0.
+NETWORK_TO_PT_HOURS: dict[str, int] = {
+    "NYC": -3, "WDC": -3, "MMT": -3,
+    "CMP": -2, "HOU": -2, "DAL": -2,
+    "SFO": 0, "SEA": 0, "LAX": 0, "CVC": 0,
+    "SFO OTA": 0, "CVC OTA": 0,
+}
 # ─────────────────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="Datamover Aircheck Agent", docs_url=None, redoc_url=None)
@@ -71,6 +87,9 @@ def _load_db() -> None:
                     # Was actively recording when agent stopped — genuinely lost
                     cap["status"] = "error"
                     cap["error"] = "Agent restarted during capture"
+                # backfill fields added after initial deployment
+                cap.setdefault("last_polled_at", None)
+                cap.setdefault("reschedule_history", [])
                 # pending/scheduled captures are re-queued in startup()
             captures.update(data)
         except Exception:
@@ -225,9 +244,12 @@ async def _poll_spots() -> None:
                 isci      = cap["isci_code"]
                 start_dt  = datetime.fromisoformat(cap["start_time"])
                 query_date = (start_dt + timedelta(seconds=20)).date()
+                cod_user = NETWORK_COD_USER.get(cap["network"], 1)
                 try:
                     cur.execute(
-                        "SELECT TOP 1 ORA FROM TPALINSE "
+                        "SELECT TOP 1 ORA, DATA, "
+                        "dbo.tcFrames2Msec(dbo.getVideoStandard(COD_USER), ORA) AS air_ms "
+                        "FROM TPALINSE "
                         "WHERE COD_PROGRA = ? AND DATA = ? AND ORA > 0 "
                         "ORDER BY ORA",
                         (isci, query_date),
@@ -241,15 +263,32 @@ async def _poll_spots() -> None:
                     logging.warning("Poll: %s not found in TPALINSE on %s — spot may have been pulled", isci, query_date)
                     continue
 
-                new_ora   = row[0]
-                orig_ora  = cap["original_ora"]
-                shift_sec = (new_ora - orig_ora) / 30
+                new_ora  = row[0]
+                air_date = row[1]
+                air_ms   = row[2]
+                orig_ora = cap["original_ora"]
+                shift_sec = (new_ora - orig_ora) / 30  # approximate delta for threshold check
+
+                cap["last_polled_at"] = datetime.now().isoformat()
 
                 if abs(shift_sec) < RESCHEDULE_MIN_SHIFT_SEC:
+                    logging.debug("Poll: %s unchanged (shift %.1fs < threshold) — %s still at %s", isci, shift_sec, cap["id"], start_dt)
                     continue
 
-                cap_id    = cap["id"]
-                new_start = start_dt + timedelta(seconds=shift_sec)
+                # Compute new start using Etere's drop-frame-correct time conversion
+                cap_id = cap["id"]
+                air_date_only = air_date.date() if hasattr(air_date, "date") else air_date
+                naive_local = datetime.combine(air_date_only, datetime.min.time()) + timedelta(milliseconds=air_ms)
+                new_air_pt  = naive_local + timedelta(hours=NETWORK_TO_PT_HOURS.get(cap["network"], 0))
+                new_start   = new_air_pt - timedelta(seconds=20)
+                cap.setdefault("reschedule_history", []).append({
+                    "detected_at": datetime.now().isoformat(),
+                    "old_ora":     orig_ora,
+                    "new_ora":     new_ora,
+                    "shift_sec":   round(shift_sec, 1),
+                    "old_start":   start_dt.isoformat(),
+                    "new_start":   new_start.isoformat(),
+                })
                 logging.info("Poll: %s shifted %+.0fs — rescheduling %s to %s", isci, shift_sec, cap_id, new_start)
 
                 task = _tasks.pop(cap_id, None)
@@ -303,21 +342,23 @@ async def create_capture(req: CaptureRequest):
     filename = f"{net_s}_{client_s}_{ts}.mp4"
 
     captures[cap_id] = {
-        "id":               cap_id,
-        "client":           req.client,
-        "network":          req.network,
-        "duration_seconds": req.duration_seconds,
-        "start_time":       start_dt.isoformat(),
-        "subfolder":        subfolder,
-        "filename":         filename,
-        "notes":            req.notes,
-        "isci_code":        req.isci_code or None,
-        "original_ora":     req.original_ora,
-        "status":           "pending",
-        "created_at":       now.isoformat(),
-        "ended_at":         None,
-        "size_bytes":       None,
-        "error":            None,
+        "id":                  cap_id,
+        "client":              req.client,
+        "network":             req.network,
+        "duration_seconds":    req.duration_seconds,
+        "start_time":          start_dt.isoformat(),
+        "subfolder":           subfolder,
+        "filename":            filename,
+        "notes":               req.notes,
+        "isci_code":           req.isci_code or None,
+        "original_ora":        req.original_ora,
+        "status":              "pending",
+        "created_at":          now.isoformat(),
+        "ended_at":            None,
+        "size_bytes":          None,
+        "error":               None,
+        "last_polled_at":      None,
+        "reschedule_history":  [],
     }
     _save_db()
 
