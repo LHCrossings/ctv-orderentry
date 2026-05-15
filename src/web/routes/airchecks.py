@@ -167,6 +167,17 @@ def build_airchecks_router(templates: Jinja2Templates) -> APIRouter:
         except Exception as exc:
             raise HTTPException(status_code=502, detail=str(exc))
 
+    @router.post("/api/airchecks/poll")
+    async def poll_agent():
+        import json as _json
+        import urllib.request
+        req = urllib.request.Request(f"{AGENT_URL}/poll", data=b"", method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return JSONResponse(_json.loads(resp.read()))
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc))
+
     @router.post("/api/airchecks/deploy")
     async def deploy_agent():
         import json as _json

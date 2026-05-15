@@ -268,7 +268,9 @@
         <div class="agent-status">
             <div class="dot checking" id="agentDot"></div>
             <span id="agentLabel">Connecting to Datamover…</span>
-            <button class="refresh-btn" id="deployBtn" onclick="deployAgent()" style="margin-left:8px; color:var(--nord5); border-color:var(--nord3);">⬆ Deploy</button>
+            <span id="pollStatus" style="margin-left:10px; font-size:0.75rem; color:var(--text-muted);"></span>
+            <button class="refresh-btn" id="pollBtn" onclick="triggerPoll()" style="margin-left:8px;" title="Trigger an immediate Etere poll">↻ Poll</button>
+            <button class="refresh-btn" id="deployBtn" onclick="deployAgent()" style="margin-left:4px; color:var(--nord5); border-color:var(--nord3);">⬆ Deploy</button>
         </div>
     </div>
 </header>
@@ -431,20 +433,71 @@ function clearPresets() {
 }
 
 // ── Agent health check ────────────────────────────────────────────────────────
+function _fmtAgo(iso) {
+    if (!iso) return null;
+    const secs = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+    if (secs < 60)  return `${secs}s ago`;
+    if (secs < 3600) return `${Math.round(secs/60)}m ago`;
+    return `${Math.round(secs/3600)}h ago`;
+}
+
+function _renderPollStatus(poll) {
+    const el = document.getElementById('pollStatus');
+    if (!poll) { el.textContent = ''; return; }
+    if (poll.last_error) {
+        el.innerHTML = `<span style="color:var(--nord11);" title="${escHtml(poll.last_error)}">Poll failed ${_fmtAgo(poll.last_attempted) || ''}: ${escHtml(poll.last_error.slice(0,60))}${poll.last_error.length > 60 ? '…' : ''}</span>`;
+    } else if (poll.last_succeeded) {
+        el.textContent = `Polled ${_fmtAgo(poll.last_succeeded)} (${poll.candidate_count} candidate${poll.candidate_count !== 1 ? 's' : ''})`;
+        el.style.color = 'var(--text-muted)';
+    } else if (poll.last_attempted) {
+        el.textContent = `Poll pending…`;
+    } else {
+        el.textContent = 'Not yet polled';
+    }
+}
+
 async function checkAgent() {
     const dot   = document.getElementById('agentDot');
     const label = document.getElementById('agentLabel');
     try {
         const r = await fetch(`${AGENT}/health`, { signal: AbortSignal.timeout(3000) });
         if (r.ok) {
+            const data = await r.json();
             dot.className = 'dot ok';
             label.textContent = 'Datamover connected';
+            _renderPollStatus(data.poll || null);
         } else {
             throw new Error();
         }
     } catch {
         dot.className = 'dot err';
         label.textContent = 'Datamover unreachable';
+        document.getElementById('pollStatus').textContent = '';
+    }
+}
+
+async function triggerPoll() {
+    const btn = document.getElementById('pollBtn');
+    const el  = document.getElementById('pollStatus');
+    btn.disabled = true;
+    el.textContent = 'Polling…';
+    el.style.color = 'var(--text-muted)';
+    try {
+        const r = await fetch('/api/airchecks/poll', { method: 'POST', signal: AbortSignal.timeout(20000) });
+        const data = await r.json();
+        if (!r.ok) {
+            el.innerHTML = `<span style="color:var(--nord11);">${escHtml(data.detail || 'Poll failed')}</span>`;
+        } else if (data.error) {
+            el.innerHTML = `<span style="color:var(--nord11);" title="${escHtml(data.error)}">Poll error: ${escHtml(data.error.slice(0,80))}</span>`;
+        } else {
+            el.textContent = `Polled — ${data.polled} spot${data.polled !== 1 ? 's' : ''} checked, ${data.rescheduled} rescheduled`;
+            el.style.color = data.rescheduled > 0 ? 'var(--nord13)' : 'var(--text-muted)';
+            if (data.rescheduled > 0) await loadCaptures();
+        }
+    } catch (e) {
+        el.innerHTML = `<span style="color:var(--nord11);">Poll timed out — check agent logs</span>`;
+    } finally {
+        btn.disabled = false;
     }
 }
 

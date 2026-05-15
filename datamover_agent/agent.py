@@ -87,6 +87,12 @@ app.add_middleware(
 
 captures: dict[str, dict] = {}
 _tasks:   dict[str, asyncio.Task] = {}
+_poll_state: dict = {
+    "last_attempted": None,
+    "last_succeeded": None,
+    "last_error":     None,
+    "candidate_count": 0,
+}
 
 
 def _load_settings() -> None:
@@ -304,31 +310,38 @@ def _etere_connect():
     return pymssql.connect(server=db_server, user=db_user, password=db_pass, database=ETERE_DB_NAME)
 
 
-async def _poll_spots() -> None:
-    """Every 10 min: re-check TPALINSE for any contract-linked captures that have moved."""
-    while True:
-        await asyncio.sleep(POLL_INTERVAL_SEC)
-        now = datetime.now()
-        candidates = [
-            cap for cap in list(captures.values())
-            if cap.get("isci_code")
-            and cap.get("original_ora") is not None
-            and cap.get("status") in ("pending", "scheduled")
-            and datetime.fromisoformat(cap["start_time"]) > now + timedelta(minutes=2)
-        ]
-        if not candidates:
-            continue
+async def _do_poll() -> dict:
+    """Run one poll cycle. Returns a summary dict. Called by the loop and the /poll endpoint."""
+    now = datetime.now()
+    candidates = [
+        cap for cap in list(captures.values())
+        if cap.get("isci_code")
+        and cap.get("original_ora") is not None
+        and cap.get("status") in ("pending", "scheduled")
+        and datetime.fromisoformat(cap["start_time"]) > now + timedelta(minutes=2)
+    ]
+    _poll_state["last_attempted"] = now.isoformat()
+    _poll_state["candidate_count"] = len(candidates)
+    _poll_state["last_error"] = None
 
-        loop = asyncio.get_event_loop()
-        try:
-            conn = await loop.run_in_executor(None, _etere_connect)
-        except Exception as exc:
-            logging.warning("Etere poll: DB connect failed: %s", exc)
-            continue
+    if not candidates:
+        _poll_state["last_succeeded"] = now.isoformat()
+        return {"polled": 0, "rescheduled": 0, "candidates": 0}
 
-        try:
-            cur = conn.cursor()
-            for cap in candidates:
+    loop = asyncio.get_event_loop()
+    try:
+        conn = await loop.run_in_executor(None, _etere_connect)
+    except Exception as exc:
+        msg = str(exc)
+        _poll_state["last_error"] = f"DB connect failed: {msg}"
+        logging.warning("Etere poll: DB connect failed: %s", msg)
+        return {"error": _poll_state["last_error"], "candidates": len(candidates)}
+
+    polled = 0
+    rescheduled = 0
+    try:
+        cur = conn.cursor()
+        for cap in candidates:
                 isci      = cap["isci_code"]
                 start_dt  = datetime.fromisoformat(cap["start_time"])
                 query_date = (start_dt + timedelta(seconds=20)).date()
@@ -346,6 +359,9 @@ async def _poll_spots() -> None:
                     logging.warning("Poll: TPALINSE query failed for %s: %s", isci, exc)
                     continue
 
+                cap["last_polled_at"] = datetime.now().isoformat()
+                polled += 1
+
                 if row is None:
                     logging.warning("Poll: %s not found in TPALINSE on %s — spot may have been pulled", isci, query_date)
                     continue
@@ -355,8 +371,6 @@ async def _poll_spots() -> None:
                 air_ms   = row[2]
                 orig_ora = cap["original_ora"]
                 shift_sec = (new_ora - orig_ora) / 30  # approximate delta for threshold check
-
-                cap["last_polled_at"] = datetime.now().isoformat()
 
                 if abs(shift_sec) < RESCHEDULE_MIN_SHIFT_SEC:
                     logging.debug("Poll: %s unchanged (shift %.1fs < threshold) — %s still at %s", isci, shift_sec, cap["id"], start_dt)
@@ -395,8 +409,20 @@ async def _poll_spots() -> None:
                 cap["status"] = "pending"
                 _save_db()
                 _tasks[cap_id] = asyncio.create_task(_schedule(cap_id, delay))
+                rescheduled += 1
         finally:
             conn.close()
+
+    _poll_state["last_succeeded"] = datetime.now().isoformat()
+    _save_db()
+    return {"polled": polled, "rescheduled": rescheduled, "candidates": len(candidates)}
+
+
+async def _poll_spots() -> None:
+    """Every 10 min: re-check TPALINSE for any contract-linked captures that have moved."""
+    while True:
+        await asyncio.sleep(POLL_INTERVAL_SEC)
+        await _do_poll()
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -590,9 +616,15 @@ async def deploy():
     return {"status": "deploying", "git_output": result.stdout.strip()}
 
 
+@app.post("/poll")
+async def manual_poll():
+    """Trigger an immediate Etere poll cycle and return the result."""
+    return await _do_poll()
+
+
 @app.get("/health")
 async def health():
-    return {"ok": True, "captures": len(captures)}
+    return {"ok": True, "captures": len(captures), "poll": _poll_state}
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
