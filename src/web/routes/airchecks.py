@@ -59,7 +59,7 @@ def _fetch_etere_spots(contract_id: int) -> list[dict]:
             LEFT JOIN ANAGRAF a      ON a.ID_ANAGRAF           = ct.COMMITTENTE
             WHERE cr.ID_CONTRATTITESTATA = %d
               AND DATEADD(MILLISECOND, dbo.tcFrames2Msec(dbo.getVideoStandard(tp.COD_USER), tp.ORA) %% 86400000,
-                          CAST(tp.DATA AS DATETIME)) >= DATEADD(HOUR, 4, GETDATE())
+                          CAST(tp.DATA AS DATETIME)) >= DATEADD(MINUTE, 30, GETDATE())
               AND f.COD_PROGRA IS NOT NULL
               AND f.COD_PROGRA != ''
               AND tp.NEWTYPE = 'COM'
