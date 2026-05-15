@@ -41,7 +41,8 @@ SETTINGS_FILE           = OUTPUT_DIR / "settings.json"
 
 # Client name → agency subfolder inside ONEDRIVE_ROOT
 CLIENT_AGENCY: dict[str, str] = {
-    "McDonald's": "Admerasia",
+    "McDonald's":           "Admerasia",
+    "Lexus Dealer Association": "Lexus",
 }
 
 NETWORK_PORTS: dict[str, int] = {
