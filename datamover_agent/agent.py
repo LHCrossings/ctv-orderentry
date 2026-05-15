@@ -329,7 +329,7 @@ async def _poll_spots() -> None:
                         "SELECT TOP 1 ORA, DATA, "
                         "dbo.tcFrames2Msec(dbo.getVideoStandard(COD_USER), ORA) AS air_ms "
                         "FROM TPALINSE "
-                        "WHERE COD_PROGRA = ? AND DATA = ? AND ORA > 0 "
+                        "WHERE COD_PROGRA = %s AND DATA = %s AND ORA > 0 "
                         "ORDER BY ORA",
                         (isci, query_date),
                     )
