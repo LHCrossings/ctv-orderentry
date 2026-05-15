@@ -272,7 +272,7 @@ async def _schedule(cap_id: str, delay: float) -> None:
 # ── Etere polling ─────────────────────────────────────────────────────────────
 
 def _etere_connect():
-    import pyodbc
+    import pymssql
     db_server = ETERE_DB_SERVER
     db_user = db_pass = None
     try:
@@ -293,17 +293,7 @@ def _etere_connect():
                     db_pass = val
     except Exception:
         pass
-    if db_user and db_pass:
-        conn_str = (
-            f"DRIVER={{SQL Server}};SERVER={db_server};"
-            f"DATABASE={ETERE_DB_NAME};UID={db_user};PWD={db_pass};"
-        )
-    else:
-        conn_str = (
-            f"DRIVER={{SQL Server}};SERVER={db_server};"
-            f"DATABASE={ETERE_DB_NAME};Trusted_Connection=yes;"
-        )
-    return pyodbc.connect(conn_str)
+    return pymssql.connect(server=db_server, user=db_user, password=db_pass, database=ETERE_DB_NAME)
 
 
 async def _poll_spots() -> None:
