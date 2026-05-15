@@ -146,6 +146,7 @@
                 <input id="searchInput" class="search-input" type="text"
                        placeholder="Search: newstoday*23  or  newstoday 23  (space = AND, * = wildcard)" autocomplete="off" />
             </div>
+            <button class="btn btn-primary" onclick="runSearch()">Search</button>
             <button class="btn btn-ghost" onclick="browse()">Browse All</button>
         </div>
     </div>
@@ -199,7 +200,6 @@
 <script>
 let _nextToken = '';
 let _currentSearch = '';
-let _debounce = null;
 
 const searchInput  = document.getElementById('searchInput');
 const fileBody     = document.getElementById('fileBody');
@@ -215,12 +215,13 @@ const deleteSelBtn = document.getElementById('deleteSelBtn');
 const selectAllCb  = document.getElementById('selectAll');
 const batchConfirm = document.getElementById('batchConfirm');
 
-searchInput.addEventListener('input', () => {
-    clearTimeout(_debounce);
+searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') runSearch(); });
+
+function runSearch() {
     const q = searchInput.value.trim();
     if (!q) { clearResults(); return; }
-    _debounce = setTimeout(() => search(q), 300);
-});
+    search(q);
+}
 
 function clearResults() {
     fileBody.innerHTML = '';
