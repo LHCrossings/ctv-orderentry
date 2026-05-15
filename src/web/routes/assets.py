@@ -55,17 +55,20 @@ def _client():
 def _matches(key: str, q: str) -> bool:
     """Match a key against a query.
 
-    Supports two modes:
-      - Glob (*): matched against filename stem (without extension), case-insensitive.
-        e.g. "newstoday*23" matches "Newstoday051123.mp4"
-      - Multi-term AND: space-separated terms, all must be substrings.
-        e.g. "newstoday 23" matches any key containing both words.
+    Glob (*): matched against full key (case-insensitive). A trailing * is
+    auto-appended so you never need to include the file extension.
+      newstoday*23   → newstoday*23*  → matches Newstoday051123.mp4
+      newstoday*23.mp4 → kept as-is  → also matches
+
+    Multi-term AND (no *): all space-separated terms must be substrings.
+      newstoday 23 → key must contain both "newstoday" and "23"
     """
     import fnmatch as _fnm
     q_lower = q.strip().lower()
     if '*' in q_lower:
-        stem = key.lower().rsplit('.', 1)[0] if '.' in key else key.lower()
-        return _fnm.fnmatch(stem, q_lower)
+        full    = key.lower()
+        pattern = q_lower if q_lower.endswith('*') else q_lower + '*'
+        return _fnm.fnmatch(full, pattern)
     return all(t in key.lower() for t in q_lower.split() if t)
 
 
