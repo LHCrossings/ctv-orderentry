@@ -535,6 +535,36 @@ async def update_settings(req: SettingsUpdate):
     return {"onedrive_retention_days": ONEDRIVE_RETENTION_DAYS}
 
 
+@app.post("/deploy")
+async def deploy():
+    import shutil as _sh
+    import subprocess as _sp
+    repo_dir = Path(r"C:\windev\ctv-orderentry")
+    src      = repo_dir / "datamover_agent" / "agent.py"
+    dst      = Path(r"C:\datamover_agent\agent.py")
+    nssm     = Path(r"C:\datamover_agent\nssm.exe")
+
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None,
+        lambda: _sp.run(["git", "pull"], cwd=str(repo_dir), capture_output=True, text=True),
+    )
+    if result.returncode != 0:
+        raise HTTPException(500, f"git pull failed: {result.stderr.strip()}")
+    try:
+        _sh.copy2(str(src), str(dst))
+    except Exception as exc:
+        raise HTTPException(500, f"File copy failed: {exc}")
+
+    # Restart via detached process — agent dies after this fires
+    _sp.Popen(
+        ["cmd", "/c", f"timeout /t 3 /nobreak && {nssm} restart AirchecksAgent"],
+        creationflags=_sp.DETACHED_PROCESS | _sp.CREATE_NEW_PROCESS_GROUP,
+        close_fds=True,
+    )
+    return {"status": "deploying", "git_output": result.stdout.strip()}
+
+
 @app.get("/health")
 async def health():
     return {"ok": True, "captures": len(captures)}

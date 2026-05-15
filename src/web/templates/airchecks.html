@@ -268,6 +268,7 @@
         <div class="agent-status">
             <div class="dot checking" id="agentDot"></div>
             <span id="agentLabel">Connecting to Datamover…</span>
+            <button class="refresh-btn" id="deployBtn" onclick="deployAgent()" style="margin-left:8px;">⬆ Deploy</button>
         </div>
     </div>
 </header>
@@ -962,6 +963,41 @@ loadCaptures().then(() => {
         document.getElementById('retentionInput').value = 90;
     });
 });
+
+async function deployAgent() {
+    const btn = document.getElementById('deployBtn');
+    const label = document.getElementById('agentLabel');
+    btn.disabled = true;
+    btn.textContent = '⏳ Deploying…';
+    try {
+        const r = await fetch('/api/airchecks/deploy', { method: 'POST' });
+        if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'Deploy failed'); }
+        btn.textContent = '⏳ Restarting…';
+        // Poll /health until agent comes back (up to 30s)
+        let attempts = 0;
+        const poll = setInterval(async () => {
+            attempts++;
+            try {
+                const h = await fetch(`${AGENT}/health`, { signal: AbortSignal.timeout(2000) });
+                if (h.ok) {
+                    clearInterval(poll);
+                    btn.textContent = '✓ Deployed';
+                    label.textContent = 'Agent online';
+                    setTimeout(() => { btn.textContent = '⬆ Deploy'; btn.disabled = false; }, 3000);
+                }
+            } catch {}
+            if (attempts >= 30) {
+                clearInterval(poll);
+                btn.textContent = '⬆ Deploy';
+                btn.disabled = false;
+            }
+        }, 1000);
+    } catch (e) {
+        alert('Deploy error: ' + e.message);
+        btn.textContent = '⬆ Deploy';
+        btn.disabled = false;
+    }
+}
 
 async function saveRetention() {
     const days = parseInt(document.getElementById('retentionInput').value);
