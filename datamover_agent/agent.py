@@ -342,76 +342,75 @@ async def _do_poll() -> dict:
     try:
         cur = conn.cursor()
         for cap in candidates:
-                isci      = cap["isci_code"]
-                start_dt  = datetime.fromisoformat(cap["start_time"])
-                query_date = (start_dt + timedelta(seconds=20)).date()
+            isci      = cap["isci_code"]
+            start_dt  = datetime.fromisoformat(cap["start_time"])
+            query_date = (start_dt + timedelta(seconds=20)).date()
+            try:
+                cur.execute(
+                    "SELECT TOP 1 ORA, DATA, "
+                    "dbo.tcFrames2Msec(dbo.getVideoStandard(COD_USER), ORA) AS air_ms "
+                    "FROM TPALINSE "
+                    "WHERE COD_PROGRA = %s AND DATA = %s AND ORA > 0 "
+                    "ORDER BY ORA",
+                    (isci, query_date),
+                )
+                row = cur.fetchone()
+            except Exception as exc:
+                logging.warning("Poll: TPALINSE query failed for %s: %s", isci, exc)
+                continue
+
+            cap["last_polled_at"] = datetime.now().isoformat()
+            polled += 1
+
+            if row is None:
+                logging.warning("Poll: %s not found in TPALINSE on %s — spot may have been pulled", isci, query_date)
+                continue
+
+            new_ora  = row[0]
+            air_date = row[1]
+            air_ms   = row[2]
+            orig_ora = cap["original_ora"]
+            shift_sec = (new_ora - orig_ora) / 30  # approximate delta for threshold check
+
+            if abs(shift_sec) < RESCHEDULE_MIN_SHIFT_SEC:
+                logging.debug("Poll: %s unchanged (shift %.1fs < threshold) — %s still at %s", isci, shift_sec, cap["id"], start_dt)
+                continue
+
+            cap_id = cap["id"]
+            air_date_only = air_date.date() if hasattr(air_date, "date") else air_date
+            naive_local = datetime.combine(air_date_only, datetime.min.time()) + timedelta(milliseconds=air_ms)
+            new_air_pt  = naive_local + timedelta(hours=NETWORK_TO_PT_HOURS.get(cap["network"], 0))
+            new_start   = new_air_pt - timedelta(seconds=20)
+            cap.setdefault("reschedule_history", []).append({
+                "detected_at": datetime.now().isoformat(),
+                "old_ora":     orig_ora,
+                "new_ora":     new_ora,
+                "shift_sec":   round(shift_sec, 1),
+                "old_start":   start_dt.isoformat(),
+                "new_start":   new_start.isoformat(),
+            })
+            logging.info("Poll: %s shifted %+.0fs — rescheduling %s to %s", isci, shift_sec, cap_id, new_start)
+
+            task = _tasks.pop(cap_id, None)
+            if task:
+                task.cancel()
                 try:
-                    cur.execute(
-                        "SELECT TOP 1 ORA, DATA, "
-                        "dbo.tcFrames2Msec(dbo.getVideoStandard(COD_USER), ORA) AS air_ms "
-                        "FROM TPALINSE "
-                        "WHERE COD_PROGRA = %s AND DATA = %s AND ORA > 0 "
-                        "ORDER BY ORA",
-                        (isci, query_date),
-                    )
-                    row = cur.fetchone()
-                except Exception as exc:
-                    logging.warning("Poll: TPALINSE query failed for %s: %s", isci, exc)
-                    continue
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
-                cap["last_polled_at"] = datetime.now().isoformat()
-                polled += 1
-
-                if row is None:
-                    logging.warning("Poll: %s not found in TPALINSE on %s — spot may have been pulled", isci, query_date)
-                    continue
-
-                new_ora  = row[0]
-                air_date = row[1]
-                air_ms   = row[2]
-                orig_ora = cap["original_ora"]
-                shift_sec = (new_ora - orig_ora) / 30  # approximate delta for threshold check
-
-                if abs(shift_sec) < RESCHEDULE_MIN_SHIFT_SEC:
-                    logging.debug("Poll: %s unchanged (shift %.1fs < threshold) — %s still at %s", isci, shift_sec, cap["id"], start_dt)
-                    continue
-
-                # Compute new start using Etere's drop-frame-correct time conversion
-                cap_id = cap["id"]
-                air_date_only = air_date.date() if hasattr(air_date, "date") else air_date
-                naive_local = datetime.combine(air_date_only, datetime.min.time()) + timedelta(milliseconds=air_ms)
-                new_air_pt  = naive_local + timedelta(hours=NETWORK_TO_PT_HOURS.get(cap["network"], 0))
-                new_start   = new_air_pt - timedelta(seconds=20)
-                cap.setdefault("reschedule_history", []).append({
-                    "detected_at": datetime.now().isoformat(),
-                    "old_ora":     orig_ora,
-                    "new_ora":     new_ora,
-                    "shift_sec":   round(shift_sec, 1),
-                    "old_start":   start_dt.isoformat(),
-                    "new_start":   new_start.isoformat(),
-                })
-                logging.info("Poll: %s shifted %+.0fs — rescheduling %s to %s", isci, shift_sec, cap_id, new_start)
-
-                task = _tasks.pop(cap_id, None)
-                if task:
-                    task.cancel()
-                    try:
-                        await task
-                    except (asyncio.CancelledError, Exception):
-                        pass
-
-                cap["start_time"]  = new_start.isoformat()
-                cap["original_ora"] = new_ora
-                net_s    = _safe(cap["network"].replace(" ", "_"))
-                client_s = _safe(cap["client"].replace(" ", "_"))
-                cap["filename"] = f"{net_s}_{client_s}_{new_start.strftime('%Y%m%d_%H%M')}.mp4"
-                delay = max(0.0, (new_start - datetime.now()).total_seconds())
-                cap["status"] = "pending"
-                _save_db()
-                _tasks[cap_id] = asyncio.create_task(_schedule(cap_id, delay))
-                rescheduled += 1
-        finally:
-            conn.close()
+            cap["start_time"]  = new_start.isoformat()
+            cap["original_ora"] = new_ora
+            net_s    = _safe(cap["network"].replace(" ", "_"))
+            client_s = _safe(cap["client"].replace(" ", "_"))
+            cap["filename"] = f"{net_s}_{client_s}_{new_start.strftime('%Y%m%d_%H%M')}.mp4"
+            delay = max(0.0, (new_start - datetime.now()).total_seconds())
+            cap["status"] = "pending"
+            _save_db()
+            _tasks[cap_id] = asyncio.create_task(_schedule(cap_id, delay))
+            rescheduled += 1
+    finally:
+        conn.close()
 
     _poll_state["last_succeeded"] = datetime.now().isoformat()
     _save_db()
