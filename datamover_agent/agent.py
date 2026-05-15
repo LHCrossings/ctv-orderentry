@@ -35,9 +35,9 @@ POLL_INTERVAL_SEC = 600                 # 10 minutes
 RESCHEDULE_MIN_SHIFT_SEC = 30           # ignore sub-30-second drift
 
 # ── OneDrive auto-upload ──────────────────────────────────────────────────────
-ONEDRIVE_ROOT = Path(r"C:\Users\usrdm1\OneDrive - crossingstv.com")
+ONEDRIVE_ROOT = Path(r"C:\Users\usrdm1\OneDrive - crossingstv.com\Airchecks")
 # Map lowercase substring of client name → subfolder under ONEDRIVE_ROOT.
-# Add entries here to enable auto-upload for additional agencies.
+# Unmatched clients land directly in ONEDRIVE_ROOT.
 ONEDRIVE_CLIENT_FOLDERS: dict[str, str] = {
     "admerasia": "Admerasia",
     "lexus":     "Lexus",
@@ -170,9 +170,7 @@ def _onedrive_upload(cap: dict) -> None:
         (v for k, v in ONEDRIVE_CLIENT_FOLDERS.items() if k in client_key),
         None,
     )
-    if not folder_name:
-        return
-    dest_dir = ONEDRIVE_ROOT / folder_name
+    dest_dir = ONEDRIVE_ROOT / folder_name if folder_name else ONEDRIVE_ROOT
     try:
         dest_dir.mkdir(parents=True, exist_ok=True)
         src  = _cap_path(cap)
