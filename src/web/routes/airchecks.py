@@ -144,6 +144,27 @@ def build_airchecks_router(templates: Jinja2Templates) -> APIRouter:
     async def airchecks(request: Request):
         return templates.TemplateResponse(request, "airchecks.html")
 
+    @router.get("/api/airchecks/settings")
+    async def get_aircheck_settings():
+        import json as _json, urllib.request
+        try:
+            with urllib.request.urlopen(f"{AGENT_URL}/settings", timeout=3) as resp:
+                return JSONResponse(_json.loads(resp.read()))
+        except Exception:
+            return JSONResponse({"onedrive_retention_days": 90})
+
+    @router.patch("/api/airchecks/settings")
+    async def update_aircheck_settings(request: Request):
+        import json as _json, urllib.request
+        body = await request.body()
+        req = urllib.request.Request(f"{AGENT_URL}/settings", data=body, method="PATCH")
+        req.add_header("Content-Type", "application/json")
+        try:
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                return JSONResponse(_json.loads(resp.read()))
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc))
+
     @router.get("/api/airchecks/etere-spots")
     async def etere_spots(contract_id: int):
         import traceback

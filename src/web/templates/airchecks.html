@@ -358,6 +358,17 @@
         <div id="spotsArea" style="margin-top:16px;"></div>
     </div>
 
+    <!-- OneDrive settings -->
+    <div class="card" style="padding: 16px 20px;">
+        <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+            <span style="font-size:0.78rem; color:var(--nord4); text-transform:uppercase; letter-spacing:0.05em; white-space:nowrap;">OneDrive Retention</span>
+            <input type="number" id="retentionInput" min="1" max="3650" style="width:80px; background:var(--nord0); border:1px solid var(--nord3); border-radius:6px; color:var(--nord6); padding:5px 8px; font-size:0.88rem; font-family:inherit;">
+            <span style="font-size:0.85rem; color:var(--nord4);">days</span>
+            <button onclick="saveRetention()" style="background:var(--nord10); border:none; color:#fff; padding:6px 16px; border-radius:6px; font-size:0.82rem; font-weight:600; cursor:pointer; text-transform:uppercase; letter-spacing:0.04em;">Save</button>
+            <span id="retentionStatus" style="font-size:0.8rem; color:var(--nord14); display:none;">Saved</span>
+        </div>
+    </div>
+
     <!-- Captures list -->
     <div class="card">
         <div class="captures-header">
@@ -943,7 +954,28 @@ loadCaptures().then(() => {
             })
             .catch(() => {});
     }
+    // Load retention setting
+    fetch('/api/airchecks/settings').then(r => r.json()).then(d => {
+        document.getElementById('retentionInput').value = d.onedrive_retention_days ?? 90;
+    }).catch(() => {
+        document.getElementById('retentionInput').value = 90;
+    });
 });
+
+async function saveRetention() {
+    const days = parseInt(document.getElementById('retentionInput').value);
+    if (!days || days < 1) return;
+    const r = await fetch('/api/airchecks/settings', {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({onedrive_retention_days: days}),
+    });
+    if (r.ok) {
+        const el = document.getElementById('retentionStatus');
+        el.style.display = 'inline';
+        setTimeout(() => el.style.display = 'none', 2000);
+    }
+}
 </script>
 
 </body>

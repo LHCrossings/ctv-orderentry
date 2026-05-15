@@ -36,7 +36,8 @@ RESCHEDULE_MIN_SHIFT_SEC = 30           # ignore sub-30-second drift
 
 # ── OneDrive auto-upload ──────────────────────────────────────────────────────
 ONEDRIVE_ROOT           = Path(r"C:\Users\usrdm1\OneDrive - crossingstv.com\Airchecks")
-ONEDRIVE_RETENTION_DAYS = 90
+ONEDRIVE_RETENTION_DAYS = 90        # overridden at runtime by /settings PATCH
+SETTINGS_FILE           = OUTPUT_DIR / "settings.json"
 
 NETWORK_PORTS: dict[str, int] = {
     "NYC":     6014,
@@ -82,6 +83,21 @@ captures: dict[str, dict] = {}
 _tasks:   dict[str, asyncio.Task] = {}
 
 
+def _load_settings() -> None:
+    global ONEDRIVE_RETENTION_DAYS
+    if SETTINGS_FILE.exists():
+        try:
+            data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+            ONEDRIVE_RETENTION_DAYS = int(data.get("onedrive_retention_days", ONEDRIVE_RETENTION_DAYS))
+        except Exception:
+            pass
+
+
+def _save_settings() -> None:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    SETTINGS_FILE.write_text(json.dumps({"onedrive_retention_days": ONEDRIVE_RETENTION_DAYS}, indent=2), encoding="utf-8")
+
+
 def _load_db() -> None:
     if DB_FILE.exists():
         try:
@@ -121,6 +137,7 @@ async def _requeue_scheduled() -> None:
 
 @app.on_event("startup")
 async def startup() -> None:
+    _load_settings()
     _load_db()
     await _requeue_scheduled()
     asyncio.create_task(_poll_spots())
@@ -499,6 +516,24 @@ async def delete_capture(cap_id: str):
             pass
     _save_db()
     return {"deleted": cap_id}
+
+
+class SettingsUpdate(BaseModel):
+    onedrive_retention_days: Optional[int] = None
+
+@app.get("/settings")
+async def get_settings():
+    return {"onedrive_retention_days": ONEDRIVE_RETENTION_DAYS}
+
+@app.patch("/settings")
+async def update_settings(req: SettingsUpdate):
+    global ONEDRIVE_RETENTION_DAYS
+    if req.onedrive_retention_days is not None:
+        if not (1 <= req.onedrive_retention_days <= 3650):
+            raise HTTPException(400, "Retention must be 1–3650 days")
+        ONEDRIVE_RETENTION_DAYS = req.onedrive_retention_days
+        _save_settings()
+    return {"onedrive_retention_days": ONEDRIVE_RETENTION_DAYS}
 
 
 @app.get("/health")
