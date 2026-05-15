@@ -146,22 +146,31 @@
 #airchecksCard.notify #airchecksClear { display: block; }
 </style>
 <script>
-function _ackedCount() { return parseInt(localStorage.getItem('aircheckAcked') || '0', 10); }
+function _ackedIds() {
+    try { return new Set(JSON.parse(localStorage.getItem('aircheckAckedIds') || '[]')); }
+    catch { return new Set(); }
+}
+function _saveAckedIds(set) {
+    localStorage.setItem('aircheckAckedIds', JSON.stringify([...set]));
+}
 
 async function checkAirchecks() {
     try {
         const r = await fetch('/api/airchecks/status', { signal: AbortSignal.timeout(4000) });
         if (!r.ok) return;
-        const { complete } = await r.json();
-        const acked = _ackedCount();
-        const newCount = complete > acked ? complete - acked : 0;
-        if (complete < acked) localStorage.setItem('aircheckAcked', complete);
-        const card  = document.getElementById('airchecksCard');
-        const badge = document.getElementById('airchecksBadge');
-        if (newCount > 0) {
+        const { complete_ids = [] } = await r.json();
+        const acked  = _ackedIds();
+        // Prune acked IDs that no longer exist (captures deleted)
+        const liveIds = new Set(complete_ids);
+        const pruned  = new Set([...acked].filter(id => liveIds.has(id)));
+        if (pruned.size !== acked.size) _saveAckedIds(pruned);
+        const newIds = complete_ids.filter(id => !pruned.has(id));
+        const card   = document.getElementById('airchecksCard');
+        const badge  = document.getElementById('airchecksBadge');
+        if (newIds.length > 0) {
             card.classList.add('notify');
             badge.classList.add('ready');
-            badge.textContent = `${newCount} Ready`;
+            badge.textContent = `${newIds.length} Ready`;
         } else {
             card.classList.remove('notify');
             badge.classList.remove('ready');
@@ -175,8 +184,8 @@ function dismissAirchecks(e) {
     e.stopPropagation();
     fetch('/api/airchecks/status', { signal: AbortSignal.timeout(4000) })
         .then(r => r.json())
-        .then(({ complete }) => {
-            localStorage.setItem('aircheckAcked', complete);
+        .then(({ complete_ids = [] }) => {
+            _saveAckedIds(new Set(complete_ids));
             checkAirchecks();
         })
         .catch(() => {});

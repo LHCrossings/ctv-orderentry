@@ -124,9 +124,10 @@ def _fetch_agent_status() -> dict:
         with urllib.request.urlopen(f"{AGENT_URL}/captures", timeout=3) as resp:
             caps = _json.loads(resp.read())
         return {
-            "complete":  sum(1 for c in caps if c.get("status") == "complete"),
-            "scheduled": sum(1 for c in caps if c.get("status") in ("scheduled", "pending", "recording")),
-            "unreachable": False,
+            "complete":     sum(1 for c in caps if c.get("status") == "complete"),
+            "complete_ids": [c["id"] for c in caps if c.get("status") == "complete"],
+            "scheduled":    sum(1 for c in caps if c.get("status") in ("scheduled", "pending", "recording")),
+            "unreachable":  False,
         }
     except Exception:
         return {"complete": 0, "scheduled": 0, "unreachable": True}
