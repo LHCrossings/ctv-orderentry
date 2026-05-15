@@ -232,7 +232,12 @@ class OrderScanner:
                 if "LEXUS" in name_upper:
                     customer_name = "Lexus"
                 elif order_type == OrderType.IMPRENTA:
-                    customer_name = "PG&E"
+                    # Extract client from filename: "Imprenta_<Client>_2026" → <Client>
+                    _parts = [
+                        p for p in file_path.stem.replace('_', ' ').split()
+                        if p.lower() != 'imprenta' and not (len(p) == 4 and p.isdigit())
+                    ]
+                    customer_name = ' '.join(_parts) if _parts else "Unknown"
                 elif order_type == OrderType.PROSIO:
                     customer_name = "AQMD"
                 else:

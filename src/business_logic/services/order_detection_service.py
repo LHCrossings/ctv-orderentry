@@ -568,9 +568,10 @@ class OrderDetectionService:
         """
         Check if text matches an Imprenta PDF broadcast order.
 
-        Marker: "IMPRENTA:" appears in the header identifying the agency.
+        Marker: "IMPRENTA" appears in the header (Format A: "IMPRENTA: <client>",
+        Format B: "Agency: IMPRENTA").
         """
-        return "IMPRENTA:" in text.upper()
+        return "IMPRENTA" in text.upper()
 
     def _is_timeadvertising(self, text: str) -> bool:
         """
