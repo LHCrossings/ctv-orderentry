@@ -594,6 +594,7 @@ async def deploy():
     src      = repo_dir / "datamover_agent" / "agent.py"
     dst      = Path(r"C:\datamover_agent\agent.py")
     nssm     = Path(r"C:\datamover_agent\nssm.exe")
+    svc_name = "AirchecksAgentSvc"
 
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(
@@ -609,7 +610,7 @@ async def deploy():
 
     # Restart via detached process — agent dies after this fires
     _sp.Popen(
-        ["cmd", "/c", f"timeout /t 3 /nobreak && {nssm} restart AirchecksAgent"],
+        ["cmd", "/c", f"timeout /t 3 /nobreak && {nssm} restart {svc_name}"],
         creationflags=_sp.DETACHED_PROCESS | _sp.CREATE_NEW_PROCESS_GROUP,
         close_fds=True,
     )
