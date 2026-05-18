@@ -23,22 +23,29 @@ from pydantic import BaseModel
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-_PT = ZoneInfo("America/Los_Angeles")
-_MARKET_TZ = {
-    "NYC": ZoneInfo("America/New_York"),
-    "WDC": ZoneInfo("America/New_York"),
-    "MMT": ZoneInfo("America/New_York"),
-    "CMP": ZoneInfo("America/Chicago"),
-    "HOU": ZoneInfo("America/Chicago"),
-    "DAL": ZoneInfo("America/Chicago"),
-    "SFO": ZoneInfo("America/Los_Angeles"),
-    "SEA": ZoneInfo("America/Los_Angeles"),
-    "LAX": ZoneInfo("America/Los_Angeles"),
-    "CVC": ZoneInfo("America/Los_Angeles"),
-}
+try:
+    _PT = ZoneInfo("America/Los_Angeles")
+    _MARKET_TZ = {
+        "NYC": ZoneInfo("America/New_York"),
+        "WDC": ZoneInfo("America/New_York"),
+        "MMT": ZoneInfo("America/New_York"),
+        "CMP": ZoneInfo("America/Chicago"),
+        "HOU": ZoneInfo("America/Chicago"),
+        "DAL": ZoneInfo("America/Chicago"),
+        "SFO": ZoneInfo("America/Los_Angeles"),
+        "SEA": ZoneInfo("America/Los_Angeles"),
+        "LAX": ZoneInfo("America/Los_Angeles"),
+        "CVC": ZoneInfo("America/Los_Angeles"),
+    }
+except Exception:
+    logging.warning("tzdata not available — filename timestamps will use server local time. Run: pip install tzdata")
+    _PT = None
+    _MARKET_TZ = {}
 
 def _filename_ts(start_dt_pt: datetime, network: str) -> str:
     """Return YYYYMMDD_HHMM in the market's local timezone (filename only)."""
+    if _PT is None:
+        return start_dt_pt.strftime("%Y%m%d_%H%M")
     tz = _MARKET_TZ.get(network, _PT)
     return start_dt_pt.replace(tzinfo=_PT).astimezone(tz).strftime("%Y%m%d_%H%M")
 
