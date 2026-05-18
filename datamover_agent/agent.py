@@ -13,6 +13,7 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -21,6 +22,25 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+_PT = ZoneInfo("America/Los_Angeles")
+_MARKET_TZ = {
+    "NYC": ZoneInfo("America/New_York"),
+    "WDC": ZoneInfo("America/New_York"),
+    "MMT": ZoneInfo("America/New_York"),
+    "CMP": ZoneInfo("America/Chicago"),
+    "HOU": ZoneInfo("America/Chicago"),
+    "DAL": ZoneInfo("America/Chicago"),
+    "SFO": ZoneInfo("America/Los_Angeles"),
+    "SEA": ZoneInfo("America/Los_Angeles"),
+    "LAX": ZoneInfo("America/Los_Angeles"),
+    "CVC": ZoneInfo("America/Los_Angeles"),
+}
+
+def _filename_ts(start_dt_pt: datetime, network: str) -> str:
+    """Return YYYYMMDD_HHMM in the market's local timezone (filename only)."""
+    tz = _MARKET_TZ.get(network, _PT)
+    return start_dt_pt.replace(tzinfo=_PT).astimezone(tz).strftime("%Y%m%d_%H%M")
 
 # ── CONFIG ───────────────────────────────────────────────────────────────────
 FFMPEG     = "ffmpeg"                    # update if not in PATH: r"C:\ffmpeg\bin\ffmpeg.exe"
@@ -403,7 +423,7 @@ async def _do_poll() -> dict:
             cap["original_ora"] = new_ora
             net_s    = _safe(cap["network"].replace(" ", "_"))
             client_s = _safe(cap["client"].replace(" ", "_"))
-            cap["filename"] = f"{net_s}_{client_s}_{new_start.strftime('%Y%m%d_%H%M')}.mp4"
+            cap["filename"] = f"{net_s}_{client_s}_{_filename_ts(new_start, cap['network'])}.mp4"
             delay = max(0.0, (new_start - datetime.now()).total_seconds())
             cap["status"] = "pending"
             _save_db()
@@ -450,7 +470,7 @@ async def create_capture(req: CaptureRequest):
 
     net_s    = _safe(req.network.replace(" ", "_"))
     client_s = _safe(req.client.replace(" ", "_"))
-    ts       = start_dt.strftime("%Y%m%d_%H%M")
+    ts       = _filename_ts(start_dt, req.network)
     filename = f"{net_s}_{client_s}_{ts}.mp4"
 
     captures[cap_id] = {
@@ -527,7 +547,7 @@ async def update_capture(cap_id: str, req: CaptureUpdate):
         cap["start_time"] = start_dt.isoformat()
         net_s    = _safe(cap["network"].replace(" ", "_"))
         client_s = _safe(cap["client"].replace(" ", "_"))
-        cap["filename"] = f"{net_s}_{client_s}_{start_dt.strftime('%Y%m%d_%H%M')}.mp4"
+        cap["filename"] = f"{net_s}_{client_s}_{_filename_ts(start_dt, cap['network'])}.mp4"
     else:
         start_dt = datetime.fromisoformat(cap["start_time"])
 
