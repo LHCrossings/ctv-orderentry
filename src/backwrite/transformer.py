@@ -1232,11 +1232,10 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
                 m = _io_line_re.match(s.row_description)
                 group_io_num[key] = int(m.group(1)) if m else 9999
 
-        # When all groups carry a (Line N) prefix, sort by IO line number to
-        # restore the IO ordering (run-sheet order is air-time, not IO order).
-        groups_items = list(groups.items())
-        if all(v < 9999 for v in group_io_num.values()):
-            groups_items.sort(key=lambda kv: group_io_num[kv[0]])
+        # Sort by extracted IO line number (integer).  Groups without a (Line N)
+        # prefix get 9999 and sort to the end.  Python's stable sort preserves
+        # relative run-sheet order within the 9999 bucket.
+        groups_items = sorted(groups.items(), key=lambda kv: group_io_num[kv[0]])
 
         sc_lines: List[dict] = []
         for idx, ((desc, _rate), group) in enumerate(groups_items):
