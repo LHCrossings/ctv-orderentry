@@ -98,9 +98,12 @@
         .lang-badge { font-size: 0.78rem; font-weight: 600; color: var(--nord9); }
         .net-val { font-family: monospace; }
 
-        .save-all-btn { background: var(--nord14); color: var(--nord6); border: none; border-radius: 8px; padding: 8px 20px; font-size: 0.9rem; font-weight: 600; cursor: pointer; font-family: inherit; }
+        .save-all-btn, .fill-all-btn { border: none; border-radius: 8px; padding: 4px 14px; font-size: 0.8rem; font-weight: 600; cursor: pointer; font-family: inherit; }
+        .save-all-btn { background: var(--nord14); color: var(--nord6); }
         .save-all-btn:hover { background: #8fad7a; }
-        .save-all-btn:disabled { opacity: 0.5; cursor: default; }
+        .fill-all-btn { background: rgba(163,190,140,0.25); color: var(--nord14); border: 1px solid rgba(163,190,140,0.5); }
+        .fill-all-btn:hover { background: rgba(163,190,140,0.4); }
+        .save-all-btn:disabled, .fill-all-btn:disabled { opacity: 0.5; cursor: default; }
 
         /* No spots in block */
         .no-spots { padding: 10px 28px; font-size: 0.82rem; color: var(--text-muted); font-style: italic; }
@@ -264,7 +267,8 @@
             <button class="expand-btn" onclick="expandAll()">Expand all</button>
             <button class="expand-btn" onclick="collapseAll()">Collapse all</button>
             &nbsp;&nbsp;
-            <button class="save-all-btn" id="saveAllBtn" onclick="saveAll()" style="padding:4px 14px;font-size:0.8rem;">Save All</button>
+            <button class="fill-all-btn" id="fillAllBtn" onclick="fillAll()">⚡ Fill All</button>
+            <button class="save-all-btn" id="saveAllBtn" onclick="saveAll()">Save All</button>
         </div>`;
 
         data.programs.forEach((prg, pi) => {
@@ -363,6 +367,40 @@
   </tr>`;
     }
 
+    function programFillPayload(prg) {
+        return {
+            time_in: prg.time_in,
+            time_out: prg.time_out,
+            spots: prg.spots.map(s => ({
+                excel_row: s.excel_row,
+                show_name: s.show_name,
+                actual_time: document.querySelector(`input[data-row="${s.excel_row}"]`)?.value || s.actual_time,
+            })),
+        };
+    }
+
+    function applyFillResults(results) {
+        let filled = 0, noMatch = 0;
+        for (const r of results) {
+            const input = document.querySelector(`input[data-row="${r.excel_row}"]`);
+            if (!input) continue;
+            if (r.status === 'filled') {
+                input.value = r.actual_time;
+                for (const prg of logData.programs) {
+                    const spot = prg.spots.find(s => s.excel_row === r.excel_row);
+                    if (spot) { spot.actual_time = r.actual_time; break; }
+                }
+                updateRowCompliance(input);
+                input.classList.add('saved');
+                setTimeout(() => input.classList.remove('saved'), 2000);
+                filled++;
+            } else {
+                noMatch++;
+            }
+        }
+        return { filled, noMatch };
+    }
+
     async function fillProgram(pi) {
         const prg = logData.programs[pi];
         const btn = document.getElementById(`fill-${pi}`);
@@ -370,15 +408,9 @@
         btn.textContent = '…';
 
         const payload = {
-            date:    currentDate,
-            market:  currentMarket,
-            time_in:  prg.time_in,
-            time_out: prg.time_out,
-            spots:  prg.spots.map(s => ({
-                excel_row:  s.excel_row,
-                show_name:  s.show_name,
-                actual_time: document.querySelector(`input[data-row="${s.excel_row}"]`)?.value || s.actual_time,
-            })),
+            date: currentDate,
+            market: currentMarket,
+            ...programFillPayload(prg),
         };
 
         try {
@@ -390,28 +422,42 @@
             const data = await resp.json();
             if (!resp.ok) { alert(data.error || 'Fill failed.'); return; }
 
-            let filled = 0, noMatch = 0;
-            for (const r of data.results) {
-                const input = document.querySelector(`input[data-row="${r.excel_row}"]`);
-                if (!input) continue;
-                if (r.status === 'filled') {
-                    input.value = r.actual_time;
-                    const spot = prg.spots.find(s => s.excel_row === r.excel_row);
-                    if (spot) spot.actual_time = r.actual_time;
-                    updateRowCompliance(input);
-                    input.classList.add('saved');
-                    setTimeout(() => input.classList.remove('saved'), 2000);
-                    filled++;
-                } else {
-                    noMatch++;
-                }
-            }
+            const { filled, noMatch } = applyFillResults(data.results);
             btn.textContent = filled ? `✓ ${filled} filled` : '— no match';
             if (noMatch) btn.textContent += ` (${noMatch} not found)`;
             setTimeout(() => { btn.textContent = '⚡ Fill'; btn.disabled = false; }, 3000);
         } catch (e) {
             btn.textContent = '✗ error';
             setTimeout(() => { btn.textContent = '⚡ Fill'; btn.disabled = false; }, 3000);
+        }
+    }
+
+    async function fillAll() {
+        if (!logData?.programs?.length) return;
+        const programs = logData.programs.filter(p => p.spots.length).map(programFillPayload);
+        if (!programs.length) return;
+
+        const btn = document.getElementById('fillAllBtn');
+        btn.disabled = true;
+        btn.textContent = `Filling ${programs.length} programs…`;
+
+        try {
+            const resp = await fetch('/api/master-control/logs/fill-all', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date: currentDate, market: currentMarket, programs }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) { alert(data.error || 'Fill All failed.'); return; }
+
+            const { filled, noMatch } = applyFillResults(data.results);
+            btn.textContent = filled
+                ? `✓ ${filled} filled` + (noMatch ? ` · ${noMatch} not found` : '')
+                : '— no match';
+        } catch (e) {
+            btn.textContent = '✗ error';
+        } finally {
+            setTimeout(() => { btn.textContent = '⚡ Fill All'; btn.disabled = false; }, 3000);
         }
     }
 

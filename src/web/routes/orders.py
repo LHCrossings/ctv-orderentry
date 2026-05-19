@@ -150,6 +150,91 @@ def _broadcast_month_folder(monday) -> tuple[int, str]:
     return first_prev.year, first_prev.strftime("%m %B %Y")
 
 
+def _find_traffic_log(mkt: str, target: _date_cls) -> Optional[Path]:
+    """Locate weekly traffic log .xlsm for a market and any date in that broadcast week."""
+    monday = target - timedelta(days=target.weekday())
+    year, month_folder = _broadcast_month_folder(monday)
+    log_root = Path("K:/Traffic/logs") if sys.platform == "win32" else Path("/mnt/k/Traffic/logs")
+    base = log_root / str(year) / month_folder
+    for file_date in (monday.strftime("%y%m%d"), monday.strftime("%m%d%y")):
+        for subfolder in ("", "done", "Done", "!Done"):
+            folder = base / subfolder if subfolder else base
+            p = folder / f"{mkt} Log - {file_date}.xlsm"
+            if p.exists():
+                return p
+    return None
+
+
+_MC_MARKET_IDS = {
+    "NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4,
+    "SEA": 5, "LAX": 6, "CVC": 7, "WDC": 8, "DAL": 10,
+}
+_MC_FILL_FPS = 29.97
+
+
+def _mc_fill_program_spots(
+    ws,
+    target: _date_cls,
+    market_id: int,
+    spots: list,
+    time_in: str,
+    time_out: str,
+    cur,
+    fps: float = _MC_FILL_FPS,
+) -> list:
+    """Fill column I for one program's spots from TPALINSE. Caller owns workbook save."""
+    import datetime as _dt
+    import re
+    from collections import defaultdict
+
+    def _time_to_frames(t: str) -> int:
+        parts = t.split(":")
+        h = int(parts[0])
+        mn = int(parts[1]) if len(parts) > 1 else 0
+        s = int(parts[2]) if len(parts) > 2 else 0
+        return round((h * 3600 + mn * 60 + s) * fps)
+
+    by_asset: dict = defaultdict(list)
+    for spot in spots:
+        show = spot.get("show_name", "")
+        m = re.match(r"^([^:]+):", show.strip())
+        asset_code = m.group(1).strip() if m else show.strip()
+        by_asset[asset_code].append(spot)
+
+    from_frames = _time_to_frames(time_in) if time_in else None
+    to_frames = _time_to_frames(time_out) if time_out else None
+
+    results = []
+    for asset_code, asset_spots in by_asset.items():
+        if from_frames is not None and to_frames is not None:
+            cur.execute(
+                "SELECT ORA FROM TPALINSE"
+                " WHERE DATA = %s AND TITLE LIKE %s AND COD_USER = %d"
+                " AND ORA >= %d AND ORA < %d"
+                " ORDER BY ORA",
+                (target, f"%{asset_code}%", market_id, from_frames, to_frames),
+            )
+        else:
+            cur.execute(
+                "SELECT ORA FROM TPALINSE"
+                " WHERE DATA = %s AND TITLE LIKE %s AND COD_USER = %d"
+                " ORDER BY ORA",
+                (target, f"%{asset_code}%", market_id),
+            )
+        oras = [r["ORA"] for r in cur.fetchall()]
+        for i, spot in enumerate(asset_spots):
+            if i >= len(oras):
+                results.append({"excel_row": spot["excel_row"], "status": "no_match", "actual_time": ""})
+                continue
+            secs = round(oras[i] / fps)
+            h, rem = divmod(secs, 3600)
+            mn, s = divmod(rem, 60)
+            time_str = f"{h}:{mn:02d}:{s:02d}"
+            ws.cell(row=spot["excel_row"], column=9).value = _dt.timedelta(seconds=secs)
+            results.append({"excel_row": spot["excel_row"], "status": "filled", "actual_time": time_str})
+    return results
+
+
 def _build_spot_filter(filters: dict) -> str:
     """Return extra AND clauses for TPALINSE spot queries based on optional filter dict."""
     import re
@@ -2013,18 +2098,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         def _monday(d: _date_cls) -> _date_cls:
             return d - timedelta(days=d.weekday())
 
-        def _find_log(mkt: str, monday: _date_cls):
-            year, month_folder = _broadcast_month_folder(monday)
-            _log_root = Path("K:/Traffic/logs") if sys.platform == "win32" else Path("/mnt/k/Traffic/logs")
-            base = _log_root / str(year) / month_folder
-            for file_date in (monday.strftime("%y%m%d"), monday.strftime("%m%d%y")):
-                for subfolder in ("", "done", "Done", "!Done"):
-                    folder = base / subfolder if subfolder else base
-                    p = folder / f"{mkt} Log - {file_date}.xlsm"
-                    if p.exists():
-                        return p
-            return None
-
         def _to_win(p: Path) -> str:
             return str(p).replace("/", "\\")
 
@@ -2037,7 +2110,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             # Resolve all paths first
             found: list[tuple[str, Path]] = []
             for mkt in MARKETS:
-                log_path = await asyncio.get_running_loop().run_in_executor(None, _find_log, mkt, monday)
+                log_path = await asyncio.get_running_loop().run_in_executor(
+                    None, _find_traffic_log, mkt, monday
+                )
                 if log_path is None:
                     fname = f"{mkt} Log - {monday.strftime('%y%m%d')}.xlsm"
                     folder = f"K:\\Traffic\\logs\\{monday.year}\\{monday.strftime('%m %B %Y')}"
@@ -2121,19 +2196,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def load_traffic_log(date: str = Query(...), market: str = Query(...)):
         import openpyxl
 
-        def _find_log(mkt: str, target: _date_cls) -> Optional[Path]:
-            monday = target - timedelta(days=target.weekday())
-            year, month_folder = _broadcast_month_folder(monday)
-            _log_root = Path("K:/Traffic/logs") if sys.platform == "win32" else Path("/mnt/k/Traffic/logs")
-            base = _log_root / str(year) / month_folder
-            for file_date in (monday.strftime("%y%m%d"), monday.strftime("%m%d%y")):
-                for subfolder in ("", "done", "Done", "!Done"):
-                    folder = base / subfolder if subfolder else base
-                    p = folder / f"{mkt} Log - {file_date}.xlsm"
-                    if p.exists():
-                        return p
-            return None
-
         def _fmt_t(val) -> str:
             if val is None:
                 return ""
@@ -2148,7 +2210,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
         def _run():
             target = _date_cls.fromisoformat(date)
-            log_path = _find_log(market, target)
+            log_path = _find_traffic_log(market, target)
             if log_path is None:
                 return None
             day_name = target.strftime("%A")
@@ -2206,104 +2268,99 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     @router.post("/api/master-control/logs/fill-program")
     async def fill_program_times(body: dict = Body(...)):
-        import datetime as _dt
-        import re
-        from collections import defaultdict
-
         import openpyxl
-
-        MARKET_IDS = {
-            "NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4,
-            "SEA": 5, "LAX": 6, "CVC": 7, "WDC": 8, "DAL": 10,
-        }
-        FPS = 29.97
 
         date_str = body["date"]
         market   = body["market"]
         spots    = body["spots"]  # [{excel_row, show_name, actual_time}]
         time_in  = body.get("time_in", "")
         time_out = body.get("time_out", "")
-        market_id = MARKET_IDS.get(market)
+        market_id = _MC_MARKET_IDS.get(market)
         if market_id is None:
             return JSONResponse({"error": f"Unknown market: {market}"}, status_code=400)
 
         target = _date_cls.fromisoformat(date_str)
 
-        def _time_to_frames(t: str) -> int:
-            parts = t.split(":")
-            h = int(parts[0])
-            mn = int(parts[1]) if len(parts) > 1 else 0
-            s  = int(parts[2]) if len(parts) > 2 else 0
-            return round((h * 3600 + mn * 60 + s) * FPS)
-
-        def _find_log(mkt: str, d: _date_cls) -> Optional[Path]:
-            monday = d - timedelta(days=d.weekday())
-            year, month_folder = _broadcast_month_folder(monday)
-            _log_root = Path("K:/Traffic/logs") if sys.platform == "win32" else Path("/mnt/k/Traffic/logs")
-            base = _log_root / str(year) / month_folder
-            for file_date in (monday.strftime("%y%m%d"), monday.strftime("%m%d%y")):
-                for subfolder in ("", "done", "Done", "!Done"):
-                    folder = base / subfolder if subfolder else base
-                    p = folder / f"{mkt} Log - {file_date}.xlsm"
-                    if p.exists():
-                        return p
-            return None
-
         def _run():
-            log_path = _find_log(market, target)
+            log_path = _find_traffic_log(market, target)
             if log_path is None:
                 raise FileNotFoundError(f"Log not found for {market} {date_str}")
             day_name = target.strftime("%A")
             wb = openpyxl.load_workbook(str(log_path), keep_vba=True)
-            ws = wb[day_name]
+            try:
+                ws = wb[day_name]
+                project_root = Path(__file__).parent.parent.parent.parent
+                sys.path.insert(0, str(project_root))
+                from browser_automation.etere_direct_client import connect
 
-            by_asset: dict = defaultdict(list)
-            for spot in spots:
-                show = spot.get("show_name", "")
-                m = re.match(r"^([^:]+):", show.strip())
-                asset_code = m.group(1).strip() if m else show.strip()
-                by_asset[asset_code].append(spot)
+                with connect() as conn:
+                    cur = conn.cursor(as_dict=True)
+                    results = _mc_fill_program_spots(
+                        ws, target, market_id, spots, time_in, time_out, cur
+                    )
+                wb.save(str(log_path))
+                return results
+            finally:
+                wb.close()
 
-            project_root = Path(__file__).parent.parent.parent.parent
-            sys.path.insert(0, str(project_root))
-            from browser_automation.etere_direct_client import connect
+        try:
+            results = await asyncio.get_running_loop().run_in_executor(None, _run)
+            return JSONResponse({"results": results})
+        except FileNotFoundError as e:
+            return JSONResponse({"error": str(e)}, status_code=404)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
 
-            from_frames = _time_to_frames(time_in) if time_in else None
-            to_frames   = _time_to_frames(time_out) if time_out else None
+    @router.post("/api/master-control/logs/fill-all")
+    async def fill_all_program_times(body: dict = Body(...)):
+        import openpyxl
 
-            results = []
-            with connect() as conn:
-                cur = conn.cursor(as_dict=True)
-                for asset_code, asset_spots in by_asset.items():
-                    if from_frames is not None and to_frames is not None:
-                        cur.execute(
-                            "SELECT ORA FROM TPALINSE"
-                            " WHERE DATA = %s AND TITLE LIKE %s AND COD_USER = %d"
-                            " AND ORA >= %d AND ORA < %d"
-                            " ORDER BY ORA",
-                            (target, f"%{asset_code}%", market_id, from_frames, to_frames),
-                        )
-                    else:
-                        cur.execute(
-                            "SELECT ORA FROM TPALINSE"
-                            " WHERE DATA = %s AND TITLE LIKE %s AND COD_USER = %d"
-                            " ORDER BY ORA",
-                            (target, f"%{asset_code}%", market_id),
-                        )
-                    oras = [r["ORA"] for r in cur.fetchall()]
-                    for i, spot in enumerate(asset_spots):
-                        if i >= len(oras):
-                            results.append({"excel_row": spot["excel_row"], "status": "no_match", "actual_time": ""})
+        date_str = body["date"]
+        market = body["market"]
+        programs = body.get("programs") or []
+        if not programs:
+            return JSONResponse({"error": "No programs provided"}, status_code=400)
+
+        market_id = _MC_MARKET_IDS.get(market)
+        if market_id is None:
+            return JSONResponse({"error": f"Unknown market: {market}"}, status_code=400)
+
+        target = _date_cls.fromisoformat(date_str)
+
+        def _run():
+            log_path = _find_traffic_log(market, target)
+            if log_path is None:
+                raise FileNotFoundError(f"Log not found for {market} {date_str}")
+            day_name = target.strftime("%A")
+            wb = openpyxl.load_workbook(str(log_path), keep_vba=True)
+            try:
+                ws = wb[day_name]
+                project_root = Path(__file__).parent.parent.parent.parent
+                sys.path.insert(0, str(project_root))
+                from browser_automation.etere_direct_client import connect
+
+                all_results = []
+                with connect() as conn:
+                    cur = conn.cursor(as_dict=True)
+                    for prg in programs:
+                        spots = prg.get("spots") or []
+                        if not spots:
                             continue
-                        secs = round(oras[i] / FPS)
-                        h, rem = divmod(secs, 3600)
-                        mn, s = divmod(rem, 60)
-                        time_str = f"{h}:{mn:02d}:{s:02d}"
-                        ws.cell(row=spot["excel_row"], column=9).value = _dt.timedelta(seconds=secs)
-                        results.append({"excel_row": spot["excel_row"], "status": "filled", "actual_time": time_str})
-
-            wb.save(str(log_path))
-            return results
+                        all_results.extend(
+                            _mc_fill_program_spots(
+                                ws,
+                                target,
+                                market_id,
+                                spots,
+                                prg.get("time_in", ""),
+                                prg.get("time_out", ""),
+                                cur,
+                            )
+                        )
+                wb.save(str(log_path))
+                return all_results
+            finally:
+                wb.close()
 
         try:
             results = await asyncio.get_running_loop().run_in_executor(None, _run)
@@ -2317,22 +2374,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def save_airtime(body: dict = Body(...)):
         import openpyxl
 
-        def _find_log(mkt: str, target: _date_cls) -> Optional[Path]:
-            monday = target - timedelta(days=target.weekday())
-            year, month_folder = _broadcast_month_folder(monday)
-            _log_root = Path("K:/Traffic/logs") if sys.platform == "win32" else Path("/mnt/k/Traffic/logs")
-            base = _log_root / str(year) / month_folder
-            for file_date in (monday.strftime("%y%m%d"), monday.strftime("%m%d%y")):
-                for subfolder in ("", "done", "Done", "!Done"):
-                    folder = base / subfolder if subfolder else base
-                    p = folder / f"{mkt} Log - {file_date}.xlsm"
-                    if p.exists():
-                        return p
-            return None
-
         def _run():
             target = _date_cls.fromisoformat(body["date"])
-            log_path = _find_log(body["market"], target)
+            log_path = _find_traffic_log(body["market"], target)
             if log_path is None:
                 raise FileNotFoundError(f"Log not found for {body['market']} {body['date']}")
             day_name = target.strftime("%A")
