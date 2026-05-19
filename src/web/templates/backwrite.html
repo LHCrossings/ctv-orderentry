@@ -839,7 +839,7 @@ function showPreview(d) {
     const items = [
         ['Agency',     d.agency],
         ['Client',     d.client],
-        ['Contract',   d.contract_code],
+        ['Contract',   d.contract_code + (d.contract_id ? ' (#' + d.contract_id + ')' : '')],
         ['Markets',    d.markets.join(', ')],
         ['Air Dates',  d.date_range.start + ' – ' + d.date_range.end],
         ['Lines',      d.line_count + ' contract lines'],
