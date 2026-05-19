@@ -1221,13 +1221,25 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
         # into separate contract lines with the same description — merge them back.
         # Rate is included so that two IO lines with identical daypart text but
         # different rates (e.g. two Vietnamese slots at $140 and $120) stay separate.
+        _io_line_re = re.compile(r'^\(Line (\d+)\)')
         groups: Dict[tuple, List[SpotRow]] = OrderedDict()
+        group_io_num: Dict[tuple, int] = {}
         for s in spots:
-            key = (_strip_line_prefix(s.row_description), round(s.gross_rate, 4))
+            stripped = _strip_line_prefix(s.row_description)
+            key = (stripped, round(s.gross_rate, 4))
             groups.setdefault(key, []).append(s)
+            if key not in group_io_num:
+                m = _io_line_re.match(s.row_description)
+                group_io_num[key] = int(m.group(1)) if m else 9999
+
+        # When all groups carry a (Line N) prefix, sort by IO line number to
+        # restore the IO ordering (run-sheet order is air-time, not IO order).
+        groups_items = list(groups.items())
+        if all(v < 9999 for v in group_io_num.values()):
+            groups_items.sort(key=lambda kv: group_io_num[kv[0]])
 
         sc_lines: List[dict] = []
-        for idx, ((desc, _rate), group) in enumerate(groups.items()):
+        for idx, ((desc, _rate), group) in enumerate(groups_items):
             d_start     = min(s.air_date for s in group)
             d_end       = max(s.air_date for s in group)
             total_spots = len(group)
