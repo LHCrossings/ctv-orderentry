@@ -199,6 +199,7 @@ def _normalize_line(line, idx: int) -> dict:
     language = _str(_get(line, "language", "language_code"))
     start_date = _str(_get(line, "start_date", "flight_start", "start"))
     end_date   = _str(_get(line, "end_date",   "flight_end",   "end"))
+    line_number = _int(_get(line, "line_number", "io_line_number", "line_num"))
 
     return {
         "description": description,
@@ -213,6 +214,7 @@ def _normalize_line(line, idx: int) -> dict:
         "language": language,
         "start_date": start_date,
         "end_date": end_date,
+        "line_number": line_number,
     }
 
 

@@ -1085,6 +1085,10 @@ def _sc_lines_from_io(io_detail: dict) -> List[dict]:
             line_desc = f"{days} {time_}  {description}".strip()
         else:
             line_desc = description
+        # Prefix with IO line number when available so same-daypart lines are distinguishable
+        io_line_num = ln.get("line_number")
+        if io_line_num:
+            line_desc = f"(Line {io_line_num}) {line_desc}"
 
         sc.append({
             "line_number":      idx + 1,
@@ -1213,15 +1217,17 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
                     _ln["length"] = f":{_d}"
         print(f"[backwrite] IO-sourced SC lines: {len(sc_lines)}")
     else:
-        # Group by description: Etere splits one IO line across months/weeks into
-        # separate contract lines with the same description — merge them back.
-        groups: Dict[str, List[SpotRow]] = OrderedDict()
+        # Group by (description, rate): Etere splits one IO line across months/weeks
+        # into separate contract lines with the same description — merge them back.
+        # Rate is included so that two IO lines with identical daypart text but
+        # different rates (e.g. two Vietnamese slots at $140 and $120) stay separate.
+        groups: Dict[tuple, List[SpotRow]] = OrderedDict()
         for s in spots:
-            key = _strip_line_prefix(s.row_description)
+            key = (_strip_line_prefix(s.row_description), round(s.gross_rate, 4))
             groups.setdefault(key, []).append(s)
 
         sc_lines: List[dict] = []
-        for idx, (desc, group) in enumerate(groups.items()):
+        for idx, ((desc, _rate), group) in enumerate(groups.items()):
             d_start     = min(s.air_date for s in group)
             d_end       = max(s.air_date for s in group)
             total_spots = len(group)
