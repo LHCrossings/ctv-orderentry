@@ -38,8 +38,7 @@ INVOICE_HEADER = "Agency"
 SPOT_CODE_PAID  = 2
 SPOT_CODE_BONUS = 10
 
-CUSTOMERS_DB_PATH = Path("data") / "customers.db"
-
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMERS_DB_PATH
 _MARKET_MAP = {
     "SACRAMENTO":     "CVC",
     "CENTRAL VALLEY": "CVC",

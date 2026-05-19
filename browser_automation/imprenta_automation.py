@@ -372,11 +372,12 @@ def gather_imprenta_inputs(file_path: str) -> Optional[dict]:
     _src = Path(__file__).parent.parent / "src"
     if str(_src) not in _sys.path:
         _sys.path.insert(0, str(_src))
+    from browser_automation.customer_defaults import DEFAULT_DB_PATH
     from data_access.repositories.customer_repository import CustomerRepository
     from domain.entities import Customer
     from domain.enums import OrderType as _OT
 
-    _repo = CustomerRepository(Path(__file__).parent.parent / "data" / "customers.db")
+    _repo = CustomerRepository(DEFAULT_DB_PATH)
     _found = _repo.find_by_name_any_type(result.client)
     _existing = [_found] if _found is not None else []
     _saved_id = next(

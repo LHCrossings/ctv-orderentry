@@ -56,8 +56,7 @@ SPOT_CODE_PAID = 2
 SPOT_CODE_BONUS = 10
 
 # Customer database path (relative to project root)
-CUSTOMERS_DB_PATH = Path("data") / "customers.db"
-
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMERS_DB_PATH
 # Known customer IDs (avoid DB round-trip for well-known clients)
 KNOWN_CUSTOMER_IDS = {
     "ochca": 364,

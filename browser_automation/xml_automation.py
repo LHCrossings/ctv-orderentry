@@ -47,9 +47,7 @@ from src.business_logic.services.customer_matching_service import CustomerMatchi
 from src.domain.enums import OrderType
 
 # Path to customer database (relative to project root)
-_DB_PATH = Path(__file__).parent.parent / "data" / "customers.db"
-
-
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as _DB_PATH
 # ============================================================================
 # KNOWN MARKETS (for prompting when XML cannot detect market)
 # ============================================================================

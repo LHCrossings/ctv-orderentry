@@ -40,9 +40,7 @@ from src.domain.enums import BillingType, OrderType, SeparationInterval
 # ─────────────────────────────────────────────────────────────────────────────
 
 GALEFORCE_SEPARATION = SeparationInterval.GALEFORCE.value  # (25, 0, 0)
-CUSTOMER_DB_PATH = os.path.join("data", "customers.db")
-
-
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 # ─────────────────────────────────────────────────────────────────────────────
 # CUSTOMER DATABASE LOOKUP
 # ─────────────────────────────────────────────────────────────────────────────

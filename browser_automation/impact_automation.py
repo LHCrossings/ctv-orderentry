@@ -84,9 +84,7 @@ SEPARATION = (15, 0, 0)   # (customer_minutes, event_minutes, order_minutes)
 SPOT_CODE_PAID  = 2   # "Paid Commercial"
 SPOT_CODE_BONUS = 10  # "BNS"
 
-CUSTOMER_DB_PATH = os.path.join("data", "customers.db")
-
-
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 # ═══════════════════════════════════════════════════════════════════════════════
 # CUSTOMER DATABASE (self-learning)
 # ═══════════════════════════════════════════════════════════════════════════════

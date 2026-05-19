@@ -1,0 +1,35 @@
+.git
+.github
+.venv
+venv
+__pycache__
+*.py[cod]
+*$py.class
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+htmlcov
+*.egg-info
+
+# Local/runtime data (mounted as volumes in compose)
+incoming/
+processed/
+errors/
+data/
+
+# Secrets — mount at runtime, never bake into the image
+.env
+credentials.env
+*.env.local
+
+# IDE / OS
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+
+# Large or non-runtime trees
+Old Code/
+archived scripts/
+agent-transcripts/

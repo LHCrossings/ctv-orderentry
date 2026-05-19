@@ -1698,8 +1698,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     # Customer Database
     # ------------------------------------------------------------------
 
-    _BILLING_DIR    = Path(r"C:\Users\usrjp\windev\billing")
+    _repo = Path(__file__).resolve().parents[3]
+    _BILLING_DIR = _repo.parent / "billing"
     _BILLING_PYTHON = _BILLING_DIR / ".venv" / "Scripts" / "python.exe"
+    if not _BILLING_PYTHON.exists():
+        _BILLING_PYTHON = _BILLING_DIR / ".venv" / "bin" / "python"
     _BILLING_MANAGE  = _BILLING_DIR / "manage_db.py"
     _BILLING_BACKFILL = _BILLING_DIR / "backfill.py"
 
@@ -1749,7 +1752,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         from pathlib import Path
 
         _SKIP = {"created_at"}
-        target_path = Path("data/customers.db")
+        target_path = config.customer_db_path
         if not target_path.exists():
             from fastapi.responses import JSONResponse
             return JSONResponse(status_code=400, content={"error": f"Target database not found: {target_path.resolve()}"})
@@ -1830,7 +1833,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
         insert_rows = body.get("insert", [])
         upsert_rows = body.get("upsert", [])
-        target_path = Path("data/customers.db")
+        target_path = config.customer_db_path
 
         inserted = updated = 0
         with sqlite3.connect(str(target_path)) as conn:
@@ -2833,7 +2836,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     _hdr = _cur.fetchone()
                 if _hdr and _hdr.get("COMMITTENTE"):
                     _cid = str(int(_hdr["COMMITTENTE"]))
-                    _db_path = Path(__file__).parents[3] / "data" / "customers.db"
+                    _db_path = config.customer_db_path
                     if _db_path.exists():
                         with _sqlite3.connect(str(_db_path)) as _sdb:
                             _row = _sdb.execute(
@@ -3239,7 +3242,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     _hdr = _cur.fetchone()
                 if _hdr and _hdr.get("COMMITTENTE"):
                     _cid = str(int(_hdr["COMMITTENTE"]))
-                    _db_path = Path(__file__).parents[3] / "data" / "customers.db"
+                    _db_path = config.customer_db_path
                     if _db_path.exists():
                         with _sqlite3.connect(str(_db_path)) as _sdb:
                             _row = _sdb.execute(
@@ -3547,7 +3550,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     _hdr = _cur.fetchone()
                 if _hdr and _hdr.get("COMMITTENTE"):
                     _cid = str(int(_hdr["COMMITTENTE"]))
-                    _db_path = Path(__file__).parents[3] / "data" / "customers.db"
+                    _db_path = config.customer_db_path
                     if _db_path.exists():
                         with _sqlite3.connect(str(_db_path)) as _sdb:
                             _row = _sdb.execute(
@@ -4244,7 +4247,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     _hdr = _cur.fetchone()
                 if _hdr and _hdr.get("COMMITTENTE"):
                     _cid = str(int(_hdr["COMMITTENTE"]))
-                    _db_path = Path(__file__).parents[3] / "data" / "customers.db"
+                    _db_path = config.customer_db_path
                     if _db_path.exists():
                         with _sqlite3.connect(str(_db_path)) as _sdb:
                             _row = _sdb.execute(

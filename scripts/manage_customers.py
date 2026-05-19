@@ -11,7 +11,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-DB_PATH = Path("data") / "customers.db"
+DB_PATH = Path(__file__).resolve().parent.parent / "data" / "customers.db"
 
 EDITABLE_FIELDS = [
     ("separation_customer",     "Customer separation (minutes)"),

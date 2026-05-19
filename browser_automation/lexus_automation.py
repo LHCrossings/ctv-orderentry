@@ -85,9 +85,7 @@ from src.domain.enums import BillingType
 LEXUS_CUSTOMER_ID = 13
 LEXUS_SEPARATION = (25, 0, 0)      # customer=25, event=0, order=0
 LEXUS_BILLING = BillingType.CUSTOMER_SHARE_AGENCY
-CUSTOMER_DB_PATH = os.path.join("data", "customers.db")
-
-
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 # ───────────────────────────────────────────────────────────────────────────
 # QUARTER HELPERS
 # ───────────────────────────────────────────────────────────────────────────
@@ -768,7 +766,7 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
         from data_access.repositories.customer_repository import CustomerRepository
         from domain.entities import Customer
         from domain.enums import OrderType as _OT
-        _repo = CustomerRepository(Path(__file__).parent.parent / "data" / "customers.db")
+        _repo = CustomerRepository(CUSTOMER_DB_PATH)
         _repo.save(Customer(
             customer_id=str(LEXUS_CUSTOMER_ID),
             customer_name="Lexus",

@@ -386,9 +386,10 @@ class InputCollector:
         """
         try:
             import sqlite3
-            from pathlib import Path
 
-            db_path = Path("data") / "customers.db"
+            from orchestration.config import ApplicationConfig
+
+            db_path = ApplicationConfig.from_defaults().customer_db_path
             if not db_path.exists():
                 return None
 
@@ -439,9 +440,10 @@ class InputCollector:
         """
         try:
             import sqlite3
-            from pathlib import Path
 
-            db_path = Path("data") / "customers.db"
+            from orchestration.config import ApplicationConfig
+
+            db_path = ApplicationConfig.from_defaults().customer_db_path
             if not db_path.exists():
                 return None
 

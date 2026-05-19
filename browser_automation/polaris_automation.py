@@ -17,8 +17,7 @@ from typing import Optional
 from browser_automation.etere_client import EtereClient
 from browser_automation.parsers.polaris_parser import PolarisOrder, PolarisLine, parse_polaris_file as parse_polaris_xlsx
 
-CUSTOMER_DB_PATH = os.path.join("data", "customers.db")
-
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 _MARKET_SHORT = {
     "CVC": "CV",
     "SFO": "SF",

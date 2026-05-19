@@ -54,7 +54,7 @@ from src.domain.enums import BillingType, OrderType, SeparationInterval
 # CONSTANTS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-CUSTOMER_DB_PATH = os.path.join("data", "customers.db")
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 RPM_DEFAULT_SEPARATION = SeparationInterval.RPM.value  # (25, 0, 15)
 
 

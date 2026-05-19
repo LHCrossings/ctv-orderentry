@@ -40,9 +40,7 @@ from src.domain.enums import BillingType, OrderType, SeparationInterval
 
 SAC_MARKET = "CVC"
 SAC_SEPARATION = SeparationInterval.SACCOUNTYVOTERS.value   # (15, 0, 0)
-CUSTOMER_DB_PATH = os.path.join("data", "customers.db")
-
-
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 # ─────────────────────────────────────────────────────────────────────────────
 # CUSTOMER DATABASE LOOKUP
 # ─────────────────────────────────────────────────────────────────────────────
@@ -270,7 +268,7 @@ def gather_saccountyvoters_inputs(pdf_path: str) -> Optional[dict]:
             from data_access.repositories.customer_repository import CustomerRepository as _CR
             from domain.entities import Customer as _Cust
             from domain.enums import OrderType as _OT
-            _repo = _CR(_Path(__file__).parent.parent / "data" / "customers.db")
+            _repo = _CR(CUSTOMER_DB_PATH)
             _repo.save(_Cust(
                 customer_id=str(customer_id),
                 customer_name=order.client,

@@ -56,13 +56,28 @@ class EtereSession:
         print("\n[BROWSER] Initializing Chrome driver...")
         
         options = webdriver.ChromeOptions()
-        options.add_argument('--start-maximized')
-        
+        chrome_bin = os.getenv("CHROME_BIN") or os.getenv("CHROMIUM_PATH")
+        if chrome_bin:
+            options.binary_location = chrome_bin
+
+        if os.getenv("CHROME_HEADLESS", "").lower() in ("1", "true", "yes"):
+            options.add_argument("--headless=new")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--disable-gpu")
+        else:
+            options.add_argument("--start-maximized")
+
         # Suppress automation warnings
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option('useAutomationExtension', False)
-        
-        self.driver = webdriver.Chrome(options=options)
+
+        chromedriver = os.getenv("CHROMEDRIVER_PATH")
+        if chromedriver:
+            from selenium.webdriver.chrome.service import Service
+            self.driver = webdriver.Chrome(service=Service(chromedriver), options=options)
+        else:
+            self.driver = webdriver.Chrome(options=options)
         self.wait = WebDriverWait(self.driver, 10)
         
         print("[BROWSER] ✓ Browser started")

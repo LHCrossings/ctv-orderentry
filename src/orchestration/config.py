@@ -49,13 +49,13 @@ class ApplicationConfig:
         Returns:
             ApplicationConfig with standard defaults
         """
-        base_path = Path.cwd()
+        root = Path(__file__).resolve().parents[2]
 
         return cls(
-            incoming_dir=base_path / "incoming",
-            processed_dir=base_path / "processed",
-            error_dir=base_path / "errors",
-            customer_db_path=base_path / "data" / "customers.db",
+            incoming_dir=root / "incoming",
+            processed_dir=root / "processed",
+            error_dir=root / "errors",
+            customer_db_path=root / "data" / "customers.db",
             batch_size=10,
             auto_process=False,
             require_confirmation=True,

@@ -44,8 +44,7 @@ MARKET_3_TO_2: dict[str, str] = {
     "DAL": "DL",
 }
 
-# Default database path (relative to project root)
-DEFAULT_DB_PATH = Path("data") / "customers.db"
+DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "customers.db"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

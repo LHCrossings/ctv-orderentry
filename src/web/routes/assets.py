@@ -24,7 +24,7 @@ def _load_s3_config() -> dict[str, str]:
     cfg: dict[str, str] = {}
     for env_file in ("credentials.env", ".env"):
         p = _PROJECT_ROOT / env_file
-        if not p.exists():
+        if not p.is_file():
             continue
         for line in p.read_text(encoding="utf-8").splitlines():
             line = line.strip()

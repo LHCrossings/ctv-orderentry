@@ -37,8 +37,7 @@ from src.domain.enums import BillingType, OrderType
 # ─────────────────────────────────────────────────────────────────────────────
 
 SIERRA_SEPARATION = (15, 0, 0)
-CUSTOMER_DB_PATH  = os.path.join(os.path.dirname(__file__), '..', 'data', 'customers.db')
-
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 _DAY_SETS: dict[str, set] = {
     'M-Su':  {0, 1, 2, 3, 4, 5, 6},
     'M-F':   {0, 1, 2, 3, 4},

@@ -53,8 +53,7 @@ from browser_automation.parsers.charmaine_parser import (
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Default customer DB path (relative to project root)
-CUSTOMER_DB_PATH = os.path.join("data", "customers.db")
-
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 # Known agency keywords - if detected, order type = AGENCY
 # (Also defined in enums.py — this is for quick reference)
 KNOWN_AGENCIES = [

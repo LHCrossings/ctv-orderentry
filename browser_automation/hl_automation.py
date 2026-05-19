@@ -55,8 +55,7 @@ SPOT_CODE_PAID = 2       # Paid Commercial
 SPOT_CODE_BONUS = 10     # BNS / Bonus Spot
 
 # Customer database path (relative to project root)
-CUSTOMERS_DB_PATH = Path("data") / "customers.db"
-
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMERS_DB_PATH
 # Market mapping for H&L (SFO and CVC only)
 HL_MARKET_MAPPING = {
     "SAN FRANCISCO": "SFO",

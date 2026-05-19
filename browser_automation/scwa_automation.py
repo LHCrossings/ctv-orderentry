@@ -43,8 +43,7 @@ from src.domain.enums import BillingType, OrderType, SeparationInterval
 
 SCWA_MARKET     = "CVC"
 SCWA_SEPARATION = SeparationInterval.SCWA.value   # (15, 0, 0)
-CUSTOMER_DB_PATH = os.path.join("data", "customers.db")
-
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 # ROS schedule per language key → (days, time_str)
 # Vietnamese updated Apr 1, 2026: was 11a-1p, now 10a-1p
 _ROS_MAP: dict[str, tuple[str, str]] = {

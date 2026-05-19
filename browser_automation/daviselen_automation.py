@@ -71,9 +71,7 @@ from browser_automation.parsers.daviselen_parser import (
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Default database path
-CUSTOMER_DB_PATH = os.path.join("data", "customers.db")
-
-
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 def lookup_customer(
     client_name: str,
     db_path: str = CUSTOMER_DB_PATH

@@ -250,7 +250,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Seed customer default templates")
-    parser.add_argument("--db", type=Path, default=Path("data/customers.db"),
+    parser.add_argument("--db", type=Path, default=Path(__file__).resolve().parent / "data" / "customers.db",
                         help="Path to customers.db")
     parser.add_argument("--list", action="store_true", help="List all templates")
     args = parser.parse_args()

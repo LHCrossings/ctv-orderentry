@@ -264,8 +264,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--db",
         type=Path,
-        default=Path("data/customers.db"),
-        help="Path to customers.db file (default: data/customers.db)"
+        default=Path(__file__).resolve().parent / "data" / "customers.db",
+        help="Path to customers.db file (default: data/customers.db)",
     )
     parser.add_argument(
         "--list",

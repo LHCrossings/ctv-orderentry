@@ -25,9 +25,7 @@ AGENCY_NAME = "hl"
 SEPARATION_INTERVALS = (25, 0, 0)
 CHARGE_TO = "Customer share indicating agency %"
 INVOICE_HEADER = "Agency"
-CUSTOMERS_DB_PATH = __import__("pathlib").Path("data") / "customers.db"
-
-
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMERS_DB_PATH
 # ── Default code/description resolution for BDR ───────────────────────────────
 
 def _get_bdr_defaults(orders: list[BDROrder]) -> tuple[str, str]:

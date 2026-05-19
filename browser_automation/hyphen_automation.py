@@ -28,9 +28,7 @@ from browser_automation.parsers.hyphen_parser import HyphenEstimate, HyphenLine,
 from browser_automation.ros_definitions import ROS_SCHEDULES
 from src.domain.enums import BillingType, OrderType
 
-CUSTOMER_DB_PATH = os.path.join("data", "customers.db")
-
-
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 # ─────────────────────────────────────────────────────────────────────────────
 # CUSTOMER DATABASE
 # ─────────────────────────────────────────────────────────────────────────────

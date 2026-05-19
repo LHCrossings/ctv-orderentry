@@ -31,9 +31,7 @@ from browser_automation.parsers.prosio_parser import ProsioOrder, ProsioLine, pa
 from src.domain.enums import BillingType, OrderType, SeparationInterval
 
 PROSIO_SEPARATION = SeparationInterval.DEFAULT.value   # (15, 0, 0)
-CUSTOMER_DB_PATH  = os.path.join("data", "customers.db")
-
-
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 # ─────────────────────────────────────────────────────────────────────────────
 # CUSTOMER DATABASE
 # ─────────────────────────────────────────────────────────────────────────────

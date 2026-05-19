@@ -123,7 +123,7 @@ def gather_upfront_inputs(order: MisfitOrder, etere_client: EtereClient) -> dict
     print()
     
     # Show existing Misfit customers for reference
-    db_path = Path(__file__).parent.parent / "data" / "customers.db"
+    from browser_automation.customer_defaults import DEFAULT_DB_PATH as db_path
     repo = CustomerRepository(str(db_path))
     
     existing_customers = repo.list_by_order_type(OrderType.MISFIT)
@@ -353,7 +353,7 @@ def process_misfit_order(
                 f"\nSave customer ID {selected_id} as '{order.agency}' for future Misfit orders? (y/n): "
             ).strip().lower()
             if save_yn == 'y':
-                db_path = Path(__file__).parent.parent / "data" / "customers.db"
+                from browser_automation.customer_defaults import DEFAULT_DB_PATH as db_path
                 repo = CustomerRepository(str(db_path))
                 repo.save(Customer(
                     customer_id=str(selected_id),

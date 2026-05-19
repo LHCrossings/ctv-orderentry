@@ -62,12 +62,11 @@ class TestApplicationConfig:
         """Should create config with standard defaults."""
         config = ApplicationConfig.from_defaults()
 
-        # Should use current directory as base
-        base_path = Path.cwd()
-        assert config.incoming_dir == base_path / "incoming"
-        assert config.processed_dir == base_path / "processed"
-        assert config.error_dir == base_path / "errors"
-        assert config.customer_db_path == base_path / "data" / "customers.db"
+        root = Path(__file__).resolve().parents[2]
+        assert config.incoming_dir == root / "incoming"
+        assert config.processed_dir == root / "processed"
+        assert config.error_dir == root / "errors"
+        assert config.customer_db_path == root / "data" / "customers.db"
 
     def test_for_testing_factory(self):
         """Should create config suitable for testing."""

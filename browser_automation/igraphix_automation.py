@@ -73,9 +73,7 @@ from browser_automation.parsers.igraphix_parser import (
 # CUSTOMER DATABASE ACCESS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-CUSTOMER_DB_PATH = os.path.join("data", "customers.db")
-
-
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 def save_new_customer(
     customer_id: str,
     customer_name: str,

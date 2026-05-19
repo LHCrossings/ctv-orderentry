@@ -1,0 +1,45 @@
+# CTV Order Entry — Control Room (production-oriented)
+#
+# Network access (Tailscale on the host — option A):
+#   1. Install Tailscale on the Linux host and join your tailnet.
+#   2. Bind the app to localhost only on the host, OR publish only on the
+#      Tailscale interface (see comments below).
+#   3. Users reach: http://<host-magicdns-name>:4000
+#      MagicDNS supplies the hostname; you still choose the port (4000 here).
+#
+# Blocking IPs:
+#   - Tailscale ACLs control which tailnet identities can reach the host/port.
+#   - To block specific public IPs, do NOT expose port 4000 on 0.0.0.0; use
+#     host firewall (ufw/nftables) or bind to 127.0.0.1 + Tailscale IP only.
+#   - This compose file publishes 4000 on all interfaces by default; tighten
+#     on the host if you need stricter IP allowlists.
+
+services:
+  control-room:
+    build: .
+    container_name: ctv-control-room
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: "4000"
+      # Etere SQL Server (pymssql) — set in credentials.env or here:
+      # ETERE_DB_SERVER: "100.85.38.72"
+      # ETERE_DB_USER: ""
+      # ETERE_DB_PASSWORD: ""
+      # ETERE_WEB_URL: "http://100.102.206.113"
+    volumes:
+      - ./incoming:/app/incoming
+      - ./processed:/app/processed
+      - ./errors:/app/errors
+      - ./data:/app/data
+      # Optional: override SQLite path (relative to /app project root)
+      # CUSTOMER_DB_PATH: data/customers.db
+      # Create credentials.env on the host first (empty dir is created if missing).
+      # - ./credentials.env:/app/credentials.env:ro
+    restart: unless-stopped
+    # Optional: keep logs bounded
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

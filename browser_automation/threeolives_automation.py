@@ -34,7 +34,7 @@ from browser_automation.parsers.threeolives_parser import (
 from browser_automation.ros_definitions import ROS_SCHEDULES
 from src.domain.enums import BillingType, OrderType, SeparationInterval
 
-CUSTOMER_DB_PATH = os.path.join('data', 'customers.db')
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 DEFAULT_MARKET = 'LAX'   # Riverside County is in the LA DMA
 THREEOLIVES_SEPARATION = SeparationInterval.for_order_type(OrderType.THREEOLIVES)
 
