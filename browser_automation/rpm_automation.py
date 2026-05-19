@@ -368,7 +368,7 @@ def process_rpm_order(
             days, time_range, language = _parse_rpm_daypart(line.daypart)
             days, _ = EtereClient.check_sunday_6_7a_rule(days, time_range)
             time_from, time_to = EtereClient.parse_time_range(time_range)
-            description = line.daypart
+            description = f"(Line {line.line_number}) {line.daypart}" if line.line_number else line.daypart
             spot_code = 10 if line.is_bonus else 2
             duration_seconds = _duration_to_seconds(line.duration)
 

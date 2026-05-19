@@ -48,6 +48,7 @@ class RPMLine:
     total_spots: int
     is_bonus: bool
     rate_missing: bool = False  # True when PDF has no per-line rate column
+    line_number: Optional[int] = None  # IO line number, if present in PDF
 
 
 def _extract_market_code(market_text: str) -> str:
@@ -93,8 +94,11 @@ def _normalize_daypart_name(program_name: str) -> tuple[str, str]:
     first_word = program_name.split()[0].upper() if program_name.split() else ""
     has_mf   = bool(re.match(r'^MT[A-Z]+F', first_word))
     has_sasu = bool(re.search(r'SASU', first_word))
+    has_sa   = not has_sasu and bool(re.search(r'SA', first_word))
     if has_mf and has_sasu:
         day_pattern = "M-Su"
+    elif has_mf and has_sa:
+        day_pattern = "M-Sa"
     elif has_mf:
         day_pattern = "M-F"
     elif has_sasu:
@@ -138,7 +142,7 @@ def _normalize_daypart_name(program_name: str) -> tuple[str, str]:
     language_code = "ROS"  # Default
     language_display = "ROS"
     
-    if any(w in program_name.upper() for w in ("CHINESE", "MANDARIN", "CANTONESE", "CANO", "MAND")):
+    if any(w in program_name.upper() for w in ("CHINESE", "MANDARIN", "CANTONESE", "CANO", "MAND", "SHANGHAI", "MARNARIN")):
         language_code = "M/C"
         language_display = "Chinese"
     elif "VIETNAMESE" in program_name.upper():
@@ -348,6 +352,16 @@ def _parse_week_header_dates(
         if len(dates) >= 2:
             return tuple(dates)
 
+    # Strategy 3: "Dur" inline in column header row (new AEInboxOrder format)
+    # e.g. "Line Daypart (Program) Daypart Gross C/T Dur 8/10 8/17 Total Adults 35-64"
+    for line in text_lines:
+        if 'Dur' not in line or 'Total' not in line:
+            continue
+        after = line[line.index('Dur') + 3:]
+        dates = parse_dates_from_tokens(after.split())
+        if len(dates) >= 2:
+            return tuple(dates)
+
     return ()
 
 
@@ -432,7 +446,9 @@ def parse_rpm_pdf(pdf_path: str) -> tuple[Optional[RPMOrder], list[RPMLine]]:
                     estimate = estimate_match.group(1)
 
             if "Description:" in line:
-                desc_match = re.search(r'Description:\s*(.+)', line)
+                desc_match = re.search(r'Description:\s*(.+?)(?:\s+Flight\s+(?:Start|End):|$)', line)
+                if not desc_match:
+                    desc_match = re.search(r'Description:\s*(.+)', line)
                 if desc_match:
                     description = desc_match.group(1).strip()
 
@@ -471,6 +487,45 @@ def parse_rpm_pdf(pdf_path: str) -> tuple[Optional[RPMOrder], list[RPMLine]]:
                 if buyer_match:
                     buyer = buyer_match.group(1).strip()
 
+            # New AEInboxOrder format fallbacks (when old-format labels not found)
+            if not client and "Client:" in line and "Estimate:" not in line:
+                m = re.search(r'Client:\s*([^D\n]+?)(?:\s+Demo:|$)', line)
+                if m:
+                    client = m.group(1).strip()
+
+            if not estimate and "CPE:" in line:
+                m = re.search(r'CPE:\s*(\S+)', line)
+                if m:
+                    estimate = m.group(1)
+
+            if not flight_start and "Flight Start:" in line and "Date" not in line:
+                m = re.search(r'Flight Start:\s*(\d{1,2}/\d{1,2}/\d{2,4})', line)
+                if m:
+                    ds = m.group(1)
+                    try:
+                        flight_start = datetime.strptime(ds, "%m/%d/%y").date()
+                    except ValueError:
+                        flight_start = datetime.strptime(ds, "%m/%d/%Y").date()
+
+            if not flight_end and "Flight End:" in line and "Date" not in line:
+                m = re.search(r'Flight End:\s*(\d{1,2}/\d{1,2}/\d{2,4})', line)
+                if m:
+                    ds = m.group(1)
+                    try:
+                        flight_end = datetime.strptime(ds, "%m/%d/%y").date()
+                    except ValueError:
+                        flight_end = datetime.strptime(ds, "%m/%d/%Y").date()
+
+            if separation == 30 and "Separation:" in line and "between" not in line.lower():
+                m = re.search(r'Separation:\s*(\d+)', line)
+                if m:
+                    separation = int(m.group(1))
+
+            if not buyer and "AE:" in line:
+                m = re.search(r'AE:\s*([^\n]+?)(?:\s+Phone:|$)', line)
+                if m:
+                    buyer = m.group(1).strip()
+
         # Convert market name to code
         market_code = _extract_market_code(market_text)
 
@@ -478,6 +533,8 @@ def parse_rpm_pdf(pdf_path: str) -> tuple[Optional[RPMOrder], list[RPMLine]]:
         lines = []
         text_lines = text.split('\n')
 
+        # Normalize uppercase time suffixes to lowercase (text-based PDFs use A/P)
+        text_lines = [re.sub(r'(\d+:\d+)([AP])\b', lambda m: m.group(1) + m.group(2).lower(), ln) for ln in text_lines]
         # Preprocess: fix spaces in times (e.g., "11 :00a" → "11:00a")
         text_lines = [re.sub(r'(\d+)\s*:\s*(\d+)([ap])', r'\1:\2\3', ln) for ln in text_lines]
         # Preprocess: close OCR space in time ranges (e.g., "6:00a- 8:00p" → "6:00a-8:00p")
@@ -488,13 +545,16 @@ def parse_rpm_pdf(pdf_path: str) -> tuple[Optional[RPMOrder], list[RPMLine]]:
         i = 0
         while i < len(text_lines):
             line_text = text_lines[i].strip()
+            io_line_num_match = re.match(r'^(\d+)\s+', line_text)
+            io_line_number = int(io_line_num_match.group(1)) if io_line_num_match else None
+            line_text = re.sub(r'^\d+\s+', '', line_text)  # strip leading line numbers
 
             # Look for lines that start with daypart patterns (tolerant of OCR artifacts
             # such as doubled letters: "MTuWTHhF" instead of "MTuWThF")
             if re.match(r'^(MT[A-Za-z]+SaSu|MT[A-Za-z]+Sa\b|MT[A-Za-z]+F\b|SaSu\w*)', line_text, re.IGNORECASE):
                 try:
                     # Handle split time: "MTuWThFSaSu 6:00a- RT $0.00..."
-                    split_match = re.search(r'(\d+:\d+[ap])-\s+(RT|DT|PA)', line_text, re.IGNORECASE)
+                    split_match = re.search(r'(\d+:\d+[ap])-\s+(RT|DT|PA|WK|PT)', line_text, re.IGNORECASE)
                     if split_match:
                         i += 1
                         if i < len(text_lines):
@@ -513,21 +573,25 @@ def parse_rpm_pdf(pdf_path: str) -> tuple[Optional[RPMOrder], list[RPMLine]]:
                         continue
 
                     daypart_time = parts[1]
-                    daypart_code = parts[2]   # RT, DT, or PA
 
-                    # Detect format: old PDFs have an explicit dollar rate at
-                    # parts[3] (e.g. "$36.00"); new PDFs omit the rate column
-                    # and have the duration integer at parts[3].
-                    if parts[3].startswith('$') or (
-                        '.' in parts[3] and not parts[3].replace('.', '').isdigit()
-                    ):
-                        # Old format: rate | duration | weekly…
-                        rate_str = parts[3]
-                        duration_val = parts[4] if len(parts) > 4 else '30'
-                        spots_start = 5
+                    # Find the $ rate token to locate all columns dynamically.
+                    # This handles: old format (no C/T column), new AEInboxOrder
+                    # format (C/T column between rate and duration), and lines with
+                    # embedded program names in parens shifting part positions.
+                    rate_idx = next((j for j, p in enumerate(parts) if p.startswith('$')), None)
+                    if rate_idx is not None and rate_idx >= 2:
+                        daypart_code = parts[rate_idx - 1]
+                        rate_str = parts[rate_idx]
                         no_rate_format = False
+                        # Skip optional C/T cash-trade column
+                        next_col = rate_idx + 1
+                        if next_col < len(parts) and parts[next_col] in ('C', 'T'):
+                            next_col += 1
+                        duration_val = parts[next_col] if next_col < len(parts) else '30'
+                        spots_start = next_col + 1
                     else:
-                        # New format (no rate column): duration | weekly… | total | rtg
+                        # No rate column: duration | weekly spots | total | rtg
+                        daypart_code = parts[2]
                         rate_str = '$0.00'
                         duration_val = parts[3]
                         spots_start = 4
@@ -550,15 +614,21 @@ def parse_rpm_pdf(pdf_path: str) -> tuple[Optional[RPMOrder], list[RPMLine]]:
                     else:
                         total_spots = sum(weekly_spots)
 
-                    # Language from next line
-                    language_name = ""
-                    if i + 1 < len(text_lines):
+                    # Language from embedded program name in parens, or next line.
+                    # Closed paren: "(Mandarin News)" embedded on current line after split.
+                    # Unclosed paren: "(Shanghai TV" when program name spans two lines.
+                    paren_match = re.search(r'\(([^)]+)\)', line_text)
+                    if not paren_match:
+                        paren_match = re.search(r'\(([^)]+)', line_text)
+                    language_name = paren_match.group(1).strip() if paren_match else ""
+                    if not language_name and i + 1 < len(text_lines):
                         next_line = text_lines[i + 1].strip()
-                        if next_line and not re.match(
+                        next_line_check = re.sub(r'^\d+\s+', '', next_line)
+                        if next_line_check and not re.match(
                             r'^(MT[A-Za-z]+SaSu|MT[A-Za-z]+Sa\b|MT[A-Za-z]+F\b|SaSu\w*|Total)',
-                            next_line, re.IGNORECASE
+                            next_line_check, re.IGNORECASE
                         ):
-                            language_name = next_line
+                            language_name = next_line_check
                             i += 1
 
                     # Parse rate
@@ -591,6 +661,7 @@ def parse_rpm_pdf(pdf_path: str) -> tuple[Optional[RPMOrder], list[RPMLine]]:
                         total_spots=total_spots,
                         is_bonus=is_bonus,
                         rate_missing=no_rate_format,
+                        line_number=io_line_number,
                     ))
 
                 except Exception as e:
