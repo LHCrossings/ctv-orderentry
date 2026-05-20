@@ -5248,4 +5248,94 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+    # ── Per-contract unset billing fix ───────────────────────────────────────
+
+    @router.get("/api/master-control/booked-business/unset-contracts")
+    async def booked_business_unset_contracts(year: int, month: int):
+        def _run():
+            from browser_automation.etere_direct_client import connect as _connect
+
+            bcast_start = _bb_broadcast_month_start(year, month)
+            month_end   = _bb_month_end(year, month)
+
+            conn = _connect()
+            cur = conn.cursor(as_dict=True)
+            cur.execute("""
+                SELECT DISTINCT
+                    ct.ID_CONTRATTITESTATA,
+                    ct.COD_CONTRATTO,
+                    ct.DESCRIZIONE,
+                    ae.RAG_SOCIAL  AS ae_name,
+                    ag.RAG_SOCIAL  AS buying_agency,
+                    cl.RAG_SOCIAL  AS client_name
+                FROM CONTRATTITESTATA ct
+                JOIN CONTRATTIRIGHE cr
+                     ON cr.ID_CONTRATTITESTATA = ct.ID_CONTRATTITESTATA
+                    AND cr.DATA_INIZIO <= %s
+                    AND cr.DATA_FINE   >= %s
+                LEFT JOIN ANAGRAF ae ON ae.ID_ANAGRAF = ct.AGENTE1
+                LEFT JOIN ANAGRAF ag ON ag.ID_ANAGRAF = ct.AGENZIA
+                LEFT JOIN ANAGRAF cl ON cl.ID_ANAGRAF = ct.COMMITTENTE
+                WHERE ct.CENTROMEDIA = 0
+                  AND (ct.CAMBIOMERCE = 0 OR ct.CAMBIOMERCE IS NULL)
+                  AND ct.ID_PAGAMENTI != 4
+                ORDER BY ae.RAG_SOCIAL, cl.RAG_SOCIAL, ct.COD_CONTRATTO
+            """, (str(month_end), str(bcast_start)))
+            rows = cur.fetchall()
+            conn.close()
+
+            contracts = []
+            for r in rows:
+                agency = (r["buying_agency"] or "").strip()
+                client = (r["client_name"]   or "").strip()
+                if agency and client and agency != client:
+                    display_client = f"{agency}:{client}"
+                else:
+                    display_client = client or agency or r["COD_CONTRATTO"] or "Unknown"
+                contracts.append({
+                    "id":          r["ID_CONTRATTITESTATA"],
+                    "code":        r["COD_CONTRATTO"] or "",
+                    "description": (r["DESCRIZIONE"] or "").strip(),
+                    "ae":          (r["ae_name"] or "Unknown AE").strip(),
+                    "client":      display_client,
+                })
+            return {"contracts": contracts}
+
+        try:
+            return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.post("/api/master-control/booked-business/set-contract-billing")
+    async def booked_business_set_contract_billing(request: Request):
+        body = await request.json()
+        updates = body.get("updates", [])  # [{contract_id, billing}, ...]
+        if not updates:
+            return JSONResponse({"updated": 0})
+
+        def _run():
+            from browser_automation.etere_direct_client import connect as _connect
+
+            conn = _connect()
+            cur = conn.cursor()
+            count = 0
+            for u in updates:
+                cid     = int(u["contract_id"])
+                billing = int(u["billing"])
+                if billing not in (316, 317):
+                    continue
+                cur.execute(
+                    "UPDATE CONTRATTITESTATA SET CENTROMEDIA = %s WHERE ID_CONTRATTITESTATA = %s AND CENTROMEDIA = 0",
+                    (billing, cid),
+                )
+                count += cur.rowcount
+            conn.commit()
+            conn.close()
+            return {"updated": count}
+
+        try:
+            return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     return router

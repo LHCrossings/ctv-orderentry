@@ -160,6 +160,75 @@
             padding: 2rem;
             color: var(--text-muted);
         }
+        .unset-card {
+            background: var(--nord6);
+            border: 1px solid var(--nord13);
+            border-radius: 12px;
+            padding: 20px 24px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+            margin-bottom: 16px;
+        }
+        .unset-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+        .unset-card-title {
+            font-weight: 600;
+            color: var(--nord13);
+            font-size: 0.95rem;
+        }
+        .unset-apply-btn {
+            padding: 0.4rem 1.2rem;
+            border-radius: 6px;
+            border: none;
+            background: var(--nord10);
+            color: #fff;
+            font-family: inherit;
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .unset-apply-btn:disabled { opacity: 0.5; cursor: default; }
+        .unset-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.88rem;
+        }
+        .unset-table th {
+            text-align: left;
+            padding: 0.4rem 0.6rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .unset-table td {
+            padding: 0.4rem 0.6rem;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        .unset-table .radio-group {
+            display: flex;
+            gap: 0.75rem;
+        }
+        .unset-table .radio-group label {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            cursor: pointer;
+            font-size: 0.82rem;
+        }
+        .unset-result {
+            margin-top: 0.75rem;
+            font-size: 0.85rem;
+            display: none;
+        }
+        .unset-result.ok  { color: var(--nord14); }
+        .unset-result.err { color: var(--nord11); }
     </style>
 </head>
 <body>
@@ -208,6 +277,27 @@
     <div class="tool-card" style="padding: 0; overflow: hidden;">
         <div id="report-area">
             <div class="loading-msg">Loading…</div>
+        </div>
+    </div>
+
+    <div id="unset-panel" style="display:none;">
+        <div class="unset-card">
+            <div class="unset-card-header">
+                <div class="unset-card-title" id="unset-title">⚠ Unset Contracts This Month</div>
+                <button class="unset-apply-btn" id="unset-apply-btn" onclick="applyUnsetFix()" disabled>Apply</button>
+            </div>
+            <table class="unset-table">
+                <thead>
+                    <tr>
+                        <th>Contract</th>
+                        <th>AE</th>
+                        <th>Client</th>
+                        <th>Set To</th>
+                    </tr>
+                </thead>
+                <tbody id="unset-tbody"></tbody>
+            </table>
+            <div id="unset-result" class="unset-result"></div>
         </div>
     </div>
 </main>
@@ -260,6 +350,7 @@
             document.getElementById('bounds-label').textContent =
                 `Broadcast: ${lastData.bcast_bounds}  ·  Calendar: ${lastData.cal_bounds}`;
             render(lastData);
+            loadUnsetContracts();
         } catch (e) {
             document.getElementById('report-area').innerHTML =
                 `<div class="bb-empty">Error: ${e.message}</div>`;
@@ -346,6 +437,104 @@
 
         html += '</tbody></table>';
         document.getElementById('report-area').innerHTML = html;
+    }
+
+    // ── Unset contract fix panel ──────────────────────────────────────────────
+    let unsetContracts = [];
+    let unsetChoices  = {};
+
+    async function loadUnsetContracts() {
+        try {
+            const res = await fetch(`/api/master-control/booked-business/unset-contracts?year=${currentYear}&month=${currentMonth}`);
+            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+            unsetContracts = data.contracts;
+            unsetChoices   = {};
+            for (const c of unsetContracts) unsetChoices[c.id] = null;
+            renderUnset();
+        } catch (e) {
+            document.getElementById('unset-panel').style.display = 'none';
+        }
+    }
+
+    function renderUnset() {
+        const panel = document.getElementById('unset-panel');
+        if (!unsetContracts.length) { panel.style.display = 'none'; return; }
+        panel.style.display = 'block';
+        document.getElementById('unset-title').textContent =
+            `⚠ ${unsetContracts.length} Unset Contract${unsetContracts.length !== 1 ? 's' : ''} This Month`;
+
+        const tbody = document.getElementById('unset-tbody');
+        tbody.innerHTML = unsetContracts.map(c => {
+            const sel = unsetChoices[c.id];
+            return `<tr>
+                <td><strong>${esc(c.code)}</strong><br><span style="color:var(--text-muted);font-size:0.78rem;">${esc(c.description)}</span></td>
+                <td>${esc(c.ae)}</td>
+                <td>${esc(c.client)}</td>
+                <td>
+                    <div class="radio-group">
+                        <label>
+                            <input type="radio" name="uc_${c.id}" value="316"
+                                ${sel === 316 ? 'checked' : ''}
+                                onchange="pickUnset(${c.id}, 316)" />
+                            <span style="color:var(--nord9)">Broadcast</span>
+                        </label>
+                        <label>
+                            <input type="radio" name="uc_${c.id}" value="317"
+                                ${sel === 317 ? 'checked' : ''}
+                                onchange="pickUnset(${c.id}, 317)" />
+                            <span style="color:var(--nord14)">Calendar</span>
+                        </label>
+                    </div>
+                </td>
+            </tr>`;
+        }).join('');
+        updateUnsetBtn();
+    }
+
+    function pickUnset(id, billing) {
+        unsetChoices[id] = billing;
+        updateUnsetBtn();
+    }
+
+    function updateUnsetBtn() {
+        const pending = Object.values(unsetChoices).filter(v => v !== null).length;
+        document.getElementById('unset-apply-btn').disabled = pending === 0;
+    }
+
+    async function applyUnsetFix() {
+        const updates = unsetContracts
+            .filter(c => unsetChoices[c.id] !== null)
+            .map(c => ({ contract_id: c.id, billing: unsetChoices[c.id] }));
+        if (!updates.length) return;
+
+        const btn = document.getElementById('unset-apply-btn');
+        btn.disabled = true;
+        btn.textContent = 'Applying…';
+        const resultEl = document.getElementById('unset-result');
+        resultEl.style.display = 'none';
+
+        try {
+            const res = await fetch('/api/master-control/booked-business/set-contract-billing', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ updates }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+            resultEl.className = 'unset-result ok';
+            resultEl.textContent = `Updated ${data.updated} contract${data.updated !== 1 ? 's' : ''}.`;
+            resultEl.style.display = 'block';
+            btn.textContent = 'Apply';
+            // reload both the report and the unset list
+            await Promise.all([load(), loadUnsetContracts()]);
+        } catch (e) {
+            resultEl.className = 'unset-result err';
+            resultEl.textContent = `Error: ${e.message}`;
+            resultEl.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = 'Apply';
+        }
     }
 
     init();
