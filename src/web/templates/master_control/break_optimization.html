@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Break Optimization — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 1400px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px 24px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+            margin-bottom: 16px;
+        }
+
+        .controls-row { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+        .field-group { display: flex; flex-direction: column; gap: 4px; }
+        .field-label { font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .field-input { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 7px 12px; font-size: 0.9rem; color: var(--text-primary); outline: none; font-family: inherit; width: 90px; }
+        .field-input:focus { border-color: var(--nord10); }
+
+        .pill-group { display: flex; gap: 6px; flex-wrap: wrap; }
+        .mkt-pill { background: transparent; border: 1px solid var(--border-color); border-radius: 20px; padding: 5px 12px; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); cursor: pointer; transition: all 0.15s; font-family: inherit; }
+        .mkt-pill:hover:not(.active) { border-color: var(--nord10); color: var(--nord10); }
+        .mkt-pill.active { background: var(--nord10); border-color: var(--nord10); color: var(--nord6); }
+
+        .load-btn { background: var(--nord10); color: var(--nord6); border: none; border-radius: 8px; padding: 8px 20px; font-size: 0.9rem; font-weight: 600; cursor: pointer; font-family: inherit; }
+        .load-btn:hover { background: var(--nord9); }
+        .load-btn:disabled { opacity: 0.5; cursor: default; }
+
+        .apply-all-btn { background: var(--nord14); color: var(--nord6); border: none; border-radius: 8px; padding: 8px 20px; font-size: 0.9rem; font-weight: 600; cursor: pointer; font-family: inherit; }
+        .apply-all-btn:hover { background: #8fad7a; }
+        .apply-all-btn:disabled { opacity: 0.5; cursor: default; }
+
+        /* Break cards */
+        .break-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            margin-bottom: 12px;
+            overflow: hidden;
+        }
+        .break-card.has-violation { border-color: var(--nord13); }
+        .break-card.has-bookend-warning { border-color: var(--nord11); }
+
+        .break-header {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 16px;
+            background: var(--nord5);
+            border-bottom: 1px solid var(--border-color);
+        }
+        .break-title { font-weight: 700; font-size: 0.88rem; color: var(--text-primary); }
+        .break-time { font-family: monospace; font-size: 0.82rem; color: var(--text-muted); }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 700; }
+        .badge-violation { background: rgba(235,203,139,0.25); color: var(--nord13); border: 1px solid rgba(235,203,139,0.5); }
+        .badge-bookend { background: rgba(191,97,106,0.2); color: var(--nord11); border: 1px solid rgba(191,97,106,0.4); }
+        .badge-ok { background: rgba(163,190,140,0.2); color: var(--nord14); border: 1px solid rgba(163,190,140,0.4); }
+        .break-spacer { flex: 1; }
+        .apply-btn { background: var(--nord14); color: var(--nord6); border: none; border-radius: 6px; padding: 4px 14px; font-size: 0.78rem; font-weight: 700; cursor: pointer; font-family: inherit; }
+        .apply-btn:hover { background: #8fad7a; }
+        .apply-btn:disabled { opacity: 0.4; cursor: default; }
+        .apply-done { font-size: 0.75rem; color: var(--nord14); font-weight: 600; }
+
+        /* Side-by-side break content */
+        .break-body { display: grid; grid-template-columns: 1fr 1fr; }
+        .col-header { padding: 6px 16px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: var(--nord5); border-bottom: 1px solid var(--border-color); }
+        .col-header.right { border-left: 1px solid var(--border-color); }
+        .spot-list { padding: 6px 0; }
+        .spot-row {
+            display: flex; align-items: center; gap: 8px;
+            padding: 5px 16px;
+            font-size: 0.83rem;
+            border-bottom: 1px solid var(--nord5);
+        }
+        .spot-row:last-child { border-bottom: none; }
+        .spot-row.moved { background: rgba(235,203,139,0.12); }
+        .spot-row.right-col { border-left: 1px solid var(--border-color); }
+        .spot-time { font-family: monospace; font-size: 0.78rem; color: var(--text-muted); min-width: 58px; }
+        .spot-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-primary); }
+        .moved-arrow { font-size: 0.7rem; color: var(--nord13); font-weight: 700; }
+
+        /* Label badges */
+        .lbl { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 0.65rem; font-weight: 700; white-space: nowrap; min-width: 62px; text-align: center; }
+        .lbl-BOOKEND    { background: rgba(191,97,106,0.2);  color: var(--nord11); }
+        .lbl-BILLBOARD  { background: rgba(208,135,112,0.2); color: var(--nord12); }
+        .lbl-COMPANION  { background: rgba(235,203,139,0.25);color: #b8972a; }
+        .lbl-PAYING     { background: rgba(94,129,172,0.18); color: var(--nord10); }
+        .lbl-WORLDLINK  { background: rgba(129,161,193,0.18);color: var(--nord9); }
+        .lbl-PI         { background: rgba(180,142,173,0.2); color: var(--nord15,#b48ead); }
+        .lbl-PSA        { background: var(--nord5); color: var(--text-muted); }
+        .lbl-STATION-ID { background: var(--nord5); color: var(--text-muted); }
+        .lbl-OTHER      { background: var(--nord5); color: var(--text-muted); }
+
+        .empty-state { text-align: center; padding: 56px 0; color: var(--text-muted); font-size: 0.9rem; }
+        .summary-bar { display: flex; align-items: center; gap: 16px; padding: 10px 0; font-size: 0.82rem; color: var(--text-muted); flex-wrap: wrap; }
+        .summary-bar strong { color: var(--text-primary); }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/master-control" class="back-link">🎬</a>
+            <div class="logo-icon">⚙️</div>
+            <div>
+                <h1>Break <span>Optimization</span></h1>
+                <div class="logo-sub">Master Control</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="tool-card">
+        <div class="controls-row">
+            <div class="field-group">
+                <label class="field-label">Date</label>
+                <input type="date" id="datePicker" class="field-input" style="width:140px" />
+            </div>
+            <div class="field-group">
+                <label class="field-label">Market</label>
+                <div class="pill-group">
+                    <button class="mkt-pill" data-market="NYC" onclick="selectMkt(this)">NYC</button>
+                    <button class="mkt-pill" data-market="CMP" onclick="selectMkt(this)">CMP</button>
+                    <button class="mkt-pill" data-market="HOU" onclick="selectMkt(this)">HOU</button>
+                    <button class="mkt-pill" data-market="SFO" onclick="selectMkt(this)">SFO</button>
+                    <button class="mkt-pill" data-market="SEA" onclick="selectMkt(this)">SEA</button>
+                    <button class="mkt-pill active" data-market="LAX" onclick="selectMkt(this)">LAX</button>
+                    <button class="mkt-pill" data-market="CVC" onclick="selectMkt(this)">CVC</button>
+                    <button class="mkt-pill" data-market="WDC" onclick="selectMkt(this)">WDC</button>
+                </div>
+            </div>
+            <div class="field-group">
+                <label class="field-label">From</label>
+                <input type="text" id="timeFrom" class="field-input" placeholder="08:00:00" value="08:00:00" />
+            </div>
+            <div class="field-group">
+                <label class="field-label">To</label>
+                <input type="text" id="timeTo" class="field-input" placeholder="09:00:00" value="09:00:00" />
+            </div>
+            <button class="load-btn" id="loadBtn" onclick="loadBreaks()">Load</button>
+            <button class="apply-all-btn" id="applyAllBtn" onclick="applyAll()" style="display:none">Apply All Fixes</button>
+        </div>
+    </div>
+
+    <div id="summaryBar"></div>
+    <div id="breakArea"><div class="empty-state">Select a market, date, and time window — then click Load.</div></div>
+</main>
+
+<script>
+let selectedMarket = 'LAX';
+let breakData = [];
+
+function selectMkt(el) {
+    document.querySelectorAll('.mkt-pill').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+    selectedMarket = el.dataset.market;
+}
+
+function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function labelClass(lbl) {
+    return 'lbl-' + lbl.replace(/\s+/g, '-');
+}
+
+async function loadBreaks() {
+    const date = document.getElementById('datePicker').value;
+    const timeFrom = document.getElementById('timeFrom').value.trim();
+    const timeTo   = document.getElementById('timeTo').value.trim();
+    if (!date)       { alert('Please select a date.'); return; }
+    if (!selectedMarket) { alert('Please select a market.'); return; }
+    if (!timeFrom || !timeTo) { alert('Please enter a time window.'); return; }
+
+    const btn = document.getElementById('loadBtn');
+    btn.disabled = true; btn.textContent = 'Loading…';
+    document.getElementById('breakArea').innerHTML = '';
+    document.getElementById('summaryBar').innerHTML = '';
+    document.getElementById('applyAllBtn').style.display = 'none';
+
+    try {
+        const url = `/api/master-control/break-optimization/load?market=${selectedMarket}&date=${date}&time_from=${encodeURIComponent(timeFrom)}&time_to=${encodeURIComponent(timeTo)}`;
+        const resp = await fetch(url);
+        if (!resp.ok) {
+            const err = await resp.json();
+            document.getElementById('breakArea').innerHTML = `<div class="empty-state">${esc(err.error || 'Error loading data.')}</div>`;
+            return;
+        }
+        const data = await resp.json();
+        breakData = data.breaks;
+        renderBreaks(data);
+    } catch(e) {
+        document.getElementById('breakArea').innerHTML = `<div class="empty-state">Network error: ${esc(e.message)}</div>`;
+    } finally {
+        btn.disabled = false; btn.textContent = 'Load';
+    }
+}
+
+function renderBreaks(data) {
+    const violations = data.breaks.filter(b => b.violation || b.bookend_warning);
+    const changed    = data.breaks.filter(b => b.changed);
+
+    // Summary bar
+    let sb = `<div class="summary-bar">
+        <span><strong>${data.breaks.length}</strong> breaks</span>
+        <span><strong style="color:var(--nord13)">${violations.length}</strong> with violations</span>
+        <span><strong>${changed.length}</strong> need reordering</span>
+    </div>`;
+    document.getElementById('summaryBar').innerHTML = sb;
+
+    if (changed.length > 1) {
+        document.getElementById('applyAllBtn').style.display = '';
+    }
+
+    if (data.breaks.length === 0) {
+        document.getElementById('breakArea').innerHTML = '<div class="empty-state">No commercial breaks found in this window.</div>';
+        return;
+    }
+
+    document.getElementById('breakArea').innerHTML = data.breaks.map((brk, bi) => renderBreak(brk, bi)).join('');
+}
+
+function renderBreak(brk, bi) {
+    const badgeHtml = brk.bookend_warning
+        ? '<span class="badge badge-bookend">⚠ Multiple Bookends</span>'
+        : brk.violation
+            ? '<span class="badge badge-violation">⚠ Out of Order</span>'
+            : '<span class="badge badge-ok">✓ OK</span>';
+
+    const startTime = brk.current[0]?.time || '';
+    const applyDisabled = !brk.changed ? 'disabled' : '';
+
+    // Build optimized ID order for moved detection
+    const origIds = brk.current.map(s => s.id);
+    const optIds  = brk.optimized.map(s => s.id);
+
+    const renderSpot = (s, newTime, isMoved, isRight) => {
+        const movedClass = isMoved ? ' moved' : '';
+        const rightClass = isRight ? ' right-col' : '';
+        const arrow = isMoved ? '<span class="moved-arrow">↕</span>' : '';
+        const time = isRight ? (newTime || s.time) : s.time;
+        return `<div class="spot-row${movedClass}${rightClass}">
+            <span class="spot-time">${esc(time)}</span>
+            <span class="lbl ${esc(labelClass(s.label))}">${esc(s.label)}</span>
+            <span class="spot-title" title="${esc(s.title)}">${esc(s.title)}</span>
+            ${arrow}
+        </div>`;
+    };
+
+    const maxLen = Math.max(brk.current.length, brk.optimized.length);
+    let leftRows = '', rightRows = '';
+    for (let i = 0; i < maxLen; i++) {
+        const cur = brk.current[i];
+        const opt = brk.optimized[i];
+        if (cur) {
+            const moved = i < optIds.length && cur.id !== optIds[i];
+            leftRows += renderSpot(cur, null, moved, false);
+        }
+        if (opt) {
+            const moved = i < origIds.length && opt.id !== origIds[i];
+            rightRows += renderSpot(opt, opt.new_time, moved, true);
+        }
+    }
+
+    return `<div class="break-card ${brk.bookend_warning ? 'has-bookend-warning' : brk.violation ? 'has-violation' : ''}" id="break-${bi}">
+        <div class="break-header">
+            <span class="break-title">Break ${bi + 1}</span>
+            <span class="break-time">${esc(startTime)}</span>
+            ${badgeHtml}
+            <span class="break-spacer"></span>
+            <span class="apply-done" id="done-${bi}" style="display:none">✓ Applied</span>
+            <button class="apply-btn" id="apply-${bi}" ${applyDisabled} onclick="applyBreak(${bi})">Apply Fix</button>
+        </div>
+        <div class="break-body">
+            <div>
+                <div class="col-header">Current Order</div>
+                <div class="spot-list">${leftRows}</div>
+            </div>
+            <div>
+                <div class="col-header right">Optimized Order</div>
+                <div class="spot-list">${rightRows}</div>
+            </div>
+        </div>
+    </div>`;
+}
+
+async function applyBreak(bi) {
+    const brk = breakData[bi];
+    const updates = brk.optimized.map(s => ({ id_tpalinse: s.id, new_ora: s.new_ora }));
+    const btn = document.getElementById(`apply-${bi}`);
+    btn.disabled = true; btn.textContent = 'Applying…';
+
+    try {
+        const resp = await fetch('/api/master-control/break-optimization/apply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ updates })
+        });
+        if (!resp.ok) {
+            const err = await resp.json();
+            alert('Error: ' + (err.error || 'Unknown error'));
+            btn.disabled = false; btn.textContent = 'Apply Fix';
+            return;
+        }
+        btn.style.display = 'none';
+        document.getElementById(`done-${bi}`).style.display = '';
+        document.getElementById(`break-${bi}`).classList.remove('has-violation', 'has-bookend-warning');
+    } catch(e) {
+        alert('Network error: ' + e.message);
+        btn.disabled = false; btn.textContent = 'Apply Fix';
+    }
+}
+
+async function applyAll() {
+    const allUpdates = breakData
+        .filter(b => b.changed)
+        .flatMap(b => b.optimized.map(s => ({ id_tpalinse: s.id, new_ora: s.new_ora })));
+
+    const btn = document.getElementById('applyAllBtn');
+    btn.disabled = true; btn.textContent = 'Applying…';
+
+    try {
+        const resp = await fetch('/api/master-control/break-optimization/apply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ updates: allUpdates })
+        });
+        if (!resp.ok) {
+            const err = await resp.json();
+            alert('Error: ' + (err.error || 'Unknown error'));
+            btn.disabled = false; btn.textContent = 'Apply All Fixes';
+            return;
+        }
+        breakData.forEach((_, bi) => {
+            if (breakData[bi].changed) {
+                const applyBtn = document.getElementById(`apply-${bi}`);
+                if (applyBtn) applyBtn.style.display = 'none';
+                const done = document.getElementById(`done-${bi}`);
+                if (done) done.style.display = '';
+                document.getElementById(`break-${bi}`)?.classList.remove('has-violation', 'has-bookend-warning');
+            }
+        });
+        btn.textContent = '✓ All Applied';
+    } catch(e) {
+        alert('Network error: ' + e.message);
+        btn.disabled = false; btn.textContent = 'Apply All Fixes';
+    }
+}
+
+// Default date to today
+document.getElementById('datePicker').value = new Date().toISOString().slice(0,10);
+</script>
+</body>
+</html>

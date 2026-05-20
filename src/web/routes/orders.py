@@ -2404,6 +2404,176 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=500)
 
+    # ── Break Optimization ─────────────────────────────────────────────────────
+
+    @router.get("/master-control/break-optimization", response_class=HTMLResponse)
+    async def break_optimization_page(request: Request):
+        return templates.TemplateResponse(request, "master_control/break_optimization.html")
+
+    _BO_MARKET_IDS = {"NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4, "SEA": 5, "LAX": 6, "CVC": 7, "WDC": 8, "DAL": 10}
+    _BO_FPS = 29.97
+
+    def _bo_frames_to_time(frames: int) -> str:
+        secs = round(frames / _BO_FPS)
+        h, rem = divmod(secs, 3600)
+        mn, s = divmod(rem, 60)
+        return f"{h}:{mn:02d}:{s:02d}"
+
+    def _bo_time_to_frames(t: str) -> int:
+        parts = t.split(":")
+        h = int(parts[0]); mn = int(parts[1]) if len(parts) > 1 else 0; s = int(parts[2]) if len(parts) > 2 else 0
+        return round((h * 3600 + mn * 60 + s) * _BO_FPS)
+
+    def _bo_classify(newtype: str, capo, fine, is_wl: bool, prev_label: str):
+        if capo and fine:                                           return 1, "BOOKEND"
+        if capo and not fine:                                       return 2, "BILLBOARD"
+        if prev_label == "BILLBOARD" and newtype in ("COM","BNS"):  return 3, "COMPANION"
+        if newtype in ("COM","BNS") and not is_wl:                  return 4, "PAYING"
+        if newtype in ("COM","BNS") and is_wl:                      return 5, "WORLDLINK"
+        if newtype == "PER":                                        return 6, "PI"
+        if newtype == "PSA":                                        return 7, "PSA"
+        if newtype == "ID":                                         return 8, "STATION ID"
+        return 0, newtype or "OTHER"
+
+    def _bo_optimize(spots: list) -> list:
+        skip = set()
+        pairs = []
+        for j, s in enumerate(spots):
+            if j in skip:
+                continue
+            if s["label"] == "BILLBOARD":
+                pair = [s]
+                if j + 1 < len(spots) and spots[j + 1]["label"] == "COMPANION":
+                    pair.append(spots[j + 1])
+                    skip.add(j + 1)
+                pairs.append((2, pair))
+            elif s["label"] == "BOOKEND":
+                pairs.append((1, [s]))
+            else:
+                pairs.append((s["priority"], [s]))
+        pairs.sort(key=lambda x: x[0])
+        return [s for _, grp in pairs for s in grp]
+
+    @router.get("/api/master-control/break-optimization/load")
+    async def load_break_optimization(
+        market: str = Query(...),
+        date: str = Query(...),
+        time_from: str = Query(...),
+        time_to: str = Query(...),
+    ):
+        market_id = _BO_MARKET_IDS.get(market.upper())
+        if not market_id:
+            return JSONResponse({"error": f"Unknown market: {market}"}, status_code=400)
+
+        from_frames = _bo_time_to_frames(time_from)
+        to_frames   = _bo_time_to_frames(time_to)
+
+        def _run():
+            with connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                cur.execute(
+                    "SELECT t.ID_TPALINSE, t.ORA, t.TITLE, t.NEWTYPE, t.DURATION,"
+                    " cr.CONTROLLACAPOFILA, cr.CONTROLLAFINEFILA, ct.COD_CONTRATTO"
+                    " FROM TPALINSE t"
+                    " LEFT JOIN trafficTPalinse tp ON tp.ID_TPalinse = t.ID_TPALINSE"
+                    " LEFT JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe"
+                    " LEFT JOIN CONTRATTITESTATA ct ON ct.ID_CONTRATTITESTATA = tp.ID_CONTRATTITESTATA"
+                    " WHERE t.DATA = %s AND t.COD_USER = %d"
+                    " AND t.ORA >= %d AND t.ORA < %d"
+                    " ORDER BY t.ORA",
+                    (date, market_id, from_frames, to_frames),
+                )
+                return cur.fetchall()
+
+        try:
+            rows = await asyncio.get_running_loop().run_in_executor(None, _run)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+        # Annotate each row with label and priority
+        prev_label = None
+        annotated = []
+        for r in rows:
+            nt = (r["NEWTYPE"] or "").strip()
+            is_wl = (r["COD_CONTRATTO"] or "").strip().startswith("WL")
+            pri, label = _bo_classify(nt, r["CONTROLLACAPOFILA"], r["CONTROLLAFINEFILA"], is_wl, prev_label)
+            prev_label = label
+            annotated.append({
+                "id": r["ID_TPALINSE"],
+                "ora": r["ORA"],
+                "time": _bo_frames_to_time(r["ORA"]),
+                "title": (r["TITLE"] or "").strip(),
+                "newtype": nt,
+                "label": label,
+                "priority": pri,
+                "duration": r["DURATION"] or 0,
+                "contract": (r["COD_CONTRATTO"] or "").strip(),
+                "is_fixed": pri == 0,
+            })
+
+        # Segment into fixed anchors and commercial break blocks
+        breaks = []
+        i = 0
+        while i < len(annotated):
+            if annotated[i]["is_fixed"]:
+                i += 1
+            else:
+                block = []
+                while i < len(annotated) and not annotated[i]["is_fixed"]:
+                    block.append(annotated[i])
+                    i += 1
+                if not block:
+                    continue
+                optimized = _bo_optimize(block)
+                # Recalculate new times from break start
+                cursor = block[0]["ora"]
+                opt_timed = []
+                for s in optimized:
+                    opt_timed.append({**s, "new_ora": cursor, "new_time": _bo_frames_to_time(cursor)})
+                    cursor += s["duration"]
+
+                orig_ids = [s["id"] for s in block]
+                opt_ids  = [s["id"] for s in opt_timed]
+                violation = [s["priority"] for s in block] != sorted(s["priority"] for s in block)
+                bookend_count = sum(1 for s in block if s["label"] == "BOOKEND")
+                changed = orig_ids != opt_ids
+
+                breaks.append({
+                    "current":          block,
+                    "optimized":        opt_timed,
+                    "violation":        violation,
+                    "bookend_warning":  bookend_count > 1,
+                    "changed":          changed,
+                })
+
+        return JSONResponse({
+            "market": market, "date": date,
+            "time_from": time_from, "time_to": time_to,
+            "breaks": breaks,
+        })
+
+    @router.post("/api/master-control/break-optimization/apply")
+    async def apply_break_optimization(body: dict = Body(...)):
+        updates = body.get("updates", [])
+        if not updates:
+            return JSONResponse({"ok": True, "updated": 0})
+
+        def _run():
+            with connect() as conn:
+                cur = conn.cursor()
+                for u in updates:
+                    cur.execute(
+                        "UPDATE TPALINSE SET ORA = %d, ORA_P = %d WHERE ID_TPALINSE = %d",
+                        (int(u["new_ora"]), int(u["new_ora"]), int(u["id_tpalinse"])),
+                    )
+                conn.commit()
+
+        try:
+            await asyncio.get_running_loop().run_in_executor(None, _run)
+            return JSONResponse({"ok": True, "updated": len(updates)})
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
     # ── Assign Traffic ─────────────────────────────────────────────────────────
 
     @router.get("/traffic/assign-assets", response_class=HTMLResponse)
