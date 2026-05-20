@@ -226,7 +226,7 @@ def _mc_fill_program_spots(
             if i >= len(oras):
                 results.append({"excel_row": spot["excel_row"], "status": "no_match", "actual_time": ""})
                 continue
-            secs = round(oras[i] / fps)
+            secs = int(oras[i] / fps)
             h, rem = divmod(secs, 3600)
             mn, s = divmod(rem, 60)
             time_str = f"{h}:{mn:02d}:{s:02d}"
