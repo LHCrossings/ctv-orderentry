@@ -5035,6 +5035,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         cr.N_PASSAGGI,  cr.IMPORTO,
                         cr.NEWTYPE,
                         ct.CENTROMEDIA, ct.P_AGENZIA, ct.COD_CONTRATTO,
+                        ct.CAMBIOMERCE, ct.ID_PAGAMENTI,
                         ae.RAG_SOCIAL AS ae_name,
                         ag.RAG_SOCIAL AS buying_agency,
                         cl.RAG_SOCIAL AS client_name
@@ -5052,8 +5053,18 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 """, (str(month_end), str(bcast_start)))
                 rows = cur.fetchall()
 
+            def _is_trade(r):
+                return (
+                    r["CAMBIOMERCE"]
+                    or r["ID_PAGAMENTI"] == 4
+                    or "TRD" in (r["NEWTYPE"] or "")
+                )
+
             clients: dict = defaultdict(
                 lambda: {"gross": 0.0, "net": 0.0, "centromedia": None, "unset": False}
+            )
+            trade_clients: dict = defaultdict(
+                lambda: {"gross": 0.0, "net": 0.0}
             )
 
             for r in rows:
@@ -5078,35 +5089,49 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     cli = f"{agency}:{client}"
                 else:
                     cli = client or agency or r["COD_CONTRATTO"] or "Unknown"
-                key = (ae, cli)
-                clients[key]["gross"] += gross
-                clients[key]["net"]   += net
-                if clients[key]["centromedia"] is None:
-                    clients[key]["centromedia"] = cm
-                if cm == 0:
-                    clients[key]["unset"] = True
 
-            ae_map: dict = defaultdict(list)
-            for (ae, cli), data in clients.items():
-                cm = data["centromedia"] or 0
-                billing = "Broadcast" if cm == 316 else ("Calendar" if cm == 317 else "—")
-                ae_map[ae].append({
-                    "client":  cli,
-                    "gross":   round(data["gross"], 2),
-                    "net":     round(data["net"],   2),
-                    "billing": billing,
-                    "unset":   data["unset"],
-                })
+                if show_trade and _is_trade(r):
+                    key = (ae, cli)
+                    trade_clients[key]["gross"] += gross
+                    trade_clients[key]["net"]   += net
+                else:
+                    key = (ae, cli)
+                    clients[key]["gross"] += gross
+                    clients[key]["net"]   += net
+                    if clients[key]["centromedia"] is None:
+                        clients[key]["centromedia"] = cm
+                    if cm == 0:
+                        clients[key]["unset"] = True
 
-            ae_groups = []
-            for ae in sorted(ae_map):
-                rows_out = sorted(ae_map[ae], key=lambda x: x["client"])
-                ae_groups.append({
-                    "ae":      ae,
-                    "clients": rows_out,
-                    "gross":   round(sum(c["gross"] for c in rows_out), 2),
-                    "net":     round(sum(c["net"]   for c in rows_out), 2),
-                })
+            def _build_ae_groups(client_map, include_billing=True):
+                ae_map: dict = defaultdict(list)
+                for (ae, cli), data in client_map.items():
+                    row = {
+                        "client": cli,
+                        "gross":  round(data["gross"], 2),
+                        "net":    round(data["net"],   2),
+                    }
+                    if include_billing:
+                        cm = data.get("centromedia") or 0
+                        row["billing"] = "Broadcast" if cm == 316 else ("Calendar" if cm == 317 else "—")
+                        row["unset"]   = data.get("unset", False)
+                    else:
+                        row["billing"] = "Trade"
+                        row["unset"]   = False
+                    ae_map[ae].append(row)
+                groups = []
+                for ae in sorted(ae_map):
+                    rows_out = sorted(ae_map[ae], key=lambda x: x["client"])
+                    groups.append({
+                        "ae":      ae,
+                        "clients": rows_out,
+                        "gross":   round(sum(c["gross"] for c in rows_out), 2),
+                        "net":     round(sum(c["net"]   for c in rows_out), 2),
+                    })
+                return groups
+
+            ae_groups    = _build_ae_groups(clients,       include_billing=True)
+            trade_groups = _build_ae_groups(trade_clients, include_billing=False) if show_trade else []
 
             grand_gross = round(sum(g["gross"] for g in ae_groups), 2)
             grand_net   = round(sum(g["net"]   for g in ae_groups), 2)
@@ -5119,12 +5144,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             cal_label   = f"{_md(cal_start)} – {_md(month_end)}, {month_end.year}"
 
             return {
-                "month_label":  month_label,
-                "bcast_bounds": bcast_label,
-                "cal_bounds":   cal_label,
-                "ae_groups":    ae_groups,
-                "grand_gross":  grand_gross,
-                "grand_net":    grand_net,
+                "month_label":   month_label,
+                "bcast_bounds":  bcast_label,
+                "cal_bounds":    cal_label,
+                "ae_groups":     ae_groups,
+                "grand_gross":   grand_gross,
+                "grand_net":     grand_net,
+                "trade_groups":  trade_groups,
+                "trade_gross":   round(sum(g["gross"] for g in trade_groups), 2),
+                "trade_net":     round(sum(g["net"]   for g in trade_groups), 2),
             }
 
         try:

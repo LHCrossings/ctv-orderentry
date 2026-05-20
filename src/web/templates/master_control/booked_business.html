@@ -128,10 +128,28 @@
             border-radius: 4px;
             font-weight: 500;
         }
-        .badge-broadcast { background: rgba(94,129,172,0.2); color: var(--nord9); }
+        .badge-broadcast { background: rgba(94,129,172,0.2);  color: var(--nord9); }
         .badge-calendar  { background: rgba(163,190,140,0.2); color: var(--nord14); }
         .badge-unset     { background: rgba(235,203,139,0.2); color: var(--nord13); }
+        .badge-trade     { background: rgba(191,97,106,0.15); color: var(--nord11); }
         .warn-icon { color: var(--nord13); margin-left: 0.3rem; }
+        .trade-section-header td {
+            background: var(--nord11);
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.78rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            padding: 0.5rem 0.75rem;
+            border-bottom: none;
+        }
+        .trade-total td {
+            background: rgba(191,97,106,0.15);
+            color: var(--nord11);
+            font-weight: 700;
+            font-size: 0.95rem;
+            border-bottom: none;
+        }
         .bb-empty {
             text-align: center;
             padding: 3rem;
@@ -296,6 +314,35 @@
             <td></td>
             <td class="num">${fmt(data['grand_' + col])}</td>
         </tr>`;
+
+        if (data.trade_groups && data.trade_groups.length > 0) {
+            html += `<tr class="trade-section-header">
+                <td colspan="3">TRADE</td>
+            </tr>`;
+            for (const ae of data.trade_groups) {
+                html += `<tr class="ae-heading">
+                    <td colspan="2">${ae.ae}</td>
+                    <td class="num">${fmt(ae[col])}</td>
+                </tr>`;
+                for (const c of ae.clients) {
+                    html += `<tr>
+                        <td>&nbsp;&nbsp;&nbsp;${c.client}</td>
+                        <td><span class="billing-badge badge-trade">Trade</span></td>
+                        <td class="num">${fmt(c[col])}</td>
+                    </tr>`;
+                }
+                html += `<tr class="ae-subtotal">
+                    <td>&nbsp;&nbsp;&nbsp;${ae.ae} Total</td>
+                    <td></td>
+                    <td class="num">${fmt(ae[col])}</td>
+                </tr>`;
+            }
+            html += `<tr class="trade-total">
+                <td>Trade Total</td>
+                <td></td>
+                <td class="num">${fmt(data['trade_' + col])}</td>
+            </tr>`;
+        }
 
         html += '</tbody></table>';
         document.getElementById('report-area').innerHTML = html;
