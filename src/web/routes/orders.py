@@ -2575,13 +2575,31 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
         def _run():
             from browser_automation.etere_direct_client import connect as _connect
+            ids = [int(u["id_tpalinse"]) for u in updates]
+            id_placeholders = ",".join(["%d"] * len(ids))
             with _connect() as conn:
-                cur = conn.cursor()
-                for u in updates:
-                    cur.execute(
-                        "UPDATE TPALINSE SET ORA = %d, ORA_P = %d WHERE ID_TPALINSE = %d",
-                        (int(u["new_ora"]), int(u["new_ora"]), int(u["id_tpalinse"])),
-                    )
+                cur = conn.cursor(as_dict=True)
+                cur.execute(
+                    f"SELECT ID_TPALINSE, XORDER FROM TPALINSE WHERE ID_TPALINSE IN ({id_placeholders})",
+                    tuple(ids),
+                )
+                xorder_map = {r["ID_TPALINSE"]: r["XORDER"] for r in cur.fetchall()}
+                # Distribute current XORDERs (sorted) to spots in their new optimized order
+                sorted_xorders = sorted(v for v in xorder_map.values() if v is not None)
+                cur2 = conn.cursor()
+                for i, u in enumerate(updates):
+                    new_ora = int(u["new_ora"])
+                    new_xorder = sorted_xorders[i] if i < len(sorted_xorders) else None
+                    if new_xorder is not None:
+                        cur2.execute(
+                            "UPDATE TPALINSE SET ORA = %d, ORA_P = %d, XORDER = %d WHERE ID_TPALINSE = %d",
+                            (new_ora, new_ora, new_xorder, int(u["id_tpalinse"])),
+                        )
+                    else:
+                        cur2.execute(
+                            "UPDATE TPALINSE SET ORA = %d, ORA_P = %d WHERE ID_TPALINSE = %d",
+                            (new_ora, new_ora, int(u["id_tpalinse"])),
+                        )
                 conn.commit()
 
         try:
