@@ -5143,36 +5143,34 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         def _run():
             from browser_automation.etere_direct_client import connect as _connect
 
-            conn_str = _connect()
-            import pyodbc
-
-            with pyodbc.connect(conn_str) as conn:
-                cur = conn.cursor()
-                # clients that have at least one unset (CENTROMEDIA=0) cash contract
-                cur.execute("""
-                    SELECT
-                        a.ID_ANAGRAF,
-                        a.NOME                             AS client_name,
-                        ISNULL(a.CENTROMEDIA, 0)           AS default_billing,
-                        COUNT(ct.ID_CONTRATTO)             AS unset_count
-                    FROM ANAGRAF a
-                    JOIN CONTRATTITESTATA ct
-                         ON ct.COMMITTENTE = a.ID_ANAGRAF
-                        AND ct.CENTROMEDIA = 0
-                        AND (ct.CAMBIOMERCE = 0 OR ct.CAMBIOMERCE IS NULL)
-                    GROUP BY a.ID_ANAGRAF, a.NOME, a.CENTROMEDIA
-                    ORDER BY a.NOME
-                """)
-                rows = cur.fetchall()
+            conn = _connect()
+            cur = conn.cursor(as_dict=True)
+            cur.execute("""
+                SELECT
+                    a.ID_ANAGRAF,
+                    a.RAG_SOCIAL                       AS client_name,
+                    ISNULL(a.CENTROMEDIA, 0)           AS default_billing,
+                    COUNT(ct.ID_CONTRATTITESTATA)      AS unset_count
+                FROM ANAGRAF a
+                JOIN CONTRATTITESTATA ct
+                     ON ct.COMMITTENTE = a.ID_ANAGRAF
+                    AND ct.CENTROMEDIA = 0
+                    AND (ct.CAMBIOMERCE = 0 OR ct.CAMBIOMERCE IS NULL)
+                    AND ct.ID_PAGAMENTI != 4
+                GROUP BY a.ID_ANAGRAF, a.RAG_SOCIAL, a.CENTROMEDIA
+                ORDER BY a.RAG_SOCIAL
+            """)
+            rows = cur.fetchall()
+            conn.close()
 
             clients = []
             for r in rows:
-                db = int(r.default_billing or 0)
+                db = int(r["default_billing"] or 0)
                 clients.append({
-                    "id":              r.ID_ANAGRAF,
-                    "name":            (r.client_name or "").strip(),
-                    "default_billing": db,       # 316=Broadcast, 317=Calendar, 0=Unset
-                    "unset_count":     r.unset_count,
+                    "id":              r["ID_ANAGRAF"],
+                    "name":            (r["client_name"] or "").strip(),
+                    "default_billing": db,
+                    "unset_count":     r["unset_count"],
                 })
             return {"clients": clients}
 
@@ -5184,41 +5182,37 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     @router.post("/api/master-control/billing-type-fix/apply")
     async def billing_type_fix_apply(request: Request):
         body = await request.json()
-        # [{client_id: int, billing: 316|317}, ...]
         updates = body.get("updates", [])
         if not updates:
             return JSONResponse({"updated": 0})
 
         def _run():
-            import pyodbc
-
             from browser_automation.etere_direct_client import connect as _connect
 
-            conn_str = _connect()
+            conn = _connect()
+            cur = conn.cursor()
             total_contracts = 0
-            with pyodbc.connect(conn_str) as conn:
-                cur = conn.cursor()
-                for u in updates:
-                    cid     = int(u["client_id"])
-                    billing = int(u["billing"])
-                    if billing not in (316, 317):
-                        continue
-                    # update client's default on ANAGRAF
-                    cur.execute(
-                        "UPDATE ANAGRAF SET CENTROMEDIA = ? WHERE ID_ANAGRAF = ?",
-                        billing, cid,
-                    )
-                    # back-fill only currently-unset cash contracts for this client
-                    cur.execute(
-                        """UPDATE CONTRATTITESTATA
-                              SET CENTROMEDIA = ?
-                            WHERE COMMITTENTE = ?
-                              AND CENTROMEDIA = 0
-                              AND (CAMBIOMERCE = 0 OR CAMBIOMERCE IS NULL)""",
-                        billing, cid,
-                    )
-                    total_contracts += cur.rowcount
-                conn.commit()
+            for u in updates:
+                cid     = int(u["client_id"])
+                billing = int(u["billing"])
+                if billing not in (316, 317):
+                    continue
+                cur.execute(
+                    "UPDATE ANAGRAF SET CENTROMEDIA = %s WHERE ID_ANAGRAF = %s",
+                    (billing, cid),
+                )
+                cur.execute(
+                    """UPDATE CONTRATTITESTATA
+                          SET CENTROMEDIA = %s
+                        WHERE COMMITTENTE = %s
+                          AND CENTROMEDIA = 0
+                          AND (CAMBIOMERCE = 0 OR CAMBIOMERCE IS NULL)
+                          AND ID_PAGAMENTI != 4""",
+                    (billing, cid),
+                )
+                total_contracts += cur.rowcount
+            conn.commit()
+            conn.close()
             return {"updated_contracts": total_contracts, "updated_clients": len(updates)}
 
         try:
