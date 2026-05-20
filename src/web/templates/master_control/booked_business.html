@@ -337,6 +337,13 @@
         return '$' + Number(n).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     }
 
+    function esc(s) {
+        return String(s ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
     async function load() {
         document.getElementById('report-area').innerHTML = '<div class="loading-msg">Loading…</div>';
         document.getElementById('month-label').textContent = '—';
