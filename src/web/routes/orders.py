@@ -5036,14 +5036,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         cr.NEWTYPE,
                         ct.CENTROMEDIA, ct.P_AGENZIA, ct.COD_CONTRATTO,
                         ae.RAG_SOCIAL AS ae_name,
-                        cl.RAG_SOCIAL AS agency_name,
-                        ut.RAG_SOCIAL AS final_user_name
+                        ag.RAG_SOCIAL AS buying_agency,
+                        cl.RAG_SOCIAL AS client_name
                     FROM CONTRATTIRIGHE cr
                     JOIN CONTRATTITESTATA ct
                       ON ct.ID_CONTRATTITESTATA = cr.ID_CONTRATTITESTATA
                     LEFT JOIN ANAGRAF ae ON ae.ID_ANAGRAF = ct.AGENTE1
+                    LEFT JOIN ANAGRAF ag ON ag.ID_ANAGRAF = ct.AGENZIA
                     LEFT JOIN ANAGRAF cl ON cl.ID_ANAGRAF = ct.COMMITTENTE
-                    LEFT JOIN ANAGRAF ut ON ut.ID_ANAGRAF = ct.UT_FINALE
                     WHERE cr.NEWTYPE LIKE '%%COM%%'
                       AND cr.IMPORTO > 0
                       AND (ct.CAMBIOMERCE = 0 OR ct.CAMBIOMERCE IS NULL)
@@ -5071,13 +5071,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 gross      = float(r["N_PASSAGGI"]) * float(r["IMPORTO"]) * frac
                 net        = gross * (1 - float(r["P_AGENZIA"] or 0) / 100)
 
-                ae        = r["ae_name"]        or "Unknown AE"
-                agency    = (r["agency_name"]    or "").strip()
-                final_usr = (r["final_user_name"] or "").strip()
-                if final_usr and final_usr != agency:
-                    cli = f"{agency}:{final_usr}" if agency else final_usr
+                ae     = r["ae_name"]      or "Unknown AE"
+                agency = (r["buying_agency"] or "").strip()
+                client = (r["client_name"]   or "").strip()
+                if agency and client and agency != client:
+                    cli = f"{agency}:{client}"
                 else:
-                    cli = agency or r["COD_CONTRATTO"] or "Unknown"
+                    cli = client or agency or r["COD_CONTRATTO"] or "Unknown"
                 key = (ae, cli)
                 clients[key]["gross"] += gross
                 clients[key]["net"]   += net
