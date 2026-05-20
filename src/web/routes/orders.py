@@ -5034,6 +5034,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         cr.DATA_INIZIO, cr.DATA_FINE,
                         cr.N_PASSAGGI,  cr.IMPORTO,
                         cr.NEWTYPE,
+                        cr.LUNEDI, cr.MARTEDI, cr.MERCOLEDI, cr.GIOVEDI,
+                        cr.VENERDI, cr.SABATO, cr.DOMENICA,
                         ct.CENTROMEDIA, ct.P_AGENZIA, ct.COD_CONTRATTO,
                         ct.CAMBIOMERCE, ct.ID_PAGAMENTI,
                         ae.RAG_SOCIAL AS ae_name,
@@ -5052,6 +5054,21 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                       AND cr.DATA_FINE   >= %s
                 """, (str(month_end), str(bcast_start)))
                 rows = cur.fetchall()
+
+            _DAY_COLS = ["LUNEDI","MARTEDI","MERCOLEDI","GIOVEDI","VENERDI","SABATO","DOMENICA"]
+
+            def _count_wd(d1, d2, wd):
+                if d2 < d1:
+                    return 0
+                n = (d2 - d1).days + 1
+                off = (wd - d1.weekday()) % 7
+                return max(0, (n - off + 6) // 7)
+
+            def _active_days_in_range(r, d1, d2):
+                wds = [i for i, col in enumerate(_DAY_COLS) if r[col]]
+                if not wds:
+                    return (d2 - d1).days + 1  # fallback: all days
+                return sum(_count_wd(d1, d2, wd) for wd in wds)
 
             def _is_trade(r):
                 return (
@@ -5076,9 +5093,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 line_e = min(r["DATA_FINE"].date(), month_end)
                 if line_e < line_s:
                     continue
-                total_days = (r["DATA_FINE"].date() - r["DATA_INIZIO"].date()).days + 1
-                overlap    = (line_e - line_s).days + 1
-                frac       = overlap / total_days if total_days > 0 else 0
+                total_active   = _active_days_in_range(r, r["DATA_INIZIO"].date(), r["DATA_FINE"].date())
+                overlap_active = _active_days_in_range(r, line_s, line_e)
+                frac           = overlap_active / total_active if total_active > 0 else 0
                 gross      = float(r["N_PASSAGGI"]) * float(r["IMPORTO"]) * frac
                 net        = gross * (1 - float(r["P_AGENZIA"] or 0) / 100)
 
