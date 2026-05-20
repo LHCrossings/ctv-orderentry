@@ -5042,7 +5042,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                       ON ct.ID_CONTRATTITESTATA = cr.ID_CONTRATTITESTATA
                     LEFT JOIN ANAGRAF ae ON ae.ID_ANAGRAF = ct.AGENTE1
                     LEFT JOIN ANAGRAF cl ON cl.ID_ANAGRAF = ct.COMMITTENTE
-                    WHERE cr.NEWTYPE LIKE 'COM%%'
+                    WHERE cr.NEWTYPE LIKE '%%COM%%'
                       AND cr.IMPORTO > 0
                       AND (ct.CAMBIOMERCE = 0 OR ct.CAMBIOMERCE IS NULL)
                       AND cr.DATA_INIZIO <= %s
