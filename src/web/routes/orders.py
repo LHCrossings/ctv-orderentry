@@ -5013,9 +5013,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     @router.get("/master-control/booked-business")
     async def booked_business_page(request: Request):
-        return templates.TemplateResponse(
-            "master_control/booked_business.html", {"request": request}
-        )
+        return templates.TemplateResponse(request, "master_control/booked_business.html")
 
     @router.get("/api/master-control/booked-business/load")
     async def booked_business_load(year: int, month: int):
