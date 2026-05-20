@@ -25,7 +25,7 @@ from openpyxl import load_workbook
 from openpyxl.styles import Alignment
 from openpyxl.utils import get_column_letter
 
-# EtereBridge lives next to this repo 
+# EtereBridge lives next to this repo
 _repo_root = Path(__file__).resolve().parents[2]
 _eb_path = None
 for _name in ("EtereBridge", "eterebridge"):
