@@ -171,9 +171,18 @@
                 </div>
                 <button id="next-btn">&#8594;</button>
             </div>
-            <div class="bb-tabs">
-                <button class="bb-tab" id="tab-net" onclick="setTab('net')">Net</button>
-                <button class="bb-tab" id="tab-gross" onclick="setTab('gross')">Gross</button>
+            <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+                <div class="bb-tabs">
+                    <button class="bb-tab" id="tab-net" onclick="setTab('net')">Net</button>
+                    <button class="bb-tab" id="tab-gross" onclick="setTab('gross')">Gross</button>
+                </div>
+                <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.85rem;color:var(--text-muted);cursor:pointer;white-space:nowrap;">
+                    <input type="checkbox" id="show-trade" onchange="load()" />
+                    Show Trade?
+                </label>
+                <a href="/master-control/billing-type-fix"
+                   style="font-size:0.8rem;color:var(--nord13);text-decoration:none;white-space:nowrap;"
+                   title="Fix clients with unset billing type">🏷️ Fix Billing Types</a>
             </div>
         </div>
     </div>
@@ -225,7 +234,8 @@
         document.getElementById('month-label').textContent = '—';
         document.getElementById('bounds-label').textContent = '';
         try {
-            const res = await fetch(`/api/master-control/booked-business/load?year=${currentYear}&month=${currentMonth}`);
+            const showTrade = document.getElementById('show-trade').checked;
+            const res = await fetch(`/api/master-control/booked-business/load?year=${currentYear}&month=${currentMonth}&show_trade=${showTrade}`);
             if (!res.ok) throw new Error(await res.text());
             lastData = await res.json();
             document.getElementById('month-label').textContent = lastData.month_label;

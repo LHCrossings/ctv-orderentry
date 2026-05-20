@@ -5016,7 +5016,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         return templates.TemplateResponse(request, "master_control/booked_business.html")
 
     @router.get("/api/master-control/booked-business/load")
-    async def booked_business_load(year: int, month: int):
+    async def booked_business_load(year: int, month: int, show_trade: bool = False):
         def _run():
             import calendar as _cal
             from collections import defaultdict
@@ -5046,7 +5046,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     LEFT JOIN ANAGRAF cl ON cl.ID_ANAGRAF = ct.COMMITTENTE
                     WHERE cr.NEWTYPE LIKE '%%COM%%'
                       AND cr.IMPORTO > 0
-                      AND (ct.CAMBIOMERCE = 0 OR ct.CAMBIOMERCE IS NULL)
+                      {'' if show_trade else "AND cr.NEWTYPE NOT LIKE '%%TRD%%' AND (ct.CAMBIOMERCE = 0 OR ct.CAMBIOMERCE IS NULL) AND ct.ID_PAGAMENTI != 4"}
                       AND cr.DATA_INIZIO <= %s
                       AND cr.DATA_FINE   >= %s
                 """, (str(month_end), str(bcast_start)))
@@ -5126,6 +5126,100 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 "grand_gross":  grand_gross,
                 "grand_net":    grand_net,
             }
+
+        try:
+            return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    # ── Billing Type Cleanup ──────────────────────────────────────────────────
+
+    @router.get("/master-control/billing-type-fix")
+    async def billing_type_fix_page(request: Request):
+        return templates.TemplateResponse(request, "master_control/billing_type_fix.html")
+
+    @router.get("/api/master-control/billing-type-fix/clients")
+    async def billing_type_fix_clients():
+        def _run():
+            from browser_automation.etere_direct_client import connect as _connect
+
+            conn_str = _connect()
+            import pyodbc
+
+            with pyodbc.connect(conn_str) as conn:
+                cur = conn.cursor()
+                # clients that have at least one unset (CENTROMEDIA=0) cash contract
+                cur.execute("""
+                    SELECT
+                        a.ID_ANAGRAF,
+                        a.NOME                             AS client_name,
+                        ISNULL(a.CENTROMEDIA, 0)           AS default_billing,
+                        COUNT(ct.ID_CONTRATTO)             AS unset_count
+                    FROM ANAGRAF a
+                    JOIN CONTRATTITESTATA ct
+                         ON ct.COMMITTENTE = a.ID_ANAGRAF
+                        AND ct.CENTROMEDIA = 0
+                        AND (ct.CAMBIOMERCE = 0 OR ct.CAMBIOMERCE IS NULL)
+                    GROUP BY a.ID_ANAGRAF, a.NOME, a.CENTROMEDIA
+                    ORDER BY a.NOME
+                """)
+                rows = cur.fetchall()
+
+            clients = []
+            for r in rows:
+                db = int(r.default_billing or 0)
+                clients.append({
+                    "id":              r.ID_ANAGRAF,
+                    "name":            (r.client_name or "").strip(),
+                    "default_billing": db,       # 316=Broadcast, 317=Calendar, 0=Unset
+                    "unset_count":     r.unset_count,
+                })
+            return {"clients": clients}
+
+        try:
+            return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.post("/api/master-control/billing-type-fix/apply")
+    async def billing_type_fix_apply(request: Request):
+        body = await request.json()
+        # [{client_id: int, billing: 316|317}, ...]
+        updates = body.get("updates", [])
+        if not updates:
+            return JSONResponse({"updated": 0})
+
+        def _run():
+            import pyodbc
+
+            from browser_automation.etere_direct_client import connect as _connect
+
+            conn_str = _connect()
+            total_contracts = 0
+            with pyodbc.connect(conn_str) as conn:
+                cur = conn.cursor()
+                for u in updates:
+                    cid     = int(u["client_id"])
+                    billing = int(u["billing"])
+                    if billing not in (316, 317):
+                        continue
+                    # update client's default on ANAGRAF
+                    cur.execute(
+                        "UPDATE ANAGRAF SET CENTROMEDIA = ? WHERE ID_ANAGRAF = ?",
+                        billing, cid,
+                    )
+                    # back-fill only currently-unset cash contracts for this client
+                    cur.execute(
+                        """UPDATE CONTRATTITESTATA
+                              SET CENTROMEDIA = ?
+                            WHERE COMMITTENTE = ?
+                              AND CENTROMEDIA = 0
+                              AND (CAMBIOMERCE = 0 OR CAMBIOMERCE IS NULL)""",
+                        billing, cid,
+                    )
+                    total_contracts += cur.rowcount
+                conn.commit()
+            return {"updated_contracts": total_contracts, "updated_clients": len(updates)}
 
         try:
             return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))

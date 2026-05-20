@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Billing Type Cleanup — Master Control</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px 24px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+            margin-bottom: 16px;
+        }
+        .caution-banner {
+            background: rgba(235,203,139,0.15);
+            border: 1px solid var(--nord13);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            color: var(--text-primary);
+            font-size: 0.88rem;
+            margin-bottom: 1rem;
+        }
+        .caution-banner strong { color: var(--nord13); }
+        .bulk-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+        .bulk-actions button {
+            padding: 0.4rem 1.1rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.88rem;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .bulk-actions button:hover { border-color: var(--nord10); color: var(--nord10); }
+        .bulk-btn-bcast { border-color: var(--nord9) !important; color: var(--nord9) !important; }
+        .bulk-btn-cal   { border-color: var(--nord14) !important; color: var(--nord14) !important; }
+        .apply-btn {
+            margin-left: auto;
+            padding: 0.45rem 1.4rem;
+            border-radius: 6px;
+            border: none;
+            background: var(--nord10);
+            color: #fff;
+            font-family: inherit;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .apply-btn:disabled { opacity: 0.5; cursor: default; }
+        .bt-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        .bt-table th {
+            text-align: left;
+            padding: 0.5rem 0.75rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .bt-table th.center { text-align: center; }
+        .bt-table td {
+            padding: 0.45rem 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        .bt-table td.center { text-align: center; }
+        .bt-table td.count {
+            font-variant-numeric: tabular-nums;
+            font-family: 'Courier New', monospace;
+            font-size: 0.88rem;
+            text-align: center;
+        }
+        .radio-group {
+            display: flex;
+            gap: 0.75rem;
+            justify-content: center;
+        }
+        .radio-group label {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .billing-badge {
+            display: inline-block;
+            font-size: 0.7rem;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        .badge-broadcast { background: rgba(94,129,172,0.2);  color: var(--nord9); }
+        .badge-calendar  { background: rgba(163,190,140,0.2); color: var(--nord14); }
+        .badge-unset     { background: rgba(235,203,139,0.2); color: var(--nord13); }
+        .result-msg {
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            margin-top: 1rem;
+            display: none;
+        }
+        .result-ok  { background: rgba(163,190,140,0.15); border: 1px solid var(--nord14); color: var(--text-primary); }
+        .result-err { background: rgba(191,97,106,0.15);  border: 1px solid var(--nord11); color: var(--nord11); }
+        .loading-msg, .empty-msg {
+            text-align: center;
+            padding: 2.5rem;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="back-link">🏠</a>
+            <div class="logo-icon">🏷️</div>
+            <div>
+                <h1>Billing Type <span>Cleanup</span></h1>
+                <div class="logo-sub">Master Control</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="tool-card">
+        <div class="caution-banner">
+            <strong>Note:</strong> Only contracts currently marked <em>unset</em> (no billing type) will be updated.
+            Contracts that already have Broadcast or Calendar set will not be changed —
+            individual contract overrides are preserved.
+            Billing type can also be adjusted per-contract directly in Etere.
+        </div>
+        <div class="bulk-actions">
+            <button class="bulk-btn-bcast" onclick="setAll(316)">Set All → Broadcast</button>
+            <button class="bulk-btn-cal"   onclick="setAll(317)">Set All → Calendar</button>
+            <span id="sel-count" style="color:var(--text-muted);font-size:0.85rem;"></span>
+            <button class="apply-btn" id="apply-btn" onclick="applyChanges()" disabled>Apply Changes</button>
+        </div>
+        <div id="result-msg" class="result-msg"></div>
+    </div>
+
+    <div class="tool-card" style="padding: 0; overflow: hidden;">
+        <div id="table-area">
+            <div class="loading-msg">Loading…</div>
+        </div>
+    </div>
+</main>
+
+<script>
+    let clients = [];   // raw data from API
+    let choices = {};   // { client_id: 316|317|null }
+
+    async function load() {
+        try {
+            const res = await fetch('/api/master-control/billing-type-fix/clients');
+            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+            clients = data.clients;
+            choices = {};
+            for (const c of clients) choices[c.id] = null;
+            render();
+        } catch (e) {
+            document.getElementById('table-area').innerHTML =
+                `<div class="empty-msg">Error loading data: ${e.message}</div>`;
+        }
+    }
+
+    function render() {
+        if (!clients.length) {
+            document.getElementById('table-area').innerHTML =
+                '<div class="empty-msg">No clients with unset billing type found.</div>';
+            return;
+        }
+
+        let html = `<table class="bt-table">
+            <thead>
+                <tr>
+                    <th>Client</th>
+                    <th class="center">Current Default</th>
+                    <th class="center">Unset Contracts</th>
+                    <th class="center">Set To</th>
+                </tr>
+            </thead>
+            <tbody>`;
+
+        for (const c of clients) {
+            const badge = c.default_billing === 316
+                ? `<span class="billing-badge badge-broadcast">Broadcast</span>`
+                : c.default_billing === 317
+                ? `<span class="billing-badge badge-calendar">Calendar</span>`
+                : `<span class="billing-badge badge-unset">Unset</span>`;
+
+            const sel = choices[c.id];
+            html += `<tr>
+                <td>${esc(c.name)}</td>
+                <td class="center">${badge}</td>
+                <td class="count">${c.unset_count}</td>
+                <td class="center">
+                    <div class="radio-group">
+                        <label>
+                            <input type="radio" name="bt_${c.id}" value="316"
+                                ${sel === 316 ? 'checked' : ''}
+                                onchange="pick(${c.id}, 316)" />
+                            <span style="color:var(--nord9)">Broadcast</span>
+                        </label>
+                        <label>
+                            <input type="radio" name="bt_${c.id}" value="317"
+                                ${sel === 317 ? 'checked' : ''}
+                                onchange="pick(${c.id}, 317)" />
+                            <span style="color:var(--nord14)">Calendar</span>
+                        </label>
+                    </div>
+                </td>
+            </tr>`;
+        }
+
+        html += '</tbody></table>';
+        document.getElementById('table-area').innerHTML = html;
+        updateApplyBtn();
+    }
+
+    function pick(clientId, billing) {
+        choices[clientId] = billing;
+        updateApplyBtn();
+    }
+
+    function setAll(billing) {
+        for (const c of clients) choices[c.id] = billing;
+        render();
+    }
+
+    function updateApplyBtn() {
+        const pending = Object.values(choices).filter(v => v !== null).length;
+        document.getElementById('sel-count').textContent =
+            pending ? `${pending} client${pending !== 1 ? 's' : ''} selected` : '';
+        document.getElementById('apply-btn').disabled = pending === 0;
+    }
+
+    async function applyChanges() {
+        const updates = clients
+            .filter(c => choices[c.id] !== null)
+            .map(c => ({ client_id: c.id, billing: choices[c.id] }));
+
+        if (!updates.length) return;
+
+        const btn = document.getElementById('apply-btn');
+        btn.disabled = true;
+        btn.textContent = 'Applying…';
+
+        const msg = document.getElementById('result-msg');
+        msg.style.display = 'none';
+
+        try {
+            const res = await fetch('/api/master-control/billing-type-fix/apply', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ updates }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+
+            msg.className = 'result-msg result-ok';
+            msg.textContent =
+                `Done. Updated ${data.updated_clients} client record${data.updated_clients !== 1 ? 's' : ''} ` +
+                `and ${data.updated_contracts} unset contract${data.updated_contracts !== 1 ? 's' : ''}.`;
+            msg.style.display = 'block';
+
+            // reload to show updated defaults
+            await load();
+        } catch (e) {
+            msg.className = 'result-msg result-err';
+            msg.textContent = `Error: ${e.message}`;
+            msg.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = 'Apply Changes';
+        }
+    }
+
+    function esc(s) {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
+    load();
+</script>
+</body>
+</html>
