@@ -5104,9 +5104,12 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             grand_gross = round(sum(g["gross"] for g in ae_groups), 2)
             grand_net   = round(sum(g["net"]   for g in ae_groups), 2)
 
+            def _md(d):
+                return f"{d.strftime('%b')} {d.day}"
+
             month_label = f"{_cal.month_name[month]} {year}"
-            bcast_label = f"{bcast_start.strftime('%b %-d')} – {month_end.strftime('%b %-d, %Y')}"
-            cal_label   = f"{cal_start.strftime('%b %-d')} – {month_end.strftime('%b %-d, %Y')}"
+            bcast_label = f"{_md(bcast_start)} – {_md(month_end)}, {month_end.year}"
+            cal_label   = f"{_md(cal_start)} – {_md(month_end)}, {month_end.year}"
 
             return {
                 "month_label":  month_label,
