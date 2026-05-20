@@ -5000,4 +5000,128 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+    # ── Booked Business ──────────────────────────────────────────────────────
+
+    import calendar as _cal_mod
+
+    def _bb_broadcast_month_start(yr: int, mo: int) -> _date_cls:
+        first = _date_cls(yr, mo, 1)
+        return first - timedelta(days=first.weekday())
+
+    def _bb_month_end(yr: int, mo: int) -> _date_cls:
+        return _date_cls(yr, mo, _cal_mod.monthrange(yr, mo)[1])
+
+    @router.get("/master-control/booked-business")
+    async def booked_business_page(request: Request):
+        return templates.TemplateResponse(
+            "master_control/booked_business.html", {"request": request}
+        )
+
+    @router.get("/api/master-control/booked-business/load")
+    async def booked_business_load(year: int, month: int):
+        def _run():
+            import calendar as _cal
+            from collections import defaultdict
+
+            from browser_automation.etere_direct_client import connect as _connect
+
+            bcast_start = _bb_broadcast_month_start(year, month)
+            cal_start   = _date_cls(year, month, 1)
+            month_end   = _bb_month_end(year, month)
+
+            with _connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                cur.execute("""
+                    SELECT
+                        cr.DATA_INIZIO, cr.DATA_FINE,
+                        cr.N_PASSAGGI,  cr.IMPORTO,
+                        cr.NEWTYPE,
+                        ct.CENTROMEDIA, ct.P_AGENZIA, ct.COD_CONTRATTO,
+                        ae.RAG_SOCIAL AS ae_name,
+                        cl.RAG_SOCIAL AS client_name
+                    FROM CONTRATTIRIGHE cr
+                    JOIN CONTRATTITESTATA ct
+                      ON ct.ID_CONTRATTITESTATA = cr.ID_CONTRATTITESTATA
+                    LEFT JOIN ANAGRAF ae ON ae.ID_ANAGRAF = ct.AGENTE1
+                    LEFT JOIN ANAGRAF cl ON cl.ID_ANAGRAF = ct.COMMITTENTE
+                    WHERE cr.NEWTYPE LIKE 'COM%%'
+                      AND cr.IMPORTO > 0
+                      AND (ct.CAMBIOMERCE = 0 OR ct.CAMBIOMERCE IS NULL)
+                      AND cr.DATA_INIZIO <= %s
+                      AND cr.DATA_FINE   >= %s
+                """, (str(month_end), str(bcast_start)))
+                rows = cur.fetchall()
+
+            clients: dict = defaultdict(
+                lambda: {"gross": 0.0, "net": 0.0, "centromedia": None, "unset": False}
+            )
+
+            for r in rows:
+                if not r["DATA_INIZIO"] or not r["DATA_FINE"]:
+                    continue
+                cm     = r["CENTROMEDIA"] or 0
+                mstart = bcast_start if cm == 316 else cal_start
+                line_s = max(r["DATA_INIZIO"].date(), mstart)
+                line_e = min(r["DATA_FINE"].date(), month_end)
+                if line_e < line_s:
+                    continue
+                total_days = (r["DATA_FINE"].date() - r["DATA_INIZIO"].date()).days + 1
+                overlap    = (line_e - line_s).days + 1
+                frac       = overlap / total_days if total_days > 0 else 0
+                gross      = float(r["N_PASSAGGI"]) * float(r["IMPORTO"]) * frac
+                net        = gross * (1 - float(r["P_AGENZIA"] or 0) / 100)
+
+                ae  = r["ae_name"]    or "Unknown AE"
+                cli = r["client_name"] or r["COD_CONTRATTO"] or "Unknown"
+                key = (ae, cli)
+                clients[key]["gross"] += gross
+                clients[key]["net"]   += net
+                if clients[key]["centromedia"] is None:
+                    clients[key]["centromedia"] = cm
+                if cm == 0:
+                    clients[key]["unset"] = True
+
+            ae_map: dict = defaultdict(list)
+            for (ae, cli), data in clients.items():
+                cm = data["centromedia"] or 0
+                billing = "Broadcast" if cm == 316 else ("Calendar" if cm == 317 else "—")
+                ae_map[ae].append({
+                    "client":  cli,
+                    "gross":   round(data["gross"], 2),
+                    "net":     round(data["net"],   2),
+                    "billing": billing,
+                    "unset":   data["unset"],
+                })
+
+            ae_groups = []
+            for ae in sorted(ae_map):
+                rows_out = sorted(ae_map[ae], key=lambda x: x["client"])
+                ae_groups.append({
+                    "ae":      ae,
+                    "clients": rows_out,
+                    "gross":   round(sum(c["gross"] for c in rows_out), 2),
+                    "net":     round(sum(c["net"]   for c in rows_out), 2),
+                })
+
+            grand_gross = round(sum(g["gross"] for g in ae_groups), 2)
+            grand_net   = round(sum(g["net"]   for g in ae_groups), 2)
+
+            month_label = f"{_cal.month_name[month]} {year}"
+            bcast_label = f"{bcast_start.strftime('%b %-d')} – {month_end.strftime('%b %-d, %Y')}"
+            cal_label   = f"{cal_start.strftime('%b %-d')} – {month_end.strftime('%b %-d, %Y')}"
+
+            return {
+                "month_label":  month_label,
+                "bcast_bounds": bcast_label,
+                "cal_bounds":   cal_label,
+                "ae_groups":    ae_groups,
+                "grand_gross":  grand_gross,
+                "grand_net":    grand_net,
+            }
+
+        try:
+            return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     return router

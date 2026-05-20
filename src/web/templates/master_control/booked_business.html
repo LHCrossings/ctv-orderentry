@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Booked Business — Master Control</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        .bb-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .bb-nav {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .bb-nav button {
+            background: var(--nord3);
+            border: 1px solid var(--nord4);
+            color: var(--nord6);
+            border-radius: 6px;
+            padding: 0.4rem 0.9rem;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+        .bb-nav button:hover { background: var(--nord4); }
+        .bb-month {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: var(--nord6);
+            min-width: 160px;
+            text-align: center;
+        }
+        .bb-bounds {
+            font-size: 0.78rem;
+            color: var(--nord4);
+            margin-top: 0.2rem;
+            text-align: center;
+        }
+        .bb-tabs {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .bb-tab {
+            padding: 0.4rem 1.2rem;
+            border-radius: 6px;
+            border: 1px solid var(--nord4);
+            background: var(--nord3);
+            color: var(--nord4);
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .bb-tab.active {
+            background: var(--nord10);
+            border-color: var(--nord10);
+            color: var(--nord6);
+        }
+        .bb-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        .bb-table th {
+            text-align: left;
+            padding: 0.5rem 0.75rem;
+            color: var(--nord4);
+            font-weight: 500;
+            border-bottom: 1px solid var(--nord3);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .bb-table th.num { text-align: right; }
+        .bb-table td {
+            padding: 0.45rem 0.75rem;
+            border-bottom: 1px solid rgba(76,86,106,0.3);
+            color: var(--nord6);
+        }
+        .bb-table td.num {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            font-family: 'Courier New', monospace;
+            font-size: 0.88rem;
+        }
+        .ae-heading td {
+            background: var(--nord2);
+            color: var(--nord8);
+            font-weight: 600;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.85rem;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+        }
+        .ae-subtotal td {
+            background: rgba(59,66,82,0.5);
+            font-weight: 600;
+            color: var(--nord6);
+            font-size: 0.88rem;
+        }
+        .grand-total td {
+            background: var(--nord10);
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.95rem;
+            border-bottom: none;
+        }
+        .billing-badge {
+            display: inline-block;
+            font-size: 0.7rem;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        .badge-broadcast { background: rgba(94,129,172,0.2); color: var(--nord9); }
+        .badge-calendar  { background: rgba(163,190,140,0.2); color: var(--nord14); }
+        .badge-unset     { background: rgba(235,203,139,0.2); color: var(--nord13); }
+        .warn-icon { color: var(--nord13); margin-left: 0.3rem; }
+        .bb-empty {
+            text-align: center;
+            padding: 3rem;
+            color: var(--nord4);
+        }
+        .loading-msg {
+            text-align: center;
+            padding: 2rem;
+            color: var(--nord4);
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/reports" class="back-link">← Reports</a>
+            <div class="logo-icon">📊</div>
+            <div>
+                <h1>Booked <span>Business</span></h1>
+                <div class="logo-sub">Master Control</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="bb-header">
+        <div>
+            <div class="bb-nav">
+                <button id="prev-btn">&#8592;</button>
+                <div>
+                    <div class="bb-month" id="month-label">—</div>
+                    <div class="bb-bounds" id="bounds-label"></div>
+                </div>
+                <button id="next-btn">&#8594;</button>
+            </div>
+        </div>
+        <div class="bb-tabs">
+            <button class="bb-tab" id="tab-net" onclick="setTab('net')">Net</button>
+            <button class="bb-tab" id="tab-gross" onclick="setTab('gross')">Gross</button>
+        </div>
+    </div>
+
+    <div id="report-area">
+        <div class="loading-msg">Loading…</div>
+    </div>
+</main>
+
+<script>
+    let currentYear, currentMonth;
+    let activeTab = 'net';
+    let lastData = null;
+
+    function init() {
+        const now = new Date();
+        currentYear  = now.getFullYear();
+        currentMonth = now.getMonth() + 1;
+        setTab('net');
+        load();
+    }
+
+    function setTab(tab) {
+        activeTab = tab;
+        document.getElementById('tab-net').classList.toggle('active', tab === 'net');
+        document.getElementById('tab-gross').classList.toggle('active', tab === 'gross');
+        if (lastData) render(lastData);
+    }
+
+    document.getElementById('prev-btn').onclick = () => {
+        currentMonth--;
+        if (currentMonth < 1) { currentMonth = 12; currentYear--; }
+        load();
+    };
+    document.getElementById('next-btn').onclick = () => {
+        currentMonth++;
+        if (currentMonth > 12) { currentMonth = 1; currentYear++; }
+        load();
+    };
+
+    function fmt(n) {
+        return '$' + Number(n).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+
+    async function load() {
+        document.getElementById('report-area').innerHTML = '<div class="loading-msg">Loading…</div>';
+        document.getElementById('month-label').textContent = '—';
+        document.getElementById('bounds-label').textContent = '';
+        try {
+            const res = await fetch(`/api/master-control/booked-business/load?year=${currentYear}&month=${currentMonth}`);
+            if (!res.ok) throw new Error(await res.text());
+            lastData = await res.json();
+            document.getElementById('month-label').textContent = lastData.month_label;
+            document.getElementById('bounds-label').textContent =
+                `Broadcast: ${lastData.bcast_bounds}  ·  Calendar: ${lastData.cal_bounds}`;
+            render(lastData);
+        } catch (e) {
+            document.getElementById('report-area').innerHTML =
+                `<div class="bb-empty">Error: ${e.message}</div>`;
+        }
+    }
+
+    function render(data) {
+        const col = activeTab;
+        if (!data.ae_groups || data.ae_groups.length === 0) {
+            document.getElementById('report-area').innerHTML =
+                '<div class="bb-empty">No booked business found for this month.</div>';
+            return;
+        }
+
+        let html = `<table class="bb-table">
+            <thead>
+                <tr>
+                    <th>Account Executive / Client</th>
+                    <th>Billing</th>
+                    <th class="num">${col === 'net' ? 'Net Revenue' : 'Gross Revenue'}</th>
+                </tr>
+            </thead>
+            <tbody>`;
+
+        for (const ae of data.ae_groups) {
+            html += `<tr class="ae-heading">
+                <td colspan="2">${ae.ae}</td>
+                <td class="num">${fmt(ae[col])}</td>
+            </tr>`;
+            for (const c of ae.clients) {
+                const badge = c.billing === 'Broadcast'
+                    ? `<span class="billing-badge badge-broadcast">Broadcast</span>`
+                    : c.billing === 'Calendar'
+                    ? `<span class="billing-badge badge-calendar">Calendar</span>`
+                    : `<span class="billing-badge badge-unset">⚠ Unset</span>`;
+                const warn = c.unset ? `<span class="warn-icon" title="CENTROMEDIA not set — billing type unknown">⚠</span>` : '';
+                html += `<tr>
+                    <td>&nbsp;&nbsp;&nbsp;${c.client}${warn}</td>
+                    <td>${badge}</td>
+                    <td class="num">${fmt(c[col])}</td>
+                </tr>`;
+            }
+            html += `<tr class="ae-subtotal">
+                <td>&nbsp;&nbsp;&nbsp;${ae.ae} Total</td>
+                <td></td>
+                <td class="num">${fmt(ae[col])}</td>
+            </tr>`;
+        }
+
+        html += `<tr class="grand-total">
+            <td>Grand Total</td>
+            <td></td>
+            <td class="num">${fmt(data['grand_' + col])}</td>
+        </tr>`;
+
+        html += '</tbody></table>';
+        document.getElementById('report-area').innerHTML = html;
+    }
+
+    init();
+</script>
+</body>
+</html>
