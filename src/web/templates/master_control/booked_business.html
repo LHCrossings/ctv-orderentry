@@ -8,13 +8,20 @@
     <link rel="stylesheet" href="/static/css/_variables.css" />
     <link rel="stylesheet" href="/static/css/portal.css" />
     <style>
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px 24px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+            margin-bottom: 16px;
+        }
         .bb-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
             flex-wrap: wrap;
             gap: 1rem;
-            margin-bottom: 1.5rem;
         }
         .bb-nav {
             display: flex;
@@ -22,25 +29,26 @@
             gap: 0.75rem;
         }
         .bb-nav button {
-            background: var(--nord3);
-            border: 1px solid var(--nord4);
-            color: var(--nord6);
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
             border-radius: 6px;
             padding: 0.4rem 0.9rem;
             font-size: 1rem;
             cursor: pointer;
+            font-family: inherit;
         }
-        .bb-nav button:hover { background: var(--nord4); }
+        .bb-nav button:hover { border-color: var(--nord10); color: var(--nord10); }
         .bb-month {
             font-size: 1.3rem;
             font-weight: 600;
-            color: var(--nord6);
+            color: var(--text-primary);
             min-width: 160px;
             text-align: center;
         }
         .bb-bounds {
             font-size: 0.78rem;
-            color: var(--nord4);
+            color: var(--text-muted);
             margin-top: 0.2rem;
             text-align: center;
         }
@@ -51,16 +59,17 @@
         .bb-tab {
             padding: 0.4rem 1.2rem;
             border-radius: 6px;
-            border: 1px solid var(--nord4);
-            background: var(--nord3);
-            color: var(--nord4);
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            color: var(--text-muted);
             cursor: pointer;
             font-weight: 500;
+            font-family: inherit;
         }
         .bb-tab.active {
             background: var(--nord10);
             border-color: var(--nord10);
-            color: var(--nord6);
+            color: #fff;
         }
         .bb-table {
             width: 100%;
@@ -70,9 +79,9 @@
         .bb-table th {
             text-align: left;
             padding: 0.5rem 0.75rem;
-            color: var(--nord4);
+            color: var(--text-muted);
             font-weight: 500;
-            border-bottom: 1px solid var(--nord3);
+            border-bottom: 1px solid var(--border-color);
             font-size: 0.78rem;
             text-transform: uppercase;
             letter-spacing: 0.05em;
@@ -80,8 +89,8 @@
         .bb-table th.num { text-align: right; }
         .bb-table td {
             padding: 0.45rem 0.75rem;
-            border-bottom: 1px solid rgba(76,86,106,0.3);
-            color: var(--nord6);
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
         }
         .bb-table td.num {
             text-align: right;
@@ -90,19 +99,20 @@
             font-size: 0.88rem;
         }
         .ae-heading td {
-            background: var(--nord2);
-            color: var(--nord8);
+            background: var(--nord5);
+            color: var(--nord10);
             font-weight: 600;
             padding: 0.5rem 0.75rem;
-            font-size: 0.85rem;
-            letter-spacing: 0.03em;
+            font-size: 0.82rem;
+            letter-spacing: 0.05em;
             text-transform: uppercase;
         }
         .ae-subtotal td {
-            background: rgba(59,66,82,0.5);
+            background: var(--nord5);
             font-weight: 600;
-            color: var(--nord6);
+            color: var(--text-primary);
             font-size: 0.88rem;
+            border-top: 1px solid var(--border-color);
         }
         .grand-total td {
             background: var(--nord10);
@@ -125,12 +135,12 @@
         .bb-empty {
             text-align: center;
             padding: 3rem;
-            color: var(--nord4);
+            color: var(--text-muted);
         }
         .loading-msg {
             text-align: center;
             padding: 2rem;
-            color: var(--nord4);
+            color: var(--text-muted);
         }
     </style>
 </head>
@@ -151,8 +161,8 @@
 </header>
 
 <main>
-    <div class="bb-header">
-        <div>
+    <div class="tool-card">
+        <div class="bb-header">
             <div class="bb-nav">
                 <button id="prev-btn">&#8592;</button>
                 <div>
@@ -161,15 +171,17 @@
                 </div>
                 <button id="next-btn">&#8594;</button>
             </div>
-        </div>
-        <div class="bb-tabs">
-            <button class="bb-tab" id="tab-net" onclick="setTab('net')">Net</button>
-            <button class="bb-tab" id="tab-gross" onclick="setTab('gross')">Gross</button>
+            <div class="bb-tabs">
+                <button class="bb-tab" id="tab-net" onclick="setTab('net')">Net</button>
+                <button class="bb-tab" id="tab-gross" onclick="setTab('gross')">Gross</button>
+            </div>
         </div>
     </div>
 
-    <div id="report-area">
-        <div class="loading-msg">Loading…</div>
+    <div class="tool-card" style="padding: 0; overflow: hidden;">
+        <div id="report-area">
+            <div class="loading-msg">Loading…</div>
+        </div>
     </div>
 </main>
 
