@@ -1749,7 +1749,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         import os
         import sqlite3
         import tempfile
-        from pathlib import Path
 
         _SKIP = {"created_at"}
         target_path = config.customer_db_path
@@ -1829,7 +1828,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         Body: { insert: [row_dicts], upsert: [row_dicts] }
         """
         import sqlite3
-        from pathlib import Path
 
         insert_rows = body.get("insert", [])
         upsert_rows = body.get("upsert", [])
@@ -2421,18 +2419,28 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     def _bo_time_to_frames(t: str) -> int:
         parts = t.split(":")
-        h = int(parts[0]); mn = int(parts[1]) if len(parts) > 1 else 0; s = int(parts[2]) if len(parts) > 2 else 0
+        h = int(parts[0])
+        mn = int(parts[1]) if len(parts) > 1 else 0
+        s = int(parts[2]) if len(parts) > 2 else 0
         return round((h * 3600 + mn * 60 + s) * _BO_FPS)
 
     def _bo_classify(newtype: str, capo, fine, is_wl: bool, prev_label: str):
-        if capo and fine:                                           return 1, "BOOKEND"
-        if capo and not fine:                                       return 2, "BILLBOARD"
-        if prev_label == "BILLBOARD" and newtype in ("COM","BNS"):  return 3, "COMPANION"
-        if newtype in ("COM","BNS") and not is_wl:                  return 4, "PAYING"
-        if newtype in ("COM","BNS") and is_wl:                      return 5, "WORLDLINK"
-        if newtype == "PER":                                        return 6, "PI"
-        if newtype == "PSA":                                        return 7, "PSA"
-        if newtype == "ID":                                         return 8, "STATION ID"
+        if capo and fine:
+            return 1, "BOOKEND"
+        if capo and not fine:
+            return 2, "BILLBOARD"
+        if prev_label == "BILLBOARD" and newtype in ("COM", "BNS"):
+            return 3, "COMPANION"
+        if newtype in ("COM", "BNS") and not is_wl:
+            return 4, "PAYING"
+        if newtype in ("COM", "BNS") and is_wl:
+            return 5, "WORLDLINK"
+        if newtype == "PER":
+            return 6, "PI"
+        if newtype == "PSA":
+            return 7, "PSA"
+        if newtype == "ID":
+            return 8, "STATION ID"
         return 0, newtype or "OTHER"
 
     def _bo_optimize(spots: list) -> list:
@@ -2469,7 +2477,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         to_frames   = _bo_time_to_frames(time_to)
 
         def _run():
-            with connect() as conn:
+            from browser_automation.etere_direct_client import connect as _connect
+            with _connect() as conn:
                 cur = conn.cursor(as_dict=True)
                 cur.execute(
                     "SELECT t.ID_TPALINSE, t.ORA, t.TITLE, t.NEWTYPE, t.DURATION,"
@@ -2559,7 +2568,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             return JSONResponse({"ok": True, "updated": 0})
 
         def _run():
-            with connect() as conn:
+            from browser_automation.etere_direct_client import connect as _connect
+            with _connect() as conn:
                 cur = conn.cursor()
                 for u in updates:
                     cur.execute(
