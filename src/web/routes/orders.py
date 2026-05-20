@@ -5027,55 +5027,52 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             cal_start   = _date_cls(year, month, 1)
             month_end   = _bb_month_end(year, month)
 
+            trade_guard = (
+                "-- show all"
+                if show_trade else
+                "AND cr.NEWTYPE NOT LIKE '%%TRD%%' AND (ct.CAMBIOMERCE = 0 OR ct.CAMBIOMERCE IS NULL) AND ct.ID_PAGAMENTI != 4"
+            )
+
             with _connect() as conn:
                 cur = conn.cursor(as_dict=True)
+                # Revenue is summed from ContrattiImportiGiornalieri — one row per scheduled
+                # spot occurrence with its exact date and amount, so no proration is needed.
+                # The CASE expression applies the correct billing window per contract:
+                # Broadcast (316) → bcast_start; Calendar (317) or Unset → cal_start.
                 cur.execute(f"""
                     SELECT
-                        cr.DATA_INIZIO, cr.DATA_FINE,
-                        cr.N_PASSAGGI,  cr.IMPORTO,
-                        cr.NEWTYPE,
-                        cr.LUNEDI, cr.MARTEDI, cr.MERCOLEDI, cr.GIOVEDI,
-                        cr.VENERDI, cr.SABATO, cr.DOMENICA,
+                        ct.ID_CONTRATTITESTATA             AS id,
                         ct.CENTROMEDIA, ct.P_AGENZIA, ct.COD_CONTRATTO,
                         ct.CAMBIOMERCE, ct.ID_PAGAMENTI,
-                        ae.RAG_SOCIAL AS ae_name,
-                        ag.RAG_SOCIAL AS buying_agency,
-                        cl.RAG_SOCIAL AS client_name
+                        ae.RAG_SOCIAL                      AS ae_name,
+                        ag.RAG_SOCIAL                      AS buying_agency,
+                        cl.RAG_SOCIAL                      AS client_name,
+                        ISNULL(SUM(cig.IMPORTO), 0)        AS gross
                     FROM CONTRATTIRIGHE cr
                     JOIN CONTRATTITESTATA ct
                       ON ct.ID_CONTRATTITESTATA = cr.ID_CONTRATTITESTATA
+                    JOIN ContrattiImportiGiornalieri cig
+                      ON cig.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
                     LEFT JOIN ANAGRAF ae ON ae.ID_ANAGRAF = ct.AGENTE1
                     LEFT JOIN ANAGRAF ag ON ag.ID_ANAGRAF = ct.AGENZIA
                     LEFT JOIN ANAGRAF cl ON cl.ID_ANAGRAF = ct.COMMITTENTE
                     WHERE cr.NEWTYPE LIKE '%%COM%%'
                       AND cr.IMPORTO > 0
-                      {'-- show all' if show_trade else "AND cr.NEWTYPE NOT LIKE '%%TRD%%' AND (ct.CAMBIOMERCE = 0 OR ct.CAMBIOMERCE IS NULL) AND ct.ID_PAGAMENTI != 4"}
+                      {trade_guard}
                       AND cr.DATA_INIZIO <= %s
                       AND cr.DATA_FINE   >= %s
-                """, (str(month_end), str(bcast_start)))
+                      AND cig.DATA >= CASE WHEN ct.CENTROMEDIA = 316 THEN %s ELSE %s END
+                      AND cig.DATA <= %s
+                    GROUP BY
+                        ct.ID_CONTRATTITESTATA, ct.CENTROMEDIA, ct.P_AGENZIA, ct.COD_CONTRATTO,
+                        ct.CAMBIOMERCE, ct.ID_PAGAMENTI,
+                        ae.RAG_SOCIAL, ag.RAG_SOCIAL, cl.RAG_SOCIAL
+                """, (str(month_end), str(bcast_start),
+                      str(bcast_start), str(cal_start), str(month_end)))
                 rows = cur.fetchall()
 
-            _DAY_COLS = ["LUNEDI","MARTEDI","MERCOLEDI","GIOVEDI","VENERDI","SABATO","DOMENICA"]
-
-            def _count_wd(d1, d2, wd):
-                if d2 < d1:
-                    return 0
-                n = (d2 - d1).days + 1
-                off = (wd - d1.weekday()) % 7
-                return max(0, (n - off + 6) // 7)
-
-            def _active_days_in_range(r, d1, d2):
-                wds = [i for i, col in enumerate(_DAY_COLS) if r[col]]
-                if not wds:
-                    return (d2 - d1).days + 1  # fallback: all days
-                return sum(_count_wd(d1, d2, wd) for wd in wds)
-
             def _is_trade(r):
-                return (
-                    r["CAMBIOMERCE"]
-                    or r["ID_PAGAMENTI"] == 4
-                    or "TRD" in (r["NEWTYPE"] or "")
-                )
+                return r["CAMBIOMERCE"] or r["ID_PAGAMENTI"] == 4
 
             clients: dict = defaultdict(
                 lambda: {"gross": 0.0, "net": 0.0, "centromedia": None, "unset": False}
@@ -5085,19 +5082,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             )
 
             for r in rows:
-                if not r["DATA_INIZIO"] or not r["DATA_FINE"]:
-                    continue
-                cm     = r["CENTROMEDIA"] or 0
-                mstart = bcast_start if cm == 316 else cal_start
-                line_s = max(r["DATA_INIZIO"].date(), mstart)
-                line_e = min(r["DATA_FINE"].date(), month_end)
-                if line_e < line_s:
-                    continue
-                total_active   = _active_days_in_range(r, r["DATA_INIZIO"].date(), r["DATA_FINE"].date())
-                overlap_active = _active_days_in_range(r, line_s, line_e)
-                frac           = overlap_active / total_active if total_active > 0 else 0
-                gross      = float(r["N_PASSAGGI"]) * float(r["IMPORTO"]) * frac
-                net        = gross * (1 - float(r["P_AGENZIA"] or 0) / 100)
+                cm    = r["CENTROMEDIA"] or 0
+                gross = float(r["gross"])
+                net   = gross * (1 - float(r["P_AGENZIA"] or 0) / 100)
 
                 ae     = r["ae_name"]      or "Unknown AE"
                 agency = (r["buying_agency"] or "").strip()
