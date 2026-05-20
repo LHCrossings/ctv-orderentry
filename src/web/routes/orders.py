@@ -2528,9 +2528,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 i += 1
             else:
                 block = []
-                while i < len(annotated) and not annotated[i]["is_fixed"]:
-                    block.append(annotated[i])
-                    i += 1
+                while i < len(annotated):
+                    row = annotated[i]
+                    if row["newtype"] == "NOOP":
+                        i += 1  # spacer — transparent to break boundaries
+                    elif row["is_fixed"]:
+                        break  # PGM — actual break boundary
+                    else:
+                        block.append(row)
+                        i += 1
                 if not block:
                     continue
                 optimized = _bo_optimize(block)
