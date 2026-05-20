@@ -5029,7 +5029,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
             with _connect() as conn:
                 cur = conn.cursor(as_dict=True)
-                cur.execute("""
+                cur.execute(f"""
                     SELECT
                         cr.DATA_INIZIO, cr.DATA_FINE,
                         cr.N_PASSAGGI,  cr.IMPORTO,
@@ -5046,7 +5046,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     LEFT JOIN ANAGRAF cl ON cl.ID_ANAGRAF = ct.COMMITTENTE
                     WHERE cr.NEWTYPE LIKE '%%COM%%'
                       AND cr.IMPORTO > 0
-                      {'' if show_trade else "AND cr.NEWTYPE NOT LIKE '%%TRD%%' AND (ct.CAMBIOMERCE = 0 OR ct.CAMBIOMERCE IS NULL) AND ct.ID_PAGAMENTI != 4"}
+                      {'-- show all' if show_trade else "AND cr.NEWTYPE NOT LIKE '%%TRD%%' AND (ct.CAMBIOMERCE = 0 OR ct.CAMBIOMERCE IS NULL) AND ct.ID_PAGAMENTI != 4"}
                       AND cr.DATA_INIZIO <= %s
                       AND cr.DATA_FINE   >= %s
                 """, (str(month_end), str(bcast_start)))
