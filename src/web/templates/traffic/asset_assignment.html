@@ -425,7 +425,22 @@
             flex-shrink: 0;
         }
         .aa-weight:focus { border-color: var(--nord10); box-shadow: 0 0 0 2px rgba(94,129,172,0.15); }
-        .aa-weight-label { font-size: 0.72rem; color: var(--text-muted); flex-shrink: 0; }
+        .aa-pct {
+            width: 48px;
+            text-align: center;
+            background: color-mix(in srgb, var(--nord10) 8%, var(--bg-secondary));
+            border: 1px solid color-mix(in srgb, var(--nord10) 30%, var(--border-color));
+            border-radius: 6px;
+            padding: 4px 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            color: var(--nord10);
+            outline: none;
+            flex-shrink: 0;
+        }
+        .aa-pct:focus { border-color: var(--nord10); box-shadow: 0 0 0 2px rgba(94,129,172,0.15); }
+        .aa-col-label { font-size: 0.72rem; color: var(--text-muted); flex-shrink: 0; }
         .aa-variant label {
             display: flex;
             align-items: center;
@@ -2295,11 +2310,16 @@
                         <span class="spot-code">${esc(v.cod_progra)}</span>
                         <span class="spot-title">${esc(v.descrizio)}</span>
                     </label>
+                    <span class="aa-col-label">wt</span>
                     <input type="number" class="aa-weight"
                            data-line="${line.line_id}" data-filmati="${v.filmati_id}"
-                           min="1" max="99" value="1"
+                           min="1" max="999" value="1"
                            title="Rotation weight — higher = more airings" />
-                    <span class="aa-weight-label">wt</span>
+                    <span class="aa-col-label">%</span>
+                    <input type="number" class="aa-pct"
+                           data-line="${line.line_id}" data-filmati="${v.filmati_id}"
+                           min="1" max="99" value=""
+                           title="Rotation percentage (auto-calculated from weights)" />
                 </div>`;
             }
             html += `</div>`;
@@ -2318,7 +2338,37 @@
         </div>`;
 
         el.innerHTML = html;
+        _syncAllAutoAssignPcts();
     }
+
+    function _syncLinePcts(lineId) {
+        const wtEls = [...document.querySelectorAll(`#autoScanResults .aa-weight[data-line="${lineId}"]`)];
+        if (!wtEls.length) return;
+        const total = wtEls.reduce((s, w) => s + Math.max(1, parseInt(w.value) || 1), 0);
+        wtEls.forEach(w => {
+            const pEl = document.querySelector(`#autoScanResults .aa-pct[data-line="${lineId}"][data-filmati="${w.dataset.filmati}"]`);
+            if (pEl && document.activeElement !== pEl) {
+                pEl.value = Math.round(Math.max(1, parseInt(w.value) || 1) / total * 100);
+            }
+        });
+    }
+
+    function _syncAllAutoAssignPcts() {
+        const lineIds = new Set([...document.querySelectorAll('#autoScanResults .aa-weight')].map(w => w.dataset.line));
+        lineIds.forEach(lid => _syncLinePcts(lid));
+    }
+
+    document.addEventListener('input', e => {
+        const el = e.target;
+        if (!el.closest('#autoScanResults')) return;
+        if (el.classList.contains('aa-weight')) {
+            _syncLinePcts(el.dataset.line);
+        } else if (el.classList.contains('aa-pct')) {
+            const wEl = document.querySelector(`#autoScanResults .aa-weight[data-line="${el.dataset.line}"][data-filmati="${el.dataset.filmati}"]`);
+            if (wEl) wEl.value = Math.max(1, parseInt(el.value) || 1);
+            _syncLinePcts(el.dataset.line);
+        }
+    });
 
     async function applyAutoAssign() {
         const byLine = {};
