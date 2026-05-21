@@ -601,6 +601,7 @@
                 <span style="background:color-mix(in srgb,var(--nord10) 12%,transparent); color:var(--nord10); border:1px solid color-mix(in srgb,var(--nord10) 35%,transparent); font-size:0.72rem; font-weight:600; padding:2px 8px; border-radius:4px;">Davis Elen</span>
                 <span style="background:color-mix(in srgb,var(--nord10) 12%,transparent); color:var(--nord10); border:1px solid color-mix(in srgb,var(--nord10) 35%,transparent); font-size:0.72rem; font-weight:600; padding:2px 8px; border-radius:4px;">IW Group (Lexus)</span>
                 <span style="background:color-mix(in srgb,var(--nord10) 12%,transparent); color:var(--nord10); border:1px solid color-mix(in srgb,var(--nord10) 35%,transparent); font-size:0.72rem; font-weight:600; padding:2px 8px; border-radius:4px;">Tatari (WorldLink)</span>
+                <span style="background:color-mix(in srgb,var(--nord10) 12%,transparent); color:var(--nord10); border:1px solid color-mix(in srgb,var(--nord10) 35%,transparent); font-size:0.72rem; font-weight:600; padding:2px 8px; border-radius:4px;">Direct Donor (WorldLink) .ods</span>
             </div>
             <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px; flex-wrap:wrap;">
                 <span style="font-size:0.72rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; min-width:120px;">Auto-assign (scan)</span>
@@ -612,8 +613,8 @@
             <div class="field-group" style="flex:1;">
                 <label class="field-label">Traffic Instructions PDF</label>
                 <div class="pdf-drop-zone" id="trafficPdfDropZone">
-                    <input type="file" id="trafficPdfFiles" accept=".pdf" multiple />
-                    <span class="pdf-drop-label"><strong>Click to browse</strong> or drag &amp; drop PDFs</span>
+                    <input type="file" id="trafficPdfFiles" accept=".pdf,.ods" multiple />
+                    <span class="pdf-drop-label"><strong>Click to browse</strong> or drag &amp; drop PDFs / ODS</span>
                     <span class="pdf-drop-name" id="trafficPdfName"></span>
                 </div>
             </div>
@@ -1424,7 +1425,7 @@
             // Route by format — mixed uploads are allowed; each item declares its own format
             const daviselen = items.filter(i => i.format === 'daviselen');
             const lexus     = items.filter(i => i.format === 'lexus');
-            const tatari    = items.filter(i => i.format === 'tatari');
+            const tatari    = items.filter(i => i.format === 'tatari' || i.format === 'directdonor');
             const unknown   = items.filter(i => i.format === 'unknown' || i.error);
 
             if (unknown.length) {
@@ -2454,7 +2455,7 @@
         e.preventDefault();
         zone.classList.remove('drag-over');
         const dt = new DataTransfer();
-        [...e.dataTransfer.files].filter(f => /\.pdf$/i.test(f.name)).forEach(f => dt.items.add(f));
+        [...e.dataTransfer.files].filter(f => /\.(pdf|ods)$/i.test(f.name)).forEach(f => dt.items.add(f));
         if (!dt.files.length) return;
         input.files = dt.files;
         updateLabel();
