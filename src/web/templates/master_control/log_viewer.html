@@ -98,12 +98,9 @@
         .lang-badge { font-size: 0.78rem; font-weight: 600; color: var(--nord9); }
         .net-val { font-family: monospace; }
 
-        .save-all-btn, .fill-all-btn { border: none; border-radius: 8px; padding: 4px 14px; font-size: 0.8rem; font-weight: 600; cursor: pointer; font-family: inherit; }
-        .save-all-btn { background: var(--nord14); color: var(--nord6); }
-        .save-all-btn:hover { background: #8fad7a; }
-        .fill-all-btn { background: rgba(163,190,140,0.25); color: var(--nord14); border: 1px solid rgba(163,190,140,0.5); }
+        .fill-all-btn { border: none; border-radius: 8px; padding: 4px 14px; font-size: 0.8rem; font-weight: 600; cursor: pointer; font-family: inherit; background: rgba(163,190,140,0.25); color: var(--nord14); border: 1px solid rgba(163,190,140,0.5); }
         .fill-all-btn:hover { background: rgba(163,190,140,0.4); }
-        .save-all-btn:disabled, .fill-all-btn:disabled { opacity: 0.5; cursor: default; }
+        .fill-all-btn:disabled { opacity: 0.5; cursor: default; }
 
         /* No spots in block */
         .no-spots { padding: 10px 28px; font-size: 0.82rem; color: var(--text-muted); font-style: italic; }
@@ -268,7 +265,6 @@
             <button class="expand-btn" onclick="collapseAll()">Collapse all</button>
             &nbsp;&nbsp;
             <button class="fill-all-btn" id="fillAllBtn" onclick="fillAll()">⚡ Fill All</button>
-            <button class="save-all-btn" id="saveAllBtn" onclick="saveAll()">Save All</button>
         </div>`;
 
         data.programs.forEach((prg, pi) => {
@@ -481,31 +477,6 @@
         input.value = input.value.replace(/^0(\d:)/, '$1');
         updateRowCompliance(input);
         saveTime(input);
-    }
-
-    async function saveAll() {
-        const inputs = [...document.querySelectorAll('.airtime-input')].filter(i => i.value.trim());
-        if (!inputs.length) return;
-        const btn = document.getElementById('saveAllBtn');
-        btn.disabled = true;
-        btn.textContent = `Saving ${inputs.length}…`;
-        let ok = 0, fail = 0;
-        for (const input of inputs) {
-            input.value = input.value.replace(/^0(\d:)/, '$1');
-            const excelRow   = parseInt(input.dataset.row);
-            const actualTime = input.value.trim();
-            try {
-                const resp = await fetch('/api/master-control/logs/save-airtime', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ date: currentDate, market: currentMarket, excel_row: excelRow, actual_time: actualTime }),
-                });
-                if (resp.ok) { ok++; } else { fail++; }
-            } catch { fail++; }
-        }
-        btn.disabled = false;
-        btn.textContent = fail ? `✓ ${ok} saved · ✗ ${fail} failed` : `✓ All ${ok} saved`;
-        setTimeout(() => { btn.textContent = 'Save All'; }, 3000);
     }
 
     async function saveTime(input) {
