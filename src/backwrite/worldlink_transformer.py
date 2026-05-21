@@ -389,7 +389,7 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
     ws.cell(disc_row, 16).value = f"=-1*(L{disc_row}*P{sum_row})"
     notes = order_comment
     if is_asian:
-        notes = (notes + "\nTHE ASIAN CHANNEL") if notes else "THE ASIAN CHANNEL"
+        notes = (notes + "\n\nTHE ASIAN CHANNEL") if notes else "THE ASIAN CHANNEL"
     ws.cell(net_row,   2).value = notes
     ws.cell(net_row,  16).value = f"=SUM(P{sum_row}:P{disc_row})"
 
