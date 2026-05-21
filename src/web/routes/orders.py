@@ -5873,8 +5873,12 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
         def _run():
             from datetime import date as _d
+
             from browser_automation.etere_direct_client import (
-                EtereDirectClient, connect as _connect,
+                EtereDirectClient,
+            )
+            from browser_automation.etere_direct_client import (
+                connect as _connect,
             )
 
             date_from = _d.fromisoformat(date_from_s)
