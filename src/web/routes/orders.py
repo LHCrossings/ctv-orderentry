@@ -2489,6 +2489,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     " LEFT JOIN CONTRATTITESTATA ct ON ct.ID_CONTRATTITESTATA = tp.ID_CONTRATTITESTATA"
                     " WHERE t.DATA = %s AND t.COD_USER = %d"
                     " AND t.ORA >= %d AND t.ORA < %d"
+                    " AND t.LIVELLO = 0"
                     " ORDER BY t.XORDER, t.ORA",
                     (date, market_id, from_frames, to_frames),
                 )
