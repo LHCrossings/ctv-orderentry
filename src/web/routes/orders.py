@@ -4023,6 +4023,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 return "lexus"
             if "TRAFFIC INSTRUCTIONS" in upper and "tatari" in text.lower():
                 return "tatari"
+            if "marketing architects" in text.lower():
+                return "ma"
             return "unknown"
 
         def _run():
@@ -4354,6 +4356,96 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             "filename":            filename,
                             "format":              "directdonor",
                             "advertiser":          instr.advertiser,
+                            "search_suggestion":   instr.search_suggestion,
+                            "date_from_sql":       instr.date_from_sql,
+                            "date_to_sql":         instr.date_to_sql,
+                            "date_from_display":   instr.date_from_display,
+                            "date_to_display":     instr.date_to_display,
+                            "spots":               spots_out,
+                            "duration_groups":     duration_groups,
+                            "contract_candidates": contracts,
+                        })
+
+                    elif fmt == "ma":
+                        from browser_automation.parsers.ma_traffic_parser import (
+                            parse_ma_traffic_pdf,
+                        )
+                        instr = parse_ma_traffic_pdf(pdf_bytes)
+
+                        isci_codes   = [s.isci for s in instr.spots]
+                        placeholders = ",".join(f"'{c}'" for c in isci_codes) if isci_codes else "''"
+                        cur.execute(
+                            f"SELECT ID_FILMATI, COD_PROGRA, DESCRIZIO FROM FILMATI"
+                            f" WHERE COD_PROGRA IN ({placeholders})"
+                        )
+                        filmati_map = {
+                            r["COD_PROGRA"]: {"filmati_id": r["ID_FILMATI"],
+                                              "db_title":   r["DESCRIZIO"] or ""}
+                            for r in cur.fetchall()
+                        }
+
+                        spots_out = []
+                        for s in instr.spots:
+                            found = s.isci in filmati_map
+                            spots_out.append({
+                                "isci":         s.isci,
+                                "title":        s.title or (filmati_map[s.isci]["db_title"] if found else ""),
+                                "duration_sec": s.duration_sec,
+                                "rotation_pct": s.rotation_pct,
+                                "filmati_id":   filmati_map[s.isci]["filmati_id"] if found else None,
+                                "found":        found,
+                            })
+
+                        from collections import defaultdict as _dd
+                        by_dur: dict = _dd(list)
+                        for s in spots_out:
+                            by_dur[s["duration_sec"]].append(s)
+                        duration_groups = [
+                            {"duration_sec": dur, "spots": grp,
+                             "all_found": all(s["found"] for s in grp)}
+                            for dur, grp in sorted(by_dur.items())
+                        ]
+
+                        term = f"%{instr.search_suggestion}%"
+                        date_filter = ""
+                        if instr.date_from_sql:
+                            date_filter += f" AND cr.DATA_FINE >= '{instr.date_from_sql}'"
+                        if instr.date_to_sql:
+                            date_filter += f" AND cr.DATA_INIZIO <= '{instr.date_to_sql}'"
+
+                        durations = list({s["duration_sec"] for s in spots_out})
+                        dur_having = ""
+                        if len(durations) == 1:
+                            dur_having = (
+                                f" HAVING SUM(CASE WHEN CAST(ROUND(CAST(cr.DURATA AS FLOAT)"
+                                f" / {_FPS_GLOBAL}, 0) AS INT) = {durations[0]} THEN 1 ELSE 0 END) > 0"
+                            )
+
+                        cur.execute(f"""
+                            SELECT TOP 10
+                                ct.ID_CONTRATTITESTATA AS id,
+                                ct.COD_CONTRATTO       AS code,
+                                ct.DESCRIZIONE         AS description,
+                                CONVERT(VARCHAR(10), MIN(cr.DATA_INIZIO), 101) AS date_start,
+                                CONVERT(VARCHAR(10), MAX(cr.DATA_FINE),   101) AS date_end,
+                                COUNT(DISTINCT cr.ID_CONTRATTIRIGHE) AS line_count
+                            FROM CONTRATTITESTATA ct
+                            JOIN CONTRATTIRIGHE cr
+                              ON cr.ID_CONTRATTITESTATA = ct.ID_CONTRATTITESTATA
+                            WHERE (ct.DESCRIZIONE LIKE %s OR ct.COD_CONTRATTO LIKE %s)
+                              {date_filter}
+                            GROUP BY ct.ID_CONTRATTITESTATA, ct.COD_CONTRATTO, ct.DESCRIZIONE
+                            {dur_having}
+                            ORDER BY ct.ID_CONTRATTITESTATA DESC
+                        """, (term, term))
+                        contracts = [dict(r) for r in cur.fetchall()]
+
+                        items.append({
+                            "filename":            filename,
+                            "format":              "ma",
+                            "advertiser":          instr.advertiser,
+                            "client_code":         instr.client_code,
+                            "product_code":        instr.product_code,
                             "search_suggestion":   instr.search_suggestion,
                             "date_from_sql":       instr.date_from_sql,
                             "date_to_sql":         instr.date_to_sql,
