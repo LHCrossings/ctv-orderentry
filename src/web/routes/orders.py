@@ -2484,7 +2484,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     "SELECT t.ID_TPALINSE, t.ORA, t.XORDER, t.TITLE, t.NEWTYPE, t.DURATION,"
                     " cr.CONTROLLACAPOFILA, cr.CONTROLLAFINEFILA, ct.COD_CONTRATTO"
                     " FROM TPALINSE t"
-                    " LEFT JOIN trafficTPalinse tp ON tp.ID_TPalinse = t.ID_TPALINSE"
+                    " INNER JOIN trafficTPalinse tp ON tp.ID_TPalinse = t.ID_TPALINSE"
                     " LEFT JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe"
                     " LEFT JOIN CONTRATTITESTATA ct ON ct.ID_CONTRATTITESTATA = tp.ID_CONTRATTITESTATA"
                     " WHERE t.DATA = %s AND t.COD_USER = %d"
