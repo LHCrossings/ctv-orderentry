@@ -328,7 +328,20 @@
             outline: none;
         }
         .weight-input:focus { border-color: var(--nord10); box-shadow: 0 0 0 2px rgba(94,129,172,0.15); }
-        .weight-pct { font-size: 0.85rem; color: var(--text-muted); }
+        .pct-input {
+            width: 48px;
+            text-align: center;
+            background: color-mix(in srgb, var(--nord10) 8%, var(--bg-secondary));
+            border: 1px solid color-mix(in srgb, var(--nord10) 30%, var(--border-color));
+            border-radius: 6px;
+            padding: 5px 6px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            color: var(--nord10);
+            outline: none;
+        }
+        .pct-input:focus { border-color: var(--nord10); box-shadow: 0 0 0 2px rgba(94,129,172,0.15); }
         .remove-btn {
             background: none;
             border: none;
@@ -350,7 +363,7 @@
             flex-wrap: wrap;
             gap: 10px;
         }
-        .weight-total {
+        .weight-total-hidden {
             font-size: 0.85rem;
             font-weight: 600;
             color: var(--text-muted);
@@ -1203,7 +1216,7 @@
             el.innerHTML = '<div class="empty-builder">Select spots from the library to build a rotation.</div>';
             return;
         }
-        const defaultWeight = Math.floor(100 / spots.length);
+        const defaultWeight = 1;
         el.innerHTML = `
             <div id="builderRows">
                 ${spots.map(s => `
@@ -1212,16 +1225,19 @@
                         <div class="builder-code">${esc(s.code)}</div>
                         <div class="builder-title">${esc(s.title || '')}</div>
                     </div>
-                    <input type="number" class="weight-input" min="1" max="100"
+                    <span class="aa-col-label">wt</span>
+                    <input type="number" class="weight-input" min="1" max="999"
                            value="${getWeight(s.id, defaultWeight)}"
-                           oninput="updateWeightTotal()"
+                           oninput="updateBuilderPcts()"
                            data-id="${s.id}" />
-                    <span class="weight-pct">%</span>
+                    <span class="aa-col-label">%</span>
+                    <input type="number" class="pct-input" min="1" max="99"
+                           value="" data-id="${s.id}"
+                           oninput="onBuilderPctInput(this)" />
                     <button class="remove-btn" onclick="removeSpot(${s.id})" title="Remove">✕</button>
                 </div>`).join('')}
             </div>
             <div class="builder-footer">
-                <span class="weight-total" id="weightTotal"></span>
                 <div class="builder-actions">
                     <button class="balance-btn" onclick="balanceWeights()">Balance</button>
                     <button class="run-btn danger" onclick="clearAssignments()"
@@ -1234,7 +1250,7 @@
                     </button>
                 </div>
             </div>`;
-        updateWeightTotal();
+        updateBuilderPcts();
     }
 
     const weights = {};
@@ -1242,32 +1258,34 @@
         return weights[id] !== undefined ? weights[id] : defaultVal;
     }
 
-    function updateWeightTotal() {
+    function updateBuilderPcts() {
         let total = 0;
         document.querySelectorAll('.weight-input').forEach(inp => {
-            const id = inp.dataset.id;
-            const v = parseInt(inp.value) || 0;
-            weights[id] = v;
+            const v = Math.max(1, parseInt(inp.value) || 1);
+            weights[inp.dataset.id] = v;
             total += v;
         });
-        const el = document.getElementById('weightTotal');
-        if (!el) return;
-        el.textContent = `Total: ${total}%`;
-        el.className = 'weight-total ' + (total === 100 ? 'ok' : 'warn');
+        document.querySelectorAll('.weight-input').forEach(inp => {
+            const pEl = inp.closest('.builder-row')?.querySelector('.pct-input');
+            if (pEl && document.activeElement !== pEl) {
+                pEl.value = Math.round(weights[inp.dataset.id] / total * 100);
+            }
+        });
+    }
+
+    function onBuilderPctInput(el) {
+        const v = Math.max(1, parseInt(el.value) || 1);
+        const wEl = el.closest('.builder-row')?.querySelector('.weight-input');
+        if (wEl) { wEl.value = v; weights[el.dataset.id] = v; }
+        updateBuilderPcts();
     }
 
     function balanceWeights() {
-        const inputs = document.querySelectorAll('.weight-input');
-        const n = inputs.length;
-        if (!n) return;
-        const base = Math.floor(100 / n);
-        const rem  = 100 - base * n;
-        inputs.forEach((inp, i) => {
-            const v = base + (i === 0 ? rem : 0);
-            inp.value = v;
-            weights[inp.dataset.id] = v;
+        document.querySelectorAll('.weight-input').forEach(inp => {
+            inp.value = 1;
+            weights[inp.dataset.id] = 1;
         });
-        updateWeightTotal();
+        updateBuilderPcts();
     }
 
     function removeSpot(id) {
