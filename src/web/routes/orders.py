@@ -4867,14 +4867,25 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             with _db_connect() as conn:
                 cursor = conn.cursor()
                 updated = 0
+                schedule_updated = 0
                 for p in pairs:
                     cursor.execute(
                         "UPDATE FILMATI SET COD_PROGRA = %s, DESCRIZIO = %s WHERE ID_FILMATI = %d",
                         (p["new_code"], p["new_title"], p["asset_id"]),
                     )
                     updated += cursor.rowcount
+                    cursor.execute(
+                        "UPDATE TPALINSE SET COD_PROGRA = %s, TITLE = %s WHERE ID_FILMATI = %d",
+                        (p["new_code"], p["new_title"], p["asset_id"]),
+                    )
+                    schedule_updated += cursor.rowcount
+                    cursor.execute(
+                        "UPDATE trafficTPalinse SET Cod_Progra = %s, Title = %s WHERE ID_Filmati = %d",
+                        (p["new_code"], p["new_title"], p["asset_id"]),
+                    )
+                    schedule_updated += cursor.rowcount
                 conn.commit()
-            return JSONResponse({"updated": updated})
+            return JSONResponse({"updated": updated, "schedule_updated": schedule_updated})
         except HTTPException:
             raise
         except Exception as exc:

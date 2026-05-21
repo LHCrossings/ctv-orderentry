@@ -325,7 +325,7 @@ async function applyChanges() {
         });
         if (!resp.ok) throw new Error((await resp.json().catch(()=>({}))).detail || `HTTP ${resp.status}`);
         const data = await resp.json();
-        statusEl.textContent = `✓ ${data.updated} asset(s) updated`;
+        statusEl.textContent = `✓ ${data.updated} asset(s) updated · ${data.schedule_updated} schedule row(s) updated`;
         statusEl.className = 'apply-status';
         statusEl.style.display = '';
         _applyPairs = [];
