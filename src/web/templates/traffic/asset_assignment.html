@@ -1596,9 +1596,9 @@
             const candidates = r.contract_candidates || [];
             const contractsHtml = candidates.length === 0
                 ? `<span style="color:var(--nord11);font-size:0.82rem;">No contracts found — try searching below.</span>`
-                : candidates.map((c, i) =>
+                : candidates.map((c) =>
                     `<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;margin-bottom:5px;">
-                        <input type="radio" name="tatari_contract_${idx}" value="${c.id}" ${i===0?'checked':''}>
+                        <input type="checkbox" class="tatari-cb-${idx}" value="${c.id}" checked>
                         <span style="font-family:monospace;color:var(--nord10);">${esc(c.code)}</span>
                         <span style="color:var(--text-muted);">${esc(c.description)} &middot; ${esc(c.date_start)}–${esc(c.date_end)} &middot; ${c.line_count} lines</span>
                     </label>`
@@ -1653,9 +1653,9 @@
                 container.innerHTML = '<span style="color:var(--nord11);font-size:0.82rem;">No contracts found.</span>';
                 return;
             }
-            container.innerHTML = candidates.map((c, i) =>
+            container.innerHTML = candidates.map((c) =>
                 `<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;margin-bottom:5px;">
-                    <input type="radio" name="tatari_contract_${idx}" value="${c.id}" ${i===0?'checked':''}>
+                    <input type="checkbox" class="tatari-cb-${idx}" value="${c.id}" checked>
                     <span style="font-family:monospace;color:var(--nord10);">${esc(c.code)}</span>
                     <span style="color:var(--text-muted);">${esc(c.description)} &middot; ${esc(c.date_start)}–${esc(c.date_end)} &middot; ${c.line_count} lines</span>
                 </label>`
@@ -1667,9 +1667,9 @@
 
     async function assignTatari(idx) {
         const r = window.tatariResults[idx];
-        const radio = document.querySelector(`input[name="tatari_contract_${idx}"]:checked`);
-        if (!radio) { alert('Select a contract first.'); return; }
-        const contractId = parseInt(radio.value);
+        const checked = [...document.querySelectorAll(`.tatari-cb-${idx}:checked`)];
+        if (!checked.length) { alert('Select at least one contract.'); return; }
+        const contractIds = checked.map(cb => parseInt(cb.value));
 
         const btn      = document.getElementById(`tatariAssignBtn_${idx}`);
         const statusEl = document.getElementById(`tatariStatus_${idx}`);
@@ -1691,12 +1691,17 @@
                 if (r.date_from_sql) params.set('date_from', r.date_from_sql);
                 if (r.date_to_sql)   params.set('date_to',   r.date_to_sql);
 
-                const linesResp = await fetch(`/api/traffic/contract/${contractId}/lines-by-duration?${params}`);
-                if (!linesResp.ok) throw new Error((await linesResp.json()).detail || 'Lines fetch failed');
-                const lines = await linesResp.json();
+                // Try each selected contract — use the first one that has matching lines
+                let lines = [], usedContractId = null;
+                for (const cid of contractIds) {
+                    const linesResp = await fetch(`/api/traffic/contract/${cid}/lines-by-duration?${params}`);
+                    if (!linesResp.ok) continue;
+                    const candidate = await linesResp.json();
+                    if (candidate.length) { lines = candidate; usedContractId = cid; break; }
+                }
 
                 if (!lines.length) {
-                    errors.push(`:${durSec}s — no matching lines`);
+                    errors.push(`:${durSec}s — no matching lines in any selected contract`);
                     continue;
                 }
 
@@ -1707,7 +1712,7 @@
                 if (r.date_from_sql) payload.date_from = r.date_from_sql;
                 if (r.date_to_sql)   payload.date_to   = r.date_to_sql;
 
-                const assignResp = await fetch(`/api/traffic/contract/${contractId}/auto-assign`, {
+                const assignResp = await fetch(`/api/traffic/contract/${usedContractId}/auto-assign`, {
                     method:  'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body:    JSON.stringify(payload),
