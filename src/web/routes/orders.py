@@ -4320,6 +4320,17 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             date_filter += f" AND cr.DATA_FINE >= '{instr.date_from_sql}'"
                         if instr.date_to_sql:
                             date_filter += f" AND cr.DATA_INIZIO <= '{instr.date_to_sql}'"
+
+                        # Filter to contracts with lines matching the file's duration so
+                        # e.g. the CVH :120 contract never appears when a :60 file is parsed.
+                        durations = list({s["duration_sec"] for s in spots_out})
+                        dur_having = ""
+                        if len(durations) == 1:
+                            dur_having = (
+                                f" HAVING SUM(CASE WHEN CAST(ROUND(CAST(cr.DURATA AS FLOAT)"
+                                f" / {_FPS_GLOBAL}, 0) AS INT) = {durations[0]} THEN 1 ELSE 0 END) > 0"
+                            )
+
                         cur.execute(f"""
                             SELECT TOP 10
                                 ct.ID_CONTRATTITESTATA AS id,
@@ -4334,6 +4345,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             WHERE (ct.DESCRIZIONE LIKE %s OR ct.COD_CONTRATTO LIKE %s)
                               {date_filter}
                             GROUP BY ct.ID_CONTRATTITESTATA, ct.COD_CONTRATTO, ct.DESCRIZIONE
+                            {dur_having}
                             ORDER BY ct.ID_CONTRATTITESTATA DESC
                         """, (term, term))
                         contracts = [dict(r) for r in cur.fetchall()]
