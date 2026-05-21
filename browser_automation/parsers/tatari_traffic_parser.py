@@ -21,9 +21,25 @@ class TatariSpot:
     rotation_pct: float
 
 
+# Advertiser names in Tatari PDFs that don't match Etere contract descriptions verbatim.
+# Maps the PDF advertiser string (case-insensitive prefix match) → better search term.
+_SEARCH_OVERRIDES: dict = {
+    "bettersleep": "Better",
+}
+
+
+def _search_suggestion(advertiser: str) -> str:
+    key = advertiser.lower().replace(" ", "")
+    for prefix, suggestion in _SEARCH_OVERRIDES.items():
+        if key.startswith(prefix):
+            return suggestion
+    return advertiser
+
+
 @dataclass
 class TatariTrafficInstruction:
     advertiser: str
+    search_suggestion: str          # pre-filled search term for the contract finder
     date_from_sql: Optional[str]    # "2026-05-18"
     date_to_sql: Optional[str]      # "2026-05-24"
     date_from_display: str          # "5/18"
@@ -111,6 +127,7 @@ def parse_tatari_traffic_pdf(pdf_bytes: bytes) -> TatariTrafficInstruction:
 
     return TatariTrafficInstruction(
         advertiser=advertiser,
+        search_suggestion=_search_suggestion(advertiser),
         date_from_sql=date_from_sql,
         date_to_sql=date_to_sql,
         date_from_display=date_from_display or "",

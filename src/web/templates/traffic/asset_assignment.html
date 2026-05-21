@@ -1617,7 +1617,7 @@
                     <input type="text" id="tatariSearch_${idx}" class="field-input"
                         placeholder="Search by name or contract code…"
                         style="max-width:280px;font-size:0.82rem;"
-                        value="${esc(r.advertiser)}"
+                        value="${esc(r.search_suggestion || r.advertiser)}"
                         onkeydown="if(event.key==='Enter') searchTatariContract(${idx})" />
                     <button class="run-btn" onclick="searchTatariContract(${idx})">Find</button>
                 </div>

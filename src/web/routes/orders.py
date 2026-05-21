@@ -4205,7 +4205,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         ]
 
                         # Fuzzy-search contracts by advertiser name + date overlap
-                        term = f"%{instr.advertiser}%"
+                        term = f"%{instr.search_suggestion}%"
                         date_filter = ""
                         if instr.date_from_sql:
                             date_filter += f" AND cr.DATA_FINE >= '{instr.date_from_sql}'"
@@ -4233,6 +4233,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             "filename":            filename,
                             "format":              "tatari",
                             "advertiser":          instr.advertiser,
+                            "search_suggestion":   instr.search_suggestion,
                             "date_from_sql":       instr.date_from_sql,
                             "date_to_sql":         instr.date_to_sql,
                             "date_from_display":   instr.date_from_display,
