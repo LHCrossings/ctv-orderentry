@@ -5886,7 +5886,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
             conn = _connect()
             try:
-                client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+                client = EtereDirectClient(conn, owner="HOUSE", autocommit=False)
                 client.set_master_market("NYC")
 
                 contract_id = client.create_contract_header(
@@ -5898,6 +5898,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     contract_date=_d.today(),
                     contract_end_date=date_to,
                     payment_id=4,
+                    contract_type=1,
                     note=note,
                 )
 
