@@ -2424,12 +2424,12 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         s = int(parts[2]) if len(parts) > 2 else 0
         return round((h * 3600 + mn * 60 + s) * _BO_FPS)
 
-    def _bo_classify(newtype: str, capo, fine, is_wl: bool, prev_label: str):
+    def _bo_classify(newtype: str, capo, fine, is_wl: bool, prev_label: str, prev_contract: str = "", contract: str = ""):
         if capo and fine:
             return 1, "BOOKEND"
         if capo and not fine:
             return 2, "BILLBOARD"
-        if prev_label == "BILLBOARD" and newtype in ("COM", "BNS"):
+        if prev_label == "BILLBOARD" and newtype in ("COM", "BNS") and contract and contract == prev_contract:
             return 3, "COMPANION"
         if newtype in ("COM", "BNS") and not is_wl:
             return 4, "PAYING"
@@ -2501,13 +2501,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             return JSONResponse({"error": str(e)}, status_code=500)
 
         # Annotate each row with label and priority
-        prev_label = None
+        prev_label    = None
+        prev_contract = ""
         annotated = []
         for r in rows:
-            nt = (r["NEWTYPE"] or "").strip()
-            is_wl = (r["COD_CONTRATTO"] or "").strip().startswith("WL")
-            pri, label = _bo_classify(nt, r["CONTROLLACAPOFILA"], r["CONTROLLAFINEFILA"], is_wl, prev_label)
-            prev_label = label
+            nt       = (r["NEWTYPE"] or "").strip()
+            contract = (r["COD_CONTRATTO"] or "").strip()
+            is_wl    = contract.startswith("WL")
+            pri, label = _bo_classify(nt, r["CONTROLLACAPOFILA"], r["CONTROLLAFINEFILA"], is_wl, prev_label, prev_contract, contract)
+            prev_label    = label
+            prev_contract = contract
             annotated.append({
                 "id": r["ID_TPALINSE"],
                 "ora": r["ORA"],
