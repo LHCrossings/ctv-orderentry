@@ -545,7 +545,15 @@
         </div>
 
         <!-- Traffic instructions PDF upload — always visible -->
-        <div class="input-row" style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border-color);">
+        <div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border-color);">
+            <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px; flex-wrap:wrap;">
+                <span style="font-size:0.72rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;">Auto-parse formats</span>
+                <span style="background:color-mix(in srgb,var(--nord10) 12%,transparent); color:var(--nord10); border:1px solid color-mix(in srgb,var(--nord10) 35%,transparent); font-size:0.72rem; font-weight:600; padding:2px 8px; border-radius:4px;">Davis Elen</span>
+                <span style="background:color-mix(in srgb,var(--nord10) 12%,transparent); color:var(--nord10); border:1px solid color-mix(in srgb,var(--nord10) 35%,transparent); font-size:0.72rem; font-weight:600; padding:2px 8px; border-radius:4px;">IW Group (Lexus)</span>
+                <span style="background:color-mix(in srgb,var(--nord10) 12%,transparent); color:var(--nord10); border:1px solid color-mix(in srgb,var(--nord10) 35%,transparent); font-size:0.72rem; font-weight:600; padding:2px 8px; border-radius:4px;">Tatari (WorldLink)</span>
+            </div>
+        </div>
+        <div class="input-row" style="margin-top:6px;">
             <div class="field-group" style="flex:1;">
                 <label class="field-label">Traffic Instructions PDF</label>
                 <div class="pdf-drop-zone" id="trafficPdfDropZone">
@@ -584,6 +592,7 @@
 
         <div id="admerasiaGrid" style="display:none; margin-top:14px;"></div>
         <div id="daviselenGrid" style="display:none; margin-top:14px;"></div>
+        <div id="tatariGrid" style="display:none; margin-top:14px;"></div>
 
         <div id="contractBanner" class="contract-banner">
             <div class="contract-code" id="bannerCode"></div>
@@ -1355,6 +1364,7 @@
             // Route by format — mixed uploads are allowed; each item declares its own format
             const daviselen = items.filter(i => i.format === 'daviselen');
             const lexus     = items.filter(i => i.format === 'lexus');
+            const tatari    = items.filter(i => i.format === 'tatari');
             const unknown   = items.filter(i => i.format === 'unknown' || i.error);
 
             if (unknown.length) {
@@ -1369,6 +1379,10 @@
             if (lexus.length) {
                 window.lexusResults = lexus;
                 renderLexusGrid(lexus);
+            }
+            if (tatari.length) {
+                window.tatariResults = tatari;
+                renderTatariGrid(tatari);
             }
         } catch (e) {
             alert(`Error: ${e.message}`);
@@ -1538,6 +1552,180 @@
             used[best]++;
         }
         return list;
+    }
+
+    // ── Tatari / WorldLink traffic ────────────────────────────────────────────
+
+    function renderTatariGrid(results) {
+        const grid = document.getElementById('tatariGrid');
+        grid.innerHTML = '';
+
+        results.forEach((r, idx) => {
+            const card = document.createElement('div');
+            card.className = 'tool-card';
+            card.style.marginBottom = '12px';
+
+            if (r.error) {
+                card.innerHTML = `<p style="color:var(--nord11);">${esc(r.filename)}: ${esc(r.error)}</p>`;
+                grid.appendChild(card);
+                return;
+            }
+
+            // Spots grouped by duration
+            const byDur = {};
+            (r.spots || []).forEach(s => {
+                if (!byDur[s.duration_sec]) byDur[s.duration_sec] = [];
+                byDur[s.duration_sec].push(s);
+            });
+            const spotsHtml = Object.entries(byDur).sort((a,b)=>+a[0]-+b[0]).map(([dur, spots]) => {
+                const pills = spots.map(s => {
+                    const col  = s.found ? 'var(--nord14)' : 'var(--nord11)';
+                    const icon = s.found ? '✓' : '✗';
+                    return `<span style="color:${col};font-family:monospace;font-size:0.8rem;">${icon} ${esc(s.isci)}</span>`
+                         + ` <span style="color:var(--text-muted);font-size:0.78rem;">${s.rotation_pct}%</span>`;
+                }).join('&emsp;');
+                return `<div style="margin-bottom:5px;"><strong style="font-size:0.76rem;color:var(--text-muted);">:${dur}s</strong>&nbsp; ${pills}</div>`;
+            }).join('');
+
+            // Contract candidates
+            const candidates = r.contract_candidates || [];
+            const contractsHtml = candidates.length === 0
+                ? `<span style="color:var(--nord11);font-size:0.82rem;">No contracts found — try searching below.</span>`
+                : candidates.map((c, i) =>
+                    `<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;margin-bottom:5px;">
+                        <input type="radio" name="tatari_contract_${idx}" value="${c.id}" ${i===0?'checked':''}>
+                        <span style="font-family:monospace;color:var(--nord10);">${esc(c.code)}</span>
+                        <span style="color:var(--text-muted);">${esc(c.description)} &middot; ${esc(c.date_start)}–${esc(c.date_end)} &middot; ${c.line_count} lines</span>
+                    </label>`
+                ).join('');
+
+            card.innerHTML = `
+                <h2 style="margin-bottom:4px;">${esc(r.advertiser)}</h2>
+                <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
+                    Flight: <strong style="color:var(--text-primary);">${esc(r.date_from_display)} – ${esc(r.date_to_display)}</strong>
+                    &nbsp;·&nbsp; <span style="font-style:italic;">${esc(r.filename)}</span>
+                </p>
+                <div style="margin-bottom:14px;">${spotsHtml}</div>
+                <div class="section-title" style="margin-bottom:8px;">Contract</div>
+                <div id="tatariContracts_${idx}" style="margin-bottom:10px;">${contractsHtml}</div>
+                <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+                    <input type="text" id="tatariSearch_${idx}" class="field-input"
+                        placeholder="Search by name or contract code…"
+                        style="max-width:280px;font-size:0.82rem;"
+                        value="${esc(r.advertiser)}"
+                        onkeydown="if(event.key==='Enter') searchTatariContract(${idx})" />
+                    <button class="run-btn" onclick="searchTatariContract(${idx})">Find</button>
+                </div>
+                <div style="display:flex;gap:10px;align-items:center;padding-top:12px;border-top:1px solid var(--border-color);">
+                    <button class="run-btn apply" id="tatariAssignBtn_${idx}" onclick="assignTatari(${idx})">Assign</button>
+                    <span id="tatariStatus_${idx}" style="font-size:0.82rem;"></span>
+                </div>
+            `;
+            grid.appendChild(card);
+        });
+
+        grid.style.display = results.length ? 'block' : 'none';
+    }
+
+    async function searchTatariContract(idx) {
+        const r = window.tatariResults[idx];
+        const q = document.getElementById(`tatariSearch_${idx}`).value.trim();
+        if (!q) return;
+
+        const params = new URLSearchParams({ q });
+        if (r.date_from_sql) params.set('date_from', r.date_from_sql);
+        if (r.date_to_sql)   params.set('date_to',   r.date_to_sql);
+
+        const container = document.getElementById(`tatariContracts_${idx}`);
+        container.innerHTML = '<span style="color:var(--text-muted);font-size:0.82rem;">Searching…</span>';
+
+        try {
+            const resp = await fetch(`/api/traffic/tatari/search?${params}`);
+            if (!resp.ok) throw new Error('Search failed');
+            const candidates = await resp.json();
+
+            if (!candidates.length) {
+                container.innerHTML = '<span style="color:var(--nord11);font-size:0.82rem;">No contracts found.</span>';
+                return;
+            }
+            container.innerHTML = candidates.map((c, i) =>
+                `<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;margin-bottom:5px;">
+                    <input type="radio" name="tatari_contract_${idx}" value="${c.id}" ${i===0?'checked':''}>
+                    <span style="font-family:monospace;color:var(--nord10);">${esc(c.code)}</span>
+                    <span style="color:var(--text-muted);">${esc(c.description)} &middot; ${esc(c.date_start)}–${esc(c.date_end)} &middot; ${c.line_count} lines</span>
+                </label>`
+            ).join('');
+        } catch (e) {
+            container.innerHTML = `<span style="color:var(--nord11);font-size:0.82rem;">Error: ${esc(e.message)}</span>`;
+        }
+    }
+
+    async function assignTatari(idx) {
+        const r = window.tatariResults[idx];
+        const radio = document.querySelector(`input[name="tatari_contract_${idx}"]:checked`);
+        if (!radio) { alert('Select a contract first.'); return; }
+        const contractId = parseInt(radio.value);
+
+        const btn      = document.getElementById(`tatariAssignBtn_${idx}`);
+        const statusEl = document.getElementById(`tatariStatus_${idx}`);
+        btn.disabled = true;
+        statusEl.style.color = '';
+        statusEl.textContent = 'Assigning…';
+
+        // Group found spots by duration
+        const byDur = {};
+        (r.spots || []).filter(s => s.found).forEach(s => {
+            if (!byDur[s.duration_sec]) byDur[s.duration_sec] = [];
+            byDur[s.duration_sec].push(s);
+        });
+
+        let totalLines = 0, totalSpots = 0, errors = [];
+        try {
+            for (const [durSec, spots] of Object.entries(byDur)) {
+                const params = new URLSearchParams({ duration_sec: durSec });
+                if (r.date_from_sql) params.set('date_from', r.date_from_sql);
+                if (r.date_to_sql)   params.set('date_to',   r.date_to_sql);
+
+                const linesResp = await fetch(`/api/traffic/contract/${contractId}/lines-by-duration?${params}`);
+                if (!linesResp.ok) throw new Error((await linesResp.json()).detail || 'Lines fetch failed');
+                const lines = await linesResp.json();
+
+                if (!lines.length) {
+                    errors.push(`:${durSec}s — no matching lines`);
+                    continue;
+                }
+
+                const filmatiIds = buildRotationList(spots);
+                const payload = {
+                    assignments: lines.map(l => ({ line_id: l.line_id, filmati_ids: filmatiIds })),
+                };
+                if (r.date_from_sql) payload.date_from = r.date_from_sql;
+                if (r.date_to_sql)   payload.date_to   = r.date_to_sql;
+
+                const assignResp = await fetch(`/api/traffic/contract/${contractId}/auto-assign`, {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify(payload),
+                });
+                if (!assignResp.ok) throw new Error((await assignResp.json()).detail || 'Assign failed');
+                const result = await assignResp.json();
+                totalLines += result.lines_updated  || 0;
+                totalSpots += result.spots_assigned || 0;
+            }
+
+            if (errors.length) {
+                statusEl.style.color = 'var(--nord13)';
+                statusEl.textContent = `Done — ${totalLines} line(s), ${totalSpots} spot(s). Skipped: ${errors.join(', ')}`;
+            } else {
+                statusEl.style.color = 'var(--nord14)';
+                statusEl.textContent = `Done — ${totalLines} line(s), ${totalSpots} spot(s) assigned.`;
+            }
+        } catch (e) {
+            statusEl.style.color  = 'var(--nord11)';
+            statusEl.textContent  = `Error: ${e.message}`;
+        } finally {
+            btn.disabled = false;
+        }
     }
 
     // ── Lexus / IW Group traffic ──────────────────────────────────────────────
