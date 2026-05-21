@@ -140,11 +140,17 @@
             </div>
             <div class="field-group">
                 <label class="field-label">From</label>
-                <input type="text" id="timeFrom" class="field-input" placeholder="08:00:00" value="08:00:00" />
+                <input type="text" id="timeFrom" class="field-input" placeholder="08:00:00" value="08:00:00"
+                       onfocus="this.select();this.dataset.clearing='1';"
+                       onkeydown="if(event.key==='Enter'){this.blur();}else if(this.dataset.clearing==='1'){if(/^\d$/.test(event.key))this.value='';delete this.dataset.clearing;}"
+                       oninput="fmtAirtime(this)" />
             </div>
             <div class="field-group">
                 <label class="field-label">To</label>
-                <input type="text" id="timeTo" class="field-input" placeholder="09:00:00" value="09:00:00" />
+                <input type="text" id="timeTo" class="field-input" placeholder="09:00:00" value="09:00:00"
+                       onfocus="this.select();this.dataset.clearing='1';"
+                       onkeydown="if(event.key==='Enter'){this.blur();}else if(this.dataset.clearing==='1'){if(/^\d$/.test(event.key))this.value='';delete this.dataset.clearing;}"
+                       oninput="fmtAirtime(this)" />
             </div>
             <button class="load-btn" id="loadBtn" onclick="loadBreaks()">Load</button>
             <button class="apply-all-btn" id="applyAllBtn" onclick="applyAll()" style="display:none">Apply All Fixes</button>
@@ -158,6 +164,15 @@
 <script>
 let selectedMarket = 'LAX';
 let breakData = [];
+
+function fmtAirtime(input) {
+    const digits = input.value.replace(/\D/g, '').slice(0, 6);
+    let v = digits;
+    if (digits.length > 4)      v = digits.slice(0,2) + ':' + digits.slice(2,4) + ':' + digits.slice(4);
+    else if (digits.length > 2) v = digits.slice(0,2) + ':' + digits.slice(2);
+    input.value = v;
+    input.setSelectionRange(v.length, v.length);
+}
 
 function selectMkt(el) {
     document.querySelectorAll('.mkt-pill').forEach(p => p.classList.remove('active'));
