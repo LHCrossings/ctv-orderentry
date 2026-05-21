@@ -5835,7 +5835,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     @router.get("/orders/trade-entry", response_class=HTMLResponse)
     async def trade_entry_page(request: Request):
-        return templates.TemplateResponse("trade/trade_entry.html", {"request": request})
+        return templates.TemplateResponse(request, "trade/trade_entry.html")
 
     @router.get("/api/trade/search-customer")
     async def trade_search_customer(q: str = Query(..., min_length=2)):
