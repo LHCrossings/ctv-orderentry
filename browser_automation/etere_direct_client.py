@@ -242,10 +242,13 @@ def _build_newtype(
     is_bookend: bool = False,
     is_added_value: bool = False,
     is_barter: bool = False,
+    is_trade: bool = False,
 ) -> str:
     """Build semicolon-delimited NEWTYPE string. Always includes COMS; adds one specific type."""
     types = ["COMS"]
-    if is_bonus:
+    if is_trade:
+        types.append("TRD")
+    elif is_bonus:
         types.append("BNS")
     elif is_billboard:
         types.append("BB")
@@ -600,9 +603,13 @@ EXEC web_sales_savecontractgeneral
         is_billboard: bool = False,
         is_added_value: bool = False,
         is_barter: bool = False,
+        is_trade: bool = False,
         note: str = "",
         separation_intervals: tuple[int, int, int] = (15, 0, 0),
         contract_id: Optional[int] = None,
+        priority: int = 500,
+        whitelist_priority: int = 50,
+        booking_code: int = 2,
         # Unused kwargs kept for interface compatibility with EtereClient
         **_kwargs,
     ) -> int:
@@ -644,7 +651,7 @@ EXEC web_sales_savecontractgeneral
         intevent = _minutes_to_frames(separation_intervals[1])
         intsrighe = _minutes_to_frames(separation_intervals[2])
 
-        newtype = _build_newtype(is_bonus, is_billboard, is_bookend, is_added_value, is_barter)
+        newtype = _build_newtype(is_bonus, is_billboard, is_bookend, is_added_value, is_barter, is_trade)
 
         # Convert date -> datetime for legacy ODBC driver
         datefrom_dt = datetime(date_from.year, date_from.month, date_from.day)
@@ -729,7 +736,7 @@ EXEC web_sales_InsertContractLine
             max_daily_run,      # @passaggigiorno
             is_bookend,         # @controllocapo  (top of break)
             is_bookend,         # @controllofine  (bottom of break)
-            500,                # @priorita
+            priority,           # @priorita
             1,                  # @prenotazione
             False,              # @omaggio
             rate,               # @importo
@@ -742,9 +749,9 @@ EXEC web_sales_InsertContractLine
             day_bits["sab"],    # @sab
             day_bits["dom"],    # @dom
             True,               # @manualprice
-            2,                  # @idbooking
+            booking_code,       # @idbooking
             0,                  # @id (new line; SP returns the assigned ID)
-            50,                 # @priwhitelist
+            whitelist_priority, # @priwhitelist
             1,                  # @rowstatus
             intcomm,            # @intcomm
             intsrighe,          # @intsrighe

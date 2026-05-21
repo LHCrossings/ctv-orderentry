@@ -5919,6 +5919,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     daypart   = str(ld.get("daypart", "06:00-23:59"))
                     days      = str(ld.get("days", "M-Su"))
                     line_desc = str(ld.get("description", description))
+                    line_from = _d.fromisoformat(ld["date_from"]) if ld.get("date_from") else date_from
+                    line_to   = _d.fromisoformat(ld["date_to"])   if ld.get("date_to")   else date_to
 
                     client.add_contract_line(
                         market=market,
@@ -5928,12 +5930,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         rate=rate,
                         total_spots=spots,
                         spots_per_week=0,   # monthly rotation
-                        date_from=date_from,
-                        date_to=date_to,
+                        date_from=line_from,
+                        date_to=line_to,
                         duration=dur_str,
-                        is_barter=True,
+                        is_trade=True,
                         separation_intervals=(separation, 0, 0),
                         contract_id=contract_id,
+                        priority=600,
+                        whitelist_priority=60,
+                        booking_code=3,     # TRD
                     )
                     markets_created.append(market)
 

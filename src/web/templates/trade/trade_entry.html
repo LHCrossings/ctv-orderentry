@@ -26,17 +26,14 @@
             padding-bottom: 8px;
             border-bottom: 1px solid var(--border-color);
         }
-        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px; }
+        .form-grid   { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px; }
         .form-grid-3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 14px 24px; }
         .form-grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 14px 24px; }
-        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        .form-group  { display: flex; flex-direction: column; gap: 5px; }
         .form-group.full { grid-column: 1 / -1; }
         .form-group label {
-            font-size: 0.78rem;
-            font-weight: 700;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
+            font-size: 0.78rem; font-weight: 700; color: var(--text-secondary);
+            text-transform: uppercase; letter-spacing: 0.05em;
         }
         .form-group input,
         .form-group select,
@@ -44,17 +41,14 @@
             padding: 8px 10px;
             border: 1px solid var(--border-color);
             border-radius: 6px;
-            font-family: inherit;
-            font-size: 0.92rem;
-            color: var(--text-primary);
-            background: white;
+            font-family: inherit; font-size: 0.92rem;
+            color: var(--text-primary); background: white;
             transition: border-color 0.15s;
         }
         .form-group input:focus,
         .form-group select:focus { outline: none; border-color: var(--accent-primary); }
-        .form-group input.error { border-color: var(--accent-danger); }
 
-        /* Customer search typeahead */
+        /* Customer typeahead */
         .search-wrap { position: relative; }
         .search-dropdown {
             position: absolute; top: 100%; left: 0; right: 0; z-index: 200;
@@ -74,26 +68,45 @@
             margin-top: 4px; min-height: 18px;
         }
 
-        /* Market checkboxes */
-        .market-grid {
-            display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px;
+        /* Lines table */
+        .lines-table {
+            width: 100%; border-collapse: collapse; font-size: 0.85rem;
         }
-        .market-cb { display: flex; align-items: center; gap: 5px; cursor: pointer; }
-        .market-cb input[type=checkbox] { cursor: pointer; width: 15px; height: 15px; }
-        .market-cb span {
-            font-size: 0.85rem; font-weight: 600; color: var(--text-primary);
-            padding: 3px 8px; border-radius: 4px; background: var(--bg-secondary);
-            border: 1px solid var(--border-color); transition: all 0.1s;
+        .lines-table th {
+            text-align: left; padding: 6px 8px;
+            font-size: 0.72rem; font-weight: 700; color: var(--text-secondary);
+            text-transform: uppercase; letter-spacing: 0.05em;
+            background: var(--bg-secondary); border-bottom: 2px solid var(--border-color);
+            white-space: nowrap;
         }
-        .market-cb input:checked + span {
-            background: var(--accent-primary); color: white; border-color: var(--accent-primary);
+        .lines-table td {
+            padding: 5px 4px; border-bottom: 1px solid var(--border-color); vertical-align: middle;
         }
-        .market-shortcut {
-            font-size: 0.78rem; color: var(--accent-primary); cursor: pointer;
-            text-decoration: underline; margin-top: 6px; display: inline-block;
+        .lines-table tr:last-child td { border-bottom: none; }
+        .lines-table input,
+        .lines-table select {
+            padding: 5px 7px; border: 1px solid var(--border-color); border-radius: 5px;
+            font-family: inherit; font-size: 0.83rem; color: var(--text-primary);
+            background: white; width: 100%; box-sizing: border-box;
         }
+        .lines-table input:focus,
+        .lines-table select:focus { outline: none; border-color: var(--accent-primary); }
+        .lines-table td.td-rm { width: 28px; text-align: center; }
+        .btn-rm {
+            background: none; border: none; cursor: pointer; color: var(--accent-danger);
+            font-size: 1.1rem; line-height: 1; padding: 2px 4px; border-radius: 4px;
+        }
+        .btn-rm:hover { background: #fdf0f0; }
+        .lines-table td.td-desc { min-width: 160px; }
+        .lines-table td.td-mkt  { width: 80px; }
+        .lines-table td.td-date { width: 110px; }
+        .lines-table td.td-days { width: 70px; }
+        .lines-table td.td-dp   { width: 120px; }
+        .lines-table td.td-dur  { width: 75px; }
+        .lines-table td.td-spt  { width: 60px; }
+        .lines-table td.td-rate { width: 80px; }
 
-        /* Preview section */
+        /* Preview */
         #previewSection { display: none; }
         .preview-table {
             width: 100%; border-collapse: collapse; font-size: 0.875rem; margin-top: 8px;
@@ -104,17 +117,12 @@
             text-transform: uppercase; letter-spacing: 0.05em;
             background: var(--bg-secondary); border-bottom: 1px solid var(--border-color);
         }
-        .preview-table td {
-            padding: 8px 10px; border-bottom: 1px solid var(--border-color);
-            color: var(--text-primary);
-        }
+        .preview-table td { padding: 8px 10px; border-bottom: 1px solid var(--border-color); }
         .preview-table tr:last-child td { border-bottom: none; }
-        .preview-header-row {
-            display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 14px;
-        }
+        .preview-header-row { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 14px; }
         .ph-item { display: flex; flex-direction: column; gap: 2px; }
         .ph-label { font-size: 0.72rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
-        .ph-val { font-size: 0.92rem; font-weight: 600; color: var(--text-primary); }
+        .ph-val   { font-size: 0.92rem; font-weight: 600; color: var(--text-primary); }
         .preview-note {
             margin-top: 10px; padding: 10px 14px; border-radius: 6px;
             background: #fff8e6; border: 1px solid var(--accent-warning);
@@ -133,27 +141,16 @@
         .btn-primary:hover:not(:disabled) { opacity: 0.85; }
         .btn-success { background: var(--accent-success); color: white; }
         .btn-success:hover:not(:disabled) { opacity: 0.85; }
-        .btn-ghost {
-            background: transparent; color: var(--accent-primary);
-            border: 1px solid var(--accent-primary);
-        }
+        .btn-ghost { background: transparent; color: var(--accent-primary); border: 1px solid var(--accent-primary); }
         .btn-ghost:hover { background: var(--bg-secondary); }
 
-        /* Status */
         #statusMsg {
             font-size: 0.88rem; padding: 10px 14px; border-radius: 6px;
             display: none; margin-top: 12px;
         }
         #statusMsg.success { background: #edf7ed; color: #1a6b1a; border: 1px solid var(--accent-success); }
-        #statusMsg.error { background: #fdf0f0; color: #8b1a1a; border: 1px solid var(--accent-danger); }
+        #statusMsg.error   { background: #fdf0f0; color: #8b1a1a; border: 1px solid var(--accent-danger); }
         #statusMsg.working { background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--border-color); }
-
-        .pill {
-            display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem;
-            font-weight: 700; margin-left: 6px;
-        }
-        .pill-trade { background: #f3e8ff; color: #6b21a8; }
-        .pill-direct { background: #e0f2fe; color: #0369a1; }
     </style>
 </head>
 <body>
@@ -172,7 +169,7 @@
     </div>
 </header>
 
-<main style="max-width: 840px; margin: 0 auto; padding: 24px 16px;">
+<main style="max-width: 1000px; margin: 0 auto; padding: 24px 16px;">
 
     <!-- Client -->
     <div class="te-card">
@@ -180,7 +177,7 @@
         <div class="form-grid">
             <div class="form-group search-wrap">
                 <label>Customer <span style="color:var(--accent-danger)">*</span></label>
-                <input id="customerSearch" class="field-input" type="text"
+                <input id="customerSearch" type="text"
                        placeholder="Type name to search Etere…" autocomplete="off" />
                 <div id="customerDropdown" class="search-dropdown"></div>
                 <div id="customerIdDisplay"></div>
@@ -209,6 +206,14 @@
                 <label>Flight End <span style="color:var(--accent-danger)">*</span></label>
                 <input id="dateTo" type="date" />
             </div>
+            <div class="form-group">
+                <label>Total Trade Value ($) <span style="color:var(--accent-danger)">*</span></label>
+                <input id="totalValue" type="number" min="0" step="0.01" placeholder="12000.00" />
+            </div>
+            <div class="form-group">
+                <label>Separation (min)</label>
+                <input id="separation" type="number" min="0" step="5" value="15" />
+            </div>
             <div class="form-group full">
                 <label>Notes</label>
                 <textarea id="contractNote" rows="2" style="resize:vertical;"></textarea>
@@ -217,63 +222,31 @@
         </div>
     </div>
 
-    <!-- Line Details -->
+    <!-- Lines -->
     <div class="te-card">
-        <h2>Line Details</h2>
-        <div class="form-grid-3" style="margin-bottom: 16px;">
-            <div class="form-group">
-                <label>Total Trade Value ($) <span style="color:var(--accent-danger)">*</span></label>
-                <input id="totalValue" type="number" min="0" step="0.01" placeholder="5000.00" />
-            </div>
-            <div class="form-group">
-                <label>Spots per Line <span style="color:var(--accent-danger)">*</span></label>
-                <input id="spotsPerLine" type="number" min="1" step="1" placeholder="30" />
-            </div>
-            <div class="form-group">
-                <label>Duration</label>
-                <select id="duration">
-                    <option value="30">:30 (30 sec)</option>
-                    <option value="60">:60 (60 sec)</option>
-                    <option value="120">:120 (120 sec)</option>
-                    <option value="15">:15 (15 sec)</option>
-                </select>
-            </div>
+        <h2>Lines <span style="font-weight:400;font-size:0.85em;color:var(--text-muted);text-transform:none;letter-spacing:0">— TRD · Priority 600 · Whitelist 60</span></h2>
+        <div style="overflow-x:auto;">
+            <table class="lines-table">
+                <thead>
+                    <tr>
+                        <th class="td-desc">Description</th>
+                        <th class="td-mkt">Market</th>
+                        <th class="td-date">Date From</th>
+                        <th class="td-date">Date To</th>
+                        <th class="td-days">Days</th>
+                        <th class="td-dp">Daypart</th>
+                        <th class="td-dur">Dur</th>
+                        <th class="td-spt">Spots</th>
+                        <th class="td-rate">Rate ($)</th>
+                        <th class="td-rm"></th>
+                    </tr>
+                </thead>
+                <tbody id="linesBody"></tbody>
+            </table>
         </div>
-        <div class="form-grid-3" style="margin-bottom: 16px;">
-            <div class="form-group">
-                <label>Daypart</label>
-                <input id="daypart" type="text" value="06:00-23:59" />
-            </div>
-            <div class="form-group">
-                <label>Days</label>
-                <input id="days" type="text" value="M-Su" />
-            </div>
-            <div class="form-group">
-                <label>Separation (min)</label>
-                <input id="separation" type="number" min="0" step="5" value="15" />
-            </div>
-        </div>
-
-        <!-- Markets -->
-        <div class="form-group">
-            <label>Markets <span style="color:var(--accent-danger)">*</span></label>
-            <div class="market-grid" id="marketGrid">
-                <label class="market-cb"><input type="checkbox" value="NYC" /><span>NYC</span></label>
-                <label class="market-cb"><input type="checkbox" value="CMP" /><span>CMP</span></label>
-                <label class="market-cb"><input type="checkbox" value="HOU" /><span>HOU</span></label>
-                <label class="market-cb"><input type="checkbox" value="SFO" /><span>SFO</span></label>
-                <label class="market-cb"><input type="checkbox" value="SEA" /><span>SEA</span></label>
-                <label class="market-cb"><input type="checkbox" value="LAX" /><span>LAX</span></label>
-                <label class="market-cb"><input type="checkbox" value="CVC" /><span>CVC</span></label>
-                <label class="market-cb"><input type="checkbox" value="WDC" /><span>WDC</span></label>
-                <label class="market-cb"><input type="checkbox" value="MMT" /><span>MMT</span></label>
-                <label class="market-cb"><input type="checkbox" value="DAL" /><span>DAL</span></label>
-            </div>
-            <div>
-                <span class="market-shortcut" onclick="selectAllCTV()">All CTV markets (NYC, CMP, HOU, SFO, SEA, LAX, CVC, WDC)</span>
-                &nbsp;·&nbsp;
-                <span class="market-shortcut" onclick="clearMarkets()">Clear</span>
-            </div>
+        <div style="margin-top:10px; display:flex; gap:10px; align-items:center;">
+            <button class="btn btn-ghost" style="font-size:0.82rem; padding:6px 14px;" onclick="addLine()">+ Add Line</button>
+            <span style="font-size:0.78rem; color:var(--text-secondary);">Date fields default to contract flight dates if left blank.</span>
         </div>
     </div>
 
@@ -284,7 +257,7 @@
     </div>
 
     <!-- Preview -->
-    <div id="previewSection" class="te-card" style="margin-top: 18px; border-color: var(--accent-primary);">
+    <div id="previewSection" class="te-card" style="margin-top:18px; border-color:var(--accent-primary);">
         <h2 style="color:var(--accent-primary);">Preview — Review Before Creating</h2>
         <div class="preview-header-row" id="previewHeader"></div>
         <table class="preview-table">
@@ -293,8 +266,9 @@
                     <th>#</th>
                     <th>Market</th>
                     <th>Description</th>
+                    <th>Dates</th>
                     <th>Days / Daypart</th>
-                    <th>Duration</th>
+                    <th>Dur</th>
                     <th>Spots</th>
                     <th>Rate</th>
                 </tr>
@@ -303,22 +277,20 @@
         </table>
         <div class="preview-note">
             ⚠️ This will create a new <strong>trade contract</strong> (Exchange for Goods) in Etere with
-            <span id="previewLineCount">0</span> line(s). No changes have been made yet.
-            Payment method will be set to <strong>Barter (ID 4)</strong> and
-            <strong>CAMBIOMERCE = 1</strong> will be set directly in the database.
+            <span id="previewLineCount">0</span> line(s).
+            Booking type <strong>TRD</strong> · Priority <strong>600</strong> · Whitelist <strong>60</strong> ·
+            Payment <strong>ID 4</strong> · <strong>CAMBIOMERCE = 1</strong>.
+            No changes have been made yet.
         </div>
-        <div class="btn-row" style="margin-top: 14px;">
-            <button class="btn btn-success" id="confirmBtn" onclick="createContract()">
-                ✓ Create Contract
-            </button>
+        <div class="btn-row" style="margin-top:14px;">
+            <button class="btn btn-success" id="confirmBtn" onclick="createContract()">✓ Create Contract</button>
             <button class="btn btn-ghost" onclick="resetPreview()">Edit</button>
         </div>
     </div>
 
     <div id="statusMsg"></div>
 
-    <!-- Success panel -->
-    <div id="successPanel" style="display:none;" class="te-card" style="border-color: var(--accent-success);">
+    <div id="successPanel" style="display:none;" class="te-card">
         <h2 style="color:var(--accent-success);">Contract Created</h2>
         <div id="successDetails" style="font-size:0.92rem; color:var(--text-primary);"></div>
     </div>
@@ -334,7 +306,6 @@ let _previewData = null;
 const csInput = document.getElementById('customerSearch');
 const csDrop  = document.getElementById('customerDropdown');
 const csIdEl  = document.getElementById('customerIdDisplay');
-const csHid   = document.getElementById('customerId');
 
 let _csTimer = null;
 csInput.addEventListener('input', () => {
@@ -359,7 +330,6 @@ async function searchCustomers(q) {
                 div.innerHTML = `${esc(c.name)} <span class="sd-id">#${c.id}</span>`;
                 div.onclick = () => {
                     csInput.value = c.name;
-                    csHid.value = c.id;
                     _customerId = c.id;
                     csIdEl.textContent = `Customer ID: ${c.id}`;
                     csDrop.style.display = 'none';
@@ -371,35 +341,115 @@ async function searchCustomers(q) {
     } catch(e) { csDrop.style.display = 'none'; }
 }
 
-// ─── Market helpers ─────────────────────────────────────────────────────────
+// ─── Lines table ─────────────────────────────────────────────────────────────
 
-function selectAllCTV() {
-    const ctv = ['NYC','CMP','HOU','SFO','SEA','LAX','CVC','WDC'];
-    document.querySelectorAll('#marketGrid input[type=checkbox]').forEach(cb => {
-        cb.checked = ctv.includes(cb.value);
-    });
+const MARKETS = ['NYC','CMP','HOU','SFO','SEA','LAX','CVC','WDC','MMT','DAL'];
+
+function marketOptions(selected) {
+    return MARKETS.map(m =>
+        `<option value="${m}"${m === selected ? ' selected' : ''}>${m}</option>`
+    ).join('');
 }
 
-function clearMarkets() {
-    document.querySelectorAll('#marketGrid input[type=checkbox]').forEach(cb => cb.checked = false);
+function durOptions(selected) {
+    return [['30',':30'],['60',':60'],['120',':120'],['15',':15']].map(([v,l]) =>
+        `<option value="${v}"${v === selected ? ' selected' : ''}>${l}</option>`
+    ).join('');
 }
 
-function selectedMarkets() {
-    return Array.from(document.querySelectorAll('#marketGrid input[type=checkbox]:checked')).map(c => c.value);
+function addLine(defaults) {
+    const d = defaults || {};
+    const row = document.createElement('tr');
+    row.innerHTML = `
+        <td class="td-desc"><input type="text" name="desc" value="${esc(d.description||'')}" placeholder="CI 2605 TRADE NYC :30" /></td>
+        <td class="td-mkt"><select name="market">${marketOptions(d.market||'NYC')}</select></td>
+        <td class="td-date"><input type="date" name="date_from" value="${d.date_from||''}" /></td>
+        <td class="td-date"><input type="date" name="date_to"   value="${d.date_to||''}" /></td>
+        <td class="td-days"><input type="text" name="days"    value="${d.days||'M-Su'}" /></td>
+        <td class="td-dp">  <input type="text" name="daypart" value="${d.daypart||'06:00-23:59'}" /></td>
+        <td class="td-dur"> <select name="duration">${durOptions(d.duration||'30')}</select></td>
+        <td class="td-spt"> <input type="number" name="spots" value="${d.spots||''}" min="1" placeholder="30" /></td>
+        <td class="td-rate"><input type="number" name="rate"  value="${d.rate||''}"  min="0" step="0.01" placeholder="0.00" /></td>
+        <td class="td-rm">  <button class="btn-rm" onclick="removeLine(this)" title="Remove">×</button></td>
+    `;
+    document.getElementById('linesBody').appendChild(row);
 }
+
+function removeLine(btn) {
+    btn.closest('tr').remove();
+}
+
+function getLines() {
+    return Array.from(document.querySelectorAll('#linesBody tr')).map(row => ({
+        description:  row.querySelector('[name=desc]').value.trim(),
+        market:       row.querySelector('[name=market]').value,
+        date_from:    row.querySelector('[name=date_from]').value || null,
+        date_to:      row.querySelector('[name=date_to]').value   || null,
+        days:         row.querySelector('[name=days]').value.trim()    || 'M-Su',
+        daypart:      row.querySelector('[name=daypart]').value.trim() || '06:00-23:59',
+        duration_sec: parseInt(row.querySelector('[name=duration]').value),
+        total_spots:  parseInt(row.querySelector('[name=spots]').value) || 0,
+        rate:         parseFloat(row.querySelector('[name=rate]').value) || 0,
+    }));
+}
+
+// Start with one blank line
+addLine();
+
+// ─── Auto-generate note ──────────────────────────────────────────────────────
+
+const MONTHS = ['January','February','March','April','May','June',
+                'July','August','September','October','November','December'];
+
+function buildNote() {
+    const val  = parseFloat(document.getElementById('totalValue').value) || 0;
+    const from = document.getElementById('dateFrom').value;
+    const to   = document.getElementById('dateTo').value;
+
+    let note = 'This is a trade invoice. Please do not pay. Affidavit is for accounting purposes only.';
+
+    if (val > 0 || from || to) {
+        const parts = [];
+        if (val > 0) parts.push(`Total trade amount $${val.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}`);
+        if (from && to) {
+            const mFrom = MONTHS[new Date(from + 'T00:00:00').getMonth()];
+            const mTo   = MONTHS[new Date(to   + 'T00:00:00').getMonth()];
+            parts.push(`airing ${mFrom} through ${mTo}`);
+        }
+        if (parts.length) note += ' ' + parts.join(', ') + '.';
+    }
+
+    document.getElementById('contractNote').value = note;
+}
+
+['totalValue', 'dateFrom', 'dateTo'].forEach(id =>
+    document.getElementById(id).addEventListener('input', buildNote)
+);
+buildNote();
 
 // ─── Validation ─────────────────────────────────────────────────────────────
 
 function validate() {
     const errors = [];
-    if (!_customerId) errors.push('Select a customer');
-    if (!v('contractCode')) errors.push('Contract code required');
-    if (!v('contractDesc')) errors.push('Description required');
-    if (!v('dateFrom'))     errors.push('Flight start required');
-    if (!v('dateTo'))       errors.push('Flight end required');
-    if (!parseFloat(v('totalValue')) > 0) errors.push('Total value required');
-    if (!parseInt(v('spotsPerLine')) > 0) errors.push('Spots per line required');
-    if (!selectedMarkets().length) errors.push('Select at least one market');
+    if (!_customerId)        errors.push('Select a customer');
+    if (!v('contractCode'))  errors.push('Contract code required');
+    if (!v('contractDesc'))  errors.push('Description required');
+    if (!v('dateFrom'))      errors.push('Flight start required');
+    if (!v('dateTo'))        errors.push('Flight end required');
+    if (!parseFloat(v('totalValue')))  errors.push('Total trade value required');
+
+    const note = v('contractNote');
+    if (!note.includes('$') || (!note.toLowerCase().includes('airing'))) {
+        errors.push('Note must include the trade amount and flight months — check the Notes field');
+    }
+
+    const lines = getLines();
+    if (!lines.length) errors.push('Add at least one line');
+    lines.forEach((l, i) => {
+        if (!l.description)  errors.push(`Line ${i+1}: description required`);
+        if (!l.total_spots)  errors.push(`Line ${i+1}: spots required`);
+        if (!l.rate && l.rate !== 0) errors.push(`Line ${i+1}: rate required`);
+    });
     return errors;
 }
 
@@ -411,53 +461,46 @@ function buildPreview() {
     const errors = validate();
     if (errors.length) { showStatus('error', errors.join(' · ')); return; }
 
-    const markets     = selectedMarkets();
-    const totalValue  = parseFloat(v('totalValue'));
-    const spotsPerLine= parseInt(v('spotsPerLine'));
-    const duration    = parseInt(v('duration'));
-    const daypart     = v('daypart') || '06:00-23:59';
-    const days        = v('days') || 'M-Su';
-    const sep         = parseInt(v('separation')) || 15;
-    const rateEach    = totalValue / (spotsPerLine * markets.length);
+    const lines      = getLines();
+    const dateFrom   = v('dateFrom');
+    const dateTo     = v('dateTo');
+    const totalValue = parseFloat(v('totalValue'));
+    const sep        = parseInt(v('separation')) || 15;
 
-    const lines = markets.map((mkt, i) => ({
-        market:      mkt,
-        description: `${v('contractCode')} TRADE ${mkt} :${String(duration).padStart(2,'0')}`,
-        daypart,
-        days,
-        duration_sec: duration,
-        total_spots:  spotsPerLine,
-        rate:         rateEach,
+    // Fill in contract-level dates for any line that left them blank
+    const resolvedLines = lines.map(l => ({
+        ...l,
+        date_from: l.date_from || dateFrom,
+        date_to:   l.date_to   || dateTo,
     }));
 
     _previewData = {
-        customer_id:    _customerId,
-        customer_name:  csInput.value.trim(),
-        code:           v('contractCode'),
-        description:    v('contractDesc'),
-        date_from:      v('dateFrom'),
-        date_to:        v('dateTo'),
-        note:           v('contractNote'),
-        separation:     sep,
-        lines,
+        customer_id:   _customerId,
+        customer_name: csInput.value.trim(),
+        code:          v('contractCode'),
+        description:   v('contractDesc'),
+        date_from:     dateFrom,
+        date_to:       dateTo,
+        note:          v('contractNote'),
+        separation:    sep,
+        lines:         resolvedLines,
     };
 
-    // Render header
     const hdr = document.getElementById('previewHeader');
-    hdr.innerHTML = phItem('Customer', _previewData.customer_name + ` (ID ${_customerId})`)
+    hdr.innerHTML = phItem('Customer', `${_previewData.customer_name} (ID ${_customerId})`)
                   + phItem('Code', _previewData.code)
                   + phItem('Description', _previewData.description)
-                  + phItem('Flight', `${_previewData.date_from} → ${_previewData.date_to}`)
-                  + phItem('Total Value', `$${totalValue.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`)
-                  + phItem('Markets', markets.join(', '));
+                  + phItem('Flight', `${dateFrom} → ${dateTo}`)
+                  + phItem('Total Value', `$${totalValue.toLocaleString('en-US',{minimumFractionDigits:2})}`)
+                  + phItem('Lines', resolvedLines.length);
 
-    // Render lines
     const tbody = document.getElementById('previewLines');
-    tbody.innerHTML = lines.map((l, i) =>
+    tbody.innerHTML = resolvedLines.map((l, i) =>
         `<tr>
           <td style="color:var(--text-muted)">${i+1}</td>
           <td><strong>${esc(l.market)}</strong></td>
           <td style="font-size:0.83rem">${esc(l.description)}</td>
+          <td style="font-size:0.83rem">${esc(l.date_from)} → ${esc(l.date_to)}</td>
           <td style="font-size:0.83rem">${esc(l.days)} · ${esc(l.daypart)}</td>
           <td>:${l.duration_sec}s</td>
           <td>${l.total_spots}</td>
@@ -465,7 +508,7 @@ function buildPreview() {
         </tr>`
     ).join('');
 
-    document.getElementById('previewLineCount').textContent = lines.length;
+    document.getElementById('previewLineCount').textContent = resolvedLines.length;
     document.getElementById('previewSection').style.display = 'block';
     document.getElementById('previewSection').scrollIntoView({behavior:'smooth', block:'nearest'});
     hideStatus();
@@ -490,7 +533,7 @@ async function createContract() {
     try {
         const r = await fetch('/api/trade/create', {
             method: 'POST',
-            headers: {'Content-Type':'application/json'},
+            headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(_previewData),
         });
         const data = await r.json();
@@ -503,8 +546,11 @@ async function createContract() {
         panel.style.display = 'block';
         document.getElementById('successDetails').innerHTML =
             `<p>Contract <strong>#${data.contract_id}</strong> created — <strong>${esc(data.code)}</strong></p>
-             <p>${data.lines_created} line(s) created across ${data.markets.join(', ')}</p>
-             <p style="margin-top:8px; font-size:0.82rem; color:var(--text-secondary)">CAMBIOMERCE = 1 ✓ &nbsp;·&nbsp; Payment ID = 4 (Barter) ✓</p>
+             <p>${data.lines_created} line(s) created</p>
+             <p style="margin-top:8px; font-size:0.82rem; color:var(--text-secondary)">
+               TRD · Priority 600 · Whitelist 60 ✓ &nbsp;·&nbsp;
+               CAMBIOMERCE = 1 ✓ &nbsp;·&nbsp; Payment ID = 4 ✓
+             </p>
              <p style="margin-top:8px;"><a href="#" onclick="location.reload()" style="color:var(--accent-primary)">Enter another trade contract</a></p>`;
         panel.scrollIntoView({behavior:'smooth'});
     } catch (err) {
@@ -513,38 +559,6 @@ async function createContract() {
     }
 }
 
-// ─── Auto-generate note ──────────────────────────────────────────────────────
-
-const MONTHS = ['January','February','March','April','May','June',
-                 'July','August','September','October','November','December'];
-
-function buildNote() {
-    const val  = parseFloat(document.getElementById('totalValue').value);
-    const from = document.getElementById('dateFrom').value;
-    const to   = document.getElementById('dateTo').value;
-
-    let note = 'This is a trade invoice. Please do not pay. Affidavit is for accounting purposes only.';
-
-    if (val > 0 || from || to) {
-        const parts = [];
-        if (val > 0) parts.push(`Total trade amount $${val.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`);
-        if (from && to) {
-            const mFrom = MONTHS[new Date(from + 'T00:00:00').getMonth()];
-            const mTo   = MONTHS[new Date(to   + 'T00:00:00').getMonth()];
-            parts.push(`airing ${mFrom} through ${mTo}`);
-        }
-        if (parts.length) note += ' ' + parts.join(', ') + '.';
-    }
-
-    document.getElementById('contractNote').value = note;
-}
-
-['totalValue', 'dateFrom', 'dateTo'].forEach(id =>
-    document.getElementById(id).addEventListener('input', buildNote)
-);
-// Pre-fill on load
-buildNote();
-
 // ─── Utilities ───────────────────────────────────────────────────────────────
 
 function showStatus(type, msg) {
@@ -552,8 +566,7 @@ function showStatus(type, msg) {
     el.className = type; el.textContent = msg; el.style.display = 'block';
 }
 function hideStatus() {
-    const el = document.getElementById('statusMsg');
-    el.style.display = 'none';
+    document.getElementById('statusMsg').style.display = 'none';
 }
 function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
