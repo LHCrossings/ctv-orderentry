@@ -1,5 +1,15 @@
 # Lessons Learned
 
+## EtereDirectClient SP Calls Must Use `self._ph`, Not Hardcoded `?`
+
+**Session:** Trade entry direct DB write (2026-05-21)
+
+**What happened:** `web_sales_savecontractgeneral` and `web_sales_InsertContractLine` SQL strings were written with hardcoded `?` placeholders. pymssql requires `%s`. The `_ph` attribute is set correctly on the client (`'%s'` for pymssql, `'?'` for pyodbc) but was only used in ad-hoc queries — not in the SP call strings. Result: `Incorrect syntax near '?'` at runtime.
+
+**Rule:** Any SQL string in `etere_direct_client.py` that contains `?` placeholders must be executed as `cursor.execute(sql.replace('?', self._ph), params)`. Never hardcode `?` and call `.execute(sql, params)` directly — it will break on pymssql connections.
+
+**Applies to:** Both SP calls in `etere_direct_client.py` (header + line inserts), and any future SP calls added to the file.
+
 ## Month-Only Orders Must Use Rotation Scheduling; Week-Column Orders Stay Default
 
 **Session:** Universal rule (2026-05-14)
