@@ -299,6 +299,18 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     def _ensure_used_dir():
         used_dir.mkdir(parents=True, exist_ok=True)
 
+    def _purge_used_folder(days: int = 30) -> int:
+        """Delete files in Used/ older than `days` days. Returns count deleted."""
+        if not used_dir.exists():
+            return 0
+        cutoff = datetime.now() - timedelta(days=days)
+        deleted = 0
+        for f in used_dir.iterdir():
+            if f.is_file() and datetime.fromtimestamp(f.stat().st_mtime) < cutoff:
+                f.unlink(missing_ok=True)
+                deleted += 1
+        return deleted
+
     def _make_scanner() -> OrderScanner:
         return OrderScanner(PDFOrderDetector(), config.incoming_dir)
 
@@ -1261,6 +1273,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             dest = used_dir / f"{target.stem}_{ts}{target.suffix}"
 
         shutil.move(str(target), str(dest))
+        _purge_used_folder(days=30)
         return JSONResponse(content={"message": f"'{filename}' moved to Used."})
 
     # ------------------------------------------------------------------
