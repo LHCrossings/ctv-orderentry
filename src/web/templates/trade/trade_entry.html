@@ -210,8 +210,9 @@
                 <input id="dateTo" type="date" />
             </div>
             <div class="form-group full">
-                <label>Notes (optional)</label>
-                <input id="contractNote" type="text" placeholder="Internal notes…" />
+                <label>Notes</label>
+                <textarea id="contractNote" rows="2" style="resize:vertical;"></textarea>
+                <span style="font-size:0.75rem;color:var(--text-secondary);">Auto-generated from value and dates — edit freely.</span>
             </div>
         </div>
     </div>
@@ -511,6 +512,38 @@ async function createContract() {
         showStatus('error', err.message);
     }
 }
+
+// ─── Auto-generate note ──────────────────────────────────────────────────────
+
+const MONTHS = ['January','February','March','April','May','June',
+                 'July','August','September','October','November','December'];
+
+function buildNote() {
+    const val  = parseFloat(document.getElementById('totalValue').value);
+    const from = document.getElementById('dateFrom').value;
+    const to   = document.getElementById('dateTo').value;
+
+    let note = 'This is a trade invoice. Please do not pay. Affidavit is for accounting purposes only.';
+
+    if (val > 0 || from || to) {
+        const parts = [];
+        if (val > 0) parts.push(`Total trade amount $${val.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`);
+        if (from && to) {
+            const mFrom = MONTHS[new Date(from + 'T00:00:00').getMonth()];
+            const mTo   = MONTHS[new Date(to   + 'T00:00:00').getMonth()];
+            parts.push(`airing ${mFrom} through ${mTo}`);
+        }
+        if (parts.length) note += ' ' + parts.join(', ') + '.';
+    }
+
+    document.getElementById('contractNote').value = note;
+}
+
+['totalValue', 'dateFrom', 'dateTo'].forEach(id =>
+    document.getElementById(id).addEventListener('input', buildNote)
+);
+// Pre-fill on load
+buildNote();
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
 
