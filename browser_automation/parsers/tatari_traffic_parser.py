@@ -28,6 +28,7 @@ _SEARCH_OVERRIDES: dict = {
     "marsmen":       "Mars",
     "lectricebikes": "Lectric",
     "sundaysfordogs": "Sundays",
+    "woofpet":        "Woof",
 }
 
 
