@@ -83,6 +83,13 @@ def parse_imd_traffic_pdf(pdf_bytes: bytes) -> IMDTrafficInstruction:
         product_code = m.group(1).strip()
         product_name = m.group(2).strip()
 
+    # Access Code: "Access Code: RBS5 :15 RUE BOOK"
+    # Use the code itself as the search term — contracts are differentiated by it.
+    access_code = ""
+    m = re.search(r'Access Code:\s*([A-Z0-9]+)', text)
+    if m:
+        access_code = m.group(1).strip()
+
     # ISCI: "ISCI/Tape Code: RBS5H"
     isci = ""
     m = re.search(r'ISCI/Tape Code:\s*([A-Z0-9]+)', text)
@@ -124,7 +131,7 @@ def parse_imd_traffic_pdf(pdf_bytes: bytes) -> IMDTrafficInstruction:
         advertiser=product_name,
         client_code=client_code,
         product_code=product_code,
-        search_suggestion=_search_suggestion(product_name),
+        search_suggestion=access_code or _search_suggestion(product_name),
         date_from_sql=date_from_sql,
         date_to_sql=date_to_sql,
         date_from_display=date_from_display,
