@@ -585,7 +585,7 @@ def _extract_ad_codes(text: str) -> List[IGraphixAdCode]:
     
     # Pattern: "MM/D/YY thru M/DD/YY: Description ad/#CODE (XX spots)"
     # Updated to handle hyphens and other characters in description
-    pattern = r'(\d{1,2}/\d{1,2}/\d{2})\s+thru\s+(\d{1,2}/\d{1,2}/\d{2}):\s*(.+?)\s+ad/#([\w-]+)\s*\((\d+)\s+spots?\)'
+    pattern = r'(\d{1,2}/\d{1,2}/\d{2})\s+thru\s+(\d{1,2}/\d{1,2}/\d{2}):\s*(.+?)\s+ad/#?([\w-]+)\s*\((\d+)\s+spots?\)'
     
     matches = re.finditer(pattern, text, re.IGNORECASE)
     
