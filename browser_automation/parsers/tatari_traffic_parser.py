@@ -24,9 +24,10 @@ class TatariSpot:
 # Advertiser names in Tatari PDFs that don't match Etere contract descriptions verbatim.
 # Maps the PDF advertiser string (case-insensitive prefix match) → better search term.
 _SEARCH_OVERRIDES: dict = {
-    "bettersleep":  "Better",
-    "marsmen":      "Mars",
+    "bettersleep":   "Better",
+    "marsmen":       "Mars",
     "lectricebikes": "Lectric",
+    "sundaysfordogs": "Sundays",
 }
 
 
