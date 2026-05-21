@@ -1719,8 +1719,8 @@
                 });
                 if (!assignResp.ok) throw new Error((await assignResp.json()).detail || 'Assign failed');
                 const result = await assignResp.json();
-                totalLines += result.lines_updated  || 0;
-                totalSpots += result.spots_assigned || 0;
+                totalLines += result.lines_updated || 0;
+                totalSpots += result.spots_updated || 0;
             }
 
             if (errors.length) {
