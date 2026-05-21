@@ -2476,6 +2476,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         from_frames = _bo_time_to_frames(time_from)
         to_frames   = _bo_time_to_frames(time_to)
 
+        # Fetch 3 minutes past to_frames so breaks straddling the window boundary are complete
+        _BO_BUFFER = round(3 * 60 * _BO_FPS)
+
         def _run():
             from browser_automation.etere_direct_client import connect as _connect
             with _connect() as conn:
@@ -2491,7 +2494,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     " AND t.ORA >= %d AND t.ORA < %d"
                     " AND t.LIVELLO = 0"
                     " ORDER BY t.XORDER, t.ORA",
-                    (date, market_id, from_frames, to_frames),
+                    (date, market_id, from_frames, to_frames + _BO_BUFFER),
                 )
                 return cur.fetchall()
 
@@ -2557,13 +2560,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 bookend_count = sum(1 for s in block if s["label"] == "BOOKEND")
                 changed = orig_ids != opt_ids
 
-                breaks.append({
-                    "current":          block,
-                    "optimized":        opt_timed,
-                    "violation":        violation,
-                    "bookend_warning":  bookend_count > 1,
-                    "changed":          changed,
-                })
+                # Only include breaks that started within the requested window
+                if block[0]["ora"] < to_frames:
+                    breaks.append({
+                        "current":          block,
+                        "optimized":        opt_timed,
+                        "violation":        violation,
+                        "bookend_warning":  bookend_count > 1,
+                        "changed":          changed,
+                    })
 
         return JSONResponse({
             "market": market, "date": date,
