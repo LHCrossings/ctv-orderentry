@@ -5845,13 +5845,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             cur = conn.cursor(as_dict=True)
             like = f"%{q}%"
             cur.execute(
-                "SELECT TOP 20 ID_ANAGRAFICHE, COGNOME FROM ANAGRAFICHE "
-                "WHERE ID_TIPO = 3 AND COGNOME LIKE %s ORDER BY COGNOME",
+                "SELECT TOP 20 ID_ANAGRAF, RAG_SOCIAL FROM ANAGRAF "
+                "WHERE RAG_SOCIAL LIKE %s ORDER BY RAG_SOCIAL",
                 (like,),
             )
             rows = cur.fetchall()
             conn.close()
-            return [{"id": r["ID_ANAGRAFICHE"], "name": r["COGNOME"]} for r in rows]
+            return [{"id": r["ID_ANAGRAF"], "name": r["RAG_SOCIAL"]} for r in rows]
 
         try:
             return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
