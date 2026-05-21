@@ -191,6 +191,12 @@ main {
     border: 1px solid rgba(163, 190, 140, 0.4);
 }
 
+.module-badge.in-progress {
+    background: rgba(235, 203, 139, 0.2);
+    color: #8a6500;
+    border: 1px solid rgba(235, 203, 139, 0.5);
+}
+
 .module-badge.coming {
     background: rgba(76, 86, 106, 0.15);
     color: var(--nord3);
