@@ -4208,7 +4208,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         term = f"%{instr.advertiser}%"
                         date_filter = ""
                         if instr.date_from_sql:
-                            date_filter += f" AND cr.DATA_TERMINE >= '{instr.date_from_sql}'"
+                            date_filter += f" AND cr.DATA_FINE >= '{instr.date_from_sql}'"
                         if instr.date_to_sql:
                             date_filter += f" AND cr.DATA_INIZIO <= '{instr.date_to_sql}'"
                         cur.execute(f"""
@@ -4216,8 +4216,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 ct.ID_CONTRATTITESTATA AS id,
                                 ct.COD_CONTRATTO       AS code,
                                 ct.DESCRIZIONE         AS description,
-                                CONVERT(VARCHAR(10), MIN(cr.DATA_INIZIO),  101) AS date_start,
-                                CONVERT(VARCHAR(10), MAX(cr.DATA_TERMINE), 101) AS date_end,
+                                CONVERT(VARCHAR(10), MIN(cr.DATA_INIZIO), 101) AS date_start,
+                                CONVERT(VARCHAR(10), MAX(cr.DATA_FINE),   101) AS date_end,
                                 COUNT(DISTINCT cr.ID_CONTRATTIRIGHE) AS line_count
                             FROM CONTRATTITESTATA ct
                             JOIN CONTRATTIRIGHE cr
@@ -4268,7 +4268,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 term = f"%{q}%"
                 date_filter = ""
                 if date_from:
-                    date_filter += f" AND cr.DATA_TERMINE >= '{date_from}'"
+                    date_filter += f" AND cr.DATA_FINE >= '{date_from}'"
                 if date_to:
                     date_filter += f" AND cr.DATA_INIZIO <= '{date_to}'"
                 cur.execute(f"""
@@ -4276,8 +4276,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         ct.ID_CONTRATTITESTATA AS id,
                         ct.COD_CONTRATTO       AS code,
                         ct.DESCRIZIONE         AS description,
-                        CONVERT(VARCHAR(10), MIN(cr.DATA_INIZIO),  101) AS date_start,
-                        CONVERT(VARCHAR(10), MAX(cr.DATA_TERMINE), 101) AS date_end,
+                        CONVERT(VARCHAR(10), MIN(cr.DATA_INIZIO), 101) AS date_start,
+                        CONVERT(VARCHAR(10), MAX(cr.DATA_FINE),   101) AS date_end,
                         COUNT(DISTINCT cr.ID_CONTRATTIRIGHE) AS line_count
                     FROM CONTRATTITESTATA ct
                     JOIN CONTRATTIRIGHE cr
