@@ -2481,7 +2481,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             with _connect() as conn:
                 cur = conn.cursor(as_dict=True)
                 cur.execute(
-                    "SELECT t.ID_TPALINSE, t.ORA, t.TITLE, t.NEWTYPE, t.DURATION,"
+                    "SELECT t.ID_TPALINSE, t.ORA, t.XORDER, t.TITLE, t.NEWTYPE, t.DURATION,"
                     " cr.CONTROLLACAPOFILA, cr.CONTROLLAFINEFILA, ct.COD_CONTRATTO"
                     " FROM TPALINSE t"
                     " LEFT JOIN trafficTPalinse tp ON tp.ID_TPalinse = t.ID_TPALINSE"
@@ -2489,7 +2489,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     " LEFT JOIN CONTRATTITESTATA ct ON ct.ID_CONTRATTITESTATA = tp.ID_CONTRATTITESTATA"
                     " WHERE t.DATA = %s AND t.COD_USER = %d"
                     " AND t.ORA >= %d AND t.ORA < %d"
-                    " ORDER BY t.ORA",
+                    " ORDER BY t.XORDER, t.ORA",
                     (date, market_id, from_frames, to_frames),
                 )
                 return cur.fetchall()
