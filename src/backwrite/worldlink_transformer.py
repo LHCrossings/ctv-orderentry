@@ -278,6 +278,7 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
     buyer         = io_data.get("buyer", "")
     order_comment = io_data.get("order_comment", "") or ""
     lines         = io_data.get("lines", [])
+    is_asian      = io_data.get("network", "") == "ASIAN"
 
     agency_street = io_data.get("agency_street", "")
     agency_city   = io_data.get("agency_city", "")
@@ -294,6 +295,10 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
         cell.value = v
         if nf:
             cell.number_format = nf
+
+    if is_asian:
+        sv(1,  6,  "SALES CONFIRMATION - THE ASIAN CHANNEL")
+        sv(6,  12, "DAL")
 
     sv(3,  4,  _clean_org_name(agency))
     sv(3,  12, advertiser)
@@ -382,7 +387,10 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
     ws.cell(sum_row,  12).value = f"=SUM(L{DATA_START}:L{last_data})"
     ws.cell(sum_row,  16).value = f"=SUM(P{DATA_START}:P{last_data})"
     ws.cell(disc_row, 16).value = f"=-1*(L{disc_row}*P{sum_row})"
-    ws.cell(net_row,   2).value = order_comment
+    notes = order_comment
+    if is_asian:
+        notes = (notes + "\nTHE ASIAN CHANNEL") if notes else "THE ASIAN CHANNEL"
+    ws.cell(net_row,   2).value = notes
     ws.cell(net_row,  16).value = f"=SUM(P{sum_row}:P{disc_row})"
 
     ws.column_dimensions["P"].width = 14
@@ -475,6 +483,7 @@ def _fill_mlbf_tab(ws, io_data: dict, user_inputs: dict) -> None:
     tracking    = str(io_data.get("tracking_number", "") or "")
     lines       = io_data.get("lines", [])
     contract_no = user_inputs.get("contract_number", "")
+    market_code = "DAL" if io_data.get("network", "") == "ASIAN" else "Admin"
 
     contract_val = _to_int_if_numeric(contract_no)
     tracking_val = _to_int_if_numeric(tracking)
@@ -518,7 +527,7 @@ def _fill_mlbf_tab(ws, io_data: dict, user_inputs: dict) -> None:
         _wc(ws, r, 26, "Agency")
         _wc(ws, r, 27, "Y")
         _wc(ws, r, 28, contract_val)
-        _wc(ws, r, 29, "Admin")
+        _wc(ws, r, 29, market_code)
 
     # ── Broker fee instruction row ────────────────────────────────────────────
     fee_instr = BILL_START + len(sorted_months) + 1
@@ -559,4 +568,4 @@ def _fill_mlbf_tab(ws, io_data: dict, user_inputs: dict) -> None:
         _wc(ws, r, 26, "Agency")
         _wc(ws, r, 27, "Y")
         _wc(ws, r, 28, contract_val)
-        _wc(ws, r, 29, "Admin")
+        _wc(ws, r, 29, market_code)

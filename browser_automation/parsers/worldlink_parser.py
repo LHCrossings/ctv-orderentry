@@ -81,11 +81,10 @@ def parse_worldlink_pdf(pdf_path):
         return None
 
 def _extract_network(text):
-    """Determine if this is Crossings TV or Asian Channel"""
-    if "ASIAN" in text.upper():
+    """Determine if this is Crossings TV or Asian Channel."""
+    if re.search(r'Station/Region\s*:\s*The Asian Channel', text, re.IGNORECASE):
         return "ASIAN"
-    else:
-        return "CROSSINGS"
+    return "CROSSINGS"
 
 def _determine_order_type(lines):
     """
