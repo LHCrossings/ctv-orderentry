@@ -410,6 +410,22 @@
             overflow: visible;
             text-overflow: clip;
         }
+        .aa-weight {
+            width: 52px;
+            text-align: center;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 4px 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            color: var(--text-primary);
+            outline: none;
+            flex-shrink: 0;
+        }
+        .aa-weight:focus { border-color: var(--nord10); box-shadow: 0 0 0 2px rgba(94,129,172,0.15); }
+        .aa-weight-label { font-size: 0.72rem; color: var(--text-muted); flex-shrink: 0; }
         .aa-variant label {
             display: flex;
             align-items: center;
@@ -2279,6 +2295,11 @@
                         <span class="spot-code">${esc(v.cod_progra)}</span>
                         <span class="spot-title">${esc(v.descrizio)}</span>
                     </label>
+                    <input type="number" class="aa-weight"
+                           data-line="${line.line_id}" data-filmati="${v.filmati_id}"
+                           min="1" max="99" value="1"
+                           title="Rotation weight — higher = more airings" />
+                    <span class="aa-weight-label">wt</span>
                 </div>`;
             }
             html += `</div>`;
@@ -2304,11 +2325,13 @@
         document.querySelectorAll('#autoScanResults input[type=checkbox]:checked').forEach(cb => {
             const lid = parseInt(cb.dataset.line);
             const fid = parseInt(cb.dataset.filmati);
+            const wEl = document.querySelector(`#autoScanResults .aa-weight[data-line="${lid}"][data-filmati="${fid}"]`);
+            const weight = Math.max(1, parseInt(wEl?.value || '1') || 1);
             if (!byLine[lid]) byLine[lid] = [];
-            byLine[lid].push(fid);
+            byLine[lid].push({filmati_id: fid, weight});
         });
-        const assignments = Object.entries(byLine).map(([lid, fids]) => ({
-            line_id: parseInt(lid), filmati_ids: fids,
+        const assignments = Object.entries(byLine).map(([lid, spots]) => ({
+            line_id: parseInt(lid), spots,
         }));
         if (!assignments.length) {
             document.getElementById('autoAssignToast').textContent = 'No spots checked.';

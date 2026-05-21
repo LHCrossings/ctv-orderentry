@@ -3256,7 +3256,12 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 connect as _db_connect,
             )
 
-            all_filmati_ids = list({fid for a in assignments for fid in a.get("filmati_ids", [])})
+            # Support both legacy filmati_ids and new spots format
+            all_filmati_ids = list({
+                s["filmati_id"] if isinstance(s, dict) else s
+                for a in assignments
+                for s in (a.get("spots") or [{"filmati_id": f} for f in a.get("filmati_ids", [])])
+            })
             if not all_filmati_ids:
                 raise ValueError("No filmati selected")
 
@@ -3351,28 +3356,38 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     if not r.json().get("IsOk"):
                         raise ValueError(f"MaterialAddToAssetListC failed for filmati {fid}: {r.json()}")
 
-                # Build global chronological tp→filmati map when all lines share the same
-                # filmati_ids (the common case for Daviselen/Lexus rotation instructions).
-                # This mirrors the manual rotation path: Bresenham interleave across all
-                # spots sorted by date/time, so the A,B pattern is continuous, not reset
-                # per line.
-                asgn_filmati = [tuple(a.get("filmati_ids", [])) for a in assignments]
-                common_filmati = list(assignments[0].get("filmati_ids", [])) if assignments else []
+                # Normalize: convert legacy filmati_ids list → weighted spots format
+                for a in assignments:
+                    if "filmati_ids" in a and "spots" not in a:
+                        a["spots"] = [{"filmati_id": fid, "weight": 1} for fid in a["filmati_ids"]]
+
+                def _bresenham(spots_list: list, count: int) -> list:
+                    """Return `count` filmati_ids in Bresenham-weighted order."""
+                    total_w = sum(s.get("weight", 1) for s in spots_list)
+                    accum = {s["filmati_id"]: 0.0 for s in spots_list}
+                    result = []
+                    for _ in range(count):
+                        for s in spots_list:
+                            accum[s["filmati_id"]] += s.get("weight", 1) / total_w
+                        chosen = max(accum, key=accum.__getitem__)
+                        result.append(chosen)
+                        accum[chosen] -= 1.0
+                    return result
+
+                # Use global chronological interleave when all lines share identical spots+weights
+                # (common for Daviselen/Lexus). Per-line Bresenham otherwise.
+                asgn_spots_key = [
+                    tuple((s["filmati_id"], s.get("weight", 1)) for s in a.get("spots", []))
+                    for a in assignments
+                ]
+                common_spots = assignments[0].get("spots", []) if assignments else []
                 use_global = bool(
-                    common_filmati
-                    and len(set(asgn_filmati)) == 1
+                    common_spots
+                    and len(set(asgn_spots_key)) == 1
                     and len(all_rows_ordered) > 0
                 )
                 if use_global:
-                    n = len(common_filmati)
-                    accum = {fid: 0.0 for fid in common_filmati}
-                    global_rotation: list = []
-                    for _ in all_rows_ordered:
-                        for fid in common_filmati:
-                            accum[fid] += 1.0 / n
-                        chosen = max(accum, key=accum.__getitem__)
-                        global_rotation.append(chosen)
-                        accum[chosen] -= 1.0
+                    global_rotation = _bresenham(common_spots, len(all_rows_ordered))
                     tp_filmati_global = {
                         tp_id: global_rotation[i]
                         for i, (_, tp_id) in enumerate(all_rows_ordered)
@@ -3383,14 +3398,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     asgn = asgn_map.get(line_id)
                     if not asgn:
                         continue
-                    filmati_ids = asgn.get("filmati_ids", [])
-                    if not filmati_ids or not tp_ids:
+                    spots = asgn.get("spots", [])
+                    if not spots or not tp_ids:
                         continue
                     if use_global:
                         idf = [tp_filmati_global[tp_id] for tp_id in tp_ids]
                     else:
-                        n   = len(filmati_ids)
-                        idf = [filmati_ids[i % n] for i in range(len(tp_ids))]
+                        idf = _bresenham(spots, len(tp_ids))
                     r = session.post(
                         f"{ETERE_WEB_URL}/Sales/MaterialAssignAssetRotation",
                         json={"idp": list(tp_ids), "idf": idf, "idcr": line_id},
