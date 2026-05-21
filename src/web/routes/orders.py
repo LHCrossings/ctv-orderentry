@@ -4047,7 +4047,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
                 for filename, pdf_bytes in parsed_files:
                     # ODS files are Direct Donor TV; PDFs need text-based detection
-                    if filename.lower().endswith(".ods"):
+                    if filename.lower().endswith((".ods", ".xlsx", ".xls")):
                         fmt = "directdonor"
                         text = ""
                     else:
@@ -4278,7 +4278,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         from browser_automation.parsers.directdonor_traffic_parser import (
                             parse_directdonor_traffic_ods,
                         )
-                        instr = parse_directdonor_traffic_ods(pdf_bytes)
+                        instr = parse_directdonor_traffic_ods(pdf_bytes, filename)
 
                         isci_codes   = [s.isci for s in instr.spots]
                         placeholders = ",".join(f"'{c}'" for c in isci_codes) if isci_codes else "''"

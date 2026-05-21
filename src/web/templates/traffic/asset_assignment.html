@@ -613,7 +613,7 @@
             <div class="field-group" style="flex:1;">
                 <label class="field-label">Traffic Instructions PDF</label>
                 <div class="pdf-drop-zone" id="trafficPdfDropZone">
-                    <input type="file" id="trafficPdfFiles" accept=".pdf,.ods" multiple />
+                    <input type="file" id="trafficPdfFiles" accept=".pdf,.ods,.xlsx,.xls" multiple />
                     <span class="pdf-drop-label"><strong>Click to browse</strong> or drag &amp; drop PDFs / ODS</span>
                     <span class="pdf-drop-name" id="trafficPdfName"></span>
                 </div>
@@ -2455,7 +2455,7 @@
         e.preventDefault();
         zone.classList.remove('drag-over');
         const dt = new DataTransfer();
-        [...e.dataTransfer.files].filter(f => /\.(pdf|ods)$/i.test(f.name)).forEach(f => dt.items.add(f));
+        [...e.dataTransfer.files].filter(f => /\.(pdf|ods|xlsx|xls)$/i.test(f.name)).forEach(f => dt.items.add(f));
         if (!dt.files.length) return;
         input.files = dt.files;
         updateLabel();

@@ -61,11 +61,13 @@ class DirectDonorTrafficInstruction:
     spots: List[DirectDonorSpot] = field(default_factory=list)
 
 
-def parse_directdonor_traffic_ods(file_bytes: bytes) -> DirectDonorTrafficInstruction:
-    """Parse a Direct Donor TV traffic instruction ODS file."""
+def parse_directdonor_traffic_ods(file_bytes: bytes, filename: str = "") -> DirectDonorTrafficInstruction:
+    """Parse a Direct Donor TV traffic instruction ODS or XLSX file."""
     import pandas as pd
 
-    df = pd.read_excel(io.BytesIO(file_bytes), engine="odf", header=None, dtype=str)
+    ext = filename.lower().rsplit(".", 1)[-1] if filename else "ods"
+    engine = "openpyxl" if ext in ("xlsx", "xls") else "odf"
+    df = pd.read_excel(io.BytesIO(file_bytes), engine=engine, header=None, dtype=str)
 
     # Extract advertiser from "Advertiser: ..." row
     advertiser = ""
