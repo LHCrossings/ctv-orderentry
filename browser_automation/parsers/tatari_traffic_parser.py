@@ -25,6 +25,7 @@ class TatariSpot:
 # Maps the PDF advertiser string (case-insensitive prefix match) → better search term.
 _SEARCH_OVERRIDES: dict = {
     "bettersleep": "Better",
+    "marsmen":     "Mars",
 }
 
 
