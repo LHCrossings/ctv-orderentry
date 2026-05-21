@@ -566,7 +566,7 @@ EXEC web_sales_savecontractgeneral
         ]
 
         cursor = self._conn.cursor()
-        cursor.execute(sql, params)
+        cursor.execute(sql.replace('?', self._ph), params)
         if self._autocommit:
             self._conn.commit()
 
@@ -782,7 +782,7 @@ EXEC web_sales_InsertContractLine
         ]
 
         cursor = self._conn.cursor()
-        cursor.execute(sql, params)
+        cursor.execute(sql.replace('?', self._ph), params)
         if self._autocommit:
             self._conn.commit()
 
