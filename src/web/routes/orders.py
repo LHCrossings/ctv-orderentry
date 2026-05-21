@@ -5831,4 +5831,125 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+    # ── Trade Entry ────────────────────────────────────────────────────────────
+
+    @router.get("/orders/trade-entry", response_class=HTMLResponse)
+    async def trade_entry_page(request: Request):
+        return templates.TemplateResponse("trade/trade_entry.html", {"request": request})
+
+    @router.get("/api/trade/search-customer")
+    async def trade_search_customer(q: str = Query(..., min_length=2)):
+        def _run():
+            from browser_automation.etere_direct_client import connect as _connect
+            conn = _connect()
+            cur = conn.cursor(as_dict=True)
+            like = f"%{q}%"
+            cur.execute(
+                "SELECT TOP 20 ID_ANAGRAFICHE, COGNOME FROM ANAGRAFICHE "
+                "WHERE ID_TIPO = 3 AND COGNOME LIKE %s ORDER BY COGNOME",
+                (like,),
+            )
+            rows = cur.fetchall()
+            conn.close()
+            return [{"id": r["ID_ANAGRAFICHE"], "name": r["COGNOME"]} for r in rows]
+
+        try:
+            return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.post("/api/trade/create")
+    async def trade_create_contract(request: Request):
+        body = await request.json()
+
+        customer_id  = int(body["customer_id"])
+        code         = str(body["code"]).strip()
+        description  = str(body["description"]).strip()
+        date_from_s  = str(body["date_from"])
+        date_to_s    = str(body["date_to"])
+        note         = str(body.get("note", ""))
+        separation   = int(body.get("separation", 15))
+        lines_data   = body["lines"]  # [{market, description, daypart, days, duration_sec, total_spots, rate}]
+
+        def _run():
+            from datetime import date as _d
+            from browser_automation.etere_direct_client import (
+                EtereDirectClient, connect as _connect,
+            )
+
+            date_from = _d.fromisoformat(date_from_s)
+            date_to   = _d.fromisoformat(date_to_s)
+
+            conn = _connect()
+            try:
+                client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+                client.set_master_market("NYC")
+
+                contract_id = client.create_contract_header(
+                    code=code,
+                    description=description,
+                    customer_id=customer_id,
+                    agency_id=0,
+                    media_center_id=0,
+                    contract_date=_d.today(),
+                    contract_end_date=date_to,
+                    payment_id=4,
+                    note=note,
+                )
+
+                # Mark as Exchange for Goods (not exposed through the SP)
+                cur = conn.cursor()
+                cur.execute(
+                    "UPDATE CONTRATTITESTATA SET CAMBIOMERCE = 1 "
+                    "WHERE ID_CONTRATTITESTATA = %s",
+                    (contract_id,),
+                )
+
+                markets_created = []
+                for ld in lines_data:
+                    dur_sec   = int(ld["duration_sec"])
+                    dur_str   = f"00:00:{dur_sec:02d}:00"
+                    spots     = int(ld["total_spots"])
+                    rate      = float(ld["rate"])
+                    market    = str(ld["market"])
+                    daypart   = str(ld.get("daypart", "06:00-23:59"))
+                    days      = str(ld.get("days", "M-Su"))
+                    line_desc = str(ld.get("description", description))
+
+                    client.add_contract_line(
+                        market=market,
+                        days=days,
+                        time_range=daypart,
+                        description=line_desc,
+                        rate=rate,
+                        total_spots=spots,
+                        spots_per_week=0,   # monthly rotation
+                        date_from=date_from,
+                        date_to=date_to,
+                        duration=dur_str,
+                        is_barter=True,
+                        separation_intervals=(separation, 0, 0),
+                        contract_id=contract_id,
+                    )
+                    markets_created.append(market)
+
+                conn.commit()
+                conn.close()
+                return {
+                    "contract_id":   contract_id,
+                    "code":          code,
+                    "lines_created": len(lines_data),
+                    "markets":       markets_created,
+                }
+            except Exception:
+                conn.rollback()
+                conn.close()
+                raise
+
+        try:
+            result = await asyncio.get_running_loop().run_in_executor(None, _run)
+            return JSONResponse(result)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     return router

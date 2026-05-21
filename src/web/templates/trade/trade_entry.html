@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Trade Entry – Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        .te-card {
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 24px 28px;
+            margin-bottom: 18px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+        }
+        .te-card h2 {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin: 0 0 16px 0;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px; }
+        .form-grid-3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 14px 24px; }
+        .form-grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 14px 24px; }
+        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        .form-group.full { grid-column: 1 / -1; }
+        .form-group label {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 0.92rem;
+            color: var(--text-primary);
+            background: white;
+            transition: border-color 0.15s;
+        }
+        .form-group input:focus,
+        .form-group select:focus { outline: none; border-color: var(--accent-primary); }
+        .form-group input.error { border-color: var(--accent-danger); }
+
+        /* Customer search typeahead */
+        .search-wrap { position: relative; }
+        .search-dropdown {
+            position: absolute; top: 100%; left: 0; right: 0; z-index: 200;
+            background: white; border: 1px solid var(--border-color);
+            border-radius: 6px; box-shadow: 0 4px 12px var(--shadow-color);
+            max-height: 220px; overflow-y: auto; display: none;
+        }
+        .search-dropdown .sd-item {
+            padding: 9px 12px; cursor: pointer; border-bottom: 1px solid var(--border-color);
+            font-size: 0.88rem;
+        }
+        .search-dropdown .sd-item:last-child { border-bottom: none; }
+        .search-dropdown .sd-item:hover { background: var(--bg-secondary); }
+        .search-dropdown .sd-item .sd-id { color: var(--text-muted); font-size: 0.78rem; margin-left: 6px; }
+        #customerIdDisplay {
+            font-size: 0.82rem; color: var(--accent-primary); font-weight: 600;
+            margin-top: 4px; min-height: 18px;
+        }
+
+        /* Market checkboxes */
+        .market-grid {
+            display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px;
+        }
+        .market-cb { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+        .market-cb input[type=checkbox] { cursor: pointer; width: 15px; height: 15px; }
+        .market-cb span {
+            font-size: 0.85rem; font-weight: 600; color: var(--text-primary);
+            padding: 3px 8px; border-radius: 4px; background: var(--bg-secondary);
+            border: 1px solid var(--border-color); transition: all 0.1s;
+        }
+        .market-cb input:checked + span {
+            background: var(--accent-primary); color: white; border-color: var(--accent-primary);
+        }
+        .market-shortcut {
+            font-size: 0.78rem; color: var(--accent-primary); cursor: pointer;
+            text-decoration: underline; margin-top: 6px; display: inline-block;
+        }
+
+        /* Preview section */
+        #previewSection { display: none; }
+        .preview-table {
+            width: 100%; border-collapse: collapse; font-size: 0.875rem; margin-top: 8px;
+        }
+        .preview-table th {
+            text-align: left; padding: 7px 10px;
+            font-size: 0.72rem; font-weight: 700; color: var(--text-secondary);
+            text-transform: uppercase; letter-spacing: 0.05em;
+            background: var(--bg-secondary); border-bottom: 1px solid var(--border-color);
+        }
+        .preview-table td {
+            padding: 8px 10px; border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        .preview-table tr:last-child td { border-bottom: none; }
+        .preview-header-row {
+            display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 14px;
+        }
+        .ph-item { display: flex; flex-direction: column; gap: 2px; }
+        .ph-label { font-size: 0.72rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
+        .ph-val { font-size: 0.92rem; font-weight: 600; color: var(--text-primary); }
+        .preview-note {
+            margin-top: 10px; padding: 10px 14px; border-radius: 6px;
+            background: #fff8e6; border: 1px solid var(--accent-warning);
+            font-size: 0.82rem; color: var(--text-primary);
+        }
+
+        /* Buttons */
+        .btn-row { display: flex; gap: 12px; align-items: center; margin-top: 6px; }
+        .btn {
+            padding: 9px 20px; border: none; border-radius: 6px;
+            font-family: inherit; font-size: 0.9rem; font-weight: 600;
+            cursor: pointer; transition: opacity 0.15s;
+        }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-primary { background: var(--accent-primary); color: white; }
+        .btn-primary:hover:not(:disabled) { opacity: 0.85; }
+        .btn-success { background: var(--accent-success); color: white; }
+        .btn-success:hover:not(:disabled) { opacity: 0.85; }
+        .btn-ghost {
+            background: transparent; color: var(--accent-primary);
+            border: 1px solid var(--accent-primary);
+        }
+        .btn-ghost:hover { background: var(--bg-secondary); }
+
+        /* Status */
+        #statusMsg {
+            font-size: 0.88rem; padding: 10px 14px; border-radius: 6px;
+            display: none; margin-top: 12px;
+        }
+        #statusMsg.success { background: #edf7ed; color: #1a6b1a; border: 1px solid var(--accent-success); }
+        #statusMsg.error { background: #fdf0f0; color: #8b1a1a; border: 1px solid var(--accent-danger); }
+        #statusMsg.working { background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--border-color); }
+
+        .pill {
+            display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem;
+            font-weight: 700; margin-left: 6px;
+        }
+        .pill-trade { background: #f3e8ff; color: #6b21a8; }
+        .pill-direct { background: #e0f2fe; color: #0369a1; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/orders" class="back-link">←</a>
+            <div class="logo-icon">🤝</div>
+            <div>
+                <h1>Trade <span>Entry</span></h1>
+                <div class="logo-sub">Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main style="max-width: 840px; margin: 0 auto; padding: 24px 16px;">
+
+    <!-- Client -->
+    <div class="te-card">
+        <h2>Client</h2>
+        <div class="form-grid">
+            <div class="form-group search-wrap">
+                <label>Customer <span style="color:var(--accent-danger)">*</span></label>
+                <input id="customerSearch" class="field-input" type="text"
+                       placeholder="Type name to search Etere…" autocomplete="off" />
+                <div id="customerDropdown" class="search-dropdown"></div>
+                <div id="customerIdDisplay"></div>
+                <input type="hidden" id="customerId" value="" />
+            </div>
+        </div>
+    </div>
+
+    <!-- Contract Header -->
+    <div class="te-card">
+        <h2>Contract Header</h2>
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Contract Code <span style="color:var(--accent-danger)">*</span></label>
+                <input id="contractCode" type="text" placeholder="CI 2605 CROSS" />
+            </div>
+            <div class="form-group">
+                <label>Description <span style="color:var(--accent-danger)">*</span></label>
+                <input id="contractDesc" type="text" placeholder="COMMUNITY INITIATIVES TV JUNE 2026" />
+            </div>
+            <div class="form-group">
+                <label>Flight Start <span style="color:var(--accent-danger)">*</span></label>
+                <input id="dateFrom" type="date" />
+            </div>
+            <div class="form-group">
+                <label>Flight End <span style="color:var(--accent-danger)">*</span></label>
+                <input id="dateTo" type="date" />
+            </div>
+            <div class="form-group full">
+                <label>Notes (optional)</label>
+                <input id="contractNote" type="text" placeholder="Internal notes…" />
+            </div>
+        </div>
+    </div>
+
+    <!-- Line Details -->
+    <div class="te-card">
+        <h2>Line Details</h2>
+        <div class="form-grid-3" style="margin-bottom: 16px;">
+            <div class="form-group">
+                <label>Total Trade Value ($) <span style="color:var(--accent-danger)">*</span></label>
+                <input id="totalValue" type="number" min="0" step="0.01" placeholder="5000.00" />
+            </div>
+            <div class="form-group">
+                <label>Spots per Line <span style="color:var(--accent-danger)">*</span></label>
+                <input id="spotsPerLine" type="number" min="1" step="1" placeholder="30" />
+            </div>
+            <div class="form-group">
+                <label>Duration</label>
+                <select id="duration">
+                    <option value="30">:30 (30 sec)</option>
+                    <option value="60">:60 (60 sec)</option>
+                    <option value="120">:120 (120 sec)</option>
+                    <option value="15">:15 (15 sec)</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-grid-3" style="margin-bottom: 16px;">
+            <div class="form-group">
+                <label>Daypart</label>
+                <input id="daypart" type="text" value="06:00-23:59" />
+            </div>
+            <div class="form-group">
+                <label>Days</label>
+                <input id="days" type="text" value="M-Su" />
+            </div>
+            <div class="form-group">
+                <label>Separation (min)</label>
+                <input id="separation" type="number" min="0" step="5" value="15" />
+            </div>
+        </div>
+
+        <!-- Markets -->
+        <div class="form-group">
+            <label>Markets <span style="color:var(--accent-danger)">*</span></label>
+            <div class="market-grid" id="marketGrid">
+                <label class="market-cb"><input type="checkbox" value="NYC" /><span>NYC</span></label>
+                <label class="market-cb"><input type="checkbox" value="CMP" /><span>CMP</span></label>
+                <label class="market-cb"><input type="checkbox" value="HOU" /><span>HOU</span></label>
+                <label class="market-cb"><input type="checkbox" value="SFO" /><span>SFO</span></label>
+                <label class="market-cb"><input type="checkbox" value="SEA" /><span>SEA</span></label>
+                <label class="market-cb"><input type="checkbox" value="LAX" /><span>LAX</span></label>
+                <label class="market-cb"><input type="checkbox" value="CVC" /><span>CVC</span></label>
+                <label class="market-cb"><input type="checkbox" value="WDC" /><span>WDC</span></label>
+                <label class="market-cb"><input type="checkbox" value="MMT" /><span>MMT</span></label>
+                <label class="market-cb"><input type="checkbox" value="DAL" /><span>DAL</span></label>
+            </div>
+            <div>
+                <span class="market-shortcut" onclick="selectAllCTV()">All CTV markets (NYC, CMP, HOU, SFO, SEA, LAX, CVC, WDC)</span>
+                &nbsp;·&nbsp;
+                <span class="market-shortcut" onclick="clearMarkets()">Clear</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="btn-row">
+        <button class="btn btn-primary" onclick="buildPreview()">Preview</button>
+        <span style="font-size:0.82rem; color:var(--text-secondary);">Review what will be created before committing to the database.</span>
+    </div>
+
+    <!-- Preview -->
+    <div id="previewSection" class="te-card" style="margin-top: 18px; border-color: var(--accent-primary);">
+        <h2 style="color:var(--accent-primary);">Preview — Review Before Creating</h2>
+        <div class="preview-header-row" id="previewHeader"></div>
+        <table class="preview-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Market</th>
+                    <th>Description</th>
+                    <th>Days / Daypart</th>
+                    <th>Duration</th>
+                    <th>Spots</th>
+                    <th>Rate</th>
+                </tr>
+            </thead>
+            <tbody id="previewLines"></tbody>
+        </table>
+        <div class="preview-note">
+            ⚠️ This will create a new <strong>trade contract</strong> (Exchange for Goods) in Etere with
+            <span id="previewLineCount">0</span> line(s). No changes have been made yet.
+            Payment method will be set to <strong>Barter (ID 4)</strong> and
+            <strong>CAMBIOMERCE = 1</strong> will be set directly in the database.
+        </div>
+        <div class="btn-row" style="margin-top: 14px;">
+            <button class="btn btn-success" id="confirmBtn" onclick="createContract()">
+                ✓ Create Contract
+            </button>
+            <button class="btn btn-ghost" onclick="resetPreview()">Edit</button>
+        </div>
+    </div>
+
+    <div id="statusMsg"></div>
+
+    <!-- Success panel -->
+    <div id="successPanel" style="display:none;" class="te-card" style="border-color: var(--accent-success);">
+        <h2 style="color:var(--accent-success);">Contract Created</h2>
+        <div id="successDetails" style="font-size:0.92rem; color:var(--text-primary);"></div>
+    </div>
+
+</main>
+
+<script>
+let _customerId = null;
+let _previewData = null;
+
+// ─── Customer search ────────────────────────────────────────────────────────
+
+const csInput = document.getElementById('customerSearch');
+const csDrop  = document.getElementById('customerDropdown');
+const csIdEl  = document.getElementById('customerIdDisplay');
+const csHid   = document.getElementById('customerId');
+
+let _csTimer = null;
+csInput.addEventListener('input', () => {
+    clearTimeout(_csTimer);
+    const q = csInput.value.trim();
+    if (q.length < 2) { csDrop.style.display = 'none'; return; }
+    _csTimer = setTimeout(() => searchCustomers(q), 250);
+});
+csInput.addEventListener('blur', () => setTimeout(() => { csDrop.style.display = 'none'; }, 200));
+
+async function searchCustomers(q) {
+    try {
+        const r = await fetch('/api/trade/search-customer?q=' + encodeURIComponent(q));
+        const data = await r.json();
+        csDrop.innerHTML = '';
+        if (!data.length) {
+            csDrop.innerHTML = '<div class="sd-item" style="color:var(--text-muted);">No matches</div>';
+        } else {
+            data.forEach(c => {
+                const div = document.createElement('div');
+                div.className = 'sd-item';
+                div.innerHTML = `${esc(c.name)} <span class="sd-id">#${c.id}</span>`;
+                div.onclick = () => {
+                    csInput.value = c.name;
+                    csHid.value = c.id;
+                    _customerId = c.id;
+                    csIdEl.textContent = `Customer ID: ${c.id}`;
+                    csDrop.style.display = 'none';
+                };
+                csDrop.appendChild(div);
+            });
+        }
+        csDrop.style.display = 'block';
+    } catch(e) { csDrop.style.display = 'none'; }
+}
+
+// ─── Market helpers ─────────────────────────────────────────────────────────
+
+function selectAllCTV() {
+    const ctv = ['NYC','CMP','HOU','SFO','SEA','LAX','CVC','WDC'];
+    document.querySelectorAll('#marketGrid input[type=checkbox]').forEach(cb => {
+        cb.checked = ctv.includes(cb.value);
+    });
+}
+
+function clearMarkets() {
+    document.querySelectorAll('#marketGrid input[type=checkbox]').forEach(cb => cb.checked = false);
+}
+
+function selectedMarkets() {
+    return Array.from(document.querySelectorAll('#marketGrid input[type=checkbox]:checked')).map(c => c.value);
+}
+
+// ─── Validation ─────────────────────────────────────────────────────────────
+
+function validate() {
+    const errors = [];
+    if (!_customerId) errors.push('Select a customer');
+    if (!v('contractCode')) errors.push('Contract code required');
+    if (!v('contractDesc')) errors.push('Description required');
+    if (!v('dateFrom'))     errors.push('Flight start required');
+    if (!v('dateTo'))       errors.push('Flight end required');
+    if (!parseFloat(v('totalValue')) > 0) errors.push('Total value required');
+    if (!parseInt(v('spotsPerLine')) > 0) errors.push('Spots per line required');
+    if (!selectedMarkets().length) errors.push('Select at least one market');
+    return errors;
+}
+
+function v(id) { return document.getElementById(id).value.trim(); }
+
+// ─── Preview ─────────────────────────────────────────────────────────────────
+
+function buildPreview() {
+    const errors = validate();
+    if (errors.length) { showStatus('error', errors.join(' · ')); return; }
+
+    const markets     = selectedMarkets();
+    const totalValue  = parseFloat(v('totalValue'));
+    const spotsPerLine= parseInt(v('spotsPerLine'));
+    const duration    = parseInt(v('duration'));
+    const daypart     = v('daypart') || '06:00-23:59';
+    const days        = v('days') || 'M-Su';
+    const sep         = parseInt(v('separation')) || 15;
+    const rateEach    = totalValue / (spotsPerLine * markets.length);
+
+    const lines = markets.map((mkt, i) => ({
+        market:      mkt,
+        description: `${v('contractCode')} TRADE ${mkt} :${String(duration).padStart(2,'0')}`,
+        daypart,
+        days,
+        duration_sec: duration,
+        total_spots:  spotsPerLine,
+        rate:         rateEach,
+    }));
+
+    _previewData = {
+        customer_id:    _customerId,
+        customer_name:  csInput.value.trim(),
+        code:           v('contractCode'),
+        description:    v('contractDesc'),
+        date_from:      v('dateFrom'),
+        date_to:        v('dateTo'),
+        note:           v('contractNote'),
+        separation:     sep,
+        lines,
+    };
+
+    // Render header
+    const hdr = document.getElementById('previewHeader');
+    hdr.innerHTML = phItem('Customer', _previewData.customer_name + ` (ID ${_customerId})`)
+                  + phItem('Code', _previewData.code)
+                  + phItem('Description', _previewData.description)
+                  + phItem('Flight', `${_previewData.date_from} → ${_previewData.date_to}`)
+                  + phItem('Total Value', `$${totalValue.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`)
+                  + phItem('Markets', markets.join(', '));
+
+    // Render lines
+    const tbody = document.getElementById('previewLines');
+    tbody.innerHTML = lines.map((l, i) =>
+        `<tr>
+          <td style="color:var(--text-muted)">${i+1}</td>
+          <td><strong>${esc(l.market)}</strong></td>
+          <td style="font-size:0.83rem">${esc(l.description)}</td>
+          <td style="font-size:0.83rem">${esc(l.days)} · ${esc(l.daypart)}</td>
+          <td>:${l.duration_sec}s</td>
+          <td>${l.total_spots}</td>
+          <td>$${l.rate.toFixed(2)}</td>
+        </tr>`
+    ).join('');
+
+    document.getElementById('previewLineCount').textContent = lines.length;
+    document.getElementById('previewSection').style.display = 'block';
+    document.getElementById('previewSection').scrollIntoView({behavior:'smooth', block:'nearest'});
+    hideStatus();
+}
+
+function phItem(label, val) {
+    return `<div class="ph-item"><span class="ph-label">${label}</span><span class="ph-val">${esc(String(val))}</span></div>`;
+}
+
+function resetPreview() {
+    document.getElementById('previewSection').style.display = 'none';
+    _previewData = null;
+}
+
+// ─── Create ─────────────────────────────────────────────────────────────────
+
+async function createContract() {
+    if (!_previewData) return;
+    document.getElementById('confirmBtn').disabled = true;
+    showStatus('working', 'Creating contract in Etere…');
+
+    try {
+        const r = await fetch('/api/trade/create', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(_previewData),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || 'Server error');
+
+        hideStatus();
+        document.getElementById('previewSection').style.display = 'none';
+
+        const panel = document.getElementById('successPanel');
+        panel.style.display = 'block';
+        document.getElementById('successDetails').innerHTML =
+            `<p>Contract <strong>#${data.contract_id}</strong> created — <strong>${esc(data.code)}</strong></p>
+             <p>${data.lines_created} line(s) created across ${data.markets.join(', ')}</p>
+             <p style="margin-top:8px; font-size:0.82rem; color:var(--text-secondary)">CAMBIOMERCE = 1 ✓ &nbsp;·&nbsp; Payment ID = 4 (Barter) ✓</p>
+             <p style="margin-top:8px;"><a href="#" onclick="location.reload()" style="color:var(--accent-primary)">Enter another trade contract</a></p>`;
+        panel.scrollIntoView({behavior:'smooth'});
+    } catch (err) {
+        document.getElementById('confirmBtn').disabled = false;
+        showStatus('error', err.message);
+    }
+}
+
+// ─── Utilities ───────────────────────────────────────────────────────────────
+
+function showStatus(type, msg) {
+    const el = document.getElementById('statusMsg');
+    el.className = type; el.textContent = msg; el.style.display = 'block';
+}
+function hideStatus() {
+    const el = document.getElementById('statusMsg');
+    el.style.display = 'none';
+}
+function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+
+</body>
+</html>
