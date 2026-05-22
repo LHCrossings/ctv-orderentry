@@ -5702,6 +5702,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             cal_start   = _date_cls(year, month, 1)
             month_end   = _bb_month_end(year, month)
 
+            _ny, _nm  = (year, month + 1) if month < 12 else (year + 1, 1)
+            bcast_end = _bb_broadcast_month_start(_ny, _nm) - timedelta(days=1)
+
             trade_guard = (
                 "-- show all"
                 if show_trade else
@@ -5748,12 +5751,12 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                       AND t.LIVELLO = 0
                       {trade_guard}
                       AND t.DATA >= CASE WHEN ct.CENTROMEDIA = 316 THEN %s ELSE %s END
-                      AND t.DATA <= %s
+                      AND t.DATA <= CASE WHEN ct.CENTROMEDIA = 316 THEN %s ELSE %s END
                     GROUP BY
                         ct.ID_CONTRATTITESTATA, ct.CENTROMEDIA, ct.P_AGENZIA, ct.COD_CONTRATTO,
                         ct.CAMBIOMERCE, ct.ID_PAGAMENTI,
                         ae.Nome, ae.RAG_SOCIAL, ag.RAG_SOCIAL, cl.RAG_SOCIAL
-                """, (str(bcast_start), str(cal_start), str(month_end)))
+                """, (str(bcast_start), str(cal_start), str(bcast_end), str(month_end)))
                 rows = cur.fetchall()
 
             def _is_trade(r):
@@ -5842,7 +5845,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 return f"{d.strftime('%b')} {d.day}"
 
             month_label = f"{_cal.month_name[month]} {year}"
-            bcast_label = f"{_md(bcast_start)} – {_md(month_end)}, {month_end.year}"
+            bcast_label = f"{_md(bcast_start)} – {_md(bcast_end)}, {bcast_end.year}"
             cal_label   = f"{_md(cal_start)} – {_md(month_end)}, {month_end.year}"
 
             return {
