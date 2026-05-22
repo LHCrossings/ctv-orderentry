@@ -97,7 +97,7 @@ try:
         agency_pct=AGENCY_PCT,
         contract_date=order.flight_start,
         contract_end_date=order.flight_end,
-        contract_type=2,
+        contract_type=1,
         customer_order_ref=order.estimate_number,
     )
     print(f"  → contract_id = {contract_id}")

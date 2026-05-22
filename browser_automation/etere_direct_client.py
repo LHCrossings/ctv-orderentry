@@ -446,7 +446,7 @@ class EtereDirectClient:
         media_center_id: int = 316,
         contract_date: Optional[date] = None,
         contract_end_date: Optional[date] = None,
-        contract_type: int = 2,
+        contract_type: int = 1,
         invoice_mode: int = 2,
         invoice_header: int = 1,
         vat: int = 1,
