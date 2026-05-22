@@ -2541,15 +2541,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     conflict_key  = _pi_product_key(conflict_spot["cod_progra"])
                     conflict_dur  = conflict_spot["duration"]
 
-                    # Search other breaks for a swap candidate
+                    # Search other breaks for a swap candidate (duration need not match —
+                    # breaks are elastic; only constraint is no same product in same break)
                     for k, brk_b in enumerate(breaks):
                         if k == i:
                             continue
                         for m, cand in enumerate(brk_b["optimized"]):
                             if cand["label"] != "PI":
                                 continue
-                            if cand["duration"] != conflict_dur:
-                                continue   # must match duration (no time-slot shift)
                             cand_key = _pi_product_key(cand["cod_progra"])
 
                             # Would cand create a new conflict in break A?
