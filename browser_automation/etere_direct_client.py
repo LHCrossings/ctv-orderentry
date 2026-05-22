@@ -752,7 +752,7 @@ EXEC web_sales_InsertContractLine
             booking_code,       # @idbooking
             0,                  # @id (new line; SP returns the assigned ID)
             whitelist_priority, # @priwhitelist
-            1,                  # @rowstatus
+            0,                  # @rowstatus
             intcomm,            # @intcomm
             intsrighe,          # @intsrighe
             intevent,           # @intevent
