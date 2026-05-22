@@ -66,6 +66,7 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from etere_client import EtereClient
+from etere_direct_client import EtereDirectClient, connect
 from parsers.lexus_parser import (
     LexusLine,
     LexusParseResult,
@@ -83,6 +84,7 @@ from src.domain.enums import BillingType
 # ───────────────────────────────────────────────────────────────────────────
 
 LEXUS_CUSTOMER_ID = 13
+LEXUS_AGENCY_ID   = 12
 LEXUS_SEPARATION = (25, 0, 0)      # customer=25, event=0, order=0
 LEXUS_BILLING = BillingType.CUSTOMER_SHARE_AGENCY
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
@@ -795,14 +797,119 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
 # BROWSER AUTOMATION
 # ───────────────────────────────────────────────────────────────────────────
 
+def _execute_direct(user_input: dict) -> bool:
+    """Direct DB execution — replaces Selenium browser automation for Lexus."""
+    market = user_input["market"]
+
+    print("\n" + "=" * 70)
+    print("STARTING DIRECT DB ENTRY — LEXUS / IW GROUP")
+    print("=" * 70)
+
+    conn = connect()
+    try:
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=True)
+        client.set_master_market(market)
+        all_success = True
+
+        for contract_job in user_input["contracts"]:
+            order_flow    = contract_job["order_flow"]
+            etere_lines   = contract_job["etere_lines"]
+            quarter_label = contract_job["quarter_label"]
+
+            print(f"\n{'═' * 60}")
+            print(f"[{quarter_label}] {len(etere_lines)} line(s) — {order_flow.upper()}")
+
+            # ── Create or retrieve contract ───────────────────────────
+            if order_flow == "new":
+                contract_id = client.create_contract_header(
+                    customer_id=int(user_input["customer_id"]),
+                    agency_id=LEXUS_AGENCY_ID,
+                    code=contract_job["contract_code"],
+                    description=contract_job["contract_description"],
+                    contract_date=contract_job["flight_start"],
+                    contract_end_date=contract_job["flight_end"],
+                    agency_pct=15.0,
+                    customer_order_ref=f"{user_input['estimate']} {user_input['market']} {user_input['language']}",
+                )
+                if not contract_id:
+                    print(f"[{quarter_label}] ✗ Failed to create contract")
+                    all_success = False
+                    continue
+                print(f"[{quarter_label}] ✓ Created contract #{contract_id}")
+            else:
+                contract_id = int(contract_job["contract_number"])
+                client._contract_id = contract_id
+                # Extend contract end date to cover the new lines
+                max_end = max(ln["end_date"] for ln in etere_lines)
+                cur = conn.cursor()
+                cur.execute(
+                    f"UPDATE CONTRATTITESTATA SET data_fine={client._ph} WHERE ID_CONTRATTO={client._ph}",
+                    (max_end, contract_id),
+                )
+                print(f"[{quarter_label}] Adding to existing contract #{contract_id}")
+
+            # ── Add contract lines ────────────────────────────────────
+            for line_idx, line_spec in enumerate(etere_lines, 1):
+                days     = line_spec["days"]
+                time_str = line_spec["time"]
+                days, _  = EtereClient.check_sunday_6_7a_rule(days, time_str)
+                time_from, time_to = EtereClient.parse_time_range(time_str)
+                time_range = f"{time_from}-{time_to}"
+                dur_sec    = line_spec["duration"]
+                duration   = f"00:00:{dur_sec:02d}:00"
+
+                bns_flag = " [BNS]" if line_spec["is_bonus"] else ""
+                print(f"\n  [LINE {line_idx}] {days} {time_str}{bns_flag}")
+                print(f"    {line_spec['start_date']} – {line_spec['end_date']}")
+                print(
+                    f"    {line_spec['total_spots']}x total, "
+                    f"{line_spec['spots_per_week']}/wk, "
+                    f"{line_spec['max_daily_run']}x/day @ ${line_spec['rate']:.2f}  "
+                    f"sep={line_spec['separation']}"
+                )
+
+                line_id = client.add_contract_line(
+                    contract_id=contract_id,
+                    market=market,
+                    days=days,
+                    time_range=time_range,
+                    description=line_spec["description"],
+                    rate=float(line_spec["rate"]),
+                    total_spots=line_spec["total_spots"],
+                    spots_per_week=line_spec["spots_per_week"],
+                    max_daily_run=line_spec["max_daily_run"],
+                    date_from=line_spec["start_date"],
+                    date_to=line_spec["end_date"],
+                    duration=duration,
+                    is_bonus=line_spec["is_bonus"],
+                    booking_code=line_spec["spot_code"],
+                    separation_intervals=line_spec["separation"],
+                )
+                if line_id <= 0:
+                    print("    ✗ Failed")
+                    all_success = False
+                else:
+                    print(f"    → line_id = {line_id}")
+
+            print(f"\n[{quarter_label}] ✓ Contract #{contract_id} — {len(etere_lines)} line(s) complete")
+
+    except Exception as e:
+        print(f"\n[ERROR] Direct DB entry failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+    finally:
+        conn.close()
+
+    return all_success
+
+
 def process_lexus_order(driver, file_path: str, user_input: dict = None) -> bool:
     """
-    Process Lexus order with completely unattended browser automation.
-
-    Follows admerasia_automation.py / worldlink_automation.py pattern.
+    Process Lexus order via direct DB entry.
 
     Args:
-        driver:     Selenium WebDriver (raw driver)
+        driver:     Unused (kept for interface compatibility with orchestrator)
         file_path:  Path to the JPG or XLSX file
         user_input: Pre-collected inputs from orchestrator (optional)
 
@@ -814,106 +921,7 @@ def process_lexus_order(driver, file_path: str, user_input: dict = None) -> bool
         if not user_input:
             return False
 
-    billing = user_input["billing"]
-    market  = user_input["market"]
-
-    print("\n" + "=" * 70)
-    print("STARTING BROWSER AUTOMATION — LEXUS / IW GROUP")
-    print("=" * 70)
-
-    etere = EtereClient(driver)
-    all_success = True
-
-    try:
-        for contract_job in user_input["contracts"]:
-            order_flow    = contract_job["order_flow"]
-            etere_lines   = contract_job["etere_lines"]
-            quarter_label = contract_job["quarter_label"]
-
-            print(f"\n{'═' * 60}")
-            print(f"[{quarter_label}] {len(etere_lines)} line(s) — {order_flow.upper()}")
-
-            # ── Create or retrieve contract ───────────────────────────
-            if order_flow == "new":
-                contract_number = etere.create_contract_header(
-                    customer_id=int(user_input["customer_id"]),
-                    code=contract_job["contract_code"],
-                    description=contract_job["contract_description"],
-                    contract_start=contract_job["flight_start"].strftime('%m/%d/%Y'),
-                    contract_end=contract_job["flight_end"].strftime('%m/%d/%Y'),
-                    charge_to=billing.get_charge_to(),
-                    invoice_header=billing.get_invoice_header(),
-                    customer_order_ref=f"{user_input['estimate']} {user_input['market']} {user_input['language']}",
-                )
-                if not contract_number:
-                    print(f"[{quarter_label}] ✗ Failed to create contract")
-                    all_success = False
-                    continue
-                print(f"[{quarter_label}] ✓ Created contract: {contract_number}")
-            else:
-                contract_number = contract_job["contract_number"]
-                print(f"[{quarter_label}] Adding to existing contract: {contract_number}")
-                lines_for_extend = [
-                    {"end_date": ln["end_date"].strftime('%m/%d/%Y')}
-                    for ln in etere_lines
-                ]
-                if not etere.extend_contract_end_date(contract_number, lines_for_extend):
-                    print(f"[{quarter_label}] ✗ Failed to extend contract end date")
-                    all_success = False
-                    continue
-
-            # ── Add contract lines ────────────────────────────────────
-            for line_idx, line_spec in enumerate(etere_lines, 1):
-                days     = line_spec["days"]
-                time_str = line_spec["time"]
-                days, _  = EtereClient.check_sunday_6_7a_rule(days, time_str)
-                time_from, time_to = EtereClient.parse_time_range(time_str)
-                start_date_str = line_spec["start_date"].strftime('%m/%d/%Y')
-                end_date_str   = line_spec["end_date"].strftime('%m/%d/%Y')
-
-                bns_flag = " [BNS]" if line_spec["is_bonus"] else ""
-                print(f"\n  [LINE {line_idx}] {days} {time_str}{bns_flag}")
-                print(f"    {start_date_str} – {end_date_str}")
-                print(
-                    f"    {line_spec['total_spots']}x total, "
-                    f"{line_spec['spots_per_week']}/wk, "
-                    f"{line_spec['max_daily_run']}x/day @ ${line_spec['rate']:.2f}  "
-                    f"sep={line_spec['separation']}"
-                )
-
-                is_priority = (
-                    not line_spec.get("is_bonus", False)
-                    and line_spec["separation"][0] < LEXUS_SEPARATION[0]
-                )
-                success = etere.add_contract_line(
-                    contract_number=contract_number,
-                    market=market,
-                    start_date=start_date_str,
-                    end_date=end_date_str,
-                    days=days,
-                    time_from=time_from,
-                    time_to=time_to,
-                    description=line_spec["description"],
-                    spot_code=line_spec["spot_code"],
-                    duration_seconds=line_spec["duration"],
-                    total_spots=line_spec["total_spots"],
-                    spots_per_week=line_spec["spots_per_week"],
-                    max_daily_run=line_spec["max_daily_run"],
-                    rate=float(line_spec["rate"]),
-                    separation_intervals=line_spec["separation"],
-                    is_priority=is_priority,
-                )
-                if not success:
-                    print("    ✗ Failed")
-                    all_success = False
-
-            print(f"\n[{quarter_label}] ✓ Contract {contract_number} — {len(etere_lines)} line(s) complete")
-
-    except Exception as e:
-        print(f"\n[ERROR] Browser automation failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+    return _execute_direct(user_input)
 
     return all_success
 
