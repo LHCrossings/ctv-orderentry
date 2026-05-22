@@ -2518,70 +2518,77 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 if len(keys_a) == len(set(keys_a)):
                     continue               # no conflict in this break
 
-                # Find the first duplicate PI spot in break A
+                # Find both indices involved in the first PI conflict (first + second occurrence).
+                # We try swapping either one out — different lengths mean one may have a
+                # valid partner in another break while the other doesn't.
                 seen: dict = {}
-                conflict_idx: int = -1
+                conflict_pair: tuple = (-1, -1)
                 for j, s in enumerate(brk_a["optimized"]):
                     if s["label"] != "PI":
                         continue
                     k = _pi_product_key(s["cod_progra"])
                     if k in seen:
-                        conflict_idx = j   # this is the duplicate
+                        conflict_pair = (seen[k], j)
                         break
                     seen[k] = j
 
-                if conflict_idx < 0:
+                if conflict_pair[0] < 0:
                     continue
 
-                conflict_spot = brk_a["optimized"][conflict_idx]
-                conflict_key  = _pi_product_key(conflict_spot["cod_progra"])
-                conflict_dur  = conflict_spot["duration"]
+                # Try second occurrence first, then first — either can be moved out
+                for conflict_idx in (conflict_pair[1], conflict_pair[0]):
+                    conflict_spot = brk_a["optimized"][conflict_idx]
+                    conflict_key  = _pi_product_key(conflict_spot["cod_progra"])
+                    conflict_dur  = conflict_spot["duration"]
 
-                # Search other breaks for a swap candidate
-                for k, brk_b in enumerate(breaks):
-                    if k == i:
-                        continue
-                    for m, cand in enumerate(brk_b["optimized"]):
-                        if cand["label"] != "PI":
+                    # Search other breaks for a swap candidate
+                    for k, brk_b in enumerate(breaks):
+                        if k == i:
                             continue
-                        if cand["duration"] != conflict_dur:
-                            continue       # must match duration (no time-slot shift)
-                        cand_key = _pi_product_key(cand["cod_progra"])
+                        for m, cand in enumerate(brk_b["optimized"]):
+                            if cand["label"] != "PI":
+                                continue
+                            if cand["duration"] != conflict_dur:
+                                continue   # must match duration (no time-slot shift)
+                            cand_key = _pi_product_key(cand["cod_progra"])
 
-                        # Would cand create a new conflict in break A?
-                        other_keys_a = [_pi_product_key(s["cod_progra"])
-                                        for j, s in enumerate(brk_a["optimized"])
-                                        if s["label"] == "PI" and j != conflict_idx]
-                        if cand_key in other_keys_a:
-                            continue
+                            # Would cand create a new conflict in break A?
+                            other_keys_a = [_pi_product_key(s["cod_progra"])
+                                            for j, s in enumerate(brk_a["optimized"])
+                                            if s["label"] == "PI" and j != conflict_idx]
+                            if cand_key in other_keys_a:
+                                continue
 
-                        # Would conflict_spot create a new conflict in break B?
-                        other_keys_b = [_pi_product_key(s["cod_progra"])
-                                        for mm, s in enumerate(brk_b["optimized"])
-                                        if s["label"] == "PI" and mm != m]
-                        if conflict_key in other_keys_b:
-                            continue
+                            # Would conflict_spot create a new conflict in break B?
+                            other_keys_b = [_pi_product_key(s["cod_progra"])
+                                            for mm, s in enumerate(brk_b["optimized"])
+                                            if s["label"] == "PI" and mm != m]
+                            if conflict_key in other_keys_b:
+                                continue
 
-                        # Perform the swap (keep each spot's time slot)
-                        ora_a, time_a = conflict_spot["new_ora"], conflict_spot["new_time"]
-                        ora_b, time_b = cand["new_ora"], cand["new_time"]
-                        brk_a["optimized"][conflict_idx] = {**cand, "new_ora": ora_a, "new_time": time_a}
-                        brk_b["optimized"][m] = {**conflict_spot, "new_ora": ora_b, "new_time": time_b}
+                            # Perform the swap (keep each spot's time slot)
+                            ora_a, time_a = conflict_spot["new_ora"], conflict_spot["new_time"]
+                            ora_b, time_b = cand["new_ora"], cand["new_time"]
+                            brk_a["optimized"][conflict_idx] = {**cand, "new_ora": ora_a, "new_time": time_a}
+                            brk_b["optimized"][m] = {**conflict_spot, "new_ora": ora_b, "new_time": time_b}
 
-                        # Recalculate changed + violation for both breaks
-                        for brk in (brk_a, brk_b):
-                            cur_ids  = [s["id"] for s in brk["current"]]
-                            opt_ids  = [s["id"] for s in brk["optimized"]]
-                            brk["changed"] = cur_ids != opt_ids
-                            new_pi_keys = _pi_keys(brk)
-                            pri_bad = ([s["priority"] for s in brk["optimized"]]
-                                       != sorted(s["priority"] for s in brk["optimized"]))
-                            brk["violation"] = pri_bad or (len(new_pi_keys) != len(set(new_pi_keys)))
+                            # Recalculate changed + violation for both breaks
+                            for brk in (brk_a, brk_b):
+                                cur_ids  = [s["id"] for s in brk["current"]]
+                                opt_ids  = [s["id"] for s in brk["optimized"]]
+                                brk["changed"] = cur_ids != opt_ids
+                                new_pi_keys = _pi_keys(brk)
+                                pri_bad = ([s["priority"] for s in brk["optimized"]]
+                                           != sorted(s["priority"] for s in brk["optimized"]))
+                                brk["violation"] = pri_bad or (len(new_pi_keys) != len(set(new_pi_keys)))
 
-                        made_swap = True
-                        break
+                            made_swap = True
+                            break
+                        if made_swap:
+                            break
                     if made_swap:
                         break
+
                 if made_swap:
                     break
             if not made_swap:
