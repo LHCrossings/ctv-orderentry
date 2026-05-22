@@ -411,6 +411,8 @@ class EtereDirectClient:
         self._autocommit = autocommit
         self._master_market = "NYC"
         self._contract_id: Optional[int] = None
+        self._nielsen_id: int = DEFAULT_NIELSEN_ID
+        self._nielsen_code: str = DEFAULT_NIELSEN_CODE
         self._http_session = None   # populated via set_http_session() or set_session_cookies()
 
     def set_http_session(self, session) -> None:
@@ -445,11 +447,14 @@ class EtereDirectClient:
         cur.execute(
             f"""
             SELECT a.AGENZIA, a.ID_PAGAMENTI, a.CENTROMEDIA, a.AGENTE1,
-                   ISNULL(ag.Commissione, 0) AS agency_pct,
-                   ISNULL(ae.COD_CONTO, '')  AS owner
+                   ISNULL(ag.Commissione, 0)  AS agency_pct,
+                   ISNULL(ae.COD_CONTO, '')   AS owner,
+                   ISNULL(a.Id_Nielsen, 0)    AS nielsen_id,
+                   ISNULL(n.NIELSEN, '')      AS nielsen_code
             FROM ANAGRAF a
-            LEFT JOIN ANAGRAF ag ON ag.ID_ANAGRAF = a.AGENZIA
-            LEFT JOIN ANAGRAF ae ON ae.ID_ANAGRAF = a.AGENTE1
+            LEFT JOIN ANAGRAF ag  ON ag.ID_ANAGRAF  = a.AGENZIA
+            LEFT JOIN ANAGRAF ae  ON ae.ID_ANAGRAF  = a.AGENTE1
+            LEFT JOIN NIELSEN n   ON n.ID_NIELSEN   = a.Id_Nielsen
             WHERE a.ID_ANAGRAF = {self._ph}
             """,
             (customer_id,),
@@ -464,6 +469,8 @@ class EtereDirectClient:
             "agent_id":        int(row[3] or 11),
             "agency_pct":      float(row[4] or 0.0),
             "owner":           str(row[5] or ""),
+            "nielsen_id":      int(row[6] or 0),
+            "nielsen_code":    str(row[7] or ""),
         }
 
     # ── Contract header ─────────────────────────────────────────────────────────
@@ -524,6 +531,10 @@ class EtereDirectClient:
             # owner: explicit arg > customer DB override > ANAGRAF AE > instance default
             anagraf_owner   = defaults.get("owner", "") or self.owner
             effective_owner = owner if owner is not None else anagraf_owner
+            # Nielsen product code from ANAGRAF.Id_Nielsen — drives all subsequent add_contract_line calls
+            if defaults.get("nielsen_id"):
+                self._nielsen_id   = defaults["nielsen_id"]
+                self._nielsen_code = defaults["nielsen_code"] or DEFAULT_NIELSEN_CODE
         else:
             agency_pct      = agency_pct       if agency_pct       is not None else 15.0
             agent_id        = agent_id         if agent_id         is not None else 11
@@ -812,7 +823,7 @@ EXEC web_sales_InsertContractLine
             1,                  # @prenotazione
             False,              # @omaggio
             rate,               # @importo
-            DEFAULT_NIELSEN_CODE,  # @nielsen
+            self._nielsen_code,    # @nielsen
             day_bits["lun"],    # @lun
             day_bits["mar"],    # @mar
             day_bits["mer"],    # @mer
@@ -828,7 +839,7 @@ EXEC web_sales_InsertContractLine
             intcomm,            # @intcomm
             intsrighe,          # @intsrighe
             intevent,           # @intevent
-            DEFAULT_NIELSEN_ID, # @idnielsen
+            self._nielsen_id,   # @idnielsen
             0,                  # @idfatturadesc
             0,                  # @production
             0,                  # @dubbing
