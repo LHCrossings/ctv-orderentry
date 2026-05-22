@@ -5912,6 +5912,55 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+    @router.get("/api/master-control/billing-type-fix/suggest")
+    async def billing_type_fix_suggest():
+        def _run():
+            from browser_automation.etere_direct_client import connect as _connect
+
+            conn = _connect()
+            cur = conn.cursor(as_dict=True)
+
+            # All clients with unset contracts + ANAGRAF default + most-recent historical billing
+            cur.execute("""
+                SELECT
+                    a.ID_ANAGRAF,
+                    ISNULL(a.CENTROMEDIA, 0) AS anagraf_billing,
+                    hist.CENTROMEDIA         AS hist_billing
+                FROM ANAGRAF a
+                JOIN CONTRATTITESTATA ct
+                     ON ct.COMMITTENTE = a.ID_ANAGRAF
+                    AND ct.CENTROMEDIA = 0
+                    AND (ct.CAMBIOMERCE = 0 OR ct.CAMBIOMERCE IS NULL)
+                    AND ct.ID_PAGAMENTI != 4
+                OUTER APPLY (
+                    SELECT TOP 1 CENTROMEDIA
+                    FROM CONTRATTITESTATA h
+                    WHERE h.COMMITTENTE = a.ID_ANAGRAF
+                      AND h.CENTROMEDIA IN (316, 317)
+                    ORDER BY h.ID_CONTRATTITESTATA DESC
+                ) hist
+                GROUP BY a.ID_ANAGRAF, a.CENTROMEDIA, hist.CENTROMEDIA
+            """)
+            suggestions: dict = {}
+            for r in cur.fetchall():
+                cid = r["ID_ANAGRAF"]
+                ab  = int(r["anagraf_billing"] or 0)
+                hb  = r["hist_billing"]
+                if ab in (316, 317):
+                    suggestions[cid] = {"billing": ab,  "source": "anagraf"}
+                elif hb in (316, 317):
+                    suggestions[cid] = {"billing": hb,  "source": "history"}
+                else:
+                    suggestions[cid] = {"billing": None, "source": "none"}
+
+            conn.close()
+            return {"suggestions": {str(k): v for k, v in suggestions.items()}}
+
+        try:
+            return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     @router.post("/api/master-control/billing-type-fix/apply")
     async def billing_type_fix_apply(request: Request):
         body = await request.json()

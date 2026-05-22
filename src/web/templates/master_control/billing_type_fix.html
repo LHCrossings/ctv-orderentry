@@ -124,6 +124,15 @@
             padding: 2.5rem;
             color: var(--text-muted);
         }
+        .source-label {
+            font-size: 0.68rem;
+            margin-top: 2px;
+            text-align: center;
+            color: var(--text-muted);
+        }
+        .source-anagraf { color: var(--nord14); }
+        .source-history  { color: var(--nord9); }
+        .source-none     { color: var(--nord13); }
     </style>
 </head>
 <body>
@@ -153,6 +162,7 @@
         <div class="bulk-actions">
             <button class="bulk-btn-bcast" onclick="setAll(316)">Set All → Broadcast</button>
             <button class="bulk-btn-cal"   onclick="setAll(317)">Set All → Calendar</button>
+            <button id="suggest-btn" onclick="autoSuggest()" style="border-color:var(--nord15)!important;color:var(--nord15)!important;">✦ Auto-Suggest</button>
             <span id="sel-count" style="color:var(--text-muted);font-size:0.85rem;"></span>
             <button class="apply-btn" id="apply-btn" onclick="applyChanges()" disabled>Apply Changes</button>
         </div>
@@ -167,8 +177,9 @@
 </main>
 
 <script>
-    let clients = [];   // raw data from API
-    let choices = {};   // { client_id: 316|317|null }
+    let clients     = [];   // raw data from API
+    let choices     = {};   // { client_id: 316|317|null }
+    let suggestions = {};   // { client_id: {billing, source} } from auto-suggest
 
     async function load() {
         try {
@@ -177,6 +188,7 @@
             const data = await res.json();
             clients = data.clients;
             choices = {};
+            suggestions = {};
             for (const c of clients) choices[c.id] = null;
             render();
         } catch (e) {
@@ -211,6 +223,16 @@
                 : `<span class="billing-badge badge-unset">Unset</span>`;
 
             const sel = choices[c.id];
+            const sug = suggestions[c.id];
+            let sourceHtml = '';
+            if (sug) {
+                if (sug.source === 'anagraf')
+                    sourceHtml = `<div class="source-label source-anagraf">✓ From client record</div>`;
+                else if (sug.source === 'history')
+                    sourceHtml = `<div class="source-label source-history">↑ From contract history</div>`;
+                else
+                    sourceHtml = `<div class="source-label source-none">— No suggestion found</div>`;
+            }
             html += `<tr>
                 <td>${esc(c.name)}</td>
                 <td class="center">${badge}</td>
@@ -230,6 +252,7 @@
                             <span style="color:var(--nord14)">Calendar</span>
                         </label>
                     </div>
+                    ${sourceHtml}
                 </td>
             </tr>`;
         }
@@ -285,6 +308,7 @@
                 `and ${data.updated_contracts} unset contract${data.updated_contracts !== 1 ? 's' : ''}.`;
             msg.style.display = 'block';
 
+            btn.textContent = 'Apply Changes';
             // reload to show updated defaults
             await load();
         } catch (e) {
@@ -293,6 +317,42 @@
             msg.style.display = 'block';
             btn.disabled = false;
             btn.textContent = 'Apply Changes';
+        }
+    }
+
+    async function autoSuggest() {
+        const btn = document.getElementById('suggest-btn');
+        btn.disabled = true;
+        btn.textContent = 'Suggesting…';
+        try {
+            const res = await fetch('/api/master-control/billing-type-fix/suggest');
+            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+            suggestions = data.suggestions;
+            // Pre-fill choices where we have a suggestion
+            let filled = 0;
+            for (const [idStr, sug] of Object.entries(suggestions)) {
+                const id = parseInt(idStr);
+                if (sug.billing && choices[id] === null) {
+                    choices[id] = sug.billing;
+                    filled++;
+                }
+            }
+            render();
+            const resultEl = document.getElementById('result-msg');
+            resultEl.className = 'result-msg result-ok';
+            resultEl.textContent = filled
+                ? `Auto-suggested ${filled} client${filled !== 1 ? 's' : ''} — review and click Apply Changes to confirm.`
+                : 'No suggestions found — all clients will need to be set manually.';
+            resultEl.style.display = 'block';
+        } catch (e) {
+            const resultEl = document.getElementById('result-msg');
+            resultEl.className = 'result-msg result-err';
+            resultEl.textContent = `Auto-suggest failed: ${e.message}`;
+            resultEl.style.display = 'block';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '✦ Auto-Suggest';
         }
     }
 
