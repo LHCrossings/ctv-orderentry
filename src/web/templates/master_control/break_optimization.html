@@ -202,7 +202,10 @@ async function loadBreaks() {
     btn.disabled = true; btn.textContent = 'Loading…';
     document.getElementById('breakArea').innerHTML = '';
     document.getElementById('summaryBar').innerHTML = '';
-    document.getElementById('applyAllBtn').style.display = 'none';
+    const applyAllBtn = document.getElementById('applyAllBtn');
+    applyAllBtn.style.display = 'none';
+    applyAllBtn.disabled = false;
+    applyAllBtn.textContent = 'Apply All Fixes';
 
     try {
         const url = `/api/master-control/break-optimization/load?market=${selectedMarket}&date=${date}&time_from=${encodeURIComponent(timeFrom)}&time_to=${encodeURIComponent(timeTo)}`;
