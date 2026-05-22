@@ -5710,8 +5710,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
             with _connect() as conn:
                 cur = conn.cursor(as_dict=True)
-                # Revenue is summed from ContrattiImportiGiornalieri — one row per scheduled
-                # spot occurrence with its exact date and amount, so no proration is needed.
+                # Revenue is counted from TPALINSE (actual scheduled spots) at the
+                # contract line rate (cr.IMPORTO).  This matches the commercial log
+                # exactly — one spot = one rate unit, no proration across flight days.
                 # The CASE expression applies the correct billing window per contract:
                 # Broadcast (316) → bcast_start; Calendar (317) or Unset → cal_start.
                 cur.execute(f"""
@@ -5726,28 +5727,28 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         ))                                 AS ae_name,
                         ag.RAG_SOCIAL                      AS buying_agency,
                         cl.RAG_SOCIAL                      AS client_name,
-                        ISNULL(SUM(cig.IMPORTO), 0)        AS gross
-                    FROM CONTRATTIRIGHE cr
+                        ISNULL(SUM(cr.IMPORTO), 0)         AS gross
+                    FROM TPALINSE t
+                    JOIN trafficTPalinse tp
+                      ON tp.ID_TPalinse = t.ID_TPALINSE
+                    JOIN CONTRATTIRIGHE cr
+                      ON cr.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe
                     JOIN CONTRATTITESTATA ct
-                      ON ct.ID_CONTRATTITESTATA = cr.ID_CONTRATTITESTATA
-                    JOIN ContrattiImportiGiornalieri cig
-                      ON cig.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
+                      ON ct.ID_CONTRATTITESTATA = tp.ID_CONTRATTITESTATA
                     LEFT JOIN ANAGRAF ae ON ae.ID_ANAGRAF = ct.AGENTE1
                     LEFT JOIN ANAGRAF ag ON ag.ID_ANAGRAF = ct.AGENZIA
                     LEFT JOIN ANAGRAF cl ON cl.ID_ANAGRAF = ct.COMMITTENTE
                     WHERE cr.NEWTYPE LIKE '%%COM%%'
                       AND cr.IMPORTO > 0
+                      AND t.LIVELLO = 0
                       {trade_guard}
-                      AND cr.DATA_INIZIO <= %s
-                      AND cr.DATA_FINE   >= %s
-                      AND cig.DATA >= CASE WHEN ct.CENTROMEDIA = 316 THEN %s ELSE %s END
-                      AND cig.DATA <= %s
+                      AND t.DATA >= CASE WHEN ct.CENTROMEDIA = 316 THEN %s ELSE %s END
+                      AND t.DATA <= %s
                     GROUP BY
                         ct.ID_CONTRATTITESTATA, ct.CENTROMEDIA, ct.P_AGENZIA, ct.COD_CONTRATTO,
                         ct.CAMBIOMERCE, ct.ID_PAGAMENTI,
                         ae.Nome, ae.RAG_SOCIAL, ag.RAG_SOCIAL, cl.RAG_SOCIAL
-                """, (str(month_end), str(bcast_start),
-                      str(bcast_start), str(cal_start), str(month_end)))
+                """, (str(bcast_start), str(cal_start), str(month_end)))
                 rows = cur.fetchall()
 
             def _is_trade(r):
