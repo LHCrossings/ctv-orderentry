@@ -902,7 +902,7 @@ def _execute_direct(user_input: dict) -> bool:
     return all_success
 
 
-def process_lexus_order(driver, file_path: str, user_input: dict = None) -> bool:
+def process_lexus_order(driver=None, file_path: str = "", user_input: dict = None) -> bool:
     """
     Process Lexus order via direct DB entry.
 

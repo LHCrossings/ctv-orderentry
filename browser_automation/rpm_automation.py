@@ -416,8 +416,8 @@ def _execute_direct(user_input: dict) -> bool:
 
 
 def process_rpm_order(
-    driver,
-    pdf_path: str,
+    driver=None,
+    pdf_path: str = "",
     user_input: dict = None
 ) -> bool:
     """

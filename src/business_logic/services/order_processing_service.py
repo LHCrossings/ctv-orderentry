@@ -99,6 +99,12 @@ class OrderProcessingService:
         OrderType.RWNY:             "_process_rwny_order",
     }
 
+    # Order types that use direct DB entry — no browser session needed
+    _DIRECT_DB_ORDER_TYPES = {
+        OrderType.LEXUS,
+        OrderType.RPM,
+    }
+
     def __init__(
         self,
         processors: dict[OrderType, OrderProcessor],
@@ -162,6 +168,7 @@ class OrderProcessingService:
             # Any type with a dedicated processor requires a live browser session.
             needs_browser = any(
                 order.order_type in self._PROCESSOR_DISPATCH
+                and order.order_type not in self._DIRECT_DB_ORDER_TYPES
                 for order in orders
             )
 
@@ -1627,14 +1634,6 @@ class OrderProcessingService:
             print(f"File: {order.pdf_path.name}")
             print(f"{'='*70}\n")
 
-            if shared_session is None:
-                return ProcessingResult(
-                    success=False,
-                    contracts=[],
-                    order_type=OrderType.LEXUS,
-                    error_message="Browser session required for Lexus orders"
-                )
-
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
@@ -1643,10 +1642,7 @@ class OrderProcessingService:
                     error_message="Order inputs not collected"
                 )
 
-            print("[SESSION] ✓ Using shared browser session")
-
             success = process_lexus_order(
-                driver=shared_session.driver,
                 file_path=str(order.pdf_path),
                 user_input=order.order_input
             )
@@ -2083,14 +2079,6 @@ class OrderProcessingService:
                 print(f"Customer: {order.customer_name}")
             print(f"{'='*70}\n")
 
-            if shared_session is None:
-                return ProcessingResult(
-                    success=False,
-                    contracts=[],
-                    order_type=OrderType.RPM,
-                    error_message="Browser session required for RPM orders"
-                )
-
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
@@ -2099,11 +2087,7 @@ class OrderProcessingService:
                     error_message="Order inputs not collected"
                 )
 
-            print("[SESSION] ✓ Using shared browser session")
-            # Market already set to NYC once at batch start
-
             success = process_rpm_order(
-                driver=shared_session.driver,
                 pdf_path=str(order.pdf_path),
                 user_input=order.order_input
             )
