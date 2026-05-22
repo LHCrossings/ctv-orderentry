@@ -5766,6 +5766,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 lambda: {"gross": 0.0, "net": 0.0}
             )
 
+            wl_fee_by_ae: dict = defaultdict(float)
+
             for r in rows:
                 cm    = r["CENTROMEDIA"] or 0
                 gross = float(r["gross"])
@@ -5791,6 +5793,17 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         clients[key]["centromedia"] = cm
                     if cm == 0:
                         clients[key]["unset"] = True
+                    if agency == "Worldlink":
+                        # Round fee per contract (matches spreadsheet per-contract rounding)
+                        wl_fee_by_ae[ae] += round(-0.10 * net, 2)
+
+            # Inject WorldLink broker fee line (DO NOT INVOICE)
+            for ae, fee in wl_fee_by_ae.items():
+                key = (ae, "WorldLink Broker Fees (DO NOT INVOICE)")
+                clients[key]["gross"] += fee
+                clients[key]["net"]   += fee
+                if clients[key]["centromedia"] is None:
+                    clients[key]["centromedia"] = 316
 
             def _build_ae_groups(client_map, include_billing=True):
                 ae_map: dict = defaultdict(list)
