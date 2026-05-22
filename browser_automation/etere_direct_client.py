@@ -634,7 +634,7 @@ EXEC web_sales_savecontractgeneral
             invoice_mode,     # @invoicemode
             0,                # @idbank
             0,                # @scontoinco
-            0,                # @customercolor
+            16711680,         # @customercolor — default red (0xFF0000), matches Etere convention
             invoice_header,   # @intestazione
             False,            # @pagrate
             False,            # @fattprepaga
