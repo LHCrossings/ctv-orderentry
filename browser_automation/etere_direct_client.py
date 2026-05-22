@@ -245,18 +245,18 @@ def _build_newtype(
     is_barter: bool = False,
     is_trade: bool = False,
 ) -> str:
-    """Build semicolon-delimited NEWTYPE string. Always includes COMS; adds one specific type."""
-    types = ["COMS"]
+    """Build semicolon-delimited NEWTYPE string matching Etere UI order: specific type first, COMS second."""
     if is_trade:
-        types.append("TRD")
+        specific = "TRD"
     elif is_bonus:
-        types.append("BNS")
+        specific = "BNS"
     elif is_billboard:
-        types.append("BB")
+        specific = "BB"
     elif is_bookend:
-        types.append("BOOK")
+        specific = "BOOK"
     else:
-        types.append("COM")
+        specific = "COM"
+    types = [specific, "COMS"]
     if is_added_value:
         types.append("AV")
     if is_barter:
@@ -835,7 +835,7 @@ EXEC web_sales_InsertContractLine
             booking_code,       # @idbooking
             0,                  # @id (new line; SP returns the assigned ID)
             whitelist_priority, # @priwhitelist
-            0,                  # @rowstatus
+            1,                  # @rowstatus — 1=active, matches Selenium-created lines
             intcomm,            # @intcomm
             intsrighe,          # @intsrighe
             intevent,           # @intevent
