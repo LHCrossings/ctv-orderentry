@@ -2574,7 +2574,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             opt_ids  = [s["id"] for s in brk["optimized"]]
                             brk["changed"] = cur_ids != opt_ids
                             new_pi_keys = _pi_keys(brk)
-                            brk["violation"] = brk["violation"] or (len(new_pi_keys) != len(set(new_pi_keys)))
+                            pri_bad = ([s["priority"] for s in brk["optimized"]]
+                                       != sorted(s["priority"] for s in brk["optimized"]))
+                            brk["violation"] = pri_bad or (len(new_pi_keys) != len(set(new_pi_keys)))
 
                         made_swap = True
                         break
@@ -2584,6 +2586,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     break
             if not made_swap:
                 break
+
+        # Mark any remaining PI conflicts as unresolvable (no valid swap partner found)
+        for brk in breaks:
+            keys = _pi_keys(brk)
+            brk["pi_unresolvable"] = len(keys) != len(set(keys))
 
     def _bo_process_market(cur, market_id: int, date: str, from_frames: int, to_frames: int) -> list:
         """Fetch, annotate, segment, and optimise all breaks for one market. Returns break list."""
@@ -2654,11 +2661,12 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 violation = pri_viol or len(pi_keys) != len(set(pi_keys))
                 if block[0]["ora"] < to_frames:
                     breaks.append({
-                        "current":         block,
-                        "optimized":       opt_timed,
-                        "violation":       violation,
-                        "bookend_warning": sum(1 for s in block if s["label"] == "BOOKEND") > 1,
-                        "changed":         orig_ids != [s["id"] for s in opt_timed],
+                        "current":          block,
+                        "optimized":        opt_timed,
+                        "violation":        violation,
+                        "bookend_warning":  sum(1 for s in block if s["label"] == "BOOKEND") > 1,
+                        "changed":          orig_ids != [s["id"] for s in opt_timed],
+                        "pi_unresolvable":  False,
                     })
 
         _bo_fix_pi_conflicts(breaks)

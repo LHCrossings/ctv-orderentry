@@ -60,6 +60,7 @@
         .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 700; }
         .badge-violation { background: rgba(235,203,139,0.25); color: var(--nord13); border: 1px solid rgba(235,203,139,0.5); }
         .badge-bookend { background: rgba(191,97,106,0.2); color: var(--nord11); border: 1px solid rgba(191,97,106,0.4); }
+        .badge-danger { background: rgba(191,97,106,0.2); color: var(--nord11); border: 1px solid rgba(191,97,106,0.4); }
         .badge-ok { background: rgba(163,190,140,0.2); color: var(--nord14); border: 1px solid rgba(163,190,140,0.4); }
         .break-spacer { flex: 1; }
         .apply-btn { background: var(--nord14); color: var(--nord6); border: none; border-radius: 6px; padding: 4px 14px; font-size: 0.78rem; font-weight: 700; cursor: pointer; font-family: inherit; }
@@ -291,11 +292,12 @@ function renderBreaks(data) {
 }
 
 function renderBreak(brk, bi) {
-    const badgeHtml = brk.bookend_warning
-        ? '<span class="badge badge-bookend">⚠ Multiple Bookends</span>'
-        : brk.violation
-            ? '<span class="badge badge-violation">⚠ Out of Order</span>'
-            : '<span class="badge badge-ok">✓ OK</span>';
+    const badges = [];
+    if (brk.bookend_warning)   badges.push('<span class="badge badge-bookend">⚠ Multiple Bookends</span>');
+    if (brk.pi_unresolvable)   badges.push('<span class="badge badge-danger">⚠ PI Conflict — Manual Fix</span>');
+    else if (brk.violation)    badges.push('<span class="badge badge-violation">⚠ Out of Order</span>');
+    if (!badges.length)        badges.push('<span class="badge badge-ok">✓ OK</span>');
+    const badgeHtml = badges.join(' ');
 
     const startTime = brk.current[0]?.time || '';
     const applyDisabled = !brk.changed ? 'disabled' : '';
