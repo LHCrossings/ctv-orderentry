@@ -545,7 +545,7 @@ class EtereDirectClient:
         if contract_date is None:
             contract_date = date.today()
 
-        user_id = MARKET_USER_IDS.get(self._master_market, 1)
+        user_id = MARKET_USER_IDS["NYC"]  # header always NYC, lines carry their own market
 
         # Legacy {SQL Server} driver can't bind ? params inside a DECLARE batch.
         # Call the SP directly; retrieve the new ID by querying the table.
