@@ -2651,7 +2651,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     elif row["is_fixed"]:
                         break
                     else:
-                        block.append(row); i += 1
+                        block.append(row)
+                        i += 1
                 if not block:
                     continue
                 optimized = _bo_optimize(block)
