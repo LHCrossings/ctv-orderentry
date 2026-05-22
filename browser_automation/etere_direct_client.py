@@ -413,6 +413,28 @@ class EtereDirectClient:
         self._nielsen_id: int = DEFAULT_NIELSEN_ID
         self._nielsen_code: str = DEFAULT_NIELSEN_CODE
         self._http_session = None   # populated via set_http_session() or set_session_cookies()
+        self._default_prenotazione: int = 0  # Priority; refreshed from inifiles on init
+        self._load_default_scheduling()
+
+    def _load_default_scheduling(self) -> None:
+        """Read prop_defscheduletype from Etere inifiles and cache as _default_prenotazione.
+
+        Etere stores this as a 1-based index: 1=Priority(0), 2=Rotation(1), 3=Opt(2), 4=Fixed(3).
+        Falls back to Priority (0) on any error.
+        """
+        try:
+            cur = self._conn.cursor()
+            cur.execute(
+                f"SELECT TOP 1 OBJ_VALUE FROM inifiles "
+                f"WHERE OBJ_NAME = {self._ph} ORDER BY LASTMODIFIED DESC",
+                ("sales.ini/parameters/prop_defscheduletype",),
+            )
+            row = cur.fetchone()
+            if row and row[0] is not None:
+                self._default_prenotazione = max(0, int(row[0]) - 1)
+                print(f"[DIRECT] Etere default scheduling: prop_defscheduletype={row[0]} → PRENOTAZIONE={self._default_prenotazione}")
+        except Exception as e:
+            print(f"[DIRECT] Warning: could not read default scheduling type ({e}); defaulting to Priority (0)")
 
     def set_http_session(self, session) -> None:
         """Pass a live requests.Session so HTTP calls can authenticate with Etere."""
@@ -683,6 +705,7 @@ EXEC web_sales_savecontractgeneral
         is_bonus: bool = False,
         is_bookend: bool = False,
         is_billboard: bool = False,
+        is_bottom: bool = False,
         is_added_value: bool = False,
         is_barter: bool = False,
         is_trade: bool = False,
@@ -734,6 +757,37 @@ EXEC web_sales_savecontractgeneral
         intsrighe = _minutes_to_frames(separation_intervals[2])
 
         newtype = _build_newtype(is_bonus, is_billboard, is_bookend, is_added_value, is_barter, is_trade)
+
+        # Scheduling type (PRENOTAZIONE)
+        # Bookend/billboard: always 0 — capofila/finefila + priority=3 control placement
+        # BNS or AV (non-bookend): always Rotation (1)
+        # Monthly (flight >7 days, spots_per_week=0): always Rotation (1)
+        # Time window >2 hours: always Rotation (1)
+        # Otherwise: use Etere's configured default (read from inifiles at init)
+        _is_position_locked = is_bookend or is_billboard or is_bottom
+        if _is_position_locked:
+            prenotazione = 0
+        elif is_bonus or is_added_value:
+            prenotazione = 1
+        else:
+            _flight_days = (date_to - date_from).days if date_from and date_to else 0
+            _is_monthly = _flight_days > 7 and spots_per_week == 0
+            _window_minutes = (end_h * 60 + end_m) - (start_h * 60 + start_m)
+            _wide_window = _window_minutes > 120
+            prenotazione = 1 if (_is_monthly or _wide_window) else self._default_prenotazione
+
+        # capofila (top of break): bookend or billboard
+        # finefila (bottom of break): bookend or bottom
+        capofila = is_bookend or is_billboard
+        finefila = is_bookend or is_bottom
+
+        # Priority: forced by break position; caller value for all other types
+        if is_bookend or is_billboard:
+            effective_priority = 3
+        elif is_bottom:
+            effective_priority = 997
+        else:
+            effective_priority = priority
 
         # Convert date -> datetime for legacy ODBC driver
         datefrom_dt = datetime(date_from.year, date_from.month, date_from.day)
@@ -816,10 +870,10 @@ EXEC web_sales_InsertContractLine
             total_spots,        # @totalschedule
             spots_per_week,     # @passaggisettimana
             max_daily_run,      # @passaggigiorno
-            is_bookend,         # @controllocapo  (top of break)
-            is_bookend,         # @controllofine  (bottom of break)
-            priority,           # @priorita
-            1,                  # @prenotazione
+            capofila,           # @controllocapo  (top of break: bookend or billboard)
+            finefila,           # @controllofine  (bottom of break: bookend or bottom)
+            effective_priority, # @priorita  (3 forced for bookend/billboard)
+            prenotazione,       # @prenotazione  (0=Priority,1=Rotation; derived per rules)
             False,              # @omaggio
             rate,               # @importo
             self._nielsen_code,    # @nielsen
