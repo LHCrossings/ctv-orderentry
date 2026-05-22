@@ -921,8 +921,16 @@ EXEC web_sales_InsertContractLine
             return -1
 
         if not self._http_session:
-            print("[DIRECT]     ! No HTTP session — call set_http_session() first")
-            return -1
+            print("[DIRECT]     ! No HTTP session — falling back to SQL block assignment")
+            return self._assign_blocks(
+                line_id=line_id,
+                user_id=user_id,
+                start_frames=start_frames,
+                end_frames=end_frames,
+                day_bits=day_bits,
+                date_from=date_from,
+                date_to=date_to,
+            )
 
         time_from = _frames_to_hhmm(start_frames)
         time_to   = _frames_to_hhmm(end_frames)
