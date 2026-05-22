@@ -275,7 +275,8 @@ function previewRename() {
     for (const a of _assets) {
         if (!selectedIds.has(a.id)) continue;
         const newCode  = a.code.split(find).join(replace);
-        const newTitle = a.title.split(find).join(replace);
+        const _re      = new RegExp(find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+        const newTitle = a.title.replace(_re, replace);
         if (newCode === a.code && newTitle === a.title) { noMatch.push(a); continue; }
         pairs.push({ asset_id: a.id, old_code: a.code, new_code: newCode, old_title: a.title, new_title: newTitle });
     }
