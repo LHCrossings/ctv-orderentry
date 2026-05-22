@@ -510,6 +510,11 @@ class EtereDirectClient:
         # Auto-populate from ANAGRAF when agency_id not explicitly provided
         if agency_id is None:
             defaults = self.get_client_defaults(customer_id)
+            if not defaults:
+                raise ValueError(
+                    f"Customer ID {customer_id} not found in ANAGRAF. "
+                    "Check customers.db for a stale or incorrect customer_id."
+                )
             agency_id       = defaults.get("agency_id", 0)
             agency_pct      = agency_pct       if agency_pct       is not None else defaults.get("agency_pct", 15.0)
             agent_id        = agent_id         if agent_id         is not None else defaults.get("agent_id", 11)
