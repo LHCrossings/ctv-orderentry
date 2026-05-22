@@ -401,7 +401,7 @@ class EtereDirectClient:
     be switched by changing one import and the constructor call.
     """
 
-    def __init__(self, conn: pyodbc.Connection, owner: str = "Charmaine Lane",
+    def __init__(self, conn: pyodbc.Connection, owner: str = "House",
                  autocommit: bool = True):
         self._conn = conn
         # '%s' for pymssql (used when SQL auth creds are set), '?' for pyodbc (Windows Auth)
@@ -433,6 +433,35 @@ class EtereDirectClient:
     def set_master_market(self, market: str) -> None:
         self._master_market = market
 
+    # ── Client defaults from Etere ANAGRAF ──────────────────────────────────────
+
+    def get_client_defaults(self, customer_id: int) -> dict:
+        """
+        Query ANAGRAF for the client record and return contract header defaults.
+        Replicates what the Etere desktop app auto-populates when selecting a client.
+        """
+        cur = self._conn.cursor()
+        cur.execute(
+            f"""
+            SELECT a.AGENZIA, a.ID_PAGAMENTI, a.CENTROMEDIA, a.AGENTE1,
+                   ISNULL(ag.Commissione, 0) AS agency_pct
+            FROM ANAGRAF a
+            LEFT JOIN ANAGRAF ag ON ag.ID_ANAGRAF = a.AGENZIA
+            WHERE a.ID_ANAGRAF = {self._ph}
+            """,
+            (customer_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {}
+        return {
+            "agency_id":      int(row[0] or 0),
+            "payment_id":     int(row[1] or 1),
+            "media_center_id": int(row[2] or 316),
+            "agent_id":       int(row[3] or 11),
+            "agency_pct":     float(row[4] or 0.0),
+        }
+
     # ── Contract header ─────────────────────────────────────────────────────────
 
     def create_contract_header(
@@ -440,25 +469,46 @@ class EtereDirectClient:
         code: str,
         description: str,
         customer_id: int,
-        agency_id: int,
-        agency_pct: float = 15.0,
-        agent_id: int = 11,
-        media_center_id: int = 316,
+        agency_id: Optional[int] = None,
+        agency_pct: Optional[float] = None,
+        agent_id: Optional[int] = None,
+        media_center_id: Optional[int] = None,
         contract_date: Optional[date] = None,
         contract_end_date: Optional[date] = None,
         contract_type: int = 1,
         invoice_mode: int = 2,
         invoice_header: int = 1,
         vat: int = 1,
-        payment_id: int = 1,
+        payment_id: Optional[int] = None,
         note: str = "",
         customer_order_ref: str = "",
+        owner: Optional[str] = None,
     ) -> int:
         """
         Create a contract header via web_sales_savecontractgeneral.
         Stores the returned ID internally for subsequent add_contract_line calls.
         Returns the new contract ID.
+
+        agency_id=None triggers auto-lookup of agency_id, agency_pct, agent_id,
+        media_center_id, and payment_id from ANAGRAF, replicating Etere's
+        client-select auto-populate behaviour.
         """
+        # Auto-populate from ANAGRAF when agency_id not explicitly provided
+        if agency_id is None:
+            defaults = self.get_client_defaults(customer_id)
+            agency_id       = defaults.get("agency_id", 0)
+            agency_pct      = agency_pct       if agency_pct       is not None else defaults.get("agency_pct", 15.0)
+            agent_id        = agent_id         if agent_id         is not None else defaults.get("agent_id", 11)
+            media_center_id = media_center_id  if media_center_id  is not None else defaults.get("media_center_id", 316)
+            payment_id      = payment_id       if payment_id       is not None else defaults.get("payment_id", 1)
+        else:
+            agency_pct      = agency_pct       if agency_pct       is not None else 15.0
+            agent_id        = agent_id         if agent_id         is not None else 11
+            media_center_id = media_center_id  if media_center_id  is not None else 316
+            payment_id      = payment_id       if payment_id       is not None else 1
+
+        effective_owner = owner if owner is not None else self.owner
+
         if contract_date is None:
             contract_date = date.today()
 
@@ -532,7 +582,7 @@ EXEC web_sales_savecontractgeneral
             agent_id,         # @idAgent
             0,                # @percAgentCommission
             note or "",       # @note  (NOT NULL)
-            self.owner,       # @owner
+            effective_owner,  # @owner
             agency_id,        # @idAgency
             0,                # @idFinaluser
             media_center_id,  # @idMediacenter

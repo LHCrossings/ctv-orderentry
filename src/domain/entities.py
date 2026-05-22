@@ -167,6 +167,7 @@ class Customer:
     separation_customer: int = 15       # Customer separation minutes
     separation_event: int = 0           # Event separation minutes
     separation_order: int = 0           # Order separation minutes
+    owner: str = ""                       # Etere contract owner (ANAGRAF.COD_CONTO, e.g. "Charmaine Lane")
     code_name: str = ""                 # Name token in contract code (e.g., "Muckleshoot", "TVC")
     description_name: str = ""         # Name prefix in description (e.g., "Muckleshoot Casino")
     include_market_in_code: bool = False  # Append market to code and description

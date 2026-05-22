@@ -44,6 +44,7 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from etere_client import EtereClient
+from etere_direct_client import EtereDirectClient, connect
 
 from browser_automation.parsers.rpm_parser import (
     parse_rpm_pdf,
@@ -149,6 +150,7 @@ def lookup_customer(
                 'code_name': customer.code_name,
                 'description_name': customer.description_name,
                 'include_market_in_code': customer.include_market_in_code,
+                'owner': customer.owner,
             }
     except Exception as e:
         print(f"[CUSTOMER DB] ⚠ Database lookup failed: {e}")
@@ -164,6 +166,7 @@ def save_new_customer(
     code_name: str = "",
     description_name: str = "",
     include_market_in_code: bool = False,
+    owner: str = "",
     db_path: str = CUSTOMER_DB_PATH,
 ) -> None:
     """Save a new RPM customer to the database for future orders."""
@@ -184,6 +187,7 @@ def save_new_customer(
             code_name=code_name,
             description_name=description_name,
             include_market_in_code=include_market_in_code,
+            owner=owner,
         )
         repo.save(customer)
         print(f"[CUSTOMER DB] ✓ Saved: {customer_name} → ID {customer_id}")
@@ -238,7 +242,9 @@ def gather_rpm_inputs(pdf_path: str) -> Optional[dict]:
         code_name = customer.get('code_name', '')
         description_name = customer.get('description_name', '')
         include_market = customer.get('include_market_in_code', False)
+        owner = customer.get('owner', '') or "Charmaine Lane"
     else:
+        owner = "Charmaine Lane"  # will be overridden below for new customers
         print(f"\n[CUSTOMER] ✗ Not found: {order.client}")
         print("Please enter customer details:")
         customer_id = input("  Customer ID: ").strip()
@@ -256,11 +262,14 @@ def gather_rpm_inputs(pdf_path: str) -> Optional[dict]:
         ).strip() or order.client
         include_mkt_str = input("  Include market in code/description? (y/n) [n]: ").strip().lower()
         include_market = include_mkt_str in ('y', 'yes')
+        owner_input = input("  AE Owner (Charmaine Lane / Marquice Wong / House) [Charmaine Lane]: ").strip()
+        owner = owner_input or "Charmaine Lane"
         save_new_customer(
             customer_id, order.client, abbreviation, market, separation,
             code_name=code_name,
             description_name=description_name,
             include_market_in_code=include_market,
+            owner=owner,
         )
 
     # Build contract code and description defaults
@@ -307,76 +316,60 @@ def gather_rpm_inputs(pdf_path: str) -> Optional[dict]:
         'notes': notes,
         'billing': billing,
         'separation': separation,
+        'owner': owner,
     }
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# BROWSER AUTOMATION
+# DIRECT DB ENTRY
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def process_rpm_order(
-    driver,
-    pdf_path: str,
-    user_input: dict = None
-) -> bool:
-    """
-    Process RPM order with completely unattended automation.
+def _execute_direct(user_input: dict) -> bool:
+    """Direct DB execution — replaces Selenium browser automation for RPM."""
+    order      = user_input['order']
+    lines      = user_input['lines']
+    market     = user_input['market']
+    separation = user_input['separation']
 
-    Workflow:
-    1. Use pre-collected inputs (from orchestrator) OR gather them now
-    2. Create contract header via EtereClient
-    3. Add all contract lines with weekly distribution
-    4. Return success status
-    """
-    if user_input is None:
-        user_input = gather_rpm_inputs(pdf_path)
-        if not user_input:
-            return False
+    print("\n" + "=" * 70)
+    print("STARTING DIRECT DB ENTRY — RPM")
+    print("=" * 70)
 
-    order = user_input['order']
-    lines = user_input['lines']
-
-    print("\n" + "="*70)
-    print("STARTING RPM BROWSER AUTOMATION")
-    print("="*70)
-
-    all_success = True
-    etere = EtereClient(driver)
-
+    conn = connect()
     try:
-        billing = user_input['billing']
-        contract_number = etere.create_contract_header(
+        client = EtereDirectClient(conn, autocommit=True)
+        client.set_master_market(market)
+
+        contract_id = client.create_contract_header(
             customer_id=int(user_input['customer_id']),
             code=user_input['contract_code'],
             description=user_input['contract_description'],
-            contract_start=order.flight_start.strftime('%m/%d/%Y'),
-            contract_end=order.flight_end.strftime('%m/%d/%Y'),
+            contract_date=order.flight_start,
+            contract_end_date=order.flight_end,
+            note=user_input['notes'],
             customer_order_ref=user_input['customer_order_ref'],
-            notes=user_input['notes'],
-            charge_to=billing.get_charge_to(),
-            invoice_header=billing.get_invoice_header(),
+            owner=user_input.get('owner', 'Charmaine Lane'),
         )
-        if not contract_number:
+        if not contract_id:
             print("[CONTRACT] ✗ Failed to create contract")
             return False
-        print(f"[CONTRACT] ✓ Created: {contract_number}")
+        print(f"[CONTRACT] ✓ Created #{contract_id}")
 
-        separation = user_input['separation']
-        market = user_input['market']
-
+        all_success = True
         for line_num, line in enumerate(lines, 1):
             days, time_range, language = _parse_rpm_daypart(line.daypart)
             days, _ = EtereClient.check_sunday_6_7a_rule(days, time_range)
             time_from, time_to = EtereClient.parse_time_range(time_range)
+            time_range_str = f"{time_from}-{time_to}"
             description = f"(Line {line.line_number}) {line.daypart}" if line.line_number else line.daypart
             spot_code = 10 if line.is_bonus else 2
-            duration_seconds = _duration_to_seconds(line.duration)
+            dur_sec   = _duration_to_seconds(line.duration)
+            duration  = f"00:00:{dur_sec:02d}:00"
 
-            rate_note = " [RATE MISSING — enter manually]" if line.rate_missing else ""
+            rate_note = " [RATE MISSING]" if line.rate_missing else ""
             print(f"\n[LINE {line_num}] {'BNS' if line.is_bonus else 'PAID'} "
-                  f"{language} | {days} {time_range} | {duration_seconds}s{rate_note}")
+                  f"{language} | {days} {time_range}{rate_note}")
 
-            # Build week_dates for this line (fall back to flight_start + offset)
             if order.week_dates:
                 line_week_dates = order.week_dates
             else:
@@ -387,36 +380,63 @@ def process_rpm_order(
             blocks = _consolidate_weeks(line.weekly_spots, line_week_dates, order.flight_end)
 
             for block_start, block_end, spots_per_week, total_spots in blocks:
-                print(f"  {block_start} - {block_end}: {spots_per_week}/wk, {total_spots} total")
-                success = etere.add_contract_line(
-                    contract_number=contract_number,
+                print(f"  {block_start} – {block_end}: {spots_per_week}/wk, {total_spots} total")
+                line_id = client.add_contract_line(
+                    contract_id=contract_id,
                     market=market,
-                    start_date=block_start.strftime('%m/%d/%Y'),
-                    end_date=block_end.strftime('%m/%d/%Y'),
                     days=days,
-                    time_from=time_from,
-                    time_to=time_to,
+                    time_range=time_range_str,
                     description=description,
-                    spot_code=spot_code,
-                    duration_seconds=duration_seconds,
+                    rate=float(line.rate),
                     total_spots=total_spots,
                     spots_per_week=spots_per_week,
-                    rate=float(line.rate),
+                    date_from=block_start,
+                    date_to=block_end,
+                    duration=duration,
+                    is_bonus=line.is_bonus,
+                    booking_code=spot_code,
                     separation_intervals=separation,
                 )
-                if not success:
-                    print(f"  [LINE {line_num}] ✗ Failed for block {block_start} - {block_end}")
+                if line_id <= 0:
+                    print(f"  ✗ Failed")
                     all_success = False
+                else:
+                    print(f"  → line_id={line_id}")
 
-        print(f"\n[COMPLETE] Contract {contract_number} — {len(lines)} lines processed")
+        print(f"\n[COMPLETE] Contract #{contract_id} — {len(lines)} lines processed")
+        return all_success
 
     except Exception as e:
-        print(f"\n[ERROR] Browser automation failed: {e}")
+        print(f"\n[ERROR] Direct DB entry failed: {e}")
         import traceback
         traceback.print_exc()
         return False
+    finally:
+        conn.close()
 
-    return all_success
+
+def process_rpm_order(
+    driver,
+    pdf_path: str,
+    user_input: dict = None
+) -> bool:
+    """
+    Process RPM order via direct DB entry.
+
+    Args:
+        driver:     Unused (kept for interface compatibility with orchestrator)
+        pdf_path:   Path to the RPM PDF file
+        user_input: Pre-collected inputs from orchestrator (optional)
+
+    Returns:
+        True if all lines were entered successfully
+    """
+    if user_input is None:
+        user_input = gather_rpm_inputs(pdf_path)
+        if not user_input:
+            return False
+
+    return _execute_direct(user_input)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

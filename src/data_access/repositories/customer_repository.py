@@ -72,6 +72,7 @@ class CustomerRepository:
                     code_name TEXT DEFAULT '',
                     description_name TEXT DEFAULT '',
                     include_market_in_code INTEGER DEFAULT 0,
+                    owner TEXT DEFAULT '',
                     PRIMARY KEY (customer_name, order_type)
                 )
             """)
@@ -105,6 +106,7 @@ class CustomerRepository:
             ("description_name", "TEXT DEFAULT ''"),
             ("include_market_in_code", "INTEGER DEFAULT 0"),
             ("auto_aircheck", "INTEGER DEFAULT 0"),
+            ("owner", "TEXT DEFAULT ''"),
         ]
 
         conn = sqlite3.connect(self._db_path)
@@ -142,7 +144,7 @@ class CustomerRepository:
                 SELECT customer_id, customer_name, order_type,
                        abbreviation, default_market, billing_type,
                        separation_customer, separation_event, separation_order,
-                       code_name, description_name, include_market_in_code, auto_aircheck
+                       code_name, description_name, include_market_in_code, auto_aircheck, owner
                 FROM customers
                 WHERE LOWER(customer_name) = ? AND order_type = ?
                 """,
@@ -183,7 +185,7 @@ class CustomerRepository:
                 SELECT customer_id, customer_name, order_type,
                        abbreviation, default_market, billing_type,
                        separation_customer, separation_event, separation_order,
-                       code_name, description_name, include_market_in_code, auto_aircheck
+                       code_name, description_name, include_market_in_code, auto_aircheck, owner
                 FROM customers
                 WHERE LOWER(customer_name) = ?
                 LIMIT 1
@@ -201,7 +203,7 @@ class CustomerRepository:
                 SELECT customer_id, customer_name, order_type,
                        abbreviation, default_market, billing_type,
                        separation_customer, separation_event, separation_order,
-                       code_name, description_name, include_market_in_code, auto_aircheck
+                       code_name, description_name, include_market_in_code, auto_aircheck, owner
                 FROM customers
                 """
             )
@@ -278,7 +280,7 @@ class CustomerRepository:
                 SELECT customer_id, customer_name, order_type,
                        abbreviation, default_market, billing_type,
                        separation_customer, separation_event, separation_order,
-                       code_name, description_name, include_market_in_code, auto_aircheck
+                       code_name, description_name, include_market_in_code, auto_aircheck, owner
                 FROM customers
                 WHERE order_type = ?
                 ORDER BY customer_name
@@ -302,8 +304,8 @@ class CustomerRepository:
                 (customer_id, customer_name, order_type,
                  abbreviation, default_market, billing_type,
                  separation_customer, separation_event, separation_order,
-                 code_name, description_name, include_market_in_code, auto_aircheck)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 code_name, description_name, include_market_in_code, auto_aircheck, owner)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     customer.customer_id,
@@ -319,6 +321,7 @@ class CustomerRepository:
                     customer.description_name,
                     1 if customer.include_market_in_code else 0,
                     1 if customer.auto_aircheck else 0,
+                    customer.owner,
                 )
             )
             conn.commit()
@@ -369,7 +372,7 @@ class CustomerRepository:
                 SELECT customer_id, customer_name, order_type,
                        abbreviation, default_market, billing_type,
                        separation_customer, separation_event, separation_order,
-                       code_name, description_name, include_market_in_code, auto_aircheck
+                       code_name, description_name, include_market_in_code, auto_aircheck, owner
                 FROM customers
                 ORDER BY customer_name
                 """
@@ -391,6 +394,23 @@ class CustomerRepository:
         Returns:
             Customer entity
         """
+        if len(row) >= 14:
+            return Customer(
+                customer_id=row[0],
+                customer_name=row[1],
+                order_type=OrderType(row[2]),
+                abbreviation=row[3] or "",
+                default_market=row[4],
+                billing_type=row[5] or "agency",
+                separation_customer=row[6] if row[6] is not None else 15,
+                separation_event=row[7] if row[7] is not None else 0,
+                separation_order=row[8] if row[8] is not None else 0,
+                code_name=row[9] or "",
+                description_name=row[10] or "",
+                include_market_in_code=bool(row[11]),
+                auto_aircheck=bool(row[12]),
+                owner=row[13] or "",
+            )
         if len(row) >= 13:
             return Customer(
                 customer_id=row[0],
