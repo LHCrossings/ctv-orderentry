@@ -66,7 +66,7 @@ def parse_directdonor_traffic_ods(file_bytes: bytes, filename: str = "") -> Dire
     import pandas as pd
 
     ext = filename.lower().rsplit(".", 1)[-1] if filename else "ods"
-    engine = "openpyxl" if ext in ("xlsx", "xls") else "odf"
+    engine = "xlrd" if ext == "xls" else ("openpyxl" if ext in ("xlsx", "xlsm") else "odf")
     df = pd.read_excel(io.BytesIO(file_bytes), engine=engine, header=None, dtype=str)
 
     # Extract advertiser from "Advertiser: ..." row
