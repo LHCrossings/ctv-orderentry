@@ -835,7 +835,7 @@ EXEC web_sales_InsertContractLine
             booking_code,       # @idbooking
             0,                  # @id (new line; SP returns the assigned ID)
             whitelist_priority, # @priwhitelist
-            1,                  # @rowstatus — 1=active, matches Selenium-created lines
+            0,                  # @rowstatus — 0=unscheduled; Etere sets to 1 after scheduling
             intcomm,            # @intcomm
             intsrighe,          # @intsrighe
             intevent,           # @intevent
