@@ -5727,7 +5727,12 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         ))                                 AS ae_name,
                         ag.RAG_SOCIAL                      AS buying_agency,
                         cl.RAG_SOCIAL                      AS client_name,
-                        ISNULL(SUM(cr.IMPORTO), 0)         AS gross
+                        ISNULL(SUM(
+                            CASE WHEN cr.CONTROLLACAPOFILA = 1 AND cr.CONTROLLAFINEFILA = 1
+                                 THEN cr.IMPORTO * 0.5
+                                 ELSE cr.IMPORTO
+                            END
+                        ), 0)                              AS gross
                     FROM TPALINSE t
                     JOIN trafficTPalinse tp
                       ON tp.ID_TPalinse = t.ID_TPALINSE
