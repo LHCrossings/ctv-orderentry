@@ -2456,6 +2456,12 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             return 8, "STATION ID"
         return 0, newtype or "OTHER"
 
+    def _pi_product_key(cod_progra: str) -> str:
+        """'PI-504-030' → 'PI-504'; non-PI or unrecognised codes return the full code."""
+        import re as _re
+        m = _re.match(r'^(PI-\d+)-\d+$', (cod_progra or "").strip(), _re.IGNORECASE)
+        return m.group(1).upper() if m else (cod_progra or "").strip().upper()
+
     def _bo_optimize(spots: list) -> list:
         skip = set()
         pairs = []
@@ -2473,7 +2479,111 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             else:
                 pairs.append((s["priority"], [s]))
         pairs.sort(key=lambda x: x[0])
-        return [s for _, grp in pairs for s in grp]
+        result = [s for _, grp in pairs for s in grp]
+
+        # Reorder PI spots to avoid same-product adjacency (e.g. PI-504-030 and PI-504-060)
+        pi_indices = [i for i, s in enumerate(result) if s["label"] == "PI"]
+        if len(pi_indices) > 1:
+            from collections import Counter
+            pi_spots = [result[i] for i in pi_indices]
+            counts = Counter(_pi_product_key(s["cod_progra"]) for s in pi_spots)
+            reordered, last_key, remaining = [], None, list(pi_spots)
+            while remaining:
+                best = max(
+                    (s for s in remaining if _pi_product_key(s["cod_progra"]) != last_key),
+                    key=lambda s: counts[_pi_product_key(s["cod_progra"])],
+                    default=remaining[0],
+                )
+                reordered.append(best)
+                last_key = _pi_product_key(best["cod_progra"])
+                counts[last_key] -= 1
+                remaining.remove(best)
+            for idx, pi_idx in enumerate(pi_indices):
+                result[pi_idx] = reordered[idx]
+
+        return result
+
+    def _bo_fix_pi_conflicts(breaks: list) -> None:
+        """Cross-break swap: if two PI spots with the same product number land in the same
+        break, swap one with a same-duration PI spot from another break that won't cause a
+        new conflict.  Modifies breaks in-place; updates 'changed' and 'violation' flags."""
+
+        def _pi_keys(brk):
+            return [_pi_product_key(s["cod_progra"]) for s in brk["optimized"] if s["label"] == "PI"]
+
+        for _pass in range(20):            # cap iterations
+            made_swap = False
+            for i, brk_a in enumerate(breaks):
+                keys_a = _pi_keys(brk_a)
+                if len(keys_a) == len(set(keys_a)):
+                    continue               # no conflict in this break
+
+                # Find the first duplicate PI spot in break A
+                seen: dict = {}
+                conflict_idx: int = -1
+                for j, s in enumerate(brk_a["optimized"]):
+                    if s["label"] != "PI":
+                        continue
+                    k = _pi_product_key(s["cod_progra"])
+                    if k in seen:
+                        conflict_idx = j   # this is the duplicate
+                        break
+                    seen[k] = j
+
+                if conflict_idx < 0:
+                    continue
+
+                conflict_spot = brk_a["optimized"][conflict_idx]
+                conflict_key  = _pi_product_key(conflict_spot["cod_progra"])
+                conflict_dur  = conflict_spot["duration"]
+
+                # Search other breaks for a swap candidate
+                for k, brk_b in enumerate(breaks):
+                    if k == i:
+                        continue
+                    for m, cand in enumerate(brk_b["optimized"]):
+                        if cand["label"] != "PI":
+                            continue
+                        if cand["duration"] != conflict_dur:
+                            continue       # must match duration (no time-slot shift)
+                        cand_key = _pi_product_key(cand["cod_progra"])
+
+                        # Would cand create a new conflict in break A?
+                        other_keys_a = [_pi_product_key(s["cod_progra"])
+                                        for j, s in enumerate(brk_a["optimized"])
+                                        if s["label"] == "PI" and j != conflict_idx]
+                        if cand_key in other_keys_a:
+                            continue
+
+                        # Would conflict_spot create a new conflict in break B?
+                        other_keys_b = [_pi_product_key(s["cod_progra"])
+                                        for mm, s in enumerate(brk_b["optimized"])
+                                        if s["label"] == "PI" and mm != m]
+                        if conflict_key in other_keys_b:
+                            continue
+
+                        # Perform the swap (keep each spot's time slot)
+                        ora_a, time_a = conflict_spot["new_ora"], conflict_spot["new_time"]
+                        ora_b, time_b = cand["new_ora"], cand["new_time"]
+                        brk_a["optimized"][conflict_idx] = {**cand, "new_ora": ora_a, "new_time": time_a}
+                        brk_b["optimized"][m] = {**conflict_spot, "new_ora": ora_b, "new_time": time_b}
+
+                        # Recalculate changed + violation for both breaks
+                        for brk in (brk_a, brk_b):
+                            cur_ids  = [s["id"] for s in brk["current"]]
+                            opt_ids  = [s["id"] for s in brk["optimized"]]
+                            brk["changed"] = cur_ids != opt_ids
+                            new_pi_keys = _pi_keys(brk)
+                            brk["violation"] = brk["violation"] or (len(new_pi_keys) != len(set(new_pi_keys)))
+
+                        made_swap = True
+                        break
+                    if made_swap:
+                        break
+                if made_swap:
+                    break
+            if not made_swap:
+                break
 
     @router.get("/api/master-control/break-optimization/load")
     async def load_break_optimization(
@@ -2497,7 +2607,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             with _connect() as conn:
                 cur = conn.cursor(as_dict=True)
                 cur.execute(
-                    "SELECT t.ID_TPALINSE, t.ORA, t.XORDER, t.TITLE, t.NEWTYPE, t.DURATION,"
+                    "SELECT t.ID_TPALINSE, t.ORA, t.XORDER, t.TITLE, t.COD_PROGRA, t.NEWTYPE, t.DURATION,"
                     " cr.CONTROLLACAPOFILA, cr.CONTROLLAFINEFILA, ct.COD_CONTRATTO"
                     " FROM TPALINSE t"
                     " LEFT JOIN trafficTPalinse tp ON tp.ID_TPalinse = t.ID_TPALINSE"
@@ -2532,6 +2642,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 "ora": r["ORA"],
                 "time": _bo_frames_to_time(r["ORA"]),
                 "title": (r["TITLE"] or "").strip(),
+                "cod_progra": (r["COD_PROGRA"] or "").strip(),
                 "newtype": nt,
                 "label": label,
                 "priority": pri,
@@ -2569,7 +2680,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
                 orig_ids = [s["id"] for s in block]
                 opt_ids  = [s["id"] for s in opt_timed]
-                violation = [s["priority"] for s in block] != sorted(s["priority"] for s in block)
+                priority_violation = [s["priority"] for s in block] != sorted(s["priority"] for s in block)
+                pi_keys = [_pi_product_key(s["cod_progra"]) for s in block if s["label"] == "PI"]
+                pi_conflict = len(pi_keys) != len(set(pi_keys))
+                violation = priority_violation or pi_conflict
                 bookend_count = sum(1 for s in block if s["label"] == "BOOKEND")
                 changed = orig_ids != opt_ids
 
@@ -2582,6 +2696,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         "bookend_warning":  bookend_count > 1,
                         "changed":          changed,
                     })
+
+        _bo_fix_pi_conflicts(breaks)
 
         return JSONResponse({
             "market": market, "date": date,
