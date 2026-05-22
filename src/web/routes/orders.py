@@ -5988,7 +5988,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 WHERE ct.CENTROMEDIA = 0
                   AND (ct.CAMBIOMERCE = 0 OR ct.CAMBIOMERCE IS NULL)
                   AND ct.ID_PAGAMENTI != 4
-                ORDER BY ae.RAG_SOCIAL, cl.RAG_SOCIAL, ct.COD_CONTRATTO
+                ORDER BY ae_name, buying_agency, client_name, ct.COD_CONTRATTO
             """, (str(month_end), str(bcast_start)))
             rows = cur.fetchall()
             conn.close()
