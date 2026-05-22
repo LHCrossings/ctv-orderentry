@@ -161,6 +161,47 @@
 
     <div id="summaryBar"></div>
     <div id="breakArea"><div class="empty-state">Select a market, date, and time window — then click Load.</div></div>
+
+    <!-- Bulk Optimization -->
+    <div class="tool-card" style="margin-top:8px">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Bulk Optimize — All Markets</div>
+        <p style="font-size:0.82rem;color:var(--text-muted);margin:0 0 14px">Optimize breaks across all Crossings TV markets at once (Dallas excluded). No preview — changes apply immediately.</p>
+        <div class="controls-row">
+            <div class="field-group">
+                <label class="field-label">Date</label>
+                <input type="date" id="bulkDate" class="field-input" style="width:140px" />
+            </div>
+            <div class="field-group">
+                <label class="field-label">From</label>
+                <input type="text" id="bulkFrom" class="field-input" placeholder="08:00:00" value="08:00:00"
+                       onfocus="this.select();this.dataset.clearing='1';"
+                       onkeydown="if(event.key==='Enter'){this.blur();}else if(this.dataset.clearing==='1'){if(/^\d$/.test(event.key))this.value='';delete this.dataset.clearing;}"
+                       oninput="fmtAirtime(this)" />
+            </div>
+            <div class="field-group">
+                <label class="field-label">To</label>
+                <input type="text" id="bulkTo" class="field-input" placeholder="09:00:00" value="09:00:00"
+                       onfocus="this.select();this.dataset.clearing='1';"
+                       onkeydown="if(event.key==='Enter'){this.blur();}else if(this.dataset.clearing==='1'){if(/^\d$/.test(event.key))this.value='';delete this.dataset.clearing;}"
+                       oninput="fmtAirtime(this)" />
+            </div>
+            <button class="load-btn" id="bulkBtn" onclick="bulkOptimize()" style="background:var(--nord14)">Optimize All Markets</button>
+        </div>
+        <div id="bulkResults" style="margin-top:16px;display:none">
+            <table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+                <thead>
+                    <tr style="background:var(--bg-secondary)">
+                        <th style="padding:6px 10px;text-align:left;font-weight:700;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);border-bottom:1px solid var(--border-color)">Market</th>
+                        <th style="padding:6px 10px;text-align:center;font-weight:700;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);border-bottom:1px solid var(--border-color)">Breaks</th>
+                        <th style="padding:6px 10px;text-align:center;font-weight:700;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);border-bottom:1px solid var(--border-color)">Changed</th>
+                        <th style="padding:6px 10px;text-align:center;font-weight:700;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);border-bottom:1px solid var(--border-color)">Spots Updated</th>
+                    </tr>
+                </thead>
+                <tbody id="bulkResultsBody"></tbody>
+            </table>
+            <div id="bulkStatus" style="margin-top:10px;font-size:0.85rem;font-weight:600;color:var(--nord14)"></div>
+        </div>
+    </div>
 </main>
 
 <script>
@@ -376,8 +417,56 @@ async function applyAll() {
     }
 }
 
+async function bulkOptimize() {
+    const date     = document.getElementById('bulkDate').value;
+    const timeFrom = document.getElementById('bulkFrom').value.trim();
+    const timeTo   = document.getElementById('bulkTo').value.trim();
+    if (!date)             { alert('Please select a date.'); return; }
+    if (!timeFrom || !timeTo) { alert('Please enter a time window.'); return; }
+
+    const btn = document.getElementById('bulkBtn');
+    btn.disabled = true; btn.textContent = 'Optimizing…';
+    document.getElementById('bulkResults').style.display = 'none';
+    document.getElementById('bulkResultsBody').innerHTML = '';
+    document.getElementById('bulkStatus').textContent = '';
+
+    try {
+        const resp = await fetch('/api/master-control/break-optimization/bulk-apply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date, time_from: timeFrom, time_to: timeTo }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) { alert('Error: ' + (data.error || 'Unknown error')); return; }
+
+        const tbody = document.getElementById('bulkResultsBody');
+        let totalChanged = 0, totalSpots = 0;
+        for (const r of data.results) {
+            const tr = document.createElement('tr');
+            const changed = r.breaks_changed > 0;
+            tr.innerHTML = `
+                <td style="padding:6px 10px;font-weight:700;color:var(--text-primary)">${esc(r.market)}</td>
+                <td style="padding:6px 10px;text-align:center;color:var(--text-muted)">${r.breaks_total}</td>
+                <td style="padding:6px 10px;text-align:center;color:${changed ? 'var(--nord14)' : 'var(--text-muted)'};font-weight:${changed ? '700' : '400'}">${r.breaks_changed}</td>
+                <td style="padding:6px 10px;text-align:center;color:${r.spots_updated > 0 ? 'var(--nord14)' : 'var(--text-muted)'};font-weight:${r.spots_updated > 0 ? '700' : '400'}">${r.spots_updated}</td>`;
+            tbody.appendChild(tr);
+            totalChanged += r.breaks_changed;
+            totalSpots   += r.spots_updated;
+        }
+        document.getElementById('bulkStatus').textContent =
+            `✓ Done — ${totalChanged} break${totalChanged !== 1 ? 's' : ''} reordered, ${totalSpots} spot${totalSpots !== 1 ? 's' : ''} updated`;
+        document.getElementById('bulkResults').style.display = '';
+        btn.textContent = '✓ Done';
+    } catch(e) {
+        alert('Network error: ' + e.message);
+        btn.disabled = false; btn.textContent = 'Optimize All Markets';
+    }
+}
+
 // Default date to today
-document.getElementById('datePicker').value = new Date().toISOString().slice(0,10);
+const _today = new Date().toISOString().slice(0,10);
+document.getElementById('datePicker').value = _today;
+document.getElementById('bulkDate').value   = _today;
 </script>
 </body>
 </html>

@@ -2585,6 +2585,85 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             if not made_swap:
                 break
 
+    def _bo_process_market(cur, market_id: int, date: str, from_frames: int, to_frames: int) -> list:
+        """Fetch, annotate, segment, and optimise all breaks for one market. Returns break list."""
+        _BO_BUFFER = round(3 * 60 * _BO_FPS)
+        cur.execute(
+            "SELECT t.ID_TPALINSE, t.ORA, t.XORDER, t.TITLE, t.COD_PROGRA, t.NEWTYPE, t.DURATION,"
+            " cr.CONTROLLACAPOFILA, cr.CONTROLLAFINEFILA, ct.COD_CONTRATTO"
+            " FROM TPALINSE t"
+            " LEFT JOIN trafficTPalinse tp ON tp.ID_TPalinse = t.ID_TPALINSE"
+            " LEFT JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe"
+            " LEFT JOIN CONTRATTITESTATA ct ON ct.ID_CONTRATTITESTATA = tp.ID_CONTRATTITESTATA"
+            " WHERE t.DATA = %s AND t.COD_USER = %d"
+            " AND t.ORA >= %d AND t.ORA < %d"
+            " AND t.LIVELLO = 0"
+            " ORDER BY t.XORDER, t.ORA",
+            (date, market_id, from_frames, to_frames + _BO_BUFFER),
+        )
+        rows = cur.fetchall()
+
+        prev_label, prev_contract = None, ""
+        annotated = []
+        for r in rows:
+            nt = (r["NEWTYPE"] or "").strip()
+            contract = (r["COD_CONTRATTO"] or "").strip()
+            is_wl = contract.startswith("WL")
+            pri, label = _bo_classify(nt, r["CONTROLLACAPOFILA"], r["CONTROLLAFINEFILA"],
+                                      is_wl, prev_label, prev_contract, contract)
+            prev_label, prev_contract = label, contract
+            annotated.append({
+                "id":        r["ID_TPALINSE"],
+                "ora":       r["ORA"],
+                "time":      _bo_frames_to_time(r["ORA"]),
+                "title":     (r["TITLE"] or "").strip(),
+                "cod_progra":(r["COD_PROGRA"] or "").strip(),
+                "newtype":   nt,
+                "label":     label,
+                "priority":  pri,
+                "duration":  r["DURATION"] or 0,
+                "contract":  contract,
+                "is_fixed":  pri == 0,
+            })
+
+        breaks, i = [], 0
+        while i < len(annotated):
+            if annotated[i]["is_fixed"]:
+                i += 1
+            else:
+                block = []
+                while i < len(annotated):
+                    row = annotated[i]
+                    if row["newtype"] == "NOOP":
+                        i += 1
+                    elif row["is_fixed"]:
+                        break
+                    else:
+                        block.append(row); i += 1
+                if not block:
+                    continue
+                optimized = _bo_optimize(block)
+                cur_pos = block[0]["ora"]
+                opt_timed = []
+                for s in optimized:
+                    opt_timed.append({**s, "new_ora": cur_pos, "new_time": _bo_frames_to_time(cur_pos)})
+                    cur_pos += s["duration"]
+                orig_ids = [s["id"] for s in block]
+                pri_viol = [s["priority"] for s in block] != sorted(s["priority"] for s in block)
+                pi_keys  = [_pi_product_key(s["cod_progra"]) for s in block if s["label"] == "PI"]
+                violation = pri_viol or len(pi_keys) != len(set(pi_keys))
+                if block[0]["ora"] < to_frames:
+                    breaks.append({
+                        "current":         block,
+                        "optimized":       opt_timed,
+                        "violation":       violation,
+                        "bookend_warning": sum(1 for s in block if s["label"] == "BOOKEND") > 1,
+                        "changed":         orig_ids != [s["id"] for s in opt_timed],
+                    })
+
+        _bo_fix_pi_conflicts(breaks)
+        return breaks
+
     @router.get("/api/master-control/break-optimization/load")
     async def load_break_optimization(
         market: str = Query(...),
@@ -2595,109 +2674,18 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         market_id = _BO_MARKET_IDS.get(market.upper())
         if not market_id:
             return JSONResponse({"error": f"Unknown market: {market}"}, status_code=400)
-
         from_frames = _bo_time_to_frames(time_from)
         to_frames   = _bo_time_to_frames(time_to)
-
-        # Fetch 3 minutes past to_frames so breaks straddling the window boundary are complete
-        _BO_BUFFER = round(3 * 60 * _BO_FPS)
 
         def _run():
             from browser_automation.etere_direct_client import connect as _connect
             with _connect() as conn:
-                cur = conn.cursor(as_dict=True)
-                cur.execute(
-                    "SELECT t.ID_TPALINSE, t.ORA, t.XORDER, t.TITLE, t.COD_PROGRA, t.NEWTYPE, t.DURATION,"
-                    " cr.CONTROLLACAPOFILA, cr.CONTROLLAFINEFILA, ct.COD_CONTRATTO"
-                    " FROM TPALINSE t"
-                    " LEFT JOIN trafficTPalinse tp ON tp.ID_TPalinse = t.ID_TPALINSE"
-                    " LEFT JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe"
-                    " LEFT JOIN CONTRATTITESTATA ct ON ct.ID_CONTRATTITESTATA = tp.ID_CONTRATTITESTATA"
-                    " WHERE t.DATA = %s AND t.COD_USER = %d"
-                    " AND t.ORA >= %d AND t.ORA < %d"
-                    " AND t.LIVELLO = 0"
-                    " ORDER BY t.XORDER, t.ORA",
-                    (date, market_id, from_frames, to_frames + _BO_BUFFER),
-                )
-                return cur.fetchall()
+                return _bo_process_market(conn.cursor(as_dict=True), market_id, date, from_frames, to_frames)
 
         try:
-            rows = await asyncio.get_running_loop().run_in_executor(None, _run)
+            breaks = await asyncio.get_running_loop().run_in_executor(None, _run)
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=500)
-
-        # Annotate each row with label and priority
-        prev_label    = None
-        prev_contract = ""
-        annotated = []
-        for r in rows:
-            nt       = (r["NEWTYPE"] or "").strip()
-            contract = (r["COD_CONTRATTO"] or "").strip()
-            is_wl    = contract.startswith("WL")
-            pri, label = _bo_classify(nt, r["CONTROLLACAPOFILA"], r["CONTROLLAFINEFILA"], is_wl, prev_label, prev_contract, contract)
-            prev_label    = label
-            prev_contract = contract
-            annotated.append({
-                "id": r["ID_TPALINSE"],
-                "ora": r["ORA"],
-                "time": _bo_frames_to_time(r["ORA"]),
-                "title": (r["TITLE"] or "").strip(),
-                "cod_progra": (r["COD_PROGRA"] or "").strip(),
-                "newtype": nt,
-                "label": label,
-                "priority": pri,
-                "duration": r["DURATION"] or 0,
-                "contract": (r["COD_CONTRATTO"] or "").strip(),
-                "is_fixed": pri == 0,
-            })
-
-        # Segment into fixed anchors and commercial break blocks
-        breaks = []
-        i = 0
-        while i < len(annotated):
-            if annotated[i]["is_fixed"]:
-                i += 1
-            else:
-                block = []
-                while i < len(annotated):
-                    row = annotated[i]
-                    if row["newtype"] == "NOOP":
-                        i += 1  # spacer — transparent to break boundaries
-                    elif row["is_fixed"]:
-                        break  # PGM — actual break boundary
-                    else:
-                        block.append(row)
-                        i += 1
-                if not block:
-                    continue
-                optimized = _bo_optimize(block)
-                # Recalculate new times from break start
-                cursor = block[0]["ora"]
-                opt_timed = []
-                for s in optimized:
-                    opt_timed.append({**s, "new_ora": cursor, "new_time": _bo_frames_to_time(cursor)})
-                    cursor += s["duration"]
-
-                orig_ids = [s["id"] for s in block]
-                opt_ids  = [s["id"] for s in opt_timed]
-                priority_violation = [s["priority"] for s in block] != sorted(s["priority"] for s in block)
-                pi_keys = [_pi_product_key(s["cod_progra"]) for s in block if s["label"] == "PI"]
-                pi_conflict = len(pi_keys) != len(set(pi_keys))
-                violation = priority_violation or pi_conflict
-                bookend_count = sum(1 for s in block if s["label"] == "BOOKEND")
-                changed = orig_ids != opt_ids
-
-                # Only include breaks that started within the requested window
-                if block[0]["ora"] < to_frames:
-                    breaks.append({
-                        "current":          block,
-                        "optimized":        opt_timed,
-                        "violation":        violation,
-                        "bookend_warning":  bookend_count > 1,
-                        "changed":          changed,
-                    })
-
-        _bo_fix_pi_conflicts(breaks)
 
         return JSONResponse({
             "market": market, "date": date,
@@ -2743,6 +2731,74 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         try:
             await asyncio.get_running_loop().run_in_executor(None, _run)
             return JSONResponse({"ok": True, "updated": len(updates)})
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    @router.post("/api/master-control/break-optimization/bulk-apply")
+    async def bulk_apply_break_optimization(body: dict = Body(...)):
+        date      = body.get("date", "")
+        time_from = body.get("time_from", "")
+        time_to   = body.get("time_to", "")
+        if not date or not time_from or not time_to:
+            return JSONResponse({"error": "date, time_from, time_to required"}, status_code=400)
+
+        from_frames = _bo_time_to_frames(time_from)
+        to_frames   = _bo_time_to_frames(time_to)
+        # All Crossings TV markets — DAL excluded (Asian Channel, different break structure)
+        bulk_markets = {k: v for k, v in _BO_MARKET_IDS.items() if k != "DAL"}
+
+        def _run():
+            from browser_automation.etere_direct_client import connect as _connect
+            results = []
+            with _connect() as conn:
+                for market_name, market_id in bulk_markets.items():
+                    cur = conn.cursor(as_dict=True)
+                    breaks = _bo_process_market(cur, market_id, date, from_frames, to_frames)
+                    changed_breaks = [b for b in breaks if b["changed"]]
+                    all_updates = []
+                    for brk in changed_breaks:
+                        all_updates.extend(brk["optimized"])
+                    if not all_updates:
+                        results.append({
+                            "market": market_name, "breaks_total": len(breaks),
+                            "breaks_changed": 0, "spots_updated": 0,
+                        })
+                        continue
+                    ids = [int(u["id"]) for u in all_updates]
+                    id_ph = ",".join(["%d"] * len(ids))
+                    cur2 = conn.cursor(as_dict=True)
+                    cur2.execute(
+                        f"SELECT ID_TPALINSE, XORDER FROM TPALINSE WHERE ID_TPALINSE IN ({id_ph})",
+                        tuple(ids),
+                    )
+                    xorder_map = {r["ID_TPALINSE"]: r["XORDER"] for r in cur2.fetchall()}
+                    sorted_xorders = sorted(v for v in xorder_map.values() if v is not None)
+                    cur3 = conn.cursor()
+                    for i, u in enumerate(all_updates):
+                        new_ora    = int(u["new_ora"])
+                        new_xorder = sorted_xorders[i] if i < len(sorted_xorders) else None
+                        if new_xorder is not None:
+                            cur3.execute(
+                                "UPDATE TPALINSE SET ORA = %d, ORA_P = %d, XORDER = %d WHERE ID_TPALINSE = %d",
+                                (new_ora, new_ora, new_xorder, int(u["id"])),
+                            )
+                        else:
+                            cur3.execute(
+                                "UPDATE TPALINSE SET ORA = %d, ORA_P = %d WHERE ID_TPALINSE = %d",
+                                (new_ora, new_ora, int(u["id"])),
+                            )
+                    conn.commit()
+                    results.append({
+                        "market":         market_name,
+                        "breaks_total":   len(breaks),
+                        "breaks_changed": len(changed_breaks),
+                        "spots_updated":  len(all_updates),
+                    })
+            return results
+
+        try:
+            results = await asyncio.get_running_loop().run_in_executor(None, _run)
+            return JSONResponse({"ok": True, "results": results})
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=500)
 
