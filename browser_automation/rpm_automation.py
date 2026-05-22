@@ -242,9 +242,9 @@ def gather_rpm_inputs(pdf_path: str) -> Optional[dict]:
         code_name = customer.get('code_name', '')
         description_name = customer.get('description_name', '')
         include_market = customer.get('include_market_in_code', False)
-        owner = customer.get('owner', '') or "Charmaine Lane"
+        owner = customer.get('owner') or None  # None → ANAGRAF lookup in create_contract_header
     else:
-        owner = "Charmaine Lane"  # will be overridden below for new customers
+        owner = None
         print(f"\n[CUSTOMER] ✗ Not found: {order.client}")
         print("Please enter customer details:")
         customer_id = input("  Customer ID: ").strip()
@@ -262,8 +262,8 @@ def gather_rpm_inputs(pdf_path: str) -> Optional[dict]:
         ).strip() or order.client
         include_mkt_str = input("  Include market in code/description? (y/n) [n]: ").strip().lower()
         include_market = include_mkt_str in ('y', 'yes')
-        owner_input = input("  AE Owner (Charmaine Lane / Marquice Wong / House) [Charmaine Lane]: ").strip()
-        owner = owner_input or "Charmaine Lane"
+        owner_input = input("  AE Owner (override; leave blank to auto-derive from ANAGRAF): ").strip()
+        owner = owner_input or None
         save_new_customer(
             customer_id, order.client, abbreviation, market, separation,
             code_name=code_name,
@@ -348,7 +348,7 @@ def _execute_direct(user_input: dict) -> bool:
             contract_end_date=order.flight_end,
             note=user_input['notes'],
             customer_order_ref=user_input['customer_order_ref'],
-            owner=user_input.get('owner', 'Charmaine Lane'),
+            owner=user_input.get('owner') or None,
         )
         if not contract_id:
             print("[CONTRACT] ✗ Failed to create contract")

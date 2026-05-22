@@ -84,7 +84,6 @@ from src.domain.enums import BillingType
 # ───────────────────────────────────────────────────────────────────────────
 
 LEXUS_CUSTOMER_ID = 13
-LEXUS_AGENCY_ID   = 12
 LEXUS_SEPARATION = (25, 0, 0)      # customer=25, event=0, order=0
 LEXUS_BILLING = BillingType.CUSTOMER_SHARE_AGENCY
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
@@ -777,7 +776,6 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
             code_name="IW Lexus",
             description_name="Lexus",
             default_market=market,
-            owner="Charmaine Lane",
         ))
     except Exception:
         pass  # DB write is best-effort — never block order entry
@@ -791,7 +789,6 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
         "billing": LEXUS_BILLING,
         "contracts": contracts,
         "melissa_warnings": warnings,
-        "owner": "Charmaine Lane",
     }
 
 
@@ -809,7 +806,7 @@ def _execute_direct(user_input: dict) -> bool:
 
     conn = connect()
     try:
-        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=True)
+        client = EtereDirectClient(conn, autocommit=True)
         client.set_master_market(market)
         all_success = True
 
@@ -830,7 +827,7 @@ def _execute_direct(user_input: dict) -> bool:
                     contract_date=contract_job["flight_start"],
                     contract_end_date=contract_job["flight_end"],
                     customer_order_ref=f"{user_input['estimate']} {user_input['market']} {user_input['language']}",
-                    owner=user_input.get("owner", "Charmaine Lane"),
+                    owner=user_input.get("owner") or None,
                 )
                 if not contract_id:
                     print(f"[{quarter_label}] ✗ Failed to create contract")

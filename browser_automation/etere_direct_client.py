@@ -444,9 +444,11 @@ class EtereDirectClient:
         cur.execute(
             f"""
             SELECT a.AGENZIA, a.ID_PAGAMENTI, a.CENTROMEDIA, a.AGENTE1,
-                   ISNULL(ag.Commissione, 0) AS agency_pct
+                   ISNULL(ag.Commissione, 0) AS agency_pct,
+                   ISNULL(ae.COD_CONTO, '')  AS owner
             FROM ANAGRAF a
             LEFT JOIN ANAGRAF ag ON ag.ID_ANAGRAF = a.AGENZIA
+            LEFT JOIN ANAGRAF ae ON ae.ID_ANAGRAF = a.AGENTE1
             WHERE a.ID_ANAGRAF = {self._ph}
             """,
             (customer_id,),
@@ -455,11 +457,12 @@ class EtereDirectClient:
         if not row:
             return {}
         return {
-            "agency_id":      int(row[0] or 0),
-            "payment_id":     int(row[1] or 1),
+            "agency_id":       int(row[0] or 0),
+            "payment_id":      int(row[1] or 1),
             "media_center_id": int(row[2] or 316),
-            "agent_id":       int(row[3] or 11),
-            "agency_pct":     float(row[4] or 0.0),
+            "agent_id":        int(row[3] or 11),
+            "agency_pct":      float(row[4] or 0.0),
+            "owner":           str(row[5] or ""),
         }
 
     # ── Contract header ─────────────────────────────────────────────────────────
@@ -501,13 +504,15 @@ class EtereDirectClient:
             agent_id        = agent_id         if agent_id         is not None else defaults.get("agent_id", 11)
             media_center_id = media_center_id  if media_center_id  is not None else defaults.get("media_center_id", 316)
             payment_id      = payment_id       if payment_id       is not None else defaults.get("payment_id", 1)
+            # owner: explicit arg > customer DB override > ANAGRAF AE > instance default
+            anagraf_owner   = defaults.get("owner", "") or self.owner
+            effective_owner = owner if owner is not None else anagraf_owner
         else:
             agency_pct      = agency_pct       if agency_pct       is not None else 15.0
             agent_id        = agent_id         if agent_id         is not None else 11
             media_center_id = media_center_id  if media_center_id  is not None else 316
             payment_id      = payment_id       if payment_id       is not None else 1
-
-        effective_owner = owner if owner is not None else self.owner
+            effective_owner = owner if owner is not None else self.owner
 
         if contract_date is None:
             contract_date = date.today()
