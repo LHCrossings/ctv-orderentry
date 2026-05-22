@@ -245,23 +245,22 @@ def _build_newtype(
     is_barter: bool = False,
     is_trade: bool = False,
 ) -> str:
-    """Build semicolon-delimited NEWTYPE string matching Etere UI order: specific type first, COMS second."""
+    """Build semicolon-delimited NEWTYPE string: specific type first, COMS second."""
     if is_trade:
         specific = "TRD"
     elif is_bonus:
         specific = "BNS"
+    elif is_added_value:
+        specific = "AV"
     elif is_billboard:
         specific = "BB"
     elif is_bookend:
         specific = "BOOK"
+    elif is_barter:
+        specific = "BART"
     else:
         specific = "COM"
-    types = [specific, "COMS"]
-    if is_added_value:
-        types.append("AV")
-    if is_barter:
-        types.append("BAR")
-    return ";".join(types)
+    return f"{specific};COMS"
 
 # Default Nielsen target ID (Adults 35-64)
 DEFAULT_NIELSEN_ID   = 728
