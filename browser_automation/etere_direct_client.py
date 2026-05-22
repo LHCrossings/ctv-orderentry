@@ -479,8 +479,9 @@ class EtereDirectClient:
         contract_date: Optional[date] = None,
         contract_end_date: Optional[date] = None,
         contract_type: int = 1,
-        invoice_mode: int = 2,
-        invoice_header: int = 1,
+        billing_type: str = "agency",   # "agency" → INVOICEMODE=2/FATTURA=1; "client" → 0/0
+        invoice_mode: Optional[int] = None,
+        invoice_header: Optional[int] = None,
         vat: int = 1,
         payment_id: Optional[int] = None,
         note: str = "",
@@ -495,7 +496,17 @@ class EtereDirectClient:
         agency_id=None triggers auto-lookup of agency_id, agency_pct, agent_id,
         media_center_id, and payment_id from ANAGRAF, replicating Etere's
         client-select auto-populate behaviour.
+
+        billing_type drives invoice_mode/invoice_header defaults:
+          "agency"  → INVOICEMODE=2, FATTURAZIONE_PRINCIPALE=1  (Customer share indicating agency %)
+          "client"  → INVOICEMODE=0, FATTURAZIONE_PRINCIPALE=0  (Customer / direct)
         """
+        # Derive invoice fields from billing_type if not explicitly overridden
+        if invoice_mode is None:
+            invoice_mode = 2 if billing_type == "agency" else 0
+        if invoice_header is None:
+            invoice_header = 1 if billing_type == "agency" else 0
+
         # Auto-populate from ANAGRAF when agency_id not explicitly provided
         if agency_id is None:
             defaults = self.get_client_defaults(customer_id)
