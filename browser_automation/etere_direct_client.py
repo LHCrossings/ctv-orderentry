@@ -202,7 +202,8 @@ def etere_web_logout(session) -> None:
 
 # ── Constants ───────────────────────────────────────────────────────────────────
 
-FRAMES_PER_SECOND = 29.97  # NTSC broadcast frame rate
+FRAMES_PER_SECOND = 29.97   # NTSC drop-frame rate — used for time-of-day (start/end/separation)
+DURATION_FPS      = 30      # Nominal fps for spot duration (:30=900f, :15=450f, :10=300f)
 
 # Market code -> Etere Users.cod_user (also CONTRATTITESTATA.COD_USER)
 MARKET_USER_IDS: dict[str, int] = {
@@ -275,7 +276,7 @@ def _to_frames(h: int, m: int = 0, s: int = 0) -> int:
 
 
 def _seconds_to_frames(seconds: int) -> int:
-    return round(seconds * FRAMES_PER_SECOND)
+    return seconds * DURATION_FPS
 
 
 def _minutes_to_frames(minutes: int) -> int:
