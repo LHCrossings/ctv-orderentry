@@ -223,7 +223,8 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
         lines       = io_data.get("lines", [])
         spot_length = lines[0].get("duration", "") if lines else ""
         revision    = user_inputs.get("revision", 0)
-        parts       = ["WorldLink -", agency_w1, adv_w1, spot_length, tracking]
+        is_tac      = io_data.get("network", "") == "ASIAN"
+        parts       = ["TAC WorldLink -" if is_tac else "WorldLink -", agency_w1, adv_w1, spot_length, tracking]
         if revision:
             parts.append(f"(Rev{revision})")
         filename = re.sub(r'[\\/:*?"<>|]', "", " ".join(p for p in parts if p)) + ".xlsx"
