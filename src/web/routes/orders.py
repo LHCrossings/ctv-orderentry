@@ -5719,7 +5719,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         ct.ID_CONTRATTITESTATA             AS id,
                         ct.CENTROMEDIA, ct.P_AGENZIA, ct.COD_CONTRATTO,
                         ct.CAMBIOMERCE, ct.ID_PAGAMENTI,
-                        ae.RAG_SOCIAL                      AS ae_name,
+                        LTRIM(RTRIM(
+                            CASE WHEN ae.Nome IS NOT NULL AND ae.Nome != ''
+                                 THEN ae.Nome + ' ' + ae.RAG_SOCIAL
+                                 ELSE ae.RAG_SOCIAL END
+                        ))                                 AS ae_name,
                         ag.RAG_SOCIAL                      AS buying_agency,
                         cl.RAG_SOCIAL                      AS client_name,
                         ISNULL(SUM(cig.IMPORTO), 0)        AS gross
@@ -5741,7 +5745,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     GROUP BY
                         ct.ID_CONTRATTITESTATA, ct.CENTROMEDIA, ct.P_AGENZIA, ct.COD_CONTRATTO,
                         ct.CAMBIOMERCE, ct.ID_PAGAMENTI,
-                        ae.RAG_SOCIAL, ag.RAG_SOCIAL, cl.RAG_SOCIAL
+                        ae.Nome, ae.RAG_SOCIAL, ag.RAG_SOCIAL, cl.RAG_SOCIAL
                 """, (str(month_end), str(bcast_start),
                       str(bcast_start), str(cal_start), str(month_end)))
                 rows = cur.fetchall()
@@ -5944,7 +5948,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     ct.ID_CONTRATTITESTATA,
                     ct.COD_CONTRATTO,
                     ct.DESCRIZIONE,
-                    ae.RAG_SOCIAL  AS ae_name,
+                    LTRIM(RTRIM(
+                        CASE WHEN ae.Nome IS NOT NULL AND ae.Nome != ''
+                             THEN ae.Nome + ' ' + ae.RAG_SOCIAL
+                             ELSE ae.RAG_SOCIAL END
+                    ))             AS ae_name,
                     ag.RAG_SOCIAL  AS buying_agency,
                     cl.RAG_SOCIAL  AS client_name
                 FROM CONTRATTITESTATA ct
