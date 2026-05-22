@@ -5799,8 +5799,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         row["unset"]   = False
                     ae_map[ae].append(row)
                 groups = []
-                for ae in sorted(ae_map):
-                    rows_out = sorted(ae_map[ae], key=lambda x: x["client"])
+                for ae in sorted(ae_map, key=str.casefold):
+                    rows_out = sorted(ae_map[ae], key=lambda x: x["client"].casefold())
                     groups.append({
                         "ae":      ae,
                         "clients": rows_out,
