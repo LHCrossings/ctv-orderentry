@@ -2539,7 +2539,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 for conflict_idx in (conflict_pair[1], conflict_pair[0]):
                     conflict_spot = brk_a["optimized"][conflict_idx]
                     conflict_key  = _pi_product_key(conflict_spot["cod_progra"])
-                    conflict_dur  = conflict_spot["duration"]
 
                     # Search other breaks for a swap candidate (duration need not match —
                     # breaks are elastic; only constraint is no same product in same break)
