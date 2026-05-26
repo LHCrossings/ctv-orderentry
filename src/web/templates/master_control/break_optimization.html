@@ -48,6 +48,7 @@
         }
         .break-card.has-violation { border-color: var(--nord13); }
         .break-card.has-bookend-warning { border-color: var(--nord11); }
+        .break-card.has-sep-violation { border-color: var(--nord12); }
 
         .break-header {
             display: flex; align-items: center; gap: 10px;
@@ -61,7 +62,15 @@
         .badge-violation { background: rgba(235,203,139,0.25); color: var(--nord13); border: 1px solid rgba(235,203,139,0.5); }
         .badge-bookend { background: rgba(191,97,106,0.2); color: var(--nord11); border: 1px solid rgba(191,97,106,0.4); }
         .badge-danger { background: rgba(191,97,106,0.2); color: var(--nord11); border: 1px solid rgba(191,97,106,0.4); }
+        .badge-sep { background: rgba(208,135,112,0.2); color: var(--nord12); border: 1px solid rgba(208,135,112,0.4); }
         .badge-ok { background: rgba(163,190,140,0.2); color: var(--nord14); border: 1px solid rgba(163,190,140,0.4); }
+        .sep-violation-panel { margin-top: 10px; padding: 8px 10px; background: rgba(208,135,112,0.08); border: 1px solid rgba(208,135,112,0.3); border-radius: 4px; font-size: 0.78rem; }
+        .sep-panel-title { font-weight: 700; color: var(--nord12); margin-bottom: 5px; }
+        .sep-row { display: flex; gap: 6px; align-items: baseline; padding: 2px 0; flex-wrap: wrap; }
+        .sep-spot, .sep-conflict { color: var(--text-primary); font-weight: 500; }
+        .sep-at { color: var(--text-muted); font-size: 0.72rem; }
+        .sep-arrow { color: var(--nord12); font-weight: 700; }
+        .sep-gap { margin-left: auto; color: var(--nord12); font-size: 0.72rem; white-space: nowrap; }
         .break-spacer { flex: 1; }
         .apply-btn { background: var(--nord14); color: var(--nord6); border: none; border-radius: 6px; padding: 4px 14px; font-size: 0.78rem; font-weight: 700; cursor: pointer; font-family: inherit; }
         .apply-btn:hover { background: #8fad7a; }
@@ -293,10 +302,11 @@ function renderBreaks(data) {
 
 function renderBreak(brk, bi) {
     const badges = [];
-    if (brk.bookend_warning)   badges.push('<span class="badge badge-bookend">⚠ Multiple Bookends</span>');
-    if (brk.pi_unresolvable)   badges.push('<span class="badge badge-danger">⚠ PI Conflict — Manual Fix</span>');
-    else if (brk.violation)    badges.push('<span class="badge badge-violation">⚠ Out of Order</span>');
-    if (!badges.length)        badges.push('<span class="badge badge-ok">✓ OK</span>');
+    if (brk.bookend_warning)                              badges.push('<span class="badge badge-bookend">⚠ Multiple Bookends</span>');
+    if (brk.pi_unresolvable)                              badges.push('<span class="badge badge-danger">⚠ PI Conflict — Manual Fix</span>');
+    if (brk.sep_violations?.length)                       badges.push(`<span class="badge badge-sep">⚠ Separation (${brk.sep_violations.length})</span>`);
+    if (brk.ordering_violation && !brk.pi_unresolvable)   badges.push('<span class="badge badge-violation">⚠ Out of Order</span>');
+    if (!badges.length)                                    badges.push('<span class="badge badge-ok">✓ OK</span>');
     const badgeHtml = badges.join(' ');
 
     const startTime = brk.current[0]?.time || '';
@@ -334,7 +344,22 @@ function renderBreak(brk, bi) {
         }
     }
 
-    return `<div class="break-card ${brk.bookend_warning ? 'has-bookend-warning' : brk.violation ? 'has-violation' : ''}" id="break-${bi}">
+    const cardClass = brk.bookend_warning ? 'has-bookend-warning'
+                    : brk.sep_violations?.length ? 'has-sep-violation'
+                    : brk.violation ? 'has-violation' : '';
+    const sepHtml = brk.sep_violations?.length ? `
+        <div class="sep-violation-panel">
+            <div class="sep-panel-title">⏱ Separation Violations</div>
+            ${brk.sep_violations.map(v => `<div class="sep-row">
+                <span class="sep-spot">${esc(v.spot_title)}</span>
+                <span class="sep-at">@${esc(v.spot_time)}</span>
+                <span class="sep-arrow">↔</span>
+                <span class="sep-conflict">${esc(v.conflict_title)}</span>
+                <span class="sep-at">@${esc(v.conflict_time)}</span>
+                <span class="sep-gap">gap&nbsp;${v.actual_mins}m / req&nbsp;${v.req_mins}m</span>
+            </div>`).join('')}
+        </div>` : '';
+    return `<div class="break-card ${cardClass}" id="break-${bi}">
         <div class="break-header">
             <span class="break-title">Break ${bi + 1}</span>
             <span class="break-time">${esc(startTime)}</span>
@@ -353,6 +378,7 @@ function renderBreak(brk, bi) {
                 <div class="spot-list">${rightRows}</div>
             </div>
         </div>
+        ${sepHtml}
     </div>`;
 }
 

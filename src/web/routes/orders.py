@@ -2582,7 +2582,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 new_pi_keys = _pi_keys(brk)
                                 pri_bad = ([s["priority"] for s in brk["optimized"]]
                                            != sorted(s["priority"] for s in brk["optimized"]))
-                                brk["violation"] = pri_bad or (len(new_pi_keys) != len(set(new_pi_keys)))
+                                brk["ordering_violation"] = brk["violation"] = pri_bad or (len(new_pi_keys) != len(set(new_pi_keys)))
 
                             made_swap = True
                             break
@@ -2600,6 +2600,82 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         for brk in breaks:
             keys = _pi_keys(brk)
             brk["pi_unresolvable"] = len(keys) != len(set(keys))
+
+    def _bo_fetch_sep_context(cur, market_id: int, date: str, from_frames: int, to_frames: int) -> list:
+        """COM/BNS spots in a ±1-hr window — used for customer separation checking."""
+        one_hour = round(3600 * _BO_FPS)
+        ext_from = max(0, from_frames - one_hour)
+        ext_to   = to_frames + one_hour
+        cur.execute(
+            "SELECT t.ID_TPALINSE, t.ORA, t.TITLE,"
+            " ct.COMMITTENTE,"
+            " COALESCE(cr.Interv_Committente, 0) AS cust_sep"
+            " FROM TPALINSE t"
+            " LEFT JOIN trafficTPalinse tp ON tp.ID_TPalinse = t.ID_TPALINSE"
+            " LEFT JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe"
+            " LEFT JOIN CONTRATTITESTATA ct ON ct.ID_CONTRATTITESTATA = tp.ID_CONTRATTITESTATA"
+            " WHERE t.DATA = %s AND t.COD_USER = %d"
+            " AND t.NEWTYPE IN ('COM', 'BNS')"
+            " AND t.ORA >= %d AND t.ORA < %d"
+            " AND t.LIVELLO = 0",
+            (date, market_id, ext_from, ext_to),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+    def _bo_check_separation(breaks: list, sep_spots: list) -> None:
+        """
+        For each COM/BNS spot inside a break, check whether any same-customer spot in
+        sep_spots (±1 hr window) is closer than Interv_Committente.
+        Attaches 'sep_violations' list to every break; sets violation=True when found.
+        """
+        from collections import defaultdict
+        by_cust: dict = defaultdict(list)
+        id_to_req: dict = {}
+        for s in sep_spots:
+            cid = s.get("COMMITTENTE")
+            sep = int(s.get("cust_sep") or 0)
+            if cid is None:
+                continue
+            cid = int(cid)
+            by_cust[cid].append({
+                "id":    s["ID_TPALINSE"],
+                "ora":   s["ORA"],
+                "title": (s.get("TITLE") or "").strip(),
+            })
+            id_to_req[s["ID_TPALINSE"]] = (cid, sep)
+
+        for brk in breaks:
+            violations = []
+            seen_pairs: set = set()
+            for spot in brk["current"]:
+                sid = spot["id"]
+                if sid not in id_to_req:
+                    continue
+                cid, req = id_to_req[sid]
+                if req <= 0:
+                    continue
+                for other in by_cust.get(cid, []):
+                    if other["id"] == sid:
+                        continue
+                    pair_key = (min(sid, other["id"]), max(sid, other["id"]))
+                    if pair_key in seen_pairs:
+                        continue
+                    gap = abs(spot["ora"] - other["ora"])
+                    if gap < req:
+                        seen_pairs.add(pair_key)
+                        violations.append({
+                            "spot_id":        sid,
+                            "spot_title":     spot["title"],
+                            "spot_time":      spot["time"],
+                            "conflict_id":    other["id"],
+                            "conflict_title": other["title"],
+                            "conflict_time":  _bo_frames_to_time(other["ora"]),
+                            "req_mins":       round(req / (_BO_FPS * 60), 1),
+                            "actual_mins":    round(gap / (_BO_FPS * 60), 1),
+                        })
+            brk["sep_violations"] = violations
+            if violations:
+                brk["violation"] = True
 
     def _bo_process_market(cur, market_id: int, date: str, from_frames: int, to_frames: int) -> list:
         """Fetch, annotate, segment, and optimise all breaks for one market. Returns break list."""
@@ -2671,15 +2747,17 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 violation = pri_viol or len(pi_keys) != len(set(pi_keys))
                 if block[0]["ora"] < to_frames:
                     breaks.append({
-                        "current":          block,
-                        "optimized":        opt_timed,
-                        "violation":        violation,
-                        "bookend_warning":  sum(1 for s in block if s["label"] == "BOOKEND") % 2 != 0,
-                        "changed":          orig_ids != [s["id"] for s in opt_timed],
-                        "pi_unresolvable":  False,
+                        "current":            block,
+                        "optimized":          opt_timed,
+                        "violation":          violation,
+                        "ordering_violation": violation,
+                        "bookend_warning":    sum(1 for s in block if s["label"] == "BOOKEND") % 2 != 0,
+                        "changed":            orig_ids != [s["id"] for s in opt_timed],
+                        "pi_unresolvable":    False,
                     })
 
         _bo_fix_pi_conflicts(breaks)
+        _bo_check_separation(breaks, _bo_fetch_sep_context(cur, market_id, date, from_frames, to_frames))
         return breaks
 
     @router.get("/api/master-control/break-optimization/load")
