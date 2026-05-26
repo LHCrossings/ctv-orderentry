@@ -2607,8 +2607,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         cur.execute(
             "SELECT t.ID_TPALINSE, t.ORA, t.TITLE,"
             " ct.COMMITTENTE, ct.ID_CONTRATTITESTATA AS contract_id,"
-            " COALESCE(cr.Interv_Committente, 0) AS cust_sep,"
-            " COALESCE(cr.INTERV_CONTRATTO, 0)   AS order_sep"
+            " COALESCE(cr.Interv_Committente, 0)    AS cust_sep,"
+            " COALESCE(cr.INTERV_CONTRATTO, 0)      AS order_sep,"
+            " COALESCE(cr.CONTROLLACAPOFILA, 0)     AS capofila,"
+            " COALESCE(cr.CONTROLLAFINEFILA, 0)     AS finefila"
             " FROM TPALINSE t"
             " LEFT JOIN trafficTPalinse tp ON tp.ID_TPalinse = t.ID_TPALINSE"
             " LEFT JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe"
@@ -2643,26 +2645,32 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             ctr_id    = s.get("contract_id")
             cust_sep  = int(s.get("cust_sep")  or 0)
             order_sep = int(s.get("order_sep") or 0)
+            is_bookend = bool(s.get("capofila")) and bool(s.get("finefila"))
             entry = {
-                "id":    sid,
-                "ora":   s["ORA"],
-                "title": (s.get("TITLE") or "").strip(),
+                "id":         sid,
+                "ora":        s["ORA"],
+                "title":      (s.get("TITLE") or "").strip(),
+                "is_bookend": is_bookend,
             }
             if cid is not None:
                 by_cust[int(cid)].append(entry)
             if ctr_id is not None:
                 by_contract[int(ctr_id)].append(entry)
             id_to_meta[sid] = {
-                "cust_id":   int(cid)    if cid    is not None else None,
-                "ctr_id":    int(ctr_id) if ctr_id is not None else None,
-                "cust_sep":  cust_sep,
-                "order_sep": order_sep,
+                "cust_id":    int(cid)    if cid    is not None else None,
+                "ctr_id":     int(ctr_id) if ctr_id is not None else None,
+                "cust_sep":   cust_sep,
+                "order_sep":  order_sep,
+                "is_bookend": is_bookend,
             }
 
-        def _check_group(spot, group_list, req, seen_pairs, violations):
+        def _check_group(spot, group_list, req, seen_pairs, violations, spot_is_bookend=False):
             sid = spot["id"]
             for other in group_list:
                 if other["id"] == sid:
+                    continue
+                # Bookend pairs intentionally share a break — not a separation violation
+                if spot_is_bookend and other.get("is_bookend"):
                     continue
                 pair_key = (min(sid, other["id"]), max(sid, other["id"]))
                 if pair_key in seen_pairs:
@@ -2689,10 +2697,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 meta = id_to_meta.get(sid)
                 if not meta:
                     continue
+                is_be = meta["is_bookend"]
                 if meta["cust_sep"] > 0 and meta["cust_id"] is not None:
-                    _check_group(spot, by_cust[meta["cust_id"]], meta["cust_sep"], seen_pairs, violations)
+                    _check_group(spot, by_cust[meta["cust_id"]], meta["cust_sep"], seen_pairs, violations, is_be)
                 if meta["order_sep"] > 0 and meta["ctr_id"] is not None:
-                    _check_group(spot, by_contract[meta["ctr_id"]], meta["order_sep"], seen_pairs, violations)
+                    _check_group(spot, by_contract[meta["ctr_id"]], meta["order_sep"], seen_pairs, violations, is_be)
             brk["sep_violations"] = violations
             if violations:
                 brk["violation"] = True
