@@ -598,7 +598,7 @@ def create_tcaa_contract(
         etere: EtereClient instance
         estimate: TCAAEstimate object
         bonus_inputs: User inputs for bonus lines
-        separation_intervals: Confirmed separation intervals (customer, event, order)
+        separation_intervals: Confirmed separation intervals (customer, order, event)
         order_code: Optional custom contract code (uses default if None)
         description: Optional custom description (uses default if None)
     

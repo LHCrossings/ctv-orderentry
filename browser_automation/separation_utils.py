@@ -4,7 +4,7 @@ Separation Interval Detection and Confirmation
 Utility for detecting separation requirements from order PDFs
 and confirming with user before applying to contracts.
 
-UNIVERSAL RULE: Default separation is 15,0,0 (Customer=15, Event=0, Order=0)
+UNIVERSAL RULE: Default separation is 15,0,0 (Customer=15, Order=0, Event=0)
 Override only when PDF explicitly specifies different separation.
 """
 
@@ -62,70 +62,70 @@ def confirm_separation_intervals(
         estimate_number: Optional estimate number for context
         
     Returns:
-        Tuple of (customer, event, order) intervals in minutes
+        Tuple of (customer, order, event) intervals in minutes
     """
     print("\n" + "=" * 70)
     print("SEPARATION INTERVAL CONFIRMATION")
     print("=" * 70)
-    
+
     if estimate_number:
         print(f"Order: {order_type} - Estimate {estimate_number}")
     else:
         print(f"Order: {order_type}")
-    
+
     print()
-    
+
     # Default is always 15,0,0 (industry standard)
     default_customer = 15
-    default_event = 0
     default_order = 0
-    
+    default_event = 0
+
     if detected_separation is not None:
         print(f"✓ PDF specifies separation: {detected_separation} minutes")
         print(f"  This will be applied as CUSTOMER separation")
-        print(f"  Recommended: Customer={detected_separation}, Event=0, Order=0")
+        print(f"  Recommended: Customer={detected_separation}, Order=0, Event=0")
         print()
         suggested_customer = detected_separation
     else:
         print(f"No separation specified in PDF")
-        print(f"Default: Customer={default_customer}, Event=0, Order=0 (industry standard)")
+        print(f"Default: Customer={default_customer}, Order=0, Event=0 (industry standard)")
         print()
         suggested_customer = default_customer
-    
+
     # Ask user to confirm or adjust
     print("Options:")
-    print(f"  1. Use recommended: Customer={suggested_customer}, Event=0, Order=0")
-    print(f"  2. Use default: Customer={default_customer}, Event=0, Order=0")
+    print(f"  1. Use recommended: Customer={suggested_customer}, Order=0, Event=0")
+    print(f"  2. Use default: Customer={default_customer}, Order=0, Event=0")
     print(f"  3. Custom (enter your own values)")
     print()
-    
+
     while True:
         choice = input("Select option (1-3) [default: 1]: ").strip()
-        
+
         if choice == "" or choice == "1":
             # Use recommended
-            return (suggested_customer, default_event, default_order)
-        
+            return (suggested_customer, default_order, default_event)
+
         elif choice == "2":
             # Use default 15,0,0
-            return (default_customer, default_event, default_order)
-        
+            return (default_customer, default_order, default_event)
+
         elif choice == "3":
             # Custom entry
             print()
             print("Enter custom separation intervals (in minutes):")
-            
+
             while True:
                 try:
                     customer = int(input("  Customer separation: ").strip())
-                    event = int(input("  Event separation: ").strip())
                     order = int(input("  Order separation: ").strip())
-                    
-                    print(f"\n  Confirmed: Customer={customer}, Event={event}, Order={order}")
+                    event = int(input("  Event separation: ").strip())
+
+                    print(f"\n  Confirmed: Customer={customer}, Order={order}, Event={event}")
                     confirm = input("  Is this correct? (y/n): ").strip().lower()
-                    
+
                     if confirm == "y":
-                        return (customer, event, order)
+                        return (customer, order, event)
                     else:
                         print("\n  Let's try again...")
                         
@@ -141,13 +141,13 @@ def format_separation_intervals(intervals: Tuple[int, int, int]) -> str:
     Format separation intervals for display.
     
     Args:
-        intervals: Tuple of (customer, event, order) in minutes
-        
+        intervals: Tuple of (customer, order, event) in minutes
+
     Returns:
-        Formatted string like "Customer=15, Event=0, Order=0"
+        Formatted string like "Customer=15, Order=0, Event=0"
     """
-    customer, event, order = intervals
-    return f"Customer={customer}, Event={event}, Order={order}"
+    customer, order, event = intervals
+    return f"Customer={customer}, Order={order}, Event={event}"
 
 
 def validate_spot_capacity(

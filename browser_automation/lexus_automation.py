@@ -8,7 +8,7 @@ BUSINESS RULES
 
 Customer:
     IW Group / Lexus (DB ID: 13)
-    - Separation: 25, 0, 0  (customer=25, event=0, order=0)
+    - Separation: 25, 0, 0  (customer=25, order=0, event=0)
 
 Billing (Universal for ALL Lexus / IW Group):
     - Charge To: "Customer share indicating agency %"

@@ -335,7 +335,7 @@ class InputCollector:
             order: Order being processed
 
         Returns:
-            Tuple of (customer, event, order) separation intervals in minutes
+            Tuple of (customer, order, event) separation intervals in minutes
         """
         # Look up from database
         default_sep = self._get_customer_separation(
@@ -348,7 +348,7 @@ class InputCollector:
 
         # Present to user
         default_str = f"{default_sep[0]},{default_sep[1]},{default_sep[2]}"
-        print("\nSeparation intervals (customer, event, order)")
+        print("\nSeparation intervals (customer, order, event)")
         user_input = input(f"  Confirm or change (default: {default_str}): ").strip()
 
         if not user_input:
@@ -382,7 +382,7 @@ class InputCollector:
             order_type: Agency type (e.g., "opad", "tcaa")
 
         Returns:
-            (customer, event, order) tuple or None if not found
+            (customer, order, event) tuple or None if not found
         """
         try:
             import sqlite3
@@ -396,7 +396,7 @@ class InputCollector:
             with sqlite3.connect(str(db_path)) as conn:
                 # Exact match
                 cursor = conn.execute(
-                    """SELECT separation_customer, separation_event, separation_order
+                    """SELECT separation_customer, separation_order, separation_event
                     FROM customers WHERE customer_name = ? AND order_type = ?""",
                     (customer_name, order_type),
                 )
@@ -406,14 +406,14 @@ class InputCollector:
 
                 # Fuzzy containment match
                 cursor = conn.execute(
-                    """SELECT customer_name, separation_customer, separation_event, separation_order
+                    """SELECT customer_name, separation_customer, separation_order, separation_event
                     FROM customers WHERE order_type = ?""",
                     (order_type,),
                 )
-                for db_name, sep_c, sep_e, sep_o in cursor.fetchall():
+                for db_name, sep_c, sep_o, sep_e in cursor.fetchall():
                     if (db_name.lower() in customer_name.lower()
                             or customer_name.lower() in db_name.lower()):
-                        return (sep_c, sep_e, sep_o)
+                        return (sep_c, sep_o, sep_e)
 
                 return None
 

@@ -195,7 +195,7 @@ def gather_hl_bdr_inputs(pdf_path: str) -> dict | None:
     # ── Separation (HL default, no prompt needed) ──
     separation = SEPARATION_INTERVALS
     print(f"\n[BILLING] ✓ Customer share indicating agency % / Agency")
-    print(f"[INTERVALS] ✓ Customer={separation[0]}, Event={separation[1]}, Order={separation[2]}")
+    print(f"[INTERVALS] ✓ Customer={separation[0]}, Order={separation[1]}, Event={separation[2]}")
 
     print("\n" + "=" * 70)
     print("INPUT COLLECTION COMPLETE - Ready for automation")

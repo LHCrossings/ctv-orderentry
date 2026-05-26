@@ -9,7 +9,7 @@ ADMERASIA BUSINESS RULES
 Known Customers:
     1. McDonald's (ID: 42) → ALL markets
        - All Admerasia orders are McDonald's
-       - Separation: 3, 5, 0 (customer=3, event=0, order=5)
+       - Separation: 3, 5, 0 (customer=3, order=5, event=0)
 
 Billing (Universal for ALL Admerasia):
     - Charge To: "Customer share indicating agency %"
@@ -38,9 +38,7 @@ Blocks:
     - Legacy "select all" approach removed — matches TCAA/Daviselen behavior
 
 Separation Intervals:
-    - ALWAYS (3, 5, 0) → customer=3, event=0, order=5
-    - NOTE: Etere fixed the backend swap, so enter them correctly:
-      customer=3, event=0, order=5
+    - ALWAYS (3, 5, 0) → customer=3, order=5, event=0
 
 Market:
     - Single market per order (detected from DMA field in PDF)
@@ -85,11 +83,9 @@ from parsers.admerasia_parser import (
 # McDonald's is the only known Admerasia customer
 MCDONALDS_CUSTOMER_ID = 42
 
-# Admerasia separation intervals: (customer, event, order) = (3, 0, 5)
-# NOTE: get_default_separation_intervals() returns (3, 5, 0) in the
-# original (customer, order, event) format.
-# Etere fields: customer=3, event=0, order=5
-ADMERASIA_SEPARATION = (3, 0, 5)
+# Admerasia separation intervals: (customer, order, event) = (3, 5, 0)
+# Etere fields: customer=3, order=5, event=0
+ADMERASIA_SEPARATION = (3, 5, 0)
 
 # Default database path (for future customer DB integration)
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH

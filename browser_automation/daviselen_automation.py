@@ -187,7 +187,7 @@ def save_new_customer(
         customer_name: Full customer name
         abbreviation: Short code (e.g., "SoCal", "McD")
         market: Market code (e.g., "LAX", "SEA")
-        separation: Tuple of (customer, event, order) separation minutes
+        separation: Tuple of (customer, order, event) separation minutes
         db_path: Path to customers.db
     """
     try:

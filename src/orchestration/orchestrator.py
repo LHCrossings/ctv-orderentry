@@ -324,7 +324,7 @@ class ApplicationOrchestrator:
             return inputs
 
         sep = inputs['separation']
-        print(f"\n[SEPARATION] Will apply  Customer={sep[0]}, Event={sep[1]}, Order={sep[2]}")
+        print(f"\n[SEPARATION] Will apply  Customer={sep[0]}, Order={sep[1]}, Event={sep[2]}")
         response = input(
             "  Press Enter to confirm, or type new values (e.g. 25,0,15): "
         ).strip()
@@ -335,7 +335,7 @@ class ApplicationOrchestrator:
         try:
             parts = [int(x.strip()) for x in response.replace(' ', '').split(',')]
             if len(parts) == 3:
-                print(f"  ✓ Updated to  Customer={parts[0]}, Event={parts[1]}, Order={parts[2]}")
+                print(f"  ✓ Updated to  Customer={parts[0]}, Order={parts[1]}, Event={parts[2]}")
                 return {**inputs, 'separation': tuple(parts)}
             else:
                 print("  ⚠ Expected 3 comma-separated values — keeping original")

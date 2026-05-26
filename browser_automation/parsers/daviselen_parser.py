@@ -1059,9 +1059,9 @@ def get_default_separation_intervals(order: DaviselenOrder) -> Dict[str, int]:
     Get default separation intervals for Daviselen orders.
     
     Rules:
-    - So Cal Toyota: Customer=25, Event=0, Order=0
-    - Seattle McD: Customer=15, Event=0, Order=0
-    - WDC McD: Customer=15, Event=0, Order=0 (same as Seattle McD)
+    - So Cal Toyota: Customer=25, Order=0, Event=0
+    - Seattle McD: Customer=15, Order=0, Event=0
+    - WDC McD: Customer=15, Order=0, Event=0 (same as Seattle McD)
     
     Args:
         order: DaviselenOrder object

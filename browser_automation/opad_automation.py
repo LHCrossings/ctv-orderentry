@@ -7,7 +7,7 @@ Parser handles PDF extraction; this file handles business logic + orchestration.
 opAD Business Rules:
 - NYC market ONLY (always)
 - Multiple clients possible under opAD → customer DB lookup with manual fallback
-- Separation intervals: Customer=15, Event=0, Order=15
+- Separation intervals: Customer=15, Order=15, Event=0
 - Billing: Charge To = "Customer share indicating agency %", Invoice Header = "Agency"
 - Description from IO → contract header Notes field
 - Estimate number → Customer Order Ref
@@ -40,8 +40,8 @@ from parsers.opad_parser import (
 AGENCY_NAME = "opAD"
 DEFAULT_MARKET = "NYC"
 
-# Separation intervals: (customer, event, order) in minutes
-SEPARATION_INTERVALS = (15, 0, 15)
+# Separation intervals: (customer, order, event) in minutes
+SEPARATION_INTERVALS = (15, 15, 0)
 
 # Billing
 CHARGE_TO = "Customer share indicating agency %"

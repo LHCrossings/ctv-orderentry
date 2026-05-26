@@ -84,8 +84,8 @@ def _save_new_customer(
             default_market=SAC_MARKET,
             billing_type="client",
             separation_customer=SAC_SEPARATION[0],
-            separation_event=SAC_SEPARATION[1],
-            separation_order=SAC_SEPARATION[2],
+            separation_order=SAC_SEPARATION[1],
+            separation_event=SAC_SEPARATION[2],
         )
         repo.save(customer)
         print(f"[CUSTOMER DB] ✓ Saved: {customer_name} → ID {customer_id}")
@@ -330,16 +330,16 @@ def gather_saccountyvoters_inputs(pdf_path: str) -> Optional[dict]:
 
     # ── Separation confirmation ────────────────────────────────────────────────
     sep = SAC_SEPARATION
-    print(f"Separation: Customer={sep[0]}, Event={sep[1]}, Order={sep[2]}")
+    print(f"Separation: Customer={sep[0]}, Order={sep[1]}, Event={sep[2]}")
     sep_yn = input("Keep default separation? (y/n): ").strip().lower()
     if sep_yn != 'y':
         c = input(f"  Customer separation [{sep[0]}]: ").strip()
-        e = input(f"  Event separation [{sep[1]}]: ").strip()
-        o = input(f"  Order separation [{sep[2]}]: ").strip()
+        o = input(f"  Order separation [{sep[1]}]: ").strip()
+        e = input(f"  Event separation [{sep[2]}]: ").strip()
         sep = (
             int(c) if c.isdigit() else sep[0],
-            int(e) if e.isdigit() else sep[1],
-            int(o) if o.isdigit() else sep[2],
+            int(o) if o.isdigit() else sep[1],
+            int(e) if e.isdigit() else sep[2],
         )
     print(f"✓ Separation: {sep}\n")
 
@@ -505,7 +505,7 @@ def _create_phase_contract(
         phase_inputs:  Dict with 'contract_code', 'description'
         customer_id:   Etere customer ID (or None)
         notes:         Contract notes
-        separation:    (customer, event, order) separation tuple
+        separation:    (customer, order, event) separation tuple
 
     Returns:
         True on success, False on failure.

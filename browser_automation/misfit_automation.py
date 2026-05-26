@@ -16,7 +16,7 @@ Key Misfit Business Rules:
 - No customer info on PDF - uses universal customer detection
 - ALL ROS lines are BONUS (rate = $0)
 - Billing: "Customer share indicating agency %" / "Agency"
-- Separation: Customer=15, Event=0, Order=0
+- Separation: Customer=15, Order=0, Event=0
 """
 
 from dataclasses import dataclass
@@ -327,7 +327,7 @@ def process_misfit_order(
     spot_duration = prompt_for_spot_duration()
     
     # Separation intervals for Misfit
-    separation_intervals = (15, 0, 0)  # Customer=15, Event=0, Order=0
+    separation_intervals = (15, 0, 0)  # Customer=15, Order=0, Event=0
     
     # Create contract
     success = create_misfit_contract(
@@ -399,7 +399,7 @@ def create_misfit_contract(
         contract_code: Contract code
         description: Contract description
         spot_duration: Spot duration in seconds
-        separation_intervals: (customer, event, order) separation
+        separation_intervals: (customer, order, event) separation
     
     Returns:
         True if successful

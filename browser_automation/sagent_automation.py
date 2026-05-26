@@ -19,7 +19,7 @@ Key SAGENT Business Rules:
 - Order # goes in Customer Order Ref field
 - Contract naming: "Sagent <Client> <Est#>"
 - Billing: "Customer share indicating agency %" / "Agency"
-- Separation: Customer=15, Event=0, Order=0
+- Separation: Customer=15, Order=0, Event=0
 """
 
 from dataclasses import dataclass
@@ -50,7 +50,7 @@ from src.domain.enums import OrderType, BillingType
 SAGENT_CUSTOMER_ID = 175
 
 # Separation intervals
-SAGENT_SEPARATION = (10, 0, 0)  # Customer=10, Event=0, Order=0
+SAGENT_SEPARATION = (10, 0, 0)  # Customer=10, Order=0, Event=0
 
 
 # ============================================================================
@@ -295,7 +295,7 @@ def create_sagent_contract(
         order_code: Contract code
         description: Contract description
         notes: Contract notes
-        separation_intervals: (customer, event, order) separation
+        separation_intervals: (customer, order, event) separation
     
     Returns:
         True if successful

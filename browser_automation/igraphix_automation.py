@@ -110,7 +110,7 @@ def get_separation_intervals(language: str, is_bonus: bool) -> tuple[int, int, i
     Get separation intervals for iGraphix by language and line type.
 
     Returns:
-        Tuple of (customer_minutes, event_minutes, order_minutes)
+        Tuple of (customer_minutes, order_minutes, event_minutes)
     """
     intervals = {
         'Filipino':   {'paid': 30, 'bonus': 30},

@@ -874,7 +874,7 @@ class EtereClient:
         spots_per_week: int = 0,
         max_daily_run: Optional[int] = None,  # Auto-calculated if None
         rate: float = 0.0,
-        separation_intervals: Tuple[int, int, int] = (15, 0, 0),  # DEFAULT: Customer=15, Event=0, Order=0
+        separation_intervals: Tuple[int, int, int] = (15, 0, 0),  # DEFAULT: Customer=15, Order=0, Event=0
         is_bookend: bool = False,
         is_billboard: bool = False,
         is_added_value: bool = False,
@@ -901,7 +901,7 @@ class EtereClient:
             separation_intervals: (Customer, Event, Order) intervals in minutes.
                 DEFAULT: (15, 0, 0) - Industry standard is 15 minutes customer separation.
                 Override when PDF specifies different separation (e.g., TCAA uses 10,0,0).
-                Format: (customer_minutes, event_minutes, order_minutes)
+                Format: (customer_minutes, order_minutes, event_minutes)
             total_spots: Total spots for entire date range (if None, calculated from spots_per_week)
         
         Returns:
@@ -1190,7 +1190,7 @@ class EtereClient:
             time.sleep(1)
             
             # Separation Intervals
-            customer_int, event_int, order_int = separation_intervals
+            customer_int, order_int, event_int = separation_intervals
             
             customer_field = self.driver.find_element(By.ID, "contractLineGeneralicomm")
             customer_field.clear()
@@ -1204,7 +1204,7 @@ class EtereClient:
             order_field.clear()
             order_field.send_keys(str(order_int))
             
-            print(f"[LINE] ✓ Intervals: Cust={customer_int}, Event={event_int}, Order={order_int}")
+            print(f"[LINE] ✓ Intervals: Cust={customer_int}, Order={order_int}, Event={event_int}")
 
             # Other markets (WorldLink CMP lines — ddpselectedStationOther multi-select)
             if other_markets:

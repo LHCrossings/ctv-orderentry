@@ -6,7 +6,7 @@ Parser handles PDF extraction; this file handles business logic + orchestration.
 
 Business Rules:
 - Markets: LAX (Los Angeles) primary; SFO and CVC possible
-- Separation intervals: Customer=25, Event=0, Order=0
+- Separation intervals: Customer=25, Order=0, Event=0
   (PDF says "30 min" — house rule maps this to 25 for Etere entry)
 - Billing: Charge To = "Customer share indicating agency %", Invoice Header = "Agency"
 - IO shows STN Net rates (rates_are_net=True) — gross up before Etere entry
@@ -43,7 +43,7 @@ from browser_automation.parsers.mediasol_parser import (
 
 AGENCY_NAME = "mediasol"
 
-# Separation intervals: (customer, event, order) in minutes
+# Separation intervals: (customer, order, event) in minutes
 # PDF says "30 min between spots" — house rule: enter 25 in Etere
 SEPARATION_INTERVALS = (25, 0, 0)
 
@@ -464,7 +464,7 @@ def gather_mediasol_inputs(pdf_path: str) -> dict | None:
 
     separation = SEPARATION_INTERVALS
     print(f"\n[BILLING]    ✓ {CHARGE_TO} / {INVOICE_HEADER}")
-    print(f"[INTERVALS]  ✓ Customer={separation[0]}, Event={separation[1]}, Order={separation[2]}")
+    print(f"[INTERVALS]  ✓ Customer={separation[0]}, Order={separation[1]}, Event={separation[2]}")
     print("\n" + "=" * 70)
     print("INPUT COLLECTION COMPLETE - Ready for automation")
     print("=" * 70)

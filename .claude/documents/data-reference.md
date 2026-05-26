@@ -196,7 +196,7 @@ Override when the source PDF specifies an explicit daily cap.
 
 ### Separation Intervals
 
-Tuple format: `(customer_minutes, event_minutes, order_minutes)`
+Tuple format: `(customer_minutes, order_minutes, event_minutes)`
 
 Map to Etere UI fields (Selenium):
 - `contractLineGeneralIcomm` — customer separation
@@ -389,7 +389,7 @@ Example with `"7/28–8/31"`:
 - **Always call `logout()`** before closing the browser. Etere locks accounts
   on concurrent sessions; skipping logout causes the next run to fail.
 - **Separation defaults come from the customer DB** — always check
-  `separation_customer/event/order` fields before falling back to `(15, 0, 0)`.
+  `separation_customer/order/event` fields before falling back to `(15, 0, 0)`.
 
 ---
 

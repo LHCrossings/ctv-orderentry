@@ -1917,7 +1917,7 @@ class OrderProcessingService:
         opAD orders have:
         - NYC market ONLY (always)
         - Multiple clients possible → customer DB lookup with manual fallback
-        - Separation intervals: Customer=15, Event=0, Order=15
+        - Separation intervals: Customer=15, Order=15, Event=0
         - Universal agency billing
         - Bonus lines (rate=0) → BNS spot code
         - Weekly distribution splitting (gaps + differing counts)

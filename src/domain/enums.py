@@ -284,12 +284,12 @@ class SeparationInterval(Enum):
     """
     Standard separation interval configurations by agency.
 
-    Format: (customer_separation, event_separation, order_separation)
+    Format: (customer_separation, order_separation, event_separation)
     These control how far apart ads must be scheduled in Etere.
     """
-    WORLDLINK = (5, 0, 15)
-    OPAD = (15, 0, 15)
-    RPM = (25, 0, 15)
+    WORLDLINK = (5, 15, 0)
+    OPAD = (15, 15, 0)
+    RPM = (25, 15, 0)
     HL_PARTNERS = (25, 0, 0)
     DAVISELEN_DEFAULT = (15, 0, 0)
     MISFIT = (15, 0, 0)
@@ -320,7 +320,7 @@ class SeparationInterval(Enum):
             order_type: The type of order being processed
 
         Returns:
-            Tuple of (customer, event, order) separation values
+            Tuple of (customer, order, event) separation values
         """
         mapping = {
             OrderType.WORLDLINK: cls.WORLDLINK.value,

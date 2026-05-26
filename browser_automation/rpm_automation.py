@@ -26,7 +26,7 @@ Line Generation:
     - No block filtering (Blocks tab skipped — matches all new automations)
 
 Separation:
-    - Customer=25, Event=0, Order=15 (SeparationInterval.RPM)
+    - Customer=25, Order=15, Event=0 (SeparationInterval.RPM)
 
 ═══════════════════════════════════════════════════════════════════════════════
 IMPORTS

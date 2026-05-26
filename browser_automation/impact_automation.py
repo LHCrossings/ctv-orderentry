@@ -79,7 +79,7 @@ MASTER_MARKET = "NYC"  # Crossings TV master market
 
 BILLING = BillingType.CUSTOMER_SHARE_AGENCY
 
-SEPARATION = (15, 0, 0)   # (customer_minutes, event_minutes, order_minutes)
+SEPARATION = (15, 0, 0)   # (customer_minutes, order_minutes, event_minutes)
 
 SPOT_CODE_PAID  = 2   # "Paid Commercial"
 SPOT_CODE_BONUS = 10  # "BNS"

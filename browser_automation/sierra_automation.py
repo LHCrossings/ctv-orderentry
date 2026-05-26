@@ -187,15 +187,15 @@ def gather_sierra_inputs(pdf_path: str) -> Optional[dict]:
 
     # ── Separation ────────────────────────────────────────────────────────
     sep = SIERRA_SEPARATION
-    print(f"Separation: Customer={sep[0]}, Event={sep[1]}, Order={sep[2]}")
+    print(f"Separation: Customer={sep[0]}, Order={sep[1]}, Event={sep[2]}")
     if input("Keep default separation? (y/n): ").strip().lower() != 'y':
         c = input(f"  Customer [{sep[0]}]: ").strip()
-        e = input(f"  Event [{sep[1]}]: ").strip()
-        o = input(f"  Order [{sep[2]}]: ").strip()
+        o = input(f"  Order [{sep[1]}]: ").strip()
+        e = input(f"  Event [{sep[2]}]: ").strip()
         sep = (
             int(c) if c.isdigit() else sep[0],
-            int(e) if e.isdigit() else sep[1],
-            int(o) if o.isdigit() else sep[2],
+            int(o) if o.isdigit() else sep[1],
+            int(e) if e.isdigit() else sep[2],
         )
     print(f"✓ Separation: {sep}\n")
 

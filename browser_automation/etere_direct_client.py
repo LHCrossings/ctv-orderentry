@@ -752,13 +752,12 @@ EXEC web_sales_savecontractgeneral
         else:
             day_bits = parse_day_bits(days)
 
-        # Separation in frames
-        # SP @intevent → INTERVALLO (= order separation, despite column name)
-        # SP @intsrighe → INTERV_CONTRATTO (= event separation, despite column name)
-        # Confirmed by Selenium comparison: order(15min) lands in INTERVALLO, not INTERV_CONTRATTO
+        # Separation in frames — tuple is (customer, order, event)
+        # SP @intevent → INTERVALLO (= order separation)
+        # SP @intsrighe → INTERV_CONTRATTO (= event separation)
         intcomm   = _minutes_to_frames(separation_intervals[0])  # customer → @intcomm
-        intsrighe = _minutes_to_frames(separation_intervals[1])  # event    → @intsrighe → INTERV_CONTRATTO
-        intevent  = _minutes_to_frames(separation_intervals[2])  # order    → @intevent  → INTERVALLO
+        intevent  = _minutes_to_frames(separation_intervals[1])  # order    → @intevent  → INTERVALLO
+        intsrighe = _minutes_to_frames(separation_intervals[2])  # event    → @intsrighe → INTERV_CONTRATTO
 
         newtype = _build_newtype(is_bonus, is_billboard, is_bookend, is_added_value, is_barter, is_trade)
 

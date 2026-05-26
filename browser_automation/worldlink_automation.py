@@ -30,7 +30,7 @@ Block Refresh:
     - highest_line tracked for revision orders (partial refresh)
 
 Separation:
-    - Customer=5, Event=0, Order=15 (SeparationInterval.WORLDLINK)
+    - Customer=5, Order=15, Event=0 (SeparationInterval.WORLDLINK)
 
 ═══════════════════════════════════════════════════════════════════════════════
 IMPORTS
@@ -58,7 +58,7 @@ from browser_automation.parsers.worldlink_parser import parse_worldlink_pdf
 # ═══════════════════════════════════════════════════════════════════════════════
 
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
-WL_DEFAULT_SEPARATION = SeparationInterval.WORLDLINK.value  # (5, 0, 15)
+WL_DEFAULT_SEPARATION = SeparationInterval.WORLDLINK.value  # (5, 15, 0)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -153,8 +153,8 @@ def lookup_customer(
                 'abbreviation': customer.abbreviation,
                 'separation': (
                     customer.separation_customer,
-                    customer.separation_event,
                     customer.separation_order,
+                    customer.separation_event,
                 ),
             }
     except Exception as e:
@@ -182,8 +182,8 @@ def save_new_customer(
             default_market=None,
             billing_type='agency',
             separation_customer=separation[0],
-            separation_event=separation[1],
-            separation_order=separation[2],
+            separation_order=separation[1],
+            separation_event=separation[2],
         ))
         print(f"[CUSTOMER DB] ✓ Saved: {customer_name} → ID {customer_id}")
     except Exception as e:
@@ -252,9 +252,9 @@ def gather_worldlink_inputs(pdf_path: str) -> Optional[dict]:
             customer_id = input("  Customer ID: ").strip()
             abbreviation = input("  Abbreviation (e.g., Muck, Cross): ").strip()
             cust_sep = input("  Customer separation [5]: ").strip() or "5"
-            event_sep = input("  Event separation [0]: ").strip() or "0"
             order_sep = input("  Order separation [20]: ").strip() or "20"
-            separation = (int(cust_sep), int(event_sep), int(order_sep))
+            event_sep = input("  Event separation [0]: ").strip() or "0"
+            separation = (int(cust_sep), int(order_sep), int(event_sep))
             save_new_customer(customer_id, advertiser, abbreviation, separation)
 
     billing = BillingType.CUSTOMER_SHARE_AGENCY

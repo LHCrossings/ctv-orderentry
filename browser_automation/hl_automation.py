@@ -7,7 +7,7 @@ Parser handles PDF extraction; this file handles business logic + orchestration.
 H&L Partners Business Rules:
 - Markets: SFO (San Francisco) or CVC (Sacramento) ONLY
 - Multiple clients possible → customer DB lookup with manual fallback
-- Separation intervals: Customer=25, Event=0, Order=0
+- Separation intervals: Customer=25, Order=0, Event=0
 - Billing: Charge To = "Customer share indicating agency %", Invoice Header = "Agency"
 - Description from IO → contract header Notes field
 - Estimate number → Customer Order Ref
@@ -43,7 +43,7 @@ from parsers.hl_parser import (
 
 AGENCY_NAME = "hl"
 
-# Separation intervals: (customer, event, order) in minutes
+# Separation intervals: (customer, order, event) in minutes
 SEPARATION_INTERVALS = (25, 0, 0)
 
 # Billing
@@ -653,7 +653,7 @@ def gather_hl_inputs(pdf_path: str) -> dict | None:
     # ── Separation intervals (use agency default, no prompt needed) ──
     separation = SEPARATION_INTERVALS
     print(f"\n[BILLING] ✓ Customer share indicating agency % / Agency")
-    print(f"[INTERVALS] ✓ Customer={separation[0]}, Event={separation[1]}, Order={separation[2]}")
+    print(f"[INTERVALS] ✓ Customer={separation[0]}, Order={separation[1]}, Event={separation[2]}")
 
     print("\n" + "=" * 70)
     print("INPUT COLLECTION COMPLETE - Ready for automation")
