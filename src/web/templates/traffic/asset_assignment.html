@@ -1752,36 +1752,37 @@
                 if (r.date_from_sql) params.set('date_from', r.date_from_sql);
                 if (r.date_to_sql)   params.set('date_to',   r.date_to_sql);
 
-                // Try each selected contract — use the first one that has matching lines
-                let lines = [], usedContractId = null;
+                const filmatiIds = buildRotationList(spots);
+                let anyAssigned = false;
+
+                // Assign every checked contract that has matching lines for this duration
                 for (const cid of contractIds) {
                     const linesResp = await fetch(`/api/traffic/contract/${cid}/lines-by-duration?${params}`);
                     if (!linesResp.ok) continue;
-                    const candidate = await linesResp.json();
-                    if (candidate.length) { lines = candidate; usedContractId = cid; break; }
+                    const lines = await linesResp.json();
+                    if (!lines.length) continue;
+
+                    const payload = {
+                        assignments: lines.map(l => ({ line_id: l.line_id, filmati_ids: filmatiIds })),
+                    };
+                    if (r.date_from_sql) payload.date_from = r.date_from_sql;
+                    if (r.date_to_sql)   payload.date_to   = r.date_to_sql;
+
+                    const assignResp = await fetch(`/api/traffic/contract/${cid}/auto-assign`, {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify(payload),
+                    });
+                    if (!assignResp.ok) throw new Error((await assignResp.json()).detail || 'Assign failed');
+                    const result = await assignResp.json();
+                    totalLines += result.lines_updated || 0;
+                    totalSpots += result.spots_updated || 0;
+                    anyAssigned = true;
                 }
 
-                if (!lines.length) {
+                if (!anyAssigned) {
                     errors.push(`:${durSec}s — no matching lines in any selected contract`);
-                    continue;
                 }
-
-                const filmatiIds = buildRotationList(spots);
-                const payload = {
-                    assignments: lines.map(l => ({ line_id: l.line_id, filmati_ids: filmatiIds })),
-                };
-                if (r.date_from_sql) payload.date_from = r.date_from_sql;
-                if (r.date_to_sql)   payload.date_to   = r.date_to_sql;
-
-                const assignResp = await fetch(`/api/traffic/contract/${usedContractId}/auto-assign`, {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify(payload),
-                });
-                if (!assignResp.ok) throw new Error((await assignResp.json()).detail || 'Assign failed');
-                const result = await assignResp.json();
-                totalLines += result.lines_updated || 0;
-                totalSpots += result.spots_updated || 0;
             }
 
             if (errors.length) {
