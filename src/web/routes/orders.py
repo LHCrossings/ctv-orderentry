@@ -2580,9 +2580,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 opt_ids  = [s["id"] for s in brk["optimized"]]
                                 brk["changed"] = cur_ids != opt_ids
                                 new_pi_keys = _pi_keys(brk)
-                                pri_bad = ([s["priority"] for s in brk["optimized"]]
-                                           != sorted(s["priority"] for s in brk["optimized"]))
-                                brk["ordering_violation"] = brk["violation"] = pri_bad or (len(new_pi_keys) != len(set(new_pi_keys)))
+                                brk["ordering_violation"] = brk["violation"] = brk["changed"] or (len(new_pi_keys) != len(set(new_pi_keys)))
 
                             made_swap = True
                             break
@@ -2764,7 +2762,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     opt_timed.append({**s, "new_ora": cur_pos, "new_time": _bo_frames_to_time(cur_pos)})
                     cur_pos += s["duration"]
                 orig_ids = [s["id"] for s in block]
-                pri_viol = [s["priority"] for s in block] != sorted(s["priority"] for s in block)
+                pri_viol = orig_ids != [s["id"] for s in optimized]
                 pi_keys  = [_pi_product_key(s["cod_progra"]) for s in block if s["label"] == "PI"]
                 violation = pri_viol or len(pi_keys) != len(set(pi_keys))
                 if block[0]["ora"] < to_frames:
