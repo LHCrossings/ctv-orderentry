@@ -166,11 +166,13 @@ def compare_dicts(ref, test, skip_keys, label):
     return diffs, nulls
 
 
-def run(ref_id, test_id):
+def run(ref_id, test_id, last: int = 0):
     print("=" * 70)
     print(f"  CONTRACT COMPARISON")
     print(f"  REF  (Selenium baseline) : #{ref_id}")
     print(f"  TEST (EtereDirect entry) : #{test_id}")
+    if last:
+        print(f"  Comparing last {last} line(s) from each contract")
     print("=" * 70)
 
     conn = connect()
@@ -190,6 +192,10 @@ def run(ref_id, test_id):
     # ── 2. Lines ─────────────────────────────────────────────────────────────
     ref_lines  = fetch_lines(cur, ref_id)
     test_lines = fetch_lines(cur, test_id)
+
+    if last:
+        ref_lines  = ref_lines[-last:]
+        test_lines = test_lines[-last:]
 
     print(f"\n{'='*70}")
     print(f"  CONTRACT LINES (CONTRATTIRIGHE)")
@@ -247,7 +253,11 @@ def run(ref_id, test_id):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: uv run python scripts/compare_contracts.py <REF_ID> <TEST_ID>")
-        sys.exit(1)
-    run(int(sys.argv[1]), int(sys.argv[2]))
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("ref_id", type=int)
+    parser.add_argument("test_id", type=int)
+    parser.add_argument("--last", type=int, default=0,
+                        help="Compare only the last N lines from each contract (by ID order)")
+    args = parser.parse_args()
+    run(args.ref_id, args.test_id, last=args.last)
