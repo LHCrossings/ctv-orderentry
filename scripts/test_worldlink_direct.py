@@ -27,6 +27,9 @@ from browser_automation.parsers.worldlink_parser import parse_worldlink_pdf
 
 SEPARATION = (5, 0, 15)  # WorldLink: customer=5, event=0, order=15
 
+# All markets that receive a $0 line for CROSSINGS (NYC gets real rate)
+CROSSINGS_ZERO_MARKETS = ["CMP", "CVC", "SFO", "LAX", "SEA", "HOU", "WDC", "MMT"]
+
 
 def _secs_to_duration(secs: int) -> str:
     """Convert integer seconds to HH:MM:SS:FF timecode string."""
@@ -125,22 +128,23 @@ def _add_crossings_lines(client: EtereDirectClient, lines: list) -> None:
         )
         print(f"    NYC line_id={nyc_id}  rate=${rate}")
 
-        # CMP — $0 (block refresh replicates to other markets)
-        cmp_id = client.add_contract_line(
-            market="CMP",
-            days=days,
-            time_range=time_range,
-            description=desc,
-            rate=0.0,
-            total_spots=total,
-            spots_per_week=spots_pw,
-            date_from=date_from,
-            date_to=date_to,
-            duration=duration,
-            is_bonus=is_bonus,
-            separation_intervals=SEPARATION,
-        )
-        print(f"    CMP line_id={cmp_id}  rate=$0.00")
+        # All other markets — $0 each
+        for mkt in CROSSINGS_ZERO_MARKETS:
+            mkt_id = client.add_contract_line(
+                market=mkt,
+                days=days,
+                time_range=time_range,
+                description=desc,
+                rate=0.0,
+                total_spots=total,
+                spots_per_week=spots_pw,
+                date_from=date_from,
+                date_to=date_to,
+                duration=duration,
+                is_bonus=is_bonus,
+                separation_intervals=SEPARATION,
+            )
+            print(f"    {mkt} line_id={mkt_id}  rate=$0.00")
 
 
 def _add_asian_lines(client: EtereDirectClient, lines: list) -> None:
