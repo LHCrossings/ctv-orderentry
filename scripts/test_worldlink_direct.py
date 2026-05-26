@@ -24,9 +24,9 @@ sys.path.insert(0, str(project_root / "browser_automation"))
 
 from browser_automation.etere_direct_client import EtereDirectClient, connect
 from browser_automation.parsers.worldlink_parser import parse_worldlink_pdf
-from browser_automation.worldlink_automation import _format_24hr_short
+from browser_automation.worldlink_automation import _format_24hr_short, lookup_customer
 
-SEPARATION = (5, 15, 0)  # WorldLink default — overridden per-advertiser from customers.db
+WL_DEFAULT_SEPARATION = (5, 15, 0)  # fallback when advertiser not in customers.db
 
 # All markets that receive a $0 line for CROSSINGS (NYC gets real rate)
 # Order matches Selenium entry: CMP=2, HOU=3, SFO=4, SEA=5, LAX=6, CVC=7, WDC=8, MMT=9
@@ -90,7 +90,7 @@ def _lookup_wl_ids(cursor) -> tuple[int, int, int]:
     raise RuntimeError("No existing WorldLink contracts found — cannot derive customer/agency IDs")
 
 
-def _add_crossings_lines(client: EtereDirectClient, lines: list) -> None:
+def _add_crossings_lines(client: EtereDirectClient, lines: list, separation: tuple) -> None:
     """
     CROSSINGS network: NYC line at real rate + CMP line at $0 per PDF line.
     """
@@ -127,7 +127,7 @@ def _add_crossings_lines(client: EtereDirectClient, lines: list) -> None:
             date_to=date_to,
             duration=duration,
             is_bonus=is_bonus,
-            separation_intervals=SEPARATION,
+            separation_intervals=separation,
             scheduling_type=0,  # Priority — WL uses wide dayparts that would auto-trigger Rotation
         )
         print(f"    NYC line_id={nyc_id}  rate=${rate}")
@@ -146,13 +146,13 @@ def _add_crossings_lines(client: EtereDirectClient, lines: list) -> None:
                 date_to=date_to,
                 duration=duration,
                 is_bonus=is_bonus,
-                separation_intervals=SEPARATION,
+                separation_intervals=separation,
                 scheduling_type=0,
             )
             print(f"    {mkt} line_id={mkt_id}  rate=$0.00")
 
 
-def _add_asian_lines(client: EtereDirectClient, lines: list) -> None:
+def _add_asian_lines(client: EtereDirectClient, lines: list, separation: tuple) -> None:
     """
     ASIAN network: single DAL market line per PDF line.
     """
@@ -188,7 +188,7 @@ def _add_asian_lines(client: EtereDirectClient, lines: list) -> None:
             date_to=date_to,
             duration=duration,
             is_bonus=is_bonus,
-            separation_intervals=SEPARATION,
+            separation_intervals=separation,
             scheduling_type=0,
         )
         print(f"    DAL line_id={dal_id}  rate=${rate}")
@@ -205,6 +205,7 @@ def run(pdf_path: Path) -> None:
 
     network    = order_data.get('network', 'CROSSINGS')
     order_type = order_data.get('order_type', 'new')
+    advertiser = order_data.get('advertiser', '')
     lines      = order_data.get('lines', [])
     order_code = order_data.get('order_code', 'WL UNKNOWN')
     description = order_data.get('description', order_code)
@@ -281,6 +282,12 @@ def run(pdf_path: Path) -> None:
             )
             print(f"  → contract_id = {contract_id}")
 
+        # Per-advertiser separation from customers.db (falls back to WL default)
+        cust_rec = lookup_customer(advertiser)
+        separation = cust_rec['separation'] if cust_rec else WL_DEFAULT_SEPARATION
+        print(f"[SEP] Customer={separation[0]}, Order={separation[1]}, Event={separation[2]}"
+              + (f"  (from customers.db: {advertiser})" if cust_rec else "  (default fallback)"))
+
         # Pull Nielsen from the contract's actual customer record
         wl_defaults = client.get_client_defaults(customer_id)
         if wl_defaults.get("nielsen_id"):
@@ -291,9 +298,9 @@ def run(pdf_path: Path) -> None:
         # ── Lines ──────────────────────────────────────────────────────
         print(f"\n[LINES] Entering {len(lines)} PDF line(s) as {network}...")
         if network == "ASIAN":
-            _add_asian_lines(client, lines)
+            _add_asian_lines(client, lines, separation)
         else:
-            _add_crossings_lines(client, lines)
+            _add_crossings_lines(client, lines, separation)
 
         conn.commit()
         print(f"\n{'='*65}")
