@@ -247,18 +247,19 @@ def run(pdf_path: Path) -> None:
         client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
         client.set_master_market(master_market)
 
-        # Pull Nielsen ID/code from the WorldLink customer record
-        wl_defaults = client.get_client_defaults(customer_id)
-        if wl_defaults.get("nielsen_id"):
-            client._nielsen_id   = wl_defaults["nielsen_id"]
-            client._nielsen_code = wl_defaults["nielsen_code"]
-            print(f"[DB] nielsen_id={client._nielsen_id}  nielsen_code={client._nielsen_code}")
-
         if is_revision:
             # ── Revision: extend end date + attach to existing contract ───
             _extend_end_date(cursor, existing_contract_id, flight_end)
             client._contract_id = existing_contract_id
             contract_id = existing_contract_id
+            # Read the actual customer from the existing contract so Nielsen lookup is correct
+            cursor.execute(
+                "SELECT COMMITTENTE FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = %s",
+                (existing_contract_id,)
+            )
+            _row = cursor.fetchone()
+            if _row:
+                customer_id = int(_row[0])
             print(f"\n[REVISION] Adding lines to existing contract #{contract_id}")
         else:
             # ── New order: create contract header ──────────────────────────
@@ -279,6 +280,13 @@ def run(pdf_path: Path) -> None:
                 customer_order_ref=tracking,
             )
             print(f"  → contract_id = {contract_id}")
+
+        # Pull Nielsen from the contract's actual customer record
+        wl_defaults = client.get_client_defaults(customer_id)
+        if wl_defaults.get("nielsen_id"):
+            client._nielsen_id   = wl_defaults["nielsen_id"]
+            client._nielsen_code = wl_defaults["nielsen_code"]
+            print(f"[DB] Nielsen → id={client._nielsen_id}  code={client._nielsen_code}")
 
         # ── Lines ──────────────────────────────────────────────────────
         print(f"\n[LINES] Entering {len(lines)} PDF line(s) as {network}...")
