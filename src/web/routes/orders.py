@@ -2465,6 +2465,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     def _bo_optimize(spots: list) -> list:
         skip = set()
         pairs = []
+        bookend_count = 0
         for j, s in enumerate(spots):
             if j in skip:
                 continue
@@ -2475,7 +2476,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     skip.add(j + 1)
                 pairs.append((2, pair))
             elif s["label"] == "BOOKEND":
-                pairs.append((1, [s]))
+                bookend_count += 1
+                # First bookend → top of break; second bookend → bottom (after everything else)
+                prio = 1 if bookend_count == 1 else 999
+                pairs.append((prio, [s]))
             else:
                 pairs.append((s["priority"], [s]))
         pairs.sort(key=lambda x: x[0])
@@ -2670,7 +2674,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         "current":          block,
                         "optimized":        opt_timed,
                         "violation":        violation,
-                        "bookend_warning":  sum(1 for s in block if s["label"] == "BOOKEND") > 1,
+                        "bookend_warning":  sum(1 for s in block if s["label"] == "BOOKEND") % 2 != 0,
                         "changed":          orig_ids != [s["id"] for s in opt_timed],
                         "pi_unresolvable":  False,
                     })
