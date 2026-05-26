@@ -75,7 +75,7 @@ def _fmt(v):
 
 def fetch_header(cur, contract_id):
     cur.execute(
-        "SELECT * FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = ?", contract_id
+        "SELECT * FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = %s", (contract_id,)
     )
     cols = [d[0] for d in cur.description]
     row = cur.fetchone()
@@ -86,8 +86,8 @@ def fetch_header(cur, contract_id):
 
 def fetch_lines(cur, contract_id):
     cur.execute(
-        "SELECT * FROM CONTRATTIRIGHE WHERE ID_CONTRATTITESTATA = ? ORDER BY ID_CONTRATTIRIGHE",
-        contract_id,
+        "SELECT * FROM CONTRATTIRIGHE WHERE ID_CONTRATTITESTATA = %s ORDER BY ID_CONTRATTIRIGHE",
+        (contract_id,),
     )
     cols = [d[0] for d in cur.description]
     rows = cur.fetchall()
@@ -96,8 +96,8 @@ def fetch_lines(cur, contract_id):
 
 def fetch_blocks(cur, line_id):
     cur.execute(
-        "SELECT * FROM CONTRATTIFASCE WHERE ID_CONTRATTIRIGHE = ? ORDER BY ID_FASCE",
-        line_id,
+        "SELECT * FROM CONTRATTIFASCE WHERE ID_CONTRATTIRIGHE = %s ORDER BY ID_FASCE",
+        (line_id,),
     )
     cols = [d[0] for d in cur.description]
     rows = cur.fetchall()
