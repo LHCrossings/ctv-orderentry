@@ -30,7 +30,7 @@ Block Refresh:
     - highest_line tracked for revision orders (partial refresh)
 
 Separation:
-    - Customer=5, Event=0, Order=20 (SeparationInterval.WORLDLINK)
+    - Customer=5, Event=0, Order=15 (SeparationInterval.WORLDLINK)
 
 ═══════════════════════════════════════════════════════════════════════════════
 IMPORTS
@@ -58,7 +58,7 @@ from browser_automation.parsers.worldlink_parser import parse_worldlink_pdf
 # ═══════════════════════════════════════════════════════════════════════════════
 
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
-WL_DEFAULT_SEPARATION = SeparationInterval.WORLDLINK.value  # (5, 0, 20)
+WL_DEFAULT_SEPARATION = SeparationInterval.WORLDLINK.value  # (5, 0, 15)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

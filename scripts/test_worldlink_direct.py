@@ -26,7 +26,7 @@ from browser_automation.etere_direct_client import EtereDirectClient, connect
 from browser_automation.parsers.worldlink_parser import parse_worldlink_pdf
 from browser_automation.worldlink_automation import _format_24hr_short
 
-SEPARATION = (5, 0, 20)  # WorldLink: customer=5, event=0, order=20 (from customers.db)
+SEPARATION = (5, 0, 15)  # WorldLink default — overridden per-advertiser from customers.db
 
 # All markets that receive a $0 line for CROSSINGS (NYC gets real rate)
 # Order matches Selenium entry: CMP=2, HOU=3, SFO=4, SEA=5, LAX=6, CVC=7, WDC=8, MMT=9
