@@ -44,6 +44,29 @@ def _build_notes(order_data: dict) -> str:
     return re.sub(r'[-]', '', comment).strip()
 
 
+def _extend_end_date(cursor, contract_id: int, new_end) -> None:
+    """Extend contract end date in CONTRATTITESTATA if new lines go beyond it."""
+    cursor.execute(
+        "SELECT DATA_SCADENZA_PROPOSTA FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = %s",
+        (contract_id,)
+    )
+    row = cursor.fetchone()
+    if not row:
+        raise ValueError(f"Contract ID {contract_id} not found in CONTRATTITESTATA")
+    current_end = row[0]
+    # Normalise to date for comparison
+    current_date = current_end.date() if hasattr(current_end, 'date') else current_end
+    if current_date is None or current_date < new_end:
+        print(f"[DATES] Extending contract end: {current_date} → {new_end}")
+        cursor.execute(
+            "UPDATE CONTRATTITESTATA SET DATA_SCADENZA_PROPOSTA = %s "
+            "WHERE ID_CONTRATTITESTATA = %s",
+            (new_end, contract_id)
+        )
+    else:
+        print(f"[DATES] Contract end {current_date} already covers {new_end} — no update needed")
+
+
 def _lookup_wl_ids(cursor) -> tuple[int, int, int]:
     """
     Return (customer_id, agency_id, media_center_id) from the most recent
@@ -168,14 +191,17 @@ def run(pdf_path: Path) -> None:
     print(f"\n[PARSE] {pdf_path.name}")
     order_data = parse_worldlink_pdf(str(pdf_path))
 
-    network = order_data.get('network', 'CROSSINGS')
-    lines = order_data.get('lines', [])
+    network    = order_data.get('network', 'CROSSINGS')
+    order_type = order_data.get('order_type', 'new')
+    lines      = order_data.get('lines', [])
     order_code = order_data.get('order_code', 'WL UNKNOWN')
     description = order_data.get('description', order_code)
-    tracking = order_data.get('tracking_number', '')
-    notes = _build_notes(order_data)
+    tracking   = order_data.get('tracking_number', '')
+    notes      = _build_notes(order_data)
+    is_revision = order_type != 'new'
 
     print(f"  Network     : {network}")
+    print(f"  Order type  : {order_type}")
     print(f"  Order code  : {order_code}")
     print(f"  Description : {description}")
     print(f"  Tracking #  : {tracking}")
@@ -184,6 +210,12 @@ def run(pdf_path: Path) -> None:
     if not lines:
         print("\n[ERROR] No lines parsed — aborting")
         sys.exit(1)
+
+    # ── Revision: prompt for existing contract ID ─────────────────────
+    existing_contract_id = None
+    if is_revision:
+        print(f"\n[REVISION] Order type: {order_type.upper()}")
+        existing_contract_id = int(input("  Existing contract DB ID (ID_CONTRATTITESTATA): ").strip())
 
     # ── Connect + look up IDs ─────────────────────────────────────────
     print("\n[DB] Connecting...")
@@ -199,30 +231,36 @@ def run(pdf_path: Path) -> None:
     flight_start = min(_parse_date(l['start_date']) for l in lines)
     flight_end   = max(_parse_date(l['end_date'])   for l in lines)
 
-    test_code = f"TEST {order_code}"
-    test_desc = f"TEST — {description}"
-
     try:
         master_market = "DAL" if network == "ASIAN" else "NYC"
         client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
         client.set_master_market(master_market)
 
-        # ── Contract header ────────────────────────────────────────────
-        print(f"\n[HEADER] Creating: {test_code}")
-        contract_id = client.create_contract_header(
-            code=test_code,
-            description=test_desc,
-            customer_id=customer_id,
-            agency_id=agency_id,
-            media_center_id=media_center_id,
-            contract_date=flight_start,
-            contract_end_date=flight_end,
-            contract_type=1,          # Proposal — forces manual review before scheduling
-            billing_type="agency",
-            note=notes,
-            customer_order_ref=tracking,
-        )
-        print(f"  → contract_id = {contract_id}")
+        if is_revision:
+            # ── Revision: extend end date + attach to existing contract ───
+            _extend_end_date(cursor, existing_contract_id, flight_end)
+            client._contract_id = existing_contract_id
+            contract_id = existing_contract_id
+            print(f"\n[REVISION] Adding lines to existing contract #{contract_id}")
+        else:
+            # ── New order: create contract header ──────────────────────────
+            test_code = f"TEST {order_code}"
+            test_desc = f"TEST — {description}"
+            print(f"\n[HEADER] Creating: {test_code}")
+            contract_id = client.create_contract_header(
+                code=test_code,
+                description=test_desc,
+                customer_id=customer_id,
+                agency_id=agency_id,
+                media_center_id=media_center_id,
+                contract_date=flight_start,
+                contract_end_date=flight_end,
+                contract_type=1,          # Proposal — forces manual review before scheduling
+                billing_type="agency",
+                note=notes,
+                customer_order_ref=tracking,
+            )
+            print(f"  → contract_id = {contract_id}")
 
         # ── Lines ──────────────────────────────────────────────────────
         print(f"\n[LINES] Entering {len(lines)} PDF line(s) as {network}...")
@@ -234,7 +272,8 @@ def run(pdf_path: Path) -> None:
         conn.commit()
         print(f"\n{'='*65}")
         print(f"✓ Contract #{contract_id} committed.")
-        print(f"  Code : {test_code}")
+        if not is_revision:
+            print(f"  Code : TEST {order_code}")
         print(f"  Note : Approve in Etere, then compare with:")
         print(f"         uv run python scripts/compare_contracts.py <REF_ID> {contract_id}")
         print(f"{'='*65}")
@@ -252,3 +291,4 @@ if __name__ == "__main__":
         print("Usage: uv run python scripts/test_worldlink_direct.py <worldlink.pdf>")
         sys.exit(1)
     run(Path(sys.argv[1]))
+
