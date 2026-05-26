@@ -195,12 +195,12 @@
                 <input type="number" id="f-separation_customer" value="15" min="0" />
             </div>
             <div class="form-group">
-                <label>Sep. Event (min)</label>
-                <input type="number" id="f-separation_event" value="0" min="0" />
-            </div>
-            <div class="form-group">
                 <label>Sep. Order (min)</label>
                 <input type="number" id="f-separation_order" value="0" min="0" />
+            </div>
+            <div class="form-group">
+                <label>Sep. Event (min)</label>
+                <input type="number" id="f-separation_event" value="0" min="0" />
             </div>
         </div>
         <div class="checkbox-row">
@@ -241,7 +241,7 @@ function renderTable() {
             <td>${esc(r.description_name || '')}</td>
             <td><span class="tag tag-${r.billing_type === 'agency' ? 'agency' : 'direct'}">${esc(r.billing_type || 'agency')}</span></td>
             <td>${r.default_market ? esc(r.default_market) : '<span class="muted">—</span>'}</td>
-            <td class="sep-cell">${r.separation_customer}/${r.separation_event}/${r.separation_order}</td>
+            <td class="sep-cell">${r.separation_customer}/${r.separation_order}/${r.separation_event}</td>
             <td><button class="btn-danger del-btn" data-name="${esc(r.customer_name)}" data-type="${esc(r.order_type)}">Delete</button></td>
         </tr>
     `).join('');
