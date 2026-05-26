@@ -47,7 +47,7 @@ def _build_notes(order_data: dict) -> str:
 def _extend_end_date(cursor, contract_id: int, new_end) -> None:
     """Extend contract end date in CONTRATTITESTATA if new lines go beyond it."""
     cursor.execute(
-        "SELECT DATA_SCADENZA_PROPOSTA FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = %s",
+        "SELECT DATA_TERMINE FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = %s",
         (contract_id,)
     )
     row = cursor.fetchone()
@@ -59,7 +59,7 @@ def _extend_end_date(cursor, contract_id: int, new_end) -> None:
     if current_date is None or current_date < new_end:
         print(f"[DATES] Extending contract end: {current_date} → {new_end}")
         cursor.execute(
-            "UPDATE CONTRATTITESTATA SET DATA_SCADENZA_PROPOSTA = %s "
+            "UPDATE CONTRATTITESTATA SET DATA_TERMINE = %s "
             "WHERE ID_CONTRATTITESTATA = %s",
             (new_end, contract_id)
         )
