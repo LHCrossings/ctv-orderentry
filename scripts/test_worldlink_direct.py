@@ -24,11 +24,13 @@ sys.path.insert(0, str(project_root / "browser_automation"))
 
 from browser_automation.etere_direct_client import EtereDirectClient, connect
 from browser_automation.parsers.worldlink_parser import parse_worldlink_pdf
+from browser_automation.worldlink_automation import _format_24hr_short
 
-SEPARATION = (5, 0, 15)  # WorldLink: customer=5, event=0, order=15
+SEPARATION = (20, 0, 5)  # WorldLink: customer=20, event=0, order=5 (from ANAGRAF defaults)
 
 # All markets that receive a $0 line for CROSSINGS (NYC gets real rate)
-CROSSINGS_ZERO_MARKETS = ["CMP", "CVC", "SFO", "LAX", "SEA", "HOU", "WDC", "MMT"]
+# Order matches Selenium entry: CMP=2, HOU=3, SFO=4, SEA=5, LAX=6, CVC=7, WDC=8, MMT=9
+CROSSINGS_ZERO_MARKETS = ["CMP", "HOU", "SFO", "SEA", "LAX", "CVC", "WDC", "MMT"]
 
 
 def _secs_to_duration(secs: int) -> str:
@@ -105,7 +107,8 @@ def _add_crossings_lines(client: EtereDirectClient, lines: list) -> None:
         date_from = _parse_date(line['start_date'])
         date_to = _parse_date(line['end_date'])
         label = "BNS " if is_bonus else ""
-        desc = f"(Line {line['line_number']}) {label}{days} {from_time}-{to_time}"
+        time_short = f"{_format_24hr_short(from_time)}-{_format_24hr_short(to_time)}"
+        desc = f"(Line {line['line_number']}) {label}{days} {time_short}"
 
         print(f"\n  [LINE {line['line_number']}] {days} {time_range} | "
               f"{line['duration']}s | {spots_pw}/wk | ${rate}"
@@ -125,6 +128,7 @@ def _add_crossings_lines(client: EtereDirectClient, lines: list) -> None:
             duration=duration,
             is_bonus=is_bonus,
             separation_intervals=SEPARATION,
+            scheduling_type=0,  # Priority — WL uses wide dayparts that would auto-trigger Rotation
         )
         print(f"    NYC line_id={nyc_id}  rate=${rate}")
 
@@ -143,6 +147,7 @@ def _add_crossings_lines(client: EtereDirectClient, lines: list) -> None:
                 duration=duration,
                 is_bonus=is_bonus,
                 separation_intervals=SEPARATION,
+                scheduling_type=0,
             )
             print(f"    {mkt} line_id={mkt_id}  rate=$0.00")
 
@@ -164,7 +169,8 @@ def _add_asian_lines(client: EtereDirectClient, lines: list) -> None:
         date_from = _parse_date(line['start_date'])
         date_to = _parse_date(line['end_date'])
         label = "BNS " if is_bonus else ""
-        desc = f"(Line {line['line_number']}) {label}{days} {from_time}-{to_time}"
+        time_short = f"{_format_24hr_short(from_time)}-{_format_24hr_short(to_time)}"
+        desc = f"(Line {line['line_number']}) {label}{days} {time_short}"
 
         print(f"\n  [LINE {line['line_number']}] {days} {time_range} | "
               f"{line['duration']}s | {spots_pw}/wk | ${rate}"
@@ -183,6 +189,7 @@ def _add_asian_lines(client: EtereDirectClient, lines: list) -> None:
             duration=duration,
             is_bonus=is_bonus,
             separation_intervals=SEPARATION,
+            scheduling_type=0,
         )
         print(f"    DAL line_id={dal_id}  rate=${rate}")
 
@@ -239,6 +246,13 @@ def run(pdf_path: Path) -> None:
         master_market = "DAL" if network == "ASIAN" else "NYC"
         client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
         client.set_master_market(master_market)
+
+        # Pull Nielsen ID/code from the WorldLink customer record
+        wl_defaults = client.get_client_defaults(customer_id)
+        if wl_defaults.get("nielsen_id"):
+            client._nielsen_id   = wl_defaults["nielsen_id"]
+            client._nielsen_code = wl_defaults["nielsen_code"]
+            print(f"[DB] nielsen_id={client._nielsen_id}  nielsen_code={client._nielsen_code}")
 
         if is_revision:
             # ── Revision: extend end date + attach to existing contract ───

@@ -715,6 +715,7 @@ EXEC web_sales_savecontractgeneral
         priority: int = 500,
         whitelist_priority: int = 50,
         booking_code: int = 2,
+        scheduling_type: Optional[int] = None,
         # Unused kwargs kept for interface compatibility with EtereClient
         **_kwargs,
     ) -> int:
@@ -752,29 +753,36 @@ EXEC web_sales_savecontractgeneral
             day_bits = parse_day_bits(days)
 
         # Separation in frames
-        intcomm  = _minutes_to_frames(separation_intervals[0])
-        intevent = _minutes_to_frames(separation_intervals[1])
-        intsrighe = _minutes_to_frames(separation_intervals[2])
+        # SP @intevent → INTERVALLO (= order separation, despite column name)
+        # SP @intsrighe → INTERV_CONTRATTO (= event separation, despite column name)
+        # Confirmed by Selenium comparison: order(15min) lands in INTERVALLO, not INTERV_CONTRATTO
+        intcomm   = _minutes_to_frames(separation_intervals[0])  # customer → @intcomm
+        intsrighe = _minutes_to_frames(separation_intervals[1])  # event    → @intsrighe → INTERV_CONTRATTO
+        intevent  = _minutes_to_frames(separation_intervals[2])  # order    → @intevent  → INTERVALLO
 
         newtype = _build_newtype(is_bonus, is_billboard, is_bookend, is_added_value, is_barter, is_trade)
 
         # Scheduling type (PRENOTAZIONE)
+        # Caller may pass scheduling_type to override all auto-detection.
         # Bookend/billboard: always 0 — capofila/finefila + priority=3 control placement
         # BNS or AV (non-bookend): always Rotation (1)
         # Monthly (flight >7 days, spots_per_week=0): always Rotation (1)
         # Time window >2 hours: always Rotation (1)
         # Otherwise: use Etere's configured default (read from inifiles at init)
-        _is_position_locked = is_bookend or is_billboard or is_bottom
-        if _is_position_locked:
-            prenotazione = 0
-        elif is_bonus or is_added_value:
-            prenotazione = 1
+        if scheduling_type is not None:
+            prenotazione = scheduling_type
         else:
-            _flight_days = (date_to - date_from).days if date_from and date_to else 0
-            _is_monthly = _flight_days > 7 and spots_per_week == 0
-            _window_minutes = (end_h * 60 + end_m) - (start_h * 60 + start_m)
-            _wide_window = _window_minutes > 120
-            prenotazione = 1 if (_is_monthly or _wide_window) else self._default_prenotazione
+            _is_position_locked = is_bookend or is_billboard or is_bottom
+            if _is_position_locked:
+                prenotazione = 0
+            elif is_bonus or is_added_value:
+                prenotazione = 1
+            else:
+                _flight_days = (date_to - date_from).days if date_from and date_to else 0
+                _is_monthly = _flight_days > 7 and spots_per_week == 0
+                _window_minutes = (end_h * 60 + end_m) - (start_h * 60 + start_m)
+                _wide_window = _window_minutes > 120
+                prenotazione = 1 if (_is_monthly or _wide_window) else self._default_prenotazione
 
         # capofila (top of break): bookend or billboard
         # finefila (bottom of break): bookend or bottom

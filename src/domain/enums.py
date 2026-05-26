@@ -287,7 +287,7 @@ class SeparationInterval(Enum):
     Format: (customer_separation, event_separation, order_separation)
     These control how far apart ads must be scheduled in Etere.
     """
-    WORLDLINK = (5, 0, 15)
+    WORLDLINK = (20, 0, 5)
     OPAD = (15, 0, 15)
     RPM = (25, 0, 15)
     HL_PARTNERS = (25, 0, 0)

@@ -30,7 +30,7 @@ Block Refresh:
     - highest_line tracked for revision orders (partial refresh)
 
 Separation:
-    - Customer=5, Event=0, Order=15 (SeparationInterval.WORLDLINK)
+    - Customer=20, Event=0, Order=5 (SeparationInterval.WORLDLINK)
 
 ═══════════════════════════════════════════════════════════════════════════════
 IMPORTS
@@ -58,7 +58,7 @@ from browser_automation.parsers.worldlink_parser import parse_worldlink_pdf
 # ═══════════════════════════════════════════════════════════════════════════════
 
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
-WL_DEFAULT_SEPARATION = SeparationInterval.WORLDLINK.value  # (5, 0, 15)
+WL_DEFAULT_SEPARATION = SeparationInterval.WORLDLINK.value  # (20, 0, 5)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -234,7 +234,7 @@ def gather_worldlink_inputs(pdf_path: str) -> Optional[dict]:
         print(f"\n[REVISION] Order type: {order_type_str.upper()}")
         contract_number = input("  Existing contract number: ").strip()
         customer_id = None
-        separation = (5, 0, 15)  # WorldLink default — contract already has its own settings
+        separation = WL_DEFAULT_SEPARATION  # (20, 0, 5) — WorldLink default from ANAGRAF
         print(f"[CUSTOMER] ✓ Revision — using existing contract {contract_number}")
     else:
         # New order: look up or prompt for customer details
@@ -250,9 +250,9 @@ def gather_worldlink_inputs(pdf_path: str) -> Optional[dict]:
             print("Please enter customer details:")
             customer_id = input("  Customer ID: ").strip()
             abbreviation = input("  Abbreviation (e.g., Muck, Cross): ").strip()
-            cust_sep = input("  Customer separation [5]: ").strip() or "5"
+            cust_sep = input("  Customer separation [20]: ").strip() or "20"
             event_sep = input("  Event separation [0]: ").strip() or "0"
-            order_sep = input("  Order separation [15]: ").strip() or "15"
+            order_sep = input("  Order separation [5]: ").strip() or "5"
             separation = (int(cust_sep), int(event_sep), int(order_sep))
             save_new_customer(customer_id, advertiser, abbreviation, separation)
 

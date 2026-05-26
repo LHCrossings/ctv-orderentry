@@ -6,8 +6,8 @@ Usage:
     uv run python scripts/inspect_ghost_spot.py "Horsepower Duck" 2026-05-21 3
     uv run python scripts/inspect_ghost_spot.py "Knightline" 2026-05-21 3
 """
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from browser_automation.etere_direct_client import connect
