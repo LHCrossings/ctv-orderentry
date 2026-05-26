@@ -930,6 +930,16 @@ EXEC web_sales_InsertContractLine
         row = cursor.fetchone()
         line_id = row[0] if row else 0
 
+        # Clear SECEVENTTYPE — column default is 'CTM' but Selenium always sends ''.
+        # Secondary events are assigned manually by operators inside Etere, never during entry.
+        if line_id:
+            cursor.execute(
+                f"UPDATE CONTRATTIRIGHE SET SECEVENTTYPE={self._ph} WHERE ID_CONTRATTIRIGHE={self._ph}",
+                ("", line_id)
+            )
+            if self._autocommit:
+                self._conn.commit()
+
         # Assign available program blocks to this line
         if line_id:
             self._assign_blocks_http(
