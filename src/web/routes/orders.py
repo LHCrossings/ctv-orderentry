@@ -2602,14 +2602,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             brk["pi_unresolvable"] = len(keys) != len(set(keys))
 
     def _bo_fetch_sep_context(cur, market_id: int, date: str, from_frames: int, to_frames: int) -> list:
-        """COM/BNS spots in a ±1-hr window — used for customer separation checking."""
+        """COM/BNS spots in a ±1-hr window — used for separation checking."""
         one_hour = round(3600 * _BO_FPS)
         ext_from = max(0, from_frames - one_hour)
         ext_to   = to_frames + one_hour
         cur.execute(
             "SELECT t.ID_TPALINSE, t.ORA, t.TITLE,"
-            " ct.COMMITTENTE,"
-            " COALESCE(cr.Interv_Committente, 0) AS cust_sep"
+            " ct.COMMITTENTE, ct.ID_CONTRATTITESTATA AS contract_id,"
+            " COALESCE(cr.Interv_Committente, 0) AS cust_sep,"
+            " COALESCE(cr.INTERV_CONTRATTO, 0)   AS order_sep"
             " FROM TPALINSE t"
             " LEFT JOIN trafficTPalinse tp ON tp.ID_TPalinse = t.ID_TPALINSE"
             " LEFT JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe"
@@ -2624,55 +2625,76 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     def _bo_check_separation(breaks: list, sep_spots: list) -> None:
         """
-        For each COM/BNS spot inside a break, check whether any same-customer spot in
-        sep_spots (±1 hr window) is closer than Interv_Committente.
+        For each COM/BNS spot inside a break, check two separation rules:
+          - Customer separation (Interv_Committente): gap between any two spots for
+            the same customer (COMMITTENTE), regardless of which contract they're on.
+          - Order separation (INTERV_CONTRATTO): gap between spots under the same
+            contract header (ID_CONTRATTITESTATA). Catches cases like Admerasia
+            where customer sep = 0 but order sep > 0.
         Attaches 'sep_violations' list to every break; sets violation=True when found.
         """
         from collections import defaultdict
-        by_cust: dict = defaultdict(list)
-        id_to_req: dict = {}
+
+        by_cust:     dict = defaultdict(list)
+        by_contract: dict = defaultdict(list)
+        id_to_meta:  dict = {}
+
         for s in sep_spots:
-            cid = s.get("COMMITTENTE")
-            sep = int(s.get("cust_sep") or 0)
-            if cid is None:
-                continue
-            cid = int(cid)
-            by_cust[cid].append({
-                "id":    s["ID_TPALINSE"],
+            sid       = s["ID_TPALINSE"]
+            cid       = s.get("COMMITTENTE")
+            ctr_id    = s.get("contract_id")
+            cust_sep  = int(s.get("cust_sep")  or 0)
+            order_sep = int(s.get("order_sep") or 0)
+            entry = {
+                "id":    sid,
                 "ora":   s["ORA"],
                 "title": (s.get("TITLE") or "").strip(),
-            })
-            id_to_req[s["ID_TPALINSE"]] = (cid, sep)
+            }
+            if cid is not None:
+                by_cust[int(cid)].append(entry)
+            if ctr_id is not None:
+                by_contract[int(ctr_id)].append(entry)
+            id_to_meta[sid] = {
+                "cust_id":   int(cid)    if cid    is not None else None,
+                "ctr_id":    int(ctr_id) if ctr_id is not None else None,
+                "cust_sep":  cust_sep,
+                "order_sep": order_sep,
+            }
+
+        def _check_group(spot, group_list, req, seen_pairs, violations):
+            sid = spot["id"]
+            for other in group_list:
+                if other["id"] == sid:
+                    continue
+                pair_key = (min(sid, other["id"]), max(sid, other["id"]))
+                if pair_key in seen_pairs:
+                    continue
+                gap = abs(spot["ora"] - other["ora"])
+                if gap < req:
+                    seen_pairs.add(pair_key)
+                    violations.append({
+                        "spot_id":        sid,
+                        "spot_title":     spot["title"],
+                        "spot_time":      spot["time"],
+                        "conflict_id":    other["id"],
+                        "conflict_title": other["title"],
+                        "conflict_time":  _bo_frames_to_time(other["ora"]),
+                        "req_mins":       round(req / (_BO_FPS * 60), 1),
+                        "actual_mins":    round(gap / (_BO_FPS * 60), 1),
+                    })
 
         for brk in breaks:
             violations = []
             seen_pairs: set = set()
             for spot in brk["current"]:
-                sid = spot["id"]
-                if sid not in id_to_req:
+                sid  = spot["id"]
+                meta = id_to_meta.get(sid)
+                if not meta:
                     continue
-                cid, req = id_to_req[sid]
-                if req <= 0:
-                    continue
-                for other in by_cust.get(cid, []):
-                    if other["id"] == sid:
-                        continue
-                    pair_key = (min(sid, other["id"]), max(sid, other["id"]))
-                    if pair_key in seen_pairs:
-                        continue
-                    gap = abs(spot["ora"] - other["ora"])
-                    if gap < req:
-                        seen_pairs.add(pair_key)
-                        violations.append({
-                            "spot_id":        sid,
-                            "spot_title":     spot["title"],
-                            "spot_time":      spot["time"],
-                            "conflict_id":    other["id"],
-                            "conflict_title": other["title"],
-                            "conflict_time":  _bo_frames_to_time(other["ora"]),
-                            "req_mins":       round(req / (_BO_FPS * 60), 1),
-                            "actual_mins":    round(gap / (_BO_FPS * 60), 1),
-                        })
+                if meta["cust_sep"] > 0 and meta["cust_id"] is not None:
+                    _check_group(spot, by_cust[meta["cust_id"]], meta["cust_sep"], seen_pairs, violations)
+                if meta["order_sep"] > 0 and meta["ctr_id"] is not None:
+                    _check_group(spot, by_contract[meta["ctr_id"]], meta["order_sep"], seen_pairs, violations)
             brk["sep_violations"] = violations
             if violations:
                 brk["violation"] = True
