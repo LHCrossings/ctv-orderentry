@@ -2645,32 +2645,43 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             ctr_id    = s.get("contract_id")
             cust_sep  = int(s.get("cust_sep")  or 0)
             order_sep = int(s.get("order_sep") or 0)
-            is_bookend = bool(s.get("capofila")) and bool(s.get("finefila"))
+            is_bookend  = bool(s.get("capofila")) and bool(s.get("finefila"))
+            is_billboard = bool(s.get("capofila")) and not bool(s.get("finefila"))
+            ctr_id_int  = int(ctr_id) if ctr_id is not None else None
             entry = {
-                "id":         sid,
-                "ora":        s["ORA"],
-                "title":      (s.get("TITLE") or "").strip(),
-                "is_bookend": is_bookend,
+                "id":           sid,
+                "ora":          s["ORA"],
+                "title":        (s.get("TITLE") or "").strip(),
+                "is_bookend":   is_bookend,
+                "is_billboard": is_billboard,
+                "ctr_id":       ctr_id_int,
             }
             if cid is not None:
                 by_cust[int(cid)].append(entry)
-            if ctr_id is not None:
-                by_contract[int(ctr_id)].append(entry)
+            if ctr_id_int is not None:
+                by_contract[ctr_id_int].append(entry)
             id_to_meta[sid] = {
-                "cust_id":    int(cid)    if cid    is not None else None,
-                "ctr_id":     int(ctr_id) if ctr_id is not None else None,
-                "cust_sep":   cust_sep,
-                "order_sep":  order_sep,
-                "is_bookend": is_bookend,
+                "cust_id":     int(cid) if cid is not None else None,
+                "ctr_id":      ctr_id_int,
+                "cust_sep":    cust_sep,
+                "order_sep":   order_sep,
+                "is_bookend":  is_bookend,
+                "is_billboard": is_billboard,
             }
 
-        def _check_group(spot, group_list, req, seen_pairs, violations, spot_is_bookend=False):
+        def _check_group(spot, group_list, req, seen_pairs, violations,
+                         spot_is_bookend=False, spot_is_billboard=False, spot_ctr_id=None):
             sid = spot["id"]
             for other in group_list:
                 if other["id"] == sid:
                     continue
                 # Bookend pairs intentionally share a break — not a separation violation
                 if spot_is_bookend and other.get("is_bookend"):
+                    continue
+                # Billboard+companion pairs are by design adjacent in the same contract
+                other_ctr = other.get("ctr_id")
+                same_contract = (spot_ctr_id is not None and spot_ctr_id == other_ctr)
+                if same_contract and (spot_is_billboard or other.get("is_billboard")):
                     continue
                 pair_key = (min(sid, other["id"]), max(sid, other["id"]))
                 if pair_key in seen_pairs:
@@ -2698,10 +2709,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 if not meta:
                     continue
                 is_be = meta["is_bookend"]
+                is_bb = meta["is_billboard"]
+                ctr   = meta["ctr_id"]
                 if meta["cust_sep"] > 0 and meta["cust_id"] is not None:
-                    _check_group(spot, by_cust[meta["cust_id"]], meta["cust_sep"], seen_pairs, violations, is_be)
-                if meta["order_sep"] > 0 and meta["ctr_id"] is not None:
-                    _check_group(spot, by_contract[meta["ctr_id"]], meta["order_sep"], seen_pairs, violations, is_be)
+                    _check_group(spot, by_cust[meta["cust_id"]], meta["cust_sep"],
+                                 seen_pairs, violations, is_be, is_bb, ctr)
+                if meta["order_sep"] > 0 and ctr is not None:
+                    _check_group(spot, by_contract[ctr], meta["order_sep"],
+                                 seen_pairs, violations, is_be, is_bb, ctr)
             brk["sep_violations"] = violations
             if violations:
                 brk["violation"] = True
