@@ -220,7 +220,6 @@ def run(pdf_path: Path) -> None:
     # ── Connect + look up IDs ─────────────────────────────────────────
     print("\n[DB] Connecting...")
     conn = connect()
-    conn.autocommit = False
     cursor = conn.cursor()
 
     customer_id, agency_id, media_center_id = _lookup_wl_ids(cursor)
