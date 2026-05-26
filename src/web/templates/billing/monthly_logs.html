@@ -51,6 +51,34 @@
 
         #results { max-width: 900px; margin: 0 auto; }
 
+        .month-info-banner {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: .65rem 1rem;
+            margin-bottom: 1rem;
+            font-size: .85rem;
+        }
+        .month-label {
+            font-weight: 700;
+            color: var(--nord10);
+            font-size: .95rem;
+            white-space: nowrap;
+        }
+        .month-range-item {
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+        .range-type {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-right: .35rem;
+        }
+
         .summary-bar {
             display: flex;
             gap: 1.5rem;
@@ -283,13 +311,24 @@ function groupConsecutive(dates) {
     return runs;
 }
 
-function renderResults(data) {
+function renderResults(payload) {
+    const data = payload.results ?? payload;
+    const mi   = payload.month_info ?? null;
     const resultsDiv = document.getElementById('results');
     const totalMarkets = data.length;
     const okMarkets = data.filter(r => r.missing.length === 0).length;
     const totalMissing = data.reduce((s, r) => s + r.missing.length, 0);
 
-    let html = `<div class="summary-bar">
+    let html = '';
+    if (mi) {
+        html += `<div class="month-info-banner">
+            <span class="month-label">${mi.month_label}</span>
+            <span class="month-range-item"><span class="range-type">Broadcast</span>${formatDate(mi.broadcast_start)} – ${formatDate(mi.broadcast_end)}</span>
+            <span class="month-range-item"><span class="range-type">Calendar</span>${formatDate(mi.calendar_start)} – ${formatDate(mi.calendar_end)}</span>
+        </div>`;
+    }
+
+    html += `<div class="summary-bar">
         <span><strong>${totalMarkets}</strong> markets</span>
         <span style="color:var(--nord14)"><strong>${okMarkets}</strong> complete</span>
         ${totalMissing > 0 ? `<span style="color:var(--nord11)"><strong>${totalMissing}</strong> missing day${totalMissing !== 1 ? 's' : ''}</span>` : ''}

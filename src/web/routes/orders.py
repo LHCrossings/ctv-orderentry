@@ -589,11 +589,38 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 market_dates[mkt] = set()
             market_dates[mkt].add(d)
 
+        # Infer billing month from filename YYMM (e.g. "2605" → May 2026)
+        import re as _re
+        import calendar as _cal
+        _fm = _re.search(r'(\d{2})(0[1-9]|1[0-2])(?!\d)', billing_book.filename or "")
+        month_info = None
+        true_start = None
+        true_end   = None
+        if _fm:
+            yy, mm = int(_fm.group(1)), int(_fm.group(2))
+            year       = 2000 + yy
+            cal_start  = _date(year, mm, 1)
+            cal_end    = _date(year, mm, _cal.monthrange(year, mm)[1])
+            bcast_start = cal_start - timedelta(days=cal_start.weekday())
+            _next_mm, _next_yy = (mm + 1, year) if mm < 12 else (1, year + 1)
+            _next1     = _date(_next_yy, _next_mm, 1)
+            bcast_end  = _next1 - timedelta(days=_next1.weekday()) - timedelta(days=1)
+            true_start, true_end = bcast_start, bcast_end
+            _mnames = ['January','February','March','April','May','June',
+                       'July','August','September','October','November','December']
+            month_info = {
+                "month_label":     f"{_mnames[mm - 1]} {year}",
+                "broadcast_start": bcast_start.isoformat(),
+                "broadcast_end":   bcast_end.isoformat(),
+                "calendar_start":  cal_start.isoformat(),
+                "calendar_end":    cal_end.isoformat(),
+            }
+
         results = []
         for mkt in sorted(market_dates):
             dates    = market_dates[mkt]
-            first    = min(dates)
-            last     = max(dates)
+            first    = true_start if true_start else min(dates)
+            last     = true_end   if true_end   else max(dates)
             expected = set()
             cur = first
             while cur <= last:
@@ -610,7 +637,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             })
 
         from fastapi.responses import JSONResponse as _JSONResponse
-        return _JSONResponse(results)
+        return _JSONResponse({"month_info": month_info, "results": results})
 
     @router.get("/scripts", response_class=HTMLResponse)
     async def scripts(request: Request):
