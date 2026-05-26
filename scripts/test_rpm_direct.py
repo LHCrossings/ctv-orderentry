@@ -7,15 +7,16 @@ Parses AEInboxOrder (8).pdf, enters via direct DB with contract code
 Run:  uv run python scripts/test_rpm_direct.py
 """
 import sys
-from datetime import date
 from pathlib import Path
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+from datetime import timedelta
+
 from browser_automation.etere_direct_client import EtereDirectClient, connect
 from browser_automation.parsers.rpm_parser import parse_rpm_pdf
-from datetime import timedelta
+
 sys.path.insert(0, str(project_root / "browser_automation"))
 from etere_client import EtereClient
 
@@ -78,7 +79,7 @@ print(f"\n[PARSE] {PDF_PATH.name}")
 print(f"  Client  : {order.client}")
 print(f"  Estimate: {order.estimate_number}")
 print(f"  Flight  : {order.flight_start} – {order.flight_end}")
-print(f"  Lines   : {len(lines)} ({sum(l.total_spots for l in lines)} spots)")
+print(f"  Lines   : {len(lines)} ({sum(ln.total_spots for ln in lines)} spots)")
 
 conn = connect()
 print("\n[DB] Connected.")

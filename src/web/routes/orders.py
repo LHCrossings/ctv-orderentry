@@ -590,8 +590,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             market_dates[mkt].add(d)
 
         # Infer billing month from filename YYMM (e.g. "2605" → May 2026)
-        import re as _re
         import calendar as _cal
+        import re as _re
         _fm = _re.search(r'(\d{2})(0[1-9]|1[0-2])(?!\d)', billing_book.filename or "")
         month_info = None
         true_start = None
