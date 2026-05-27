@@ -203,7 +203,6 @@ def etere_web_logout(session) -> None:
 # ── Constants ───────────────────────────────────────────────────────────────────
 
 FRAMES_PER_SECOND = 29.97   # NTSC drop-frame rate — used for time-of-day (start/end/separation)
-DURATION_FPS      = 30      # Nominal fps for spot duration (:30=900f, :15=450f, :10=300f)
 
 # Market code -> Etere Users.cod_user (also CONTRATTITESTATA.COD_USER)
 MARKET_USER_IDS: dict[str, int] = {
@@ -275,7 +274,20 @@ def _to_frames(h: int, m: int = 0, s: int = 0) -> int:
 
 
 def _seconds_to_frames(seconds: int) -> int:
-    return seconds * DURATION_FPS
+    """Convert spot duration in seconds to SMPTE drop-frame frame count.
+
+    Etere stores durations as 29.97df frames. At exact minute marks (MM:00),
+    frames 00 and 01 are dropped (invalid in df), so the first valid frame is 02.
+    Verified: :15→450, :30→900, :60→1800, 2:00→3598.
+    """
+    m, s = divmod(seconds, 60)
+    h, m = divmod(m, 60)
+    total_minutes = h * 60 + m
+    base = (h * 3600 + m * 60 + s) * 30
+    drop = 2 * (total_minutes - total_minutes // 10)
+    # At exact minute marks (non-10-min boundary), frame 00 is invalid — use frame 02
+    correction = 2 if (s == 0 and total_minutes > 0 and total_minutes % 10 != 0) else 0
+    return base - drop + correction
 
 
 def _minutes_to_frames(minutes: int) -> int:
@@ -516,6 +528,7 @@ class EtereDirectClient:
         note: str = "",
         customer_order_ref: str = "",
         owner: Optional[str] = None,
+        master_market: str = "NYC",
     ) -> int:
         """
         Create a contract header via web_sales_savecontractgeneral.
@@ -566,7 +579,7 @@ class EtereDirectClient:
         if contract_date is None:
             contract_date = date.today()
 
-        user_id = MARKET_USER_IDS["NYC"]  # header always NYC, lines carry their own market
+        user_id = MARKET_USER_IDS.get(master_market, MARKET_USER_IDS["NYC"])
 
         # Legacy {SQL Server} driver can't bind ? params inside a DECLARE batch.
         # Call the SP directly; retrieve the new ID by querying the table.

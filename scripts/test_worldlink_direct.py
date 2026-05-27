@@ -238,14 +238,24 @@ def run(pdf_path: Path) -> None:
                 print(f"[REVISION] ✗ No contract found for tracking '{tracking}'")
             existing_contract_id = int(input("  Existing contract DB ID (ID_CONTRATTITESTATA): ").strip())
 
-    # ── Connect + look up IDs ─────────────────────────────────────────
+    # ── Connect ──────────────────────────────────────────────────────────
     print("\n[DB] Connecting...")
     conn = connect()
     cursor = conn.cursor()
 
-    customer_id, agency_id, media_center_id = _lookup_wl_ids(cursor)
-    print(f"[DB] customer_id={customer_id}  agency_id={agency_id}  "
-          f"media_center_id={media_center_id}")
+    # Customer: look up in customers.db first; agency/media-center auto-populated
+    # from ANAGRAF by create_contract_header when agency_id=None.
+    cust_rec = lookup_customer(advertiser)
+    if cust_rec:
+        customer_id = int(cust_rec['customer_id'])
+        agency_id = None          # triggers ANAGRAF auto-lookup
+        media_center_id = None
+        print(f"[DB] customer_id={customer_id} (from customers.db: {advertiser})")
+    else:
+        # Fallback: grab IDs from most recent matching WL contract
+        customer_id, agency_id, media_center_id = _lookup_wl_ids(cursor)
+        print(f"[DB] customer_id={customer_id}  agency_id={agency_id}  "
+              f"media_center_id={media_center_id}  (fallback from DB)")
 
     # ── Flight range ───────────────────────────────────────────────────
     flight_start = min(_parse_date(l['start_date']) for l in lines)
@@ -285,6 +295,7 @@ def run(pdf_path: Path) -> None:
                 contract_end_date=flight_end,
                 contract_type=1,          # Proposal — forces manual review before scheduling
                 billing_type="agency",
+                master_market=master_market,
                 note=notes,
                 customer_order_ref=tracking,
             )
