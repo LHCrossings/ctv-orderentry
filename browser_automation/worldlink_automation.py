@@ -205,7 +205,7 @@ def _lookup_contract_by_tracking(tracking_number: str) -> Optional[str]:
             cursor = conn.cursor()
             sql = (
                 f"SELECT TOP 1 COD_CONTRATTO FROM CONTRATTITESTATA"
-                f" WHERE REF_ORDINE_CLIENTE = {ph}"
+                f" WHERE CUSTOMERREF = {ph}"
                 f" ORDER BY ID_CONTRATTITESTATA DESC"
             )
             cursor.execute(sql, (tracking_number,))
