@@ -24,7 +24,7 @@ sys.path.insert(0, str(project_root / "browser_automation"))
 
 from browser_automation.etere_direct_client import EtereDirectClient, connect
 from browser_automation.parsers.worldlink_parser import parse_worldlink_pdf
-from browser_automation.worldlink_automation import _format_24hr_short, lookup_customer
+from browser_automation.worldlink_automation import _format_24hr_short, lookup_customer, _lookup_contract_by_tracking
 
 WL_DEFAULT_SEPARATION = (5, 15, 0)  # fallback when advertiser not in customers.db
 
@@ -224,11 +224,19 @@ def run(pdf_path: Path) -> None:
         print("\n[ERROR] No lines parsed — aborting")
         sys.exit(1)
 
-    # ── Revision: prompt for existing contract ID ─────────────────────
+    # ── Revision: look up existing contract ID by tracking number ────────
     existing_contract_id = None
     if is_revision:
         print(f"\n[REVISION] Order type: {order_type.upper()}")
-        existing_contract_id = int(input("  Existing contract DB ID (ID_CONTRATTITESTATA): ").strip())
+        found_id, found_code = _lookup_contract_by_tracking(tracking)
+        if found_id:
+            print(f"[REVISION] ✓ Found contract {found_code} (ID {found_id}) for tracking '{tracking}'")
+            confirm = input(f"  Use {found_code} (ID {found_id})? (y/n): ").strip().lower()
+            existing_contract_id = int(found_id) if confirm == 'y' else int(input("  Existing contract DB ID: ").strip())
+        else:
+            if tracking:
+                print(f"[REVISION] ✗ No contract found for tracking '{tracking}'")
+            existing_contract_id = int(input("  Existing contract DB ID (ID_CONTRATTITESTATA): ").strip())
 
     # ── Connect + look up IDs ─────────────────────────────────────────
     print("\n[DB] Connecting...")
