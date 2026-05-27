@@ -579,6 +579,19 @@ class EtereDirectClient:
         if contract_date is None:
             contract_date = date.today()
 
+        # Enforce Etere's uniqueness rule — duplicate codes are blocked in the UI
+        # but bypassed by direct SP calls. Raise before touching the DB.
+        dup_cur = self._conn.cursor()
+        dup_cur.execute(
+            f"SELECT COUNT(*) FROM CONTRATTITESTATA WHERE COD_CONTRATTO = {self._ph}",
+            (code,)
+        )
+        if (dup_cur.fetchone() or [0])[0] > 0:
+            raise ValueError(
+                f"Contract code '{code}' already exists in Etere. "
+                "Choose a unique code before entering."
+            )
+
         user_id = MARKET_USER_IDS.get(master_market, MARKET_USER_IDS["NYC"])
 
         # Legacy {SQL Server} driver can't bind ? params inside a DECLARE batch.
