@@ -190,31 +190,32 @@ def save_new_customer(
         print(f"[CUSTOMER DB] ✗ Save failed: {e}")
 
 
-def _lookup_contract_by_tracking(tracking_number: str) -> Optional[str]:
+def _lookup_contract_by_tracking(tracking_number: str) -> tuple:
     """
-    Query CONTRATTITESTATA for a contract whose REF_ORDINE_CLIENTE matches
-    the WorldLink tracking number. Returns the Etere contract number string,
-    or None if not found or DB is unavailable.
+    Query CONTRATTITESTATA for a contract whose CUSTOMERREF matches the WL tracking number.
+
+    Returns (id_str, cod_contratto) where id_str is the integer ID used in Etere URLs,
+    or (None, None) if not found or DB unavailable.
     """
     if not tracking_number:
-        return None
+        return None, None
     try:
         from browser_automation.etere_direct_client import connect as db_connect
         with db_connect() as conn:
             ph = '%s' if type(conn).__module__.startswith('pymssql') else '?'
             cursor = conn.cursor()
             sql = (
-                f"SELECT TOP 1 COD_CONTRATTO FROM CONTRATTITESTATA"
+                f"SELECT TOP 1 ID_CONTRATTITESTATA, COD_CONTRATTO FROM CONTRATTITESTATA"
                 f" WHERE CUSTOMERREF = {ph}"
                 f" ORDER BY ID_CONTRATTITESTATA DESC"
             )
             cursor.execute(sql, (tracking_number,))
             row = cursor.fetchone()
             if row:
-                return str(row[0]).strip()
+                return str(row[0]).strip(), str(row[1]).strip()
     except Exception as e:
         print(f"[REVISION] ⚠ DB lookup failed: {e}")
-    return None
+    return None, None
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -260,11 +261,11 @@ def gather_worldlink_inputs(pdf_path: str) -> Optional[dict]:
     if order_type_str != 'new':
         print(f"\n[REVISION] Order type: {order_type_str.upper()}")
         tracking = order_data.get('tracking_number', '')
-        found = _lookup_contract_by_tracking(tracking)
+        found, found_code = _lookup_contract_by_tracking(tracking)
         if found:
-            print(f"[REVISION] ✓ Found contract {found} for tracking '{tracking}'")
-            confirm = input(f"  Use contract {found}? (y/n): ").strip().lower()
-            contract_number = found if confirm == 'y' else input("  Existing contract number: ").strip()
+            print(f"[REVISION] ✓ Found contract {found_code} (ID {found}) for tracking '{tracking}'")
+            confirm = input(f"  Use {found_code} (ID {found})? (y/n): ").strip().lower()
+            contract_number = found if confirm == 'y' else input("  Existing contract ID: ").strip()
         else:
             if tracking:
                 print(f"[REVISION] ✗ No contract found for tracking '{tracking}'")
