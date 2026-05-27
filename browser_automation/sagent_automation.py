@@ -14,7 +14,7 @@ Key SAGENT Business Rules:
 - Multi-market orders (CVC, LAX, SFO, etc.)
 - Master market always NYC (like Misfit)
 - Individual lines set their own market
-- Customer: Hardcoded to CAL FIRE (ID 175)
+- Customer: Looked up from customers.db by advertiser name; prompts if not found
 - Rate Grossing: Net rates divided by 0.85
 - Order # goes in Customer Order Ref field
 - Contract naming: "Sagent <Client> <Est#>"
@@ -45,9 +45,6 @@ from src.domain.enums import OrderType, BillingType
 # ============================================================================
 # SAGENT CONSTANTS
 # ============================================================================
-
-# Customer: CAL FIRE (hardcoded)
-SAGENT_CUSTOMER_ID = 175
 
 # Separation intervals
 SAGENT_SEPARATION = (10, 0, 0)  # Customer=10, Order=0, Event=0
@@ -106,6 +103,40 @@ def gather_upfront_inputs(order: SagentOrder) -> dict:
     print(f"Lines: {len(order.lines)}")
     print()
     
+    # 0. Customer
+    print("[0/3] Customer")
+    print("-" * 70)
+    resolved_customer_id = None
+    resolved_customer_name = order.advertiser
+    try:
+        import sys as _sys
+        from pathlib import Path as _Path
+        _src = _Path(__file__).parent.parent / "src"
+        if str(_src) not in _sys.path:
+            _sys.path.insert(0, str(_src))
+        from browser_automation.customer_defaults import DEFAULT_DB_PATH as _DB_PATH
+        from data_access.repositories.customer_repository import CustomerRepository as _CR
+        import sqlite3 as _sqlite3
+        _conn = _sqlite3.connect(str(_DB_PATH))
+        _conn.row_factory = _sqlite3.Row
+        _rows = _conn.execute(
+            "SELECT customer_id, customer_name FROM customers"
+            " WHERE order_type='sagent' ORDER BY customer_name"
+        ).fetchall()
+        _conn.close()
+        if _rows:
+            print("Known SAGENT customers:")
+            for r in _rows:
+                print(f"  {r['customer_id']:>6}  {r['customer_name']}")
+    except Exception:
+        pass
+    cid_input = input(f"Enter Etere customer ID for '{order.advertiser}': ").strip()
+    if cid_input:
+        resolved_customer_id = int(cid_input)
+        name_input = input(f"Customer name (Enter to use '{order.advertiser}'): ").strip()
+        resolved_customer_name = name_input if name_input else order.advertiser
+    print(f"✓ Customer ID: {resolved_customer_id}  ({resolved_customer_name})\n")
+
     # 1. Contract Code
     print("[1/3] Contract Code")
     print("-" * 70)
@@ -155,31 +186,28 @@ def gather_upfront_inputs(order: SagentOrder) -> dict:
     print("✓ All inputs gathered - ready for automation")
     print(f"{'='*70}\n")
 
-    # Silently upsert customer to DB
-    try:
-        import sys as _sys
-        from pathlib import Path as _Path
-        _src = _Path(__file__).parent.parent / "src"
-        if str(_src) not in _sys.path:
-            _sys.path.insert(0, str(_src))
-        from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
-        from data_access.repositories.customer_repository import CustomerRepository as _CR
-        from domain.entities import Customer as _Cust
-        from domain.enums import OrderType as _OT
-        _repo = _CR(CUSTOMER_DB_PATH)
-        _repo.save(_Cust(
-            customer_id=str(SAGENT_CUSTOMER_ID),
-            customer_name="CAL FIRE",
-            order_type=_OT.SAGENT,
-            billing_type="agency",
-        ))
-    except Exception:
-        pass
+    # Upsert customer to DB if we have an ID
+    if resolved_customer_id is not None:
+        try:
+            from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+            from data_access.repositories.customer_repository import CustomerRepository as _CR
+            from domain.entities import Customer as _Cust
+            from domain.enums import OrderType as _OT
+            _CR(CUSTOMER_DB_PATH).save(_Cust(
+                customer_id=str(resolved_customer_id),
+                customer_name=resolved_customer_name,
+                order_type=_OT.SAGENT,
+                billing_type="agency",
+            ))
+        except Exception:
+            pass
 
     return {
         'contract_code': contract_code,
         'description': description,
-        'notes': notes
+        'notes': notes,
+        'customer_id': resolved_customer_id,
+        'customer_name': resolved_customer_name,
     }
 
 
@@ -246,6 +274,7 @@ def process_sagent_order(
             order_code=inputs['contract_code'],
             description=inputs['description'],
             notes=inputs['notes'],
+            customer_id=inputs.get('customer_id'),
             separation_intervals=SAGENT_SEPARATION
         )
         
@@ -275,7 +304,8 @@ def create_sagent_contract(
     order_code: str,
     description: str,
     notes: str,
-    separation_intervals: Tuple[int, int, int]
+    separation_intervals: Tuple[int, int, int],
+    customer_id: Optional[int] = None,
 ) -> bool:
     """
     Create a single SAGENT contract in Etere.
@@ -311,7 +341,7 @@ def create_sagent_contract(
         # Individual lines will use their own market (CVC, LAX, SFO, etc.)
         
         contract_number = etere.create_contract_header(
-            customer_id=SAGENT_CUSTOMER_ID,  # CAL FIRE
+            customer_id=customer_id,
             code=order_code,
             description=description,
             contract_start=order.flight_start,
