@@ -435,21 +435,42 @@ def parse_sagent_pdf(pdf_path: str) -> SagentOrder:
                     rest_of_line.split()[0] if rest_of_line else "UNKNOWN"
                 )
 
-                # PREVIOUS line: Time Period
-                time_period = ""
+                # TIME PERIOD: reconstruct from surrounding lines.
+                # Layout: idx-2 has "START to", idx-1 has "END ..." OR
+                # end time is on the data line itself (e.g. "3 11:59P :15 $90.00").
+                _t_start, _t_end = "", ""
+                if idx - 2 >= 0:
+                    _m = re.search(r'(\d+:\d+[APap])\s+to\b', text_lines[idx - 2])
+                    if _m:
+                        _t_start = _m.group(1)
                 if idx - 1 >= 0:
-                    time_period = text_lines[idx - 1].strip()
-                    if not re.search(r'\d+:\d+[AP]', time_period):
-                        time_period = "6:00A to 11:59P"
+                    _m = re.match(r'(\d+:\d+[APap])', text_lines[idx - 1].strip())
+                    if _m:
+                        _t_end = _m.group(1)
+                if not _t_end:
+                    _m = re.match(r'^\d+\s+(\d+:\d+[APap])\s+:', line_text)
+                    if _m:
+                        _t_end = _m.group(1)
+                if _t_start and _t_end:
+                    time_period = f"{_t_start} to {_t_end}"
+                elif _t_start:
+                    time_period = f"{_t_start} to 11:59P"
+                else:
+                    time_period = "6:00A to 11:59P"
 
-                # NEXT line: Days
-                days = ""
-                if idx + 1 < len(text_lines):
-                    days_text = text_lines[idx + 1].strip()
-                    if re.match(r'^[MTWRFS]', days_text):
-                        days = days_text
-                if not days:
-                    days = "M T W R F Sa Su"
+                # DAYS: collect only valid day tokens from following lines.
+                # Reject lines like "FRANCISCO LANGUAGE" that start with F but
+                # aren't day patterns.
+                _VALID_DAY = {'M', 'T', 'W', 'R', 'F', 'Sa', 'Su'}
+                _day_tokens: list = []
+                for _off in (1, 2, 3):
+                    _dl = text_lines[idx + _off].strip() if idx + _off < len(text_lines) else ""
+                    if not _dl or re.match(r'^\d+\s+', _dl):
+                        break
+                    for _tok in _dl.split():
+                        if _tok in _VALID_DAY:
+                            _day_tokens.append(_tok)
+                days = ' '.join(_day_tokens) if _day_tokens else "M T W R F Sa Su"
 
                 # Market: scan surrounding lines for known market keywords.
                 # The market column often wraps onto adjacent lines in this PDF format.
