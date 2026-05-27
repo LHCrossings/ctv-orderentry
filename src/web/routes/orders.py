@@ -2483,11 +2483,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             return 8, "STATION ID"
         return 0, newtype or "OTHER"
 
-    def _pi_product_key(cod_progra: str) -> str:
-        """'PI-504-030' → 'PI-504'; non-PI or unrecognised codes return the full code."""
+    def _pi_product_key(title: str) -> str:
+        """'PI-504-030: ...' → 'PI-504'; unrecognised titles return the full title."""
         import re as _re
-        m = _re.match(r'^(PI-\d+)-\d+$', (cod_progra or "").strip(), _re.IGNORECASE)
-        return m.group(1).upper() if m else (cod_progra or "").strip().upper()
+        m = _re.match(r'^(PI-\d+)-\d+', (title or "").strip(), _re.IGNORECASE)
+        return m.group(1).upper() if m else (title or "").strip().upper()
 
     def _bo_optimize(spots: list) -> list:
         skip = set()
@@ -2517,16 +2517,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         if len(pi_indices) > 1:
             from collections import Counter
             pi_spots = [result[i] for i in pi_indices]
-            counts = Counter(_pi_product_key(s["cod_progra"]) for s in pi_spots)
+            counts = Counter(_pi_product_key(s["title"]) for s in pi_spots)
             reordered, last_key, remaining = [], None, list(pi_spots)
             while remaining:
                 best = max(
-                    (s for s in remaining if _pi_product_key(s["cod_progra"]) != last_key),
-                    key=lambda s: counts[_pi_product_key(s["cod_progra"])],
+                    (s for s in remaining if _pi_product_key(s["title"]) != last_key),
+                    key=lambda s: counts[_pi_product_key(s["title"])],
                     default=remaining[0],
                 )
                 reordered.append(best)
-                last_key = _pi_product_key(best["cod_progra"])
+                last_key = _pi_product_key(best["title"])
                 counts[last_key] -= 1
                 remaining.remove(best)
             for idx, pi_idx in enumerate(pi_indices):
@@ -2540,7 +2540,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         new conflict.  Modifies breaks in-place; updates 'changed' and 'violation' flags."""
 
         def _pi_keys(brk):
-            return [_pi_product_key(s["cod_progra"]) for s in brk["optimized"] if s["label"] == "PI"]
+            return [_pi_product_key(s["title"]) for s in brk["optimized"] if s["label"] == "PI"]
 
         for _pass in range(20):            # cap iterations
             made_swap = False
@@ -2557,7 +2557,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 for j, s in enumerate(brk_a["optimized"]):
                     if s["label"] != "PI":
                         continue
-                    k = _pi_product_key(s["cod_progra"])
+                    k = _pi_product_key(s["title"])
                     if k in seen:
                         conflict_pair = (seen[k], j)
                         break
@@ -2569,7 +2569,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 # Try second occurrence first, then first — either can be moved out
                 for conflict_idx in (conflict_pair[1], conflict_pair[0]):
                     conflict_spot = brk_a["optimized"][conflict_idx]
-                    conflict_key  = _pi_product_key(conflict_spot["cod_progra"])
+                    conflict_key  = _pi_product_key(conflict_spot["title"])
 
                     # Search other breaks for a swap candidate (duration need not match —
                     # breaks are elastic; only constraint is no same product in same break)
@@ -2579,17 +2579,17 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         for m, cand in enumerate(brk_b["optimized"]):
                             if cand["label"] != "PI":
                                 continue
-                            cand_key = _pi_product_key(cand["cod_progra"])
+                            cand_key = _pi_product_key(cand["title"])
 
                             # Would cand create a new conflict in break A?
-                            other_keys_a = [_pi_product_key(s["cod_progra"])
+                            other_keys_a = [_pi_product_key(s["title"])
                                             for j, s in enumerate(brk_a["optimized"])
                                             if s["label"] == "PI" and j != conflict_idx]
                             if cand_key in other_keys_a:
                                 continue
 
                             # Would conflict_spot create a new conflict in break B?
-                            other_keys_b = [_pi_product_key(s["cod_progra"])
+                            other_keys_b = [_pi_product_key(s["title"])
                                             for mm, s in enumerate(brk_b["optimized"])
                                             if s["label"] == "PI" and mm != m]
                             if conflict_key in other_keys_b:
@@ -2814,7 +2814,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     cur_pos += s["duration"]
                 orig_ids = [s["id"] for s in block]
                 pri_viol = orig_ids != [s["id"] for s in optimized]
-                pi_keys  = [_pi_product_key(s["cod_progra"]) for s in block if s["label"] == "PI"]
+                pi_keys  = [_pi_product_key(s["title"]) for s in block if s["label"] == "PI"]
                 violation = pri_viol or len(pi_keys) != len(set(pi_keys))
                 if block[0]["ora"] < to_frames:
                     breaks.append({
