@@ -529,6 +529,7 @@ class EtereDirectClient:
         customer_order_ref: str = "",
         owner: Optional[str] = None,
         master_market: str = "NYC",
+        allow_rename: bool = False,
     ) -> int:
         """
         Create a contract header via web_sales_savecontractgeneral.
@@ -580,17 +581,30 @@ class EtereDirectClient:
             contract_date = date.today()
 
         # Enforce Etere's uniqueness rule — duplicate codes are blocked in the UI
-        # but bypassed by direct SP calls. Raise before touching the DB.
+        # but bypassed by direct SP calls. Raise (or auto-rename) before touching the DB.
         dup_cur = self._conn.cursor()
         dup_cur.execute(
             f"SELECT COUNT(*) FROM CONTRATTITESTATA WHERE COD_CONTRATTO = {self._ph}",
             (code,)
         )
         if (dup_cur.fetchone() or [0])[0] > 0:
-            raise ValueError(
-                f"Contract code '{code}' already exists in Etere. "
-                "Choose a unique code before entering."
-            )
+            if not allow_rename:
+                raise ValueError(
+                    f"Contract code '{code}' already exists in Etere. "
+                    "Choose a unique code before entering."
+                )
+            # Auto-append '*' until a unique code is found
+            candidate = code
+            while True:
+                candidate += "*"
+                dup_cur.execute(
+                    f"SELECT COUNT(*) FROM CONTRATTITESTATA WHERE COD_CONTRATTO = {self._ph}",
+                    (candidate,)
+                )
+                if (dup_cur.fetchone() or [0])[0] == 0:
+                    print(f"[HEADER] Code '{code}' exists — using '{candidate}'")
+                    code = candidate
+                    break
 
         user_id = MARKET_USER_IDS.get(master_market, MARKET_USER_IDS["NYC"])
 

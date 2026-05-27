@@ -296,6 +296,7 @@ def run(pdf_path: Path) -> None:
                 contract_type=1,          # Proposal — forces manual review before scheduling
                 billing_type="agency",
                 master_market=master_market,
+                allow_rename=True,        # Append * if code already exists (test-only)
                 note=notes,
                 customer_order_ref=tracking,
             )
