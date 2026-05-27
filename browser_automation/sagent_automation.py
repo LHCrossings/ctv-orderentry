@@ -359,18 +359,14 @@ def create_sagent_contract(
         print(f"[SAGENT] ✓ Contract created: {contract_number}")
         
         # ═══════════════════════════════════════════════════════════════
-        # ADD LINES - Process each market separately
+        # ADD LINES - Process in PDF line-number order
         # ═══════════════════════════════════════════════════════════════
-        
+
         line_count = 0
-        
-        # Process each market
-        for market in order.markets:
-            market_lines = order.get_lines_by_market(market)
-            
-            print(f"\n[MARKET] Processing {market} ({len(market_lines)} lines)")
-            
-            for line_idx, line in enumerate(market_lines):
+
+        for line_idx, line in enumerate(sorted(order.lines, key=lambda l: l.line_number)):
+            market = line.market
+            print(f"\n[LINE {line.line_number}] Market: {market}")
                 
                 # Get line description (handles paid vs bonus formatting)
                 desc = line.get_description()
