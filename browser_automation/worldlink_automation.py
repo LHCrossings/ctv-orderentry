@@ -190,6 +190,33 @@ def save_new_customer(
         print(f"[CUSTOMER DB] ✗ Save failed: {e}")
 
 
+def _lookup_contract_by_tracking(tracking_number: str) -> Optional[str]:
+    """
+    Query CONTRATTITESTATA for a contract whose REF_ORDINE_CLIENTE matches
+    the WorldLink tracking number. Returns the Etere contract number string,
+    or None if not found or DB is unavailable.
+    """
+    if not tracking_number:
+        return None
+    try:
+        from browser_automation.etere_direct_client import connect as db_connect
+        with db_connect() as conn:
+            ph = '%s' if type(conn).__module__.startswith('pymssql') else '?'
+            cursor = conn.cursor()
+            sql = (
+                f"SELECT TOP 1 COD_CONTRATTO FROM CONTRATTITESTATA"
+                f" WHERE REF_ORDINE_CLIENTE = {ph}"
+                f" ORDER BY ID_CONTRATTITESTATA DESC"
+            )
+            cursor.execute(sql, (tracking_number,))
+            row = cursor.fetchone()
+            if row:
+                return str(row[0]).strip()
+    except Exception as e:
+        print(f"[REVISION] ⚠ DB lookup failed: {e}")
+    return None
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # UPFRONT INPUT COLLECTION
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -232,7 +259,16 @@ def gather_worldlink_inputs(pdf_path: str) -> Optional[dict]:
     contract_number = None
     if order_type_str != 'new':
         print(f"\n[REVISION] Order type: {order_type_str.upper()}")
-        contract_number = input("  Existing contract number: ").strip()
+        tracking = order_data.get('tracking_number', '')
+        found = _lookup_contract_by_tracking(tracking)
+        if found:
+            print(f"[REVISION] ✓ Found contract {found} for tracking '{tracking}'")
+            confirm = input(f"  Use contract {found}? (y/n): ").strip().lower()
+            contract_number = found if confirm == 'y' else input("  Existing contract number: ").strip()
+        else:
+            if tracking:
+                print(f"[REVISION] ✗ No contract found for tracking '{tracking}'")
+            contract_number = input("  Existing contract number: ").strip()
         customer_id = None
         customer = lookup_customer(advertiser)
         separation = customer['separation'] if customer else WL_DEFAULT_SEPARATION
