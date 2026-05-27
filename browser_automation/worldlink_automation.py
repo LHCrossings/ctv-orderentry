@@ -37,6 +37,7 @@ IMPORTS
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
+import atexit
 import os
 import sys
 from datetime import datetime
@@ -51,6 +52,25 @@ from etere_client import EtereClient
 from src.domain.enums import BillingType, OrderType, SeparationInterval
 
 from browser_automation.parsers.worldlink_parser import parse_worldlink_pdf
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SESSION SUMMARY — revised contracts accumulator
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_session_revised: list[str] = []
+
+
+def _print_session_summary():
+    """Print revised contract list at program exit. Fires via atexit."""
+    if _session_revised:
+        print("\n" + "=" * 60)
+        print("WORLDLINK SESSION SUMMARY — Revised contracts:")
+        print("  " + ", ".join(_session_revised))
+        print("=" * 60)
+
+
+atexit.register(_print_session_summary)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -534,6 +554,8 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
         contract_code = str(row[0]).strip() if row else str(contract_id)
         conn.close()
         print(f"\n[DIRECT] ✓ Contract {contract_code} committed.")
+        if is_revision:
+            _session_revised.append(contract_code)
         return contract_code
 
     except Exception as exc:
