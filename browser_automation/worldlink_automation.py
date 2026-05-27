@@ -256,20 +256,28 @@ def gather_worldlink_inputs(pdf_path: str) -> Optional[dict]:
     print(f"[PARSE] ✓ Lines: {len(lines)}")
 
     # Revision orders: skip customer details — contract already exists in Etere.
-    # Only the contract number is needed to add lines.
+    # contract_number = COD_CONTRATTO string (Selenium navigates by code)
+    # contract_id     = ID_CONTRATTITESTATA integer (direct DB uses the integer PK)
     contract_number = None
+    contract_id = None
     if order_type_str != 'new':
         print(f"\n[REVISION] Order type: {order_type_str.upper()}")
         tracking = order_data.get('tracking_number', '')
-        found, found_code = _lookup_contract_by_tracking(tracking)
-        if found:
-            print(f"[REVISION] ✓ Found contract {found_code} (ID {found}) for tracking '{tracking}'")
-            confirm = input(f"  Use {found_code} (ID {found})? (y/n): ").strip().lower()
-            contract_number = found if confirm == 'y' else input("  Existing contract ID: ").strip()
+        found_id, found_code = _lookup_contract_by_tracking(tracking)
+        if found_id:
+            print(f"[REVISION] ✓ Found contract {found_code} (ID {found_id}) for tracking '{tracking}'")
+            confirm = input(f"  Use {found_code} (ID {found_id})? (y/n): ").strip().lower()
+            if confirm == 'y':
+                contract_number = found_code
+                contract_id = int(found_id)
+            else:
+                contract_number = input("  Existing contract number: ").strip()
+                contract_id = None
         else:
             if tracking:
                 print(f"[REVISION] ✗ No contract found for tracking '{tracking}'")
             contract_number = input("  Existing contract number: ").strip()
+            contract_id = None
         customer_id = None
         customer = lookup_customer(advertiser)
         separation = customer['separation'] if customer else WL_DEFAULT_SEPARATION
@@ -307,9 +315,238 @@ def gather_worldlink_inputs(pdf_path: str) -> Optional[dict]:
         'separation': separation,
         'billing': billing,
         'network': network,
-        'contract_number': contract_number,
+        'contract_number': contract_number,  # COD_CONTRATTO string — Selenium navigates by this
+        'contract_id': contract_id,           # ID_CONTRATTITESTATA integer — direct DB uses this
         'notes': _build_notes(order_data),
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DIRECT DB ENTRY
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Markets that receive a $0 line in Crossings direct entry.
+# Order matches Etere UI entry: CMP=2, HOU=3, SFO=4, SEA=5, LAX=6, CVC=7, WDC=8, MMT=9
+CROSSINGS_ZERO_MARKETS = ["CMP", "HOU", "SFO", "SEA", "LAX", "CVC", "WDC", "MMT"]
+
+
+def _secs_to_duration(secs: int) -> str:
+    """Convert integer seconds to HH:MM:SS:FF string for EtereDirectClient."""
+    m, s = divmod(int(secs), 60)
+    h, m = divmod(m, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}:00"
+
+
+def _extend_end_date_direct(cursor, ph: str, contract_id: int, new_end) -> None:
+    """Extend CONTRATTITESTATA.DATA_TERMINE if new lines go beyond current end."""
+    cursor.execute(
+        f"SELECT DATA_TERMINE FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = {ph}",
+        (contract_id,)
+    )
+    row = cursor.fetchone()
+    if not row:
+        raise ValueError(f"Contract ID {contract_id} not found in CONTRATTITESTATA")
+    current_end = row[0]
+    current_date = current_end.date() if hasattr(current_end, 'date') else current_end
+    if current_date is None or current_date < new_end:
+        print(f"[DATES] Extending contract end: {current_date} → {new_end}")
+        cursor.execute(
+            f"UPDATE CONTRATTITESTATA SET DATA_TERMINE = {ph} "
+            f"WHERE ID_CONTRATTITESTATA = {ph}",
+            (new_end, contract_id)
+        )
+    else:
+        print(f"[DATES] Contract end {current_date} already covers {new_end} — no update")
+
+
+def _add_crossings_lines_direct(client, lines: list, separation: tuple) -> None:
+    """
+    CROSSINGS direct entry: NYC at real rate + 8 $0 market lines per PDF line.
+    All markets are entered individually via SP — no block refresh required.
+    """
+    for line in lines:
+        days = line['days_of_week']
+        rate = float(line['rate'])
+        is_bonus = rate == 0.0
+        from_time = line['from_time']
+        to_time = line['to_time']
+        time_range = f"{from_time}-{to_time}"
+        duration = _secs_to_duration(int(line['duration']))
+        spots_pw = int(line['spots'])
+        total = int(line['total_spots'])
+        date_from = _parse_date(line['start_date'])
+        date_to = _parse_date(line['end_date'])
+        label = "BNS " if is_bonus else ""
+        time_short = _short_time_range(from_time, to_time)
+        desc = f"(Line {line['line_number']}) {label}{days} {time_short}"
+
+        print(f"\n  [LINE {line['line_number']}] {days} {line['time_range']} | "
+              f"{line['duration']}s | {spots_pw}/wk | ${rate}"
+              + (" [BNS]" if is_bonus else ""))
+
+        nyc_id = client.add_contract_line(
+            market="NYC", days=days, time_range=time_range, description=desc,
+            rate=rate, total_spots=total, spots_per_week=spots_pw,
+            date_from=date_from, date_to=date_to, duration=duration,
+            is_bonus=is_bonus, separation_intervals=separation, scheduling_type=0,
+        )
+        print(f"    NYC line_id={nyc_id}  rate=${rate}")
+
+        for mkt in CROSSINGS_ZERO_MARKETS:
+            mkt_id = client.add_contract_line(
+                market=mkt, days=days, time_range=time_range, description=desc,
+                rate=0.0, total_spots=total, spots_per_week=spots_pw,
+                date_from=date_from, date_to=date_to, duration=duration,
+                is_bonus=is_bonus, separation_intervals=separation, scheduling_type=0,
+            )
+            print(f"    {mkt} line_id={mkt_id}  rate=$0.00")
+
+
+def _add_asian_lines_direct(client, lines: list, separation: tuple) -> None:
+    """ASIAN direct entry: single DAL market line per PDF line."""
+    for line in lines:
+        days = line['days_of_week']
+        rate = float(line['rate'])
+        is_bonus = rate == 0.0
+        from_time = line['from_time']
+        to_time = line['to_time']
+        time_range = f"{from_time}-{to_time}"
+        duration = _secs_to_duration(int(line['duration']))
+        spots_pw = int(line['spots'])
+        total = int(line['total_spots'])
+        date_from = _parse_date(line['start_date'])
+        date_to = _parse_date(line['end_date'])
+        label = "BNS " if is_bonus else ""
+        time_short = _short_time_range(from_time, to_time)
+        desc = f"(Line {line['line_number']}) {label}{days} {time_short}"
+
+        print(f"\n  [LINE {line['line_number']}] {days} {line['time_range']} | "
+              f"{line['duration']}s | {spots_pw}/wk | ${rate}"
+              + (" [BNS]" if is_bonus else ""))
+
+        dal_id = client.add_contract_line(
+            market="DAL", days=days, time_range=time_range, description=desc,
+            rate=rate, total_spots=total, spots_per_week=spots_pw,
+            date_from=date_from, date_to=date_to, duration=duration,
+            is_bonus=is_bonus, separation_intervals=separation, scheduling_type=0,
+        )
+        print(f"    DAL line_id={dal_id}  rate=${rate}")
+
+
+def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
+    """
+    Enter a WorldLink order directly via DB stored procedures (no browser).
+
+    Returns COD_CONTRATTO string on success, None on failure (rolls back fully).
+    Crossings TV: enters all 9 markets explicitly — block refresh not required.
+    """
+    from browser_automation.etere_direct_client import EtereDirectClient, connect as db_connect
+
+    order_data = user_input['order_data']
+    network = user_input['network']
+    lines = order_data['lines']
+    order_type_str = order_data.get('order_type', 'new')
+    separation = user_input['separation']
+    is_revision = order_type_str != 'new'
+    master_market = "DAL" if network == "ASIAN" else "NYC"
+
+    print("\n" + "="*70)
+    print(f"WORLDLINK DIRECT DB ENTRY — {network} / {order_type_str.upper()}")
+    print("="*70)
+
+    flight_start = min(_parse_date(l['start_date']) for l in lines)
+    flight_end   = max(_parse_date(l['end_date'])   for l in lines)
+
+    conn = None
+    try:
+        conn = db_connect()
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+        client.set_master_market(master_market)
+        ph = client._ph
+
+        if is_revision:
+            contract_id = user_input.get('contract_id')
+            if contract_id is None:
+                # contract_number is the code — look up integer ID
+                cur = conn.cursor()
+                cur.execute(
+                    f"SELECT TOP 1 ID_CONTRATTITESTATA FROM CONTRATTITESTATA "
+                    f"WHERE COD_CONTRATTO = {ph}",
+                    (user_input['contract_number'],)
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise ValueError(f"Contract '{user_input['contract_number']}' not found in DB")
+                contract_id = int(row[0])
+            else:
+                contract_id = int(contract_id)
+
+            cur = conn.cursor()
+            _extend_end_date_direct(cur, ph, contract_id, flight_end)
+            client._contract_id = contract_id
+
+            cur.execute(
+                f"SELECT COMMITTENTE FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = {ph}",
+                (contract_id,)
+            )
+            row = cur.fetchone()
+            customer_id = int(row[0]) if row else None
+            print(f"[REVISION] Adding lines to existing contract #{contract_id}")
+        else:
+            customer_id = int(user_input['customer_id'])
+            contract_id = client.create_contract_header(
+                code=order_data['order_code'],
+                description=order_data['description'],
+                customer_id=customer_id,
+                agency_id=None,
+                media_center_id=None,
+                contract_date=flight_start,
+                contract_end_date=flight_end,
+                contract_type=1,
+                billing_type="agency",
+                master_market=master_market,
+                note=user_input['notes'],
+                customer_order_ref=order_data.get('tracking_number', ''),
+            )
+            print(f"[CONTRACT] ✓ ID={contract_id}")
+
+        if customer_id:
+            wl_defaults = client.get_client_defaults(customer_id)
+            if wl_defaults.get("nielsen_id"):
+                client._nielsen_id   = wl_defaults["nielsen_id"]
+                client._nielsen_code = wl_defaults["nielsen_code"]
+                print(f"[DB] Nielsen → id={client._nielsen_id}  code={client._nielsen_code}")
+
+        print(f"[LINES] Entering {len(lines)} PDF line(s)...")
+        if network == "ASIAN":
+            _add_asian_lines_direct(client, lines, separation)
+        else:
+            _add_crossings_lines_direct(client, lines, separation)
+
+        conn.commit()
+
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT COD_CONTRATTO FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = {ph}",
+            (contract_id,)
+        )
+        row = cur.fetchone()
+        contract_code = str(row[0]).strip() if row else str(contract_id)
+        conn.close()
+        print(f"\n[DIRECT] ✓ Contract {contract_code} committed.")
+        return contract_code
+
+    except Exception as exc:
+        print(f"\n[DIRECT] ✗ Error: {exc}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
+        return None
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -472,32 +709,14 @@ def _add_asian_lines(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# BROWSER AUTOMATION
+# BROWSER AUTOMATION (Selenium — fallback path)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def process_worldlink_order(
-    driver,
-    pdf_path: str,
-    user_input: dict = None
-) -> Optional[str]:
+def _process_worldlink_order_selenium(driver, user_input: dict) -> Optional[str]:
     """
-    Process WorldLink order with completely unattended automation.
-
-    Returns contract_number (str) on success, None on failure.
-    The contract_number is needed by the service to build a Contract entity
-    so requires_block_refresh() works and the result formatter shows the reminder.
-
-    Workflow:
-    1. Use pre-collected inputs (from orchestrator) OR gather them now
-    2. Create contract header (new) or use existing contract (revision)
-    3. Add all lines (NYC+CMP for Crossings, DAL for Asian Channel)
-    4. Return contract_number
+    Selenium fallback for WorldLink order entry.
+    Called by process_worldlink_order() when the direct DB path fails.
     """
-    if user_input is None:
-        user_input = gather_worldlink_inputs(pdf_path)
-        if not user_input:
-            return None
-
     order_data = user_input['order_data']
     network = user_input['network']
     lines = order_data['lines']
@@ -531,21 +750,15 @@ def process_worldlink_order(
                 print("[CONTRACT] ✗ Failed to create contract")
                 return None
             print(f"[CONTRACT] ✓ Created: {contract_number}")
-            highest_existing_etere_num = None  # New contract — refresh all lines
+            highest_existing_etere_num = None
         else:
             contract_number = user_input.get('contract_number', '')
             if not contract_number:
                 print("[CONTRACT] ✗ No contract number provided for revision")
                 return None
             print(f"[CONTRACT] ✓ Using existing: {contract_number}")
-            # Extend contract end date if revision lines go beyond it.
-            # Also warms up the Etere sales context (new orders get this via
-            # create_contract_header; revision orders need it explicitly).
             if not etere.extend_contract_end_date(contract_number, lines):
                 return None
-            # Scan existing lines to get the highest Etere internal line number.
-            # This is the onscreen Etere-assigned ID (unique per line, SQL-assigned),
-            # NOT the PDF line number. Block refresh filters by this to skip pre-existing lines.
             existing_data = etere.get_all_line_ids_with_numbers(contract_number)
             etere_line_nums = [lnum for _, lnum in existing_data if lnum is not None]
             highest_existing_etere_num = max(etere_line_nums) if etere_line_nums else None
@@ -560,7 +773,6 @@ def process_worldlink_order(
         status = "✓" if success else "⚠ (some lines failed)"
         print(f"\n[COMPLETE] {status} Contract {contract_number} — {len(lines)} PDF lines")
 
-        # Block refresh: Crossings TV only (CMP lines replicated to other markets)
         if network == 'CROSSINGS' and success:
             _perform_block_refresh_direct(etere, contract_number, only_lines_above=highest_existing_etere_num)
 
@@ -571,6 +783,29 @@ def process_worldlink_order(
         import traceback
         traceback.print_exc()
         return None
+
+
+def process_worldlink_order(
+    driver,
+    pdf_path: str,
+    user_input: dict = None
+) -> Optional[str]:
+    """
+    Process a WorldLink order. Tries direct DB entry first; falls back to Selenium.
+
+    Returns COD_CONTRATTO string on success, None on failure.
+    """
+    if user_input is None:
+        user_input = gather_worldlink_inputs(pdf_path)
+        if not user_input:
+            return None
+
+    result = process_worldlink_order_direct(user_input)
+    if result is not None:
+        return result
+
+    print("\n[FALLBACK] Direct DB entry failed — retrying via Selenium...")
+    return _process_worldlink_order_selenium(driver, user_input)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
