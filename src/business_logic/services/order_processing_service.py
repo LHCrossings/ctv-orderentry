@@ -2176,10 +2176,27 @@ class OrderProcessingService:
             contracts = []
             if success:
                 highest_line = order.order_input.get('highest_line') if isinstance(order.order_input, dict) else None
+                etere_id = None
+                try:
+                    from browser_automation.etere_direct_client import connect as _db_connect
+                    with _db_connect() as _conn:
+                        _ph = '%s' if type(_conn).__module__.startswith('pymssql') else '?'
+                        _cur = _conn.cursor()
+                        _cur.execute(
+                            f"SELECT TOP 1 ID_CONTRATTITESTATA FROM CONTRATTITESTATA "
+                            f"WHERE COD_CONTRATTO = {_ph}",
+                            (contract_num,)
+                        )
+                        _row = _cur.fetchone()
+                        if _row:
+                            etere_id = int(_row[0])
+                except Exception:
+                    pass
                 contracts = [Contract(
                     contract_number=contract_num,
                     order_type=OrderType.WORLDLINK,
                     highest_line=highest_line,
+                    etere_id=etere_id,
                 )]
 
             if success:

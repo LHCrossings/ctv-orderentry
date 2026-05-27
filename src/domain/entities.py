@@ -92,6 +92,7 @@ class Contract:
     order_type: OrderType
     highest_line: int | None = None
     market: str | None = None
+    etere_id: int | None = None
 
     def requires_block_refresh(self) -> bool:
         """

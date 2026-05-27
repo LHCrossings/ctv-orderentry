@@ -241,7 +241,8 @@ class ProcessingResultFormatter(ConsoleFormatter):
             lines.append(self.subheader(f"{order_type.name} ({len(contracts)} contract(s))"))
             for contract in contracts:
                 refresh_indicator = "🔄" if contract.requires_block_refresh() else ""
-                lines.append(f"  - Contract {contract.contract_number} {refresh_indicator}")
+                id_tag = f" (ID: {contract.etere_id})" if contract.etere_id else ""
+                lines.append(f"  - Contract {contract.contract_number}{id_tag} {refresh_indicator}")
 
         # Failed orders
         if failed:
