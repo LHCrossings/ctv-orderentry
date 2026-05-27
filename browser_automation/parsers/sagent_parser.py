@@ -364,9 +364,9 @@ def parse_sagent_pdf(pdf_path: str) -> SagentOrder:
                             day_numbers = re.findall(r'\b(\d{1,2})\b', day_line)
                             print(f"[PARSER] Days found: {day_numbers}")
                             
-                            # Match first 3 months with first 3 day numbers
-                            if len(day_numbers) >= 3:
-                                for month, day in zip(months[:3], day_numbers[:3]):
+                            # Match all months with day numbers
+                            if len(day_numbers) >= len(months):
+                                for month, day in zip(months, day_numbers[:len(months)]):
                                     week_start_dates.append(f"{month} {day}")
                                 
                                 print(f"[PARSER] Week start dates: {week_start_dates}")
@@ -404,62 +404,83 @@ def parse_sagent_pdf(pdf_path: str) -> SagentOrder:
         while idx < len(text_lines):
             line_text = text_lines[idx].strip()
             
-            # Check if this is a line number (e.g., "1   :15   $21.25...")
-            line_match = re.match(r'^(\d+)\s+(:?\d+)\s+\$([0-9.]+)\s+(\w+)\s+(.+)', line_text)
-            
+            # Check if this is a line number.
+            # Handles two layouts:
+            #   "1   :15   $60.00 ..."          (time period on previous line)
+            #   "3   11:59P   :15   $90.00 ..."  (end-time bleeds onto data line)
+            line_match = re.match(
+                r'^(\d+)\s+(?:\d+:\d+[APap][Mm]?\s+)?(:?\d+)\s+\$([0-9.]+)\s+(.+)',
+                line_text,
+            )
+
             if line_match:
                 line_number = int(line_match.group(1))
                 length = line_match.group(2)
                 net_rate_str = line_match.group(3)
-                market = line_match.group(4)
-                rest_of_line = line_match.group(5)
-                
-                # Parse the rest: "PROGRAM   WEEK1 WEEK2 WEEK3 TOTAL DP GRI NETCOST"
-                # Extract program name (before the numbers)
-                program_match = re.match(r'^(\w+(?:\s+\w+)*?)\s+(\d+)', rest_of_line)
-                if program_match:
-                    program = program_match.group(1).strip()
-                    
-                    # Extract weekly spots (3 numbers before "Tot Spots")
-                    spot_match = re.findall(r'\b(\d+)\b', rest_of_line)
-                    if len(spot_match) >= 3:
-                        weekly_spots = [int(spot_match[0]), int(spot_match[1]), int(spot_match[2])]
-                    else:
-                        weekly_spots = [0, 0, 0]
+                rest_of_line = line_match.group(4)
+
+                # Extract all weekly spot counts (first N numbers = one per week column).
+                # Trailing numbers are Total, DP, and net-cost fragments — skip them.
+                n_weeks = len(week_start_dates) if week_start_dates else 3
+                spot_match = re.findall(r'\b(\d+)\b', rest_of_line)
+                if len(spot_match) >= n_weeks:
+                    weekly_spots = [int(spot_match[i]) for i in range(n_weeks)]
+                elif spot_match:
+                    weekly_spots = [int(x) for x in spot_match[:n_weeks]]
                 else:
-                    program = rest_of_line.split()[0] if rest_of_line else "UNKNOWN"
-                    weekly_spots = [0, 0, 0]
-                
+                    weekly_spots = [0] * n_weeks
+
+                program_match = re.match(r'^(\w+(?:\s+\w+)*?)\s+(\d+)', rest_of_line)
+                program = program_match.group(1).strip() if program_match else (
+                    rest_of_line.split()[0] if rest_of_line else "UNKNOWN"
+                )
+
                 # PREVIOUS line: Time Period
                 time_period = ""
                 if idx - 1 >= 0:
                     time_period = text_lines[idx - 1].strip()
-                    # Verify it looks like a time period
                     if not re.search(r'\d+:\d+[AP]', time_period):
-                        time_period = "6:00A to 11:59P"  # Default if not found
-                
+                        time_period = "6:00A to 11:59P"
+
                 # NEXT line: Days
                 days = ""
                 if idx + 1 < len(text_lines):
                     days_text = text_lines[idx + 1].strip()
-                    # Check if this looks like days
                     if re.match(r'^[MTWRFS]', days_text):
                         days = days_text
-                
-                # If no days found, default to M-Su
                 if not days:
                     days = "M T W R F Sa Su"
-                
-                # Parse net rate
-                net_rate = float(net_rate_str)
-                
-                # Gross up rate
-                gross_rate = gross_up_rate(net_rate)
-                
-                # Normalize market
-                market_normalized = normalize_market_code(market)
+
+                # Market: scan surrounding lines for known market keywords.
+                # The market column often wraps onto adjacent lines in this PDF format.
+                ctx = " ".join(
+                    text_lines[j] for j in range(max(0, idx - 2), min(len(text_lines), idx + 3))
+                ).upper()
+                if "FRANCISCO" in ctx:
+                    market_normalized = "SFO"
+                elif "ANGELES" in ctx:
+                    market_normalized = "LAX"
+                elif "VALLEY" in ctx:
+                    market_normalized = "CVC"
+                elif "SEATTLE" in ctx:
+                    market_normalized = "SEA"
+                elif "HOUSTON" in ctx:
+                    market_normalized = "HOU"
+                elif "CHICAGO" in ctx or "MINNEAPOLIS" in ctx:
+                    market_normalized = "CMP"
+                elif "WASHINGTON" in ctx:
+                    market_normalized = "WDC"
+                else:
+                    # Fallback: try to parse a market token from rest_of_line
+                    first_word = rest_of_line.split()[0] if rest_of_line else ""
+                    market_normalized = normalize_market_code(first_word)
+
                 markets_set.add(market_normalized)
-                
+
+                # Parse net rate and gross up
+                net_rate = float(net_rate_str)
+                gross_rate = gross_up_rate(net_rate)
+
                 # Calculate total spots
                 total_spots = sum(weekly_spots)
                 
@@ -526,13 +547,13 @@ def _parse_flight_dates(flight_dates: str) -> Tuple[str, str]:
     Returns:
         Tuple of (start_date, end_date) in MM/DD/YYYY format
     """
-    # Split on dash
-    parts = flight_dates.split('-')
-    if len(parts) != 2:
+    # Extract two MM/DD/YY(YY) dates — ignores trailing text like "Phone: 916-359-8316"
+    dates = re.findall(r'\d{1,2}/\d{1,2}/\d{2,4}', flight_dates)
+    if len(dates) < 2:
         raise ValueError(f"Invalid flight dates format: {flight_dates}")
-    
-    start = parts[0].strip()
-    end = parts[1].strip()
+
+    start = dates[0]
+    end = dates[1]
     
     # Convert MM/DD/YY to MM/DD/YYYY
     start_formatted = _format_date(start)
