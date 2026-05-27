@@ -1,8 +1,7 @@
 """
-Credential Loader - Reads Etere credentials from credentials.env
+Credential Loader - Reads Etere credentials from .env (or credentials.env)
 
-Keeps credentials out of source code. The credentials.env file
-is excluded from git via .gitignore.
+Keeps credentials out of source code. Env files are excluded from git via .gitignore.
 
 Usage:
     from credential_loader import load_credentials
@@ -16,24 +15,28 @@ from typing import Tuple
 
 def load_credentials(env_path: Path | None = None) -> Tuple[str, str]:
     """
-    Load Etere username and password from credentials.env.
+    Load Etere username and password from .env or credentials.env.
 
-    Looks for credentials.env in the same directory as this file,
+    Looks for .env first, then credentials.env in the project root,
     or accepts a custom path.
 
     Args:
-        env_path: Optional path to .env file. Defaults to
-                  credentials.env in the project root.
+        env_path: Optional path to env file. Defaults to the first
+                  existing file among .env, credentials.env.
 
     Returns:
         (username, password) tuple
 
     Raises:
-        FileNotFoundError: If credentials.env doesn't exist
+        FileNotFoundError: If no env file exists
         ValueError: If required keys are missing or still placeholder
     """
     if env_path is None:
-        env_path = Path(__file__).parent / "credentials.env"
+        root = Path(__file__).parent
+        env_path = next(
+            (root / name for name in (".env", "credentials.env") if (root / name).is_file()),
+            root / ".env",
+        )
 
     if not env_path.exists():
         raise FileNotFoundError(
@@ -48,13 +51,13 @@ def load_credentials(env_path: Path | None = None) -> Tuple[str, str]:
 
     if not username or username == "your_username_here":
         raise ValueError(
-            "ETERE_USERNAME not set in credentials.env. "
+            f"ETERE_USERNAME not set in {env_path.name}. "
             "Please replace the placeholder with your actual username."
         )
 
     if not password or password == "your_password_here":
         raise ValueError(
-            "ETERE_PASSWORD not set in credentials.env. "
+            f"ETERE_PASSWORD not set in {env_path.name}. "
             "Please replace the placeholder with your actual password."
         )
 

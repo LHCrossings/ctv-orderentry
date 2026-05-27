@@ -20,24 +20,18 @@ services:
     container_name: ctv-control-room
     ports:
       - "4000:4000"
+    env_file:
+      - .env
     environment:
       PORT: "4000"
-      # Etere SQL Server (pymssql) — set in credentials.env or here:
-      # ETERE_DB_SERVER: "100.85.38.72"
-      # ETERE_DB_USER: ""
-      # ETERE_DB_PASSWORD: ""
-      # ETERE_WEB_URL: "http://100.102.206.113"
     volumes:
       - ./incoming:/app/incoming
       - ./processed:/app/processed
       - ./errors:/app/errors
       - ./data:/app/data
-      # Optional: override SQLite path (relative to /app project root)
-      # CUSTOMER_DB_PATH: data/customers.db
-      # Create credentials.env on the host first (empty dir is created if missing).
-      # - ./credentials.env:/app/credentials.env:ro
+      - ./.env:/app/.env:ro
+      - /mnt/k-drive:/mnt/k
     restart: unless-stopped
-    # Optional: keep logs bounded
     logging:
       driver: json-file
       options:

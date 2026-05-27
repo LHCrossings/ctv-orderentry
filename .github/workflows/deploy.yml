@@ -1,0 +1,35 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Connect Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          version: latest
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          # Wait until deploy host is reachable on tailnet.
+          ping: ${{ vars.DEPLOY_HOST }}
+
+      - uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ vars.DEPLOY_HOST }}
+          username: ${{ vars.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -euxo pipefail
+            cd /opt/ctv-orderentry
+            git fetch origin
+            git checkout "${{ github.ref_name }}"
+            git pull --ff-only origin "${{ github.ref_name }}"
+            docker compose build control-room
+            docker compose up -d control-room
