@@ -367,75 +367,72 @@ def create_sagent_contract(
         for line_idx, line in enumerate(sorted(order.lines, key=lambda l: l.line_number)):
             market = line.market
             print(f"\n[LINE {line.line_number}] Market: {market}")
-                
-                # Get line description (handles paid vs bonus formatting)
-                desc = line.get_description()
-                # Get language
-                language = line.get_language()
-                
-                # Spot code
-                spot_code = 10 if line.is_bonus() else 2  # BNS=10, Paid=2
-                
-                # Get Etere-formatted days and time
-                days = line.get_etere_days()
-                time = line.get_etere_time()
-                
-                # Consolidate weekly distribution (groups identical consecutive weeks)
-                ranges = EtereClient.consolidate_weeks(
-                    line.weekly_spots,
-                    order.week_start_dates,
-                    flight_end=order.flight_end
+
+            # Get line description (handles paid vs bonus formatting)
+            desc = line.get_description()
+            # Get language
+            language = line.get_language()
+
+            # Spot code
+            spot_code = 10 if line.is_bonus() else 2  # BNS=10, Paid=2
+
+            # Get Etere-formatted days and time
+            days = line.get_etere_days()
+            time = line.get_etere_time()
+
+            # Consolidate weekly distribution (groups identical consecutive weeks)
+            ranges = EtereClient.consolidate_weeks(
+                line.weekly_spots,
+                order.week_start_dates,
+                flight_end=order.flight_end
+            )
+
+            print(f"\n  Line {line.line_number}: {desc}")
+            print(f"    Rate: ${line.net_rate} net → ${line.gross_rate} gross")
+            print(f"    Splits into {len(ranges)} Etere line(s)")
+
+            # Parse time range using etere_client utility
+            time_from, time_to = EtereClient.parse_time_range(time)
+
+            # Apply Sunday 6-7a rule using etere_client utility
+            adjusted_days, adjusted_day_count = EtereClient.check_sunday_6_7a_rule(days, time)
+
+            # Get duration in seconds
+            duration_seconds = line.get_duration_seconds()
+
+            # Create Etere line for each range
+            for range_idx, range_data in enumerate(ranges, 1):
+                line_count += 1
+
+                # Calculate total spots for this range
+                total_spots = range_data['spots_per_week'] * range_data['weeks']
+
+                print(f"    Creating line {line_count}: {range_data['start_date']} - {range_data['end_date']}")
+
+                # Get spots per week
+                spots_per_week = range_data['spots_per_week']
+
+                success = etere.add_contract_line(
+                    contract_number=contract_number,
+                    market=market,
+                    start_date=range_data['start_date'],
+                    end_date=range_data['end_date'],
+                    days=adjusted_days,
+                    time_from=time_from,
+                    time_to=time_to,
+                    description=desc,
+                    spot_code=spot_code,
+                    duration_seconds=duration_seconds,
+                    total_spots=total_spots,
+                    spots_per_week=spots_per_week,
+                    rate=float(line.gross_rate),
+                    separation_intervals=separation_intervals,
+                    is_bookend=False
                 )
-                
-                print(f"\n  Line {line.line_number}: {desc}")
-                print(f"    Rate: ${line.net_rate} net → ${line.gross_rate} gross")
-                print(f"    Splits into {len(ranges)} Etere line(s)")
-                
-                # Parse time range using etere_client utility
-                time_from, time_to = EtereClient.parse_time_range(time)
-                
-                # Apply Sunday 6-7a rule using etere_client utility
-                adjusted_days, adjusted_day_count = EtereClient.check_sunday_6_7a_rule(days, time)
-                
-                # Get duration in seconds
-                duration_seconds = line.get_duration_seconds()
-                
-                # Create Etere line for each range
-                for range_idx, range_data in enumerate(ranges, 1):
-                    line_count += 1
-                    
-                    # Calculate total spots for this range
-                    total_spots = range_data['spots_per_week'] * range_data['weeks']
-                    
-                    print(f"    Creating line {line_count}: {range_data['start_date']} - {range_data['end_date']}")
-                    
-                    # Get spots per week
-                    spots_per_week = range_data['spots_per_week']
-                    
-                    # Add the line using etere_client!
-                    # max_daily_run is auto-calculated by etere_client from spots_per_week and days
-                    # Use GROSS RATE (not net rate!)
-                    success = etere.add_contract_line(
-                        contract_number=contract_number,
-                        market=market,  # Set market per line (CVC, LAX, SFO, etc.)
-                        start_date=range_data['start_date'],
-                        end_date=range_data['end_date'],
-                        days=adjusted_days,
-                        time_from=time_from,
-                        time_to=time_to,
-                        description=desc,
-                        spot_code=spot_code,
-                        duration_seconds=duration_seconds,
-                        total_spots=total_spots,
-                        spots_per_week=spots_per_week,
-                        # max_daily_run is auto-calculated - no need to pass it!
-                        rate=float(line.gross_rate),  # USE GROSS RATE                        separation_intervals=separation_intervals,
-                        is_bookend=False
-                    )
-                    
-                    if not success:
-                        print(f"    ✗ Failed to add line {line_count}")
-                        return False
+
+                if not success:
+                    print(f"    ✗ Failed to add line {line_count}")
+                    return False
         
         print(f"\n[SAGENT] ✓ All {line_count} lines added successfully")
         return True
