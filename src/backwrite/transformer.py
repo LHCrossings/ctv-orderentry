@@ -1132,7 +1132,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
     _gross_up_dict = user_inputs.get("gross_up_rates") or {}
     if _gross_up_dict and is_agency and (1 - agency_fee) > 0:
         _gross_up_map = {
-            round(float(k), 4): round(float(v) / (1 - agency_fee), 4)
+            round(float(k), 4): float(v) / (1 - agency_fee)
             for k, v in _gross_up_dict.items()
         }
         # Also index by net rate so IO-sourced SC lines (which carry net rates,
@@ -1140,7 +1140,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
         for _v in _gross_up_dict.values():
             _net = round(float(_v), 4)
             if _net not in _gross_up_map:
-                _gross_up_map[_net] = round(float(_v) / (1 - agency_fee), 4)
+                _gross_up_map[_net] = float(_v) / (1 - agency_fee)
 
     def _grossed_up(rate: float) -> float:
         if not _gross_up_map:

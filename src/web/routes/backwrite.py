@@ -28,7 +28,7 @@ from backwrite.transformer import (
 
 SALES_PEOPLE = [
     "Charmaine Lane",
-    "Rod Malin",
+    "Marquice Wong",
     "House",
 ]
 
