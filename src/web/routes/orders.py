@@ -14,7 +14,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, List, Optional
 
-from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, UploadFile
+from src.web.auth import require_export_token
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
@@ -5844,7 +5845,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         return templates.TemplateResponse(request, "master_control/booked_business.html")
 
     @router.get("/api/master-control/booked-business/load")
-    async def booked_business_load(year: int, month: int, show_trade: bool = False):
+    async def booked_business_load(year: int, month: int, show_trade: bool = False, _auth: None = Depends(require_export_token)):
         def _run():
             import calendar as _cal
             from collections import defaultdict

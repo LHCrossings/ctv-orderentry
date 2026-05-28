@@ -7,9 +7,11 @@ import io
 from collections import defaultdict
 from datetime import date, timedelta
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
+
+from src.web.auth import require_export_token
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -244,7 +246,7 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
         return templates.TemplateResponse(request, "reports/placement_by_week.html")
 
     @router.get("/api/reports/placement-by-week/{contract_id}")
-    async def placement_by_week_data(contract_id: int):
+    async def placement_by_week_data(contract_id: int, _auth: None = Depends(require_export_token)):
         try:
             hdr, daily = await asyncio.get_running_loop().run_in_executor(
                 None, lambda: _fetch_placements_sync(contract_id)
@@ -256,7 +258,7 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
         return JSONResponse(_build_pivot(hdr, daily))
 
     @router.get("/api/reports/placement-by-week/{contract_id}/excel")
-    async def placement_by_week_excel(contract_id: int):
+    async def placement_by_week_excel(contract_id: int, _auth: None = Depends(require_export_token)):
         try:
             hdr, daily = await asyncio.get_running_loop().run_in_executor(
                 None, lambda: _fetch_placements_sync(contract_id)
@@ -332,6 +334,7 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
         date_from: str = Query(...),
         date_to: str = Query(...),
         markets: str = Query(...),
+        _auth: None = Depends(require_export_token),
     ):
         try:
             d_from = date.fromisoformat(date_from)
