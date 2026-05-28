@@ -38,7 +38,8 @@ def _search_suggestion(advertiser: str) -> str:
     for prefix, suggestion in _SEARCH_OVERRIDES.items():
         if key.startswith(prefix):
             return suggestion
-    return advertiser
+    # Default: first word is specific enough to find the contract
+    return advertiser.split()[0] if advertiser else advertiser
 
 
 @dataclass
