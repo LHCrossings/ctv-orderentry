@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Release Blacklist — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 800px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+        }
+
+        .tool-card h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+
+        .tool-card p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            margin-bottom: 20px;
+        }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .field-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .field-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 1rem;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            color: var(--text-primary);
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            width: 100%;
+        }
+
+        .field-input:focus {
+            border-color: var(--nord10);
+            box-shadow: 0 0 0 3px rgba(94,129,172,0.15);
+        }
+
+        .btn {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.15s;
+            white-space: nowrap;
+            height: 42px;
+        }
+
+        .btn-preview {
+            background: var(--nord10);
+            color: white;
+        }
+
+        .btn-preview:hover:not(:disabled) { background: var(--nord9); transform: translateY(-1px); }
+
+        .btn-apply {
+            background: var(--nord11);
+            color: white;
+        }
+
+        .btn-apply:hover:not(:disabled) { background: #bf616a; transform: translateY(-1px); }
+
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+        .search-wrap { position: relative; flex: 1; max-width: 380px; }
+        .search-dropdown {
+            position: absolute; top: 100%; left: 0; z-index: 200;
+            background: var(--nord6); border: 1px solid var(--border-color);
+            border-radius: 8px; box-shadow: 0 4px 16px var(--shadow-color);
+            min-width: 360px; max-height: 280px; overflow-y: auto;
+        }
+        .dropdown-item { padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border-color); }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover { background: var(--bg-secondary); }
+        .dropdown-code { font-weight: 700; font-size: 0.88rem; color: var(--text-primary); }
+        .dropdown-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 1px; }
+
+        .preview-section { display: none; margin-top: 24px; }
+        .preview-section.visible { display: block; }
+
+        .preview-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        .preview-table th {
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .preview-table th.num, .preview-table td.num { text-align: right; }
+        .preview-table td {
+            padding: 9px 12px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        .preview-table tr:last-child td { border-bottom: none; }
+        .missed-cell { color: var(--nord11); font-weight: 600; }
+
+        .summary-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 16px;
+            gap: 16px;
+        }
+
+        .summary-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .summary-label strong {
+            color: var(--text-primary);
+            font-size: 1rem;
+        }
+
+        .result-msg {
+            margin-top: 16px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            display: none;
+        }
+        .result-msg.success { background: rgba(163,190,140,0.15); color: var(--nord14); border: 1px solid rgba(163,190,140,0.4); }
+        .result-msg.error   { background: rgba(191,97,106,0.12);  color: var(--nord11); border: 1px solid rgba(191,97,106,0.3);  }
+
+        .empty-msg {
+            padding: 24px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.88rem;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/scripts" class="back-link">&#8592;</a>
+            <div class="logo-icon">&#128683;</div>
+            <div>
+                <h1>Release <span>Blacklist</span></h1>
+                <div class="logo-sub">Scripts · Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="tool-card">
+        <h2>Release Blacklisted Spots</h2>
+        <p>Shows spots Etere could not schedule (blacklisted) and releases them back into scheduler availability. Ordered counts are left unchanged — Etere will re-attempt scheduling on the next pass. Does not affect already-placed spots.</p>
+
+        <div class="input-row">
+            <div class="field-group search-wrap">
+                <label class="field-label">Contract</label>
+                <input class="field-input" id="contractSearch" placeholder="Search by code, name, or ID…" autocomplete="off" />
+                <div id="contractDropdown" class="search-dropdown" style="display:none;"></div>
+            </div>
+            <button id="previewBtn" class="btn btn-preview" onclick="loadPreview()">Preview</button>
+        </div>
+
+        <div id="previewSection" class="preview-section">
+            <div id="previewBody"></div>
+            <div class="summary-row">
+                <span class="summary-label" id="summaryLabel"></span>
+                <button id="applyBtn" class="btn btn-apply" onclick="applyRelease()" style="display:none;">Release Spots</button>
+            </div>
+            <div id="resultMsg" class="result-msg"></div>
+        </div>
+    </div>
+</main>
+
+<script>
+let selectedContractId = null;
+const contractSearchEl = document.getElementById('contractSearch');
+const contractDropdown  = document.getElementById('contractDropdown');
+let _cTimer = null;
+
+contractSearchEl.addEventListener('input', () => {
+    selectedContractId = null;
+    clearPreview();
+    if (!contractSearchEl.value.trim()) { contractDropdown.style.display = 'none'; return; }
+    clearTimeout(_cTimer);
+    _cTimer = setTimeout(searchContracts, 350);
+});
+contractSearchEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { clearTimeout(_cTimer); searchContracts(); }
+});
+document.addEventListener('click', e => {
+    if (!e.target.closest('.search-wrap')) contractDropdown.style.display = 'none';
+});
+
+async function searchContracts() {
+    const q = contractSearchEl.value.trim();
+    if (!q) return;
+    const resp = await fetch(`/api/traffic/contract-search?q=${encodeURIComponent(q)}`);
+    const rows = await resp.json();
+    contractDropdown.innerHTML = rows.length
+        ? rows.map(r => `
+            <div class="dropdown-item" data-id="${r.id}" data-code="${escHtml(r.code||'')}">
+                <div class="dropdown-code">${escHtml(r.code)}</div>
+                <div class="dropdown-desc">${escHtml(r.description||'')} &nbsp;·&nbsp; ${r.date_start} – ${r.date_end}</div>
+            </div>`).join('')
+        : '<div class="dropdown-item"><span class="dropdown-desc">No contracts found.</span></div>';
+    contractDropdown.style.display = 'block';
+}
+
+contractDropdown.addEventListener('click', e => {
+    const item = e.target.closest('.dropdown-item[data-id]');
+    if (!item) return;
+    selectedContractId = parseInt(item.dataset.id);
+    contractSearchEl.value = item.dataset.code;
+    contractDropdown.style.display = 'none';
+    clearPreview();
+});
+
+function escHtml(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function clearPreview() {
+    document.getElementById('previewSection').classList.remove('visible');
+    document.getElementById('previewBody').innerHTML = '';
+    document.getElementById('summaryLabel').textContent = '';
+    document.getElementById('applyBtn').style.display = 'none';
+    const msg = document.getElementById('resultMsg');
+    msg.style.display = 'none';
+    msg.className = 'result-msg';
+}
+
+async function loadPreview() {
+    if (!selectedContractId) { contractSearchEl.focus(); return; }
+
+    document.getElementById('previewBtn').disabled = true;
+    clearPreview();
+    document.getElementById('previewSection').classList.add('visible');
+    document.getElementById('previewBody').innerHTML = '<div class="empty-msg">Loading…</div>';
+
+    try {
+        const resp = await fetch(`/api/scripts/release-blacklist/preview?contract_id=${selectedContractId}`);
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({detail: resp.statusText}));
+            throw new Error(err.detail || resp.statusText);
+        }
+        const data = await resp.json();
+
+        if (!data.lines.length) {
+            document.getElementById('previewBody').innerHTML =
+                '<div class="empty-msg">No blacklisted spots found for this contract.</div>';
+            document.getElementById('summaryLabel').textContent = 'Nothing to release.';
+            document.getElementById('previewBtn').disabled = false;
+            return;
+        }
+
+        let html = `<table class="preview-table">
+            <thead><tr>
+                <th>Market</th>
+                <th>Description</th>
+                <th class="num">Ordered</th>
+                <th class="num">Placed</th>
+                <th class="num">Missed</th>
+            </tr></thead><tbody>`;
+        for (const ln of data.lines) {
+            html += `<tr>
+                <td>${escHtml(ln.market)}</td>
+                <td>${escHtml(ln.description)}</td>
+                <td class="num">${ln.ordered}</td>
+                <td class="num">${ln.placed}</td>
+                <td class="num missed-cell">${ln.missed}</td>
+            </tr>`;
+        }
+        html += '</tbody></table>';
+        document.getElementById('previewBody').innerHTML = html;
+
+        document.getElementById('summaryLabel').innerHTML =
+            `<strong>${data.total_missed}</strong> spots across <strong>${data.lines.length}</strong> line${data.lines.length !== 1 ? 's' : ''} will be released.`;
+        document.getElementById('applyBtn').style.display = '';
+        document.getElementById('applyBtn').textContent = `Release ${data.total_missed} Spots`;
+
+    } catch (err) {
+        document.getElementById('previewBody').innerHTML =
+            `<div class="empty-msg" style="color:var(--nord11);">Error: ${escHtml(err.message)}</div>`;
+    }
+    document.getElementById('previewBtn').disabled = false;
+}
+
+async function applyRelease() {
+    if (!selectedContractId) return;
+
+    const applyBtn  = document.getElementById('applyBtn');
+    const resultMsg = document.getElementById('resultMsg');
+    applyBtn.disabled = true;
+    resultMsg.style.display = 'none';
+
+    try {
+        const resp = await fetch('/api/scripts/release-blacklist/apply', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({contract_id: selectedContractId}),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || resp.statusText);
+
+        resultMsg.textContent = `Done — ${data.deleted} blacklist entr${data.deleted !== 1 ? 'ies' : 'y'} removed. Etere will re-attempt scheduling on the next pass.`;
+        resultMsg.className = 'result-msg success';
+        resultMsg.style.display = 'block';
+        applyBtn.style.display = 'none';
+        document.getElementById('summaryLabel').textContent = '';
+
+    } catch (err) {
+        resultMsg.textContent = `Error: ${err.message}`;
+        resultMsg.className = 'result-msg error';
+        resultMsg.style.display = 'block';
+        applyBtn.disabled = false;
+    }
+}
+</script>
+
+</body>
+</html>

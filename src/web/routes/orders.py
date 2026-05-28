@@ -6382,4 +6382,82 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+    # ── Release Blacklist ─────────────────────────────────────────────────────
+
+    @router.get("/scripts/release-blacklist", response_class=HTMLResponse)
+    async def scripts_release_blacklist(request: Request):
+        return templates.TemplateResponse(request, "scripts/release_blacklist.html")
+
+    @router.get("/api/scripts/release-blacklist/preview")
+    async def release_blacklist_preview(contract_id: int = Query(..., gt=0)):
+        try:
+            from browser_automation.etere_direct_client import connect as _db_connect
+            with _db_connect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT
+                        cr.ID_CONTRATTIRIGHE,
+                        cr.COD_USER,
+                        cr.DESCRIZIONE,
+                        cr.N_PASSAGGI,
+                        COUNT(tsl.ID_ContrattiRighe) AS blacklist_rows,
+                        SUM(tsl.PassageMiss) AS missed_spots,
+                        (SELECT COUNT(*) FROM trafficPalinse tp
+                         WHERE tp.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
+                         AND (tp.ID_TRAFFICTRASH = 0 OR tp.ID_TRAFFICTRASH IS NULL)) AS placed_spots
+                    FROM CONTRATTIRIGHE cr
+                    JOIN Traffic_ScheduleList tsl ON tsl.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
+                    WHERE cr.ID_CONTRATTITESTATA = %s AND tsl.BlackList > 0
+                    GROUP BY cr.ID_CONTRATTIRIGHE, cr.COD_USER, cr.DESCRIZIONE, cr.N_PASSAGGI
+                    ORDER BY cr.COD_USER, cr.ID_CONTRATTIRIGHE
+                """, [contract_id])
+                rows = cursor.fetchall()
+
+            if not rows:
+                return JSONResponse({"lines": [], "total_missed": 0})
+
+            _mn = {1:"NYC",2:"CMP",3:"HOU",4:"SFO",5:"SEA",6:"LAX",7:"CVC",8:"WDC",9:"MMT",10:"DAL"}
+            lines = []
+            total_missed = 0
+            for (lid, cod_user, desc, n_pass, _bl_rows, missed, placed) in rows:
+                m = missed or 0
+                total_missed += m
+                lines.append({
+                    "line_id":     lid,
+                    "market":      _mn.get(cod_user, str(cod_user) if cod_user else "—"),
+                    "description": desc or "",
+                    "ordered":     n_pass or 0,
+                    "placed":      placed or 0,
+                    "missed":      m,
+                })
+
+            return JSONResponse({"contract_id": contract_id, "lines": lines, "total_missed": total_missed})
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.post("/api/scripts/release-blacklist/apply")
+    async def release_blacklist_apply(body: dict = Body(...)):
+        contract_id = body.get("contract_id")
+        if not contract_id:
+            raise HTTPException(status_code=400, detail="contract_id required")
+        try:
+            from browser_automation.etere_direct_client import connect as _db_connect
+            with _db_connect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    DELETE FROM Traffic_ScheduleList
+                    WHERE ID_ContrattiRighe IN (
+                        SELECT ID_CONTRATTIRIGHE FROM CONTRATTIRIGHE
+                        WHERE ID_CONTRATTITESTATA = %s
+                    )
+                    AND BlackList > 0
+                """, [contract_id])
+                deleted = cursor.rowcount
+                conn.commit()
+            return JSONResponse({"deleted": deleted})
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     return router
