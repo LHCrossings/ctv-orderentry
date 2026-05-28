@@ -11,8 +11,6 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
-from src.web.auth import require_export_token
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

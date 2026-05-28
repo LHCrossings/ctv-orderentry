@@ -14,11 +14,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, List, Optional
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
-
-from src.web.auth import require_export_token
 
 _src_path = Path(__file__).parent.parent.parent
 if str(_src_path) not in sys.path:
