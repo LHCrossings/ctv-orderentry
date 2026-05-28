@@ -117,6 +117,7 @@ class OrderProcessingService:
     _DIRECT_DB_ORDER_TYPES = {
         OrderType.LEXUS,
         OrderType.RPM,
+        OrderType.WORLDLINK,
     }
 
     def __init__(
@@ -2154,7 +2155,7 @@ class OrderProcessingService:
             ProcessingResult with contract for block-refresh tracking
         """
         try:
-            from browser_automation.worldlink_automation import process_worldlink_order
+            from browser_automation.worldlink_automation import process_worldlink_order_direct
 
             print(f"\n{'='*70}")
             print("PROCESSING WORLDLINK ORDER")
@@ -2164,14 +2165,6 @@ class OrderProcessingService:
                 print(f"Customer: {order.customer_name}")
             print(f"{'='*70}\n")
 
-            if shared_session is None:
-                return ProcessingResult(
-                    success=False,
-                    contracts=[],
-                    order_type=OrderType.WORLDLINK,
-                    error_message="Browser session required for WorldLink orders"
-                )
-
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
@@ -2180,13 +2173,7 @@ class OrderProcessingService:
                     error_message="Order inputs not collected"
                 )
 
-            print("[SESSION] ✓ Using shared browser session")
-
-            contract_num = process_worldlink_order(
-                driver=shared_session.driver,
-                pdf_path=str(order.pdf_path),
-                user_input=order.order_input
-            )
+            contract_num = process_worldlink_order_direct(user_input=order.order_input)
 
             success = contract_num is not None
             contracts = []
