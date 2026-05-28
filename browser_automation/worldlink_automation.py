@@ -379,7 +379,7 @@ def _extend_end_date_direct(cursor, ph: str, contract_id: int, new_end) -> None:
         print(f"[DATES] Contract end {current_date} already covers {new_end} — no update")
 
 
-def _add_crossings_lines_direct(client, lines: list, separation: tuple) -> None:
+def _add_crossings_lines_direct(client, lines: list, separation: tuple, row_status: int = 0) -> None:
     """
     CROSSINGS direct entry: NYC at real rate + 8 $0 market lines per PDF line.
     All markets are entered individually via SP — no block refresh required.
@@ -409,7 +409,8 @@ def _add_crossings_lines_direct(client, lines: list, separation: tuple) -> None:
             market="NYC", days=days, time_range=time_range, description=desc,
             rate=rate, total_spots=total, spots_per_week=spots_pw,
             date_from=date_from, date_to=date_to, duration=duration,
-            is_bonus=is_bonus, booking_code=booking, separation_intervals=separation, scheduling_type=0,
+            is_bonus=is_bonus, booking_code=booking, separation_intervals=separation,
+            scheduling_type=0, row_status=row_status,
         )
         print(f"    NYC line_id={nyc_id}  rate=${rate}")
 
@@ -418,12 +419,13 @@ def _add_crossings_lines_direct(client, lines: list, separation: tuple) -> None:
                 market=mkt, days=days, time_range=time_range, description=desc,
                 rate=0.0, total_spots=total, spots_per_week=spots_pw,
                 date_from=date_from, date_to=date_to, duration=duration,
-                is_bonus=is_bonus, booking_code=booking, separation_intervals=separation, scheduling_type=0,
+                is_bonus=is_bonus, booking_code=booking, separation_intervals=separation,
+                scheduling_type=0, row_status=row_status,
             )
             print(f"    {mkt} line_id={mkt_id}  rate=$0.00")
 
 
-def _add_asian_lines_direct(client, lines: list, separation: tuple) -> None:
+def _add_asian_lines_direct(client, lines: list, separation: tuple, row_status: int = 0) -> None:
     """ASIAN direct entry: single DAL market line per PDF line."""
     for line in lines:
         days = line['days_of_week']
@@ -450,7 +452,7 @@ def _add_asian_lines_direct(client, lines: list, separation: tuple) -> None:
             rate=rate, total_spots=total, spots_per_week=spots_pw,
             date_from=date_from, date_to=date_to, duration=duration,
             is_bonus=is_bonus, booking_code=10 if is_bonus else 2,
-            separation_intervals=separation, scheduling_type=0,
+            separation_intervals=separation, scheduling_type=0, row_status=row_status,
         )
         print(f"    DAL line_id={dal_id}  rate=${rate}")
 
@@ -539,11 +541,16 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
                 client._nielsen_code = wl_defaults["nielsen_code"]
                 print(f"[DB] Nielsen → id={client._nielsen_id}  code={client._nielsen_code}")
 
+        # Revision lines on an approved contract must use ROWSTATUS=2 (Change Data)
+        # so the traffic engine doesn't schedule them without manual re-approval.
+        # New contract lines use ROWSTATUS=0 (Ready) — the Proposal contract type gates them.
+        line_row_status = 2 if is_revision else 0
+
         print(f"[LINES] Entering {len(lines)} PDF line(s)...")
         if network == "ASIAN":
-            _add_asian_lines_direct(client, lines, separation)
+            _add_asian_lines_direct(client, lines, separation, row_status=line_row_status)
         else:
-            _add_crossings_lines_direct(client, lines, separation)
+            _add_crossings_lines_direct(client, lines, separation, row_status=line_row_status)
 
         conn.commit()
 

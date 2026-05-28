@@ -756,6 +756,7 @@ EXEC web_sales_savecontractgeneral
         whitelist_priority: int = 50,
         booking_code: int = 2,
         scheduling_type: Optional[int] = None,
+        row_status: int = 0,   # 0=Ready, 2=Change Data (use 2 for revision lines on approved contracts)
         # Unused kwargs kept for interface compatibility with EtereClient
         **_kwargs,
     ) -> int:
@@ -935,7 +936,7 @@ EXEC web_sales_InsertContractLine
             booking_code,       # @idbooking
             0,                  # @id (new line; SP returns the assigned ID)
             whitelist_priority, # @priwhitelist
-            0,                  # @rowstatus — 0=unscheduled; Etere sets to 1 after scheduling
+            row_status,         # @rowstatus — 0=Ready, 2=Change Data (revision lines on approved contracts)
             intcomm,            # @intcomm
             intsrighe,          # @intsrighe
             intevent,           # @intevent
