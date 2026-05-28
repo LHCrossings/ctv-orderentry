@@ -302,7 +302,20 @@ def gather_worldlink_inputs(pdf_path: str) -> Optional[dict]:
         customer = lookup_customer(advertiser)
         separation = customer['separation'] if customer else WL_DEFAULT_SEPARATION
         print(f"[CUSTOMER] ✓ Revision — using existing contract {contract_number}")
+
+        if order_type_str == 'revision_change':
+            while True:
+                raw = input("  First available date for changes (MM/DD/YYYY): ").strip()
+                try:
+                    first_available_date = datetime.strptime(raw, '%m/%d/%Y').date()
+                    print(f"  ✓ Changes apply from {first_available_date}")
+                    break
+                except ValueError:
+                    print("  Invalid date. Use MM/DD/YYYY.")
+        else:
+            first_available_date = None
     else:
+        first_available_date = None
         # New order: look up or prompt for customer details
         customer = lookup_customer(advertiser)
         if customer:
@@ -335,9 +348,10 @@ def gather_worldlink_inputs(pdf_path: str) -> Optional[dict]:
         'separation': separation,
         'billing': billing,
         'network': network,
-        'contract_number': contract_number,  # COD_CONTRATTO string — Selenium navigates by this
-        'contract_id': contract_id,           # ID_CONTRATTITESTATA integer — direct DB uses this
+        'contract_number': contract_number,      # COD_CONTRATTO string — Selenium navigates by this
+        'contract_id': contract_id,              # ID_CONTRATTITESTATA integer — direct DB uses this
         'notes': _build_notes(order_data),
+        'first_available_date': first_available_date,  # date or None; set for revision_change only
     }
 
 
@@ -457,6 +471,105 @@ def _add_asian_lines_direct(client, lines: list, separation: tuple, row_status: 
         print(f"    DAL line_id={dal_id}  rate=${rate}")
 
 
+def _find_wl_line_ids(conn, ph: str, contract_id: int, wl_line_number: int) -> list:
+    """Return list of (ID_CONTRATTIRIGHE, COD_USER) for a WL line number across all markets."""
+    cur = conn.cursor()
+    cur.execute(
+        f"SELECT ID_CONTRATTIRIGHE, COD_USER FROM CONTRATTIRIGHE "
+        f"WHERE ID_CONTRATTITESTATA = {ph} AND DESCRIZIONE LIKE {ph}",
+        (contract_id, f'(Line {wl_line_number})%')
+    )
+    return cur.fetchall()
+
+
+def _spot_check_and_unschedule(conn, ph: str, line_ids: list, first_available_date) -> tuple:
+    """
+    Count locked spots (before cutoff) and delete removable spots (>= cutoff).
+    Returns (locked_count, removed_count).
+    """
+    id_ph = ','.join([ph] * len(line_ids))
+    cur = conn.cursor()
+
+    cur.execute(
+        f"SELECT COUNT(*) FROM trafficPalinse "
+        f"WHERE ID_ContrattiRighe IN ({id_ph}) AND Date < {ph}",
+        (*line_ids, first_available_date)
+    )
+    locked = cur.fetchone()[0] or 0
+
+    cur.execute(
+        f"SELECT COUNT(*) FROM trafficPalinse "
+        f"WHERE ID_ContrattiRighe IN ({id_ph}) AND Date >= {ph}",
+        (*line_ids, first_available_date)
+    )
+    removable = cur.fetchone()[0] or 0
+
+    if removable > 0:
+        cur.execute(
+            f"DELETE FROM trafficPalinse "
+            f"WHERE ID_ContrattiRighe IN ({id_ph}) AND Date >= {ph}",
+            (*line_ids, first_available_date)
+        )
+
+    return locked, removable
+
+
+def _update_change_lines(
+    conn, ph: str, lines_with_market: list, io_line: dict,
+    locked_count: int, is_cancel: bool, paid_market_id: int = 1,
+) -> None:
+    """
+    UPDATE CONTRATTIRIGHE rows to match the IO for a CHANGE or CANCEL line.
+    Sets ROWSTATUS=2 so lines require re-approval before scheduling.
+    paid_market_id: COD_USER that gets the real rate (1=NYC for Crossings, 10=DAL for Asian).
+    """
+    from math import ceil
+    from browser_automation.etere_direct_client import _to_frames, _parse_hhmm, parse_day_bits
+
+    end_date   = _parse_date(io_line['end_date'])
+    start_date = _parse_date(io_line['start_date'])
+    new_n_passaggi = locked_count if is_cancel else int(io_line['total_spots'])
+    spots_pw   = int(io_line['spots'])
+
+    from_h, from_m = _parse_hhmm(io_line['from_time'])
+    to_h,   to_m   = _parse_hhmm(io_line['to_time'])
+    ora_inizio = _to_frames(from_h, from_m)
+    ora_fine   = _to_frames(to_h, to_m)
+
+    day_bits   = parse_day_bits(io_line['days_of_week'])
+    active_days = sum(1 for v in day_bits.values() if v)
+    max_daily  = ceil(spots_pw / active_days) if active_days else spots_pw
+    real_rate  = float(io_line['rate'])
+
+    cur = conn.cursor()
+    for line_id, cod_user in lines_with_market:
+        importo = real_rate if cod_user == paid_market_id else 0.0
+        cur.execute(
+            f"UPDATE CONTRATTIRIGHE SET "
+            f"DATA_INIZIO = {ph}, DATA_FINE = {ph}, N_PASSAGGI = {ph}, "
+            f"PASSAGGI_SETTIMANALI = {ph}, PASSAGGI_GIORNALIERI = {ph}, "
+            f"ORA_INIZIO = {ph}, ORA_FINE = {ph}, "
+            f"LUNEDI = {ph}, MARTEDI = {ph}, MERCOLEDI = {ph}, "
+            f"GIOVEDI = {ph}, VENERDI = {ph}, SABATO = {ph}, DOMENICA = {ph}, "
+            f"IMPORTO = {ph}, ROWSTATUS = 2 "
+            f"WHERE ID_CONTRATTIRIGHE = {ph}",
+            (
+                start_date, end_date, new_n_passaggi,
+                spots_pw, max_daily,
+                ora_inizio, ora_fine,
+                1 if day_bits['lun'] else 0,
+                1 if day_bits['mar'] else 0,
+                1 if day_bits['mer'] else 0,
+                1 if day_bits['gio'] else 0,
+                1 if day_bits['ven'] else 0,
+                1 if day_bits['sab'] else 0,
+                1 if day_bits['dom'] else 0,
+                importo,
+                line_id,
+            )
+        )
+
+
 def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
     """
     Enter a WorldLink order directly via DB stored procedures (no browser).
@@ -546,11 +659,50 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
         # New contract lines use ROWSTATUS=0 (Ready) — the Proposal contract type gates them.
         line_row_status = 2 if is_revision else 0
 
-        print(f"[LINES] Entering {len(lines)} PDF line(s)...")
-        if network == "ASIAN":
-            _add_asian_lines_direct(client, lines, separation, row_status=line_row_status)
+        print(f"[LINES] Processing {len(lines)} PDF line(s) ({order_type_str.upper()})...")
+        if order_type_str == 'revision_change':
+            first_available = user_input['first_available_date']
+            paid_market_id  = 10 if network == "ASIAN" else 1
+            add_lines = []
+            for io_line in lines:
+                action  = (io_line.get('action') or 'ADD').upper()
+                wl_num  = io_line['line_number']
+                if action in ('CHANGE', 'CANCEL'):
+                    etere_lines = _find_wl_line_ids(conn, ph, contract_id, wl_num)
+                    if not etere_lines:
+                        print(f"\n  [Line {wl_num}] {action} ✗ No matching Etere lines — skipped")
+                        continue
+                    line_ids = [r[0] for r in etere_lines]
+                    locked, removed = _spot_check_and_unschedule(conn, ph, line_ids, first_available)
+                    n_new = locked if action == 'CANCEL' else int(io_line['total_spots'])
+                    if action != 'CANCEL' and locked > n_new:
+                        print(f"\n  [Line {wl_num}] {action} ⚠ CONFLICT — "
+                              f"IO orders {n_new} spots but {locked} are already locked "
+                              f"before {first_available}. Manual correction required.")
+                    else:
+                        _update_change_lines(conn, ph, etere_lines, io_line, locked,
+                                             is_cancel=(action == 'CANCEL'),
+                                             paid_market_id=paid_market_id)
+                        time_short = _short_time_range(io_line['from_time'], io_line['to_time'])
+                        print(f"\n  [Line {wl_num}] {action} → "
+                              f"locked: {locked}, unscheduled: {removed} | "
+                              f"Updated: end {io_line['end_date']}, "
+                              f"N_PASSAGGI={n_new}, {io_line['days_of_week']} {time_short}")
+                elif action == 'ADD':
+                    add_lines.append(io_line)
+
+            if add_lines:
+                print(f"\n[LINES] Adding {len(add_lines)} new ADD line(s)...")
+                if network == "ASIAN":
+                    _add_asian_lines_direct(client, add_lines, separation, row_status=2)
+                else:
+                    _add_crossings_lines_direct(client, add_lines, separation, row_status=2)
         else:
-            _add_crossings_lines_direct(client, lines, separation, row_status=line_row_status)
+            # new and revision_add: add all lines
+            if network == "ASIAN":
+                _add_asian_lines_direct(client, lines, separation, row_status=line_row_status)
+            else:
+                _add_crossings_lines_direct(client, lines, separation, row_status=line_row_status)
 
         conn.commit()
 
