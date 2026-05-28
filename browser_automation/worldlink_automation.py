@@ -526,8 +526,7 @@ def _update_change_lines(
     from math import ceil
     from browser_automation.etere_direct_client import _to_frames, _parse_hhmm, parse_day_bits
 
-    end_date   = _parse_date(io_line['end_date'])
-    start_date = _parse_date(io_line['start_date'])
+    end_date       = _parse_date(io_line['end_date'])
     new_n_passaggi = locked_count if is_cancel else int(io_line['total_spots'])
     spots_pw   = int(io_line['spots'])
 
@@ -546,7 +545,7 @@ def _update_change_lines(
         importo = real_rate if cod_user == paid_market_id else 0.0
         cur.execute(
             f"UPDATE CONTRATTIRIGHE SET "
-            f"DATA_INIZIO = {ph}, DATA_FINE = {ph}, N_PASSAGGI = {ph}, "
+            f"DATA_FINE = {ph}, N_PASSAGGI = {ph}, "
             f"PASSAGGI_SETTIMANALI = {ph}, PASSAGGI_GIORNALIERI = {ph}, "
             f"ORA_INIZIO = {ph}, ORA_FINE = {ph}, "
             f"LUNEDI = {ph}, MARTEDI = {ph}, MERCOLEDI = {ph}, "
@@ -554,7 +553,7 @@ def _update_change_lines(
             f"IMPORTO = {ph}, ROWSTATUS = 2 "
             f"WHERE ID_CONTRATTIRIGHE = {ph}",
             (
-                start_date, end_date, new_n_passaggi,
+                end_date, new_n_passaggi,
                 spots_pw, max_daily,
                 ora_inizio, ora_fine,
                 1 if day_bits['lun'] else 0,
