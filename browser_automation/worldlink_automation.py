@@ -40,7 +40,8 @@ IMPORTS
 import atexit
 import os
 import sys
-from datetime import datetime
+import math
+from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -482,80 +483,124 @@ def _find_wl_line_ids(conn, ph: str, contract_id: int, wl_line_number: int) -> l
     return cur.fetchall()
 
 
-def _spot_check_and_unschedule(conn, ph: str, line_ids: list, first_available_date) -> tuple:
-    """
-    Count locked spots (before cutoff) and delete removable spots (>= cutoff).
-    Returns (locked_count, removed_count).
-    """
+def _count_spots(conn, ph: str, line_ids: list, first_available_date) -> tuple:
+    """Count locked (< cutoff) and removable (>= cutoff) spots. No deletes."""
     id_ph = ','.join([ph] * len(line_ids))
     cur = conn.cursor()
-
     cur.execute(
         f"SELECT COUNT(*) FROM trafficPalinse "
         f"WHERE ID_ContrattiRighe IN ({id_ph}) AND Date < {ph}",
         (*line_ids, first_available_date)
     )
     locked = cur.fetchone()[0] or 0
-
     cur.execute(
         f"SELECT COUNT(*) FROM trafficPalinse "
         f"WHERE ID_ContrattiRighe IN ({id_ph}) AND Date >= {ph}",
         (*line_ids, first_available_date)
     )
     removable = cur.fetchone()[0] or 0
-
-    if removable > 0:
-        cur.execute(
-            f"DELETE FROM trafficPalinse "
-            f"WHERE ID_ContrattiRighe IN ({id_ph}) AND Date >= {ph}",
-            (*line_ids, first_available_date)
-        )
-
     return locked, removable
+
+
+def _unschedule_spots(conn, ph: str, line_ids: list, first_available_date) -> int:
+    """Delete trafficPalinse rows on or after cutoff. Returns deleted count."""
+    id_ph = ','.join([ph] * len(line_ids))
+    cur = conn.cursor()
+    cur.execute(
+        f"DELETE FROM trafficPalinse "
+        f"WHERE ID_ContrattiRighe IN ({id_ph}) AND Date >= {ph}",
+        (*line_ids, first_available_date)
+    )
+    return cur.rowcount
+
+
+def _count_remaining_days(first_available_date: date, new_end_date: date, day_bits: dict) -> int:
+    """Count weekdays in [first_available_date, new_end_date] that match the day pattern."""
+    keys = ['lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom']
+    count = 0
+    current = first_available_date
+    while current <= new_end_date:
+        if day_bits[keys[current.weekday()]]:
+            count += 1
+        current += timedelta(days=1)
+    return count
+
+
+def _query_current_line_params(conn, ph: str, line_id: int) -> Optional[dict]:
+    """Query end date, total spots, rate, and day flags from a CONTRATTIRIGHE row."""
+    cur = conn.cursor()
+    cur.execute(
+        f"SELECT DATA_FINE, N_PASSAGGI, IMPORTO, "
+        f"LUNEDI, MARTEDI, MERCOLEDI, GIOVEDI, VENERDI, SABATO, DOMENICA "
+        f"FROM CONTRATTIRIGHE WHERE ID_CONTRATTIRIGHE = {ph}",
+        (line_id,)
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    end = row[0]
+    if hasattr(end, 'date'):
+        end = end.date()
+    return {
+        'end_date':   end,
+        'total_spots': int(row[1]) if row[1] is not None else 0,
+        'rate':        float(row[2]) if row[2] is not None else 0.0,
+        'day_bits':    tuple(int(v or 0) for v in row[3:10]),
+    }
+
+
+def _day_bits_to_display(bits_tuple: tuple) -> str:
+    """Convert (mon, tue, wed, thu, fri, sat, sun) flags to a short display string."""
+    names = ['M', 'Tu', 'W', 'Th', 'F', 'Sa', 'Su']
+    active = [i for i, v in enumerate(bits_tuple) if v]
+    if not active:
+        return '—'
+    if len(active) == 1:
+        return names[active[0]]
+    if active == list(range(active[0], active[-1] + 1)):
+        return f"{names[active[0]]}-{names[active[-1]]}"
+    return '/'.join(names[i] for i in active)
 
 
 def _update_change_lines(
     conn, ph: str, lines_with_market: list, io_line: dict,
-    locked_count: int, is_cancel: bool, paid_market_id: int = 1,
+    locked_count: int, is_cancel: bool, remaining_days: int,
+    paid_market_id: int = 1,
 ) -> None:
     """
     UPDATE CONTRATTIRIGHE rows to match the IO for a CHANGE or CANCEL line.
-    Sets ROWSTATUS=2 so lines require re-approval before scheduling.
-    paid_market_id: COD_USER that gets the real rate (1=NYC for Crossings, 10=DAL for Asian).
+
+    Updates: end date, total spots, day flags, ROWSTATUS.
+    Also updates max/day (PASSAGGI_GIORNALIERI) when spots still need placement.
+    Does NOT touch: start date, times, rate, weekly cap.
+
+    ROWSTATUS: 1 if no spots remain to place, 2 if Etere must re-schedule.
     """
-    from math import ceil
-    from browser_automation.etere_direct_client import _to_frames, _parse_hhmm, parse_day_bits
+    from browser_automation.etere_direct_client import parse_day_bits
 
-    end_date       = _parse_date(io_line['end_date'])
-    new_n_passaggi = locked_count if is_cancel else int(io_line['total_spots'])
-    spots_pw   = int(io_line['spots'])
-
-    from_h, from_m = _parse_hhmm(io_line['from_time'])
-    to_h,   to_m   = _parse_hhmm(io_line['to_time'])
-    ora_inizio = _to_frames(from_h, from_m)
-    ora_fine   = _to_frames(to_h, to_m)
-
+    end_date   = _parse_date(io_line['end_date'])
+    n_passaggi = locked_count if is_cancel else int(io_line['total_spots'])
+    remaining  = n_passaggi - locked_count
+    rowstatus  = 1 if remaining == 0 else 2
     day_bits   = parse_day_bits(io_line['days_of_week'])
-    active_days = sum(1 for v in day_bits.values() if v)
-    max_daily  = ceil(spots_pw / active_days) if active_days else spots_pw
-    real_rate  = float(io_line['rate'])
+
+    new_max_daily = (math.ceil(remaining / remaining_days)
+                     if remaining > 0 and remaining_days > 0 else None)
+
+    extra_col = f"PASSAGGI_GIORNALIERI = {ph}, " if new_max_daily is not None else ""
+    extra_val = (new_max_daily,) if new_max_daily is not None else ()
 
     cur = conn.cursor()
-    for line_id, cod_user in lines_with_market:
-        importo = real_rate if cod_user == paid_market_id else 0.0
+    for line_id, _ in lines_with_market:
         cur.execute(
             f"UPDATE CONTRATTIRIGHE SET "
             f"DATA_FINE = {ph}, N_PASSAGGI = {ph}, "
-            f"PASSAGGI_SETTIMANALI = {ph}, PASSAGGI_GIORNALIERI = {ph}, "
-            f"ORA_INIZIO = {ph}, ORA_FINE = {ph}, "
             f"LUNEDI = {ph}, MARTEDI = {ph}, MERCOLEDI = {ph}, "
             f"GIOVEDI = {ph}, VENERDI = {ph}, SABATO = {ph}, DOMENICA = {ph}, "
-            f"IMPORTO = {ph}, ROWSTATUS = 2 "
+            f"{extra_col}ROWSTATUS = {ph} "
             f"WHERE ID_CONTRATTIRIGHE = {ph}",
             (
-                end_date, new_n_passaggi,
-                spots_pw, max_daily,
-                ora_inizio, ora_fine,
+                end_date, n_passaggi,
                 1 if day_bits['lun'] else 0,
                 1 if day_bits['mar'] else 0,
                 1 if day_bits['mer'] else 0,
@@ -563,7 +608,8 @@ def _update_change_lines(
                 1 if day_bits['ven'] else 0,
                 1 if day_bits['sab'] else 0,
                 1 if day_bits['dom'] else 0,
-                importo,
+                *extra_val,
+                rowstatus,
                 line_id,
             )
         )
@@ -660,33 +706,94 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
 
         print(f"[LINES] Processing {len(lines)} PDF line(s) ({order_type_str.upper()})...")
         if order_type_str == 'revision_change':
+            from browser_automation.etere_direct_client import parse_day_bits
             first_available = user_input['first_available_date']
             paid_market_id  = 10 if network == "ASIAN" else 1
+            doc_str         = f"{first_available.month}/{first_available.day}"
             add_lines = []
+
             for io_line in lines:
                 action  = (io_line.get('action') or 'ADD').upper()
                 wl_num  = io_line['line_number']
+
                 if action in ('CHANGE', 'CANCEL'):
                     etere_lines = _find_wl_line_ids(conn, ph, contract_id, wl_num)
                     if not etere_lines:
                         print(f"\n  [Line {wl_num}] {action} ✗ No matching Etere lines — skipped")
                         continue
+
                     line_ids = [r[0] for r in etere_lines]
-                    locked, removed = _spot_check_and_unschedule(conn, ph, line_ids, first_available)
-                    n_new = locked if action == 'CANCEL' else int(io_line['total_spots'])
-                    if action != 'CANCEL' and locked > n_new:
-                        print(f"\n  [Line {wl_num}] {action} ⚠ CONFLICT — "
-                              f"IO orders {n_new} spots but {locked} are already locked "
-                              f"before {first_available}. Manual correction required.")
+                    locked, removable = _count_spots(conn, ph, line_ids, first_available)
+
+                    # Query current params from paid market row for display
+                    paid_row = next((r for r in etere_lines if r[1] == paid_market_id),
+                                    etere_lines[0])
+                    current = _query_current_line_params(conn, ph, paid_row[0])
+
+                    n_io      = locked if action == 'CANCEL' else int(io_line['total_spots'])
+                    remaining = n_io - locked
+                    new_end   = _parse_date(io_line['end_date'])
+                    day_bits  = parse_day_bits(io_line['days_of_week'])
+                    rem_days  = _count_remaining_days(first_available, new_end, day_bits)
+                    new_max_daily = (math.ceil(remaining / rem_days)
+                                     if remaining > 0 and rem_days > 0 else None)
+
+                    # Format display strings
+                    def _fmt_date(d):
+                        return f"{d.month}/{d.day}/{d.year}" if d else '?'
+
+                    cur_end_str  = _fmt_date(current['end_date']) if current else '?'
+                    new_end_str  = _fmt_date(new_end)
+                    cur_days_str = _day_bits_to_display(current['day_bits']) if current else '?'
+                    new_days_str = _day_bits_to_display(
+                        tuple(1 if day_bits[k] else 0
+                              for k in ['lun','mar','mer','gio','ven','sab','dom'])
+                    )
+                    cur_spots = current['total_spots'] if current else '?'
+                    cur_rate  = current['rate'] if current else 0.0
+
+                    print(f"\n  [Line {wl_num}]  {action}")
+                    print(f"    End date:     {cur_end_str} → {new_end_str}")
+                    days_note = "(unchanged)" if cur_days_str == new_days_str else f"→ {new_days_str}"
+                    print(f"    Days:         {cur_days_str} {days_note}")
+                    if action == 'CANCEL':
+                        print(f"    Total spots:  {cur_spots} → 0  (CANCEL)")
+                    elif cur_spots == n_io:
+                        print(f"    Total spots:  {n_io} (unchanged)")
                     else:
-                        _update_change_lines(conn, ph, etere_lines, io_line, locked,
-                                             is_cancel=(action == 'CANCEL'),
-                                             paid_market_id=paid_market_id)
-                        time_short = _short_time_range(io_line['from_time'], io_line['to_time'])
-                        print(f"\n  [Line {wl_num}] {action} → "
-                              f"locked: {locked}, unscheduled: {removed} | "
-                              f"Updated: end {io_line['end_date']}, "
-                              f"N_PASSAGGI={n_new}, {io_line['days_of_week']} {time_short}")
+                        print(f"    Total spots:  {cur_spots} → {n_io}")
+                    print(f"    Rate:         ${cur_rate:.2f}  (update manually if changed)")
+                    print()
+                    print(f"    Locked before {doc_str}:  {locked} spot{'s' if locked != 1 else ''}")
+                    print(f"    Unschedule {doc_str}+:     {removable} spot{'s' if removable != 1 else ''}")
+                    if remaining == 0:
+                        print(f"    Remaining to place:  0 — no rescheduling needed")
+                        print(f"    Status → Scheduled (no re-approval needed)")
+                    else:
+                        max_note = f" → new max/day: {new_max_daily}" if new_max_daily else ""
+                        print(f"    Remaining to place:  {remaining} on {rem_days} "
+                              f"day{'s' if rem_days != 1 else ''}{max_note}")
+                        print(f"    Status → Needs re-approval")
+
+                    if action != 'CANCEL' and locked > n_io:
+                        print(f"\n    ⚠ CONFLICT — IO orders {n_io} spots but {locked} are already locked.")
+                        print(f"    Cannot proceed. Manual correction required.")
+                        continue
+
+                    answer = input(f"\n  Apply? [y/n]: ").strip().lower()
+                    if answer != 'y':
+                        print(f"  [Line {wl_num}] Skipped.")
+                        continue
+
+                    removed = _unschedule_spots(conn, ph, line_ids, first_available)
+                    _update_change_lines(conn, ph, etere_lines, io_line, locked,
+                                         is_cancel=(action == 'CANCEL'),
+                                         remaining_days=rem_days,
+                                         paid_market_id=paid_market_id)
+                    status_str = "Scheduled" if remaining == 0 else "Needs re-approval"
+                    print(f"  [Line {wl_num}] ✓ Applied — {removed} spot(s) unscheduled, "
+                          f"status: {status_str}")
+
                 elif action == 'ADD':
                     add_lines.append(io_line)
 
