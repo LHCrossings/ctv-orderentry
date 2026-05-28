@@ -1636,6 +1636,17 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
         def _query():
             from browser_automation.etere_direct_client import connect as _db_connect
+            _FPS = 29.97
+            _MKT_ORDER = {1:"NYC",2:"CMP",3:"HOU",4:"SFO",5:"SEA",6:"LAX",7:"CVC",8:"WDC",9:"MMT",10:"DAL"}
+
+            def _to_ampm(frames):
+                if frames is None: return ""
+                s = round(frames / _FPS)
+                h, m = s // 3600, (s % 3600) // 60
+                suffix = "AM" if h < 12 else "PM"
+                h12 = h % 12 or 12
+                return f"{h12}:{m:02d} {suffix}"
+
             dt_from = _parse_date(date_from)
             dt_to   = _parse_date(date_to)
             with _db_connect() as conn:
@@ -1644,11 +1655,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 # (COMS uses -1, others use 0). NOOP/PGM excluded — only ad types.
                 cur.execute("""
                     SELECT
+                        t.COD_USER,
+                        t.DATA,
+                        t.ORA,
                         ct.COD_CONTRATTO,
-                        ct.DESCRIZIONE,
-                        COUNT(*) AS spot_count,
-                        MIN(t.DATA) AS first_date,
-                        MAX(t.DATA) AS last_date
+                        ct.DESCRIZIONE
                     FROM tpalinse t
                     JOIN trafficPalinse tp ON tp.id_tpalinse = t.ID_TPALINSE
                     JOIN CONTRATTIRIGHE cr ON tp.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
@@ -1657,20 +1668,20 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                       AND t.LIVELLO = 0
                       AND (t.ID_FILMATI IS NULL OR t.ID_FILMATI <= 0)
                       AND t.NEWTYPE IN ('COM','COMS','BNS','BART','BB','AV','TRD')
-                    GROUP BY ct.COD_CONTRATTO, ct.DESCRIZIONE
-                    ORDER BY COUNT(*) DESC
+                    ORDER BY t.COD_USER, t.DATA, t.ORA
                 """, (dt_from, dt_to))
                 rows = []
-                for row in cur.fetchall():
-                    code, name, cnt, fd, ld = row
-                    def _fmt(d):
-                        return f"{d.month}/{d.day:02d}/{str(d.year)[2:]}" if d else ""
+                for cod_user, data, ora, code, name in cur.fetchall():
+                    mkt_id  = cod_user or 0
+                    market  = _MKT_ORDER.get(mkt_id, str(mkt_id))
+                    date_s  = f"{data.month}/{data.day:02d}/{str(data.year)[2:]}" if data else ""
                     rows.append({
+                        "market":        market,
+                        "market_order":  mkt_id,
+                        "date":          date_s,
+                        "time":          _to_ampm(ora),
                         "contract_code": code or "",
                         "contract_name": name or "",
-                        "spot_count":    cnt,
-                        "first_date":    _fmt(fd),
-                        "last_date":     _fmt(ld),
                     })
             return rows
 
