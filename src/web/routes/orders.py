@@ -1689,6 +1689,31 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         rows = await asyncio.to_thread(_query)
         return JSONResponse(content={"rows": rows, "total": len(rows)})
 
+    @router.get("/api/traffic/missing-materials/status")
+    async def get_missing_materials_status():
+        """Fast COUNT-only check for today + tomorrow used by the portal badge."""
+        from datetime import date as _date
+        from datetime import timedelta as _td
+
+        def _count():
+            from browser_automation.etere_direct_client import connect as _db_connect
+            today    = _date.today().isoformat()
+            tomorrow = (_date.today() + _td(days=1)).isoformat()
+            with _db_connect() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT COUNT(*)
+                    FROM tpalinse
+                    WHERE DATA BETWEEN %s AND %s
+                      AND LIVELLO = 0
+                      AND (ID_FILMATI IS NULL OR ID_FILMATI <= 0)
+                      AND NEWTYPE IN ('COM','COMS','BNS','BART','BB','AV','TRD')
+                """, (today, tomorrow))
+                return cur.fetchone()[0] or 0
+
+        count = await asyncio.to_thread(_count)
+        return JSONResponse(content={"count": count})
+
     @router.get("/api/traffic/no-material")
     async def get_no_material(
         date_from: str = Query(...),

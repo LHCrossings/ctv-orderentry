@@ -40,13 +40,13 @@
             <span class="module-badge live">Live</span>
         </a>
 
-        <a href="/traffic" class="module-card active">
+        <a href="/traffic" class="module-card active" id="trafficCard">
             <div class="module-icon">📡</div>
             <div class="module-body">
                 <div class="module-name">Traffic</div>
                 <div class="module-desc">Functions related to copy, traffic, and playout of spots.</div>
             </div>
-            <span class="module-badge live">Live</span>
+            <span class="module-badge live" id="trafficBadge">Live</span>
         </a>
 
         <a href="/master-control" class="module-card active">
@@ -117,6 +117,16 @@
 </main>
 
 <style>
+#trafficCard.alert {
+    background: rgba(191,97,106,0.15);
+    border-color: #bf616a;
+    box-shadow: 0 4px 18px rgba(191,97,106,0.2);
+}
+#trafficBadge.alert {
+    background: #bf616a;
+    color: white;
+    border-color: #bf616a;
+}
 #airchecksCard.notify {
     background: rgba(163,190,140,0.55);
     border-color: #a3be8c;
@@ -193,6 +203,28 @@ function dismissAirchecks(e) {
 
 checkAirchecks();
 setInterval(checkAirchecks, 60000);
+
+async function checkTraffic() {
+    try {
+        const r = await fetch('/api/traffic/missing-materials/status', { signal: AbortSignal.timeout(6000) });
+        if (!r.ok) return;
+        const { count = 0 } = await r.json();
+        const card  = document.getElementById('trafficCard');
+        const badge = document.getElementById('trafficBadge');
+        if (count > 0) {
+            card.classList.add('alert');
+            badge.classList.add('alert');
+            badge.textContent = `${count} Missing`;
+        } else {
+            card.classList.remove('alert');
+            badge.classList.remove('alert');
+            badge.textContent = 'Live';
+        }
+    } catch {}
+}
+
+checkTraffic();
+setInterval(checkTraffic, 300000);
 </script>
 </body>
 </html>
