@@ -3392,10 +3392,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             " WHERE ID_TPALINSE = %d",
                             (cod, title, filmati_id, newtype, supporto, aspect, duration_p, tp_id),
                         )
-                    # Upsert CONTRATTIFILMATI for assigned lines (DELETE+INSERT so new
-                    # lines added after MaterialAddToAssetListC ran still get pool rows).
+                    # Ensure every assigned line has pool rows in CONTRATTIFILMATI.
+                    # PERCROTATION is left 0 — actual rotation is driven by TPALINSE.
                     for line_id in line_tp_map.keys():
-                        for filmati_id, perc in perc_map.items():
+                        for filmati_id in perc_map:
                             cur.execute(
                                 "DELETE FROM CONTRATTIFILMATI"
                                 " WHERE ID_CONTRATTIRIGHE = %d AND ID_FILMATI = %d",
@@ -3404,8 +3404,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             cur.execute(
                                 "INSERT INTO CONTRATTIFILMATI"
                                 " (ID_CONTRATTIRIGHE, ID_FILMATI, PERCROTATION)"
-                                " VALUES (%d, %d, %d)",
-                                (line_id, filmati_id, perc),
+                                " VALUES (%d, %d, 0)",
+                                (line_id, filmati_id),
                             )
                     # Remove pool rows for non-assigned lines (MaterialAddToAssetListC
                     # adds to every line; clean up unused ones by removing PERCROTATION=0).
@@ -3813,10 +3813,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 tp_id,
                             ),
                         )
-                    # Upsert CONTRATTIFILMATI for every line that received spots.
-                    # DELETE+INSERT is used so new lines added after MaterialAddToAssetListC
-                    # previously ran (and was skipped this time via existing_pool) still
-                    # get their pool rows populated reliably.
+                    # Ensure every assigned line has pool rows in CONTRATTIFILMATI.
+                    # PERCROTATION is left 0 — the pool list just needs to exist;
+                    # actual rotation is driven by TPALINSE.ID_FILMATI.
                     for line_id in line_tp_map.keys():
                         asgn = asgn_map.get(line_id)
                         if not asgn:
@@ -3824,10 +3823,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         filmati_ids_line = asgn.get("filmati_ids", [])
                         if not filmati_ids_line:
                             continue
-                        n     = len(filmati_ids_line)
-                        percs = [100 // n] * n
-                        percs[0] += 100 - sum(percs)
-                        for fid, perc in zip(filmati_ids_line, percs):
+                        for fid in filmati_ids_line:
                             cur.execute(
                                 "DELETE FROM CONTRATTIFILMATI"
                                 " WHERE ID_CONTRATTIRIGHE = %d AND ID_FILMATI = %d",
@@ -3836,8 +3832,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             cur.execute(
                                 "INSERT INTO CONTRATTIFILMATI"
                                 " (ID_CONTRATTIRIGHE, ID_FILMATI, PERCROTATION)"
-                                " VALUES (%d, %d, %d)",
-                                (line_id, fid, perc),
+                                " VALUES (%d, %d, 0)",
+                                (line_id, fid),
                             )
                     conn.commit()
 
@@ -5268,14 +5264,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 tp_id,
                             ),
                         )
-                    # PERCROTATION: proportional to usage count per line (DELETE+INSERT)
+                    # Ensure every assigned line has pool rows in CONTRATTIFILMATI.
+                    # PERCROTATION is left 0 — actual rotation is driven by TPALINSE.
                     for line_id, pairs in line_tp_filmati.items():
-                        total  = len(pairs)
-                        counts = Counter(p[1] for p in pairs)
-                        fids   = list(counts.keys())
-                        percs  = [round(100 * c / total) for c in counts.values()]
-                        percs[0] += 100 - sum(percs)
-                        for fid, perc in zip(fids, percs):
+                        fids = list({p[1] for p in pairs})
+                        for fid in fids:
                             cur.execute(
                                 "DELETE FROM CONTRATTIFILMATI"
                                 " WHERE ID_CONTRATTIRIGHE = %d AND ID_FILMATI = %d",
@@ -5284,8 +5277,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             cur.execute(
                                 "INSERT INTO CONTRATTIFILMATI"
                                 " (ID_CONTRATTIRIGHE, ID_FILMATI, PERCROTATION)"
-                                " VALUES (%d, %d, %d)",
-                                (line_id, fid, perc),
+                                " VALUES (%d, %d, 0)",
+                                (line_id, fid),
                             )
                     # Remove pool entries that weren't assigned to any spot on any line
                     cur.execute(
