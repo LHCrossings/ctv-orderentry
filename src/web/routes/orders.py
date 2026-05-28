@@ -1640,24 +1640,23 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             dt_to   = _parse_date(date_to)
             with _db_connect() as conn:
                 cur = conn.cursor()
+                # tpalinse is authoritative. ID_FILMATI <= 0 means no material
+                # (COMS uses -1, others use 0). NOOP/PGM excluded — only ad types.
                 cur.execute("""
                     SELECT
                         ct.COD_CONTRATTO,
                         ct.DESCRIZIONE,
                         COUNT(*) AS spot_count,
-                        MIN(tp.Date) AS first_date,
-                        MAX(tp.Date) AS last_date
-                    FROM trafficPalinse tp
-                    JOIN CONTRATTIRIGHE cr
-                        ON tp.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
-                    JOIN CONTRATTITESTATA ct
-                        ON cr.ID_CONTRATTITESTATA = ct.ID_CONTRATTITESTATA
-                    WHERE tp.Date BETWEEN %s AND %s
-                      AND (tp.ID_TRAFFICTRASH IS NULL OR tp.ID_TRAFFICTRASH = 0)
-                      AND NOT EXISTS (
-                          SELECT 1 FROM CONTRATTIFILMATI cf
-                          WHERE cf.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe
-                      )
+                        MIN(t.DATA) AS first_date,
+                        MAX(t.DATA) AS last_date
+                    FROM tpalinse t
+                    JOIN trafficPalinse tp ON tp.id_tpalinse = t.ID_TPALINSE
+                    JOIN CONTRATTIRIGHE cr ON tp.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
+                    JOIN CONTRATTITESTATA ct ON cr.ID_CONTRATTITESTATA = ct.ID_CONTRATTITESTATA
+                    WHERE t.DATA BETWEEN %s AND %s
+                      AND t.LIVELLO = 0
+                      AND (t.ID_FILMATI IS NULL OR t.ID_FILMATI <= 0)
+                      AND t.NEWTYPE IN ('COM','COMS','BNS','BART','BB','AV','TRD')
                     GROUP BY ct.COD_CONTRATTO, ct.DESCRIZIONE
                     ORDER BY COUNT(*) DESC
                 """, (dt_from, dt_to))
@@ -1701,20 +1700,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 cur = conn.cursor()
                 cur.execute("""
                     SELECT
-                        CAST(tp.Date AS DATE) AS day,
-                        tp.Cod_User,
+                        CAST(t.DATA AS DATE) AS day,
+                        t.COD_USER,
                         COUNT(*) AS spot_count
-                    FROM trafficPalinse tp
-                    WHERE tp.Date BETWEEN %s AND %s
-                      AND (tp.ID_TRAFFICTRASH IS NULL OR tp.ID_TRAFFICTRASH = 0)
-                      AND tp.ID_ContrattiRighe IS NOT NULL
-                      AND tp.ID_ContrattiRighe > 0
-                      AND NOT EXISTS (
-                          SELECT 1 FROM CONTRATTIFILMATI cf
-                          WHERE cf.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe
-                      )
-                    GROUP BY CAST(tp.Date AS DATE), tp.Cod_User
-                    ORDER BY CAST(tp.Date AS DATE), tp.Cod_User
+                    FROM tpalinse t
+                    WHERE t.DATA BETWEEN %s AND %s
+                      AND t.LIVELLO = 0
+                      AND (t.ID_FILMATI IS NULL OR t.ID_FILMATI <= 0)
+                      AND t.NEWTYPE IN ('COM','COMS','BNS','BART','BB','AV','TRD')
+                    GROUP BY CAST(t.DATA AS DATE), t.COD_USER
+                    ORDER BY CAST(t.DATA AS DATE), t.COD_USER
                 """, (dt_from, dt_to))
                 rows = []
                 for row in cur.fetchall():
