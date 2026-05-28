@@ -50,13 +50,13 @@
             <span class="module-badge live">Live</span>
         </a>
 
-        <a href="/traffic/missing-materials" class="module-card active">
+        <a href="/traffic/missing-materials" class="module-card active" id="missingMaterialsCard">
             <div class="module-icon">⚠️</div>
             <div class="module-body">
                 <div class="module-name">Missing Materials</div>
                 <div class="module-desc">Find scheduled spots across all markets that have no commercial attached and will air black.</div>
             </div>
-            <span class="module-badge live">Live</span>
+            <span class="module-badge live" id="missingMaterialsBadge">Live</span>
         </a>
 
         <a href="/assets" class="module-card active">
@@ -70,6 +70,39 @@
 
     </div>
 </main>
+
+<style>
+#missingMaterialsCard.alert {
+    background: rgba(191,97,106,0.15);
+    border-color: #bf616a;
+    box-shadow: 0 4px 18px rgba(191,97,106,0.2);
+}
+#missingMaterialsBadge.alert {
+    background: #bf616a;
+    color: white;
+    border-color: #bf616a;
+}
+</style>
+<script>
+(async function checkTraffic() {
+    try {
+        const r = await fetch('/api/traffic/missing-materials/status', { signal: AbortSignal.timeout(6000) });
+        if (!r.ok) return;
+        const { count = 0 } = await r.json();
+        const card  = document.getElementById('missingMaterialsCard');
+        const badge = document.getElementById('missingMaterialsBadge');
+        if (count > 0) {
+            card.classList.add('alert');
+            badge.classList.add('alert');
+            badge.textContent = `${count} Missing`;
+        } else {
+            card.classList.remove('alert');
+            badge.classList.remove('alert');
+            badge.textContent = 'Live';
+        }
+    } catch {}
+})();
+</script>
 
 </body>
 </html>
