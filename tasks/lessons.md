@@ -10,7 +10,7 @@
 
 1. **`MaterialAddToAssetListC`** — the Etere HTTP call that registers filmati in the contract pool. Must be called for each filmati not yet in the pool for the specific lines being assigned (not just "anywhere in the contract"). Endpoint: `POST /Sales/MaterialAddToAssetListC` with `{"idFilmatiList": [fid], "idct": contract_id}`.
 
-2. **`CONTRATTIFILMATI` rows** — one row per `(ID_CONTRATTIRIGHE, ID_FILMATI)` with `PERCROTATION` set (proportional to rotation %). Use DELETE+INSERT (not UPDATE+INSERT-if-rowcount) so new lines that were added after the HTTP call ran still get their rows.
+2. **`CONTRATTIFILMATI` rows** — one row per `(ID_CONTRATTIRIGHE, ID_FILMATI)` with `PERCROTATION` set. Use DELETE+INSERT (not UPDATE+INSERT-if-rowcount) so new lines that were added after the HTTP call ran still get their rows. **Critical:** all sub-lines for the same filmati must have the **same `PERCROTATION` value** (use contract-wide totals, not per-line proportional). Etere's "rotate by order" view deduplicates by `(filmati, PERCROTATION)` — if different sub-lines have different percentages, the same filmati appears multiple times.
 
 **How to apply:** When writing any new traffic assignment endpoint or modifying existing ones, confirm both of the above are handled. TPALINSE being correct is necessary but not sufficient — Etere's native UI will show the pool as empty if CONTRATTIFILMATI isn't populated, confusing traffic managers.
 
