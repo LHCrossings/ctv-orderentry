@@ -1640,7 +1640,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             _MKT_ORDER = {1:"NYC",2:"CMP",3:"HOU",4:"SFO",5:"SEA",6:"LAX",7:"CVC",8:"WDC",9:"MMT",10:"DAL"}
 
             def _to_ampm(frames):
-                if frames is None: return ""
+                if frames is None:
+                    return ""
                 s = round(frames / _FPS)
                 h, m = s // 3600, (s % 3600) // 60
                 suffix = "AM" if h < 12 else "PM"
@@ -1668,7 +1669,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                       AND t.LIVELLO = 0
                       AND (t.ID_FILMATI IS NULL OR t.ID_FILMATI <= 0)
                       AND t.NEWTYPE IN ('COM','COMS','BNS','BART','BB','AV','TRD')
-                    ORDER BY t.COD_USER, t.DATA, t.ORA
+                    ORDER BY t.DATA, t.COD_USER, t.ORA
                 """, (dt_from, dt_to))
                 rows = []
                 for cod_user, data, ora, code, name in cur.fetchall():

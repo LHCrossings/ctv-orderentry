@@ -96,8 +96,17 @@
 
         .summary-bar strong { color: var(--nord11); }
 
-        /* Market sections */
-        .market-section { margin-bottom: 28px; }
+        /* Date + Market sections */
+        .market-section { margin-bottom: 32px; }
+
+        .date-heading {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0 0 12px 0;
+            padding-bottom: 6px;
+            border-bottom: 2px solid var(--border-color);
+        }
 
         .market-heading {
             display: flex;
@@ -287,48 +296,57 @@ function render(rows) {
         return;
     }
 
+    const markets = new Set(rows.map(r => r.market));
     document.getElementById('summaryBar').innerHTML =
-        `<strong>${rows.length}</strong> spot${rows.length !== 1 ? 's' : ''} without material across ${new Set(rows.map(r => r.market)).size} market${new Set(rows.map(r => r.market)).size !== 1 ? 's' : ''}`;
+        `<strong>${rows.length}</strong> spot${rows.length !== 1 ? 's' : ''} without material across ${markets.size} market${markets.size !== 1 ? 's' : ''}`;
 
-    // Group by market (already sorted by market_order, date, time from server)
-    const byMarket = [];
-    let current = null;
+    // Group by date, then by market within each date (server already sorted DATA, COD_USER, ORA)
+    const byDate = [];
+    let curDate = null, curMarket = null;
     for (const r of rows) {
-        if (!current || current.market !== r.market) {
-            current = { market: r.market, rows: [] };
-            byMarket.push(current);
+        if (!curDate || curDate.date !== r.date) {
+            curDate = { date: r.date, markets: [] };
+            byDate.push(curDate);
+            curMarket = null;
         }
-        current.rows.push(r);
+        if (!curMarket || curMarket.market !== r.market) {
+            curMarket = { market: r.market, rows: [] };
+            curDate.markets.push(curMarket);
+        }
+        curMarket.rows.push(r);
     }
 
-    for (const group of byMarket) {
+    for (const dateGroup of byDate) {
         const section = document.createElement('div');
         section.className = 'market-section';
-        section.innerHTML = `
+
+        const mktBlocks = dateGroup.markets.map(mkt => `
             <div class="market-heading">
-                <span class="market-label">${escHtml(group.market)}</span>
-                <span class="market-count">${group.rows.length} spot${group.rows.length !== 1 ? 's' : ''}</span>
+                <span class="market-label">${escHtml(mkt.market)}</span>
+                <span class="market-count">${mkt.rows.length} spot${mkt.rows.length !== 1 ? 's' : ''}</span>
             </div>
-            <div style="overflow-x:auto">
+            <div style="overflow-x:auto;margin-bottom:12px">
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th class="col-date">Date</th>
                             <th class="col-time">Time</th>
                             <th class="col-code">Contract</th>
                             <th>Name</th>
                         </tr>
                     </thead>
-                    <tbody>${group.rows.map(r => `
+                    <tbody>${mkt.rows.map(r => `
                         <tr>
-                            <td class="col-date">${escHtml(r.date)}</td>
                             <td class="col-time">${escHtml(r.time)}</td>
                             <td class="col-code">${escHtml(r.contract_code)}</td>
                             <td>${escHtml(r.contract_name)}</td>
                         </tr>`).join('')}
                     </tbody>
                 </table>
-            </div>`;
+            </div>`).join('');
+
+        section.innerHTML = `
+            <h3 class="date-heading">${escHtml(dateGroup.date)}</h3>
+            ${mktBlocks}`;
         container.appendChild(section);
     }
 }
