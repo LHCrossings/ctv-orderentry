@@ -25,6 +25,20 @@ from domain.enums import OrderType
 from domain.value_objects import OrderInput
 
 
+def _print_pre_close_summary(results: list[ProcessingResult]) -> None:
+    """Print contract codes before the browser close prompt appears."""
+    contracts = [c for r in results if r.success for c in r.contracts]
+    if not contracts:
+        return
+    print(f"\n{'='*70}")
+    print(f"CONTRACTS CREATED — {len(contracts)}")
+    print(f"{'='*70}")
+    for c in contracts:
+        etere_id = f" (ID: {c.etere_id})" if c.etere_id else ""
+        print(f"  ✓ {c.contract_number}{etere_id}")
+    print(f"{'='*70}\n")
+
+
 class OrderProcessor(Protocol):
     """
     Protocol defining the interface for order processors.
@@ -196,7 +210,9 @@ class OrderProcessingService:
                     print("[SESSION] Setting master market to NYC...")
                     shared_session.set_market("NYC")
                     print("[SESSION] \u2713 Master market set \u2014 beginning batch\n")
-                    return self._process_orders_with_session(orders, shared_session)
+                    results = self._process_orders_with_session(orders, shared_session)
+                    _print_pre_close_summary(results)
+                return results
 
         # Session provided or no orders need browser
         return self._process_orders_with_session(orders, browser_session)
