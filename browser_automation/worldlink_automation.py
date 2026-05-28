@@ -499,10 +499,9 @@ def _count_spots(conn, ph: str, line_ids: list, first_available_date,
     """
     Count locked and removable spots. No deletes.
 
-    locked   — spots before cutoff on the paid market line only.
-                Used for remaining math: paid line is the true spot count.
-    removable — spots on/after cutoff across ALL market lines.
-                Used for display: shows total spots being freed.
+    locked          — spots before cutoff on paid market line only (for remaining math).
+    removable_paid  — spots on/after cutoff on paid market line only (for display).
+    removable_total — spots on/after cutoff across ALL market lines (actual delete scope).
     """
     cur = conn.cursor()
     cur.execute(
@@ -512,14 +511,21 @@ def _count_spots(conn, ph: str, line_ids: list, first_available_date,
     )
     locked = cur.fetchone()[0] or 0
 
+    cur.execute(
+        f"SELECT COUNT(*) FROM trafficPalinse "
+        f"WHERE ID_ContrattiRighe = {ph} AND Date >= {ph}",
+        (paid_line_id, first_available_date)
+    )
+    removable_paid = cur.fetchone()[0] or 0
+
     id_ph = ','.join([ph] * len(line_ids))
     cur.execute(
         f"SELECT COUNT(*) FROM trafficPalinse "
         f"WHERE ID_ContrattiRighe IN ({id_ph}) AND Date >= {ph}",
         (*line_ids, first_available_date)
     )
-    removable = cur.fetchone()[0] or 0
-    return locked, removable
+    removable_total = cur.fetchone()[0] or 0
+    return locked, removable_paid, removable_total
 
 
 def _unschedule_spots(conn, ph: str, line_ids: list, first_available_date) -> int:
@@ -598,7 +604,10 @@ def _update_change_lines(
     """
     from browser_automation.etere_direct_client import parse_day_bits
 
-    end_date   = _parse_date(io_line['end_date'])
+    end_date_obj = _parse_date(io_line['end_date'])
+    # SQL Server datetime columns require a datetime, not a date
+    end_dt = datetime(end_date_obj.year, end_date_obj.month, end_date_obj.day)
+
     n_passaggi = locked_count if is_cancel else int(io_line['total_spots'])
     remaining  = n_passaggi - locked_count
     rowstatus  = 1 if remaining == 0 else 2
@@ -610,6 +619,13 @@ def _update_change_lines(
     extra_col = f"PASSAGGI_GIORNALIERI = {ph}, " if new_max_daily is not None else ""
     extra_val = (new_max_daily,) if new_max_daily is not None else ()
 
+    # Build updated description: preserve "(Line N)" prefix, update days
+    wl_num     = io_line['line_number']
+    is_bonus   = float(io_line['rate']) == 0.0
+    label      = "BNS " if is_bonus else ""
+    time_short = _short_time_range(io_line['from_time'], io_line['to_time'])
+    new_desc   = f"(Line {wl_num}) {label}{io_line['days_of_week']} {time_short}"
+
     cur = conn.cursor()
     for line_id, _ in lines_with_market:
         cur.execute(
@@ -617,10 +633,11 @@ def _update_change_lines(
             f"DATA_FINE = {ph}, N_PASSAGGI = {ph}, "
             f"LUNEDI = {ph}, MARTEDI = {ph}, MERCOLEDI = {ph}, "
             f"GIOVEDI = {ph}, VENERDI = {ph}, SABATO = {ph}, DOMENICA = {ph}, "
+            f"DESCRIZIONE = {ph}, "
             f"{extra_col}ROWSTATUS = {ph} "
             f"WHERE ID_CONTRATTIRIGHE = {ph}",
             (
-                end_date, n_passaggi,
+                end_dt, n_passaggi,
                 1 if day_bits['lun'] else 0,
                 1 if day_bits['mar'] else 0,
                 1 if day_bits['mer'] else 0,
@@ -628,6 +645,7 @@ def _update_change_lines(
                 1 if day_bits['ven'] else 0,
                 1 if day_bits['sab'] else 0,
                 1 if day_bits['dom'] else 0,
+                new_desc,
                 *extra_val,
                 rowstatus,
                 line_id,
@@ -761,8 +779,9 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
                     # Paid market row drives spot counts and current-param display
                     paid_row = next((r for r in etere_lines if r[1] == paid_market_id),
                                     etere_lines[0])
-                    locked, removable = _count_spots(conn, ph, line_ids, first_available,
-                                                     paid_line_id=paid_row[0])
+                    locked, removable_paid, removable_total = _count_spots(
+                        conn, ph, line_ids, first_available, paid_line_id=paid_row[0]
+                    )
                     current = _query_current_line_params(conn, ph, paid_row[0])
 
                     n_io      = locked if action == 'CANCEL' else int(io_line['total_spots'])
@@ -799,8 +818,10 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
                         print(f"    Total spots:  {cur_spots} → {n_io}")
                     print(f"    Rate:         ${cur_rate:.2f}  (update manually if changed)")
                     print()
+                    total_note = (f"  ({removable_total} total across all markets)"
+                                  if removable_total != removable_paid else "")
                     print(f"    Locked before {doc_str}:  {locked} spot{'s' if locked != 1 else ''}")
-                    print(f"    Unschedule {doc_str}+:     {removable} spot{'s' if removable != 1 else ''}")
+                    print(f"    Unschedule {doc_str}+:     {removable_paid} spot{'s' if removable_paid != 1 else ''}{total_note}")
                     if remaining == 0:
                         print(f"    Remaining to place:  0 — no rescheduling needed")
                         print(f"    Status → Scheduled (no re-approval needed)")
@@ -826,7 +847,7 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
                                          remaining_days=rem_days,
                                          paid_market_id=paid_market_id)
                     status_str = "Scheduled" if remaining == 0 else "Needs re-approval"
-                    print(f"  [Line {wl_num}] ✓ Applied — {removed} spot(s) unscheduled, "
+                    print(f"  [Line {wl_num}] ✓ Applied — {removed} spot(s) unscheduled across all markets, "
                           f"status: {status_str}")
 
                 elif action == 'ADD':
