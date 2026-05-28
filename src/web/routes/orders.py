@@ -3392,17 +3392,23 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             " WHERE ID_TPALINSE = %d",
                             (cod, title, filmati_id, newtype, supporto, aspect, duration_p, tp_id),
                         )
-                    # Update PERCROTATION per (line, filmati) so native app shows correct %
+                    # Upsert CONTRATTIFILMATI for assigned lines (DELETE+INSERT so new
+                    # lines added after MaterialAddToAssetListC ran still get pool rows).
                     for line_id in line_tp_map.keys():
                         for filmati_id, perc in perc_map.items():
                             cur.execute(
-                                "UPDATE CONTRATTIFILMATI SET PERCROTATION = %d"
+                                "DELETE FROM CONTRATTIFILMATI"
                                 " WHERE ID_CONTRATTIRIGHE = %d AND ID_FILMATI = %d",
-                                (perc, line_id, filmati_id),
+                                (line_id, filmati_id),
                             )
-                    # Remove spurious pool rows: MaterialAddToAssetListC adds each filmati
-                    # to every line in the contract; delete rows where PERCROTATION=0
-                    # so only lines that actually use the filmati remain in the pool.
+                            cur.execute(
+                                "INSERT INTO CONTRATTIFILMATI"
+                                " (ID_CONTRATTIRIGHE, ID_FILMATI, PERCROTATION)"
+                                " VALUES (%d, %d, %d)",
+                                (line_id, filmati_id, perc),
+                            )
+                    # Remove pool rows for non-assigned lines (MaterialAddToAssetListC
+                    # adds to every line; clean up unused ones by removing PERCROTATION=0).
                     if filmati_ids:
                         fid_str = ",".join(str(f) for f in filmati_ids)
                         cur.execute(
@@ -3808,10 +3814,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             ),
                         )
                     # Upsert CONTRATTIFILMATI for every line that received spots.
-                    # UPDATE first; INSERT if the row is missing (happens when a prior
-                    # period's MaterialAddToAssetListC ran and existing_pool already
-                    # contained this filmati, so the HTTP call was skipped and the new
-                    # line never got a pool row added).
+                    # DELETE+INSERT is used so new lines added after MaterialAddToAssetListC
+                    # previously ran (and was skipped this time via existing_pool) still
+                    # get their pool rows populated reliably.
                     for line_id in line_tp_map.keys():
                         asgn = asgn_map.get(line_id)
                         if not asgn:
@@ -3824,17 +3829,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         percs[0] += 100 - sum(percs)
                         for fid, perc in zip(filmati_ids_line, percs):
                             cur.execute(
-                                "UPDATE CONTRATTIFILMATI SET PERCROTATION = %d"
+                                "DELETE FROM CONTRATTIFILMATI"
                                 " WHERE ID_CONTRATTIRIGHE = %d AND ID_FILMATI = %d",
-                                (perc, line_id, fid),
+                                (line_id, fid),
                             )
-                            if cur.rowcount == 0:
-                                cur.execute(
-                                    "INSERT INTO CONTRATTIFILMATI"
-                                    " (ID_CONTRATTIRIGHE, ID_FILMATI, PERCROTATION)"
-                                    " VALUES (%d, %d, %d)",
-                                    (line_id, fid, perc),
-                                )
+                            cur.execute(
+                                "INSERT INTO CONTRATTIFILMATI"
+                                " (ID_CONTRATTIRIGHE, ID_FILMATI, PERCROTATION)"
+                                " VALUES (%d, %d, %d)",
+                                (line_id, fid, perc),
+                            )
                     conn.commit()
 
             needs_airchecks = False
@@ -5264,7 +5268,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 tp_id,
                             ),
                         )
-                    # PERCROTATION: proportional to usage count per line
+                    # PERCROTATION: proportional to usage count per line (DELETE+INSERT)
                     for line_id, pairs in line_tp_filmati.items():
                         total  = len(pairs)
                         counts = Counter(p[1] for p in pairs)
@@ -5273,9 +5277,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         percs[0] += 100 - sum(percs)
                         for fid, perc in zip(fids, percs):
                             cur.execute(
-                                "UPDATE CONTRATTIFILMATI SET PERCROTATION = %d"
+                                "DELETE FROM CONTRATTIFILMATI"
                                 " WHERE ID_CONTRATTIRIGHE = %d AND ID_FILMATI = %d",
-                                (perc, line_id, fid),
+                                (line_id, fid),
+                            )
+                            cur.execute(
+                                "INSERT INTO CONTRATTIFILMATI"
+                                " (ID_CONTRATTIRIGHE, ID_FILMATI, PERCROTATION)"
+                                " VALUES (%d, %d, %d)",
+                                (line_id, fid, perc),
                             )
                     # Remove pool entries that weren't assigned to any spot on any line
                     cur.execute(
