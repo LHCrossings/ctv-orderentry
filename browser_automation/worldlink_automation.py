@@ -483,16 +483,25 @@ def _find_wl_line_ids(conn, ph: str, contract_id: int, wl_line_number: int) -> l
     return cur.fetchall()
 
 
-def _count_spots(conn, ph: str, line_ids: list, first_available_date) -> tuple:
-    """Count locked (< cutoff) and removable (>= cutoff) spots. No deletes."""
-    id_ph = ','.join([ph] * len(line_ids))
+def _count_spots(conn, ph: str, line_ids: list, first_available_date,
+                 paid_line_id: int) -> tuple:
+    """
+    Count locked and removable spots. No deletes.
+
+    locked   — spots before cutoff on the paid market line only.
+                Used for remaining math: paid line is the true spot count.
+    removable — spots on/after cutoff across ALL market lines.
+                Used for display: shows total spots being freed.
+    """
     cur = conn.cursor()
     cur.execute(
         f"SELECT COUNT(*) FROM trafficPalinse "
-        f"WHERE ID_ContrattiRighe IN ({id_ph}) AND Date < {ph}",
-        (*line_ids, first_available_date)
+        f"WHERE ID_ContrattiRighe = {ph} AND Date < {ph}",
+        (paid_line_id, first_available_date)
     )
     locked = cur.fetchone()[0] or 0
+
+    id_ph = ','.join([ph] * len(line_ids))
     cur.execute(
         f"SELECT COUNT(*) FROM trafficPalinse "
         f"WHERE ID_ContrattiRighe IN ({id_ph}) AND Date >= {ph}",
@@ -723,11 +732,12 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
                         continue
 
                     line_ids = [r[0] for r in etere_lines]
-                    locked, removable = _count_spots(conn, ph, line_ids, first_available)
 
-                    # Query current params from paid market row for display
+                    # Paid market row drives spot counts and current-param display
                     paid_row = next((r for r in etere_lines if r[1] == paid_market_id),
                                     etere_lines[0])
+                    locked, removable = _count_spots(conn, ph, line_ids, first_available,
+                                                     paid_line_id=paid_row[0])
                     current = _query_current_line_params(conn, ph, paid_row[0])
 
                     n_io      = locked if action == 'CANCEL' else int(io_line['total_spots'])
