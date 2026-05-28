@@ -15,7 +15,6 @@ usual, then compare:
 import re
 import sys
 from datetime import datetime
-from math import ceil
 from pathlib import Path
 
 project_root = Path(__file__).parent.parent
@@ -24,7 +23,11 @@ sys.path.insert(0, str(project_root / "browser_automation"))
 
 from browser_automation.etere_direct_client import EtereDirectClient, connect
 from browser_automation.parsers.worldlink_parser import parse_worldlink_pdf
-from browser_automation.worldlink_automation import _format_24hr_short, lookup_customer, _lookup_contract_by_tracking
+from browser_automation.worldlink_automation import (
+    _format_24hr_short,
+    _lookup_contract_by_tracking,
+    lookup_customer,
+)
 
 WL_DEFAULT_SEPARATION = (5, 15, 0)  # fallback when advertiser not in customers.db
 
@@ -258,8 +261,8 @@ def run(pdf_path: Path) -> None:
               f"media_center_id={media_center_id}  (fallback from DB)")
 
     # ── Flight range ───────────────────────────────────────────────────
-    flight_start = min(_parse_date(l['start_date']) for l in lines)
-    flight_end   = max(_parse_date(l['end_date'])   for l in lines)
+    flight_start = min(_parse_date(ln['start_date']) for ln in lines)
+    flight_end   = max(_parse_date(ln['end_date'])   for ln in lines)
 
     try:
         master_market = "DAL" if network == "ASIAN" else "NYC"
@@ -327,7 +330,7 @@ def run(pdf_path: Path) -> None:
         print(f"✓ Contract #{contract_id} committed.")
         if not is_revision:
             print(f"  Code : TEST {order_code}")
-        print(f"  Note : Approve in Etere, then compare with:")
+        print("  Note : Approve in Etere, then compare with:")
         print(f"         uv run python scripts/compare_contracts.py <REF_ID> {contract_id}")
         print(f"{'='*65}")
 

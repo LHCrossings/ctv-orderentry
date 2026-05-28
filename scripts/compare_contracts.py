@@ -168,7 +168,7 @@ def compare_dicts(ref, test, skip_keys, label):
 
 def run(ref_id, test_id, last: int = 0):
     print("=" * 70)
-    print(f"  CONTRACT COMPARISON")
+    print("  CONTRACT COMPARISON")
     print(f"  REF  (Selenium baseline) : #{ref_id}")
     print(f"  TEST (EtereDirect entry) : #{test_id}")
     if last:
@@ -198,7 +198,7 @@ def run(ref_id, test_id, last: int = 0):
         test_lines = test_lines[-last:]
 
     print(f"\n{'='*70}")
-    print(f"  CONTRACT LINES (CONTRATTIRIGHE)")
+    print("  CONTRACT LINES (CONTRATTIRIGHE)")
     print(f"  Ref has {len(ref_lines)} line(s), Test has {len(test_lines)} line(s)")
     print(f"{'='*70}")
 
@@ -236,7 +236,7 @@ def run(ref_id, test_id, last: int = 0):
 
     # ── 3. Summary ───────────────────────────────────────────────────────────
     print(f"\n{'='*70}")
-    print(f"  SUMMARY")
+    print("  SUMMARY")
     print(f"{'='*70}")
     print(f"  Header mismatches  : {h_diffs}")
     print(f"  Header nulls       : {h_nulls}")
@@ -244,7 +244,7 @@ def run(ref_id, test_id, last: int = 0):
     print(f"  Line nulls         : {total_line_nulls}")
     total = h_diffs + h_nulls + total_line_diffs + total_line_nulls
     if total == 0:
-        print(f"\n  ✓ All compared fields match — direct entry looks correct!")
+        print("\n  ✓ All compared fields match — direct entry looks correct!")
     else:
         print(f"\n  ✗ {total} issue(s) need review before rolling out direct entry.")
     print()
