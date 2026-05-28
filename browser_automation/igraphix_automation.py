@@ -339,6 +339,7 @@ def process_igraphix_order_direct(user_input: dict) -> Optional[str]:
                 date_to=date_to,
                 duration=duration_str,
                 is_bonus=is_bonus,
+                booking_code=10 if is_bonus else 2,
                 separation_intervals=separation,
             )
             print(f"  line_id={line_id}")

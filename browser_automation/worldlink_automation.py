@@ -404,11 +404,12 @@ def _add_crossings_lines_direct(client, lines: list, separation: tuple) -> None:
               f"{line['duration']}s | {spots_pw}/wk | ${rate}"
               + (" [BNS]" if is_bonus else ""))
 
+        booking = 10 if is_bonus else 2
         nyc_id = client.add_contract_line(
             market="NYC", days=days, time_range=time_range, description=desc,
             rate=rate, total_spots=total, spots_per_week=spots_pw,
             date_from=date_from, date_to=date_to, duration=duration,
-            is_bonus=is_bonus, separation_intervals=separation, scheduling_type=0,
+            is_bonus=is_bonus, booking_code=booking, separation_intervals=separation, scheduling_type=0,
         )
         print(f"    NYC line_id={nyc_id}  rate=${rate}")
 
@@ -417,7 +418,7 @@ def _add_crossings_lines_direct(client, lines: list, separation: tuple) -> None:
                 market=mkt, days=days, time_range=time_range, description=desc,
                 rate=0.0, total_spots=total, spots_per_week=spots_pw,
                 date_from=date_from, date_to=date_to, duration=duration,
-                is_bonus=is_bonus, separation_intervals=separation, scheduling_type=0,
+                is_bonus=is_bonus, booking_code=booking, separation_intervals=separation, scheduling_type=0,
             )
             print(f"    {mkt} line_id={mkt_id}  rate=$0.00")
 
@@ -448,7 +449,8 @@ def _add_asian_lines_direct(client, lines: list, separation: tuple) -> None:
             market="DAL", days=days, time_range=time_range, description=desc,
             rate=rate, total_spots=total, spots_per_week=spots_pw,
             date_from=date_from, date_to=date_to, duration=duration,
-            is_bonus=is_bonus, separation_intervals=separation, scheduling_type=0,
+            is_bonus=is_bonus, booking_code=10 if is_bonus else 2,
+            separation_intervals=separation, scheduling_type=0,
         )
         print(f"    DAL line_id={dal_id}  rate=${rate}")
 
