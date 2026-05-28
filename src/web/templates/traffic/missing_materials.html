@@ -88,7 +88,6 @@
         .run-btn:hover:not(:disabled) { background: var(--nord9); transform: translateY(-1px); }
         .run-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 
-        /* Results */
         .results-header {
             display: flex;
             justify-content: space-between;
@@ -102,32 +101,6 @@
         }
 
         .results-count strong { color: var(--nord11); }
-
-        .filter-row {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 14px;
-            flex-wrap: wrap;
-        }
-
-        .filter-btn {
-            padding: 4px 12px;
-            border: 1px solid var(--border-color);
-            border-radius: 20px;
-            background: var(--bg-secondary);
-            font-size: 0.78rem;
-            font-weight: 600;
-            font-family: 'Inter', sans-serif;
-            color: var(--text-muted);
-            cursor: pointer;
-            transition: all 0.15s;
-        }
-
-        .filter-btn.active {
-            background: var(--nord10);
-            color: white;
-            border-color: var(--nord10);
-        }
 
         .data-table {
             width: 100%;
@@ -172,9 +145,10 @@
             color: var(--nord10);
         }
 
-        .status-NM { color: var(--nord11); font-weight: 700; }
-        .status-NA { color: var(--nord13); font-weight: 700; }
-        .status-NR { color: var(--nord15, #b48ead); font-weight: 700; }
+        .spot-count {
+            font-weight: 700;
+            color: var(--nord11);
+        }
 
         .empty-state {
             text-align: center;
@@ -252,7 +226,7 @@
 <main>
     <div class="tool-card">
         <h2>Spots Scheduled Without a Commercial</h2>
-        <p>Queries all markets for spots scheduled in Etere that have no material attached. These will air black if not resolved before airtime.</p>
+        <p>Scans all markets for spots scheduled in Etere whose contract lines have no material assigned. These will air black if not resolved before airtime.</p>
 
         <div class="input-row">
             <div class="field-group date">
@@ -267,71 +241,66 @@
         </div>
 
         <div id="errorArea"></div>
+
         <div id="resultsArea">
             <div class="tabs">
-                <button class="tab-btn active" onclick="switchTab('flagged', this)">Etere Flagged <span id="flaggedBadge"></span></button>
-                <button class="tab-btn" onclick="switchTab('unlinked', this)">No Material Linked <span id="unlinkedBadge"></span></button>
+                <button class="tab-btn active" onclick="switchTab('contracts', this)">By Contract <span id="contractsBadge"></span></button>
+                <button class="tab-btn" onclick="switchTab('byday', this)">By Day <span id="bydayBadge"></span></button>
             </div>
 
-            <!-- Tab: Etere Flagged -->
-            <div id="tab-flagged" class="tab-panel active">
+            <!-- Tab: By Contract -->
+            <div id="tab-contracts" class="tab-panel active">
                 <div class="results-header">
-                    <div class="results-count">Showing <strong id="rowCount">0</strong> spots across all markets</div>
+                    <div class="results-count"><strong id="contractCount">0</strong> contracts with unassigned spots</div>
                 </div>
-                <div class="filter-row" id="marketFilters"></div>
                 <div style="overflow-x:auto">
-                    <table class="data-table" id="resultsTable">
+                    <table class="data-table" id="contractsTable">
                         <thead>
                             <tr>
-                                <th onclick="sortBy('market', 'flagged')">Market</th>
-                                <th onclick="sortBy('schedule_time', 'flagged')">Schedule Time</th>
-                                <th onclick="sortBy('customer', 'flagged')">Customer</th>
-                                <th onclick="sortBy('agency', 'flagged')">Agency</th>
-                                <th onclick="sortBy('description', 'flagged')">Description</th>
-                                <th onclick="sortBy('duration', 'flagged')">Dur</th>
-                                <th onclick="sortBy('cod_progra', 'flagged')">Program</th>
-                                <th onclick="sortBy('status', 'flagged')">Status</th>
+                                <th onclick="sortBy('contract_code', 'contracts')">Contract</th>
+                                <th onclick="sortBy('contract_name', 'contracts')">Name</th>
+                                <th onclick="sortBy('spot_count', 'contracts')" style="text-align:right">Spots</th>
+                                <th onclick="sortBy('first_date', 'contracts')">First Air</th>
+                                <th onclick="sortBy('last_date', 'contracts')">Last Air</th>
                             </tr>
                         </thead>
-                        <tbody id="resultsBody"></tbody>
+                        <tbody id="contractsBody"></tbody>
                     </table>
                 </div>
             </div>
 
-            <!-- Tab: No Material Linked -->
-            <div id="tab-unlinked" class="tab-panel">
+            <!-- Tab: By Day -->
+            <div id="tab-byday" class="tab-panel">
                 <div class="results-header">
-                    <div class="results-count">Showing <strong id="unlinkedCount">0</strong> spots with no material linked</div>
+                    <div class="results-count"><strong id="bydayCount">0</strong> market-days with unassigned spots</div>
                 </div>
-                <div class="filter-row" id="unlinkedFilters"></div>
                 <div style="overflow-x:auto">
-                    <table class="data-table" id="unlinkedTable">
+                    <table class="data-table" id="bydayTable">
                         <thead>
                             <tr>
-                                <th onclick="sortBy('market', 'unlinked')">Market</th>
-                                <th onclick="sortBy('date', 'unlinked')">Date</th>
-                                <th onclick="sortBy('time', 'unlinked')">Time</th>
-                                <th onclick="sortBy('program', 'unlinked')">Program</th>
-                                <th onclick="sortBy('title', 'unlinked')">Title</th>
-                                <th onclick="sortBy('duration', 'unlinked')">Dur (s)</th>
+                                <th onclick="sortBy('date', 'byday')">Date</th>
+                                <th onclick="sortBy('market', 'byday')">Market</th>
+                                <th onclick="sortBy('spot_count', 'byday')" style="text-align:right">Spots</th>
                             </tr>
                         </thead>
-                        <tbody id="unlinkedBody"></tbody>
+                        <tbody id="bydayBody"></tbody>
                     </table>
                 </div>
             </div>
         </div>
-        <div id="loadingArea" class="loading" style="display:none">Querying all markets...</div>
+
+        <div id="loadingArea" class="loading" style="display:none">Scanning all markets...</div>
     </div>
 </main>
 
 <script>
-let flaggedRows = [];
-let unlinkedRows = [];
-let activeFlaggedMarket = 'ALL';
-let activeUnlinkedMarket = 'ALL';
-let activeTab = 'flagged';
-let sortState = { flagged: { col: 'schedule_time', asc: true }, unlinked: { col: 'date', asc: true } };
+let contractRows = [];
+let bydayRows    = [];
+let activeTab    = 'contracts';
+let sortState    = {
+    contracts: { col: 'spot_count', asc: false },
+    byday:     { col: 'date',       asc: true  },
+};
 
 function toMMDDYYYY(d) {
     const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -341,24 +310,19 @@ function toMMDDYYYY(d) {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-    const today    = new Date();
-    const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+    const today = new Date();
+    const next7 = new Date(today); next7.setDate(today.getDate() + 6);
     document.getElementById('dateFrom').value = toMMDDYYYY(today);
-    document.getElementById('dateTo').value   = toMMDDYYYY(tomorrow);
+    document.getElementById('dateTo').value   = toMMDDYYYY(next7);
 });
 
 function formatDate(el) {
     const d = el.value.replace(/\D/g, '');
     const yr = new Date().getFullYear();
-    if (d.length === 3) {
-        el.value = '0' + d.slice(0,1) + '/' + d.slice(1,3) + '/' + yr;
-    } else if (d.length === 4) {
-        el.value = d.slice(0,2) + '/' + d.slice(2,4) + '/' + yr;
-    } else if (d.length === 6) {
-        el.value = d.slice(0,2) + '/' + d.slice(2,4) + '/20' + d.slice(4,6);
-    } else if (d.length === 8) {
-        el.value = d.slice(0,2) + '/' + d.slice(2,4) + '/' + d.slice(4,8);
-    }
+    if (d.length === 3)      el.value = '0' + d.slice(0,1) + '/' + d.slice(1,3) + '/' + yr;
+    else if (d.length === 4) el.value = d.slice(0,2) + '/' + d.slice(2,4) + '/' + yr;
+    else if (d.length === 6) el.value = d.slice(0,2) + '/' + d.slice(2,4) + '/20' + d.slice(4,6);
+    else if (d.length === 8) el.value = d.slice(0,2) + '/' + d.slice(2,4) + '/' + d.slice(4,8);
 }
 
 function switchTab(tab, btn) {
@@ -385,133 +349,86 @@ async function loadMissing() {
     try {
         const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
 
-        const [flaggedResp, unlinkedResp] = await Promise.all([
+        const [contractsResp, bydayResp] = await Promise.all([
             fetch('/api/traffic/missing-materials?' + params),
             fetch('/api/traffic/no-material?' + params),
         ]);
 
-        if (!flaggedResp.ok) throw new Error(await flaggedResp.text());
-        if (!unlinkedResp.ok) throw new Error(await unlinkedResp.text());
+        if (!contractsResp.ok) throw new Error(await contractsResp.text());
+        if (!bydayResp.ok)     throw new Error(await bydayResp.text());
 
-        const flaggedData = await flaggedResp.json();
-        const unlinkedData = await unlinkedResp.json();
+        const contractsData = await contractsResp.json();
+        const bydayData     = await bydayResp.json();
 
-        flaggedRows = Array.isArray(flaggedData) ? flaggedData : (flaggedData.rows || []);
-        unlinkedRows = unlinkedData.rows || [];
+        contractRows = contractsData.rows || [];
+        bydayRows    = bydayData.rows    || [];
 
-        const errs = Array.isArray(flaggedData) ? [] : (flaggedData.errors || []);
-        if (errs.length) {
-            document.getElementById('errorArea').innerHTML =
-                `<div class="alert-err" style="margin-bottom:12px">Some markets returned errors:<br>${errs.map(e => escHtml(e)).join('<br>')}</div>`;
-        }
+        document.getElementById('contractsBadge').textContent = contractRows.length ? `(${contractRows.length})` : '';
+        document.getElementById('bydayBadge').textContent     = bydayRows.length    ? `(${bydayRows.length})`    : '';
 
-        document.getElementById('flaggedBadge').textContent = flaggedRows.length ? `(${flaggedRows.length})` : '';
-        document.getElementById('unlinkedBadge').textContent = unlinkedRows.length ? `(${unlinkedRows.length})` : '';
-
-        activeFlaggedMarket = 'ALL';
-        activeUnlinkedMarket = 'ALL';
-        renderFlaggedFilters();
-        renderFlaggedTable();
-        renderUnlinkedFilters();
-        renderUnlinkedTable();
+        renderContractsTable();
+        renderBydayTable();
         document.getElementById('resultsArea').classList.add('visible');
     } catch(e) {
         document.getElementById('errorArea').innerHTML =
-            `<div class="alert-err">Error: ${e.message}</div>`;
+            `<div class="alert-err">Error: ${escHtml(e.message)}</div>`;
     } finally {
         document.getElementById('loadingArea').style.display = 'none';
         document.getElementById('runBtn').disabled = false;
     }
 }
 
-function renderFiltersFor(rows, activeMarket, containerId, onSelect) {
-    const markets = ['ALL', ...new Set(rows.map(r => r.market))].sort((a,b) => a === 'ALL' ? -1 : a.localeCompare(b));
-    const counts = {};
-    rows.forEach(r => { counts[r.market] = (counts[r.market] || 0) + 1; });
-    const container = document.getElementById(containerId);
-    container.innerHTML = '';
-    markets.forEach(m => {
-        const btn = document.createElement('button');
-        btn.className = 'filter-btn' + (m === activeMarket ? ' active' : '');
-        btn.textContent = m === 'ALL' ? `All Markets (${rows.length})` : `${m} (${counts[m] || 0})`;
-        btn.onclick = () => onSelect(m);
-        container.appendChild(btn);
-    });
-}
-
-function renderFlaggedFilters() {
-    renderFiltersFor(flaggedRows, activeFlaggedMarket, 'marketFilters', m => {
-        activeFlaggedMarket = m; renderFlaggedFilters(); renderFlaggedTable();
-    });
-}
-
-function renderUnlinkedFilters() {
-    renderFiltersFor(unlinkedRows, activeUnlinkedMarket, 'unlinkedFilters', m => {
-        activeUnlinkedMarket = m; renderUnlinkedFilters(); renderUnlinkedTable();
-    });
-}
-
 function sortedRows(rows, tab) {
     const { col, asc } = sortState[tab];
     return [...rows].sort((a, b) => {
         let av = a[col] ?? '', bv = b[col] ?? '';
-        if (col === 'schedule_time') { av = new Date(av); bv = new Date(bv); }
+        if (typeof av === 'number' && typeof bv === 'number') {
+            return asc ? av - bv : bv - av;
+        }
+        av = String(av); bv = String(bv);
         if (av < bv) return asc ? -1 : 1;
-        if (av > bv) return asc ? 1 : -1;
+        if (av > bv) return asc ? 1  : -1;
         return 0;
     });
 }
 
-function renderFlaggedTable() {
-    const rows = activeFlaggedMarket === 'ALL' ? flaggedRows : flaggedRows.filter(r => r.market === activeFlaggedMarket);
-    const sorted = sortedRows(rows, 'flagged');
-    document.getElementById('rowCount').textContent = sorted.length;
-    const tbody = document.getElementById('resultsBody');
-    if (!sorted.length) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:30px">No Etere-flagged missing materials for this date range.</td></tr>';
-        return;
-    }
-    tbody.innerHTML = sorted.map(r => {
-        const dt = r.schedule_time ? new Date(r.schedule_time) : null;
-        const dateStr = dt ? dt.toLocaleDateString('en-US', {month:'2-digit', day:'2-digit', year:'2-digit'}) : '';
-        const timeStr = dt ? dt.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12:true}) : '';
-        return `<tr>
-            <td><span class="market-badge">${escHtml(r.market)}</span></td>
-            <td style="white-space:nowrap">${dateStr} ${timeStr}</td>
-            <td>${escHtml(r.customer || '')}</td>
-            <td>${escHtml(r.agency || '')}</td>
-            <td>${escHtml(r.description || '')}</td>
-            <td style="text-align:center">${escHtml(r.duration || '')}</td>
-            <td>${escHtml(r.cod_progra || '')}</td>
-            <td><span class="status-${escHtml(r.status || '')}">${escHtml(r.status || '')}</span></td>
-        </tr>`;
-    }).join('');
+function sortBy(col, tab) {
+    if (sortState[tab].col === col) { sortState[tab].asc = !sortState[tab].asc; }
+    else { sortState[tab] = { col, asc: col === 'spot_count' ? false : true }; }
+    if (tab === 'contracts') renderContractsTable();
+    else renderBydayTable();
 }
 
-function renderUnlinkedTable() {
-    const rows = activeUnlinkedMarket === 'ALL' ? unlinkedRows : unlinkedRows.filter(r => r.market === activeUnlinkedMarket);
-    const sorted = sortedRows(rows, 'unlinked');
-    document.getElementById('unlinkedCount').textContent = sorted.length;
-    const tbody = document.getElementById('unlinkedBody');
+function renderContractsTable() {
+    const sorted = sortedRows(contractRows, 'contracts');
+    document.getElementById('contractCount').textContent = sorted.length;
+    const tbody = document.getElementById('contractsBody');
     if (!sorted.length) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:30px">No spots without material found for this date range.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No contracts with missing materials in this date range.</td></tr>';
         return;
     }
     tbody.innerHTML = sorted.map(r => `<tr>
-        <td><span class="market-badge">${escHtml(r.market)}</span></td>
-        <td style="white-space:nowrap">${escHtml(r.date)}</td>
-        <td style="white-space:nowrap">${escHtml(r.time)}</td>
-        <td>${escHtml(r.program)}</td>
-        <td>${escHtml(r.title)}</td>
-        <td style="text-align:center">${r.duration}</td>
+        <td style="font-family:monospace;font-size:0.82rem">${escHtml(r.contract_code)}</td>
+        <td>${escHtml(r.contract_name)}</td>
+        <td style="text-align:right"><span class="spot-count">${r.spot_count}</span></td>
+        <td style="white-space:nowrap">${escHtml(r.first_date)}</td>
+        <td style="white-space:nowrap">${escHtml(r.last_date)}</td>
     </tr>`).join('');
 }
 
-function sortBy(col, tab) {
-    if (sortState[tab].col === col) { sortState[tab].asc = !sortState[tab].asc; }
-    else { sortState[tab] = { col, asc: true }; }
-    if (tab === 'flagged') renderFlaggedTable();
-    else renderUnlinkedTable();
+function renderBydayTable() {
+    const sorted = sortedRows(bydayRows, 'byday');
+    document.getElementById('bydayCount').textContent = sorted.length;
+    const tbody = document.getElementById('bydayBody');
+    if (!sorted.length) {
+        tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No missing materials by day for this date range.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = sorted.map(r => `<tr>
+        <td style="white-space:nowrap">${escHtml(r.date)}</td>
+        <td><span class="market-badge">${escHtml(r.market)}</span></td>
+        <td style="text-align:right"><span class="spot-count">${r.spot_count}</span></td>
+    </tr>`).join('');
 }
 
 function escHtml(s) {

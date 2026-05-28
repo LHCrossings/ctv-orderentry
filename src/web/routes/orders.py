@@ -1638,55 +1638,45 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             from browser_automation.etere_direct_client import connect as _db_connect
             dt_from = _parse_date(date_from)
             dt_to   = _parse_date(date_to)
-            results = []
-            errors  = []
             with _db_connect() as conn:
-                cursor = conn.cursor()
-                # Discover stations from users table (same source as the SSRS report)
-                cursor.execute("SELECT DISTINCT cod_user, nome FROM users ORDER BY cod_user")
-                stations = [(row[0], row[1]) for row in cursor.fetchall()]
-                if not stations:
-                    errors.append("No stations found in users table.")
-                    return results, errors
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT
+                        ct.COD_CONTRATTO,
+                        ct.DESCRIZIONE,
+                        COUNT(*) AS spot_count,
+                        MIN(tp.Date) AS first_date,
+                        MAX(tp.Date) AS last_date
+                    FROM trafficPalinse tp
+                    JOIN CONTRATTIRIGHE cr
+                        ON tp.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
+                    JOIN CONTRATTITESTATA ct
+                        ON cr.ID_CONTRATTITESTATA = ct.ID_CONTRATTITESTATA
+                    WHERE tp.Date BETWEEN %s AND %s
+                      AND (tp.ID_TRAFFICTRASH IS NULL OR tp.ID_TRAFFICTRASH = 0)
+                      AND NOT EXISTS (
+                          SELECT 1 FROM CONTRATTIFILMATI cf
+                          WHERE cf.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe
+                      )
+                    GROUP BY ct.COD_CONTRATTO, ct.DESCRIZIONE
+                    ORDER BY COUNT(*) DESC
+                """, (dt_from, dt_to))
+                rows = []
+                for row in cur.fetchall():
+                    code, name, cnt, fd, ld = row
+                    def _fmt(d):
+                        return f"{d.month}/{d.day:02d}/{str(d.year)[2:]}" if d else ""
+                    rows.append({
+                        "contract_code": code or "",
+                        "contract_name": name or "",
+                        "spot_count":    cnt,
+                        "first_date":    _fmt(fd),
+                        "last_date":     _fmt(ld),
+                    })
+            return rows
 
-                _set = conn.cursor()
-                _set.execute("SET ARITHABORT ON")
-                _set.execute("SET ANSI_NULLS ON")
-                _set.execute("SET ANSI_WARNINGS ON")
-                _set.execute("SET QUOTED_IDENTIFIER ON")
-                for cod_user, nome in stations:
-                    market_name = _MARKET_NAMES.get(cod_user, nome or str(cod_user))
-                    try:
-                        cur = conn.cursor()  # fresh cursor per market avoids stale result-set state
-                        cur.execute(
-                            "EXEC dbo.rpt_trf_missing_material_list ?, ?, ?, ?, ?, ?, ?, ?",
-                            cod_user, dt_from, dt_to, "1", "1", "1", "3", None
-                        )
-                        # SP may produce multiple result sets; advance to one with columns
-                        while cur.description is None:
-                            if not cur.nextset():
-                                break
-                        if cur.description:
-                            for row in cur.fetchall():
-                                results.append({
-                                    "market":        market_name,
-                                    "customer":      row[0],
-                                    "agency":        row[1],
-                                    "salesman":      row[2],
-                                    "description":   row[3],
-                                    "duration":      row[4],
-                                    "cod_progra":    row[5],
-                                    "schedule_time": row[6].isoformat() if row[6] else None,
-                                    "status":        row[7],
-                                })
-                    except Exception as e:
-                        errors.append(f"{market_name} (cod_user={cod_user}): {e}")
-            return results, errors
-
-        rows, errors = await asyncio.to_thread(_query)
-        if errors and not rows:
-            raise HTTPException(status_code=500, detail="\n".join(errors))
-        return JSONResponse(content={"rows": rows, "errors": errors})
+        rows = await asyncio.to_thread(_query)
+        return JSONResponse(content={"rows": rows, "total": len(rows)})
 
     @router.get("/api/traffic/no-material")
     async def get_no_material(
@@ -1710,26 +1700,31 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             with _db_connect() as conn:
                 cur = conn.cursor()
                 cur.execute("""
-                    SELECT COD_USER, DATA, ORA, COD_PROGRA, TITLE, DURATION
-                    FROM TPalinseSpotsInCluster
-                    WHERE DATA BETWEEN ? AND ?
-                      AND (ID_FILMATI IS NULL OR ID_FILMATI = 0)
-                    ORDER BY DATA, COD_USER, ORA
-                """, dt_from, dt_to)
+                    SELECT
+                        CAST(tp.Date AS DATE) AS day,
+                        tp.Cod_User,
+                        COUNT(*) AS spot_count
+                    FROM trafficPalinse tp
+                    WHERE tp.Date BETWEEN %s AND %s
+                      AND (tp.ID_TRAFFICTRASH IS NULL OR tp.ID_TRAFFICTRASH = 0)
+                      AND tp.ID_ContrattiRighe IS NOT NULL
+                      AND tp.ID_ContrattiRighe > 0
+                      AND NOT EXISTS (
+                          SELECT 1 FROM CONTRATTIFILMATI cf
+                          WHERE cf.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe
+                      )
+                    GROUP BY CAST(tp.Date AS DATE), tp.Cod_User
+                    ORDER BY CAST(tp.Date AS DATE), tp.Cod_User
+                """, (dt_from, dt_to))
                 rows = []
                 for row in cur.fetchall():
-                    cod_user, data, ora, cod_progra, title, duration = row
+                    day, cod_user, cnt = row
                     market = _MARKET_NAMES.get(cod_user, str(cod_user))
-                    date_str = (
-                        f"{data.month}/{data.day:02d}/{str(data.year)[2:]}" if data else ""
-                    )
+                    date_str = f"{day.month}/{day.day:02d}/{str(day.year)[2:]}" if day else ""
                     rows.append({
-                        "market":   market,
-                        "date":     date_str,
-                        "time":     _frames_to_ampm(ora),
-                        "program":  cod_progra or "",
-                        "title":    title or "",
-                        "duration": _frames_to_sec(duration),
+                        "date":       date_str,
+                        "market":     market,
+                        "spot_count": cnt,
                     })
             return rows
 
