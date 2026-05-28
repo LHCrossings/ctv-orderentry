@@ -472,6 +472,17 @@ def _add_asian_lines_direct(client, lines: list, separation: tuple, row_status: 
         print(f"    DAL line_id={dal_id}  rate=${rate}")
 
 
+def _line_exists_in_etere(conn, ph: str, contract_id: int, wl_line_number: int) -> bool:
+    """Return True if any CONTRATTIRIGHE row already exists for this WL line number."""
+    cur = conn.cursor()
+    cur.execute(
+        f"SELECT COUNT(*) FROM CONTRATTIRIGHE "
+        f"WHERE ID_CONTRATTITESTATA = {ph} AND DESCRIZIONE LIKE {ph}",
+        (contract_id, f'(Line {wl_line_number})%')
+    )
+    return (cur.fetchone()[0] or 0) > 0
+
+
 def _find_wl_line_ids(conn, ph: str, contract_id: int, wl_line_number: int) -> list:
     """Return list of (ID_CONTRATTIRIGHE, COD_USER) for a WL line number across all markets."""
     cur = conn.cursor()
@@ -683,6 +694,20 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
             row = cur.fetchone()
             customer_id = int(row[0]) if row else None
             print(f"[REVISION] Adding lines to existing contract #{contract_id}")
+
+            # Safety check: catch ADD lines that may be mislabelled (agency typo).
+            # For any ADD line with line_number > 1, verify it doesn't already exist.
+            for io_line in lines:
+                action = (io_line.get('action') or 'ADD').upper()
+                wl_num = io_line['line_number']
+                if action != 'ADD' or wl_num <= 1:
+                    continue
+                if _line_exists_in_etere(conn, ph, contract_id, wl_num):
+                    print(f"\n  ⚠ [Line {wl_num}] is marked ADD but already exists on contract {contract_id}.")
+                    ans = input(f"  Treat Line {wl_num} as CHANGE instead? [y/n]: ").strip().lower()
+                    if ans == 'y':
+                        io_line['action'] = 'CHANGE'
+                        print(f"  [Line {wl_num}] → action overridden to CHANGE")
         else:
             customer_id = int(user_input['customer_id'])
             contract_id = client.create_contract_header(
