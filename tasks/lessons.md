@@ -1,5 +1,21 @@
 # Lessons Learned
 
+## Every Traffic Assignment Must Populate CONTRATTIFILMATI (the "Rotate with the following assets" pool)
+
+**Session:** Tatari/MA Woof/Pholicious fix (2026-05-28)
+
+**What happened:** Tatari drag-and-drop correctly assigned filmati to individual TPALINSE spots, but the "Rotate with the following assets" pool in Etere's native UI (table: `CONTRATTIFILMATI`) was empty for new contract lines added after the first assignment run. The `existing_pool` check saw the filmati were already in other lines' pool and skipped `MaterialAddToAssetListC`, so new lines never got their pool rows created.
+
+**Rule:** Any code that assigns traffic (via `auto-assign`, `assign`, or `assign-spots`) **must** ensure `CONTRATTIFILMATI` is populated for every assigned line. Two requirements:
+
+1. **`MaterialAddToAssetListC`** — the Etere HTTP call that registers filmati in the contract pool. Must be called for each filmati not yet in the pool for the specific lines being assigned (not just "anywhere in the contract"). Endpoint: `POST /Sales/MaterialAddToAssetListC` with `{"idFilmatiList": [fid], "idct": contract_id}`.
+
+2. **`CONTRATTIFILMATI` rows** — one row per `(ID_CONTRATTIRIGHE, ID_FILMATI)` with `PERCROTATION` set (proportional to rotation %). Use DELETE+INSERT (not UPDATE+INSERT-if-rowcount) so new lines that were added after the HTTP call ran still get their rows.
+
+**How to apply:** When writing any new traffic assignment endpoint or modifying existing ones, confirm both of the above are handled. TPALINSE being correct is necessary but not sufficient — Etere's native UI will show the pool as empty if CONTRATTIFILMATI isn't populated, confusing traffic managers.
+
+---
+
 ## Direct DB Entry Must Always Pass `booking_code` Explicitly
 
 **Session:** iGraphix + WorldLink BNS fix (2026-05-28)
