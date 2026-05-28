@@ -5878,7 +5878,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         return templates.TemplateResponse(request, "master_control/booked_business.html")
 
     @router.get("/api/master-control/booked-business/load")
-    async def booked_business_load(year: int, month: int, show_trade: bool = False, _auth: None = Depends(require_export_token)):
+    async def booked_business_load(year: int, month: int, show_trade: bool = False):
         def _run():
             import calendar as _cal
             from collections import defaultdict
