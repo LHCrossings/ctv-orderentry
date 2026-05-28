@@ -234,6 +234,143 @@ def gather_igraphix_inputs(pdf_path: str) -> Optional[dict]:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# DIRECT DB ENTRY
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _parse_date_yy(date_str: str):
+    """Convert 'MM/DD/YY' string to date object (2-digit year)."""
+    from datetime import date as _date
+    return datetime.strptime(date_str.strip(), '%m/%d/%y').date()
+
+
+def _secs_to_duration(secs: int) -> str:
+    """Convert integer seconds to HH:MM:SS:FF string for EtereDirectClient."""
+    m, s = divmod(int(secs), 60)
+    h, m = divmod(m, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}:00"
+
+
+def process_igraphix_order_direct(user_input: dict) -> Optional[str]:
+    """
+    Enter an iGraphix order directly via DB stored procedures (no browser).
+
+    Returns COD_CONTRATTO string on success, None on failure (rolls back fully).
+    """
+    from browser_automation.etere_direct_client import EtereDirectClient, connect as db_connect
+
+    order: IGraphixOrder = user_input['order']
+
+    print("\n" + "=" * 70)
+    print("IGRAPHIX DIRECT DB ENTRY")
+    print("=" * 70)
+
+    flight_start = _parse_date_yy(order.flight_start)
+    flight_end   = _parse_date_yy(order.flight_end)
+
+    conn = None
+    try:
+        conn = db_connect()
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+        client.set_master_market("NYC")
+
+        contract_id = client.create_contract_header(
+            code=user_input['contract_code'],
+            description=user_input['contract_description'],
+            customer_id=int(user_input['customer_id']),
+            contract_date=flight_start,
+            contract_end_date=flight_end,
+            contract_type=1,
+            billing_type="agency",
+            note=user_input['notes'],
+            customer_order_ref=user_input['customer_order_ref'],
+            master_market="NYC",
+        )
+        print(f"[CONTRACT] ✓ ID={contract_id}")
+
+        duration_str = _secs_to_duration(order.spot_duration)
+
+        print(f"\n[LINES] Adding {len(order.ad_codes)} line(s)...")
+
+        for i, ad_code in enumerate(order.ad_codes, 1):
+            is_bonus = ad_code.is_bonus
+            rate = 0.0 if is_bonus else order.rate_per_spot
+
+            if is_bonus:
+                ros_days, ros_time_raw = _get_ros_schedule(order.language)
+                days = ros_days
+                time_raw = ros_time_raw
+            else:
+                days = order.paid_days
+                time_raw = order.paid_time
+
+            days, _ = EtereClient.check_sunday_6_7a_rule(days, time_raw)
+            time_from, time_to = EtereClient.parse_time_range(time_raw)
+            time_range = f"{time_from}-{time_to}"
+
+            if is_bonus:
+                line_desc = f"BNS {order.language} {time_raw} [{ad_code.ad_code}]"
+            else:
+                line_desc = f"{order.language} {time_raw} [{ad_code.ad_code}]"
+
+            max_daily = _calculate_max_daily(
+                ad_code.spots, days, ad_code.start_date, ad_code.end_date
+            )
+            separation = get_separation_intervals(order.language, is_bonus)
+            date_from = _parse_date_yy(ad_code.start_date)
+            date_to   = _parse_date_yy(ad_code.end_date)
+
+            status_label = "BNS" if is_bonus else "PAID"
+            print(f"\n[LINE {i}] {status_label} [{ad_code.ad_code}] {ad_code.description}")
+            print(f"  Days: {days}, Time: {time_raw}  ({time_from}–{time_to})")
+            print(f"  Spots: {ad_code.spots}  Rate: ${rate:.2f}  Max/day: {max_daily}")
+            print(f"  Flight: {ad_code.start_date} – {ad_code.end_date}")
+            print(f"  Separation: {separation}")
+
+            line_id = client.add_contract_line(
+                market=order.market,
+                days=days,
+                time_range=time_range,
+                description=line_desc,
+                rate=rate,
+                total_spots=ad_code.spots,
+                spots_per_week=0,
+                max_daily_run=max_daily,
+                date_from=date_from,
+                date_to=date_to,
+                duration=duration_str,
+                is_bonus=is_bonus,
+                separation_intervals=separation,
+            )
+            print(f"  line_id={line_id}")
+
+        conn.commit()
+
+        ph = client._ph
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT COD_CONTRATTO FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = {ph}",
+            (contract_id,)
+        )
+        row = cur.fetchone()
+        contract_code = str(row[0]).strip() if row else str(contract_id)
+        conn.close()
+        print(f"\n[DIRECT] ✓ Contract {contract_code} committed.")
+        return contract_code
+
+    except Exception as exc:
+        print(f"\n[DIRECT] ✗ Error: {exc}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # BROWSER AUTOMATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -271,6 +408,15 @@ def process_igraphix_order(
             return False
 
     order: IGraphixOrder = user_input['order']
+
+    # ═══════════════════════════════════════════════════════════════
+    # TRY DIRECT DB FIRST
+    # ═══════════════════════════════════════════════════════════════
+
+    contract_code = process_igraphix_order_direct(user_input)
+    if contract_code:
+        return True
+    print("\n[FALLBACK] Direct DB failed — retrying via browser automation...")
 
     # ═══════════════════════════════════════════════════════════════
     # BROWSER AUTOMATION (COMPLETELY UNATTENDED)
