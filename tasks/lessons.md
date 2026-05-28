@@ -1,5 +1,22 @@
 # Lessons Learned
 
+## Direct DB Entry Must Always Pass `booking_code` Explicitly
+
+**Session:** iGraphix + WorldLink BNS fix (2026-05-28)
+
+**What happened:** `is_bonus=True` in `EtereDirectClient.add_contract_line()` only controls the scheduling type (forces Rotation) and the NEWTYPE string. It does NOT override the `booking_code` parameter, which defaults to `2` (Paid Commercial). Bonus lines were entered with booking code 2 instead of 10 (BNS).
+
+**Rule:** Any direct DB automation call to `add_contract_line()` must always pass `booking_code` explicitly:
+```python
+booking_code=10 if is_bonus else 2
+```
+
+Never rely on `is_bonus=True` to set the booking code automatically. The Selenium `EtereClient` path uses a `spot_code` variable for this — replicate that pattern in every direct DB conversion.
+
+**Applies to:** Every future direct DB conversion. When converting a Selenium automation, find where it computes `spot_code = 10 if is_bonus else 2` and carry that logic into the direct DB call as `booking_code=spot_code`.
+
+---
+
 ## EtereDirectClient SP Calls Must Use `self._ph`, Not Hardcoded `?`
 
 **Session:** Trade entry direct DB write (2026-05-21)
