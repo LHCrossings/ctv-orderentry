@@ -4918,6 +4918,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     date_filter += f" AND cr.DATA_FINE >= '{date_from}'"
                 if date_to:
                     date_filter += f" AND cr.DATA_INIZIO <= '{date_to}'"
+                id_filter = ""
+                params: tuple = (term, term)
+                if q.isdigit():
+                    id_filter = "OR ct.ID_CONTRATTITESTATA = %s"
+                    params = (term, term, int(q))
                 cur.execute(f"""
                     SELECT TOP 20
                         ct.ID_CONTRATTITESTATA AS id,
@@ -4929,11 +4934,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     FROM CONTRATTITESTATA ct
                     JOIN CONTRATTIRIGHE cr
                       ON cr.ID_CONTRATTITESTATA = ct.ID_CONTRATTITESTATA
-                    WHERE (ct.DESCRIZIONE LIKE %s OR ct.COD_CONTRATTO LIKE %s)
+                    WHERE (ct.DESCRIZIONE LIKE %s OR ct.COD_CONTRATTO LIKE %s {id_filter})
                       {date_filter}
                     GROUP BY ct.ID_CONTRATTITESTATA, ct.COD_CONTRATTO, ct.DESCRIZIONE
                     ORDER BY ct.ID_CONTRATTITESTATA DESC
-                """, (term, term))
+                """, params)
                 return [dict(r) for r in cur.fetchall()]
         try:
             result = await asyncio.get_running_loop().run_in_executor(None, _run)
