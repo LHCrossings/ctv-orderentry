@@ -605,8 +605,8 @@ def _update_change_lines(
     from browser_automation.etere_direct_client import parse_day_bits
 
     end_date_obj = _parse_date(io_line['end_date'])
-    # SQL Server datetime columns require a datetime, not a date
-    end_dt = datetime(end_date_obj.year, end_date_obj.month, end_date_obj.day)
+    # Pass as ISO string — avoids pymssql datetime binding ambiguity with some columns
+    end_dt = end_date_obj.strftime('%Y-%m-%d')
 
     n_passaggi = locked_count if is_cancel else int(io_line['total_spots'])
     remaining  = n_passaggi - locked_count
@@ -651,6 +651,14 @@ def _update_change_lines(
                 line_id,
             )
         )
+
+    # Verify DATA_FINE updated correctly on the first line
+    cur.execute(
+        f"SELECT DATA_FINE FROM CONTRATTIRIGHE WHERE ID_CONTRATTIRIGHE = {ph}",
+        (lines_with_market[0][0],)
+    )
+    actual_end = cur.fetchone()[0]
+    print(f"    [verify] DATA_FINE = {actual_end}  (expected {end_date_obj})")
 
 
 def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
