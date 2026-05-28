@@ -630,14 +630,14 @@ def _update_change_lines(
     for line_id, _ in lines_with_market:
         cur.execute(
             f"UPDATE CONTRATTIRIGHE SET "
-            f"DATA_FINE = {ph}, N_PASSAGGI = {ph}, "
+            f"DATA_FINE = {ph}, DATEEND = {ph}, N_PASSAGGI = {ph}, "
             f"LUNEDI = {ph}, MARTEDI = {ph}, MERCOLEDI = {ph}, "
             f"GIOVEDI = {ph}, VENERDI = {ph}, SABATO = {ph}, DOMENICA = {ph}, "
             f"DESCRIZIONE = {ph}, "
             f"{extra_col}ROWSTATUS = {ph} "
             f"WHERE ID_CONTRATTIRIGHE = {ph}",
             (
-                end_dt, n_passaggi,
+                end_dt, end_dt, n_passaggi,
                 1 if day_bits['lun'] else 0,
                 1 if day_bits['mar'] else 0,
                 1 if day_bits['mer'] else 0,
@@ -652,13 +652,6 @@ def _update_change_lines(
             )
         )
 
-    # Verify DATA_FINE updated correctly on the first line
-    cur.execute(
-        f"SELECT DATA_FINE FROM CONTRATTIRIGHE WHERE ID_CONTRATTIRIGHE = {ph}",
-        (lines_with_market[0][0],)
-    )
-    actual_end = cur.fetchone()[0]
-    print(f"    [verify] DATA_FINE = {actual_end}  (expected {end_date_obj})")
 
 
 def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
