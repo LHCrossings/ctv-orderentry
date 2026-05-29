@@ -1,5 +1,30 @@
 # Lessons Learned
 
+## Etere Blacklist Is a DELETE + TSL Insert, Not a LIVELLO Change
+
+**Session:** Missing Materials blacklist button (2026-05-29)
+
+**What happened:** Built a "Blacklist" button on the missing materials page. Went through several wrong approaches before confirming the correct mechanism by watching the DB during a live native Etere blacklist action:
+
+- ❌ `LIVELLO=666` alone — Etere counts 666 rows AND TSL separately → doubles the blacklist count
+- ❌ TSL-only (leaving LIVELLO=0) → placed count stays at N_PASSAGGI, so placed + blacklisted > N_PASSAGGI
+- ✅ **DELETE the TPALINSE row + DELETE the trafficPalinse row + INSERT TSL** — this is exactly what Etere does natively
+
+**Rule:** To blacklist a scheduled spot programmatically:
+1. `DELETE FROM trafficPalinse WHERE id_tpalinse = %s`
+2. `DELETE FROM TPALINSE WHERE ID_TPALINSE = %s`
+3. `INSERT INTO Traffic_ScheduleList (ID_ContrattiRighe, BlackList, PassageMiss, ID_TRAFFICPALINSE, Date, ToDate, Notes, Operator, ID_FILMATI, ID_FILMATI_TAIL, ID_FILMATI_MIDDLE, ID_FATTURAEMITTENTE, Split) VALUES (%s, 1, 1, %s, %s, %s, %s, %s, -1, -1, -1, 0, 0)`
+   - `ID_TRAFFICPALINSE` = the `trafficPalinse.id_trafficPalinse` of the deleted row
+   - `Date` / `ToDate` = `CONTRATTIRIGHE.DATA_INIZIO` / `DATA_FINE` for that contract line
+   - INSERT only if no existing `BlackList > 0` entry for that line (never increment)
+
+**Result:** N_PASSAGGI = placed (LIVELLO=0) + blacklisted (TSL.PassageMiss). Etere contract view shows correct 10/9/1.
+
+**Also confirmed:**
+- TPALINSE rows with invalid ORA values will crash `tcFrames2Msec` — filter by ORA range directly instead of calling the SP in WHERE
+- `pymssql` requires explicit `conn.commit()` — the `with conn:` context manager does NOT auto-commit in this project's connection wrapper
+- TPALINSE has triggers → `OUTPUT INSERTED.x` is blocked; use `SELECT SCOPE_IDENTITY()` after INSERT instead
+
 ## Every Traffic Assignment Must Populate CONTRATTIFILMATI (the "Rotate with the following assets" pool)
 
 **Session:** Tatari/MA Woof/Pholicious fix (2026-05-28)
