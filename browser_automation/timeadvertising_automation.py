@@ -313,7 +313,8 @@ def _create_timeadvertising_contract(
             booking_code = 10 if ln.rate == 0 else 2
             time_from, time_to = _line_times(ln.program)
             time_range = f"{time_from}-{time_to}"
-            desc = _line_description(ln.program)
+            base_desc = _line_description(ln.program)
+            desc = f"BNS {base_desc}" if ln.rate == 0 else base_desc
             etere_specs = ln.get_etere_lines()
 
             kind = "BONUS" if ln.rate == 0 else "PAID"
