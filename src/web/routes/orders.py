@@ -6866,7 +6866,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 market      = _mn_rev.get(row["COD_USER"], "NYC")
                 contract_id = row["contract_id"]
 
-                # Insert make-good line (row_status=1 → pending approval)
+                # Insert make-good line (row_status=2 → Change Data, requires approval before scheduling)
                 client = EtereDirectClient(conn, autocommit=False)
                 client._contract_id = contract_id
                 new_line_id = client.add_contract_line(
@@ -6888,7 +6888,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     whitelist_priority = int(row["PrioritaWhiteList"] or 50),
                     booking_code       = int(row["ID_BOOKINGCODE"] or 2),
                     scheduling_type    = int(row["PRENOTAZIONE"] or 1),
-                    row_status         = 1,
+                    row_status         = 2,
                 )
 
                 # Refresh blocks for the new line
