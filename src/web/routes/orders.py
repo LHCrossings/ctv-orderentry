@@ -6757,7 +6757,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         _fps   = 29.97
 
         def _fr2hm(frames):
-            if not frames: return "00:00"
+            if not frames:
+                return "00:00"
             total_sec = round(frames / _fps)
             return f"{total_sec // 3600:02d}:{(total_sec % 3600) // 60:02d}"
 
@@ -6814,9 +6815,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         time_from_str = body["time_from"]   # HH:MM
         time_to_str   = body["time_to"]     # HH:MM
 
-        from datetime import datetime as _dt, date as _date
+        from datetime import datetime as _dt
+
         from browser_automation.etere_direct_client import (
-            connect as _db_connect, EtereDirectClient,
+            EtereDirectClient,
+        )
+        from browser_automation.etere_direct_client import (
+            connect as _db_connect,
         )
 
         _mn_rev = {1:"NYC",2:"CMP",3:"HOU",4:"SFO",5:"SEA",6:"LAX",7:"CVC",8:"WDC",9:"MMT",10:"DAL"}
@@ -6841,7 +6846,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 day_parts = []
                 for flag, code in [("LUNEDI","M"),("MARTEDI","Tu"),("MERCOLEDI","W"),
                                     ("GIOVEDI","Th"),("VENERDI","F"),("SABATO","Sa"),("DOMENICA","Su")]:
-                    if row.get(flag): day_parts.append(code)
+                    if row.get(flag):
+                        day_parts.append(code)
                 days = ",".join(day_parts) or "M-Su"
 
                 # Duration frames → "HH:MM:SS:FF"
