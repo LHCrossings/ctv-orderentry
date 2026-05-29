@@ -391,10 +391,12 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
                         tp.ORA                             AS time_frames,
                         ISNULL(f.COD_PROGRA, tp.TITLE)     AS spot_code,
                         ISNULL(f.DESCRIZIO, '')            AS spot_title,
-                        ISNULL(cr.PREZZO, 0)               AS rate
+                        ISNULL(cr.IMPORTO, 0)              AS rate
                     FROM TPALINSE tp
+                    JOIN trafficPalinse tpa
+                        ON tpa.id_tpalinse = tp.ID_TPALINSE
                     JOIN CONTRATTIRIGHE cr
-                        ON cr.ID_CONTRATTIRIGHE = tp.ID_CONTRATTIRIGHE
+                        ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
                     JOIN CONTRATTITESTATA ct
                         ON ct.ID_CONTRATTITESTATA = cr.ID_CONTRATTITESTATA
                     LEFT JOIN FILMATI f
