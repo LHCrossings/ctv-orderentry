@@ -373,13 +373,15 @@ async def _do_poll() -> dict:
             start_dt  = datetime.fromisoformat(cap["start_time"])
             query_date = (start_dt + timedelta(seconds=20)).date()
             try:
+                cod_user = NETWORK_COD_USER.get(cap.get("network", ""), 0)
                 cur.execute(
                     "SELECT TOP 1 ORA, DATA, "
                     "dbo.tcFrames2Msec(dbo.getVideoStandard(COD_USER), ORA) AS air_ms "
                     "FROM TPALINSE "
                     "WHERE COD_PROGRA = %s AND DATA = %s AND ORA > 0 "
+                    "AND COD_USER = %s AND LIVELLO = 0 "
                     "ORDER BY ORA",
-                    (isci, query_date),
+                    (isci, query_date, cod_user),
                 )
                 row = cur.fetchone()
             except Exception as exc:
