@@ -628,3 +628,78 @@ tbody tr.clickable {
     font-size: 0.72rem;
     font-weight: 600;
 }
+
+/* ── Web Terminal Modal ──────────────────────────────────────────────────── */
+
+.terminal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(46, 52, 64, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+    padding: 24px;
+}
+
+.terminal-overlay.hidden {
+    display: none;
+}
+
+.terminal-modal {
+    background: #2e3440;
+    border-radius: 10px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+    width: 92vw;
+    height: 88vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.terminal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: #3b4252;
+    border-bottom: 1px solid #434c5e;
+    flex-shrink: 0;
+}
+
+.terminal-title {
+    color: #d8dee9;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.terminal-close-btn {
+    background: #bf616a;
+    color: #eceff4;
+    border: none;
+    padding: 4px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.terminal-close-btn:hover {
+    background: #d08770;
+}
+
+.terminal-container {
+    flex: 1;
+    padding: 6px 8px;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.terminal-container .xterm {
+    height: 100%;
+}
+
+.terminal-container .xterm-viewport {
+    overflow-y: auto !important;
+}

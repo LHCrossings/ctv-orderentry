@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, List, Optional
 
-from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
@@ -1347,6 +1347,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 if str(p).startswith(str(config.incoming_dir.resolve())) and p.exists():
                     safe_files.append(f)
 
+        n = len(files) if files else "all"
         if sys.platform == "win32":
             # Use argument list + CREATE_NEW_CONSOLE — avoids shell=True which
             # causes cmd.exe to split filenames containing & at the shell level.
@@ -1355,12 +1356,129 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 args += ["--files"] + safe_files
             subprocess.Popen(args, cwd=str(project_root),
                              creationflags=subprocess.CREATE_NEW_CONSOLE)
-            n = len(files) if files else "all"
             return JSONResponse({"message": f"Terminal opened — processing {n} order(s)."})
         else:
-            files_arg = (" --files " + " ".join(f'"{f}"' for f in safe_files)) if safe_files else ""
-            cmd = f"uv run python main.py{files_arg}"
-            return JSONResponse({"message": f"Run in your terminal: {cmd}", "manual": True})
+            return JSONResponse({"terminal": "ws", "files": safe_files,
+                                 "message": f"Opening terminal — processing {n} order(s)."})
+
+    # ------------------------------------------------------------------
+    # Web terminal (Linux/Mac only — Windows falls back to Popen above)
+    # ------------------------------------------------------------------
+
+    @router.websocket("/ws/terminal")
+    async def terminal_ws(websocket: WebSocket):
+        if sys.platform == "win32":
+            await websocket.close(code=1011, reason="Web terminal not supported on Windows")
+            return
+
+        import os as _os
+        import fcntl as _fcntl
+        import termios as _termios
+        import struct as _struct
+        import pty as _pty
+
+        await websocket.accept()
+
+        _project_root = Path(__file__).parent.parent.parent.parent
+        _python_exe = _project_root / ".venv" / "bin" / "python"
+        if not _python_exe.exists():
+            _python_exe = Path(sys.executable)
+
+        files_param = websocket.query_params.get("files", "")
+        safe = [f for f in files_param.split(",") if f.strip()] if files_param else []
+        validated: list[str] = []
+        for f in safe:
+            p = (config.incoming_dir / f).resolve()
+            if str(p).startswith(str(config.incoming_dir.resolve())):
+                validated.append(f)
+
+        args = [str(_python_exe), "-u", str(_project_root / "main.py")]
+        if validated:
+            args += ["--files"] + validated
+
+        master_fd, slave_fd = _pty.openpty()
+        _fcntl.ioctl(master_fd, _termios.TIOCSWINSZ, _struct.pack("HHHH", 24, 80, 0, 0))
+
+        proc = await asyncio.create_subprocess_exec(
+            *args,
+            stdin=slave_fd,
+            stdout=slave_fd,
+            stderr=slave_fd,
+            cwd=str(_project_root),
+            close_fds=True,
+        )
+        _os.close(slave_fd)
+
+        loop = asyncio.get_running_loop()
+        read_q: asyncio.Queue = asyncio.Queue()
+
+        def _on_readable():
+            try:
+                data = _os.read(master_fd, 4096)
+                read_q.put_nowait(data)
+            except OSError:
+                read_q.put_nowait(None)
+                try:
+                    loop.remove_reader(master_fd)
+                except Exception:
+                    pass
+
+        loop.add_reader(master_fd, _on_readable)
+
+        async def _pty_to_ws():
+            while True:
+                data = await read_q.get()
+                if data is None:
+                    break
+                try:
+                    await websocket.send_bytes(data)
+                except Exception:
+                    break
+            try:
+                await websocket.send_text("\r\n[Process finished]\r\n")
+            except Exception:
+                pass
+
+        read_task = asyncio.create_task(_pty_to_ws())
+
+        try:
+            while True:
+                msg = await websocket.receive()
+                if msg["type"] == "websocket.disconnect":
+                    break
+                payload = msg.get("bytes") or (msg.get("text", "").encode() if msg.get("text") else None)
+                if not payload:
+                    continue
+                try:
+                    ctrl = json.loads(payload)
+                    if ctrl.get("type") == "resize":
+                        cols = max(1, int(ctrl.get("cols", 80)))
+                        rows = max(1, int(ctrl.get("rows", 24)))
+                        _fcntl.ioctl(master_fd, _termios.TIOCSWINSZ,
+                                     _struct.pack("HHHH", rows, cols, 0, 0))
+                    continue
+                except (json.JSONDecodeError, ValueError):
+                    pass
+                try:
+                    _os.write(master_fd, payload if isinstance(payload, bytes) else payload.encode())
+                except OSError:
+                    break
+        except (WebSocketDisconnect, Exception):
+            pass
+        finally:
+            read_task.cancel()
+            try:
+                loop.remove_reader(master_fd)
+            except Exception:
+                pass
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+            try:
+                _os.close(master_fd)
+            except OSError:
+                pass
 
     # ------------------------------------------------------------------
     # History (Used folder)

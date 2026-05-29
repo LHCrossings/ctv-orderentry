@@ -192,6 +192,8 @@ async function runQueue() {
         const data = await res.json();
         if (!res.ok) {
             alert(data.detail || 'Failed to start.');
+        } else if (data.terminal === 'ws') {
+            openTerminal(data.files || selected);
         } else if (data.manual) {
             setStatus(data.message, 'info');
         } else {
@@ -203,6 +205,69 @@ async function runQueue() {
         btn.disabled = false;
         updateRunBtn();
     }
+}
+
+// ── Web Terminal ───────────────────────────────────────────────────────────
+
+let _termWs    = null;
+let _term      = null;
+let _fitAddon  = null;
+
+function openTerminal(files) {
+    const overlay = document.getElementById('terminal-overlay');
+    overlay.classList.remove('hidden');
+
+    const container = document.getElementById('terminal-container');
+    container.innerHTML = '';
+
+    _term = new Terminal({
+        theme: { background: '#2e3440', foreground: '#d8dee9', cursor: '#81a1c1', selectionBackground: '#4c566a' },
+        fontFamily: 'Consolas, "Courier New", monospace',
+        fontSize: 14,
+        cursorBlink: true,
+    });
+    _fitAddon = new FitAddon.FitAddon();
+    _term.loadAddon(_fitAddon);
+    _term.open(container);
+    requestAnimationFrame(() => _fitAddon.fit());
+
+    const proto      = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const filesList  = (files || []).filter(Boolean);
+    const query      = filesList.length ? '?files=' + filesList.map(encodeURIComponent).join(',') : '';
+    _termWs          = new WebSocket(`${proto}//${location.host}/ws/terminal${query}`);
+    _termWs.binaryType = 'arraybuffer';
+
+    _termWs.onopen    = () => _term && _term.write('\x1b[32mStarting automation...\x1b[0m\r\n');
+    _termWs.onmessage = e  => {
+        if (!_term) return;
+        _term.write(e.data instanceof ArrayBuffer ? new Uint8Array(e.data) : e.data);
+    };
+    _termWs.onclose   = () => _term && _term.write('\r\n\x1b[33m[Session closed — you may close this window]\x1b[0m\r\n');
+    _termWs.onerror   = () => _term && _term.write('\r\n\x1b[31m[Connection error]\x1b[0m\r\n');
+
+    _term.onData(data => {
+        if (_termWs && _termWs.readyState === WebSocket.OPEN) _termWs.send(data);
+    });
+    _term.onResize(({cols, rows}) => {
+        if (_termWs && _termWs.readyState === WebSocket.OPEN)
+            _termWs.send(JSON.stringify({type: 'resize', cols, rows}));
+    });
+
+    const onResize = () => _fitAddon && _fitAddon.fit();
+    window.addEventListener('resize', onResize);
+    overlay._termResizeHandler = onResize;
+}
+
+function closeTerminal() {
+    const overlay = document.getElementById('terminal-overlay');
+    if (overlay._termResizeHandler) {
+        window.removeEventListener('resize', overlay._termResizeHandler);
+        overlay._termResizeHandler = null;
+    }
+    if (_termWs)   { _termWs.close();   _termWs   = null; }
+    if (_term)     { _term.dispose();   _term     = null; }
+    _fitAddon = null;
+    overlay.classList.add('hidden');
 }
 
 async function markDone(filename) {
@@ -385,7 +450,12 @@ async function showDetail(filename, orderType, detailBase) {
 
 function closeDetailModal() { detailOverlay.classList.add('hidden'); }
 function closeDetail(event) { if (event.target === detailOverlay) closeDetailModal(); }
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetailModal(); });
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        closeDetailModal();
+        if (_term) closeTerminal();
+    }
+});
 
 // ── Select-all checkbox ────────────────────────────────────────────────────
 
