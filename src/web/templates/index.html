@@ -8,7 +8,6 @@
     <link rel="stylesheet" href="/static/css/_variables.css" />
     <link rel="stylesheet" href="/static/css/portal.css" />
     <link rel="stylesheet" href="/static/css/app.css" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" />
 </head>
 <body>
 
@@ -139,12 +138,15 @@
             <span class="terminal-title">&#9654; Order Queue Processing</span>
             <button class="terminal-close-btn" onclick="closeTerminal()">&#10005; Close</button>
         </div>
-        <div id="terminal-container" class="terminal-container"></div>
+        <div id="terminal-log" class="terminal-log"></div>
+        <div class="terminal-input-row">
+            <input type="text" id="terminal-input" class="terminal-input-field"
+                   placeholder="Type response and press Enter..." autocomplete="off" disabled />
+            <button id="terminal-send" class="terminal-send-btn" disabled>Send</button>
+        </div>
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
 <script src="/static/js/app.js"></script>
 </body>
 </html>

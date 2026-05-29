@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading as _threading
 import time as _time
+import uuid as _uuid
 from datetime import date as _date_cls
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -22,8 +23,6 @@ from fastapi import (
     Query,
     Request,
     UploadFile,
-    WebSocket,
-    WebSocketDisconnect,
 )
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
@@ -1368,34 +1367,25 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                              creationflags=subprocess.CREATE_NEW_CONSOLE)
             return JSONResponse({"message": f"Terminal opened — processing {n} order(s)."})
         else:
-            return JSONResponse({"terminal": "ws", "files": safe_files,
+            return JSONResponse({"terminal": "sse", "files": safe_files,
                                  "message": f"Opening terminal — processing {n} order(s)."})
 
     # ------------------------------------------------------------------
-    # Web terminal (Linux/Mac only — Windows falls back to Popen above)
+    # Web terminal — SSE output + POST input (Linux/Mac)
     # ------------------------------------------------------------------
 
-    @router.websocket("/ws/terminal")
-    async def terminal_ws(websocket: WebSocket):
-        if sys.platform == "win32":
-            await websocket.close(code=1011, reason="Web terminal not supported on Windows")
-            return
+    _terminal_sessions: dict[str, asyncio.subprocess.Process] = {}
 
-        import fcntl as _fcntl
-        import os as _os
-        import pty as _pty
-        import struct as _struct
-        import termios as _termios
-
-        await websocket.accept()
+    @router.get("/api/terminal/stream")
+    async def terminal_stream(files: str = Query("")):
+        session_id = _uuid.uuid4().hex[:8]
 
         _project_root = Path(__file__).parent.parent.parent.parent
         _python_exe = _project_root / ".venv" / "bin" / "python"
         if not _python_exe.exists():
             _python_exe = Path(sys.executable)
 
-        files_param = websocket.query_params.get("files", "")
-        safe = [f for f in files_param.split(",") if f.strip()] if files_param else []
+        safe = [f for f in files.split(",") if f.strip()] if files else []
         validated: list[str] = []
         for f in safe:
             p = (config.incoming_dir / f).resolve()
@@ -1406,89 +1396,53 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         if validated:
             args += ["--files"] + validated
 
-        master_fd, slave_fd = _pty.openpty()
-        _fcntl.ioctl(master_fd, _termios.TIOCSWINSZ, _struct.pack("HHHH", 24, 80, 0, 0))
-
         proc = await asyncio.create_subprocess_exec(
             *args,
-            stdin=slave_fd,
-            stdout=slave_fd,
-            stderr=slave_fd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
             cwd=str(_project_root),
-            close_fds=True,
         )
-        _os.close(slave_fd)
+        _terminal_sessions[session_id] = proc
 
-        loop = asyncio.get_running_loop()
-        read_q: asyncio.Queue = asyncio.Queue()
-
-        def _on_readable():
+        async def event_gen():
+            yield f"data: {json.dumps({'type': 'session', 'id': session_id})}\n\n"
             try:
-                data = _os.read(master_fd, 4096)
-                read_q.put_nowait(data)
-            except OSError:
-                read_q.put_nowait(None)
-                try:
-                    loop.remove_reader(master_fd)
-                except Exception:
-                    pass
-
-        loop.add_reader(master_fd, _on_readable)
-
-        async def _pty_to_ws():
-            while True:
-                data = await read_q.get()
-                if data is None:
-                    break
-                try:
-                    await websocket.send_bytes(data)
-                except Exception:
-                    break
-            try:
-                await websocket.send_text("\r\n[Process finished]\r\n")
+                while True:
+                    chunk = await proc.stdout.read(4096)
+                    if not chunk:
+                        break
+                    yield f"data: {json.dumps({'type': 'output', 'text': chunk.decode(errors='replace')})}\n\n"
             except Exception:
                 pass
+            finally:
+                _terminal_sessions.pop(session_id, None)
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
-        read_task = asyncio.create_task(_pty_to_ws())
+        return StreamingResponse(
+            event_gen(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
-        try:
-            while True:
-                msg = await websocket.receive()
-                if msg["type"] == "websocket.disconnect":
-                    break
-                payload = msg.get("bytes") or (msg.get("text", "").encode() if msg.get("text") else None)
-                if not payload:
-                    continue
-                try:
-                    ctrl = json.loads(payload)
-                    if isinstance(ctrl, dict) and ctrl.get("type") == "resize":
-                        cols = max(1, int(ctrl.get("cols", 80)))
-                        rows = max(1, int(ctrl.get("rows", 24)))
-                        _fcntl.ioctl(master_fd, _termios.TIOCSWINSZ,
-                                     _struct.pack("HHHH", rows, cols, 0, 0))
-                        continue
-                except (json.JSONDecodeError, ValueError, AttributeError):
-                    pass
-                try:
-                    _os.write(master_fd, payload if isinstance(payload, bytes) else payload.encode())
-                except OSError:
-                    break
-        except (WebSocketDisconnect, Exception):
-            pass
-        finally:
-            read_task.cancel()
-            try:
-                loop.remove_reader(master_fd)
-            except Exception:
-                pass
+    @router.post("/api/terminal/{session_id}/input")
+    async def terminal_input(session_id: str, body: dict = Body(...)):
+        proc = _terminal_sessions.get(session_id)
+        if not proc or proc.stdin is None or proc.stdin.is_closing():
+            raise HTTPException(404, "Session not found or closed")
+        proc.stdin.write((body.get("text", "") + "\n").encode())
+        await proc.stdin.drain()
+        return JSONResponse({"ok": True})
+
+    @router.post("/api/terminal/{session_id}/kill")
+    async def terminal_kill(session_id: str):
+        proc = _terminal_sessions.pop(session_id, None)
+        if proc:
             try:
                 proc.terminate()
             except Exception:
                 pass
-            try:
-                _os.close(master_fd)
-            except OSError:
-                pass
+        return JSONResponse({"ok": True})
 
     # ------------------------------------------------------------------
     # History (Used folder)

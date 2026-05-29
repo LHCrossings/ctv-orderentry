@@ -192,7 +192,7 @@ async function runQueue() {
         const data = await res.json();
         if (!res.ok) {
             alert(data.detail || 'Failed to start.');
-        } else if (data.terminal === 'ws') {
+        } else if (data.terminal === 'sse') {
             openTerminal(data.files || selected);
         } else if (data.manual) {
             setStatus(data.message, 'info');
@@ -207,67 +207,85 @@ async function runQueue() {
     }
 }
 
-// ── Web Terminal ───────────────────────────────────────────────────────────
+// ── Web Terminal (SSE output + POST input) ────────────────────────────────
 
-let _termWs    = null;
-let _term      = null;
-let _fitAddon  = null;
+let _termEs        = null;
+let _termSessionId = null;
 
 function openTerminal(files) {
     const overlay = document.getElementById('terminal-overlay');
     overlay.classList.remove('hidden');
 
-    const container = document.getElementById('terminal-container');
-    container.innerHTML = '';
+    const log   = document.getElementById('terminal-log');
+    const input = document.getElementById('terminal-input');
+    const send  = document.getElementById('terminal-send');
+    log.innerHTML  = '';
+    input.value    = '';
+    input.disabled = true;
+    send.disabled  = true;
+    _termSessionId = null;
 
-    _term = new Terminal({
-        theme: { background: '#2e3440', foreground: '#d8dee9', cursor: '#81a1c1', selectionBackground: '#4c566a' },
-        fontFamily: 'Consolas, "Courier New", monospace',
-        fontSize: 14,
-        cursorBlink: true,
-    });
-    _fitAddon = new FitAddon.FitAddon();
-    _term.loadAddon(_fitAddon);
-    _term.open(container);
-    requestAnimationFrame(() => { _fitAddon.fit(); _term.focus(); });
+    const filesList = (files || []).filter(Boolean);
+    const query = filesList.length ? '?files=' + filesList.map(encodeURIComponent).join(',') : '';
 
-    const proto      = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const filesList  = (files || []).filter(Boolean);
-    const query      = filesList.length ? '?files=' + filesList.map(encodeURIComponent).join(',') : '';
-    _termWs          = new WebSocket(`${proto}//${location.host}/ws/terminal${query}`);
-    _termWs.binaryType = 'arraybuffer';
+    _termEs = new EventSource('/api/terminal/stream' + query);
 
-    _termWs.onopen    = () => _term && _term.write('\x1b[32mStarting automation...\x1b[0m\r\n');
-    _termWs.onmessage = e  => {
-        if (!_term) return;
-        _term.write(e.data instanceof ArrayBuffer ? new Uint8Array(e.data) : e.data);
+    _termEs.onmessage = e => {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'session') {
+            _termSessionId = msg.id;
+            input.disabled = false;
+            send.disabled  = false;
+            input.focus();
+        } else if (msg.type === 'output') {
+            _appendLog(msg.text);
+        } else if (msg.type === 'done') {
+            _appendLog('\n[Process finished — you may close this window]\n');
+            input.disabled = true;
+            send.disabled  = true;
+            if (_termEs) { _termEs.close(); _termEs = null; }
+        }
     };
-    _termWs.onclose   = () => _term && _term.write('\r\n\x1b[33m[Session closed — you may close this window]\x1b[0m\r\n');
-    _termWs.onerror   = () => _term && _term.write('\r\n\x1b[31m[Connection error]\x1b[0m\r\n');
 
-    _term.onData(data => {
-        if (_termWs && _termWs.readyState === WebSocket.OPEN) _termWs.send(data);
-    });
-    _term.onResize(({cols, rows}) => {
-        if (_termWs && _termWs.readyState === WebSocket.OPEN)
-            _termWs.send(JSON.stringify({type: 'resize', cols, rows}));
-    });
+    _termEs.onerror = () => {
+        _appendLog('\n[Connection error]\n');
+        input.disabled = true;
+        send.disabled  = true;
+    };
+}
 
-    const onResize = () => _fitAddon && _fitAddon.fit();
-    window.addEventListener('resize', onResize);
-    overlay._termResizeHandler = onResize;
+function _appendLog(text) {
+    const log = document.getElementById('terminal-log');
+    const span = document.createElement('span');
+    span.textContent = text;
+    log.appendChild(span);
+    log.scrollTop = log.scrollHeight;
+}
+
+async function _sendTerminalInput() {
+    const input = document.getElementById('terminal-input');
+    const text = input.value;
+    if (!_termSessionId || input.disabled) return;
+    input.value = '';
+    _appendLog(text + '\n');
+    try {
+        await fetch(`/api/terminal/${_termSessionId}/input`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({text}),
+        });
+    } catch (err) {
+        _appendLog(`[Send error: ${err.message}]\n`);
+    }
 }
 
 function closeTerminal() {
-    const overlay = document.getElementById('terminal-overlay');
-    if (overlay._termResizeHandler) {
-        window.removeEventListener('resize', overlay._termResizeHandler);
-        overlay._termResizeHandler = null;
+    if (_termEs) { _termEs.close(); _termEs = null; }
+    if (_termSessionId) {
+        fetch(`/api/terminal/${_termSessionId}/kill`, {method: 'POST'}).catch(() => {});
+        _termSessionId = null;
     }
-    if (_termWs)   { _termWs.close();   _termWs   = null; }
-    if (_term)     { _term.dispose();   _term     = null; }
-    _fitAddon = null;
-    overlay.classList.add('hidden');
+    document.getElementById('terminal-overlay').classList.add('hidden');
 }
 
 async function markDone(filename) {
@@ -451,11 +469,12 @@ async function showDetail(filename, orderType, detailBase) {
 function closeDetailModal() { detailOverlay.classList.add('hidden'); }
 function closeDetail(event) { if (event.target === detailOverlay) closeDetailModal(); }
 document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') {
-        closeDetailModal();
-        if (_term) closeTerminal();
-    }
+    if (e.key === 'Escape') { closeDetailModal(); closeTerminal(); }
 });
+document.getElementById('terminal-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.stopPropagation(); _sendTerminalInput(); }
+});
+document.getElementById('terminal-send').addEventListener('click', _sendTerminalInput);
 
 // ── Select-all checkbox ────────────────────────────────────────────────────
 
