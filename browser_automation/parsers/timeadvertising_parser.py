@@ -82,7 +82,7 @@ class TimeAdvertisingWeek:
     """
     week_start: str        # "03/02/2026" (MM/DD/YYYY, always Monday)
     day_spots: dict        # {"R": 1, "F": 1} etc.
-    rate: float            # per-spot gross rate (0.0 for thematic/free)
+    rate: float            # per-spot gross rate (0.0 = bonus/free spots)
 
     @property
     def total_spots(self) -> int:
@@ -98,8 +98,7 @@ class TimeAdvertisingWeek:
 class TimeAdvertisingLine:
     """A program/daypart line with its weekly spot schedule."""
     program: str                # "M-F: Cant. News/Talk 7pm-8pm"
-    section: str                # "Prime Time Dream Drive..." or "Thematic..."
-    is_thematic: bool           # True = free/bonus spots, False = paid
+    section: str                # "Prime Time Dream Drive 8 Car Giveaway", etc.
     weeks: tuple                # tuple[TimeAdvertisingWeek, ...]
 
     @property
@@ -217,25 +216,21 @@ class TimeAdvertisingOrder:
 
     @property
     def paid_lines(self) -> list:
-        return [ln for ln in self.lines if not ln.is_thematic]
+        return [ln for ln in self.lines if ln.rate > 0]
 
     @property
-    def thematic_lines(self) -> list:
-        return [ln for ln in self.lines if ln.is_thematic]
+    def bonus_lines(self) -> list:
+        return [ln for ln in self.lines if ln.rate == 0]
 
     @property
     def flight_start(self) -> str:
-        dates = [w.week_start for ln in self.paid_lines for w in ln.weeks]
-        if not dates:
-            dates = [w.week_start for ln in self.thematic_lines for w in ln.weeks]
+        dates = [w.week_start for ln in self.lines for w in ln.weeks]
         return min(dates) if dates else ""
 
     @property
     def flight_end(self) -> str:
-        """Sunday of the last week (covers all lines including thematic-only orders)."""
-        dates = [w.week_start for ln in self.paid_lines for w in ln.weeks]
-        if not dates:
-            dates = [w.week_start for ln in self.thematic_lines for w in ln.weeks]
+        """Sunday of the last week across all lines."""
+        dates = [w.week_start for ln in self.lines for w in ln.weeks]
         if not dates:
             return ""
         last_wk = datetime.strptime(max(dates), '%m/%d/%Y')
@@ -488,7 +483,6 @@ def _parse_schedule(schedule_lines: list, word_rows: dict, day_col_x: dict) -> l
     """
     parsed_lines: list = []
     current_section = ""
-    in_thematic = False
     current_program: Optional[str] = None
     current_weeks: list = []
 
@@ -534,7 +528,6 @@ def _parse_schedule(schedule_lines: list, word_rows: dict, day_col_x: dict) -> l
             parsed_lines.append(TimeAdvertisingLine(
                 program=current_program,
                 section=current_section,
-                is_thematic=in_thematic,
                 weeks=tuple(current_weeks),
             ))
 
@@ -604,7 +597,6 @@ def _parse_schedule(schedule_lines: list, word_rows: dict, day_col_x: dict) -> l
         if stripped and not re.match(r'^\d', stripped):
             _flush()
             current_section = stripped
-            in_thematic = "thematic" in stripped.lower() or "free" in stripped.lower()
             current_program = None
             current_weeks = []
 
@@ -712,10 +704,10 @@ if __name__ == "__main__":
     print(f"  Ad Titles:")
     for t in order.ad_titles:
         print(f"    • {t}")
-    print(f"  Lines:  {len(order.lines)} ({len(order.paid_lines)} paid, {len(order.thematic_lines)} thematic)")
+    print(f"  Lines:  {len(order.lines)} ({len(order.paid_lines)} paid, {len(order.bonus_lines)} bonus)")
 
     for j, ln in enumerate(order.lines):
-        kind = "THEMATIC" if ln.is_thematic else "PAID"
+        kind = "BONUS" if ln.rate == 0 else "PAID"
         print(f"\n  [{j+1}] {kind}  {ln.program}")
         print(f"        Section: {ln.section}")
         print(f"        Rate: ${ln.rate:.2f}/spot")
@@ -727,7 +719,7 @@ if __name__ == "__main__":
     print("ETERE LINES (as would be entered)")
     print(f"{'='*70}")
     for j, ln in enumerate(order.lines):
-        kind = "THEMATIC" if ln.is_thematic else "PAID"
+        kind = "BONUS" if ln.rate == 0 else "PAID"
         etere = ln.get_etere_lines()
         print(f"\n  [{j+1}] {kind}  {ln.program}")
         for k, spec in enumerate(etere, 1):
