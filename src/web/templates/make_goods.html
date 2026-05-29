@@ -56,8 +56,7 @@
       padding: 3px 10px; border-radius: 12px; font-size: 0.78rem; font-weight: 700;
     }
 
-    .table-wrap { overflow-x: auto; }
-    table { width: 100%; min-width: 860px; border-collapse: collapse; font-size: 0.875rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
     th {
       background: var(--bg-secondary); color: var(--text-secondary); font-weight: 600;
       font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;
@@ -318,7 +317,7 @@ function render(data) {
             </div>
             <span class="contract-missed" style="margin-left:auto;flex-shrink:0">${c.total_missed} missed</span>
           </div>
-          <div class="table-wrap"><table>
+          <table>
             <thead><tr>
               <th>Market</th><th>Description</th><th>Flight</th><th>Time</th>
               <th>Type</th><th class="num">Gross</th><th class="num">Net</th>
@@ -342,7 +341,7 @@ function render(data) {
               <td class="num">${net}</td>
               <td class="num" id="ord-${lid}">${l.ordered}</td>
               <td class="num missed-val" id="miss-${lid}">${l.missed}</td>
-              <td style="text-align:right;white-space:nowrap"><button class="btn-mg" id="mgbtn-${lid}" onclick="openMgForm(${lid})">Make Good</button></td>
+              <td style="text-align:right;white-space:nowrap"><button class="btn-mg" id="mgbtn-${lid}" onclick="openMgForm(${lid})">MG</button></td>
             </tr>
             <tr id="mgform-${lid}" class="mg-form-row">
               <td colspan="10">
@@ -364,7 +363,7 @@ function render(data) {
               </td>
             </tr>`;
         }
-        html += `</tbody></table></div></div>`;
+        html += `</tbody></table></div>`;
     }
 
     resultsDiv.innerHTML = html;
