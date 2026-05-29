@@ -373,7 +373,7 @@ function render(data) {
 // ── Make Good form ───────────────────────────────────────────────────────────
 
 function openMgForm(lid) {
-    document.getElementById(`mgform-${lid}`).style.display = '';
+    document.getElementById(`mgform-${lid}`).style.display = 'table-row';
     document.getElementById(`mgbtn-${lid}`).disabled = true;
     document.getElementById(`mgspots-${lid}`).focus();
 }
