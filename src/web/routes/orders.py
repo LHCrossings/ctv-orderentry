@@ -6691,4 +6691,84 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+    # ── Make Goods ──────────────────────────────────────────────────────────
+
+    @router.get("/orders/make-goods", response_class=HTMLResponse)
+    async def make_goods_page(request: Request):
+        return templates.TemplateResponse(request, "make_goods.html")
+
+    @router.get("/api/orders/make-goods")
+    async def get_make_goods(date_from: str = Query(...), date_to: str = Query(...)):
+        try:
+            from browser_automation.etere_direct_client import connect as _db_connect
+            with _db_connect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT
+                        ct.ID_CONTRATTITESTATA,
+                        ct.COD_CONTRATTO,
+                        ct.DESCRIZIONE        AS contract_desc,
+                        ct.COMMITTENTE,
+                        cr.ID_CONTRATTIRIGHE,
+                        cr.COD_USER           AS market_id,
+                        cr.DESCRIZIONE        AS line_desc,
+                        CONVERT(varchar, cr.DATA_INIZIO, 101) AS date_start,
+                        CONVERT(varchar, cr.DATA_FINE,   101) AS date_end,
+                        cr.N_PASSAGGI         AS ordered,
+                        SUM(tsl.PassageMiss)  AS missed
+                    FROM Traffic_ScheduleList tsl
+                    JOIN CONTRATTIRIGHE cr
+                        ON cr.ID_CONTRATTIRIGHE = tsl.ID_ContrattiRighe
+                    JOIN CONTRATTITESTATA ct
+                        ON ct.ID_CONTRATTITESTATA = cr.ID_CONTRATTITESTATA
+                    WHERE tsl.BlackList > 0
+                      AND tsl.Date   <= %s
+                      AND tsl.ToDate >= %s
+                    GROUP BY
+                        ct.ID_CONTRATTITESTATA, ct.COD_CONTRATTO,
+                        ct.DESCRIZIONE, ct.COMMITTENTE,
+                        cr.ID_CONTRATTIRIGHE, cr.COD_USER, cr.DESCRIZIONE,
+                        cr.DATA_INIZIO, cr.DATA_FINE, cr.N_PASSAGGI
+                    ORDER BY ct.COD_CONTRATTO, cr.COD_USER, cr.DATA_INIZIO
+                """, [date_to, date_from])
+                rows = cursor.fetchall()
+
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+        _mn = {1:"NYC",2:"CMP",3:"HOU",4:"SFO",5:"SEA",6:"LAX",7:"CVC",8:"WDC",9:"MMT",10:"DAL"}
+
+        contracts: dict = {}
+        for (ct_id, code, ct_desc, client, line_id, market_id, line_desc,
+             d_start, d_end, ordered, missed) in rows:
+            if ct_id not in contracts:
+                contracts[ct_id] = {
+                    "contract_id":  ct_id,
+                    "code":         code or "",
+                    "description":  ct_desc or "",
+                    "client":       client or "",
+                    "total_missed": 0,
+                    "lines":        [],
+                }
+            m = missed or 0
+            contracts[ct_id]["total_missed"] += m
+            contracts[ct_id]["lines"].append({
+                "line_id":     line_id,
+                "market":      _mn.get(market_id, str(market_id) if market_id else "—"),
+                "description": line_desc or "",
+                "date_start":  d_start or "",
+                "date_end":    d_end or "",
+                "ordered":     ordered or 0,
+                "missed":      m,
+            })
+
+        contract_list = list(contracts.values())
+        total_missed  = sum(c["total_missed"] for c in contract_list)
+
+        return JSONResponse({
+            "contracts":       contract_list,
+            "total_contracts": len(contract_list),
+            "total_missed":    total_missed,
+        })
+
     return router

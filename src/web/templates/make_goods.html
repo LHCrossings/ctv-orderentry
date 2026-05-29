@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Make Goods — CTV Control Room</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="/static/css/_variables.css" />
+  <link rel="stylesheet" href="/static/css/portal.css" />
+  <style>
+    main { max-width: 1000px; margin: 0 auto; padding: 32px 24px; }
+
+    .filter-card {
+      background: var(--bg-primary); border: 1px solid var(--border-color);
+      border-radius: 10px; padding: 20px 24px; margin-bottom: 28px;
+      display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap;
+    }
+    .field-group { display: flex; flex-direction: column; gap: 5px; }
+    .field-label {
+      font-size: 0.75rem; font-weight: 600; color: var(--text-secondary);
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .field-input {
+      background: var(--bg-secondary); border: 1px solid var(--border-color);
+      border-radius: 8px; padding: 9px 12px; color: var(--text-primary);
+      font-size: 0.9rem; font-family: inherit;
+    }
+    .field-input:focus { outline: none; border-color: var(--nord10); }
+    .btn-load {
+      background: var(--accent-primary); color: #fff; border: none;
+      padding: 9px 24px; border-radius: 8px; font-size: 0.9rem;
+      font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+    .btn-load:hover { opacity: 0.9; }
+    .btn-load:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .summary-bar {
+      font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px;
+      display: none;
+    }
+    .summary-bar strong { color: var(--text-primary); }
+
+    .contract-group {
+      background: var(--bg-primary); border: 1px solid var(--border-color);
+      border-radius: 10px; margin-bottom: 16px; overflow: hidden;
+    }
+    .contract-header {
+      display: flex; align-items: center; gap: 12px; padding: 14px 18px;
+      border-bottom: 1px solid var(--border-color); flex-wrap: wrap;
+    }
+    .contract-code { font-weight: 700; color: var(--nord10); font-size: 0.95rem; }
+    .contract-desc { color: var(--text-primary); font-size: 0.88rem; }
+    .contract-client { color: var(--text-secondary); font-size: 0.82rem; }
+    .contract-missed {
+      margin-left: auto; background: var(--nord11); color: #fff;
+      padding: 3px 10px; border-radius: 12px; font-size: 0.78rem; font-weight: 700;
+    }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    th {
+      background: var(--bg-secondary); color: var(--text-secondary); font-weight: 600;
+      font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;
+      padding: 8px 14px; text-align: left; border-bottom: 1px solid var(--border-color);
+    }
+    td { padding: 9px 14px; border-bottom: 1px solid var(--border-color); color: var(--text-primary); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--bg-secondary); }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .market-badge {
+      display: inline-block; padding: 2px 7px; border-radius: 4px;
+      background: var(--nord9); font-size: 0.78rem; font-weight: 600; color: #fff;
+    }
+    .missed-val { color: var(--nord11); font-weight: 600; }
+
+    .empty-msg { color: var(--text-secondary); font-size: 0.88rem; padding: 32px 0; text-align: center; }
+    .error-msg { color: var(--nord11); font-size: 0.88rem; padding: 16px 0; }
+    #results { display: none; }
+  </style>
+</head>
+<body>
+
+<header class="portal-header">
+  <div class="header-inner">
+    <div class="logo">
+      <a href="/orders" class="back-link">🏠</a>
+      <div class="logo-icon">🔄</div>
+      <div class="logo-text">
+        <div class="logo-name">Make Goods</div>
+        <div class="logo-sub">Orders</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="filter-card">
+    <div class="field-group">
+      <label class="field-label" for="dateFrom">From</label>
+      <input type="date" id="dateFrom" class="field-input" />
+    </div>
+    <div class="field-group">
+      <label class="field-label" for="dateTo">To</label>
+      <input type="date" id="dateTo" class="field-input" />
+    </div>
+    <button class="btn-load" id="loadBtn">Load</button>
+  </div>
+
+  <div class="summary-bar" id="summaryBar"></div>
+  <div id="statusMsg"></div>
+  <div id="results"></div>
+</main>
+
+<script>
+const MARKETS = {1:'NYC',2:'CMP',3:'HOU',4:'SFO',5:'SEA',6:'LAX',7:'CVC',8:'WDC',9:'MMT',10:'DAL'};
+
+const loadBtn    = document.getElementById('loadBtn');
+const summaryBar = document.getElementById('summaryBar');
+const statusMsg  = document.getElementById('statusMsg');
+const resultsDiv = document.getElementById('results');
+
+// Default to current month
+const today = new Date();
+const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+document.getElementById('dateFrom').value = fmt(firstOfMonth);
+document.getElementById('dateTo').value   = fmt(today);
+
+function fmt(d) {
+    return d.toISOString().slice(0, 10);
+}
+
+loadBtn.addEventListener('click', async () => {
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo   = document.getElementById('dateTo').value;
+    if (!dateFrom || !dateTo) {
+        showStatus('Please select both dates.', 'error');
+        return;
+    }
+    if (dateFrom > dateTo) {
+        showStatus('From date must be before To date.', 'error');
+        return;
+    }
+    await load(dateFrom, dateTo);
+});
+
+async function load(dateFrom, dateTo) {
+    loadBtn.disabled = true;
+    loadBtn.textContent = 'Loading…';
+    summaryBar.style.display = 'none';
+    resultsDiv.style.display = 'none';
+    resultsDiv.innerHTML = '';
+    statusMsg.innerHTML = '';
+
+    try {
+        const resp = await fetch(`/api/orders/make-goods?date_from=${dateFrom}&date_to=${dateTo}`);
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Error loading data');
+        render(data);
+    } catch (e) {
+        showStatus('Error: ' + escHtml(e.message), 'error');
+    } finally {
+        loadBtn.disabled = false;
+        loadBtn.textContent = 'Load';
+    }
+}
+
+function render(data) {
+    if (!data.contracts.length) {
+        resultsDiv.innerHTML = '<p class="empty-msg">No blacklisted spots found in this date range.</p>';
+        resultsDiv.style.display = 'block';
+        return;
+    }
+
+    summaryBar.innerHTML = `<strong>${data.total_contracts}</strong> contract(s) · <strong>${data.total_missed}</strong> missed spot(s)`;
+    summaryBar.style.display = 'block';
+
+    let html = '';
+    for (const c of data.contracts) {
+        html += `
+        <div class="contract-group">
+          <div class="contract-header">
+            <span class="contract-code">${escHtml(c.code)}</span>
+            <span class="contract-desc">${escHtml(c.description || '')}</span>
+            ${c.client ? `<span class="contract-client">${escHtml(c.client)}</span>` : ''}
+            <span class="contract-missed">${c.total_missed} missed</span>
+          </div>
+          <table>
+            <thead><tr>
+              <th>Market</th>
+              <th>Description</th>
+              <th>Flight</th>
+              <th class="num">Ordered</th>
+              <th class="num">Missed</th>
+            </tr></thead>
+            <tbody>`;
+        for (const l of c.lines) {
+            html += `<tr>
+              <td><span class="market-badge">${escHtml(l.market)}</span></td>
+              <td>${escHtml(l.description || '—')}</td>
+              <td style="font-size:0.8rem;color:var(--text-secondary)">${escHtml(l.date_start)} – ${escHtml(l.date_end)}</td>
+              <td class="num">${l.ordered}</td>
+              <td class="num missed-val">${l.missed}</td>
+            </tr>`;
+        }
+        html += `</tbody></table></div>`;
+    }
+
+    resultsDiv.innerHTML = html;
+    resultsDiv.style.display = 'block';
+}
+
+function showStatus(msg, type) {
+    statusMsg.innerHTML = `<p class="${type === 'error' ? 'error-msg' : ''}">${escHtml(msg)}</p>`;
+}
+
+function escHtml(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
