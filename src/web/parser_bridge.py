@@ -448,10 +448,13 @@ def _normalize_igraphix(order) -> dict:
 # Public API
 # ---------------------------------------------------------------------------
 
+_DIRECT_DB_KEYS = {"LEXUS", "RPM", "WORLDLINK", "TIMEADVERTISING"}
+
 def list_parsers() -> list[dict]:
     """Return display info for every registered parser, sorted by display name."""
     return sorted(
-        [{"key": k, "name": _DISPLAY_NAMES.get(k, k)} for k in _REGISTRY],
+        [{"key": k, "name": _DISPLAY_NAMES.get(k, k), "direct_db": k in _DIRECT_DB_KEYS}
+         for k in _REGISTRY],
         key=lambda x: x["name"].lower(),
     )
 

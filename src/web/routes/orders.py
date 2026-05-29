@@ -14,7 +14,17 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, List, Optional
 
-from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Body,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
@@ -1371,11 +1381,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             await websocket.close(code=1011, reason="Web terminal not supported on Windows")
             return
 
-        import os as _os
         import fcntl as _fcntl
-        import termios as _termios
-        import struct as _struct
+        import os as _os
         import pty as _pty
+        import struct as _struct
+        import termios as _termios
 
         await websocket.accept()
 

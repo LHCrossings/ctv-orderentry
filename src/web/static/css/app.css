@@ -307,6 +307,12 @@ tbody td {
     white-space: nowrap;
 }
 
+.parser-chip--direct {
+    background: rgba(191, 97, 106, 0.15);
+    border-color: #bf616a;
+    color: #bf616a;
+}
+
 /* ── Tab bar ─────────────────────────────────────────────────────────────── */
 
 .tab-bar {
