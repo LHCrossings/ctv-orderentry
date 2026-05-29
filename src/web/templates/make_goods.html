@@ -194,15 +194,23 @@ function render(data) {
               <th>Market</th>
               <th>Description</th>
               <th>Flight</th>
+              <th>Type</th>
+              <th class="num">Gross</th>
+              <th class="num">Net</th>
               <th class="num">Ordered</th>
               <th class="num">Missed</th>
             </tr></thead>
             <tbody>`;
         for (const l of c.lines) {
+            const gross = l.gross_rate > 0 ? '$' + l.gross_rate.toFixed(2) : '—';
+            const net   = l.net_rate   > 0 ? '$' + l.net_rate.toFixed(2)   : '—';
             html += `<tr>
               <td><span class="market-badge">${escHtml(l.market)}</span></td>
               <td>${escHtml(l.description || '—')}</td>
               <td style="font-size:0.8rem;color:var(--text-secondary)">${escHtml(l.date_start)} – ${escHtml(l.date_end)}</td>
+              <td style="font-size:0.82rem">${escHtml(l.spot_type)}</td>
+              <td class="num">${gross}</td>
+              <td class="num">${net}</td>
               <td class="num">${l.ordered}</td>
               <td class="num missed-val">${l.missed}</td>
             </tr>`;
