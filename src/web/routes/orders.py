@@ -1741,29 +1741,50 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 if spot["LIVELLO"] != 0:
                     raise ValueError(f"Spot {id_tpalinse} is not active (LIVELLO={spot['LIVELLO']})")
 
-                # Fetch trafficPalinse for break context
+                # Fetch trafficPalinse for break context + TSL reference ID
                 cur.execute("""
-                    SELECT id_palinsesto, id_fascia, clusterIndex, offset, Date, Cod_User, ID_ContrattiRighe
+                    SELECT id_trafficPalinse, id_palinsesto, id_fascia, clusterIndex,
+                           offset, Date, Cod_User, ID_ContrattiRighe
                     FROM trafficPalinse WHERE id_tpalinse = %s
                 """, (id_tpalinse,))
                 tpa = cur.fetchone()
                 if not tpa:
                     raise ValueError("No trafficPalinse record found")
 
-                line_id = tpa["ID_ContrattiRighe"]
+                line_id      = tpa["ID_ContrattiRighe"]
+                tpa_id       = tpa["id_trafficPalinse"]
 
-                # Blacklist entry for make-good tracking — INSERT only, never increment
-                # Etere subtracts TSL.PassageMiss from the placed count in its display.
-                # Setting LIVELLO=666 would double-count (Etere counts both 666 rows AND TSL).
+                # Fetch contract line date range for TSL
+                cur.execute(
+                    "SELECT DATA_INIZIO, DATA_FINE FROM CONTRATTIRIGHE WHERE ID_CONTRATTIRIGHE=%s",
+                    (line_id,)
+                )
+                cr = cur.fetchone()
+                date_start = cr["DATA_INIZIO"] if cr else None
+                date_end   = cr["DATA_FINE"]   if cr else None
+
+                # Delete the TPALINSE and trafficPalinse rows — this is what Etere does natively
+                cur.execute("DELETE FROM trafficPalinse WHERE id_tpalinse=%s", (id_tpalinse,))
+                cur.execute("DELETE FROM TPALINSE WHERE ID_TPALINSE=%s", (id_tpalinse,))
+
+                # Blacklist entry — INSERT only (never increment an existing entry)
                 cur.execute(
                     "SELECT COUNT(*) AS cnt FROM Traffic_ScheduleList WHERE ID_ContrattiRighe=%s AND BlackList>0",
                     (line_id,)
                 )
                 if cur.fetchone()["cnt"] == 0:
-                    cur.execute(
-                        "INSERT INTO Traffic_ScheduleList (ID_ContrattiRighe, BlackList, PassageMiss) VALUES (%s, 1, 1)",
-                        (line_id,)
-                    )
+                    cur.execute("""
+                        INSERT INTO Traffic_ScheduleList (
+                            ID_ContrattiRighe, BlackList, PassageMiss,
+                            ID_TRAFFICPALINSE, Date, ToDate,
+                            Notes, Operator,
+                            ID_FILMATI, ID_FILMATI_TAIL, ID_FILMATI_MIDDLE,
+                            ID_FATTURAEMITTENTE, Split
+                        ) VALUES (%s, 1, 1, %s, %s, %s, %s, %s, -1, -1, -1, 0, 0)
+                    """, (
+                        line_id, tpa_id, date_start, date_end,
+                        "Blacklisted - no materials", "ControlRoom",
+                    ))
 
                 # Find filler: PI first, PSA fallback (only if replace requested)
                 dur = spot["DURATION"]
