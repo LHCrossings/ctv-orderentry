@@ -1,5 +1,57 @@
 # Lessons Learned
 
+## assign_blocks_for_existing_line Strips All Asterisks From DESCRIZIONE
+
+**Session:** Make Goods (2026-05-29)
+
+**What happened:** Used `*MG*` as a prefix for make-good line descriptions. After `assign_blocks_for_existing_line` ran, the asterisks were silently stripped. The description landed as `MG M-F ...` instead of `*MG* M-F ...`.
+
+**Rule:** `assign_blocks_for_existing_line` runs this SQL after every block refresh:
+```sql
+UPDATE CONTRATTIRIGHE
+SET    DESCRIZIONE = RTRIM(REPLACE(DESCRIZIONE, '*', ''))
+WHERE  ID_CONTRATTIRIGHE = %s AND DESCRIZIONE LIKE '%*%'
+```
+This strips ALL asterisks from any description that contains one — by design, to clean up trailing `*` Etere appends after block operations.
+
+**How to apply:** Never use `*` in programmatically-set description prefixes on lines that go through block refresh. Use hyphens or brackets instead: `-MG-`, `[MG]`, etc.
+
+---
+
+## Make-Good Lines Must Use row_status=2 (Change Data), Not row_status=1
+
+**Session:** Make Goods (2026-05-29)
+
+**What happened:** Initially set `row_status=1` for make-good lines. This sent them directly to the scheduler. The correct value is `row_status=2` (Change Data), which holds the line pending approval before scheduling runs.
+
+**Rule:** From `add_contract_line` signature: `row_status: int = 0 — 0=Ready, 2=Change Data`. Use:
+- `row_status=0` — line is ready, scheduler picks it up immediately
+- `row_status=2` — line requires approval (Change Data gate) before scheduling
+
+**How to apply:** Any line inserted as a revision, make-good, or correction to an already-approved contract must use `row_status=2`. Only use `row_status=0` for fresh new lines on contracts that haven't been approved yet.
+
+---
+
+## Showing/Hiding `<tr>` Elements in JavaScript Requires `display='table-row'`
+
+**Session:** Make Goods (2026-05-29)
+
+**What happened:** Used `element.style.display = ''` to show a hidden `<tr>`. This removes the inline style but falls back to the CSS `display: none` — the row stays invisible. Nothing happened when the MG button was clicked.
+
+**Rule:** To show a `<tr>` that has `display: none` in CSS, set `element.style.display = 'table-row'` explicitly. Setting it to `''` only works if the element has no CSS rule hiding it.
+
+```js
+// Wrong — reverts to CSS display:none
+row.style.display = '';
+
+// Correct
+row.style.display = 'table-row';
+```
+
+**How to apply:** Any time a `<tr>` is toggled visible in JS, use `'table-row'`. For `<div>`, use `'block'` or `'flex'`. Never use `''` to unhide an element that has a CSS `display:none` rule.
+
+---
+
 ## Time Advertising "Thematic" Is a Creative Title, Not a Paid/Bonus Indicator
 
 **Session:** Time Advertising direct DB conversion (2026-05-29)
