@@ -119,6 +119,7 @@ class OrderProcessingService:
         OrderType.RPM,
         OrderType.WORLDLINK,
         OrderType.TIMEADVERTISING,
+        OrderType.IGRAPHIX,
     }
 
     def __init__(
