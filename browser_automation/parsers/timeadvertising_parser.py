@@ -182,8 +182,10 @@ class TimeAdvertisingLine:
                 last_week_start = next_start
                 j += 1
 
-            # Block end = Saturday of last week in block
-            block_end = last_week_start + timedelta(days=6)
+            # Block end = last spot day in the last week (not always Sunday)
+            _day_offset = {d: idx for idx, d in enumerate(DAY_ORDER)}
+            last_spot_offset = max(_day_offset.get(d, 0) for d in pattern)
+            block_end = last_week_start + timedelta(days=last_spot_offset)
 
             etere_lines.append({
                 'days': pattern,

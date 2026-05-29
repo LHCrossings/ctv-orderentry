@@ -238,9 +238,15 @@ def _default_description(order: TimeAdvertisingOrder) -> str:
 # LINE HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 
+# TA day code → EtereDirectClient token map
+# "T" (Tuesday in TA) must be "TU" — the direct client's _TOKEN_MAP has no bare "T"
+# "S" (Saturday in TA) must be "SA"; "U" (Sunday) must be "SU"
+_TA_TO_DC = {'M': 'M', 'T': 'TU', 'W': 'W', 'R': 'R', 'F': 'F', 'S': 'SA', 'U': 'SU'}
+
+
 def _days_for_etere(days_str: str) -> str:
-    """Convert concatenated day codes to comma-separated: 'RF' → 'R,F'"""
-    return ",".join(list(days_str))
+    """Convert TA day codes to comma-separated direct-client tokens: 'MT' → 'M,TU'"""
+    return ",".join(_TA_TO_DC.get(d, d) for d in days_str)
 
 
 def _line_description(program: str) -> str:
