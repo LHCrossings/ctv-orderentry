@@ -1,29 +1,130 @@
 # Lessons Learned
 
-## Etere Blacklist Is a DELETE + TSL Insert, Not a LIVELLO Change
+## Time Advertising "Thematic" Is a Creative Title, Not a Paid/Bonus Indicator
 
-**Session:** Missing Materials blacklist button (2026-05-29)
+**Session:** Time Advertising direct DB conversion (2026-05-29)
 
-**What happened:** Built a "Blacklist" button on the missing materials page. Went through several wrong approaches before confirming the correct mechanism by watching the DB during a live native Etere blacklist action:
+**Rule:** In Time Advertising broadcast orders, "Thematic" (or "Thematic … Existing") is the **title of the ad creative** to air — a traffic instruction to use the spot called "Thematic." It has nothing to do with whether the line is paid or bonus.
 
-- ❌ `LIVELLO=666` alone — Etere counts 666 rows AND TSL separately → doubles the blacklist count
-- ❌ TSL-only (leaving LIVELLO=0) → placed count stays at N_PASSAGGI, so placed + blacklisted > N_PASSAGGI
-- ✅ **DELETE the TPALINSE row + DELETE the trafficPalinse row + INSERT TSL** — this is exactly what Etere does natively
+Paid vs. bonus is determined exclusively by whether the line has a **rate**:
+- Rate > 0 → Paid Commercial (`booking_code=2`)
+- Rate = 0 → BNS (`booking_code=10`)
 
-**Rule:** To blacklist a scheduled spot programmatically:
-1. `DELETE FROM trafficPalinse WHERE id_tpalinse = %s`
-2. `DELETE FROM TPALINSE WHERE ID_TPALINSE = %s`
-3. `INSERT INTO Traffic_ScheduleList (ID_ContrattiRighe, BlackList, PassageMiss, ID_TRAFFICPALINSE, Date, ToDate, Notes, Operator, ID_FILMATI, ID_FILMATI_TAIL, ID_FILMATI_MIDDLE, ID_FATTURAEMITTENTE, Split) VALUES (%s, 1, 1, %s, %s, %s, %s, %s, -1, -1, -1, 0, 0)`
-   - `ID_TRAFFICPALINSE` = the `trafficPalinse.id_trafficPalinse` of the deleted row
-   - `Date` / `ToDate` = `CONTRATTIRIGHE.DATA_INIZIO` / `DATA_FINE` for that contract line
-   - INSERT only if no existing `BlackList > 0` entry for that line (never increment)
+**Do NOT** use `is_thematic` or section header keywords ("thematic", "free") to infer booking code. The `is_thematic` flag in `TimeAdvertisingLine` is a parser artifact (section header detection) and is unreliable. The automation correctly ignores it and uses `ln.rate == 0` exclusively.
 
-**Result:** N_PASSAGGI = placed (LIVELLO=0) + blacklisted (TSL.PassageMiss). Etere contract view shows correct 10/9/1.
+**Applies to:** `timeadvertising_automation.py` and any future Time Advertising parser work.
 
-**Also confirmed:**
-- TPALINSE rows with invalid ORA values will crash `tcFrames2Msec` — filter by ORA range directly instead of calling the SP in WHERE
-- `pymssql` requires explicit `conn.commit()` — the `with conn:` context manager does NOT auto-commit in this project's connection wrapper
-- TPALINSE has triggers → `OUTPUT INSERTED.x` is blocked; use `SELECT SCOPE_IDENTITY()` after INSERT instead
+---
+
+## Etere Blacklist — Complete Reference
+
+**Sessions:** Missing Materials blacklist button (2026-05-29) + Make Goods reconciliation (2026-05-29)
+
+---
+
+### The Accounting Formula
+
+For any contract line, at all times:
+
+```
+N_PASSAGGI  =  trafficPalinse rows  +  TSL.PassageMiss
+(ordered)       (placed/aired)          (blacklisted)
+```
+
+If `trafficPalinse + TSL.PassageMiss < N_PASSAGGI`, there are **orphaned deletions** — spots that were removed from the schedule but whose blacklist count was never written. These appear as phantom "remaining" spots that will never air and never make-good.
+
+**Source of truth for what actually aired:** `trafficPalinse`. Not TPALINSE (pre-air schedule), not N_PASSAGGI (ordered count). Use `trafficPalinse` joined to `TPALINSE` for the air date and time.
+
+---
+
+### How to Blacklist a Spot (one spot per call)
+
+```sql
+-- Step 1: delete from schedule
+DELETE FROM trafficPalinse WHERE id_tpalinse = %s
+DELETE FROM TPALINSE        WHERE ID_TPALINSE = %s
+
+-- Step 2a: first blacklist on this line → INSERT
+INSERT INTO Traffic_ScheduleList (
+    ID_ContrattiRighe, BlackList, PassageMiss,
+    ID_TRAFFICPALINSE, Date, ToDate,
+    Notes, Operator,
+    ID_FILMATI, ID_FILMATI_TAIL, ID_FILMATI_MIDDLE,
+    ID_FATTURAEMITTENTE, Split
+) VALUES (%s, 1, 1, %s, %s, %s, %s, %s, -1, -1, -1, 0, 0)
+
+-- Step 2b: subsequent blacklist on same line → INCREMENT (never skip)
+UPDATE Traffic_ScheduleList
+SET PassageMiss = PassageMiss + 1
+WHERE ID_ContrattiRighe = %s AND BlackList > 0
+```
+
+- `ID_TRAFFICPALINSE` = `trafficPalinse.id_trafficPalinse` of the deleted row
+- `Date` / `ToDate` = **always** `CONTRATTIRIGHE.DATA_INIZIO` / `DATA_FINE` — **never leave NULL**
+
+---
+
+### Critical: PassageMiss Must Always Be Incremented
+
+❌ **Wrong (original implementation):** Check `COUNT(*) == 0` → INSERT; else skip entirely.
+This silently orphans every spot after the first: TPALINSE/trafficPalinse rows are deleted but PassageMiss never increases. The spots vanish from the schedule AND from blacklist accounting.
+
+✅ **Correct:** INSERT on first occurrence; `PassageMiss + 1` on every subsequent spot for that line.
+
+---
+
+### Critical: TSL Date/ToDate Must Never Be NULL
+
+If `Date`/`ToDate` on a TSL row are NULL, that blacklisted spot will be **invisible in every date-range query** (SQL `NULL <= date` evaluates to NULL/false). Always read `DATA_INIZIO`/`DATA_FINE` from `CONTRATTIRIGHE` before inserting.
+
+In any query filtering by date range, use:
+```sql
+ISNULL(tsl.Date,   cr.DATA_INIZIO) <= @date_to
+ISNULL(tsl.ToDate, cr.DATA_FINE)   >= @date_from
+```
+
+---
+
+### What NOT to Do
+
+- ❌ `LIVELLO=666` alone — Etere counts 666 rows AND TSL separately → doubles blacklist count
+- ❌ TSL-only (leaving LIVELLO=0) → trafficPalinse count stays high, placed + blacklisted > N_PASSAGGI
+- ❌ Skipping TSL write if entry already exists → orphaned deletions (the bug above)
+- ❌ Leaving TSL Date/ToDate NULL → spot disappears from all date range reports
+
+---
+
+### Detecting Orphaned Deletions
+
+Run this on any contract to find lines where the formula breaks:
+
+```sql
+SELECT cr.ID_CONTRATTIRIGHE, cr.DESCRIZIONE,
+       cr.N_PASSAGGI AS ordered,
+       ISNULL(tp.placed, 0) AS placed,
+       ISNULL(tsl.missed, 0) AS blacklisted,
+       cr.N_PASSAGGI - ISNULL(tp.placed, 0) - ISNULL(tsl.missed, 0) AS orphaned
+FROM CONTRATTIRIGHE cr
+LEFT JOIN (SELECT ID_ContrattiRighe, COUNT(*) AS placed
+           FROM trafficPalinse GROUP BY ID_ContrattiRighe) tp
+    ON tp.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
+LEFT JOIN (SELECT ID_ContrattiRighe, SUM(PassageMiss) AS missed
+           FROM Traffic_ScheduleList WHERE BlackList > 0
+           GROUP BY ID_ContrattiRighe) tsl
+    ON tsl.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
+WHERE cr.ID_CONTRATTITESTATA = @contract_id
+  AND cr.N_PASSAGGI - ISNULL(tp.placed,0) - ISNULL(tsl.missed,0) > 0
+```
+
+Fix: `UPDATE Traffic_ScheduleList SET PassageMiss = PassageMiss + @orphaned WHERE ID_ContrattiRighe = @line_id AND BlackList > 0`. If no TSL row exists yet, INSERT with `PassageMiss = @orphaned`.
+
+---
+
+### Also Confirmed
+
+- `tcFrames2Msec(COD_USER, ORA)` crashes if COD_USER is a numeric market ID (e.g. 4=SFO) — it expects a VideoStandard char. Convert frames manually in Python: `total_sec = ora // fps; hh = total_sec // 3600` etc.
+- `pymssql` requires explicit `conn.commit()` — `with conn:` does NOT auto-commit
+- TPALINSE has triggers → `OUTPUT INSERTED.x` is blocked; use `SELECT SCOPE_IDENTITY()` after INSERT
 
 ## Every Traffic Assignment Must Populate CONTRATTIFILMATI (the "Rotate with the following assets" pool)
 
