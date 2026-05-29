@@ -1814,7 +1814,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             MEDIA_TY, MEDIA_ID, ORA_P, DATA_P, EVENT, EVENT_P,
                             DURATION_P, FADEIN, FADEOUT, INTRO, OUTRO, ICON
                         )
-                        OUTPUT INSERTED.ID_TPALINSE
                         VALUES (
                             %s, %s, 0, 0, %s, %s,
                             %s, %s, %s, %s, 0, 'T',
@@ -1845,8 +1844,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         spot["ORA_P"], spot["DATA_P"],
                         filler["DURATA"],
                     ))
+                    cur.execute("SELECT SCOPE_IDENTITY() AS new_id")
                     row = cur.fetchone()
-                    new_filler_id = row["ID_TPALINSE"] if row else None
+                    new_filler_id = int(row["new_id"]) if row and row["new_id"] else None
 
                     if new_filler_id:
                         cur.execute("""
