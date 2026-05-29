@@ -56,7 +56,8 @@
       padding: 3px 10px; border-radius: 12px; font-size: 0.78rem; font-weight: 700;
     }
 
-    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; min-width: 860px; border-collapse: collapse; font-size: 0.875rem; }
     th {
       background: var(--bg-secondary); color: var(--text-secondary); font-weight: 600;
       font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;
@@ -317,7 +318,7 @@ function render(data) {
             </div>
             <span class="contract-missed" style="margin-left:auto;flex-shrink:0">${c.total_missed} missed</span>
           </div>
-          <table>
+          <div class="table-wrap"><table>
             <thead><tr>
               <th>Market</th><th>Description</th><th>Flight</th><th>Time</th>
               <th>Type</th><th class="num">Gross</th><th class="num">Net</th>
@@ -363,7 +364,7 @@ function render(data) {
               </td>
             </tr>`;
         }
-        html += `</tbody></table></div>`;
+        html += `</tbody></table></div></div>`;
     }
 
     resultsDiv.innerHTML = html;
