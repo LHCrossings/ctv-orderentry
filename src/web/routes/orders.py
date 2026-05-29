@@ -1878,6 +1878,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             _dt.now(), tpa["Date"], tpa["Cod_User"],
                         ))
 
+                conn.commit()
+
             return {
                 "blacklisted":    True,
                 "filler_type":    filler_type,
