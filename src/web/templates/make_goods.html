@@ -94,6 +94,50 @@
     .client-filter select:focus { outline: none; border-color: var(--nord10); }
     .contract-group.hidden { display: none; }
 
+    .btn-mg {
+      background: var(--nord10); color: #fff; border: none;
+      padding: 4px 12px; border-radius: 6px; font-size: 0.75rem;
+      font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap;
+    }
+    .btn-mg:hover { opacity: 0.85; }
+    .btn-mg:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .mg-form-row { display: none; background: var(--bg-secondary); }
+    .mg-form-row td { padding: 14px 18px; }
+    .mg-panel {
+      display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;
+    }
+    .mg-panel .field-group { display: flex; flex-direction: column; gap: 4px; }
+    .mg-panel .field-label { font-size: 0.7rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
+    .mg-panel input {
+      background: var(--bg-primary); border: 1px solid var(--border-color);
+      border-radius: 6px; padding: 7px 10px; color: var(--text-secondary);
+      font-size: 0.85rem; font-family: inherit; width: 110px;
+    }
+    .mg-panel input:focus { outline: none; border-color: var(--nord10); color: var(--text-primary); }
+    .mg-panel input.spots-input { width: 60px; }
+    .btn-mg-submit {
+      background: var(--nord14); color: #fff; border: none;
+      padding: 7px 18px; border-radius: 6px; font-size: 0.82rem;
+      font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+    .btn-mg-submit:hover { opacity: 0.9; }
+    .btn-mg-cancel {
+      background: none; color: var(--text-secondary); border: 1px solid var(--border-color);
+      padding: 7px 14px; border-radius: 6px; font-size: 0.82rem; cursor: pointer; font-family: inherit;
+    }
+    .mg-form-status { font-size: 0.8rem; color: var(--nord11); margin-left: 8px; }
+
+    .mg-applied-row td { background: color-mix(in srgb, var(--nord14) 8%, transparent); font-size: 0.82rem; padding: 7px 14px; border-bottom: 1px dashed var(--border-color); }
+    .mg-tag { display: inline-block; background: var(--nord14); color: #fff; padding: 1px 7px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; margin-right: 6px; }
+
+    .btn-summary {
+      background: var(--nord14); color: #fff; border: none;
+      padding: 6px 16px; border-radius: 8px; font-size: 0.82rem; font-weight: 600;
+      cursor: pointer; font-family: inherit; margin-left: 8px; display: none;
+    }
+    .btn-summary:hover { opacity: 0.9; }
+
     .print-header { display: none; }
 
     @page { size: landscape; margin: 14mm; }
@@ -149,6 +193,7 @@
     </div>
     <button class="btn-load" id="loadBtn">Load</button>
     <button class="btn-export" id="exportBtn" onclick="exportPDF()" style="display:none">Save as PDF</button>
+    <button class="btn-summary" id="summaryBtn" onclick="printSummary()">Print MG Summary</button>
   </div>
 
   <div class="summary-bar" id="summaryBar">
@@ -172,11 +217,14 @@ const summaryBar = document.getElementById('summaryBar');
 const statusMsg  = document.getElementById('statusMsg');
 const resultsDiv = document.getElementById('results');
 
+const mgLog = [];  // accumulated make-goods this session
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 function toMMDDYYYY(d) {
     return String(d.getMonth()+1).padStart(2,'0') + '/' +
            String(d.getDate()).padStart(2,'0') + '/' + d.getFullYear();
 }
-
 function formatDate(el) {
     const d = el.value.replace(/\D/g, '');
     const yr = new Date().getFullYear();
@@ -185,22 +233,29 @@ function formatDate(el) {
     else if (d.length === 6) el.value = d.slice(0,2)+'/'+d.slice(2,4)+'/20'+d.slice(4,6);
     else if (d.length === 8) el.value = d.slice(0,2)+'/'+d.slice(2,4)+'/'+d.slice(4,8);
 }
+function formatTime(el) {
+    const v = el.value.replace(/\D/g,'');
+    if (v.length === 3)      el.value = '0'+v[0]+':'+v.slice(1);
+    else if (v.length === 4) el.value = v.slice(0,2)+':'+v.slice(2);
+}
+function escHtml(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
-// Default to current month
+// ── Init ─────────────────────────────────────────────────────────────────────
+
 const today = new Date();
-const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-document.getElementById('dateFrom').value = toMMDDYYYY(firstOfMonth);
+document.getElementById('dateFrom').value = toMMDDYYYY(new Date(today.getFullYear(), today.getMonth(), 1));
 document.getElementById('dateTo').value   = toMMDDYYYY(today);
 
 loadBtn.addEventListener('click', async () => {
     const dateFrom = document.getElementById('dateFrom').value.trim();
     const dateTo   = document.getElementById('dateTo').value.trim();
-    if (!dateFrom || !dateTo) {
-        showStatus('Please select both dates.', 'error');
-        return;
-    }
+    if (!dateFrom || !dateTo) { showStatus('Please select both dates.', 'error'); return; }
     await load(dateFrom, dateTo);
 });
+
+// ── Load ─────────────────────────────────────────────────────────────────────
 
 async function load(dateFrom, dateTo) {
     loadBtn.disabled = true;
@@ -209,7 +264,6 @@ async function load(dateFrom, dateTo) {
     resultsDiv.style.display = 'none';
     resultsDiv.innerHTML = '';
     statusMsg.innerHTML = '';
-
     try {
         const resp = await fetch(`/api/orders/make-goods?date_from=${dateFrom}&date_to=${dateTo}`);
         const data = await resp.json();
@@ -223,6 +277,8 @@ async function load(dateFrom, dateTo) {
     }
 }
 
+// ── Render ───────────────────────────────────────────────────────────────────
+
 function render(data) {
     if (!data.contracts.length) {
         resultsDiv.innerHTML = '<p class="empty-msg">No blacklisted spots found in this date range.</p>';
@@ -230,11 +286,9 @@ function render(data) {
         return;
     }
 
-    // Populate client filter
     const clientSel = document.getElementById('clientFilter');
     clientSel.innerHTML = '<option value="">All clients</option>';
-    const clients = [...new Set(data.contracts.map(c => c.client).filter(Boolean))].sort();
-    clients.forEach(cl => {
+    [...new Set(data.contracts.map(c => c.client).filter(Boolean))].sort().forEach(cl => {
         const opt = document.createElement('option');
         opt.value = cl; opt.textContent = cl;
         clientSel.appendChild(opt);
@@ -251,36 +305,62 @@ function render(data) {
         html += `
         <div class="contract-group" data-client="${escHtml(c.client)}">
           <div class="contract-header">
-            <span class="contract-code">${escHtml(c.code)}</span>
-            <span class="contract-desc">${escHtml(c.description || '')}</span>
-            ${c.client ? `<span class="contract-client">${escHtml(c.client)}</span>` : ''}
-            ${c.agency ? `<span class="contract-client" style="color:var(--nord9)">${escHtml(c.agency)}</span>` : ''}
-            <span class="contract-missed">${c.total_missed} missed</span>
+            <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+              <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+                <span class="contract-code">${escHtml(c.code)}</span>
+                <span class="contract-desc">${escHtml(c.description || '')}</span>
+              </div>
+              <div style="display:flex;gap:12px;flex-wrap:wrap">
+                ${c.client ? `<span class="contract-client">${escHtml(c.client)}</span>` : ''}
+                ${c.agency ? `<span class="contract-client" style="color:var(--nord9)">${escHtml(c.agency)}</span>` : ''}
+              </div>
+            </div>
+            <span class="contract-missed" style="margin-left:auto;flex-shrink:0">${c.total_missed} missed</span>
           </div>
           <table>
             <thead><tr>
-              <th>Market</th>
-              <th>Description</th>
-              <th>Flight</th>
-              <th>Type</th>
-              <th class="num">Gross</th>
-              <th class="num">Net</th>
-              <th class="num">Ordered</th>
-              <th class="num">Missed</th>
+              <th>Market</th><th>Description</th><th>Flight</th><th>Time</th>
+              <th>Type</th><th class="num">Gross</th><th class="num">Net</th>
+              <th class="num">Ordered</th><th class="num">Missed</th><th></th>
             </tr></thead>
             <tbody>`;
+
         for (const l of c.lines) {
             const gross = l.gross_rate > 0 ? '$' + l.gross_rate.toFixed(2) : '—';
             const net   = l.net_rate   > 0 ? '$' + l.net_rate.toFixed(2)   : '—';
-            html += `<tr>
+            const lid   = l.line_id;
+            const lj    = escHtml(JSON.stringify(l));
+            html += `
+            <tr id="line-${lid}" data-line="${lj}" data-contract-code="${escHtml(c.code)}" data-client="${escHtml(c.client)}">
               <td><span class="market-badge">${escHtml(l.market)}</span></td>
               <td>${escHtml(l.description || '—')}</td>
-              <td style="font-size:0.8rem;color:var(--text-secondary)">${escHtml(l.date_start)} – ${escHtml(l.date_end)}</td>
+              <td style="font-size:0.8rem;color:var(--text-secondary);white-space:nowrap">${escHtml(l.date_start)} – ${escHtml(l.date_end)}</td>
+              <td style="font-size:0.8rem;color:var(--text-secondary);white-space:nowrap">${escHtml(l.time_from)} – ${escHtml(l.time_to)}</td>
               <td style="font-size:0.82rem">${escHtml(l.spot_type)}</td>
               <td class="num">${gross}</td>
               <td class="num">${net}</td>
-              <td class="num">${l.ordered}</td>
-              <td class="num missed-val">${l.missed}</td>
+              <td class="num" id="ord-${lid}">${l.ordered}</td>
+              <td class="num missed-val" id="miss-${lid}">${l.missed}</td>
+              <td style="text-align:right"><button class="btn-mg" id="mgbtn-${lid}" onclick="openMgForm(${lid})">Make Good</button></td>
+            </tr>
+            <tr id="mgform-${lid}" class="mg-form-row">
+              <td colspan="10">
+                <div class="mg-panel">
+                  <div class="field-group"><span class="field-label">Spots</span>
+                    <input type="number" class="spots-input" id="mgspots-${lid}" min="1" max="${l.missed}" value="${l.missed}" /></div>
+                  <div class="field-group"><span class="field-label">Start Date</span>
+                    <input type="text" id="mgdf-${lid}" value="${escHtml(l.date_start)}" onfocus="this.select()" onblur="formatDate(this)" /></div>
+                  <div class="field-group"><span class="field-label">End Date</span>
+                    <input type="text" id="mgdt-${lid}" value="${escHtml(l.date_end)}" onfocus="this.select()" onblur="formatDate(this)" /></div>
+                  <div class="field-group"><span class="field-label">Start Time</span>
+                    <input type="text" id="mgtf-${lid}" value="${escHtml(l.time_from)}" onfocus="this.select()" onblur="formatTime(this)" style="width:80px" /></div>
+                  <div class="field-group"><span class="field-label">End Time</span>
+                    <input type="text" id="mgtt-${lid}" value="${escHtml(l.time_to)}" onfocus="this.select()" onblur="formatTime(this)" style="width:80px" /></div>
+                  <button class="btn-mg-submit" onclick="submitMakeGood(${lid})">Apply Make Good</button>
+                  <button class="btn-mg-cancel" onclick="closeMgForm(${lid})">Cancel</button>
+                  <span class="mg-form-status" id="mgstatus-${lid}"></span>
+                </div>
+              </td>
             </tr>`;
         }
         html += `</tbody></table></div>`;
@@ -290,6 +370,94 @@ function render(data) {
     resultsDiv.style.display = 'block';
 }
 
+// ── Make Good form ───────────────────────────────────────────────────────────
+
+function openMgForm(lid) {
+    document.getElementById(`mgform-${lid}`).style.display = '';
+    document.getElementById(`mgbtn-${lid}`).disabled = true;
+    document.getElementById(`mgspots-${lid}`).focus();
+}
+function closeMgForm(lid) {
+    document.getElementById(`mgform-${lid}`).style.display = 'none';
+    document.getElementById(`mgbtn-${lid}`).disabled = false;
+    document.getElementById(`mgstatus-${lid}`).textContent = '';
+}
+
+async function submitMakeGood(lid) {
+    const row      = document.getElementById(`line-${lid}`);
+    const l        = JSON.parse(row.dataset.line.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"'));
+    const spots    = parseInt(document.getElementById(`mgspots-${lid}`).value) || 0;
+    const df       = document.getElementById(`mgdf-${lid}`).value.trim();
+    const dt       = document.getElementById(`mgdt-${lid}`).value.trim();
+    const tf       = document.getElementById(`mgtf-${lid}`).value.trim();
+    const tt       = document.getElementById(`mgtt-${lid}`).value.trim();
+    const statusEl = document.getElementById(`mgstatus-${lid}`);
+    const submitBtn = document.querySelector(`#mgform-${lid} .btn-mg-submit`);
+
+    if (!spots || !df || !dt || !tf || !tt) { statusEl.textContent = 'Fill all fields.'; return; }
+    if (spots > l.missed) { statusEl.textContent = `Max ${l.missed} spot(s).`; return; }
+
+    statusEl.textContent = 'Applying…';
+    submitBtn.disabled = true;
+
+    try {
+        const resp = await fetch('/api/orders/make-goods/apply', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({line_id: lid, spots, date_from: df, date_to: dt, time_from: tf, time_to: tt})
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Error');
+
+        // Update counts on original row
+        const newMissed  = l.missed - spots;
+        const newOrdered = l.ordered - spots;
+        document.getElementById(`miss-${lid}`).textContent = newMissed;
+        document.getElementById(`ord-${lid}`).textContent  = newOrdered;
+        l.missed  = newMissed;
+        l.ordered = newOrdered;
+        row.dataset.line = JSON.stringify(l);
+
+        // Insert MG applied sub-row above the form row
+        const gross = l.gross_rate > 0 ? '$' + l.gross_rate.toFixed(2) : '—';
+        const net   = l.net_rate   > 0 ? '$' + l.net_rate.toFixed(2)   : '—';
+        const mgRow = document.createElement('tr');
+        mgRow.className = 'mg-applied-row';
+        mgRow.innerHTML = `
+          <td><span class="market-badge">${escHtml(l.market)}</span></td>
+          <td><span class="mg-tag">MG</span><em>*MG* ${escHtml(l.description)}</em></td>
+          <td style="white-space:nowrap">${escHtml(df)} – ${escHtml(dt)}</td>
+          <td style="white-space:nowrap">${escHtml(tf)} – ${escHtml(tt)}</td>
+          <td>${escHtml(l.spot_type)}</td>
+          <td class="num">${gross}</td>
+          <td class="num">${net}</td>
+          <td class="num">${spots}</td>
+          <td class="num" style="color:var(--nord14)">✓</td>
+          <td style="font-size:0.75rem;color:var(--text-secondary)">Pending Approval</td>`;
+        document.getElementById(`mgform-${lid}`).before(mgRow);
+        closeMgForm(lid);
+
+        mgLog.push({
+            lineId: lid, newLineId: data.new_line_id,
+            contractCode: row.dataset.contractCode, client: row.dataset.client,
+            market: l.market, origDesc: l.description,
+            origDateFrom: l.date_start, origDateTo: l.date_end,
+            origTimeFrom: l.time_from,  origTimeTo:  l.time_to,
+            newDateFrom: df, newDateTo: dt, newTimeFrom: tf, newTimeTo: tt,
+            spots, spotType: l.spot_type, gross, net
+        });
+
+        document.getElementById('summaryBtn').style.display = '';
+        if (newMissed <= 0) document.getElementById(`mgbtn-${lid}`).style.display = 'none';
+
+    } catch(e) {
+        statusEl.textContent = 'Error: ' + e.message;
+        submitBtn.disabled = false;
+    }
+}
+
+// ── Filter ───────────────────────────────────────────────────────────────────
+
 function filterByClient() {
     const val = document.getElementById('clientFilter').value;
     document.querySelectorAll('.contract-group').forEach(el => {
@@ -297,22 +465,70 @@ function filterByClient() {
     });
 }
 
+// ── Export: current page view ─────────────────────────────────────────────────
+
 function exportPDF() {
     const dateFrom = document.getElementById('dateFrom').value.trim();
     const dateTo   = document.getElementById('dateTo').value.trim();
     const client   = document.getElementById('clientFilter').value;
-    const clientLabel = client ? ` &nbsp;·&nbsp; ${escHtml(client)}` : '';
+    const clientLabel = client ? ` · ${client}` : '';
     document.getElementById('printHeader').innerHTML =
-        `<h2>Make Goods</h2><p>Date range: ${escHtml(dateFrom)} – ${escHtml(dateTo)}${clientLabel} &nbsp;·&nbsp; Crossings TV</p>`;
+        `<h2>Make Goods</h2><p>Date range: ${escHtml(dateFrom)} – ${escHtml(dateTo)}${escHtml(clientLabel)} · Crossings TV</p>`;
     window.print();
 }
 
-function showStatus(msg, type) {
-    statusMsg.innerHTML = `<p class="${type === 'error' ? 'error-msg' : ''}">${escHtml(msg)}</p>`;
+// ── Export: MG Summary (new window) ──────────────────────────────────────────
+
+function printSummary() {
+    if (!mgLog.length) return;
+    const dateFrom = document.getElementById('dateFrom').value.trim();
+    const dateTo   = document.getElementById('dateTo').value.trim();
+    const client   = mgLog[0].client || '';
+
+    const rows = mgLog.map(e => `<tr>
+      <td>${escHtml(e.contractCode)}</td>
+      <td>${escHtml(e.market)}</td>
+      <td>${escHtml(e.origDesc)}</td>
+      <td>${escHtml(e.origDateFrom)} – ${escHtml(e.origDateTo)}</td>
+      <td>${escHtml(e.origTimeFrom)} – ${escHtml(e.origTimeTo)}</td>
+      <td>${escHtml(e.newDateFrom)} – ${escHtml(e.newDateTo)}</td>
+      <td>${escHtml(e.newTimeFrom)} – ${escHtml(e.newTimeTo)}</td>
+      <td style="text-align:right">${e.spots}</td>
+      <td style="text-align:right">${escHtml(e.spotType)}</td>
+      <td style="text-align:right">${escHtml(e.gross)}</td>
+      <td style="text-align:right">${escHtml(e.net)}</td>
+    </tr>`).join('');
+
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Make Good Summary</title>
+    <style>
+      body{font-family:Arial,sans-serif;font-size:11px;color:#222;margin:20px}
+      h2{font-size:15px;margin:0 0 4px}p{font-size:11px;color:#555;margin:0 0 16px}
+      table{width:100%;border-collapse:collapse}
+      th{background:#eee;font-size:9px;text-transform:uppercase;letter-spacing:.05em;padding:6px 8px;text-align:left;border-bottom:2px solid #ccc}
+      td{padding:6px 8px;border-bottom:1px solid #ddd}
+      tr:nth-child(even) td{background:#f8f8f8}
+      @page{size:landscape;margin:12mm}
+    </style></head><body>
+    <h2>Make Good Summary — ${escHtml(client)}</h2>
+    <p>Period: ${escHtml(dateFrom)} – ${escHtml(dateTo)} &nbsp;·&nbsp; Crossings TV &nbsp;·&nbsp; ${mgLog.length} make good(s) applied</p>
+    <table><thead><tr>
+      <th>Contract</th><th>Market</th><th>Description</th>
+      <th>Original Flight</th><th>Original Time</th>
+      <th>MG Flight</th><th>MG Time</th>
+      <th>Spots</th><th>Type</th><th>Gross</th><th>Net</th>
+    </tr></thead><tbody>${rows}</tbody></table>
+    </body></html>`;
+
+    const win = window.open('', '_blank', 'width=1100,height=750');
+    win.document.write(html);
+    win.document.close();
+    win.print();
 }
 
-function escHtml(s) {
-    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+// ── Status ───────────────────────────────────────────────────────────────────
+
+function showStatus(msg, type) {
+    statusMsg.innerHTML = `<p class="${type === 'error' ? 'error-msg' : ''}">${escHtml(msg)}</p>`;
 }
 </script>
 </body>

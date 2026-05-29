@@ -6725,6 +6725,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         cr.N_PASSAGGI               AS ordered,
                         cr.IMPORTO,
                         cr.ID_BOOKINGCODE,
+                        cr.ORA_INIZIO,
+                        cr.ORA_FINE,
                         SUM(tsl.PassageMiss)        AS missed
                     FROM Traffic_ScheduleList tsl
                     JOIN CONTRATTIRIGHE cr
@@ -6743,7 +6745,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         ct.DESCRIZIONE, ct.P_AGENZIA, a.RAG_SOCIAL, ag.RAG_SOCIAL,
                         cr.ID_CONTRATTIRIGHE, cr.COD_USER, cr.DESCRIZIONE,
                         cr.DATA_INIZIO, cr.DATA_FINE, cr.N_PASSAGGI,
-                        cr.IMPORTO, cr.ID_BOOKINGCODE
+                        cr.IMPORTO, cr.ID_BOOKINGCODE, cr.ORA_INIZIO, cr.ORA_FINE
                     ORDER BY a.RAG_SOCIAL, ct.COD_CONTRATTO, cr.COD_USER, cr.DATA_INIZIO
                 """, [date_to, date_from])
                 rows = cursor.fetchall()
@@ -6751,11 +6753,18 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
-        _mn = {1:"NYC",2:"CMP",3:"HOU",4:"SFO",5:"SEA",6:"LAX",7:"CVC",8:"WDC",9:"MMT",10:"DAL"}
+        _mn    = {1:"NYC",2:"CMP",3:"HOU",4:"SFO",5:"SEA",6:"LAX",7:"CVC",8:"WDC",9:"MMT",10:"DAL"}
+        _fps   = 29.97
+
+        def _fr2hm(frames):
+            if not frames: return "00:00"
+            total_sec = round(frames / _fps)
+            return f"{total_sec // 3600:02d}:{(total_sec % 3600) // 60:02d}"
 
         contracts: dict = {}
         for (ct_id, code, ct_desc, client_name, agency_name, p_agenzia, line_id, market_id, line_desc,
-             d_start, d_end, ordered, importo, id_bookingcode, missed) in rows:
+             d_start, d_end, ordered, importo, id_bookingcode,
+             ora_inizio, ora_fine, missed) in rows:
             if ct_id not in contracts:
                 contracts[ct_id] = {
                     "contract_id":  ct_id,
@@ -6783,6 +6792,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 "spot_type":   spot_type,
                 "gross_rate":  gross_rate,
                 "net_rate":    net_rate,
+                "time_from":   _fr2hm(ora_inizio),
+                "time_to":     _fr2hm(ora_fine),
             })
 
         contract_list = list(contracts.values())
@@ -6793,5 +6804,121 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             "total_contracts": len(contract_list),
             "total_missed":    total_missed,
         })
+
+    @router.post("/api/orders/make-goods/apply")
+    async def apply_make_good(body: dict = Body(...)):
+        line_id       = int(body["line_id"])
+        spots         = int(body["spots"])
+        date_from_str = body["date_from"]   # MM/DD/YYYY
+        date_to_str   = body["date_to"]
+        time_from_str = body["time_from"]   # HH:MM
+        time_to_str   = body["time_to"]     # HH:MM
+
+        from datetime import datetime as _dt, date as _date
+        from browser_automation.etere_direct_client import (
+            connect as _db_connect, EtereDirectClient,
+        )
+
+        _mn_rev = {1:"NYC",2:"CMP",3:"HOU",4:"SFO",5:"SEA",6:"LAX",7:"CVC",8:"WDC",9:"MMT",10:"DAL"}
+        _fps    = 29.97
+
+        try:
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+
+                # Load original line
+                cur.execute("""
+                    SELECT cr.*, ct.ID_CONTRATTITESTATA AS contract_id
+                    FROM CONTRATTIRIGHE cr
+                    JOIN CONTRATTITESTATA ct ON ct.ID_CONTRATTITESTATA = cr.ID_CONTRATTITESTATA
+                    WHERE cr.ID_CONTRATTIRIGHE = %s
+                """, [line_id])
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail=f"Line {line_id} not found")
+
+                # Reconstruct day string from Italian weekday flags
+                day_parts = []
+                for flag, code in [("LUNEDI","M"),("MARTEDI","Tu"),("MERCOLEDI","W"),
+                                    ("GIOVEDI","Th"),("VENERDI","F"),("SABATO","Sa"),("DOMENICA","Su")]:
+                    if row.get(flag): day_parts.append(code)
+                days = ",".join(day_parts) or "M-Su"
+
+                # Duration frames → "HH:MM:SS:FF"
+                dur_sec = round(row["DURATA"] / _fps)
+                duration_str = f"00:00:{dur_sec:02d}:00"
+
+                # Separation frames → minutes
+                sep_cust = round(row["Interv_Committente"] / (60 * _fps))
+                sep_ord  = round(row["INTERVALLO"]         / (60 * _fps))
+                sep_evt  = round(row["INTERV_CONTRATTO"]   / (60 * _fps))
+
+                # Parse user-supplied dates
+                df = _dt.strptime(date_from_str, "%m/%d/%Y").date()
+                dt = _dt.strptime(date_to_str,   "%m/%d/%Y").date()
+
+                market      = _mn_rev.get(row["COD_USER"], "NYC")
+                contract_id = row["contract_id"]
+
+                # Insert make-good line (row_status=1 → pending approval)
+                client = EtereDirectClient(conn, autocommit=False)
+                client._contract_id = contract_id
+                new_line_id = client.add_contract_line(
+                    market             = market,
+                    days               = days,
+                    time_range         = f"{time_from_str}-{time_to_str}",
+                    description        = f"*MG* {(row['DESCRIZIONE'] or '').strip()}",
+                    rate               = float(row["IMPORTO"] or 0),
+                    total_spots        = spots,
+                    spots_per_week     = 0,
+                    max_daily_run      = int(row["PASSAGGI_GIORNALIERI"] or 1),
+                    date_from          = df,
+                    date_to            = dt,
+                    duration           = duration_str,
+                    is_bonus           = (row["ID_BOOKINGCODE"] == 10),
+                    separation_intervals = (sep_cust, sep_ord, sep_evt),
+                    contract_id        = contract_id,
+                    priority           = int(row["PRIORITA"] or 500),
+                    whitelist_priority = int(row["PrioritaWhiteList"] or 50),
+                    booking_code       = int(row["ID_BOOKINGCODE"] or 2),
+                    scheduling_type    = int(row["PRENOTAZIONE"] or 1),
+                    row_status         = 1,
+                )
+
+                # Refresh blocks for the new line
+                client.assign_blocks_for_existing_line(new_line_id)
+
+                # Decrement N_PASSAGGI on original line
+                cur.execute(
+                    "UPDATE CONTRATTIRIGHE SET N_PASSAGGI = N_PASSAGGI - %s WHERE ID_CONTRATTIRIGHE = %s",
+                    [spots, line_id]
+                )
+
+                # Update TSL PassageMiss (delete row if it reaches 0)
+                cur.execute(
+                    "SELECT PassageMiss FROM Traffic_ScheduleList WHERE ID_ContrattiRighe=%s AND BlackList>0",
+                    [line_id]
+                )
+                tsl = cur.fetchone()
+                if tsl:
+                    new_miss = (tsl["PassageMiss"] or 0) - spots
+                    if new_miss <= 0:
+                        cur.execute(
+                            "DELETE FROM Traffic_ScheduleList WHERE ID_ContrattiRighe=%s AND BlackList>0",
+                            [line_id]
+                        )
+                    else:
+                        cur.execute(
+                            "UPDATE Traffic_ScheduleList SET PassageMiss=%s WHERE ID_ContrattiRighe=%s AND BlackList>0",
+                            [new_miss, line_id]
+                        )
+
+                conn.commit()
+                return JSONResponse({"ok": True, "new_line_id": new_line_id, "spots": spots})
+
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
 
     return router
