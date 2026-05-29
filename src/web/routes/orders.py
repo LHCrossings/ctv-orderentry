@@ -1767,12 +1767,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 cur.execute("DELETE FROM trafficPalinse WHERE id_tpalinse=%s", (id_tpalinse,))
                 cur.execute("DELETE FROM TPALINSE WHERE ID_TPALINSE=%s", (id_tpalinse,))
 
-                # Blacklist entry — INSERT only (never increment an existing entry)
+                # Blacklist entry — INSERT first occurrence; INCREMENT PassageMiss for subsequent spots
                 cur.execute(
-                    "SELECT COUNT(*) AS cnt FROM Traffic_ScheduleList WHERE ID_ContrattiRighe=%s AND BlackList>0",
+                    "SELECT ID_TrafficScheduleList FROM Traffic_ScheduleList WHERE ID_ContrattiRighe=%s AND BlackList>0",
                     (line_id,)
                 )
-                if cur.fetchone()["cnt"] == 0:
+                existing = cur.fetchone()
+                if existing is None:
                     cur.execute("""
                         INSERT INTO Traffic_ScheduleList (
                             ID_ContrattiRighe, BlackList, PassageMiss,
@@ -1785,6 +1786,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         line_id, tpa_id, date_start, date_end,
                         "Blacklisted - no materials", "ControlRoom",
                     ))
+                else:
+                    cur.execute(
+                        "UPDATE Traffic_ScheduleList SET PassageMiss = PassageMiss + 1 WHERE ID_ContrattiRighe=%s AND BlackList>0",
+                        (line_id,)
+                    )
 
                 # Find filler: PI first, PSA fallback (only if replace requested)
                 dur = spot["DURATION"]
