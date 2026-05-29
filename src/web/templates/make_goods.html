@@ -75,6 +75,40 @@
     .empty-msg { color: var(--text-secondary); font-size: 0.88rem; padding: 32px 0; text-align: center; }
     .error-msg { color: var(--nord11); font-size: 0.88rem; padding: 16px 0; }
     #results { display: none; }
+
+    .btn-export {
+      background: var(--bg-secondary); color: var(--text-primary);
+      border: 1px solid var(--border-color); padding: 6px 16px;
+      border-radius: 8px; font-size: 0.82rem; font-weight: 600;
+      cursor: pointer; font-family: inherit; margin-left: 12px;
+    }
+    .btn-export:hover { border-color: var(--nord10); color: var(--nord10); }
+
+    .print-header { display: none; }
+
+    @page { size: landscape; margin: 14mm; }
+
+    @media print {
+      header, .filter-card, .summary-bar, .btn-export { display: none !important; }
+      body { background: #fff !important; color: #000 !important; }
+      main { max-width: 100%; padding: 0; margin: 0; }
+      #results { display: block !important; }
+      .print-header { display: block; margin-bottom: 20px; }
+      .print-header h2 { font-size: 1.1rem; font-weight: 700; margin: 0 0 2px; }
+      .print-header p  { font-size: 0.8rem; color: #555; margin: 0; }
+      .contract-group {
+        border: 1px solid #ccc; border-radius: 0;
+        margin-bottom: 12px; page-break-inside: avoid;
+      }
+      .contract-header { background: #f4f4f4 !important; padding: 10px 14px; }
+      .contract-code { color: #000 !important; }
+      .contract-missed { background: #555 !important; }
+      .market-badge { background: #555 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .missed-val { color: #c00 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      th { background: #eee !important; color: #333 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      tr:hover td { background: none !important; }
+      td, th { padding: 6px 10px; font-size: 0.78rem; }
+    }
   </style>
 </head>
 <body>
@@ -105,7 +139,10 @@
     <button class="btn-load" id="loadBtn">Load</button>
   </div>
 
-  <div class="summary-bar" id="summaryBar"></div>
+  <div class="summary-bar" id="summaryBar">
+    <button class="btn-export" id="exportBtn" onclick="exportPDF()">Save as PDF</button>
+  </div>
+  <div class="print-header" id="printHeader"></div>
   <div id="statusMsg"></div>
   <div id="results"></div>
 </main>
@@ -220,6 +257,14 @@ function render(data) {
 
     resultsDiv.innerHTML = html;
     resultsDiv.style.display = 'block';
+}
+
+function exportPDF() {
+    const dateFrom = document.getElementById('dateFrom').value.trim();
+    const dateTo   = document.getElementById('dateTo').value.trim();
+    document.getElementById('printHeader').innerHTML =
+        `<h2>Make Goods</h2><p>Date range: ${escHtml(dateFrom)} – ${escHtml(dateTo)} &nbsp;·&nbsp; Crossings TV</p>`;
+    window.print();
 }
 
 function showStatus(msg, type) {
