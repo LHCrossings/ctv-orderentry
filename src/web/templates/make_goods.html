@@ -305,17 +305,16 @@ function render(data) {
         html += `
         <div class="contract-group" data-client="${escHtml(c.client)}">
           <div class="contract-header">
-            <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
-              <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+              <div style="display:flex;align-items:center;gap:10px">
                 <span class="contract-code">${escHtml(c.code)}</span>
-                <span class="contract-desc">${escHtml(c.description || '')}</span>
+                <span style="font-size:0.75rem;color:var(--text-secondary);font-weight:500">#${c.contract_id}</span>
               </div>
-              <div style="display:flex;gap:12px;flex-wrap:wrap">
-                ${c.client ? `<span class="contract-client">${escHtml(c.client)}</span>` : ''}
-                ${c.agency ? `<span class="contract-client" style="color:var(--nord9)">${escHtml(c.agency)}</span>` : ''}
-              </div>
+              <span class="contract-desc">${escHtml(c.description || '')}</span>
+              ${c.client ? `<span class="contract-client">${escHtml(c.client)}</span>` : ''}
+              ${c.agency ? `<span class="contract-client" style="color:var(--nord9)">${escHtml(c.agency)}</span>` : ''}
             </div>
-            <span class="contract-missed" style="margin-left:auto;flex-shrink:0">${c.total_missed} missed</span>
+            <span class="contract-missed" style="margin-left:auto;flex-shrink:0;align-self:flex-start">${c.total_missed} missed</span>
           </div>
           <table>
             <thead><tr>
