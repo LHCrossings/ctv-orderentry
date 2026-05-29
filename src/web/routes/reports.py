@@ -376,7 +376,7 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
             with _db_connect() as conn:
                 cur = conn.cursor(as_dict=True)
                 cur.execute("""
-                    SELECT CODICE AS code, DESCRIZIONE AS description
+                    SELECT COD_CONTRATTO AS code, DESCRIZIONE AS description
                     FROM CONTRATTITESTATA
                     WHERE ID_CONTRATTITESTATA = %s
                 """, (contract_id,))
