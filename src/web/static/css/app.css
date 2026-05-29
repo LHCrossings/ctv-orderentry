@@ -290,6 +290,13 @@ tbody td {
     line-height: 1.6;
 }
 
+.parsers-note {
+    font-size: 0.72rem;
+    color: #bf616a;
+    margin-top: 0.3rem;
+    font-style: italic;
+}
+
 .parsers-grid {
     display: flex;
     flex-wrap: wrap;
