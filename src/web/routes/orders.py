@@ -1752,10 +1752,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
                 line_id = tpa["ID_ContrattiRighe"]
 
-                # Remove from playout (prevents dead air)
-                cur.execute("UPDATE TPALINSE SET LIVELLO=666 WHERE ID_TPALINSE=%s", (id_tpalinse,))
-
-                # Blacklist entry for make-good tracking
+                # Blacklist entry — matches Etere's native blacklist behavior exactly
                 cur.execute(
                     "SELECT COUNT(*) AS cnt FROM Traffic_ScheduleList WHERE ID_ContrattiRighe=%s AND BlackList>0",
                     (line_id,)
