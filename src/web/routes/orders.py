@@ -6728,8 +6728,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     JOIN CONTRATTITESTATA ct
                         ON ct.ID_CONTRATTITESTATA = cr.ID_CONTRATTITESTATA
                     WHERE tsl.BlackList > 0
-                      AND tsl.Date   <= %s
-                      AND tsl.ToDate >= %s
+                      AND ISNULL(tsl.Date,   cr.DATA_INIZIO) <= %s
+                      AND ISNULL(tsl.ToDate, cr.DATA_FINE)   >= %s
                     GROUP BY
                         ct.ID_CONTRATTITESTATA, ct.COD_CONTRATTO,
                         ct.DESCRIZIONE, ct.COMMITTENTE,
