@@ -13,6 +13,32 @@ from datetime import datetime
 import pdfplumber
 
 
+def _ocr_first_page(pdf_path, dpi=200):
+    """OCR fallback for image-based PDFs. Returns '' if dependencies missing."""
+    try:
+        import fitz
+        import pytesseract
+        from PIL import Image
+    except ImportError:
+        return ""
+    try:
+        import os, sys
+        if sys.platform == "win32":
+            default = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+            if os.path.exists(default):
+                pytesseract.pytesseract.tesseract_cmd = default
+        doc = fitz.open(str(pdf_path))
+        page = doc[0]
+        mat = fitz.Matrix(dpi / 72, dpi / 72)
+        pix = page.get_pixmap(matrix=mat, colorspace=fitz.csGRAY)
+        img = Image.frombytes("L", [pix.width, pix.height], pix.samples)
+        text = pytesseract.image_to_string(img, config="--psm 6")
+        doc.close()
+        return text
+    except Exception:
+        return ""
+
+
 def parse_worldlink_pdf(pdf_path):
     """
     Parse a WorldLink PDF and extract order data
@@ -28,7 +54,13 @@ def parse_worldlink_pdf(pdf_path):
         with pdfplumber.open(pdf_path) as pdf:
             # WorldLink orders are typically single page
             first_page = pdf.pages[0]
-            text = first_page.extract_text()
+            text = first_page.extract_text() or ""
+
+        # Image-based PDFs yield no text — fall back to OCR
+        if len(text.strip()) < 50:
+            text = _ocr_first_page(pdf_path)
+
+        if text:
 
             # Parse header information
             order_data = _parse_header(text)
