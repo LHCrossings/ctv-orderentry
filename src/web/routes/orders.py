@@ -1752,17 +1752,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
                 line_id = tpa["ID_ContrattiRighe"]
 
-                # Blacklist entry — matches Etere's native blacklist behavior exactly
+                # Remove this specific airing from playout (prevents dead air)
+                cur.execute("UPDATE TPALINSE SET LIVELLO=666 WHERE ID_TPALINSE=%s", (id_tpalinse,))
+
+                # Blacklist entry for make-good tracking — INSERT only, never increment
+                # (incrementing doubles the count if a prior entry already exists)
                 cur.execute(
                     "SELECT COUNT(*) AS cnt FROM Traffic_ScheduleList WHERE ID_ContrattiRighe=%s AND BlackList>0",
                     (line_id,)
                 )
-                if cur.fetchone()["cnt"] > 0:
-                    cur.execute(
-                        "UPDATE Traffic_ScheduleList SET BlackList=BlackList+1, PassageMiss=PassageMiss+1 WHERE ID_ContrattiRighe=%s AND BlackList>0",
-                        (line_id,)
-                    )
-                else:
+                if cur.fetchone()["cnt"] == 0:
                     cur.execute(
                         "INSERT INTO Traffic_ScheduleList (ID_ContrattiRighe, BlackList, PassageMiss) VALUES (%s, 1, 1)",
                         (line_id,)
