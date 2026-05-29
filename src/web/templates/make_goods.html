@@ -321,7 +321,7 @@ function render(data) {
             <thead><tr>
               <th>Market</th><th>Description</th><th>Flight</th><th>Time</th>
               <th>Type</th><th class="num">Gross</th><th class="num">Net</th>
-              <th class="num">Ordered</th><th class="num">Missed</th><th></th>
+              <th class="num">Ordered</th><th class="num">Missed</th><th style="width:100px"></th>
             </tr></thead>
             <tbody>`;
 
@@ -341,7 +341,7 @@ function render(data) {
               <td class="num">${net}</td>
               <td class="num" id="ord-${lid}">${l.ordered}</td>
               <td class="num missed-val" id="miss-${lid}">${l.missed}</td>
-              <td style="text-align:right"><button class="btn-mg" id="mgbtn-${lid}" onclick="openMgForm(${lid})">Make Good</button></td>
+              <td style="text-align:right;white-space:nowrap"><button class="btn-mg" id="mgbtn-${lid}" onclick="openMgForm(${lid})">Make Good</button></td>
             </tr>
             <tr id="mgform-${lid}" class="mg-form-row">
               <td colspan="10">
