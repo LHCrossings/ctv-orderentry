@@ -178,6 +178,99 @@
             color: var(--text-primary);
         }
         .spot-title-banner span { color: var(--text-muted); font-weight: 400; font-size: 0.82rem; margin-left: 8px; }
+
+        /* Contract results table */
+        .contract-banner {
+            padding: 12px 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .contract-banner .cb-code { font-weight: 700; font-size: 1rem; color: var(--text-primary); }
+        .contract-banner .cb-meta { font-size: 0.82rem; color: var(--text-muted); margin-top: 2px; }
+
+        .mkt-section { margin-bottom: 20px; }
+        .mkt-section-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 14px;
+            background: var(--nord10);
+            color: #fff;
+            border-radius: 8px 8px 0 0;
+            font-weight: 700;
+            font-size: 0.88rem;
+        }
+        .mkt-section-header .mkt-count-badge {
+            background: rgba(255,255,255,0.25);
+            border-radius: 10px;
+            padding: 1px 9px;
+            font-size: 0.8rem;
+        }
+        .airing-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+            border: 1px solid var(--border-color);
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            overflow: hidden;
+        }
+        .airing-table th {
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 7px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .airing-table td {
+            padding: 6px 12px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        .airing-table tr:last-child td { border-bottom: none; }
+        .airing-table tr:hover td { background: var(--bg-secondary); }
+        .airing-table .date-row td {
+            background: var(--bg-secondary);
+            font-weight: 700;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            padding: 4px 12px;
+            border-top: 1px solid var(--border-color);
+        }
+        .type-com { color: var(--nord14, #a3be8c); font-weight: 700; }
+        .type-bns { color: var(--nord13, #ebcb8b); font-weight: 700; }
+
+        /* Super search bar */
+        .search-wrap { position: relative; }
+        .search-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            z-index: 100;
+            min-width: 340px;
+            max-height: 280px;
+            overflow-y: auto;
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 4px 16px var(--shadow-color);
+            margin-top: 4px;
+        }
+        .dropdown-item {
+            padding: 10px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover { background: var(--bg-secondary); }
+        .dropdown-code { font-weight: 700; font-size: 0.88rem; color: var(--text-primary); }
+        .dropdown-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
     </style>
 </head>
 <body>
@@ -200,9 +293,10 @@
     <div class="tool-card">
         <h2>Search</h2>
         <div class="input-row" style="margin-bottom:16px;">
-            <div class="field-group" style="flex:1; min-width:200px;">
+            <div class="field-group search-wrap" style="flex:1; min-width:200px;">
                 <label class="field-label">Spot Code / Title</label>
                 <input id="spotInput" class="field-input" placeholder="MD15V362" autocomplete="off" />
+                <div id="spotDropdown" class="search-dropdown" style="display:none;"></div>
             </div>
             <div class="field-group">
                 <label class="field-label">Date From</label>
@@ -221,6 +315,32 @@
                 <!-- populated by JS -->
             </div>
         </div>
+    </div>
+
+    <!-- Contract as-run -->
+    <div class="tool-card">
+        <h2>By Contract</h2>
+        <div class="input-row" style="margin-bottom:0;">
+            <div class="field-group search-wrap" style="flex:1; min-width:220px;">
+                <label class="field-label">Contract</label>
+                <input id="contractSearch" class="field-input" placeholder="LEXUS, PACO BMO…" autocomplete="off" />
+                <div id="contractDropdown" class="search-dropdown" style="display:none;"></div>
+            </div>
+            <div class="field-group">
+                <label class="field-label">Date From</label>
+                <input id="cDateFrom" type="date" class="field-input" />
+            </div>
+            <div class="field-group">
+                <label class="field-label">Date To</label>
+                <input id="cDateTo" type="date" class="field-input" />
+            </div>
+            <button class="run-btn" onclick="runContractReport()">Run Report</button>
+        </div>
+    </div>
+
+    <div id="contractResultsSection" style="display:none;">
+        <div id="contractLoadingMsg" class="loading-msg" style="display:none;">Loading…</div>
+        <div id="contractResultsBody"></div>
     </div>
 
     <div id="resultsSection" style="display:none;">
@@ -331,10 +451,178 @@
     document.getElementById('dateTo').value   = today.toISOString().slice(0,10);
     document.getElementById('dateFrom').value = prior.toISOString().slice(0,10);
 
-    // Run on Enter in spot input
-    document.getElementById('spotInput').addEventListener('keydown', e => {
-        if (e.key === 'Enter') runReport();
+    // Super search bar
+    const spotInput   = document.getElementById('spotInput');
+    const dropdown    = document.getElementById('spotDropdown');
+    let _searchTimer  = null;
+
+    function esc2(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;'); }
+
+    function selectSpot(code) {
+        spotInput.value = code;
+        dropdown.style.display = 'none';
+        runReport();
+    }
+
+    async function searchSpots() {
+        const q = spotInput.value.trim();
+        if (q.length < 2) { dropdown.style.display = 'none'; return; }
+        const resp = await fetch(`/api/reports/spot-search?q=${encodeURIComponent(q)}`);
+        if (!resp.ok) return;
+        const rows = await resp.json();
+        if (!rows.length) {
+            dropdown.innerHTML = '<div class="dropdown-item"><span class="dropdown-desc">No spots found.</span></div>';
+        } else {
+            dropdown.innerHTML = rows.map(r => {
+                const dur = r.duration_sec ? `:${r.duration_sec}` : '';
+                return `<div class="dropdown-item" onclick="selectSpot('${esc2(r.code)}')">
+                    <div class="dropdown-code">${esc2(r.code)}${dur}</div>
+                    <div class="dropdown-desc">${esc2(r.title || '')}</div>
+                </div>`;
+            }).join('');
+        }
+        dropdown.style.display = 'block';
+    }
+
+    spotInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { clearTimeout(_searchTimer); dropdown.style.display = 'none'; runReport(); }
+        if (e.key === 'Escape') dropdown.style.display = 'none';
     });
+    spotInput.addEventListener('input', () => {
+        if (!spotInput.value.trim()) { dropdown.style.display = 'none'; return; }
+        clearTimeout(_searchTimer);
+        _searchTimer = setTimeout(searchSpots, 350);
+    });
+    document.addEventListener('click', e => {
+        if (!e.target.closest('.search-wrap')) dropdown.style.display = 'none';
+    });
+
+    window.selectSpot = selectSpot;
+
+    // ── Contract search ───────────────────────────────────────────────────────
+    const contractInput    = document.getElementById('contractSearch');
+    const contractDropdown = document.getElementById('contractDropdown');
+    let _contractTimer     = null;
+    let _selectedContractId = null;
+
+    function selectContract(id, code, description) {
+        _selectedContractId = id;
+        contractInput.value = code + (description ? ' — ' + description : '');
+        contractDropdown.style.display = 'none';
+    }
+
+    async function searchContracts() {
+        const q = contractInput.value.trim();
+        if (q.length < 2) { contractDropdown.style.display = 'none'; return; }
+        const resp = await fetch(`/api/traffic/contract-search?q=${encodeURIComponent(q)}`);
+        if (!resp.ok) return;
+        const rows = await resp.json();
+        if (!rows.length) {
+            contractDropdown.innerHTML = '<div class="dropdown-item"><span class="dropdown-desc">No contracts found.</span></div>';
+        } else {
+            contractDropdown.innerHTML = rows.map(r =>
+                `<div class="dropdown-item" onclick="selectContract(${r.id}, '${esc2(r.code)}', '${esc2(r.description || '')}')">
+                    <div class="dropdown-code">${esc2(r.code)}</div>
+                    <div class="dropdown-desc">${esc2(r.description || '')} &nbsp;·&nbsp; ${r.date_start} – ${r.date_end}</div>
+                </div>`
+            ).join('');
+        }
+        contractDropdown.style.display = 'block';
+    }
+
+    contractInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { clearTimeout(_contractTimer); contractDropdown.style.display = 'none'; runContractReport(); }
+        if (e.key === 'Escape') contractDropdown.style.display = 'none';
+    });
+    contractInput.addEventListener('input', () => {
+        _selectedContractId = null;
+        clearTimeout(_contractTimer);
+        if (!contractInput.value.trim()) { contractDropdown.style.display = 'none'; return; }
+        _contractTimer = setTimeout(searchContracts, 350);
+    });
+    document.addEventListener('click', e => {
+        if (!e.target.closest('#contractSearch') && !e.target.closest('#contractDropdown'))
+            contractDropdown.style.display = 'none';
+    });
+
+    window.selectContract = selectContract;
+
+    window.runContractReport = async function () {
+        if (!_selectedContractId) { alert('Select a contract from the dropdown.'); return; }
+        const dateFrom = document.getElementById('cDateFrom').value;
+        const dateTo   = document.getElementById('cDateTo').value;
+        if (!dateFrom || !dateTo) { alert('Enter a date range.'); return; }
+
+        const section = document.getElementById('contractResultsSection');
+        const loading = document.getElementById('contractLoadingMsg');
+        const body    = document.getElementById('contractResultsBody');
+        section.style.display = 'block';
+        loading.style.display = 'block';
+        body.innerHTML = '';
+
+        const url = `/api/reports/as-run-by-contract?contract_id=${_selectedContractId}&date_from=${dateFrom}&date_to=${dateTo}`;
+        const resp = await fetch(url);
+        loading.style.display = 'none';
+        if (!resp.ok) { body.innerHTML = `<div class="loading-msg">Error: ${resp.status}</div>`; return; }
+        const data = await resp.json();
+        body.innerHTML = buildContractResults(data);
+    };
+
+    function buildContractResults(data) {
+        let html = `<div class="contract-banner">
+            <div class="cb-code">${esc(data.contract_code)}</div>
+            <div class="cb-meta">${esc(data.contract_description || '')} &nbsp;·&nbsp; ${esc(data.date_from)} — ${esc(data.date_to)}</div>
+        </div>`;
+
+        if (!data.total) {
+            html += '<div class="loading-msg">No airings found in this date range.</div>';
+            return html;
+        }
+
+        data.markets.forEach(mkt => {
+            if (!mkt.count) return;
+            html += `<div class="mkt-section">
+                <div class="mkt-section-header">
+                    <span>${esc(mkt.market)}</span>
+                    <span class="mkt-count-badge">${mkt.count}</span>
+                </div>
+                <table class="airing-table">
+                    <thead><tr>
+                        <th>Date</th><th>Time</th><th>Spot</th><th>Title</th><th>Type</th><th>Rate</th>
+                    </tr></thead>
+                    <tbody>`;
+
+            let lastDate = null;
+            mkt.airings.forEach(a => {
+                if (a.date !== lastDate) {
+                    html += `<tr class="date-row"><td colspan="6">${esc(a.date)}</td></tr>`;
+                    lastDate = a.date;
+                }
+                const typeClass = a.type === 'BNS' ? 'type-bns' : 'type-com';
+                const rate = a.rate > 0 ? `$${a.rate.toFixed(2)}` : '—';
+                html += `<tr>
+                    <td></td>
+                    <td class="airing-time">${esc(a.time)}</td>
+                    <td><strong>${esc(a.spot_code)}</strong></td>
+                    <td>${esc(a.spot_title)}</td>
+                    <td class="${typeClass}">${esc(a.type)}</td>
+                    <td>${rate}</td>
+                </tr>`;
+            });
+
+            html += `</tbody></table></div>`;
+        });
+
+        html += `<div class="grand-total-bar"><div><div class="gt-label">Total Airings</div><div style="font-size:1.4rem;">${data.total}</div></div><div style="text-align:right;"><div class="gt-label">Markets</div><div>${data.markets.filter(m=>m.count>0).length}</div></div></div>`;
+        return html;
+    }
+
+    // Default contract date range: last 30 days
+    const cToday = new Date();
+    const cPrior = new Date(cToday);
+    cPrior.setDate(cPrior.getDate() - 30);
+    document.getElementById('cDateTo').value   = cToday.toISOString().slice(0,10);
+    document.getElementById('cDateFrom').value = cPrior.toISOString().slice(0,10);
 })();
 </script>
 </body>

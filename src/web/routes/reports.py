@@ -359,4 +359,120 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
             "total": sum(m["count"] for m in results),
         })
 
+    @router.get("/api/reports/as-run-by-contract")
+    async def as_run_by_contract(
+        contract_id: int = Query(...),
+        date_from: str = Query(...),
+        date_to: str = Query(...),
+    ):
+        try:
+            d_from = date.fromisoformat(date_from)
+            d_to   = date.fromisoformat(date_to)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format")
+
+        def _run():
+            from browser_automation.etere_direct_client import connect as _db_connect
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                cur.execute("""
+                    SELECT CODICE AS code, DESCRIZIONE AS description
+                    FROM CONTRATTITESTATA
+                    WHERE ID_CONTRATTITESTATA = %s
+                """, (contract_id,))
+                hdr = cur.fetchone()
+                if not hdr:
+                    return None, []
+
+                cur.execute("""
+                    SELECT
+                        tp.COD_USER                        AS market_id,
+                        CAST(tp.DATA AS DATE)              AS air_date,
+                        tp.ORA                             AS time_frames,
+                        ISNULL(f.COD_PROGRA, tp.TITLE)     AS spot_code,
+                        ISNULL(f.DESCRIZIO, '')            AS spot_title,
+                        ISNULL(cr.PREZZO, 0)               AS rate
+                    FROM TPALINSE tp
+                    JOIN CONTRATTIRIGHE cr
+                        ON cr.ID_CONTRATTIRIGHE = tp.ID_CONTRATTIRIGHE
+                    JOIN CONTRATTITESTATA ct
+                        ON ct.ID_CONTRATTITESTATA = cr.ID_CONTRATTITESTATA
+                    LEFT JOIN FILMATI f
+                        ON f.ID_FILMATI = tp.ID_FILMATI AND tp.ID_FILMATI > 0
+                    WHERE ct.ID_CONTRATTITESTATA = %s
+                      AND tp.DATA >= %s
+                      AND tp.DATA <= %s
+                      AND tp.LIVELLO = 0
+                    ORDER BY tp.COD_USER, tp.DATA, tp.ORA
+                """, (contract_id, d_from.isoformat(), d_to.isoformat()))
+                rows = cur.fetchall()
+            return hdr, rows
+
+        try:
+            hdr, rows = await asyncio.get_running_loop().run_in_executor(None, _run)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+        if hdr is None:
+            raise HTTPException(status_code=404, detail="Contract not found")
+
+        by_market = {}
+        for r in rows:
+            mid = r["market_id"]
+            mcode = MARKET_MAP.get(mid, str(mid))
+            if mcode not in by_market:
+                by_market[mcode] = []
+            rate = float(r["rate"] or 0)
+            by_market[mcode].append({
+                "date":       str(r["air_date"]),
+                "time":       _frames_to_time(r["time_frames"]),
+                "spot_code":  r["spot_code"] or "",
+                "spot_title": r["spot_title"] or "",
+                "type":       "BNS" if rate == 0 else "COM",
+                "rate":       rate,
+            })
+
+        markets = [
+            {"market": m, "airings": a, "count": len(a)}
+            for m, a in sorted(by_market.items())
+        ]
+        return JSONResponse({
+            "contract_code":        hdr["code"],
+            "contract_description": hdr["description"],
+            "date_from":            date_from,
+            "date_to":              date_to,
+            "markets":              markets,
+            "total":                len(rows),
+        })
+
+    @router.get("/api/reports/spot-search")
+    async def spot_search(q: str = Query("")):
+        if len(q) < 2:
+            return JSONResponse([])
+
+        def _run():
+            from browser_automation.etere_direct_client import connect as _db_connect
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                term = f"%{q.upper()}%"
+                cur.execute("""
+                    SELECT TOP 25 ID_FILMATI AS id, COD_PROGRA AS code,
+                           DESCRIZIO AS title, DURATA AS durata
+                    FROM FILMATI
+                    WHERE TIPO = 'T'
+                      AND DURATA <= 1800
+                      AND (UPPER(COD_PROGRA) LIKE %s OR UPPER(DESCRIZIO) LIKE %s)
+                    ORDER BY COD_PROGRA
+                """, (term, term))
+                rows = cur.fetchall()
+            for r in rows:
+                r["duration_sec"] = round(r["durata"] / 30) if r["durata"] else 0
+            return rows
+
+        try:
+            rows = await asyncio.get_running_loop().run_in_executor(None, _run)
+            return JSONResponse(rows)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     return router
