@@ -203,40 +203,27 @@ main {
     border: 1px solid var(--border-color);
 }
 
-/* ── Back link ───────────────────────────────────────────────────────────── */
+/* ── Home button ─────────────────────────────────────────────────────────── */
 
-.back-link,
-.back-link:visited {
+.home-btn,
+.home-btn:visited {
     color: var(--nord6);
     text-decoration: none;
-    font-size: 0.75rem;
-    font-weight: 500;
-    padding: 5px 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 5px 14px;
     background: rgba(255,255,255,0.08);
     border: 1px solid rgba(255,255,255,0.14);
     border-radius: 8px;
     opacity: 0.85;
     transition: opacity 0.15s, background 0.15s;
-    letter-spacing: 0.03em;
-    line-height: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 3px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
 }
 
-.back-link:hover {
+.home-btn:hover {
     opacity: 1;
     background: rgba(255,255,255,0.14);
-}
-
-.back-link::after {
-    content: "home";
-    font-size: 0.55rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    opacity: 0.7;
 }
 
 /* ── Cards with sub-actions (partial modules) ────────────────────────────── */

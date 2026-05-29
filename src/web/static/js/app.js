@@ -229,7 +229,7 @@ function openTerminal(files) {
     _fitAddon = new FitAddon.FitAddon();
     _term.loadAddon(_fitAddon);
     _term.open(container);
-    requestAnimationFrame(() => _fitAddon.fit());
+    requestAnimationFrame(() => { _fitAddon.fit(); _term.focus(); });
 
     const proto      = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const filesList  = (files || []).filter(Boolean);

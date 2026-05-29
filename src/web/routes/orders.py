@@ -1451,13 +1451,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     continue
                 try:
                     ctrl = json.loads(payload)
-                    if ctrl.get("type") == "resize":
+                    if isinstance(ctrl, dict) and ctrl.get("type") == "resize":
                         cols = max(1, int(ctrl.get("cols", 80)))
                         rows = max(1, int(ctrl.get("rows", 24)))
                         _fcntl.ioctl(master_fd, _termios.TIOCSWINSZ,
                                      _struct.pack("HHHH", rows, cols, 0, 0))
-                    continue
-                except (json.JSONDecodeError, ValueError):
+                        continue
+                except (json.JSONDecodeError, ValueError, AttributeError):
                     pass
                 try:
                     _os.write(master_fd, payload if isinstance(payload, bytes) else payload.encode())
