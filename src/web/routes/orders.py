@@ -6873,7 +6873,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     market             = market,
                     days               = days,
                     time_range         = f"{time_from_str}-{time_to_str}",
-                    description        = f"*MG* {(row['DESCRIZIONE'] or '').strip()}",
+                    description        = f"-MG- {(row['DESCRIZIONE'] or '').strip()}",
                     rate               = float(row["IMPORTO"] or 0),
                     total_spots        = spots,
                     spots_per_week     = 0,
