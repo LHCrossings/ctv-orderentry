@@ -6713,33 +6713,38 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     SELECT
                         ct.ID_CONTRATTITESTATA,
                         ct.COD_CONTRATTO,
-                        ct.DESCRIZIONE        AS contract_desc,
-                        ct.COMMITTENTE,
+                        ct.DESCRIZIONE              AS contract_desc,
+                        ISNULL(a.RAG_SOCIAL, '')    AS client_name,
+                        ISNULL(ag.RAG_SOCIAL, '')   AS agency_name,
                         ct.P_AGENZIA,
                         cr.ID_CONTRATTIRIGHE,
-                        cr.COD_USER           AS market_id,
-                        cr.DESCRIZIONE        AS line_desc,
+                        cr.COD_USER                 AS market_id,
+                        cr.DESCRIZIONE              AS line_desc,
                         CONVERT(varchar, cr.DATA_INIZIO, 101) AS date_start,
                         CONVERT(varchar, cr.DATA_FINE,   101) AS date_end,
-                        cr.N_PASSAGGI         AS ordered,
+                        cr.N_PASSAGGI               AS ordered,
                         cr.IMPORTO,
                         cr.ID_BOOKINGCODE,
-                        SUM(tsl.PassageMiss)  AS missed
+                        SUM(tsl.PassageMiss)        AS missed
                     FROM Traffic_ScheduleList tsl
                     JOIN CONTRATTIRIGHE cr
                         ON cr.ID_CONTRATTIRIGHE = tsl.ID_ContrattiRighe
                     JOIN CONTRATTITESTATA ct
                         ON ct.ID_CONTRATTITESTATA = cr.ID_CONTRATTITESTATA
+                    LEFT JOIN ANAGRAF a
+                        ON a.ID_ANAGRAF = ct.COMMITTENTE
+                    LEFT JOIN ANAGRAF ag
+                        ON ag.ID_ANAGRAF = ct.AGENZIA
                     WHERE tsl.BlackList > 0
                       AND ISNULL(tsl.Date,   cr.DATA_INIZIO) <= %s
                       AND ISNULL(tsl.ToDate, cr.DATA_FINE)   >= %s
                     GROUP BY
                         ct.ID_CONTRATTITESTATA, ct.COD_CONTRATTO,
-                        ct.DESCRIZIONE, ct.COMMITTENTE, ct.P_AGENZIA,
+                        ct.DESCRIZIONE, ct.P_AGENZIA, a.RAG_SOCIAL, ag.RAG_SOCIAL,
                         cr.ID_CONTRATTIRIGHE, cr.COD_USER, cr.DESCRIZIONE,
                         cr.DATA_INIZIO, cr.DATA_FINE, cr.N_PASSAGGI,
                         cr.IMPORTO, cr.ID_BOOKINGCODE
-                    ORDER BY ct.COD_CONTRATTO, cr.COD_USER, cr.DATA_INIZIO
+                    ORDER BY a.RAG_SOCIAL, ct.COD_CONTRATTO, cr.COD_USER, cr.DATA_INIZIO
                 """, [date_to, date_from])
                 rows = cursor.fetchall()
 
@@ -6749,14 +6754,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         _mn = {1:"NYC",2:"CMP",3:"HOU",4:"SFO",5:"SEA",6:"LAX",7:"CVC",8:"WDC",9:"MMT",10:"DAL"}
 
         contracts: dict = {}
-        for (ct_id, code, ct_desc, client, p_agenzia, line_id, market_id, line_desc,
+        for (ct_id, code, ct_desc, client_name, agency_name, p_agenzia, line_id, market_id, line_desc,
              d_start, d_end, ordered, importo, id_bookingcode, missed) in rows:
             if ct_id not in contracts:
                 contracts[ct_id] = {
                     "contract_id":  ct_id,
                     "code":         code or "",
                     "description":  ct_desc or "",
-                    "client":       client or "",
+                    "client":       client_name or "",
+                    "agency":       agency_name or "",
                     "total_missed": 0,
                     "lines":        [],
                 }

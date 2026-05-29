@@ -83,13 +83,23 @@
       cursor: pointer; font-family: inherit; margin-left: 12px;
     }
     .btn-export:hover { border-color: var(--nord10); color: var(--nord10); }
+    .client-filter {
+      display: flex; align-items: center; gap: 8px; margin-left: 16px;
+    }
+    .client-filter select {
+      background: var(--bg-secondary); border: 1px solid var(--border-color);
+      border-radius: 8px; padding: 5px 10px; color: var(--text-primary);
+      font-size: 0.82rem; font-family: inherit; cursor: pointer;
+    }
+    .client-filter select:focus { outline: none; border-color: var(--nord10); }
+    .contract-group.hidden { display: none; }
 
     .print-header { display: none; }
 
     @page { size: landscape; margin: 14mm; }
 
     @media print {
-      header, .filter-card, .summary-bar, .btn-export { display: none !important; }
+      header, .filter-card, .summary-bar, .btn-export, #exportBtn { display: none !important; }
       body { background: #fff !important; color: #000 !important; }
       main { max-width: 100%; padding: 0; margin: 0; }
       #results { display: block !important; }
@@ -138,10 +148,16 @@
       <input type="text" id="dateTo" class="field-input" placeholder="MM/DD/YYYY" onfocus="this.select()" onblur="formatDate(this)" style="width:120px" />
     </div>
     <button class="btn-load" id="loadBtn">Load</button>
+    <button class="btn-export" id="exportBtn" onclick="exportPDF()" style="display:none">Save as PDF</button>
   </div>
 
   <div class="summary-bar" id="summaryBar">
-    <button class="btn-export" id="exportBtn" onclick="exportPDF()">Save as PDF</button>
+    <span id="summaryText"></span>
+    <div class="client-filter">
+      <select id="clientFilter" onchange="filterByClient()">
+        <option value="">All clients</option>
+      </select>
+    </div>
   </div>
   <div class="print-header" id="printHeader"></div>
   <div id="statusMsg"></div>
@@ -214,17 +230,31 @@ function render(data) {
         return;
     }
 
-    summaryBar.innerHTML = `<strong>${data.total_contracts}</strong> contract(s) · <strong>${data.total_missed}</strong> missed spot(s)`;
-    summaryBar.style.display = 'block';
+    // Populate client filter
+    const clientSel = document.getElementById('clientFilter');
+    clientSel.innerHTML = '<option value="">All clients</option>';
+    const clients = [...new Set(data.contracts.map(c => c.client).filter(Boolean))].sort();
+    clients.forEach(cl => {
+        const opt = document.createElement('option');
+        opt.value = cl; opt.textContent = cl;
+        clientSel.appendChild(opt);
+    });
+
+    document.getElementById('summaryText').innerHTML =
+        `<strong>${data.total_contracts}</strong> contract(s) · <strong>${data.total_missed}</strong> missed spot(s)`;
+    summaryBar.style.display = 'flex';
+    summaryBar.style.alignItems = 'center';
+    document.getElementById('exportBtn').style.display = '';
 
     let html = '';
     for (const c of data.contracts) {
         html += `
-        <div class="contract-group">
+        <div class="contract-group" data-client="${escHtml(c.client)}">
           <div class="contract-header">
             <span class="contract-code">${escHtml(c.code)}</span>
             <span class="contract-desc">${escHtml(c.description || '')}</span>
             ${c.client ? `<span class="contract-client">${escHtml(c.client)}</span>` : ''}
+            ${c.agency ? `<span class="contract-client" style="color:var(--nord9)">${escHtml(c.agency)}</span>` : ''}
             <span class="contract-missed">${c.total_missed} missed</span>
           </div>
           <table>
@@ -260,11 +290,20 @@ function render(data) {
     resultsDiv.style.display = 'block';
 }
 
+function filterByClient() {
+    const val = document.getElementById('clientFilter').value;
+    document.querySelectorAll('.contract-group').forEach(el => {
+        el.classList.toggle('hidden', val !== '' && el.dataset.client !== val);
+    });
+}
+
 function exportPDF() {
     const dateFrom = document.getElementById('dateFrom').value.trim();
     const dateTo   = document.getElementById('dateTo').value.trim();
+    const client   = document.getElementById('clientFilter').value;
+    const clientLabel = client ? ` &nbsp;·&nbsp; ${escHtml(client)}` : '';
     document.getElementById('printHeader').innerHTML =
-        `<h2>Make Goods</h2><p>Date range: ${escHtml(dateFrom)} – ${escHtml(dateTo)} &nbsp;·&nbsp; Crossings TV</p>`;
+        `<h2>Make Goods</h2><p>Date range: ${escHtml(dateFrom)} – ${escHtml(dateTo)}${clientLabel} &nbsp;·&nbsp; Crossings TV</p>`;
     window.print();
 }
 
