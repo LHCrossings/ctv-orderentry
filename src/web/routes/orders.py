@@ -1752,11 +1752,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
                 line_id = tpa["ID_ContrattiRighe"]
 
-                # Remove this specific airing from playout (prevents dead air)
-                cur.execute("UPDATE TPALINSE SET LIVELLO=666 WHERE ID_TPALINSE=%s", (id_tpalinse,))
-
                 # Blacklist entry for make-good tracking — INSERT only, never increment
-                # (incrementing doubles the count if a prior entry already exists)
+                # Etere subtracts TSL.PassageMiss from the placed count in its display.
+                # Setting LIVELLO=666 would double-count (Etere counts both 666 rows AND TSL).
                 cur.execute(
                     "SELECT COUNT(*) AS cnt FROM Traffic_ScheduleList WHERE ID_ContrattiRighe=%s AND BlackList>0",
                     (line_id,)
