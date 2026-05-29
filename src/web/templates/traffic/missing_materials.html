@@ -163,6 +163,19 @@
         .col-time  { width: 90px; white-space: nowrap; color: var(--text-muted); }
         .col-code  { width: 180px; font-family: monospace; font-size: 0.80rem; color: var(--text-muted); }
         .col-name  { }
+        .col-action { width: 120px; text-align: right; }
+
+        .bl-btn {
+            padding: 3px 10px; border-radius: 6px; font-size: 0.74rem; font-weight: 600;
+            font-family: inherit; cursor: pointer; border: 1px solid rgba(191,97,106,0.4);
+            background: rgba(191,97,106,0.08); color: var(--nord11);
+            transition: all 0.15s; white-space: nowrap;
+        }
+        .bl-btn:hover:not(:disabled) { background: rgba(191,97,106,0.18); }
+        .bl-btn:disabled { opacity: 0.55; cursor: default; }
+        .bl-btn.done-pi  { background: rgba(163,190,140,0.15); border-color: rgba(163,190,140,0.5); color: var(--nord14); }
+        .bl-btn.done-psa { background: rgba(235,203,139,0.2);  border-color: rgba(235,203,139,0.5); color: #8a7030; }
+        .bl-btn.done-bl  { background: rgba(76,86,106,0.15);   border-color: var(--border-color);   color: var(--text-muted); }
 
         .empty-state {
             text-align: center;
@@ -332,6 +345,7 @@ function render(rows) {
                             <th class="col-time">Time</th>
                             <th class="col-code">Contract</th>
                             <th>Name</th>
+                            <th class="col-action"></th>
                         </tr>
                     </thead>
                     <tbody>${mkt.rows.map(r => `
@@ -339,6 +353,7 @@ function render(rows) {
                             <td class="col-time">${escHtml(r.time)}</td>
                             <td class="col-code">${escHtml(r.contract_code)}</td>
                             <td>${escHtml(r.contract_name)}</td>
+                            <td class="col-action"><button class="bl-btn" onclick="blacklistSpot(this,${r.id_tpalinse})">⛔ Blacklist</button></td>
                         </tr>`).join('')}
                     </tbody>
                 </table>
@@ -353,6 +368,38 @@ function render(rows) {
 
 function escHtml(s) {
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function blacklistSpot(btn, idTpalinse) {
+    btn.disabled = true;
+    btn.textContent = '…';
+    try {
+        const r = await fetch('/api/traffic/blacklist-spot', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id_tpalinse: idTpalinse}),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || `Error ${r.status}`);
+        const row = btn.closest('tr');
+        if (data.filler_inserted) {
+            const label = data.filler_type === 'PSA' ? 'PSA' : 'PI';
+            btn.textContent = `✓ + ${label}`;
+            btn.className = 'bl-btn done-' + (data.filler_type === 'PSA' ? 'psa' : 'pi');
+        } else if (data.no_filler) {
+            btn.textContent = '✓ Blacklisted';
+            btn.className = 'bl-btn done-bl';
+        } else {
+            btn.textContent = '✓ Blacklisted';
+            btn.className = 'bl-btn done-bl';
+        }
+        row.style.opacity = '0.45';
+    } catch(e) {
+        btn.textContent = '✗ ' + String(e.message).slice(0, 35);
+        btn.style.color = 'var(--nord11)';
+        btn.style.borderColor = 'rgba(191,97,106,0.5)';
+        btn.disabled = false;
+    }
 }
 </script>
 

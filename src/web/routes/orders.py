@@ -1658,7 +1658,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         t.DATA,
                         t.ORA,
                         ct.COD_CONTRATTO,
-                        ct.DESCRIZIONE
+                        ct.DESCRIZIONE,
+                        t.ID_TPALINSE,
+                        t.DURATION
                     FROM tpalinse t
                     JOIN trafficPalinse tp ON tp.id_tpalinse = t.ID_TPALINSE
                     JOIN CONTRATTIRIGHE cr ON tp.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
@@ -1670,17 +1672,19 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     ORDER BY t.DATA, t.COD_USER, t.ORA
                 """, (dt_from, dt_to))
                 rows = []
-                for cod_user, data, ora, code, name in cur.fetchall():
+                for cod_user, data, ora, code, name, id_tpalinse, duration in cur.fetchall():
                     mkt_id  = cod_user or 0
                     market  = _MKT_ORDER.get(mkt_id, str(mkt_id))
                     date_s  = f"{data.month}/{data.day:02d}/{str(data.year)[2:]}" if data else ""
                     rows.append({
-                        "market":        market,
-                        "market_order":  mkt_id,
-                        "date":          date_s,
-                        "time":          _to_ampm(ora),
-                        "contract_code": code or "",
-                        "contract_name": name or "",
+                        "market":          market,
+                        "market_order":    mkt_id,
+                        "date":            date_s,
+                        "time":            _to_ampm(ora),
+                        "contract_code":   code or "",
+                        "contract_name":   name or "",
+                        "id_tpalinse":     id_tpalinse,
+                        "duration_frames": int(duration or 0),
                     })
             return rows
 
@@ -1711,6 +1715,182 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
         count = await asyncio.to_thread(_count)
         return JSONResponse(content={"count": count})
+
+    @router.post("/api/traffic/blacklist-spot")
+    async def blacklist_spot(request: Request):
+        body = await request.json()
+        id_tpalinse = int(body["id_tpalinse"])
+
+        def _run():
+            from datetime import datetime as _dt
+
+            from browser_automation.etere_direct_client import connect as _db_connect
+
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+
+                # Fetch the spot
+                cur.execute("""
+                    SELECT DATA, COD_USER, ORA, ORA_P, DATA_P, XORDER, ORDINALE, DURATION, LIVELLO
+                    FROM TPALINSE WHERE ID_TPALINSE = %s
+                """, (id_tpalinse,))
+                spot = cur.fetchone()
+                if not spot:
+                    raise ValueError(f"Spot {id_tpalinse} not found")
+                if spot["LIVELLO"] != 0:
+                    raise ValueError(f"Spot {id_tpalinse} is not active (LIVELLO={spot['LIVELLO']})")
+
+                # Fetch trafficPalinse for break context
+                cur.execute("""
+                    SELECT id_palinsesto, id_fascia, clusterIndex, offset, Date, Cod_User, ID_ContrattiRighe
+                    FROM trafficPalinse WHERE id_tpalinse = %s
+                """, (id_tpalinse,))
+                tpa = cur.fetchone()
+                if not tpa:
+                    raise ValueError("No trafficPalinse record found")
+
+                line_id = tpa["ID_ContrattiRighe"]
+
+                # Remove from playout (prevents dead air)
+                cur.execute("UPDATE TPALINSE SET LIVELLO=666 WHERE ID_TPALINSE=%s", (id_tpalinse,))
+
+                # Blacklist entry for make-good tracking
+                cur.execute(
+                    "SELECT COUNT(*) AS cnt FROM Traffic_ScheduleList WHERE ID_ContrattiRighe=%s AND BlackList>0",
+                    (line_id,)
+                )
+                if cur.fetchone()["cnt"] > 0:
+                    cur.execute(
+                        "UPDATE Traffic_ScheduleList SET BlackList=BlackList+1, PassageMiss=PassageMiss+1 WHERE ID_ContrattiRighe=%s AND BlackList>0",
+                        (line_id,)
+                    )
+                else:
+                    cur.execute(
+                        "INSERT INTO Traffic_ScheduleList (ID_ContrattiRighe, BlackList, PassageMiss) VALUES (%s, 1, 1)",
+                        (line_id,)
+                    )
+
+                # Find filler: PI first, PSA fallback
+                dur = spot["DURATION"]
+                filler = None
+                filler_type = None
+                for pattern, label in [("PI-%%", "PI"), ("PSA-%%", "PSA")]:
+                    cur.execute("""
+                        SELECT TOP 1 ID_FILMATI, COD_PROGRA, DESCRIZIO, DURATA, NEWTYPE
+                        FROM FILMATI
+                        WHERE DESCRIZIO LIKE %s
+                          AND DESCRIZIO NOT LIKE 'DO NOT%%'
+                          AND (DATA_SCAD IS NULL OR DATA_SCAD > GETDATE())
+                          AND ABS(DURATA - %s) <= 5
+                        ORDER BY NEWID()
+                    """, (pattern, dur))
+                    filler = cur.fetchone()
+                    if filler:
+                        filler_type = label
+                        break
+
+                new_filler_id = None
+                if filler:
+                    supporto = ("0ETX      " + filler["DESCRIZIO"])[:30]
+                    newtype  = filler["NEWTYPE"] or "PER"
+                    cur.execute("""
+                        INSERT INTO TPALINSE (
+                            DATA, COD_USER, LIVELLO, SPLIT, XORDER, ORA,
+                            ID_FILMATI, COD_PROGRA, NEWTYPE, TITLE, PART, EVENT_TYPE,
+                            DURATION, TIMECODE_I, TIMECODE_O, TRANS, TRANS_DUR,
+                            GPI, GPI2, GPID1, GPID2, TITLER, TITLER_IN, TITLER_DUR,
+                            CRAWL_DESC, CRAWL_VOL, CRAWL_IN, CRAWL_SPEE, RECORDABLE,
+                            DSK1, DSK1_IN, DSK1_DUR, DSK2, DSK2_IN, DSK2_DUR,
+                            DSK3, DSK3_IN, DSK3_DUR,
+                            OUTPUT_M, ASPECT, SUBTITLE, NOTE, TIPO_TC,
+                            RIMAND, RIMAND_IN, RIMAND_VOL,
+                            DATA_PREV, ORA_PREV, STATUS, STATUS_RC, STATUS_MM, STATUS_CA,
+                            SUPPORTO, SUPPORTORC, SUPPORTOB, COSTO, DSKA, DSKB, DSKC,
+                            TVGUIDE, PROVENIENZA, ORDINALE,
+                            ID_FATTURAEMITTENTE, ID_FATTURAAGENZIA, EXTERNALID, EXTERSTRID,
+                            CRYPTATO, ID_SUPPORT, VISIONATO, ID_DOCUMENT, TRAFFICID,
+                            TYPE, ERRORCODE, CODE_PRIMECAST, COLOR, AUDIO, AUDIO_TY,
+                            VOICEOVR_A, VOICEOVR_B, VOICEOVR_C, VOICEOVR_D,
+                            MEDIA_TY, MEDIA_ID, ORA_P, DATA_P, EVENT, EVENT_P,
+                            DURATION_P, FADEIN, FADEOUT, INTRO, OUTRO, ICON
+                        )
+                        OUTPUT INSERTED.ID_TPALINSE
+                        VALUES (
+                            %s, %s, 0, 0, %s, %s,
+                            %s, %s, %s, %s, 0, 'T',
+                            %s, 0, %s, 'CT', 0,
+                            '000000000', '000000000', 0, 0, 0, 0, 0,
+                            '', 0, 0, 0, '',
+                            'NN', 0, 0, 'NN', 0, 0,
+                            'NN', 0, 0,
+                            '', 'H', '', '', 'C',
+                            0, 0, 0,
+                            %s, %s, 'I', '', '', '',
+                            %s, '', '', 0.00,
+                            'NA  0000000000000000', 'NA  0000000000000000', 'NA  0000000000000000',
+                            'NN000', 'TRAFFIC_NEW', %s,
+                            0, 0, 0, '', '', 0, 'X', 0, 0,
+                            'T', 0, '1', 'FF000005', '1234', 'M',
+                            0, 0, 0, 0,
+                            '', '', %s, %s, 0, 0,
+                            %s, 0, 0, 0, 0, ''
+                        )
+                    """, (
+                        spot["DATA"], spot["COD_USER"], spot["XORDER"], spot["ORA"],
+                        filler["ID_FILMATI"], filler["COD_PROGRA"], newtype, filler["DESCRIZIO"],
+                        filler["DURATA"], filler["DURATA"] - 1,
+                        spot["DATA"], spot["ORA"],
+                        supporto,
+                        spot["ORDINALE"],
+                        spot["ORA_P"], spot["DATA_P"],
+                        filler["DURATA"],
+                    ))
+                    row = cur.fetchone()
+                    new_filler_id = row["ID_TPALINSE"] if row else None
+
+                    if new_filler_id:
+                        cur.execute("""
+                            UPDATE TPALINSE SET
+                                EVENT    = 100000000000 + %s,
+                                EVENT_P  = 100000000000 + %s,
+                                TRAFFICID = %s
+                            WHERE ID_TPALINSE = %s
+                        """, (new_filler_id, new_filler_id, new_filler_id, new_filler_id))
+
+                        cur.execute("""
+                            INSERT INTO trafficPalinse (
+                                id_tpalinse, id_palinsesto, id_fascia, clusterIndex, offset,
+                                tag, scadenza, data_ins, ID_Operation, ID_ContrattiRighe,
+                                Date, Cod_User, ID_FATTURAEMITTENTE, ID_FATTURAAGENZIA,
+                                TrafficFlag, TrafficNotes, ID_FATTURAEMITTENTELOGO,
+                                ID_TRAFFICTRASH, SCHEDULEDMODE, EVENTTYPE,
+                                ID_CPEMITTENTE, ID_CPAGENZIA, ID_CPEMITTENTELOGO
+                            ) VALUES (
+                                %s, %s, %s, %s, %s,
+                                0, '1900-01-01', %s, 0, -1,
+                                %s, %s, 0, 0,
+                                0, '', 0, 0, 0, 1,
+                                0, 0, 0
+                            )
+                        """, (
+                            new_filler_id, tpa["id_palinsesto"], tpa["id_fascia"],
+                            tpa["clusterIndex"], tpa["offset"],
+                            _dt.now(), tpa["Date"], tpa["Cod_User"],
+                        ))
+
+            return {
+                "blacklisted":    True,
+                "filler_type":    filler_type,
+                "filler_name":    filler["DESCRIZIO"] if filler else None,
+                "filler_inserted": new_filler_id is not None,
+                "no_filler":      filler is None,
+            }
+
+        try:
+            result = await asyncio.to_thread(_run)
+            return JSONResponse(result)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
 
     @router.get("/api/traffic/no-material")
     async def get_no_material(
