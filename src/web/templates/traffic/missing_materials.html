@@ -353,7 +353,9 @@ function render(rows) {
                             <td class="col-time">${escHtml(r.time)}</td>
                             <td class="col-code">${escHtml(r.contract_code)}</td>
                             <td>${escHtml(r.contract_name)}</td>
-                            <td class="col-action"><button class="bl-btn" onclick="blacklistSpot(this,${r.id_tpalinse})">⛔ Blacklist</button></td>
+                            <td class="col-action" style="white-space:nowrap">
+                                <button class="bl-btn" onclick="blacklistSpot(this,${r.id_tpalinse},false)" style="margin-right:4px">⛔ BL</button><button class="bl-btn" onclick="blacklistSpot(this,${r.id_tpalinse},true)">⛔ BL + Fill</button>
+                            </td>
                         </tr>`).join('')}
                     </tbody>
                 </table>
@@ -370,14 +372,15 @@ function escHtml(s) {
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-async function blacklistSpot(btn, idTpalinse) {
-    btn.disabled = true;
+async function blacklistSpot(btn, idTpalinse, replace) {
+    // Disable both buttons in this row's action cell
+    btn.closest('td').querySelectorAll('.bl-btn').forEach(b => b.disabled = true);
     btn.textContent = '…';
     try {
         const r = await fetch('/api/traffic/blacklist-spot', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({id_tpalinse: idTpalinse}),
+            body: JSON.stringify({id_tpalinse: idTpalinse, replace: replace}),
         });
         const data = await r.json();
         if (!r.ok) throw new Error(data.detail || `Error ${r.status}`);
@@ -398,7 +401,7 @@ async function blacklistSpot(btn, idTpalinse) {
         btn.textContent = '✗ ' + String(e.message).slice(0, 35);
         btn.style.color = 'var(--nord11)';
         btn.style.borderColor = 'rgba(191,97,106,0.5)';
-        btn.disabled = false;
+        btn.closest('td').querySelectorAll('.bl-btn').forEach(b => b.disabled = false);
     }
 }
 </script>

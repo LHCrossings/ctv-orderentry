@@ -1720,6 +1720,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def blacklist_spot(request: Request):
         body = await request.json()
         id_tpalinse = int(body["id_tpalinse"])
+        replace = bool(body.get("replace", True))
 
         def _run():
             from datetime import datetime as _dt
@@ -1770,11 +1771,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         (line_id,)
                     )
 
-                # Find filler: PI first, PSA fallback
+                # Find filler: PI first, PSA fallback (only if replace requested)
                 dur = spot["DURATION"]
                 filler = None
                 filler_type = None
-                for pattern, label in [("PI-%%", "PI"), ("PSA-%%", "PSA")]:
+                for pattern, label in ([("PI-%%", "PI"), ("PSA-%%", "PSA")] if replace else []):
                     cur.execute("""
                         SELECT TOP 1 ID_FILMATI, COD_PROGRA, DESCRIZIO, DURATA, NEWTYPE
                         FROM FILMATI
