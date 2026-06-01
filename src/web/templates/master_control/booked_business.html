@@ -403,7 +403,7 @@
             document.getElementById('month-label').textContent = lastData.month_label;
             document.getElementById('bounds-label').textContent =
                 `Broadcast: ${lastData.bcast_bounds}  ·  Calendar: ${lastData.cal_bounds}`;
-            buildMarketPills(lastData.all_markets || []);
+            buildMarketPills(['NYC','CMP','HOU','SFO','SEA','LAX','CVC','WDC','MMT','DAL']);
             render(lastData);
             loadUnsetContracts();
         } catch (e) {
