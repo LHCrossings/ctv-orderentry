@@ -6323,6 +6323,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         ct.ID_CONTRATTITESTATA             AS id,
                         ct.CENTROMEDIA, ct.P_AGENZIA, ct.COD_CONTRATTO,
                         ct.CAMBIOMERCE, ct.ID_PAGAMENTI,
+                        t.COD_USER                         AS cod_user,
                         LTRIM(RTRIM(
                             CASE WHEN ae.Nome IS NOT NULL AND ae.Nome != ''
                                  THEN ae.Nome + ' ' + ae.RAG_SOCIAL
@@ -6354,7 +6355,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                       AND t.DATA <= CASE WHEN ct.CENTROMEDIA = 316 THEN %s ELSE %s END
                     GROUP BY
                         ct.ID_CONTRATTITESTATA, ct.CENTROMEDIA, ct.P_AGENZIA, ct.COD_CONTRATTO,
-                        ct.CAMBIOMERCE, ct.ID_PAGAMENTI,
+                        ct.CAMBIOMERCE, ct.ID_PAGAMENTI, t.COD_USER,
                         ae.Nome, ae.RAG_SOCIAL, ag.RAG_SOCIAL, cl.RAG_SOCIAL
                 """, (str(bcast_start), str(cal_start), str(bcast_end), str(month_end)))
                 rows = cur.fetchall()
@@ -6362,11 +6363,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             def _is_trade(r):
                 return r["CAMBIOMERCE"] or r["ID_PAGAMENTI"] == 4
 
+            _MKT_CODE = {1:"NYC",2:"CMP",3:"HOU",4:"SFO",5:"SEA",6:"LAX",7:"CVC",8:"WDC",9:"MMT",10:"DAL"}
+            _MKT_ORDER = ["NYC","CMP","HOU","SFO","SEA","LAX","CVC","WDC","MMT","DAL"]
+
             clients: dict = defaultdict(
-                lambda: {"gross": 0.0, "net": 0.0, "centromedia": None, "unset": False}
+                lambda: {"gross": 0.0, "net": 0.0, "centromedia": None, "unset": False, "markets": set()}
             )
             trade_clients: dict = defaultdict(
-                lambda: {"gross": 0.0, "net": 0.0}
+                lambda: {"gross": 0.0, "net": 0.0, "markets": set()}
             )
 
             wl_fee_by_ae: dict = defaultdict(float)
@@ -6384,10 +6388,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 else:
                     cli = client or agency or r["COD_CONTRATTO"] or "Unknown"
 
+                mkt = _MKT_CODE.get(r.get("cod_user") or 0, "")
+
                 if show_trade and _is_trade(r):
                     key = (ae, cli)
                     trade_clients[key]["gross"] += gross
                     trade_clients[key]["net"]   += net
+                    if mkt:
+                        trade_clients[key]["markets"].add(mkt)
                 else:
                     key = (ae, cli)
                     clients[key]["gross"] += gross
@@ -6396,6 +6404,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         clients[key]["centromedia"] = cm
                     if cm == 0:
                         clients[key]["unset"] = True
+                    if mkt:
+                        clients[key]["markets"].add(mkt)
                     if agency == "Worldlink":
                         # Round fee per contract (matches spreadsheet per-contract rounding)
                         wl_fee_by_ae[ae] += round(-0.10 * net, 2)
@@ -6412,9 +6422,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 ae_map: dict = defaultdict(list)
                 for (ae, cli), data in client_map.items():
                     row = {
-                        "client": cli,
-                        "gross":  round(data["gross"], 2),
-                        "net":    round(data["net"],   2),
+                        "client":  cli,
+                        "gross":   round(data["gross"], 2),
+                        "net":     round(data["net"],   2),
+                        "markets": sorted(data.get("markets", set()),
+                                          key=lambda m: _MKT_ORDER.index(m) if m in _MKT_ORDER else 99),
                     }
                     if include_billing:
                         cm = data.get("centromedia") or 0
@@ -6441,6 +6453,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             grand_gross = round(sum(g["gross"] for g in ae_groups), 2)
             grand_net   = round(sum(g["net"]   for g in ae_groups), 2)
 
+            all_markets = sorted(
+                {m for g in ae_groups for c in g["clients"] for m in c["markets"]},
+                key=lambda m: _MKT_ORDER.index(m) if m in _MKT_ORDER else 99,
+            )
+
             def _md(d):
                 return f"{d.strftime('%b')} {d.day}"
 
@@ -6458,6 +6475,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 "trade_groups":  trade_groups,
                 "trade_gross":   round(sum(g["gross"] for g in trade_groups), 2),
                 "trade_net":     round(sum(g["net"]   for g in trade_groups), 2),
+                "all_markets":   all_markets,
             }
 
         try:

@@ -229,6 +229,24 @@
         }
         .unset-result.ok  { color: var(--nord14); }
         .unset-result.err { color: var(--nord11); }
+        .mkt-pill {
+            padding: 0.25rem 0.65rem;
+            border-radius: 5px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            font-size: 0.72rem;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: inherit;
+            letter-spacing: 0.04em;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+        }
+        .mkt-pill.active {
+            background: var(--nord10);
+            border-color: var(--nord10);
+            color: #fff;
+        }
     </style>
 </head>
 <body>
@@ -267,6 +285,7 @@
                     <input type="checkbox" id="show-trade" onchange="load()" />
                     Show Trade?
                 </label>
+                <div id="market-pills" style="display:flex;gap:0.3rem;flex-wrap:wrap;"></div>
                 <a href="/master-control/billing-type-fix"
                    style="font-size:0.8rem;color:var(--nord13);text-decoration:none;white-space:nowrap;"
                    title="Fix clients with unset billing type">🏷️ Fix Billing Types</a>
@@ -306,6 +325,7 @@
     let currentYear, currentMonth;
     let activeTab = 'net';
     let lastData = null;
+    let selectedMarkets = new Set();
 
     function init() {
         const now = new Date();
@@ -344,6 +364,33 @@
             .replace(/>/g, '&gt;');
     }
 
+    function buildMarketPills(markets) {
+        const container = document.getElementById('market-pills');
+        // Initialise selectedMarkets to all on first load; preserve selection on month nav
+        const isFirstLoad = selectedMarkets.size === 0;
+        if (isFirstLoad) markets.forEach(m => selectedMarkets.add(m));
+        // Remove pills for markets no longer present; add new ones
+        const existing = new Set([...container.querySelectorAll('.mkt-pill')].map(p => p.dataset.mkt));
+        markets.forEach(m => {
+            if (!existing.has(m)) {
+                const btn = document.createElement('button');
+                btn.className = 'mkt-pill' + (selectedMarkets.has(m) ? ' active' : '');
+                btn.dataset.mkt = m;
+                btn.textContent = m;
+                btn.onclick = () => {
+                    selectedMarkets.has(m) ? selectedMarkets.delete(m) : selectedMarkets.add(m);
+                    btn.classList.toggle('active', selectedMarkets.has(m));
+                    if (lastData) render(lastData);
+                };
+                container.appendChild(btn);
+            }
+        });
+        // Re-sync active state for existing pills
+        container.querySelectorAll('.mkt-pill').forEach(p => {
+            p.classList.toggle('active', selectedMarkets.has(p.dataset.mkt));
+        });
+    }
+
     async function load() {
         document.getElementById('report-area').innerHTML = '<div class="loading-msg">Loading…</div>';
         document.getElementById('month-label').textContent = '—';
@@ -356,6 +403,7 @@
             document.getElementById('month-label').textContent = lastData.month_label;
             document.getElementById('bounds-label').textContent =
                 `Broadcast: ${lastData.bcast_bounds}  ·  Calendar: ${lastData.cal_bounds}`;
+            buildMarketPills(lastData.all_markets || []);
             render(lastData);
             loadUnsetContracts();
         } catch (e) {
@@ -372,6 +420,11 @@
             return;
         }
 
+        // Filter clients by selected markets (show client if any of its markets are selected)
+        const filterClients = clients => selectedMarkets.size === 0
+            ? clients
+            : clients.filter(c => !c.markets || c.markets.length === 0 || c.markets.some(m => selectedMarkets.has(m)));
+
         let html = `<table class="bb-table">
             <thead>
                 <tr>
@@ -382,12 +435,17 @@
             </thead>
             <tbody>`;
 
+        let grandTotal = 0;
         for (const ae of data.ae_groups) {
+            const visibleClients = filterClients(ae.clients);
+            if (!visibleClients.length) continue;
+            const aeTotal = visibleClients.reduce((s, c) => s + c[col], 0);
+            grandTotal += aeTotal;
             html += `<tr class="ae-heading">
                 <td colspan="2">${ae.ae}</td>
-                <td class="num">${fmt(ae[col])}</td>
+                <td class="num">${fmt(aeTotal)}</td>
             </tr>`;
-            for (const c of ae.clients) {
+            for (const c of visibleClients) {
                 const badge = c.billing === 'Broadcast'
                     ? `<span class="billing-badge badge-broadcast">Broadcast</span>`
                     : c.billing === 'Calendar'
@@ -403,14 +461,14 @@
             html += `<tr class="ae-subtotal">
                 <td>&nbsp;&nbsp;&nbsp;${ae.ae} Total</td>
                 <td></td>
-                <td class="num">${fmt(ae[col])}</td>
+                <td class="num">${fmt(aeTotal)}</td>
             </tr>`;
         }
 
         html += `<tr class="grand-total">
             <td>Grand Total</td>
             <td></td>
-            <td class="num">${fmt(data['grand_' + col])}</td>
+            <td class="num">${fmt(grandTotal)}</td>
         </tr>`;
 
         if (data.trade_groups && data.trade_groups.length > 0) {
