@@ -1598,28 +1598,37 @@
         const rows = results.map(r => {
             if (r.error) return `<tr><td>${esc(r.filename)}</td><td colspan="4" style="color:var(--nord11);">${esc(r.error)}</td></tr>`;
 
+            // ISCI column: compact — code + dialect tag only
             const spotsCell = r.spots.map(s => {
                 const icon = s.found ? '✓' : '✗';
                 const col  = s.found ? 'var(--nord14)' : 'var(--nord11)';
-                return `<span style="color:${col};">${icon} ${esc(s.isci)}</span> <span style="color:var(--text-muted);font-size:0.78rem;">${esc(s.dialect)}</span> ${esc(s.title)} <span style="color:var(--text-muted);">${s.rotation_pct}%</span>`;
+                return `<span style="color:${col};">${icon} ${esc(s.isci)}</span> <span style="color:var(--text-muted);font-size:0.78rem;">(${esc(s.dialect)})</span>`;
             }).join('<br>');
 
+            // Contracts column: one line per contract with summary counts; flag unmatched lines
             const contractsCell = r.contracts.length
                 ? r.contracts.map(ct => {
-                    const matchedLines = ct.lines.filter(l => l.matched_filmati_id);
-                    const unmatchedLines = ct.lines.filter(l => !l.matched_filmati_id);
-                    const linesSummary = ct.lines.map(l => {
-                        const icon = l.matched_filmati_id ? '✓' : '?';
-                        const col  = l.matched_filmati_id ? 'var(--nord14)' : 'var(--nord13)';
-                        const dialect = l.matched_dialect ? ` → ${l.matched_dialect}` : ' → unmatched';
-                        return `<span style="color:${col};font-size:0.78rem;">${icon} ${esc(l.description)}${dialect} (${l.spot_count} spots)</span>`;
-                    }).join('<br>');
-                    return `<strong style="color:var(--nord14);">${esc(ct.code)}</strong><br>${linesSummary}`;
-                }).join('<hr style="border:none;border-top:1px solid var(--border-color);margin:4px 0;">')
+                    const withSpots  = ct.lines.filter(l => l.spot_count > 0);
+                    const matched    = withSpots.filter(l => l.matched_filmati_id);
+                    const unmatched  = withSpots.filter(l => !l.matched_filmati_id);
+                    const totalSpots = withSpots.reduce((a, l) => a + l.spot_count, 0);
+                    const allOk      = unmatched.length === 0 && matched.length > 0;
+                    const codeCol    = allOk ? 'var(--nord14)' : 'var(--nord13)';
+                    let summary      = `${matched.length} line${matched.length !== 1 ? 's' : ''}, ${totalSpots} spot${totalSpots !== 1 ? 's' : ''}`;
+                    if (unmatched.length) {
+                        const unmatchedList = unmatched.map(l =>
+                            `<span style="color:var(--nord13);font-size:0.76rem;">? ${esc(l.description)}</span>`
+                        ).join('<br>');
+                        summary += `<br>${unmatchedList}`;
+                    }
+                    return `<span style="color:${codeCol};font-weight:600;">${esc(ct.code)}</span>
+                            <span style="font-size:0.78rem;color:var(--text-muted);">#${ct.id} · ${ct.date_start}–${ct.date_end}</span><br>
+                            <span style="font-size:0.78rem;">${summary}</span>`;
+                }).join('<br style="margin:4px 0;">')
                 : `<span style="color:var(--nord11);">No contracts found for estimate ${esc(r.estimate)}</span>`;
 
             const periodCell = r.date_from_sql
-                ? `<span style="font-family:monospace;">${esc(r.date_from_sql)}</span> –<br><span style="font-family:monospace;">${esc(r.date_to_sql)}</span>`
+                ? `<span style="font-family:monospace;">${esc(r.date_from_sql)}</span> – <span style="font-family:monospace;">${esc(r.date_to_sql)}</span>`
                 : `<span style="color:var(--text-muted);">—</span>`;
 
             return `<tr>
