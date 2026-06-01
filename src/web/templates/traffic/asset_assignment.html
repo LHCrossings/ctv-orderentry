@@ -650,6 +650,7 @@
 
         <div id="admerasiaGrid" style="display:none; margin-top:14px;"></div>
         <div id="daviselenGrid" style="display:none; margin-top:14px;"></div>
+        <div id="hlGrid"        style="display:none; margin-top:14px;"></div>
         <div id="tatariGrid" style="display:none; margin-top:14px;"></div>
 
         <div id="contractBanner" class="contract-banner">
@@ -1428,6 +1429,7 @@
             const daviselen = items.filter(i => i.format === 'daviselen');
             const lexus     = items.filter(i => i.format === 'lexus');
             const tatari    = items.filter(i => i.format === 'tatari' || i.format === 'directdonor' || i.format === 'ma' || i.format === 'imd');
+            const hl        = items.filter(i => i.format === 'hl');
             const unknown   = items.filter(i => i.format === 'unknown' || i.error);
 
             if (unknown.length) {
@@ -1438,6 +1440,10 @@
             if (daviselen.length) {
                 window.daviselenResults = daviselen;
                 renderDaviselenGrid(daviselen);
+            }
+            if (hl.length) {
+                window.hlResults = hl;
+                renderHLGrid(hl);
             }
             if (lexus.length) {
                 window.lexusResults = lexus;
@@ -1580,6 +1586,129 @@
         } catch (e) {
             toast.style.color  = 'var(--nord11)';
             toast.textContent  = `Error: ${e.message}`;
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = 'Assign All';
+        }
+    }
+
+    function renderHLGrid(results) {
+        const grid = document.getElementById('hlGrid');
+        const allReady = results.every(r =>
+            !r.error && r.contracts.length && r.spots.every(s => s.found)
+        );
+
+        const rows = results.map(r => {
+            if (r.error) return `<tr><td>${esc(r.filename)}</td><td colspan="4" style="color:var(--nord11);">${esc(r.error)}</td></tr>`;
+
+            const spotsCell = r.spots.map(s => {
+                const icon = s.found ? '✓' : '✗';
+                const col  = s.found ? 'var(--nord14)' : 'var(--nord11)';
+                return `<span style="color:${col};">${icon} ${esc(s.isci)}</span> <span style="color:var(--text-muted);font-size:0.78rem;">${esc(s.dialect)}</span> ${esc(s.title)} <span style="color:var(--text-muted);">${s.rotation_pct}%</span>`;
+            }).join('<br>');
+
+            const contractsCell = r.contracts.length
+                ? r.contracts.map(ct => {
+                    const matchedLines = ct.lines.filter(l => l.matched_filmati_id);
+                    const unmatchedLines = ct.lines.filter(l => !l.matched_filmati_id);
+                    const linesSummary = ct.lines.map(l => {
+                        const icon = l.matched_filmati_id ? '✓' : '?';
+                        const col  = l.matched_filmati_id ? 'var(--nord14)' : 'var(--nord13)';
+                        const dialect = l.matched_dialect ? ` → ${l.matched_dialect}` : ' → unmatched';
+                        return `<span style="color:${col};font-size:0.78rem;">${icon} ${esc(l.description)}${dialect} (${l.spot_count} spots)</span>`;
+                    }).join('<br>');
+                    return `<strong style="color:var(--nord14);">${esc(ct.code)}</strong><br>${linesSummary}`;
+                }).join('<hr style="border:none;border-top:1px solid var(--border-color);margin:4px 0;">')
+                : `<span style="color:var(--nord11);">No contracts found for estimate ${esc(r.estimate)}</span>`;
+
+            const periodCell = r.date_from_sql
+                ? `<span style="font-family:monospace;">${esc(r.date_from_sql)}</span> –<br><span style="font-family:monospace;">${esc(r.date_to_sql)}</span>`
+                : `<span style="color:var(--text-muted);">—</span>`;
+
+            return `<tr>
+                <td style="font-size:0.8rem;color:var(--text-muted);">${esc(r.filename)}</td>
+                <td><strong>${esc(r.estimate)}</strong><br><span style="font-size:0.78rem;color:var(--text-muted);">${esc(r.advertiser)}</span></td>
+                <td>${periodCell}</td>
+                <td>${spotsCell}</td>
+                <td>${contractsCell}</td>
+            </tr>`;
+        }).join('');
+
+        grid.innerHTML = `
+            <div class="tool-card" style="margin-bottom:0;">
+                <h2>H&amp;L Traffic Instructions</h2>
+                <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+                    <thead>
+                        <tr style="text-align:left;border-bottom:1px solid var(--border-color);">
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">File</th>
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Estimate</th>
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Instruction Period</th>
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">ISCI / Dialect</th>
+                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Contracts &amp; Lines</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+                <div style="margin-top:14px;display:flex;align-items:center;gap:12px;">
+                    <button class="run-btn apply" onclick="applyHLTraffic()"
+                            ${allReady ? '' : 'disabled title="Resolve all contracts and ISCI codes first"'}>
+                        Assign All
+                    </button>
+                    <span id="hlToast" style="font-size:0.85rem;"></span>
+                </div>
+            </div>`;
+        grid.style.display = 'block';
+    }
+
+    async function applyHLTraffic() {
+        const results = window.hlResults || [];
+        const toast   = document.getElementById('hlToast');
+        const btn     = document.getElementById('hlGrid').querySelector('.run-btn.apply');
+        btn.disabled    = true;
+        btn.textContent = 'Assigning…';
+        toast.textContent = '';
+        toast.style.color = '';
+
+        let totalLines = 0, totalSpots = 0, errors = [];
+
+        try {
+            for (const r of results) {
+                for (const contract of r.contracts) {
+                    const assignments = contract.lines
+                        .filter(l => l.matched_filmati_id)
+                        .map(l => ({ line_id: l.line_id, filmati_ids: [l.matched_filmati_id] }));
+                    if (!assignments.length) continue;
+
+                    const payload = { assignments };
+                    if (r.date_from_sql) payload.date_from = r.date_from_sql;
+                    if (r.date_to_sql)   payload.date_to   = r.date_to_sql;
+
+                    const resp = await fetch(`/api/traffic/contract/${contract.id}/auto-assign`, {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify(payload),
+                    });
+                    if (!resp.ok) {
+                        const detail = (await resp.json()).detail || 'Unknown error';
+                        errors.push(`${contract.code}: ${detail}`);
+                        continue;
+                    }
+                    const data = await resp.json();
+                    totalLines += data.lines_updated || 0;
+                    totalSpots += data.spots_updated || 0;
+                }
+            }
+
+            if (errors.length) {
+                toast.style.color = 'var(--nord11)';
+                toast.textContent = errors.join(' | ');
+            } else {
+                toast.style.color = 'var(--nord14)';
+                toast.textContent = `Done — ${totalLines} line${totalLines!==1?'s':''}, ${totalSpots} spot${totalSpots!==1?'s':''} assigned.`;
+            }
+        } catch (e) {
+            toast.style.color = 'var(--nord11)';
+            toast.textContent = `Error: ${e.message}`;
         } finally {
             btn.disabled    = false;
             btn.textContent = 'Assign All';

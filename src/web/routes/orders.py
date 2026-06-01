@@ -106,6 +106,18 @@ _CTV_LANG_WINDOWS: dict = {
 _CTV_LANG_WINDOWS["Chinese"]    = _CTV_LANG_WINDOWS["Mandarin"] + _CTV_LANG_WINDOWS["Cantonese"]
 _CTV_LANG_WINDOWS["SouthAsian"] = _CTV_LANG_WINDOWS["Hindi"]    + _CTV_LANG_WINDOWS["Punjabi"]
 
+# Keywords used to match HL contract line descriptions to a system dialect
+_HL_LINE_KEYWORDS: dict = {
+    "Cantonese":  ["cantonese", "jade"],
+    "Mandarin":   ["mandarin"],
+    "SouthAsian": ["hindi", "punjabi", "south asian"],
+    "Filipino":   ["filipino", "tagalog", "pilipino"],
+    "Korean":     ["korean"],
+    "Vietnamese": ["vietnamese"],
+    "Hmong":      ["hmong"],
+    "Japanese":   ["japanese"],
+}
+
 # The Asian Channel (DAL) — broadcast day runs 0600–0559 (wraps past midnight)
 _DAL_LANG_WINDOWS: dict = {
     "Mandarin": [
@@ -4682,6 +4694,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 return "ma"
             if "icon media direct" in text.lower():
                 return "imd"
+            if "hl.agency" in text.lower() or ("ESTIMATE NUMBER:" in upper and "ISCI/Ad-ID" in text):
+                return "hl"
             return "unknown"
 
         def _run():
@@ -5201,6 +5215,118 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             "spots":               spots_out,
                             "duration_groups":     duration_groups,
                             "contract_candidates": contracts,
+                        })
+
+                    elif fmt == "hl":
+                        from browser_automation.parsers.hl_traffic_parser import (
+                            parse_hl_traffic_pdf,
+                        )
+                        instr = parse_hl_traffic_pdf(pdf_bytes)
+
+                        # ISCI → filmati lookup
+                        isci_codes   = [s.isci for s in instr.spots]
+                        placeholders = ",".join(f"'{c}'" for c in isci_codes) if isci_codes else "''"
+                        cur.execute(
+                            f"SELECT ID_FILMATI, COD_PROGRA, DESCRIZIO FROM FILMATI"
+                            f" WHERE COD_PROGRA IN ({placeholders})"
+                        )
+                        filmati_map = {
+                            r["COD_PROGRA"]: {"filmati_id": r["ID_FILMATI"],
+                                              "db_title":   r["DESCRIZIO"] or ""}
+                            for r in cur.fetchall()
+                        }
+
+                        spots_out, not_found = [], []
+                        dialect_to_filmati: dict = {}  # system_dialect → filmati_id
+                        for s in instr.spots:
+                            found = s.isci in filmati_map
+                            fid   = filmati_map[s.isci]["filmati_id"] if found else None
+                            if found:
+                                dialect_to_filmati[s.system_dialect] = fid
+                            spots_out.append({
+                                "isci":           s.isci,
+                                "title":          s.title or (filmati_map[s.isci]["db_title"] if found else ""),
+                                "dialect":        s.dialect,
+                                "system_dialect": s.system_dialect,
+                                "rotation_pct":   s.rotation_pct,
+                                "filmati_id":     fid,
+                                "found":          found,
+                            })
+                            if not found:
+                                not_found.append(s.isci)
+
+                        # Find ALL contracts matching the estimate number
+                        term = f"%{instr.estimate}%"
+                        cur.execute("""
+                            SELECT ct.ID_CONTRATTITESTATA AS id,
+                                   ct.COD_CONTRATTO       AS code,
+                                   ct.DESCRIZIONE         AS description,
+                                   CONVERT(VARCHAR(10), ct.DATA_INIZIO,  101) AS date_start,
+                                   CONVERT(VARCHAR(10), ct.DATA_TERMINE, 101) AS date_end
+                            FROM CONTRATTITESTATA ct
+                            WHERE UPPER(ct.COD_CONTRATTO) LIKE %s
+                               OR UPPER(ct.DESCRIZIONE)   LIKE %s
+                            ORDER BY ct.DATA_INIZIO DESC
+                        """, (term, term))
+                        contracts_raw = [dict(r) for r in cur.fetchall()]
+
+                        # For each contract, get matching-duration lines and detect dialect
+                        contracts_out = []
+                        for ct in contracts_raw:
+                            date_filter = ""
+                            if instr.date_from_sql:
+                                date_filter += f" AND tp.DATA >= '{instr.date_from_sql}'"
+                            if instr.date_to_sql:
+                                date_filter += f" AND tp.DATA <= '{instr.date_to_sql}'"
+                            cur.execute(f"""
+                                SELECT cr.ID_CONTRATTIRIGHE AS line_id,
+                                       cr.DESCRIZIONE       AS description,
+                                       ISNULL(sc.spot_count, 0) AS spot_count
+                                FROM CONTRATTIRIGHE cr
+                                LEFT JOIN (
+                                    SELECT tpa.id_contrattirighe, COUNT(*) AS spot_count
+                                    FROM trafficPalinse tpa
+                                    JOIN TPALINSE tp ON tp.ID_TPALINSE = tpa.id_tpalinse
+                                    WHERE 1=1 {date_filter}
+                                    GROUP BY tpa.id_contrattirighe
+                                ) sc ON sc.id_contrattirighe = cr.ID_CONTRATTIRIGHE
+                                WHERE cr.ID_CONTRATTITESTATA = {ct['id']}
+                                  AND CAST(ROUND(CAST(cr.DURATA AS FLOAT) / {_FPS_GLOBAL}, 0) AS INT)
+                                      = {instr.duration_sec}
+                                ORDER BY cr.ID_CONTRATTIRIGHE
+                            """)
+                            lines_out = []
+                            for row in cur.fetchall():
+                                desc_lower = (row["description"] or "").lower()
+                                matched_dialect = None
+                                matched_fid     = None
+                                for sys_dialect, fid in dialect_to_filmati.items():
+                                    kws = _HL_LINE_KEYWORDS.get(sys_dialect, [sys_dialect.lower()])
+                                    if any(kw in desc_lower for kw in kws):
+                                        matched_dialect = sys_dialect
+                                        matched_fid     = fid
+                                        break
+                                lines_out.append({
+                                    "line_id":           row["line_id"],
+                                    "description":       row["description"],
+                                    "spot_count":        row["spot_count"],
+                                    "matched_dialect":   matched_dialect,
+                                    "matched_filmati_id": matched_fid,
+                                })
+                            contracts_out.append({**ct, "lines": lines_out})
+
+                        items.append({
+                            "filename":      filename,
+                            "format":        "hl",
+                            "advertiser":    instr.advertiser,
+                            "estimate":      instr.estimate,
+                            "duration_sec":  instr.duration_sec,
+                            "date_range":    f"{instr.start_date}–{instr.end_date}",
+                            "date_from_sql": instr.date_from_sql,
+                            "date_to_sql":   instr.date_to_sql,
+                            "spots":         spots_out,
+                            "not_found":     not_found,
+                            "contracts":     contracts_out,
                         })
 
                     else:
