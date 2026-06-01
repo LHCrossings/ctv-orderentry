@@ -598,13 +598,9 @@
         <div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border-color);">
             <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px; flex-wrap:wrap;">
                 <span style="font-size:0.72rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; min-width:120px;">Auto-parse formats</span>
-                <span style="background:color-mix(in srgb,var(--nord10) 12%,transparent); color:var(--nord10); border:1px solid color-mix(in srgb,var(--nord10) 35%,transparent); font-size:0.72rem; font-weight:600; padding:2px 8px; border-radius:4px;">Davis Elen</span>
-                <span style="background:color-mix(in srgb,var(--nord10) 12%,transparent); color:var(--nord10); border:1px solid color-mix(in srgb,var(--nord10) 35%,transparent); font-size:0.72rem; font-weight:600; padding:2px 8px; border-radius:4px;">IW Group (Lexus)</span>
-                <span style="background:color-mix(in srgb,var(--nord10) 12%,transparent); color:var(--nord10); border:1px solid color-mix(in srgb,var(--nord10) 35%,transparent); font-size:0.72rem; font-weight:600; padding:2px 8px; border-radius:4px;">Tatari (WorldLink)</span>
-                <span style="background:color-mix(in srgb,var(--nord10) 12%,transparent); color:var(--nord10); border:1px solid color-mix(in srgb,var(--nord10) 35%,transparent); font-size:0.72rem; font-weight:600; padding:2px 8px; border-radius:4px;">Direct Donor (WorldLink)</span>
-                <span style="background:color-mix(in srgb,var(--nord10) 12%,transparent); color:var(--nord10); border:1px solid color-mix(in srgb,var(--nord10) 35%,transparent); font-size:0.72rem; font-weight:600; padding:2px 8px; border-radius:4px;">Marketing Architects (WorldLink)</span>
-                <span style="background:color-mix(in srgb,var(--nord10) 12%,transparent); color:var(--nord10); border:1px solid color-mix(in srgb,var(--nord10) 35%,transparent); font-size:0.72rem; font-weight:600; padding:2px 8px; border-radius:4px;">Icon Media Direct (WorldLink)</span>
-                <span style="background:color-mix(in srgb,var(--nord10) 12%,transparent); color:var(--nord10); border:1px solid color-mix(in srgb,var(--nord10) 35%,transparent); font-size:0.72rem; font-weight:600; padding:2px 8px; border-radius:4px;">H&amp;L Partners</span>
+                {% for fmt in traffic_formats %}
+                <span style="background:color-mix(in srgb,var(--nord10) 12%,transparent); color:var(--nord10); border:1px solid color-mix(in srgb,var(--nord10) 35%,transparent); font-size:0.72rem; font-weight:600; padding:2px 8px; border-radius:4px;">{{ fmt }}</span>
+                {% endfor %}
             </div>
             <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px; flex-wrap:wrap;">
                 <span style="font-size:0.72rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; min-width:120px;">Auto-assign (scan)</span>

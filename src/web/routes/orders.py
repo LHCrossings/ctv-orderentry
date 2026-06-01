@@ -106,6 +106,18 @@ _CTV_LANG_WINDOWS: dict = {
 _CTV_LANG_WINDOWS["Chinese"]    = _CTV_LANG_WINDOWS["Mandarin"] + _CTV_LANG_WINDOWS["Cantonese"]
 _CTV_LANG_WINDOWS["SouthAsian"] = _CTV_LANG_WINDOWS["Hindi"]    + _CTV_LANG_WINDOWS["Punjabi"]
 
+# Canonical list of supported traffic instruction formats — rendered as badges on the assign-assets page.
+# Add one entry here whenever a new parser is wired into _detect_format().
+_TRAFFIC_FORMAT_LABELS = [
+    "Davis Elen",
+    "IW Group (Lexus)",
+    "Tatari (WorldLink)",
+    "Direct Donor (WorldLink)",
+    "Marketing Architects (WorldLink)",
+    "Icon Media Direct (WorldLink)",
+    "H&L Partners",
+]
+
 # Keywords used to match HL contract line descriptions to a system dialect
 _HL_LINE_KEYWORDS: dict = {
     "Cantonese":  ["cantonese", "jade"],
@@ -3301,7 +3313,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     @router.get("/traffic/assign-assets", response_class=HTMLResponse)
     async def traffic_assign_assets_page(request: Request):
-        return templates.TemplateResponse(request, "traffic/asset_assignment.html")
+        return templates.TemplateResponse(request, "traffic/asset_assignment.html",
+                                          {"traffic_formats": _TRAFFIC_FORMAT_LABELS})
 
     @router.get("/api/traffic/contract-search")
     async def traffic_contract_search(q: str = Query("")):
