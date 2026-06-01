@@ -373,6 +373,8 @@ function escHtml(s) {
 }
 
 async function blacklistSpot(btn, idTpalinse, replace) {
+    const action = replace ? 'Blacklist this spot and insert a PI/PSA filler?' : 'Blacklist this spot (no filler)?';
+    if (!confirm(action)) return;
     // Disable both buttons in this row's action cell
     btn.closest('td').querySelectorAll('.bl-btn').forEach(b => b.disabled = true);
     btn.textContent = '…';
