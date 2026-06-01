@@ -348,15 +348,18 @@ function render(rows) {
                             <th class="col-action"></th>
                         </tr>
                     </thead>
-                    <tbody>${mkt.rows.map(r => `
-                        <tr>
+                    <tbody>${mkt.rows.map(r => {
+                        const orphaned = r.contract_code === '— orphaned —';
+                        return `
+                        <tr${orphaned ? ' style="background:rgba(191,97,106,0.07)"' : ''}>
                             <td class="col-time">${escHtml(r.time)}</td>
-                            <td class="col-code">${escHtml(r.contract_code)}</td>
-                            <td>${escHtml(r.contract_name)}</td>
+                            <td class="col-code" style="${orphaned ? 'color:var(--nord11);font-style:italic' : ''}">${escHtml(r.contract_code)}</td>
+                            <td style="${orphaned ? 'color:var(--nord11);font-style:italic' : ''}">${escHtml(r.contract_name)}</td>
                             <td class="col-action" style="white-space:nowrap">
-                                <button class="bl-btn" onclick="blacklistSpot(this,${r.id_tpalinse},false)" style="margin-right:4px">⛔ BL</button><button class="bl-btn" onclick="blacklistSpot(this,${r.id_tpalinse},true)">⛔ BL + Fill</button>
+                                <button class="bl-btn" onclick="blacklistSpot(this,${r.id_tpalinse},false)" style="margin-right:4px">⛔ BL</button><button class="bl-btn" onclick="blacklistSpot(this,${r.id_tpalinse},true)"${orphaned ? ' disabled title="No contract link — cannot insert filler"' : ''}>⛔ BL + Fill</button>
                             </td>
-                        </tr>`).join('')}
+                        </tr>`;
+                    }).join('')}
                     </tbody>
                 </table>
             </div>`).join('');
@@ -387,13 +390,13 @@ async function blacklistSpot(btn, idTpalinse, replace) {
         const data = await r.json();
         if (!r.ok) throw new Error(data.detail || `Error ${r.status}`);
         const row = btn.closest('tr');
-        if (data.filler_inserted) {
+        if (data.orphaned_deleted) {
+            btn.textContent = '✓ Deleted';
+            btn.className = 'bl-btn done-bl';
+        } else if (data.filler_inserted) {
             const label = data.filler_type === 'PSA' ? 'PSA' : 'PI';
             btn.textContent = `✓ + ${label}`;
             btn.className = 'bl-btn done-' + (data.filler_type === 'PSA' ? 'psa' : 'pi');
-        } else if (data.no_filler) {
-            btn.textContent = '✓ Blacklisted';
-            btn.className = 'bl-btn done-bl';
         } else {
             btn.textContent = '✓ Blacklisted';
             btn.className = 'bl-btn done-bl';

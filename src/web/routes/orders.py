@@ -1744,9 +1744,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         t.ID_TPALINSE,
                         t.DURATION
                     FROM tpalinse t
-                    JOIN trafficPalinse tp ON tp.id_tpalinse = t.ID_TPALINSE
-                    JOIN CONTRATTIRIGHE cr ON tp.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
-                    JOIN CONTRATTITESTATA ct ON cr.ID_CONTRATTITESTATA = ct.ID_CONTRATTITESTATA
+                    LEFT JOIN trafficPalinse tp ON tp.id_tpalinse = t.ID_TPALINSE
+                    LEFT JOIN CONTRATTIRIGHE cr ON tp.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
+                    LEFT JOIN CONTRATTITESTATA ct ON cr.ID_CONTRATTITESTATA = ct.ID_CONTRATTITESTATA
                     WHERE t.DATA BETWEEN %s AND %s
                       AND t.LIVELLO = 0
                       AND (t.ID_FILMATI IS NULL OR t.ID_FILMATI <= 0)
@@ -1763,8 +1763,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         "market_order":    mkt_id,
                         "date":            date_s,
                         "time":            _to_ampm(ora),
-                        "contract_code":   code or "",
-                        "contract_name":   name or "",
+                        "contract_code":   code or "— orphaned —",
+                        "contract_name":   name or "No contract link — spot will air black",
                         "id_tpalinse":     id_tpalinse,
                         "duration_frames": int(duration or 0),
                     })
@@ -1831,7 +1831,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 """, (id_tpalinse,))
                 tpa = cur.fetchone()
                 if not tpa:
-                    raise ValueError("No trafficPalinse record found")
+                    # Fully orphaned spot — no contract link, no TSL accounting needed
+                    cur.execute("DELETE FROM TPALINSE WHERE ID_TPALINSE=%s", (id_tpalinse,))
+                    conn.commit()
+                    return {"orphaned_deleted": True, "filler_inserted": False, "no_filler": True}
 
                 line_id      = tpa["ID_ContrattiRighe"]
                 tpa_id       = tpa["id_trafficPalinse"]
