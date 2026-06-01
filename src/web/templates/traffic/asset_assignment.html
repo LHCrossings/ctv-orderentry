@@ -1601,18 +1601,24 @@
                 .map(s => `<div style="color:var(--nord11);font-size:0.82rem;margin-top:4px;">✗ ${esc(s.isci)} (${esc(s.dialect)}) — not found in Etere</div>`)
                 .join('');
 
-            // Flatten to one row per (dialect × contract) where spot_count > 0
+            // Group by contract, with a header row per contract
             const tableRows = [];
             for (const ct of r.contracts) {
-                for (const da of ct.dialect_assignments) {
-                    if (!da.spot_count) continue;
-                    tableRows.push(`<tr>
+                const ctRows = ct.dialect_assignments
+                    .filter(da => da.spot_count > 0)
+                    .map(da => `<tr>
                         <td style="padding:6px 10px;font-family:monospace;font-size:0.82rem;color:var(--nord14);">${esc(da.isci)}</td>
                         <td style="padding:6px 10px;font-size:0.82rem;">${esc(da.dialect)}</td>
-                        <td style="padding:6px 10px;font-size:0.82rem;color:var(--text-muted);">${esc(ct.code)}</td>
                         <td style="padding:6px 10px;font-size:0.82rem;text-align:right;color:var(--nord10);font-weight:600;">${da.spot_count}</td>
                     </tr>`);
-                }
+                if (!ctRows.length) continue;
+                tableRows.push(`<tr>
+                    <td colspan="3" style="padding:8px 10px 4px;font-size:0.78rem;font-weight:700;color:var(--nord10);border-top:${tableRows.length ? '2px' : '0'} solid var(--border-color);letter-spacing:0.03em;">
+                        ${esc(ct.code)}
+                        <span style="font-weight:400;color:var(--text-muted);margin-left:6px;">#${ct.id} · ${ct.date_start}–${ct.date_end}</span>
+                    </td>
+                </tr>`);
+                tableRows.push(...ctRows);
             }
 
             const period = r.date_from_sql ? `${r.date_from_sql} – ${r.date_to_sql}` : '';
@@ -1630,7 +1636,6 @@
                     <thead><tr style="border-bottom:1px solid var(--border-color);">
                         <th style="padding:5px 10px;text-align:left;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">ISCI</th>
                         <th style="padding:5px 10px;text-align:left;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Dialect</th>
-                        <th style="padding:5px 10px;text-align:left;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Contract</th>
                         <th style="padding:5px 10px;text-align:right;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Spots</th>
                     </tr></thead>
                     <tbody>${tbody}</tbody>
