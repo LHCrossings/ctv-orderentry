@@ -285,7 +285,10 @@
                     <input type="checkbox" id="show-trade" onchange="load()" />
                     Show Trade?
                 </label>
-                <div id="market-pills" style="display:flex;gap:0.3rem;flex-wrap:wrap;"></div>
+                <div style="display:flex;gap:0.3rem;flex-wrap:wrap;align-items:center;">
+                    <button class="mkt-pill active" onclick="toggleAllMarkets(this)" id="mkt-all-btn">All</button>
+                    <div id="market-pills" style="display:flex;gap:0.3rem;flex-wrap:wrap;"></div>
+                </div>
                 <a href="/master-control/billing-type-fix"
                    style="font-size:0.8rem;color:var(--nord13);text-decoration:none;white-space:nowrap;"
                    title="Fix clients with unset billing type">🏷️ Fix Billing Types</a>
@@ -364,12 +367,31 @@
             .replace(/>/g, '&gt;');
     }
 
+    const _ALL_MARKETS = ['NYC','CMP','HOU','SFO','SEA','LAX','CVC','WDC','MMT','DAL'];
+
+    function _syncAllBtn() {
+        const allSelected = _ALL_MARKETS.every(m => selectedMarkets.has(m));
+        document.getElementById('mkt-all-btn').classList.toggle('active', allSelected);
+    }
+
+    function toggleAllMarkets(btn) {
+        const allSelected = _ALL_MARKETS.every(m => selectedMarkets.has(m));
+        if (allSelected) {
+            selectedMarkets.clear();
+        } else {
+            _ALL_MARKETS.forEach(m => selectedMarkets.add(m));
+        }
+        document.querySelectorAll('#market-pills .mkt-pill').forEach(p => {
+            p.classList.toggle('active', selectedMarkets.has(p.dataset.mkt));
+        });
+        _syncAllBtn();
+        if (lastData) render(lastData);
+    }
+
     function buildMarketPills(markets) {
         const container = document.getElementById('market-pills');
-        // Initialise selectedMarkets to all on first load; preserve selection on month nav
         const isFirstLoad = selectedMarkets.size === 0;
         if (isFirstLoad) markets.forEach(m => selectedMarkets.add(m));
-        // Remove pills for markets no longer present; add new ones
         const existing = new Set([...container.querySelectorAll('.mkt-pill')].map(p => p.dataset.mkt));
         markets.forEach(m => {
             if (!existing.has(m)) {
@@ -380,15 +402,16 @@
                 btn.onclick = () => {
                     selectedMarkets.has(m) ? selectedMarkets.delete(m) : selectedMarkets.add(m);
                     btn.classList.toggle('active', selectedMarkets.has(m));
+                    _syncAllBtn();
                     if (lastData) render(lastData);
                 };
                 container.appendChild(btn);
             }
         });
-        // Re-sync active state for existing pills
         container.querySelectorAll('.mkt-pill').forEach(p => {
             p.classList.toggle('active', selectedMarkets.has(p.dataset.mkt));
         });
+        _syncAllBtn();
     }
 
     async function load() {
@@ -403,7 +426,7 @@
             document.getElementById('month-label').textContent = lastData.month_label;
             document.getElementById('bounds-label').textContent =
                 `Broadcast: ${lastData.bcast_bounds}  ·  Calendar: ${lastData.cal_bounds}`;
-            buildMarketPills(['NYC','CMP','HOU','SFO','SEA','LAX','CVC','WDC','MMT','DAL']);
+            buildMarketPills(_ALL_MARKETS);
             render(lastData);
             loadUnsetContracts();
         } catch (e) {
