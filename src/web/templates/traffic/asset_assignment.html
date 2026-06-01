@@ -1591,73 +1591,67 @@
 
     function renderHLGrid(results) {
         const grid = document.getElementById('hlGrid');
-        const allReady = results.every(r =>
-            !r.error && r.contracts.length && r.spots.every(s => s.found)
-        );
 
-        const rows = results.map(r => {
-            if (r.error) return `<tr><td>${esc(r.filename)}</td><td colspan="4" style="color:var(--nord11);">${esc(r.error)}</td></tr>`;
+        // One row per (ISCI × contract) pair — spot count comes from language-window
+        // filtering applied server-side, same engine as the manual assign page.
+        const sections = results.map(r => {
+            if (r.error) return `<div style="color:var(--nord11);padding:8px 0;">${esc(r.filename)}: ${esc(r.error)}</div>`;
 
-            // ISCI column: compact — code + dialect tag only
-            const spotsCell = r.spots.map(s => {
-                const icon = s.found ? '✓' : '✗';
-                const col  = s.found ? 'var(--nord14)' : 'var(--nord11)';
-                return `<span style="color:${col};">${icon} ${esc(s.isci)}</span> <span style="color:var(--text-muted);font-size:0.78rem;">(${esc(s.dialect)})</span>`;
-            }).join('<br>');
+            const notFoundWarnings = r.spots.filter(s => !s.found)
+                .map(s => `<div style="color:var(--nord11);font-size:0.82rem;margin-top:4px;">✗ ${esc(s.isci)} (${esc(s.dialect)}) — not found in Etere</div>`)
+                .join('');
 
-            // Contracts column: one line per contract with summary counts; flag unmatched lines
-            const contractsCell = r.contracts.length
-                ? r.contracts.map(ct => {
-                    const withSpots  = ct.lines.filter(l => l.spot_count > 0);
-                    const matched    = withSpots.filter(l => l.matched_filmati_id);
-                    const unmatched  = withSpots.filter(l => !l.matched_filmati_id);
-                    const totalSpots = withSpots.reduce((a, l) => a + l.spot_count, 0);
-                    const allOk      = unmatched.length === 0 && matched.length > 0;
-                    const codeCol    = allOk ? 'var(--nord14)' : 'var(--nord13)';
-                    let summary      = `${matched.length} line${matched.length !== 1 ? 's' : ''}, ${totalSpots} spot${totalSpots !== 1 ? 's' : ''}`;
-                    if (unmatched.length) {
-                        const unmatchedList = unmatched.map(l =>
-                            `<span style="color:var(--nord13);font-size:0.76rem;">? ${esc(l.description)}</span>`
-                        ).join('<br>');
-                        summary += `<br>${unmatchedList}`;
-                    }
-                    return `<span style="color:${codeCol};font-weight:600;">${esc(ct.code)}</span>
-                            <span style="font-size:0.78rem;color:var(--text-muted);">#${ct.id} · ${ct.date_start}–${ct.date_end}</span><br>
-                            <span style="font-size:0.78rem;">${summary}</span>`;
-                }).join('<br style="margin:4px 0;">')
-                : `<span style="color:var(--nord11);">No contracts found for estimate ${esc(r.estimate)}</span>`;
+            // Flatten to one row per (dialect × contract) where spot_count > 0
+            const tableRows = [];
+            for (const ct of r.contracts) {
+                for (const da of ct.dialect_assignments) {
+                    if (!da.spot_count) continue;
+                    tableRows.push(`<tr>
+                        <td style="padding:6px 10px;font-family:monospace;font-size:0.82rem;color:var(--nord14);">${esc(da.isci)}</td>
+                        <td style="padding:6px 10px;font-size:0.82rem;">${esc(da.dialect)}</td>
+                        <td style="padding:6px 10px;font-size:0.82rem;color:var(--text-muted);">${esc(ct.code)}</td>
+                        <td style="padding:6px 10px;font-size:0.82rem;text-align:right;color:var(--nord10);font-weight:600;">${da.spot_count}</td>
+                    </tr>`);
+                }
+            }
 
-            const periodCell = r.date_from_sql
-                ? `<span style="font-family:monospace;">${esc(r.date_from_sql)}</span> – <span style="font-family:monospace;">${esc(r.date_to_sql)}</span>`
-                : `<span style="color:var(--text-muted);">—</span>`;
+            const period = r.date_from_sql ? `${r.date_from_sql} – ${r.date_to_sql}` : '';
+            const tbody = tableRows.length
+                ? tableRows.join('')
+                : `<tr><td colspan="4" style="padding:10px;color:var(--nord13);">No scheduled spots found for any dialect in this date range</td></tr>`;
 
-            return `<tr>
-                <td style="font-size:0.8rem;color:var(--text-muted);">${esc(r.filename)}</td>
-                <td><strong>${esc(r.estimate)}</strong><br><span style="font-size:0.78rem;color:var(--text-muted);">${esc(r.advertiser)}</span></td>
-                <td>${periodCell}</td>
-                <td>${spotsCell}</td>
-                <td>${contractsCell}</td>
-            </tr>`;
-        }).join('');
+            return `
+                <div style="margin-bottom:8px;">
+                    <span style="font-weight:600;">${esc(r.estimate)}</span>
+                    <span style="color:var(--text-muted);font-size:0.82rem;margin-left:8px;">${esc(r.advertiser)}</span>
+                    ${period ? `<span style="color:var(--text-muted);font-size:0.82rem;margin-left:8px;">· ${esc(period)}</span>` : ''}
+                </div>
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead><tr style="border-bottom:1px solid var(--border-color);">
+                        <th style="padding:5px 10px;text-align:left;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">ISCI</th>
+                        <th style="padding:5px 10px;text-align:left;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Dialect</th>
+                        <th style="padding:5px 10px;text-align:left;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Contract</th>
+                        <th style="padding:5px 10px;text-align:right;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Spots</th>
+                    </tr></thead>
+                    <tbody>${tbody}</tbody>
+                </table>
+                ${notFoundWarnings}`;
+        }).join('<hr style="border:none;border-top:1px solid var(--border-color);margin:16px 0;">');
+
+        const anyReady = results.some(r => !r.error && r.contracts.some(ct =>
+            ct.dialect_assignments.some(da => da.spot_count > 0)
+        ));
 
         grid.innerHTML = `
             <div class="tool-card" style="margin-bottom:0;">
                 <h2>H&amp;L Traffic Instructions</h2>
-                <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
-                    <thead>
-                        <tr style="text-align:left;border-bottom:1px solid var(--border-color);">
-                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">File</th>
-                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Estimate</th>
-                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Instruction Period</th>
-                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">ISCI / Dialect</th>
-                            <th style="padding:6px 10px;color:var(--text-muted);font-weight:500;">Contracts &amp; Lines</th>
-                        </tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>
-                <div style="margin-top:14px;display:flex;align-items:center;gap:12px;">
+                <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:16px;">
+                    Spot counts determined by language time windows. Review, then click <strong>Assign All</strong>.
+                </div>
+                ${sections}
+                <div style="margin-top:16px;display:flex;align-items:center;gap:12px;">
                     <button class="run-btn apply" onclick="applyHLTraffic()"
-                            ${allReady ? '' : 'disabled title="Resolve all contracts and ISCI codes first"'}>
+                            ${anyReady ? '' : 'disabled title="No spots to assign"'}>
                         Assign All
                     </button>
                     <span id="hlToast" style="font-size:0.85rem;"></span>
@@ -1675,33 +1669,29 @@
         toast.textContent = '';
         toast.style.color = '';
 
-        let totalLines = 0, totalSpots = 0, errors = [];
+        let totalSpots = 0, errors = [];
 
         try {
             for (const r of results) {
-                for (const contract of r.contracts) {
-                    const assignments = contract.lines
-                        .filter(l => l.matched_filmati_id)
-                        .map(l => ({ line_id: l.line_id, filmati_ids: [l.matched_filmati_id] }));
-                    if (!assignments.length) continue;
-
-                    const payload = { assignments };
-                    if (r.date_from_sql) payload.date_from = r.date_from_sql;
-                    if (r.date_to_sql)   payload.date_to   = r.date_to_sql;
-
-                    const resp = await fetch(`/api/traffic/contract/${contract.id}/auto-assign`, {
-                        method:  'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body:    JSON.stringify(payload),
-                    });
-                    if (!resp.ok) {
-                        const detail = (await resp.json()).detail || 'Unknown error';
-                        errors.push(`${contract.code}: ${detail}`);
-                        continue;
+                for (const ct of r.contracts) {
+                    for (const da of ct.dialect_assignments) {
+                        if (!da.spot_count || !da.filmati_id) continue;
+                        const resp = await fetch(`/api/traffic/contract/${ct.id}/assign`, {
+                            method:  'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                spots:   [{ id: da.filmati_id, weight: 1, pct: 100 }],
+                                filters: da.filters,
+                            }),
+                        });
+                        if (!resp.ok) {
+                            const detail = (await resp.json()).detail || 'Unknown error';
+                            errors.push(`${ct.code} ${da.dialect}: ${detail}`);
+                            continue;
+                        }
+                        const data = await resp.json();
+                        totalSpots += data.spots_updated || 0;
                     }
-                    const data = await resp.json();
-                    totalLines += data.lines_updated || 0;
-                    totalSpots += data.spots_updated || 0;
                 }
             }
 
@@ -1710,7 +1700,7 @@
                 toast.textContent = errors.join(' | ');
             } else {
                 toast.style.color = 'var(--nord14)';
-                toast.textContent = `Done — ${totalLines} line${totalLines!==1?'s':''}, ${totalSpots} spot${totalSpots!==1?'s':''} assigned.`;
+                toast.textContent = `Done — ${totalSpots} spot${totalSpots!==1?'s':''} assigned.`;
             }
         } catch (e) {
             toast.style.color = 'var(--nord11)';

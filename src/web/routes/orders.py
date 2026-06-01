@@ -118,17 +118,6 @@ _TRAFFIC_FORMAT_LABELS = [
     "H&L Partners",
 ]
 
-# Keywords used to match HL contract line descriptions to a system dialect
-_HL_LINE_KEYWORDS: dict = {
-    "Cantonese":  ["cantonese", "jade"],
-    "Mandarin":   ["mandarin"],
-    "SouthAsian": ["hindi", "punjabi", "south asian"],
-    "Filipino":   ["filipino", "tagalog", "pilipino"],
-    "Korean":     ["korean"],
-    "Vietnamese": ["vietnamese"],
-    "Hmong":      ["hmong"],
-    "Japanese":   ["japanese"],
-}
 
 # The Asian Channel (DAL) — broadcast day runs 0600–0559 (wraps past midnight)
 _DAL_LANG_WINDOWS: dict = {
@@ -5283,50 +5272,45 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         """, (term, term))
                         contracts_raw = [dict(r) for r in cur.fetchall()]
 
-                        # For each contract, get matching-duration lines and detect dialect
+                        # For each contract × dialect, count scheduled spots using the
+                        # language time windows — same engine as the manual assign page.
+                        # No line-description guessing; spot position determines language.
                         contracts_out = []
                         for ct in contracts_raw:
-                            date_filter = ""
-                            if instr.date_from_sql:
-                                date_filter += f" AND tp.DATA >= '{instr.date_from_sql}'"
-                            if instr.date_to_sql:
-                                date_filter += f" AND tp.DATA <= '{instr.date_to_sql}'"
-                            cur.execute(f"""
-                                SELECT cr.ID_CONTRATTIRIGHE AS line_id,
-                                       cr.DESCRIZIONE       AS description,
-                                       ISNULL(sc.spot_count, 0) AS spot_count
-                                FROM CONTRATTIRIGHE cr
-                                LEFT JOIN (
-                                    SELECT tpa.id_contrattirighe, COUNT(*) AS spot_count
-                                    FROM trafficPalinse tpa
-                                    JOIN TPALINSE tp ON tp.ID_TPALINSE = tpa.id_tpalinse
-                                    WHERE 1=1 {date_filter}
-                                    GROUP BY tpa.id_contrattirighe
-                                ) sc ON sc.id_contrattirighe = cr.ID_CONTRATTIRIGHE
-                                WHERE cr.ID_CONTRATTITESTATA = {ct['id']}
-                                  AND CAST(ROUND(CAST(cr.DURATA AS FLOAT) / {_FPS_GLOBAL}, 0) AS INT)
-                                      = {instr.duration_sec}
-                                ORDER BY cr.ID_CONTRATTIRIGHE
-                            """)
-                            lines_out = []
-                            for row in cur.fetchall():
-                                desc_lower = (row["description"] or "").lower()
-                                matched_dialect = None
-                                matched_fid     = None
-                                for sys_dialect, fid in dialect_to_filmati.items():
-                                    kws = _HL_LINE_KEYWORDS.get(sys_dialect, [sys_dialect.lower()])
-                                    if any(kw in desc_lower for kw in kws):
-                                        matched_dialect = sys_dialect
-                                        matched_fid     = fid
-                                        break
-                                lines_out.append({
-                                    "line_id":           row["line_id"],
-                                    "description":       row["description"],
-                                    "spot_count":        row["spot_count"],
-                                    "matched_dialect":   matched_dialect,
-                                    "matched_filmati_id": matched_fid,
+                            dialect_assignments = []
+                            for sys_dialect, fid in dialect_to_filmati.items():
+                                filters_dict = {
+                                    "languages": [sys_dialect],
+                                    "duration":  instr.duration_sec,
+                                }
+                                if instr.date_from_sql:
+                                    filters_dict["date_from"] = instr.date_from_sql
+                                if instr.date_to_sql:
+                                    filters_dict["date_to"] = instr.date_to_sql
+                                filter_sql = _build_spot_filter(filters_dict)
+                                cur.execute(f"""
+                                    SELECT COUNT(*) AS cnt
+                                    FROM TPALINSE tp
+                                    JOIN trafficPalinse tpa ON tpa.id_tpalinse      = tp.ID_TPALINSE
+                                    JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
+                                    WHERE cr.ID_CONTRATTITESTATA = {ct['id']}
+                                    {filter_sql}
+                                """)
+                                spot_count = (cur.fetchone() or {}).get("cnt", 0) or 0
+                                # Retrieve display dialect from spots_out
+                                raw_dialect = next(
+                                    (s["dialect"] for s in spots_out if s["system_dialect"] == sys_dialect),
+                                    sys_dialect,
+                                )
+                                dialect_assignments.append({
+                                    "system_dialect": sys_dialect,
+                                    "dialect":        raw_dialect,
+                                    "filmati_id":     fid,
+                                    "isci":           next(s["isci"] for s in spots_out if s["system_dialect"] == sys_dialect),
+                                    "spot_count":     spot_count,
+                                    "filters":        filters_dict,
                                 })
-                            contracts_out.append({**ct, "lines": lines_out})
+                            contracts_out.append({**ct, "dialect_assignments": dialect_assignments})
 
                         items.append({
                             "filename":      filename,
