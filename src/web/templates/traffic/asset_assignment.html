@@ -2497,13 +2497,20 @@
     }
 
     function _syncLinePcts(lineId) {
-        const wtEls = [...document.querySelectorAll(`#autoScanResults .aa-weight[data-line="${lineId}"]`)];
-        if (!wtEls.length) return;
-        const total = wtEls.reduce((s, w) => s + Math.max(1, parseInt(w.value) || 1), 0);
-        wtEls.forEach(w => {
+        const allWtEls = [...document.querySelectorAll(`#autoScanResults .aa-weight[data-line="${lineId}"]`)];
+        // Only include weights for checked variants in the total
+        const checkedWtEls = allWtEls.filter(w => {
+            const cb = document.querySelector(`#autoScanResults input[type=checkbox][data-line="${lineId}"][data-filmati="${w.dataset.filmati}"]`);
+            return cb && cb.checked;
+        });
+        const total = checkedWtEls.reduce((s, w) => s + Math.max(1, parseInt(w.value) || 1), 0);
+        allWtEls.forEach(w => {
             const pEl = document.querySelector(`#autoScanResults .aa-pct[data-line="${lineId}"][data-filmati="${w.dataset.filmati}"]`);
-            if (pEl && document.activeElement !== pEl) {
-                pEl.value = Math.round(Math.max(1, parseInt(w.value) || 1) / total * 100);
+            if (!pEl) return;
+            if (!checkedWtEls.includes(w)) {
+                pEl.value = '';  // unchecked — clear %
+            } else if (document.activeElement !== pEl) {
+                pEl.value = total > 0 ? Math.round(Math.max(1, parseInt(w.value) || 1) / total * 100) : '';
             }
         });
     }
@@ -2521,6 +2528,13 @@
         } else if (el.classList.contains('aa-pct')) {
             const wEl = document.querySelector(`#autoScanResults .aa-weight[data-line="${el.dataset.line}"][data-filmati="${el.dataset.filmati}"]`);
             if (wEl) wEl.value = Math.max(1, parseInt(el.value) || 1);
+            _syncLinePcts(el.dataset.line);
+        }
+    });
+
+    document.addEventListener('change', e => {
+        const el = e.target;
+        if (el.type === 'checkbox' && el.closest('#autoScanResults') && el.dataset.line) {
             _syncLinePcts(el.dataset.line);
         }
     });
