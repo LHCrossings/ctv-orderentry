@@ -209,7 +209,12 @@ Fix: `UPDATE Traffic_ScheduleList SET PassageMiss = PassageMiss + @orphaned WHER
 
 2. **`CONTRATTIFILMATI` rows** — one row per `(ID_CONTRATTIRIGHE, ID_FILMATI)` with `PERCROTATION = 0`. Use DELETE+INSERT (not UPDATE+INSERT-if-rowcount) so new lines that were added after the HTTP call ran still get their rows. **Do NOT calculate or set PERCROTATION** — the actual rotation percentages are set separately via the portal's rotation builder or manually in Etere. Setting per-line proportional values causes each filmati to appear multiple times in Etere's "rotate by order" view (which deduplicates by `filmati + PERCROTATION`). The pool rows just need to exist; actual rotation is driven by `TPALINSE.ID_FILMATI`.
 
-**How to apply:** When writing any new traffic assignment endpoint or modifying existing ones, confirm both of the above are handled. TPALINSE being correct is necessary but not sufficient — Etere's native UI will show the pool as empty if CONTRATTIFILMATI isn't populated, confusing traffic managers.
+**How to apply:** This is a **mandatory checklist item for every new traffic instruction format**, not just new endpoints. Any time a new parser/format is wired into `parse-instructions` (e.g. RPM, a new agency), verify before shipping:
+
+1. The assignment path it uses (`/assign`, `/auto-assign`, or `/assign-spots`) calls `MaterialAddToAssetListC` for each filmati being registered.
+2. `CONTRATTIFILMATI` rows are written (DELETE+INSERT) for every `(ID_CONTRATTIRIGHE, ID_FILMATI)` pair on the lines being assigned.
+
+Even when reusing an existing endpoint (e.g. RPM reuses `/assign` same as H&L), the new filmati/contract combination may not yet be in the pool — the pool check is per-line, not per-contract. TPALINSE being correct is necessary but not sufficient — Etere's native UI will show the pool as empty if CONTRATTIFILMATI isn't populated, confusing traffic managers.
 
 ---
 
