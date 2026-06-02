@@ -1423,7 +1423,7 @@
             const items = await resp.json();
 
             // Route by format — mixed uploads are allowed; each item declares its own format
-            const daviselen = items.filter(i => i.format === 'daviselen');
+            const daviselen = items.filter(i => i.format === 'daviselen' || i.format === 'rpm');
             const lexus     = items.filter(i => i.format === 'lexus');
             const tatari    = items.filter(i => i.format === 'tatari' || i.format === 'directdonor' || i.format === 'ma' || i.format === 'imd');
             const hl        = items.filter(i => i.format === 'hl');

@@ -4698,6 +4698,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 return "imd"
             if "hl.agency" in text.lower() or ("ESTIMATE NUMBER:" in upper and "ISCI/Ad-ID" in text):
                 return "hl"
+            if "RPM ADVERTISING" in upper and "TRAFFIC INSTRUCTIONS" in upper:
+                return "rpm"
             return "unknown"
 
         def _run():
@@ -5037,6 +5039,109 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             "spots":               spots_out,
                             "duration_groups":     duration_groups,
                             "contract_candidates": contracts,
+                        })
+
+                    elif fmt == "rpm":
+                        from browser_automation.parsers.rpm_traffic_parser import (
+                            parse_rpm_traffic_pdf,
+                        )
+                        instr = parse_rpm_traffic_pdf(pdf_bytes)
+                        if not instr.estimate:
+                            items.append({"filename": filename, "format": "rpm",
+                                          "error": "No estimate number found"})
+                            continue
+
+                        term = f"%{instr.estimate}%"
+                        cur.execute("""
+                            SELECT TOP 5
+                                ct.ID_CONTRATTITESTATA AS id,
+                                ct.COD_CONTRATTO       AS code,
+                                ct.DESCRIZIONE         AS description,
+                                CONVERT(VARCHAR(10), ct.DATA_INIZIO,  101) AS date_start,
+                                CONVERT(VARCHAR(10), ct.DATA_TERMINE, 101) AS date_end
+                            FROM CONTRATTITESTATA ct
+                            WHERE UPPER(ct.COD_CONTRATTO) LIKE %s
+                               OR UPPER(ct.DESCRIZIONE)   LIKE %s
+                            ORDER BY ct.DATA_INIZIO DESC
+                        """, (term, term))
+                        contracts = [dict(r) for r in cur.fetchall()]
+                        contract_id = contracts[0]["id"] if contracts else None
+
+                        isci_codes   = [s.isci for s in instr.spots]
+                        placeholders = ",".join(f"'{c}'" for c in isci_codes) if isci_codes else "''"
+                        cur.execute(
+                            f"SELECT ID_FILMATI, COD_PROGRA, DESCRIZIO FROM FILMATI"
+                            f" WHERE COD_PROGRA IN ({placeholders})"
+                        )
+                        filmati_map = {
+                            r["COD_PROGRA"]: {"filmati_id": r["ID_FILMATI"],
+                                              "db_title":   r["DESCRIZIO"] or ""}
+                            for r in cur.fetchall()
+                        }
+
+                        spots_out, not_found = [], []
+                        for s in instr.spots:
+                            found = s.isci in filmati_map
+                            if found:
+                                spots_out.append({
+                                    "isci": s.isci,
+                                    "title": s.title or filmati_map[s.isci]["db_title"],
+                                    "duration_sec": s.duration_sec,
+                                    "rotation_pct": s.rotation_pct,
+                                    "filmati_id": filmati_map[s.isci]["filmati_id"],
+                                    "found": True,
+                                })
+                            else:
+                                not_found.append(s.isci)
+                                spots_out.append({
+                                    "isci": s.isci,
+                                    "title": s.title,
+                                    "duration_sec": s.duration_sec,
+                                    "rotation_pct": s.rotation_pct,
+                                    "filmati_id": None,
+                                    "found": False,
+                                })
+
+                        line_ids = []
+                        if contract_id:
+                            date_filter = ""
+                            if instr.date_to_sql:
+                                date_filter += f" AND tp.DATA <= '{instr.date_to_sql}'"
+                            cur.execute(f"""
+                                SELECT cr.ID_CONTRATTIRIGHE AS line_id,
+                                       cr.DESCRIZIONE       AS description,
+                                       ISNULL(sc.spot_count, 0) AS spot_count
+                                FROM CONTRATTIRIGHE cr
+                                LEFT JOIN (
+                                    SELECT tpa.id_contrattirighe, COUNT(*) AS spot_count
+                                    FROM trafficPalinse tpa
+                                    JOIN TPALINSE tp ON tp.ID_TPALINSE = tpa.id_tpalinse
+                                    WHERE 1=1 {date_filter}
+                                    GROUP BY tpa.id_contrattirighe
+                                ) sc ON sc.id_contrattirighe = cr.ID_CONTRATTIRIGHE
+                                WHERE cr.ID_CONTRATTITESTATA = {contract_id}
+                                  AND CAST(ROUND(CAST(cr.DURATA AS FLOAT) / {_FPS_GLOBAL}, 0) AS INT)
+                                      = {instr.duration_sec}
+                                ORDER BY cr.ID_CONTRATTIRIGHE
+                            """)
+                            line_ids = [{"line_id": r["line_id"], "description": r["description"],
+                                         "spot_count": r["spot_count"]} for r in cur.fetchall()]
+
+                        items.append({
+                            "filename":            filename,
+                            "format":              "rpm",
+                            "estimate":            instr.estimate,
+                            "product":             instr.market,
+                            "advertiser":          instr.advertiser,
+                            "market":              instr.market,
+                            "duration_sec":        instr.duration_sec,
+                            "date_to_display":     instr.date_to_display,
+                            "date_to_sql":         instr.date_to_sql,
+                            "contract":            contracts[0] if contracts else None,
+                            "contract_candidates": contracts,
+                            "spots":               spots_out,
+                            "not_found":           not_found,
+                            "lines":               line_ids,
                         })
 
                     elif fmt == "ma":
