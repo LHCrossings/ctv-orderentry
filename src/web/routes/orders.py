@@ -116,6 +116,7 @@ _TRAFFIC_FORMAT_LABELS = [
     "Marketing Architects (WorldLink)",
     "Icon Media Direct (WorldLink)",
     "H&L Partners",
+    "RPM",
 ]
 
 
@@ -5051,22 +5052,32 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                           "error": "No estimate number found"})
                             continue
 
-                        term = f"%{instr.estimate}%"
-                        cur.execute("""
-                            SELECT TOP 5
-                                ct.ID_CONTRATTITESTATA AS id,
-                                ct.COD_CONTRATTO       AS code,
-                                ct.DESCRIZIONE         AS description,
-                                CONVERT(VARCHAR(10), ct.DATA_INIZIO,  101) AS date_start,
-                                CONVERT(VARCHAR(10), ct.DATA_TERMINE, 101) AS date_end
-                            FROM CONTRATTITESTATA ct
-                            WHERE UPPER(ct.COD_CONTRATTO) LIKE %s
-                               OR UPPER(ct.DESCRIZIONE)   LIKE %s
-                            ORDER BY ct.DATA_INIZIO DESC
-                        """, (term, term))
-                        contracts = [dict(r) for r in cur.fetchall()]
-                        contract_id = contracts[0]["id"] if contracts else None
+                        # Extract system_dialect ("Cantonese", "Mandarin", …) from spot title
+                        _RPM_LANG_KW = {
+                            "cantonese": "Cantonese", "mandarin": "Mandarin",
+                            "vietnamese": "Vietnamese", "korean": "Korean",
+                            "punjabi": "Punjabi", "hindi": "Hindi",
+                            "south asian": "SouthAsian", "filipino": "Filipino",
+                            "hmong": "Hmong",
+                        }
+                        def _rpm_dialect(title: str) -> str:
+                            low = title.lower()
+                            for kw, d in _RPM_LANG_KW.items():
+                                if kw in low:
+                                    return d
+                            return ""
 
+                        # Market label → Etere short code for contract filtering
+                        _RPM_MKT = {
+                            "sacramento": "CV", "san francisco": "SF",
+                            "seattle": "SEA", "los angeles": "LA",
+                            "houston": "HOU", "chicago": "CMP",
+                            "washington": "WDC", "new york": "NYC",
+                        }
+                        mkt_low = instr.market.lower()
+                        market_short = next((v for k, v in _RPM_MKT.items() if k in mkt_low), "")
+
+                        # ISCI → FILMATI lookup
                         isci_codes   = [s.isci for s in instr.spots]
                         placeholders = ",".join(f"'{c}'" for c in isci_codes) if isci_codes else "''"
                         cur.execute(
@@ -5080,68 +5091,94 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         }
 
                         spots_out, not_found = [], []
+                        dialect_to_filmati: dict = {}  # system_dialect → filmati_id
                         for s in instr.spots:
-                            found = s.isci in filmati_map
-                            if found:
-                                spots_out.append({
-                                    "isci": s.isci,
-                                    "title": s.title or filmati_map[s.isci]["db_title"],
-                                    "duration_sec": s.duration_sec,
-                                    "rotation_pct": s.rotation_pct,
-                                    "filmati_id": filmati_map[s.isci]["filmati_id"],
-                                    "found": True,
-                                })
-                            else:
+                            found      = s.isci in filmati_map
+                            fid        = filmati_map[s.isci]["filmati_id"] if found else None
+                            sys_dialect = _rpm_dialect(s.title)
+                            if found and sys_dialect:
+                                dialect_to_filmati[sys_dialect] = fid
+                            spots_out.append({
+                                "isci":           s.isci,
+                                "title":          s.title or (filmati_map[s.isci]["db_title"] if found else ""),
+                                "dialect":        sys_dialect or s.title,
+                                "system_dialect": sys_dialect,
+                                "rotation_pct":   s.rotation_pct,
+                                "filmati_id":     fid,
+                                "found":          found,
+                            })
+                            if not found:
                                 not_found.append(s.isci)
-                                spots_out.append({
-                                    "isci": s.isci,
-                                    "title": s.title,
-                                    "duration_sec": s.duration_sec,
-                                    "rotation_pct": s.rotation_pct,
-                                    "filmati_id": None,
-                                    "found": False,
-                                })
 
-                        line_ids = []
-                        if contract_id:
-                            date_filter = ""
-                            if instr.date_to_sql:
-                                date_filter += f" AND tp.DATA <= '{instr.date_to_sql}'"
-                            cur.execute(f"""
-                                SELECT cr.ID_CONTRATTIRIGHE AS line_id,
-                                       cr.DESCRIZIONE       AS description,
-                                       ISNULL(sc.spot_count, 0) AS spot_count
-                                FROM CONTRATTIRIGHE cr
-                                LEFT JOIN (
-                                    SELECT tpa.id_contrattirighe, COUNT(*) AS spot_count
-                                    FROM trafficPalinse tpa
-                                    JOIN TPALINSE tp ON tp.ID_TPALINSE = tpa.id_tpalinse
-                                    WHERE 1=1 {date_filter}
-                                    GROUP BY tpa.id_contrattirighe
-                                ) sc ON sc.id_contrattirighe = cr.ID_CONTRATTIRIGHE
-                                WHERE cr.ID_CONTRATTITESTATA = {contract_id}
-                                  AND CAST(ROUND(CAST(cr.DURATA AS FLOAT) / {_FPS_GLOBAL}, 0) AS INT)
-                                      = {instr.duration_sec}
-                                ORDER BY cr.ID_CONTRATTIRIGHE
-                            """)
-                            line_ids = [{"line_id": r["line_id"], "description": r["description"],
-                                         "spot_count": r["spot_count"]} for r in cur.fetchall()]
+                        # Find contract by estimate + market short code
+                        term = f"%{instr.estimate}%"
+                        mkt_filter = (
+                            f" AND (UPPER(ct.COD_CONTRATTO) LIKE '%{market_short}%'"
+                            f"   OR UPPER(ct.DESCRIZIONE)   LIKE '%{market_short}%')"
+                            if market_short else ""
+                        )
+                        cur.execute(f"""
+                            SELECT ct.ID_CONTRATTITESTATA AS id,
+                                   ct.COD_CONTRATTO       AS code,
+                                   ct.DESCRIZIONE         AS description,
+                                   CONVERT(VARCHAR(10), ct.DATA_INIZIO,  101) AS date_start,
+                                   CONVERT(VARCHAR(10), ct.DATA_TERMINE, 101) AS date_end
+                            FROM CONTRATTITESTATA ct
+                            WHERE (UPPER(ct.COD_CONTRATTO) LIKE %s
+                               OR  UPPER(ct.DESCRIZIONE)   LIKE %s)
+                            {mkt_filter}
+                            ORDER BY ct.DATA_INIZIO DESC
+                        """, (term, term))
+                        contracts_raw = [dict(r) for r in cur.fetchall()]
+
+                        # Per contract × dialect: count scheduled spots via language time windows
+                        contracts_out = []
+                        for ct in contracts_raw:
+                            dialect_assignments = []
+                            for sys_dialect, fid in dialect_to_filmati.items():
+                                filters_dict: dict = {
+                                    "languages": [sys_dialect],
+                                    "duration":  instr.duration_sec,
+                                }
+                                if instr.date_to_sql:
+                                    filters_dict["date_to"] = instr.date_to_sql
+                                filter_sql = _build_spot_filter(filters_dict)
+                                cur.execute(f"""
+                                    SELECT COUNT(*) AS cnt
+                                    FROM TPALINSE tp
+                                    JOIN trafficPalinse tpa ON tpa.id_tpalinse      = tp.ID_TPALINSE
+                                    JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
+                                    WHERE cr.ID_CONTRATTITESTATA = {ct['id']}
+                                    {filter_sql}
+                                """)
+                                spot_count = (cur.fetchone() or {}).get("cnt", 0) or 0
+                                raw_dialect = next(
+                                    (s["dialect"] for s in spots_out if s["system_dialect"] == sys_dialect),
+                                    sys_dialect,
+                                )
+                                dialect_assignments.append({
+                                    "system_dialect": sys_dialect,
+                                    "dialect":        raw_dialect,
+                                    "filmati_id":     fid,
+                                    "isci":           next(s["isci"] for s in spots_out
+                                                          if s["system_dialect"] == sys_dialect),
+                                    "spot_count":     spot_count,
+                                    "filters":        filters_dict,
+                                })
+                            contracts_out.append({**ct, "dialect_assignments": dialect_assignments})
 
                         items.append({
-                            "filename":            filename,
-                            "format":              "rpm",
-                            "estimate":            instr.estimate,
-                            "product":             instr.market,
-                            "advertiser":          instr.advertiser,
-                            "market":              instr.market,
-                            "duration_sec":        instr.duration_sec,
-                            "date_to_display":     instr.date_to_display,
-                            "date_to_sql":         instr.date_to_sql,
-                            "contract":            contracts[0] if contracts else None,
-                            "contract_candidates": contracts,
-                            "spots":               spots_out,
-                            "not_found":           not_found,
-                            "lines":               line_ids,
+                            "filename":        filename,
+                            "format":          "rpm",
+                            "advertiser":      instr.advertiser,
+                            "estimate":        instr.estimate,
+                            "market":          instr.market,
+                            "duration_sec":    instr.duration_sec,
+                            "date_to_sql":     instr.date_to_sql,
+                            "date_to_display": instr.date_to_display,
+                            "spots":           spots_out,
+                            "not_found":       not_found,
+                            "contracts":       contracts_out,
                         })
 
                     elif fmt == "ma":

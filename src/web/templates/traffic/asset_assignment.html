@@ -1423,10 +1423,10 @@
             const items = await resp.json();
 
             // Route by format — mixed uploads are allowed; each item declares its own format
-            const daviselen = items.filter(i => i.format === 'daviselen' || i.format === 'rpm');
+            const daviselen = items.filter(i => i.format === 'daviselen');
             const lexus     = items.filter(i => i.format === 'lexus');
             const tatari    = items.filter(i => i.format === 'tatari' || i.format === 'directdonor' || i.format === 'ma' || i.format === 'imd');
-            const hl        = items.filter(i => i.format === 'hl');
+            const hl        = items.filter(i => i.format === 'hl' || i.format === 'rpm');
             const unknown   = items.filter(i => i.format === 'unknown' || i.error);
 
             if (unknown.length) {
@@ -1649,7 +1649,7 @@
 
         grid.innerHTML = `
             <div class="tool-card" style="margin-bottom:0;">
-                <h2>H&amp;L Traffic Instructions</h2>
+                <h2>Traffic Instructions</h2>
                 <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:16px;">
                     Spot counts determined by language time windows. Review, then click <strong>Assign All</strong>.
                 </div>
