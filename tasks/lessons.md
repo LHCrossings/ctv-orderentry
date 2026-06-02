@@ -1,5 +1,24 @@
 # Lessons Learned
 
+## Language-Targeted Traffic Instructions Must Use Day/Time Window Filters — Never Line Description Matching
+
+**Session:** RPM Thunder Valley (2026-06-02)
+
+**Rule:** Any traffic instruction format that assigns spots per language (Cantonese, Mandarin, Vietnamese, etc.) must use `_CTV_LANG_WINDOWS` (or `_DAL_LANG_WINDOWS` for The Asian Channel) time-window filters — exactly as H&L Partners and RPM do. Never attempt to detect language by matching against contract line descriptions (e.g. checking that a line starts with "C " or "M ").
+
+**Why:** Line descriptions are free-text and change. Time windows are the ground truth: a spot that airs Monday 19:00–20:00 is Cantonese because that's what Crossings TV programs in that slot. Line description matching will silently mis-assign when descriptions are renamed or formatted differently.
+
+**How to apply:**
+1. Extract `system_dialect` from the spot title (keyword match: "cantonese" → `"Cantonese"`, etc.)
+2. Build `filters_dict = {"languages": [sys_dialect], "duration": dur_sec}` (plus `date_from`/`date_to`)
+3. Count scheduled spots via `_build_spot_filter(filters_dict)` against `TPALINSE`
+4. Assign via `/api/traffic/contract/{id}/assign` with `spots=[{id: filmati_id, ...}]` and `filters=filters_dict`
+5. Route the response through the H&L grid (`renderHLGrid` / `applyHLTraffic`) — shape the backend response with `contracts → dialect_assignments` identical to the H&L format
+
+The `/assign` endpoint handles the time-window SQL internally. Never replicate that logic in the parser or by inspecting line descriptions.
+
+---
+
 ## assign_blocks_for_existing_line Strips All Asterisks From DESCRIZIONE
 
 **Session:** Make Goods (2026-05-29)
