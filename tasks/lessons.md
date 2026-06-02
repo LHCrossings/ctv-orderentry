@@ -209,6 +209,8 @@ Fix: `UPDATE Traffic_ScheduleList SET PassageMiss = PassageMiss + @orphaned WHER
 
 2. **`CONTRATTIFILMATI` rows** — one row per `(ID_CONTRATTIRIGHE, ID_FILMATI)` with `PERCROTATION = 0`. Use DELETE+INSERT (not UPDATE+INSERT-if-rowcount) so new lines that were added after the HTTP call ran still get their rows. **Do NOT calculate or set PERCROTATION** — the actual rotation percentages are set separately via the portal's rotation builder or manually in Etere. Setting per-line proportional values causes each filmati to appear multiple times in Etere's "rotate by order" view (which deduplicates by `filmati + PERCROTATION`). The pool rows just need to exist; actual rotation is driven by `TPALINSE.ID_FILMATI`.
 
+3. **Cleanup DELETE must EXCLUDE assigned lines.** `MaterialAddToAssetListC` adds `PERCROTATION=0` rows to every line in the contract. The cleanup that removes rows for non-assigned lines MUST include `AND ID_CONTRATTIRIGHE NOT IN ({assigned_line_ids})` — otherwise it deletes the rows that were just inserted for the assigned lines, leaving the pool empty. This is a repeatedly-seen bug: the pool looks empty even though TPALINSE has correct spot assignments.
+
 **How to apply:** This is a **mandatory checklist item for every new traffic instruction format**, not just new endpoints. Any time a new parser/format is wired into `parse-instructions` (e.g. RPM, a new agency), verify before shipping:
 
 1. The assignment path it uses (`/assign`, `/auto-assign`, or `/assign-spots`) calls `MaterialAddToAssetListC` for each filmati being registered.

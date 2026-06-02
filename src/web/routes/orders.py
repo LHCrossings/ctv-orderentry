@@ -3712,13 +3712,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 (line_id, filmati_id),
                             )
                     # Remove pool rows for non-assigned lines (MaterialAddToAssetListC
-                    # adds to every line; clean up unused ones by removing PERCROTATION=0).
-                    if filmati_ids:
-                        fid_str = ",".join(str(f) for f in filmati_ids)
+                    # adds to every line; clean up unused ones — but EXCLUDE assigned
+                    # lines or we delete the rows we just inserted above).
+                    if filmati_ids and line_tp_map:
+                        fid_str      = ",".join(str(f) for f in filmati_ids)
+                        assigned_str = ",".join(str(lid) for lid in line_tp_map.keys())
                         cur.execute(
                             f"DELETE FROM CONTRATTIFILMATI"
                             f" WHERE ID_FILMATI IN ({fid_str})"
                             f" AND PERCROTATION = 0"
+                            f" AND ID_CONTRATTIRIGHE NOT IN ({assigned_str})"
                             f" AND ID_CONTRATTIRIGHE IN ("
                             f"   SELECT ID_CONTRATTIRIGHE FROM CONTRATTIRIGHE"
                             f"   WHERE ID_CONTRATTITESTATA = {contract_id}"
