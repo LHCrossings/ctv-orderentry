@@ -2787,6 +2787,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         mn, s = divmod(rem, 60)
         return f"{h}:{mn:02d}:{s:02d}"
 
+    def _bo_frames_to_hhmm(frames: int) -> str:
+        secs = round(frames / _BO_FPS)
+        h, mn = divmod(secs, 3600)
+        return f"{h:02d}:{mn // 60:02d}"
+
     def _bo_time_to_frames(t: str) -> int:
         parts = t.split(":")
         h = int(parts[0])
@@ -2967,7 +2972,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             " COALESCE(cr.Interv_Committente, 0)    AS cust_sep,"
             " COALESCE(cr.INTERV_CONTRATTO, 0)      AS order_sep,"
             " COALESCE(cr.CONTROLLACAPOFILA, 0)     AS capofila,"
-            " COALESCE(cr.CONTROLLAFINEFILA, 0)     AS finefila"
+            " COALESCE(cr.CONTROLLAFINEFILA, 0)     AS finefila,"
+            " COALESCE(cr.ORA_INIZIOF, cr.ORA_INIZIO) AS line_time_from,"
+            " COALESCE(cr.ORA_FINEF,   cr.ORA_FINE)   AS line_time_to"
             " FROM TPALINSE t"
             " LEFT JOIN trafficTPalinse tp ON tp.ID_TPalinse = t.ID_TPALINSE"
             " LEFT JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe"
@@ -3024,6 +3031,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 "order_sep":   order_sep,
                 "is_bookend":  is_bookend,
                 "is_billboard": is_billboard,
+                "time_from":   _bo_frames_to_hhmm(int(s["line_time_from"])) if s.get("line_time_from") is not None else None,
+                "time_to":     _bo_frames_to_hhmm(int(s["line_time_to"]))   if s.get("line_time_to")   is not None else None,
             }
 
         def _check_group(spot, group_list, req, seen_pairs, violations,
@@ -3046,15 +3055,21 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 gap = abs(spot["ora"] - other["ora"])
                 if gap < req:
                     seen_pairs.add(pair_key)
+                    spot_meta  = id_to_meta.get(sid, {})
+                    other_meta = id_to_meta.get(other["id"], {})
                     violations.append({
-                        "spot_id":        sid,
-                        "spot_title":     spot["title"],
-                        "spot_time":      spot["time"],
-                        "conflict_id":    other["id"],
-                        "conflict_title": other["title"],
-                        "conflict_time":  _bo_frames_to_time(other["ora"]),
-                        "req_mins":       round(req / (_BO_FPS * 60), 1),
-                        "actual_mins":    round(gap / (_BO_FPS * 60), 1),
+                        "spot_id":             sid,
+                        "spot_title":          spot["title"],
+                        "spot_time":           spot["time"],
+                        "spot_valid_from":     spot_meta.get("time_from"),
+                        "spot_valid_to":       spot_meta.get("time_to"),
+                        "conflict_id":         other["id"],
+                        "conflict_title":      other["title"],
+                        "conflict_time":       _bo_frames_to_time(other["ora"]),
+                        "conflict_valid_from": other_meta.get("time_from"),
+                        "conflict_valid_to":   other_meta.get("time_to"),
+                        "req_mins":            round(req / (_BO_FPS * 60), 1),
+                        "actual_mins":         round(gap / (_BO_FPS * 60), 1),
                     })
 
         for brk in breaks:

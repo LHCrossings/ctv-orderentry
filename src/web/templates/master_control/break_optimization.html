@@ -71,6 +71,9 @@
         .sep-at { color: var(--text-muted); font-size: 0.72rem; }
         .sep-arrow { color: var(--nord12); font-weight: 700; }
         .sep-gap { margin-left: auto; color: var(--nord12); font-size: 0.72rem; white-space: nowrap; }
+        .sep-valid-row { display: flex; gap: 6px; align-items: center; padding: 1px 0 5px 0; flex-wrap: wrap; }
+        .sep-valid-label { font-size: 0.67rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+        .sep-valid-chip { font-size: 0.72rem; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; padding: 1px 7px; font-family: monospace; }
         .break-spacer { flex: 1; }
         .apply-btn { background: var(--nord14); color: var(--nord6); border: none; border-radius: 6px; padding: 4px 14px; font-size: 0.78rem; font-weight: 700; cursor: pointer; font-family: inherit; }
         .apply-btn:hover { background: #8fad7a; }
@@ -350,14 +353,26 @@ function renderBreak(brk, bi) {
     const sepHtml = brk.sep_violations?.length ? `
         <div class="sep-violation-panel">
             <div class="sep-panel-title">⏱ Separation Violations</div>
-            ${brk.sep_violations.map(v => `<div class="sep-row">
+            ${brk.sep_violations.map(v => {
+                const vA = v.spot_valid_from     ? `${v.spot_valid_from}–${v.spot_valid_to}`     : null;
+                const vB = v.conflict_valid_from ? `${v.conflict_valid_from}–${v.conflict_valid_to}` : null;
+                let validLine = '';
+                if (vA && vB && vA === vB) {
+                    validLine = `<div class="sep-valid-row"><span class="sep-valid-label">Valid to air</span><span class="sep-valid-chip">${esc(vA)}</span></div>`;
+                } else if (vA || vB) {
+                    const cA = vA ? `<span class="sep-valid-chip">${esc(v.spot_title.slice(0,16))} · ${esc(vA)}</span>` : '';
+                    const cB = vB ? `<span class="sep-valid-chip">${esc(v.conflict_title.slice(0,16))} · ${esc(vB)}</span>` : '';
+                    validLine = `<div class="sep-valid-row"><span class="sep-valid-label">Valid to air</span>${cA}${cB}</div>`;
+                }
+                return `<div class="sep-row">
                 <span class="sep-spot">${esc(v.spot_title)}</span>
                 <span class="sep-at">@${esc(v.spot_time)}</span>
                 <span class="sep-arrow">↔</span>
                 <span class="sep-conflict">${esc(v.conflict_title)}</span>
                 <span class="sep-at">@${esc(v.conflict_time)}</span>
                 <span class="sep-gap">gap&nbsp;${v.actual_mins}m / req&nbsp;${v.req_mins}m</span>
-            </div>`).join('')}
+            </div>${validLine}`;
+            }).join('')}
         </div>` : '';
     return `<div class="break-card ${cardClass}" id="break-${bi}">
         <div class="break-header">
