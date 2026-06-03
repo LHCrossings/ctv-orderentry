@@ -2933,8 +2933,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             # Perform the swap (keep each spot's time slot)
                             ora_a, time_a = conflict_spot["new_ora"], conflict_spot["new_time"]
                             ora_b, time_b = cand["new_ora"], cand["new_time"]
+                            dup_a = brk_a["optimized"][conflict_pair[0]]["title"]
+                            dup_b = conflict_spot["title"]
                             brk_a["optimized"][conflict_idx] = {**cand, "new_ora": ora_a, "new_time": time_a}
                             brk_b["optimized"][m] = {**conflict_spot, "new_ora": ora_b, "new_time": time_b}
+
+                            # Record what triggered the swap for diagnostics
+                            brk_a["pi_conflict_detail"] = f"{dup_a}  ×  {dup_b}"
+                            brk_b["pi_swap_source"] = f"Break {i + 1}: {dup_a}  ×  {dup_b}"
 
                             # Recalculate changed + violation for both breaks
                             for brk in (brk_a, brk_b):
@@ -3172,6 +3178,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         "pi_unresolvable":    False,
                     })
 
+        _bo_fix_pi_conflicts(breaks)
         _bo_check_separation(breaks, _bo_fetch_sep_context(cur, market_id, date, from_frames, to_frames))
         return breaks
 
