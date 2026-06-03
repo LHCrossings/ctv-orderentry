@@ -3172,7 +3172,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         "pi_unresolvable":    False,
                     })
 
-        _bo_fix_pi_conflicts(breaks)
         _bo_check_separation(breaks, _bo_fetch_sep_context(cur, market_id, date, from_frames, to_frames))
         return breaks
 
