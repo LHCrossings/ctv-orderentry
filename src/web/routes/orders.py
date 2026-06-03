@@ -2906,10 +2906,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     conflict_spot = brk_a["optimized"][conflict_idx]
                     conflict_key  = _pi_product_key(conflict_spot["title"])
 
-                    # Search other breaks for a swap candidate (duration need not match —
-                    # breaks are elastic; only constraint is no same product in same break)
+                    # Search other breaks for a swap candidate within ±1 hour only
+                    one_hour = round(3600 * _BO_FPS)
+                    brk_a_ora = brk_a["current"][0]["ora"] if brk_a["current"] else 0
                     for k, brk_b in enumerate(breaks):
                         if k == i:
+                            continue
+                        brk_b_ora = brk_b["current"][0]["ora"] if brk_b["current"] else 0
+                        if abs(brk_a_ora - brk_b_ora) > one_hour:
                             continue
                         for m, cand in enumerate(brk_b["optimized"]):
                             if cand["label"] != "PI":
