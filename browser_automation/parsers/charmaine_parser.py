@@ -509,6 +509,17 @@ def _parse_page_text_fallback(
     week_columns = parse_week_column_dates(week_labels, year)
     market       = detect_market_from_text(text)
 
+    # Derive flight dates from week columns when not in the PDF header
+    if not flight_start or not flight_end:
+        from datetime import datetime as _dt, timedelta as _td
+        valid_cols = [w for w in week_columns if w.start_date]
+        if valid_cols:
+            if not flight_start:
+                flight_start = valid_cols[0].start_date  # already MM/DD/YYYY
+            if not flight_end:
+                last = _dt.strptime(valid_cols[-1].start_date, '%m/%d/%Y').date()
+                flight_end = (last + _td(days=6)).strftime('%m/%d/%Y')
+
     return CharmaineOrder(
         advertiser=advertiser,
         contact="",
@@ -1106,6 +1117,17 @@ def _parse_page(
 
     if not parsed_lines:
         return None
+
+    # Derive flight dates from week columns when not in the PDF header
+    if not flight_start or not flight_end:
+        from datetime import datetime as _dt, timedelta as _td
+        valid_cols = [w for w in week_columns if w.start_date]
+        if valid_cols:
+            if not flight_start:
+                flight_start = valid_cols[0].start_date
+            if not flight_end:
+                last = _dt.strptime(valid_cols[-1].start_date, '%m/%d/%Y').date()
+                flight_end = (last + _td(days=6)).strftime('%m/%d/%Y')
 
     return CharmaineOrder(
         advertiser=advertiser,
