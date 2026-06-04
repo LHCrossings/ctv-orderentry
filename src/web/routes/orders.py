@@ -1106,6 +1106,172 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
+    # ── Worldlink Room Maker ─────────────────────────────────────────────────
+
+    @router.get("/scripts/worldlink-room", response_class=HTMLResponse)
+    async def worldlink_room_page(request: Request):
+        return templates.TemplateResponse(request, "scripts/worldlink_room.html")
+
+    @router.get("/api/scripts/worldlink-room/spots")
+    async def worldlink_room_spots(
+        market: str = Query(...),
+        date_from: str = Query(...),
+        date_to: str = Query(...),
+        time_from: str = Query(...),
+        time_to: str = Query(...),
+    ):
+        from browser_automation.etere_direct_client import connect as _edc
+        from src.domain.enums import Market as _M
+        FPS = 30
+        def _to_frames(t):
+            h, m = int(t[:2]), int(t[3:5])
+            return (h * 3600 + m * 60) * FPS
+        def _from_frames(f):
+            s = f // FPS
+            return f"{s // 3600:02d}:{(s % 3600) // 60:02d}"
+        try:
+            mkt_id = _M[market.upper()].etere_id
+        except KeyError:
+            raise HTTPException(status_code=400, detail=f"Unknown market: {market}")
+        conn = _edc()
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT tp.ID_TPALINSE, tp.DATA, tp.ORA,
+                       ttp.ID_ContrattiRighe,
+                       cr.DESCRIZIONE, ct.COD_CONTRATTO, ct.DESCRIZIONE
+                FROM TPALINSE tp
+                JOIN trafficPalinse ttp ON ttp.id_tpalinse = tp.ID_TPALINSE
+                JOIN CONTRATTIRIGHE cr ON ttp.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
+                JOIN CONTRATTITESTATA ct ON cr.ID_CONTRATTITESTATA = ct.ID_CONTRATTITESTATA
+                WHERE ct.AGENZIA = 133
+                  AND tp.COD_USER = %s
+                  AND tp.DATA >= %s AND tp.DATA <= %s
+                  AND tp.ORA >= %s AND tp.ORA <= %s
+                  AND tp.LIVELLO = 0
+                ORDER BY tp.DATA, tp.ORA
+            """, (mkt_id, date_from, date_to, _to_frames(time_from), _to_frames(time_to)))
+            rows = cur.fetchall()
+            return JSONResponse([{
+                "id": r[0],
+                "date": str(r[1])[:10],
+                "time": _from_frames(r[2]),
+                "line_id": r[3],
+                "line_desc": r[4] or "",
+                "contract_code": r[5] or "",
+                "contract_desc": r[6] or "",
+            } for r in rows])
+        finally:
+            conn.close()
+
+    @router.post("/api/scripts/worldlink-room/blacklist")
+    async def worldlink_room_blacklist(body: dict = Body(...)):
+        from browser_automation.etere_direct_client import connect as _edc
+        spot_ids = body.get("spot_ids", [])
+        if not spot_ids:
+            return JSONResponse({"blacklisted": 0})
+        conn = _edc()
+        try:
+            cur = conn.cursor()
+            done = 0
+            for tpa_id in spot_ids:
+                cur.execute("""
+                    SELECT ttp.ID_ContrattiRighe, cr.DATA_INIZIO, cr.DATA_FINE
+                    FROM trafficPalinse ttp
+                    JOIN CONTRATTIRIGHE cr ON ttp.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
+                    WHERE ttp.id_tpalinse = %s
+                """, (tpa_id,))
+                row = cur.fetchone()
+                if not row:
+                    continue
+                line_id, d_from, d_to = row
+                cur.execute("DELETE FROM trafficPalinse WHERE id_tpalinse = %s", (tpa_id,))
+                cur.execute("DELETE FROM TPALINSE WHERE ID_TPALINSE = %s", (tpa_id,))
+                cur.execute("""
+                    SELECT ID_TrafficScheduleList FROM Traffic_ScheduleList
+                    WHERE ID_ContrattiRighe = %s AND BlackList > 0
+                """, (line_id,))
+                if cur.fetchone() is None:
+                    cur.execute("""
+                        INSERT INTO Traffic_ScheduleList
+                          (ID_ContrattiRighe, BlackList, PassageMiss,
+                           ID_TRAFFICPALINSE, Date, ToDate,
+                           Notes, Operator,
+                           ID_FILMATI, ID_FILMATI_TAIL, ID_FILMATI_MIDDLE,
+                           ID_FATTURAEMITTENTE, Split)
+                        VALUES (%s,1,1,%s,%s,%s,%s,%s,-1,-1,-1,0,0)
+                    """, (line_id, tpa_id, d_from, d_to, "WL room", "Portal"))
+                else:
+                    cur.execute("""
+                        UPDATE Traffic_ScheduleList
+                        SET PassageMiss = PassageMiss + 1
+                        WHERE ID_ContrattiRighe = %s AND BlackList > 0
+                    """, (line_id,))
+                conn.commit()
+                done += 1
+            return JSONResponse({"blacklisted": done})
+        finally:
+            conn.close()
+
+    @router.get("/api/scripts/worldlink-room/blacklisted")
+    async def worldlink_room_blacklisted(market: str = Query(...)):
+        from browser_automation.etere_direct_client import connect as _edc
+        from src.domain.enums import Market as _M
+        try:
+            mkt_id = _M[market.upper()].etere_id
+        except KeyError:
+            raise HTTPException(status_code=400, detail=f"Unknown market: {market}")
+        conn = _edc()
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT tsl.ID_TrafficScheduleList,
+                       tsl.ID_ContrattiRighe,
+                       tsl.PassageMiss,
+                       tsl.Date, tsl.ToDate,
+                       cr.DESCRIZIONE, ct.COD_CONTRATTO
+                FROM Traffic_ScheduleList tsl
+                JOIN CONTRATTIRIGHE cr ON tsl.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
+                JOIN CONTRATTITESTATA ct ON cr.ID_CONTRATTITESTATA = ct.ID_CONTRATTITESTATA
+                WHERE ct.AGENZIA = 133
+                  AND tsl.BlackList > 0
+                  AND cr.COD_USER = %s
+                ORDER BY tsl.Date, ct.COD_CONTRATTO
+            """, (mkt_id,))
+            rows = cur.fetchall()
+            return JSONResponse([{
+                "tsl_id": r[0],
+                "line_id": r[1],
+                "count": r[2],
+                "date_from": str(r[3])[:10] if r[3] else "",
+                "date_to": str(r[4])[:10] if r[4] else "",
+                "line_desc": r[5] or "",
+                "contract_code": r[6] or "",
+            } for r in rows])
+        finally:
+            conn.close()
+
+    @router.post("/api/scripts/worldlink-room/restore")
+    async def worldlink_room_restore(body: dict = Body(...)):
+        from browser_automation.etere_direct_client import connect as _edc
+        line_ids = body.get("line_ids", [])
+        if not line_ids:
+            return JSONResponse({"restored": 0})
+        conn = _edc()
+        try:
+            cur = conn.cursor()
+            total = 0
+            for line_id in line_ids:
+                cur.execute("""
+                    DELETE FROM Traffic_ScheduleList
+                    WHERE ID_ContrattiRighe = %s AND BlackList > 0
+                """, (line_id,))
+                total += cur.rowcount
+                conn.commit()
+            return JSONResponse({"restored": total})
+        finally:
+            conn.close()
+
     @router.get("/api/scripts/block-refresh")
     async def run_block_refresh(contract_id: int = Query(..., gt=0)):
         project_root = Path(__file__).parent.parent.parent.parent

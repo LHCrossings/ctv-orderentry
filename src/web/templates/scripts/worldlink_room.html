@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Worldlink Room Maker — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <link rel="stylesheet" href="/static/css/app.css" />
+    <style>
+        .toolbar { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 18px; }
+        .field-group { display: flex; flex-direction: column; gap: 4px; }
+        .field-group label { font-size: 0.75rem; font-weight: 600; color: var(--text-secondary);
+                             text-transform: uppercase; letter-spacing: 0.04em; }
+        .field-group input, .field-group select {
+            padding: 7px 10px; border: 1px solid var(--border-color); border-radius: 6px;
+            font-family: inherit; font-size: 0.88rem; background: var(--bg-secondary);
+            color: var(--text-primary); min-width: 120px;
+        }
+        .btn { padding: 8px 16px; border: none; border-radius: 6px; font-family: inherit;
+               font-size: 0.88rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+        .btn-primary { background: var(--accent-primary); color: white; }
+        .btn-primary:hover { opacity: 0.88; }
+        .btn-danger  { background: var(--nord11, #BF616A); color: white; }
+        .btn-danger:hover { opacity: 0.88; }
+        .btn-restore { background: var(--nord14, #A3BE8C); color: #2E3440; }
+        .btn-restore:hover { opacity: 0.88; }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+        .section { margin-bottom: 28px; }
+        .section-header { display: flex; align-items: center; justify-content: space-between;
+                          margin-bottom: 10px; }
+        .section-title { font-size: 0.85rem; font-weight: 700; text-transform: uppercase;
+                         letter-spacing: 0.06em; color: var(--text-secondary); }
+        .count-badge { font-size: 0.78rem; background: var(--bg-secondary);
+                       border: 1px solid var(--border-color); border-radius: 10px;
+                       padding: 2px 8px; color: var(--text-secondary); }
+
+        .table-wrap { border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); }
+        table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+        thead { background: var(--nord1); color: var(--nord4); }
+        thead th { padding: 8px 10px; text-align: left; font-weight: 500;
+                   font-size: 0.76rem; letter-spacing: 0.03em; text-transform: uppercase; }
+        tbody tr { border-bottom: 1px solid var(--border-color); transition: background 0.1s; }
+        tbody tr:last-child { border-bottom: none; }
+        tbody tr:hover { background: var(--bg-secondary); }
+        tbody td { padding: 7px 10px; vertical-align: middle; }
+        td.mono { font-family: monospace; }
+        .cb-col { width: 32px; text-align: center; }
+        .tag-code { font-family: monospace; font-size: 0.8rem; background: var(--bg-secondary);
+                    border: 1px solid var(--border-color); border-radius: 4px;
+                    padding: 1px 5px; color: var(--accent-primary); }
+        .empty-msg { text-align: center; color: var(--text-secondary); padding: 28px;
+                     font-style: italic; font-size: 0.85rem; }
+        .status-bar { font-size: 0.8rem; color: var(--text-secondary); margin-top: 6px; }
+        .actions-bar { display: flex; gap: 8px; align-items: center; }
+        .select-all-label { font-size: 0.8rem; color: var(--text-secondary); cursor: pointer;
+                            user-select: none; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/scripts" class="home-btn">←</a>
+            <div class="logo-icon">🔀</div>
+            <div>
+                <h1>Worldlink <span>Room Maker</span></h1>
+                <div class="logo-sub">Scripts</div>
+            </div>
+        </div>
+        <span class="header-badge">AGENZIA 133</span>
+    </div>
+</header>
+
+<main>
+    <div class="portal-intro">
+        <h2>Free Up Break Space</h2>
+        <p>Find scheduled Worldlink spots in a window, blacklist them to open up room, then restore them after the small client schedules so Etere can re-place them.</p>
+    </div>
+
+    <!-- Search form -->
+    <div class="toolbar">
+        <div class="field-group">
+            <label>Market</label>
+            <select id="market">
+                <option value="HOU">HOU – Houston</option>
+                <option value="SFO">SFO – San Francisco</option>
+                <option value="CVC">CVC – Sacramento</option>
+                <option value="LAX">LAX – Los Angeles</option>
+                <option value="SEA">SEA – Seattle</option>
+                <option value="CMP">CMP – Chicago/Mpls</option>
+                <option value="WDC">WDC – Washington DC</option>
+                <option value="NYC">NYC – New York</option>
+            </select>
+        </div>
+        <div class="field-group">
+            <label>Date From</label>
+            <input type="date" id="date-from" />
+        </div>
+        <div class="field-group">
+            <label>Date To</label>
+            <input type="date" id="date-to" />
+        </div>
+        <div class="field-group">
+            <label>Time From</label>
+            <input type="time" id="time-from" value="07:00" />
+        </div>
+        <div class="field-group">
+            <label>Time To</label>
+            <input type="time" id="time-to" value="16:00" />
+        </div>
+        <button class="btn btn-primary" id="search-btn" onclick="search()">Search</button>
+        <button class="btn btn-restore" onclick="loadBlacklisted()" style="margin-left:4px">Refresh Blacklisted</button>
+    </div>
+
+    <!-- Scheduled spots -->
+    <div class="section">
+        <div class="section-header">
+            <span class="section-title">Scheduled Worldlink Spots</span>
+            <div class="actions-bar">
+                <label class="select-all-label"><input type="checkbox" id="select-all" onchange="toggleAll(this)"> Select all</label>
+                <button class="btn btn-danger" id="blacklist-btn" onclick="blacklistSelected()" disabled>Blacklist Selected</button>
+                <button class="btn btn-danger" onclick="blacklistAll()" id="blacklist-all-btn" disabled>Blacklist All</button>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="cb-col"></th>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th>Contract</th>
+                        <th>Line</th>
+                    </tr>
+                </thead>
+                <tbody id="spots-tbody">
+                    <tr><td colspan="5" class="empty-msg">Enter search criteria above and click Search.</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="status-bar" id="spots-status"></div>
+    </div>
+
+    <!-- Blacklisted spots -->
+    <div class="section">
+        <div class="section-header">
+            <span class="section-title">Currently Blacklisted (this market)</span>
+            <div class="actions-bar">
+                <label class="select-all-label"><input type="checkbox" id="bl-select-all" onchange="toggleAllBL(this)"> Select all</label>
+                <button class="btn btn-restore" id="restore-btn" onclick="restoreSelected()" disabled>Restore Selected</button>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="cb-col"></th>
+                        <th>Contract</th>
+                        <th>Line</th>
+                        <th>Spots</th>
+                        <th>Flight</th>
+                    </tr>
+                </thead>
+                <tbody id="bl-tbody">
+                    <tr><td colspan="5" class="empty-msg">Select a market and click Refresh Blacklisted.</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="status-bar" id="bl-status"></div>
+    </div>
+</main>
+
+<script>
+let _spots = [];
+let _blacklisted = [];
+
+async function search() {
+    const mkt      = document.getElementById('market').value;
+    const dateFrom = document.getElementById('date-from').value;
+    const dateTo   = document.getElementById('date-to').value;
+    const timeFrom = document.getElementById('time-from').value;
+    const timeTo   = document.getElementById('time-to').value;
+
+    if (!dateFrom || !dateTo) { alert('Date range required.'); return; }
+
+    document.getElementById('search-btn').textContent = 'Searching…';
+    document.getElementById('search-btn').disabled = true;
+
+    try {
+        const url = `/api/scripts/worldlink-room/spots?market=${mkt}&date_from=${dateFrom}&date_to=${dateTo}&time_from=${timeFrom}:00&time_to=${timeTo}:00`;
+        const resp = await fetch(url);
+        if (!resp.ok) { alert('Error: ' + await resp.text()); return; }
+        _spots = await resp.json();
+        renderSpots();
+        await loadBlacklisted();
+    } finally {
+        document.getElementById('search-btn').textContent = 'Search';
+        document.getElementById('search-btn').disabled = false;
+    }
+}
+
+function renderSpots() {
+    const tbody = document.getElementById('spots-tbody');
+    document.getElementById('spots-status').textContent = `${_spots.length} spot(s) found`;
+    document.getElementById('blacklist-btn').disabled = _spots.length === 0;
+    document.getElementById('blacklist-all-btn').disabled = _spots.length === 0;
+    document.getElementById('select-all').checked = false;
+
+    if (_spots.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-msg">No Worldlink spots found in this window.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = _spots.map(s => `
+        <tr>
+            <td class="cb-col"><input type="checkbox" class="spot-cb" data-id="${s.id}"></td>
+            <td>${s.date}</td>
+            <td class="mono">${s.time}</td>
+            <td><span class="tag-code">${esc(s.contract_code)}</span></td>
+            <td>${esc(s.line_desc)}</td>
+        </tr>
+    `).join('');
+    tbody.querySelectorAll('.spot-cb').forEach(cb =>
+        cb.addEventListener('change', updateBlacklistBtnState)
+    );
+}
+
+function updateBlacklistBtnState() {
+    const any = document.querySelectorAll('.spot-cb:checked').length > 0;
+    document.getElementById('blacklist-btn').disabled = !any;
+}
+
+function toggleAll(master) {
+    document.querySelectorAll('.spot-cb').forEach(cb => cb.checked = master.checked);
+    updateBlacklistBtnState();
+}
+
+function toggleAllBL(master) {
+    document.querySelectorAll('.bl-cb').forEach(cb => cb.checked = master.checked);
+    updateRestoreBtnState();
+}
+
+function updateRestoreBtnState() {
+    const any = document.querySelectorAll('.bl-cb:checked').length > 0;
+    document.getElementById('restore-btn').disabled = !any;
+}
+
+async function blacklistSelected() {
+    const ids = [...document.querySelectorAll('.spot-cb:checked')].map(cb => parseInt(cb.dataset.id));
+    await doBlacklist(ids);
+}
+
+async function blacklistAll() {
+    const ids = _spots.map(s => s.id);
+    await doBlacklist(ids);
+}
+
+async function doBlacklist(ids) {
+    if (ids.length === 0) return;
+    if (!confirm(`Blacklist ${ids.length} spot(s)? This will remove them from the schedule.`)) return;
+
+    document.getElementById('blacklist-btn').disabled = true;
+    document.getElementById('blacklist-all-btn').disabled = true;
+
+    const resp = await fetch('/api/scripts/worldlink-room/blacklist', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({spot_ids: ids}),
+    });
+    const data = await resp.json();
+    alert(`✓ ${data.blacklisted} spot(s) blacklisted.`);
+    await search();
+}
+
+async function loadBlacklisted() {
+    const mkt = document.getElementById('market').value;
+    const resp = await fetch(`/api/scripts/worldlink-room/blacklisted?market=${mkt}`);
+    if (!resp.ok) return;
+    _blacklisted = await resp.json();
+    renderBlacklisted();
+}
+
+function renderBlacklisted() {
+    const tbody = document.getElementById('bl-tbody');
+    document.getElementById('bl-status').textContent = `${_blacklisted.length} blacklisted entry(ies)`;
+    document.getElementById('restore-btn').disabled = _blacklisted.length === 0;
+    document.getElementById('bl-select-all').checked = false;
+
+    if (_blacklisted.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-msg">No blacklisted Worldlink spots for this market.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = _blacklisted.map(b => `
+        <tr>
+            <td class="cb-col"><input type="checkbox" class="bl-cb" data-line="${b.line_id}"></td>
+            <td><span class="tag-code">${esc(b.contract_code)}</span></td>
+            <td>${esc(b.line_desc)}</td>
+            <td class="mono">${b.count}</td>
+            <td class="mono">${b.date_from} – ${b.date_to}</td>
+        </tr>
+    `).join('');
+    tbody.querySelectorAll('.bl-cb').forEach(cb =>
+        cb.addEventListener('change', updateRestoreBtnState)
+    );
+}
+
+async function restoreSelected() {
+    const line_ids = [...document.querySelectorAll('.bl-cb:checked')].map(cb => parseInt(cb.dataset.line));
+    if (line_ids.length === 0) return;
+    if (!confirm(`Restore ${line_ids.length} line(s)? Spots will become schedulable again in Etere.`)) return;
+
+    document.getElementById('restore-btn').disabled = true;
+    const resp = await fetch('/api/scripts/worldlink-room/restore', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({line_ids}),
+    });
+    const data = await resp.json();
+    alert(`✓ ${data.restored} TSL entry(ies) removed — spots are schedulable again.`);
+    await loadBlacklisted();
+}
+
+function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>
