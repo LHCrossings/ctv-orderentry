@@ -429,7 +429,7 @@ def build_placement_csv_from_db(
 
     contract_code   = hdr["contract_code"]   or ""
     description     = hdr["description"]     or ""
-    agency_name     = hdr["agency_name"]     or description
+    agency_name     = hdr["agency_name"]     or ""  # empty for direct/client orders
     client_name     = hdr["client_name"]     or ""
     agency_address  = hdr["agency_address"]  or ""
     agency_city     = hdr["agency_city"]     or ""

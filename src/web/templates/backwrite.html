@@ -855,6 +855,7 @@ function prefillFromCSV(d) {
     if (d.estimate_hint) setIfEmpty('estimate', d.estimate_hint);
     if (d.address)       setIfEmpty('address',  d.address);
     if (d.city)          setIfEmpty('city',     d.city);
+    if (d.agency_flag)   fill('agency_flag',    d.agency_flag);
 }
 
 function setIfEmpty(id, val) {
