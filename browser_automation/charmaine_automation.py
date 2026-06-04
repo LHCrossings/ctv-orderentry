@@ -842,6 +842,7 @@ def process_charmaine_order(
                 contract_date=flight_start,
                 contract_end_date=flight_end,
                 note=notes,
+                allow_rename=True,
             )
 
             if not contract_number:
