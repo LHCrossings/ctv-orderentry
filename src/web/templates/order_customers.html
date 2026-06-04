@@ -255,7 +255,7 @@ function renderTable() {
     tbody.querySelectorAll('.del-btn').forEach(btn => {
         btn.addEventListener('click', e => {
             e.stopPropagation();
-            deleteCustomer(btn.dataset.name, btn.dataset.type);
+            deleteCustomer(btn, btn.dataset.name, btn.dataset.type);
         });
     });
 }
@@ -266,7 +266,7 @@ function openModal(name, type) {
     _editKey = { customer_name: name, order_type: type };
     document.getElementById('modal-title').textContent = 'Edit Customer';
     fillForm(row);
-    document.getElementById('f-customer_name').readOnly = true;
+    document.getElementById('f-customer_name').readOnly = false;
     document.getElementById('f-order_type').readOnly = true;
     document.getElementById('modal-backdrop').classList.add('open');
 }
@@ -344,13 +344,32 @@ async function saveCustomer() {
     loadCustomers(document.getElementById('search-input').value);
 }
 
-async function deleteCustomer(name, type) {
-    if (!confirm(`Delete "${name}" (${type})?`)) return;
+async function deleteCustomer(btn, name, type) {
+    if (!btn.dataset.confirming) {
+        btn.dataset.confirming = '1';
+        btn.textContent = 'Sure?';
+        setTimeout(() => {
+            if (btn.dataset.confirming) {
+                delete btn.dataset.confirming;
+                btn.textContent = 'Delete';
+            }
+        }, 3000);
+        return;
+    }
+    delete btn.dataset.confirming;
+    btn.textContent = 'Deleting…';
+    btn.disabled = true;
     const resp = await fetch(
         `/api/orders/customers?customer_name=${encodeURIComponent(name)}&order_type=${encodeURIComponent(type)}`,
         { method: 'DELETE' }
     );
-    if (resp.ok) loadCustomers(document.getElementById('search-input').value);
+    if (resp.ok) {
+        loadCustomers(document.getElementById('search-input').value);
+    } else {
+        btn.textContent = 'Delete';
+        btn.disabled = false;
+        alert('Delete failed: ' + await resp.text());
+    }
 }
 
 function closeModal() {

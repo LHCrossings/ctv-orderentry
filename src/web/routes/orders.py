@@ -2393,12 +2393,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         try:
             conn.execute(
                 """UPDATE customers SET
-                   customer_id=?, code_name=?, description_name=?,
+                   customer_name=?, customer_id=?, code_name=?, description_name=?,
                    billing_type=?, default_market=?, separation_customer=?,
                    separation_event=?, separation_order=?, include_market_in_code=?,
                    auto_aircheck=?, abbreviation=?
                    WHERE customer_name=? AND order_type=?""",
                 (
+                    body.get("customer_name", customer_name),
                     body.get("customer_id", ""),
                     body.get("code_name", ""),
                     body.get("description_name", ""),
