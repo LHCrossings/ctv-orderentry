@@ -1137,7 +1137,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         try:
             cur = conn.cursor()
             cur.execute("""
-                SELECT tp.ID_TPALINSE, tp.DATA, tp.ORA,
+                SELECT tp.ID_TPALINSE, tp.DATA, tp.ORA, tp.DURATION,
                        ttp.ID_ContrattiRighe,
                        cr.DESCRIZIONE, ct.COD_CONTRATTO, ct.DESCRIZIONE
                 FROM TPALINSE tp
@@ -1152,14 +1152,18 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 ORDER BY tp.DATA, tp.ORA
             """, (mkt_id, date_from, date_to, _to_frames(time_from), _to_frames(time_to)))
             rows = cur.fetchall()
+            def _dur(f):
+                s = round(f / 29.97)
+                return f":{s:02d}" if s < 60 else f"{s//60}:{s%60:02d}"
             return JSONResponse([{
                 "id": r[0],
                 "date": str(r[1])[:10],
                 "time": _from_frames(r[2]),
-                "line_id": r[3],
-                "line_desc": r[4] or "",
-                "contract_code": r[5] or "",
-                "contract_desc": r[6] or "",
+                "duration": _dur(r[3]) if r[3] else "",
+                "line_id": r[4],
+                "line_desc": r[5] or "",
+                "contract_code": r[6] or "",
+                "contract_desc": r[7] or "",
             } for r in rows])
         finally:
             conn.close()

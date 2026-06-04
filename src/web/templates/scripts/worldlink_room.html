@@ -141,12 +141,13 @@
                         <th class="cb-col"></th>
                         <th>Date</th>
                         <th>Time</th>
+                        <th>Len</th>
                         <th>Contract</th>
                         <th>Line</th>
                     </tr>
                 </thead>
                 <tbody id="spots-tbody">
-                    <tr><td colspan="5" class="empty-msg">Enter search criteria above and click Search.</td></tr>
+                    <tr><td colspan="6" class="empty-msg">Enter search criteria above and click Search.</td></tr>
                 </tbody>
             </table>
         </div>
@@ -246,7 +247,7 @@ function renderSpots() {
     document.getElementById('select-all').checked = false;
 
     if (_spots.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="empty-msg">No Worldlink spots found in this window.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">No Worldlink spots found in this window.</td></tr>';
         return;
     }
     tbody.innerHTML = _spots.map(s => `
@@ -254,6 +255,7 @@ function renderSpots() {
             <td class="cb-col"><input type="checkbox" class="spot-cb" data-id="${s.id}"></td>
             <td>${s.date}</td>
             <td class="mono">${s.time}</td>
+            <td class="mono">${esc(s.duration)}</td>
             <td><span class="tag-code">${esc(s.contract_code)}</span></td>
             <td>${esc(s.line_desc)}</td>
         </tr>
