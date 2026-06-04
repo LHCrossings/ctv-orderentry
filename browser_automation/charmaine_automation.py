@@ -907,9 +907,11 @@ def process_charmaine_order(
                         'total_spots': line.total_spots,
                     }] if line.total_spots > 0 else []
                 else:
+                    flight_end_str   = flight_end.strftime('%m/%d/%Y')   if flight_end   else order.flight_end
+                    flight_start_str = flight_start.strftime('%m/%d/%Y') if flight_start else order.flight_start
                     week_groups = EtereClient.consolidate_weeks(
-                        line.weekly_spots, order.week_columns, order.flight_end,
-                        flight_start=order.flight_start,
+                        line.weekly_spots, order.week_columns, flight_end_str,
+                        flight_start=flight_start_str,
                     )
 
                 for group in week_groups:
