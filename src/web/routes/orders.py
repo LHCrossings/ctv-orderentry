@@ -1271,14 +1271,18 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     WHERE ID_ContrattiRighe = %s AND BlackList > 0
                 """, (line_id,))
                 total += cur.rowcount
-                # Reset scheduling state so Etere's scheduler picks up freed spots:
-                # - SCHEDULESTATUS NULL = active (clears "complete" flag)
-                # - SCHEDULELASTUPD NULL = not yet evaluated (forces re-evaluation)
+                # Put the line back in active scheduling:
+                # ROWSTATUS=0 is confirmed to make the line appear in Etere's
+                # traffic scheduler — this is the primary trigger.
+                # SCHEDULESTATUS=NULL and SCHEDULELASTUPD=NULL are also cleared
+                # as a precaution.
                 cur.execute("""
                     UPDATE CONTRATTIRIGHE
-                    SET SCHEDULESTATUS = NULL, SCHEDULELASTUPD = NULL, SCHEDULEMSG = ''
+                    SET ROWSTATUS = 0,
+                        SCHEDULESTATUS = NULL,
+                        SCHEDULELASTUPD = NULL,
+                        SCHEDULEMSG = ''
                     WHERE ID_CONTRATTIRIGHE = %s
-                      AND (SCHEDULESTATUS = 1 OR SCHEDULELASTUPD IS NOT NULL)
                 """, (line_id,))
                 conn.commit()
             return JSONResponse({"restored": total})
