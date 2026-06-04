@@ -921,6 +921,12 @@ def process_charmaine_order(
                     group_weeks = group['weeks']
                     group_total = group.get('total_spots', group_spw * group_weeks)
 
+                    # consolidate_weeks returns MM/DD/YYYY strings; direct client needs date objects
+                    if isinstance(group_start, str):
+                        group_start = datetime.strptime(group_start, '%m/%d/%Y').date()
+                    if isinstance(group_end, str):
+                        group_end = datetime.strptime(group_end, '%m/%d/%Y').date()
+
                     print(f"  {group_start} - {group_end} ({group_weeks} wk): {group_spw}/wk, {group_total} total")
 
                     line_id = client.add_contract_line(
