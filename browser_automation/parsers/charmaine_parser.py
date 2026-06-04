@@ -622,6 +622,8 @@ def _parse_page(
             advertiser = line_stripped.replace("Advertiser ", "", 1).strip()
         elif line_stripped.startswith("Client ") and not advertiser:
             val = line_stripped.replace("Client ", "", 1).strip()
+            # Strip trailing label tokens from same-line adjacent cells (e.g. "... Address:")
+            val = re.sub(r'\s+(?:Address|Phone|Email|Contact|Fax)\s*:.*$', '', val, flags=re.IGNORECASE).strip()
             # Skip signature/placeholder labels (e.g., "Client signature", "Client name")
             if val and val.lower() not in ('signature', 'name', 'print', 'initial', 'date'):
                 advertiser = val
@@ -1031,6 +1033,7 @@ def _parse_page(
             # Skip summary/total rows
             lang_lower = lang_cell.lower()
             if lang_lower in ['total paid', 'total bonus', 'total units', 'total bonuses',
+                              'total paid+bonuses', 'total units+bonuses',
                               'paid', 'bonuses',
                               'production', 'production ( talent hosting)']:
                 continue
