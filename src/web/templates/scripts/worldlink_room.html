@@ -64,7 +64,7 @@
 <header>
     <div class="header-inner">
         <div class="logo">
-            <a href="/scripts" class="home-btn">←</a>
+            <a href="/" class="home-btn">🏠</a>
             <div class="logo-icon">🔀</div>
             <div>
                 <h1>Worldlink <span>Room Maker</span></h1>
@@ -98,19 +98,27 @@
         </div>
         <div class="field-group">
             <label>Date From</label>
-            <input type="date" id="date-from" />
+            <input type="text" class="field-input" id="date-from" placeholder="MM/DD/YYYY"
+                   onfocus="this.select()" onblur="formatDate(this)" style="width:110px" />
         </div>
         <div class="field-group">
             <label>Date To</label>
-            <input type="date" id="date-to" />
+            <input type="text" class="field-input" id="date-to" placeholder="MM/DD/YYYY"
+                   onfocus="this.select()" onblur="formatDate(this)" style="width:110px" />
         </div>
         <div class="field-group">
             <label>Time From</label>
-            <input type="time" id="time-from" value="07:00" />
+            <input type="text" class="field-input" id="time-from" placeholder="07:00" value="07:00"
+                   onfocus="this.select();this.dataset.clearing='1';"
+                   onkeydown="if(event.key==='Enter'){this.blur();}else if(this.dataset.clearing==='1'){if(/^\d$/.test(event.key))this.value='';delete this.dataset.clearing;}"
+                   oninput="fmtTime(this)" style="width:80px" />
         </div>
         <div class="field-group">
             <label>Time To</label>
-            <input type="time" id="time-to" value="16:00" />
+            <input type="text" class="field-input" id="time-to" placeholder="16:00" value="16:00"
+                   onfocus="this.select();this.dataset.clearing='1';"
+                   onkeydown="if(event.key==='Enter'){this.blur();}else if(this.dataset.clearing==='1'){if(/^\d$/.test(event.key))this.value='';delete this.dataset.clearing;}"
+                   oninput="fmtTime(this)" style="width:80px" />
         </div>
         <button class="btn btn-primary" id="search-btn" onclick="search()">Search</button>
         <button class="btn btn-restore" onclick="loadBlacklisted()" style="margin-left:4px">Refresh Blacklisted</button>
@@ -178,6 +186,33 @@
 let _spots = [];
 let _blacklisted = [];
 
+// ── Standard date/time helpers ─────────────────────────────────────────────
+function toMMDDYYYY(d) {
+    return String(d.getMonth()+1).padStart(2,'0') + '/' +
+           String(d.getDate()).padStart(2,'0') + '/' + d.getFullYear();
+}
+function formatDate(el) {
+    const d = el.value.replace(/\D/g, '');
+    const yr = new Date().getFullYear();
+    if (d.length === 3)      el.value = '0'+d[0]+'/'+d.slice(1,3)+'/'+yr;
+    else if (d.length === 4) el.value = d.slice(0,2)+'/'+d.slice(2,4)+'/'+yr;
+    else if (d.length === 6) el.value = d.slice(0,2)+'/'+d.slice(2,4)+'/20'+d.slice(4,6);
+    else if (d.length === 8) el.value = d.slice(0,2)+'/'+d.slice(2,4)+'/'+d.slice(4,8);
+}
+function fmtTime(input) {
+    const digits = input.value.replace(/\D/g, '').slice(0, 4);
+    input.value = digits.length > 2 ? digits.slice(0,2) + ':' + digits.slice(2) : digits;
+    input.setSelectionRange(input.value.length, input.value.length);
+}
+
+// Set default dates on load
+(function() {
+    const today = new Date();
+    const nextWeek = new Date(today); nextWeek.setDate(today.getDate() + 6);
+    document.getElementById('date-from').value = toMMDDYYYY(today);
+    document.getElementById('date-to').value   = toMMDDYYYY(nextWeek);
+})();
+
 async function search() {
     const mkt      = document.getElementById('market').value;
     const dateFrom = document.getElementById('date-from').value;
@@ -191,7 +226,7 @@ async function search() {
     document.getElementById('search-btn').disabled = true;
 
     try {
-        const url = `/api/scripts/worldlink-room/spots?market=${mkt}&date_from=${dateFrom}&date_to=${dateTo}&time_from=${timeFrom}:00&time_to=${timeTo}:00`;
+        const url = `/api/scripts/worldlink-room/spots?market=${mkt}&date_from=${encodeURIComponent(dateFrom)}&date_to=${encodeURIComponent(dateTo)}&time_from=${timeFrom}&time_to=${timeTo}`;
         const resp = await fetch(url);
         if (!resp.ok) { alert('Error: ' + await resp.text()); return; }
         _spots = await resp.json();
