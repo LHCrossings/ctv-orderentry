@@ -363,8 +363,36 @@ async function restoreSelected() {
         body: JSON.stringify({line_ids}),
     });
     const data = await resp.json();
-    alert(`✓ ${data.restored} TSL entry(ies) removed — spots are schedulable again.`);
+    document.getElementById('bl-status').textContent =
+        `✓ ${data.restored} TSL entry(ies) removed — Etere is scheduling...`;
     await loadBlacklisted();
+
+    // Auto re-apply filmati once Etere places the new spots
+    if (data.filmati && Object.keys(data.filmati).length > 0) {
+        reapplyFilmati(data.filmati, 20);
+    }
+}
+
+async function reapplyFilmati(filmati, attemptsLeft) {
+    if (attemptsLeft <= 0) {
+        document.getElementById('bl-status').textContent =
+            '⚠ Creatives not yet re-applied — Etere may still be scheduling. Refresh page and check.';
+        return;
+    }
+    const resp = await fetch('/api/scripts/worldlink-room/reapply-filmati', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({filmati}),
+    });
+    const data = await resp.json();
+    if (data.pending === 0 && data.applied > 0) {
+        document.getElementById('bl-status').textContent =
+            `✓ ${data.applied} spot(s) restored with creatives re-applied.`;
+    } else if (data.pending > 0) {
+        document.getElementById('bl-status').textContent =
+            `Waiting for Etere to schedule (${data.pending} line(s) pending)... retry ${21 - attemptsLeft}/20`;
+        setTimeout(() => reapplyFilmati(filmati, attemptsLeft - 1), 15000);
+    }
 }
 
 function esc(s) {

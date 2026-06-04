@@ -1264,22 +1264,33 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         from browser_automation.etere_direct_client import connect as _edc
         line_ids = body.get("line_ids", [])
         if not line_ids:
-            return JSONResponse({"restored": 0})
+            return JSONResponse({"restored": 0, "filmati": {}})
         conn = _edc()
         try:
             cur = conn.cursor()
             total = 0
+            filmati = {}  # {line_id: {filmati_id, snapshot_max_tpa_id}}
             for line_id in line_ids:
+                # Read filmati stored during blacklist
+                cur.execute("""
+                    SELECT ID_FILMATI FROM Traffic_ScheduleList
+                    WHERE ID_ContrattiRighe = %s AND BlackList > 0
+                """, (line_id,))
+                tsl_row = cur.fetchone()
+                stored_filmati = tsl_row[0] if tsl_row and tsl_row[0] and tsl_row[0] > 0 else None
+                # Snapshot max TPALINSE ID — new spots will have higher IDs
+                cur.execute("""
+                    SELECT ISNULL(MAX(tp.ID_TPALINSE), 0)
+                    FROM TPALINSE tp
+                    JOIN trafficPalinse ttp ON ttp.id_tpalinse = tp.ID_TPALINSE
+                    WHERE ttp.ID_ContrattiRighe = %s AND tp.LIVELLO = 0
+                """, (line_id,))
+                snapshot_max = cur.fetchone()[0]
                 cur.execute("""
                     DELETE FROM Traffic_ScheduleList
                     WHERE ID_ContrattiRighe = %s AND BlackList > 0
                 """, (line_id,))
                 total += cur.rowcount
-                # Put the line back in active scheduling:
-                # ROWSTATUS=0 is confirmed to make the line appear in Etere's
-                # traffic scheduler — this is the primary trigger.
-                # SCHEDULESTATUS=NULL and SCHEDULELASTUPD=NULL are also cleared
-                # as a precaution.
                 cur.execute("""
                     UPDATE CONTRATTIRIGHE
                     SET ROWSTATUS = 0,
@@ -1289,7 +1300,49 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     WHERE ID_CONTRATTIRIGHE = %s
                 """, (line_id,))
                 conn.commit()
-            return JSONResponse({"restored": total})
+                if stored_filmati:
+                    filmati[str(line_id)] = {"filmati_id": stored_filmati, "snapshot_max": snapshot_max}
+            return JSONResponse({"restored": total, "filmati": filmati})
+        finally:
+            conn.close()
+
+    @router.post("/api/scripts/worldlink-room/reapply-filmati")
+    async def worldlink_room_reapply_filmati(body: dict = Body(...)):
+        """Find new TPALINSE rows created after restore and apply stored filmati."""
+        from browser_automation.etere_direct_client import connect as _edc
+        filmati = body.get("filmati", {})  # {line_id: {filmati_id, snapshot_max}}
+        if not filmati:
+            return JSONResponse({"applied": 0, "pending": 0})
+        conn = _edc()
+        try:
+            cur = conn.cursor()
+            applied = 0
+            pending = 0
+            for line_id_str, info in filmati.items():
+                line_id = int(line_id_str)
+                filmati_id = info["filmati_id"]
+                snapshot_max = info["snapshot_max"]
+                # Find new TPALINSE rows for this line created after the snapshot
+                cur.execute("""
+                    SELECT tp.ID_TPALINSE
+                    FROM TPALINSE tp
+                    JOIN trafficPalinse ttp ON ttp.id_tpalinse = tp.ID_TPALINSE
+                    WHERE ttp.ID_ContrattiRighe = %s
+                      AND tp.ID_TPALINSE > %s
+                      AND tp.LIVELLO = 0
+                """, (line_id, snapshot_max))
+                new_rows = [r[0] for r in cur.fetchall()]
+                if new_rows:
+                    for tpa_id in new_rows:
+                        cur.execute(
+                            "UPDATE TPALINSE SET ID_FILMATI = %s WHERE ID_TPALINSE = %s",
+                            (filmati_id, tpa_id)
+                        )
+                        applied += 1
+                    conn.commit()
+                else:
+                    pending += 1  # Etere hasn't scheduled this line yet
+            return JSONResponse({"applied": applied, "pending": pending})
         finally:
             conn.close()
 
