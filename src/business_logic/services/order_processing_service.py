@@ -120,6 +120,7 @@ class OrderProcessingService:
         OrderType.WORLDLINK,
         OrderType.TIMEADVERTISING,
         OrderType.IGRAPHIX,
+        OrderType.CHARMAINE,
     }
 
     def __init__(
@@ -1289,41 +1290,13 @@ class OrderProcessingService:
                 error_message=error_detail,
             )
 
-    def _run_charmaine_with_driver(self, order: Order, driver: Any, process_fn: Any) -> ProcessingResult:
-        """Call CHARMAINE processor with an already-open driver and build ProcessingResult."""
-        from etere_client import EtereClient
-        etere_client = EtereClient(driver)
-        success = process_fn(str(order.pdf_path), shared_session=etere_client)
-        if success:
-            print("\n✓ CHARMAINE order processed successfully")
-            return ProcessingResult(success=True, contracts=[], order_type=OrderType.CHARMAINE)
-        print("\n✗ CHARMAINE order processing failed")
-        return ProcessingResult(
-            success=False, contracts=[], order_type=OrderType.CHARMAINE,
-            error_message="CHARMAINE processing failed - check browser output"
-        )
-
     def _process_charmaine_order(
         self,
         order: Order,
-        shared_session: Any = None
+        shared_session: Any = None,
     ) -> ProcessingResult:
         """
-        Process Charmaine order using charmaine_automation.
-
-        Charmaine orders are generic client template orders with:
-        - Single market per order (detected from PDF)
-        - Agency vs Client billing detection
-        - Customer DB integration (self-learning)
-        - Weekly line entry (each week = separate Etere line)
-        - Master market: NYC
-
-        Args:
-            order: CHARMAINE order to process
-            shared_session: Shared browser session (creates one if None)
-
-        Returns:
-            ProcessingResult with success status
+        Process Charmaine order via direct DB entry. No browser needed.
         """
         try:
             from charmaine_automation import process_charmaine_order
@@ -1336,25 +1309,15 @@ class OrderProcessingService:
                 print(f"Customer: {order.customer_name}")
             print(f"{'='*70}\n")
 
-            if shared_session is None:
-                try:
-                    from etere_session import EtereSession
-                except ImportError:
-                    print("[ERROR] Could not import EtereSession")
-                    return ProcessingResult(
-                        success=False, contracts=[], order_type=OrderType.CHARMAINE,
-                        error_message="EtereSession import failed"
-                    )
-                print("[SESSION] Creating browser session for CHARMAINE order...")
-                with EtereSession() as session:
-                    session.set_market("NYC")
-                    print("[SESSION] Master market set to NYC")
-                    return self._run_charmaine_with_driver(order, session.driver, process_charmaine_order)
-
-            if hasattr(shared_session, 'set_market'):
-                print("[SESSION] ✓ Using shared browser session (market pre-set to NYC)")
-            driver = shared_session.driver if hasattr(shared_session, 'driver') else shared_session
-            return self._run_charmaine_with_driver(order, driver, process_charmaine_order)
+            success = process_charmaine_order(str(order.pdf_path))
+            if success:
+                print("\n✓ CHARMAINE order processed successfully")
+                return ProcessingResult(success=True, contracts=[], order_type=OrderType.CHARMAINE)
+            print("\n✗ CHARMAINE order processing failed")
+            return ProcessingResult(
+                success=False, contracts=[], order_type=OrderType.CHARMAINE,
+                error_message="CHARMAINE processing failed — check output",
+            )
 
         except Exception as e:
             import traceback

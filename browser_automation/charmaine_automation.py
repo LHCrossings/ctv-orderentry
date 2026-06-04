@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Optional
 
 from browser_automation.etere_client import EtereClient
-from selenium.webdriver.common.by import By
+from browser_automation.etere_direct_client import EtereDirectClient, connect
 from browser_automation.ros_definitions import ROS_SCHEDULES
 from browser_automation.language_utils import (
     extract_language_from_program,
@@ -755,7 +755,7 @@ def collect_user_input(order: CharmaineOrder) -> dict:
 
 def process_charmaine_order(
     pdf_path: str,
-    shared_session: Optional[EtereClient] = None,
+    shared_session=None,  # unused — kept for interface compatibility
 ) -> bool:
     """
     Process a Charmaine client order end-to-end.
@@ -802,148 +802,106 @@ def process_charmaine_order(
             continue
         
         # ═══════════════════════════════════════════════════════════
-        # STEP 3: BROWSER AUTOMATION
+        # STEP 3: DIRECT DB ENTRY
         # ═══════════════════════════════════════════════════════════
-        
-        if shared_session:
-            etere = shared_session
-        else:
-            from selenium import webdriver
-            from selenium.webdriver.chrome.options import Options
-            
-            chrome_options = Options()
-            chrome_options.add_argument("--start-maximized")
-            chrome_options.add_argument("--no-sandbox")
-            chrome_options.add_argument("--disable-dev-shm-usage")
-            driver = webdriver.Chrome(options=chrome_options)
-            etere = EtereClient(driver)
-            etere.login()
-        
+
+        billing = user_input['billing_type']
+        billing_type_str = "agency" if billing == BillingType.CUSTOMER_SHARE_AGENCY else "client"
+        notes       = user_input.get('notes', '')
+        dur         = order.duration_seconds or 30
+        duration_str = f"00:00:{dur:02d}:00"
+
+        # Parse flight dates; fall back to week columns when PDF header lacks them
+        def _parse_date(s: str):
+            try:
+                return datetime.strptime(s, '%m/%d/%Y').date()
+            except Exception:
+                return None
+
+        flight_start = _parse_date(order.flight_start)
+        flight_end   = _parse_date(order.flight_end)
+        valid_cols   = [w for w in order.week_columns if w.start_date]
+        if flight_start is None and valid_cols:
+            flight_start = datetime.strptime(valid_cols[0].start_date, '%m/%d/%Y').date()
+        if flight_end is None and valid_cols:
+            flight_end = datetime.strptime(valid_cols[-1].start_date, '%m/%d/%Y').date() + timedelta(days=6)
+
+        conn = connect()
         try:
-            # Set master market to NYC (Crossings TV standard)
-            if order.station and 'asian channel' in order.station.lower():
-                etere.set_master_market("DAL")
-            else:
-                etere.set_master_market("NYC")
-            
-            # ═══════════════════════════════════════════════════════
-            # CREATE CONTRACT HEADER
-            # ═══════════════════════════════════════════════════════
-            
-            billing = user_input['billing_type']
-            
-            # Use notes from user input (already confirmed/edited)
-            notes = user_input.get('notes', '')
-            
-            contract_number = etere.create_contract_header(
-                customer_id=int(user_input['customer_id']) if user_input['customer_id'] and user_input['customer_id'].isdigit() else None,
+            client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=True)
+            client.set_master_market("NYC")
+
+            # ───────────────────────────────────────────────────────
+            # CONTRACT HEADER
+            # ───────────────────────────────────────────────────────
+            contract_number = client.create_contract_header(
+                customer_id=int(user_input['customer_id']),
                 code=user_input['contract_code'],
                 description=user_input['contract_description'],
-                contract_start=order.flight_start,
-                contract_end=order.flight_end,
-                notes=notes,
-                charge_to=billing.get_charge_to(),
-                invoice_header=billing.get_invoice_header(),
+                billing_type=billing_type_str,
+                contract_date=flight_start,
+                contract_end_date=flight_end,
+                note=notes,
             )
-            
+
             if not contract_number:
                 print("[CONTRACT] ✗ Failed to create contract")
                 all_success = False
                 continue
-            
+
             print(f"[CONTRACT] ✓ Created: {contract_number}")
-            
-            # ═══════════════════════════════════════════════════════
-            # UPDATE CUSTOMER ID IN DATABASE
-            # ═══════════════════════════════════════════════════════
-            # If customer was selected via browser search (ID was "SEARCH"),
-            # read the actual ID from the contract page and update the DB.
-            
-            stored_id = user_input.get('customer_id', '')
-            if not stored_id or stored_id == 'SEARCH' or not str(stored_id).isdigit():
-                try:
-                    # Read the customer ID from the contract page
-                    cid_field = etere.driver.find_element(By.ID, "customerId")
-                    actual_id = cid_field.get_attribute("value")
-                    if actual_id and actual_id.strip().isdigit():
-                        actual_id = actual_id.strip()
-                        print(f"[CUSTOMER DB] Updating ID: SEARCH → {actual_id}")
-                        _update_customer_id(order.advertiser, actual_id)
-                        user_input['customer_id'] = actual_id
-                except Exception as e:
-                    print(f"[CUSTOMER DB] ⚠ Could not update customer ID: {e}")
-            
-            # ═══════════════════════════════════════════════════════
-            # ADD CONTRACT LINES
-            # ═══════════════════════════════════════════════════════
-            
-            separation = user_input['separation']
-            hindi_punjabi = user_input['hindi_punjabi']
-            bonus_overrides = user_input.get('bonus_overrides', {})
+
+            # ───────────────────────────────────────────────────────
+            # CONTRACT LINES
+            # ───────────────────────────────────────────────────────
+            separation          = user_input['separation']
+            hindi_punjabi       = user_input['hindi_punjabi']
+            bonus_overrides     = user_input.get('bonus_overrides', {})
             daypart_corrections = user_input.get('daypart_corrections', {})
-            
+
             line_num = 0
             for line_idx, line in enumerate(order.lines):
                 line_num += 1
                 language = normalize_language(line.language)
-                
+
                 print(f"\n[LINE {line_num}] {'BNS' if line.is_bonus else 'PAID'} {language}")
-                
-                # Determine days and time
+
                 if line.is_bonus:
-                    # Check if user overrode this bonus line
                     override = bonus_overrides.get(line_idx)
-                    
                     if override:
-                        # User chose to use PDF-specific times
-                        days = override['days']
-                        time_range = override['time_range']
+                        days        = override['days']
+                        time_range  = override['time_range']
                         description = override['description']
                         print(f"  [OVERRIDE] Using PDF times: {days} {time_range}")
                         print(f"  [OVERRIDE] Description: {description}")
                     else:
-                        # Standard ROS defaults
                         ros_schedule = ROS_SCHEDULES.get(language, {})
-                        days = ros_schedule.get('days', 'M-Su')
-                        time_range = ros_schedule.get('time', '6a-11:59p')
+                        days        = ros_schedule.get('days', 'M-Su')
+                        time_range  = ros_schedule.get('time', '6a-11:59p')
                         description = f"BNS {language} ROS"
-                    
-                    spot_code = 10  # BNS / Bonus Spot
+                    spot_code = 10
                 else:
-                    # Check if daypart was corrected upfront
                     correction = daypart_corrections.get(line_idx)
                     if correction:
-                        days = correction['days']
+                        days       = correction['days']
                         time_range = correction['time_range']
                     else:
                         daypart_clean = ' '.join(line.daypart.split())
-                        days = daypart_to_days(daypart_clean)
+                        days       = daypart_to_days(daypart_clean)
                         time_range = daypart_to_time_range(daypart_clean)
-                    
-                    spot_code = 2  # Paid Commercial
-                    
-                    # Build description using program name from PDF
+                    spot_code    = 2
                     program_name = ' '.join(line.language.split())
-                    description = f"{days} {time_range} {program_name}"
-                
-                # Apply Sunday 6-7a rule
+                    description  = f"{days} {time_range} {program_name}"
+
                 days, _ = EtereClient.check_sunday_6_7a_rule(days, time_range)
-                
-                # Parse time range through etere_client (handles semicolons)
                 time_from, time_to = EtereClient.parse_time_range(time_range)
-                
-                # ═══════════════════════════════════════════════════
-                # CONSOLIDATED LINE ENTRY
-                # ═══════════════════════════════════════════════════
-                # Group consecutive weeks with the same spot count
-                # into a single Etere line to minimize entries.
-                # Example: 9 weeks all with 3 spots → 1 line (not 9)
-                
+                time_range_norm = f"{time_from}-{time_to}"
+                rate = line.rate if not line.is_bonus else 0.0
+
                 if order.is_single_flight:
-                    # Single date-range order: total spots for full flight, no per-week limit
                     week_groups = [{
-                        'start_date': order.flight_start,
-                        'end_date': order.flight_end,
+                        'start_date': flight_start,
+                        'end_date':   flight_end,
                         'spots_per_week': 0,
                         'weeks': 1,
                         'total_spots': line.total_spots,
@@ -954,51 +912,45 @@ def process_charmaine_order(
                         flight_start=order.flight_start,
                     )
 
-                # Rate (only for paid lines)
-                rate = line.rate if not line.is_bonus else 0.0
-
                 for group in week_groups:
                     group_start = group['start_date']
-                    group_end = group['end_date']
-                    group_spots_per_week = group['spots_per_week']
+                    group_end   = group['end_date']
+                    group_spw   = group['spots_per_week']
                     group_weeks = group['weeks']
-                    group_total = group.get('total_spots', group_spots_per_week * group_weeks)
-                    
-                    print(f"  {group_start} - {group_end} ({group_weeks} wk): {group_spots_per_week}/wk, {group_total} total")
-                    
-                    success = etere.add_contract_line(
-                        contract_number=contract_number,
+                    group_total = group.get('total_spots', group_spw * group_weeks)
+
+                    print(f"  {group_start} - {group_end} ({group_weeks} wk): {group_spw}/wk, {group_total} total")
+
+                    line_id = client.add_contract_line(
+                        contract_id=contract_number,
                         market=order.market,
-                        start_date=group_start,
-                        end_date=group_end,
                         days=days,
-                        time_from=time_from,
-                        time_to=time_to,
+                        time_range=time_range_norm,
                         description=description,
-                        spot_code=spot_code,
-                        duration_seconds=order.duration_seconds,
+                        rate=rate,
                         total_spots=group_total,
-                        spots_per_week=group_spots_per_week,
-                        rate=rate,                        separation_intervals=separation,
+                        spots_per_week=group_spw,
+                        date_from=group_start,
+                        date_to=group_end,
+                        duration=duration_str,
+                        is_bonus=line.is_bonus,
+                        booking_code=spot_code,
+                        separation_intervals=separation,
                     )
-                    
-                    if not success:
+
+                    if line_id <= 0:
                         print(f"  [LINE {line_num}] ✗ Failed for {group_start} - {group_end}")
                         all_success = False
-            
+
             print(f"\n[COMPLETE] Contract {contract_number} — {line_num} lines processed")
-            
+
+        except Exception as exc:
+            print(f"\n[CONTRACT] ✗ Error: {exc}")
+            import traceback
+            traceback.print_exc()
+            all_success = False
         finally:
-            # Only close browser if we created it (not shared session)
-            if not shared_session:
-                try:
-                    etere.logout()
-                except Exception:
-                    pass
-                try:
-                    driver.quit()
-                except Exception:
-                    pass
+            conn.close()
     
     return all_success
 
