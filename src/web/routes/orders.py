@@ -1180,15 +1180,19 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             done = 0
             for tpa_id in spot_ids:
                 cur.execute("""
-                    SELECT ttp.ID_ContrattiRighe, cr.DATA_INIZIO, cr.DATA_FINE
+                    SELECT ttp.ID_ContrattiRighe, cr.DATA_INIZIO, cr.DATA_FINE,
+                           tp.ID_FILMATI
                     FROM trafficPalinse ttp
                     JOIN CONTRATTIRIGHE cr ON ttp.ID_ContrattiRighe = cr.ID_CONTRATTIRIGHE
+                    JOIN TPALINSE tp ON tp.ID_TPALINSE = ttp.id_tpalinse
                     WHERE ttp.id_tpalinse = %s
                 """, (tpa_id,))
                 row = cur.fetchone()
                 if not row:
                     continue
-                line_id, d_from, d_to = row
+                line_id, d_from, d_to, filmati_id = row
+                # Preserve filmati ID so Etere (or our restore step) can re-apply it
+                filmati_id = filmati_id if filmati_id and filmati_id > 0 else -1
                 cur.execute("DELETE FROM trafficPalinse WHERE id_tpalinse = %s", (tpa_id,))
                 cur.execute("DELETE FROM TPALINSE WHERE ID_TPALINSE = %s", (tpa_id,))
                 cur.execute("""
@@ -1203,8 +1207,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                            Notes, Operator,
                            ID_FILMATI, ID_FILMATI_TAIL, ID_FILMATI_MIDDLE,
                            ID_FATTURAEMITTENTE, Split)
-                        VALUES (%s,1,1,%s,%s,%s,%s,%s,-1,-1,-1,0,0)
-                    """, (line_id, tpa_id, d_from, d_to, "WL room", "Portal"))
+                        VALUES (%s,1,1,%s,%s,%s,%s,%s,%s,-1,-1,0,0)
+                    """, (line_id, tpa_id, d_from, d_to, "WL room", "Portal", filmati_id))
                 else:
                     cur.execute("""
                         UPDATE Traffic_ScheduleList
