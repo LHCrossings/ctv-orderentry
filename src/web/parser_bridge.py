@@ -459,6 +459,49 @@ def list_parsers() -> list[dict]:
     )
 
 
+def _normalize_sagent(order) -> dict:
+    """SAGENT normalizer: same as generic but injects per-line start/end dates
+    from weekly spot distribution and week column dates."""
+    result = _normalize_order(order)
+
+    week_start_dates = getattr(order, "week_start_dates", []) or []
+    flight_end_str   = getattr(order, "flight_end", "") or ""
+    raw_lines        = getattr(order, "lines", []) or []
+
+    if not (week_start_dates and flight_end_str and raw_lines):
+        return result
+
+    from datetime import datetime, timedelta
+    _month_map = {
+        'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
+        'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12,
+    }
+    year = int(flight_end_str.split('/')[-1])
+    week_dates = []
+    for item in week_start_dates:
+        parts = str(item).strip().split()
+        if len(parts) == 2 and parts[0] in _month_map:
+            week_dates.append(datetime(year, _month_map[parts[0]], int(parts[1])).date())
+
+    flight_end_date = datetime.strptime(flight_end_str, '%m/%d/%Y').date()
+
+    for raw_line, norm_line in zip(raw_lines, result["lines"]):
+        weekly_spots = list(getattr(raw_line, "weekly_spots", []) or [])
+        if not weekly_spots or not week_dates:
+            continue
+        n = min(len(weekly_spots), len(week_dates))
+        first_idx = next((i for i in range(n) if weekly_spots[i] > 0), None)
+        last_idx  = next((i for i in range(n - 1, -1, -1) if weekly_spots[i] > 0), None)
+        if first_idx is None:
+            continue
+        start_d = week_dates[first_idx]
+        end_d   = min(week_dates[last_idx] + timedelta(days=6), flight_end_date)
+        norm_line["start_date"] = start_d.strftime('%m/%d/%Y')
+        norm_line["end_date"]   = end_d.strftime('%m/%d/%Y')
+
+    return result
+
+
 def get_order_detail(file_path: Path, order_type: str) -> dict:
     """
     Parse the given file and return a normalized detail dict.
@@ -539,6 +582,8 @@ def get_order_detail(file_path: Path, order_type: str) -> dict:
         result = _normalize_admerasia(raw)
     elif order_type == "IGRAPHIX":
         result = _normalize_igraphix(raw)
+    elif order_type == "SAGENT":
+        result = _normalize_sagent(raw)
     else:
         result = _normalize_order(raw)
     result["lines"] = _apply_ros_overrides(result["lines"])
