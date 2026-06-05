@@ -121,6 +121,7 @@ class OrderProcessingService:
         OrderType.TIMEADVERTISING,
         OrderType.IGRAPHIX,
         OrderType.CHARMAINE,
+        OrderType.HL,
     }
 
     def __init__(
@@ -1423,25 +1424,17 @@ class OrderProcessingService:
     def _process_hl_order(
         self,
         order: Order,
-        shared_session: any
+        shared_session: any,
     ) -> ProcessingResult:
         """
-        Process H&L Partners order using hl_automation.
+        Process H&L Partners order via direct DB entry. No browser needed.
 
         H&L Partners orders have:
         - SFO or CVC markets only (detected from PDF header)
         - Multiple clients possible → customer DB lookup with manual fallback
         - Separation: customer=25, event=0, order=0
-        - Universal agency billing
+        - Agency billing
         - Multiple estimates per PDF → each becomes a separate contract
-        - Master market: NYC (set by session before calling)
-
-        Args:
-            order: H&L Partners order to process
-            shared_session: Shared browser session (EtereSession)
-
-        Returns:
-            ProcessingResult with success status
         """
         try:
             from browser_automation.hl_automation import process_hl_order
@@ -1454,32 +1447,18 @@ class OrderProcessingService:
                 print(f"Customer: {order.customer_name}")
             print(f"{'='*70}\n")
 
-            if shared_session is None:
-                return ProcessingResult(
-                    success=False,
-                    contracts=[],
-                    order_type=OrderType.HL,
-                    error_message="Browser session required for H&L Partners orders"
-                )
-
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
                     contracts=[],
                     order_type=OrderType.HL,
-                    error_message="Order inputs not collected"
+                    error_message="Order inputs not collected",
                 )
 
-            print("[SESSION] ✓ Using shared browser session")
-            # Market already set to NYC once at batch start
-
             success = process_hl_order(
-                driver=shared_session.driver,
                 pdf_path=str(order.pdf_path),
-                user_input=order.order_input
+                pre_gathered_inputs=order.order_input,
             )
-
-            contracts = []
 
             if success:
                 print("\n✓ H&L Partners order processed successfully")
@@ -1488,22 +1467,20 @@ class OrderProcessingService:
 
             return ProcessingResult(
                 success=success,
-                contracts=contracts,
+                contracts=[],
                 order_type=OrderType.HL,
-                error_message=None if success else "Processing failed"
+                error_message=None if success else "Processing failed",
             )
 
         except Exception as e:
             import traceback
             error_detail = f"H&L Partners processing error: {str(e)}\n{traceback.format_exc()}"
-
             print(f"\n✗ H&L Partners processing failed: {e}")
-
             return ProcessingResult(
                 success=False,
                 contracts=[],
                 order_type=OrderType.HL,
-                error_message=error_detail
+                error_message=error_detail,
             )
 
     def _process_hl_bdr_order(
