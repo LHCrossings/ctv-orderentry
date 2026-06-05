@@ -448,7 +448,7 @@ def _normalize_igraphix(order) -> dict:
 # Public API
 # ---------------------------------------------------------------------------
 
-_DIRECT_DB_KEYS = {"LEXUS", "RPM", "WORLDLINK", "TIMEADVERTISING", "IGRAPHIX", "CHARMAINE"}
+_DIRECT_DB_KEYS = {"LEXUS", "RPM", "WORLDLINK", "TIMEADVERTISING", "IGRAPHIX", "CHARMAINE", "HL"}
 
 def list_parsers() -> list[dict]:
     """Return display info for every registered parser, sorted by display name."""
