@@ -1155,15 +1155,6 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
             eb_df = run_eterebridge_pipeline(raw_csv, user_inputs)
             if eb_df is not None and not eb_df.empty:
                 run_rows = _eb_df_to_run_rows(eb_df, agency_fee, is_agency)
-                if _gross_up_map:
-                    for r in run_rows:
-                        grossed = _grossed_up(r["gross_rate"])
-                        if grossed != r["gross_rate"]:
-                            broker = round(grossed * agency_fee, 2) if is_agency else 0.0
-                            r["gross_rate"]  = grossed
-                            r["spot_value"]  = grossed
-                            r["broker_fees"] = broker
-                            r["station_net"] = round(grossed - broker, 2)
         except Exception as _eb_exc:
             print(f"[EtereBridge] Falling back to built-in pipeline: {_eb_exc}")
 
@@ -1204,6 +1195,17 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
                 "contract":     contract,
                 "market":       s.market,
             })
+
+    # Apply gross-up to all run rows regardless of which path built them
+    if _gross_up_map:
+        for r in run_rows:
+            grossed = _grossed_up(r["gross_rate"])
+            if grossed != r["gross_rate"]:
+                broker = round(grossed * agency_fee, 2) if is_agency else 0.0
+                r["gross_rate"]  = grossed
+                r["spot_value"]  = grossed
+                r["broker_fees"] = broker
+                r["station_net"] = round(grossed - broker, 2)
 
     # Ensure estimate_run is present on every run row (EtereBridge rows lack it)
     for rr in run_rows:
