@@ -1,10 +1,10 @@
 """
-H/L Buy Detail Report (BDR) Automation
+H/L Buy Detail Report (BDR) Automation - Direct DB Entry
 
 Processes H/L Agency Buy Detail Report PDFs.
 One page = one estimate = one Etere contract.
 
-Entered into Etere exactly like standard H&L orders (hl_automation.py):
+Entered into Etere exactly like standard H&L orders:
 - Same agency DB records (order_type = 'hl')
 - Same billing: Customer share indicating agency % / Agency
 - Same separation: (25, 0, 0)
@@ -13,28 +13,28 @@ Entered into Etere exactly like standard H&L orders (hl_automation.py):
 """
 from __future__ import annotations
 
-import time
+from datetime import datetime
 
-from selenium import webdriver
-
-from browser_automation.etere_client import EtereClient
+from browser_automation.etere_client import EtereClient  # check_sunday_6_7a_rule + parse_time_range utilities
+from browser_automation.etere_direct_client import (
+    AGENCY_IDS,
+    EtereDirectClient,
+    MEDIA_CENTER_IDS,
+    connect,
+)
 from browser_automation.parsers.hl_bdr_parser import BDROrder, BDRLine, parse_bdr_pdf
 
 # ── Same constants as HL — BDR is the same agency ────────────────────────────
 AGENCY_NAME = "hl"
 SEPARATION_INTERVALS = (25, 0, 0)
-CHARGE_TO = "Customer share indicating agency %"
-INVOICE_HEADER = "Agency"
+SPOT_CODE_PAID = 2
+
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMERS_DB_PATH
+
+
 # ── Default code/description resolution for BDR ───────────────────────────────
 
 def _get_bdr_defaults(orders: list[BDROrder]) -> tuple[str, str]:
-    """
-    Build smart contract code/description defaults for a BDR PDF.
-
-    Uses the same customer-template system as HL orders.
-    Falls back to generic defaults if no template is found.
-    """
     from browser_automation.customer_defaults import ensure_template_columns, resolve_defaults
 
     if not orders:
@@ -62,7 +62,6 @@ def _get_bdr_defaults(orders: list[BDROrder]) -> tuple[str, str]:
 
 
 def _save_customer_to_db(client_name: str, customer_id: int) -> None:
-    """Save customer to DB (INSERT OR IGNORE). Non-fatal."""
     try:
         import sqlite3
         with sqlite3.connect(str(CUSTOMERS_DB_PATH)) as conn:
@@ -79,7 +78,6 @@ def _save_customer_to_db(client_name: str, customer_id: int) -> None:
 
 
 def _resolve_bdr_customer_id(client_name: str) -> int | None:
-    """Look up customer ID from DB using order_type='hl'."""
     try:
         import sqlite3
         with sqlite3.connect(str(CUSTOMERS_DB_PATH)) as conn:
@@ -92,7 +90,6 @@ def _resolve_bdr_customer_id(client_name: str) -> int | None:
                 print(f"[CUSTOMER DB] ✓ Found: {client_name} → ID {cust_id}")
                 return cust_id
 
-            # Fuzzy match
             rows = conn.execute(
                 "SELECT customer_name, customer_id FROM customers WHERE order_type = ?",
                 (AGENCY_NAME,),
@@ -112,7 +109,7 @@ def _resolve_bdr_customer_id(client_name: str) -> int | None:
 
 def gather_hl_bdr_inputs(pdf_path: str) -> dict | None:
     """
-    Gather all user inputs before browser automation starts.
+    Gather all user inputs before DB automation starts.
     Works like gather_hl_inputs — same prompts, same DB, same defaults.
     """
     print("\n" + "=" * 70)
@@ -138,7 +135,6 @@ def gather_hl_bdr_inputs(pdf_path: str) -> dict | None:
     if len(orders) > 1:
         print(f"[PARSE] ℹ {len(orders)} estimates — each becomes a separate contract")
 
-        # ── Estimate selection ──
         print(f"\n[SELECT] Which estimates do you want to enter?")
         for i, o in enumerate(orders, 1):
             total_spots = sum(ln.total_spots for ln in o.lines)
@@ -166,25 +162,22 @@ def gather_hl_bdr_inputs(pdf_path: str) -> dict | None:
         print(f"[CUSTOMER] ✓ {client_name} → ID {customer_id}")
     else:
         print(f"[CUSTOMER] Not in DB: {client_name}")
-        cid_input = input("  Enter customer ID (or press Enter to search in Etere): ").strip()
+        cid_input = input("  Enter customer ID (or press Enter to skip): ").strip()
         if cid_input:
             try:
                 customer_id = int(cid_input)
             except ValueError:
                 customer_id = None
 
-    # Persist customer immediately so template lookup works
     if customer_id and client_name:
         _save_customer_to_db(client_name, customer_id)
 
-    # ── Smart code/description defaults ──
     suggested_code, suggested_desc = _get_bdr_defaults(orders)
 
     print(f"\n[CONTRACT]")
     contract_code = input(f"  Code [{suggested_code}]: ").strip() or suggested_code
     description = input(f"  Description [{suggested_desc}]: ").strip() or suggested_desc
 
-    # ── Show generated codes for all estimates ──
     if len(orders) > 1:
         print(f"\n[CONTRACTS] Will create {len(orders)} contracts:")
         for o in orders:
@@ -192,7 +185,6 @@ def gather_hl_bdr_inputs(pdf_path: str) -> dict | None:
             est_desc = description.replace(orders[0].estimate_number, o.estimate_number)
             print(f"  Est {o.estimate_number} → {est_code}  |  {est_desc}")
 
-    # ── Separation (HL default, no prompt needed) ──
     separation = SEPARATION_INTERVALS
     print(f"\n[BILLING] ✓ Customer share indicating agency % / Agency")
     print(f"[INTERVALS] ✓ Customer={separation[0]}, Order={separation[1]}, Event={separation[2]}")
@@ -211,17 +203,22 @@ def gather_hl_bdr_inputs(pdf_path: str) -> dict | None:
 
 
 def process_hl_bdr_order(
-    driver: webdriver.Chrome,
-    pdf_path: str,
-    user_input: dict,
+    driver=None,                          # unused — kept for interface compatibility
+    pdf_path: str = "",
+    user_input: dict | None = None,       # legacy kwarg name
+    pre_gathered_inputs: dict | None = None,
 ) -> list[str]:
     """
-    Process all estimates in a BDR PDF.
-    Returns list of created contract numbers (empty on failure).
+    Process all estimates in a BDR PDF via direct DB entry.
+    Returns list of created contract IDs as strings (empty on failure).
     """
-    etere = EtereClient(driver)
+    inputs = pre_gathered_inputs or user_input
+    if not inputs:
+        print("[BDR] No inputs provided")
+        return []
+
     try:
-        return _execute_order(etere, pdf_path, user_input)
+        return _execute_order(pdf_path, inputs)
     except Exception as e:
         print(f"[BDR] Fatal error: {e}")
         import traceback
@@ -231,11 +228,7 @@ def process_hl_bdr_order(
 
 # ── Internal execution ────────────────────────────────────────────────────────
 
-def _execute_order(
-    etere: EtereClient,
-    pdf_path: str,
-    user_input: dict,
-) -> list[str]:
+def _execute_order(pdf_path: str, user_input: dict) -> list[str]:
     orders: list[BDROrder] = user_input.get("orders") or parse_bdr_pdf(pdf_path)
     customer_id: int | None = user_input.get("customer_id")
     order_code: str = user_input.get("order_code", "HL Order")
@@ -246,65 +239,72 @@ def _execute_order(
         print("[BDR] No orders to process.")
         return []
 
-    etere.set_master_market("NYC")
-    created: list[str] = []
+    conn = connect()
+    try:
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=True)
+        client.set_master_market("NYC")
 
-    for order in orders:
-        print(f"\n[BDR] Processing Est {order.estimate_number}: {order.description}")
+        created: list[str] = []
 
-        # Build per-estimate code: substitute this estimate's number for the first one
-        # e.g. "HL Toyota 13931 SF" → "HL Toyota 13932 SF" for estimate 13932
-        if len(orders) > 1:
-            est_order_code = order_code.replace(orders[0].estimate_number, order.estimate_number)
-        else:
-            est_order_code = order_code
+        for order in orders:
+            print(f"\n[BDR] Processing Est {order.estimate_number}: {order.description}")
 
-        # Use estimate description for notes (like HL)
-        est_notes = order.description if order.description else description
-        est_description = description.replace(orders[0].estimate_number, order.estimate_number)
+            est_order_code = (
+                order_code.replace(orders[0].estimate_number, order.estimate_number)
+                if len(orders) > 1 else order_code
+            )
+            est_notes = order.description if order.description else description
+            est_description = description.replace(orders[0].estimate_number, order.estimate_number)
 
-        contract_number = etere.create_contract_header(
-            customer_id=customer_id,
-            code=est_order_code,
-            description=est_description,
-            contract_start=order.flight_start,
-            contract_end=order.flight_end,
-            customer_order_ref=order.estimate_number,
-            notes=est_notes,
-            charge_to=CHARGE_TO,
-            invoice_header=INVOICE_HEADER,
-        )
+            flight_start = datetime.strptime(order.flight_start, "%m/%d/%Y").date()
+            flight_end   = datetime.strptime(order.flight_end,   "%m/%d/%Y").date()
 
-        if not contract_number:
-            print(f"[BDR] ✗ Failed to create contract for Est {order.estimate_number}")
-            continue
+            contract_id = client.create_contract_header(
+                customer_id=int(customer_id),
+                code=est_order_code,
+                description=est_description,
+                contract_date=flight_start,
+                contract_end_date=flight_end,
+                customer_order_ref=order.estimate_number,
+                note=est_notes,
+                billing_type="agency",
+                agency_id=AGENCY_IDS["HL"],
+                media_center_id=MEDIA_CENTER_IDS["HL"],
+                allow_rename=True,
+            )
 
-        print(f"[BDR] ✓ Contract {contract_number} created")
-        created.append(str(contract_number))
+            if not contract_id:
+                print(f"[BDR] ✗ Failed to create contract for Est {order.estimate_number}")
+                continue
 
-        if customer_id:
-            _save_customer_to_db(order.client, customer_id)
+            print(f"[BDR] ✓ Contract #{contract_id} created")
+            created.append(str(contract_id))
 
-        line_count = 0
-        for line in order.lines:
-            line_count += _add_bdr_line(etere, order, line, contract_number, separation)
-            time.sleep(2)
+            if customer_id:
+                _save_customer_to_db(order.client, customer_id)
 
-        print(f"\n{'='*60}")
-        print(f"✓ H&L BDR ESTIMATE {order.estimate_number} COMPLETE")
-        print(f"  Contract: {contract_number}  |  Lines Added: {line_count}")
-        print(f"{'='*60}")
+            line_count = 0
+            for line in order.lines:
+                line_count += _add_bdr_line(client, order, line, contract_id, separation)
 
-        _validate_contract(contract_number, order)
+            print(f"\n{'='*60}")
+            print(f"✓ H&L BDR ESTIMATE {order.estimate_number} COMPLETE")
+            print(f"  Contract: #{contract_id}  |  Lines Added: {line_count}")
+            print(f"{'='*60}")
 
-    return created
+            _validate_contract(contract_id, order)
+
+        return created
+
+    finally:
+        conn.close()
 
 
 def _add_bdr_line(
-    etere: EtereClient,
+    client: EtereDirectClient,
     order: BDROrder,
     line: BDRLine,
-    contract_number: int,
+    contract_id: int,
     separation: tuple[int, int, int],
 ) -> int:
     """
@@ -321,12 +321,11 @@ def _add_bdr_line(
         flight_end=order.flight_end,
     )
 
-    # Clamp start dates: week column headers may precede the EXACT FLIGHT DATES start
-    from datetime import datetime as _dt
-    _flight_start = _dt.strptime(order.flight_start, "%m/%d/%Y")
+    # Clamp start dates that precede the exact flight start
+    _flight_start_dt = datetime.strptime(order.flight_start, "%m/%d/%Y")
     date_ranges = [
         {**dr, "start_date": order.flight_start}
-        if _dt.strptime(dr["start_date"], "%m/%d/%Y") < _flight_start
+        if datetime.strptime(dr["start_date"], "%m/%d/%Y") < _flight_start_dt
         else dr
         for dr in date_ranges
     ]
@@ -335,41 +334,44 @@ def _add_bdr_line(
         print(f"  [BDR] ⚠ {line.days} {line.time} — no active weeks, skipping")
         return 0
 
-    # Apply Sunday 6–7a rule
-    days, _ = etere.check_sunday_6_7a_rule(line.days, line.time)
+    days, _ = EtereClient.check_sunday_6_7a_rule(line.days, line.time)
     time_from, time_to = EtereClient.parse_time_range(line.time)
+    time_range = f"{time_from}-{time_to}"
+    duration_str = f"00:00:{line.duration:02d}:00"
 
-    # Description: same format as HL — "{days} {time} {language}"
     description = f"{days} {line.time} {line.language.title()}"
     if line.category:
         description += f" {line.category.title()}"
 
     count = 0
     for dr in date_ranges:
-        success = etere.add_contract_line(
-            contract_number=contract_number,
+        date_from = datetime.strptime(dr["start_date"], "%m/%d/%Y").date()
+        date_to   = datetime.strptime(dr["end_date"],   "%m/%d/%Y").date()
+
+        line_id = client.add_contract_line(
+            contract_id=contract_id,
             market=order.market,
-            start_date=dr["start_date"],
-            end_date=dr["end_date"],
             days=days,
-            time_from=time_from,
-            time_to=time_to,
+            time_range=time_range,
             description=description,
-            spot_code=EtereClient.SPOT_CODES["Paid Commercial"],
-            duration_seconds=line.duration,
+            rate=float(line.rate),
             total_spots=dr["spots"],
             spots_per_week=dr["spots_per_week"],
-            rate=float(line.rate),
+            date_from=date_from,
+            date_to=date_to,
+            duration=duration_str,
+            booking_code=SPOT_CODE_PAID,
             separation_intervals=separation,
         )
 
-        status = "✓" if success else "✗"
+        status = "✓" if line_id > 0 else "✗"
         print(
             f"  [BDR] {status} {description}"
             f"  {dr['start_date']}–{dr['end_date']}"
             f"  {dr['spots_per_week']}/wk={dr['spots']} total"
+            + (f" → line_id={line_id}" if line_id > 0 else "")
         )
-        if success:
+        if line_id > 0:
             count += 1
 
     return count
@@ -377,24 +379,11 @@ def _add_bdr_line(
 
 # ── Post-entry validation ─────────────────────────────────────────────────────
 
-def _validate_contract(contract_number: int | str, order: "BDROrder") -> None:
+def _validate_contract(contract_id: int, order: BDROrder) -> None:
     """
-    After Selenium entry, query Etere DB directly to verify what was entered.
-
-    Checks:
-    - Line count entered
-    - All line start dates >= order.flight_start (no pre-flight lines)
-    - Per-line spots/week, rate, description
-
-    Silently skips if the DB connection is unavailable (e.g. not on Windows,
-    or Tailscale not connected).
+    After entry, query Etere DB directly to verify what was entered.
+    Silently skips if the DB connection is unavailable.
     """
-    try:
-        from browser_automation.etere_direct_client import connect
-    except ImportError as e:
-        print(f"[VALIDATE] ⚠ Skipping — etere_direct_client not importable: {e}")
-        return
-
     try:
         conn = connect()
     except Exception as e:
@@ -402,17 +391,18 @@ def _validate_contract(contract_number: int | str, order: "BDROrder") -> None:
         return
 
     try:
-        from datetime import datetime
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT
-                DATA_INIZIO, DATA_FINE,
-                PASSAGGI_SETTIMANALI,
-                IMPORTO, DESCRIZIONE
+        cursor.execute(
+            """
+            SELECT DATA_INIZIO, DATA_FINE,
+                   PASSAGGI_SETTIMANALI,
+                   IMPORTO, DESCRIZIONE
             FROM CONTRATTIRIGHE
-            WHERE ID_CONTRATTITESTATA = ?
+            WHERE ID_CONTRATTITESTATA = %s
             ORDER BY ID_CONTRATTIRIGHE
-        """, [int(contract_number)])
+            """,
+            [contract_id],
+        )
         rows = cursor.fetchall()
         conn.close()
     except Exception as e:
@@ -425,7 +415,7 @@ def _validate_contract(contract_number: int | str, order: "BDROrder") -> None:
 
     flight_start = datetime.strptime(order.flight_start, "%m/%d/%Y")
 
-    print(f"\n[VALIDATE] Contract {contract_number} — DB check:")
+    print(f"\n[VALIDATE] Contract #{contract_id} — DB check:")
     print(f"  Lines in DB: {len(rows)}")
 
     early = [r for r in rows if r[0] and r[0] < flight_start]

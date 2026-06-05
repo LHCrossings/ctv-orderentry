@@ -122,6 +122,7 @@ class OrderProcessingService:
         OrderType.IGRAPHIX,
         OrderType.CHARMAINE,
         OrderType.HL,
+        OrderType.HL_BDR,
     }
 
     def __init__(
@@ -1486,9 +1487,9 @@ class OrderProcessingService:
     def _process_hl_bdr_order(
         self,
         order: Order,
-        shared_session: any
+        shared_session: any,
     ) -> ProcessingResult:
-        """Process H/L Buy Detail Report order (rotated PDF, custom font encoding)."""
+        """Process H/L Buy Detail Report order via direct DB entry. No browser needed."""
         try:
             from browser_automation.hl_bdr_automation import process_hl_bdr_order
 
@@ -1498,28 +1499,17 @@ class OrderProcessingService:
             print(f"File: {order.pdf_path.name}")
             print(f"{'='*70}\n")
 
-            if shared_session is None:
-                return ProcessingResult(
-                    success=False,
-                    contracts=[],
-                    order_type=OrderType.HL_BDR,
-                    error_message="Browser session required for H/L BDR orders"
-                )
-
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
                     contracts=[],
                     order_type=OrderType.HL_BDR,
-                    error_message="Order inputs not collected"
+                    error_message="Order inputs not collected",
                 )
 
-            print("[SESSION] ✓ Using shared browser session")
-
             contracts = process_hl_bdr_order(
-                driver=shared_session.driver,
                 pdf_path=str(order.pdf_path),
-                user_input=order.order_input
+                pre_gathered_inputs=order.order_input,
             )
 
             success = bool(contracts)
@@ -1533,7 +1523,7 @@ class OrderProcessingService:
                 success=success,
                 contracts=[Contract(c, OrderType.HL_BDR) for c in contracts],
                 order_type=OrderType.HL_BDR,
-                error_message=None if success else "Processing failed"
+                error_message=None if success else "Processing failed",
             )
 
         except Exception as e:
@@ -1544,7 +1534,7 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.HL_BDR,
-                error_message=error_detail
+                error_message=error_detail,
             )
 
     def _process_lexus_order(
