@@ -1,5 +1,22 @@
 # Lessons Learned
 
+## `parse_day_bits` (DirectDB) and `_select_days` (Selenium) Must Stay in Sync
+
+**Session:** Admerasia DirectDB conversion (2026-06-08)
+
+**Rule:** There are two day-parsing implementations in this codebase:
+- `EtereClient._select_days()` — Selenium path (`etere_client.py` ~line 1262). The **original** reference. Supports M/T/W/R/F/S/U single-char, ranges (M-F, Sa-Su), and comma lists.
+- `parse_day_bits()` — DirectDB path (`etere_direct_client.py` ~line 361). Must support **all the same aliases**.
+
+When Admerasia was converted to DirectDB, `T` (Tuesday), `S` (Saturday), and `U` (Sunday) — single-char codes used by the Admerasia parser — were missing from `parse_day_bits`. The result: lines were created with all day flags = False, so the scheduler could never place any spots.
+
+**How to apply:**
+1. Any time you add a day alias to `_select_days` in `etere_client.py`, also add it to `_TOKEN_MAP` and `_TOKEN_TO_INDEX` in `etere_direct_client.py`.
+2. Any time you convert a parser to DirectDB, run a quick sanity-check: print the `days` string each line will pass to `add_contract_line` and confirm `parse_day_bits` produces at least one `True` flag for each. A line where all flags are False will silently enter but never schedule.
+3. The canonical full alias set is in `_select_days` — treat it as the source of truth when syncing.
+
+**Known full single-char set:** M=Monday, T=Tuesday, W=Wednesday, R=Thursday, F=Friday, S=Saturday, U=Sunday.
+
 ## Language-Targeted Traffic Instructions Must Use Day/Time Window Filters — Never Line Description Matching
 
 **Session:** RPM Thunder Valley (2026-06-02)
