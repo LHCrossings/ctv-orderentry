@@ -637,8 +637,11 @@
         <div id="admerasiaIoRow" class="input-row" style="display:none; margin-top:10px;">
             <div class="field-group">
                 <label class="field-label">IO File</label>
-                <input type="file" id="admerasiaIoFile" accept=".pdf" class="field-input"
-                       style="font-size:0.82rem; padding:6px 10px;" />
+                <div class="pdf-drop-zone" id="admerasiaIoDropZone">
+                    <input type="file" id="admerasiaIoFile" accept=".pdf" />
+                    <span class="pdf-drop-label"><strong>Click to browse</strong> or drag &amp; drop IO here</span>
+                    <span class="pdf-drop-name" id="admerasiaIoName"></span>
+                </div>
             </div>
             <button class="run-btn" id="parseIoBtn" onclick="parseAdmerasiaIo()">Parse IO</button>
         </div>
@@ -939,6 +942,8 @@
         document.getElementById('admerasiaIoRow').style.display = 'none';
         document.getElementById('admerasiaGrid').style.display = 'none';
         if (document.getElementById('admerasiaIoFile')) document.getElementById('admerasiaIoFile').value = '';
+        const ioName = document.getElementById('admerasiaIoName');
+        if (ioName) { ioName.textContent = ''; const lbl = document.getElementById('admerasiaIoDropZone')?.querySelector('.pdf-drop-label'); if (lbl) lbl.style.display = ''; }
         window.admerasiaIscis = null;
         window.admerasiaSpots = null;
     }
@@ -2607,6 +2612,34 @@
         const dt = new DataTransfer();
         [...e.dataTransfer.files].filter(f => /\.(pdf|ods|xlsx|xls)$/i.test(f.name)).forEach(f => dt.items.add(f));
         if (!dt.files.length) return;
+        input.files = dt.files;
+        updateLabel();
+    });
+})();
+
+// Admerasia IO drag-and-drop
+(function() {
+    const zone = document.getElementById('admerasiaIoDropZone');
+    const input = document.getElementById('admerasiaIoFile');
+    const nameLabel = document.getElementById('admerasiaIoName');
+
+    function updateLabel() {
+        const label = zone.querySelector('.pdf-drop-label');
+        if (!input.files.length) { nameLabel.textContent = ''; label.style.display = ''; return; }
+        nameLabel.textContent = input.files[0].name;
+        label.style.display = 'none';
+    }
+
+    input.addEventListener('change', updateLabel);
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', e => {
+        e.preventDefault();
+        zone.classList.remove('drag-over');
+        const f = [...e.dataTransfer.files].find(f => /\.pdf$/i.test(f.name));
+        if (!f) return;
+        const dt = new DataTransfer();
+        dt.items.add(f);
         input.files = dt.files;
         updateLabel();
     });
