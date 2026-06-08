@@ -587,6 +587,9 @@ def parse_rpm_pdf(pdf_path: str) -> tuple[Optional[RPMOrder], list[RPMLine]]:
                         next_col = rate_idx + 1
                         if next_col < len(parts) and parts[next_col] in ('C', 'T'):
                             next_col += 1
+                        # Skip optional STN Net column (second $ token, e.g. "$139.99")
+                        if next_col < len(parts) and parts[next_col].startswith('$'):
+                            next_col += 1
                         duration_val = parts[next_col] if next_col < len(parts) else '30'
                         spots_start = next_col + 1
                     else:
