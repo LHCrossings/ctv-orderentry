@@ -52,7 +52,6 @@ IMPORTS - Universal utilities, no duplication
 import os
 import sys
 from pathlib import Path
-from datetime import date
 from typing import Optional
 
 # Add project root to path
@@ -62,20 +61,17 @@ if str(project_root) not in sys.path:
 
 from etere_client import EtereClient
 from etere_direct_client import EtereDirectClient, connect
-from src.domain.enums import BillingType, OrderType
-
 from parsers.admerasia_parser import (
-    parse_admerasia_pdf,
     AdmerasiaOrder,
-    AdmerasiaLine,
-    get_default_order_code,
-    get_default_order_description,
+    extract_order_total_from_pdf,
     get_default_customer_order_ref,
     get_default_notes,
-    get_default_separation_intervals,
-    extract_order_total_from_pdf,
+    get_default_order_code,
+    get_default_order_description,
+    parse_admerasia_pdf,
 )
 
+from src.domain.enums import BillingType, OrderType
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONSTANTS
@@ -90,6 +86,7 @@ ADMERASIA_SEPARATION = (3, 5, 0)
 
 # Default database path (for future customer DB integration)
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # CUSTOMER LOOKUP
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -372,7 +369,7 @@ def gather_admerasia_inputs(pdf_path: str) -> Optional[dict]:
         customer_id = customer['customer_id']
         separation = customer['separation']
     else:
-        print(f"\n[CUSTOMER] ✗ Could not auto-detect customer")
+        print("\n[CUSTOMER] ✗ Could not auto-detect customer")
         print("Please enter customer details:")
         customer_id = input("  Customer ID: ").strip()
 
@@ -407,7 +404,7 @@ def gather_admerasia_inputs(pdf_path: str) -> Optional[dict]:
     suggested_code = get_default_order_code(order)
     suggested_desc = get_default_order_description(order)
 
-    print(f"\n[CONTRACT]")
+    print("\n[CONTRACT]")
     contract_code = input(f"  Code [{suggested_code}]: ").strip() or suggested_code
     description = input(f"  Description [{suggested_desc}]: ").strip() or suggested_desc
 
@@ -416,13 +413,13 @@ def gather_admerasia_inputs(pdf_path: str) -> Optional[dict]:
 
     # Notes: header text from PDF (campaign info, DMA, restrictions)
     notes = get_default_notes(order)
-    print(f"\n  Notes:")
+    print("\n  Notes:")
     for line in notes.split('\n'):
         print(f"    {line}")
 
     # Billing (UNIVERSAL for ALL agency orders)
     billing = BillingType.CUSTOMER_SHARE_AGENCY
-    print(f"\n[BILLING] ✓ Customer share indicating agency % / Agency")
+    print("\n[BILLING] ✓ Customer share indicating agency % / Agency")
 
     # Spot duration is read per-line from line_spec['spot_length'] during entry
     # (orders may mix :15 and :30 lines)
