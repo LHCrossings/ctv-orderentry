@@ -1524,7 +1524,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     @router.get("/api/orders")
     async def list_orders():
-        return JSONResponse(content=_scan_dir(config.incoming_dir))
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, _scan_dir, config.incoming_dir)
+        return JSONResponse(content=result)
 
     @router.post("/api/orders/upload")
     async def upload_order(file: UploadFile):
@@ -1746,7 +1748,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     @router.get("/api/orders/{filename:path}/detail")
     async def order_detail(filename: str):
         path, order_type = _resolve_file(filename)
-        detail = get_order_detail(path, order_type)
+        loop = asyncio.get_running_loop()
+        detail = await loop.run_in_executor(None, get_order_detail, path, order_type)
         detail["filename"] = filename
         detail["order_type"] = order_type
         return JSONResponse(content=detail)

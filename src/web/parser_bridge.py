@@ -536,9 +536,14 @@ def get_order_detail(file_path: Path, order_type: str) -> dict:
         order_obj, lines = raw[0], raw[1] if len(raw) > 1 else []
         if order_obj is None:
             return {"error": "Parser returned no order data."}
-        # Attach lines to order_obj if it doesn't already have them
+        # Attach lines to order_obj if it doesn't already have them.
+        # Frozen dataclasses (e.g. RPMOrder) raise FrozenInstanceError on setattr —
+        # swallow it; the fallback below picks up lines from the tuple directly.
         if not getattr(order_obj, "lines", None) and not getattr(order_obj, "line_items", None):
-            object.__setattr__(order_obj, "lines", lines) if hasattr(order_obj, "__slots__") else setattr(order_obj, "lines", lines)
+            try:
+                object.__setattr__(order_obj, "lines", lines) if hasattr(order_obj, "__slots__") else setattr(order_obj, "lines", lines)
+            except AttributeError:
+                pass
         result = _normalize_order(order_obj)
         if not result["lines"] and lines:
             result["lines"] = [_normalize_line(ln, i) for i, ln in enumerate(lines)]

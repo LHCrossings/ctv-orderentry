@@ -548,8 +548,11 @@ class OrderDetectionService:
             "San Francisco"
         ])
         has_estimate = "Estimate:" in text
-        # Any Crossings TV station header (Seattle, Sacramento, SFO vary)
-        has_header = "CROSSINGS TV" in text.upper()
+        # Any Crossings TV station header (Seattle, Sacramento, SFO vary).
+        # PDFs with embedded text layers render "CROSSINGS TV" as "CROSSINGST V"
+        # or "CROSSINGST TV" (space dropped) — match on "CROSSINGS" alone since
+        # it's distinctive enough when combined with market + estimate.
+        has_header = "CROSSINGS" in text.upper()
 
         return has_market and has_estimate and has_header
 
