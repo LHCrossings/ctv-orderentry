@@ -330,6 +330,7 @@ _TOKEN_MAP: dict[str, str] = {
     "M":   "lun",
     "MO":  "lun",
     "MON": "lun",
+    "T":   "mar",   # Admerasia/Melissa single-char Tuesday
     "TU":  "mar",
     "TUE": "mar",
     "W":   "mer",
@@ -339,8 +340,10 @@ _TOKEN_MAP: dict[str, str] = {
     "R":   "gio",
     "F":   "ven",
     "FRI": "ven",
+    "S":   "sab",   # Admerasia/Melissa single-char Saturday
     "SA":  "sab",
     "SAT": "sab",
+    "U":   "dom",   # Admerasia/Melissa single-char Sunday
     "SU":  "dom",
     "SUN": "dom",
 }
@@ -349,12 +352,12 @@ _TOKEN_MAP: dict[str, str] = {
 _DAY_ORDER = ["lun", "mar", "mer", "gio", "ven", "sab", "dom"]
 _TOKEN_TO_INDEX: dict[str, int] = {
     "M": 0, "MO": 0, "MON": 0,
-    "TU": 1, "TUE": 1,
+    "T": 1, "TU": 1, "TUE": 1,   # T = Tuesday (Admerasia)
     "W": 2, "WED": 2,
     "TH": 3, "THU": 3, "R": 3,
     "F": 4, "FRI": 4,
-    "SA": 5, "SAT": 5,
-    "SU": 6, "SUN": 6,
+    "S": 5, "SA": 5, "SAT": 5,   # S = Saturday (Admerasia)
+    "U": 6, "SU": 6, "SUN": 6,   # U = Sunday (Admerasia)
 }
 
 
