@@ -6103,16 +6103,20 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 " VALUES (%d, %d, 0)",
                                 (line_id, fid),
                             )
-                    # Remove pool entries that weren't assigned to any spot on any line
-                    cur.execute(
-                        f"DELETE FROM CONTRATTIFILMATI"
-                        f" WHERE ID_FILMATI IN ({fid_ph})"
-                        f" AND PERCROTATION = 0"
-                        f" AND ID_CONTRATTIRIGHE IN ("
-                        f"   SELECT ID_CONTRATTIRIGHE FROM CONTRATTIRIGHE"
-                        f"   WHERE ID_CONTRATTITESTATA = {contract_id}"
-                        f" )"
-                    )
+                    # Remove pool entries that weren't assigned to any spot on any line.
+                    # Must exclude assigned lines or we delete the rows just inserted above.
+                    if line_tp_filmati:
+                        assigned_line_ph = ",".join(str(lid) for lid in line_tp_filmati.keys())
+                        cur.execute(
+                            f"DELETE FROM CONTRATTIFILMATI"
+                            f" WHERE ID_FILMATI IN ({fid_ph})"
+                            f" AND PERCROTATION = 0"
+                            f" AND ID_CONTRATTIRIGHE NOT IN ({assigned_line_ph})"
+                            f" AND ID_CONTRATTIRIGHE IN ("
+                            f"   SELECT ID_CONTRATTIRIGHE FROM CONTRATTIRIGHE"
+                            f"   WHERE ID_CONTRATTITESTATA = {contract_id}"
+                            f" )"
+                        )
                     conn.commit()
 
             needs_airchecks = False
