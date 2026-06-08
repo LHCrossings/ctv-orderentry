@@ -124,6 +124,9 @@ class OrderProcessingService:
         OrderType.HL,
         OrderType.HL_BDR,
         OrderType.ADMERASIA,
+        OrderType.SAGENT,
+        OrderType.GALEFORCE,
+        OrderType.HYPHEN,
     }
 
     def __init__(
@@ -981,7 +984,7 @@ class OrderProcessingService:
             ProcessingResult with success status
         """
         try:
-            from sagent_automation import process_sagent_order
+            from sagent_automation import process_sagent_order_direct
 
             print(f"\n{'='*70}")
             print("PROCESSING SAGENT ORDER")
@@ -991,30 +994,27 @@ class OrderProcessingService:
                 print(f"Customer: {order.customer_name}")
             print(f"{'='*70}\n")
 
-            pre_gathered_inputs = order.order_input if order.order_input else None
+            if not order.order_input:
+                return ProcessingResult(
+                    success=False, contracts=[], order_type=OrderType.SAGENT,
+                    error_message="Order inputs not collected"
+                )
 
-            if shared_session is None:
-                try:
-                    from etere_session import EtereSession
-                except ImportError:
-                    print("[ERROR] Could not import EtereSession")
-                    return ProcessingResult(
-                        success=False, contracts=[], order_type=OrderType.SAGENT,
-                        error_message="EtereSession import failed"
-                    )
-                print("[SESSION] Creating browser session for SAGENT order...")
-                with EtereSession() as session:
-                    session.set_market("NYC")
-                    print("[SESSION] Master market set to NYC")
-                    return self._run_sagent_with_driver(
-                        order, session.driver, session, pre_gathered_inputs, process_sagent_order
-                    )
+            contract_id = process_sagent_order_direct(
+                pdf_path=str(order.pdf_path),
+                user_input=order.order_input,
+            )
+            success = contract_id is not None
+            contracts = [str(contract_id)] if contract_id else []
 
-            if hasattr(shared_session, 'set_market'):
-                print("[SESSION] ✓ Using shared browser session (market pre-set to NYC)")
-            driver = shared_session.driver if hasattr(shared_session, 'driver') else shared_session
-            return self._run_sagent_with_driver(
-                order, driver, shared_session, pre_gathered_inputs, process_sagent_order
+            if success:
+                print(f"\n✓ SAGENT order processed successfully — contract {contract_id}")
+            else:
+                print("\n✗ SAGENT order processing failed")
+
+            return ProcessingResult(
+                success=success, contracts=contracts, order_type=OrderType.SAGENT,
+                error_message="" if success else "SAGENT direct DB entry failed"
             )
 
         except Exception as e:
@@ -1056,7 +1056,7 @@ class OrderProcessingService:
         system (e.g. BMO/PACO Collective). Master market is NYC.
         """
         try:
-            from galeforce_automation import process_galeforce_order
+            from galeforce_automation import process_galeforce_order_direct
 
             print(f"\n{'='*70}")
             print("PROCESSING GALEFORCE ORDER")
@@ -1066,30 +1066,27 @@ class OrderProcessingService:
                 print(f"Customer: {order.customer_name}")
             print(f"{'='*70}\n")
 
-            pre_gathered_inputs = order.order_input if order.order_input else None
+            if not order.order_input:
+                return ProcessingResult(
+                    success=False, contracts=[], order_type=OrderType.GALEFORCE,
+                    error_message="Order inputs not collected"
+                )
 
-            if shared_session is None:
-                try:
-                    from etere_session import EtereSession
-                except ImportError:
-                    print("[ERROR] Could not import EtereSession")
-                    return ProcessingResult(
-                        success=False, contracts=[], order_type=OrderType.GALEFORCE,
-                        error_message="EtereSession import failed",
-                    )
-                print("[SESSION] Creating browser session for GaleForce order...")
-                with EtereSession() as session:
-                    session.set_market("NYC")
-                    print("[SESSION] Master market set to NYC")
-                    return self._run_galeforce_with_driver(
-                        order, session.driver, session, pre_gathered_inputs, process_galeforce_order
-                    )
+            contract_id = process_galeforce_order_direct(
+                pdf_path=str(order.pdf_path),
+                user_input=order.order_input,
+            )
+            success = contract_id is not None
+            contracts = [str(contract_id)] if contract_id else []
 
-            if hasattr(shared_session, 'set_market'):
-                print("[SESSION] ✓ Using shared browser session (market pre-set to NYC)")
-            driver = shared_session.driver if hasattr(shared_session, 'driver') else shared_session
-            return self._run_galeforce_with_driver(
-                order, driver, shared_session, pre_gathered_inputs, process_galeforce_order
+            if success:
+                print(f"\n✓ GaleForce order processed successfully — contract {contract_id}")
+            else:
+                print("\n✗ GaleForce order processing failed")
+
+            return ProcessingResult(
+                success=success, contracts=contracts, order_type=OrderType.GALEFORCE,
+                error_message="" if success else "GaleForce direct DB entry failed"
             )
 
         except Exception as exc:
@@ -1131,7 +1128,7 @@ class OrderProcessingService:
         Single-market orders (CVC or LAX). Master market is NYC.
         """
         try:
-            from hyphen_automation import process_hyphen_order
+            from hyphen_automation import process_hyphen_order_direct
 
             print(f"\n{'='*70}")
             print("PROCESSING HYPHEN ORDER")
@@ -1139,30 +1136,27 @@ class OrderProcessingService:
             print(f"File: {order.pdf_path.name}")
             print(f"{'='*70}\n")
 
-            pre_gathered_inputs = order.order_input if order.order_input else None
+            if not order.order_input:
+                return ProcessingResult(
+                    success=False, contracts=[], order_type=OrderType.HYPHEN,
+                    error_message="Order inputs not collected"
+                )
 
-            if shared_session is None:
-                try:
-                    from etere_session import EtereSession
-                except ImportError:
-                    print("[ERROR] Could not import EtereSession")
-                    return ProcessingResult(
-                        success=False, contracts=[], order_type=OrderType.HYPHEN,
-                        error_message="EtereSession import failed",
-                    )
-                print("[SESSION] Creating browser session for Hyphen order...")
-                with EtereSession() as session:
-                    session.set_market("NYC")
-                    print("[SESSION] Master market set to NYC")
-                    return self._run_hyphen_with_driver(
-                        order, session.driver, session, pre_gathered_inputs, process_hyphen_order
-                    )
+            contract_id = process_hyphen_order_direct(
+                pdf_path=str(order.pdf_path),
+                user_input=order.order_input,
+            )
+            success = contract_id is not None
+            contracts = [str(contract_id)] if contract_id else []
 
-            if hasattr(shared_session, 'set_market'):
-                print("[SESSION] ✓ Using shared browser session (market pre-set to NYC)")
-            driver = shared_session.driver if hasattr(shared_session, 'driver') else shared_session
-            return self._run_hyphen_with_driver(
-                order, driver, shared_session, pre_gathered_inputs, process_hyphen_order
+            if success:
+                print(f"\n✓ Hyphen order processed successfully — contract {contract_id}")
+            else:
+                print("\n✗ Hyphen order processing failed")
+
+            return ProcessingResult(
+                success=success, contracts=contracts, order_type=OrderType.HYPHEN,
+                error_message="" if success else "Hyphen direct DB entry failed"
             )
 
         except Exception as exc:

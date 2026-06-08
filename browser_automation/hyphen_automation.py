@@ -29,6 +29,151 @@ from browser_automation.ros_definitions import ROS_SCHEDULES
 from src.domain.enums import BillingType, OrderType
 
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DATE / DURATION HELPERS (direct DB)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _parse_date(s):
+    """Parse MM/DD/YYYY, MM/DD/YY, or date objects to datetime.date."""
+    from datetime import datetime, date
+    if isinstance(s, date):
+        return s
+    s = str(s).strip()
+    for fmt in ('%m/%d/%Y', '%m/%d/%y', '%b %d, %Y', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"Cannot parse date: {s!r}")
+
+
+def _secs_to_duration(secs: int) -> str:
+    """Convert seconds to HH:MM:SS:FF duration string for EtereDirectClient."""
+    m, s = divmod(int(secs), 60)
+    h, m = divmod(m, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}:00"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DIRECT DB ENTRY
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _create_hyphen_contract_direct(estimate: HyphenEstimate, inputs: dict) -> Optional[int]:
+    """
+    Enter Hyphen order directly via DB stored procedures (no browser).
+    Returns contract_id on success, None on failure (rolls back fully).
+    """
+    from browser_automation.etere_direct_client import EtereDirectClient, connect
+
+    customer_id = inputs.get('customer_id')
+    if customer_id is None:
+        print("[HYPHEN DIRECT] ✗ No customer_id — cannot enter without a known ID")
+        return None
+
+    conn = None
+    try:
+        conn = connect()
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+        client.set_master_market("NYC")
+
+        contract_id = client.create_contract_header(
+            code=inputs['contract_code'],
+            description=inputs['description'],
+            customer_id=int(customer_id),
+            contract_date=_parse_date(estimate.flight_start),
+            contract_end_date=_parse_date(estimate.flight_end),
+            contract_type=1,
+            billing_type="agency",
+            note=inputs['notes'],
+            customer_order_ref=inputs['order_ref'],
+        )
+        print(f"[HYPHEN DIRECT] ✓ Contract header ID={contract_id}")
+
+        separation = inputs.get('separation', (estimate.separation, 0, 0))
+        line_count = 0
+
+        for line in estimate.lines:
+            if line.total_spots == 0:
+                continue
+
+            is_bonus     = line.is_bonus
+            booking_code = 10 if is_bonus else 2
+            duration_str = _secs_to_duration(line.get_duration_seconds())
+            etere_days   = line.get_etere_days()
+            etere_time   = line.get_etere_time()
+            description  = line.get_description(etere_days, etere_time)
+
+            time_from, time_to = EtereClient.parse_time_range(etere_time)
+            time_range         = f"{time_from}-{time_to}"
+
+            if is_bonus:
+                language = line.program.split()[0].title()
+                ros = ROS_SCHEDULES.get(language)
+                if ros:
+                    time_from, time_to = EtereClient.parse_time_range(ros['time'])
+                    time_range    = f"{time_from}-{time_to}"
+                    adjusted_days = ros['days']
+                    description   = f"(Line {line.line_number}) BNS {language} ROS"
+                    print(f"    [ROS] {language}: {adjusted_days} {ros['time']}")
+                else:
+                    adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(etere_days, etere_time)
+            else:
+                adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(etere_days, etere_time)
+
+            ranges = EtereClient.consolidate_weeks(
+                line.weekly_spots,
+                line.week_start_dates,
+                flight_end=estimate.flight_end,
+            )
+
+            for rng in ranges:
+                line_count  += 1
+                total_spots  = rng['spots_per_week'] * rng['weeks']
+                print(f"  [LINE {line_count}] {description}: "
+                      f"{rng['start_date']}–{rng['end_date']} "
+                      f"({rng['spots_per_week']}/wk×{rng['weeks']}w={total_spots})")
+                client.add_contract_line(
+                    market=estimate.market,
+                    days=adjusted_days,
+                    time_range=time_range,
+                    description=description,
+                    rate=float(line.gross_rate),
+                    total_spots=total_spots,
+                    spots_per_week=rng['spots_per_week'],
+                    date_from=_parse_date(rng['start_date']),
+                    date_to=_parse_date(rng['end_date']),
+                    duration=duration_str,
+                    is_bonus=is_bonus,
+                    booking_code=booking_code,
+                    separation_intervals=separation,
+                )
+
+        conn.commit()
+        conn.close()
+        print(f"[HYPHEN DIRECT] ✓ {line_count} lines committed.")
+        return contract_id
+
+    except Exception as exc:
+        print(f"[HYPHEN DIRECT] ✗ {exc}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
+        return None
+
+
+def process_hyphen_order_direct(pdf_path: str, user_input: dict) -> Optional[int]:
+    """Direct DB entry point for the order processing service (no browser needed)."""
+    estimate = parse_hyphen_pdf(pdf_path)
+    return _create_hyphen_contract_direct(estimate, user_input)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CUSTOMER DATABASE
 # ─────────────────────────────────────────────────────────────────────────────
@@ -234,8 +379,17 @@ def process_hyphen_order(
             print("\n✗ Input gathering cancelled")
             return False
 
-        etere = EtereClient(driver)
-        return _create_hyphen_contract(etere, estimate, inputs)
+        # Try direct DB first (no browser needed)
+        contract_id = _create_hyphen_contract_direct(estimate, inputs)
+        if contract_id is not None:
+            return True
+        elif driver is not None:
+            print("[FALLBACK] Direct DB failed — retrying via browser automation...")
+            etere = EtereClient(driver)
+            return _create_hyphen_contract(etere, estimate, inputs)
+        else:
+            print("[HYPHEN] ✗ Direct DB failed and no browser driver available")
+            return False
 
     except Exception as exc:
         print(f"\n✗ Error processing Hyphen order: {exc}")

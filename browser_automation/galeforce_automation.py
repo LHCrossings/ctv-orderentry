@@ -41,6 +41,164 @@ from src.domain.enums import BillingType, OrderType, SeparationInterval
 
 GALEFORCE_SEPARATION = SeparationInterval.GALEFORCE.value  # (25, 0, 0)
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DATE / DURATION HELPERS (direct DB)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _parse_date(s):
+    """Parse MM/DD/YYYY, MM/DD/YY, or date objects to datetime.date."""
+    from datetime import datetime, date
+    if isinstance(s, date):
+        return s
+    s = str(s).strip()
+    for fmt in ('%m/%d/%Y', '%m/%d/%y', '%b %d, %Y', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"Cannot parse date: {s!r}")
+
+
+def _secs_to_duration(secs: int) -> str:
+    """Convert seconds to HH:MM:SS:FF duration string for EtereDirectClient."""
+    m, s = divmod(int(secs), 60)
+    h, m = divmod(m, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}:00"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DIRECT DB ENTRY
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _create_galeforce_contract_direct(order: GaleForceOrder, inputs: dict) -> Optional[int]:
+    """
+    Enter GaleForce order directly via DB stored procedures (no browser).
+    Returns contract_id on success, None on failure (rolls back fully).
+    """
+    from browser_automation.etere_direct_client import EtereDirectClient, connect
+
+    customer_id = inputs.get('customer_id')
+    if customer_id is None:
+        print("[GALEFORCE DIRECT] ✗ No customer_id — cannot enter without a known ID")
+        return None
+
+    conn = None
+    try:
+        conn = connect()
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+        client.set_master_market("NYC")
+
+        contract_id = client.create_contract_header(
+            code=inputs['contract_code'],
+            description=inputs['description'],
+            customer_id=int(customer_id),
+            contract_date=_parse_date(order.flight_start),
+            contract_end_date=_parse_date(order.flight_end),
+            contract_type=1,
+            billing_type="agency",
+            note=inputs['notes'],
+            customer_order_ref=order.order_number,
+        )
+        print(f"[GALEFORCE DIRECT] ✓ Contract header ID={contract_id}")
+
+        separation = inputs.get('separation', GALEFORCE_SEPARATION)
+        line_count = 0
+
+        for line in order.lines:
+            if line.total_spots == 0:
+                continue
+
+            is_bonus     = line.is_bonus
+            booking_code = 10 if is_bonus else 2
+            duration_str = _secs_to_duration(line.get_duration_seconds())
+
+            if inputs.get('gross_up') and not is_bonus:
+                rate = _gross_up(line.net_rate)
+            else:
+                rate = line.net_rate  # bonus lines are always 0
+
+            etere_days   = line.get_etere_days()
+            etere_time   = line.get_etere_time()
+            description  = line.get_description(etere_days, etere_time)
+            description  = f"(Line {line.line_number}) {description}"
+
+            time_from, time_to = EtereClient.parse_time_range(etere_time)
+            time_range         = f"{time_from}-{time_to}"
+            adjusted_days, _   = EtereClient.check_sunday_6_7a_rule(etere_days, etere_time)
+
+            # ROS override for all-day bonus lines
+            is_ros = (
+                is_bonus
+                and not line.is_billboard
+                and line.length in (':15', ':30')
+                and etere_time == '12a-12a'
+            )
+            if is_ros:
+                prog_lower = line.program.lower()
+                for language, sched in ROS_SCHEDULES.items():
+                    if language.lower() in prog_lower:
+                        time_from, time_to = EtereClient.parse_time_range(sched['time'])
+                        time_range   = f"{time_from}-{time_to}"
+                        adjusted_days = etere_days
+                        description  = f"(Line {line.line_number}) {etere_days} BNS {language} ROS"
+                        print(f"    [ROS] {language} — {sched['time']}, desc: {description!r}")
+                        break
+
+            ranges = EtereClient.consolidate_weeks(
+                line.weekly_spots,
+                order.week_start_dates,
+                flight_end=order.flight_end,
+            )
+
+            for rng in ranges:
+                line_count  += 1
+                total_spots  = rng['spots_per_week'] * rng['weeks']
+                print(f"  [LINE {line_count}] {description}: "
+                      f"{rng['start_date']}–{rng['end_date']} "
+                      f"({rng['spots_per_week']}/wk×{rng['weeks']}w={total_spots})")
+                client.add_contract_line(
+                    market=order.market,
+                    days=adjusted_days,
+                    time_range=time_range,
+                    description=description,
+                    rate=float(rate),
+                    total_spots=total_spots,
+                    spots_per_week=rng['spots_per_week'],
+                    date_from=_parse_date(rng['start_date']),
+                    date_to=_parse_date(rng['end_date']),
+                    duration=duration_str,
+                    is_bonus=is_bonus,
+                    is_billboard=line.is_billboard,
+                    booking_code=booking_code,
+                    separation_intervals=separation,
+                )
+
+        conn.commit()
+        conn.close()
+        print(f"[GALEFORCE DIRECT] ✓ {line_count} lines committed.")
+        return contract_id
+
+    except Exception as exc:
+        print(f"[GALEFORCE DIRECT] ✗ {exc}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
+        return None
+
+
+def process_galeforce_order_direct(pdf_path: str, user_input: dict) -> Optional[int]:
+    """Direct DB entry point for the order processing service (no browser needed)."""
+    order = parse_galeforce_pdf(pdf_path)
+    return _create_galeforce_contract_direct(order, user_input)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CUSTOMER DATABASE LOOKUP
 # ─────────────────────────────────────────────────────────────────────────────
@@ -242,9 +400,17 @@ def process_galeforce_order(
             print("\n✗ Input gathering cancelled")
             return False
 
-        etere = EtereClient(driver)
-
-        success = _create_galeforce_contract(etere, order, inputs)
+        # Try direct DB first (no browser needed)
+        contract_id = _create_galeforce_contract_direct(order, inputs)
+        if contract_id is not None:
+            success = True
+        elif driver is not None:
+            print("[FALLBACK] Direct DB failed — retrying via browser automation...")
+            etere = EtereClient(driver)
+            success = _create_galeforce_contract(etere, order, inputs)
+        else:
+            print("[GALEFORCE] ✗ Direct DB failed and no browser driver available")
+            success = False
 
         if success:
             print(f"\n{'=' * 70}")
