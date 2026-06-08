@@ -123,6 +123,7 @@ class OrderProcessingService:
         OrderType.CHARMAINE,
         OrderType.HL,
         OrderType.HL_BDR,
+        OrderType.ADMERASIA,
     }
 
     def __init__(
@@ -1365,15 +1366,6 @@ class OrderProcessingService:
                 print(f"Customer: {order.customer_name}")
             print(f"{'='*70}\n")
 
-            # Admerasia REQUIRES a browser session
-            if shared_session is None:
-                return ProcessingResult(
-                    success=False,
-                    contracts=[],
-                    order_type=OrderType.ADMERASIA,
-                    error_message="Browser session required for Admerasia orders"
-                )
-
             # Get inputs from order (already collected by orchestrator)
             if not order.order_input:
                 return ProcessingResult(
@@ -1383,21 +1375,17 @@ class OrderProcessingService:
                     error_message="Order inputs not collected"
                 )
 
-            print("[SESSION] ✓ Using shared browser session")
-            # Market already set to NYC once at batch start
-
-            # Process the order with pre-collected inputs (matching Daviselen pattern)
+            # DirectDB — no browser session needed
             contract_num = process_admerasia_order(
-                driver=shared_session.driver,  # ← Pass driver, not session!
                 pdf_path=str(order.pdf_path),
-                user_input=order.order_input
+                user_input=order.order_input,
             )
 
             success = bool(contract_num)
             contracts = [str(contract_num)] if contract_num else []
 
             if success:
-                print("\n✓ Admerasia order processed successfully")
+                print(f"\n✓ Admerasia order processed successfully — contract {contract_num}")
             else:
                 print("\n✗ Admerasia order processing failed")
 

@@ -61,6 +61,7 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from etere_client import EtereClient
+from etere_direct_client import EtereDirectClient, connect
 from src.domain.enums import BillingType, OrderType
 
 from parsers.admerasia_parser import (
@@ -449,154 +450,113 @@ def gather_admerasia_inputs(pdf_path: str) -> Optional[dict]:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def process_admerasia_order(
-    driver,
     pdf_path: str,
-    user_input: dict = None
+    user_input: dict = None,
+    driver=None,  # ignored — kept for call-site compatibility during transition
 ):
     """
-    Process Admerasia order with completely unattended automation.
-
-    Matches Daviselen/TCAA pattern for consistency across all automations.
+    Process Admerasia order via EtereDirectClient (no browser required).
 
     Workflow:
     1. Use pre-collected inputs (from orchestrator) OR gather them now
-    2. Start browser automation (no interruptions)
-    3. Create contract header
-    4. Add all contract lines (pre-analyzed from daily spot grid)
-    5. Return contract number on success, None on failure
-
-    Args:
-        driver: Selenium WebDriver (raw driver, not session)
-        pdf_path: Path to Admerasia PDF
-        user_input: Pre-collected inputs from orchestrator (optional)
-
-    Returns:
-        Contract number string if successful, None otherwise
+    2. Open direct DB connection
+    3. Create contract header via SP
+    4. Add all contract lines via SP
+    5. Return contract ID on success, None on failure
     """
-    # ═══════════════════════════════════════════════════════════════
-    # GET INPUTS (pre-collected OR gather now)
-    # ═══════════════════════════════════════════════════════════════
-
     if user_input is None:
-        # Not called from orchestrator - gather inputs now
         user_input = gather_admerasia_inputs(pdf_path)
         if not user_input:
             return None
 
     order = user_input['order']
     etere_lines = user_input['etere_lines']
-
-    # ═══════════════════════════════════════════════════════════════
-    # BROWSER AUTOMATION (COMPLETELY UNATTENDED)
-    # ═══════════════════════════════════════════════════════════════
+    separation = user_input['separation']
+    market = user_input['market']
 
     print("\n" + "=" * 70)
-    print("STARTING BROWSER AUTOMATION")
+    print("STARTING DIRECT DB ENTRY")
     print("=" * 70)
 
-    all_success = True
-
-    # Create Etere client (just like Daviselen/TCAA does)
-    etere = EtereClient(driver)
-
     try:
-        # Master market already set by session (NYC for Crossings TV)
-        # Individual lines will use their specific market
+        with connect() as conn:
+            client = EtereDirectClient(conn, autocommit=True)
+            client.set_master_market("NYC")  # always NYC for Admerasia
 
-        # ═══════════════════════════════════════════════════════════
-        # CREATE CONTRACT HEADER
-        # ═══════════════════════════════════════════════════════════
+            # ═══════════════════════════════════════════════════════
+            # CREATE CONTRACT HEADER
+            # ═══════════════════════════════════════════════════════
 
-        billing = user_input['billing']
-        flight_start, flight_end = order.get_flight_dates()
+            flight_start, flight_end = order.get_flight_dates()
 
-        contract_number = etere.create_contract_header(
-            customer_id=int(user_input['customer_id']),
-            code=user_input['contract_code'],
-            description=user_input['contract_description'],
-            contract_start=flight_start.strftime('%m/%d/%Y'),
-            contract_end=flight_end.strftime('%m/%d/%Y'),
-            customer_order_ref=user_input['customer_order_ref'],
-            notes=user_input['notes'],
-            charge_to=billing.get_charge_to(),
-            invoice_header=billing.get_invoice_header(),
-        )
-
-        if not contract_number:
-            print("[CONTRACT] ✗ Failed to create contract")
-            return None
-
-        print(f"[CONTRACT] ✓ Created: {contract_number}")
-
-        # ═══════════════════════════════════════════════════════════
-        # ADD CONTRACT LINES
-        # ═══════════════════════════════════════════════════════════
-
-        separation = user_input['separation']
-        market = user_input['market']
-
-        for line_idx, line_spec in enumerate(etere_lines, 1):
-            # Build description: DAYS TIME
-            # No program names for Admerasia (business rule #4)
-            # No line numbers (IO doesn't have them)
-            description = f"{line_spec['days']} {line_spec['time']}"
-
-            # Format dates for Etere
-            start_date_str = line_spec['start_date'].strftime('%m/%d/%Y')
-            end_date_str = line_spec['end_date'].strftime('%m/%d/%Y')
-
-            # Apply Sunday 6-7a rule
-            days, _ = EtereClient.check_sunday_6_7a_rule(
-                line_spec['days'], line_spec['time']
+            contract_id = client.create_contract_header(
+                code=user_input['contract_code'],
+                description=user_input['contract_description'],
+                customer_id=int(user_input['customer_id']),
+                contract_date=flight_start,
+                contract_end_date=flight_end,
+                note=user_input['notes'],
+                customer_order_ref=user_input['customer_order_ref'],
+                billing_type="agency",
+                allow_rename=True,
             )
 
-            # Parse time range using EtereClient universal parser
-            time_from, time_to = EtereClient.parse_time_range(line_spec['time'])
+            if not contract_id:
+                print("[CONTRACT] ✗ Failed to create contract")
+                return None
 
-            # Determine spot code (Admerasia never has bonus spots)
-            spot_code = 2  # Paid Commercial
+            print(f"[CONTRACT] ✓ Created: {contract_id}")
 
-            # Calculate spots_per_week: Admerasia orders specify exact spots on exact days,
-            # so max per week = 0 (tells Etere to not apply any weekly cap)
-            spots_per_week = 0
+            # ═══════════════════════════════════════════════════════
+            # ADD CONTRACT LINES
+            # ═══════════════════════════════════════════════════════
 
-            print(f"\n[LINE {line_idx}] {days} {line_spec['time']}")
-            print(f"  {start_date_str} - {end_date_str}")
-            print(f"  {line_spec['total_spots']}x total, "
-                  f"{line_spec['per_day_max']}x/day max "
-                  f"@ ${line_spec['rate']}")
+            for line_idx, line_spec in enumerate(etere_lines, 1):
+                # Description uses original days (before Sunday rule strips Sunday)
+                description = f"{line_spec['days']} {line_spec['time']}"
 
-            success = etere.add_contract_line(
-                contract_number=contract_number,
-                market=market,
-                start_date=start_date_str,
-                end_date=end_date_str,
-                days=days,
-                time_from=time_from,
-                time_to=time_to,
-                description=description,
-                spot_code=spot_code,
-                duration_seconds=line_spec.get('spot_length', 15),
-                total_spots=line_spec['total_spots'],
-                spots_per_week=spots_per_week,
-                max_daily_run=line_spec['per_day_max'],
-                rate=float(line_spec['rate']),                separation_intervals=separation,
-            )
+                # Apply Sunday 6-7a rule to Etere day flags
+                days, _ = EtereClient.check_sunday_6_7a_rule(
+                    line_spec['days'], line_spec['time']
+                )
 
-            if not success:
-                print(f"  [LINE {line_idx}] ✗ Failed")
-                all_success = False
+                time_from, time_to = EtereClient.parse_time_range(line_spec['time'])
+                time_range = f"{time_from}-{time_to}"
 
-        print(f"\n[COMPLETE] Contract {contract_number} — "
-              f"{len(etere_lines)} lines processed")
+                secs = int(line_spec.get('spot_length', 15))
+                duration = f"00:00:{secs:02d}:00"
+
+                print(f"\n[LINE {line_idx}] {days} {line_spec['time']}")
+                print(f"  {line_spec['start_date']} - {line_spec['end_date']}")
+                print(f"  {line_spec['total_spots']}x total, "
+                      f"{line_spec['per_day_max']}x/day max "
+                      f"@ ${line_spec['rate']}")
+
+                client.add_contract_line(
+                    market=market,
+                    days=days,
+                    time_range=time_range,
+                    description=description,
+                    rate=float(line_spec['rate']),
+                    total_spots=line_spec['total_spots'],
+                    spots_per_week=0,
+                    max_daily_run=line_spec['per_day_max'],
+                    date_from=line_spec['start_date'],
+                    date_to=line_spec['end_date'],
+                    duration=duration,
+                    booking_code=2,  # always Paid — Admerasia has no bonus spots
+                    separation_intervals=separation,
+                )
+                print(f"  [LINE {line_idx}] ✓ Added")
+
+        print(f"\n[COMPLETE] Contract {contract_id} — {len(etere_lines)} lines processed")
+        return contract_id
 
     except Exception as e:
-        print(f"\n[ERROR] Browser automation failed: {e}")
+        print(f"\n[ERROR] Direct DB entry failed: {e}")
         import traceback
         traceback.print_exc()
         return None
-
-    return contract_number if all_success else None
 
 
 
@@ -609,8 +569,7 @@ if __name__ == "__main__":
     print("ADMERASIA AUTOMATION - STANDALONE MODE NOT SUPPORTED")
     print("=" * 70)
     print()
-    print("This automation must be run through the orchestrator (main.py)")
-    print("which provides the browser session.")
+    print("This automation must be run through the orchestrator (main.py).")
     print()
     print("To process Admerasia orders:")
     print("  1. Place PDF in incoming\\ folder")
@@ -618,6 +577,6 @@ if __name__ == "__main__":
     print("  3. Select the Admerasia order from the menu")
     print()
     print("For testing/development, you can call process_admerasia_order()")
-    print("directly with a browser driver session.")
+    print("directly — no browser session required (DirectDB).")
     print("=" * 70)
     sys.exit(1)
