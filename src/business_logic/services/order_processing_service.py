@@ -146,6 +146,7 @@ class OrderProcessingService:
         OrderType.POLARIS,
         OrderType.THREEOLIVES,
         OrderType.WALLRICH,
+        OrderType.XML,
     }
 
     def __init__(

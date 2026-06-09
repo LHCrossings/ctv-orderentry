@@ -385,6 +385,36 @@ def process_xml_order(
             return False
         estimates = inputs.estimates
 
+    if driver is None:
+        from browser_automation.tcaa_automation import _create_tcaa_contract_direct
+        success_count = 0
+        for estimate in estimates:
+            estimate_confirmed = _inject_confirmed(estimate, inputs.agency, inputs.client, inputs.market)
+            bonus_inputs = inputs.bonus_inputs.get(estimate.estimate_number, {})
+            print(f"\n{'='*60}")
+            print(f"Creating contract (direct DB) for estimate {estimate.estimate_number}")
+            print(f"  Agency: {inputs.agency}  Client: {inputs.client}  Market: {inputs.market}")
+            print(f"{'='*60}")
+            result = _create_tcaa_contract_direct(
+                estimate=estimate_confirmed,
+                bonus_inputs=bonus_inputs,
+                separation_intervals=inputs.separation_intervals,
+                order_code=inputs.order_code,
+                description=inputs.description,
+            )
+            if result:
+                success_count += 1
+                print(f"\n✓ Estimate {estimate.estimate_number} completed (contract ID={result})")
+            else:
+                print(f"\n✗ Estimate {estimate.estimate_number} FAILED")
+                cont = input("\nContinue with remaining? (y/n): ").strip().lower()
+                if cont != "y":
+                    break
+        print(f"\n{'='*70}")
+        print(f"XML ORDER COMPLETE  {success_count}/{len(estimates)} contracts created")
+        print(f"{'='*70}")
+        return success_count == len(estimates)
+
     etere = EtereClient(driver)
 
     # ── Create each contract ──
