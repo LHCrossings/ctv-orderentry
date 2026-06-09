@@ -351,14 +351,6 @@ def gather_wallrich_inputs(pdf_path: str) -> Optional[dict]:
     desc_input = input(f"  Description   [{default_desc}]: ").strip()
     description = desc_input or default_desc
 
-    print(f"\n[SEPARATION] PDF: {est.separation} min → Etere: {etere_sep}")
-
-    print("\n[CONFIRM] Ready to process.")
-    confirm = input("  Start automation? [Y/n]: ").strip().lower()
-    if confirm == "n":
-        print("[CANCEL] Aborted by user.")
-        return None
-
     return {
         "order_code":    order_code,
         "description":   description,
