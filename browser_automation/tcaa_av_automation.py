@@ -75,36 +75,12 @@ def gather_inputs(order: ToyotaAVOrder) -> dict:
     dur_input = input(f"Spot duration in seconds [{DEFAULT_DURATION_SEC}]: ").strip()
     duration = int(dur_input) if dur_input else DEFAULT_DURATION_SEC
 
-    # Separation
-    from separation_utils import confirm_separation_intervals
-    separation = confirm_separation_intervals(
-        detected_separation=DEFAULT_SEPARATION[0],
-        order_type="TCAA_AV",
-    )
-
-    print(f"\n{'='*70}")
-    print("SUMMARY")
-    print(f"{'='*70}")
-    print(f"  Code        : {contract_code}")
-    print(f"  Description : {contract_desc}")
-    print(f"  Market      : {market}")
-    print(f"  Duration    : :{duration:02d}s")
-    print(f"  Separation  : {separation}")
-    if existing_contract_number:
-        print(f"  Adding to existing contract: {existing_contract_number}")
-    print(f"  Lines to enter: {len(order.lines)}")
-    print()
-
-    confirm = input("Proceed? [Y/n]: ").strip().lower()
-    if confirm == 'n':
-        raise SystemExit("Aborted by user.")
-
     return {
         "contract_code": contract_code,
         "contract_desc": contract_desc,
         "market": market,
         "duration": duration,
-        "separation": separation,
+        "separation": DEFAULT_SEPARATION,
         "existing_contract_number": existing_contract_number,
     }
 
@@ -345,12 +321,26 @@ def _create_tcaa_av_contract_direct(order: ToyotaAVOrder, inputs: dict) -> Optio
 # Entry point
 # ---------------------------------------------------------------------------
 
-def process_toyota_av_order(driver, pdf_path: str) -> bool:
+def gather_tcaa_av_inputs(pdf_path: str) -> Optional[dict]:
+    """Parse PDF and gather all user inputs upfront (called by orchestrator)."""
+    try:
+        order = parse_toyota_av_pdf(pdf_path)
+    except Exception as e:
+        print(f"[TCAA AV] ✗ Failed to parse PDF: {e}")
+        return None
+    return gather_inputs(order)
+
+
+def process_toyota_av_order(
+    driver,
+    pdf_path: str,
+    pre_gathered_inputs: Optional[dict] = None,
+) -> bool:
     """Full pipeline: parse PDF → gather inputs → enter contract."""
     print(f"\n[AV] Parsing {Path(pdf_path).name} ...")
     order = parse_toyota_av_pdf(pdf_path)
 
-    inputs = gather_inputs(order)
+    inputs = pre_gathered_inputs if pre_gathered_inputs is not None else gather_inputs(order)
 
     if driver is None:
         contract_id = _create_tcaa_av_contract_direct(order, inputs)

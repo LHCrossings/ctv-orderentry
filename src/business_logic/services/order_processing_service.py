@@ -686,24 +686,28 @@ class OrderProcessingService:
             print(f"File: {order.pdf_path.name}")
             print(f"{'='*70}\n")
 
-            def _run(driver):
-                success = self._tcaa_av_processor['process'](
-                    driver=driver,
-                    pdf_path=str(order.pdf_path),
-                )
-                if success:
-                    return ProcessingResult(
-                        success=True,
-                        contracts=[Contract(contract_number="TCAA-AV", order_type=OrderType.TCAA_AV)],
-                        order_type=OrderType.TCAA_AV,
-                        error_message=None,
-                    )
-                return ProcessingResult(
-                    success=False, contracts=[], order_type=OrderType.TCAA_AV,
-                    error_message="TCAA AV processing failed — check browser output for details"
-                )
+            inp = order.order_input
+            pre_gathered = inp if isinstance(inp, dict) else None
+            contract_label = (
+                inp.get('contract_code') if isinstance(inp, dict) else None
+            ) or "TCAA-AV"
 
-            return _run(None)
+            success = self._tcaa_av_processor['process'](
+                driver=None,
+                pdf_path=str(order.pdf_path),
+                pre_gathered_inputs=pre_gathered,
+            )
+            if success:
+                return ProcessingResult(
+                    success=True,
+                    contracts=[Contract(contract_number=contract_label, order_type=OrderType.TCAA_AV)],
+                    order_type=OrderType.TCAA_AV,
+                    error_message=None,
+                )
+            return ProcessingResult(
+                success=False, contracts=[], order_type=OrderType.TCAA_AV,
+                error_message="TCAA AV processing failed — check browser output for details"
+            )
 
         except Exception as e:
             import traceback
