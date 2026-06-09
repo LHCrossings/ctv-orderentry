@@ -20,6 +20,14 @@ contracts = [Contract(contract_number=label, order_type=OrderType.X)] if success
 ```
 For multi-contract types (SACCOUNTYVOTERS), build one `Contract` per phase from `inp.get('phase1_inputs', {}).get('contract_code')` etc.
 
+Note the gather key name varies by parser — check what the gather function actually returns: `'order_code'` (WALLRICH, SAGENT), `'contract_code'` (TIMEADVERTISING, TCAA_AV), or nested phase dicts (SACCOUNTYVOTERS).
+
+After adding a new `_process_*` method to the service, run this sanity check to catch any remaining `contracts=[]` on active success paths:
+```python
+grep -n "contracts=\[\]" order_processing_service.py | grep "success=success"
+```
+Any hit means the summary will show "0 contracts created" even on a successful run.
+
 ### 3. `booking_code` must always be explicit — never rely on `is_bonus`
 Pass `booking_code=10 if is_bonus else 2` to every `add_contract_line()` call. `is_bonus=True` only sets the scheduling type; it does NOT set the booking code.
 
