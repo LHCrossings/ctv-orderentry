@@ -420,6 +420,8 @@ tbody td {
     accent-color: var(--nord10);
     width: 18px;
     height: 18px;
+    transform: scale(1.5);
+    transform-origin: center;
 }
 
 /* ── Clickable row ───────────────────────────────────────────────────────── */
