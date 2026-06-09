@@ -81,14 +81,20 @@ def _create_opad_contract_direct(pdf_path: str, user_input) -> bool:
     """Enter opAD order directly via DB stored procedures (no browser)."""
     from browser_automation.etere_direct_client import EtereDirectClient, connect
 
-    customer_id, _ = _resolve_customer_id(pdf_path)
+    if isinstance(user_input, dict):
+        customer_id = user_input.get('customer_id')
+        order_code  = user_input.get('order_code', '')
+        description = user_input.get('description', '')
+        separation  = user_input.get('separation', SEPARATION_INTERVALS)
+    else:
+        customer_id, _ = _resolve_customer_id(pdf_path)
+        order_code  = user_input.order_code
+        description = user_input.description
+        separation  = user_input.separation_intervals or SEPARATION_INTERVALS
+
     if customer_id is None:
         print("[OPAD DIRECT] ✗ No customer_id — cannot enter without a known ID")
         return False
-
-    order_code  = user_input.order_code
-    description = user_input.description
-    separation  = user_input.separation_intervals or SEPARATION_INTERVALS
 
     conn = None
     try:
@@ -154,6 +160,37 @@ def _create_opad_contract_direct(pdf_path: str, user_input) -> bool:
             except: pass
         return False
 # ═══════════════════════════════════════════════════════════════════════════════
+# PRE-GATHER (called before processing begins)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def gather_opad_inputs(pdf_path: str) -> Optional[dict]:
+    """Collect all opAD inputs upfront before processing begins."""
+    try:
+        order = parse_opad_pdf(pdf_path)
+    except Exception as e:
+        print(f"[OPAD] ✗ Failed to parse PDF: {e}")
+        return None
+
+    # Build readable defaults
+    client_short = (order.client or "").replace("NYS ", "NY ").strip()[:20]
+    default_code = f"opAD {client_short} {order.estimate_number}".strip()
+    default_desc = order.description or f"{order.client} Est {order.estimate_number}"
+
+    # Customer ID (DB lookup → prompt if not found)
+    customer_id, _ = _resolve_customer_id(pdf_path)
+
+    order_code  = input(f"  Enter order code (default: {default_code}): ").strip() or default_code
+    description = input(f"  Enter description (default: {default_desc}): ").strip() or default_desc
+
+    return {
+        'customer_id': customer_id,
+        'order_code':  order_code,
+        'description': description,
+        'separation':  SEPARATION_INTERVALS,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # MAIN ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -200,14 +237,16 @@ def _execute_order(
 ) -> bool:
     """Execute the full order workflow."""
 
-    order_code = user_input.order_code
-    description = user_input.description
-
-    # Customer ID resolved from database (not from OrderInput)
-    customer_id, _ = _resolve_customer_id(pdf_path)
-    
-    # Separation intervals from user_input (confirmed by user in input_collectors)
-    separation = user_input.separation_intervals or SEPARATION_INTERVALS
+    if isinstance(user_input, dict):
+        order_code  = user_input.get('order_code', '')
+        description = user_input.get('description', '')
+        customer_id = user_input.get('customer_id')
+        separation  = user_input.get('separation', SEPARATION_INTERVALS)
+    else:
+        order_code  = user_input.order_code
+        description = user_input.description
+        customer_id, _ = _resolve_customer_id(pdf_path)
+        separation  = user_input.separation_intervals or SEPARATION_INTERVALS
 
     # ── Parse PDF ──
     print(f"\n{'='*60}")

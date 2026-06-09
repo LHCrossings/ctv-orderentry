@@ -59,6 +59,7 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
     OrderType.MEDIASOL:          ("browser_automation.mediasol_automation",            "gather_mediasol_inputs",           "Media Solutions"),
     OrderType.RWNY:              ("browser_automation.rwny_automation",                "gather_rwny_inputs",               "Resorts World NY"),
     OrderType.MISFIT:            ("browser_automation.misfit_automation",              "gather_misfit_inputs",             "Misfit"),
+    OrderType.OPAD:              ("browser_automation.opad_automation",                "gather_opad_inputs",               "opAD"),
 }
 
 
