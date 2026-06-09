@@ -816,16 +816,6 @@ class OrderProcessingService:
                 print(f"Customer: {order.customer_name}")
             print(f"{'='*70}\n")
 
-            # Daviselen REQUIRES a browser session (no standalone mode)
-            if shared_session is None:
-                return ProcessingResult(
-                    success=False,
-                    contracts=[],
-                    order_type=OrderType.DAVISELEN,
-                    error_message="Browser session required for Daviselen orders"
-                )
-
-            # Get inputs from order (already collected by orchestrator)
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
@@ -834,12 +824,8 @@ class OrderProcessingService:
                     error_message="Order inputs not collected"
                 )
 
-            print("[SESSION] ✓ Using shared browser session")
-            # Market already set to NYC once at batch start
-
-            # Process the order with pre-collected inputs (matching TCAA pattern)
             success = process_daviselen_order(
-                driver=shared_session.driver,  # ← Pass driver, not session!
+                driver=None,
                 pdf_path=str(order.pdf_path),
                 user_input=order.order_input
             )
