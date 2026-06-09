@@ -418,8 +418,8 @@ tbody td {
 #col-check input[type="checkbox"] {
     cursor: pointer;
     accent-color: var(--nord10);
-    width: 14px;
-    height: 14px;
+    width: 18px;
+    height: 18px;
 }
 
 /* ── Clickable row ───────────────────────────────────────────────────────── */
