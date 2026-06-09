@@ -975,7 +975,7 @@ class OrderProcessingService:
                 user_input=order.order_input,
             )
             success = contract_id is not None
-            contracts = [str(contract_id)] if contract_id else []
+            contracts = [Contract(contract_number=str(contract_id), order_type=OrderType.SAGENT)] if contract_id else []
 
             if success:
                 print(f"\n✓ SAGENT order processed successfully — contract {contract_id}")
@@ -1047,7 +1047,7 @@ class OrderProcessingService:
                 user_input=order.order_input,
             )
             success = contract_id is not None
-            contracts = [str(contract_id)] if contract_id else []
+            contracts = [Contract(contract_number=str(contract_id), order_type=OrderType.GALEFORCE)] if contract_id else []
 
             if success:
                 print(f"\n✓ GaleForce order processed successfully — contract {contract_id}")
@@ -1117,7 +1117,7 @@ class OrderProcessingService:
                 user_input=order.order_input,
             )
             success = contract_id is not None
-            contracts = [str(contract_id)] if contract_id else []
+            contracts = [Contract(contract_number=str(contract_id), order_type=OrderType.HYPHEN)] if contract_id else []
 
             if success:
                 print(f"\n✓ Hyphen order processed successfully — contract {contract_id}")
@@ -1326,7 +1326,7 @@ class OrderProcessingService:
             )
 
             success = bool(contract_num)
-            contracts = [str(contract_num)] if contract_num else []
+            contracts = [Contract(contract_number=str(contract_num), order_type=OrderType.ADMERASIA)] if contract_num else []
 
             if success:
                 print(f"\n✓ Admerasia order processed successfully — contract {contract_num}")
@@ -1546,7 +1546,7 @@ class OrderProcessingService:
                 user_input=order.order_input
             )
 
-            contracts = [order.order_input.get("contract_code", "imprenta")] if success else []
+            contracts = [Contract(contract_number=order.order_input.get("contract_code", "imprenta"), order_type=OrderType.IMPRENTA)] if success else []
             return ProcessingResult(
                 success=success,
                 contracts=contracts,
