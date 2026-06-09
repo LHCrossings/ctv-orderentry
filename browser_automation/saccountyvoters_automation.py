@@ -284,64 +284,31 @@ def gather_saccountyvoters_inputs(pdf_path: str) -> Optional[dict]:
     # yymm from flight start: "04/07/2026" → "2604"
     fs1 = order.phases[0].flight_start   # MM/DD/YYYY
     yymm1 = fs1[8:10] + fs1[0:2]        # "26" + "04" = "2604"
-    print("[1/5] Phase 1 Contract Code")
-    print("-" * 70)
     default_code_ph1 = f"Sac County Voters {yymm1}"
-    print(f"Default: {default_code_ph1}")
-    use_default = input("Use default? (y/n): ").strip().lower()
-    code_ph1 = default_code_ph1 if use_default == 'y' else input("Enter contract code: ").strip()
-    print(f"✓ {code_ph1}\n")
+    raw = input(f"  Phase 1 contract code [{default_code_ph1}]: ").strip()
+    code_ph1 = raw or default_code_ph1
 
-    print("[2/5] Phase 1 Contract Description")
-    print("-" * 70)
     default_desc_ph1 = f"Sac County Voters Phase 1 {yymm1}"
-    print(f"Default: {default_desc_ph1}")
-    use_default = input("Use default? (y/n): ").strip().lower()
-    desc_ph1 = default_desc_ph1 if use_default == 'y' else input("Enter description: ").strip()
-    print(f"✓ {desc_ph1}\n")
+    raw = input(f"  Phase 1 description   [{default_desc_ph1}]: ").strip()
+    desc_ph1 = raw or default_desc_ph1
 
     # ── Phase 2 inputs ────────────────────────────────────────────────────────
     fs2 = order.phases[1].flight_start   # MM/DD/YYYY
     yymm2 = fs2[8:10] + fs2[0:2]        # "26" + "05" = "2605"
-    print("[3/5] Phase 2 Contract Code")
-    print("-" * 70)
-    default_code_ph2 = f"Sac County Voters {yymm2}"
-    print(f"Default: {default_code_ph2}")
-    use_default = input("Use default? (y/n): ").strip().lower()
-    code_ph2 = default_code_ph2 if use_default == 'y' else input("Enter contract code: ").strip()
-    print(f"✓ {code_ph2}\n")
 
-    print("[4/5] Phase 2 Contract Description")
-    print("-" * 70)
+    default_code_ph2 = f"Sac County Voters {yymm2}"
+    raw = input(f"  Phase 2 contract code [{default_code_ph2}]: ").strip()
+    code_ph2 = raw or default_code_ph2
+
     default_desc_ph2 = f"Sac County Voters Phase 2 {yymm2}"
-    print(f"Default: {default_desc_ph2}")
-    use_default = input("Use default? (y/n): ").strip().lower()
-    desc_ph2 = default_desc_ph2 if use_default == 'y' else input("Enter description: ").strip()
-    print(f"✓ {desc_ph2}\n")
+    raw = input(f"  Phase 2 description   [{default_desc_ph2}]: ").strip()
+    desc_ph2 = raw or default_desc_ph2
 
     # ── Notes ─────────────────────────────────────────────────────────────────
-    print("[5/5] Contract Notes")
-    print("-" * 70)
     default_notes = f"Contact: {order.contact}\nEmail: {order.email}"
-    print(f"Default:\n{default_notes}")
-    use_default = input("Use default? (y/n): ").strip().lower()
-    notes = default_notes if use_default == 'y' else input("Enter notes: ").strip()
-    print(f"✓ {notes}\n")
-
-    # ── Separation confirmation ────────────────────────────────────────────────
-    sep = SAC_SEPARATION
-    print(f"Separation: Customer={sep[0]}, Order={sep[1]}, Event={sep[2]}")
-    sep_yn = input("Keep default separation? (y/n): ").strip().lower()
-    if sep_yn != 'y':
-        c = input(f"  Customer separation [{sep[0]}]: ").strip()
-        o = input(f"  Order separation [{sep[1]}]: ").strip()
-        e = input(f"  Event separation [{sep[2]}]: ").strip()
-        sep = (
-            int(c) if c.isdigit() else sep[0],
-            int(o) if o.isdigit() else sep[1],
-            int(e) if e.isdigit() else sep[2],
-        )
-    print(f"✓ Separation: {sep}\n")
+    print(f"\n  Notes default:\n    {default_notes.replace(chr(10), chr(10) + '    ')}")
+    raw = input("  Notes [Enter to keep]: ").strip()
+    notes = raw or default_notes
 
     print("=" * 70)
     print("✓ All inputs gathered — ready for automation")
