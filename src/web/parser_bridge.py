@@ -27,7 +27,7 @@ _DISPLAY_NAMES = {
     "DART":            "DART",
     "DAVISELEN":       "Davis Elen",
     "INTERTREND":      "Intertrend",
-    "GALEFORCE":       "GaleForce Media",
+    "GALEFORCE":       "PACO Collective",
     "HL":              "H&L Partners",
     "HL_BDR":          "H&L BDR",
     "HYPHEN":          "Hyphen (DPR)",
