@@ -9,8 +9,16 @@
 ### 1. Duration: always pass `str(seconds)`, never `f":{sec:02d}"`
 `_duration_str_to_seconds()` in `etere_direct_client.py` splits on `:` — a leading colon (e.g. `":30"`) produces `['', '30']` and `int('')` crashes. Pass bare integer strings: `str(spot_duration)` (e.g. `"30"`, `"45"`).
 
-### 2. `contracts` list must be populated on success
+### 2. `contracts` list must be populated on success; use gathered code, not DB ID
 `ProcessingResult.contracts` must contain at least one `Contract(contract_number=order_code, order_type=OrderType.X)` when `success=True`. Never return `contracts=[]` on success — the final summary will show "0 contracts created" even if Etere has the data.
+
+Use the **gathered contract code** (from `user_input.get('contract_code')`), not the Etere DB integer ID. The DB ID is meaningless to the user in the summary; the code they typed is what they need to verify the entry. Pattern:
+```python
+inp = order.order_input
+label = (inp.get('contract_code') if isinstance(inp, dict) else None) or str(contract_id)
+contracts = [Contract(contract_number=label, order_type=OrderType.X)] if success else []
+```
+For multi-contract types (SACCOUNTYVOTERS), build one `Contract` per phase from `inp.get('phase1_inputs', {}).get('contract_code')` etc.
 
 ### 3. `booking_code` must always be explicit — never rely on `is_bonus`
 Pass `booking_code=10 if is_bonus else 2` to every `add_contract_line()` call. `is_bonus=True` only sets the scheduling type; it does NOT set the booking code.
