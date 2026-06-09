@@ -19,9 +19,6 @@ Calendar month handling:
   Each month gets its own Etere line with that month's spot count.
 """
 
-import math
-import os
-import re
 import sys
 from datetime import datetime, timedelta, date
 from pathlib import Path
@@ -33,7 +30,7 @@ if str(_project_root) not in sys.path:
 
 from browser_automation.etere_client import EtereClient
 from browser_automation.parsers.rwny_parser import RWNYOrder, RWNYLine, RWNYMonthColumn, parse_rwny_pdf
-from src.domain.enums import BillingType, OrderType, SeparationInterval
+from src.domain.enums import OrderType, SeparationInterval
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -374,7 +371,6 @@ def gather_rwny_inputs(pdf_path: str) -> Optional[dict]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def process_rwny_order(
-    driver,
     pdf_path: str,
     shared_session=None,
     pre_gathered_inputs: Optional[dict] = None,
@@ -424,106 +420,8 @@ def process_rwny_order(
             labels = [mc.label for mc in order.month_columns]
             order.month_columns = _build_month_columns(labels, flight_start, year)
 
-        if driver is None:
-            contract_id = _create_rwny_contract_direct(order, inputs)
-            return contract_id is not None
-
-        etere      = EtereClient(driver)
-        separation = inputs.get('separation', RWNY_SEPARATION)
-        code       = inputs.get('contract_code', 'RWNY')
-        description = inputs.get('description', order.client)
-        notes      = inputs.get('notes', '')
-        customer_id = inputs.get('customer_id', RWNY_CUSTOMER_ID)
-
-        # ── Create contract header ─────────────────────────────────────────
-        contract_number = etere.create_contract_header(
-            customer_id=customer_id,
-            code=code,
-            description=description,
-            contract_start=flight_start,
-            contract_end=flight_end,
-            customer_order_ref=None,
-            notes=notes,
-            charge_to=BillingType.CUSTOMER_DIRECT.get_charge_to(),
-            invoice_header=BillingType.CUSTOMER_DIRECT.get_invoice_header(),
-        )
-
-        if not contract_number:
-            print('[RWNY] ✗ Failed to create contract header')
-            return False
-
-        print(f'[RWNY] ✓ Contract created: {contract_number}')
-
-        # ── Add one Etere line per language block per month ───────────────
-        line_count = 0
-        all_ok = True
-
-        for line in order.lines:
-            for mi, month in enumerate(order.month_columns):
-                spots = line.monthly_spots[mi] if mi < len(line.monthly_spots) else 0
-                if spots == 0:
-                    continue
-
-                # Apply Sunday 6–7a rule
-                adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(line.days, line.time_str)
-
-                # Parse time range for Etere
-                time_from, time_to = EtereClient.parse_time_range(line.time_str)
-
-                # Calculate scheduling parameters for the month
-                eligible_days = _eligible_days_in_range(
-                    adjusted_days, month.start_date, month.end_date)
-                max_daily_run = math.ceil(spots / eligible_days)
-                weeks = _weeks_in_range(month.start_date, month.end_date)
-                spots_per_week = math.ceil(spots / weeks)
-
-                spot_code = 10 if line.is_bonus else 2
-                if line.is_bonus:
-                    desc = f'{line.language} ROS BNS {month.label}'
-                else:
-                    desc = f'{line.block_name} {month.label}'
-
-                line_count += 1
-                print(f'\n  [{line_count}] {"BNS" if line.is_bonus else "PAID"} '
-                      f'{line.language} — {month.label}')
-                print(f'      {adjusted_days} {time_from}–{time_to}  '
-                      f'{month.start_date}–{month.end_date}')
-                print(f'      {spots} spots  max/day={max_daily_run}  '
-                      f'rate=${line.rate:.2f}')
-
-                ok = etere.add_contract_line(
-                    contract_number=contract_number,
-                    market=RWNY_MARKET,
-                    start_date=month.start_date,
-                    end_date=month.end_date,
-                    days=adjusted_days,
-                    time_from=time_from,
-                    time_to=time_to,
-                    description=desc,
-                    spot_code=spot_code,
-                    duration_seconds=order.duration_seconds,
-                    total_spots=spots,
-                    spots_per_week=spots_per_week,
-                    max_daily_run=max_daily_run,
-                    rate=line.rate,
-                    separation_intervals=separation,
-                    is_bookend=False,
-                    is_billboard=False,
-                )
-
-                if not ok:
-                    print(f'      ✗ Failed to add line {line_count}')
-                    all_ok = False
-
-        if all_ok:
-            print(f'\n[RWNY] ✓ All {line_count} Etere lines added')
-        else:
-            print(f'\n[RWNY] ⚠ Completed with errors — check output above')
-
-        print(f'\n{"=" * 70}')
-        print('✓ RWNY PROCESSING COMPLETE' if all_ok else '⚠ RWNY PROCESSING COMPLETED WITH ERRORS')
-        print(f'{"=" * 70}')
-        return all_ok
+        contract_id = _create_rwny_contract_direct(order, inputs)
+        return contract_id is not None
 
     except Exception as exc:
         import traceback

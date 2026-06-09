@@ -546,12 +546,11 @@ def _create_imprenta_contract_direct(user_input: dict) -> bool:
 # BROWSER AUTOMATION
 # ───────────────────────────────────────────────────────────────────────────
 
-def process_imprenta_order(driver, file_path: str, user_input: dict = None) -> bool:
+def process_imprenta_order(file_path: str, user_input: dict = None) -> bool:
     """
-    Process Imprenta order with browser automation.
+    Process Imprenta order via direct DB entry.
 
     Args:
-        driver:     Selenium WebDriver
         file_path:  Path to the XLSX file
         user_input: Pre-collected inputs from orchestrator (optional)
 
@@ -563,106 +562,7 @@ def process_imprenta_order(driver, file_path: str, user_input: dict = None) -> b
         if not user_input:
             return False
 
-    if driver is None:
-        return _create_imprenta_contract_direct(user_input)
-
-    billing    = user_input["billing"]
-    market     = user_input["market"]
-    order_flow = user_input["order_flow"]
-    etere_lines = user_input["etere_lines"]
-
-    print("\n" + "=" * 70)
-    print("STARTING BROWSER AUTOMATION — IMPRENTA")
-    print("=" * 70)
-
-    etere = EtereClient(driver)
-    all_success = True
-
-    try:
-        # Master market must be set before navigating to /sales/new
-        etere.set_master_market("NYC")
-
-        # ── Create or retrieve contract ───────────────────────────────────
-        if order_flow == "new":
-            contract_number = etere.create_contract_header(
-                customer_id=int(user_input["customer_id"]) if user_input["customer_id"] else None,
-                code=user_input["contract_code"],
-                description=user_input["contract_description"],
-                contract_start=user_input["flight_start"].strftime('%m/%d/%Y'),
-                contract_end=user_input["flight_end"].strftime('%m/%d/%Y'),
-                charge_to=billing.get_charge_to(),
-                invoice_header=billing.get_invoice_header(),
-            )
-            if not contract_number:
-                print("[ERROR] ✗ Failed to create contract")
-                return False
-            print(f"[CONTRACT] ✓ Created: {contract_number}")
-        else:
-            contract_number = user_input["contract_number"]
-            print(f"[CONTRACT] Adding to existing: {contract_number}")
-            lines_for_extend = [
-                {"end_date": ln["end_date"].strftime('%m/%d/%Y')}
-                for ln in etere_lines
-            ]
-            if not etere.extend_contract_end_date(contract_number, lines_for_extend):
-                print("[ERROR] ✗ Failed to extend contract end date")
-                return False
-
-        # ── Add contract lines ────────────────────────────────────────────
-        for line_idx, line_spec in enumerate(etere_lines, 1):
-            days     = line_spec["days"]
-            time_str = line_spec["time"]
-            days, _  = EtereClient.check_sunday_6_7a_rule(days, time_str)
-
-            if time_str:
-                time_from, time_to = EtereClient.parse_time_range(time_str)
-            else:
-                time_from, time_to = "06:00", "23:59"
-
-            start_date_str = line_spec["start_date"].strftime('%m/%d/%Y')
-            end_date_str   = line_spec["end_date"].strftime('%m/%d/%Y')
-
-            bns_flag = " [BNS]" if line_spec["is_bonus"] else ""
-            bkn_flag = " [BKN]" if line_spec["is_bookend"] else ""
-            print(f"\n  [LINE {line_idx}] {days} {time_str}{bns_flag}{bkn_flag}")
-            print(f"    {start_date_str} – {end_date_str}")
-            print(
-                f"    {line_spec['total_spots']}x total, "
-                f"{line_spec['spots_per_week']}/wk, "
-                f"{line_spec['max_daily_run']}x/day @ ${line_spec['rate']:.2f}  "
-                f"sep={line_spec['separation']}"
-            )
-
-            success = etere.add_contract_line(
-                contract_number=contract_number,
-                market=line_spec.get("market") or market,
-                start_date=start_date_str,
-                end_date=end_date_str,
-                days=days,
-                time_from=time_from,
-                time_to=time_to,
-                description=line_spec["description"],
-                spot_code=line_spec["spot_code"],
-                duration_seconds=line_spec["duration"],
-                total_spots=line_spec["total_spots"],
-                spots_per_week=line_spec["spots_per_week"],
-                max_daily_run=line_spec["max_daily_run"],
-                rate=float(line_spec["rate"]),
-                separation_intervals=line_spec["separation"],
-                is_bookend=line_spec["is_bookend"],
-            )
-            if not success:
-                print(f"    ✗ Failed")
-                all_success = False
-
-        print(f"\n[CONTRACT] ✓ {contract_number} — {len(etere_lines)} line(s) complete")
-
-    except Exception as e:
-        print(f"\n[ERROR] Browser automation failed: {e}")
-        import traceback; traceback.print_exc()
-        return False
-
-    return all_success
+    return _create_imprenta_contract_direct(user_input)
 
 
 # ───────────────────────────────────────────────────────────────────────────

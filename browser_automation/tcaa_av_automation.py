@@ -21,7 +21,6 @@ if str(_src_path) not in sys.path:
     sys.path.insert(0, str(_src_path))
 
 from browser_automation.etere_client import EtereClient
-from src.domain.enums import BillingType
 from parsers.tcaa_av_parser import parse_toyota_av_pdf, ToyotaAVOrder, ToyotaAVLine
 
 
@@ -86,110 +85,7 @@ def gather_inputs(order: ToyotaAVOrder) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Contract creation
-# ---------------------------------------------------------------------------
-
-def create_toyota_av_contract(
-    etere: EtereClient,
-    order: ToyotaAVOrder,
-    inputs: dict,
-) -> bool:
-    """Create the Toyota AV contract in Etere. Returns True on success."""
-    try:
-        print(f"\n[AV] Starting contract entry")
-
-        contract_number = inputs.get("existing_contract_number")
-
-        if not contract_number:
-            # --- Create header ---
-            contract_number = etere.create_contract_header(
-                customer_id=CUSTOMER_ID,
-                code=inputs["contract_code"],
-                description=inputs["contract_desc"],
-                contract_start=order.flight_start,
-                contract_end=order.flight_end,
-                customer_order_ref=None,
-                notes=CONTRACT_NOTES,
-                charge_to=BillingType.CUSTOMER_SHARE_AGENCY.get_charge_to(),
-                invoice_header=BillingType.CUSTOMER_SHARE_AGENCY.get_invoice_header(),
-            )
-            if not contract_number:
-                print("[AV] ✗ Failed to create contract header")
-                return False
-            print(f"[AV] ✓ Contract created: {contract_number}")
-        else:
-            print(f"[AV] Using existing contract: {contract_number}")
-
-        # --- Add lines ---
-        market = inputs["market"]
-        duration = inputs["duration"]
-        separation = inputs["separation"]
-
-        line_count = 0
-
-        for idx, line in enumerate(order.lines):
-            # Consolidate weeks into contiguous Etere date ranges
-            ranges = EtereClient.consolidate_weeks(
-                line.weekly_spots,
-                order.week_dates,
-                order.flight_end,
-                flight_start=order.flight_start,
-            )
-
-            # Parse time
-            time_from, time_to = EtereClient.parse_time_range(line.time)
-
-            # Apply Sunday 6-7a rule
-            adj_days, _ = EtereClient.check_sunday_6_7a_rule(line.days, line.time)
-
-            print(f"\n  Line {idx + 1}: {line.description}")
-            print(f"    {adj_days}  {line.time}  → {len(ranges)} Etere range(s)")
-
-            for rng in ranges:
-                line_count += 1
-                spots_pw = rng["spots_per_week"]
-                if isinstance(spots_pw, list):
-                    spots_pw = spots_pw[0]
-                total = spots_pw * rng["weeks"]
-
-                print(f"    [{line_count}] {rng['start_date']} – {rng['end_date']}  "
-                      f"spw={spots_pw}  weeks={rng['weeks']}  total={total}")
-
-                success = etere.add_contract_line(
-                    contract_number=contract_number,
-                    market=market,
-                    start_date=rng["start_date"],
-                    end_date=rng["end_date"],
-                    days=adj_days,
-                    time_from=time_from,
-                    time_to=time_to,
-                    description=line.description,
-                    spot_code=10,           # BNS
-                    duration_seconds=duration,
-                    total_spots=total,
-                    spots_per_week=spots_pw,
-                    rate=0.0,
-                    separation_intervals=separation,
-                    is_billboard=True,      # Top-of-break scheduling
-                    is_bookend=False,
-                )
-
-                if not success:
-                    print(f"    ✗ Failed to add line {line_count}")
-                    return False
-
-        print(f"\n[AV] ✓ All {line_count} lines added successfully")
-        return True
-
-    except Exception as e:
-        print(f"\n[AV] ✗ Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-
-# ---------------------------------------------------------------------------
-# Direct DB entry  (driver=None path)
+# Direct DB entry
 # ---------------------------------------------------------------------------
 
 def _parse_date(s: str):
@@ -332,7 +228,6 @@ def gather_tcaa_av_inputs(pdf_path: str) -> Optional[dict]:
 
 
 def process_toyota_av_order(
-    driver,
     pdf_path: str,
     pre_gathered_inputs: Optional[dict] = None,
 ) -> bool:
@@ -342,18 +237,11 @@ def process_toyota_av_order(
 
     inputs = pre_gathered_inputs if pre_gathered_inputs is not None else gather_inputs(order)
 
-    if driver is None:
-        contract_id = _create_tcaa_av_contract_direct(order, inputs)
-        return contract_id is not None
-
-    etere = EtereClient(driver)
-    return create_toyota_av_contract(etere, order, inputs)
+    contract_id = _create_tcaa_av_contract_direct(order, inputs)
+    return contract_id is not None
 
 
 if __name__ == "__main__":
-    from browser_automation.etere_session import EtereSession
-
     pdf_path = input("Enter path to Toyota AAPI AV PDF: ").strip()
-    with EtereSession() as session:
-        success = process_toyota_av_order(session.driver, pdf_path)
+    success = process_toyota_av_order(pdf_path)
     print("\n✓ Done" if success else "\n✗ Failed — review errors above")

@@ -32,7 +32,7 @@ from browser_automation.parsers.threeolives_parser import (
     parse_daypart,
 )
 from browser_automation.ros_definitions import ROS_SCHEDULES
-from src.domain.enums import BillingType, OrderType, SeparationInterval
+from src.domain.enums import OrderType, SeparationInterval
 
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 DEFAULT_MARKET = 'LAX'   # Riverside County is in the LA DMA
@@ -341,7 +341,6 @@ def gather_threeolives_inputs(file_path: str) -> Optional[dict]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def process_threeolives_order(
-    driver,
     file_path: str,
     shared_session=None,
     pre_gathered_inputs: Optional[dict] = None,
@@ -350,7 +349,6 @@ def process_threeolives_order(
     Process a 3 Olives Media order file and create the Etere contract.
 
     Args:
-        driver:               Selenium WebDriver
         file_path:            Path to PDF or Excel file
         shared_session:       Optional shared Etere session
         pre_gathered_inputs:  Pre-gathered inputs dict (skips upfront prompts)
@@ -383,11 +381,7 @@ def process_threeolives_order(
             print('\n✗ Input gathering cancelled')
             return False
 
-        if driver is None:
-            return _create_threeolives_contract_direct(order, inputs)
-
-        etere = EtereClient(driver)
-        return _create_threeolives_contract(etere, order, inputs)
+        return _create_threeolives_contract_direct(order, inputs)
 
     except Exception as exc:
         print(f'\n✗ Error processing 3 Olives order: {exc}')
@@ -395,110 +389,6 @@ def process_threeolives_order(
         traceback.print_exc()
         return False
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# CONTRACT CREATION
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _create_threeolives_contract(
-    etere: EtereClient,
-    order: ThreeOlivesOrder,
-    inputs: dict,
-) -> bool:
-    """Create the Etere contract header and all lines."""
-    contract_code = inputs['contract_code']
-    description = inputs['description']
-    market = inputs['market']
-    customer_id = inputs.get('customer_id')
-    separation = inputs.get('separation', THREEOLIVES_SEPARATION)
-
-    billing = BillingType.CUSTOMER_SHARE_AGENCY  # 3 Olives is an agency
-    spot_code_paid = EtereClient.SPOT_CODES.get('Paid Commercial', 2)
-    spot_code_bns = EtereClient.SPOT_CODES.get('BNS / Bonus Spot', 10)
-
-    print(f'[CONTRACT] Creating: {contract_code}')
-    print(f'[CONTRACT] Market: {market}  Customer ID: {customer_id}')
-
-    contract_number = etere.create_contract_header(
-        code=contract_code,
-        description=description,
-        customer_id=customer_id,
-        contract_start=order.flight_start,
-        contract_end=order.flight_end,
-        charge_to=billing.get_charge_to(),
-        invoice_header=billing.get_invoice_header(),
-    )
-
-    if not contract_number:
-        print('[CONTRACT] ✗ Failed to create contract header')
-        return False
-
-    print(f'[CONTRACT] ✓ Created: {contract_number}\n')
-
-    line_count = 0
-
-    for line in order.lines:
-        etere_days, etere_time = parse_daypart(line.time_str)
-
-        # Apply Sunday 6–7am rule
-        adjusted_days, _ = etere.check_sunday_6_7a_rule(etere_days, etere_time)
-
-        time_parts = etere.parse_time_range(etere_time)
-        time_from = time_parts[0]
-        time_to = time_parts[1]
-
-        spot_code = spot_code_bns if line.is_bonus else spot_code_paid
-        rate = float(line.rate)
-        duration_s = 30
-
-        description_line = line.get_description(adjusted_days, etere_time)
-
-        # Consolidate weekly spots into contiguous date ranges
-        ranges = etere.consolidate_weeks(
-            weekly_spots=line.weekly_spots,
-            week_start_dates=line.week_start_dates,
-            flight_end=order.flight_end,
-        )
-
-        for rng in ranges:
-            line_count += 1
-            spw = rng['spots_per_week']
-            weeks = rng['weeks']
-            total_spots = spw * weeks
-            max_daily = _max_daily(adjusted_days, spw)
-
-            print(f'  Line {line_count}: {description_line!r}')
-            print(f'    Rate=${rate:.2f}  {"[BONUS]" if line.is_bonus else ""}')
-            print(f'    Days={adjusted_days}  Time={etere_time}')
-            print(f'    {rng["start_date"]} – {rng["end_date"]}  '
-                  f'{spw} spots/wk × {weeks} wks = {total_spots}')
-
-            ok = etere.add_contract_line(
-                contract_number=contract_number,
-                market=market,
-                start_date=rng['start_date'],
-                end_date=rng['end_date'],
-                days=adjusted_days,
-                time_from=time_from,
-                time_to=time_to,
-                description=description_line,
-                spot_code=spot_code,
-                duration_seconds=duration_s,
-                total_spots=total_spots,
-                spots_per_week=spw,
-                rate=rate,
-                separation_intervals=separation,
-                is_bookend=False,
-                is_billboard=False,
-                max_daily_run=max_daily,
-            )
-
-            if not ok:
-                print(f'    ✗ Failed to add line {line_count}')
-                return False
-
-    print(f'\n[3OLIVES] ✓ All {line_count} Etere lines added successfully')
-    return True
 
 
 # ─────────────────────────────────────────────────────────────────────────────

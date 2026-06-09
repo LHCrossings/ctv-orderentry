@@ -9,7 +9,6 @@ Market on every line: "DAL"
 Billing: client (charge_to="Customer", invoice_header="Customer")
 """
 
-import math
 import os
 import sqlite3
 from decimal import Decimal
@@ -287,137 +286,15 @@ def gather_dart_inputs(xlsx_path: str) -> Optional[dict]:
 # Order processing
 # ─────────────────────────────────────────────────────────────────────────────
 
-def process_dart_order(driver, xlsx_path: str, user_input: dict) -> Optional[str]:
+def process_dart_order(xlsx_path: str, user_input: dict) -> Optional[str]:
     """
-    Enter a DART order into Etere.
+    Enter a DART order into Etere via direct DB.
 
     Args:
-        driver: Selenium WebDriver from the shared EtereSession.
-        xlsx_path: Path to the .xlsx file (re-parsed from disk for safety).
+        xlsx_path: Path to the .xlsx file.
         user_input: Dict returned by gather_dart_inputs.
 
     Returns:
         Contract number string on success, None on failure.
     """
-    if driver is None:
-        return _create_dart_contract_direct(xlsx_path, user_input)
-
-    etere = EtereClient(driver)
-
-    # DART is The Asian Channel Dallas — explicit DAL master market exception.
-    # (Same rationale as WorldLink TAC — see lessons.md.)
-    etere.set_master_market("DAL")
-
-    # Re-parse from disk (same safety pattern as HL automation)
-    order: DartOrder = parse_dart_xlsx(xlsx_path)
-
-    customer_id = user_input["customer_id"]
-    code = user_input["code"]
-    description = user_input["description"]
-    separation = user_input.get("separation", (15, 0, 0))
-
-    flight_start_str = order.flight_start.strftime("%m/%d/%Y")
-    flight_end_str = order.flight_end.strftime("%m/%d/%Y")
-
-    print(f"\n[DART] Creating contract: {code}")
-    print(f"[DART] Customer ID: {customer_id}")
-    print(f"[DART] Flight: {flight_start_str} – {flight_end_str}")
-
-    contract_number = etere.create_contract_header(
-        customer_id=int(customer_id),
-        code=code,
-        description=description,
-        contract_start=flight_start_str,
-        contract_end=flight_end_str,
-        charge_to="Customer",
-        invoice_header="Customer",
-    )
-
-    if not contract_number:
-        print("[DART] ✗ Failed to create contract header")
-        return None
-
-    print(f"[DART] ✓ Contract created: {contract_number}")
-
-    # ── Add contract lines ─────────────────────────────────────────────────
-    week_dates_str = [d.strftime("%m/%d/%Y") for d in order.week_start_dates]
-    flight_end_str_fmt = order.flight_end.strftime("%m/%d/%Y")
-
-    line_num = 0
-    for ln in order.lines:
-        line_num += 1
-        days, time_from, time_to = parse_dart_schedule(ln.schedule)
-        spot_code = 10 if ln.is_bonus else 2  # 10=BNS, 2=Paid Commercial
-        rate = float(ln.rate)
-        label = "BNS" if ln.is_bonus else "PAY"
-
-        if ln.is_bonus:
-            line_desc = f"BNS {ln.programming}"
-        else:
-            line_desc = f"{ln.programming} {ln.schedule}"
-
-        # Consolidate consecutive weeks with identical spot counts
-        segments = etere.consolidate_weeks(
-            ln.spot_counts,
-            week_dates_str,
-            flight_end_str_fmt,
-        )
-
-        print(f"\n[DART] Line {line_num} [{label}] {ln.programming} — "
-              f"{len(segments)} segment(s)")
-
-        for seg in segments:
-            spots_per_week = seg["spots_per_week"]
-            total_spots = seg["spots_per_week"] * seg["weeks"]
-
-            # Max daily run: ceil(spots_per_week / active_days_in_pattern)
-            active_days = _count_active_days(days)
-            max_daily = math.ceil(spots_per_week / active_days) if active_days > 0 else 1
-
-            ok = etere.add_contract_line(
-                contract_number=contract_number,
-                market="DAL",
-                start_date=seg["start_date"],
-                end_date=seg["end_date"],
-                days=days,
-                time_from=time_from,
-                time_to=time_to,
-                description=line_desc,
-                spot_code=spot_code,
-                duration_seconds=order.duration_seconds,
-                total_spots=total_spots,
-                spots_per_week=spots_per_week,
-                max_daily_run=max_daily,
-                rate=rate,
-                separation_intervals=separation,
-            )
-
-            status = "✓" if ok else "✗"
-            print(f"  [{status}] {seg['start_date']} – {seg['end_date']}  "
-                  f"{spots_per_week}/wk  {seg['weeks']} wk(s)  total={total_spots}")
-
-            if not ok:
-                print(f"[DART] ✗ Line {line_num} segment failed — aborting")
-                return None
-
-    print(f"\n[DART] ✓ All lines entered. Contract: {contract_number}")
-    return contract_number
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
-_DAY_COUNTS = {
-    "M-Su": 7,
-    "M-F":  5,
-    "M-Sa": 6,
-    "Sa-Su": 2,
-    "Sa":   1,
-    "Su":   1,
-}
-
-
-def _count_active_days(days: str) -> int:
-    """Return the number of active days in an Etere day pattern string."""
-    return _DAY_COUNTS.get(days, 7)
+    return _create_dart_contract_direct(xlsx_path, user_input)

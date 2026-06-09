@@ -21,7 +21,7 @@ Key Misfit Business Rules:
 
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Optional, Tuple
+from typing import Optional
 from pathlib import Path
 import sys
 
@@ -42,7 +42,7 @@ from parsers.misfit_parser import (
 )
 
 # Customer detection
-from src.domain.enums import OrderType, BillingType
+from src.domain.enums import OrderType
 from src.domain.entities import Customer
 from src.data_access.repositories.customer_repository import CustomerRepository
 from src.business_logic.services.customer_matching_service import CustomerMatchingService
@@ -443,36 +443,31 @@ def gather_misfit_inputs(pdf_path: str) -> Optional[dict]:
 # ============================================================================
 
 def process_misfit_order(
-    driver,
     pdf_path: str,
-    order_code: Optional[str] = None,
-    description: Optional[str] = None,
-    customer_id: Optional[int] = None,
-    user_input: Optional[dict] = None,
+    shared_session=None,
+    pre_gathered_inputs: Optional[dict] = None,
 ) -> bool:
     """
-    Process Misfit order PDF - create contract in Etere.
-    
+    Process Misfit order PDF - create contract in Etere via direct DB.
+
     Misfit orders are multi-market (LAX, SFO, CVC) with:
     - Master market always NYC
     - Individual lines set their own market
     - No customer on PDF - uses universal detection
     - ALL ROS lines are bonus
-    
+
     Args:
-        driver: Selenium WebDriver (already logged in, master market set to NYC)
         pdf_path: Path to the Misfit PDF
-        order_code: Optional pre-gathered order code
-        description: Optional pre-gathered description
-        customer_id: Optional pre-gathered customer ID
-    
+        shared_session: Unused (kept for orchestrator compatibility)
+        pre_gathered_inputs: Dict from gather_misfit_inputs()
+
     Returns:
         True if contract created successfully
     """
     print(f"\n{'='*70}")
     print(f"PROCESSING MISFIT ORDER: {pdf_path}")
     print(f"{'='*70}\n")
-    
+
     # Parse PDF
     print("Parsing PDF...")
     try:
@@ -480,7 +475,7 @@ def process_misfit_order(
     except Exception as e:
         print(f"✗ Failed to parse PDF: {e}")
         return False
-    
+
     print(f"✓ Parsed order")
     print(f"  Agency: {order.agency}")
     print(f"  Contact: {order.contact}")
@@ -490,305 +485,22 @@ def process_misfit_order(
     print(f"  Total lines: {len(order.lines)}")
     print()
 
-    # Extract pre-gathered inputs if provided
-    spot_duration = None
-    if user_input is not None:
-        customer_id   = user_input.get('customer_id', customer_id)
-        order_code    = user_input.get('order_code', order_code)
-        description   = user_input.get('description', description)
-        spot_duration = user_input.get('spot_duration')
+    inputs = pre_gathered_inputs or {}
+    customer_id   = inputs.get('customer_id')
+    order_code    = inputs.get('order_code')
+    description   = inputs.get('description')
+    spot_duration = inputs.get('spot_duration')
+    separation_intervals = inputs.get('separation', (15, 0, 0))
 
-    # If inputs not provided, prompt for them (simple version)
-    if not customer_id:
-        print("\n[CUSTOMER] No customer info on Misfit PDFs")
-        print("Options:")
-        print("  1. Enter customer ID directly")
-        print("  2. Search in Etere browser")
-        choice = input("Select (1-2): ").strip()
-        
-        if choice == "1":
-            customer_id = input("Customer ID: ").strip()
-        elif choice == "2":
-            # Will trigger browser search - don't need ID now
-            customer_id = None
-        else:
-            print("✗ Invalid choice")
-            return False
-    
-    # Use provided order_code or prompt
-    if not order_code:
-        normalized_markets = [normalize_market(m) for m in order.markets]
-        markets_str = '-'.join(normalized_markets)
-        default_code = f"Misfit {order.contact.split()[0]} {markets_str}"
-        order_code = input(f"Contract code (default: {default_code}): ").strip() or default_code
-    
-    # Use provided description or prompt
-    if not description:
-        default_desc = f"Misfit {', '.join(order.markets)}"
-        description = input(f"Description (default: {default_desc}): ").strip() or default_desc
-    
-    # Spot duration (use pre-gathered if available)
-    if spot_duration is None:
-        spot_duration = prompt_for_spot_duration()
-
-    # Separation intervals for Misfit
-    separation_intervals = (15, 0, 0)  # Customer=15, Order=0, Event=0
-
-    if driver is None:
-        contract_id = _create_misfit_contract_direct(
-            order, customer_id, order_code, description, spot_duration, separation_intervals
-        )
-        return contract_id is not None
-
-    # Create Etere client
-    etere = EtereClient(driver)
-
-    # Create contract
-    success = create_misfit_contract(
-        etere=etere,
-        order=order,
-        customer_id=customer_id,
-        order_code=order_code,
-        description=description,
-        spot_duration=spot_duration,
-        separation_intervals=separation_intervals
+    contract_id = _create_misfit_contract_direct(
+        order, customer_id, order_code, description, spot_duration, separation_intervals
     )
-    
-    if success:
-        print(f"\n{'='*70}")
-        print("MISFIT ORDER PROCESSING COMPLETE")
-        print(f"{'='*70}")
-        print("✓ Contract created successfully!")
-
-        # If customer was selected manually in the browser, offer to save for future orders
-        if customer_id is None and etere.last_customer_id:
-            selected_id = etere.last_customer_id
-            save_yn = input(
-                f"\nSave customer ID {selected_id} as '{order.agency}' for future Misfit orders? (y/n): "
-            ).strip().lower()
-            if save_yn == 'y':
-                from browser_automation.customer_defaults import DEFAULT_DB_PATH as db_path
-                repo = CustomerRepository(str(db_path))
-                repo.save(Customer(
-                    customer_id=str(selected_id),
-                    customer_name=order.agency,
-                    order_type=OrderType.MISFIT,
-                    separation_customer=15,
-                ))
-                print(f"✓ Saved '{order.agency}' (ID: {selected_id}) to customer database")
-    else:
-        print(f"\n{'='*70}")
-        print("MISFIT ORDER PROCESSING FAILED")
-        print(f"{'='*70}")
-        print("✗ Contract creation failed - review errors above")
-    
-    return success
-
-
-def create_misfit_contract(
-    etere: EtereClient,
-    order: MisfitOrder,
-    customer_id: Optional[int],
-    order_code: str,
-    description: str,
-    spot_duration: int,
-    separation_intervals: Tuple[int, int, int]
-) -> bool:
-    """
-    Create a single Misfit contract in Etere.
-    
-    Multi-market workflow:
-    1. Create contract header (master market = NYC)
-    2. For each market (LAX, SFO, CVC):
-       - Get lines for that market
-       - Add lines with market-specific setting
-    
-    ALL Etere interactions happen through etere.method_name() calls.
-    NO direct Selenium/driver code here.
-    
-    Args:
-        etere: EtereClient instance
-        order: MisfitOrder object
-        customer_id: Customer ID from detection
-        contract_code: Contract code
-        description: Contract description
-        spot_duration: Spot duration in seconds
-        separation_intervals: (customer, order, event) separation
-    
-    Returns:
-        True if successful
-    """
-    try:
-        print(f"\n[MISFIT] Creating contract for {order.agency}")
-        
-        # ═══════════════════════════════════════════════════════════════
-        # CREATE CONTRACT HEADER
-        # ═══════════════════════════════════════════════════════════════
-        
-        # Get flight dates
-        flight_start, flight_end = order.get_flight_dates()
-
-        # Use order date in ref; fall back to flight start when date is missing
-        ref_date = order.date if order.date and order.date not in ('None', '') else flight_start
-
-        # Handle customer ID
-        if customer_id is None:
-            # User will select in browser - etere_client will show instructions
-            contract_number = etere.create_contract_header(
-                customer_id=None,  # Triggers manual selection
-                code=order_code,
-                description=description,
-                contract_start=flight_start,
-                contract_end=flight_end,
-                customer_order_ref=f"Misfit {ref_date}",
-                notes=None,  # Leave notes blank for Misfit
-                charge_to=BillingType.CUSTOMER_SHARE_AGENCY.get_charge_to(),
-                invoice_header=BillingType.CUSTOMER_SHARE_AGENCY.get_invoice_header()
-            )
-        else:
-            # Direct customer ID provided
-            contract_number = etere.create_contract_header(
-                customer_id=int(customer_id),
-                code=order_code,
-                description=description,
-                contract_start=flight_start,
-                contract_end=flight_end,
-                customer_order_ref=f"Misfit {ref_date}",
-                notes=None,  # Leave notes blank for Misfit
-                charge_to=BillingType.CUSTOMER_SHARE_AGENCY.get_charge_to(),
-                invoice_header=BillingType.CUSTOMER_SHARE_AGENCY.get_invoice_header()
-            )
-        
-        if not contract_number:
-            print(f"[MISFIT] ✗ Failed to create contract header")
-            return False
-        
-        print(f"[MISFIT] ✓ Contract created: {contract_number}")
-        
-        # ═══════════════════════════════════════════════════════════════
-        # ADD LINES - Process each market separately
-        # ═══════════════════════════════════════════════════════════════
-        
-        line_count = 0
-        
-        # Process each market
-        for market in order.markets:
-            market_code = normalize_market(market)
-            market_lines = order.get_lines_by_market(market_code)
-            
-            print(f"\n[MARKET] Processing {market_code} ({len(market_lines)} lines)")
-            
-            for line_idx, line in enumerate(market_lines):
-                
-                # Get line description (handles paid vs bonus formatting)
-                desc = line.get_description()
-                
-                # Determine days and time
-                if line.is_bonus and line.time == "ROS":
-                    # Bonus ROS line - get actual schedule
-                    ros_days, ros_time = line.get_ros_schedule()
-                    days = ros_days
-                    time = ros_time
-                else:
-                    # Paid line or custom bonus
-                    days = line.days
-                    time = line.time
-                
-                # Spot code
-                spot_code = 10 if line.is_bonus else 2  # BNS=10, Paid=2
-                
-                # Analyze weekly distribution
-                # Convert week dates from '26-Jan' format to 'MM/DD/YYYY'
-                converted_week_dates = [
-                    _parse_week_date(week, order.date) 
-                    for week in order.week_start_dates
-                ]
-                
-                # Consolidate weekly distribution (groups identical consecutive weeks)
-                ranges = analyze_weekly_distribution(
-                    line.weekly_spots,
-                    converted_week_dates,
-                    contract_end_date=flight_end
-                )
-                
-                print(f"\n  Line {line_idx + 1}: {desc}")
-                print(f"    Splits into {len(ranges)} Etere line(s)")
-                
-                # Parse time range using etere_client utility
-                time_from, time_to = EtereClient.parse_time_range(time)
-                
-                # Apply Sunday 6-7a rule using etere_client utility
-                adjusted_days, adjusted_day_count = EtereClient.check_sunday_6_7a_rule(days, time)
-                
-                # Create Etere line for each range
-                for range_idx, range_data in enumerate(ranges, 1):
-                    line_count += 1
-                    
-                    # Calculate total spots for this range
-                    total_spots = range_data['spots_per_week'] * range_data['weeks']
-                    
-                    print(f"    Creating line {line_count}: {range_data['start_date']} - {range_data['end_date']}")
-                    
-                    # Get spots per week
-                    spots_per_week = range_data['spots_per_week']
-                    
-                    # Add the line using etere_client!
-                    # max_daily_run is auto-calculated by etere_client from spots_per_week and days
-                    success = etere.add_contract_line(
-                        contract_number=contract_number,
-                        market=market_code,  # Set market per line (LAX, SFO, CVC)
-                        start_date=range_data['start_date'],
-                        end_date=range_data['end_date'],
-                        days=adjusted_days,
-                        time_from=time_from,
-                        time_to=time_to,
-                        description=desc,
-                        spot_code=spot_code,
-                        duration_seconds=spot_duration,  # User-specified duration
-                        total_spots=total_spots,  # Calculated from spots_per_week * weeks
-                        spots_per_week=spots_per_week,
-                        # max_daily_run is auto-calculated - no need to pass it!
-                        rate=line.rate,                        separation_intervals=separation_intervals,
-                        is_bookend=False
-                    )
-                    
-                    if not success:
-                        print(f"    ✗ Failed to add line {line_count}")
-                        return False
-        
-        print(f"\n[MISFIT] ✓ All {line_count} lines added successfully")
-        return True
-        
-    except Exception as e:
-        print(f"\n[MISFIT] ✗ Error creating contract: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-
-# ============================================================================
-# TESTING FUNCTION
-# ============================================================================
-
-def test_misfit_automation():
-    """Test Misfit automation with a sample PDF."""
-    from browser_automation.etere_session import EtereSession
-    
-    # Prompt for PDF path
-    pdf_path = input("Enter path to Misfit PDF: ").strip()
-    
-    with EtereSession() as session:
-        # Set master market to NYC for Misfit multi-market orders
-        session.set_market("NYC")
-        
-        # Process the order
-        success = process_misfit_order(session.driver, pdf_path)
-        
-        if success:
-            print("\n✓ Contract created successfully!")
-        else:
-            print("\n✗ Contract creation failed - review errors above")
+    return contract_id is not None
 
 
 if __name__ == "__main__":
-    test_misfit_automation()
+    import sys
+    _pdf = sys.argv[1] if len(sys.argv) > 1 else input("Enter path to Misfit PDF: ").strip()
+    inputs = gather_misfit_inputs(_pdf)
+    if inputs:
+        process_misfit_order(_pdf, pre_gathered_inputs=inputs)

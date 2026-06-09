@@ -449,7 +449,6 @@ def gather_admerasia_inputs(pdf_path: str) -> Optional[dict]:
 def process_admerasia_order(
     pdf_path: str,
     user_input: dict = None,
-    driver=None,  # ignored — kept for call-site compatibility during transition
 ):
     """
     Process Admerasia order via EtereDirectClient (no browser required).

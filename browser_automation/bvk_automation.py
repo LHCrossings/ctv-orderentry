@@ -483,7 +483,6 @@ def gather_bvk_inputs(pdf_path: str) -> Optional[dict]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def process_bvk_order(
-    driver,
     pdf_path: str,
     shared_session=None,
     pre_gathered_inputs: Optional[dict] = None,
@@ -492,7 +491,6 @@ def process_bvk_order(
     Process a BVK broadcast order PDF and create the contract in Etere.
 
     Args:
-        driver:               Selenium WebDriver
         pdf_path:             Path to BVK PDF
         shared_session:       Optional shared Etere session
         pre_gathered_inputs:  Pre-gathered inputs dict (skips upfront prompts)
@@ -524,12 +522,8 @@ def process_bvk_order(
             print("\n✗ Input gathering cancelled")
             return False
 
-        if driver is None:
-            contract_id = _create_bvk_contract_direct(order, inputs)
-            return contract_id is not None
-
-        etere = EtereClient(driver)
-        return _create_bvk_contract(etere, order, inputs)
+        contract_id = _create_bvk_contract_direct(order, inputs)
+        return contract_id is not None
 
     except Exception as exc:
         print(f"\n✗ Error processing BVK order: {exc}")
@@ -537,128 +531,3 @@ def process_bvk_order(
         traceback.print_exc()
         return False
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# CONTRACT CREATION
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _create_bvk_contract(
-    etere: EtereClient,
-    order: BVKOrder,
-    inputs: dict,
-) -> bool:
-    """
-    Create the Etere contract for a BVK order.
-
-    Workflow:
-    1. Create contract header
-    2. For each line with spots > 0:
-       - Apply Sunday 6-7a rule
-       - Consolidate consecutive identical weeks
-       - Add Etere contract line(s)
-    """
-    try:
-        customer_id = inputs.get('customer_id')
-        separation  = inputs.get('separation', (25, 0, 0))
-
-        print(f"[BVK] Creating contract for {order.client}")
-
-        # ── Contract header ───────────────────────────────────────────────────
-        contract_number = etere.create_contract_header(
-            customer_id=customer_id,
-            code=inputs['contract_code'],
-            description=inputs['description'],
-            contract_start=order.flight_start,
-            contract_end=order.flight_end,
-            customer_order_ref=inputs['order_ref'],
-            notes=inputs['notes'],
-            charge_to=BillingType.CUSTOMER_SHARE_AGENCY.get_charge_to(),
-            invoice_header=BillingType.CUSTOMER_SHARE_AGENCY.get_invoice_header(),
-        )
-
-        if not contract_number:
-            print("[BVK] ✗ Failed to create contract header")
-            return False
-
-        print(f"[BVK] ✓ Contract created: {contract_number}")
-
-        # ── Lines ─────────────────────────────────────────────────────────────
-        line_count = 0
-
-        for line in order.lines:
-            if line.total_spots == 0:
-                print(f"  Line {line.line_no}: skipped (0 spots)")
-                continue
-
-            spot_code   = 10 if line.is_bonus else 2
-            description = line.get_description()
-
-            time_from, time_to = EtereClient.parse_time_range(line.time_str)
-            adjusted_days, _   = EtereClient.check_sunday_6_7a_rule(line.days, line.time_str)
-
-            ranges = EtereClient.consolidate_weeks(
-                line.weekly_spots,
-                order.week_dates,
-                flight_end=order.flight_end,
-            )
-
-            print(f"\n  Line {line.line_no}: {description}")
-            print(f"    Rate: ${line.gross_rate:.2f}  {'[BONUS]' if line.is_bonus else ''}")
-            print(f"    Days: {adjusted_days}  Time: {line.time_str}  Lang: {line.language}")
-            print(f"    Splits into {len(ranges)} Etere line(s)")
-
-            for rng in ranges:
-                line_count += 1
-                total_spots = rng['spots_per_week'] * rng['weeks']
-
-                print(
-                    f"    Line {line_count}: {rng['start_date']} – {rng['end_date']} "
-                    f"({rng['spots_per_week']}/wk × {rng['weeks']} wks = {total_spots})"
-                )
-
-                success = etere.add_contract_line(
-                    contract_number=contract_number,
-                    market=order.market,
-                    start_date=rng['start_date'],
-                    end_date=rng['end_date'],
-                    days=adjusted_days,
-                    time_from=time_from,
-                    time_to=time_to,
-                    description=description,
-                    spot_code=spot_code,
-                    duration_seconds=line.duration,
-                    total_spots=total_spots,
-                    spots_per_week=rng['spots_per_week'],
-                    rate=float(line.gross_rate),
-                    separation_intervals=separation,
-                    is_bookend=False,
-                    is_billboard=False,
-                )
-
-                if not success:
-                    print(f"    ✗ Failed to add line {line_count}")
-                    return False
-
-        print(f"\n[BVK] ✓ All {line_count} Etere lines added successfully")
-        return True
-
-    except Exception as exc:
-        print(f"\n[BVK] ✗ Error creating contract: {exc}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# STANDALONE TEST
-# ─────────────────────────────────────────────────────────────────────────────
-
-if __name__ == '__main__':
-    from browser_automation.etere_session import EtereSession
-
-    pdf = input("Enter path to BVK PDF: ").strip()
-
-    with EtereSession() as session:
-        session.set_market("NYC")
-        success = process_bvk_order(session.driver, pdf)
-        print("\n✓ Done" if success else "\n✗ Failed")

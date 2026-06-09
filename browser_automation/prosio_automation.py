@@ -29,7 +29,7 @@ if str(_project_root) not in sys.path:
 
 from browser_automation.etere_client import EtereClient
 from browser_automation.parsers.prosio_parser import ProsioOrder, ProsioLine, parse_prosio_excel
-from src.domain.enums import BillingType, OrderType, SeparationInterval
+from src.domain.enums import OrderType, SeparationInterval
 
 PROSIO_SEPARATION = SeparationInterval.DEFAULT.value   # (15, 0, 0)
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
@@ -198,115 +198,8 @@ def gather_prosio_inputs(file_path: str) -> Optional[dict]:
 # CONTRACT CREATION
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _create_prosio_contract(
-    etere: EtereClient,
-    order: ProsioOrder,
-    inputs: dict,
-) -> bool:
-    """
-    Create the Etere contract for a Prosio Media Contract order.
-
-    Workflow:
-    1. Create contract header
-    2. For each line (paid then bonus):
-       - Apply Sunday 6-7a rule
-       - Consolidate consecutive identical weeks → Etere line(s)
-    """
-    try:
-        customer_id = inputs.get('customer_id')
-        separation  = inputs.get('separation', PROSIO_SEPARATION)
-
-        print(f"[PROSIO] Creating contract for {order.advertiser}")
-
-        # ── Contract header ───────────────────────────────────────────────────
-        contract_number = etere.create_contract_header(
-            customer_id=customer_id,
-            code=inputs['contract_code'],
-            description=inputs['description'],
-            contract_start=order.flight_start,
-            contract_end=order.flight_end,
-            customer_order_ref=None,
-            notes=inputs.get('notes', ''),
-            charge_to=BillingType.CUSTOMER_SHARE_AGENCY.get_charge_to(),
-            invoice_header=BillingType.CUSTOMER_SHARE_AGENCY.get_invoice_header(),
-        )
-
-        if not contract_number:
-            print("[PROSIO] ✗ Failed to create contract header")
-            return False
-
-        print(f"[PROSIO] ✓ Contract created: {contract_number}")
-
-        # ── Lines ─────────────────────────────────────────────────────────────
-        line_count = 0
-
-        for line in order.lines:
-            spot_code  = 10 if line.is_bonus else 2
-            rate       = float(line.rate)
-            duration_s = line.get_duration_seconds()
-            etere_days = line.get_etere_days()
-            time_str   = line.get_etere_time_str()
-
-            time_from, time_to = EtereClient.parse_time_range(time_str)
-            description = line.get_description(etere_days, time_str)
-
-            # Sunday 6-7a rule
-            adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(etere_days, time_str)
-
-            # Consolidate consecutive weeks with same spot count
-            ranges = EtereClient.consolidate_weeks(
-                line.weekly_spots,
-                order.week_start_dates,
-                flight_end=order.flight_end,
-            )
-
-            tag = "BONUS" if line.is_bonus else "PAID "
-            print(f"\n  [{tag}] {description}")
-            print(f"    Rate: ${line.rate}  |  {len(ranges)} Etere line(s)")
-
-            for rng in ranges:
-                line_count += 1
-                total_spots = rng['spots_per_week'] * rng['weeks']
-
-                print(f"    Line {line_count}: "
-                      f"{rng['start_date']} – {rng['end_date']} "
-                      f"({rng['spots_per_week']} spots/wk × {rng['weeks']} wks = {total_spots})")
-
-                success = etere.add_contract_line(
-                    contract_number=contract_number,
-                    market=order.market,
-                    start_date=rng['start_date'],
-                    end_date=rng['end_date'],
-                    days=adjusted_days,
-                    time_from=time_from,
-                    time_to=time_to,
-                    description=description,
-                    spot_code=spot_code,
-                    duration_seconds=duration_s,
-                    total_spots=total_spots,
-                    spots_per_week=rng['spots_per_week'],
-                    rate=rate,
-                    separation_intervals=separation,
-                    is_bookend=False,
-                    is_billboard=False,
-                )
-
-                if not success:
-                    print(f"    ✗ Failed to add line {line_count}")
-                    return False
-
-        print(f"\n[PROSIO] ✓ All {line_count} Etere lines added successfully")
-        return True
-
-    except Exception as exc:
-        print(f"\n[PROSIO] ✗ Error creating contract: {exc}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-
 # ─────────────────────────────────────────────────────────────────────────────
-# DIRECT DB ENTRY  (driver=None path)
+# DIRECT DB ENTRY
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _parse_date(s: str):
@@ -417,7 +310,6 @@ def _create_prosio_contract_direct(order: ProsioOrder, inputs: dict):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def process_prosio_order(
-    driver,
     file_path: str,
     shared_session=None,
     pre_gathered_inputs: Optional[dict] = None,
@@ -426,7 +318,6 @@ def process_prosio_order(
     Process a Prosio Media Contract Excel file and create the contract in Etere.
 
     Args:
-        driver:               Selenium WebDriver
         file_path:            Path to Prosio .xlsm/.xlsx file
         shared_session:       Optional shared Etere session
         pre_gathered_inputs:  Pre-gathered inputs dict (skips upfront prompts)
@@ -455,12 +346,8 @@ def process_prosio_order(
                 print("[PROSIO] Input gathering cancelled")
                 return False
 
-        if driver is None:
-            contract_id = _create_prosio_contract_direct(order, inputs)
-            return contract_id is not None
-
-        etere = EtereClient(driver)
-        return _create_prosio_contract(etere, order, inputs)
+        contract_id = _create_prosio_contract_direct(order, inputs)
+        return contract_id is not None
 
     except Exception as exc:
         print(f"\n[PROSIO] ✗ Fatal error: {exc}")

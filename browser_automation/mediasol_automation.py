@@ -19,11 +19,8 @@ Business Rules:
 """
 
 import sqlite3
-import time
 from pathlib import Path
 from typing import Optional
-
-from selenium import webdriver
 
 from browser_automation.etere_client import EtereClient
 from browser_automation.parsers.mediasol_parser import (
@@ -223,155 +220,20 @@ def _normalize_mediasol_market(market_text: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def process_mediasol_order(
-    driver: webdriver.Chrome,
     pdf_path: str,
     user_input: dict,
 ) -> bool:
     """
-    Process a Media Solutions order end-to-end.
+    Process a Media Solutions order end-to-end via direct DB entry.
 
     Args:
-        driver: Selenium WebDriver (already logged in)
         pdf_path: Path to the Mediasol PDF
         user_input: Dict from gather_mediasol_inputs
 
     Returns:
         True if all estimates processed successfully
     """
-    if driver is None:
-        return _create_mediasol_contracts_direct(pdf_path, user_input)
-
-    etere = EtereClient(driver)
-    try:
-        return _execute_order(etere, pdf_path, user_input)
-    except Exception as e:
-        print(f"[MEDIASOL] ✗ Order failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-
-def _execute_order(etere: EtereClient, pdf_path: str, user_input: dict) -> bool:
-    if isinstance(user_input, dict):
-        order_code = user_input['order_code']
-        description = user_input['description']
-        customer_id = user_input.get('customer_id')
-        separation = user_input.get('separation') or SEPARATION_INTERVALS
-        existing_contract_number = user_input.get('existing_contract_number')
-        gross_up_factor = user_input.get('gross_up_factor', 1.0)
-    else:
-        order_code = user_input.order_code
-        description = user_input.description
-        customer_id = getattr(user_input, 'customer_id', None)
-        separation = getattr(user_input, 'separation_intervals', None) or SEPARATION_INTERVALS
-        existing_contract_number = getattr(user_input, 'existing_contract_number', None)
-        gross_up_factor = getattr(user_input, 'gross_up_factor', 1.0)
-
-    if customer_id is None:
-        customer_id, _ = _resolve_customer_id(pdf_path)
-
-    print(f"\n{'='*60}")
-    print(f"Processing Media Solutions Order: {pdf_path}")
-    print(f"{'='*60}\n")
-
-    estimates = parse_mediasol_pdf(pdf_path)
-    if not estimates:
-        print("[MEDIASOL] ✗ No estimates found in PDF")
-        return False
-
-    print(f"[PARSE] ✓ Found {len(estimates)} estimate(s)")
-
-    if gross_up_factor != 1.0:
-        for est in estimates:
-            for line in est.lines:
-                if not line.is_bonus():
-                    line.rate = round(line.rate * gross_up_factor, 2)
-        print(f"[PARSE] ✓ Gross-up applied (factor {gross_up_factor:.6f})")
-
-    all_success = True
-
-    for est_idx, estimate in enumerate(estimates, 1):
-        print(f"\n[ESTIMATE {est_idx}/{len(estimates)}]")
-        print(f"  Estimate #: {estimate.estimate_number}")
-        print(f"  Client:     {estimate.client}")
-        print(f"  Flight:     {estimate.flight_start} - {estimate.flight_end}")
-        print(f"  Market:     {estimate.market}")
-        print(f"  Lines:      {len(estimate.lines)}")
-
-        est_order_code = (
-            f"{order_code} Est {estimate.estimate_number}" if len(estimates) > 1 else order_code
-        )
-        est_notes = estimate.description if estimate.description else description
-        market_code = _normalize_mediasol_market(estimate.market)
-
-        if existing_contract_number:
-            contract_number = existing_contract_number
-            print(f"\n{'!'*60}")
-            print(f"  REVISION MODE — reusing contract {contract_number}")
-            print(f"  Please delete ALL existing lines from contract {contract_number} in Etere now.")
-            input("  Press Enter when lines are cleared and ready to continue...")
-            print(f"{'!'*60}")
-        else:
-            contract_number = etere.create_contract_header(
-                customer_id=customer_id,
-                code=est_order_code,
-                description=description,
-                contract_start=estimate.flight_start,
-                contract_end=estimate.flight_end,
-                customer_order_ref=estimate.estimate_number,
-                notes=est_notes,
-                charge_to=CHARGE_TO,
-                invoice_header=INVOICE_HEADER,
-            )
-            if not contract_number:
-                print(f"[MEDIASOL] ✗ Failed to create contract for estimate {estimate.estimate_number}")
-                all_success = False
-                continue
-            print(f"[MEDIASOL] ✓ Contract created: {contract_number}")
-
-        if customer_id:
-            _save_customer_to_db(estimate.client, customer_id)
-
-        line_count = 0
-        for line in estimate.lines:
-            etere_lines = _build_etere_lines(line, estimate, market_code)
-            for etere_line in etere_lines:
-                line_count += 1
-                print(f"\n  [LINE {line_count}] {etere_line['description']}")
-                print(f"    {etere_line['start_date']} - {etere_line['end_date']}")
-                print(f"    {etere_line['spots_per_week']}/wk  rate=${etere_line['rate']}")
-
-                success = etere.add_contract_line(
-                    contract_number=contract_number,
-                    market=market_code,
-                    start_date=etere_line["start_date"],
-                    end_date=etere_line["end_date"],
-                    days=etere_line["days"],
-                    time_from=etere_line["time_from"],
-                    time_to=etere_line["time_to"],
-                    description=etere_line["description"],
-                    spot_code=etere_line["spot_code"],
-                    duration_seconds=line.duration,
-                    total_spots=etere_line["total_spots"],
-                    spots_per_week=etere_line["spots_per_week"],
-                    rate=etere_line["rate"],
-                    separation_intervals=separation,
-                )
-                if not success:
-                    print(f"    ✗ Failed to add line {line_count}")
-                    all_success = False
-                    break
-                time.sleep(2)
-
-            if not all_success:
-                break
-
-        print(f"\n{'='*60}")
-        print(f"✓ MEDIASOL ESTIMATE {estimate.estimate_number} COMPLETE")
-        print(f"  Contract: {contract_number}  Lines: {line_count}")
-        print(f"{'='*60}")
-
-    return all_success
+    return _create_mediasol_contracts_direct(pdf_path, user_input)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

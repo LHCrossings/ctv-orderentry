@@ -371,173 +371,24 @@ def process_igraphix_order_direct(user_input: dict) -> Optional[str]:
         return None
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# BROWSER AUTOMATION
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def process_igraphix_order(
-    driver,
-    pdf_path: str,
-    user_input: dict = None
-) -> bool:
+def process_igraphix_order(pdf_path: str, user_input: dict = None) -> bool:
     """
-    Process iGraphix order with completely unattended automation.
-
-    Matches Daviselen pattern for consistency across all automations.
-
-    Workflow:
-    1. Use pre-collected inputs (from orchestrator) OR gather them now
-    2. Create contract header
-    3. Add one contract line per ad code (after paid/bonus split)
-    4. Return success status
+    Process iGraphix order via direct DB entry.
 
     Args:
-        driver: Selenium WebDriver (raw driver, not session)
         pdf_path: Path to iGraphix PDF
         user_input: Pre-collected inputs from orchestrator (optional)
 
     Returns:
         True if successful, False otherwise
     """
-    # ═══════════════════════════════════════════════════════════════
-    # GET INPUTS (pre-collected OR gather now)
-    # ═══════════════════════════════════════════════════════════════
-
     if user_input is None:
         user_input = gather_igraphix_inputs(pdf_path)
         if not user_input:
             return False
 
-    order: IGraphixOrder = user_input['order']
-
-    # ═══════════════════════════════════════════════════════════════
-    # TRY DIRECT DB FIRST
-    # ═══════════════════════════════════════════════════════════════
-
     contract_code = process_igraphix_order_direct(user_input)
-    if contract_code:
-        return True
-    print("\n[FALLBACK] Direct DB failed — retrying via browser automation...")
-
-    # ═══════════════════════════════════════════════════════════════
-    # BROWSER AUTOMATION (COMPLETELY UNATTENDED)
-    # ═══════════════════════════════════════════════════════════════
-
-    print("\n" + "=" * 70)
-    print("STARTING BROWSER AUTOMATION")
-    print("=" * 70)
-
-    all_success = True
-
-    # Create Etere client (same pattern as Daviselen/TCAA)
-    etere = EtereClient(driver)
-
-    try:
-        # Master market already set by session (NYC for Crossings TV)
-
-        # ═══════════════════════════════════════════════════════════
-        # CREATE CONTRACT HEADER
-        # ═══════════════════════════════════════════════════════════
-
-        billing = user_input['billing']
-
-        contract_number = etere.create_contract_header(
-            customer_id=int(user_input['customer_id']),
-            code=user_input['contract_code'],
-            description=user_input['contract_description'],
-            contract_start=order.flight_start,
-            contract_end=order.flight_end,
-            customer_order_ref=user_input['customer_order_ref'],
-            notes=user_input['notes'],
-            charge_to=billing.get_charge_to(),
-            invoice_header=billing.get_invoice_header(),
-        )
-
-        if not contract_number:
-            print("[CONTRACT] ✗ Failed to create contract")
-            return False
-
-        print(f"[CONTRACT] ✓ Created: {contract_number}")
-
-        # ═══════════════════════════════════════════════════════════
-        # ADD CONTRACT LINES (one per ad code after allocation split)
-        # ═══════════════════════════════════════════════════════════
-
-        print(f"\n[LINES] Adding {len(order.ad_codes)} line(s)...")
-
-        for i, ad_code in enumerate(order.ad_codes, 1):
-            is_bonus = ad_code.is_bonus
-            spot_code = 10 if is_bonus else 2  # BNS=10, Paid Commercial=2
-            rate = 0.0 if is_bonus else order.rate_per_spot
-
-            # Time and days
-            if is_bonus:
-                # ROS schedule for this language
-                ros_days, ros_time_raw = _get_ros_schedule(order.language)
-                days = ros_days
-                time_raw = ros_time_raw
-            else:
-                days = order.paid_days
-                time_raw = order.paid_time
-
-            # Apply Sunday 6-7a rule
-            days, _ = EtereClient.check_sunday_6_7a_rule(days, time_raw)
-
-            # Parse time to 24h format
-            time_from, time_to = EtereClient.parse_time_range(time_raw)
-
-            # Build description: [BNS] {language} {time} [{ad_code}]
-            if is_bonus:
-                line_desc = f"BNS {order.language} {time_raw} [{ad_code.ad_code}]"
-            else:
-                line_desc = f"{order.language} {time_raw} [{ad_code.ad_code}]"
-
-            # Max daily run: ceil(total_spots / available_days)
-            max_daily = _calculate_max_daily(
-                ad_code.spots, days, ad_code.start_date, ad_code.end_date
-            )
-
-            # Language-specific separation intervals
-            separation = get_separation_intervals(order.language, is_bonus)
-
-            status_label = "BNS" if is_bonus else "PAID"
-            print(f"\n[LINE {i}] {status_label} [{ad_code.ad_code}] {ad_code.description}")
-            print(f"  Days: {days}, Time: {time_raw}  ({time_from}–{time_to})")
-            print(f"  Spots: {ad_code.spots}  Rate: ${rate:.2f}  Max/day: {max_daily}")
-            print(f"  Flight: {ad_code.start_date} – {ad_code.end_date}")
-            print(f"  Separation: {separation}")
-
-            success = etere.add_contract_line(
-                contract_number=contract_number,
-                market=order.market,
-                start_date=ad_code.start_date,
-                end_date=ad_code.end_date,
-                days=days,
-                time_from=time_from,
-                time_to=time_to,
-                description=line_desc,
-                spot_code=spot_code,
-                duration_seconds=order.spot_duration,
-                total_spots=ad_code.spots,
-                spots_per_week=0,       # iGraphix: no weekly target, total only
-                max_daily_run=max_daily,
-                rate=rate,
-                separation_intervals=separation,
-            )
-
-            if not success:
-                print(f"  [LINE {i}] ✗ Failed")
-                all_success = False
-
-        print(f"\n[COMPLETE] Contract {contract_number} — {len(order.ad_codes)} lines processed")
-
-    except Exception as e:
-        print(f"\n[ERROR] Browser automation failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-    return all_success
+    return bool(contract_code)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

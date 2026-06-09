@@ -31,7 +31,7 @@ from browser_automation.parsers.saccountyvoters_parser import (
     SacCountyVotersLine,
     parse_saccountyvoters_pdf,
 )
-from src.domain.enums import BillingType, OrderType, SeparationInterval
+from src.domain.enums import OrderType, SeparationInterval
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -325,12 +325,12 @@ def gather_saccountyvoters_inputs(pdf_path: str) -> Optional[dict]:
         },
         'notes': notes,
         'customer_id': customer_id,
-        'separation': sep,
+        'separation': SAC_SEPARATION,
     }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# DIRECT DB ENTRY  (driver=None path)
+# DIRECT DB ENTRY
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _parse_date(s: str):
@@ -513,7 +513,6 @@ def _create_saccountyvoters_contracts_direct(order, inputs: dict) -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def process_saccountyvoters_order(
-    driver,
     pdf_path: str,
     shared_session=None,
     pre_gathered_inputs: Optional[dict] = None,
@@ -521,10 +520,9 @@ def process_saccountyvoters_order(
     """
     Process a Sacramento County Voter Registration PDF and create contracts.
 
-    Creates one Etere contract per phase (2 total).
+    Creates one Etere contract per phase (2 total) via direct DB entry.
 
     Args:
-        driver:               Selenium WebDriver
         pdf_path:             Path to SacCountyVoters PDF
         shared_session:       Optional shared Etere session
         pre_gathered_inputs:  Pre-gathered inputs dict (skips upfront prompts)
@@ -554,43 +552,7 @@ def process_saccountyvoters_order(
             print("\n✗ Input gathering cancelled")
             return False
 
-        if driver is None:
-            return _create_saccountyvoters_contracts_direct(order, inputs)
-
-        etere = EtereClient(driver)
-        customer_id = inputs.get('customer_id')
-        notes = inputs.get('notes', '')
-        separation = inputs.get('separation', SAC_SEPARATION)
-
-        phase_input_keys = ['phase1_inputs', 'phase2_inputs']
-        all_ok = True
-
-        for phase, input_key in zip(order.phases, phase_input_keys):
-            phase_inputs = inputs.get(input_key, {})
-            ok = _create_phase_contract(
-                etere=etere,
-                phase=phase,
-                phase_inputs=phase_inputs,
-                customer_id=customer_id,
-                notes=notes,
-                separation=separation,
-            )
-            if not ok:
-                all_ok = False
-                print(f"\n✗ Phase {phase.phase_number} contract FAILED")
-            else:
-                print(f"\n✓ Phase {phase.phase_number} contract created")
-
-        if all_ok:
-            print(f"\n{'=' * 70}")
-            print("✓ SACRAMENTO COUNTY VOTERS PROCESSING COMPLETE")
-            print(f"{'=' * 70}")
-        else:
-            print(f"\n{'=' * 70}")
-            print("✗ SACRAMENTO COUNTY VOTERS PROCESSING FAILED (partial)")
-            print(f"{'=' * 70}")
-
-        return all_ok
+        return _create_saccountyvoters_contracts_direct(order, inputs)
 
     except Exception as exc:
         print(f"\n✗ Error processing SacCountyVoters order: {exc}")
@@ -631,199 +593,3 @@ def _compute_max_daily_run(etere_days: str, start_date_str: str, end_date_str: s
         if (start + timedelta(days=i)).weekday() in eligible
     )
     return math.ceil(spots_per_week / count) if count > 0 else spots_per_week
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# PHASE CONTRACT CREATION
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _create_phase_contract(
-    etere: EtereClient,
-    phase: SacCountyVotersPhase,
-    phase_inputs: dict,
-    customer_id: Optional[int],
-    notes: str,
-    separation: tuple,
-) -> bool:
-    """
-    Create a single Etere contract for one phase of a SacCountyVoters order.
-
-    Args:
-        etere:         EtereClient instance
-        phase:         Parsed phase data
-        phase_inputs:  Dict with 'contract_code', 'description'
-        customer_id:   Etere customer ID (or None)
-        notes:         Contract notes
-        separation:    (customer, order, event) separation tuple
-
-    Returns:
-        True on success, False on failure.
-    """
-    try:
-        fs = phase.flight_start
-        yymm = fs[8:10] + fs[0:2]
-        code        = phase_inputs.get('contract_code', f"Sac County Voters {yymm}")
-        description = phase_inputs.get('description', f"Sacramento County Phase {phase.phase_number}")
-
-        print(f"\n[SAC PH{phase.phase_number}] Creating contract: {code}")
-        print(f"[SAC PH{phase.phase_number}] Flight: {phase.flight_start} – {phase.flight_end}")
-
-        # Convert "4-May" → "May 4" so consolidate_weeks can parse the labels
-        week_dates = [
-            f"{label.split('-')[1]} {label.split('-')[0]}"
-            for label in phase.week_columns
-        ]
-
-        contract_number = etere.create_contract_header(
-            customer_id=customer_id,
-            code=code,
-            description=description,
-            contract_start=phase.flight_start,
-            contract_end=phase.flight_end,
-            customer_order_ref=None,
-            notes=notes,
-            charge_to=BillingType.CUSTOMER_DIRECT.get_charge_to(),
-            invoice_header=BillingType.CUSTOMER_DIRECT.get_invoice_header(),
-        )
-
-        if not contract_number:
-            print(f"[SAC PH{phase.phase_number}] ✗ Failed to create contract header")
-            return False
-
-        print(f"[SAC PH{phase.phase_number}] ✓ Contract created: {contract_number}")
-
-        line_count = 0
-
-        for line in phase.lines:
-            if line.total_spots == 0:
-                print(f"  [{line.language}] skipped (0 spots)")
-                continue
-
-            spot_code = 10 if line.is_bonus else 2
-
-            if line.is_bonus:
-                # ROS bonus: look up schedule by language keyword
-                ros_key = _language_to_ros_key(line.language)
-                if ros_key and ros_key in ROS_SCHEDULES:
-                    sched = ROS_SCHEDULES[ros_key]
-                    ros_days = sched['days']
-                    ros_time = sched['time']
-                    time_from, time_to = EtereClient.parse_time_range(ros_time)
-                    lang_label = sched.get('language', line.language)
-                else:
-                    ros_days = "M-Su"
-                    time_from, time_to = "06:00", "23:59"
-                    lang_label = line.language
-
-                line_description = f"BNS {lang_label} ROS"
-                adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(ros_days, f"{time_from}-{time_to}")
-
-                ranges = EtereClient.consolidate_weeks(
-                    line.weekly_spots,
-                    week_dates,
-                    flight_end=phase.flight_end,
-                    flight_start=phase.flight_start,
-                )
-
-                print(f"\n  [{line.language}] BONUS  {line_description}")
-                print(f"    Days: {adjusted_days}  Time: {time_from}–{time_to}")
-                print(f"    Splits into {len(ranges)} Etere line(s)")
-
-                for rng in ranges:
-                    line_count += 1
-                    total_spots_rng = rng['spots_per_week'] * rng['weeks']
-                    max_daily = _compute_max_daily_run(
-                        adjusted_days, rng['start_date'], rng['end_date'], rng['spots_per_week']
-                    )
-                    print(f"    Creating line {line_count}: "
-                          f"{rng['start_date']} – {rng['end_date']} "
-                          f"({rng['spots_per_week']} spots/wk × {rng['weeks']} wks = {total_spots_rng}, "
-                          f"max/day={max_daily})")
-
-                    ok = etere.add_contract_line(
-                        contract_number=contract_number,
-                        market=SAC_MARKET,
-                        start_date=rng['start_date'],
-                        end_date=rng['end_date'],
-                        days=adjusted_days,
-                        time_from=time_from,
-                        time_to=time_to,
-                        description=line_description,
-                        spot_code=spot_code,
-                        duration_seconds=phase.duration_seconds,
-                        total_spots=total_spots_rng,
-                        spots_per_week=rng['spots_per_week'],
-                        max_daily_run=max_daily,
-                        rate=0.0,
-                        separation_intervals=separation,
-                        is_bookend=False,
-                        is_billboard=False,
-                    )
-                    if not ok:
-                        print(f"    ✗ Failed to add line {line_count}")
-                        return False
-
-            else:
-                # Paid line: parse daypart → days + time
-                etere_days, time_range_str = _parse_daypart(line.daypart)
-                time_from, time_to = EtereClient.parse_time_range(time_range_str)
-
-                # Build description: "{days} {language}" — time is captured in Etere line fields
-                lang_label = re.sub(r'(\w)\(', r'\1 (', line.language)  # "Chinese(Cantonese)" → "Chinese (Cantonese)"
-                line_description = f"{etere_days} {lang_label}"
-
-                adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(etere_days, time_range_str)
-
-                ranges = EtereClient.consolidate_weeks(
-                    line.weekly_spots,
-                    week_dates,
-                    flight_end=phase.flight_end,
-                    flight_start=phase.flight_start,
-                )
-
-                print(f"\n  [{line.language}] PAID  ${line.rate}")
-                print(f"    Daypart: {line.daypart!r}  →  {etere_days}  {time_range_str}")
-                print(f"    Splits into {len(ranges)} Etere line(s)")
-
-                for rng in ranges:
-                    line_count += 1
-                    total_spots_rng = rng['spots_per_week'] * rng['weeks']
-                    max_daily = _compute_max_daily_run(
-                        adjusted_days, rng['start_date'], rng['end_date'], rng['spots_per_week']
-                    )
-                    print(f"    Creating line {line_count}: "
-                          f"{rng['start_date']} – {rng['end_date']} "
-                          f"({rng['spots_per_week']} spots/wk × {rng['weeks']} wks = {total_spots_rng}, "
-                          f"max/day={max_daily})")
-
-                    ok = etere.add_contract_line(
-                        contract_number=contract_number,
-                        market=SAC_MARKET,
-                        start_date=rng['start_date'],
-                        end_date=rng['end_date'],
-                        days=adjusted_days,
-                        time_from=time_from,
-                        time_to=time_to,
-                        description=line_description,
-                        spot_code=spot_code,
-                        duration_seconds=phase.duration_seconds,
-                        total_spots=total_spots_rng,
-                        spots_per_week=rng['spots_per_week'],
-                        max_daily_run=max_daily,
-                        rate=line.rate,
-                        separation_intervals=separation,
-                        is_bookend=False,
-                        is_billboard=False,
-                    )
-                    if not ok:
-                        print(f"    ✗ Failed to add line {line_count}")
-                        return False
-
-        print(f"\n[SAC PH{phase.phase_number}] ✓ All {line_count} Etere lines added")
-        return True
-
-    except Exception as exc:
-        print(f"\n[SAC PH{phase.phase_number}] ✗ Error: {exc}")
-        import traceback
-        traceback.print_exc()
-        return False

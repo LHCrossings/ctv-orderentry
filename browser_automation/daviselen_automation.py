@@ -50,7 +50,6 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from etere_client import EtereClient
-from selenium.webdriver.common.by import By
 from ros_definitions import ROS_SCHEDULES
 from language_utils import (
     extract_language_from_program,
@@ -567,178 +566,31 @@ def _create_daviselen_contract_direct(order: "DaviselenOrder", user_input: dict)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def process_daviselen_order(
-    driver,
     pdf_path: str,
     user_input: dict = None
 ) -> bool:
     """
-    Process Daviselen order with completely unattended automation.
-    
-    Matches TCAA pattern for consistency across all automations.
-    
+    Process Daviselen order via direct DB entry.
+
     Workflow:
     1. Use pre-collected inputs (from orchestrator) OR gather them now
-    2. Start browser automation (no interruptions)
-    3. Create contract header
-    4. Add all contract lines with week consolidation
-    5. Return success status
-    
+    2. Create contract header and lines via stored procedures
+    3. Return success status
+
     Args:
-        driver: Selenium WebDriver (raw driver, not session)
         pdf_path: Path to Daviselen PDF
         user_input: Pre-collected inputs from orchestrator (optional)
-        
+
     Returns:
         True if successful, False otherwise
     """
-    # ═══════════════════════════════════════════════════════════════
-    # GET INPUTS (pre-collected OR gather now)
-    # ═══════════════════════════════════════════════════════════════
-    
     if user_input is None:
-        # Not called from orchestrator - gather inputs now
         user_input = gather_daviselen_inputs(pdf_path)
         if not user_input:
             return False
 
     order = user_input['order']
-
-    if driver is None:
-        return _create_daviselen_contract_direct(order, user_input)
-
-    # ═══════════════════════════════════════════════════════════════
-    # BROWSER AUTOMATION (COMPLETELY UNATTENDED)
-    # ═══════════════════════════════════════════════════════════════
-
-    print("\n" + "="*70)
-    print("STARTING BROWSER AUTOMATION")
-    print("="*70)
-
-    all_success = True
-
-    # Create Etere client (just like TCAA does)
-    etere = EtereClient(driver)
-    
-    try:
-        # Master market already set by session (NYC for Crossings TV)
-        # Individual lines will use their specific market (SEA, LAX, WDC, etc.)
-        
-        # ═══════════════════════════════════════════════════════════
-        # CREATE CONTRACT HEADER
-        # ═══════════════════════════════════════════════════════════
-        
-        billing = user_input['billing']
-        
-        contract_number = etere.create_contract_header(
-            customer_id=int(user_input['customer_id']),
-            code=user_input['contract_code'],
-            description=user_input['contract_description'],
-            contract_start=order.flight_start,
-            contract_end=order.flight_end,
-            customer_order_ref=user_input['customer_order_ref'],
-            notes=user_input['notes'],
-            charge_to=billing.get_charge_to(),
-            invoice_header=billing.get_invoice_header(),
-        )
-        
-        if not contract_number:
-            print("[CONTRACT] ✗ Failed to create contract")
-            return False
-        
-        print(f"[CONTRACT] ✓ Created: {contract_number}")
-        
-        # ═══════════════════════════════════════════════════════════
-        # ADD CONTRACT LINES
-        # ═══════════════════════════════════════════════════════════
-        
-        separation = user_input['separation']
-        market = user_input['market']
-        
-        line_num = 0
-        for line in order.lines:
-            line_num += 1
-            
-            # Extract language from program name
-            language = extract_language_from_program(line.program)
-            
-            # Determine if bonus
-            is_bonus = line.is_bonus()
-            spot_code = 10 if is_bonus else 2
-            
-            print(f"\n[LINE {line_num}] {'BNS' if is_bonus else 'PAID'} {language}")
-            print(f"  Days: {line.days}, Time: {line.time}")
-            print(f"  Duration: :{line.duration}s")
-            
-            # Apply Sunday 6-7a rule
-            days, _ = EtereClient.check_sunday_6_7a_rule(line.days, line.time)
-            
-            # Parse time range (handles semicolons, compressed formats)
-            time_from, time_to = EtereClient.parse_time_range(line.time)
-            
-            # Format time for description (6:00a-7:00a → 6-7a)
-            time_formatted = format_time_for_description(line.time)
-            
-            # Build description: (Line XXX) DAYS TIME [BNS] PROGRAM
-            # Remove leading zeros from line number (001 → 1)
-            line_num_clean = str(int(line.line_number))
-            desc_parts = [f"(Line {line_num_clean})", days, time_formatted]
-            
-            # Add BNS prefix for bonus spots
-            if is_bonus:
-                desc_parts.append("BNS")
-            
-            # Add program name
-            desc_parts.append(line.program)
-            
-            description = " ".join(desc_parts)
-            
-            # ═══════════════════════════════════════════════════════
-            # CONSOLIDATED LINE ENTRY
-            # ═══════════════════════════════════════════════════════
-            # Group consecutive weeks with same spot count into single lines
-            
-            week_groups = analyze_weekly_distribution(
-                line.weekly_spots, order.week_start_dates, order.flight_end
-            )
-            
-            for group in week_groups:
-                group_start = group['start_date']
-                group_end = group['end_date']
-                group_spots_per_week = group['spots_per_week']
-                group_total = group['spots']
-                group_weeks = group['num_weeks']
-                
-                print(f"  {group_start} - {group_end} ({group_weeks} wk): {group_spots_per_week}/wk, {group_total} total")
-                
-                success = etere.add_contract_line(
-                    contract_number=contract_number,
-                    market=market,
-                    start_date=group_start,
-                    end_date=group_end,
-                    days=days,
-                    time_from=time_from,
-                    time_to=time_to,
-                    description=description,
-                    spot_code=spot_code,
-                    duration_seconds=line.duration,
-                    total_spots=group_total,
-                    spots_per_week=group_spots_per_week,
-                    rate=line.rate,                    separation_intervals=separation,
-                )
-                
-                if not success:
-                    print(f"  [LINE {line_num}] ✗ Failed for {group_start} - {group_end}")
-                    all_success = False
-        
-        print(f"\n[COMPLETE] Contract {contract_number} — {line_num} lines processed")
-    
-    except Exception as e:
-        print(f"\n[ERROR] Browser automation failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-    
-    return all_success
+    return _create_daviselen_contract_direct(order, user_input)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

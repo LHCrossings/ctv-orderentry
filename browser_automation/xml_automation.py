@@ -16,13 +16,12 @@ Supported agencies (any TVB-compliant traffic system):
 
 Usage (from orchestrator or CLI):
     gather_xml_inputs("path/to/order.xml")  → inputs dict
-    process_xml_order(driver, "path/to/order.xml")
+    process_xml_order("path/to/order.xml")
 
 Architecture:
     xml_automation.py           ← YOU ARE HERE (input gathering + orchestration)
     parsers/aaaa_xml_parser.py  ← pure parsing, no side effects
-    tcaa_automation.py          ← create_tcaa_contract() is reused directly
-    etere_client.py             ← all browser interactions
+    tcaa_automation.py          ← _create_tcaa_contract_direct() is reused directly
 """
 
 from dataclasses import dataclass
@@ -35,10 +34,8 @@ _project_root = Path(__file__).parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from browser_automation.etere_client import EtereClient
 from browser_automation.parsers.aaaa_xml_parser import parse_aaaa_xml, print_parse_summary
 from browser_automation.tcaa_automation import (
-    create_tcaa_contract,
     prompt_for_bonus_lines,
 )
 from parsers.tcaa_parser import TCAAEstimate
@@ -347,23 +344,18 @@ def _gather_bonus_inputs(
 # ============================================================================
 
 def process_xml_order(
-    driver,
     xml_path: str,
     pre_gathered_inputs: Optional[XmlOrderInputs] = None,
 ) -> bool:
     """
     Process an AAAA SpotTV XML order — create contracts in Etere.
 
-    This is the main entry point called by the orchestrator after
-    the browser session is open and logged in.
-
     The flow is identical to process_tcaa_order():
     1. Parse XML (or use pre-gathered inputs)
     2. Gather user inputs if not already gathered
-    3. For each estimate: call create_tcaa_contract()
+    3. For each estimate: call _create_tcaa_contract_direct()
 
     Args:
-        driver:                Selenium WebDriver (already logged in)
         xml_path:              Path to the AAAA SpotTV XML file
         pre_gathered_inputs:   Already-gathered inputs (from gather_xml_inputs),
                                or None to gather interactively now.
@@ -385,79 +377,33 @@ def process_xml_order(
             return False
         estimates = inputs.estimates
 
-    if driver is None:
-        from browser_automation.tcaa_automation import _create_tcaa_contract_direct
-        success_count = 0
-        for estimate in estimates:
-            estimate_confirmed = _inject_confirmed(estimate, inputs.agency, inputs.client, inputs.market)
-            bonus_inputs = inputs.bonus_inputs.get(estimate.estimate_number, {})
-            print(f"\n{'='*60}")
-            print(f"Creating contract (direct DB) for estimate {estimate.estimate_number}")
-            print(f"  Agency: {inputs.agency}  Client: {inputs.client}  Market: {inputs.market}")
-            print(f"{'='*60}")
-            result = _create_tcaa_contract_direct(
-                estimate=estimate_confirmed,
-                bonus_inputs=bonus_inputs,
-                separation_intervals=inputs.separation_intervals,
-                order_code=inputs.order_code,
-                description=inputs.description,
-            )
-            if result:
-                success_count += 1
-                print(f"\n✓ Estimate {estimate.estimate_number} completed (contract ID={result})")
-            else:
-                print(f"\n✗ Estimate {estimate.estimate_number} FAILED")
-                cont = input("\nContinue with remaining? (y/n): ").strip().lower()
-                if cont != "y":
-                    break
-        print(f"\n{'='*70}")
-        print(f"XML ORDER COMPLETE  {success_count}/{len(estimates)} contracts created")
-        print(f"{'='*70}")
-        return success_count == len(estimates)
-
-    etere = EtereClient(driver)
-
-    # ── Create each contract ──
+    from browser_automation.tcaa_automation import _create_tcaa_contract_direct
     success_count = 0
-
     for estimate in estimates:
-        # Inject confirmed agency, client, and market into the estimate
         estimate_confirmed = _inject_confirmed(estimate, inputs.agency, inputs.client, inputs.market)
-
         bonus_inputs = inputs.bonus_inputs.get(estimate.estimate_number, {})
-
         print(f"\n{'='*60}")
-        print(f"Creating contract for estimate {estimate.estimate_number}")
-        print(f"  Agency: {inputs.agency}")
-        print(f"  Client: {inputs.client}  (ID: {inputs.client_id})")
-        print(f"  Market: {inputs.market}")
-        print(f"  Flight: {estimate.flight_start} – {estimate.flight_end}")
-        print(f"  Lines:  {len(estimate.lines)}")
+        print(f"Creating contract (direct DB) for estimate {estimate.estimate_number}")
+        print(f"  Agency: {inputs.agency}  Client: {inputs.client}  Market: {inputs.market}")
         print(f"{'='*60}")
-
-        success = create_tcaa_contract(
-            etere=etere,
+        result = _create_tcaa_contract_direct(
             estimate=estimate_confirmed,
             bonus_inputs=bonus_inputs,
             separation_intervals=inputs.separation_intervals,
             order_code=inputs.order_code,
             description=inputs.description,
         )
-
-        if success:
+        if result:
             success_count += 1
-            print(f"\n✓ Estimate {estimate.estimate_number} completed")
+            print(f"\n✓ Estimate {estimate.estimate_number} completed (contract ID={result})")
         else:
             print(f"\n✗ Estimate {estimate.estimate_number} FAILED")
             cont = input("\nContinue with remaining? (y/n): ").strip().lower()
             if cont != "y":
                 break
-
     print(f"\n{'='*70}")
-    print(f"XML ORDER PROCESSING COMPLETE")
+    print(f"XML ORDER COMPLETE  {success_count}/{len(estimates)} contracts created")
     print(f"{'='*70}")
-    print(f"Successfully created: {success_count}/{len(estimates)} contracts")
-
     return success_count == len(estimates)
 
 

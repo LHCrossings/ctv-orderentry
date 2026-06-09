@@ -17,11 +17,8 @@ opAD Business Rules:
 """
 
 import sqlite3
-import time
 from pathlib import Path
 from typing import Optional
-
-from selenium import webdriver
 
 from etere_client import EtereClient
 from parsers.opad_parser import (
@@ -195,20 +192,17 @@ def gather_opad_inputs(pdf_path: str) -> Optional[dict]:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def process_opad_order(
-    driver: webdriver.Chrome,
     pdf_path: str,
-    user_input: dict,
+    shared_session=None,
+    pre_gathered_inputs=None,
 ) -> bool:
     """
-    Process an opAD order end-to-end.
-
-    Called by order_processing_service.py with the same signature as
-    Daviselen/Admerasia: (driver, pdf_path, user_input).
+    Process an opAD order end-to-end via direct DB entry.
 
     Args:
-        driver: Selenium WebDriver (already logged in via shared session)
         pdf_path: Path to the opAD PDF
-        user_input: Dict with keys:
+        shared_session: Unused (direct DB — no browser session needed)
+        pre_gathered_inputs: Dict with keys gathered upfront:
             - order_code: Contract code (e.g., "opAD NYSDOH 2824")
             - description: Contract description (goes to Notes)
             - customer_id: Customer ID (int or None for manual search)
@@ -216,115 +210,7 @@ def process_opad_order(
     Returns:
         True if successful, False otherwise
     """
-    if driver is None:
-        return _create_opad_contract_direct(pdf_path, user_input)
-
-    etere = EtereClient(driver)
-
-    try:
-        return _execute_order(etere, pdf_path, user_input)
-    except Exception as e:
-        print(f"[opAD] ✗ Order failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-
-def _execute_order(
-    etere: EtereClient,
-    pdf_path: str,
-    user_input: dict,
-) -> bool:
-    """Execute the full order workflow."""
-
-    if isinstance(user_input, dict):
-        order_code  = user_input.get('order_code', '')
-        description = user_input.get('description', '')
-        customer_id = user_input.get('customer_id')
-        separation  = user_input.get('separation', SEPARATION_INTERVALS)
-    else:
-        order_code  = user_input.order_code
-        description = user_input.description
-        customer_id, _ = _resolve_customer_id(pdf_path)
-        separation  = user_input.separation_intervals or SEPARATION_INTERVALS
-
-    # ── Parse PDF ──
-    print(f"\n{'='*60}")
-    print(f"Processing opAD Order: {pdf_path}")
-    print(f"{'='*60}\n")
-
-    order = parse_opad_pdf(pdf_path)
-    print(f"[PARSE] ✓ {len(order.lines)} lines found")
-    print(f"[PARSE] Client: {order.client}")
-    print(f"[PARSE] Estimate: {order.estimate_number}")
-    print(f"[PARSE] Flight: {order.flight_start} - {order.flight_end}")
-
-    # ── Master market already set by orchestrator (shared session) ──
-
-    # ── Create contract header ──
-    contract_number = etere.create_contract_header(
-        customer_id=customer_id,
-        code=order_code,
-        description=description,
-        contract_start=order.flight_start,
-        contract_end=order.flight_end,
-        customer_order_ref=order.estimate_number,
-        notes=description,
-        charge_to=CHARGE_TO,
-        invoice_header=INVOICE_HEADER,
-    )
-
-    if not contract_number:
-        print("[opAD] ✗ Failed to create contract header")
-        return False
-
-    print(f"[opAD] ✓ Contract created: {contract_number}")
-
-    # ── Save customer to DB on first discovery ──
-    if customer_id:
-        _save_customer_to_db(order.client, customer_id)
-
-    # ── Add lines ──
-    line_count = 0
-    for line_idx, line in enumerate(order.lines, 1):
-        etere_lines = _build_etere_lines(line, order)
-
-        for etere_line in etere_lines:
-            line_count += 1
-            print(f"\n  [LINE {line_count}] {etere_line['description']}")
-            print(f"    {etere_line['start_date']} - {etere_line['end_date']}")
-            print(f"    {etere_line['spots_per_week']}/wk, rate=${etere_line['rate']}")
-
-            success = etere.add_contract_line(
-                contract_number=contract_number,
-                market=DEFAULT_MARKET,
-                start_date=etere_line["start_date"],
-                end_date=etere_line["end_date"],
-                days=etere_line["days"],
-                time_from=etere_line["time_from"],
-                time_to=etere_line["time_to"],
-                description=etere_line["description"],
-                spot_code=etere_line["spot_code"],
-                duration_seconds=line.duration,
-                total_spots=etere_line["total_spots"],
-                spots_per_week=etere_line["spots_per_week"],
-                rate=etere_line["rate"],                separation_intervals=separation,
-            )
-
-            if not success:
-                print(f"    ✗ Failed to add line {line_count}")
-                return False
-
-            time.sleep(2)
-
-    # ── Summary ──
-    print(f"\n{'='*60}")
-    print(f"✓ opAD ORDER COMPLETE")
-    print(f"  Contract: {contract_number}")
-    print(f"  Lines Added: {line_count}")
-    print(f"{'='*60}")
-
-    return True
+    return _create_opad_contract_direct(pdf_path, pre_gathered_inputs)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

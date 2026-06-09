@@ -13,7 +13,7 @@ NO Etere browser code lives here - it's all in etere_client.py.
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import Optional
 from pathlib import Path
 import sys
 
@@ -25,7 +25,6 @@ if str(_src_path) not in sys.path:
 from browser_automation.etere_client import EtereClient
 from browser_automation.ros_definitions import ROS_SCHEDULES
 from browser_automation.language_utils import extract_language_from_program
-from src.domain.enums import BillingType
 from parsers.tcaa_parser import (
     parse_tcaa_pdf,
     TCAAEstimate,
@@ -449,22 +448,20 @@ def gather_tcaa_inputs(pdf_path: str) -> Optional[dict]:
 
 
 def process_tcaa_order(
-    driver,
     pdf_path: str,
     estimate_number: Optional[str] = None,
     order_code: Optional[str] = None,
     description: Optional[str] = None
 ) -> bool:
     """
-    Process TCAA order PDF - create contracts in Etere.
-    
+    Process TCAA order PDF - create contracts in Etere via direct DB.
+
     Args:
-        driver: Selenium WebDriver (already logged in)
         pdf_path: Path to the TCAA PDF
         estimate_number: Optional - process only this estimate
         order_code: Optional pre-gathered custom contract code
         description: Optional pre-gathered custom description
-    
+
     Returns:
         True if all contracts created successfully
     """
@@ -722,272 +719,25 @@ def process_tcaa_order(
     print("STARTING CONTRACT CREATION")
     print(f"{'='*70}\n")
 
-    if driver is None:
-        success_count = 0
-        for estimate in estimates:
-            bonus_inputs = all_bonus_inputs[estimate.estimate_number]
-            contract_id = _create_tcaa_contract_direct(
-                estimate, bonus_inputs, separation_intervals, order_code, description
-            )
-            if contract_id:
-                success_count += 1
-                print(f"\n✓ Estimate {estimate.estimate_number} completed successfully")
-            else:
-                print(f"\n✗ Estimate {estimate.estimate_number} FAILED")
-                cont = input("\nContinue with remaining contracts? (y/n): ").strip().lower()
-                if cont != 'y':
-                    break
-            print()
-        print(f"\n{'='*70}")
-        print("TCAA ORDER PROCESSING COMPLETE")
-        print(f"{'='*70}")
-        print(f"Successfully created: {success_count}/{len(estimates)} contracts")
-        return success_count == len(estimates)
-
-    # Create Etere client
-    etere = EtereClient(driver)
-    
-    # Create each contract
     success_count = 0
     for estimate in estimates:
         bonus_inputs = all_bonus_inputs[estimate.estimate_number]
-        
-        success = create_tcaa_contract(
-            etere, 
-            estimate, 
-            bonus_inputs, 
-            separation_intervals,
-            order_code=order_code,
-            description=description
+        contract_id = _create_tcaa_contract_direct(
+            estimate, bonus_inputs, separation_intervals, order_code, description
         )
-        
-        if success:
+        if contract_id:
             success_count += 1
             print(f"\n✓ Estimate {estimate.estimate_number} completed successfully")
         else:
             print(f"\n✗ Estimate {estimate.estimate_number} FAILED")
-            
-            # Ask user if they want to continue
             cont = input("\nContinue with remaining contracts? (y/n): ").strip().lower()
             if cont != 'y':
                 break
-        
         print()
-    
     print(f"\n{'='*70}")
-    print(f"TCAA ORDER PROCESSING COMPLETE")
+    print("TCAA ORDER PROCESSING COMPLETE")
     print(f"{'='*70}")
     print(f"Successfully created: {success_count}/{len(estimates)} contracts")
-    
     return success_count == len(estimates)
 
 
-def create_tcaa_contract(
-    etere: EtereClient,
-    estimate: TCAAEstimate,
-    bonus_inputs: dict[int, BonusLineInput],
-    separation_intervals: Tuple[int, int, int],
-    order_code: Optional[str] = None,
-    description: Optional[str] = None
-) -> bool:
-    """
-    Create a single TCAA contract in Etere.
-    
-    This function:
-    1. Creates contract header
-    2. Adds all lines (paid and bonus)
-    
-    ALL Etere interactions happen through etere.method_name() calls.
-    NO direct Selenium/driver code here.
-    
-    Args:
-        etere: EtereClient instance
-        estimate: TCAAEstimate object
-        bonus_inputs: User inputs for bonus lines
-        separation_intervals: Confirmed separation intervals (customer, order, event)
-        order_code: Optional custom contract code (uses default if None)
-        description: Optional custom description (uses default if None)
-    
-    Returns:
-        True if successful
-    """
-    try:
-        print(f"\n[TCAA] Creating contract for estimate {estimate.estimate_number}")
-        
-        # ═══════════════════════════════════════════════════════════════
-        # CREATE CONTRACT HEADER
-        # ═══════════════════════════════════════════════════════════════
-        
-        # Master market is already set to NYC by session
-        # Individual lines will use market="SEA"
-        
-        # Use custom code if provided, otherwise default
-        if not order_code:
-            contract_code = f"TCAA Toyota {estimate.estimate_number}"
-        else:
-            contract_code = order_code
-        
-        # Use custom description if provided, otherwise default
-        if not description:
-            contract_description = f"Toyota SEA Est {estimate.estimate_number}"  # TCAA format
-        else:
-            contract_description = description
-        
-        # TCAA Notes format (2 lines):
-        # Line 1: Description from IO header (e.g., "MAY26 Asian Cable")
-        # Line 2: CPE format "CPE WWDTA/Product/EstimateNumber"
-        # Client is always hardcoded as WWDTA (Western Washington Dealers Toyota Assoc)
-        notes_line1 = estimate.description if hasattr(estimate, 'description') else "Asian Cable"
-        notes_line2 = f"CPE WWDTA/Asian/{estimate.estimate_number}"
-        notes_cpe = f"{notes_line1}\n{notes_line2}"
-        
-        contract_number = etere.create_contract_header(
-            customer_id=75,  # TCAA Toyota
-            code=contract_code,
-            description=contract_description,
-            # NO market parameter - master market already set to NYC by session
-            contract_start=estimate.flight_start,
-            contract_end=estimate.flight_end,
-            customer_order_ref=None,  # TCAA doesn't use order numbers - leave blank
-            notes=notes_cpe,  # Two-line CPE format
-            charge_to=BillingType.CUSTOMER_SHARE_AGENCY.get_charge_to(),
-            invoice_header=BillingType.CUSTOMER_SHARE_AGENCY.get_invoice_header()
-        )
-        
-        if not contract_number:
-            print(f"[TCAA] ✗ Failed to create contract header")
-            return False
-        
-        print(f"[TCAA] ✓ Contract created: {contract_number}")
-        
-        # ═══════════════════════════════════════════════════════════════
-        # ADD LINES (Paid and Bonus)
-        # ═══════════════════════════════════════════════════════════════
-        
-        line_count = 0
-        
-        for line_idx, line in enumerate(estimate.lines):
-            
-            # Determine if this is a bonus line
-            if line.is_bonus():
-                # BONUS LINE
-                bonus_input = bonus_inputs.get(line_idx)
-                if not bonus_input:
-                    print(f"  WARNING: No input for bonus line {line_idx + 1}, skipping")
-                    continue
-                
-                days = bonus_input.days
-                time = bonus_input.time
-                language = bonus_input.language
-                spot_code = 10  # Bonus
-                
-                # Format description
-                is_ros = False
-                for ros_name, ros_def in ROS_OPTIONS.items():
-                    if (ros_def['days'] == days and 
-                        ros_def['time'] == time and 
-                        ros_def['language'] == language):
-                        desc = f"BNS {language} ROS"
-                        is_ros = True
-                        break
-                
-                if not is_ros:
-                    desc = f"BNS {days} {time} {language}"
-                
-            else:
-                # PAID LINE
-                days = line.days
-                time = line.time
-                language = extract_language_from_program(line.program)
-                spot_code = 2  # Paid Commercial
-                
-                # Format description
-                time_fmt = format_time_for_description(time)
-                desc = f"{days} {time_fmt} {language}"
-            # Consolidate weekly distribution (groups identical consecutive weeks)
-            ranges = EtereClient.consolidate_weeks_from_flight(
-                line.weekly_spots,
-                estimate.flight_start,
-                estimate.flight_end
-            )
-            
-            print(f"\n  Line {line_idx + 1}: {desc}")
-            print(f"    Splits into {len(ranges)} Etere line(s)")
-            
-            # Parse time range using etere_client utility
-            time_from, time_to = EtereClient.parse_time_range(time)
-            
-            # Apply Sunday 6-7a rule using etere_client utility
-            adjusted_days, adjusted_day_count = EtereClient.check_sunday_6_7a_rule(days, time)
-            
-            # Create Etere line for each range
-            for range_idx, range_data in enumerate(ranges, 1):
-                line_count += 1
-                
-                print(f"    Creating line {line_count}: {range_data['start_date']} - {range_data['end_date']}")
-                
-                # Get spots per week (handle both int and list)
-                spots_per_week = range_data['spots_per_week']
-                if isinstance(spots_per_week, list):
-                    spots_per_week = spots_per_week[0]
-                
-                # Add the line using etere_client!
-                # max_daily_run is auto-calculated by etere_client from spots_per_week and days
-                success = etere.add_contract_line(
-                    contract_number=contract_number,
-                    market="SEA",
-                    start_date=range_data['start_date'],
-                    end_date=range_data['end_date'],
-                    days=adjusted_days,
-                    time_from=time_from,
-                    time_to=time_to,
-                    description=desc,
-                    spot_code=spot_code,
-                    duration_seconds=line.duration,
-                    total_spots=range_data['spots'],  # Total spots for this date range
-                    spots_per_week=spots_per_week,
-                    # max_daily_run is auto-calculated - no need to pass it!
-                    rate=line.rate,                    separation_intervals=separation_intervals,  # Use confirmed intervals
-                    is_bookend=False
-                )
-                
-                if not success:
-                    print(f"    ✗ Failed to add line {line_count}")
-                    return False
-        
-        print(f"\n[TCAA] ✓ All {line_count} lines added successfully")
-        return True
-        
-    except Exception as e:
-        print(f"\n[TCAA] ✗ Error creating contract: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-
-# ============================================================================
-# TESTING FUNCTION
-# ============================================================================
-
-def test_tcaa_automation():
-    """Test TCAA automation with a sample PDF."""
-    from browser_automation.etere_session import EtereSession
-    
-    # Prompt for PDF path
-    pdf_path = input("Enter path to TCAA PDF: ").strip()
-    
-    with EtereSession() as session:
-        # Set market to SEA (Seattle) for TCAA
-        session.set_market("SEA")
-        
-        # Process the order
-        success = process_tcaa_order(session.driver, pdf_path)
-        
-        if success:
-            print("\n✓ All contracts created successfully!")
-        else:
-            print("\n✗ Some contracts failed - review errors above")
-
-
-if __name__ == "__main__":
-    test_tcaa_automation()

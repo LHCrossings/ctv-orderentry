@@ -45,7 +45,7 @@ if str(_src_path) not in sys.path:
     sys.path.insert(0, str(_src_path))
 
 from etere_client import EtereClient
-from src.domain.enums import BillingType, OrderType, SeparationInterval
+from src.domain.enums import BillingType
 
 from browser_automation.parsers.intertrend_parser import (
     parse_intertrend_pdf,
@@ -301,137 +301,28 @@ def _create_intertrend_contract_direct(order: IntertrendOrder, inputs: dict) -> 
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# BROWSER AUTOMATION
+# ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def process_intertrend_order(driver, pdf_path: str, user_input: dict = None) -> bool:
+def process_intertrend_order(pdf_path: str, shared_session=None, pre_gathered_inputs=None) -> bool:
     """
-    Enter an Intertrend order into Etere. Fully unattended after gather step.
+    Enter an Intertrend order into Etere via direct DB entry.
 
     Args:
-        driver:     Selenium WebDriver (raw driver, not session)
-        pdf_path:   Path to Intertrend PDF
-        user_input: Pre-collected inputs from orchestrator (or None to gather now)
+        pdf_path:             Path to Intertrend PDF
+        shared_session:       Unused — kept for orchestrator compatibility
+        pre_gathered_inputs:  Pre-collected inputs from orchestrator (or None to gather now)
 
     Returns:
         True if all lines entered successfully.
     """
+    user_input = pre_gathered_inputs
     if user_input is None:
         user_input = gather_intertrend_inputs(pdf_path)
         if not user_input:
             return False
 
     order: IntertrendOrder = user_input['order']
-    gross_up_factor: float = user_input['gross_up_factor']
-    market: str = user_input['market']
-    separation: tuple = user_input['separation']
-    billing: BillingType = user_input['billing']
 
-    if driver is None:
-        contract_id = _create_intertrend_contract_direct(order, user_input)
-        return contract_id is not None
-
-    print('\n' + '=' * 70)
-    print('STARTING BROWSER AUTOMATION — INTERTREND')
-    print('=' * 70)
-
-    etere = EtereClient(driver)
-
-    try:
-        # ─── Create contract header ──────────────────────────────────────────
-        contract_number = etere.create_contract_header(
-            customer_id=int(user_input['customer_id']),
-            code=user_input['contract_code'],
-            description=user_input['contract_description'],
-            contract_start=order.flight_start,
-            contract_end=order.flight_end,
-            customer_order_ref=user_input['customer_order_ref'],
-            notes=user_input['notes'],
-            charge_to=billing.get_charge_to(),
-            invoice_header=billing.get_invoice_header(),
-        )
-
-        if not contract_number:
-            print('[CONTRACT] ✗ Failed to create contract header')
-            return False
-
-        print(f'[CONTRACT] ✓ Created: {contract_number}')
-
-        # ─── Enter contract lines ────────────────────────────────────────────
-        all_success = True
-        etere_line_num = 0
-
-        for line in order.lines:
-            is_bonus = line.is_bonus
-            spot_code = 10 if is_bonus else 2
-
-            # Gross-up paid lines; bonus lines stay at $0
-            rate = 0.0 if is_bonus else round(line.net_rate * gross_up_factor, 2)
-
-            # Description: "(Line N) {days} {time} Chinese" or "(Line N) {days} {time} Chinese BNS"
-            time_fmt = format_time_for_description(line.time)
-            desc_parts = [f'(Line {line.line_number})', line.days, time_fmt, 'Chinese']
-            if is_bonus:
-                desc_parts.append('BNS')
-            description = ' '.join(desc_parts)
-
-            # Apply Sunday 6-7a rule
-            days, _ = EtereClient.check_sunday_6_7a_rule(line.days, line.time)
-            time_from, time_to = EtereClient.parse_time_range(line.time)
-
-            tag = 'BNS' if is_bonus else 'COM'
-            print(f'\n[LINE {line.line_number}] {tag}  {line.days} {time_fmt} :{line.duration}  '
-                  f'{line.total_spots} spots  ${rate:.2f} gross')
-
-            # Consolidate consecutive equal-count weeks into Etere lines
-            # consolidate_weeks accepts "May 11" format and handles flight truncation
-            flight_end_mdy   = datetime.strptime(order.flight_end,   '%Y-%m-%d').strftime('%m/%d/%Y')
-            flight_start_mdy = datetime.strptime(order.flight_start, '%Y-%m-%d').strftime('%m/%d/%Y')
-            week_groups = EtereClient.consolidate_weeks(
-                line.weekly_spots, order.week_start_dates, flight_end_mdy, flight_start_mdy
-            )
-
-            for group in week_groups:
-                group_start = group['start_date']
-                group_end = group['end_date']
-                spots_per_week = group['spots_per_week']
-                num_weeks = group['weeks']
-                group_total = spots_per_week * num_weeks
-
-                etere_line_num += 1
-                print(f'  [{etere_line_num}] {group_start} – {group_end}  '
-                      f'{num_weeks}wk × {spots_per_week}/wk = {group_total} spots')
-
-                success = etere.add_contract_line(
-                    contract_number=contract_number,
-                    market=market,
-                    start_date=group_start,
-                    end_date=group_end,
-                    days=days,
-                    time_from=time_from,
-                    time_to=time_to,
-                    description=description,
-                    spot_code=spot_code,
-                    duration_seconds=line.duration,
-                    spots_per_week=spots_per_week,
-                    total_spots=group_total,
-                    rate=rate,
-                    separation_intervals=separation,
-                    max_daily_run=None,
-                )
-
-                if success:
-                    print(f'  ✓ Entered')
-                else:
-                    print(f'  ✗ FAILED')
-                    all_success = False
-
-        status = '✓ SUCCESS' if all_success else '✗ SOME LINES FAILED'
-        print(f'\n[DONE] {status} — {etere_line_num} Etere lines entered')
-        return all_success
-
-    except Exception as e:
-        import traceback
-        print(f'\n[ERROR] Intertrend automation error: {e}')
-        traceback.print_exc()
-        return False
+    contract_id = _create_intertrend_contract_direct(order, user_input)
+    return contract_id is not None

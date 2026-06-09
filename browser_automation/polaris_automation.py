@@ -8,7 +8,6 @@ Master market: NYC (standard default — Polaris is not WorldLink/DAL).
 Billing: agency (charge_to="Customer share indicating agency %", invoice_header="Agency").
 """
 
-import math
 import os
 import sqlite3
 from decimal import Decimal
@@ -329,101 +328,16 @@ def gather_polaris_inputs(xlsx_path: str) -> Optional[dict]:
 # Order processing
 # ─────────────────────────────────────────────────────────────────────────────
 
-def process_polaris_order(driver, xlsx_path: str, user_input: dict) -> Optional[str]:
+def process_polaris_order(xlsx_path: str, user_input: dict) -> Optional[str]:
     """
-    Enter a Polaris order into Etere.  Creates one contract per market.
+    Enter a Polaris order into Etere via direct DB.  Creates one contract per market.
 
     Args:
-        driver:     Selenium WebDriver from the shared EtereSession.
         xlsx_path:  Path to the .xlsx file (re-parsed from disk for safety).
         user_input: Dict returned by gather_polaris_inputs.
 
     Returns:
         Contract number of the last created contract, or None on failure.
     """
-    if driver is None:
-        order = user_input.get("order") or parse_polaris_xlsx(xlsx_path)
-        return _create_polaris_contracts_direct(order, user_input)
-
-    etere = EtereClient(driver)
-
-    # Re-parse from disk for safety (same pattern as HL / DART)
-    order: PolarisOrder = parse_polaris_xlsx(xlsx_path)
-
-    customer_id  = user_input["customer_id"]
-    contracts    = user_input["contracts"]
-    separation   = user_input.get("separation", (15, 0, 0))
-    flight_start = user_input.get("actual_start", order.flight_start)
-    flight_end   = user_input.get("actual_end",   order.flight_end)
-
-    last_contract: Optional[str] = None
-
-    for market in order.markets:
-        market_lines = order.lines_for_market(market)
-        contract_info = contracts[market]
-        code        = contract_info["code"]
-        description = contract_info["description"]
-
-        print(f"\n[POLARIS] Creating contract for {market}: {code}")
-
-        contract_number = etere.create_contract_header(
-            customer_id=int(customer_id),
-            code=code,
-            description=description,
-            contract_start=flight_start,
-            contract_end=flight_end,
-            charge_to="Customer share indicating agency %",
-            invoice_header="Agency",
-        )
-
-        if not contract_number:
-            print(f"[POLARIS] ✗ Failed to create contract header for {market}")
-            return None
-
-        print(f"[POLARIS] ✓ Contract created: {contract_number}")
-
-        # ── Add contract lines ─────────────────────────────────────────────
-        for idx, ln in enumerate(market_lines, start=1):
-            time_from, time_to = ln.get_time_from_to()
-            spot_code = EtereClient.SPOT_CODES["BNS"] if ln.is_bonus else EtereClient.SPOT_CODES["Paid Commercial"]
-            rate = float(ln.rate)
-            label = "BNS" if ln.is_bonus else "PAY"
-
-            # Apply Sunday 6-7am rule
-            days, _ = etere.check_sunday_6_7a_rule(ln.days, ln.time_str)
-
-            active_days = EtereClient._count_active_days(days)
-            max_daily = math.ceil(ln.total_spots / active_days) if active_days > 0 else 1
-
-            ok = etere.add_contract_line(
-                contract_number=contract_number,
-                market=market,
-                start_date=flight_start,
-                end_date=flight_end,
-                days=days,
-                time_from=time_from,
-                time_to=time_to,
-                description=ln.get_description(),
-                spot_code=spot_code,
-                duration_seconds=30,
-                total_spots=ln.total_spots,
-                spots_per_week=ln.total_spots,  # single-flight: spots_per_week == total_spots
-                max_daily_run=max_daily,
-                rate=rate,
-                separation_intervals=separation,
-            )
-
-            status = "✓" if ok else "✗"
-            tf_label = "BONUS" if ln.is_bonus else f"${ln.rate}"
-            print(f"  [{status}] Line {idx} [{label}]  {days}  {ln.time_str}  "
-                  f"{ln.program}  {tf_label}  ×{ln.total_spots}  "
-                  f"max/day={max_daily}")
-
-            if not ok:
-                print(f"[POLARIS] ✗ Line {idx} failed — aborting")
-                return None
-
-        print(f"\n[POLARIS] ✓ {market}: all lines entered. Contract: {contract_number}")
-        last_contract = contract_number
-
-    return last_contract
+    order = user_input.get("order") or parse_polaris_xlsx(xlsx_path)
+    return _create_polaris_contracts_direct(order, user_input)

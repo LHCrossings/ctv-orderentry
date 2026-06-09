@@ -10,12 +10,9 @@ Separation: PDF value → (PDF_val - 5, 0, 0) per lessons (30 min → 25 min Ete
 import json
 import re
 import sqlite3
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-
-from selenium import webdriver
 
 from browser_automation.etere_client import EtereClient
 from browser_automation.language_utils import extract_language_from_program
@@ -362,139 +359,24 @@ def gather_wallrich_inputs(pdf_path: str) -> Optional[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Main entry point (called by order_processing_service with driver)
+# Main entry point (called by order_processing_service)
 # ---------------------------------------------------------------------------
 
 def process_wallrich_order(
-    driver: webdriver.Chrome,
     pdf_path: str,
     user_input: dict,
 ) -> bool:
     """
-    Process a Wallrich order end-to-end.
+    Process a Wallrich order end-to-end via direct DB entry.
 
     Args:
-        driver:     Selenium WebDriver (already logged in)
         pdf_path:   Path to the Wallrich PDF
         user_input: Dict from gather_wallrich_inputs()
 
     Returns:
         True if successful, False otherwise.
     """
-    if driver is None:
-        return _create_wallrich_contract_direct(pdf_path, user_input)
-
-    etere = EtereClient(driver)
-    try:
-        return _execute_order(etere, pdf_path, user_input)
-    except Exception as e:
-        print(f"[WALLRICH] ✗ Order failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-
-def _execute_order(
-    etere: EtereClient,
-    pdf_path: str,
-    user_input: dict,
-) -> bool:
-    order_code   = user_input["order_code"]
-    description  = user_input["description"]
-    customer_id  = user_input.get("customer_id")
-    market_code  = user_input.get("market_code", "CVC")
-    separation   = user_input.get("separation", (25, 0, 0))
-
-    print(f"\n{'='*60}")
-    print(f"Processing Wallrich Order: {pdf_path}")
-    print(f"{'='*60}\n")
-
-    estimates = parse_wallrich_pdf(pdf_path)
-    if not estimates:
-        print("[WALLRICH] ✗ No estimates found")
-        return False
-
-    est = estimates[0]
-    print(f"[PARSE] ✓ {est.estimate_number} / {est.client} / {len(est.lines)} lines")
-
-    # True contract start = first week that has at least one spot on any line.
-    # The PDF flight_start is the order effective date, which often precedes airing.
-    flight_year = datetime.strptime(est.flight_start, "%m/%d/%Y").year
-    contract_start = est.flight_start
-    for i, ws in enumerate(est.week_starts):
-        if any(i < len(ln.weekly_spots) and ln.weekly_spots[i] > 0 for ln in est.lines):
-            contract_start = f"{ws}/{flight_year}"
-            break
-    if contract_start != est.flight_start:
-        print(f"[PARSE] ✓ Contract start: {contract_start} (first airing week; PDF says {est.flight_start})")
-
-    # ── Contract header ──
-    contract_number = etere.create_contract_header(
-        customer_id=customer_id,
-        code=order_code,
-        description=description,
-        contract_start=contract_start,
-        contract_end=est.flight_end,
-        customer_order_ref=est.estimate_number,
-        notes=est.description,
-        charge_to=CHARGE_TO,
-        invoice_header=INVOICE_HEADER,
-    )
-    if not contract_number:
-        print("[WALLRICH] ✗ Failed to create contract header")
-        return False
-    print(f"[WALLRICH] ✓ Contract created: {contract_number}")
-
-    # ── Persist customer ──
-    if customer_id:
-        _upsert_customer(est.client, customer_id, market_code)
-
-    # ── Contract lines ──
-    all_success = True
-    line_count  = 0
-
-    for ln in est.lines:
-        etere_lines = _build_etere_lines(ln, est, market_code, flight_year)
-
-        for el in etere_lines:
-            line_count += 1
-            print(f"\n  [LINE {line_count}] {el['description']}")
-            print(f"    {el['start_date']} – {el['end_date']}")
-            print(f"    {el['spots_per_week']}/wk × {el['num_weeks']} wks "
-                  f"= {el['total_spots']} spots  ${el['rate']:.2f}")
-
-            ok = etere.add_contract_line(
-                contract_number=contract_number,
-                market=market_code,
-                start_date=el["start_date"],
-                end_date=el["end_date"],
-                days=el["days"],
-                time_from=el["time_from"],
-                time_to=el["time_to"],
-                description=el["description"],
-                spot_code=el["spot_code"],
-                duration_seconds=ln.duration,
-                total_spots=el["total_spots"],
-                spots_per_week=el["spots_per_week"],
-                rate=el["rate"],
-                separation_intervals=separation,
-            )
-
-            if not ok:
-                print(f"    ✗ Failed to add line {line_count}")
-                all_success = False
-                break
-
-            time.sleep(2)
-
-        if not all_success:
-            break
-
-    print(f"\n{'='*60}")
-    status = "✓ COMPLETE" if all_success else "✗ FAILED"
-    print(f"{status}  Contract: {contract_number}  Lines: {line_count}")
-    print(f"{'='*60}")
-    return all_success
+    return _create_wallrich_contract_direct(pdf_path, user_input)
 
 
 # ---------------------------------------------------------------------------

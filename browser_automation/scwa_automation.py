@@ -34,7 +34,7 @@ if str(_project_root) not in sys.path:
 
 from browser_automation.etere_client import EtereClient
 from browser_automation.parsers.scwa_parser import SCWAOrder, SCWALine, parse_scwa_pdf
-from src.domain.enums import BillingType, OrderType, SeparationInterval
+from src.domain.enums import OrderType, SeparationInterval
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -364,7 +364,6 @@ def gather_scwa_inputs(pdf_path: str) -> Optional[dict]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def process_scwa_order(
-    driver,
     pdf_path: str,
     shared_session=None,
     pre_gathered_inputs: Optional[dict] = None,
@@ -396,103 +395,8 @@ def process_scwa_order(
             print("\n✗ Input gathering cancelled")
             return False
 
-        if driver is None:
-            contract_id = _create_scwa_contract_direct(order, inputs)
-            return contract_id is not None
-
-        etere = EtereClient(driver)
-        customer_id = inputs.get('customer_id')
-        notes       = inputs.get('notes', '')
-        separation  = inputs.get('separation', SCWA_SEPARATION)
-        code        = inputs.get('contract_code', f"SCWA")
-        description = inputs.get('description', order.advertiser)
-
-        # ── Create contract header ─────────────────────────────────────────
-        # Flight spans the full range across all lines (handles multi-month orders)
-        flight_start = min(
-            (l.start_date for l in order.lines),
-            key=lambda d: datetime.strptime(d, '%m/%d/%Y')
-        )
-        flight_end = max(
-            (l.end_date for l in order.lines),
-            key=lambda d: datetime.strptime(d, '%m/%d/%Y')
-        )
-
-        # NOTE: master market is ALWAYS NYC — set once by EtereSession before the
-        # browser automation runs. Never override it here.
-
-        contract_number = etere.create_contract_header(
-            customer_id=customer_id,
-            code=code,
-            description=description,
-            contract_start=flight_start,
-            contract_end=flight_end,
-            customer_order_ref=None,
-            notes=notes,
-            charge_to=BillingType.CUSTOMER_DIRECT.get_charge_to(),
-            invoice_header=BillingType.CUSTOMER_DIRECT.get_invoice_header(),
-        )
-
-        if not contract_number:
-            print("[SCWA] ✗ Failed to create contract header")
-            return False
-
-        print(f"[SCWA] ✓ Contract created: {contract_number}")
-
-        # ── Add one line per language block ───────────────────────────────
-        line_count = 0
-
-        for line in order.lines:
-            lang_key = _language_key(line.language_block)
-            if not lang_key or lang_key not in _ROS_MAP:
-                print(f"  ✗ Unknown language block: {line.language_block!r} — skipped")
-                continue
-
-            days, time_str = _ROS_MAP[lang_key]
-            time_from, time_to = EtereClient.parse_time_range(time_str)
-
-            # Apply Sunday 6–7a rule
-            adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(days, time_str)
-
-            # SCWA is a monthly total-spots order — no spots_per_week.
-            # Only total_spots and max_daily_run are entered in Etere.
-            eligible_days = _eligible_days_in_flight(adjusted_days, line.start_date, line.end_date)
-            max_daily_run = math.ceil(line.total_spots / eligible_days)
-
-            line_count += 1
-            print(f"\n  [{line.language_block}]")
-            print(f"    Days: {adjusted_days}  Time: {time_from}–{time_to}")
-            print(f"    Total spots: {line.total_spots}  Eligible days: {eligible_days}  max/day: {max_daily_run}  rate: ${line.rate}")
-
-            ok = etere.add_contract_line(
-                contract_number=contract_number,
-                market=SCWA_MARKET,
-                start_date=line.start_date,
-                end_date=line.end_date,
-                days=adjusted_days,
-                time_from=time_from,
-                time_to=time_to,
-                description=f"{adjusted_days} {line.language_block.split('(')[0].strip()} ROS",
-                spot_code=2,                      # Paid Commercial
-                duration_seconds=line.duration_seconds,
-                total_spots=line.total_spots,
-                spots_per_week=0,
-                max_daily_run=max_daily_run,
-                rate=line.rate,
-                separation_intervals=separation,
-                is_bookend=False,
-                is_billboard=False,
-            )
-
-            if not ok:
-                print(f"    ✗ Failed to add line {line_count}")
-                return False
-
-        print(f"\n[SCWA] ✓ All {line_count} Etere lines added")
-        print(f"\n{'=' * 70}")
-        print("✓ SCWA PROCESSING COMPLETE")
-        print(f"{'=' * 70}")
-        return True
+        contract_id = _create_scwa_contract_direct(order, inputs)
+        return contract_id is not None
 
     except Exception as exc:
         import traceback

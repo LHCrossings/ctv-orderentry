@@ -30,7 +30,7 @@ if str(_project_root) not in sys.path:
 
 from browser_automation.etere_client import EtereClient
 from browser_automation.parsers.sierra_parser import SierraOrder, SierraLine, parse_sierra
-from src.domain.enums import BillingType, OrderType
+from src.domain.enums import OrderType
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONSTANTS
@@ -311,7 +311,6 @@ def gather_sierra_inputs(pdf_path: str) -> Optional[dict]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def process_sierra_order(
-    driver,
     pdf_path: str,
     shared_session=None,
     pre_gathered_inputs: Optional[dict] = None,
@@ -342,102 +341,8 @@ def process_sierra_order(
             print("\n✗ Input gathering cancelled")
             return False
 
-        if driver is None:
-            contract_id = _create_sierra_contract_direct(order, inputs)
-            return contract_id is not None
-
-        etere       = EtereClient(driver)
-        customer_id = inputs.get('customer_id')
-        notes       = inputs.get('notes', '')
-        separation  = inputs.get('separation', SIERRA_SEPARATION)
-        code        = inputs.get('contract_code', 'SDS')
-        description = inputs.get('description', order.advertiser)
-
-        # ── Flight date range ──────────────────────────────────────────────
-        flight_start = min(
-            order.lines, key=lambda l: datetime.strptime(l.start_date, '%m/%d/%Y')
-        ).start_date
-        flight_end = max(
-            order.lines, key=lambda l: datetime.strptime(l.end_date, '%m/%d/%Y')
-        ).end_date
-
-        # ── Create contract header ─────────────────────────────────────────
-        contract_number = etere.create_contract_header(
-            customer_id=customer_id,
-            code=code,
-            description=description,
-            contract_start=flight_start,
-            contract_end=flight_end,
-            customer_order_ref=None,
-            notes=notes,
-            charge_to=BillingType.CUSTOMER_DIRECT.get_charge_to(),
-            invoice_header=BillingType.CUSTOMER_DIRECT.get_invoice_header(),
-        )
-
-        if not contract_number:
-            print("[SIERRA] ✗ Failed to create contract header")
-            return False
-
-        print(f"[SIERRA] ✓ Contract created: {contract_number}")
-
-        # ── Add one Etere line per SierraLine ─────────────────────────────
-        line_count = 0
-
-        for line in order.lines:
-            total_spots = line.total_spots
-
-            if total_spots == 0 and not line.is_bonus:
-                print(f"  [SKIP] {line.language_block} {line.days}: 0 spots")
-                continue
-
-            adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(line.days, line.time_str)
-            time_from, time_to = EtereClient.parse_time_range(line.time_str)
-
-            eligible_days = _eligible_days_in_flight(adjusted_days, line.start_date, line.end_date)
-            max_daily_run = math.ceil(total_spots / eligible_days) if total_spots > 0 else 1
-
-            spot_code = 10 if line.is_bonus else 2
-            rate      = 0.0 if line.is_bonus else line.rate
-
-            lang_short = line.language_block.split('/')[0].strip()
-            line_desc  = f"{adjusted_days} {lang_short} {line.time_str}"
-
-            line_count += 1
-            print(f"\n  [{line_count}] {line.language_block}")
-            print(f"    Days: {adjusted_days}  Time: {time_from}–{time_to}")
-            print(f"    Spots: {total_spots}  Eligible days: {eligible_days}  "
-                  f"Max/day: {max_daily_run}  Rate: ${rate:.2f}  "
-                  f"{'BONUS' if line.is_bonus else 'COM'}")
-
-            ok = etere.add_contract_line(
-                contract_number=contract_number,
-                market=order.market,
-                start_date=line.start_date,
-                end_date=line.end_date,
-                days=adjusted_days,
-                time_from=time_from,
-                time_to=time_to,
-                description=line_desc,
-                spot_code=spot_code,
-                duration_seconds=line.duration_seconds,
-                total_spots=total_spots,
-                spots_per_week=0,
-                max_daily_run=max_daily_run,
-                rate=rate,
-                separation_intervals=separation,
-                is_bookend=False,
-                is_billboard=False,
-            )
-
-            if not ok:
-                print(f"    ✗ Failed to add line {line_count}")
-                return False
-
-        print(f"\n[SIERRA] ✓ All {line_count} Etere lines added")
-        print(f"\n{'=' * 70}")
-        print("✓ SIERRA DONOR SERVICES PROCESSING COMPLETE")
-        print(f"{'=' * 70}")
-        return True
+        contract_id = _create_sierra_contract_direct(order, inputs)
+        return contract_id is not None
 
     except Exception as exc:
         import traceback

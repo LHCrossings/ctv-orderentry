@@ -406,7 +406,6 @@ class OrderProcessingService:
             print(f"{'='*70}\n")
 
             success = self._tcaa_processor['process'](
-                driver=None,
                 pdf_path=str(first_order.pdf_path),
                 estimate_number=None,  # batch — process all estimates in PDF
             )
@@ -631,7 +630,6 @@ class OrderProcessingService:
                 for est_num in selected_estimates:
                     per_est_code = f"{code_prefix} {est_num}" if code_prefix else None
                     ok = self._tcaa_processor['process'](
-                        driver=None,
                         pdf_path=str(order.pdf_path),
                         estimate_number=est_num,
                         order_code=per_est_code,
@@ -649,7 +647,6 @@ class OrderProcessingService:
             else:
                 # No estimate filter — process all
                 success = self._tcaa_processor['process'](
-                    driver=None,
                     pdf_path=str(order.pdf_path),
                     estimate_number=None,
                     order_code=code_prefix,
@@ -695,7 +692,6 @@ class OrderProcessingService:
             ) or "TCAA-AV"
 
             success = self._tcaa_av_processor['process'](
-                driver=None,
                 pdf_path=str(order.pdf_path),
                 pre_gathered_inputs=pre_gathered,
             )
@@ -846,7 +842,6 @@ class OrderProcessingService:
                 )
 
             success = process_daviselen_order(
-                driver=None,
                 pdf_path=str(order.pdf_path),
                 user_input=order.order_input
             )
@@ -915,7 +910,6 @@ class OrderProcessingService:
                 )
 
             success = process_intertrend_order(
-                driver=None,
                 pdf_path=str(order.pdf_path),
                 user_input=order.order_input
             )
@@ -1594,7 +1588,6 @@ class OrderProcessingService:
                 )
 
             success = process_imprenta_order(
-                driver=None,
                 file_path=str(order.pdf_path),
                 user_input=order.order_input
             )
@@ -1663,7 +1656,6 @@ class OrderProcessingService:
                 )
 
             success = process_igraphix_order(
-                driver=None,
                 pdf_path=str(order.pdf_path),
                 user_input=order.order_input
             )
@@ -1740,7 +1732,6 @@ class OrderProcessingService:
                 )
 
             success = process_impact_order(
-                driver=None,
                 pdf_path=str(order.pdf_path),
                 user_input=order.order_input
             )
@@ -1817,7 +1808,6 @@ class OrderProcessingService:
                 )
 
             success = process_opad_order(
-                driver=None,
                 pdf_path=str(order.pdf_path),
                 user_input=order.order_input
             )
@@ -1869,7 +1859,6 @@ class OrderProcessingService:
                 )
 
             success = process_wallrich_order(
-                driver=None,
                 pdf_path=str(order.pdf_path),
                 user_input=order.order_input,
             )
@@ -2086,7 +2075,6 @@ class OrderProcessingService:
                 )
 
             contract_num = process_dart_order(
-                driver=None,
                 xlsx_path=str(order.pdf_path),
                 user_input=order.order_input,
             )
@@ -2143,7 +2131,6 @@ class OrderProcessingService:
                 )
 
             contract_num = process_polaris_order(
-                driver=None,
                 xlsx_path=str(order.pdf_path),
                 user_input=order.order_input,
             )
@@ -2405,7 +2392,6 @@ class OrderProcessingService:
             pre_gathered_inputs = order.order_input if order.order_input else None
 
             success = process_threeolives_order(
-                driver=None,
                 file_path=str(order.pdf_path),
                 shared_session=None,
                 pre_gathered_inputs=pre_gathered_inputs,
@@ -2445,7 +2431,6 @@ class OrderProcessingService:
             pre_gathered_inputs = order.order_input if order.order_input else None
 
             success = process_bvk_order(
-                driver=None,
                 pdf_path=str(order.pdf_path),
                 shared_session=None,
                 pre_gathered_inputs=pre_gathered_inputs,
@@ -2490,7 +2475,6 @@ class OrderProcessingService:
                 )
 
             success = process_mediasol_order(
-                driver=None,
                 pdf_path=str(order.pdf_path),
                 user_input=order.order_input,
             )
