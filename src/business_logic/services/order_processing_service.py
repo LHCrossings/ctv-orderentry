@@ -1006,7 +1006,9 @@ class OrderProcessingService:
                 user_input=order.order_input,
             )
             success = contract_id is not None
-            contracts = [Contract(contract_number=str(contract_id), order_type=OrderType.SAGENT)] if contract_id else []
+            inp = order.order_input
+            contract_label = (inp.get('contract_code') if isinstance(inp, dict) else None) or str(contract_id)
+            contracts = [Contract(contract_number=contract_label, order_type=OrderType.SAGENT)] if success else []
 
             if success:
                 print(f"\n✓ SAGENT order processed successfully — contract {contract_id}")
@@ -1257,8 +1259,11 @@ class OrderProcessingService:
                 pre_gathered_inputs=order.order_input,
             )
 
+            inp = order.order_input
+            contract_label = (inp.get('contract_code') if isinstance(inp, dict) else None) or "TIMEADVERTISING"
+            contracts = [Contract(contract_number=contract_label, order_type=OrderType.TIMEADVERTISING)] if success else []
             return ProcessingResult(
-                success=success, contracts=[], order_type=OrderType.TIMEADVERTISING,
+                success=success, contracts=contracts, order_type=OrderType.TIMEADVERTISING,
                 error_message=None if success else "Processing failed",
             )
 
@@ -2166,8 +2171,17 @@ class OrderProcessingService:
         if success:
             print("\n✓ SacCountyVoters order processed successfully")
             inp = order.order_input
-            code = (inp.get('order_code') or inp.get('contract_code') or 'SACCOUNTYVOTERS') if isinstance(inp, dict) else 'SACCOUNTYVOTERS'
-            return ProcessingResult(success=True, contracts=[Contract(contract_number=code, order_type=OrderType.SACCOUNTYVOTERS)], order_type=OrderType.SACCOUNTYVOTERS)
+            contracts = []
+            if isinstance(inp, dict):
+                ph1 = inp.get('phase1_inputs', {})
+                ph2 = inp.get('phase2_inputs', {})
+                if ph1.get('contract_code'):
+                    contracts.append(Contract(contract_number=ph1['contract_code'], order_type=OrderType.SACCOUNTYVOTERS))
+                if ph2.get('contract_code'):
+                    contracts.append(Contract(contract_number=ph2['contract_code'], order_type=OrderType.SACCOUNTYVOTERS))
+            if not contracts:
+                contracts = [Contract(contract_number='SACCOUNTYVOTERS', order_type=OrderType.SACCOUNTYVOTERS)]
+            return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.SACCOUNTYVOTERS)
         print("\n✗ SacCountyVoters order processing failed")
         return ProcessingResult(
             success=False, contracts=[], order_type=OrderType.SACCOUNTYVOTERS,
