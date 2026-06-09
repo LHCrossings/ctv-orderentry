@@ -20,6 +20,7 @@ Key Misfit Business Rules:
 """
 
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Optional, Tuple
 from pathlib import Path
 import sys
@@ -241,6 +242,127 @@ def gather_upfront_inputs(order: MisfitOrder, etere_client: EtereClient) -> dict
 
 
 # ============================================================================
+# DIRECT DB HELPERS
+# ============================================================================
+
+def _parse_date(s):
+    """Parse MM/DD/YYYY, YYYY-MM-DD, or MM/DD/YY to date. Accepts date objects too."""
+    if isinstance(s, date):
+        return s
+    for fmt in ('%m/%d/%Y', '%Y-%m-%d', '%m/%d/%y'):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"Cannot parse date: {s!r}")
+
+
+def _create_misfit_contract_direct(
+    order: "MisfitOrder",
+    customer_id,
+    order_code: str,
+    description: str,
+    spot_duration: int,
+    separation_intervals,
+) -> Optional[int]:
+    """Enter Misfit order directly via DB stored procedures (no browser).
+    Returns contract_id on success, None on failure.
+    """
+    from browser_automation.etere_direct_client import EtereDirectClient, connect
+
+    if not customer_id:
+        print("[MISFIT DIRECT] ✗ No customer_id (browser search not available in direct mode)")
+        return None
+
+    conn = None
+    try:
+        conn = connect()
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+        client.set_master_market("NYC")
+
+        flight_start, flight_end = order.get_flight_dates()
+
+        contract_id = client.create_contract_header(
+            code=order_code,
+            description=description,
+            customer_id=int(customer_id),
+            contract_date=_parse_date(flight_start),
+            contract_end_date=_parse_date(flight_end),
+            billing_type="agency",
+            note="",
+            allow_rename=True,
+        )
+        print(f"[MISFIT DIRECT] ✓ Contract header ID={contract_id}")
+
+        line_count = 0
+        for market in order.markets:
+            market_code = normalize_market(market)
+            market_lines = order.get_lines_by_market(market_code)
+
+            for line in market_lines:
+                if line.is_bonus and line.time == "ROS":
+                    days, time = line.get_ros_schedule()
+                else:
+                    days = line.days
+                    time = line.time
+
+                booking_code = 10 if line.is_bonus else 2
+                rate = 0.0 if line.is_bonus else float(line.rate)
+                desc = line.get_description()
+
+                adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(days, time)
+                time_from, time_to = EtereClient.parse_time_range(time)
+                time_range = f"{time_from}-{time_to}"
+
+                converted_week_dates = [
+                    _parse_week_date(week, order.date)
+                    for week in order.week_start_dates
+                ]
+                ranges = analyze_weekly_distribution(
+                    line.weekly_spots,
+                    converted_week_dates,
+                    contract_end_date=flight_end,
+                )
+
+                for rng in ranges:
+                    line_count += 1
+                    total_spots = rng["spots_per_week"] * rng["weeks"]
+                    client.add_contract_line(
+                        market=market_code,
+                        days=adjusted_days,
+                        time_range=time_range,
+                        description=desc,
+                        rate=rate,
+                        total_spots=total_spots,
+                        spots_per_week=rng["spots_per_week"],
+                        date_from=_parse_date(rng["start_date"]),
+                        date_to=_parse_date(rng["end_date"]),
+                        duration=f":{spot_duration:02d}",
+                        is_bonus=line.is_bonus,
+                        booking_code=booking_code,
+                        separation_intervals=separation_intervals,
+                        contract_id=contract_id,
+                    )
+
+        conn.commit()
+        conn.close()
+        print(f"[MISFIT DIRECT] ✓ {line_count} lines committed")
+        return contract_id
+
+    except Exception as exc:
+        print(f"[MISFIT DIRECT] ✗ {exc}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
+        return None
+
+
+# ============================================================================
 # MAIN PROCESSING FUNCTIONS
 # ============================================================================
 
@@ -291,9 +413,6 @@ def process_misfit_order(
     print(f"  Total lines: {len(order.lines)}")
     print()
     
-    # Create Etere client
-    etere = EtereClient(driver)
-    
     # If inputs not provided, prompt for them (simple version)
     if not customer_id:
         print("\n[CUSTOMER] No customer info on Misfit PDFs")
@@ -328,7 +447,16 @@ def process_misfit_order(
     
     # Separation intervals for Misfit
     separation_intervals = (15, 0, 0)  # Customer=15, Order=0, Event=0
-    
+
+    if driver is None:
+        contract_id = _create_misfit_contract_direct(
+            order, customer_id, order_code, description, spot_duration, separation_intervals
+        )
+        return contract_id is not None
+
+    # Create Etere client
+    etere = EtereClient(driver)
+
     # Create contract
     success = create_misfit_contract(
         etere=etere,

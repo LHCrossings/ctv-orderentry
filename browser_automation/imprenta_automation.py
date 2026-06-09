@@ -432,6 +432,110 @@ def gather_imprenta_inputs(file_path: str) -> Optional[dict]:
 
 
 # ───────────────────────────────────────────────────────────────────────────
+# DIRECT DB ENTRY
+# ───────────────────────────────────────────────────────────────────────────
+
+def _create_imprenta_contract_direct(user_input: dict) -> bool:
+    """Enter Imprenta order directly via DB stored procedures (no browser).
+    Returns True on success, False on failure.
+    """
+    from browser_automation.etere_direct_client import EtereDirectClient, connect
+
+    order_flow  = user_input["order_flow"]
+    etere_lines = user_input["etere_lines"]
+    customer_id = user_input["customer_id"]
+    market      = user_input["market"]
+
+    conn = None
+    try:
+        conn = connect()
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+        client.set_master_market("NYC")
+
+        if order_flow == "new":
+            if customer_id is None:
+                print("[IMPRENTA DIRECT] ✗ No customer_id (browser search not available in direct mode)")
+                conn.close()
+                return False
+
+            contract_id = client.create_contract_header(
+                code=user_input["contract_code"],
+                description=user_input["contract_description"],
+                customer_id=int(customer_id),
+                contract_date=user_input["flight_start"],
+                contract_end_date=user_input["flight_end"],
+                billing_type="agency",
+                note="",
+                allow_rename=True,
+            )
+            print(f"[IMPRENTA DIRECT] ✓ Contract ID={contract_id}")
+            row_status = 0
+        else:
+            existing_num = user_input["contract_number"]
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT ID_CONTRATTITESTATA FROM CONTRATTITESTATA WHERE NUMERO = %s",
+                    (existing_num,),
+                )
+                row = cur.fetchone()
+            if not row:
+                print(f"[IMPRENTA DIRECT] ✗ Contract {existing_num!r} not found in CONTRATTITESTATA")
+                conn.close()
+                return False
+            contract_id = row[0]
+            print(f"[IMPRENTA DIRECT] Adding to existing contract ID={contract_id} ({existing_num})")
+            row_status = 2
+
+        for line_spec in etere_lines:
+            days     = line_spec["days"]
+            time_str = line_spec["time"]
+            days, _  = EtereClient.check_sunday_6_7a_rule(days, time_str)
+
+            if time_str:
+                time_from, time_to = EtereClient.parse_time_range(time_str)
+            else:
+                time_from, time_to = "06:00", "23:59"
+            time_range = f"{time_from}-{time_to}"
+
+            client.add_contract_line(
+                market=line_spec.get("market") or market,
+                days=days,
+                time_range=time_range,
+                description=line_spec["description"],
+                rate=float(line_spec["rate"]),
+                total_spots=line_spec["total_spots"],
+                spots_per_week=line_spec["spots_per_week"],
+                date_from=line_spec["start_date"],
+                date_to=line_spec["end_date"],
+                duration=f":{line_spec['duration']:02d}",
+                is_bonus=line_spec["is_bonus"],
+                booking_code=line_spec["spot_code"],
+                separation_intervals=line_spec["separation"],
+                is_bookend=line_spec["is_bookend"],
+                max_daily_run=line_spec["max_daily_run"],
+                contract_id=contract_id,
+                row_status=row_status,
+            )
+
+        conn.commit()
+        conn.close()
+        print(f"[IMPRENTA DIRECT] ✓ {len(etere_lines)} lines committed")
+        return True
+
+    except Exception as exc:
+        print(f"[IMPRENTA DIRECT] ✗ {exc}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
+        return False
+
+
+# ───────────────────────────────────────────────────────────────────────────
 # BROWSER AUTOMATION
 # ───────────────────────────────────────────────────────────────────────────
 
@@ -451,6 +555,9 @@ def process_imprenta_order(driver, file_path: str, user_input: dict = None) -> b
         user_input = gather_imprenta_inputs(file_path)
         if not user_input:
             return False
+
+    if driver is None:
+        return _create_imprenta_contract_direct(user_input)
 
     billing    = user_input["billing"]
     market     = user_input["market"]

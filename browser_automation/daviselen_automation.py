@@ -41,7 +41,7 @@ import os
 import sys
 import math
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 # Add project root to path
@@ -457,6 +457,112 @@ def gather_daviselen_inputs(pdf_path: str) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# DIRECT DB HELPERS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _parse_date(s):
+    """Parse MM/DD/YYYY, YYYY-MM-DD, or MM/DD/YY to date. Accepts date objects."""
+    if isinstance(s, date):
+        return s
+    for fmt in ('%m/%d/%Y', '%Y-%m-%d', '%m/%d/%y'):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"Cannot parse date: {s!r}")
+
+
+def _create_daviselen_contract_direct(order: "DaviselenOrder", user_input: dict) -> bool:
+    """Enter Daviselen order directly via DB stored procedures (no browser).
+    Returns True on success, False on failure.
+    """
+    from browser_automation.etere_direct_client import EtereDirectClient, connect
+
+    customer_id = user_input.get("customer_id")
+    if not customer_id:
+        print("[DAVISELEN DIRECT] ✗ No customer_id")
+        return False
+
+    conn = None
+    try:
+        conn = connect()
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+        client.set_master_market("NYC")
+
+        contract_id = client.create_contract_header(
+            code=user_input["contract_code"],
+            description=user_input["contract_description"],
+            customer_id=int(customer_id),
+            contract_date=_parse_date(order.flight_start),
+            contract_end_date=_parse_date(order.flight_end),
+            billing_type="agency",
+            note=user_input["notes"],
+            allow_rename=True,
+        )
+        print(f"[DAVISELEN DIRECT] ✓ Contract ID={contract_id}")
+
+        market     = user_input["market"]
+        separation = user_input["separation"]
+        line_count = 0
+
+        for line in order.lines:
+            is_bonus     = line.is_bonus()
+            booking_code = 10 if is_bonus else 2
+
+            days, _ = EtereClient.check_sunday_6_7a_rule(line.days, line.time)
+            time_from, time_to = EtereClient.parse_time_range(line.time)
+            time_range = f"{time_from}-{time_to}"
+            time_formatted = format_time_for_description(line.time)
+
+            line_num_clean = str(int(line.line_number))
+            desc_parts = [f"(Line {line_num_clean})", days, time_formatted]
+            if is_bonus:
+                desc_parts.append("BNS")
+            desc_parts.append(line.program)
+            description = " ".join(desc_parts)
+
+            week_groups = analyze_weekly_distribution(
+                line.weekly_spots, order.week_start_dates, order.flight_end
+            )
+
+            for group in week_groups:
+                line_count += 1
+                client.add_contract_line(
+                    market=market,
+                    days=days,
+                    time_range=time_range,
+                    description=description,
+                    rate=float(line.rate),
+                    total_spots=group["spots"],
+                    spots_per_week=group["spots_per_week"],
+                    date_from=_parse_date(group["start_date"]),
+                    date_to=_parse_date(group["end_date"]),
+                    duration=f":{line.duration:02d}",
+                    is_bonus=is_bonus,
+                    booking_code=booking_code,
+                    separation_intervals=separation,
+                    contract_id=contract_id,
+                )
+
+        conn.commit()
+        conn.close()
+        print(f"[DAVISELEN DIRECT] ✓ {line_count} lines committed")
+        return True
+
+    except Exception as exc:
+        print(f"[DAVISELEN DIRECT] ✗ {exc}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
+        return False
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # BROWSER AUTOMATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -494,19 +600,22 @@ def process_daviselen_order(
         user_input = gather_daviselen_inputs(pdf_path)
         if not user_input:
             return False
-    
+
     order = user_input['order']
-    
+
+    if driver is None:
+        return _create_daviselen_contract_direct(order, user_input)
+
     # ═══════════════════════════════════════════════════════════════
     # BROWSER AUTOMATION (COMPLETELY UNATTENDED)
     # ═══════════════════════════════════════════════════════════════
-    
+
     print("\n" + "="*70)
     print("STARTING BROWSER AUTOMATION")
     print("="*70)
-    
+
     all_success = True
-    
+
     # Create Etere client (just like TCAA does)
     etere = EtereClient(driver)
     

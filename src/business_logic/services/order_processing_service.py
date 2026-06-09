@@ -135,6 +135,10 @@ class OrderProcessingService:
         OrderType.TCAA_AV,
         OrderType.SACCOUNTYVOTERS,
         OrderType.TCAA,
+        OrderType.MISFIT,
+        OrderType.IMPACT,
+        OrderType.IMPRENTA,
+        OrderType.DAVISELEN,
     }
 
     def __init__(
