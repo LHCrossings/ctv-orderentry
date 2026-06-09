@@ -263,9 +263,16 @@ def gather_imprenta_inputs(file_path: str) -> Optional[dict]:
     print(f"[PARSE] ✓ Market:    {result.market}")
 
     if not result.client:
-        client_input = input("  Client name (not in file — used for contract code/DB lookup): ").strip()
-        if client_input:
-            result.client = client_input
+        # Try extracting from filename: "Imprenta_<Client Name>_ YYYY..."
+        _stem = Path(file_path).stem
+        _m = re.match(r'Imprenta[_ ]+(.+?)\s*[_ ]+\d{4}', _stem, re.IGNORECASE)
+        if _m:
+            result.client = _m.group(1).strip()
+            print(f"[PARSE] ✓ Client:    {result.client}  (from filename)")
+        else:
+            client_input = input("  Client name (not in file — used for contract code/DB lookup): ").strip()
+            if client_input:
+                result.client = client_input
     print(f"[PARSE] ✓ Bookend:   {result.is_bookend}")
     print(f"[PARSE] ✓ Flight:    {result.flight_start} – {result.flight_end}")
     print(f"[PARSE] ✓ Weeks:     {[str(d) for d in result.week_start_dates]}")
