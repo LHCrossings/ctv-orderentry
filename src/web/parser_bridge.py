@@ -450,10 +450,16 @@ def _normalize_igraphix(order) -> dict:
 
 _DIRECT_DB_KEYS = {"LEXUS", "RPM", "WORLDLINK", "TIMEADVERTISING", "IGRAPHIX", "CHARMAINE", "HL", "HL_BDR", "ADMERASIA", "SAGENT", "GALEFORCE", "HYPHEN", "INTERTREND", "SIERRADONOR", "PROSIO", "SCWA", "RWNY", "TCAA_AV", "SACCOUNTYVOTERS", "TCAA", "MISFIT", "IMPACT", "IMPRENTA", "DAVISELEN", "BVK", "DART", "MEDIASOL", "OPAD", "POLARIS", "THREEOLIVES", "WALLRICH", "XML"}
 
+# Keys that have been tested end-to-end with real orders against Etere DirectDB.
+# Pink pills graduate to white once they appear here.
+_DIRECT_DB_TESTED_KEYS = {"ADMERASIA"}
+
 def list_parsers() -> list[dict]:
     """Return display info for every registered parser, sorted by display name."""
     return sorted(
-        [{"key": k, "name": _DISPLAY_NAMES.get(k, k), "direct_db": k in _DIRECT_DB_KEYS}
+        [{"key": k, "name": _DISPLAY_NAMES.get(k, k),
+          "direct_db": k in _DIRECT_DB_KEYS,
+          "tested_db": k in _DIRECT_DB_TESTED_KEYS}
          for k in _REGISTRY],
         key=lambda x: x["name"].lower(),
     )

@@ -42,10 +42,10 @@
     <!-- Supported Parsers -->
     <div class="parsers-disclosure">
         <div class="parsers-label">Supported formats <span class="parsers-count">{{ parsers | length }}</span></div>
-        <div class="parsers-note">Pink clients are wired for Etere DirectDB Entry</div>
+        <div class="parsers-note">Pink = DirectDB wired but pending accuracy testing · White = tested &amp; verified</div>
         <div class="parsers-grid">
             {% for p in parsers %}
-            <span class="parser-chip{% if p.direct_db %} parser-chip--direct{% endif %}">{{ p.name }}{% if not loop.last %},{% endif %}</span>
+            <span class="parser-chip{% if p.direct_db and not p.tested_db %} parser-chip--direct{% endif %}">{{ p.name }}{% if not loop.last %},{% endif %}</span>
             {% endfor %}
         </div>
     </div>

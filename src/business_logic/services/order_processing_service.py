@@ -1841,16 +1841,6 @@ class OrderProcessingService:
                 print(f"Customer: {order.customer_name}")
             print(f"{'='*70}\n")
 
-            # opAD REQUIRES a browser session
-            if shared_session is None:
-                return ProcessingResult(
-                    success=False,
-                    contracts=[],
-                    order_type=OrderType.OPAD,
-                    error_message="Browser session required for opAD orders"
-                )
-
-            # Get inputs from order (already collected by orchestrator)
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
@@ -1859,12 +1849,8 @@ class OrderProcessingService:
                     error_message="Order inputs not collected"
                 )
 
-            print("[SESSION] ✓ Using shared browser session")
-            # Market already set to NYC once at batch start
-
-            # Process the order with pre-collected inputs (matching Daviselen/Admerasia pattern)
             success = process_opad_order(
-                driver=shared_session.driver,
+                driver=None,
                 pdf_path=str(order.pdf_path),
                 user_input=order.order_input
             )
@@ -1905,14 +1891,6 @@ class OrderProcessingService:
         try:
             from browser_automation.wallrich_automation import process_wallrich_order
 
-            if shared_session is None:
-                return ProcessingResult(
-                    success=False,
-                    contracts=[],
-                    order_type=OrderType.WALLRICH,
-                    error_message="Browser session required for Wallrich orders"
-                )
-
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
@@ -1922,7 +1900,7 @@ class OrderProcessingService:
                 )
 
             success = process_wallrich_order(
-                driver=shared_session.driver,
+                driver=None,
                 pdf_path=str(order.pdf_path),
                 user_input=order.order_input,
             )
@@ -2127,14 +2105,6 @@ class OrderProcessingService:
             print(f"File: {order.pdf_path.name}")
             print(f"{'='*70}\n")
 
-            if shared_session is None:
-                return ProcessingResult(
-                    success=False,
-                    contracts=[],
-                    order_type=OrderType.DART,
-                    error_message="Browser session required for DART orders",
-                )
-
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
@@ -2143,10 +2113,8 @@ class OrderProcessingService:
                     error_message="Order inputs not collected",
                 )
 
-            print("[SESSION] ✓ Using shared browser session")
-
             contract_num = process_dart_order(
-                driver=shared_session.driver,
+                driver=None,
                 xlsx_path=str(order.pdf_path),
                 user_input=order.order_input,
             )
@@ -2194,14 +2162,6 @@ class OrderProcessingService:
             print(f"File: {order.pdf_path.name}")
             print(f"{'='*70}\n")
 
-            if shared_session is None:
-                return ProcessingResult(
-                    success=False,
-                    contracts=[],
-                    order_type=OrderType.POLARIS,
-                    error_message="Browser session required for Polaris orders",
-                )
-
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
@@ -2210,10 +2170,8 @@ class OrderProcessingService:
                     error_message="Order inputs not collected",
                 )
 
-            print("[SESSION] ✓ Using shared browser session")
-
             contract_num = process_polaris_order(
-                driver=shared_session.driver,
+                driver=None,
                 xlsx_path=str(order.pdf_path),
                 user_input=order.order_input,
             )
@@ -2512,36 +2470,20 @@ class OrderProcessingService:
 
             pre_gathered_inputs = order.order_input if order.order_input else None
 
-            def _run(driver, session):
-                success = process_threeolives_order(
-                    driver,
-                    str(order.pdf_path),
-                    shared_session=session,
-                    pre_gathered_inputs=pre_gathered_inputs,
-                )
-                if success:
-                    print("\n✓ 3 Olives Media order processed successfully")
-                    return ProcessingResult(success=True, contracts=[], order_type=OrderType.THREEOLIVES)
-                print("\n✗ 3 Olives Media order processing failed")
-                return ProcessingResult(
-                    success=False, contracts=[], order_type=OrderType.THREEOLIVES,
-                    error_message="3 Olives Media processing failed - check browser output for details",
-                )
-
-            if shared_session is None:
-                try:
-                    from etere_session import EtereSession
-                except ImportError:
-                    return ProcessingResult(
-                        success=False, contracts=[], order_type=OrderType.THREEOLIVES,
-                        error_message="EtereSession import failed",
-                    )
-                with EtereSession() as session:
-                    session.set_market("NYC")
-                    return _run(session.driver, session)
-
-            driver = shared_session.driver if hasattr(shared_session, 'driver') else shared_session
-            return _run(driver, shared_session)
+            success = process_threeolives_order(
+                driver=None,
+                pdf_path=str(order.pdf_path),
+                shared_session=None,
+                pre_gathered_inputs=pre_gathered_inputs,
+            )
+            if success:
+                print("\n✓ 3 Olives Media order processed successfully")
+                return ProcessingResult(success=True, contracts=[], order_type=OrderType.THREEOLIVES)
+            print("\n✗ 3 Olives Media order processing failed")
+            return ProcessingResult(
+                success=False, contracts=[], order_type=OrderType.THREEOLIVES,
+                error_message="3 Olives Media processing failed",
+            )
 
         except Exception as exc:
             import traceback
@@ -2566,36 +2508,20 @@ class OrderProcessingService:
 
             pre_gathered_inputs = order.order_input if order.order_input else None
 
-            def _run(driver, session):
-                success = process_bvk_order(
-                    driver,
-                    str(order.pdf_path),
-                    shared_session=session,
-                    pre_gathered_inputs=pre_gathered_inputs,
-                )
-                if success:
-                    print("\n✓ BVK order processed successfully")
-                    return ProcessingResult(success=True, contracts=[], order_type=OrderType.BVK)
-                print("\n✗ BVK order processing failed")
-                return ProcessingResult(
-                    success=False, contracts=[], order_type=OrderType.BVK,
-                    error_message="BVK processing failed - check browser output for details",
-                )
-
-            if shared_session is None:
-                try:
-                    from etere_session import EtereSession
-                except ImportError:
-                    return ProcessingResult(
-                        success=False, contracts=[], order_type=OrderType.BVK,
-                        error_message="EtereSession import failed",
-                    )
-                with EtereSession() as session:
-                    session.set_market("NYC")
-                    return _run(session.driver, session)
-
-            driver = shared_session.driver if hasattr(shared_session, 'driver') else shared_session
-            return _run(driver, shared_session)
+            success = process_bvk_order(
+                driver=None,
+                pdf_path=str(order.pdf_path),
+                shared_session=None,
+                pre_gathered_inputs=pre_gathered_inputs,
+            )
+            if success:
+                print("\n✓ BVK order processed successfully")
+                return ProcessingResult(success=True, contracts=[], order_type=OrderType.BVK)
+            print("\n✗ BVK order processing failed")
+            return ProcessingResult(
+                success=False, contracts=[], order_type=OrderType.BVK,
+                error_message="BVK processing failed",
+            )
 
         except Exception as exc:
             import traceback
@@ -2619,12 +2545,6 @@ class OrderProcessingService:
                 print(f"Customer: {order.customer_name}")
             print(f"{'='*70}\n")
 
-            if shared_session is None:
-                return ProcessingResult(
-                    success=False, contracts=[], order_type=OrderType.MEDIASOL,
-                    error_message="Browser session required for Media Solutions orders",
-                )
-
             if not order.order_input:
                 return ProcessingResult(
                     success=False, contracts=[], order_type=OrderType.MEDIASOL,
@@ -2632,7 +2552,7 @@ class OrderProcessingService:
                 )
 
             success = process_mediasol_order(
-                driver=shared_session.driver,
+                driver=None,
                 pdf_path=str(order.pdf_path),
                 user_input=order.order_input,
             )
