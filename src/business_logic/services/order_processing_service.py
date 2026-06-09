@@ -703,11 +703,15 @@ class OrderProcessingService:
             user_input=order.order_input,
         )
         if success:
-            parsed_order = self._misfit_processor['parser'](str(order.pdf_path))
-            contract = Contract(
-                contract_number=f"MISFIT-{parsed_order.date.replace('/', '')}",
-                order_type=OrderType.MISFIT
-            )
+            inp = order.order_input
+            code = inp.get('order_code') if isinstance(inp, dict) else None
+            if not code:
+                try:
+                    parsed_order = self._misfit_processor['parser'](str(order.pdf_path))
+                    code = f"MISFIT-{parsed_order.date.replace('/', '')}" if parsed_order.date else 'MISFIT'
+                except Exception:
+                    code = 'MISFIT'
+            contract = Contract(contract_number=code, order_type=OrderType.MISFIT)
             print("\n✓ Successfully created Misfit contract")
             return ProcessingResult(
                 success=True, contracts=[contract], order_type=OrderType.MISFIT, error_message=None
@@ -1152,8 +1156,11 @@ class OrderProcessingService:
             pre_gathered_inputs=pre_gathered_inputs,
         )
         if success:
+            inp = order.order_input
+            code = inp.get('order_code') if isinstance(inp, dict) else None
+            contracts = [Contract(contract_number=code or 'PROSIO', order_type=OrderType.PROSIO)]
             print("\n✓ Prosio order processed successfully")
-            return ProcessingResult(success=True, contracts=[], order_type=OrderType.PROSIO)
+            return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.PROSIO)
         print("\n✗ Prosio order processing failed")
         return ProcessingResult(
             success=False, contracts=[], order_type=OrderType.PROSIO,
@@ -1772,7 +1779,9 @@ class OrderProcessingService:
                 user_input=order.order_input
             )
 
-            contracts = []
+            inp = order.order_input
+            code = inp.get('order_code') if isinstance(inp, dict) else None
+            contracts = [Contract(contract_number=code or 'OPAD', order_type=OrderType.OPAD)] if success else []
 
             if success:
                 print("\n✓ opAD order processed successfully")
@@ -2099,9 +2108,12 @@ class OrderProcessingService:
             else:
                 print("\n✗ Polaris order processing failed")
 
+            inp = order.order_input
+            code = inp.get('order_code') if isinstance(inp, dict) else None
+            contracts = [Contract(contract_number=code or 'POLARIS', order_type=OrderType.POLARIS)] if success else []
             return ProcessingResult(
                 success=success,
-                contracts=[],
+                contracts=contracts,
                 order_type=OrderType.POLARIS,
                 error_message=None if success else "Processing failed",
             )
@@ -2291,7 +2303,10 @@ class OrderProcessingService:
                 )
                 if success:
                     print("\n✓ RWNY order processed successfully")
-                    return ProcessingResult(success=True, contracts=[], order_type=OrderType.RWNY)
+                    inp = order.order_input
+                    code = inp.get('order_code') if isinstance(inp, dict) else None
+                    contracts = [Contract(contract_number=code or 'RWNY', order_type=OrderType.RWNY)]
+                    return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.RWNY)
                 print("\n✗ RWNY order processing failed")
                 return ProcessingResult(
                     success=False, contracts=[], order_type=OrderType.RWNY,
