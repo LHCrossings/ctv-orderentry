@@ -301,19 +301,7 @@ def gather_sierra_inputs(pdf_path: str) -> Optional[dict]:
     notes = input("Notes: ").strip()
     print(f"✓ {notes or '(none)'}\n")
 
-    # ── Separation ────────────────────────────────────────────────────────
     sep = SIERRA_SEPARATION
-    print(f"Separation: Customer={sep[0]}, Order={sep[1]}, Event={sep[2]}")
-    if input("Keep default separation? (y/n): ").strip().lower() != 'y':
-        c = input(f"  Customer [{sep[0]}]: ").strip()
-        o = input(f"  Order [{sep[1]}]: ").strip()
-        e = input(f"  Event [{sep[2]}]: ").strip()
-        sep = (
-            int(c) if c.isdigit() else sep[0],
-            int(o) if o.isdigit() else sep[1],
-            int(e) if e.isdigit() else sep[2],
-        )
-    print(f"✓ Separation: {sep}\n")
 
     print("=" * 70)
     print("✓ All inputs gathered — ready for automation")

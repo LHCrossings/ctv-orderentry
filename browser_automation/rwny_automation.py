@@ -357,24 +357,11 @@ def gather_rwny_inputs(pdf_path: str) -> Optional[dict]:
     print('[3/3] Contract Notes')
     print('-' * 70)
     default_notes = f'Contact: {order.contact}\nEmail: {order.email}'
-    print(f'Default:\n{default_notes}')
-    notes = default_notes if input('Use default? (y/n): ').strip().lower() == 'y' \
-            else input('Enter notes: ').strip()
-    print(f'✓ Notes set\n')
+    print(f"  Notes default:\n    {default_notes.replace(chr(10), chr(10) + '    ')}")
+    raw = input('  Notes [Enter to keep]: ').strip()
+    notes = raw or default_notes
 
-    # ── Separation ─────────────────────────────────────────────────────────
     sep = RWNY_SEPARATION
-    print(f'Separation: Customer={sep[0]}, Order={sep[1]}, Event={sep[2]}')
-    if input('Keep default separation? (y/n): ').strip().lower() != 'y':
-        c = input(f'  Customer [{sep[0]}]: ').strip()
-        e = input(f'  Event    [{sep[1]}]: ').strip()
-        o = input(f'  Order    [{sep[2]}]: ').strip()
-        sep = (
-            int(c) if c.isdigit() else sep[0],
-            int(e) if e.isdigit() else sep[1],
-            int(o) if o.isdigit() else sep[2],
-        )
-    print(f'✓ Separation: {sep}\n')
 
     print('=' * 70)
     print('✓ All inputs gathered — ready for automation')
