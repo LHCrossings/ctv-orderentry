@@ -105,7 +105,7 @@ def etere_web_login(retries: int = 3, retry_delay: float = 12.0):
     """Log into the Etere web UI headlessly using requests.
 
     Reads credentials from credentials.env (same as Selenium login).
-    Returns a live requests.Session ready to pass to EtereDirectClient.set_http_session().
+    Returns a live requests.Session for use with Etere web API calls (report fetcher, EDI).
     The session carries all cookies and will reuse them across calls.
 
     When the license seat limit is hit, automatically retries up to `retries` times
@@ -427,7 +427,6 @@ class EtereDirectClient:
         self._contract_id: Optional[int] = None
         self._nielsen_id: int = DEFAULT_NIELSEN_ID
         self._nielsen_code: str = DEFAULT_NIELSEN_CODE
-        self._http_session = None   # populated via set_http_session() or set_session_cookies()
         self._default_prenotazione: int = 0  # Priority; refreshed from inifiles on init
         self._load_default_scheduling()
 
@@ -450,22 +449,6 @@ class EtereDirectClient:
                 print(f"[DIRECT] Etere default scheduling: prop_defscheduletype={row[0]} → PRENOTAZIONE={self._default_prenotazione}")
         except Exception as e:
             print(f"[DIRECT] Warning: could not read default scheduling type ({e}); defaulting to Priority (0)")
-
-    def set_http_session(self, session) -> None:
-        """Pass a live requests.Session so HTTP calls can authenticate with Etere."""
-        self._http_session = session
-
-    def set_session_cookies(self, cookies: dict) -> None:
-        """Pass browser session cookies (e.g. from Selenium) so HTTP calls can authenticate.
-        Creates a requests.Session and loads the cookies into it."""
-        try:
-            import requests as _req
-        except ImportError:
-            return
-        session = _req.Session()
-        for name, value in cookies.items():
-            session.cookies.set(name, value)
-        self._http_session = session
 
     # ── Market ──────────────────────────────────────────────────────────────────
 
@@ -993,15 +976,14 @@ EXEC web_sales_InsertContractLine
 
         # Assign available program blocks to this line
         if line_id:
-            self._assign_blocks_http(
-                contract_id=cid,
+            self._assign_blocks(
+                line_id=line_id,
                 user_id=user_id,
                 start_frames=start_frames,
                 end_frames=end_frames,
                 day_bits=day_bits,
                 date_from=datefrom_dt,
                 date_to=dateto_dt,
-                line_id=line_id,
             )
 
         label = "BNS" if is_bonus else "PAID"
@@ -1083,149 +1065,6 @@ EXEC web_sales_InsertContractLine
             print(f"[DIRECT]     -> {count} block(s) assigned")
         return count
 
-    def _assign_blocks_http(
-        self,
-        contract_id: int,
-        user_id: int,
-        start_frames: int,
-        end_frames: int,
-        day_bits: dict,
-        date_from,
-        date_to,
-        line_id: int = 0,
-    ) -> int:
-        """
-        Assign program blocks to a contract line via Etere's web API.
-
-        Calls POST /sales/getautomaticcontractlineblockstable to get the list of
-        blocks Etere's server would assign (using its own matching logic), then
-        writes those blocks to CONTRATTIFASCE directly.
-
-        This hybrid approach is more accurate than the reverse-engineered SQL
-        method because Etere's server-side algorithm selects the blocks, while
-        our direct DB write avoids a separate "save" HTTP call.
-
-        Returns number of blocks assigned, or -1 on HTTP error.
-        Note: the typo "ToFimeProghhmm" (not "ToTimeProghhmm") is intentional —
-        it matches the actual Etere API parameter name.
-        """
-        import json as _json
-        import re as _re
-        try:
-            import requests as _requests  # noqa: F401
-        except ImportError:
-            print("[DIRECT]     ! requests not installed — skipping HTTP block assignment")
-            return -1
-
-        if not self._http_session:
-            print("[DIRECT]     ! No HTTP session — falling back to SQL block assignment")
-            return self._assign_blocks(
-                line_id=line_id,
-                user_id=user_id,
-                start_frames=start_frames,
-                end_frames=end_frames,
-                day_bits=day_bits,
-                date_from=date_from,
-                date_to=date_to,
-            )
-
-        time_from = _frames_to_hhmm(start_frames)
-        time_to   = _frames_to_hhmm(end_frames)
-
-        # Dates to M/D/YYYY (Etere web API format)
-        fd = date_from if hasattr(date_from, 'month') else date_from
-        td = date_to   if hasattr(date_to,   'month') else date_to
-        from_str = f"{fd.month}/{fd.day}/{fd.year}"
-        to_str   = f"{td.month}/{td.day}/{td.year}"
-
-        payload = {"f": {
-            "IdContract":       contract_id,
-            "FromDate":         from_str,
-            "ToDate":           to_str,
-            "CodUser":          str(user_id),
-            "FromTimeProghhmm": time_from,
-            "ToFimeProghhmm":   time_to,   # typo is intentional — matches Etere API
-            "Mon": day_bits.get("lun", False),
-            "Tue": day_bits.get("mar", False),
-            "Wed": day_bits.get("mer", False),
-            "Thu": day_bits.get("gio", False),
-            "Fri": day_bits.get("ven", False),
-            "Sat": day_bits.get("sab", False),
-            "Sun": day_bits.get("dom", False),
-        }}
-
-        url = f"{ETERE_WEB_URL}/sales/getautomaticcontractlineblockstable"
-        try:
-            resp = self._http_session.post(url, json=payload, timeout=30)
-            resp.raise_for_status()
-        except Exception as exc:
-            print(f"[DIRECT]     X Block assignment HTTP error: {exc}")
-            return -1
-
-        # Response is a JSON envelope: {"Result": {...}, "Value": "<html...>"}
-        # "Value" is HTML when blocks exist, or [] when none are available.
-        try:
-            value = resp.json().get("Value", resp.text)
-        except Exception:
-            value = resp.text
-
-        if not isinstance(value, str):
-            # No blocks available for this line (Etere returned Value:[])
-            print("[DIRECT]     ! No available blocks for this line")
-            return 0
-
-        body = value
-
-        # Parse block IDs from the tableSearchBlocksTable JSON object.
-        # Structure: {"Code":"BlocksTable","Header":[...],"Body":[[row cells],...]}
-        # Each row's first cell has HiddenParams.idBlock = the block ID.
-        block_ids: list[int] = []
-        tv = _re.search(r'tableSearchBlocksTable\s*=\s*([{\[])', body)
-        if tv:
-            try:
-                decoder = _json.JSONDecoder()
-                obj, _ = decoder.raw_decode(body, tv.start(1))
-                rows = obj.get('Body') or [] if isinstance(obj, dict) else obj
-                for row in rows:
-                    try:
-                        bid = row[0]['HiddenParams']['idBlock']
-                        block_ids.append(int(bid))
-                    except (KeyError, IndexError, TypeError, ValueError):
-                        pass
-            except Exception:
-                pass
-
-        # Deduplicate while preserving order
-        seen: set[int] = set()
-        block_ids = [bid for bid in block_ids if not (bid in seen or seen.add(bid))]
-
-        count = len(block_ids)
-
-        if not block_ids:
-            print("[DIRECT]     ! No blocks found in HTTP response")
-            return 0
-
-        # Write to CONTRATTIFASCE: clear stale entries then insert the new set
-        if line_id:
-            cursor = self._conn.cursor()
-            cursor.execute(
-                f"DELETE FROM CONTRATTIFASCE WHERE ID_CONTRATTIRIGHE = {self._ph}", [line_id]
-            )
-            for bid in block_ids:
-                cursor.execute(
-                    f"INSERT INTO CONTRATTIFASCE "
-                    f"(ID_CONTRATTIRIGHE, ID_FASCE, PRICELIST, SELECTEDSEGMENTS) "
-                    f"VALUES ({self._ph}, {self._ph}, '', '')",
-                    [line_id, bid],
-                )
-            if self._autocommit:
-                self._conn.commit()
-            print(f"[DIRECT]     -> {count} block(s) assigned (HTTP)")
-        else:
-            print(f"[DIRECT]     ! {count} block(s) found but no line_id — not saved")
-
-        return count
-
     def get_all_line_ids(self, contract_id) -> list[int]:
         """
         Return all ID_CONTRATTIRIGHE values for the given contract,
@@ -1243,58 +1082,10 @@ EXEC web_sales_InsertContractLine
         """, [int(contract_id)])
         return [row[0] for row in cursor.fetchall()]
 
-    def _fetch_line_times(self, line_id: int) -> tuple[str, str] | None:
-        """
-        GET /sales/modalchangecontractline/{line_id} and extract the displayed
-        start/end times (contractLineGeneralStartTime / contractLineGeneralEndTime).
-
-        Returns (time_from, time_to) as "HH:MM" strings, or None if unavailable.
-        This is exactly the data the browser reads before calling the block API.
-        """
-        import re as _re
-        try:
-            import requests as _requests  # noqa: F401
-        except ImportError:
-            return None
-
-        if not self._http_session:
-            return None
-
-        url = f"{ETERE_WEB_URL}/sales/modalchangecontractline/{line_id}"
-        try:
-            resp = self._http_session.get(url, timeout=15)
-            resp.raise_for_status()
-        except Exception as exc:
-            print(f"[DIRECT]     ! Could not fetch line page: {exc}")
-            return None
-
-        html = resp.text
-
-        def _extract(field_id: str) -> str:
-            # Match <input ... id="fieldId" ... value="HH:MM" ...> in any attr order
-            m = _re.search(
-                rf'<input\b[^>]*\bid=["\']?{_re.escape(field_id)}["\']?[^>]*>',
-                html, _re.IGNORECASE
-            )
-            if not m:
-                return ""
-            tag = m.group(0)
-            v = _re.search(r'\bvalue=["\']([^"\']*)["\']', tag)
-            return v.group(1).strip() if v else ""
-
-        t_from = _extract("contractLineGeneralStartTime")
-        t_to   = _extract("contractLineGeneralEndTime")
-
-        if t_from and t_to:
-            return t_from, t_to
-        return None
-
-    def assign_blocks_for_existing_line(self, line_id: int, use_sql: bool = True) -> int:
+    def assign_blocks_for_existing_line(self, line_id: int) -> int:
         """
         Assign blocks to a line that already exists in CONTRATTIRIGHE.
-        Uses ORA_INIZIOF/ORA_FINEF and the DLL-confirmed Traffic_Calendar query
-        by default (use_sql=True).  Pass use_sql=False to fall back to the HTTP
-        path (requires an active Etere web session).
+        Uses ORA_INIZIOF/ORA_FINEF and the DLL-confirmed Traffic_Calendar query.
 
         Returns the number of blocks assigned, or -1 if the line was not found.
         """
@@ -1338,34 +1129,19 @@ EXEC web_sales_InsertContractLine
         if self._autocommit:
             self._conn.commit()
 
-        if use_sql:
-            # ORA_INIZIOF/ORA_FINEF are the normalized frame values loadBlock() uses.
-            # ORA_FINE equals ORA_INIZIO (only start stored there); ORA_FINEF has
-            # the actual end time.
-            start_frames = row[2]
-            end_frames   = row[3] if row[3] else row[2]
-            print(f"[DIRECT]   SQL mode: start={start_frames} end={end_frames}")
-            return self._assign_blocks(
-                line_id=line_id,
-                user_id=user_id,
-                start_frames=start_frames,
-                end_frames=end_frames,
-                day_bits=day_bits,
-                date_from=date_from,
-                date_to=date_to,
-            )
-
-        start_frames = row[0]
-        end_frames   = row[1] if row[1] else row[0]
-        return self._assign_blocks_http(
-            contract_id=contract_id,
+        # ORA_INIZIOF/ORA_FINEF are the normalized frame values loadBlock() uses.
+        # ORA_FINE equals ORA_INIZIO (only start stored there); ORA_FINEF has
+        # the actual end time.
+        start_frames = row[2]
+        end_frames   = row[3] if row[3] else row[2]
+        return self._assign_blocks(
+            line_id=line_id,
             user_id=user_id,
             start_frames=start_frames,
             end_frames=end_frames,
             day_bits=day_bits,
             date_from=date_from,
             date_to=date_to,
-            line_id=line_id,
         )
 
     # ── Utilities (pass-through to shared helpers) ───────────────────────────────
