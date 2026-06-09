@@ -31,6 +31,17 @@ After writing and testing a new parser:
 3. `_DIRECT_DB_TESTED_KEYS` in `parser_bridge.py` (add after passing pink-pill test)
 Missing step 3 leaves the pill pink indefinitely. Missing step 1 causes a browser session to be opened.
 
+### 8. `gather_*_inputs` must prompt for contract code and description
+Every gather function must ask the user for the contract code and description before processing starts. Never let the processing function prompt for these or auto-generate them silently.
+
+For multi-contract types, the pattern varies:
+- **Single contract**: return `{'order_code': code, 'description': desc, ...}`
+- **Multi-estimate (TCAA)**: ask for a shared prefix; service builds `f"{prefix} {est_num}"` per estimate; return `{'order_code_prefix': prefix, 'description': desc, ...}`
+- **Per-market (Polaris)**: gather a dict `contracts[market] = {'code': ..., 'description': ...}` for each market
+- **Per-quarter (Impact, Lexus)**: each element in `quarter_inputs` list includes `'order_code'` and `'description'`
+
+The service's `_process_*_order` must read these from `user_input` and pass them to the automation function. Never fall back to auto-generation when the user has already provided a value.
+
 ---
 
 ## `parse_day_bits` (DirectDB) and `_select_days` (Selenium) Must Stay in Sync
