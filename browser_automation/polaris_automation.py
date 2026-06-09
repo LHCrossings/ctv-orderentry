@@ -237,13 +237,13 @@ def gather_polaris_inputs(xlsx_path: str) -> Optional[dict]:
     start_input = input(
         f"  Use this start date? [Enter=yes / type override, e.g. 4/17/2026]: "
     ).strip()
-    actual_start = start_input if start_input else order.flight_start
+    actual_start = start_input if start_input and start_input.lower() not in ('y', 'yes') else order.flight_start
 
     print(f"\n  Sheet end date: {order.flight_end}")
     end_input = input(
         f"  Use this end date? [Enter=yes / type override, e.g. 4/20/2026]: "
     ).strip()
-    actual_end = end_input if end_input else order.flight_end
+    actual_end = end_input if end_input and end_input.lower() not in ('y', 'yes') else order.flight_end
 
     if actual_start != order.flight_start or actual_end != order.flight_end:
         print(f"  ✓ Using adjusted flight: {actual_start} – {actual_end}")

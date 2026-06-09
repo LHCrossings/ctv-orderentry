@@ -754,8 +754,13 @@ class OrderProcessingService:
             print(f"Customer: {order.customer_name}")
 
             if order.order_input:
-                print(f"Code: {order.order_input.order_code}")
-                print(f"Description: {order.order_input.description}")
+                inp = order.order_input
+                if isinstance(inp, dict):
+                    print(f"Code: {inp.get('order_code', '')}")
+                    print(f"Description: {inp.get('description', '')}")
+                else:
+                    print(f"Code: {inp.order_code}")
+                    print(f"Description: {inp.description}")
 
             print(f"{'='*70}\n")
 
