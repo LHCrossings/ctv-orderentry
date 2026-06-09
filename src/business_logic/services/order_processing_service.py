@@ -2472,7 +2472,7 @@ class OrderProcessingService:
 
             success = process_threeolives_order(
                 driver=None,
-                pdf_path=str(order.pdf_path),
+                file_path=str(order.pdf_path),
                 shared_session=None,
                 pre_gathered_inputs=pre_gathered_inputs,
             )
