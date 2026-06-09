@@ -684,12 +684,7 @@ class OrderProcessingService:
                     error_message="TCAA AV processing failed — check browser output for details"
                 )
 
-            if shared_session:
-                return _run(shared_session.driver)
-            else:
-                with self._tcaa_av_processor['session_class']() as session:
-                    session.set_market("NYC")
-                    return _run(session.driver)
+            return _run(None)
 
         except Exception as e:
             import traceback
@@ -766,13 +761,7 @@ class OrderProcessingService:
 
             print(f"{'='*70}\n")
 
-            if shared_session:
-                print("[SESSION] ✓ Using shared browser session")
-                return self._run_misfit_with_driver(order, shared_session.driver)
-            else:
-                with self._misfit_processor['session_class']() as session:
-                    session.set_market("NYC")
-                    return self._run_misfit_with_driver(order, session.driver)
+            return self._run_misfit_with_driver(order, None)
 
         except Exception as e:
             import traceback
@@ -894,10 +883,8 @@ class OrderProcessingService:
                     error_message="Order inputs not collected"
                 )
 
-            print("[SESSION] ✓ Using shared browser session")
-
             success = process_intertrend_order(
-                driver=shared_session.driver,
+                driver=None,
                 pdf_path=str(order.pdf_path),
                 user_input=order.order_input
             )
@@ -1191,28 +1178,8 @@ class OrderProcessingService:
 
             pre_gathered_inputs = order.order_input if order.order_input else None
 
-            if shared_session is None:
-                try:
-                    from etere_session import EtereSession
-                except ImportError:
-                    print("[ERROR] Could not import EtereSession")
-                    return ProcessingResult(
-                        success=False, contracts=[], order_type=OrderType.PROSIO,
-                        error_message="EtereSession import failed",
-                    )
-                print("[SESSION] Creating browser session for Prosio order...")
-                with EtereSession() as session:
-                    session.set_market("NYC")
-                    print("[SESSION] Master market set to NYC")
-                    return self._run_prosio_with_driver(
-                        order, session.driver, session, pre_gathered_inputs, process_prosio_order
-                    )
-
-            if hasattr(shared_session, 'set_market'):
-                print("[SESSION] ✓ Using shared browser session (market pre-set to NYC)")
-            driver = shared_session.driver if hasattr(shared_session, 'driver') else shared_session
             return self._run_prosio_with_driver(
-                order, driver, shared_session, pre_gathered_inputs, process_prosio_order
+                order, None, None, pre_gathered_inputs, process_prosio_order
             )
 
         except Exception as exc:
@@ -1565,14 +1532,6 @@ class OrderProcessingService:
             print(f"File: {order.pdf_path.name}")
             print(f"{'='*70}\n")
 
-            if shared_session is None:
-                return ProcessingResult(
-                    success=False,
-                    contracts=[],
-                    order_type=OrderType.IMPRENTA,
-                    error_message="Browser session required for Imprenta orders"
-                )
-
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
@@ -1581,11 +1540,8 @@ class OrderProcessingService:
                     error_message="Order inputs not collected"
                 )
 
-            print("[SESSION] ✓ Using shared browser session")
-            print(f"[DEBUG] order.order_input type: {type(order.order_input).__name__}")
-
             success = process_imprenta_order(
-                driver=shared_session.driver,
+                driver=None,
                 file_path=str(order.pdf_path),
                 user_input=order.order_input
             )
@@ -1645,16 +1601,6 @@ class OrderProcessingService:
                 print(f"Customer: {order.customer_name}")
             print(f"{'='*70}\n")
 
-            # iGraphix REQUIRES a browser session
-            if shared_session is None:
-                return ProcessingResult(
-                    success=False,
-                    contracts=[],
-                    order_type=OrderType.IGRAPHIX,
-                    error_message="Browser session required for iGraphix orders"
-                )
-
-            # Get inputs from order (already collected by orchestrator)
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
@@ -1663,12 +1609,8 @@ class OrderProcessingService:
                     error_message="Order inputs not collected"
                 )
 
-            print("[SESSION] ✓ Using shared browser session")
-            # Market already set to NYC once at batch start
-
-            # Process the order with pre-collected inputs (matching Daviselen pattern)
             success = process_igraphix_order(
-                driver=shared_session.driver,  # ← Pass driver, not session!
+                driver=None,
                 pdf_path=str(order.pdf_path),
                 user_input=order.order_input
             )
@@ -1736,16 +1678,6 @@ class OrderProcessingService:
                 print(f"Customer: {order.customer_name}")
             print(f"{'='*70}\n")
 
-            # Impact REQUIRES a browser session
-            if shared_session is None:
-                return ProcessingResult(
-                    success=False,
-                    contracts=[],
-                    order_type=OrderType.IMPACT,
-                    error_message="Browser session required for Impact Marketing orders"
-                )
-
-            # Get inputs from order (already collected by orchestrator)
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
@@ -1754,12 +1686,8 @@ class OrderProcessingService:
                     error_message="Order inputs not collected"
                 )
 
-            print("[SESSION] ✓ Using shared browser session")
-            # Market already set to NYC once at batch start
-
-            # Process the order with pre-collected inputs (matching iGraphix pattern)
             success = process_impact_order(
-                driver=shared_session.driver,  # ← Pass driver, not session!
+                driver=None,
                 pdf_path=str(order.pdf_path),
                 user_input=order.order_input
             )
@@ -2229,28 +2157,8 @@ class OrderProcessingService:
 
             pre_gathered_inputs = order.order_input if order.order_input else None
 
-            if shared_session is None:
-                try:
-                    from etere_session import EtereSession
-                except ImportError:
-                    print("[ERROR] Could not import EtereSession")
-                    return ProcessingResult(
-                        success=False, contracts=[], order_type=OrderType.SACCOUNTYVOTERS,
-                        error_message="EtereSession import failed",
-                    )
-                print("[SESSION] Creating browser session for SacCountyVoters order...")
-                with EtereSession() as session:
-                    session.set_market("NYC")
-                    print("[SESSION] Master market set to NYC")
-                    return self._run_saccountyvoters_with_driver(
-                        order, session.driver, session, pre_gathered_inputs, process_saccountyvoters_order
-                    )
-
-            if hasattr(shared_session, 'set_market'):
-                print("[SESSION] ✓ Using shared browser session (market pre-set to NYC)")
-            driver = shared_session.driver if hasattr(shared_session, 'driver') else shared_session
             return self._run_saccountyvoters_with_driver(
-                order, driver, shared_session, pre_gathered_inputs, process_saccountyvoters_order
+                order, None, None, pre_gathered_inputs, process_saccountyvoters_order
             )
 
         except Exception as exc:
@@ -2297,20 +2205,7 @@ class OrderProcessingService:
                     error_message="SCWA processing failed - check browser output for details",
                 )
 
-            if shared_session is None:
-                try:
-                    from etere_session import EtereSession
-                except ImportError:
-                    return ProcessingResult(
-                        success=False, contracts=[], order_type=OrderType.SCWA,
-                        error_message="EtereSession import failed",
-                    )
-                with EtereSession() as session:
-                    session.set_market("NYC")
-                    return _run(session.driver, session)
-
-            driver = shared_session.driver if hasattr(shared_session, 'driver') else shared_session
-            return _run(driver, shared_session)
+            return _run(None, None)
 
         except Exception as exc:
             import traceback
@@ -2356,20 +2251,7 @@ class OrderProcessingService:
                     error_message="Sierra Donor processing failed - check browser output for details",
                 )
 
-            if shared_session is None:
-                try:
-                    from etere_session import EtereSession
-                except ImportError:
-                    return ProcessingResult(
-                        success=False, contracts=[], order_type=OrderType.SIERRADONOR,
-                        error_message="EtereSession import failed",
-                    )
-                with EtereSession() as session:
-                    session.set_market("NYC")
-                    return _run(session.driver, session)
-
-            driver = shared_session.driver if hasattr(shared_session, 'driver') else shared_session
-            return _run(driver, shared_session)
+            return _run(None, None)
 
         except Exception as exc:
             import traceback
@@ -2413,20 +2295,7 @@ class OrderProcessingService:
                     error_message="RWNY processing failed - check browser output for details",
                 )
 
-            if shared_session is None:
-                try:
-                    from etere_session import EtereSession
-                except ImportError:
-                    return ProcessingResult(
-                        success=False, contracts=[], order_type=OrderType.RWNY,
-                        error_message="EtereSession import failed",
-                    )
-                with EtereSession() as session:
-                    session.set_market("NYC")
-                    return _run(session.driver, session)
-
-            driver = shared_session.driver if hasattr(shared_session, 'driver') else shared_session
-            return _run(driver, shared_session)
+            return _run(None, None)
 
         except Exception as exc:
             import traceback
