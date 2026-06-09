@@ -507,7 +507,7 @@ def _create_imprenta_contract_direct(user_input: dict) -> bool:
                 spots_per_week=line_spec["spots_per_week"],
                 date_from=line_spec["start_date"],
                 date_to=line_spec["end_date"],
-                duration=f":{line_spec['duration']:02d}",
+                duration=str(line_spec['duration']),
                 is_bonus=line_spec["is_bonus"],
                 booking_code=line_spec["spot_code"],
                 separation_intervals=line_spec["separation"],

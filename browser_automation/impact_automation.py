@@ -380,7 +380,7 @@ def _create_impact_contracts_direct(user_input: dict) -> bool:
                         spots_per_week=spots_per_week,
                         date_from=_parse_date(rng["start_date"]),
                         date_to=_parse_date(rng["end_date"]),
-                        duration=f":{spot_duration:02d}",
+                        duration=str(spot_duration),
                         is_bonus=line.is_bonus,
                         booking_code=booking_code,
                         separation_intervals=SEPARATION,
