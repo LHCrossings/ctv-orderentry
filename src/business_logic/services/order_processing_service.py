@@ -655,8 +655,10 @@ class OrderProcessingService:
                     order_code=code_prefix,
                     description=shared_desc,
                 )
+                label = code_prefix or "TCAA"
+                contracts = [Contract(contract_number=label, order_type=OrderType.TCAA)] if success else []
                 return ProcessingResult(
-                    success=success, contracts=[], order_type=OrderType.TCAA,
+                    success=success, contracts=contracts, order_type=OrderType.TCAA,
                     error_message=None if success else "TCAA processing failed — check output for details"
                 )
 
@@ -1860,9 +1862,12 @@ class OrderProcessingService:
                 user_input=order.order_input,
             )
 
+            inp = order.order_input
+            label = (inp.get('order_code') if isinstance(inp, dict) else None) or "WALLRICH"
+            contracts = [Contract(contract_number=label, order_type=OrderType.WALLRICH)] if success else []
             return ProcessingResult(
                 success=success,
-                contracts=[],
+                contracts=contracts,
                 order_type=OrderType.WALLRICH,
                 error_message=None if success else "Processing failed",
             )
