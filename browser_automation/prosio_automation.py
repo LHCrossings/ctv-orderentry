@@ -18,6 +18,7 @@ Business Rules:
 
 import os
 import sys
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Optional
@@ -305,6 +306,113 @@ def _create_prosio_contract(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# DIRECT DB ENTRY  (driver=None path)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _parse_date(s: str):
+    """Parse MM/DD/YYYY string to date object."""
+    return datetime.strptime(s, '%m/%d/%Y').date()
+
+
+def _secs_to_duration(seconds: int) -> str:
+    return f":{seconds:02d}"
+
+
+def _create_prosio_contract_direct(order: ProsioOrder, inputs: dict):
+    """Enter Prosio order directly via DB stored procedures (no browser).
+    Returns contract_id on success, None on failure.
+    """
+    from browser_automation.etere_direct_client import EtereDirectClient, connect
+
+    customer_id = inputs.get('customer_id')
+    if customer_id is None:
+        print("[PROSIO DIRECT] ✗ No customer_id — cannot enter without a known ID")
+        return None
+
+    conn = None
+    try:
+        conn = connect()
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+        client.set_master_market("NYC")
+
+        separation = inputs.get('separation', PROSIO_SEPARATION)
+
+        contract_id = client.create_contract_header(
+            code=inputs['contract_code'],
+            description=inputs['description'],
+            customer_id=int(customer_id),
+            contract_date=_parse_date(order.flight_start),
+            contract_end_date=_parse_date(order.flight_end),
+            billing_type="agency",
+            note=inputs.get('notes', ''),
+            allow_rename=True,
+        )
+        print(f"[PROSIO DIRECT] ✓ Contract header ID={contract_id}")
+
+        line_count = 0
+        for line in order.lines:
+            booking_code = 10 if line.is_bonus else 2
+            rate         = 0.0 if line.is_bonus else float(line.rate)
+            duration_str = _secs_to_duration(line.get_duration_seconds())
+            etere_days   = line.get_etere_days()
+            time_str     = line.get_etere_time_str()
+            description  = line.get_description(etere_days, time_str)
+
+            time_from, time_to = EtereClient.parse_time_range(time_str)
+            time_range         = f"{time_from}-{time_to}"
+            adjusted_days, _   = EtereClient.check_sunday_6_7a_rule(etere_days, time_str)
+
+            ranges = EtereClient.consolidate_weeks(
+                line.weekly_spots,
+                order.week_start_dates,
+                flight_end=order.flight_end,
+            )
+
+            tag = "BONUS" if line.is_bonus else "PAID "
+            print(f"\n  [{tag}] {description} → {len(ranges)} Etere line(s)")
+
+            for rng in ranges:
+                line_count  += 1
+                total_spots  = rng['spots_per_week'] * rng['weeks']
+                print(f"    Line {line_count}: {rng['start_date']} – {rng['end_date']} "
+                      f"({rng['spots_per_week']}/wk × {rng['weeks']} = {total_spots})")
+
+                client.add_contract_line(
+                    market=order.market,
+                    days=adjusted_days,
+                    time_range=time_range,
+                    description=description,
+                    rate=rate,
+                    total_spots=total_spots,
+                    spots_per_week=rng['spots_per_week'],
+                    date_from=_parse_date(rng['start_date']),
+                    date_to=_parse_date(rng['end_date']),
+                    duration=duration_str,
+                    is_bonus=line.is_bonus,
+                    booking_code=booking_code,
+                    separation_intervals=separation,
+                    contract_id=contract_id,
+                )
+
+        conn.commit()
+        conn.close()
+        print(f"\n[PROSIO DIRECT] ✓ {line_count} lines committed")
+        return contract_id
+
+    except Exception as exc:
+        print(f"[PROSIO DIRECT] ✗ {exc}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
+        return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # MAIN PROCESSING FUNCTION  (called by order_processing_service)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -346,6 +454,10 @@ def process_prosio_order(
             if not inputs:
                 print("[PROSIO] Input gathering cancelled")
                 return False
+
+        if driver is None:
+            contract_id = _create_prosio_contract_direct(order, inputs)
+            return contract_id is not None
 
         etere = EtereClient(driver)
         return _create_prosio_contract(etere, order, inputs)

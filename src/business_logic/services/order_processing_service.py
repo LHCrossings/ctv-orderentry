@@ -127,6 +127,13 @@ class OrderProcessingService:
         OrderType.SAGENT,
         OrderType.GALEFORCE,
         OrderType.HYPHEN,
+        OrderType.INTERTREND,
+        OrderType.SIERRADONOR,
+        OrderType.PROSIO,
+        OrderType.SCWA,
+        OrderType.RWNY,
+        OrderType.TCAA_AV,
+        OrderType.SACCOUNTYVOTERS,
     }
 
     def __init__(

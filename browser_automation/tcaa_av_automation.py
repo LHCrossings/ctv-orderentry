@@ -11,6 +11,7 @@ the regular TCAA cable buy.  All lines are:
 
 Master market is NYC (set by session).  All lines use market=SEA.
 """
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple
 import sys
@@ -212,6 +213,135 @@ def create_toyota_av_contract(
 
 
 # ---------------------------------------------------------------------------
+# Direct DB entry  (driver=None path)
+# ---------------------------------------------------------------------------
+
+def _parse_date(s: str):
+    """Parse MM/DD/YYYY or YYYY-MM-DD string to date object."""
+    for fmt in ('%m/%d/%Y', '%Y-%m-%d', '%m/%d/%y'):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"Cannot parse date: {s!r}")
+
+
+def _secs_to_duration(seconds: int) -> str:
+    return f":{seconds:02d}"
+
+
+def _create_tcaa_av_contract_direct(order: ToyotaAVOrder, inputs: dict) -> Optional[int]:
+    """Enter Toyota AAPI AV order directly via DB stored procedures (no browser).
+    Returns contract_id on success, None on failure.
+    """
+    from browser_automation.etere_direct_client import EtereDirectClient, connect
+
+    conn = None
+    try:
+        conn = connect()
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+        client.set_master_market("NYC")
+
+        market         = inputs.get("market", DEFAULT_MARKET)
+        duration_str   = _secs_to_duration(inputs.get("duration", DEFAULT_DURATION_SEC))
+        separation     = inputs.get("separation", DEFAULT_SEPARATION)
+        existing_num   = inputs.get("existing_contract_number") or None
+        is_revision    = bool(existing_num)
+
+        if is_revision:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT ID_CONTRATTITESTATA FROM CONTRATTITESTATA WHERE NUMERO = %s",
+                    (existing_num,),
+                )
+                row = cur.fetchone()
+            if not row:
+                print(f"[TCAA_AV DIRECT] ✗ Contract {existing_num!r} not found in CONTRATTITESTATA")
+                conn.rollback(); conn.close()
+                return None
+            contract_id = row[0]
+            print(f"[TCAA_AV DIRECT] Adding to existing contract ID={contract_id} ({existing_num})")
+        else:
+            contract_id = client.create_contract_header(
+                code=inputs["contract_code"],
+                description=inputs["contract_desc"],
+                customer_id=CUSTOMER_ID,
+                contract_date=_parse_date(order.flight_start),
+                contract_end_date=_parse_date(order.flight_end),
+                billing_type="agency",
+                note=CONTRACT_NOTES,
+                allow_rename=True,
+            )
+            print(f"[TCAA_AV DIRECT] ✓ Contract header ID={contract_id}")
+
+        row_status = 2 if is_revision else 0
+        line_count = 0
+
+        for line in order.lines:
+            spots_pw = line.weekly_spots
+            if isinstance(spots_pw, list):
+                spots_pw_list = spots_pw
+            else:
+                spots_pw_list = [spots_pw] * len(order.week_dates)
+
+            ranges = EtereClient.consolidate_weeks(
+                spots_pw_list,
+                order.week_dates,
+                order.flight_end,
+                flight_start=order.flight_start,
+            )
+
+            time_from, time_to = EtereClient.parse_time_range(line.time)
+            time_range         = f"{time_from}-{time_to}"
+            adj_days, _        = EtereClient.check_sunday_6_7a_rule(line.days, line.time)
+
+            for rng in ranges:
+                line_count += 1
+                spw = rng["spots_per_week"]
+                if isinstance(spw, list):
+                    spw = spw[0]
+                total = spw * rng["weeks"]
+                print(f"  [{line_count}] {line.description}: "
+                      f"{rng['start_date']}–{rng['end_date']} spw={spw} total={total}")
+
+                client.add_contract_line(
+                    market=market,
+                    days=adj_days,
+                    time_range=time_range,
+                    description=line.description,
+                    rate=0.0,
+                    total_spots=total,
+                    spots_per_week=spw,
+                    date_from=_parse_date(rng["start_date"]),
+                    date_to=_parse_date(rng["end_date"]),
+                    duration=duration_str,
+                    is_bonus=True,
+                    booking_code=10,
+                    is_billboard=True,
+                    separation_intervals=separation,
+                    contract_id=contract_id,
+                    row_status=row_status,
+                )
+
+        conn.commit()
+        conn.close()
+        print(f"\n[TCAA_AV DIRECT] ✓ {line_count} lines committed")
+        return contract_id
+
+    except Exception as exc:
+        print(f"[TCAA_AV DIRECT] ✗ {exc}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -221,6 +351,10 @@ def process_toyota_av_order(driver, pdf_path: str) -> bool:
     order = parse_toyota_av_pdf(pdf_path)
 
     inputs = gather_inputs(order)
+
+    if driver is None:
+        contract_id = _create_tcaa_av_contract_direct(order, inputs)
+        return contract_id is not None
 
     etere = EtereClient(driver)
     return create_toyota_av_contract(etere, order, inputs)

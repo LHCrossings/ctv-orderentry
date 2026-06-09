@@ -20,7 +20,7 @@ Multi-daypart lines (e.g. Chinese M-F + Sat-Sun):
 import math
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from pathlib import Path
 from typing import Optional
 
@@ -38,6 +38,7 @@ from src.domain.enums import BillingType, OrderType
 
 SIERRA_SEPARATION = (15, 0, 0)
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+
 _DAY_SETS: dict[str, set] = {
     'M-Su':  {0, 1, 2, 3, 4, 5, 6},
     'M-F':   {0, 1, 2, 3, 4},
@@ -50,6 +51,16 @@ _DAY_SETS: dict[str, set] = {
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _parse_date(date_str: str) -> date:
+    """Convert MM/DD/YYYY string to date object."""
+    return datetime.strptime(date_str, '%m/%d/%Y').date()
+
+
+def _secs_to_duration(seconds: int) -> str:
+    """Convert duration in seconds to Etere duration string (e.g. 30 → ':30')."""
+    return f":{seconds}"
+
 
 def _eligible_days_in_flight(days_pattern: str, start_str: str, end_str: str) -> int:
     """Count eligible broadcast days within start_str–end_str (MM/DD/YYYY)."""
@@ -99,6 +110,111 @@ def _upsert_customer(customer_id: int, advertiser: str, market: str) -> None:
         print(f"[CUSTOMER DB] ✓ Saved: {advertiser} → ID {customer_id}")
     except Exception as exc:
         print(f"[CUSTOMER DB] ✗ Save failed: {exc}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DIRECT DB ENTRY
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _create_sierra_contract_direct(order: SierraOrder, inputs: dict) -> Optional[int]:
+    """Enter Sierra Donor Services order directly via DB stored procedures (no browser).
+
+    Returns contract_id on success, None on failure (rolls back fully).
+    """
+    from browser_automation.etere_direct_client import EtereDirectClient, connect
+
+    customer_id = inputs.get('customer_id')
+    if customer_id is None:
+        print("[SIERRA DIRECT] ✗ No customer_id — cannot enter without a known ID")
+        return None
+
+    conn = None
+    try:
+        conn = connect()
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+        client.set_master_market("NYC")
+
+        separation = inputs.get('separation', SIERRA_SEPARATION)
+
+        flight_start = min(order.lines, key=lambda l: datetime.strptime(l.start_date, '%m/%d/%Y')).start_date
+        flight_end   = max(order.lines, key=lambda l: datetime.strptime(l.end_date,   '%m/%d/%Y')).end_date
+
+        contract_id = client.create_contract_header(
+            code=inputs['contract_code'],
+            description=inputs['description'],
+            customer_id=int(customer_id),
+            contract_date=_parse_date(flight_start),
+            contract_end_date=_parse_date(flight_end),
+            contract_type=1,
+            billing_type="client",
+            note=inputs.get('notes', ''),
+            customer_order_ref='',
+            allow_rename=True,
+        )
+        if not contract_id:
+            print("[SIERRA DIRECT] ✗ Failed to create contract header")
+            return None
+        print(f"[SIERRA DIRECT] ✓ Contract header ID={contract_id}")
+
+        line_count = 0
+        for line in order.lines:
+            total_spots = line.total_spots
+            if total_spots == 0 and not line.is_bonus:
+                print(f"  [SKIP] {line.language_block} {line.days}: 0 spots")
+                continue
+
+            adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(line.days, line.time_str)
+            time_from, time_to = EtereClient.parse_time_range(line.time_str)
+            time_range = f"{time_from}-{time_to}"
+
+            eligible_days = _eligible_days_in_flight(adjusted_days, line.start_date, line.end_date)
+            max_daily_run = math.ceil(total_spots / eligible_days) if total_spots > 0 else 1
+
+            is_bonus     = line.is_bonus
+            booking_code = 10 if is_bonus else 2
+            rate         = 0.0 if is_bonus else float(line.rate)
+
+            lang_short   = line.language_block.split('/')[0].strip()
+            description  = f"{adjusted_days} {lang_short} {line.time_str}"
+            duration_str = _secs_to_duration(line.duration_seconds)
+
+            line_count += 1
+            print(f"  [LINE {line_count}] {line.language_block}: {line.start_date}–{line.end_date} "
+                  f"{total_spots} spots  {'BNS' if is_bonus else 'COM'}")
+
+            client.add_contract_line(
+                market=order.market,
+                days=adjusted_days,
+                time_range=time_range,
+                description=description,
+                rate=rate,
+                total_spots=total_spots,
+                spots_per_week=0,
+                max_daily_run=max_daily_run,
+                date_from=_parse_date(line.start_date),
+                date_to=_parse_date(line.end_date),
+                duration=duration_str,
+                is_bonus=is_bonus,
+                booking_code=booking_code,
+                separation_intervals=separation,
+            )
+
+        conn.commit()
+        conn.close()
+        print(f"[SIERRA DIRECT] ✓ {line_count} lines committed.")
+        return contract_id
+
+    except Exception as exc:
+        print(f"[SIERRA DIRECT] ✗ {exc}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
+        return None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -247,6 +363,10 @@ def process_sierra_order(
         if not inputs:
             print("\n✗ Input gathering cancelled")
             return False
+
+        if driver is None:
+            contract_id = _create_sierra_contract_direct(order, inputs)
+            return contract_id is not None
 
         etere       = EtereClient(driver)
         customer_id = inputs.get('customer_id')

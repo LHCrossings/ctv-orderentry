@@ -363,6 +363,185 @@ def gather_saccountyvoters_inputs(pdf_path: str) -> Optional[dict]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# DIRECT DB ENTRY  (driver=None path)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _parse_date(s: str):
+    """Parse MM/DD/YYYY string to date object."""
+    return datetime.strptime(s, '%m/%d/%Y').date()
+
+
+def _secs_to_duration(seconds: int) -> str:
+    return f":{seconds:02d}"
+
+
+def _create_saccountyvoters_contracts_direct(order, inputs: dict) -> bool:
+    """Enter both SacCountyVoters phases directly via DB (no browser).
+    Returns True on full success, False on any failure.
+    """
+    from browser_automation.etere_direct_client import EtereDirectClient, connect
+
+    customer_id = inputs.get('customer_id')
+    if customer_id is None:
+        print("[SAC DIRECT] ✗ No customer_id — cannot enter without a known ID")
+        return False
+
+    conn = None
+    try:
+        conn = connect()
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+        client.set_master_market("NYC")
+
+        notes      = inputs.get('notes', '')
+        separation = inputs.get('separation', SAC_SEPARATION)
+
+        phase_input_keys = ['phase1_inputs', 'phase2_inputs']
+
+        for phase, input_key in zip(order.phases, phase_input_keys):
+            phase_inputs = inputs.get(input_key, {})
+            fs   = phase.flight_start
+            yymm = fs[8:10] + fs[0:2]
+            code        = phase_inputs.get('contract_code', f"Sac County Voters {yymm}")
+            description = phase_inputs.get('description', f"Sacramento County Phase {phase.phase_number}")
+
+            # Convert "4-May" → "May 4" for consolidate_weeks
+            week_dates = [
+                f"{label.split('-')[1]} {label.split('-')[0]}"
+                for label in phase.week_columns
+            ]
+
+            print(f"\n[SAC PH{phase.phase_number} DIRECT] Creating: {code}")
+            print(f"[SAC PH{phase.phase_number} DIRECT] Flight: {phase.flight_start} – {phase.flight_end}")
+
+            contract_id = client.create_contract_header(
+                code=code,
+                description=description,
+                customer_id=int(customer_id),
+                contract_date=_parse_date(phase.flight_start),
+                contract_end_date=_parse_date(phase.flight_end),
+                billing_type="client",
+                note=notes,
+                allow_rename=True,
+            )
+            print(f"[SAC PH{phase.phase_number} DIRECT] ✓ Contract ID={contract_id}")
+
+            line_count   = 0
+            duration_str = _secs_to_duration(phase.duration_seconds)
+
+            for line in phase.lines:
+                if line.total_spots == 0:
+                    print(f"  [{line.language}] skipped (0 spots)")
+                    continue
+
+                booking_code = 10 if line.is_bonus else 2
+
+                if line.is_bonus:
+                    ros_key = _language_to_ros_key(line.language)
+                    if ros_key and ros_key in ROS_SCHEDULES:
+                        sched      = ROS_SCHEDULES[ros_key]
+                        ros_days   = sched['days']
+                        ros_time   = sched['time']
+                        time_from, time_to = EtereClient.parse_time_range(ros_time)
+                        lang_label = sched.get('language', line.language)
+                    else:
+                        ros_days   = "M-Su"
+                        time_from, time_to = "06:00", "23:59"
+                        lang_label = line.language
+
+                    line_description = f"BNS {lang_label} ROS"
+                    adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(ros_days, f"{time_from}-{time_to}")
+                    time_range       = f"{time_from}-{time_to}"
+
+                    ranges = EtereClient.consolidate_weeks(
+                        line.weekly_spots,
+                        week_dates,
+                        flight_end=phase.flight_end,
+                        flight_start=phase.flight_start,
+                    )
+
+                    for rng in ranges:
+                        line_count      += 1
+                        total_spots_rng  = rng['spots_per_week'] * rng['weeks']
+                        max_daily        = _compute_max_daily_run(
+                            adjusted_days, rng['start_date'], rng['end_date'], rng['spots_per_week']
+                        )
+                        client.add_contract_line(
+                            market=SAC_MARKET,
+                            days=adjusted_days,
+                            time_range=time_range,
+                            description=line_description,
+                            rate=0.0,
+                            total_spots=total_spots_rng,
+                            spots_per_week=rng['spots_per_week'],
+                            max_daily_run=max_daily,
+                            date_from=_parse_date(rng['start_date']),
+                            date_to=_parse_date(rng['end_date']),
+                            duration=duration_str,
+                            is_bonus=True,
+                            booking_code=booking_code,
+                            separation_intervals=separation,
+                            contract_id=contract_id,
+                        )
+
+                else:
+                    etere_days, time_range_str = _parse_daypart(line.daypart)
+                    time_from, time_to         = EtereClient.parse_time_range(time_range_str)
+                    time_range                 = f"{time_from}-{time_to}"
+                    lang_label                 = re.sub(r'(\w)\(', r'\1 (', line.language)
+                    line_description           = f"{etere_days} {lang_label}"
+                    adjusted_days, _           = EtereClient.check_sunday_6_7a_rule(etere_days, time_range_str)
+
+                    ranges = EtereClient.consolidate_weeks(
+                        line.weekly_spots,
+                        week_dates,
+                        flight_end=phase.flight_end,
+                        flight_start=phase.flight_start,
+                    )
+
+                    for rng in ranges:
+                        line_count      += 1
+                        total_spots_rng  = rng['spots_per_week'] * rng['weeks']
+                        max_daily        = _compute_max_daily_run(
+                            adjusted_days, rng['start_date'], rng['end_date'], rng['spots_per_week']
+                        )
+                        client.add_contract_line(
+                            market=SAC_MARKET,
+                            days=adjusted_days,
+                            time_range=time_range,
+                            description=line_description,
+                            rate=float(line.rate),
+                            total_spots=total_spots_rng,
+                            spots_per_week=rng['spots_per_week'],
+                            max_daily_run=max_daily,
+                            date_from=_parse_date(rng['start_date']),
+                            date_to=_parse_date(rng['end_date']),
+                            duration=duration_str,
+                            booking_code=booking_code,
+                            separation_intervals=separation,
+                            contract_id=contract_id,
+                        )
+
+            print(f"[SAC PH{phase.phase_number} DIRECT] ✓ {line_count} lines added")
+
+        conn.commit()
+        conn.close()
+        print("\n[SAC DIRECT] ✓ Both phases committed")
+        return True
+
+    except Exception as exc:
+        print(f"[SAC DIRECT] ✗ {exc}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
+        return False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # MAIN PROCESSING FUNCTION
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -407,6 +586,9 @@ def process_saccountyvoters_order(
         if not inputs:
             print("\n✗ Input gathering cancelled")
             return False
+
+        if driver is None:
+            return _create_saccountyvoters_contracts_direct(order, inputs)
 
         etere = EtereClient(driver)
         customer_id = inputs.get('customer_id')

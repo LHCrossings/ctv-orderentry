@@ -24,7 +24,7 @@ import math
 import os
 import re
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from pathlib import Path
 from typing import Optional
 
@@ -63,6 +63,20 @@ _DAY_SETS: dict[str, set] = {
     'Sa':    {5},
     'Su':    {6},
 }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _parse_date(date_str: str) -> date:
+    """Convert MM/DD/YYYY string to date object."""
+    return datetime.strptime(date_str, '%m/%d/%Y').date()
+
+
+def _secs_to_duration(seconds: int) -> str:
+    """Convert duration in seconds to Etere duration string (e.g. 30 → ':30')."""
+    return f":{seconds}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -149,6 +163,108 @@ def _upsert_customer(customer_id: int, advertiser: str) -> None:
         print(f"[CUSTOMER DB] ✓ Saved: {advertiser} → ID {customer_id}")
     except Exception as exc:
         print(f"[CUSTOMER DB] ✗ Save failed: {exc}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DIRECT DB ENTRY
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _create_scwa_contract_direct(order: SCWAOrder, inputs: dict) -> Optional[int]:
+    """Enter SCWA order directly via DB stored procedures (no browser).
+
+    Returns contract_id on success, None on failure (rolls back fully).
+    """
+    from browser_automation.etere_direct_client import EtereDirectClient, connect
+
+    customer_id = inputs.get('customer_id')
+    if customer_id is None:
+        print("[SCWA DIRECT] ✗ No customer_id — cannot enter without a known ID")
+        return None
+
+    conn = None
+    try:
+        conn = connect()
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+        client.set_master_market("NYC")
+
+        separation = inputs.get('separation', SCWA_SEPARATION)
+
+        flight_start = min(order.lines, key=lambda l: datetime.strptime(l.start_date, '%m/%d/%Y')).start_date
+        flight_end   = max(order.lines, key=lambda l: datetime.strptime(l.end_date,   '%m/%d/%Y')).end_date
+
+        contract_id = client.create_contract_header(
+            code=inputs['contract_code'],
+            description=inputs['description'],
+            customer_id=int(customer_id),
+            contract_date=_parse_date(flight_start),
+            contract_end_date=_parse_date(flight_end),
+            contract_type=1,
+            billing_type="client",
+            note=inputs.get('notes', ''),
+            customer_order_ref='',
+            allow_rename=True,
+        )
+        if not contract_id:
+            print("[SCWA DIRECT] ✗ Failed to create contract header")
+            return None
+        print(f"[SCWA DIRECT] ✓ Contract header ID={contract_id}")
+
+        line_count = 0
+        for line in order.lines:
+            lang_key = _language_key(line.language_block)
+            if not lang_key or lang_key not in _ROS_MAP:
+                print(f"  ✗ Unknown language block: {line.language_block!r} — skipped")
+                continue
+
+            days, time_str = _ROS_MAP[lang_key]
+            time_from, time_to = EtereClient.parse_time_range(time_str)
+            adjusted_days, _  = EtereClient.check_sunday_6_7a_rule(days, time_str)
+            time_range = f"{time_from}-{time_to}"
+
+            eligible_days = _eligible_days_in_flight(adjusted_days, line.start_date, line.end_date)
+            max_daily_run = math.ceil(line.total_spots / eligible_days)
+
+            lang_label   = line.language_block.split('(')[0].strip()
+            description  = f"{adjusted_days} {lang_label} ROS"
+            duration_str = _secs_to_duration(line.duration_seconds)
+
+            line_count += 1
+            print(f"  [LINE {line_count}] {lang_label}: {line.start_date}–{line.end_date} "
+                  f"{line.total_spots} spots @ ${line.rate}")
+
+            client.add_contract_line(
+                market=SCWA_MARKET,
+                days=adjusted_days,
+                time_range=time_range,
+                description=description,
+                rate=float(line.rate),
+                total_spots=line.total_spots,
+                spots_per_week=0,
+                max_daily_run=max_daily_run,
+                date_from=_parse_date(line.start_date),
+                date_to=_parse_date(line.end_date),
+                duration=duration_str,
+                is_bonus=False,
+                booking_code=2,   # always Paid Commercial for SCWA
+                separation_intervals=separation,
+            )
+
+        conn.commit()
+        conn.close()
+        print(f"[SCWA DIRECT] ✓ {line_count} lines committed.")
+        return contract_id
+
+    except Exception as exc:
+        print(f"[SCWA DIRECT] ✗ {exc}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
+        return None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -300,6 +416,10 @@ def process_scwa_order(
         if not inputs:
             print("\n✗ Input gathering cancelled")
             return False
+
+        if driver is None:
+            contract_id = _create_scwa_contract_direct(order, inputs)
+            return contract_id is not None
 
         etere = EtereClient(driver)
         customer_id = inputs.get('customer_id')

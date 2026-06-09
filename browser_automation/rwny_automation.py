@@ -23,7 +23,7 @@ import math
 import os
 import re
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from pathlib import Path
 from typing import Optional
 
@@ -52,6 +52,20 @@ _DAY_SETS: dict[str, set] = {
     'Sa':    {5},
     'Su':    {6},
 }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _parse_date(date_str: str) -> date:
+    """Convert MM/DD/YYYY string to date object."""
+    return datetime.strptime(date_str, '%m/%d/%Y').date()
+
+
+def _secs_to_duration(seconds: int) -> str:
+    """Convert duration in seconds to Etere duration string (e.g. 30 → ':30')."""
+    return f":{seconds}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -148,6 +162,107 @@ def _build_code_and_desc(order: RWNYOrder) -> tuple[str, str]:
                 f'{_MONTH_NAMES.get(mm_end, mm_end)} 20{yy}')
 
     return code, desc
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DIRECT DB ENTRY
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _create_rwny_contract_direct(order: RWNYOrder, inputs: dict) -> Optional[int]:
+    """Enter RWNY order directly via DB stored procedures (no browser).
+
+    Returns contract_id on success, None on failure (rolls back fully).
+    One Etere line per language block per calendar month.
+    spots_per_week=0 → EtereDirectClient auto-selects Rotation (monthly order).
+    """
+    from browser_automation.etere_direct_client import EtereDirectClient, connect
+
+    customer_id = inputs.get('customer_id', RWNY_CUSTOMER_ID)
+    conn = None
+    try:
+        conn = connect()
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+        client.set_master_market("NYC")
+
+        separation  = inputs.get('separation', RWNY_SEPARATION)
+        flight_start = inputs.get('flight_start', order.flight_start)
+        flight_end   = inputs.get('flight_end',   order.flight_end)
+
+        contract_id = client.create_contract_header(
+            code=inputs['contract_code'],
+            description=inputs['description'],
+            customer_id=int(customer_id),
+            contract_date=_parse_date(flight_start),
+            contract_end_date=_parse_date(flight_end),
+            contract_type=1,
+            billing_type="client",
+            note=inputs.get('notes', ''),
+            customer_order_ref='',
+            allow_rename=True,
+        )
+        if not contract_id:
+            print("[RWNY DIRECT] ✗ Failed to create contract header")
+            return None
+        print(f"[RWNY DIRECT] ✓ Contract header ID={contract_id}")
+
+        duration_str = _secs_to_duration(order.duration_seconds)
+        line_count = 0
+
+        for line in order.lines:
+            for mi, month in enumerate(order.month_columns):
+                spots = line.monthly_spots[mi] if mi < len(line.monthly_spots) else 0
+                if spots == 0:
+                    continue
+
+                adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(line.days, line.time_str)
+                time_from, time_to = EtereClient.parse_time_range(line.time_str)
+                time_range = f"{time_from}-{time_to}"
+
+                is_bonus     = line.is_bonus
+                booking_code = 10 if is_bonus else 2
+                rate         = 0.0 if is_bonus else float(line.rate)
+
+                if is_bonus:
+                    desc = f"{line.language} ROS BNS {month.label}"
+                else:
+                    desc = f"{line.block_name} {month.label}"
+
+                line_count += 1
+                print(f"  [LINE {line_count}] {'BNS' if is_bonus else 'PAID'} "
+                      f"{line.language} — {month.label}  {spots} spots")
+
+                client.add_contract_line(
+                    market=RWNY_MARKET,
+                    days=adjusted_days,
+                    time_range=time_range,
+                    description=desc,
+                    rate=rate,
+                    total_spots=spots,
+                    spots_per_week=0,      # monthly order → Rotation fires automatically
+                    date_from=_parse_date(month.start_date),
+                    date_to=_parse_date(month.end_date),
+                    duration=duration_str,
+                    is_bonus=is_bonus,
+                    booking_code=booking_code,
+                    separation_intervals=separation,
+                )
+
+        conn.commit()
+        conn.close()
+        print(f"[RWNY DIRECT] ✓ {line_count} lines committed.")
+        return contract_id
+
+    except Exception as exc:
+        print(f"[RWNY DIRECT] ✗ {exc}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
+        return None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -330,6 +445,10 @@ def process_rwny_order(
             year = _detect_year(flight_start)
             labels = [mc.label for mc in order.month_columns]
             order.month_columns = _build_month_columns(labels, flight_start, year)
+
+        if driver is None:
+            contract_id = _create_rwny_contract_direct(order, inputs)
+            return contract_id is not None
 
         etere      = EtereClient(driver)
         separation = inputs.get('separation', RWNY_SEPARATION)
