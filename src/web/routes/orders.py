@@ -1616,7 +1616,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         if sys.platform == "win32":
             # Use argument list + CREATE_NEW_CONSOLE — avoids shell=True which
             # causes cmd.exe to split filenames containing & at the shell level.
-            args = [str(python_exe), str(main_py)]
+            args = [str(python_exe), str(main_py), "--pause"]
             if safe_files:
                 args += ["--files"] + safe_files
             subprocess.Popen(args, cwd=str(project_root),

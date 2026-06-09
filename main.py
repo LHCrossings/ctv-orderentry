@@ -111,6 +111,12 @@ Modes:
         help="Process only these specific filenames (from incoming/)"
     )
 
+    parser.add_argument(
+        "--pause",
+        action="store_true",
+        help="Wait for Enter keypress before exiting (used when launched from the web UI)"
+    )
+
     args = parser.parse_args()
 
     try:
@@ -173,17 +179,19 @@ Modes:
             orchestrator.run_interactive()
 
         print("\n[COMPLETE] Application finished")
-        sys.exit(0)
 
     except KeyboardInterrupt:
         print("\n\n[CANCELLED] Application interrupted by user")
-        sys.exit(1)
 
     except Exception as e:
         print(f"\n[ERROR] Application failed: {e}")
         import traceback
         traceback.print_exc()
-        sys.exit(1)
+
+    finally:
+        if args.pause:
+            input("\nPress Enter to close this window...")
+        sys.exit(0)
 
 
 if __name__ == "__main__":
