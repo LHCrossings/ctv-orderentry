@@ -1041,12 +1041,12 @@ class OrderProcessingService:
             pre_gathered_inputs=pre_gathered_inputs,
         )
         if success:
-            print("\n✓ GaleForce order processed successfully")
+            print("\n✓ PACO order processed successfully")
             return ProcessingResult(success=True, contracts=[], order_type=OrderType.GALEFORCE)
-        print("\n✗ GaleForce order processing failed")
+        print("\n✗ PACO order processing failed")
         return ProcessingResult(
             success=False, contracts=[], order_type=OrderType.GALEFORCE,
-            error_message="GaleForce processing failed - check browser output for details",
+            error_message="PACO processing failed - check browser output for details",
         )
 
     def _process_galeforce_order(
@@ -1098,8 +1098,8 @@ class OrderProcessingService:
 
         except Exception as exc:
             import traceback
-            error_detail = f"GaleForce processing error: {str(exc)}\n{traceback.format_exc()}"
-            print(f"\n✗ GaleForce processing failed: {exc}")
+            error_detail = f"PACO processing error: {str(exc)}\n{traceback.format_exc()}"
+            print(f"\n✗ PACO processing failed: {exc}")
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.GALEFORCE,
                 error_message=error_detail,
@@ -1154,7 +1154,9 @@ class OrderProcessingService:
                 user_input=order.order_input,
             )
             success = contract_id is not None
-            contracts = [Contract(contract_number=str(contract_id), order_type=OrderType.HYPHEN)] if contract_id else []
+            inp = order.order_input
+            label = (inp.get('contract_code') if isinstance(inp, dict) else None) or str(contract_id)
+            contracts = [Contract(contract_number=label, order_type=OrderType.HYPHEN)] if success else []
 
             if success:
                 print(f"\n✓ Hyphen order processed successfully — contract {contract_id}")
@@ -2608,8 +2610,8 @@ def get_default_order_values(order: Order) -> tuple[str, str]:
             gf_order = parse_galeforce_pdf(str(order.pdf_path))
             return (gf_order.get_default_contract_code(), gf_order.get_default_description())
         except Exception as e:
-            print(f"[WARN] Could not parse GaleForce defaults: {e}")
-            return ("GaleForce Order", "GaleForce Order")
+            print(f"[WARN] Could not parse PACO defaults: {e}")
+            return ("PACO Order", "PACO Order")
 
     elif order.order_type == OrderType.TCAA:
         # TCAA Toyota orders
