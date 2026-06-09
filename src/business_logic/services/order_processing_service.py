@@ -623,16 +623,23 @@ class OrderProcessingService:
             if not selected_estimates and order.estimate_number:
                 selected_estimates = [order.estimate_number]
 
+            code_prefix = inp.get('order_code_prefix') if isinstance(inp, dict) else None
+            shared_desc = inp.get('description') if isinstance(inp, dict) else None
+
             if selected_estimates:
                 contracts, all_ok = [], True
                 for est_num in selected_estimates:
+                    per_est_code = f"{code_prefix} {est_num}" if code_prefix else None
                     ok = self._tcaa_processor['process'](
                         driver=None,
                         pdf_path=str(order.pdf_path),
                         estimate_number=est_num,
+                        order_code=per_est_code,
+                        description=shared_desc,
                     )
                     if ok:
-                        contracts.append(Contract(contract_number=f"TCAA-{est_num}", order_type=OrderType.TCAA))
+                        label = per_est_code or f"TCAA-{est_num}"
+                        contracts.append(Contract(contract_number=label, order_type=OrderType.TCAA))
                     else:
                         all_ok = False
                 return ProcessingResult(
@@ -645,6 +652,8 @@ class OrderProcessingService:
                     driver=None,
                     pdf_path=str(order.pdf_path),
                     estimate_number=None,
+                    order_code=code_prefix,
+                    description=shared_desc,
                 )
                 return ProcessingResult(
                     success=success, contracts=[], order_type=OrderType.TCAA,

@@ -430,9 +430,21 @@ def gather_tcaa_inputs(pdf_path: str) -> Optional[dict]:
         selected = chosen if chosen else [est.estimate_number for est in all_estimates]
 
     print(f"\n  ✓ Will process: {', '.join(selected)}")
+
+    # Contract code prefix — estimate number appended per contract
+    default_prefix = "TCAA Toyota"
+    raw_prefix = input(f"\n  Contract code prefix [{default_prefix}]: ").strip()
+    code_prefix = raw_prefix or default_prefix
+
+    default_desc = "Toyota SEA"
+    raw_desc = input(f"  Description [{default_desc}]: ").strip()
+    description = raw_desc or default_desc
+
     return {
         'selected_estimates': selected,
-        'separation': (10, 0, 0),
+        'order_code_prefix':  code_prefix,
+        'description':        description,
+        'separation':         (10, 0, 0),
     }
 
 
