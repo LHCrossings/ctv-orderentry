@@ -608,7 +608,7 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
         market = input("  Market code (NYC, SFO, SEA, LAX, CVC, etc.): ").strip().upper()
     elif market.upper() not in _VALID_MARKETS:
         print(f"\n  ⚠ Market detected as '{market}' which is not a recognized Etere market code.")
-        confirmed = input(f"  Enter correct market code or press Enter to use '{market}': ").strip().upper()
+        confirmed = input(f"  Market code [{market}]: ").strip().upper()
         if confirmed:
             market = confirmed
     else:

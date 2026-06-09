@@ -444,9 +444,7 @@ def gather_bvk_inputs(pdf_path: str) -> Optional[dict]:
                 _save_customer(str(customer_id), order.client, separation)
     print()
 
-    # ── Contract code ─────────────────────────────────────────────────────────
-    print("[1/3] Contract Code")
-    print("-" * 70)
+    # ── Contract code / description / notes ───────────────────────────────────
     if customer_info:
         default_code = order.get_default_contract_code(
             customer_info['code_name'],
@@ -454,44 +452,20 @@ def gather_bvk_inputs(pdf_path: str) -> Optional[dict]:
         )
     else:
         default_code = order.get_default_contract_code()
-    print(f"Default: {default_code}")
-    contract_code = (
-        default_code
-        if input("Use default? (y/n): ").strip().lower() == 'y'
-        else input("Enter contract code: ").strip()
-    )
-    print(f"✓ {contract_code}\n")
-
-    # ── Contract description ──────────────────────────────────────────────────
-    print("[2/3] Contract Description")
-    print("-" * 70)
     if customer_info and customer_info.get('description_name'):
         default_desc = order.get_default_description(customer_info['description_name'])
     else:
         default_desc = order.get_default_description()
-    print(f"Default: {default_desc}")
-    description = (
-        default_desc
-        if input("Use default? (y/n): ").strip().lower() == 'y'
-        else input("Enter description: ").strip()
-    )
-    print(f"✓ {description}\n")
-
-    # ── Notes (CPE number) ────────────────────────────────────────────────────
-    print("[3/3] Notes")
-    print("-" * 70)
     default_notes = f"CPE: {order.estimate} | {order.description}"
-    print(f"Default: {default_notes}")
-    notes = (
-        default_notes
-        if input("Use default? (y/n): ").strip().lower() == 'y'
-        else input("Enter notes: ").strip()
-    )
-    print(f"✓ {notes}\n")
 
-    print("=" * 70)
-    print("✓ All inputs gathered — ready for automation")
-    print("=" * 70 + "\n")
+    raw = input(f"  Contract code [{default_code}]: ").strip()
+    contract_code = raw or default_code
+
+    raw = input(f"  Description   [{default_desc}]: ").strip()
+    description = raw or default_desc
+
+    raw = input(f"  Notes         [{default_notes}]: ").strip()
+    notes = raw or default_notes
 
     return {
         'contract_code': contract_code,

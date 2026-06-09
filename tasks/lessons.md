@@ -58,6 +58,57 @@ For multi-contract types, the pattern varies:
 
 The service's `_process_*_order` must read these from `user_input` and pass them to the automation function. Never fall back to auto-generation when the user has already provided a value.
 
+### 9. All gather prompts must use the bracket-default pattern
+
+**Session:** UX sweep (2026-06-09)
+
+Every user-facing prompt in a `gather_*_inputs` function must use this pattern:
+```python
+raw = input(f"  Contract code [{default_code}]: ").strip()
+contract_code = raw or default_code
+```
+
+**Never** use the two-step "Use default? (y/n)" / "Enter X:" pattern — it doubles the keystrokes and is inconsistent across parsers.
+
+Rules:
+- **Always show the default inline** in the prompt label using `[default]`
+- **Pressing Enter** = accept default; **typing anything** = override
+- For optional fields (notes, skip-able): `[Enter to skip]` with `value = raw` (no fallback)
+- For confirmation of a detected value: `Market code [{market}]: ` — same pattern, Enter = keep it
+
+Files updated in the 2026-06-09 sweep: `bvk_automation.py`, `hyphen_automation.py`, `rwny_automation.py`, `scwa_automation.py`, `sierra_automation.py`, `threeolives_automation.py`, `galeforce_automation.py`, `hl_bdr_automation.py`, `lexus_automation.py`.
+
+### 10. Do not inline-prompt for separation in `gather_*_inputs`
+
+**Session:** UX sweep (2026-06-09)
+
+The orchestrator calls `_confirm_separation(inputs)` after every `gather_*_inputs` call. Any parser that also prompts for separation inside `gather_*_inputs` causes a **double prompt**.
+
+- Never add a `[SEPARATION]` prompt, `"Use default? (y/n):"` for separation, or `"Customer separation (min):"` inside a gather function.
+- Just set `inputs['separation'] = separation` from the customer DB defaults and return it — the orchestrator handles the user-facing confirmation.
+- The only exception: parsers not registered in `_INPUT_GATHERERS` (i.e. never called by the orchestrator) — but all current parsers are registered.
+
+### 11. `ProcessingResult.contracts` must use the gathered human-readable code, not the DB integer ID
+
+**Session:** Pink-pill / batch summary fixes (2026-06-09)
+
+After `create_contract_header` returns a `contract_id` (an integer Etere DB ID), the batch summary label must come from the user-gathered code string, not from `str(contract_id)`.
+
+Pattern:
+```python
+inp = order.order_input
+label = (inp.get('contract_code') if isinstance(inp, dict) else None) or str(contract_id)
+contracts = [Contract(contract_number=label, order_type=OrderType.X)] if success else []
+```
+
+Key name varies by parser: `'contract_code'` (most), `'order_code'` (WALLRICH, SAGENT), nested under `'phase1_inputs'`/`'phase2_inputs'` (SACCOUNTYVOTERS), list under `inp['contracts'][*]['contract_code']` (LEXUS).
+
+Grep to verify no parser still uses `str(contract_id)` in its contracts list:
+```bash
+grep -n "contracts=\[\]" order_processing_service.py | grep "success=success"
+# should return empty
+```
+
 ---
 
 ## `parse_day_bits` (DirectDB) and `_select_days` (Selenium) Must Stay in Sync

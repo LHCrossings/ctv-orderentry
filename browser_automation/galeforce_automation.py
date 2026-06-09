@@ -305,44 +305,23 @@ def gather_galeforce_inputs(pdf_path: str) -> Optional[dict]:
                 _save_new_customer(str(customer_id), order.advertiser)
     print()
 
-    # ── Contract code ─────────────────────────────────────────────────────────
-    print("[1/4] Contract Code")
-    print("-" * 70)
-    default_code = order.get_default_contract_code()
-    print(f"Default: {default_code}")
-    use_default = input("Use default? (y/n): ").strip().lower()
-    contract_code = default_code if use_default == 'y' else input("Enter contract code: ").strip()
-    print(f"✓ {contract_code}\n")
-
-    # ── Contract description ──────────────────────────────────────────────────
-    print("[2/4] Contract Description")
-    print("-" * 70)
-    default_desc = order.get_default_description()
-    print(f"Default: {default_desc}")
-    use_default = input("Use default? (y/n): ").strip().lower()
-    description = default_desc if use_default == 'y' else input("Enter description: ").strip()
-    print(f"✓ {description}\n")
-
-    # ── Notes ─────────────────────────────────────────────────────────────────
-    print("[3/4] Contract Notes")
-    print("-" * 70)
+    # ── Contract code / description / notes ───────────────────────────────────
+    default_code  = order.get_default_contract_code()
+    default_desc  = order.get_default_description()
     default_notes = order.get_default_notes()
-    print(f"Default: {default_notes}")
-    use_default = input("Use default? (y/n): ").strip().lower()
-    notes = default_notes if use_default == 'y' else input("Enter notes: ").strip()
-    print(f"✓ {notes}\n")
+
+    raw = input(f"  Contract code [{default_code}]: ").strip()
+    contract_code = raw or default_code
+
+    raw = input(f"  Description   [{default_desc}]: ").strip()
+    description = raw or default_desc
+
+    raw = input(f"  Notes         [{default_notes}]: ").strip()
+    notes = raw or default_notes
 
     # ── Gross-up ─────────────────────────────────────────────────────────────
-    print("[4/4] Rate Gross-up")
-    print("-" * 70)
-    print("Apply agency gross-up? (net rate ÷ 0.85 = gross rate)")
-    gross_yn = input("Apply gross-up? (y/n): ").strip().lower()
+    gross_yn = input("  Apply gross-up (net ÷ 0.85)? [y/N]: ").strip().lower()
     gross_up = gross_yn == 'y'
-    print(f"✓ Gross-up: {'Yes' if gross_up else 'No'}\n")
-
-    print("=" * 70)
-    print("✓ All inputs gathered — ready for automation")
-    print("=" * 70 + "\n")
 
     return {
         'contract_code': contract_code,

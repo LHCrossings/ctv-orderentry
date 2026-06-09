@@ -162,7 +162,7 @@ def gather_hl_bdr_inputs(pdf_path: str) -> dict | None:
         print(f"[CUSTOMER] ✓ {client_name} → ID {customer_id}")
     else:
         print(f"[CUSTOMER] Not in DB: {client_name}")
-        cid_input = input("  Enter customer ID (or press Enter to skip): ").strip()
+        cid_input = input("  Customer ID [Enter to skip]: ").strip()
         if cid_input:
             try:
                 customer_id = int(cid_input)

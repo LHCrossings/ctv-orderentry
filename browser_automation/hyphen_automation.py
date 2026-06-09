@@ -284,9 +284,7 @@ def gather_hyphen_inputs(pdf_path: str) -> Optional[dict]:
                 _save_customer(str(customer_id), estimate.client, separation)
     print()
 
-    # ── Contract code ─────────────────────────────────────────────────────────
-    print("[1/3] Contract Code")
-    print("-" * 70)
+    # ── Contract code / description / notes ───────────────────────────────────
     if customer_info:
         default_code = estimate.get_default_contract_code(
             customer_info['code_name'],
@@ -294,35 +292,20 @@ def gather_hyphen_inputs(pdf_path: str) -> Optional[dict]:
         )
     else:
         default_code = estimate.client[:6].upper().replace(" ", "")
-    print(f"Default: {default_code}")
-    use_default = input("Use default? (y/n): ").strip().lower()
-    contract_code = default_code if use_default == 'y' else input("Enter contract code: ").strip()
-    print(f"✓ {contract_code}\n")
-
-    # ── Contract description ──────────────────────────────────────────────────
-    print("[2/3] Contract Description")
-    print("-" * 70)
     if customer_info and customer_info.get('description_name'):
         default_desc = estimate.get_default_description(customer_info['description_name'])
     else:
         default_desc = f"{estimate.client} {estimate.estimate}"
-    print(f"Default: {default_desc}")
-    use_default = input("Use default? (y/n): ").strip().lower()
-    description = default_desc if use_default == 'y' else input("Enter description: ").strip()
-    print(f"✓ {description}\n")
+    default_notes = estimate.description
 
-    # ── Notes (campaign description from IO) ─────────────────────────────────
-    print("[3/3] Notes  (IO Description field → contract notes)")
-    print("-" * 70)
-    default_notes = estimate.description  # "DPR 2026 Crossings TV"
-    print(f"Default: {default_notes}")
-    use_default = input("Use default? (y/n): ").strip().lower()
-    notes = default_notes if use_default == 'y' else input("Enter notes: ").strip()
-    print(f"✓ {notes}\n")
+    raw = input(f"  Contract code [{default_code}]: ").strip()
+    contract_code = raw or default_code
 
-    print("=" * 70)
-    print("✓ All inputs gathered — ready for automation")
-    print("=" * 70 + "\n")
+    raw = input(f"  Description   [{default_desc}]: ").strip()
+    description = raw or default_desc
+
+    raw = input(f"  Notes         [{default_notes}]: ").strip()
+    notes = raw or default_notes
 
     return {
         'contract_code': contract_code,

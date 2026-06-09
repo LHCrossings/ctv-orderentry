@@ -338,20 +338,11 @@ def gather_rwny_inputs(pdf_path: str) -> Optional[dict]:
     # ── Contract code ──────────────────────────────────────────────────────
     default_code, default_desc = _build_code_and_desc(order)
 
-    print('[1/3] Contract Code')
-    print('-' * 70)
-    print(f'Default: {default_code}')
-    code = default_code if input('Use default? (y/n): ').strip().lower() == 'y' \
-           else input('Enter contract code: ').strip()
-    print(f'✓ {code}\n')
+    raw = input(f'  Contract code [{default_code}]: ').strip()
+    code = raw or default_code
 
-    # ── Contract description ───────────────────────────────────────────────
-    print('[2/3] Contract Description')
-    print('-' * 70)
-    print(f'Default: {default_desc}')
-    description = default_desc if input('Use default? (y/n): ').strip().lower() == 'y' \
-                  else input('Enter description: ').strip()
-    print(f'✓ {description}\n')
+    raw = input(f'  Description   [{default_desc}]: ').strip()
+    description = raw or default_desc
 
     # ── Notes ──────────────────────────────────────────────────────────────
     print('[3/3] Contract Notes')

@@ -288,9 +288,7 @@ def gather_threeolives_inputs(file_path: str) -> Optional[dict]:
     market = market_input if market_input else DEFAULT_MARKET
     print(f'✓ {market}\n')
 
-    # ── Contract code ─────────────────────────────────────────────────────────
-    print('[1/3] Contract Code')
-    print('-' * 70)
+    # ── Contract code / description ────────────────────────────────────────────
     # yymm from flight start e.g. "5/4/2026" → "2605"
     try:
         fs_parts = order.flight_start.split('/')
@@ -304,21 +302,15 @@ def gather_threeolives_inputs(file_path: str) -> Optional[dict]:
         if customer_info.get('include_market'):
             market_short = {'CVC': 'CV', 'SFO': 'SF', 'SEA': 'SEA'}.get(market, market)
             default_code = f'{cn} {market_short} {yymm}'
-    print(f'Default: {default_code}')
-    use_def = input('Use default? (y/n): ').strip().lower()
-    contract_code = default_code if use_def == 'y' else input('Enter contract code: ').strip()
-    print(f'✓ {contract_code}\n')
-
-    # ── Description ───────────────────────────────────────────────────────────
-    print('[2/3] Contract Description')
-    print('-' * 70)
     default_desc = f'Riverside County Voters {yymm}'
     if customer_info and customer_info.get('description_name'):
         default_desc = f'{customer_info["description_name"]} {yymm}'
-    print(f'Default: {default_desc}')
-    use_def = input('Use default? (y/n): ').strip().lower()
-    description = default_desc if use_def == 'y' else input('Enter description: ').strip()
-    print(f'✓ {description}\n')
+
+    raw = input(f'  Contract code [{default_code}]: ').strip()
+    contract_code = raw or default_code
+
+    raw = input(f'  Description   [{default_desc}]: ').strip()
+    description = raw or default_desc
 
     # ── Separation ────────────────────────────────────────────────────────────
     print('[3/3] Spot Separation')

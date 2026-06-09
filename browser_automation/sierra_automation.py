@@ -282,30 +282,20 @@ def gather_sierra_inputs(pdf_path: str) -> Optional[dict]:
         if sorted_starts else ""
     )
 
-    # ── Contract code ──────────────────────────────────────────────────────
+    # ── Contract code / description / notes ───────────────────────────────────
     default_code = f"SDS{yymm}"
-    print(f"[1/3] Contract Code  (default: {default_code})")
-    raw = input("Accept default? (y/n): ").strip().lower()
-    code = default_code if raw == 'y' else input("Enter contract code: ").strip()
-    print(f"✓ {code}\n")
-
-    # ── Description ───────────────────────────────────────────────────────
     default_desc = f"Sierra Donor Services {flight_label}".strip()
-    print(f"[2/3] Description  (default: {default_desc})")
-    raw = input("Accept default? (y/n): ").strip().lower()
-    description = default_desc if raw == 'y' else input("Enter description: ").strip()
-    print(f"✓ {description}\n")
 
-    # ── Notes ─────────────────────────────────────────────────────────────
-    print("[3/3] Contract Notes (optional, press Enter to skip)")
-    notes = input("Notes: ").strip()
-    print(f"✓ {notes or '(none)'}\n")
+    raw = input(f"  Contract code [{default_code}]: ").strip()
+    code = raw or default_code
+
+    raw = input(f"  Description   [{default_desc}]: ").strip()
+    description = raw or default_desc
+
+    raw = input("  Notes         [Enter to skip]: ").strip()
+    notes = raw
 
     sep = SIERRA_SEPARATION
-
-    print("=" * 70)
-    print("✓ All inputs gathered — ready for automation")
-    print("=" * 70 + "\n")
 
     return {
         'contract_code': code,
