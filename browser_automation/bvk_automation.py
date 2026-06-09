@@ -27,6 +27,117 @@ from browser_automation.parsers.bvk_parser import BVKOrder, parse_bvk_pdf
 from src.domain.enums import BillingType, OrderType
 
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DIRECT DB HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _parse_date(s):
+    from datetime import datetime, date
+    if isinstance(s, date):
+        return s
+    for fmt in ('%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(str(s).strip(), fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"Cannot parse date: {s!r}")
+
+
+def _secs_to_duration(secs: int) -> str:
+    m, s = divmod(int(secs), 60)
+    h, m = divmod(m, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}:00"
+
+
+def _create_bvk_contract_direct(order: 'BVKOrder', inputs: dict) -> Optional[int]:
+    """Enter BVK order directly via DB stored procedures (no browser)."""
+    from browser_automation.etere_direct_client import EtereDirectClient, connect
+
+    customer_id = inputs.get('customer_id')
+    if customer_id is None:
+        print("[BVK DIRECT] ✗ No customer_id — cannot enter without a known ID")
+        return None
+
+    conn = None
+    try:
+        conn = connect()
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+        client.set_master_market("NYC")
+
+        contract_id = client.create_contract_header(
+            code=inputs['contract_code'],
+            description=inputs['description'],
+            customer_id=int(customer_id),
+            contract_date=_parse_date(order.flight_start),
+            contract_end_date=_parse_date(order.flight_end),
+            contract_type=1,
+            billing_type="agency",
+            note=inputs['notes'],
+            customer_order_ref=inputs['order_ref'],
+            allow_rename=True,
+        )
+        if not contract_id:
+            print("[BVK DIRECT] ✗ Failed to create contract header")
+            return None
+        print(f"[BVK DIRECT] ✓ Contract ID={contract_id}")
+
+        separation = inputs.get('separation', (25, 0, 0))
+        line_count = 0
+
+        for line in order.lines:
+            if line.total_spots == 0:
+                continue
+
+            is_bonus     = line.is_bonus
+            booking_code = 10 if is_bonus else 2
+            description  = line.get_description()
+            time_from, time_to = EtereClient.parse_time_range(line.time_str)
+            adjusted_days, _   = EtereClient.check_sunday_6_7a_rule(line.days, line.time_str)
+
+            ranges = EtereClient.consolidate_weeks(
+                line.weekly_spots,
+                order.week_dates,
+                flight_end=order.flight_end,
+            )
+
+            for rng in ranges:
+                line_count  += 1
+                total_spots  = rng['spots_per_week'] * rng['weeks']
+                print(f"  [LINE {line_count}] {description}: "
+                      f"{rng['start_date']}–{rng['end_date']} "
+                      f"({rng['spots_per_week']}/wk×{rng['weeks']}={total_spots})")
+                client.add_contract_line(
+                    market=order.market,
+                    days=adjusted_days,
+                    time_range=f"{time_from}-{time_to}",
+                    description=description,
+                    rate=float(line.gross_rate),
+                    total_spots=total_spots,
+                    spots_per_week=rng['spots_per_week'],
+                    date_from=_parse_date(rng['start_date']),
+                    date_to=_parse_date(rng['end_date']),
+                    duration=_secs_to_duration(line.duration),
+                    is_bonus=is_bonus,
+                    booking_code=booking_code,
+                    separation_intervals=separation,
+                )
+
+        conn.commit()
+        conn.close()
+        print(f"[BVK DIRECT] ✓ {line_count} line(s) entered")
+        return contract_id
+
+    except Exception as exc:
+        print(f"[BVK DIRECT] ✗ {exc}")
+        import traceback; traceback.print_exc()
+        if conn:
+            try: conn.rollback(); conn.close()
+            except: pass
+        return None
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CUSTOMER DATABASE
 # ─────────────────────────────────────────────────────────────────────────────
@@ -438,6 +549,10 @@ def process_bvk_order(
         if not inputs:
             print("\n✗ Input gathering cancelled")
             return False
+
+        if driver is None:
+            contract_id = _create_bvk_contract_direct(order, inputs)
+            return contract_id is not None
 
         etere = EtereClient(driver)
         return _create_bvk_contract(etere, order, inputs)

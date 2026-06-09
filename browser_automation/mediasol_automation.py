@@ -57,6 +57,139 @@ SPOT_CODE_BONUS = 10
 
 # Customer database path (relative to project root)
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMERS_DB_PATH
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DIRECT DB HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _parse_date(s):
+    from datetime import datetime, date
+    if isinstance(s, date):
+        return s
+    for fmt in ('%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(str(s).strip(), fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"Cannot parse date: {s!r}")
+
+
+def _secs_to_duration(secs: int) -> str:
+    m, s = divmod(int(secs), 60)
+    h, m = divmod(m, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}:00"
+
+
+def _create_mediasol_contracts_direct(pdf_path: str, user_input: dict) -> bool:
+    """Enter Mediasol order(s) directly via DB stored procedures (no browser)."""
+    from browser_automation.etere_direct_client import EtereDirectClient, connect
+
+    customer_id              = user_input.get('customer_id')
+    order_code               = user_input['order_code']
+    description              = user_input['description']
+    separation               = user_input.get('separation') or SEPARATION_INTERVALS
+    existing_contract_number = user_input.get('existing_contract_number')
+    gross_up_factor          = user_input.get('gross_up_factor', 1.0)
+
+    estimates = parse_mediasol_pdf(pdf_path)
+    if not estimates:
+        print("[MEDIASOL DIRECT] ✗ No estimates found")
+        return False
+
+    if gross_up_factor != 1.0:
+        for est in estimates:
+            for line in est.lines:
+                if not line.is_bonus():
+                    line.rate = round(line.rate * gross_up_factor, 2)
+
+    conn = None
+    try:
+        conn = connect()
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+        client.set_master_market("NYC")
+        all_success = True
+
+        for est_idx, estimate in enumerate(estimates, 1):
+            est_order_code = (
+                f"{order_code} Est {estimate.estimate_number}" if len(estimates) > 1 else order_code
+            )
+            est_notes   = estimate.description if estimate.description else description
+            market_code = _normalize_mediasol_market(estimate.market)
+
+            if existing_contract_number:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT ID_CONTRATTITESTATA FROM CONTRATTITESTATA WHERE NUMERO = %s",
+                    (existing_contract_number,),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    print(f"[MEDIASOL DIRECT] ✗ Contract '{existing_contract_number}' not found in Etere")
+                    return False
+                contract_id = row[0]
+                row_status  = 2
+                print(f"[MEDIASOL DIRECT] Revision — using contract ID={contract_id} (row_status=2)")
+            else:
+                if customer_id is None:
+                    print("[MEDIASOL DIRECT] ✗ No customer_id")
+                    return False
+                contract_id = client.create_contract_header(
+                    code=est_order_code,
+                    description=description,
+                    customer_id=int(customer_id),
+                    contract_date=_parse_date(estimate.flight_start),
+                    contract_end_date=_parse_date(estimate.flight_end),
+                    contract_type=1,
+                    billing_type="agency",
+                    note=est_notes,
+                    customer_order_ref=estimate.estimate_number,
+                    allow_rename=True,
+                )
+                if not contract_id:
+                    print(f"[MEDIASOL DIRECT] ✗ Failed to create contract for estimate {estimate.estimate_number}")
+                    all_success = False
+                    continue
+                row_status = 0
+                print(f"[MEDIASOL DIRECT] ✓ Contract ID={contract_id}")
+
+            line_count = 0
+            for line in estimate.lines:
+                etere_lines = _build_etere_lines(line, estimate, market_code)
+                for el in etere_lines:
+                    line_count += 1
+                    print(f"  [LINE {line_count}] {el['description']}: "
+                          f"{el['start_date']}–{el['end_date']} "
+                          f"({el['spots_per_week']}/wk={el['total_spots']})")
+                    client.add_contract_line(
+                        contract_id=contract_id,
+                        market=market_code,
+                        days=el['days'],
+                        time_range=f"{el['time_from']}-{el['time_to']}",
+                        description=el['description'],
+                        rate=float(el['rate']),
+                        total_spots=el['total_spots'],
+                        spots_per_week=el['spots_per_week'],
+                        date_from=_parse_date(el['start_date']),
+                        date_to=_parse_date(el['end_date']),
+                        duration=_secs_to_duration(line.duration),
+                        is_bonus=(el['spot_code'] == SPOT_CODE_BONUS),
+                        booking_code=el['spot_code'],
+                        separation_intervals=separation,
+                        row_status=row_status,
+                    )
+
+        conn.commit()
+        conn.close()
+        return all_success
+
+    except Exception as exc:
+        print(f"[MEDIASOL DIRECT] ✗ {exc}")
+        import traceback; traceback.print_exc()
+        if conn:
+            try: conn.rollback(); conn.close()
+            except: pass
+        return False
 # Known customer IDs (avoid DB round-trip for well-known clients)
 KNOWN_CUSTOMER_IDS = {
     "ochca": 364,
@@ -105,6 +238,9 @@ def process_mediasol_order(
     Returns:
         True if all estimates processed successfully
     """
+    if driver is None:
+        return _create_mediasol_contracts_direct(pdf_path, user_input)
+
     etere = EtereClient(driver)
     try:
         return _execute_order(etere, pdf_path, user_input)

@@ -39,6 +39,119 @@ SPOT_CODE_PAID  = 2
 SPOT_CODE_BONUS = 10
 
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMERS_DB_PATH
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DIRECT DB HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _parse_date(s):
+    from datetime import datetime as _dt, date
+    if isinstance(s, date):
+        return s
+    for fmt in ('%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d'):
+        try:
+            return _dt.strptime(str(s).strip(), fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"Cannot parse date: {s!r}")
+
+
+def _secs_to_duration(secs: int) -> str:
+    m, s = divmod(int(secs), 60)
+    h, m = divmod(m, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}:00"
+
+
+def _create_wallrich_contract_direct(pdf_path: str, user_input: dict) -> bool:
+    """Enter Wallrich order directly via DB stored procedures (no browser)."""
+    from browser_automation.etere_direct_client import EtereDirectClient, connect
+
+    customer_id = user_input.get('customer_id')
+    order_code  = user_input['order_code']
+    description = user_input['description']
+    market_code = user_input.get('market_code', 'CVC')
+    separation  = user_input.get('separation', (25, 0, 0))
+
+    estimates = parse_wallrich_pdf(pdf_path)
+    if not estimates:
+        print("[WALLRICH DIRECT] ✗ No estimates found")
+        return False
+
+    est = estimates[0]
+
+    # True contract start = first week that has at least one spot on any line
+    flight_year    = datetime.strptime(est.flight_start, "%m/%d/%Y").year
+    contract_start = est.flight_start
+    for i, ws in enumerate(est.week_starts):
+        if any(i < len(ln.weekly_spots) and ln.weekly_spots[i] > 0 for ln in est.lines):
+            contract_start = f"{ws}/{flight_year}"
+            break
+
+    conn = None
+    try:
+        conn = connect()
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+        client.set_master_market("NYC")
+
+        contract_id = client.create_contract_header(
+            code=order_code,
+            description=description,
+            customer_id=int(customer_id) if customer_id else None,
+            contract_date=_parse_date(contract_start),
+            contract_end_date=_parse_date(est.flight_end),
+            contract_type=1,
+            billing_type="agency",
+            note=est.description,
+            customer_order_ref=est.estimate_number,
+            allow_rename=True,
+        )
+        if not contract_id:
+            print("[WALLRICH DIRECT] ✗ Failed to create contract header")
+            return False
+        print(f"[WALLRICH DIRECT] ✓ Contract ID={contract_id}")
+
+        if customer_id:
+            _upsert_customer(est.client, int(customer_id), market_code)
+
+        line_count = 0
+        for ln in est.lines:
+            etere_lines = _build_etere_lines(ln, est, market_code, flight_year)
+            for el in etere_lines:
+                line_count += 1
+                print(f"  [LINE {line_count}] {el['description']}: "
+                      f"{el['start_date']}–{el['end_date']} "
+                      f"({el['spots_per_week']}/wk×{el['num_weeks']}={el['total_spots']})")
+                client.add_contract_line(
+                    market=market_code,
+                    days=el['days'],
+                    time_range=f"{el['time_from']}-{el['time_to']}",
+                    description=el['description'],
+                    rate=float(el['rate']),
+                    total_spots=el['total_spots'],
+                    spots_per_week=el['spots_per_week'],
+                    date_from=_parse_date(el['start_date']),
+                    date_to=_parse_date(el['end_date']),
+                    duration=_secs_to_duration(ln.duration),
+                    is_bonus=(el['spot_code'] == SPOT_CODE_BONUS),
+                    booking_code=el['spot_code'],
+                    separation_intervals=separation,
+                )
+
+        conn.commit()
+        conn.close()
+        print(f"[WALLRICH DIRECT] ✓ {line_count} line(s) entered")
+        return True
+
+    except Exception as exc:
+        print(f"[WALLRICH DIRECT] ✗ {exc}")
+        import traceback; traceback.print_exc()
+        if conn:
+            try: conn.rollback(); conn.close()
+            except: pass
+        return False
+
+
 _MARKET_MAP = {
     "SACRAMENTO":     "CVC",
     "CENTRAL VALLEY": "CVC",
@@ -276,6 +389,9 @@ def process_wallrich_order(
     Returns:
         True if successful, False otherwise.
     """
+    if driver is None:
+        return _create_wallrich_contract_direct(pdf_path, user_input)
+
     etere = EtereClient(driver)
     try:
         return _execute_order(etere, pdf_path, user_input)

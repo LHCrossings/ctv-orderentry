@@ -139,6 +139,13 @@ class OrderProcessingService:
         OrderType.IMPACT,
         OrderType.IMPRENTA,
         OrderType.DAVISELEN,
+        OrderType.BVK,
+        OrderType.DART,
+        OrderType.MEDIASOL,
+        OrderType.OPAD,
+        OrderType.POLARIS,
+        OrderType.THREEOLIVES,
+        OrderType.WALLRICH,
     }
 
     def __init__(

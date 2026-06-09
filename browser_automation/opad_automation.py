@@ -53,6 +53,106 @@ SPOT_CODE_BONUS = 10     # BNS / Bonus Spot
 
 # Customer database path (relative to project root)
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMERS_DB_PATH
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DIRECT DB HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _parse_date(s):
+    from datetime import datetime, date
+    if isinstance(s, date):
+        return s
+    for fmt in ('%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(str(s).strip(), fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"Cannot parse date: {s!r}")
+
+
+def _secs_to_duration(secs: int) -> str:
+    m, s = divmod(int(secs), 60)
+    h, m = divmod(m, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}:00"
+
+
+def _create_opad_contract_direct(pdf_path: str, user_input) -> bool:
+    """Enter opAD order directly via DB stored procedures (no browser)."""
+    from browser_automation.etere_direct_client import EtereDirectClient, connect
+
+    customer_id, _ = _resolve_customer_id(pdf_path)
+    if customer_id is None:
+        print("[OPAD DIRECT] ✗ No customer_id — cannot enter without a known ID")
+        return False
+
+    order_code  = user_input.order_code
+    description = user_input.description
+    separation  = user_input.separation_intervals or SEPARATION_INTERVALS
+
+    conn = None
+    try:
+        order = parse_opad_pdf(pdf_path)
+        conn  = connect()
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+        client.set_master_market("NYC")
+
+        contract_id = client.create_contract_header(
+            code=order_code,
+            description=description,
+            customer_id=int(customer_id),
+            contract_date=_parse_date(order.flight_start),
+            contract_end_date=_parse_date(order.flight_end),
+            contract_type=1,
+            billing_type="agency",
+            note=description,
+            customer_order_ref=order.estimate_number,
+            allow_rename=True,
+        )
+        if not contract_id:
+            print("[OPAD DIRECT] ✗ Failed to create contract header")
+            return False
+        print(f"[OPAD DIRECT] ✓ Contract ID={contract_id}")
+
+        if customer_id:
+            _save_customer_to_db(order.client, customer_id)
+
+        line_count = 0
+        for line in order.lines:
+            etere_lines = _build_etere_lines(line, order)
+            for el in etere_lines:
+                line_count += 1
+                print(f"  [LINE {line_count}] {el['description']}: "
+                      f"{el['start_date']}–{el['end_date']} "
+                      f"({el['spots_per_week']}/wk={el['total_spots']})")
+                client.add_contract_line(
+                    market=DEFAULT_MARKET,
+                    days=el['days'],
+                    time_range=f"{el['time_from']}-{el['time_to']}",
+                    description=el['description'],
+                    rate=float(el['rate']),
+                    total_spots=el['total_spots'],
+                    spots_per_week=el['spots_per_week'],
+                    date_from=_parse_date(el['start_date']),
+                    date_to=_parse_date(el['end_date']),
+                    duration=_secs_to_duration(line.duration),
+                    is_bonus=(el['spot_code'] == SPOT_CODE_BONUS),
+                    booking_code=el['spot_code'],
+                    separation_intervals=separation,
+                )
+
+        conn.commit()
+        conn.close()
+        print(f"[OPAD DIRECT] ✓ {line_count} line(s) entered")
+        return True
+
+    except Exception as exc:
+        print(f"[OPAD DIRECT] ✗ {exc}")
+        import traceback; traceback.print_exc()
+        if conn:
+            try: conn.rollback(); conn.close()
+            except: pass
+        return False
 # ═══════════════════════════════════════════════════════════════════════════════
 # MAIN ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -79,6 +179,9 @@ def process_opad_order(
     Returns:
         True if successful, False otherwise
     """
+    if driver is None:
+        return _create_opad_contract_direct(pdf_path, user_input)
+
     etere = EtereClient(driver)
 
     try:

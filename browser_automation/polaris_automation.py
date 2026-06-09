@@ -18,6 +18,114 @@ from browser_automation.etere_client import EtereClient
 from browser_automation.parsers.polaris_parser import PolarisOrder, PolarisLine, parse_polaris_file as parse_polaris_xlsx
 
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DIRECT DB HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _parse_date(s):
+    from datetime import datetime, date
+    if isinstance(s, date):
+        return s
+    for fmt in ('%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(str(s).strip(), fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"Cannot parse date: {s!r}")
+
+
+def _secs_to_duration(secs: int) -> str:
+    m, s = divmod(int(secs), 60)
+    h, m = divmod(m, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}:00"
+
+
+def _create_polaris_contracts_direct(order: 'PolarisOrder', user_input: dict) -> Optional[str]:
+    """Enter Polaris order directly via DB stored procedures (no browser). One contract per market."""
+    from browser_automation.etere_direct_client import EtereDirectClient, connect
+
+    customer_id = user_input.get('customer_id')
+    if customer_id is None:
+        print("[POLARIS DIRECT] ✗ No customer_id — cannot enter without a known ID")
+        return None
+
+    contracts    = user_input['contracts']
+    separation   = user_input.get('separation', (15, 0, 0))
+    flight_start = user_input.get('actual_start', order.flight_start)
+    flight_end   = user_input.get('actual_end',   order.flight_end)
+
+    conn = None
+    try:
+        conn = connect()
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+        client.set_master_market("NYC")
+        last_contract_id = None
+
+        for market in order.markets:
+            market_lines  = order.lines_for_market(market)
+            contract_info = contracts[market]
+            code          = contract_info['code']
+            description   = contract_info['description']
+
+            print(f"\n[POLARIS DIRECT] Creating contract for {market}: {code}")
+            contract_id = client.create_contract_header(
+                code=code,
+                description=description,
+                customer_id=int(customer_id),
+                contract_date=_parse_date(flight_start),
+                contract_end_date=_parse_date(flight_end),
+                contract_type=1,
+                billing_type="agency",
+                allow_rename=True,
+            )
+            if not contract_id:
+                print(f"[POLARIS DIRECT] ✗ Failed to create contract for {market}")
+                return None
+            print(f"[POLARIS DIRECT] ✓ Contract ID={contract_id}")
+
+            line_count = 0
+            for ln in market_lines:
+                time_from, time_to = ln.get_time_from_to()
+                is_bonus     = ln.is_bonus
+                booking_code = 10 if is_bonus else 2
+                adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(ln.days, ln.time_str)
+
+                line_count += 1
+                print(f"  [LINE {line_count}] {ln.get_description()}  ×{ln.total_spots}")
+                client.add_contract_line(
+                    market=market,
+                    days=adjusted_days,
+                    time_range=f"{time_from}-{time_to}",
+                    description=ln.get_description(),
+                    rate=float(ln.rate),
+                    total_spots=ln.total_spots,
+                    spots_per_week=ln.total_spots,
+                    date_from=_parse_date(flight_start),
+                    date_to=_parse_date(flight_end),
+                    duration=_secs_to_duration(30),
+                    is_bonus=is_bonus,
+                    booking_code=booking_code,
+                    separation_intervals=separation,
+                )
+
+            print(f"[POLARIS DIRECT] ✓ {market}: {line_count} line(s) entered")
+            last_contract_id = contract_id
+
+        conn.commit()
+        conn.close()
+        return str(last_contract_id) if last_contract_id else None
+
+    except Exception as exc:
+        print(f"[POLARIS DIRECT] ✗ {exc}")
+        import traceback; traceback.print_exc()
+        if conn:
+            try: conn.rollback(); conn.close()
+            except: pass
+        return None
+
+
 _MARKET_SHORT = {
     "CVC": "CV",
     "SFO": "SF",
@@ -233,6 +341,10 @@ def process_polaris_order(driver, xlsx_path: str, user_input: dict) -> Optional[
     Returns:
         Contract number of the last created contract, or None on failure.
     """
+    if driver is None:
+        order = user_input.get("order") or parse_polaris_xlsx(xlsx_path)
+        return _create_polaris_contracts_direct(order, user_input)
+
     etere = EtereClient(driver)
 
     # Re-parse from disk for safety (same pattern as HL / DART)

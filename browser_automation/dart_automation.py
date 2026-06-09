@@ -19,6 +19,113 @@ from browser_automation.etere_client import EtereClient
 from browser_automation.parsers.dart_parser import DartOrder, parse_dart_xlsx, parse_dart_schedule
 
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DIRECT DB HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _parse_date(s):
+    from datetime import datetime, date
+    if isinstance(s, date):
+        return s
+    for fmt in ('%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(str(s).strip(), fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"Cannot parse date: {s!r}")
+
+
+def _secs_to_duration(secs: int) -> str:
+    m, s = divmod(int(secs), 60)
+    h, m = divmod(m, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}:00"
+
+
+def _create_dart_contract_direct(xlsx_path: str, user_input: dict) -> Optional[str]:
+    """Enter DART order directly via DB stored procedures (no browser). Master market: DAL."""
+    from browser_automation.etere_direct_client import EtereDirectClient, connect
+
+    customer_id = user_input.get('customer_id')
+    if customer_id is None:
+        print("[DART DIRECT] ✗ No customer_id — cannot enter without a known ID")
+        return None
+
+    order: DartOrder = parse_dart_xlsx(xlsx_path)
+    conn = None
+    try:
+        conn = connect()
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+        client.set_master_market("DAL")
+
+        week_dates_str  = [d.strftime("%m/%d/%Y") for d in order.week_start_dates]
+        flight_end_str  = order.flight_end.strftime("%m/%d/%Y")
+
+        contract_id = client.create_contract_header(
+            code=user_input['code'],
+            description=user_input['description'],
+            customer_id=int(customer_id),
+            contract_date=order.flight_start,
+            contract_end_date=order.flight_end,
+            contract_type=1,
+            billing_type="client",
+            allow_rename=True,
+        )
+        if not contract_id:
+            print("[DART DIRECT] ✗ Failed to create contract header")
+            return None
+        print(f"[DART DIRECT] ✓ Contract ID={contract_id}")
+
+        separation   = user_input.get('separation', (15, 0, 0))
+        duration_str = _secs_to_duration(order.duration_seconds)
+        line_num     = 0
+
+        for ln in order.lines:
+            days, time_from, time_to = parse_dart_schedule(ln.schedule)
+            is_bonus     = ln.is_bonus
+            booking_code = 10 if is_bonus else 2
+            line_desc    = f"BNS {ln.programming}" if is_bonus else f"{ln.programming} {ln.schedule}"
+
+            segments = EtereClient.consolidate_weeks(ln.spot_counts, week_dates_str, flight_end_str)
+
+            for seg in segments:
+                line_num       += 1
+                spots_per_week  = seg['spots_per_week']
+                total_spots     = spots_per_week * seg['weeks']
+                print(f"  [LINE {line_num}] {line_desc}: "
+                      f"{seg['start_date']}–{seg['end_date']} "
+                      f"({spots_per_week}/wk×{seg['weeks']}={total_spots})")
+                client.add_contract_line(
+                    market="DAL",
+                    days=days,
+                    time_range=f"{time_from}-{time_to}",
+                    description=line_desc,
+                    rate=float(ln.rate),
+                    total_spots=total_spots,
+                    spots_per_week=spots_per_week,
+                    date_from=_parse_date(seg['start_date']),
+                    date_to=_parse_date(seg['end_date']),
+                    duration=duration_str,
+                    is_bonus=is_bonus,
+                    booking_code=booking_code,
+                    separation_intervals=separation,
+                )
+
+        conn.commit()
+        conn.close()
+        print(f"[DART DIRECT] ✓ {line_num} line(s) entered")
+        return str(contract_id)
+
+    except Exception as exc:
+        print(f"[DART DIRECT] ✗ {exc}")
+        import traceback; traceback.print_exc()
+        if conn:
+            try: conn.rollback(); conn.close()
+            except: pass
+        return None
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Customer DB helpers (same pattern as charmaine_automation)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -192,6 +299,9 @@ def process_dart_order(driver, xlsx_path: str, user_input: dict) -> Optional[str
     Returns:
         Contract number string on success, None on failure.
     """
+    if driver is None:
+        return _create_dart_contract_direct(xlsx_path, user_input)
+
     etere = EtereClient(driver)
 
     # DART is The Asian Channel Dallas — explicit DAL master market exception.

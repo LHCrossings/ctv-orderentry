@@ -86,6 +86,116 @@ def _save_customer(customer_id: str, client_name: str) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# DIRECT DB HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _parse_date(s):
+    from datetime import datetime, date
+    if isinstance(s, date):
+        return s
+    for fmt in ('%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(str(s).strip(), fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"Cannot parse date: {s!r}")
+
+
+def _secs_to_duration(secs: int) -> str:
+    m, s = divmod(int(secs), 60)
+    h, m = divmod(m, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}:00"
+
+
+def _create_threeolives_contract_direct(order: 'ThreeOlivesOrder', inputs: dict) -> bool:
+    """Enter 3 Olives order directly via DB stored procedures (no browser)."""
+    from browser_automation.etere_direct_client import EtereDirectClient, connect
+
+    customer_id = inputs.get('customer_id')
+    if customer_id is None:
+        print("[3OLIVES DIRECT] ✗ No customer_id — cannot enter without a known ID")
+        return False
+
+    market     = inputs['market']
+    separation = inputs.get('separation', THREEOLIVES_SEPARATION)
+
+    conn = None
+    try:
+        conn = connect()
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+        client.set_master_market("NYC")
+
+        contract_id = client.create_contract_header(
+            code=inputs['contract_code'],
+            description=inputs['description'],
+            customer_id=int(customer_id),
+            contract_date=_parse_date(order.flight_start),
+            contract_end_date=_parse_date(order.flight_end),
+            contract_type=1,
+            billing_type="agency",
+            allow_rename=True,
+        )
+        if not contract_id:
+            print("[3OLIVES DIRECT] ✗ Failed to create contract header")
+            return False
+        print(f"[3OLIVES DIRECT] ✓ Contract ID={contract_id}")
+
+        line_count = 0
+
+        for line in order.lines:
+            etere_days, etere_time = parse_daypart(line.time_str)
+            adjusted_days, _       = EtereClient.check_sunday_6_7a_rule(etere_days, etere_time)
+            time_from, time_to     = EtereClient.parse_time_range(etere_time)
+
+            is_bonus     = line.is_bonus
+            booking_code = 10 if is_bonus else 2
+            description  = line.get_description(adjusted_days, etere_time)
+
+            ranges = EtereClient.consolidate_weeks(
+                weekly_spots=line.weekly_spots,
+                week_start_dates=line.week_start_dates,
+                flight_end=order.flight_end,
+            )
+
+            for rng in ranges:
+                line_count  += 1
+                spw          = rng['spots_per_week']
+                weeks        = rng['weeks']
+                total_spots  = spw * weeks
+                print(f"  [LINE {line_count}] {description}: "
+                      f"{rng['start_date']}–{rng['end_date']} "
+                      f"({spw}/wk×{weeks}={total_spots})")
+                client.add_contract_line(
+                    market=market,
+                    days=adjusted_days,
+                    time_range=f"{time_from}-{time_to}",
+                    description=description,
+                    rate=float(line.rate),
+                    total_spots=total_spots,
+                    spots_per_week=spw,
+                    date_from=_parse_date(rng['start_date']),
+                    date_to=_parse_date(rng['end_date']),
+                    duration=_secs_to_duration(30),
+                    is_bonus=is_bonus,
+                    booking_code=booking_code,
+                    separation_intervals=separation,
+                )
+
+        conn.commit()
+        conn.close()
+        print(f"[3OLIVES DIRECT] ✓ {line_count} line(s) entered")
+        return True
+
+    except Exception as exc:
+        print(f"[3OLIVES DIRECT] ✗ {exc}")
+        import traceback; traceback.print_exc()
+        if conn:
+            try: conn.rollback(); conn.close()
+            except: pass
+        return False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # MAX DAILY RUN
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -280,6 +390,9 @@ def process_threeolives_order(
         if not inputs:
             print('\n✗ Input gathering cancelled')
             return False
+
+        if driver is None:
+            return _create_threeolives_contract_direct(order, inputs)
 
         etere = EtereClient(driver)
         return _create_threeolives_contract(etere, order, inputs)
