@@ -1540,9 +1540,17 @@ class OrderProcessingService:
                 user_input=order.order_input
             )
 
+            inp = order.order_input
+            quarter_contracts = inp.get('contracts', []) if isinstance(inp, dict) else []
+            contracts = [
+                Contract(contract_number=q.get('contract_code', 'LEXUS'), order_type=OrderType.LEXUS)
+                for q in quarter_contracts
+            ] if success and quarter_contracts else (
+                [Contract(contract_number='LEXUS', order_type=OrderType.LEXUS)] if success else []
+            )
             return ProcessingResult(
                 success=success,
-                contracts=[],
+                contracts=contracts,
                 order_type=OrderType.LEXUS,
                 error_message=None if success else "Processing failed"
             )
