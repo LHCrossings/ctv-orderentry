@@ -394,6 +394,48 @@ def _create_tcaa_contract_direct(
 # MAIN PROCESSING FUNCTIONS
 # ============================================================================
 
+def gather_tcaa_inputs(pdf_path: str) -> Optional[dict]:
+    """Collect TCAA inputs upfront: show all estimates and ask which to process."""
+    try:
+        all_estimates = parse_tcaa_pdf(pdf_path)
+    except Exception as e:
+        print(f"[TCAA] ✗ Failed to parse PDF: {e}")
+        return None
+
+    print(f"\n{'='*70}")
+    print("TCAA — UPFRONT INPUT COLLECTION")
+    print(f"{'='*70}\n")
+    print(f"  PDF contains {len(all_estimates)} estimate(s):\n")
+
+    for i, est in enumerate(all_estimates, 1):
+        line_count = len(est.lines) if hasattr(est, 'lines') else '?'
+        print(f"  [{i}] Est {est.estimate_number}  |  "
+              f"{est.flight_start} – {est.flight_end}  |  "
+              f"{line_count} line(s)")
+
+    print()
+    raw = input("  Enter estimates to process (e.g. '1 3' or 'all') [all]: ").strip()
+
+    if not raw or raw.lower() == 'all':
+        selected = [est.estimate_number for est in all_estimates]
+    else:
+        chosen = []
+        for token in raw.replace(',', ' ').split():
+            try:
+                idx = int(token) - 1
+                if 0 <= idx < len(all_estimates):
+                    chosen.append(all_estimates[idx].estimate_number)
+            except ValueError:
+                pass
+        selected = chosen if chosen else [est.estimate_number for est in all_estimates]
+
+    print(f"\n  ✓ Will process: {', '.join(selected)}")
+    return {
+        'selected_estimates': selected,
+        'separation': (10, 0, 0),
+    }
+
+
 def process_tcaa_order(
     driver,
     pdf_path: str,

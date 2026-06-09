@@ -616,30 +616,40 @@ class OrderProcessingService:
             print(f"Order: {order.get_display_name()}")
             print(f"Customer: {order.customer_name}")
 
-            if order.order_input:
-                print(f"Code: {order.order_input.order_code}")
-                print(f"Description: {order.order_input.description}")
-
             print(f"{'='*70}\n")
 
-            success = self._tcaa_processor['process'](
-                driver=None,
-                pdf_path=str(order.pdf_path),
-                estimate_number=order.estimate_number,
-                order_code=order.order_input.order_code if order.order_input else None,
-                description=order.order_input.description if order.order_input else None,
-            )
-            if success:
+            inp = order.order_input
+            selected_estimates = inp.get('selected_estimates') if isinstance(inp, dict) else None
+            if not selected_estimates and order.estimate_number:
+                selected_estimates = [order.estimate_number]
+
+            if selected_estimates:
+                contracts, all_ok = [], True
+                for est_num in selected_estimates:
+                    ok = self._tcaa_processor['process'](
+                        driver=None,
+                        pdf_path=str(order.pdf_path),
+                        estimate_number=est_num,
+                    )
+                    if ok:
+                        contracts.append(Contract(contract_number=f"TCAA-{est_num}", order_type=OrderType.TCAA))
+                    else:
+                        all_ok = False
                 return ProcessingResult(
-                    success=True,
-                    contracts=[Contract(contract_number=f"TCAA-{order.estimate_number}", order_type=OrderType.TCAA)],
-                    order_type=OrderType.TCAA,
-                    error_message=None,
+                    success=all_ok, contracts=contracts, order_type=OrderType.TCAA,
+                    error_message=None if all_ok else "One or more TCAA estimates failed — check output"
                 )
-            return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.TCAA,
-                error_message="TCAA processing failed — check output for details"
-            )
+            else:
+                # No estimate filter — process all
+                success = self._tcaa_processor['process'](
+                    driver=None,
+                    pdf_path=str(order.pdf_path),
+                    estimate_number=None,
+                )
+                return ProcessingResult(
+                    success=success, contracts=[], order_type=OrderType.TCAA,
+                    error_message=None if success else "TCAA processing failed — check output for details"
+                )
 
         except Exception as e:
             import traceback

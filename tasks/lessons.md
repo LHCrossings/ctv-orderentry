@@ -1,5 +1,38 @@
 # Lessons Learned
 
+## New Parser Checklist for Direct DB (All Future Parsers Are Direct DB)
+
+**Session:** Pink-pill testing sweep (2026-06-09)
+
+**Rule:** We no longer write Selenium order-entry parsers. Every new parser is direct DB. When building one, apply ALL of the following from the start — these were all discovered as bugs during the 2026-06 testing sweep:
+
+### 1. Duration: always pass `str(seconds)`, never `f":{sec:02d}"`
+`_duration_str_to_seconds()` in `etere_direct_client.py` splits on `:` — a leading colon (e.g. `":30"`) produces `['', '30']` and `int('')` crashes. Pass bare integer strings: `str(spot_duration)` (e.g. `"30"`, `"45"`).
+
+### 2. `contracts` list must be populated on success
+`ProcessingResult.contracts` must contain at least one `Contract(contract_number=order_code, order_type=OrderType.X)` when `success=True`. Never return `contracts=[]` on success — the final summary will show "0 contracts created" even if Etere has the data.
+
+### 3. `booking_code` must always be explicit — never rely on `is_bonus`
+Pass `booking_code=10 if is_bonus else 2` to every `add_contract_line()` call. `is_bonus=True` only sets the scheduling type; it does NOT set the booking code.
+
+### 4. Customer ID must be resolved in `gather_*_inputs()`, not during processing
+All user-interactive prompts (customer ID, order code, description) belong in the upfront gather function registered in `_INPUT_GATHERERS`. If `_resolve_customer_id()` or any `input()` call fires during processing, move it to gather.
+
+### 5. `gather_*_inputs` must return a dict; service uses `user_input.get('key')`
+Service methods check `isinstance(inp, dict)` and use `.get('order_code')` / `.get('contract_code')`. The gathered dict must use the key `'order_code'` (or `'contract_code'`) so the contracts-list builder can find it.
+
+### 6. Yes/Enter at a date-override prompt must keep the original date
+Pattern: `actual = raw if raw and raw.lower() not in ('y', 'yes') else original`. Never do `actual = raw if raw else original` — typing "yes" stores the string "yes" as the date.
+
+### 7. `_DIRECT_DB_TESTED_KEYS` and service/bridge registration — 3 files
+After writing and testing a new parser:
+1. `_DIRECT_DB_ORDER_TYPES` in `order_processing_service.py`
+2. `_DIRECT_DB_KEYS` in `parser_bridge.py` (white pill → no pill until tested)
+3. `_DIRECT_DB_TESTED_KEYS` in `parser_bridge.py` (add after passing pink-pill test)
+Missing step 3 leaves the pill pink indefinitely. Missing step 1 causes a browser session to be opened.
+
+---
+
 ## `parse_day_bits` (DirectDB) and `_select_days` (Selenium) Must Stay in Sync
 
 **Session:** Admerasia DirectDB conversion (2026-06-08)

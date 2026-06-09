@@ -111,37 +111,28 @@ class OrderScanner:
                 order_type, count = self._detection_service.detect_multi_order_pdf(pdf_path)
 
                 if count > 1:
-                    # Multi-order PDF - split it
-                    print(f"\n[SCAN] {pdf_path.name}: Detected {count} orders")
+                    # Multi-order PDF — create ONE order; gather step handles estimate selection
+                    print(f"\n[SCAN] {pdf_path.name}: Detected {count} estimates")
 
-                    # Get split data
                     split_orders = self._detection_service.split_multi_order_pdf(pdf_path, order_type)
 
-                    # Create an Order entity for each sub-order
-                    for order_data in split_orders:
-                        estimate_number = order_data.get('estimate', 'Unknown')
-                        order_text = order_data.get('text', '')
+                    customer_name = "Unknown"
+                    try:
+                        first_text = split_orders[0].get('text', '') if split_orders else ''
+                        customer_name = self._detection_service.extract_customer_name_from_text(
+                            first_text, order_type
+                        ) or "Unknown"
+                    except Exception:
+                        pass
 
-                        # Extract customer name from this specific order's text
-                        customer_name = "Unknown"
-                        try:
-                            customer_name = self._detection_service.extract_customer_name_from_text(
-                                order_text,
-                                order_type
-                            ) or "Unknown"
-                        except Exception:
-                            pass
-
-                        # Create order entity
-                        order = Order(
-                            pdf_path=pdf_path,
-                            order_type=order_type,
-                            customer_name=customer_name,
-                            status=OrderStatus.PENDING,
-                            estimate_number=estimate_number
-                        )
-
-                        orders.append(order)
+                    order = Order(
+                        pdf_path=pdf_path,
+                        order_type=order_type,
+                        customer_name=f"{customer_name} ({count} estimates)",
+                        status=OrderStatus.PENDING,
+                        estimate_number=None,
+                    )
+                    orders.append(order)
                 else:
                     # Single order PDF
                     # FIXED: Also extract estimate number for single-order TCAA PDFs
