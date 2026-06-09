@@ -81,7 +81,7 @@ def _create_galeforce_contract_direct(order: GaleForceOrder, inputs: dict) -> Op
 
     customer_id = inputs.get('customer_id')
     if customer_id is None:
-        print("[GALEFORCE DIRECT] ✗ No customer_id — cannot enter without a known ID")
+        print("[PACO DIRECT] ✗ No customer_id — cannot enter without a known ID")
         return None
 
     conn = None
@@ -101,7 +101,7 @@ def _create_galeforce_contract_direct(order: GaleForceOrder, inputs: dict) -> Op
             note=inputs['notes'],
             customer_order_ref=order.order_number,
         )
-        print(f"[GALEFORCE DIRECT] ✓ Contract header ID={contract_id}")
+        print(f"[PACO DIRECT] ✓ Contract header ID={contract_id}")
 
         separation = inputs.get('separation', GALEFORCE_SEPARATION)
         line_count = 0
@@ -177,11 +177,11 @@ def _create_galeforce_contract_direct(order: GaleForceOrder, inputs: dict) -> Op
 
         conn.commit()
         conn.close()
-        print(f"[GALEFORCE DIRECT] ✓ {line_count} lines committed.")
+        print(f"[PACO DIRECT] ✓ {line_count} lines committed.")
         return contract_id
 
     except Exception as exc:
-        print(f"[GALEFORCE DIRECT] ✗ {exc}")
+        print(f"[PACO DIRECT] ✗ {exc}")
         import traceback
         traceback.print_exc()
         if conn:
@@ -267,7 +267,7 @@ def gather_galeforce_inputs(pdf_path: str) -> Optional[dict]:
         Returns None if the user cancels.
     """
     print("\n" + "=" * 70)
-    print("GALEFORCE ORDER - INPUT COLLECTION")
+    print("PACO ORDER - INPUT COLLECTION")
     print("=" * 70)
 
     print("\n[PARSE] Reading PDF…")
@@ -380,7 +380,7 @@ def process_galeforce_order(
         order = parse_galeforce_pdf(pdf_path)
 
         print(f"\n{'=' * 70}")
-        print("GALEFORCE ORDER PROCESSING")
+        print("PACO ORDER PROCESSING")
         print(f"{'=' * 70}")
         print(f"Advertiser:  {order.advertiser}")
         print(f"Campaign:    {order.campaign}")
@@ -409,16 +409,16 @@ def process_galeforce_order(
             etere = EtereClient(driver)
             success = _create_galeforce_contract(etere, order, inputs)
         else:
-            print("[GALEFORCE] ✗ Direct DB failed and no browser driver available")
+            print("[PACO] ✗ Direct DB failed and no browser driver available")
             success = False
 
         if success:
             print(f"\n{'=' * 70}")
-            print("✓ GALEFORCE ORDER PROCESSING COMPLETE")
+            print("✓ PACO ORDER PROCESSING COMPLETE")
             print(f"{'=' * 70}")
         else:
             print(f"\n{'=' * 70}")
-            print("✗ GALEFORCE ORDER PROCESSING FAILED")
+            print("✗ PACO ORDER PROCESSING FAILED")
             print(f"{'=' * 70}")
 
         return success
@@ -460,7 +460,7 @@ def _create_galeforce_contract(
         customer_id = inputs.get('customer_id')
         separation  = inputs.get('separation', GALEFORCE_SEPARATION)
 
-        print(f"[GALEFORCE] Creating contract for {order.advertiser}")
+        print(f"[PACO] Creating contract for {order.advertiser}")
 
         # ── Contract header ───────────────────────────────────────────────────
         contract_number = etere.create_contract_header(
@@ -476,10 +476,10 @@ def _create_galeforce_contract(
         )
 
         if not contract_number:
-            print("[GALEFORCE] ✗ Failed to create contract header")
+            print("[PACO] ✗ Failed to create contract header")
             return False
 
-        print(f"[GALEFORCE] ✓ Contract created: {contract_number}")
+        print(f"[PACO] ✓ Contract created: {contract_number}")
 
         # ── Lines ─────────────────────────────────────────────────────────────
         line_count = 0
@@ -571,11 +571,11 @@ def _create_galeforce_contract(
                     print(f"    ✗ Failed to add line {line_count}")
                     return False
 
-        print(f"\n[GALEFORCE] ✓ All {line_count} Etere lines added successfully")
+        print(f"\n[PACO] ✓ All {line_count} Etere lines added successfully")
         return True
 
     except Exception as exc:
-        print(f"\n[GALEFORCE] ✗ Error creating contract: {exc}")
+        print(f"\n[PACO] ✗ Error creating contract: {exc}")
         import traceback
         traceback.print_exc()
         return False

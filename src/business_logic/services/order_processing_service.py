@@ -1064,7 +1064,7 @@ class OrderProcessingService:
             from galeforce_automation import process_galeforce_order_direct
 
             print(f"\n{'='*70}")
-            print("PROCESSING GALEFORCE ORDER")
+            print("PROCESSING PACO ORDER")
             print(f"{'='*70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
@@ -1082,16 +1082,18 @@ class OrderProcessingService:
                 user_input=order.order_input,
             )
             success = contract_id is not None
-            contracts = [Contract(contract_number=str(contract_id), order_type=OrderType.GALEFORCE)] if contract_id else []
+            inp = order.order_input
+            label = (inp.get('contract_code') if isinstance(inp, dict) else None) or str(contract_id)
+            contracts = [Contract(contract_number=label, order_type=OrderType.GALEFORCE)] if success else []
 
             if success:
-                print(f"\n✓ GaleForce order processed successfully — contract {contract_id}")
+                print(f"\n✓ PACO order processed successfully — contract {contract_id}")
             else:
-                print("\n✗ GaleForce order processing failed")
+                print("\n✗ PACO order processing failed")
 
             return ProcessingResult(
                 success=success, contracts=contracts, order_type=OrderType.GALEFORCE,
-                error_message="" if success else "GaleForce direct DB entry failed"
+                error_message="" if success else "PACO direct DB entry failed"
             )
 
         except Exception as exc:

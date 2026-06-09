@@ -454,7 +454,7 @@ _DIRECT_DB_KEYS = {"LEXUS", "RPM", "WORLDLINK", "TIMEADVERTISING", "IGRAPHIX", "
 
 # Keys that have been tested end-to-end with real orders against Etere DirectDB.
 # Pink pills graduate to white once they appear here.
-_DIRECT_DB_TESTED_KEYS = {"ADMERASIA", "BVK", "THREEOLIVES", "DART", "DAVISELEN", "HL", "HL_BDR", "HYPHEN", "IMPACT", "IGRAPHIX", "IMPRENTA", "INTERTREND", "LEXUS", "MEDIASOL", "MISFIT", "OPAD", "POLARIS", "PROSIO", "RPM", "RWNY", "SAGENT", "SACCOUNTYVOTERS", "SCWA", "SIERRADONOR", "TCAA", "TCAA_AV", "TIMEADVERTISING", "WALLRICH", "WORLDLINK"}
+_DIRECT_DB_TESTED_KEYS = {"ADMERASIA", "BVK", "THREEOLIVES", "DART", "DAVISELEN", "GALEFORCE", "HL", "HL_BDR", "HYPHEN", "IMPACT", "IGRAPHIX", "IMPRENTA", "INTERTREND", "LEXUS", "MEDIASOL", "MISFIT", "OPAD", "POLARIS", "PROSIO", "RPM", "RWNY", "SAGENT", "SACCOUNTYVOTERS", "SCWA", "SIERRADONOR", "TCAA", "TCAA_AV", "TIMEADVERTISING", "WALLRICH", "WORLDLINK"}
 
 def list_parsers() -> list[dict]:
     """Return display info for every registered parser, sorted by display name."""
