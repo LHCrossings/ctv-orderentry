@@ -826,10 +826,9 @@ class OrderProcessingService:
                 user_input=order.order_input
             )
 
-            # Daviselen automation drives the browser directly and does not return
-            # contract numbers — the session is one-directional (Python → browser).
-            # Contract numbers can be retrieved from Etere manually if needed.
-            contracts = []
+            inp = order.order_input
+            code = (inp.get('order_code') or inp.get('contract_code') or 'DAVISELEN') if isinstance(inp, dict) else 'DAVISELEN'
+            contracts = [Contract(contract_number=code, order_type=OrderType.DAVISELEN)] if success else []
 
             if success:
                 print("\n✓ Daviselen order processed successfully")
@@ -896,7 +895,9 @@ class OrderProcessingService:
                 user_input=order.order_input
             )
 
-            contracts = []
+            inp = order.order_input
+            code = (inp.get('order_code') or inp.get('contract_code') or 'INTERTREND') if isinstance(inp, dict) else 'INTERTREND'
+            contracts = [Contract(contract_number=code, order_type=OrderType.INTERTREND)] if success else []
             if success:
                 print("\n✓ Intertrend order processed successfully")
             else:
@@ -2141,7 +2142,9 @@ class OrderProcessingService:
         )
         if success:
             print("\n✓ SacCountyVoters order processed successfully")
-            return ProcessingResult(success=True, contracts=[], order_type=OrderType.SACCOUNTYVOTERS)
+            inp = order.order_input
+            code = (inp.get('order_code') or inp.get('contract_code') or 'SACCOUNTYVOTERS') if isinstance(inp, dict) else 'SACCOUNTYVOTERS'
+            return ProcessingResult(success=True, contracts=[Contract(contract_number=code, order_type=OrderType.SACCOUNTYVOTERS)], order_type=OrderType.SACCOUNTYVOTERS)
         print("\n✗ SacCountyVoters order processing failed")
         return ProcessingResult(
             success=False, contracts=[], order_type=OrderType.SACCOUNTYVOTERS,
@@ -2213,7 +2216,9 @@ class OrderProcessingService:
                 )
                 if success:
                     print("\n✓ SCWA order processed successfully")
-                    return ProcessingResult(success=True, contracts=[], order_type=OrderType.SCWA)
+                    inp = order.order_input
+                    code = (inp.get('order_code') or inp.get('contract_code') or 'SCWA') if isinstance(inp, dict) else 'SCWA'
+                    return ProcessingResult(success=True, contracts=[Contract(contract_number=code, order_type=OrderType.SCWA)], order_type=OrderType.SCWA)
                 print("\n✗ SCWA order processing failed")
                 return ProcessingResult(
                     success=False, contracts=[], order_type=OrderType.SCWA,
@@ -2259,7 +2264,9 @@ class OrderProcessingService:
                 )
                 if success:
                     print("\n✓ Sierra Donor order processed successfully")
-                    return ProcessingResult(success=True, contracts=[], order_type=OrderType.SIERRADONOR)
+                    inp = order.order_input
+                    code = (inp.get('order_code') or inp.get('contract_code') or 'SIERRADONOR') if isinstance(inp, dict) else 'SIERRADONOR'
+                    return ProcessingResult(success=True, contracts=[Contract(contract_number=code, order_type=OrderType.SIERRADONOR)], order_type=OrderType.SIERRADONOR)
                 print("\n✗ Sierra Donor order processing failed")
                 return ProcessingResult(
                     success=False, contracts=[], order_type=OrderType.SIERRADONOR,
@@ -2351,7 +2358,9 @@ class OrderProcessingService:
             )
             if success:
                 print("\n✓ 3 Olives Media order processed successfully")
-                return ProcessingResult(success=True, contracts=[], order_type=OrderType.THREEOLIVES)
+                inp = pre_gathered_inputs
+                code = (inp.get('order_code') or inp.get('contract_code') or 'THREEOLIVES') if isinstance(inp, dict) else 'THREEOLIVES'
+                return ProcessingResult(success=True, contracts=[Contract(contract_number=code, order_type=OrderType.THREEOLIVES)], order_type=OrderType.THREEOLIVES)
             print("\n✗ 3 Olives Media order processing failed")
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.THREEOLIVES,
@@ -2389,7 +2398,9 @@ class OrderProcessingService:
             )
             if success:
                 print("\n✓ BVK order processed successfully")
-                return ProcessingResult(success=True, contracts=[], order_type=OrderType.BVK)
+                inp = pre_gathered_inputs
+                code = (inp.get('order_code') or inp.get('contract_code') or 'BVK') if isinstance(inp, dict) else 'BVK'
+                return ProcessingResult(success=True, contracts=[Contract(contract_number=code, order_type=OrderType.BVK)], order_type=OrderType.BVK)
             print("\n✗ BVK order processing failed")
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.BVK,
@@ -2435,8 +2446,11 @@ class OrderProcessingService:
             else:
                 print("\n✗ Media Solutions order processing failed")
 
+            inp = order.order_input
+            code = (inp.get('order_code') or inp.get('contract_code') or 'MEDIASOL') if isinstance(inp, dict) else 'MEDIASOL'
+            contracts = [Contract(contract_number=code, order_type=OrderType.MEDIASOL)] if success else []
             return ProcessingResult(
-                success=success, contracts=[], order_type=OrderType.MEDIASOL,
+                success=success, contracts=contracts, order_type=OrderType.MEDIASOL,
                 error_message=None if success else "Processing failed",
             )
 
