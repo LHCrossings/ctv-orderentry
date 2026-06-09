@@ -317,6 +317,9 @@ def _duration_str_to_seconds(duration: str) -> int:
     """
     if ":" in duration:
         parts = duration.split(":")
+        # Handle ':30' (leading colon, bare seconds) → ['', '30']
+        if parts[0] == "" and len(parts) == 2:
+            return int(parts[1])
         return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
     return int(duration)
 

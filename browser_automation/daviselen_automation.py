@@ -537,7 +537,7 @@ def _create_daviselen_contract_direct(order: "DaviselenOrder", user_input: dict)
                     spots_per_week=group["spots_per_week"],
                     date_from=_parse_date(group["start_date"]),
                     date_to=_parse_date(group["end_date"]),
-                    duration=f":{line.duration:02d}",
+                    duration=str(line.duration),
                     is_bonus=is_bonus,
                     booking_code=booking_code,
                     separation_intervals=separation,
