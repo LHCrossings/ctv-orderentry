@@ -700,9 +700,7 @@ class OrderProcessingService:
         success = self._misfit_processor['process'](
             driver=driver,
             pdf_path=str(order.pdf_path),
-            order_code=order.order_input.order_code if order.order_input else None,
-            description=order.order_input.description if order.order_input else None,
-            customer_id=None
+            user_input=order.order_input,
         )
         if success:
             parsed_order = self._misfit_processor['parser'](str(order.pdf_path))

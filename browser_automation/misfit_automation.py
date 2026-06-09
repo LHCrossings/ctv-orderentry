@@ -363,6 +363,82 @@ def _create_misfit_contract_direct(
 
 
 # ============================================================================
+# GATHER (pre-processing input collection)
+# ============================================================================
+
+def gather_misfit_inputs(pdf_path: str) -> Optional[dict]:
+    """Collect all Misfit inputs before processing. Returns dict or None on cancel."""
+    from browser_automation.customer_defaults import DEFAULT_DB_PATH as _db_path
+
+    print(f"\n{'='*70}")
+    print("MISFIT — UPFRONT INPUT COLLECTION")
+    print(f"{'='*70}\n")
+
+    try:
+        order = parse_misfit_pdf(pdf_path)
+    except Exception as e:
+        print(f"[PARSE] ✗ Failed: {e}")
+        return None
+
+    flight_start, flight_end = order.get_flight_dates()
+    print(f"[PARSE] ✓ Agency:   {order.agency}")
+    print(f"[PARSE] ✓ Contact:  {order.contact}")
+    print(f"[PARSE] ✓ Markets:  {', '.join(order.markets)}")
+    print(f"[PARSE] ✓ Flight:   {flight_start} – {flight_end}")
+    print(f"[PARSE] ✓ Lines:    {len(order.lines)}")
+
+    # ── Customer ID with DB lookup ──────────────────────────────────────────
+    _repo = CustomerRepository(_db_path)
+    _found = _repo.find_by_name_any_type(order.agency)
+    _saved_id = _found.customer_id if (_found and _found.order_type == OrderType.MISFIT) else None
+
+    cid_prompt = (f"\n  Etere customer ID [{_saved_id}]: " if _saved_id
+                  else "\n  Etere customer ID: ")
+    cid_input = input(cid_prompt).strip() or _saved_id or ""
+    try:
+        customer_id = int(cid_input)
+    except (ValueError, TypeError):
+        print("  [ERROR] A customer ID is required for direct DB entry")
+        return None
+
+    try:
+        _repo.save(Customer(
+            customer_id=str(customer_id),
+            customer_name=order.agency,
+            order_type=OrderType.MISFIT,
+            billing_type="agency",
+            code_name=order.agency,
+            description_name=order.agency,
+        ))
+    except Exception as e:
+        print(f"  ⚠ Could not save customer to DB: {e}")
+
+    # ── Contract code / description ─────────────────────────────────────────
+    first_name = order.contact.split()[0] if order.contact else "Misfit"
+    markets_str = '-'.join(normalize_market(m) for m in order.markets)
+    default_code = f"Misfit {first_name} {markets_str}"
+    default_desc = f"Misfit {', '.join(order.markets)}"
+
+    order_code  = input(f"  Code [{default_code}]: ").strip() or default_code
+    description = input(f"  Description [{default_desc}]: ").strip() or default_desc
+
+    # ── Spot duration ───────────────────────────────────────────────────────
+    spot_duration = prompt_for_spot_duration()
+
+    print(f"\n{'='*70}")
+    print("INPUT COLLECTION COMPLETE")
+    print(f"{'='*70}")
+
+    return {
+        'customer_id':   customer_id,
+        'order_code':    order_code,
+        'description':   description,
+        'spot_duration': spot_duration,
+        'separation':    (15, 0, 0),
+    }
+
+
+# ============================================================================
 # MAIN PROCESSING FUNCTIONS
 # ============================================================================
 
@@ -371,7 +447,8 @@ def process_misfit_order(
     pdf_path: str,
     order_code: Optional[str] = None,
     description: Optional[str] = None,
-    customer_id: Optional[int] = None
+    customer_id: Optional[int] = None,
+    user_input: Optional[dict] = None,
 ) -> bool:
     """
     Process Misfit order PDF - create contract in Etere.
@@ -412,7 +489,15 @@ def process_misfit_order(
     print(f"  Flight: {flight_start} - {flight_end}")
     print(f"  Total lines: {len(order.lines)}")
     print()
-    
+
+    # Extract pre-gathered inputs if provided
+    spot_duration = None
+    if user_input is not None:
+        customer_id   = user_input.get('customer_id', customer_id)
+        order_code    = user_input.get('order_code', order_code)
+        description   = user_input.get('description', description)
+        spot_duration = user_input.get('spot_duration')
+
     # If inputs not provided, prompt for them (simple version)
     if not customer_id:
         print("\n[CUSTOMER] No customer info on Misfit PDFs")
@@ -442,9 +527,10 @@ def process_misfit_order(
         default_desc = f"Misfit {', '.join(order.markets)}"
         description = input(f"Description (default: {default_desc}): ").strip() or default_desc
     
-    # Spot duration
-    spot_duration = prompt_for_spot_duration()
-    
+    # Spot duration (use pre-gathered if available)
+    if spot_duration is None:
+        spot_duration = prompt_for_spot_duration()
+
     # Separation intervals for Misfit
     separation_intervals = (15, 0, 0)  # Customer=15, Order=0, Event=0
 
