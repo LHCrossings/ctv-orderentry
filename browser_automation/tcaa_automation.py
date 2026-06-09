@@ -12,6 +12,7 @@ NO Etere browser code lives here - it's all in etere_client.py.
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional, Tuple
 from pathlib import Path
 import sys
@@ -258,6 +259,135 @@ def prompt_for_south_asian_disambiguation(description: str) -> str:
             return "Both"
         else:
             print("  Invalid choice, try again")
+
+
+# ============================================================================
+# DIRECT DB ENTRY
+# ============================================================================
+
+def _create_tcaa_contract_direct(
+    estimate: TCAAEstimate,
+    bonus_inputs: dict,
+    separation_intervals,
+    order_code: Optional[str] = None,
+    description: Optional[str] = None,
+) -> Optional[int]:
+    """Enter one TCAA estimate directly via DB (no browser).
+    Returns contract_id on success, None on failure.
+    """
+    from browser_automation.etere_direct_client import EtereDirectClient, connect
+
+    def _parse_date(s):
+        for fmt in ('%m/%d/%Y', '%Y-%m-%d'):
+            try:
+                return datetime.strptime(s, fmt).date()
+            except ValueError:
+                continue
+        raise ValueError(f"Cannot parse date: {s!r}")
+
+    def _secs_to_duration(seconds):
+        return f":{seconds:02d}"
+
+    conn = None
+    try:
+        conn = connect()
+        client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
+        client.set_master_market("NYC")
+
+        contract_code        = order_code or f"TCAA Toyota {estimate.estimate_number}"
+        contract_description = description or f"Toyota SEA Est {estimate.estimate_number}"
+        notes_line1          = estimate.description if hasattr(estimate, 'description') else "Asian Cable"
+        notes_cpe            = f"{notes_line1}\nCPE WWDTA/Asian/{estimate.estimate_number}"
+
+        contract_id = client.create_contract_header(
+            code=contract_code,
+            description=contract_description,
+            customer_id=75,
+            contract_date=_parse_date(estimate.flight_start),
+            contract_end_date=_parse_date(estimate.flight_end),
+            billing_type="agency",
+            note=notes_cpe,
+            allow_rename=True,
+        )
+        print(f"[TCAA DIRECT] ✓ Contract ID={contract_id} ({contract_code})")
+
+        line_count = 0
+
+        for line_idx, line in enumerate(estimate.lines):
+            if line.is_bonus():
+                bonus_input = bonus_inputs.get(line_idx)
+                if not bonus_input:
+                    print(f"  WARNING: No input for bonus line {line_idx + 1}, skipping")
+                    continue
+                days         = bonus_input.days
+                time         = bonus_input.time
+                language     = bonus_input.language
+                booking_code = 10
+                is_ros       = any(
+                    d['days'] == days and d['time'] == time and d['language'] == language
+                    for d in ROS_OPTIONS.values()
+                )
+                desc = f"BNS {language} ROS" if is_ros else f"BNS {days} {time} {language}"
+            else:
+                days         = line.days
+                time         = line.time
+                language     = extract_language_from_program(line.program)
+                booking_code = 2
+                desc         = f"{days} {format_time_for_description(time)} {language}"
+
+            ranges = EtereClient.consolidate_weeks_from_flight(
+                line.weekly_spots,
+                estimate.flight_start,
+                estimate.flight_end,
+            )
+
+            time_from, time_to = EtereClient.parse_time_range(time)
+            time_range         = f"{time_from}-{time_to}"
+            adjusted_days, _   = EtereClient.check_sunday_6_7a_rule(days, time)
+
+            print(f"\n  Line {line_idx + 1}: {desc} → {len(ranges)} Etere line(s)")
+
+            for rng in ranges:
+                line_count += 1
+                spw = rng['spots_per_week']
+                if isinstance(spw, list):
+                    spw = spw[0]
+                total_spots = spw * rng['weeks']
+                print(f"    [{line_count}] {rng['start_date']}–{rng['end_date']} spw={spw} total={total_spots}")
+
+                client.add_contract_line(
+                    market="SEA",
+                    days=adjusted_days,
+                    time_range=time_range,
+                    description=desc,
+                    rate=float(line.rate),
+                    total_spots=total_spots,
+                    spots_per_week=spw,
+                    date_from=_parse_date(rng['start_date']),
+                    date_to=_parse_date(rng['end_date']),
+                    duration=_secs_to_duration(line.duration),
+                    is_bonus=line.is_bonus(),
+                    booking_code=booking_code,
+                    separation_intervals=separation_intervals,
+                    contract_id=contract_id,
+                )
+
+        conn.commit()
+        conn.close()
+        print(f"\n[TCAA DIRECT] ✓ {line_count} lines committed")
+        return contract_id
+
+    except Exception as exc:
+        print(f"[TCAA DIRECT] ✗ {exc}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
+        return None
 
 
 # ============================================================================
@@ -537,7 +667,29 @@ def process_tcaa_order(
     print(f"\n{'='*70}")
     print("STARTING CONTRACT CREATION")
     print(f"{'='*70}\n")
-    
+
+    if driver is None:
+        success_count = 0
+        for estimate in estimates:
+            bonus_inputs = all_bonus_inputs[estimate.estimate_number]
+            contract_id = _create_tcaa_contract_direct(
+                estimate, bonus_inputs, separation_intervals, order_code, description
+            )
+            if contract_id:
+                success_count += 1
+                print(f"\n✓ Estimate {estimate.estimate_number} completed successfully")
+            else:
+                print(f"\n✗ Estimate {estimate.estimate_number} FAILED")
+                cont = input("\nContinue with remaining contracts? (y/n): ").strip().lower()
+                if cont != 'y':
+                    break
+            print()
+        print(f"\n{'='*70}")
+        print("TCAA ORDER PROCESSING COMPLETE")
+        print(f"{'='*70}")
+        print(f"Successfully created: {success_count}/{len(estimates)} contracts")
+        return success_count == len(estimates)
+
     # Create Etere client
     etere = EtereClient(driver)
     

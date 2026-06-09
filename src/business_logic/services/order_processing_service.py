@@ -134,6 +134,7 @@ class OrderProcessingService:
         OrderType.RWNY,
         OrderType.TCAA_AV,
         OrderType.SACCOUNTYVOTERS,
+        OrderType.TCAA,
     }
 
     def __init__(
@@ -373,64 +374,43 @@ class OrderProcessingService:
         try:
             # Lazy load TCAA processor
             if self._tcaa_processor is None:
-                from etere_session import EtereSession
                 from parsers.tcaa_parser import parse_tcaa_pdf
                 from tcaa_automation import process_tcaa_order
 
                 self._tcaa_processor = {
                     'process': process_tcaa_order,
-                    'session_class': EtereSession,
-                    'parser': parse_tcaa_pdf
+                    'parser': parse_tcaa_pdf,
                 }
 
             # Use first order for display info
             first_order = orders[0]
 
             print(f"\n{'='*70}")
-            print("TCAA BROWSER AUTOMATION (BATCH MODE)")
+            print("TCAA DIRECT DB ENTRY (BATCH MODE)")
             print(f"{'='*70}")
             print(f"PDF: {first_order.pdf_path.name}")
             print(f"Estimates: {', '.join(o.estimate_number for o in orders)}")
             print(f"Customer: {first_order.customer_name}")
             print(f"{'='*70}\n")
 
-            # Start browser session
-            with self._tcaa_processor['session_class']() as session:
-                # Set master market to NYC
-                session.set_market("NYC")
+            success = self._tcaa_processor['process'](
+                driver=None,
+                pdf_path=str(first_order.pdf_path),
+                estimate_number=None,  # batch — process all estimates in PDF
+            )
 
-                # Process all estimates together (pass None for estimate_number)
-                # This triggers batch mode in tcaa_automation
-                success = self._tcaa_processor['process'](
-                    driver=session.driver,
-                    pdf_path=str(first_order.pdf_path),
-                    estimate_number=None  # Process ALL estimates in batch
+            if success:
+                contracts = [
+                    Contract(contract_number=f"TCAA-{o.estimate_number}", order_type=OrderType.TCAA)
+                    for o in orders
+                ]
+                print(f"\n✓ Successfully created {len(contracts)} contracts")
+                return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.TCAA)
+            else:
+                return ProcessingResult(
+                    success=False, contracts=[], order_type=OrderType.TCAA,
+                    error_message="TCAA batch processing failed"
                 )
-
-                if success:
-                    # Create contracts for all processed estimates
-                    contracts = [
-                        Contract(
-                            contract_number=f"TCAA-{order.estimate_number}",
-                            order_type=OrderType.TCAA
-                        )
-                        for order in orders
-                    ]
-
-                    print(f"\n✓ Successfully created {len(contracts)} contracts")
-
-                    return ProcessingResult(
-                        success=True,
-                        contracts=contracts,
-                        order_type=OrderType.TCAA
-                    )
-                else:
-                    return ProcessingResult(
-                        success=False,
-                        contracts=[],
-                        order_type=OrderType.TCAA,
-                        error_message="TCAA batch processing failed"
-                    )
 
         except Exception as e:
             import traceback
@@ -607,34 +587,21 @@ class OrderProcessingService:
         )
 
     def _process_tcaa_order(self, order: Order, shared_session: Any = None) -> ProcessingResult:
-        """
-        UNIVERSAL: Process TCAA order with optional shared browser session.
-
-        Args:
-            order: TCAA order to process
-            shared_session: Optional shared EtereSession (for batch processing)
-
-        Returns:
-            ProcessingResult with contracts created or error
-        """
+        """Process TCAA order via direct DB (no browser)."""
         try:
-            # Lazy load TCAA processor components
             if self._tcaa_processor is None:
-                from etere_session import EtereSession
                 from parsers.tcaa_parser import parse_tcaa_pdf
                 from tcaa_automation import process_tcaa_order
 
                 self._tcaa_processor = {
                     'process': process_tcaa_order,
-                    'session_class': EtereSession,
-                    'parser': parse_tcaa_pdf
+                    'parser': parse_tcaa_pdf,
                 }
 
             print(f"\n{'='*70}")
-            print("TCAA BROWSER AUTOMATION")
+            print("TCAA DIRECT DB ENTRY")
             print(f"{'='*70}")
             print(f"Order: {order.get_display_name()}")
-            print(f"Type: {order.order_type.name}")
             print(f"Customer: {order.customer_name}")
 
             if order.order_input:
@@ -643,13 +610,24 @@ class OrderProcessingService:
 
             print(f"{'='*70}\n")
 
-            if shared_session:
-                print("[SESSION] ✓ Using shared browser session")
-                return self._run_tcaa_with_driver(order, shared_session.driver)
-            else:
-                with self._tcaa_processor['session_class']() as session:
-                    session.set_market("NYC")
-                    return self._run_tcaa_with_driver(order, session.driver)
+            success = self._tcaa_processor['process'](
+                driver=None,
+                pdf_path=str(order.pdf_path),
+                estimate_number=order.estimate_number,
+                order_code=order.order_input.order_code if order.order_input else None,
+                description=order.order_input.description if order.order_input else None,
+            )
+            if success:
+                return ProcessingResult(
+                    success=True,
+                    contracts=[Contract(contract_number=f"TCAA-{order.estimate_number}", order_type=OrderType.TCAA)],
+                    order_type=OrderType.TCAA,
+                    error_message=None,
+                )
+            return ProcessingResult(
+                success=False, contracts=[], order_type=OrderType.TCAA,
+                error_message="TCAA processing failed — check output for details"
+            )
 
         except Exception as e:
             import traceback
