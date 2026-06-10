@@ -40,12 +40,12 @@ Service methods check `isinstance(inp, dict)` and use `.get('order_code')` / `.g
 ### 6. Yes/Enter at a date-override prompt must keep the original date
 Pattern: `actual = raw if raw and raw.lower() not in ('y', 'yes') else original`. Never do `actual = raw if raw else original` — typing "yes" stores the string "yes" as the date.
 
-### 7. `_DIRECT_DB_TESTED_KEYS` and service/bridge registration — 3 files
-After writing and testing a new parser:
+### 7. Service/bridge registration — 3 files, all at once (no more pink pill)
+**Updated 2026-06-10:** The Selenium→DirectDB conversion phase is complete. All new parsers are built from scratch and go directly to white pill. Add to ALL THREE simultaneously:
 1. `_DIRECT_DB_ORDER_TYPES` in `order_processing_service.py`
-2. `_DIRECT_DB_KEYS` in `parser_bridge.py` (white pill → no pill until tested)
-3. `_DIRECT_DB_TESTED_KEYS` in `parser_bridge.py` (add after passing pink-pill test)
-Missing step 3 leaves the pill pink indefinitely. Missing step 1 causes a browser session to be opened.
+2. `_DIRECT_DB_KEYS` in `parser_bridge.py`
+3. `_DIRECT_DB_TESTED_KEYS` in `parser_bridge.py`
+Missing step 1 causes a browser session to be opened. Missing steps 2–3 hides the parser from the web UI entirely.
 
 ### 8. `gather_*_inputs` must prompt for contract code and description
 Every gather function must ask the user for the contract code and description before processing starts. Never let the processing function prompt for these or auto-generate them silently.
