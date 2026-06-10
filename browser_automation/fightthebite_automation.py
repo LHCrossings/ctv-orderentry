@@ -223,7 +223,7 @@ def _default_code(order: FTBOrder) -> tuple[str, str]:
     first_week = (order.paid_lines or order.bonus_lines)[0].week_start_dates[0]
     mon = _MONTH_NAMES.get(first_week.split()[0], 1)
     mm = f"{mon:02d}"
-    return f"Sac Yolo FTP {yr2}{mm}", f"Sac Yolo Mosquito Fight the Bite {yr4}"
+    return f"Sac Yolo FTB {yr2}{mm}", f"Sac Yolo Mosquito Fight the Bite {yr4}"
 
 
 def gather_fightthebite_inputs(file_path: str) -> Optional[dict]:
