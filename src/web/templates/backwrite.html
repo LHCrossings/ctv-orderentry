@@ -410,22 +410,22 @@
     <div class="bw-card" id="form-card" style="display:none">
         <h2>Step 2 — Fill In Details</h2>
 
-        <!-- Load existing order drop zone -->
-        <div class="upload-zone upload-zone-sm" id="existing-zone">
-            <input type="file" id="existing-input" accept=".xlsx,.xlsm,.xls" />
-            <div class="upload-icon">📁</div>
-            <p><strong>SALES CONFIRMATION</strong> — drop existing file here to pre-fill fields</p>
-            <p>or click to browse</p>
-            <div class="file-name" id="existing-filename"></div>
-        </div>
-
         <!-- IO file upload zone -->
-        <div class="upload-zone upload-zone-sm" id="io-zone" style="margin-bottom:18px">
+        <div class="upload-zone upload-zone-sm" id="io-zone">
             <input type="file" id="io-input" accept=".pdf,.xml,.xlsx,.xls,.jpg,.jpeg,.png" />
             <div class="upload-icon">📋</div>
             <p><strong>INSERTION ORDER</strong> — drop IO here to use IO lines in Sales Confirmation tab</p>
             <p style="font-size:0.78rem;color:var(--text-secondary)">PDF, XML, XLSX, XLS, JPG, PNG</p>
             <div class="file-name" id="io-filename"></div>
+        </div>
+
+        <!-- Load existing order drop zone -->
+        <div class="upload-zone upload-zone-sm" id="existing-zone" style="margin-bottom:18px">
+            <input type="file" id="existing-input" accept=".xlsx,.xlsm,.xls" />
+            <div class="upload-icon">📁</div>
+            <p><strong>SALES CONFIRMATION</strong> — drop existing file here to pre-fill fields</p>
+            <p>or click to browse</p>
+            <div class="file-name" id="existing-filename"></div>
         </div>
 
         <form id="bw-form" method="POST" action="/backwrite/generate" enctype="multipart/form-data">
