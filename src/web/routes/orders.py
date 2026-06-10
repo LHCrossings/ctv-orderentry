@@ -7336,8 +7336,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     AND BlackList > 0
                 """, [contract_id])
                 deleted = cursor.rowcount
+                # Reset line status to Ready (0) so the scheduler can pick them up again
+                cursor.execute("""
+                    UPDATE CONTRATTIRIGHE
+                    SET ROWSTATUS = 0
+                    WHERE ID_CONTRATTITESTATA = %s
+                      AND ROWSTATUS != 0
+                """, [contract_id])
+                updated_lines = cursor.rowcount
                 conn.commit()
-            return JSONResponse({"deleted": deleted})
+            return JSONResponse({"deleted": deleted, "lines_reset": updated_lines})
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
