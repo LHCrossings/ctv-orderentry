@@ -171,7 +171,15 @@ class OrderDetectionService:
         if self._is_bvk(first_page_text):
             return OrderType.BVK
 
+        # Fight the Bite public health campaign
+        if self._is_fightthebite(first_page_text):
+            return OrderType.FIGHTTHEBITE
+
         return OrderType.UNKNOWN
+
+    def _is_fightthebite(self, text: str) -> bool:
+        """Definitive marker: 'Fight The Bite' (campaign title)."""
+        return "Fight The Bite" in text or "Fight the Bite" in text
 
     def _is_rwny(self, text: str) -> bool:
         """
@@ -883,6 +891,8 @@ def detect_from_filename(filename: str) -> OrderType:
         return OrderType.POLARIS
     if "3OLIVES" in name_upper:
         return OrderType.THREEOLIVES
+    if "FIGHT" in name_upper and "BITE" in name_upper:
+        return OrderType.FIGHTTHEBITE
     # Imprenta XLSX files don't carry "Imprenta" in the filename —
     # fall through to content-based detection in the scanner.
     return OrderType.UNKNOWN

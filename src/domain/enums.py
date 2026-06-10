@@ -47,6 +47,7 @@ class OrderType(Enum):
     INTERTREND = "intertrend"
     MEDIASOL = "mediasol"
     RWNY = "rwny"
+    FIGHTTHEBITE = "fightthebite"
     UNKNOWN = "unknown"
 
     def requires_block_refresh(self) -> bool:
@@ -65,7 +66,7 @@ class OrderType(Enum):
         All known agency OrderTypes are always billed as agency.
         CHARMAINE, RWNY, and UNKNOWN may be either agency or client.
         """
-        return self not in {OrderType.CHARMAINE, OrderType.RWNY, OrderType.UNKNOWN}
+        return self not in {OrderType.CHARMAINE, OrderType.RWNY, OrderType.FIGHTTHEBITE, OrderType.UNKNOWN}
 
 
 class OrderBillingType(Enum):
@@ -309,6 +310,7 @@ class SeparationInterval(Enum):
     INTERTREND = (25, 0, 0)
     MEDIASOL = (25, 0, 0)
     RWNY = (25, 0, 0)
+    FIGHTTHEBITE = (15, 0, 0)
     DEFAULT = (15, 0, 0)
 
     @classmethod
@@ -345,5 +347,6 @@ class SeparationInterval(Enum):
             OrderType.INTERTREND:  cls.INTERTREND.value,
             OrderType.MEDIASOL:    cls.MEDIASOL.value,
             OrderType.RWNY:        cls.RWNY.value,
+            OrderType.FIGHTTHEBITE: cls.FIGHTTHEBITE.value,
         }
         return mapping.get(order_type, cls.DEFAULT.value)

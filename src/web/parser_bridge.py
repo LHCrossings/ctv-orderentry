@@ -54,6 +54,7 @@ _DISPLAY_NAMES = {
     "MEDIASOL":        "Media Solutions",
     "RWNY":            "Resorts World NY",
     "SIERRADONOR":     "Sierra Donor Services",
+    "FIGHTTHEBITE":    "Fight the Bite",
 }
 
 _REGISTRY = {
@@ -89,6 +90,7 @@ _REGISTRY = {
     "MEDIASOL":         ("browser_automation.parsers.mediasol_parser",         "parse_mediasol_pdf"),
     "RWNY":             ("browser_automation.parsers.rwny_parser",             "parse_rwny_pdf"),
     "SIERRADONOR":      ("browser_automation.parsers.sierra_parser",           "parse_sierra"),
+    "FIGHTTHEBITE":     ("browser_automation.parsers.fightthebite_parser",     "parse_fightthebite_file"),
 }
 
 _MISSING = object()
@@ -450,7 +452,7 @@ def _normalize_igraphix(order) -> dict:
 # Public API
 # ---------------------------------------------------------------------------
 
-_DIRECT_DB_KEYS = {"LEXUS", "RPM", "WORLDLINK", "TIMEADVERTISING", "IGRAPHIX", "CHARMAINE", "HL", "HL_BDR", "ADMERASIA", "SAGENT", "GALEFORCE", "HYPHEN", "INTERTREND", "SIERRADONOR", "PROSIO", "SCWA", "RWNY", "TCAA_AV", "SACCOUNTYVOTERS", "TCAA", "MISFIT", "IMPACT", "IMPRENTA", "DAVISELEN", "BVK", "DART", "MEDIASOL", "OPAD", "POLARIS", "THREEOLIVES", "WALLRICH", "XML"}
+_DIRECT_DB_KEYS = {"LEXUS", "RPM", "WORLDLINK", "TIMEADVERTISING", "IGRAPHIX", "CHARMAINE", "HL", "HL_BDR", "ADMERASIA", "SAGENT", "GALEFORCE", "HYPHEN", "INTERTREND", "SIERRADONOR", "PROSIO", "SCWA", "RWNY", "TCAA_AV", "SACCOUNTYVOTERS", "TCAA", "MISFIT", "IMPACT", "IMPRENTA", "DAVISELEN", "BVK", "DART", "MEDIASOL", "OPAD", "POLARIS", "THREEOLIVES", "WALLRICH", "XML", "FIGHTTHEBITE"}
 
 # Keys that have been tested end-to-end with real orders against Etere DirectDB.
 # Pink pills graduate to white once they appear here.

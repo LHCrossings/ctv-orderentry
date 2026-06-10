@@ -111,6 +111,7 @@ class OrderProcessingService:
         OrderType.INTERTREND:       "_process_intertrend_order",
         OrderType.MEDIASOL:         "_process_mediasol_order",
         OrderType.RWNY:             "_process_rwny_order",
+        OrderType.FIGHTTHEBITE:     "_process_fightthebite_order",
     }
 
     # Order types that use direct DB entry — no browser session needed
@@ -147,6 +148,7 @@ class OrderProcessingService:
         OrderType.THREEOLIVES,
         OrderType.WALLRICH,
         OrderType.XML,
+        OrderType.FIGHTTHEBITE,
     }
 
     def __init__(
@@ -2369,6 +2371,52 @@ class OrderProcessingService:
             print(f"\n✗ RWNY processing failed: {exc}")
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.RWNY,
+                error_message=error_detail,
+            )
+
+    def _process_fightthebite_order(
+        self,
+        order: Any,
+        shared_session: Any,
+    ) -> "ProcessingResult":
+        """Process Fight the Bite media partnership order."""
+        try:
+            from browser_automation.fightthebite_automation import process_fightthebite_order
+
+            print(f"\n{'='*70}")
+            print("PROCESSING FIGHT THE BITE ORDER")
+            print(f"{'='*70}")
+            print(f"File: {order.pdf_path.name}")
+            print(f"{'='*70}\n")
+
+            pre_gathered_inputs = order.order_input if order.order_input else None
+
+            success = process_fightthebite_order(
+                file_path=str(order.pdf_path),
+                shared_session=None,
+                pre_gathered_inputs=pre_gathered_inputs,
+            )
+            if success:
+                print("\n✓ Fight the Bite order processed successfully")
+                inp = pre_gathered_inputs
+                code = (inp.get('contract_code') if isinstance(inp, dict) else None) or 'FTB'
+                return ProcessingResult(
+                    success=True,
+                    contracts=[Contract(contract_number=code, order_type=OrderType.FIGHTTHEBITE)],
+                    order_type=OrderType.FIGHTTHEBITE,
+                )
+            print("\n✗ Fight the Bite order processing failed")
+            return ProcessingResult(
+                success=False, contracts=[], order_type=OrderType.FIGHTTHEBITE,
+                error_message="Fight the Bite processing failed — check output for details",
+            )
+
+        except Exception as exc:
+            import traceback
+            error_detail = f"Fight the Bite processing error: {str(exc)}\n{traceback.format_exc()}"
+            print(f"\n✗ Fight the Bite processing failed: {exc}")
+            return ProcessingResult(
+                success=False, contracts=[], order_type=OrderType.FIGHTTHEBITE,
                 error_message=error_detail,
             )
 
