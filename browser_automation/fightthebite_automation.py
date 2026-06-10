@@ -218,8 +218,12 @@ def _create_ftb_contract_direct(order: FTBOrder, inputs: dict) -> Optional[int]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _default_code(order: FTBOrder) -> tuple[str, str]:
-    yr = str(order.year)[2:]
-    return f"FTB{yr}{FTB_MARKET}", "Fight the Bite"
+    yr2 = str(order.year)[2:]   # "26"
+    yr4 = str(order.year)       # "2026"
+    first_week = (order.paid_lines or order.bonus_lines)[0].week_start_dates[0]
+    mon = _MONTH_NAMES.get(first_week.split()[0], 1)
+    mm = f"{mon:02d}"
+    return f"Sac Yolo FTP {yr2}{mm}", f"Sac Yolo Mosquito Fight the Bite {yr4}"
 
 
 def gather_fightthebite_inputs(file_path: str) -> Optional[dict]:
