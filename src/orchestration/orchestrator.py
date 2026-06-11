@@ -63,6 +63,7 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
     OrderType.OPAD:              ("browser_automation.opad_automation",                "gather_opad_inputs",               "opAD"),
     OrderType.TCAA:              ("browser_automation.tcaa_automation",                "gather_tcaa_inputs",               "TCAA / Toyota"),
     OrderType.TCAA_AV:          ("browser_automation.tcaa_av_automation",             "gather_tcaa_av_inputs",            "TCAA Added Value"),
+    OrderType.ACM:               ("browser_automation.acm_automation",                  "gather_acm_inputs",                 "ACM"),
 }
 
 

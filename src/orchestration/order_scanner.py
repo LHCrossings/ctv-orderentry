@@ -49,6 +49,9 @@ def _detect_xlsx_content(file_path: Path) -> OrderType:
                 if "3OLIVESMEDIA" in v:
                     wb.close()
                     return OrderType.THREEOLIVES
+                if "AMERICAN COMMUNITY MEDIA" in v:
+                    wb.close()
+                    return OrderType.ACM
         wb.close()
     except Exception as e:
         print(f"[WARN] Could not read {file_path.name}: {e}")

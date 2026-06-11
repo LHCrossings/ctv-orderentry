@@ -55,6 +55,7 @@ _DISPLAY_NAMES = {
     "RWNY":            "Resorts World NY",
     "SIERRADONOR":     "Sierra Donor Services",
     "FIGHTTHEBITE":    "Fight the Bite",
+    "ACM":             "American Community Media",
 }
 
 _REGISTRY = {
@@ -91,6 +92,7 @@ _REGISTRY = {
     "RWNY":             ("browser_automation.parsers.rwny_parser",             "parse_rwny_pdf"),
     "SIERRADONOR":      ("browser_automation.parsers.sierra_parser",           "parse_sierra"),
     "FIGHTTHEBITE":     ("browser_automation.parsers.fightthebite_parser",     "parse_fightthebite_file"),
+    "ACM":              ("browser_automation.parsers.acm_parser",               "parse_acm_xlsx"),
 }
 
 _MISSING = object()
@@ -452,12 +454,12 @@ def _normalize_igraphix(order) -> dict:
 # Public API
 # ---------------------------------------------------------------------------
 
-_DIRECT_DB_KEYS = {"LEXUS", "RPM", "WORLDLINK", "TIMEADVERTISING", "IGRAPHIX", "CHARMAINE", "HL", "HL_BDR", "ADMERASIA", "SAGENT", "GALEFORCE", "HYPHEN", "INTERTREND", "SIERRADONOR", "PROSIO", "SCWA", "RWNY", "TCAA_AV", "SACCOUNTYVOTERS", "TCAA", "MISFIT", "IMPACT", "IMPRENTA", "DAVISELEN", "BVK", "DART", "MEDIASOL", "OPAD", "POLARIS", "THREEOLIVES", "WALLRICH", "XML", "FIGHTTHEBITE"}
+_DIRECT_DB_KEYS = {"LEXUS", "RPM", "WORLDLINK", "TIMEADVERTISING", "IGRAPHIX", "CHARMAINE", "HL", "HL_BDR", "ADMERASIA", "SAGENT", "GALEFORCE", "HYPHEN", "INTERTREND", "SIERRADONOR", "PROSIO", "SCWA", "RWNY", "TCAA_AV", "SACCOUNTYVOTERS", "TCAA", "MISFIT", "IMPACT", "IMPRENTA", "DAVISELEN", "BVK", "DART", "MEDIASOL", "OPAD", "POLARIS", "THREEOLIVES", "WALLRICH", "XML", "FIGHTTHEBITE", "ACM"}
 
 # All direct-DB parsers are white pill by default. New parsers built from scratch
 # go directly into both sets. Pink pill was only needed during the Selenium→DirectDB
 # conversion phase (now complete).
-_DIRECT_DB_TESTED_KEYS = {"ADMERASIA", "BVK", "THREEOLIVES", "DART", "DAVISELEN", "GALEFORCE", "HL", "HL_BDR", "HYPHEN", "IMPACT", "IGRAPHIX", "IMPRENTA", "INTERTREND", "LEXUS", "MEDIASOL", "MISFIT", "OPAD", "POLARIS", "PROSIO", "RPM", "RWNY", "SAGENT", "SACCOUNTYVOTERS", "SCWA", "SIERRADONOR", "TCAA", "TCAA_AV", "TIMEADVERTISING", "WALLRICH", "WORLDLINK", "FIGHTTHEBITE"}
+_DIRECT_DB_TESTED_KEYS = {"ADMERASIA", "BVK", "THREEOLIVES", "DART", "DAVISELEN", "GALEFORCE", "HL", "HL_BDR", "HYPHEN", "IMPACT", "IGRAPHIX", "IMPRENTA", "INTERTREND", "LEXUS", "MEDIASOL", "MISFIT", "OPAD", "POLARIS", "PROSIO", "RPM", "RWNY", "SAGENT", "SACCOUNTYVOTERS", "SCWA", "SIERRADONOR", "TCAA", "TCAA_AV", "TIMEADVERTISING", "WALLRICH", "WORLDLINK", "FIGHTTHEBITE", "ACM"}
 
 def list_parsers() -> list[dict]:
     """Return display info for every registered parser, sorted by display name."""

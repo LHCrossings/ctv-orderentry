@@ -112,6 +112,7 @@ class OrderProcessingService:
         OrderType.MEDIASOL:         "_process_mediasol_order",
         OrderType.RWNY:             "_process_rwny_order",
         OrderType.FIGHTTHEBITE:     "_process_fightthebite_order",
+        OrderType.ACM:               "_process_acm_order",
     }
 
     # Order types that use direct DB entry — no browser session needed
@@ -149,6 +150,7 @@ class OrderProcessingService:
         OrderType.WALLRICH,
         OrderType.XML,
         OrderType.FIGHTTHEBITE,
+        OrderType.ACM,
     }
 
     def __init__(
@@ -2500,6 +2502,38 @@ class OrderProcessingService:
             print(f"\n✗ BVK processing failed: {exc}")
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.BVK,
+                error_message=error_detail,
+            )
+
+    def _process_acm_order(self, order: Order, shared_session=None) -> ProcessingResult:
+        """Process an ACM (American Community Media) order — one contract per market."""
+        inp = order.order_input if isinstance(order.order_input, dict) else {}
+        try:
+            from browser_automation.parsers.acm_parser import parse_acm_xlsx
+            from browser_automation.acm_automation import run_acm_order
+
+            parsed  = parse_acm_xlsx(str(order.pdf_path))
+            results = run_acm_order(parsed, inp)  # list of (label, success)
+
+            contracts = [
+                Contract(contract_number=label, order_type=OrderType.ACM)
+                for label, ok in results if ok
+            ]
+            overall_success = bool(contracts)
+
+            if not overall_success:
+                return ProcessingResult(
+                    success=False, contracts=[], order_type=OrderType.ACM,
+                    error_message="ACM processing failed — check output above",
+                )
+            return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.ACM)
+
+        except Exception as exc:
+            import traceback
+            error_detail = f"ACM processing error: {exc}\n{traceback.format_exc()}"
+            print(f"\n✗ ACM processing failed: {exc}")
+            return ProcessingResult(
+                success=False, contracts=[], order_type=OrderType.ACM,
                 error_message=error_detail,
             )
 

@@ -48,6 +48,7 @@ class OrderType(Enum):
     MEDIASOL = "mediasol"
     RWNY = "rwny"
     FIGHTTHEBITE = "fightthebite"
+    ACM = "acm"
     UNKNOWN = "unknown"
 
     def requires_block_refresh(self) -> bool:
@@ -115,7 +116,7 @@ KNOWN_AGENCY_KEYWORDS: list[str] = [
     "igraphix", "admerasia", "opad", "rpm", "h&l partners",
     "impact marketing", "sagent", "galeforce", "galeforcemedia",
     "ntooitive", "time advertising", "3olivesmedia", "bvk", "intertrend",
-    "mediasol", "pulsar advertising",
+    "mediasol", "pulsar advertising", "american community media",
 ]
 """
 If ANY of these keywords appear in the PDF text (case-insensitive),
@@ -311,6 +312,7 @@ class SeparationInterval(Enum):
     MEDIASOL = (25, 0, 0)
     RWNY = (25, 0, 0)
     FIGHTTHEBITE = (15, 0, 0)
+    ACM = (15, 0, 0)
     DEFAULT = (15, 0, 0)
 
     @classmethod
@@ -348,5 +350,6 @@ class SeparationInterval(Enum):
             OrderType.MEDIASOL:    cls.MEDIASOL.value,
             OrderType.RWNY:        cls.RWNY.value,
             OrderType.FIGHTTHEBITE: cls.FIGHTTHEBITE.value,
+            OrderType.ACM:          cls.ACM.value,
         }
         return mapping.get(order_type, cls.DEFAULT.value)
