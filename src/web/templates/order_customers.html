@@ -359,10 +359,11 @@ async function deleteCustomer(btn, name, type) {
     delete btn.dataset.confirming;
     btn.textContent = 'Deleting…';
     btn.disabled = true;
-    const resp = await fetch(
-        `/api/orders/customers?customer_name=${encodeURIComponent(name)}&order_type=${encodeURIComponent(type)}`,
-        { method: 'DELETE' }
-    );
+    const resp = await fetch('/api/orders/customers/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customer_name: name, order_type: type }),
+    });
     if (resp.ok) {
         loadCustomers(document.getElementById('search-input').value);
     } else {

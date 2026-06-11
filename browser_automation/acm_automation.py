@@ -52,11 +52,14 @@ def _lookup_customer(client_name: str):
         if not os.path.exists(CUSTOMER_DB_PATH):
             return None
         repo = CustomerRepository(CUSTOMER_DB_PATH)
+        # find_by_name_any_type does case-insensitive name match across all order types,
+        # which catches manually-entered records where order_type casing may differ.
         return (
             repo.find_by_name(client_name, OrderType.ACM)
             or repo.find_by_name_any_type(client_name)
         )
-    except Exception:
+    except Exception as exc:
+        print(f"[CUSTOMER] Warning: lookup failed: {exc}")
         return None
 
 

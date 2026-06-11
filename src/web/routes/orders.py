@@ -2689,12 +2689,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             conn.close()
         return JSONResponse({"ok": True})
 
-    @router.delete("/api/orders/customers")
-    async def delete_order_customer(customer_name: str, order_type: str):
+    @router.post("/api/orders/customers/delete")
+    async def delete_order_customer(body: dict = Body(...)):
+        customer_name = body.get("customer_name", "")
+        order_type    = body.get("order_type", "")
         conn = _cdb()
         try:
             conn.execute(
-                "DELETE FROM customers WHERE customer_name=? AND order_type=?",
+                "DELETE FROM customers WHERE LOWER(customer_name)=LOWER(?) AND LOWER(order_type)=LOWER(?)",
                 (customer_name, order_type),
             )
             conn.commit()
