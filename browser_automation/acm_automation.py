@@ -166,8 +166,8 @@ def gather_acm_inputs(xlsx_path: str) -> Optional[dict]:
         flight_str = ""
         if start_d and end_d:
             flight_str = (
-                f"{start_d.strftime('%-m/%-d')}"
-                f"-{end_d.strftime('%-m/%-d/%y')}"
+                f"{start_d.month}/{start_d.day}"
+                f"-{end_d.month}/{end_d.day}/{end_d.strftime('%y')}"
             )
         default_desc = f"{desc_name} {flight_str}".strip()
 
