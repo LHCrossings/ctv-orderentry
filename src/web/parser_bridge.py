@@ -459,7 +459,7 @@ _DIRECT_DB_KEYS = {"LEXUS", "RPM", "WORLDLINK", "TIMEADVERTISING", "IGRAPHIX", "
 # All direct-DB parsers are white pill by default. New parsers built from scratch
 # go directly into both sets. Pink pill was only needed during the Selenium→DirectDB
 # conversion phase (now complete).
-_DIRECT_DB_TESTED_KEYS = {"ADMERASIA", "BVK", "THREEOLIVES", "DART", "DAVISELEN", "GALEFORCE", "HL", "HL_BDR", "HYPHEN", "IMPACT", "IGRAPHIX", "IMPRENTA", "INTERTREND", "LEXUS", "MEDIASOL", "MISFIT", "OPAD", "POLARIS", "PROSIO", "RPM", "RWNY", "SAGENT", "SACCOUNTYVOTERS", "SCWA", "SIERRADONOR", "TCAA", "TCAA_AV", "TIMEADVERTISING", "WALLRICH", "WORLDLINK", "FIGHTTHEBITE", "ACM"}
+_DIRECT_DB_TESTED_KEYS = {"ADMERASIA", "BVK", "CHARMAINE", "THREEOLIVES", "DART", "DAVISELEN", "GALEFORCE", "HL", "HL_BDR", "HYPHEN", "IMPACT", "IGRAPHIX", "IMPRENTA", "INTERTREND", "LEXUS", "MEDIASOL", "MISFIT", "OPAD", "POLARIS", "PROSIO", "RPM", "RWNY", "SAGENT", "SACCOUNTYVOTERS", "SCWA", "SIERRADONOR", "TCAA", "TCAA_AV", "TIMEADVERTISING", "WALLRICH", "WORLDLINK", "XML", "FIGHTTHEBITE", "ACM"}
 
 def list_parsers() -> list[dict]:
     """Return display info for every registered parser, sorted by display name."""
