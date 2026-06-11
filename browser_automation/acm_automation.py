@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Optional
 
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 from browser_automation.etere_client import EtereClient
 from browser_automation.parsers.acm_parser import AcmMarketSection, AcmOrder, parse_acm_xlsx
 
@@ -49,13 +50,18 @@ def _parse_date(s) -> date:
     raise ValueError(f"Cannot parse date: {s!r}")
 
 
-def _lookup_customer(client_name: str) -> Optional[dict]:
+def _lookup_customer(client_name: str):
     try:
+        import os
+
         from src.data_access.repositories.customer_repository import CustomerRepository
-        repo = CustomerRepository()
+        from src.domain.enums import OrderType
+        if not os.path.exists(CUSTOMER_DB_PATH):
+            return None
+        repo = CustomerRepository(CUSTOMER_DB_PATH)
         return (
-            repo.find_customer(client_name, order_type='acm')
-            or repo.find_customer(client_name)
+            repo.find_by_name(client_name, OrderType.ACM)
+            or repo.find_by_name_any_type(client_name)
         )
     except Exception:
         return None
@@ -63,17 +69,23 @@ def _lookup_customer(client_name: str) -> Optional[dict]:
 
 def _upsert_customer(customer_id: str, client_name: str, separation: tuple) -> None:
     try:
+        import os
+
         from src.data_access.repositories.customer_repository import CustomerRepository
-        repo = CustomerRepository()
-        repo.upsert(
+        from src.domain.entities import Customer
+        from src.domain.enums import OrderType
+        if not os.path.exists(CUSTOMER_DB_PATH):
+            return
+        repo = CustomerRepository(CUSTOMER_DB_PATH)
+        repo.save(Customer(
             customer_id=customer_id,
             customer_name=client_name,
-            order_type='acm',
+            order_type=OrderType.ACM,
             billing_type='agency',
             separation_customer=separation[0],
             separation_event=separation[1],
             separation_order=separation[2],
-        )
+        ))
         print(f"[CUSTOMER DB] ✓ Saved: {client_name} → ID {customer_id}")
     except Exception as exc:
         print(f"[CUSTOMER DB] Warning: could not save: {exc}")
@@ -111,11 +123,9 @@ def gather_acm_inputs(xlsx_path: str) -> Optional[dict]:
 
     cust = _lookup_customer(order.agency)
     if cust:
-        customer_id = cust.get('customer_id')
-        raw_sep = cust.get('separation')
-        if raw_sep:
-            s0 = 25 if raw_sep[0] == 30 else raw_sep[0]
-            separation = (s0, raw_sep[1], raw_sep[2])
+        customer_id = cust.customer_id
+        s0 = 25 if cust.separation_customer == 30 else cust.separation_customer
+        separation = (s0, cust.separation_event, cust.separation_order)
         print(f"\n[CUSTOMER] ✓ Found in DB → ID {customer_id}, sep {separation}")
     else:
         print(f"\n[CUSTOMER] '{order.agency}' not found in DB.")
@@ -137,9 +147,9 @@ def gather_acm_inputs(xlsx_path: str) -> Optional[dict]:
     # ── Per-market contract code + description ────────────────────────────
     market_inputs: dict[str, dict] = {}
 
-    code_name  = cust.get('code_name',        'ACM') if cust else 'ACM'
-    desc_name  = cust.get('description_name', 'American Community Media') if cust else 'American Community Media'
-    inc_market = bool(cust.get('include_market_in_code', 1)) if cust else True
+    code_name  = (cust.code_name        or 'ACM')                        if cust else 'ACM'
+    desc_name  = (cust.description_name or 'American Community Media')   if cust else 'American Community Media'
+    inc_market = bool(cust.include_market_in_code)                       if cust else True
 
     for mkt in order.market_sections:
         print(f"\n  ── {mkt.market_code} contract ──")

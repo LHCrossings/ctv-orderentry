@@ -109,6 +109,57 @@ grep -n "contracts=\[\]" order_processing_service.py | grep "success=success"
 # should return empty
 ```
 
+### 12. CustomerRepository API — always use the entity pattern, never dict-style upsert
+
+**Session:** ACM parser (2026-06-11)
+
+The `CustomerRepository` class requires these exact call patterns:
+
+**Lookup (returns `Customer` object or `None`, never a dict):**
+```python
+import os
+from src.data_access.repositories.customer_repository import CustomerRepository
+from src.domain.enums import OrderType
+
+if not os.path.exists(CUSTOMER_DB_PATH):
+    return None
+repo = CustomerRepository(CUSTOMER_DB_PATH)
+cust = repo.find_by_name(client_name, OrderType.X) or repo.find_by_name_any_type(client_name)
+```
+
+**Reading fields from the returned Customer object (attributes, NOT dict `.get()`):**
+```python
+customer_id = cust.customer_id
+separation  = (cust.separation_customer, cust.separation_event, cust.separation_order)
+code_name   = cust.code_name or 'DEFAULT'
+desc_name   = cust.description_name or 'Default Description'
+inc_market  = bool(cust.include_market_in_code)
+```
+
+**Save (requires a `Customer` entity, NOT keyword args to a non-existent `upsert()`):**
+```python
+from src.domain.entities import Customer
+from src.domain.enums import OrderType
+
+repo.save(Customer(
+    customer_id=str(customer_id),
+    customer_name=client_name,
+    order_type=OrderType.X,
+    billing_type='agency',
+    separation_customer=separation[0],
+    separation_event=separation[1],
+    separation_order=separation[2],
+))
+```
+
+**Common mistakes that cause silent failures or crashes:**
+- Calling `repo.find_customer(name, order_type='string')` — method does not exist
+- Calling `repo.upsert(...)` — method does not exist; use `repo.save(Customer(...))`
+- Accessing `cust.get('customer_id')` — Customer is not a dict; use `cust.customer_id`
+- Instantiating `CustomerRepository()` without a path — `db_path` is required
+- Not guarding with `os.path.exists(CUSTOMER_DB_PATH)` before instantiation
+- Importing from `data_access.customer_repository` — correct path is `src.data_access.repositories.customer_repository`
+
 ---
 
 ## `parse_day_bits` (DirectDB) and `_select_days` (Selenium) Must Stay in Sync
