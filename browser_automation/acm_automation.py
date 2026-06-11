@@ -51,7 +51,7 @@ def _parse_date(s) -> date:
 
 def _lookup_customer(client_name: str) -> Optional[dict]:
     try:
-        from data_access.customer_repository import CustomerRepository
+        from src.data_access.repositories.customer_repository import CustomerRepository
         repo = CustomerRepository()
         return (
             repo.find_customer(client_name, order_type='acm')
@@ -63,7 +63,7 @@ def _lookup_customer(client_name: str) -> Optional[dict]:
 
 def _upsert_customer(customer_id: str, client_name: str, separation: tuple) -> None:
     try:
-        from data_access.customer_repository import CustomerRepository
+        from src.data_access.repositories.customer_repository import CustomerRepository
         repo = CustomerRepository()
         repo.upsert(
             customer_id=customer_id,
