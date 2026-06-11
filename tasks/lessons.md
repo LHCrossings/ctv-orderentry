@@ -199,7 +199,14 @@ billing_type = inputs.get('billing_type', 'agency')   # or 'direct' for known-di
 client.create_contract_header(..., billing_type=billing_type, ...)
 ```
 
-**When saving a new customer** via `_upsert_customer`, the default `billing_type='agency'` is fine for agency parsers — but for known-direct clients (ACM, etc.), pass `billing_type='direct'` explicitly.
+**When saving a new customer** via `_upsert_customer`, always prompt the user for billing type before saving — never assume:
+```python
+raw_bt = input("  Billing type [direct/agency]: ").strip().lower()
+billing_type = 'agency' if raw_bt.startswith('a') else 'direct'
+# ... confirm + save ...
+_upsert_customer(str(customer_id), client_name, separation, billing_type)
+```
+The DB is the source of truth for `billing_type`. If it is written wrong at save time, every subsequent order for that customer will have the wrong invoice header until someone notices.
 
 ---
 

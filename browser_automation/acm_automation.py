@@ -63,7 +63,7 @@ def _lookup_customer(client_name: str):
         return None
 
 
-def _upsert_customer(customer_id: str, client_name: str, separation: tuple) -> None:
+def _upsert_customer(customer_id: str, client_name: str, separation: tuple, billing_type: str = 'direct') -> None:
     try:
         import os
 
@@ -77,7 +77,7 @@ def _upsert_customer(customer_id: str, client_name: str, separation: tuple) -> N
             customer_id=customer_id,
             customer_name=client_name,
             order_type=OrderType.ACM,
-            billing_type='agency',
+            billing_type=billing_type,
             separation_customer=separation[0],
             separation_event=separation[1],
             separation_order=separation[2],
@@ -131,11 +131,13 @@ def gather_acm_inputs(xlsx_path: str) -> Optional[dict]:
             print("  ✗ Invalid ID — aborting")
             return None
         customer_id = int(raw_id)
+        raw_bt = input("  Billing type [direct/agency]: ").strip().lower()
+        billing_type = 'agency' if raw_bt.startswith('a') else 'direct'
         save = input(
-            f"  Save '{order.agency}' (ID {customer_id}) to DB? (y/n): "
+            f"  Save '{order.agency}' (ID {customer_id}, {billing_type}) to DB? (y/n): "
         ).strip().lower()
         if save in ('y', 'yes'):
-            _upsert_customer(str(customer_id), order.agency, separation)
+            _upsert_customer(str(customer_id), order.agency, separation, billing_type)
 
     # ── Spot duration ─────────────────────────────────────────────────────
     raw = input("\n  Spot duration in seconds [30]: ").strip()
