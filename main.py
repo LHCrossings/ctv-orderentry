@@ -189,7 +189,7 @@ Modes:
         traceback.print_exc()
 
     finally:
-        if args.pause:
+        if args.pause or sys.stdin.isatty():
             input("\nPress Enter to close this window...")
         sys.exit(0)
 
