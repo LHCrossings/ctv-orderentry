@@ -116,12 +116,14 @@ def gather_acm_inputs(xlsx_path: str) -> Optional[dict]:
     customer_id: Optional[int] = None
     separation = (15, 0, 0)
 
+    billing_type = 'direct'   # ACM default; overridden by DB record if present
     cust = _lookup_customer(order.agency)
     if cust:
-        customer_id = cust.customer_id
+        customer_id  = cust.customer_id
+        billing_type = cust.billing_type or 'direct'
         s0 = 25 if cust.separation_customer == 30 else cust.separation_customer
         separation = (s0, cust.separation_event, cust.separation_order)
-        print(f"\n[CUSTOMER] ✓ Found in DB → ID {customer_id}, sep {separation}")
+        print(f"\n[CUSTOMER] ✓ Found in DB → ID {customer_id}, billing={billing_type}, sep {separation}")
     else:
         print(f"\n[CUSTOMER] '{order.agency}' not found in DB.")
         raw_id = input("  Enter Etere customer ID: ").strip()
@@ -164,6 +166,7 @@ def gather_acm_inputs(xlsx_path: str) -> Optional[dict]:
 
     return {
         'customer_id':   customer_id,
+        'billing_type':  billing_type,
         'separation':    separation,
         'spot_duration': spot_duration,
         'contract_code': contract_code,
@@ -189,6 +192,7 @@ def _create_acm_contract(order: AcmOrder, inputs: dict) -> Optional[str]:
         return None
 
     separation    = inputs.get('separation', (15, 0, 0))
+    billing_type  = inputs.get('billing_type', 'direct')
     contract_code = inputs.get('contract_code', 'ACM')
     description   = inputs.get('description', '')
     spot_duration = inputs.get('spot_duration', 30)
@@ -214,7 +218,7 @@ def _create_acm_contract(order: AcmOrder, inputs: dict) -> Optional[str]:
             contract_date=flight_start_d,
             contract_end_date=flight_end_d,
             contract_type=1,
-            billing_type="agency",
+            billing_type=billing_type,
             allow_rename=True,
         )
         print(f"[ACM] ✓ Contract header: ID={contract_id}  code='{contract_code}'")

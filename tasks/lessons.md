@@ -178,6 +178,29 @@ f"{d.month}/{d.day}/{d.strftime('%y')}"   # works everywhere
 
 Rule: anywhere you want a date without leading zeros, use `.month`, `.day`, `.year` integer attributes directly. Only use `strftime` for the parts that format the same on all platforms (e.g. `%y`, `%Y`, `%B`, `%A`).
 
+### 14. `billing_type` must be read from the customer DB record, never hardcoded
+
+**Session:** ACM parser (2026-06-11)
+
+`EtereDirectClient.create_contract_header(billing_type=...)` drives the "Charge to" and "Invoice header" fields in Etere:
+- `"agency"` → INVOICEMODE=2, agency-style invoice header
+- anything else (e.g. `"direct"`, `"client"`) → INVOICEMODE=0, direct/customer invoice header
+
+The customer DB record stores this as `cust.billing_type` (`"agency"` or `"direct"`). **Never hardcode `billing_type="agency"`** in a gather or automation function — the customer record is the source of truth.
+
+**Pattern in gather:**
+```python
+billing_type = cust.billing_type or 'direct'   # read from DB; supply a safe default
+```
+
+**Pattern in automation (pass through inputs dict):**
+```python
+billing_type = inputs.get('billing_type', 'agency')   # or 'direct' for known-direct clients
+client.create_contract_header(..., billing_type=billing_type, ...)
+```
+
+**When saving a new customer** via `_upsert_customer`, the default `billing_type='agency'` is fine for agency parsers — but for known-direct clients (ACM, etc.), pass `billing_type='direct'` explicitly.
+
 ---
 
 ## `parse_day_bits` (DirectDB) and `_select_days` (Selenium) Must Stay in Sync
