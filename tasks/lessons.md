@@ -160,6 +160,24 @@ repo.save(Customer(
 - Not guarding with `os.path.exists(CUSTOMER_DB_PATH)` before instantiation
 - Importing from `data_access.customer_repository` — correct path is `src.data_access.repositories.customer_repository`
 
+### 13. Never use `%-m` / `%-d` in strftime — Linux-only, crashes on Windows
+
+**Session:** ACM parser (2026-06-11)
+
+The `%-m` and `%-d` strftime directives strip leading zeros but are **Linux/macOS only**. On Windows they raise `ValueError: Invalid format string`.
+
+**Wrong (Linux-only):**
+```python
+f"{d.strftime('%-m/%-d/%y')}"   # crashes on Windows
+```
+
+**Correct (cross-platform):**
+```python
+f"{d.month}/{d.day}/{d.strftime('%y')}"   # works everywhere
+```
+
+Rule: anywhere you want a date without leading zeros, use `.month`, `.day`, `.year` integer attributes directly. Only use `strftime` for the parts that format the same on all platforms (e.g. `%y`, `%Y`, `%B`, `%A`).
+
 ---
 
 ## `parse_day_bits` (DirectDB) and `_select_days` (Selenium) Must Stay in Sync
