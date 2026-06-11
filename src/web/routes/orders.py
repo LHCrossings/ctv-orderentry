@@ -204,11 +204,30 @@ def _mc_fill_program_spots(
     time_out: str,
     cur,
     fps: float = _MC_FILL_FPS,
+    program_language: str = "",
 ) -> list:
     """Fill column I for one program's spots from TPALINSE. Caller owns workbook save."""
     import datetime as _dt
     import re
     from collections import defaultdict
+
+    # Language mismatch helpers
+    _LANG_COMPAT = [frozenset({'M', 'C'}), frozenset({'SA', 'P'})]
+
+    def _extract_asset_lang(code: str) -> str:
+        """TVC30V12 → 'V', LEXUS15SA107 → 'SA', unrecognised → ''"""
+        m = re.search(r'\d+([A-Za-z]+)\d+$', code)
+        return m.group(1).upper() if m else ''
+
+    def _lang_ok(asset_lang: str, prog_lang: str) -> bool:
+        if not asset_lang or not prog_lang:
+            return True
+        if asset_lang == 'E':            # English airs anywhere
+            return True
+        if asset_lang == prog_lang.upper():
+            return True
+        pair = frozenset({asset_lang, prog_lang.upper()})
+        return any(pair <= s for s in _LANG_COMPAT)
 
     def _time_to_frames(t: str) -> int:
         parts = t.split(":")
@@ -255,7 +274,13 @@ def _mc_fill_program_spots(
             mn, s = divmod(rem, 60)
             time_str = f"{h}:{mn:02d}:{s:02d}"
             ws.cell(row=spot["excel_row"], column=9).value = _dt.timedelta(seconds=secs)
-            results.append({"excel_row": spot["excel_row"], "status": "filled", "actual_time": time_str})
+            asset_lang = _extract_asset_lang(asset_code)
+            results.append({
+                "excel_row": spot["excel_row"],
+                "status": "filled",
+                "actual_time": time_str,
+                "lang_warning": not _lang_ok(asset_lang, program_language),
+            })
     return results
 
 
@@ -2888,9 +2913,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
         date_str = body["date"]
         market   = body["market"]
-        spots    = body["spots"]  # [{excel_row, show_name, actual_time}]
-        time_in  = body.get("time_in", "")
-        time_out = body.get("time_out", "")
+        spots             = body["spots"]  # [{excel_row, show_name, actual_time}]
+        time_in           = body.get("time_in", "")
+        time_out          = body.get("time_out", "")
+        program_language  = body.get("language", "")
         market_id = _MC_MARKET_IDS.get(market)
         if market_id is None:
             return JSONResponse({"error": f"Unknown market: {market}"}, status_code=400)
@@ -2912,7 +2938,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 with connect() as conn:
                     cur = conn.cursor(as_dict=True)
                     results = _mc_fill_program_spots(
-                        ws, target, market_id, spots, time_in, time_out, cur
+                        ws, target, market_id, spots, time_in, time_out, cur,
+                        program_language=program_language,
                     )
                 wb.save(str(log_path))
                 return results
@@ -2971,6 +2998,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 prg.get("time_in", ""),
                                 prg.get("time_out", ""),
                                 cur,
+                                program_language=prg.get("language", ""),
                             )
                         )
                 wb.save(str(log_path))

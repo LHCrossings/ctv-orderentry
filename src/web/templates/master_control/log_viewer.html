@@ -96,6 +96,8 @@
         .type-bb   { background: rgba(208,135,112,0.2);  color: var(--nord12); }
         .type-other{ background: var(--nord5); color: var(--text-muted); }
         .lang-badge { font-size: 0.78rem; font-weight: 600; color: var(--nord9); }
+        .lang-warn { border-color: var(--nord13) !important; background: color-mix(in srgb, var(--nord13) 10%, var(--bg-secondary)) !important; }
+        .lang-warn-badge { margin-left: 4px; font-size: 0.8rem; color: var(--nord13); cursor: default; }
         .net-val { font-family: monospace; }
 
         .fill-all-btn { border: none; border-radius: 8px; padding: 4px 14px; font-size: 0.8rem; font-weight: 600; cursor: pointer; font-family: inherit; background: rgba(163,190,140,0.25); color: var(--nord14); border: 1px solid rgba(163,190,140,0.5); }
@@ -367,6 +369,7 @@
         return {
             time_in: prg.time_in,
             time_out: prg.time_out,
+            language: prg.language || '',
             spots: prg.spots.map(s => ({
                 excel_row: s.excel_row,
                 show_name: s.show_name,
@@ -376,7 +379,7 @@
     }
 
     function applyFillResults(results) {
-        let filled = 0, noMatch = 0;
+        let filled = 0, noMatch = 0, warnings = 0;
         for (const r of results) {
             const input = document.querySelector(`input[data-row="${r.excel_row}"]`);
             if (!input) continue;
@@ -389,12 +392,23 @@
                 updateRowCompliance(input);
                 input.classList.add('saved');
                 setTimeout(() => input.classList.remove('saved'), 2000);
+                if (r.lang_warning) {
+                    warnings++;
+                    input.classList.add('lang-warn');
+                    if (!input.nextElementSibling?.classList.contains('lang-warn-badge')) {
+                        const badge = document.createElement('span');
+                        badge.className = 'lang-warn-badge';
+                        badge.title = 'Language mismatch — verify this spot';
+                        badge.textContent = '⚠';
+                        input.insertAdjacentElement('afterend', badge);
+                    }
+                }
                 filled++;
             } else {
                 noMatch++;
             }
         }
-        return { filled, noMatch };
+        return { filled, noMatch, warnings };
     }
 
     async function fillProgram(pi) {
@@ -418,9 +432,10 @@
             const data = await resp.json();
             if (!resp.ok) { alert(data.error || 'Fill failed.'); return; }
 
-            const { filled, noMatch } = applyFillResults(data.results);
+            const { filled, noMatch, warnings } = applyFillResults(data.results);
             btn.textContent = filled ? `✓ ${filled} filled` : '— no match';
             if (noMatch) btn.textContent += ` (${noMatch} not found)`;
+            if (warnings) btn.textContent += ` ⚠ ${warnings}`;
             setTimeout(() => { btn.textContent = '⚡ Fill'; btn.disabled = false; }, 3000);
         } catch (e) {
             btn.textContent = '✗ error';
@@ -446,10 +461,11 @@
             const data = await resp.json();
             if (!resp.ok) { alert(data.error || 'Fill All failed.'); return; }
 
-            const { filled, noMatch } = applyFillResults(data.results);
+            const { filled, noMatch, warnings } = applyFillResults(data.results);
             btn.textContent = filled
                 ? `✓ ${filled} filled` + (noMatch ? ` · ${noMatch} not found` : '')
                 : '— no match';
+            if (warnings) btn.textContent += ` ⚠ ${warnings}`;
         } catch (e) {
             btn.textContent = '✗ error';
         } finally {
