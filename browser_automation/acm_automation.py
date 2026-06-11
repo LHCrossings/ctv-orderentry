@@ -1,8 +1,8 @@
 """
 ACM (American Community Media) direct DB automation.
 
-Creates one Etere contract per market section. Each section has paid lines
-(specific daypart) and bonus ROS lines per language block.
+Creates ONE Etere contract for the entire order. Each market section's lines
+are entered under that single contract, with each line carrying its own market code.
 """
 
 from __future__ import annotations
@@ -12,18 +12,11 @@ from typing import Optional
 
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 from browser_automation.etere_client import EtereClient
-from browser_automation.parsers.acm_parser import AcmMarketSection, AcmOrder, parse_acm_xlsx
+from browser_automation.parsers.acm_parser import AcmOrder, parse_acm_xlsx
 
 # ─── Month abbreviations (for consolidate_weeks date format) ─────────────────
 _MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-# ─── Market short codes for default contract codes ───────────────────────────
-_MARKET_SHORT = {
-    'CVC': 'CV', 'SFO': 'SF', 'SEA': 'SEA',
-    'LAX': 'LA', 'HOU': 'HOU', 'CMP': 'CMP',
-    'WDC': 'WDC', 'NYC': 'NYC', 'MMT': 'MMT',
-}
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -97,7 +90,7 @@ def gather_acm_inputs(xlsx_path: str) -> Optional[dict]:
     """
     Gather user inputs for an ACM order before processing.
 
-    Returns dict with: customer_id, separation, spot_duration, market_inputs.
+    Returns dict with: customer_id, separation, spot_duration, contract_code, description.
     Returns None to abort.
     """
     order = parse_acm_xlsx(xlsx_path)
@@ -119,7 +112,6 @@ def gather_acm_inputs(xlsx_path: str) -> Optional[dict]:
     # ── Customer lookup ───────────────────────────────────────────────────
     customer_id: Optional[int] = None
     separation = (15, 0, 0)
-    cust: Optional[dict] = None
 
     cust = _lookup_customer(order.agency)
     if cust:
@@ -144,83 +136,67 @@ def gather_acm_inputs(xlsx_path: str) -> Optional[dict]:
     raw = input("\n  Spot duration in seconds [30]: ").strip()
     spot_duration = int(raw) if raw.isdigit() else 30
 
-    # ── Per-market contract code + description ────────────────────────────
-    market_inputs: dict[str, dict] = {}
+    # ── Single contract code + description (covers all markets) ──────────
+    code_name = (cust.code_name        or 'ACM')                      if cust else 'ACM'
+    desc_name = (cust.description_name or 'American Community Media') if cust else 'American Community Media'
 
-    code_name  = (cust.code_name        or 'ACM')                        if cust else 'ACM'
-    desc_name  = (cust.description_name or 'American Community Media')   if cust else 'American Community Media'
-    inc_market = bool(cust.include_market_in_code)                       if cust else True
+    # Use overall flight range across all markets for the default description
+    start_d = _parse_date(order.flight_start) if order.flight_start else None
+    end_d   = _parse_date(order.flight_end)   if order.flight_end   else None
+    flight_str = ""
+    if start_d and end_d:
+        flight_str = (
+            f"{start_d.month}/{start_d.day}"
+            f"-{end_d.month}/{end_d.day}/{end_d.strftime('%y')}"
+        )
+    default_code = code_name
+    default_desc = f"{desc_name} {flight_str}".strip()
 
-    for mkt in order.market_sections:
-        print(f"\n  ── {mkt.market_code} contract ──")
+    print()
+    raw = input(f"  Contract code [{default_code}]: ").strip()
+    contract_code = raw or default_code
 
-        short_mkt = _MARKET_SHORT.get(mkt.market_code, mkt.market_code)
-        start_d   = mkt.flight_start
-        end_d     = mkt.flight_end
-
-        if inc_market:
-            default_code = f"{code_name} {short_mkt}"
-        else:
-            default_code = code_name
-
-        flight_str = ""
-        if start_d and end_d:
-            flight_str = (
-                f"{start_d.month}/{start_d.day}"
-                f"-{end_d.month}/{end_d.day}/{end_d.strftime('%y')}"
-            )
-        default_desc = f"{desc_name} {flight_str}".strip()
-
-        raw = input(f"  Contract code [{default_code}]: ").strip()
-        contract_code = raw or default_code
-
-        raw = input(f"  Description [{default_desc}]: ").strip()
-        description = raw or default_desc
-
-        market_inputs[mkt.market_code] = {
-            'contract_code': contract_code,
-            'description':   description,
-        }
+    raw = input(f"  Description [{default_desc}]: ").strip()
+    description = raw or default_desc
 
     return {
         'customer_id':   customer_id,
         'separation':    separation,
         'spot_duration': spot_duration,
-        'market_inputs': market_inputs,
+        'contract_code': contract_code,
+        'description':   description,
     }
 
 
 # ─── Direct DB Entry ──────────────────────────────────────────────────────────
 
-def _create_acm_market_contract(
-    mkt: AcmMarketSection,
-    inputs: dict,
-    mkt_inp: dict,
-    spot_duration: int,
-) -> Optional[str]:
+def _create_acm_contract(order: AcmOrder, inputs: dict) -> Optional[str]:
     """
-    Enter one ACM market section into Etere via direct DB.
+    Enter an ACM order into Etere as a single contract.
+
+    All market sections are written as lines under one contract header.
     Returns the contract code on success, None on failure (rolls back).
     """
     from browser_automation.etere_direct_client import EtereDirectClient, connect
     from browser_automation.ros_definitions import ROS_SCHEDULES
 
-    customer_id = inputs.get('customer_id')
+    customer_id   = inputs.get('customer_id')
     if customer_id is None:
         print("[ACM] ✗ No customer_id")
         return None
 
     separation    = inputs.get('separation', (15, 0, 0))
-    contract_code = mkt_inp.get('contract_code', 'ACM')
-    description   = mkt_inp.get('description', '')
+    contract_code = inputs.get('contract_code', 'ACM')
+    description   = inputs.get('description', '')
+    spot_duration = inputs.get('spot_duration', 30)
+    duration_str  = str(spot_duration)
 
-    flight_start_d = mkt.flight_start
-    flight_end_d   = mkt.flight_end
+    # Overall flight range across all markets
+    flight_start_d = _parse_date(order.flight_start) if order.flight_start else None
+    flight_end_d   = _parse_date(order.flight_end)   if order.flight_end   else None
     if not flight_start_d or not flight_end_d:
-        print(f"[ACM] ✗ {mkt.market_code}: no week dates — cannot determine flight range")
+        print("[ACM] ✗ Could not determine overall flight range")
         return None
-
-    flight_end_str = _fmt_mmddyyyy(flight_end_d)
 
     conn = None
     try:
@@ -238,82 +214,82 @@ def _create_acm_market_contract(
             billing_type="agency",
             allow_rename=True,
         )
-        print(f"[ACM] ✓ Contract header {mkt.market_code}: ID={contract_id}  code='{contract_code}'")
+        print(f"[ACM] ✓ Contract header: ID={contract_id}  code='{contract_code}'")
 
-        duration_str = str(spot_duration)
-        line_count   = 0
+        line_count = 0
 
-        for line in mkt.lines:
-            if line.total_spots == 0:
-                continue
-
-            is_bonus     = line.is_bonus
-            booking_code = 10 if is_bonus else 2
-
-            if is_bonus:
-                # Look up the standard ROS window for this language
-                lang = line.language_block.strip()
-                ros  = ROS_SCHEDULES.get(lang)
-                if ros:
-                    days      = ros['days']
-                    time_raw  = ros['time']
-                else:
-                    # Fallback: full-day ROS
-                    days, time_raw = 'M-Su', '6a-11:59p'
-                    print(f"  [WARN] No ROS schedule for '{lang}' — using {days} {time_raw}")
-                desc = f"BNS {lang} ROS"
-            else:
-                days     = line.days   # normalized in parser (Sun→Su etc.)
-                time_raw = line.time
-                days, _  = EtereClient.check_sunday_6_7a_rule(days, time_raw)
-                label    = line.language_block.strip()
-                desc     = f"{label} {line.daypart}"
-                if len(desc) > 60:
-                    desc = desc[:60]
-
-            time_from, time_to = EtereClient.parse_time_range(time_raw)
-            time_range = f"{time_from}-{time_to}"
-
-            # Convert week dates → "Jun 15" strings for consolidate_weeks
-            week_start_strs = [_fmt_mon_dd(d) for d in line.week_dates]
-
-            ranges = EtereClient.consolidate_weeks(
-                line.week_spots,
-                week_start_strs,
-                flight_end=flight_end_str,
+        for mkt in order.market_sections:
+            flight_end_str = _fmt_mmddyyyy(
+                mkt.flight_end or flight_end_d
             )
 
-            for rng in ranges:
-                total_spots = rng['spots_per_week'] * rng['weeks']
-                line_count += 1
-                print(
-                    f"  [LINE {line_count}] {desc}: "
-                    f"{rng['start_date']}–{rng['end_date']} "
-                    f"({rng['spots_per_week']}/wk×{rng['weeks']}w={total_spots})"
+            for line in mkt.lines:
+                if line.total_spots == 0:
+                    continue
+
+                is_bonus     = line.is_bonus
+                booking_code = 10 if is_bonus else 2
+
+                if is_bonus:
+                    lang = line.language_block.strip()
+                    ros  = ROS_SCHEDULES.get(lang)
+                    if ros:
+                        days     = ros['days']
+                        time_raw = ros['time']
+                    else:
+                        days, time_raw = 'M-Su', '6a-11:59p'
+                        print(f"  [WARN] No ROS schedule for '{lang}' — using {days} {time_raw}")
+                    desc = f"BNS {lang} ROS"
+                else:
+                    days     = line.days
+                    time_raw = line.time
+                    days, _  = EtereClient.check_sunday_6_7a_rule(days, time_raw)
+                    label    = line.language_block.strip()
+                    desc     = f"{label} {line.daypart}"
+                    if len(desc) > 60:
+                        desc = desc[:60]
+
+                time_from, time_to = EtereClient.parse_time_range(time_raw)
+                time_range = f"{time_from}-{time_to}"
+
+                week_start_strs = [_fmt_mon_dd(d) for d in line.week_dates]
+                ranges = EtereClient.consolidate_weeks(
+                    line.week_spots,
+                    week_start_strs,
+                    flight_end=flight_end_str,
                 )
-                client.add_contract_line(
-                    market=mkt.market_code,
-                    days=days,
-                    time_range=time_range,
-                    description=desc,
-                    rate=line.rate,
-                    total_spots=total_spots,
-                    spots_per_week=rng['spots_per_week'],
-                    date_from=_parse_date(rng['start_date']),
-                    date_to=_parse_date(rng['end_date']),
-                    duration=duration_str,
-                    is_bonus=is_bonus,
-                    booking_code=booking_code,
-                    separation_intervals=separation,
-                )
+
+                for rng in ranges:
+                    total_spots = rng['spots_per_week'] * rng['weeks']
+                    line_count += 1
+                    print(
+                        f"  [LINE {line_count}] {mkt.market_code} {desc}: "
+                        f"{rng['start_date']}–{rng['end_date']} "
+                        f"({rng['spots_per_week']}/wk×{rng['weeks']}w={total_spots})"
+                    )
+                    client.add_contract_line(
+                        market=mkt.market_code,
+                        days=days,
+                        time_range=time_range,
+                        description=desc,
+                        rate=line.rate,
+                        total_spots=total_spots,
+                        spots_per_week=rng['spots_per_week'],
+                        date_from=_parse_date(rng['start_date']),
+                        date_to=_parse_date(rng['end_date']),
+                        duration=duration_str,
+                        is_bonus=is_bonus,
+                        booking_code=booking_code,
+                        separation_intervals=separation,
+                    )
 
         conn.commit()
         conn.close()
-        print(f"[ACM] ✓ {mkt.market_code}: {line_count} lines committed.")
+        print(f"[ACM] ✓ {line_count} lines committed across {len(order.market_sections)} markets.")
         return contract_code
 
     except Exception as exc:
-        print(f"[ACM] ✗ {mkt.market_code}: {exc}")
+        print(f"[ACM] ✗ {exc}")
         import traceback
         traceback.print_exc()
         if conn:
@@ -327,18 +303,10 @@ def _create_acm_market_contract(
 
 def run_acm_order(order: AcmOrder, inputs: dict) -> list[tuple[str, bool]]:
     """
-    Process all market sections in an ACM order.
+    Process an ACM order as a single contract covering all markets.
 
-    Returns list of (contract_code, success) tuples — one per market.
+    Returns list with one (contract_code, success) tuple.
     """
-    spot_duration = inputs.get('spot_duration', 30)
-    market_inputs = inputs.get('market_inputs', {})
-    results: list[tuple[str, bool]] = []
-
-    for mkt in order.market_sections:
-        mkt_inp = market_inputs.get(mkt.market_code, {})
-        code    = _create_acm_market_contract(mkt, inputs, mkt_inp, spot_duration)
-        label   = mkt_inp.get('contract_code') or 'ACM'
-        results.append((label, code is not None))
-
-    return results
+    code = _create_acm_contract(order, inputs)
+    label = inputs.get('contract_code') or 'ACM'
+    return [(label, code is not None)]
