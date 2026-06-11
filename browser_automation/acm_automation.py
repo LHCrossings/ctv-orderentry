@@ -7,12 +7,11 @@ Creates one Etere contract per market section. Each section has paid lines
 
 from __future__ import annotations
 
-from datetime import datetime, date, timedelta
+from datetime import date, datetime
 from typing import Optional
 
 from browser_automation.etere_client import EtereClient
-from browser_automation.parsers.acm_parser import AcmOrder, AcmMarketSection, parse_acm_xlsx
-
+from browser_automation.parsers.acm_parser import AcmMarketSection, AcmOrder, parse_acm_xlsx
 
 # ─── Month abbreviations (for consolidate_weeks date format) ─────────────────
 _MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -198,7 +197,7 @@ def _create_acm_market_contract(
 
     customer_id = inputs.get('customer_id')
     if customer_id is None:
-        print(f"[ACM] ✗ No customer_id")
+        print("[ACM] ✗ No customer_id")
         return None
 
     separation    = inputs.get('separation', (15, 0, 0))
