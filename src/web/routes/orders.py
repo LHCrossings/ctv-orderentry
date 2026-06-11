@@ -225,7 +225,8 @@ def _mc_fill_program_spots(
         by_asset[asset_code].append(spot)
 
     from_frames = _time_to_frames(time_in) if time_in else None
-    to_frames = _time_to_frames(time_out) if time_out else None
+    # Allow up to 1 minute of show overrun — end time extended by 60 s worth of frames
+    to_frames = (round(_time_to_frames(time_out) + 60 * fps)) if time_out else None
 
     results = []
     for asset_code, asset_spots in by_asset.items():
