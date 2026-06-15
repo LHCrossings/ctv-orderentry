@@ -893,6 +893,8 @@ def detect_from_filename(filename: str) -> OrderType:
         return OrderType.THREEOLIVES
     if "FIGHT" in name_upper and "BITE" in name_upper:
         return OrderType.FIGHTTHEBITE
+    if "BRENTAN" in name_upper:
+        return OrderType.BRENTAN
     # Imprenta XLSX files don't carry "Imprenta" in the filename —
     # fall through to content-based detection in the scanner.
     return OrderType.UNKNOWN

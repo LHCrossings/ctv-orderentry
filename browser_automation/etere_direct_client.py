@@ -225,6 +225,7 @@ AGENCY_IDS: dict[str, int] = {
     "IMPRENTA": 76,
     "IMPACT":  251,
     "SAGENT":   69,
+    "BRENTAN": 439,
 }
 
 # Media center (CENTROMEDIA) IDs
@@ -234,6 +235,7 @@ MEDIA_CENTER_IDS: dict[str, int] = {
     "IMPRENTA": 316,
     "IMPACT":     0,
     "SAGENT":   316,
+    "BRENTAN":  316,
 }
 
 def _build_newtype(

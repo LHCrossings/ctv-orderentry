@@ -113,6 +113,7 @@ class OrderProcessingService:
         OrderType.RWNY:             "_process_rwny_order",
         OrderType.FIGHTTHEBITE:     "_process_fightthebite_order",
         OrderType.ACM:               "_process_acm_order",
+        OrderType.BRENTAN:           "_process_brentan_order",
     }
 
     # Order types that use direct DB entry — no browser session needed
@@ -151,6 +152,7 @@ class OrderProcessingService:
         OrderType.XML,
         OrderType.FIGHTTHEBITE,
         OrderType.ACM,
+        OrderType.BRENTAN,
     }
 
     def __init__(
@@ -2534,6 +2536,38 @@ class OrderProcessingService:
             print(f"\n✗ ACM processing failed: {exc}")
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.ACM,
+                error_message=error_detail,
+            )
+
+    def _process_brentan_order(self, order: Order, shared_session=None) -> ProcessingResult:
+        """Process a Brentan (Brentan Media Services) order — one contract across all markets."""
+        inp = order.order_input if isinstance(order.order_input, dict) else {}
+        try:
+            from browser_automation.brentan_automation import run_brentan_order
+            from browser_automation.parsers.brentan_parser import parse_brentan_xlsx
+
+            parsed  = parse_brentan_xlsx(str(order.pdf_path))
+            results = run_brentan_order(parsed, inp)  # list of (label, success)
+
+            contracts = [
+                Contract(contract_number=label, order_type=OrderType.BRENTAN)
+                for label, ok in results if ok
+            ]
+            overall_success = bool(contracts)
+
+            if not overall_success:
+                return ProcessingResult(
+                    success=False, contracts=[], order_type=OrderType.BRENTAN,
+                    error_message="Brentan processing failed — check output above",
+                )
+            return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.BRENTAN)
+
+        except Exception as exc:
+            import traceback
+            error_detail = f"Brentan processing error: {exc}\n{traceback.format_exc()}"
+            print(f"\n✗ Brentan processing failed: {exc}")
+            return ProcessingResult(
+                success=False, contracts=[], order_type=OrderType.BRENTAN,
                 error_message=error_detail,
             )
 
