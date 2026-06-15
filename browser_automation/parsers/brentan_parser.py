@@ -87,15 +87,11 @@ class BrentanMarketSection:
 
 @dataclass
 class BrentanOrder:
-    agency: str
+    agency: str                       # the media agency (Brentan Media Services), agency_id 439
     order_date: Optional[date]
     market_sections: list[BrentanMarketSection]
-    rates_are_net: bool = False   # Brentan rate column is "GROSS RATE"
-
-    # Bridge-compatible aliases
-    @property
-    def client(self) -> str:
-        return self.agency
+    rates_are_net: bool = False       # Brentan rate column is "GROSS RATE"
+    client: str = ""                  # the advertiser/customer (e.g. "CA Conservation Corps")
 
     @property
     def markets(self) -> list[str]:
@@ -149,6 +145,23 @@ def _detect_market(text: str) -> Optional[str]:
         if keyword in upper:
             return code
     return None
+
+
+def _client_from_filename(path: str) -> str:
+    """
+    Extract the advertiser/client name from the Brentan file name.
+
+    The workbook itself carries only the agency (Brentan Media Services);
+    the client lives in the file name, e.g.
+        "Crossings TV CA Conservation Corps_Brentan Media_2026.xlsx"
+                       └──────── client ────────┘
+    Returns "" when the conventional pattern is not found (gather then prompts).
+    """
+    stem = Path(path).stem
+    m = re.search(r'crossings\s+tv\s+(.+?)\s*_\s*brentan', stem, re.IGNORECASE)
+    if m:
+        return m.group(1).strip()
+    return ""
 
 
 # ─── Daypart Splitting ───────────────────────────────────────────────────────
@@ -324,4 +337,5 @@ def parse_brentan_xlsx(path: str) -> BrentanOrder:
         agency=agency,
         order_date=order_date,
         market_sections=markets,
+        client=_client_from_filename(path),
     )

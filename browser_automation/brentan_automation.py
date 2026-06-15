@@ -130,10 +130,13 @@ def gather_brentan_inputs(xlsx_path: str) -> Optional[dict]:
     Returns dict with: customer_id, billing_type, separation, spot_duration,
     contract_code, description, start_date_override. Returns None to abort.
     """
+    from browser_automation.etere_direct_client import AGENCY_IDS
+
     order = parse_brentan_xlsx(xlsx_path)
 
     print(f"\n{'='*60}")
-    print(f"BRENTAN: {order.agency}")
+    print(f"Agency:   {order.agency}  (fixed — Etere agency ID {AGENCY_IDS['BRENTAN']})")
+    print(f"Customer: {order.client or '(not detected — will prompt)'}")
     if order.order_date:
         print(f"Order date: {order.order_date:%B %d, %Y}")
     print(f"Markets: {', '.join(m.market_code for m in order.market_sections)}")
@@ -152,21 +155,34 @@ def gather_brentan_inputs(xlsx_path: str) -> Optional[dict]:
         print("  ✗ No flight start date found — aborting")
         return None
 
-    # ── Customer lookup ───────────────────────────────────────────────────
+    # ── Confirm the advertiser/customer (NOT the agency) ──────────────────
+    # Brentan is the agency (hardcoded agency_id above). The Etere customer is
+    # the advertiser, read from the file name and confirmable here.
+    raw = input(f"\n  Customer / advertiser name [{order.client}]: ").strip()
+    client = raw or order.client
+    if not client:
+        print("  ✗ No customer name — aborting")
+        return None
+
+    # ── Customer lookup (by the CUSTOMER, not the agency) ─────────────────
     customer_id: Optional[int] = None
     separation = (15, 0, 0)
 
-    billing_type = 'agency'   # Brentan is an agency; overridden by DB record if present
-    cust = _lookup_customer(order.agency)
+    billing_type = 'agency'   # Brentan bills as an agency; overridden by DB record if present
+    cust = _lookup_customer(client)
     if cust:
         customer_id  = cust.customer_id
         billing_type = cust.billing_type or 'agency'
         s0 = 25 if cust.separation_customer == 30 else cust.separation_customer
         separation = (s0, cust.separation_event, cust.separation_order)
-        print(f"\n[CUSTOMER] ✓ Found in DB → ID {customer_id}, billing={billing_type}, sep {separation}")
+        print(f"[CUSTOMER] ✓ '{client}' found in DB → ID {customer_id}, billing={billing_type}, sep {separation}")
     else:
-        print(f"\n[CUSTOMER] '{order.agency}' not found in DB.")
-        raw_id = input("  Enter Etere customer ID: ").strip()
+        # Normal on first order for a new advertiser: not in customers.db yet,
+        # but already exists in Etere's ANAGRAF. Enter its ANAGRAF customer ID;
+        # it is saved below so future orders resolve automatically.
+        print(f"[CUSTOMER] '{client}' not in customers.db yet (normal on first entry — it exists in ANAGRAF).")
+        print("  Enter the advertiser's Etere (ANAGRAF) customer ID — NOT the Brentan agency ID.")
+        raw_id = input("  Customer ID: ").strip()
         if not raw_id.isdigit():
             print("  ✗ Invalid ID — aborting")
             return None
@@ -174,18 +190,18 @@ def gather_brentan_inputs(xlsx_path: str) -> Optional[dict]:
         raw_bt = input("  Billing type [agency/direct]: ").strip().lower()
         billing_type = 'direct' if raw_bt.startswith('d') else 'agency'
         save = input(
-            f"  Save '{order.agency}' (ID {customer_id}, {billing_type}) to DB? (y/n): "
+            f"  Save '{client}' (ID {customer_id}, {billing_type}) to DB? (y/n): "
         ).strip().lower()
         if save in ('y', 'yes'):
-            _upsert_customer(str(customer_id), order.agency, separation, billing_type)
+            _upsert_customer(str(customer_id), client, separation, billing_type)
 
     # ── Spot duration ─────────────────────────────────────────────────────
     raw = input("\n  Spot duration in seconds [30]: ").strip()
     spot_duration = int(raw) if raw.isdigit() else 30
 
     # ── Single contract code + description (covers all markets) ──────────
-    code_name = (cust.code_name        or 'BRENTAN')               if cust else 'BRENTAN'
-    desc_name = (cust.description_name or 'Brentan Media Services') if cust else 'Brentan Media Services'
+    code_name = (cust.code_name        or client) if cust else client
+    desc_name = (cust.description_name or client) if cust else client
 
     # Use overall flight range across all markets for the default description
     start_d = start_override
@@ -208,6 +224,7 @@ def gather_brentan_inputs(xlsx_path: str) -> Optional[dict]:
 
     return {
         'customer_id':         customer_id,
+        'client':              client,
         'billing_type':        billing_type,
         'separation':          separation,
         'spot_duration':       spot_duration,
@@ -228,7 +245,6 @@ def _create_brentan_contract(order: BrentanOrder, inputs: dict) -> Optional[str]
     """
     from browser_automation.etere_direct_client import (
         AGENCY_IDS,
-        MEDIA_CENTER_IDS,
         EtereDirectClient,
         connect,
     )
@@ -266,9 +282,11 @@ def _create_brentan_contract(order: BrentanOrder, inputs: dict) -> Optional[str]
             code=contract_code,
             description=description,
             customer_id=int(customer_id),
-            agency_id=AGENCY_IDS["BRENTAN"],          # Brentan Media Services = ANAGRAF agency 439
-            agency_pct=15.0,                          # order states 15% agency commission
-            media_center_id=MEDIA_CENTER_IDS["BRENTAN"],
+            # Always query ANAGRAF for the client and use the agency it returns
+            # (CA Conservation Corps → Brentan). agency_id here is only a fallback
+            # for the rare client whose ANAGRAF record has no agency linked.
+            agency_id=AGENCY_IDS["BRENTAN"],
+            lookup_customer_defaults=True,
             contract_date=flight_start_d,
             contract_end_date=flight_end_d,
             contract_type=1,

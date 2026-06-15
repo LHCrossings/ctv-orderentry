@@ -235,7 +235,6 @@ MEDIA_CENTER_IDS: dict[str, int] = {
     "IMPRENTA": 316,
     "IMPACT":     0,
     "SAGENT":   316,
-    "BRENTAN":  316,
 }
 
 def _build_newtype(
@@ -521,6 +520,7 @@ class EtereDirectClient:
         owner: Optional[str] = None,
         master_market: str = "NYC",
         allow_rename: bool = False,
+        lookup_customer_defaults: bool = False,
     ) -> int:
         """
         Create a contract header via web_sales_savecontractgeneral.
@@ -530,6 +530,13 @@ class EtereDirectClient:
         agency_id=None triggers auto-lookup of agency_id, agency_pct, agent_id,
         media_center_id, and payment_id from ANAGRAF, replicating Etere's
         client-select auto-populate behaviour.
+
+        lookup_customer_defaults=True forces the ANAGRAF lookup even when an
+        agency_id is supplied. This is the agency-parser pattern: always query
+        ANAGRAF for the client and use the agency it returns; the supplied
+        agency_id is only a fallback for when the client's ANAGRAF record has no
+        agency linked. owner/Nielsen/payment/agent/media-center always come from
+        the client's ANAGRAF record.
 
         billing_type drives invoice_mode/invoice_header defaults:
           "agency"  → INVOICEMODE=2, FATTURAZIONE_PRINCIPALE=1  (Customer share indicating agency %)
@@ -541,16 +548,27 @@ class EtereDirectClient:
         if invoice_header is None:
             invoice_header = 1 if billing_type == "agency" else 0
 
-        # Auto-populate from ANAGRAF when agency_id not explicitly provided
-        if agency_id is None:
+        # Auto-populate from ANAGRAF, keyed on the customer (client) ID. Runs when
+        # agency_id is omitted, OR when an agency parser opts in via
+        # lookup_customer_defaults while supplying a fallback agency_id.
+        # The client's ANAGRAF record is the source of truth: owner / Nielsen /
+        # payment / agent / media-center always come from it, and the agency it
+        # returns WINS. A passed agency_id is only a fallback, used when the
+        # client's ANAGRAF record has no agency linked.
+        if agency_id is None or lookup_customer_defaults:
             defaults = self.get_client_defaults(customer_id)
             if not defaults:
                 raise ValueError(
                     f"Customer ID {customer_id} not found in ANAGRAF. "
                     "Check customers.db for a stale or incorrect customer_id."
                 )
-            agency_id       = defaults.get("agency_id", 0)
-            agency_pct      = agency_pct       if agency_pct       is not None else defaults.get("agency_pct", 15.0)
+            anagraf_agency  = defaults.get("agency_id", 0)
+            if anagraf_agency:
+                agency_id = anagraf_agency      # ANAGRAF's client→agency link wins
+            elif agency_id is None:
+                agency_id = 0
+            # else: no agency in ANAGRAF — keep the caller-supplied fallback agency_id
+            agency_pct      = agency_pct       if agency_pct       is not None else (defaults.get("agency_pct") or 15.0)
             agent_id        = agent_id         if agent_id         is not None else defaults.get("agent_id", 11)
             media_center_id = media_center_id  if media_center_id  is not None else defaults.get("media_center_id", 316)
             payment_id      = payment_id       if payment_id       is not None else defaults.get("payment_id", 1)

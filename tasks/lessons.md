@@ -236,6 +236,52 @@ Rules:
 - Use cross-platform date formatting per lesson #13 (`.month`/`.day`, never `%-m`/`%-d`).
 - For multi-line orders, use the **earliest** line start date as the trigger.
 
+### 16. Agency parsers: agency ≠ customer — hardcode the agency, look up the customer, let ANAGRAF win
+
+**Session:** Brentan Media Services parser (2026-06-15)
+
+For an **agency parser** (one media agency that places orders for many different advertisers — Brentan, HL, RPM, Sagent, etc.), the **agency** and the **customer/advertiser** are two distinct ANAGRAF records. Do not conflate them.
+
+- **Customer / advertiser** = who the campaign is for (e.g. "CA Conservation Corps", ANAGRAF/Etere customer ID 440). This is what `create_contract_header(customer_id=...)` takes and what gets stored in `customers.db`.
+- **Agency** = the buyer placing the order (e.g. "Brentan Media Services", ANAGRAF agency ID 439). Hardcode this in the parser (add it to `AGENCY_IDS` in `etere_direct_client.py`).
+
+**The rule:** *Always query ANAGRAF for the client, and if ANAGRAF returns an agency for that client, use it.* The hardcoded agency ID is only a **fallback** for the rare client whose ANAGRAF record has no agency linked. Everything else needed for the header — owner/AE, Nielsen product code, payment terms, agent, media center, agency % — also comes from the client's ANAGRAF record. The customer ID is the single key that drives all of it.
+
+**How to apply** — `create_contract_header` supports `lookup_customer_defaults=True`:
+```python
+client.create_contract_header(
+    code=..., description=..., customer_id=int(customer_id),
+    agency_id=AGENCY_IDS["BRENTAN"],   # fallback only — ANAGRAF's client→agency link wins
+    lookup_customer_defaults=True,     # always query ANAGRAF for the client
+    contract_date=..., contract_end_date=..., billing_type=billing_type, allow_rename=True,
+)
+```
+- `lookup_customer_defaults` defaults to `False` — the 5 legacy agencies that pass a hardcoded `agency_id` (HL/RPM/IMPRENTA/IMPACT/SAGENT) are unchanged. New agency parsers opt in.
+- Do **not** pass `agency_pct` / `media_center_id` explicitly when opting in — let ANAGRAF supply them (ANAGRAF's linked-agency commission and the client's media center are authoritative).
+- The gather function looks up / prompts for the **customer name only**, never the agency.
+
+**A new advertiser is normal:** on its first order it is **not yet in `customers.db` but IS in ANAGRAF**. Prompt for its Etere (ANAGRAF) customer ID — explicitly *not* the agency ID — and save it so future orders auto-resolve. Never store the agency as a customer record.
+
+### 17. The advertiser/client name may live in the FILENAME, not the workbook
+
+**Session:** Brentan Media Services parser (2026-06-15)
+
+Some proposal workbooks (Brentan) carry only the **agency** in their cells; the **advertiser** appears only in the file name, e.g. `Crossings TV CA Conservation Corps_Brentan Media_2026.xlsx`. When the client isn't in the sheet, extract it from the filename and let the user confirm/override it in `gather_*_inputs()`:
+```python
+m = re.search(r'crossings\s+tv\s+(.+?)\s*_\s*brentan', Path(path).stem, re.IGNORECASE)
+client = m.group(1).strip() if m else ""
+# in gather:  raw = input(f"  Customer / advertiser name [{client}]: ").strip(); client = raw or client
+```
+Never assume the agency name in the cells is the customer.
+
+### 18. Stop grid parsing at the totals/"Summary" section — don't rely on a market-name skip-set
+
+**Session:** Brentan Media Services parser (2026-06-15)
+
+Multi-market proposal grids end with a **"Summary of investment"** block whose per-market rows (`Los Angeles`, `San Francisco`, …) look enough like data rows to be mis-parsed as paid lines — producing garbage like `days="28"`, 3,520 spots. The ACM parser guarded this with a hardcoded skip-set of market names, but it only listed *some* markets (`san francisco`, `central valley`) and silently leaked any it missed (`los angeles`).
+
+**Rule:** `break` out of the row loop when you hit the summary header (`cell.lower() == 'summary of investment'`). Everything below it is totals/added-value notes, never airtime lines. This is robust to any market name; a name-based skip-set is not. Always verify parsed totals reconcile against the order's own summary footer (paid + bonus = total) before shipping.
+
 ---
 
 ## `parse_day_bits` (DirectDB) and `_select_days` (Selenium) Must Stay in Sync
