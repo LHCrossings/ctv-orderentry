@@ -262,11 +262,13 @@ def _create_brentan_contract(order: BrentanOrder, inputs: dict) -> Optional[str]
     spot_duration = inputs.get('spot_duration', 30)
     duration_str  = str(spot_duration)
 
-    # Overall flight range across all markets (start may be user-overridden via lesson #15)
+    # Overall flight range across all markets. The user may have overridden the
+    # start via the lesson #15 confirmation; that override must reach the LINE
+    # dates (the earliest week), not just the header — so we keep the original
+    # parsed start to know which week to shift.
+    original_start_d = _parse_date(order.flight_start) if order.flight_start else None
     override = inputs.get('start_date_override')
-    flight_start_d = _parse_date(override) if override else (
-        _parse_date(order.flight_start) if order.flight_start else None
-    )
+    flight_start_d = _parse_date(override) if override else original_start_d
     flight_end_d   = _parse_date(order.flight_end)   if order.flight_end   else None
     if not flight_start_d or not flight_end_d:
         print("[BRENTAN] ✗ Could not determine overall flight range")
@@ -340,10 +342,21 @@ def _create_brentan_contract(order: BrentanOrder, inputs: dict) -> Optional[str]
 
                 for rng in ranges:
                     total_spots = rng['spots_per_week'] * rng['weeks']
+
+                    # Apply the lesson #15 start-date override to the earliest week:
+                    # any range that begins on the original parsed flight start is
+                    # shifted to the confirmed/overridden start date.
+                    date_from = _parse_date(rng['start_date'])
+                    if (original_start_d and flight_start_d
+                            and flight_start_d != original_start_d
+                            and date_from == original_start_d):
+                        date_from = flight_start_d
+                    date_to = _parse_date(rng['end_date'])
+
                     line_count += 1
                     print(
                         f"  [LINE {line_count}] {mkt.market_code} {desc}: "
-                        f"{rng['start_date']}–{rng['end_date']} "
+                        f"{_fmt_mmddyyyy(date_from)}–{_fmt_mmddyyyy(date_to)} "
                         f"({rng['spots_per_week']}/wk×{rng['weeks']}w={total_spots})"
                     )
                     client.add_contract_line(
@@ -354,8 +367,8 @@ def _create_brentan_contract(order: BrentanOrder, inputs: dict) -> Optional[str]
                         rate=line.rate,
                         total_spots=total_spots,
                         spots_per_week=rng['spots_per_week'],
-                        date_from=_parse_date(rng['start_date']),
-                        date_to=_parse_date(rng['end_date']),
+                        date_from=date_from,
+                        date_to=date_to,
                         duration=duration_str,
                         is_bonus=is_bonus,
                         booking_code=booking_code,

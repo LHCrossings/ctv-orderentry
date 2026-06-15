@@ -235,6 +235,13 @@ Rules:
 - Follow lesson #6: Enter or `y`/`yes` keeps the parsed date; any other input is treated as a date override, never stored literally.
 - Use cross-platform date formatting per lesson #13 (`.month`/`.day`, never `%-m`/`%-d`).
 - For multi-line orders, use the **earliest** line start date as the trigger.
+- **The override must reach the LINE dates, not just the contract header.** This was a real bug (Brentan, 2026-06-15): the confirmed date was written to `create_contract_header(contract_date=...)` but the lines still used the parsed week-column dates, so the order entered with the original start. Keep the **original** parsed start, and when building each line's `date_from`, shift any range that begins on the original earliest start to the overridden date:
+  ```python
+  date_from = _parse_date(rng['start_date'])
+  if original_start and override_start and override_start != original_start and date_from == original_start:
+      date_from = override_start
+  ```
+  Only the earliest week shifts; later weeks keep their dates. Always print/verify the actual `date_from` passed to `add_contract_line`, not the parsed range, so a silently-ignored override is visible.
 
 ### 16. Agency parsers: agency ≠ customer — hardcode the agency, look up the customer, let ANAGRAF win
 
