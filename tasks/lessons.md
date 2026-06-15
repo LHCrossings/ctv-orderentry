@@ -208,6 +208,34 @@ _upsert_customer(str(customer_id), client_name, separation, billing_type)
 ```
 The DB is the source of truth for `billing_type`. If it is written wrong at save time, every subsequent order for that customer will have the wrong invoice header until someone notices.
 
+### 15. Confirm the start date when the order starts tomorrow or earlier
+
+**Session:** Start-date sanity check (2026-06-15)
+
+Every new parser must check the order's flight start date during `gather_*_inputs()`. If the earliest line/flight start date is **tomorrow or earlier** (i.e. `start_date <= today + 1 day`), prompt the user to confirm the start date before processing continues.
+
+**Why:** An order that starts today or in the past usually means the IO was received late, the date was mis-parsed (OCR artifact, wrong year), or the order is a back-fill that needs special handling. Silently entering a same-day or past-dated flight risks spots that can never air or a contract entered against the wrong date. A quick confirmation catches all three before any DB write happens.
+
+**How to apply** — add this near the top of every `gather_*_inputs()`, after the start date is known and before any other prompts:
+```python
+from datetime import date, timedelta
+
+# earliest_start is a datetime.date — the order's flight/first-line start
+if earliest_start <= date.today() + timedelta(days=1):
+    print(f"  ⚠ This order starts {earliest_start.month}/{earliest_start.day}/{earliest_start.strftime('%y')} "
+          f"(today is {date.today().month}/{date.today().day}/{date.today().strftime('%y')}).")
+    raw = input(f"  Confirm start date [{earliest_start.month}/{earliest_start.day}/{earliest_start.strftime('%y')}]: ").strip()
+    # Enter = keep the parsed date; typing anything overrides it (re-parse as needed)
+    if raw and raw.lower() not in ('y', 'yes'):
+        earliest_start = _parse_user_date(raw)   # parser-specific date parse
+```
+
+Rules:
+- The check uses `<= today + 1 day` so it fires for **today, the past, AND tomorrow** — anything that isn't comfortably in the future.
+- Follow lesson #6: Enter or `y`/`yes` keeps the parsed date; any other input is treated as a date override, never stored literally.
+- Use cross-platform date formatting per lesson #13 (`.month`/`.day`, never `%-m`/`%-d`).
+- For multi-line orders, use the **earliest** line start date as the trigger.
+
 ---
 
 ## `parse_day_bits` (DirectDB) and `_select_days` (Selenium) Must Stay in Sync
