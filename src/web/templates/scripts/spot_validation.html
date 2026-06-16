@@ -370,21 +370,28 @@ function renderResults(data) {
         const diffHtml = line.diff === 0
             ? `<span class="diff-badge diff-ok">✓</span>`
             : `<span class="diff-badge diff-err">${line.diff > 0 ? '+' : ''}${line.diff}</span>`;
+        const beTag = line.is_bookend
+            ? ` <span class="diff-badge" style="background:var(--nord10);color:#fff" title="Bookend: airs top + bottom of break, so 2 spots per ordered passage">×2 bookend</span>`
+            : '';
+        const orderedHtml = line.is_bookend
+            ? `${line.ordered} <span style="color:var(--text-muted)">→ ${line.expected}</span>`
+            : `${line.ordered}`;
         tr.innerHTML = `
             <td style="color:var(--text-muted);font-size:0.8rem">${line.line_id}</td>
-            <td>${escHtml(line.description)}</td>
+            <td>${escHtml(line.description)}${beTag}</td>
             <td>${escHtml(line.market)}</td>
             <td style="white-space:nowrap">${escHtml(line.date_from)}</td>
             <td style="white-space:nowrap">${escHtml(line.date_to)}</td>
-            <td style="text-align:right">${line.ordered}</td>
+            <td style="text-align:right">${orderedHtml}</td>
             <td style="text-align:right">${line.scheduled}</td>
             <td style="text-align:right">${diffHtml}</td>
         `;
         tbody.appendChild(tr);
     });
 
-    // Footer totals
-    const totalDiff = data.total_scheduled - data.total_ordered;
+    // Footer totals — compare against the bookend-adjusted expectation, not raw ordered
+    const totalExpected = data.total_expected ?? data.total_ordered;
+    const totalDiff = data.total_scheduled - totalExpected;
     const diffHtml = totalDiff === 0
         ? `<span class="diff-badge diff-ok">✓</span>`
         : `<span class="diff-badge diff-err">${totalDiff > 0 ? '+' : ''}${totalDiff}</span>`;

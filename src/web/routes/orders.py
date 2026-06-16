@@ -6391,6 +6391,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                            COALESCE(cr.DATESTART, cr.DATA_INIZIO),
                            COALESCE(cr.DATEEND, cr.DATA_FINE),
                            cr.N_PASSAGGI,
+                           cr.CONTROLLACAPOFILA, cr.CONTROLLAFINEFILA,
                            COUNT(tp.ID_ContrattiRighe) AS scheduled
                     FROM   CONTRATTIRIGHE cr
                     LEFT JOIN trafficTPalinse tp
@@ -6398,7 +6399,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     WHERE  cr.ID_CONTRATTITESTATA = %s
                     GROUP  BY cr.ID_CONTRATTIRIGHE, cr.DESCRIZIONE, cr.COD_USER,
                               cr.DATESTART, cr.DATA_INIZIO, cr.DATEEND, cr.DATA_FINE,
-                              cr.N_PASSAGGI
+                              cr.N_PASSAGGI, cr.CONTROLLACAPOFILA, cr.CONTROLLAFINEFILA
                     ORDER  BY cr.ID_CONTRATTIRIGHE
                 """, [contract_id])
                 rows = cursor.fetchall()
@@ -6407,11 +6408,17 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 raise HTTPException(status_code=404, detail=f"No lines found for contract {contract_id}.")
 
             lines = []
-            total_ordered = total_scheduled = mismatches = 0
-            for (lid, desc, cod_user, date_from, date_to, n_pass, sched) in rows:
+            total_ordered = total_expected = total_scheduled = mismatches = 0
+            for (lid, desc, cod_user, date_from, date_to, n_pass, capofila, finefila, sched) in rows:
                 ordered = n_pass or 0
-                diff    = sched - ordered
+                # Bookend lines (scheduling type 6: top AND bottom of break) air each
+                # ordered passage as a top/bottom pair, so 2 scheduled spots per N_PASSAGGI
+                # is correct — not an over-schedule. Compare against the doubled expectation.
+                is_bookend = bool(capofila) and bool(finefila)
+                expected   = ordered * 2 if is_bookend else ordered
+                diff       = sched - expected
                 total_ordered   += ordered
+                total_expected  += expected
                 total_scheduled += sched
                 if diff != 0:
                     mismatches += 1
@@ -6422,6 +6429,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     "date_from":  f"{date_from.month}/{date_from.day}/{date_from.year}" if date_from else "",
                     "date_to":    f"{date_to.month}/{date_to.day}/{date_to.year}" if date_to else "",
                     "ordered":    ordered,
+                    "expected":   expected,
+                    "is_bookend": is_bookend,
                     "scheduled":  sched,
                     "diff":       diff,
                 })
@@ -6430,6 +6439,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 "contract_id":     contract_id,
                 "lines":           lines,
                 "total_ordered":   total_ordered,
+                "total_expected":  total_expected,
                 "total_scheduled": total_scheduled,
                 "mismatches":      mismatches,
             })
