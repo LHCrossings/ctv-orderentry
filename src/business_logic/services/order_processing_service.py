@@ -2543,8 +2543,8 @@ class OrderProcessingService:
         """Process a T&T Public Relations order — one contract across all markets."""
         inp = order.order_input if isinstance(order.order_input, dict) else {}
         try:
-            from browser_automation.tt_automation import run_tt_order
             from browser_automation.parsers.tt_parser import parse_tt_xlsx
+            from browser_automation.tt_automation import run_tt_order
 
             parsed  = parse_tt_xlsx(str(order.pdf_path))
             results = run_tt_order(parsed, inp)  # list of (label, success)
