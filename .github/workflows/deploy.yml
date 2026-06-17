@@ -12,6 +12,28 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Verify deploy is authorized
+        # Tripwire: fail loudly if anyone other than an allowed actor triggers a
+        # deploy. Runs first, before any secrets (Tailscale / SSH key) are used.
+        # Configure the allowlist via the DEPLOY_ALLOWED_ACTORS repo variable
+        # (comma- or space-separated logins); defaults to the repo owner.
+        env:
+          ACTOR: ${{ github.actor }}
+          ALLOWED: ${{ vars.DEPLOY_ALLOWED_ACTORS }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          allowed="${ALLOWED:-$OWNER}"
+          allowed="${allowed//,/ }"
+          for a in $allowed; do
+            if [ "$a" = "$ACTOR" ]; then
+              echo "✓ Deploy authorized for actor '$ACTOR'."
+              exit 0
+            fi
+          done
+          echo "::error title=Unauthorized deploy::Triggered by '$ACTOR'; allowed: $allowed"
+          exit 1
+
       - name: Connect Tailscale
         uses: tailscale/github-action@v4
         with:
