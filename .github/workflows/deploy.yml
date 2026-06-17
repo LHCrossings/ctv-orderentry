@@ -27,6 +27,9 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
             set -euxo pipefail
+            # The checkout is owned by a different user than DEPLOY_USER, so Git's
+            # safe.directory guard blocks git commands. Allow this path (idempotent).
+            git config --global --add safe.directory /opt/ctv-orderentry
             cd /opt/ctv-orderentry
             git fetch origin
             git checkout "${{ github.ref_name }}"
