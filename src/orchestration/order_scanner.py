@@ -52,9 +52,11 @@ def _detect_xlsx_content(file_path: Path) -> OrderType:
                 if "AMERICAN COMMUNITY MEDIA" in v:
                     wb.close()
                     return OrderType.ACM
-                if "BRENTAN" in v:
+                # T&T Public Relations — cells may still carry the "Brentan
+                # Media" template branding, so match either token.
+                if "BRENTAN" in v or "T&T" in v:
                     wb.close()
-                    return OrderType.BRENTAN
+                    return OrderType.TT
         wb.close()
     except Exception as e:
         print(f"[WARN] Could not read {file_path.name}: {e}")

@@ -1,12 +1,16 @@
 """
-Brentan (Brentan Media Services) order parser.
+T&T Public Relations order parser.
 
-Reads Crossings TV media proposal Excel workbooks produced by Brentan Media.
+Reads Crossings TV media proposal Excel workbooks for T&T Public Relations
+(Etere agency ID 439). The workbooks are produced with the Brentan Media
+template, so filenames/cells may still carry the "Brentan Media" branding even
+though the agency of record is T&T Public Relations.
+
 Same workbook template as ACM: multi-market sections; language-block rows
 (paid + bonus ROS); week-date columns for spot counts.
 
 Differences from ACM:
-  * Agency name is "Brentan Media Services".
+  * Agency of record is "T&T Public Relations".
   * Rate column is "GROSS RATE" → rates_are_net=False (no gross-up needed).
   * Order-date metadata label is "Order date" (ACM uses "Date").
 """
@@ -22,7 +26,7 @@ from typing import Optional
 # ─── Data Classes ────────────────────────────────────────────────────────────
 
 @dataclass
-class BrentanLine:
+class TTLine:
     language_block: str   # e.g. "Filipino News and Talk" or "Filipino" (bonus)
     daypart: str          # e.g. "M-F 4p-5p; 6p-7p" or "ROS"
     rate: float           # per-spot GROSS rate (0.0 for bonus)
@@ -55,16 +59,16 @@ class BrentanLine:
 
 
 @dataclass
-class BrentanMarketSection:
+class TTMarketSection:
     market_code: str
-    lines: list[BrentanLine] = field(default_factory=list)
+    lines: list[TTLine] = field(default_factory=list)
 
     @property
-    def paid_lines(self) -> list[BrentanLine]:
+    def paid_lines(self) -> list[TTLine]:
         return [ln for ln in self.lines if not ln.is_bonus]
 
     @property
-    def bonus_lines(self) -> list[BrentanLine]:
+    def bonus_lines(self) -> list[TTLine]:
         return [ln for ln in self.lines if ln.is_bonus]
 
     @property
@@ -86,11 +90,11 @@ class BrentanMarketSection:
 
 
 @dataclass
-class BrentanOrder:
-    agency: str                       # the media agency (Brentan Media Services), agency_id 439
+class TTOrder:
+    agency: str                       # the media agency (T&T Public Relations), agency_id 439
     order_date: Optional[date]
-    market_sections: list[BrentanMarketSection]
-    rates_are_net: bool = False       # Brentan rate column is "GROSS RATE"
+    market_sections: list[TTMarketSection]
+    rates_are_net: bool = False       # T&T rate column is "GROSS RATE"
     client: str = ""                  # the advertiser/customer (e.g. "CA Conservation Corps")
 
     @property
@@ -98,9 +102,9 @@ class BrentanOrder:
         return [m.market_code for m in self.market_sections]
 
     @property
-    def lines(self) -> list[BrentanLine]:
+    def lines(self) -> list[TTLine]:
         """All lines across all markets (flattened for bridge display)."""
-        result: list[BrentanLine] = []
+        result: list[TTLine] = []
         for m in self.market_sections:
             result.extend(m.lines)
         return result
@@ -149,16 +153,19 @@ def _detect_market(text: str) -> Optional[str]:
 
 def _client_from_filename(path: str) -> str:
     """
-    Extract the advertiser/client name from the Brentan file name.
+    Extract the advertiser/client name from the T&T file name.
 
-    The workbook itself carries only the agency (Brentan Media Services);
-    the client lives in the file name, e.g.
+    The workbook itself carries only the agency branding (the "Brentan Media"
+    template T&T uses); the client lives in the file name, e.g.
         "Crossings TV CA Conservation Corps_Brentan Media_2026.xlsx"
+        "Crossings TV CA Conservation Corps_T&T_2026.xlsx"
                        └──────── client ────────┘
+    Matches either the "Brentan Media" or "T&T" trailing token so files keep
+    detecting regardless of which branding the agency ships.
     Returns "" when the conventional pattern is not found (gather then prompts).
     """
     stem = Path(path).stem
-    m = re.search(r'crossings\s+tv\s+(.+?)\s*_\s*brentan', stem, re.IGNORECASE)
+    m = re.search(r'crossings\s+tv\s+(.+?)\s*_\s*(?:brentan|t\s*&\s*t|t&t)', stem, re.IGNORECASE)
     if m:
         return m.group(1).strip()
     return ""
@@ -204,15 +211,15 @@ _SKIP_LABELS = frozenset({
 
 # ─── Parser ──────────────────────────────────────────────────────────────────
 
-def parse_brentan_xlsx(path: str) -> BrentanOrder:
+def parse_tt_xlsx(path: str) -> TTOrder:
     """
-    Parse a Brentan Media Services Crossings TV proposal workbook.
+    Parse a T&T Public Relations Crossings TV proposal workbook.
 
     Args:
         path: Path to the .xlsx file
 
     Returns:
-        BrentanOrder populated with all market sections and lines
+        TTOrder populated with all market sections and lines
 
     Raises:
         RuntimeError: if openpyxl is not installed
@@ -229,7 +236,7 @@ def parse_brentan_xlsx(path: str) -> BrentanOrder:
     rows = list(ws.iter_rows(values_only=True))
 
     # ── Metadata ──────────────────────────────────────────────────────────────
-    agency = "Brentan Media Services"
+    agency = "T&T Public Relations"
     order_date: Optional[date] = None
 
     for row in rows[:18]:
@@ -241,8 +248,8 @@ def parse_brentan_xlsx(path: str) -> BrentanOrder:
             break
 
     # ── Parse market sections ─────────────────────────────────────────────────
-    markets: list[BrentanMarketSection] = []
-    current_market: Optional[BrentanMarketSection] = None
+    markets: list[TTMarketSection] = []
+    current_market: Optional[TTMarketSection] = None
     week_dates: list[date] = []
     num_week_cols = 0
 
@@ -268,7 +275,7 @@ def parse_brentan_xlsx(path: str) -> BrentanOrder:
         if 'california' in cell_c_lower or 'xfinity' in cell_c_lower:
             market_code = _detect_market(cell_c)
             if market_code:
-                current_market = BrentanMarketSection(market_code=market_code)
+                current_market = TTMarketSection(market_code=market_code)
                 markets.append(current_market)
                 week_dates = []
                 num_week_cols = 0
@@ -299,7 +306,7 @@ def parse_brentan_xlsx(path: str) -> BrentanOrder:
                 int(row[col_idx]) if isinstance(row[col_idx], (int, float)) else 0
                 for col_idx in range(5, 5 + num_week_cols)
             ]
-            current_market.lines.append(BrentanLine(
+            current_market.lines.append(TTLine(
                 language_block=cell_c,
                 daypart='ROS',
                 rate=0.0,
@@ -316,7 +323,7 @@ def parse_brentan_xlsx(path: str) -> BrentanOrder:
                 int(row[col_idx]) if isinstance(row[col_idx], (int, float)) else 0
                 for col_idx in range(5, 5 + num_week_cols)
             ]
-            current_market.lines.append(BrentanLine(
+            current_market.lines.append(TTLine(
                 language_block=cell_c,
                 daypart=cell_d,
                 rate=rate,
@@ -333,7 +340,7 @@ def parse_brentan_xlsx(path: str) -> BrentanOrder:
             "Expected 'California-...' section headers."
         )
 
-    return BrentanOrder(
+    return TTOrder(
         agency=agency,
         order_date=order_date,
         market_sections=markets,

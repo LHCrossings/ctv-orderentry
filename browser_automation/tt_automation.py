@@ -1,10 +1,10 @@
 """
-Brentan (Brentan Media Services) direct DB automation.
+T&T Public Relations direct DB automation.
 
 Creates ONE Etere contract for the entire order. Each market section's lines
 are entered under that single contract, with each line carrying its own market code.
 
-Brentan orders are agency orders with GROSS rates and a 15% agency commission;
+T&T orders are agency orders with GROSS rates and a 15% agency commission;
 the commission is recorded automatically by create_contract_header via the
 ANAGRAF auto-populate path (no gross-up needed — rates are already gross).
 """
@@ -16,7 +16,7 @@ from typing import Optional
 
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 from browser_automation.etere_client import EtereClient
-from browser_automation.parsers.brentan_parser import BrentanOrder, parse_brentan_xlsx
+from browser_automation.parsers.tt_parser import TTOrder, parse_tt_xlsx
 
 # ─── Month abbreviations (for consolidate_weeks date format) ─────────────────
 _MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -59,7 +59,7 @@ def _lookup_customer(client_name: str):
         # find_by_name_any_type does case-insensitive name match across all order types,
         # which catches manually-entered records where order_type casing may differ.
         return (
-            repo.find_by_name(client_name, OrderType.BRENTAN)
+            repo.find_by_name(client_name, OrderType.TT)
             or repo.find_by_name_any_type(client_name)
         )
     except Exception as exc:
@@ -80,7 +80,7 @@ def _upsert_customer(customer_id: str, client_name: str, separation: tuple, bill
         repo.save(Customer(
             customer_id=customer_id,
             customer_name=client_name,
-            order_type=OrderType.BRENTAN,
+            order_type=OrderType.TT,
             billing_type=billing_type,
             separation_customer=separation[0],
             separation_event=separation[1],
@@ -91,7 +91,7 @@ def _upsert_customer(customer_id: str, client_name: str, separation: tuple, bill
         print(f"[CUSTOMER DB] Warning: could not save: {exc}")
 
 
-def _confirm_start_date(order: BrentanOrder) -> Optional[date]:
+def _confirm_start_date(order: TTOrder) -> Optional[date]:
     """
     Lesson #15: if the order's earliest start date is tomorrow or earlier,
     confirm the start date with the user before processing.
@@ -123,19 +123,19 @@ def _confirm_start_date(order: BrentanOrder) -> Optional[date]:
 
 # ─── Input Gather ─────────────────────────────────────────────────────────────
 
-def gather_brentan_inputs(xlsx_path: str) -> Optional[dict]:
+def gather_tt_inputs(xlsx_path: str) -> Optional[dict]:
     """
-    Gather user inputs for a Brentan order before processing.
+    Gather user inputs for a T&T order before processing.
 
     Returns dict with: customer_id, billing_type, separation, spot_duration,
     contract_code, description, start_date_override. Returns None to abort.
     """
     from browser_automation.etere_direct_client import AGENCY_IDS
 
-    order = parse_brentan_xlsx(xlsx_path)
+    order = parse_tt_xlsx(xlsx_path)
 
     print(f"\n{'='*60}")
-    print(f"Agency:   {order.agency}  (fixed — Etere agency ID {AGENCY_IDS['BRENTAN']})")
+    print(f"Agency:   {order.agency}  (fixed — Etere agency ID {AGENCY_IDS['TT']})")
     print(f"Customer: {order.client or '(not detected — will prompt)'}")
     if order.order_date:
         print(f"Order date: {order.order_date:%B %d, %Y}")
@@ -156,7 +156,7 @@ def gather_brentan_inputs(xlsx_path: str) -> Optional[dict]:
         return None
 
     # ── Confirm the advertiser/customer (NOT the agency) ──────────────────
-    # Brentan is the agency (hardcoded agency_id above). The Etere customer is
+    # T&T is the agency (hardcoded agency_id above). The Etere customer is
     # the advertiser, read from the file name and confirmable here.
     raw = input(f"\n  Customer / advertiser name [{order.client}]: ").strip()
     client = raw or order.client
@@ -168,7 +168,7 @@ def gather_brentan_inputs(xlsx_path: str) -> Optional[dict]:
     customer_id: Optional[int] = None
     separation = (15, 0, 0)
 
-    billing_type = 'agency'   # Brentan bills as an agency; overridden by DB record if present
+    billing_type = 'agency'   # T&T bills as an agency; overridden by DB record if present
     cust = _lookup_customer(client)
     if cust:
         customer_id  = cust.customer_id
@@ -181,7 +181,7 @@ def gather_brentan_inputs(xlsx_path: str) -> Optional[dict]:
         # but already exists in Etere's ANAGRAF. Enter its ANAGRAF customer ID;
         # it is saved below so future orders resolve automatically.
         print(f"[CUSTOMER] '{client}' not in customers.db yet (normal on first entry — it exists in ANAGRAF).")
-        print("  Enter the advertiser's Etere (ANAGRAF) customer ID — NOT the Brentan agency ID.")
+        print("  Enter the advertiser's Etere (ANAGRAF) customer ID — NOT the T&T agency ID.")
         raw_id = input("  Customer ID: ").strip()
         if not raw_id.isdigit():
             print("  ✗ Invalid ID — aborting")
@@ -236,9 +236,9 @@ def gather_brentan_inputs(xlsx_path: str) -> Optional[dict]:
 
 # ─── Direct DB Entry ──────────────────────────────────────────────────────────
 
-def _create_brentan_contract(order: BrentanOrder, inputs: dict) -> Optional[str]:
+def _create_tt_contract(order: TTOrder, inputs: dict) -> Optional[str]:
     """
-    Enter a Brentan order into Etere as a single contract.
+    Enter a T&T order into Etere as a single contract.
 
     All market sections are written as lines under one contract header.
     Returns the contract code on success, None on failure (rolls back).
@@ -252,12 +252,12 @@ def _create_brentan_contract(order: BrentanOrder, inputs: dict) -> Optional[str]
 
     customer_id   = inputs.get('customer_id')
     if customer_id is None:
-        print("[BRENTAN] ✗ No customer_id")
+        print("[T&T] ✗ No customer_id")
         return None
 
     separation    = inputs.get('separation', (15, 0, 0))
     billing_type  = inputs.get('billing_type', 'agency')
-    contract_code = inputs.get('contract_code', 'BRENTAN')
+    contract_code = inputs.get('contract_code', 'T&T')
     description   = inputs.get('description', '')
     spot_duration = inputs.get('spot_duration', 30)
     duration_str  = str(spot_duration)
@@ -271,7 +271,7 @@ def _create_brentan_contract(order: BrentanOrder, inputs: dict) -> Optional[str]
     flight_start_d = _parse_date(override) if override else original_start_d
     flight_end_d   = _parse_date(order.flight_end)   if order.flight_end   else None
     if not flight_start_d or not flight_end_d:
-        print("[BRENTAN] ✗ Could not determine overall flight range")
+        print("[T&T] ✗ Could not determine overall flight range")
         return None
 
     conn = None
@@ -285,9 +285,9 @@ def _create_brentan_contract(order: BrentanOrder, inputs: dict) -> Optional[str]
             description=description,
             customer_id=int(customer_id),
             # Always query ANAGRAF for the client and use the agency it returns
-            # (CA Conservation Corps → Brentan). agency_id here is only a fallback
+            # (CA Conservation Corps → T&T). agency_id here is only a fallback
             # for the rare client whose ANAGRAF record has no agency linked.
-            agency_id=AGENCY_IDS["BRENTAN"],
+            agency_id=AGENCY_IDS["TT"],
             lookup_customer_defaults=True,
             contract_date=flight_start_d,
             contract_end_date=flight_end_d,
@@ -295,7 +295,7 @@ def _create_brentan_contract(order: BrentanOrder, inputs: dict) -> Optional[str]
             billing_type=billing_type,
             allow_rename=True,
         )
-        print(f"[BRENTAN] ✓ Contract header: ID={contract_id}  code='{contract_code}'")
+        print(f"[T&T] ✓ Contract header: ID={contract_id}  code='{contract_code}'")
 
         line_count = 0
 
@@ -377,11 +377,11 @@ def _create_brentan_contract(order: BrentanOrder, inputs: dict) -> Optional[str]
 
         conn.commit()
         conn.close()
-        print(f"[BRENTAN] ✓ {line_count} lines committed across {len(order.market_sections)} markets.")
+        print(f"[T&T] ✓ {line_count} lines committed across {len(order.market_sections)} markets.")
         return contract_code
 
     except Exception as exc:
-        print(f"[BRENTAN] ✗ {exc}")
+        print(f"[T&T] ✗ {exc}")
         import traceback
         traceback.print_exc()
         if conn:
@@ -393,12 +393,12 @@ def _create_brentan_contract(order: BrentanOrder, inputs: dict) -> Optional[str]
         return None
 
 
-def run_brentan_order(order: BrentanOrder, inputs: dict) -> list[tuple[str, bool]]:
+def run_tt_order(order: TTOrder, inputs: dict) -> list[tuple[str, bool]]:
     """
-    Process a Brentan order as a single contract covering all markets.
+    Process a T&T order as a single contract covering all markets.
 
     Returns list with one (contract_code, success) tuple.
     """
-    code = _create_brentan_contract(order, inputs)
-    label = inputs.get('contract_code') or 'BRENTAN'
+    code = _create_tt_contract(order, inputs)
+    label = inputs.get('contract_code') or 'T&T'
     return [(label, code is not None)]

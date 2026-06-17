@@ -49,7 +49,7 @@ class OrderType(Enum):
     RWNY = "rwny"
     FIGHTTHEBITE = "fightthebite"
     ACM = "acm"
-    BRENTAN = "brentan"
+    TT = "tt"
     UNKNOWN = "unknown"
 
     def requires_block_refresh(self) -> bool:

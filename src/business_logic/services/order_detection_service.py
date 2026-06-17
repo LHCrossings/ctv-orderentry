@@ -893,8 +893,10 @@ def detect_from_filename(filename: str) -> OrderType:
         return OrderType.THREEOLIVES
     if "FIGHT" in name_upper and "BITE" in name_upper:
         return OrderType.FIGHTTHEBITE
-    if "BRENTAN" in name_upper:
-        return OrderType.BRENTAN
+    # T&T Public Relations — workbooks may still carry the "Brentan Media"
+    # template branding in the filename, so match either token.
+    if "BRENTAN" in name_upper or "T&T" in name_upper:
+        return OrderType.TT
     # Imprenta XLSX files don't carry "Imprenta" in the filename —
     # fall through to content-based detection in the scanner.
     return OrderType.UNKNOWN
