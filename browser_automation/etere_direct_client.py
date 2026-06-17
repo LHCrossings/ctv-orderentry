@@ -1140,7 +1140,6 @@ EXEC web_sales_InsertContractLine
         date_from   = row[11]
         date_to     = row[12]
         user_id     = row[13]
-        contract_id = row[14]
 
         # Strip trailing asterisks Etere appends after block operations
         cursor.execute(f"""
