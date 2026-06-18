@@ -128,4 +128,18 @@ Explode is **app-orchestrated** (not the encrypted `sch_ExplodeEdl` SP). Capture
 4. **Per row:** `exec sch_UpdateSupportAndProperties <new_id_tpalinse>, <fid>, 1`.
 5. **Time recalc:** `exec dbo.sch_rebuildStartTimeSchedule N'<yyyymmdd>', <cod_user>, 0, 0, null, <maxIdTpalinse>, -1, 0, 1`.
 
-**Last piece to decode** (present in the saved trace ~rows 3-4): the segment-mapping `SELECT` (`seg.split, ID_TrafficSchedule, ID_TrafficSegment, (sb.offset+seg.Offset) segtime, seg.duration, id_trafficblock, …`) that yields per-segment `@id_Block/@id_segment/@id_schedule/@ora/@duration` for a program block+date+market — needed to compute the `Traffic_InsertEvent` args. All these SPs are callable; test one market in a safe window first.
+**Segment-mapping query** (the "where" — yields per PRGS segment its `ID_TrafficSchedule / id_trafficblock / ID_TrafficSegment / segtime(=@ora) / Type`):
+`FROM traffic_calendar ca JOIN traffic_scheduleblock sb ON sb.ID_TrafficSchedule=ca.ID_TrafficSchedule JOIN traffic_block bl ON bl.ID_TrafficBlock=sb.ID_TrafficBlock OUTER APPLY (trf_instancesegment si [per date/cod_user] UNION traffic_segment se [template])` selecting `seg.split, sb.ID_TrafficSchedule, seg.ID_TrafficSegment, (sb.offset+seg.Offset) segtime, seg.duration, id_trafficblock, bl.name, Traffic_SumDurEvent(...) totdurevent, cod_user, seg.Type`.
+
+### COMPLETE per-market explode sequence (fully decoded)
+Inputs: `fid` (ID_FILMATI), `date`, `cod_user`, `placedId` (the whole-file row already dragged into break 1 → becomes Part 1).
+1. **Plan:** `SELECT * FROM dbo.ExplodeEdl(fid,0,N'eeAutomatic',cod_user,dbo.sch_GetInfDigit(fid,cod_user))` → N rows `(MARKIN,MARKOUT)`.
+2. **Where:** segment-mapping query (above) for the target block/date/cod_user → the PRGS segments in order: `id_schedule, id_Block, id_segment_k, ora_k`.
+3. **Part 1 (repurpose placed row):** `UPDATE TPalinse SET Part=1, TimeCode_I=seg1.MARKIN, TimeCode_O=seg1.MARKOUT, Duration=MARKOUT-MARKIN+1, Event_P=100000000000+placedId WHERE ID_Tpalinse=placedId`.
+4. **Parts 2..N (per segment k):**
+   - `Declare @ID int; EXEC Traffic_InsertEvent 0, date, cod_user, id_schedule, id_Block, id_segment_k, ora_k, date, ora_k, date, 0, fid, id_operazione, 0, 0, @ID OUTPUT, 0, 0, 0, duration_k`
+   - `UPDATE TPalinse SET Part=k, TimeCode_I=segk.MARKIN, TimeCode_O=segk.MARKOUT, Duration=..., Event_P=100000000000+placedId WHERE ID_Tpalinse=@ID`
+   - `EXEC sch_UpdateSupportAndProperties @ID, fid, 1`
+5. **Recalc times:** `EXEC dbo.sch_rebuildStartTimeSchedule N'yyyymmdd', cod_user, 0, 0, null, placedId, -1, 0, 1`.
+
+Notes: `Event_P=100000000000+placedId` on every part groups them as one program. `Duration=TimeCode_O-TimeCode_I+1`. `ora_k/id_segment_k/id_Block/id_schedule` come from the mapping query (PRGS segments in order). Other captured calls (`getvideostandard, getonairfile, getlowresfile, validitycheck, getmemofield, trf_getcategorynear, getfirstartist, _fn_tpalinsedatetime`) are property/display lookups, mostly inside `sch_UpdateSupportAndProperties`. All callable — test ONE market in a safe window first. Captured example (SFO): placedId=14777849, id_schedule=34370, id_Block=13175, id_segment 94054/56/58/60/62, id_operazione=190854.
