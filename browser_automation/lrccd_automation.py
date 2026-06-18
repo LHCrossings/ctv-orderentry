@@ -39,10 +39,6 @@ def _fmt(d: date) -> str:
     return f"{d.month}/{d.day}/{d.strftime('%y')}"
 
 
-def _flight_str(start: date, end: date) -> str:
-    return f"{start.month}/{start.day}-{end.month}/{end.day}/{end.strftime('%y')}"
-
-
 def _parse_user_date(s: str) -> date:
     for fmt in ('%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d', '%m/%d'):
         try:
@@ -167,10 +163,14 @@ def gather_lrccd_inputs(pdf_path: str) -> Optional[dict]:
     # ── Per-flight contract code + description ────────────────────────────
     orders_meta: list[dict] = []
     for o in doc.orders:
-        season_word = o.season.split()[0]          # "Fall" / "Spring"
-        flight = _flight_str(o.flight_start, o.flight_end)
-        default_code = f"LRCCD {season_word} Enrollment {flight}"
-        default_desc = f"LRCCD {season_word} Enrollment {flight}"
+        # Code: "3Fold LRCC <yymm>" (flight start). Description:
+        # "Los Rios Community College District <yymm>" — or "<yymm>-<yymm>"
+        # when the flight spans more than one calendar month.
+        start_ym = o.flight_start.strftime('%y%m')   # %y/%m are cross-platform (lesson #13)
+        end_ym   = o.flight_end.strftime('%y%m')
+        ym_span  = start_ym if start_ym == end_ym else f"{start_ym}-{end_ym}"
+        default_code = f"3Fold LRCC {start_ym}"
+        default_desc = f"Los Rios Community College District {ym_span}"
         print(f"\n  --- {o.season} ---")
         raw = input(f"  Contract code [{default_code}]: ").strip()
         code = raw or default_code
