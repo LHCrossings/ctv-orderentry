@@ -3129,6 +3129,76 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
             return {"filmati": filmati, "has_edl": False, "segments": 0, "error": f"EDL check failed: {exc}"}
 
+    # Count of PRGS (program) segments in a market/date time-window.
+    _DP_PRGS_COUNT_SQL = """SELECT COUNT(*) AS n FROM (
+        SELECT DISTINCT seg.ID_TrafficSegment
+        FROM traffic_calendar ca WITH(NOLOCK)
+        JOIN traffic_scheduleblock sb WITH(NOLOCK) ON sb.ID_TrafficSchedule=ca.ID_TrafficSchedule
+        JOIN traffic_block bl WITH(NOLOCK) ON bl.ID_TrafficBlock=sb.ID_TrafficBlock
+        OUTER APPLY (
+          SELECT si.ID_TrafficSegment,si.Offset,si.Type FROM trf_instancesegment si WITH(NOLOCK)
+            WHERE si.ID_TrafficBlock=bl.ID_TrafficBlock AND si.COD_USER=ca.Cod_User AND si.INSTANCEDATE=ca.Date AND si.visible=1
+          UNION
+          SELECT se.ID_TrafficSegment,se.Offset,se.Type FROM traffic_segment se WITH(NOLOCK)
+            WHERE se.ID_TrafficBlock=bl.ID_TrafficBlock AND se.visible=1
+            AND (SELECT COUNT(*) FROM trf_instancesegment WITH(NOLOCK) WHERE ID_TrafficBlock=bl.ID_TrafficBlock AND COD_USER=ca.Cod_User AND INSTANCEDATE=ca.Date)=0
+        ) seg
+        WHERE ca.Cod_User=%s AND ca.Date=%s AND bl.expired=0 AND seg.Type='PRGS'
+          AND (sb.offset+seg.Offset)>=%s AND (sb.offset+seg.Offset)<%s
+    ) x"""
+
+    @router.get("/api/master-control/daily-programming/program-pieces")
+    async def daily_programming_program_pieces(code: str, date: str, coduser: int,
+                                               start: str = "", end: str = ""):
+        """No-EDL path: find the show's a/b/c/d pieces and compare the count to the
+        PRGS program-break count in that market/time-window (fewer pieces ⇒ fillers)."""
+        import datetime as _dt
+        import re as _re
+
+        from browser_automation.etere_direct_client import connect as _db_connect
+        fps = 29.97
+
+        def _frames(hhmm):
+            m = _re.match(r"\s*(\d{1,2}):(\d{2})", hhmm or "")
+            return int((int(m.group(1)) * 3600 + int(m.group(2)) * 60) * fps) if m else None
+
+        try:
+            d = _dt.datetime.strptime(date, "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            return {"error": "Invalid date", "pieces": []}
+
+        base = code or ""
+        if base[-1:].isalpha() and base[-1:].isupper():
+            base = base[:-1]  # strip the piece letter (A/B/C/…) to get the show base
+        lo, hi = _frames(start), _frames(end)
+        try:
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                cur.execute(
+                    "SELECT ID_FILMATI, COD_PROGRA, DURATA FROM FILMATI "
+                    "WHERE NEWTYPE='PGM' AND COD_PROGRA LIKE %s ORDER BY COD_PROGRA",
+                    (base + "%",),
+                )
+                rows = cur.fetchall()
+                pieces = [r for r in rows
+                          if len(r["COD_PROGRA"]) == len(base) + 1 and r["COD_PROGRA"][-1:].isalpha()]
+                if not pieces:  # no a/b/c siblings → single whole-file program
+                    cur.execute("SELECT ID_FILMATI, COD_PROGRA, DURATA FROM FILMATI WHERE COD_PROGRA=%s", (code,))
+                    pieces = cur.fetchall()
+                slots = None
+                if lo is not None and hi is not None:
+                    cur.execute(_DP_PRGS_COUNT_SQL, (coduser, d, lo, hi))
+                    slots = int(cur.fetchone()["n"])
+            n = len(pieces)
+            out = {"base": base, "count": n, "prgs_slots": slots,
+                   "pieces": [{"id": r["ID_FILMATI"], "code": r["COD_PROGRA"], "durata": r["DURATA"]} for r in pieces]}
+            if slots is not None:
+                out["fillers_needed"] = max(0, slots - n)
+                out["status"] = "match" if n == slots else ("fillers_needed" if n < slots else "too_many")
+            return out
+        except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
+            return {"error": f"Piece check failed: {exc}", "pieces": []}
+
     _BO_MARKET_IDS = {"NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4, "SEA": 5, "LAX": 6, "CVC": 7, "WDC": 8, "MMT": 9, "DAL": 10}
     _BO_FPS = 29.97
 

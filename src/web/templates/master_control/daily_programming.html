@@ -88,6 +88,13 @@
         .fm-code { font-weight: 700; font-size: 0.86rem; color: var(--text-primary); }
         .fm-meta { font-size: 0.74rem; color: var(--text-muted); margin-left: auto; white-space: nowrap; }
         .fm-empty { color: var(--text-muted); font-size: 0.84rem; padding: 6px 2px; }
+        .fm-filler-status { font-size: 0.84rem; color: var(--text-primary); background: rgba(235,203,139,0.12); border: 1px solid rgba(235,203,139,0.4); border-radius: 8px; padding: 9px 12px; margin-bottom: 10px; }
+        .fm-chosen { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
+        .fm-chosen-row { display: flex; align-items: center; gap: 10px; padding: 7px 11px; border: 1px solid var(--border-color); border-radius: 7px; background: var(--bg-secondary); font-size: 0.84rem; }
+        .fm-chosen-row .fm-x { margin-left: auto; color: var(--nord11); cursor: pointer; font-weight: 700; }
+        .fm-slot-num { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); }
+        .fm-done { background: var(--nord14); color: var(--nord6); border: none; border-radius: 8px; padding: 8px 18px; font-size: 0.88rem; font-weight: 600; cursor: pointer; font-family: inherit; margin-bottom: 12px; }
+        .fm-done:disabled { opacity: 0.45; cursor: default; }
     </style>
 </head>
 <body>
@@ -179,7 +186,14 @@
             </div>
             <button type="button" class="modal-close" id="fmClose">✕</button>
         </div>
-        <div class="modal-check-hint" style="margin: 10px 0;">Selecting a file auto-detects EDL — files with EDL marks are flagged to explode.</div>
+        <div class="modal-check-hint" id="fmHint" style="margin: 10px 0;">Selecting a file auto-detects EDL (→ explode) — or, with no EDL, finds the show's a/b/c pieces and checks them against the program breaks.</div>
+
+        <div id="fmFillerPanel" style="display:none;">
+            <div class="fm-filler-status" id="fmFillerStatus"></div>
+            <div id="fmChosen" class="fm-chosen"></div>
+            <button type="button" id="fmDone" class="fm-done" disabled>Use these fillers</button>
+        </div>
+
         <input type="text" id="fmSearch" class="field-input" style="width:100%; box-sizing:border-box;"
                placeholder="Search media library (e.g. NEWSTODAY)…" autocomplete="off" />
         <div id="fmResults" class="fm-results"></div>
@@ -300,9 +314,16 @@
     const fmSub = document.getElementById('fmSub');
     const fmSearch = document.getElementById('fmSearch');
     const fmResults = document.getElementById('fmResults');
+    const fmHint = document.getElementById('fmHint');
+    const fmFillerPanel = document.getElementById('fmFillerPanel');
+    const fmFillerStatus = document.getElementById('fmFillerStatus');
+    const fmChosen = document.getElementById('fmChosen');
+    const fmDone = document.getElementById('fmDone');
     let modalIdx = null;
     let lastResults = [];
     let searchTimer = null;
+    let modalPhase = 'file';   // 'file' | 'fillers'
+    let fillerDraft = null;
 
     progList.addEventListener('click', function (e) {
         const row = e.target.closest('.prog-row');
@@ -311,6 +332,11 @@
 
     function openModal(idx) {
         modalIdx = idx;
+        modalPhase = 'file';
+        fillerDraft = null;
+        fmFillerPanel.style.display = 'none';
+        fmHint.style.display = 'block';
+        fmSearch.placeholder = 'Search media library (e.g. NEWSTODAY)…';
         const p = state.programs[idx];
         const a = state.assignments[idx];
         fmTitle.textContent = p.title;
@@ -324,7 +350,11 @@
         if (fmSearch.value.trim().length >= 2) searchFiles();
     }
 
-    function closeModal() { modal.style.display = 'none'; modalIdx = null; }
+    function closeModal() {
+        modal.style.display = 'none';
+        modalIdx = null; modalPhase = 'file'; fillerDraft = null;
+        fmFillerPanel.style.display = 'none';
+    }
 
     async function searchFiles() {
         const q = fmSearch.value.trim();
@@ -348,24 +378,99 @@
         }
     }
 
-    async function assignFile(file) {
+    function setAssignText(idx, txt, warn) {
+        const span = document.getElementById('assign-' + idx);
+        if (span) { span.textContent = txt; span.classList.remove('empty'); span.classList.toggle('no-edl', !!warn); }
+    }
+
+    async function pickShowFile(file) {
         fmResults.innerHTML = '<div class="fm-empty">Checking EDL for ' + escHtml(file.code) + '…</div>';
-        let explode = false, segments = 0;
-        try {
-            const r = await fetch('/api/master-control/daily-programming/edl-status?filmati=' + encodeURIComponent(file.id));
-            const s = await r.json();
-            explode = !!s.has_edl;
-            segments = s.segments || 0;
-        } catch (e) { /* leave explode=false on error */ }
-        state.assignments[modalIdx] = { file: file, explode: explode, segments: segments };
-        const span = document.getElementById('assign-' + modalIdx);
-        if (span) {
-            span.textContent = '→ ' + file.code + (explode ? ' · explode (' + segments + ' parts)' : ' · no EDL');
-            span.classList.remove('empty');
-            span.classList.toggle('no-edl', !explode);
+        let edl = { has_edl: false, segments: 0 };
+        try { edl = await (await fetch('/api/master-control/daily-programming/edl-status?filmati=' + encodeURIComponent(file.id))).json(); } catch (e) { /* default no EDL */ }
+
+        if (edl.has_edl) {  // single file split by EDL → explode
+            state.assignments[modalIdx] = { mode: 'explode', file: file, segments: edl.segments || 0 };
+            setAssignText(modalIdx, '→ ' + file.code + ' · explode (' + (edl.segments || 0) + ' parts)', false);
+            closeModal();
+            return;
         }
+
+        // No EDL → physical-pieces path: find the show's pieces + check vs PRGS breaks
+        fmResults.innerHTML = '<div class="fm-empty">No EDL — finding pieces and checking breaks…</div>';
+        const p = state.programs[modalIdx];
+        const cu = (state.codUsers && state.codUsers[0]) || 1;
+        let pd = { count: 0, pieces: [] };
+        try {
+            const u = '/api/master-control/daily-programming/program-pieces?code=' + encodeURIComponent(file.code) +
+                '&date=' + encodeURIComponent(state.date) + '&coduser=' + cu +
+                '&start=' + encodeURIComponent(p.start || '') + '&end=' + encodeURIComponent(p.end || '');
+            pd = await (await fetch(u)).json();
+        } catch (e) { /* leave pd empty */ }
+
+        if (pd.error) { setAssignText(modalIdx, '→ ' + file.code + ' · ' + pd.error, true); closeModal(); return; }
+
+        const fillers = pd.fillers_needed || 0;
+        if (pd.status === 'fillers_needed' && fillers > 0) {
+            enterFillerPhase(file, pd);   // stay open to pick fillers
+            return;
+        }
+        // exact match (or too_many) → finalize now
+        state.assignments[modalIdx] = { mode: 'pieces', file: file, pieces: pd.pieces || [], slots: pd.prgs_slots, fillers: [], status: pd.status };
+        let txt = '→ ' + (pd.count || 0) + ' piece' + (pd.count === 1 ? '' : 's');
+        if (pd.prgs_slots != null) txt += ' / ' + pd.prgs_slots + ' break' + (pd.prgs_slots === 1 ? '' : 's');
+        let warn = false;
+        if (pd.status === 'too_many') { txt += ' · ⚠ too many pieces'; warn = true; }
+        setAssignText(modalIdx, txt, warn);
         closeModal();
     }
+
+    // ── Filler-pick phase (no-EDL programs with fewer pieces than breaks) ──
+    function enterFillerPhase(showFile, pd) {
+        modalPhase = 'fillers';
+        fillerDraft = { showFile: showFile, pieces: pd.pieces || [], slots: pd.prgs_slots, needed: pd.fillers_needed || 0, chosen: [] };
+        fmHint.style.display = 'none';
+        fmFillerPanel.style.display = 'block';
+        fmSearch.value = '';
+        fmSearch.placeholder = 'Search fillers (e.g. CHINESEFILLER, K-FILLER)…';
+        fmResults.innerHTML = '';
+        lastResults = [];
+        renderChosen();
+        fmSearch.focus();
+    }
+
+    function renderChosen() {
+        const d = fillerDraft;
+        fmFillerStatus.innerHTML = 'Show <b>' + escHtml(d.showFile.code) + '</b> = ' + d.pieces.length +
+            ' piece' + (d.pieces.length === 1 ? '' : 's') + ' in ' + d.slots + ' breaks. ' +
+            'Pieces fill the first breaks; choose <b>' + d.needed + '</b> filler' + (d.needed === 1 ? '' : 's') +
+            ' for the rest (' + d.chosen.length + '/' + d.needed + ' chosen).';
+        fmChosen.innerHTML = d.chosen.map(function (f, i) {
+            return '<div class="fm-chosen-row"><span class="fm-slot-num">break ' + (d.pieces.length + i + 1) + '</span>' +
+                '<span>' + escHtml(f.code) + '</span><span class="fm-x" data-i="' + i + '">remove</span></div>';
+        }).join('');
+        fmDone.disabled = d.chosen.length !== d.needed;
+    }
+
+    function addFiller(file) {
+        if (fillerDraft.chosen.length >= fillerDraft.needed) return;
+        fillerDraft.chosen.push(file);
+        renderChosen();
+    }
+
+    fmChosen.addEventListener('click', function (e) {
+        const x = e.target.closest('.fm-x');
+        if (!x) return;
+        fillerDraft.chosen.splice(parseInt(x.dataset.i, 10), 1);
+        renderChosen();
+    });
+
+    fmDone.addEventListener('click', function () {
+        const d = fillerDraft;
+        if (d.chosen.length !== d.needed) return;
+        state.assignments[modalIdx] = { mode: 'pieces', file: d.showFile, pieces: d.pieces, slots: d.slots, fillers: d.chosen, status: 'filled' };
+        setAssignText(modalIdx, '→ ' + d.pieces.length + ' pieces + ' + d.chosen.length + ' fillers / ' + d.slots + ' breaks', false);
+        closeModal();
+    });
 
     fmSearch.addEventListener('input', function () {
         clearTimeout(searchTimer);
@@ -375,7 +480,9 @@
         const el = e.target.closest('.fm-result');
         if (!el) return;
         const f = lastResults.find(function (x) { return String(x.id) === el.dataset.id; });
-        if (f) assignFile(f);
+        if (!f) return;
+        if (modalPhase === 'fillers') addFiller(f);
+        else pickShowFile(f);
     });
     document.getElementById('fmClose').addEventListener('click', closeModal);
     modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
