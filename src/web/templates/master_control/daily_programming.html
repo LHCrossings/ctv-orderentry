@@ -99,6 +99,14 @@
         .fm-slot-num { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); }
         .fm-done { background: var(--nord14); color: var(--nord6); border: none; border-radius: 8px; padding: 8px 18px; font-size: 0.88rem; font-weight: 600; cursor: pointer; font-family: inherit; margin-bottom: 12px; }
         .fm-done:disabled { opacity: 0.45; cursor: default; }
+
+        .preview-plan { display: flex; flex-direction: column; gap: 8px; }
+        .pp-row { padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); }
+        .pp-prog { font-weight: 700; font-size: 0.88rem; color: var(--text-primary); }
+        .pp-detail { font-size: 0.8rem; color: var(--text-muted); margin-top: 3px; }
+        .pp-targets { font-size: 0.8rem; color: var(--nord10); margin-top: 3px; }
+        .pp-skip { color: var(--text-muted); }
+        .pp-empty { color: var(--text-muted); font-size: 0.86rem; }
     </style>
 </head>
 <body>
@@ -178,6 +186,12 @@
     <div class="tool-card" id="programsCard" style="display:none;">
         <div class="step-label">Programs for the day — click one to assign a file</div>
         <div id="programList" class="prog-list"></div>
+    </div>
+
+    <div class="tool-card" id="previewCard" style="display:none;">
+        <div class="step-label">Step 4 · Review & set up</div>
+        <button type="button" id="previewBtn" class="fm-done" style="margin-bottom: 12px;">Preview setup</button>
+        <div id="previewPlan" class="preview-plan"></div>
     </div>
 </main>
 
@@ -282,8 +296,10 @@
 
     async function loadGrid() {
         state.date = dateEl.value;
-        if (!state.network || !state.date) { progCard.style.display = 'none'; return; }
+        const previewCard = document.getElementById('previewCard');
+        if (!state.network || !state.date) { progCard.style.display = 'none'; previewCard.style.display = 'none'; return; }
         progCard.style.display = 'block';
+        previewCard.style.display = 'none';
         progList.innerHTML = '<div class="prog-empty">Loading…</div>';
         try {
             const r = await fetch('/api/master-control/daily-programming/grid?network=' +
@@ -307,6 +323,8 @@
                     '<span class="prog-assign empty" id="assign-' + i + '">+ choose file</span></div>';
             }).join('');
             loadPlacement();
+            previewCard.style.display = 'block';
+            document.getElementById('previewPlan').innerHTML = '';
         } catch (e) {
             progList.innerHTML = '<div class="prog-empty">Error: ' + escHtml(e.message) + '</div>';
         }
@@ -315,6 +333,16 @@
     function hhmmToFrames(s) {
         const m = /^\s*(\d{1,2}):(\d{2})/.exec(s || '');
         return m ? Math.round((parseInt(m[1], 10) * 3600 + parseInt(m[2], 10) * 60) * 29.97) : null;
+    }
+
+    // Set of COD_USERs that already have live content in this program's time window.
+    function placedMarketsFor(p) {
+        const out = {};
+        if (!state.placementData) return out;
+        const lo = hhmmToFrames(p.start), hi = hhmmToFrames(p.end);
+        if (lo == null || hi == null) return out;
+        state.placementData.placed.forEach(function (x) { if (x.ora >= lo && x.ora < hi) out[x.cu] = 1; });
+        return out;
     }
 
     // Pre-flight: show how many of the network's markets already have this program placed.
@@ -328,6 +356,7 @@
         } catch (e) { return; }
         const markets = data.markets || [];
         const placed = data.placed || [];
+        state.placementData = { markets: markets, placed: placed };
         const M = markets.length;
         state.programs.forEach(function (p, i) {
             const span = document.getElementById('placed-' + i);
@@ -523,6 +552,42 @@
     document.getElementById('fmClose').addEventListener('click', closeModal);
     modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modal.style.display === 'flex') closeModal(); });
+
+    // ── Step 4: preview the setup plan (read-only) ──
+    function previewSetup() {
+        const plan = document.getElementById('previewPlan');
+        const universe = state.codUsers || [];   // the selected scope (network or single market)
+        const items = [];
+        (state.programs || []).forEach(function (p, i) {
+            if (state.assignments[i]) items.push({ p: p, a: state.assignments[i] });
+        });
+        if (!items.length) {
+            plan.innerHTML = '<div class="pp-empty">Assign a file to at least one program first (click a program above).</div>';
+            return;
+        }
+        plan.innerHTML = items.map(function (it) {
+            const p = it.p, a = it.a;
+            const placedSet = placedMarketsFor(p);
+            const targets = universe.filter(function (cu) { return !placedSet[cu]; });
+            const skipped = universe.filter(function (cu) { return placedSet[cu]; });
+            let detail;
+            if (a.mode === 'explode') {
+                detail = 'Explode ' + (a.segments || 0) + ' parts · ' + a.file.code;
+            } else {
+                const np = a.pieces ? a.pieces.length : 0;
+                const nf = a.fillers ? a.fillers.length : 0;
+                detail = np + ' piece' + (np === 1 ? '' : 's') + (nf ? ' + ' + nf + ' filler' + (nf === 1 ? '' : 's') : '') + ' · ' + a.file.code;
+            }
+            const tnames = targets.map(function (cu) { return codeOf[cu] || cu; }).join(', ') || '(none — all already placed)';
+            const snames = skipped.length ? ' · skip (already placed): ' + skipped.map(function (cu) { return codeOf[cu] || cu; }).join(', ') : '';
+            return '<div class="pp-row">' +
+                '<div class="pp-prog">' + escHtml(p.title) + ' <span style="font-weight:400;color:var(--text-muted)">' + escHtml((p.start || '') + (p.end ? '–' + p.end : '')) + '</span></div>' +
+                '<div class="pp-detail">' + escHtml(detail) + '</div>' +
+                '<div class="pp-targets">→ set up in: ' + escHtml(tnames) + '<span class="pp-skip">' + escHtml(snames) + '</span></div></div>';
+        }).join('');
+    }
+
+    document.getElementById('previewBtn').addEventListener('click', previewSetup);
 </script>
 
 </body>
