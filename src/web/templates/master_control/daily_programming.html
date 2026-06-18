@@ -72,6 +72,7 @@
         .prog-row:hover { border-color: var(--nord10); }
         .prog-assign { font-size: 0.78rem; font-weight: 700; color: var(--nord14); white-space: nowrap; }
         .prog-assign.empty { color: var(--text-muted); font-weight: 500; opacity: 0.7; }
+        .prog-assign.no-edl { color: var(--nord13); }
 
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: flex-start; justify-content: center; padding-top: 8vh; z-index: 50; }
         .modal { background: var(--nord6); border: 1px solid var(--border-color); border-radius: 12px; width: min(560px, 92vw); max-height: 80vh; overflow: auto; padding: 22px; box-shadow: 0 8px 30px rgba(0,0,0,0.35); }
@@ -178,11 +179,7 @@
             </div>
             <button type="button" class="modal-close" id="fmClose">✕</button>
         </div>
-        <label class="modal-check">
-            <input type="checkbox" id="fmExplode" checked />
-            Explode?
-            <span class="modal-check-hint">one file split by EDL — uncheck to use separate a/b/c/d pieces</span>
-        </label>
+        <div class="modal-check-hint" style="margin: 10px 0;">Selecting a file auto-detects EDL — files with EDL marks are flagged to explode.</div>
         <input type="text" id="fmSearch" class="field-input" style="width:100%; box-sizing:border-box;"
                placeholder="Search media library (e.g. NEWSTODAY)…" autocomplete="off" />
         <div id="fmResults" class="fm-results"></div>
@@ -303,7 +300,6 @@
     const fmSub = document.getElementById('fmSub');
     const fmSearch = document.getElementById('fmSearch');
     const fmResults = document.getElementById('fmResults');
-    const fmExplode = document.getElementById('fmExplode');
     let modalIdx = null;
     let lastResults = [];
     let searchTimer = null;
@@ -320,7 +316,6 @@
         fmTitle.textContent = p.title;
         fmSub.textContent = (p.start || '') + (p.end ? '–' + p.end : '') +
             (p.language ? ' · ' + p.language + (p.kind ? ' ' + p.kind : '') : '');
-        fmExplode.checked = a ? a.explode : true;
         fmSearch.value = a ? a.file.code : '';
         fmResults.innerHTML = '';
         lastResults = [];
@@ -353,12 +348,21 @@
         }
     }
 
-    function assignFile(file) {
-        state.assignments[modalIdx] = { file: file, explode: fmExplode.checked };
+    async function assignFile(file) {
+        fmResults.innerHTML = '<div class="fm-empty">Checking EDL for ' + escHtml(file.code) + '…</div>';
+        let explode = false, segments = 0;
+        try {
+            const r = await fetch('/api/master-control/daily-programming/edl-status?filmati=' + encodeURIComponent(file.id));
+            const s = await r.json();
+            explode = !!s.has_edl;
+            segments = s.segments || 0;
+        } catch (e) { /* leave explode=false on error */ }
+        state.assignments[modalIdx] = { file: file, explode: explode, segments: segments };
         const span = document.getElementById('assign-' + modalIdx);
         if (span) {
-            span.textContent = '→ ' + file.code + (fmExplode.checked ? ' (explode)' : ' (pieces)');
+            span.textContent = '→ ' + file.code + (explode ? ' · explode (' + segments + ' parts)' : ' · no EDL');
             span.classList.remove('empty');
+            span.classList.toggle('no-edl', !explode);
         }
         closeModal();
     }

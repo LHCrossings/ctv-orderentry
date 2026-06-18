@@ -3112,6 +3112,23 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
             return {"files": [], "error": f"Search failed: {exc}"}
 
+    @router.get("/api/master-control/daily-programming/edl-status")
+    async def daily_programming_edl_status(filmati: int):
+        """Auto-detect EDL on a file via the same dbo.ExplodeEdl the engine uses.
+        >1 segment ⇒ the file has EDL splits and should be exploded."""
+        from browser_automation.etere_direct_client import connect as _db_connect
+        try:
+            with _db_connect() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT COUNT(*) FROM dbo.ExplodeEdl(%s, 0, N'eeAutomatic', 1, dbo.sch_GetInfDigit(%s, 1))",
+                    (filmati, filmati),
+                )
+                n = int(cur.fetchone()[0])
+            return {"filmati": filmati, "has_edl": n > 1, "segments": n}
+        except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
+            return {"filmati": filmati, "has_edl": False, "segments": 0, "error": f"EDL check failed: {exc}"}
+
     _BO_MARKET_IDS = {"NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4, "SEA": 5, "LAX": 6, "CVC": 7, "WDC": 8, "MMT": 9, "DAL": 10}
     _BO_FPS = 29.97
 
