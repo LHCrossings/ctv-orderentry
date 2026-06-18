@@ -115,6 +115,7 @@ class OrderProcessingService:
         OrderType.ACM:               "_process_acm_order",
         OrderType.TT:                "_process_tt_order",
         OrderType.LRCCD:             "_process_lrccd_order",
+        OrderType.AI_FALLBACK:       "_process_ai_fallback_order",
     }
 
     # Order types that use direct DB entry — no browser session needed
@@ -155,6 +156,7 @@ class OrderProcessingService:
         OrderType.ACM,
         OrderType.TT,
         OrderType.LRCCD,
+        OrderType.AI_FALLBACK,
     }
 
     def __init__(
@@ -2602,6 +2604,36 @@ class OrderProcessingService:
             print(f"\n✗ LRCCD processing failed: {exc}")
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.LRCCD,
+                error_message=error_detail,
+            )
+
+    def _process_ai_fallback_order(self, order: Order, shared_session=None) -> ProcessingResult:
+        """Process an AI-extracted (Claude) order — one contract, direct DB."""
+        inp = order.order_input if isinstance(order.order_input, dict) else {}
+        try:
+            from browser_automation.ai_fallback_automation import run_ai_order
+            from browser_automation.parsers.ai_parser import parse_ai_order
+
+            parsed  = parse_ai_order(str(order.pdf_path))   # cached — same extraction the operator previewed
+            results = run_ai_order(parsed, inp)             # list of (label, success)
+
+            contracts = [
+                Contract(contract_number=label, order_type=OrderType.AI_FALLBACK)
+                for label, ok in results if ok
+            ]
+            if not contracts:
+                return ProcessingResult(
+                    success=False, contracts=[], order_type=OrderType.AI_FALLBACK,
+                    error_message="AI fallback processing failed — check output above",
+                )
+            return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.AI_FALLBACK)
+
+        except Exception as exc:
+            import traceback
+            error_detail = f"AI fallback processing error: {exc}\n{traceback.format_exc()}"
+            print(f"\n✗ AI fallback processing failed: {exc}")
+            return ProcessingResult(
+                success=False, contracts=[], order_type=OrderType.AI_FALLBACK,
                 error_message=error_detail,
             )
 

@@ -66,6 +66,7 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
     OrderType.ACM:               ("browser_automation.acm_automation",                  "gather_acm_inputs",                 "ACM"),
     OrderType.TT:                ("browser_automation.tt_automation",                   "gather_tt_inputs",                  "T&T Public Relations"),
     OrderType.LRCCD:             ("browser_automation.lrccd_automation",                "gather_lrccd_inputs",               "LRCCD / 3Fold Communications"),
+    OrderType.AI_FALLBACK:       ("browser_automation.ai_fallback_automation",          "gather_ai_fallback_inputs",         "AI Fallback (Claude-extracted)"),
 }
 
 

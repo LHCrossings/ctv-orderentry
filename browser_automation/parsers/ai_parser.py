@@ -113,3 +113,36 @@ def parse_ai_pdf(path: str, model: str = MODEL, max_tokens: int = 16000):
         "est_cost_usd": round(resp.usage.input_tokens * 5e-6 + resp.usage.output_tokens * 25e-6, 4),
     }
     return resp.parsed_output, usage
+
+
+# ─── Cached entry point (preview and entry must use the SAME extraction) ──────
+
+def _sidecar_path(path: str) -> str:
+    return str(path) + ".ai.json"
+
+
+def parse_ai_order(path: str, refresh: bool = False) -> AIOrder:
+    """
+    Cached AI extraction. The web preview and the CLI entry step both call this;
+    caching the result in a `<file>.ai.json` sidecar guarantees they see the
+    SAME extraction (the model is non-deterministic and entry re-parses the file)
+    and avoids paying for a second API call.
+
+    Delete the sidecar (or pass refresh=True) to re-extract.
+    """
+    import json
+    import os
+
+    sidecar = _sidecar_path(path)
+    if not refresh and os.path.exists(sidecar):
+        data = json.loads(Path(sidecar).read_text())
+        return AIOrder.model_validate(data["order"])
+
+    order, usage = parse_ai_pdf(str(path))
+    try:
+        Path(sidecar).write_text(json.dumps(
+            {"order": order.model_dump(), "usage": usage}, indent=2, default=str
+        ))
+    except Exception as exc:
+        print(f"[AI] Warning: could not cache extraction: {exc}")
+    return order

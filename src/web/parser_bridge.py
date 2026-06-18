@@ -58,6 +58,7 @@ _DISPLAY_NAMES = {
     "ACM":             "American Community Media",
     "TT":              "T&T Public Relations",
     "LRCCD":           "LRCCD / 3Fold Communications",
+    "AI_FALLBACK":     "AI Fallback (Claude-extracted)",
 }
 
 _REGISTRY = {
@@ -97,6 +98,7 @@ _REGISTRY = {
     "ACM":              ("browser_automation.parsers.acm_parser",               "parse_acm_xlsx"),
     "TT":               ("browser_automation.parsers.tt_parser",                "parse_tt_xlsx"),
     "LRCCD":            ("browser_automation.parsers.lrccd_parser",             "parse_lrccd_pdf"),
+    "AI_FALLBACK":      ("browser_automation.parsers.ai_parser",                "parse_ai_order"),
 }
 
 _MISSING = object()
@@ -458,7 +460,7 @@ def _normalize_igraphix(order) -> dict:
 # Public API
 # ---------------------------------------------------------------------------
 
-_DIRECT_DB_KEYS = {"LEXUS", "RPM", "WORLDLINK", "TIMEADVERTISING", "IGRAPHIX", "CHARMAINE", "HL", "HL_BDR", "ADMERASIA", "SAGENT", "GALEFORCE", "HYPHEN", "INTERTREND", "SIERRADONOR", "PROSIO", "SCWA", "RWNY", "TCAA_AV", "SACCOUNTYVOTERS", "TCAA", "MISFIT", "IMPACT", "IMPRENTA", "DAVISELEN", "BVK", "DART", "MEDIASOL", "OPAD", "POLARIS", "THREEOLIVES", "WALLRICH", "XML", "FIGHTTHEBITE", "ACM", "TT", "LRCCD"}
+_DIRECT_DB_KEYS = {"LEXUS", "RPM", "WORLDLINK", "TIMEADVERTISING", "IGRAPHIX", "CHARMAINE", "HL", "HL_BDR", "ADMERASIA", "SAGENT", "GALEFORCE", "HYPHEN", "INTERTREND", "SIERRADONOR", "PROSIO", "SCWA", "RWNY", "TCAA_AV", "SACCOUNTYVOTERS", "TCAA", "MISFIT", "IMPACT", "IMPRENTA", "DAVISELEN", "BVK", "DART", "MEDIASOL", "OPAD", "POLARIS", "THREEOLIVES", "WALLRICH", "XML", "FIGHTTHEBITE", "ACM", "TT", "LRCCD", "AI_FALLBACK"}
 
 # All direct-DB parsers are white pill by default. New parsers built from scratch
 # go directly into both sets. Pink pill was only needed during the Selenium→DirectDB

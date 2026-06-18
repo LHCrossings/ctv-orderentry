@@ -51,6 +51,7 @@ class OrderType(Enum):
     ACM = "acm"
     TT = "tt"
     LRCCD = "lrccd"
+    AI_FALLBACK = "ai_fallback"
     UNKNOWN = "unknown"
 
     def requires_block_refresh(self) -> bool:

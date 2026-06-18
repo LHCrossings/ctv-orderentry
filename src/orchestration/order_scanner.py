@@ -4,6 +4,7 @@ Order Scanner - Scan directories for order PDFs.
 Responsible for discovering and organizing order files from the filesystem.
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -16,6 +17,13 @@ from business_logic.services.order_detection_service import detect_from_filename
 from business_logic.services.pdf_order_detector import PDFOrderDetector
 from domain.entities import Order
 from domain.enums import OrderStatus, OrderType
+
+
+def _ai_fallback_enabled() -> bool:
+    """Opt-in: when CTV_AI_FALLBACK is truthy, unrecognized orders route to the
+    Claude AI extractor instead of being skipped. Off by default — unchanged
+    behavior unless explicitly enabled."""
+    return os.environ.get("CTV_AI_FALLBACK", "").strip().lower() in ("1", "true", "yes", "on")
 
 
 def _detect_xlsx_content(file_path: Path) -> OrderType:
@@ -117,6 +125,11 @@ class OrderScanner:
             try:
                 # Check if this PDF contains multiple orders
                 order_type, count = self._detection_service.detect_multi_order_pdf(pdf_path)
+
+                # Opt-in AI fallback: route unrecognized PDFs to Claude extraction
+                # instead of failing downstream. Off unless CTV_AI_FALLBACK is set.
+                if order_type == OrderType.UNKNOWN and _ai_fallback_enabled():
+                    order_type, count = OrderType.AI_FALLBACK, 1
 
                 if count > 1:
                     # Multi-order PDF — create ONE order; gather step handles estimate selection
@@ -223,7 +236,9 @@ class OrderScanner:
                 if order_type == OrderType.UNKNOWN and file_path.suffix.lower() in {".xlsx", ".xlsm"}:
                     order_type = _detect_xlsx_content(file_path)
 
-                if order_type == OrderType.UNKNOWN:
+                if order_type == OrderType.UNKNOWN and _ai_fallback_enabled():
+                    order_type = OrderType.AI_FALLBACK
+                elif order_type == OrderType.UNKNOWN:
                     continue
 
                 # Extract customer name hint
