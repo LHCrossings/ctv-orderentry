@@ -91,13 +91,19 @@ def _upsert_customer(customer_id: str, client_name: str, separation: tuple, bill
         print(f"[CUSTOMER DB] Warning: could not save: {exc}")
 
 
+# Language names the model may emit → ROS_SCHEDULES keys (which use CTV block names).
+_LANG_ALIASES = {"mandarin": "Chinese", "cantonese": "Cantonese", "filipino": "Filipino",
+                 "tagalog": "Filipino", "hindi": "Hindi", "south asian": "South Asian"}
+
+
 def _resolve_days_time(line) -> tuple[str, str]:
     """Resolve (days, raw_time_window) for an AI line, applying ROS schedules."""
     tr = (line.time_range or "").strip()
     if not tr or tr.upper() == "ROS":
         try:
             from browser_automation.ros_definitions import ROS_SCHEDULES
-            sched = ROS_SCHEDULES.get((line.language or "").strip())
+            lang = (line.language or "").strip()
+            sched = ROS_SCHEDULES.get(lang) or ROS_SCHEDULES.get(_LANG_ALIASES.get(lang.lower(), ""))
             if sched:
                 return sched["days"], sched["time"]
         except Exception:

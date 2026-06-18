@@ -26,6 +26,14 @@ def _ai_fallback_enabled() -> bool:
     return os.environ.get("CTV_AI_FALLBACK", "").strip().lower() in ("1", "true", "yes", "on")
 
 
+def _charmaine_ai_enabled() -> bool:
+    """Opt-in: when CTV_CHARMAINE_AI is truthy, route SINGLE-contract Charmaine
+    orders to the Claude AI extractor instead of the Charmaine parser. The
+    Charmaine parser stays in place as the safety net and the multi-contract
+    path. Off by default."""
+    return os.environ.get("CTV_CHARMAINE_AI", "").strip().lower() in ("1", "true", "yes", "on")
+
+
 def _detect_xlsx_content(file_path: Path) -> OrderType:
     """
     Peek inside an XLSX file (first 10 rows) to detect order type by content.
@@ -130,6 +138,12 @@ class OrderScanner:
                 # instead of failing downstream. Off unless CTV_AI_FALLBACK is set.
                 if order_type == OrderType.UNKNOWN and _ai_fallback_enabled():
                     order_type, count = OrderType.AI_FALLBACK, 1
+
+                # Opt-in: route SINGLE-contract Charmaine orders to AI extraction.
+                # Multi-contract Charmaine (count > 1) stays on the Charmaine parser
+                # so a multi-estimate PDF is never silently merged into one contract.
+                elif order_type == OrderType.CHARMAINE and count == 1 and _charmaine_ai_enabled():
+                    order_type = OrderType.AI_FALLBACK
 
                 if count > 1:
                     # Multi-order PDF — create ONE order; gather step handles estimate selection
