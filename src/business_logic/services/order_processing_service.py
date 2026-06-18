@@ -114,6 +114,7 @@ class OrderProcessingService:
         OrderType.FIGHTTHEBITE:     "_process_fightthebite_order",
         OrderType.ACM:               "_process_acm_order",
         OrderType.TT:                "_process_tt_order",
+        OrderType.LRCCD:             "_process_lrccd_order",
     }
 
     # Order types that use direct DB entry — no browser session needed
@@ -153,6 +154,7 @@ class OrderProcessingService:
         OrderType.FIGHTTHEBITE,
         OrderType.ACM,
         OrderType.TT,
+        OrderType.LRCCD,
     }
 
     def __init__(
@@ -2568,6 +2570,38 @@ class OrderProcessingService:
             print(f"\n✗ T&T processing failed: {exc}")
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.TT,
+                error_message=error_detail,
+            )
+
+    def _process_lrccd_order(self, order: Order, shared_session=None) -> ProcessingResult:
+        """Process an LRCCD / 3Fold order — one contract per flight (FALL, SPRING)."""
+        inp = order.order_input if isinstance(order.order_input, dict) else {}
+        try:
+            from browser_automation.lrccd_automation import run_lrccd_order
+            from browser_automation.parsers.lrccd_parser import parse_lrccd_pdf
+
+            parsed  = parse_lrccd_pdf(str(order.pdf_path))
+            results = run_lrccd_order(parsed, inp)  # list of (label, success), one per flight
+
+            contracts = [
+                Contract(contract_number=label, order_type=OrderType.LRCCD)
+                for label, ok in results if ok
+            ]
+            overall_success = bool(contracts)
+
+            if not overall_success:
+                return ProcessingResult(
+                    success=False, contracts=[], order_type=OrderType.LRCCD,
+                    error_message="LRCCD processing failed — check output above",
+                )
+            return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.LRCCD)
+
+        except Exception as exc:
+            import traceback
+            error_detail = f"LRCCD processing error: {exc}\n{traceback.format_exc()}"
+            print(f"\n✗ LRCCD processing failed: {exc}")
+            return ProcessingResult(
+                success=False, contracts=[], order_type=OrderType.LRCCD,
                 error_message=error_detail,
             )
 

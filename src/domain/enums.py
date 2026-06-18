@@ -50,6 +50,7 @@ class OrderType(Enum):
     FIGHTTHEBITE = "fightthebite"
     ACM = "acm"
     TT = "tt"
+    LRCCD = "lrccd"
     UNKNOWN = "unknown"
 
     def requires_block_refresh(self) -> bool:

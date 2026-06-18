@@ -100,3 +100,34 @@
   expects 11 types; fallback test changed from RPM → WORLDLINK.
 
 **Result: 250 tests passing, 0 failures.**
+
+---
+
+## LRCCD / 3Fold Communications parser (NEW — in progress)
+
+Source: `3FOLD_LRCCD Fall&Spring Enrollment 26-27_AIRTIME_Signed.pdf`
+
+### Facts (verified against DB)
+- Text-based PDF, 2 pages = **2 orders**: FALL 2026 (7/20/26–8/23/26), SPRING 2027 (11/10/26–1/17/27).
+- Each order has **AIRTIME :30** and **AIRTIME :15** sections → per-line duration 30/15.
+- Single market **CVC**. Advertiser **Los Rios Community College** = customer **218**, linked agency **203 = 3Fold Communications**, media center 316.
+- Agency / gross rates / 15% commission → `rates_are_net=False`; commission auto via `create_contract_header(lookup_customer_defaults=True)`. ($2,499.20 × 0.85 = $2,124.32 ✓)
+- **No weekly columns** → `spots_per_week=0` → EtereDirectClient auto **Rotation**. Bonus → Rotation.
+- ROS bonus (Chinese/Filipino/Vietnamese) → `ROS_SCHEDULES[lang]`; Hmong bonus has its own daypart.
+
+### Create
+- [ ] `browser_automation/parsers/lrccd_parser.py` — `parse_lrccd_pdf` → `LRCCDDocument`
+- [ ] `browser_automation/lrccd_automation.py` — `gather_lrccd_inputs` + `run_lrccd_order` (one contract per season)
+
+### Edit (registration, all at once — lesson #7)
+- [ ] `etere_direct_client.py` AGENCY_IDS["3FOLD"]=203
+- [ ] `enums.py` LRCCD
+- [ ] `orchestrator.py` _INPUT_GATHERERS
+- [ ] `order_processing_service.py` dispatch + _DIRECT_DB_ORDER_TYPES + _process_lrccd_order
+- [ ] `parser_bridge.py` _DISPLAY_NAMES + _REGISTRY + _DIRECT_DB_KEYS + _DIRECT_DB_TESTED_KEYS
+- [ ] `order_detection_service.py` _is_lrccd + wire into detect_from_text
+
+### Review — DONE (2026-06-18)
+- Parser `parse_lrccd_pdf` + automation `gather_lrccd_inputs`/`run_lrccd_order` created; 8 registration points wired (AGENCY_IDS 3FOLD=203, enum, orchestrator, service dispatch + _DIRECT_DB + _process_lrccd_order, bridge ×4, detection _is_lrccd).
+- Verified against the real PDF: 2 contracts (Fall 7/20–8/23/26, Spring 11/10/26–1/17/27); 44 lines; spots_per_week=0 → Rotation; booking 28 paid / 16 bonus; 188 spots / 152 paid; $2,499.20 gross/flight; commission via ANAGRAF (lookup_customer_defaults=True, customer 218 → agency 203). Times incl. 12a→23:59, 6-8p→18:00-20:00, spaced "M - F ( 4 p -7p)"→M-F 16:00-19:00 all correct.
+- `pytest`: 256 passed. `ruff`: clean. Dry-run done with DB monkeypatched — **not yet written to live Etere**.

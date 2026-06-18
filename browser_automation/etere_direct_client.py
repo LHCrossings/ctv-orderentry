@@ -226,6 +226,7 @@ AGENCY_IDS: dict[str, int] = {
     "IMPACT":  251,
     "SAGENT":   69,
     "TT": 439,   # T&T Public Relations
+    "3FOLD": 203,  # 3Fold Communications (LRCCD)
 }
 
 # Media center (CENTROMEDIA) IDs

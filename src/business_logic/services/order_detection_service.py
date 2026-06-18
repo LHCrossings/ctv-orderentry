@@ -70,6 +70,10 @@ class OrderDetectionService:
         """
         # Detection order matters! More specific checks first
 
+        # LRCCD / 3Fold (check first — very distinctive 3foldcomm.com marker)
+        if self._is_lrccd(first_page_text):
+            return OrderType.LRCCD
+
         # SAGENT (check early - distinctive GaleForceMedia marker)
         if self._is_sagent(first_page_text):
             return OrderType.SAGENT
@@ -180,6 +184,22 @@ class OrderDetectionService:
     def _is_fightthebite(self, text: str) -> bool:
         """Definitive marker: 'Fight The Bite' (campaign title)."""
         return "Fight The Bite" in text or "Fight the Bite" in text
+
+    def _is_lrccd(self, text: str) -> bool:
+        """
+        Check if text matches a 3Fold Communications / LRCCD media plan.
+
+        3Fold patterns:
+        - "3foldcomm.com"  (agency email domain — decisive on its own)
+        - "3Fold" + "MEDIA PLAN"  (agency name on the Crossings TV media-plan form)
+        - "Los Rios Community College"  (the advertiser)
+        """
+        lower = text.lower()
+        if "3foldcomm" in lower:
+            return True
+        if "3fold" in lower and "media plan" in lower:
+            return True
+        return "los rios community college" in lower and "media plan" in lower
 
     def _is_rwny(self, text: str) -> bool:
         """
