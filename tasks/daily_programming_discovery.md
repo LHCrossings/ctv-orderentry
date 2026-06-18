@@ -110,3 +110,22 @@ Per market (fan across the network's COD_USERs):
 - How to trigger Etere's schedule RECALC programmatically (SP/HTTP).
 - The operator's exact manual resolution flow (to be captured in their words).
 - Actual multi-market fan-out (only NYC built so far in the worked example).
+
+---
+
+## 11. The real explode recipe (captured via SQL Profiler, validated 2026-06-18)
+
+Explode is **app-orchestrated** (not the encrypted `sch_ExplodeEdl` SP). Captured from a real MG explode of SFO (cod_user 4) on the jumpbox; trace saved as `chat.zz_explode_trace`. Per market:
+
+1. **Check marks:** `select count(id_interruzioni) from finterruzioni where ID_FILMATI=<fid> and VERSION=0 and VALID=1 and TO_EXPLODE=1`.
+2. **Get segment plan (read-only, validated):**
+   `SELECT * FROM dbo.ExplodeEdl(<fid>, 0, N'eeAutomatic', <cod_user>, dbo.sch_GetInfDigit(<fid>,<cod_user>))`
+   → rows of `(ID, NEWTYPE='PGM', MARKIN, MARKOUT)`. `@version=0` = DB version (NTSC EDL1); `@type='eeAutomatic'`.
+3. **Write each segment (block-linked):** `Traffic_InsertEvent` with params
+   `@id_contrattirighe, @date, @cod_user, @id_schedule, @id_Block, @id_segment, @ora, @data_p, @ora_p, @data_scad, @confermato, @id_filmati, @id_operazione, @Split, @UpdateSegmentHour, @OLD_ID OUTPUT, @scheduledMode, @eventLevel, @eventType, @duration_P`.
+   Example: `0,'2026-06-18',4,34370,13175,94056,884716,'2026-06-18',884716,'2026-06-18',0,141041,190854,0,0,@ID OUT,0,0,0,21643`.
+   **Block-linkage = passing `@id_Block`+`@id_segment`+`@id_schedule`.** (EE-only "fluff" = inserted without these.)
+4. **Per row:** `exec sch_UpdateSupportAndProperties <new_id_tpalinse>, <fid>, 1`.
+5. **Time recalc:** `exec dbo.sch_rebuildStartTimeSchedule N'<yyyymmdd>', <cod_user>, 0, 0, null, <maxIdTpalinse>, -1, 0, 1`.
+
+**Last piece to decode** (present in the saved trace ~rows 3-4): the segment-mapping `SELECT` (`seg.split, ID_TrafficSchedule, ID_TrafficSegment, (sb.offset+seg.Offset) segtime, seg.duration, id_trafficblock, …`) that yields per-segment `@id_Block/@id_segment/@id_schedule/@ora/@duration` for a program block+date+market — needed to compute the `Traffic_InsertEvent` args. All these SPs are callable; test one market in a safe window first.
