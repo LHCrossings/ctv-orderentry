@@ -155,7 +155,6 @@
                     <button class="mkt-pill" data-market="DAL" onclick="selectMkt(this)">DAL</button>
                 </div>
             </div>
-            <button class="load-btn" id="loadBtn" onclick="loadLog()">Load</button>
         </div>
     </div>
 
@@ -175,12 +174,15 @@
         const m = String(t.getMonth() + 1).padStart(2, '0');
         const d = String(t.getDate()).padStart(2, '0');
         document.getElementById('datePicker').value = `${y}-${m}-${d}`;
+        // Changing the date reloads the log automatically when a market is selected
+        document.getElementById('datePicker').addEventListener('change', () => { if (selectedMarket) loadLog(); });
     })();
 
     function selectMkt(el) {
         document.querySelectorAll('.mkt-pill').forEach(p => p.classList.remove('active'));
         el.classList.add('active');
         selectedMarket = el.dataset.market;
+        loadLog();   // auto-load the log on market selection (no Load button)
     }
 
     function fmtTime(t) {
@@ -222,16 +224,12 @@
 
     async function loadLog() {
         const dateVal = document.getElementById('datePicker').value;
-        if (!dateVal) { alert('Please select a date.'); return; }
-        if (!selectedMarket) { alert('Please select a market.'); return; }
+        if (!dateVal || !selectedMarket) return;   // auto-triggered; nothing to load yet
 
         currentDate   = dateVal;
         currentMarket = selectedMarket;
 
-        const btn = document.getElementById('loadBtn');
-        btn.disabled = true;
-        btn.textContent = 'Loading…';
-        document.getElementById('logArea').innerHTML = '';
+        document.getElementById('logArea').innerHTML = '<div class="log-empty">Loading…</div>';
 
         try {
             const resp = await fetch(`/api/master-control/logs/load?date=${dateVal}&market=${selectedMarket}`);
@@ -244,9 +242,6 @@
             renderLog(await resp.json());
         } catch (e) {
             document.getElementById('logArea').innerHTML = `<div class="log-empty">Error: ${escHtml(e.message)}</div>`;
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Load';
         }
     }
 
