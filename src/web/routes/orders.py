@@ -3256,6 +3256,37 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
             return {"markets": cus, "placed": [], "error": f"Placement check failed: {exc}"}
 
+    @router.post("/api/master-control/daily-programming/run")
+    async def daily_programming_run(body: dict = Body(...)):
+        """Set up across markets: place each assignment into each target market
+        (transaction-safe per market, skips already-placed). Returns per
+        (program, market) results."""
+        import datetime as _dt
+
+        from browser_automation.etere_direct_client import connect as _db_connect
+        from src.business_logic.services.daily_programming_run import run_market
+        date = body.get("date")
+        codusers = body.get("codUsers") or []
+        assignments = body.get("assignments") or []
+        try:
+            d = _dt.datetime.strptime(date, "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            return {"results": [], "error": "Invalid date"}
+        if not codusers or not assignments:
+            return {"results": [], "error": "Nothing to set up (no markets or assignments)"}
+        results = []
+        try:
+            with _db_connect() as conn:
+                for a in assignments:
+                    label = a.get("title") or ("program " + str(a.get("programIndex")))
+                    for cu in codusers:
+                        r = run_market(conn, int(cu), d, a)
+                        r["program"] = label
+                        results.append(r)
+        except Exception as exc:  # noqa: BLE001 - surface connection-level errors
+            return {"results": results, "error": f"Run failed: {exc}"}
+        return {"results": results}
+
     _BO_MARKET_IDS = {"NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4, "SEA": 5, "LAX": 6, "CVC": 7, "WDC": 8, "MMT": 9, "DAL": 10}
     _BO_FPS = 29.97
 

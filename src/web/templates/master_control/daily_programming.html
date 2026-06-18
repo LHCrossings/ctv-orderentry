@@ -107,6 +107,11 @@
         .pp-targets { font-size: 0.8rem; color: var(--nord10); margin-top: 3px; }
         .pp-skip { color: var(--text-muted); }
         .pp-empty { color: var(--text-muted); font-size: 0.86rem; }
+        .run-btn { background: var(--nord11); color: var(--nord6); border: none; border-radius: 8px; padding: 8px 18px; font-size: 0.88rem; font-weight: 600; cursor: pointer; font-family: inherit; }
+        .run-btn:hover { background: #a85460; }
+        .run-btn:disabled { opacity: 0.45; cursor: default; }
+        .pp-row.ok { border-color: rgba(163,190,140,0.5); }
+        .pp-row.fail { border-color: rgba(191,97,106,0.5); }
     </style>
 </head>
 <body>
@@ -191,7 +196,9 @@
     <div class="tool-card" id="previewCard" style="display:none;">
         <div class="step-label">Step 4 · Review & set up</div>
         <button type="button" id="previewBtn" class="fm-done" style="margin-bottom: 12px;">Preview setup</button>
+        <button type="button" id="runBtn" class="run-btn" style="margin-bottom: 12px; margin-left: 8px;">Set up across markets</button>
         <div id="previewPlan" class="preview-plan"></div>
+        <div id="runResults" class="preview-plan" style="margin-top: 12px;"></div>
     </div>
 </main>
 
@@ -588,6 +595,53 @@
     }
 
     document.getElementById('previewBtn').addEventListener('click', previewSetup);
+
+    // ── Step 4: run "Set up across markets" (writes, transaction-safe per market) ──
+    async function runSetup() {
+        const universe = state.codUsers || [];
+        const assignments = [];
+        (state.programs || []).forEach(function (p, i) {
+            const a = state.assignments[i];
+            if (!a) return;
+            assignments.push({
+                programIndex: i, title: p.title, mode: a.mode, start: p.start, end: p.end,
+                fileId: a.file.id, fileCode: a.file.code,
+                pieces: (a.pieces || []).map(function (x) { return x.id; }),
+                fillers: (a.fillers || []).map(function (x) { return x.id; })
+            });
+        });
+        if (!assignments.length) { alert('Assign a file to at least one program first.'); return; }
+        if (!universe.length) { alert('Select a network or a market first.'); return; }
+        const mkts = universe.map(function (cu) { return codeOf[cu] || cu; }).join(', ');
+        if (!confirm('Set up ' + assignments.length + ' program(s) across ' + universe.length +
+            ' market(s): ' + mkts + '?\n\nThis writes to the live schedule. Already-placed markets are skipped.')) return;
+        const out = document.getElementById('runResults');
+        out.innerHTML = '<div class="pp-empty">Running… (do not close)</div>';
+        const runBtn = document.getElementById('runBtn');
+        runBtn.disabled = true;
+        try {
+            const r = await fetch('/api/master-control/daily-programming/run', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ network: state.network, date: state.date, codUsers: universe, assignments: assignments })
+            });
+            const data = await r.json();
+            if (data.error) { out.innerHTML = '<div class="pp-empty">Error: ' + escHtml(data.error) + '</div>'; return; }
+            out.innerHTML = (data.results || []).map(function (x) {
+                const cls = x.skipped ? '' : (x.ok ? 'ok' : 'fail');
+                const icon = x.skipped ? '−' : (x.ok ? '✓' : '✗');
+                return '<div class="pp-row ' + cls + '"><div class="pp-prog">' + icon + ' ' +
+                    escHtml(x.program) + ' · ' + escHtml(String(codeOf[x.cu] || x.cu)) + '</div>' +
+                    '<div class="pp-detail">' + escHtml(x.message) + '</div></div>';
+            }).join('') || '<div class="pp-empty">No results.</div>';
+            loadPlacement();   // refresh the N/M placed badges
+        } catch (e) {
+            out.innerHTML = '<div class="pp-empty">Error: ' + escHtml(e.message) + '</div>';
+        } finally {
+            runBtn.disabled = false;
+        }
+    }
+
+    document.getElementById('runBtn').addEventListener('click', runSetup);
 </script>
 
 </body>
