@@ -3053,6 +3053,18 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def break_optimization_page(request: Request):
         return templates.TemplateResponse(request, "master_control/break_optimization.html")
 
+    # ── Set up Daily Programming ────────────────────────────────────────────────
+
+    # Network → set of station COD_USERs the programming fans out across.
+    _DP_NETWORK_CODUSERS = {
+        "CTV": [1, 2, 3, 4, 5, 6, 7, 8, 9],  # Crossings TV: all markets except DAL
+        "TAC": [10],                          # The Asian Channel: DAL only
+    }
+
+    @router.get("/master-control/daily-programming", response_class=HTMLResponse)
+    async def daily_programming_page(request: Request):
+        return templates.TemplateResponse(request, "master_control/daily_programming.html")
+
     _BO_MARKET_IDS = {"NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4, "SEA": 5, "LAX": 6, "CVC": 7, "WDC": 8, "MMT": 9, "DAL": 10}
     _BO_FPS = 29.97
 
