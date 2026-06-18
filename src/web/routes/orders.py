@@ -3069,6 +3069,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def daily_programming_grid(network: str, date: str):
         """Return the program lineup for a network/day from the K: weekly grid."""
         import datetime as _dt
+
         from src.business_logic.services.programming_grid import get_day_programs
         net = (network or "").upper()
         if net not in _DP_NETWORK_CODUSERS:

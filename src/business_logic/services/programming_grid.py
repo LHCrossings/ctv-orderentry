@@ -56,19 +56,29 @@ def find_grid_file(network: str, d: datetime.date) -> Path | None:
     return None
 
 
+# The day-grid sheet differs by network: CTV = "Local Channels", TAC = "DALLAS".
+_PREFERRED_SHEETS = ("Local Channels", "DALLAS")
+
+
+def _pick_grid_sheet(wb):
+    """Select the sheet holding the day grid (prefers known names, else detects
+    the sheet whose row 3 carries the per-day dates)."""
+    for name in _PREFERRED_SHEETS:
+        if name in wb.sheetnames:
+            return wb[name]
+    for name in wb.sheetnames:
+        sh = wb[name]
+        if any(isinstance(sh.cell(3, c).value, datetime.datetime) for c in range(2, 9)):
+            return sh
+    return None
+
+
 def _time_label(ws, row: int) -> str | None:
     v = ws.cell(row, 1).value
     if isinstance(v, datetime.time):
         return v.strftime("%H:%M")
     if isinstance(v, str) and v.strip():
         return v.strip()
-    return None
-
-
-def _covering_range(ws, row: int, col: int):
-    for mr in ws.merged_cells.ranges:
-        if mr.min_row <= row <= mr.max_row and mr.min_col <= col <= mr.max_col:
-            return mr
     return None
 
 
@@ -102,7 +112,10 @@ def get_day_programs(network: str, d: datetime.date) -> dict:
                 "error": f"No grid file found for {network} week of {_week_monday(d):%Y-%m-%d}"}
 
     wb = openpyxl.load_workbook(path, data_only=True)
-    ws = wb["Local Channels"]
+    ws = _pick_grid_sheet(wb)
+    if ws is None:
+        return {"found": False, "file": str(path), "date": d.isoformat(), "programs": [],
+                "error": f"No day-grid sheet found in {path.name} (sheets: {wb.sheetnames})"}
 
     # Day column: row 3 holds the per-column dates (Mon..Sun in cols 2..8).
     daycol = None
@@ -115,18 +128,27 @@ def get_day_programs(network: str, d: datetime.date) -> dict:
         return {"found": False, "file": str(path), "date": d.isoformat(), "programs": [],
                 "error": f"{d:%Y-%m-%d} not found as a day column in {path.name}"}
 
+    # Pre-index the merged ranges covering the day column (one pass) so we don't
+    # rescan every range per row. Some sheets report a hugely inflated max_row
+    # from stray formatting, so cap the scan — grids are only ~60 rows.
+    range_at: dict[int, object] = {}
+    for mr in ws.merged_cells.ranges:
+        if mr.min_col <= daycol <= mr.max_col and (mr.max_row - mr.min_row) <= 200:
+            for rr in range(mr.min_row, mr.max_row + 1):
+                range_at[rr] = mr
+
+    last_row = min(ws.max_row, 500)
     programs: list[dict] = []
     seen: set = set()
+    empties = 0
     r = 4
-    while r <= ws.max_row:
-        mr = _covering_range(ws, r, daycol)
-        if mr and mr.min_col <= daycol <= mr.max_col:
-            key = (mr.min_row, mr.min_col)
-            top = mr.min_row
-            val = ws.cell(top, mr.min_col).value
-            advance = mr.max_row + 1
-            start, end = _time_label(ws, top), _time_label(ws, mr.max_row + 1)
-            r = advance
+    while r <= last_row:
+        mr = range_at.get(r)
+        if mr is not None:
+            key = mr.min_row
+            val = ws.cell(mr.min_row, mr.min_col).value
+            start, end = _time_label(ws, mr.min_row), _time_label(ws, mr.max_row + 1)
+            r = mr.max_row + 1
             if key in seen:
                 continue
             seen.add(key)
@@ -136,7 +158,11 @@ def get_day_programs(network: str, d: datetime.date) -> dict:
             r += 1
 
         if not val:
+            empties += 1
+            if empties >= 12:  # several blank rows running = end of the lineup
+                break
             continue
+        empties = 0
         raw = " ".join(str(val).split())
         if _FOOTER_RE.search(raw):
             break  # reached the channel-listing footer
