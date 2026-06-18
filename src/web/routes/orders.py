@@ -3083,6 +3083,35 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:  # noqa: BLE001 - surface grid-read errors to the UI
             return {"found": False, "programs": [], "error": f"Grid read failed: {exc}"}
 
+    @router.get("/api/master-control/daily-programming/search-files")
+    async def daily_programming_search_files(q: str, limit: int = 25):
+        """Super-search the FILMATI media library by code/description."""
+        from browser_automation.etere_direct_client import connect as _db_connect
+        term = (q or "").strip()
+        if len(term) < 2:
+            return {"files": []}
+        n = max(1, min(int(limit), 100))
+        like = f"%{term}%"
+        try:
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                # Programs only: FILMATI.TIPO is always 'T'; NEWTYPE='PGM' = program
+                # (vs 'COM' commercial, 'PER'/'PSA'/etc.). PGMX is a rarer program variant.
+                cur.execute(
+                    f"""SELECT TOP {n} ID_FILMATI, COD_PROGRA, DESCRIZIO, DURATA, NEWTYPE
+                        FROM FILMATI
+                        WHERE NEWTYPE = 'PGM' AND (COD_PROGRA LIKE %s OR DESCRIZIO LIKE %s)
+                        ORDER BY ID_FILMATI DESC""",
+                    (like, like),
+                )
+                rows = cur.fetchall()
+            return {"files": [
+                {"id": r["ID_FILMATI"], "code": r["COD_PROGRA"], "desc": r["DESCRIZIO"],
+                 "durata": r["DURATA"], "tipo": r["NEWTYPE"]}
+                for r in rows]}
+        except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
+            return {"files": [], "error": f"Search failed: {exc}"}
+
     _BO_MARKET_IDS = {"NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4, "SEA": 5, "LAX": 6, "CVC": 7, "WDC": 8, "MMT": 9, "DAL": 10}
     _BO_FPS = 29.97
 

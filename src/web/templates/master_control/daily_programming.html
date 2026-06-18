@@ -68,6 +68,25 @@
         .prog-title { font-weight: 600; font-size: 0.9rem; color: var(--text-primary); flex: 1; }
         .prog-lang { font-size: 0.72rem; font-weight: 700; padding: 2px 9px; border-radius: 10px; background: rgba(94,129,172,0.15); color: var(--nord10); white-space: nowrap; }
         .prog-empty { color: var(--text-muted); font-size: 0.88rem; padding: 8px 2px; }
+        .prog-row { cursor: pointer; }
+        .prog-row:hover { border-color: var(--nord10); }
+        .prog-assign { font-size: 0.78rem; font-weight: 700; color: var(--nord14); white-space: nowrap; }
+        .prog-assign.empty { color: var(--text-muted); font-weight: 500; opacity: 0.7; }
+
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: flex-start; justify-content: center; padding-top: 8vh; z-index: 50; }
+        .modal { background: var(--nord6); border: 1px solid var(--border-color); border-radius: 12px; width: min(560px, 92vw); max-height: 80vh; overflow: auto; padding: 22px; box-shadow: 0 8px 30px rgba(0,0,0,0.35); }
+        .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+        .modal-title { font-size: 1rem; font-weight: 700; color: var(--text-primary); }
+        .modal-sub { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
+        .modal-close { background: transparent; border: none; font-size: 1.1rem; color: var(--text-muted); cursor: pointer; line-height: 1; }
+        .modal-check { display: flex; align-items: center; gap: 8px; font-size: 0.86rem; font-weight: 600; color: var(--text-primary); margin: 14px 0; }
+        .modal-check-hint { font-weight: 400; font-size: 0.75rem; color: var(--text-muted); }
+        .fm-results { display: flex; flex-direction: column; gap: 5px; margin-top: 12px; }
+        .fm-result { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; background: var(--bg-secondary); }
+        .fm-result:hover { border-color: var(--nord10); }
+        .fm-code { font-weight: 700; font-size: 0.86rem; color: var(--text-primary); }
+        .fm-meta { font-size: 0.74rem; color: var(--text-muted); margin-left: auto; white-space: nowrap; }
+        .fm-empty { color: var(--text-muted); font-size: 0.84rem; padding: 6px 2px; }
     </style>
 </head>
 <body>
@@ -145,10 +164,30 @@
     </div>
 
     <div class="tool-card" id="programsCard" style="display:none;">
-        <div class="step-label">Programs for the day</div>
+        <div class="step-label">Programs for the day — click one to assign a file</div>
         <div id="programList" class="prog-list"></div>
     </div>
 </main>
+
+<div id="fileModal" class="modal-overlay" style="display:none;">
+    <div class="modal">
+        <div class="modal-head">
+            <div>
+                <div class="modal-title" id="fmTitle">Program</div>
+                <div class="modal-sub" id="fmSub"></div>
+            </div>
+            <button type="button" class="modal-close" id="fmClose">✕</button>
+        </div>
+        <label class="modal-check">
+            <input type="checkbox" id="fmExplode" checked />
+            Explode?
+            <span class="modal-check-hint">one file split by EDL — uncheck to use separate a/b/c/d pieces</span>
+        </label>
+        <input type="text" id="fmSearch" class="field-input" style="width:100%; box-sizing:border-box;"
+               placeholder="Search media library (e.g. NEWSTODAY)…" autocomplete="off" />
+        <div id="fmResults" class="fm-results"></div>
+    </div>
+</div>
 
 <script>
     const NET_CODUSERS = { CTV: [1, 2, 3, 4, 5, 6, 7, 8, 9], TAC: [10] };
@@ -235,17 +274,21 @@
             const r = await fetch('/api/master-control/daily-programming/grid?network=' +
                 encodeURIComponent(state.network) + '&date=' + encodeURIComponent(state.date));
             const data = await r.json();
-            if (!data.found || !data.programs || !data.programs.length) {
+            state.programs = data.programs || [];
+            state.assignments = {};
+            if (!data.found || !state.programs.length) {
                 progList.innerHTML = '<div class="prog-empty">' + escHtml(data.error || 'No programs found for this date.') + '</div>';
                 return;
             }
-            progList.innerHTML = data.programs.map(function (p) {
+            progList.innerHTML = state.programs.map(function (p, i) {
                 const tag = p.language
                     ? '<span class="prog-lang">' + escHtml(p.language + (p.kind ? ' ' + p.kind : '')) + '</span>'
                     : '';
                 const time = escHtml(p.start || '') + (p.end ? '–' + escHtml(p.end) : '');
-                return '<div class="prog-row"><span class="prog-time">' + time + '</span>' +
-                    '<span class="prog-title">' + escHtml(p.title) + '</span>' + tag + '</div>';
+                return '<div class="prog-row" data-idx="' + i + '">' +
+                    '<span class="prog-time">' + time + '</span>' +
+                    '<span class="prog-title">' + escHtml(p.title) + '</span>' + tag +
+                    '<span class="prog-assign empty" id="assign-' + i + '">+ choose file</span></div>';
             }).join('');
         } catch (e) {
             progList.innerHTML = '<div class="prog-empty">Error: ' + escHtml(e.message) + '</div>';
@@ -253,6 +296,86 @@
     }
 
     dateEl.addEventListener('change', loadGrid);
+
+    // ── Step 3: click a program → super-search a file (+ Explode?) ──
+    const modal = document.getElementById('fileModal');
+    const fmTitle = document.getElementById('fmTitle');
+    const fmSub = document.getElementById('fmSub');
+    const fmSearch = document.getElementById('fmSearch');
+    const fmResults = document.getElementById('fmResults');
+    const fmExplode = document.getElementById('fmExplode');
+    let modalIdx = null;
+    let lastResults = [];
+    let searchTimer = null;
+
+    progList.addEventListener('click', function (e) {
+        const row = e.target.closest('.prog-row');
+        if (row && row.dataset.idx !== undefined) openModal(parseInt(row.dataset.idx, 10));
+    });
+
+    function openModal(idx) {
+        modalIdx = idx;
+        const p = state.programs[idx];
+        const a = state.assignments[idx];
+        fmTitle.textContent = p.title;
+        fmSub.textContent = (p.start || '') + (p.end ? '–' + p.end : '') +
+            (p.language ? ' · ' + p.language + (p.kind ? ' ' + p.kind : '') : '');
+        fmExplode.checked = a ? a.explode : true;
+        fmSearch.value = a ? a.file.code : '';
+        fmResults.innerHTML = '';
+        lastResults = [];
+        modal.style.display = 'flex';
+        fmSearch.focus();
+        if (fmSearch.value.trim().length >= 2) searchFiles();
+    }
+
+    function closeModal() { modal.style.display = 'none'; modalIdx = null; }
+
+    async function searchFiles() {
+        const q = fmSearch.value.trim();
+        if (q.length < 2) { fmResults.innerHTML = '<div class="fm-empty">Type at least 2 characters…</div>'; return; }
+        fmResults.innerHTML = '<div class="fm-empty">Searching…</div>';
+        try {
+            const r = await fetch('/api/master-control/daily-programming/search-files?q=' + encodeURIComponent(q));
+            const data = await r.json();
+            lastResults = data.files || [];
+            if (!lastResults.length) {
+                fmResults.innerHTML = '<div class="fm-empty">' + escHtml(data.error || 'No files found.') + '</div>';
+                return;
+            }
+            fmResults.innerHTML = lastResults.map(function (f) {
+                return '<div class="fm-result" data-id="' + f.id + '">' +
+                    '<span class="fm-code">' + escHtml(f.code) + '</span>' +
+                    '<span class="fm-meta">id ' + f.id + (f.tipo ? ' · ' + escHtml(f.tipo) : '') + '</span></div>';
+            }).join('');
+        } catch (e) {
+            fmResults.innerHTML = '<div class="fm-empty">Error: ' + escHtml(e.message) + '</div>';
+        }
+    }
+
+    function assignFile(file) {
+        state.assignments[modalIdx] = { file: file, explode: fmExplode.checked };
+        const span = document.getElementById('assign-' + modalIdx);
+        if (span) {
+            span.textContent = '→ ' + file.code + (fmExplode.checked ? ' (explode)' : ' (pieces)');
+            span.classList.remove('empty');
+        }
+        closeModal();
+    }
+
+    fmSearch.addEventListener('input', function () {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(searchFiles, 250);
+    });
+    fmResults.addEventListener('click', function (e) {
+        const el = e.target.closest('.fm-result');
+        if (!el) return;
+        const f = lastResults.find(function (x) { return String(x.id) === el.dataset.id; });
+        if (f) assignFile(f);
+    });
+    document.getElementById('fmClose').addEventListener('click', closeModal);
+    modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modal.style.display === 'flex') closeModal(); });
 </script>
 
 </body>
