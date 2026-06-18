@@ -3199,6 +3199,37 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
             return {"error": f"Piece check failed: {exc}", "pieces": []}
 
+    @router.get("/api/master-control/daily-programming/placement")
+    async def daily_programming_placement(network: str, date: str):
+        """Pre-flight: which markets already have live program content placed, for the
+        day. Returns the network's markets + all live (LIVELLO=0, non-bump) PGM
+        placements as (cu, ora) so the UI can bucket per-program."""
+        import datetime as _dt
+
+        from browser_automation.etere_direct_client import connect as _db_connect
+        net = (network or "").upper()
+        cus = _DP_NETWORK_CODUSERS.get(net)
+        if not cus:
+            return {"markets": [], "placed": [], "error": f"Unknown network '{network}'"}
+        try:
+            d = _dt.datetime.strptime(date, "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            return {"markets": cus, "placed": [], "error": "Invalid date"}
+        inlist = ",".join(str(int(c)) for c in cus)
+        try:
+            with _db_connect() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    f"""SELECT COD_USER, ORA FROM TPALINSE
+                        WHERE COD_USER IN ({inlist}) AND DATA=%s AND NEWTYPE='PGM'
+                          AND LIVELLO=0 AND ID_FILMATI>0 AND COD_PROGRA NOT LIKE 'BUMP%%'""",
+                    (d,),
+                )
+                placed = [{"cu": int(r[0]), "ora": int(r[1])} for r in cur.fetchall()]
+            return {"markets": cus, "placed": placed}
+        except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
+            return {"markets": cus, "placed": [], "error": f"Placement check failed: {exc}"}
+
     _BO_MARKET_IDS = {"NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4, "SEA": 5, "LAX": 6, "CVC": 7, "WDC": 8, "MMT": 9, "DAL": 10}
     _BO_FPS = 29.97
 

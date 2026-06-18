@@ -73,6 +73,10 @@
         .prog-assign { font-size: 0.78rem; font-weight: 700; color: var(--nord14); white-space: nowrap; }
         .prog-assign.empty { color: var(--text-muted); font-weight: 500; opacity: 0.7; }
         .prog-assign.no-edl { color: var(--nord13); }
+        .prog-placed { font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+        .prog-placed.all { background: rgba(163,190,140,0.2); color: var(--nord14); }
+        .prog-placed.partial { background: rgba(235,203,139,0.22); color: var(--nord13); }
+        .prog-placed.none { background: rgba(191,97,106,0.18); color: var(--nord11); }
 
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: flex-start; justify-content: center; padding-top: 8vh; z-index: 50; }
         .modal { background: var(--nord6); border: 1px solid var(--border-color); border-radius: 12px; width: min(560px, 92vw); max-height: 80vh; overflow: auto; padding: 22px; box-shadow: 0 8px 30px rgba(0,0,0,0.35); }
@@ -299,11 +303,43 @@
                 return '<div class="prog-row" data-idx="' + i + '">' +
                     '<span class="prog-time">' + time + '</span>' +
                     '<span class="prog-title">' + escHtml(p.title) + '</span>' + tag +
+                    '<span class="prog-placed" id="placed-' + i + '"></span>' +
                     '<span class="prog-assign empty" id="assign-' + i + '">+ choose file</span></div>';
             }).join('');
+            loadPlacement();
         } catch (e) {
             progList.innerHTML = '<div class="prog-empty">Error: ' + escHtml(e.message) + '</div>';
         }
+    }
+
+    function hhmmToFrames(s) {
+        const m = /^\s*(\d{1,2}):(\d{2})/.exec(s || '');
+        return m ? Math.round((parseInt(m[1], 10) * 3600 + parseInt(m[2], 10) * 60) * 29.97) : null;
+    }
+
+    // Pre-flight: show how many of the network's markets already have this program placed.
+    async function loadPlacement() {
+        if (!state.network || !state.date || !state.programs || !state.programs.length) return;
+        let data;
+        try {
+            const r = await fetch('/api/master-control/daily-programming/placement?network=' +
+                encodeURIComponent(state.network) + '&date=' + encodeURIComponent(state.date));
+            data = await r.json();
+        } catch (e) { return; }
+        const markets = data.markets || [];
+        const placed = data.placed || [];
+        const M = markets.length;
+        state.programs.forEach(function (p, i) {
+            const span = document.getElementById('placed-' + i);
+            if (!span) return;
+            const lo = hhmmToFrames(p.start), hi = hhmmToFrames(p.end);
+            if (lo == null || hi == null || !M) { span.textContent = ''; span.className = 'prog-placed'; return; }
+            const set = {};
+            placed.forEach(function (x) { if (x.ora >= lo && x.ora < hi) set[x.cu] = 1; });
+            const n = markets.filter(function (cu) { return set[cu]; }).length;
+            span.textContent = n + '/' + M + ' placed';
+            span.className = 'prog-placed ' + (n === 0 ? 'none' : (n === M ? 'all' : 'partial'));
+        });
     }
 
     dateEl.addEventListener('change', loadGrid);
