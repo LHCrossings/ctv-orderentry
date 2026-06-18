@@ -13,9 +13,10 @@ intended flow is extract → human review/edit in the web preview → enter. Out
 field names match parser_bridge._normalize_line so the existing preview UI can
 render an AIOrder with no special-casing.
 
-Model: claude-opus-4-8 (built-in high-res vision → reads both text and scanned
-PDFs natively, no OCR path needed). Structured output via messages.parse() forces
-the response to match the Pydantic schema below.
+Model cascade: tries Haiku 4.5 first (cheapest), escalates to Sonnet 4.6, then
+Opus 4.8 only if the cheaper model returns an empty or all-UNKNOWN result.
+Structured output via messages.parse() forces the response to match the Pydantic
+schema below.
 """
 
 from __future__ import annotations
@@ -25,7 +26,17 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-MODEL = "claude-opus-4-8"
+_MODEL_CASCADE = [
+    "claude-haiku-4-5",
+    "claude-sonnet-4-6",
+    "claude-opus-4-8",
+]
+
+_MODEL_COSTS = {
+    "claude-haiku-4-5":  (1.00,  5.00),
+    "claude-sonnet-4-6": (3.00, 15.00),
+    "claude-opus-4-8":   (5.00, 25.00),
+}
 
 # ─── Output schema (field names mirror parser_bridge._normalize_line) ─────────
 
@@ -79,40 +90,66 @@ _INSTRUCTION = "Extract this advertising order into the required structured sche
 
 # ─── Parser ───────────────────────────────────────────────────────────────────
 
-def parse_ai_pdf(path: str, model: str = MODEL, max_tokens: int = 16000):
+def _needs_escalation(order: AIOrder) -> bool:
+    if not order.lines:
+        return True
+    if any(line.market == "UNKNOWN" for line in order.lines):
+        return True
+    return False
+
+
+def parse_ai_pdf(path: str, model: str = None, max_tokens: int = 16000):
     """
     Extract an order PDF into an AIOrder via Claude structured output.
 
-    Returns (AIOrder, usage_dict). Reads ANTHROPIC_API_KEY from the environment
-    (the app's .env is loaded by the caller). Raises on missing key / API error.
+    Tries models in _MODEL_CASCADE order (Haiku → Sonnet → Opus), escalating
+    when the result has no lines or contains any UNKNOWN market. Pass model= to
+    pin a specific model and skip the cascade (used by the refresh endpoint).
+
+    Returns (AIOrder, usage_dict). Reads ANTHROPIC_API_KEY from the environment.
     """
     import anthropic
 
     pdf_b64 = base64.standard_b64encode(Path(path).read_bytes()).decode("utf-8")
+    client = anthropic.Anthropic()
 
-    client = anthropic.Anthropic()  # resolves ANTHROPIC_API_KEY from env
-    resp = client.messages.parse(
-        model=model,
-        max_tokens=max_tokens,
-        system=_SYSTEM,
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "document",
-                 "source": {"type": "base64", "media_type": "application/pdf", "data": pdf_b64}},
-                {"type": "text", "text": _INSTRUCTION},
-            ],
-        }],
-        output_format=AIOrder,
-    )
+    models_to_try = [model] if model else _MODEL_CASCADE
+    last_order, last_usage = None, None
 
-    usage = {
-        "input_tokens": resp.usage.input_tokens,
-        "output_tokens": resp.usage.output_tokens,
-        # rough Opus 4.8 cost: $5/1M in, $25/1M out
-        "est_cost_usd": round(resp.usage.input_tokens * 5e-6 + resp.usage.output_tokens * 25e-6, 4),
-    }
-    return resp.parsed_output, usage
+    for m in models_to_try:
+        in_rate, out_rate = _MODEL_COSTS.get(m, (5.00, 25.00))
+        resp = client.messages.parse(
+            model=m,
+            max_tokens=max_tokens,
+            system=_SYSTEM,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "document",
+                     "source": {"type": "base64", "media_type": "application/pdf", "data": pdf_b64}},
+                    {"type": "text", "text": _INSTRUCTION},
+                ],
+            }],
+            output_format=AIOrder,
+        )
+        order = resp.parsed_output
+        usage = {
+            "model": m,
+            "input_tokens": resp.usage.input_tokens,
+            "output_tokens": resp.usage.output_tokens,
+            "est_cost_usd": round(
+                resp.usage.input_tokens * in_rate * 1e-6 +
+                resp.usage.output_tokens * out_rate * 1e-6,
+                4,
+            ),
+        }
+        last_order, last_usage = order, usage
+        if not _needs_escalation(order):
+            break
+        unknowns = sum(1 for ln in order.lines if ln.market == "UNKNOWN")
+        print(f"[AI] {m}: lines={len(order.lines)}, unknowns={unknowns} — escalating to next model")
+
+    return last_order, last_usage
 
 
 # ─── Cached entry point (preview and entry must use the SAME extraction) ──────
