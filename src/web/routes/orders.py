@@ -3065,6 +3065,23 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def daily_programming_page(request: Request):
         return templates.TemplateResponse(request, "master_control/daily_programming.html")
 
+    @router.get("/api/master-control/daily-programming/grid")
+    async def daily_programming_grid(network: str, date: str):
+        """Return the program lineup for a network/day from the K: weekly grid."""
+        import datetime as _dt
+        from src.business_logic.services.programming_grid import get_day_programs
+        net = (network or "").upper()
+        if net not in _DP_NETWORK_CODUSERS:
+            return {"found": False, "programs": [], "error": f"Unknown network '{network}'"}
+        try:
+            d = _dt.datetime.strptime(date, "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            return {"found": False, "programs": [], "error": "Invalid date (expected YYYY-MM-DD)"}
+        try:
+            return get_day_programs(net, d)
+        except Exception as exc:  # noqa: BLE001 - surface grid-read errors to the UI
+            return {"found": False, "programs": [], "error": f"Grid read failed: {exc}"}
+
     _BO_MARKET_IDS = {"NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4, "SEA": 5, "LAX": 6, "CVC": 7, "WDC": 8, "MMT": 9, "DAL": 10}
     _BO_FPS = 29.97
 

@@ -55,6 +55,19 @@
         .selection-note { margin-top: 18px; font-size: 0.88rem; color: var(--text-muted); }
         .selection-note b { color: var(--nord10); }
         .selection-hint { margin-top: 6px; font-size: 0.78rem; color: var(--text-muted); opacity: 0.8; }
+
+        .controls-row { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+        .field-group { display: flex; flex-direction: column; gap: 4px; }
+        .field-label { font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .field-input { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 7px 12px; font-size: 0.9rem; color: var(--text-primary); outline: none; font-family: inherit; }
+        .field-input:focus { border-color: var(--nord10); }
+
+        .prog-list { display: flex; flex-direction: column; gap: 6px; }
+        .prog-row { display: flex; align-items: center; gap: 14px; padding: 10px 14px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; }
+        .prog-time { font-family: monospace; font-size: 0.82rem; color: var(--text-muted); min-width: 96px; }
+        .prog-title { font-weight: 600; font-size: 0.9rem; color: var(--text-primary); flex: 1; }
+        .prog-lang { font-size: 0.72rem; font-weight: 700; padding: 2px 9px; border-radius: 10px; background: rgba(94,129,172,0.15); color: var(--nord10); white-space: nowrap; }
+        .prog-empty { color: var(--text-muted); font-size: 0.88rem; padding: 8px 2px; }
     </style>
 </head>
 <body>
@@ -120,6 +133,21 @@
         <div class="selection-note" id="selectionNote">Select a network to apply to all its markets, or click a single market to focus it.</div>
         <div class="selection-hint">Network button = all markets for that network. Single pill = that market only.</div>
     </div>
+
+    <div class="tool-card">
+        <div class="step-label">Step 2 · Choose date</div>
+        <div class="controls-row">
+            <div class="field-group">
+                <label class="field-label" for="dpDate">Air date</label>
+                <input type="date" id="dpDate" class="field-input" />
+            </div>
+        </div>
+    </div>
+
+    <div class="tool-card" id="programsCard" style="display:none;">
+        <div class="step-label">Programs for the day</div>
+        <div id="programList" class="prog-list"></div>
+    </div>
 </main>
 
 <script>
@@ -168,6 +196,7 @@
             state.codUsers = NET_CODUSERS[state.network].slice();
             state.mode = 'network';
             render();
+            loadGrid();
         });
     });
 
@@ -178,8 +207,52 @@
             state.codUsers = [cu];
             state.mode = 'market';
             render();
+            loadGrid();
         });
     });
+
+    // ── Step 2: date → program lineup (read from the K: grid) ──
+    const dateEl = document.getElementById('dpDate');
+    const progCard = document.getElementById('programsCard');
+    const progList = document.getElementById('programList');
+
+    (function () {  // default to today
+        const t = new Date();
+        dateEl.value = t.getFullYear() + '-' +
+            String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
+    })();
+
+    function escHtml(s) {
+        return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    async function loadGrid() {
+        state.date = dateEl.value;
+        if (!state.network || !state.date) { progCard.style.display = 'none'; return; }
+        progCard.style.display = 'block';
+        progList.innerHTML = '<div class="prog-empty">Loading…</div>';
+        try {
+            const r = await fetch('/api/master-control/daily-programming/grid?network=' +
+                encodeURIComponent(state.network) + '&date=' + encodeURIComponent(state.date));
+            const data = await r.json();
+            if (!data.found || !data.programs || !data.programs.length) {
+                progList.innerHTML = '<div class="prog-empty">' + escHtml(data.error || 'No programs found for this date.') + '</div>';
+                return;
+            }
+            progList.innerHTML = data.programs.map(function (p) {
+                const tag = p.language
+                    ? '<span class="prog-lang">' + escHtml(p.language + (p.kind ? ' ' + p.kind : '')) + '</span>'
+                    : '';
+                const time = escHtml(p.start || '') + (p.end ? '–' + escHtml(p.end) : '');
+                return '<div class="prog-row"><span class="prog-time">' + time + '</span>' +
+                    '<span class="prog-title">' + escHtml(p.title) + '</span>' + tag + '</div>';
+            }).join('');
+        } catch (e) {
+            progList.innerHTML = '<div class="prog-empty">Error: ' + escHtml(e.message) + '</div>';
+        }
+    }
+
+    dateEl.addEventListener('change', loadGrid);
 </script>
 
 </body>
