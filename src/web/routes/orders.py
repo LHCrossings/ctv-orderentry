@@ -1590,8 +1590,34 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             dest = used_dir / f"{target.stem}_{ts}{target.suffix}"
 
-        shutil.move(str(target), str(dest))
-        _purge_used_folder(days=30)
+        try:
+            shutil.move(str(target), str(dest))
+        except OSError as exc:
+            # Most common on Windows: the file is still held open by another
+            # process (a PDF viewer, or a just-finished run console window that
+            # still has a handle). Return JSON so the UI shows a real message
+            # instead of an unparseable 500.
+            return JSONResponse(
+                status_code=409,
+                content={"detail": (
+                    f"Could not move '{filename}': {exc}. "
+                    "If it's open in another program (a PDF viewer, or a run "
+                    "window still showing 'Press Enter to close'), close it and try again."
+                )},
+            )
+
+        # Best-effort cleanup — never let these fail a move that already succeeded.
+        try:
+            _purge_used_folder(days=30)
+        except Exception as exc:
+            print(f"[orders] Used/ purge skipped: {exc}")
+        try:
+            sidecar = Path(str(target) + ".ai.json")  # AI-fallback extraction cache, if any
+            if sidecar.exists():
+                sidecar.unlink()
+        except Exception:
+            pass
+
         return JSONResponse(content={"message": f"'{filename}' moved to Used."})
 
     # ------------------------------------------------------------------
