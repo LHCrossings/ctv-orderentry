@@ -179,7 +179,7 @@
         </div>
 
         <div class="selection-note" id="selectionNote">Select a network to apply to all its markets, or click a single market to focus it.</div>
-        <div class="selection-hint">Network button = all markets for that network. Single pill = that market only.</div>
+        <div class="selection-hint">Network button = all markets for that network. Click pills to toggle individual markets — select as many as you like.</div>
     </div>
 
     <div class="tool-card">
@@ -275,8 +275,11 @@
             noteEl.innerHTML = 'Setting up <b>all ' + NET_NAME[state.network] +
                 '</b> markets &middot; COD_USER ' + state.codUsers.join(', ');
         } else {
-            noteEl.innerHTML = 'Focusing <b>' + codeOf[state.codUsers[0]] + '</b> only (' +
-                NET_NAME[state.network] + ') &middot; COD_USER ' + state.codUsers[0];
+            const names = state.codUsers.map(function (cu) { return codeOf[cu]; }).join(', ');
+            const label = state.codUsers.length === 1 ? 'Focusing <b>' + names + '</b> only'
+                : 'Setting up <b>' + names + '</b>';
+            noteEl.innerHTML = label + ' (' + NET_NAME[state.network] +
+                ') &middot; COD_USER ' + state.codUsers.join(', ');
         }
     }
 
@@ -293,9 +296,15 @@
     document.querySelectorAll('.mkt-pill').forEach(function (pill) {
         pill.addEventListener('click', function () {
             const cu = parseInt(pill.dataset.coduser, 10);
-            state.network = NET_OF[cu];
-            state.codUsers = [cu];
-            state.mode = 'market';
+            const i = state.codUsers.indexOf(cu);
+            if (i === -1) state.codUsers.push(cu);   // toggle this market in/out
+            else state.codUsers.splice(i, 1);
+            // Network (drives the K: grid lookup) follows the first selected pill.
+            state.network = state.codUsers.length ? NET_OF[state.codUsers[0]] : null;
+            const full = state.network ? NET_CODUSERS[state.network] : [];
+            const isFull = full.length && full.length === state.codUsers.length &&
+                full.every(function (c) { return state.codUsers.indexOf(c) !== -1; });
+            state.mode = isFull ? 'network' : 'market';
             render();
             loadGrid();
         });
