@@ -1,0 +1,534 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AAAA-Message xmlns="http://www.AAAA.org/schemas/spotTVCableProposal"
+  xmlns:tvb="http://www.AAAA.org/schemas/spotTV"
+  xmlns:tvb-tp="http://www.AAAA.org/schemas/TVBGeneralTypes"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.AAAA.org/schemas/spotTVCableProposal spotTVCableProposal-0.3.0.5A.xsd">
+  <AAAA-Values>
+    <SchemaName>SpotTVCableProposal</SchemaName>
+    <SchemaVersion>0.3.0.5A</SchemaVersion>
+    <Media>SpotTV</Media>
+    <BusinessObject>Proposal</BusinessObject>
+    <Action>New</Action>
+    <UniqueMessageID>3F2504E0-4F89-11D3-9A0C-0305E82C3301</UniqueMessageID>
+  </AAAA-Values>
+  <Proposal uniqueIdentifier="MM-1231238-2007" version="1" sendDateTime="2007-04-10T08:41:11"
+    weekStartDay="Mo" startDate="2007-04-16" endDate="2007-06-24">
+    <Seller companyName="Seller Inc.">
+      <OfficeName>NY</OfficeName>
+      <Salesperson name="Sean Mooney">
+        <Phone type="voice" location="work">(212)633-8100</Phone>
+        <Phone type="fax">(212)633-8120</Phone>
+        <Email type="primary">Sean@dds.net</Email>
+      </Salesperson>
+    </Seller>
+    <Buyer buyingCompanyName="Media Madness">
+      <OfficeName>New York</OfficeName>
+      <BuyerName>Emily Benitez</BuyerName>
+    </Buyer>
+    <Advertiser name="Big Car Company">
+      <Product name="Hybrid"/>
+    </Advertiser>
+    <Name>2QTR 07</Name>
+    <SellerReference>1231238</SellerReference>
+    <Outlets>
+      <TelevisionStation callLetters="YAAA" parentPlus="N" outletId="OUT0"/>
+    </Outlets>
+    <AvailList identifier="AL001" startDate="2007-04-16" endDate="2007-06-24" isPackage="N">
+      <Name>Prime Schedule</Name>
+      <OutletReferences>
+        <OutletReference outletFromProposalRef="OUT0" outletForListId="OUL0">
+          <Comment>
+            <tvb-tp:CommentLine>YAAA continues to lead in Prime Time on Monday and Tuesday nights
+              for AD2554.</tvb-tp:CommentLine>
+          </Comment>
+        </OutletReference>
+      </OutletReferences>
+      <DemoCategories>
+        <DemoCategory DemoId="DM0">
+          <tvb:DemoType>Rating</tvb:DemoType>
+          <tvb:Group>Adults</tvb:Group>
+          <tvb:AgeFrom>25</tvb:AgeFrom>
+          <tvb:AgeTo>54</tvb:AgeTo>
+        </DemoCategory>
+      </DemoCategories>
+      <TargetDemo demoRef="DM0"/>
+      <SupplementalSalesInfo salesInfoRef="SI0"/>
+      <Comment>
+        <tvb-tp:CommentLine>YAAA 2nd Quarter 2007 Prime Time schedule.</tvb-tp:CommentLine>
+      </Comment>
+      <AvailLineWithDetailedPeriods>
+        <OutletReference outletFromListRef="OUL0"/>
+        <DayTimes>
+          <DayTime>
+            <StartTime>20:00</StartTime>
+            <EndTime>21:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>Y</tvb-tp:Monday>
+              <tvb-tp:Tuesday>N</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>N</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>N</tvb-tp:Thursday>
+              <tvb-tp:Friday>N</tvb-tp:Friday>
+              <tvb-tp:Saturday>N</tvb-tp:Saturday>
+              <tvb-tp:Sunday>N</tvb-tp:Sunday>
+            </Days>
+          </DayTime>
+        </DayTimes>
+        <DaypartName>Prime</DaypartName>
+        <AvailName>Amazing Show</AvailName>
+        <SpotLength>00:00:30</SpotLength>
+        <Comment>
+          <tvb-tp:CommentLine>Amazing Show still an American favorite.</tvb-tp:CommentLine>
+        </Comment>
+        <Periods>
+          <DetailedPeriod startDate="2007-04-16" endDate="2007-04-29">
+            <Rate>1500.00</Rate>
+            <SpotsPerWeek>1</SpotsPerWeek>
+            <DemoValues>
+              <DemoValue demoRef="DM0">5.0</DemoValue>
+            </DemoValues>
+          </DetailedPeriod>
+          <DetailedPeriod startDate="2007-05-14" endDate="2007-06-10">
+            <Rate>2000.00</Rate>
+            <SpotsPerWeek>1</SpotsPerWeek>
+            <DemoValues>
+              <DemoValue demoRef="DM0">5.5</DemoValue>
+            </DemoValues>
+          </DetailedPeriod>
+          <DetailedPeriod startDate="2007-06-11" endDate="2007-06-24">
+            <Rate>3000.00</Rate>
+            <SpotsPerWeek>1</SpotsPerWeek>
+            <DemoValues>
+              <DemoValue demoRef="DM0">6.0</DemoValue>
+            </DemoValues>
+          </DetailedPeriod>
+        </Periods>
+      </AvailLineWithDetailedPeriods>
+      <AvailLineWithDetailedPeriods>
+        <OutletReference outletFromListRef="OUL0"/>
+        <DayTimes>
+          <DayTime>
+            <StartTime>21:00</StartTime>
+            <EndTime>22:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>Y</tvb-tp:Monday>
+              <tvb-tp:Tuesday>N</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>N</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>N</tvb-tp:Thursday>
+              <tvb-tp:Friday>N</tvb-tp:Friday>
+              <tvb-tp:Saturday>N</tvb-tp:Saturday>
+              <tvb-tp:Sunday>N</tvb-tp:Sunday>
+            </Days>
+          </DayTime>
+        </DayTimes>
+        <DaypartName>Prime</DaypartName>
+        <AvailName>Dance Off</AvailName>
+        <SpotLength>00:00:15</SpotLength>
+        <Comment>
+          <tvb-tp:CommentLine>Dance Off is the hottest new show!</tvb-tp:CommentLine>
+        </Comment>
+        <Periods>
+          <DetailedPeriod startDate="2007-04-16" endDate="2007-06-10">
+            <Rate>1250.00</Rate>
+            <SpotsPerWeek>1</SpotsPerWeek>
+            <DemoValues>
+              <DemoValue demoRef="DM0">3.0</DemoValue>
+            </DemoValues>
+          </DetailedPeriod>
+        </Periods>
+      </AvailLineWithDetailedPeriods>
+      <AvailLineWithDetailedPeriods>
+        <OutletReference outletFromListRef="OUL0"/>
+        <DayTimes>
+          <DayTime>
+            <StartTime>20:00</StartTime>
+            <EndTime>21:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>N</tvb-tp:Monday>
+              <tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>N</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>N</tvb-tp:Thursday>
+              <tvb-tp:Friday>N</tvb-tp:Friday>
+              <tvb-tp:Saturday>N</tvb-tp:Saturday>
+              <tvb-tp:Sunday>N</tvb-tp:Sunday>
+            </Days>
+          </DayTime>
+        </DayTimes>
+        <DaypartName>Prime</DaypartName>
+        <AvailName>American Teens</AvailName>
+        <SpotLength>00:00:30</SpotLength>
+        <Comment>
+          <tvb-tp:CommentLine>American Teens keeps on getting stronger each
+          season!</tvb-tp:CommentLine>
+        </Comment>
+        <Periods>
+          <DetailedPeriod startDate="2007-05-14" endDate="2007-06-24">
+            <Rate>4000.00</Rate>
+            <SpotsPerWeek>1</SpotsPerWeek>
+            <DemoValues>
+              <DemoValue demoRef="DM0">4.0</DemoValue>
+            </DemoValues>
+          </DetailedPeriod>
+        </Periods>
+      </AvailLineWithDetailedPeriods>
+      <AvailLineWithDetailedPeriods>
+        <OutletReference outletFromListRef="OUL0"/>
+        <DayTimes>
+          <DayTime>
+            <StartTime>21:00</StartTime>
+            <EndTime>22:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>N</tvb-tp:Monday>
+              <tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>N</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>N</tvb-tp:Thursday>
+              <tvb-tp:Friday>N</tvb-tp:Friday>
+              <tvb-tp:Saturday>N</tvb-tp:Saturday>
+              <tvb-tp:Sunday>N</tvb-tp:Sunday>
+            </Days>
+            <ProgramName>Friends and Company</ProgramName>
+          </DayTime>
+          <DayTime>
+            <StartTime>20:00</StartTime>
+            <EndTime>22:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>N</tvb-tp:Monday>
+              <tvb-tp:Tuesday>N</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>N</tvb-tp:Thursday>
+              <tvb-tp:Friday>N</tvb-tp:Friday>
+              <tvb-tp:Saturday>N</tvb-tp:Saturday>
+              <tvb-tp:Sunday>N</tvb-tp:Sunday>
+            </Days>
+            <ProgramName>My Dogpound</ProgramName>
+          </DayTime>
+        </DayTimes>
+        <DaypartName>Prime</DaypartName>
+        <AvailName>Sitcom Orbit</AvailName>
+        <SpotLength>00:00:30</SpotLength>
+        <Comment>
+          <tvb-tp:CommentLine>Sitcom orbit comprised of 'Friends and Company' on Tue 9-10p and 'My
+            Dogpound' on Wed 8-10p.</tvb-tp:CommentLine>
+        </Comment>
+        <Periods>
+          <DetailedPeriod startDate="2007-04-30" endDate="2007-05-27">
+            <Rate>7000.00</Rate>
+            <SpotsPerWeek>4</SpotsPerWeek>
+            <DemoValues>
+              <DemoValue demoRef="DM0">3.0</DemoValue>
+            </DemoValues>
+          </DetailedPeriod>
+        </Periods>
+      </AvailLineWithDetailedPeriods>
+      <AvailLineWithDetailedPeriods>
+        <OutletReference outletFromListRef="OUL0"/>
+        <DayTimes>
+          <DayTime>
+            <StartTime>22:00</StartTime>
+            <EndTime>23:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>Y</tvb-tp:Monday>
+              <tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>Y</tvb-tp:Thursday>
+              <tvb-tp:Friday>Y</tvb-tp:Friday>
+              <tvb-tp:Saturday>N</tvb-tp:Saturday>
+              <tvb-tp:Sunday>N</tvb-tp:Sunday>
+            </Days>
+          </DayTime>
+        </DayTimes>
+        <DaypartName>News</DaypartName>
+        <AvailName>Late News</AvailName>
+        <SpotLength>00:00:30</SpotLength>
+        <Comment>
+          <tvb-tp:CommentLine>Daily offering of spots</tvb-tp:CommentLine>
+        </Comment>
+        <Periods>
+          <DayDetailedPeriod startDate="2007-06-11" endDate="2007-06-15">
+            <Rate>4000.00</Rate>
+            <SpotsByDay>
+              <Monday>1</Monday>
+              <Tuesday>1</Tuesday>
+              <Wednesday>1</Wednesday>
+              <Thursday>1</Thursday>
+              <Friday>1</Friday>
+              <Saturday>0</Saturday>
+              <Sunday>0</Sunday>
+            </SpotsByDay>
+            <DemoValues>
+              <DemoValue demoRef="DM0">3.0</DemoValue>
+            </DemoValues>
+          </DayDetailedPeriod>
+        </Periods>
+      </AvailLineWithDetailedPeriods>
+    </AvailList>
+    <AvailList identifier="AL002" startDate="2007-04-16" endDate="2007-06-24" isPackage="N">
+      <Name>December Daytime Proposal</Name>
+      <OutletReferences>
+        <OutletReference outletFromProposalRef="OUT0" outletForListId="OUL1"> </OutletReference>
+      </OutletReferences>
+      <DemoCategories>
+        <DemoCategory DemoId="DM1">
+          <tvb:DemoType>Rating</tvb:DemoType>
+          <tvb:Group>Women</tvb:Group>
+          <tvb:AgeFrom>18 </tvb:AgeFrom>
+          <tvb:AgeTo>49</tvb:AgeTo>
+        </DemoCategory>
+        <DemoCategory DemoId="DM2">
+          <tvb:DemoType>Rating</tvb:DemoType>
+          <tvb:Group>Women</tvb:Group>
+          <tvb:AgeFrom>25</tvb:AgeFrom>
+          <tvb:AgeTo>49</tvb:AgeTo>
+        </DemoCategory>
+      </DemoCategories>
+      <TargetDemo demoRef="DM1"/>
+      <AvailLineWithPeriods>
+        <OutletReference outletFromListRef="OUL1"/>
+        <DayTimes>
+          <DayTime>
+            <StartTime>13:00</StartTime>
+            <EndTime>16:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>Y</tvb-tp:Monday>
+              <tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>Y</tvb-tp:Thursday>
+              <tvb-tp:Friday>Y</tvb-tp:Friday>
+              <tvb-tp:Saturday>N</tvb-tp:Saturday>
+              <tvb-tp:Sunday>N</tvb-tp:Sunday>
+            </Days>
+          </DayTime>
+        </DayTimes>
+        <DaypartName>Daytime</DaypartName>
+        <AvailName>Daytime Soaps</AvailName>
+        <SpotLength>00:00:30</SpotLength>
+        <Rate>1500.00</Rate>
+        <TotalSpots>30</TotalSpots>
+        <DemoValues>
+          <DemoValue demoRef="DM1">2.0</DemoValue>
+          <DemoValue demoRef="DM2">1.0</DemoValue>
+        </DemoValues>
+        <Periods>
+          <Period startDate="2007-04-16" endDate="2007-05-27"/>
+        </Periods>
+      </AvailLineWithPeriods>
+      <AvailLineWithPeriods>
+        <OutletReference outletFromListRef="OUL1"/>
+        <DayTimes>
+          <DayTime>
+            <StartTime>10:00</StartTime>
+            <EndTime>11:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>Y</tvb-tp:Monday>
+              <tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>Y</tvb-tp:Thursday>
+              <tvb-tp:Friday>Y</tvb-tp:Friday>
+              <tvb-tp:Saturday>N</tvb-tp:Saturday>
+              <tvb-tp:Sunday>N</tvb-tp:Sunday>
+            </Days>
+          </DayTime>
+        </DayTimes>
+        <DaypartName>Daytime</DaypartName>
+        <AvailName>Game shows</AvailName>
+        <SpotLength>00:00:30</SpotLength>
+        <Rate>3000.00</Rate>
+        <TotalSpots>40</TotalSpots>
+        <DemoValues>
+          <DemoValue demoRef="DM1">3.0</DemoValue>
+          <DemoValue demoRef="DM2">1.5</DemoValue>
+        </DemoValues>
+        <Periods>
+          <Period startDate="2007-04-16" endDate="2007-06-03"/>
+          <Period startDate="2007-06-11" endDate="2007-06-24"/>
+        </Periods>
+      </AvailLineWithPeriods>
+    </AvailList>
+    <AvailList identifier="AL003" startDate="2007-04-21" endDate="2007-05-12" isPackage="Y">
+      <Name>Baseball Package</Name>
+      <OutletReferences>
+        <OutletReference outletFromProposalRef="OUT0" outletForListId="OUL2"> </OutletReference>
+      </OutletReferences>
+      <DemoCategories>
+        <DemoCategory DemoId="DM3">
+          <tvb:DemoType>Rating</tvb:DemoType>
+          <tvb:Group>Men</tvb:Group>
+          <tvb:AgeFrom>35</tvb:AgeFrom>
+          <tvb:AgeTo>54</tvb:AgeTo>
+        </DemoCategory>
+      </DemoCategories>
+      <TargetDemo demoRef="DM3"/>
+      <Comment>
+        <tvb-tp:CommentLine>This is a Sports Package. With this package, you will receive 3 web ads
+          on the team's home page!</tvb-tp:CommentLine>
+      </Comment>
+      <AvailLineWithDetailedPeriods>
+        <OutletReference outletFromListRef="OUL2"/>
+        <DayTimes>
+          <DayTime>
+            <StartTime>13:00</StartTime>
+            <EndTime>16:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>N</tvb-tp:Monday>
+              <tvb-tp:Tuesday>N</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>N</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>N</tvb-tp:Thursday>
+              <tvb-tp:Friday>N</tvb-tp:Friday>
+              <tvb-tp:Saturday>N</tvb-tp:Saturday>
+              <tvb-tp:Sunday>Y</tvb-tp:Sunday>
+            </Days>
+          </DayTime>
+        </DayTimes>
+        <DaypartName>Sports</DaypartName>
+        <AvailName>Sunday Afternoon games</AvailName>
+        <SpotLength>00:00:30</SpotLength>
+        <Comment>
+          <tvb-tp:CommentLine>Opening Day April 22</tvb-tp:CommentLine>
+        </Comment>
+        <Periods>
+          <DetailedPeriod startDate="2007-04-22" endDate="2007-05-06">
+            <Rate>3000.00</Rate>
+            <SpotsPerWeek>2</SpotsPerWeek>
+            <DemoValues>
+              <DemoValue demoRef="DM3">8.0</DemoValue>
+            </DemoValues>
+          </DetailedPeriod>
+        </Periods>
+      </AvailLineWithDetailedPeriods>
+      <AvailLineWithDetailedPeriods>
+        <OutletReference outletFromListRef="OUL2"/>
+        <DayTimes>
+          <DayTime>
+            <StartTime>13:00</StartTime>
+            <EndTime>16:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>N</tvb-tp:Monday>
+              <tvb-tp:Tuesday>N</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>N</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>N</tvb-tp:Thursday>
+              <tvb-tp:Friday>N</tvb-tp:Friday>
+              <tvb-tp:Saturday>Y</tvb-tp:Saturday>
+              <tvb-tp:Sunday>N</tvb-tp:Sunday>
+            </Days>
+          </DayTime>
+        </DayTimes>
+        <DaypartName>Sports</DaypartName>
+        <AvailName>Saturday Afternoon games</AvailName>
+        <SpotLength>00:00:30</SpotLength>
+        <Periods>
+          <DetailedPeriod startDate="2007-04-21" endDate="2007-05-05">
+            <Rate>3000.00</Rate>
+            <SpotsPerWeek>1</SpotsPerWeek>
+            <DemoValues>
+              <DemoValue demoRef="DM3">5.0</DemoValue>
+            </DemoValues>
+          </DetailedPeriod>
+        </Periods>
+      </AvailLineWithDetailedPeriods>
+      <AvailLineWithDetailedPeriods>
+        <OutletReference outletFromListRef="OUL2"/>
+        <DayTimes>
+          <DayTime>
+            <StartTime>19:00</StartTime>
+            <EndTime>22:00</EndTime>
+            <Days>
+              <tvb-tp:Monday>N</tvb-tp:Monday>
+              <tvb-tp:Tuesday>N</tvb-tp:Tuesday>
+              <tvb-tp:Wednesday>N</tvb-tp:Wednesday>
+              <tvb-tp:Thursday>N</tvb-tp:Thursday>
+              <tvb-tp:Friday>N</tvb-tp:Friday>
+              <tvb-tp:Saturday>Y</tvb-tp:Saturday>
+              <tvb-tp:Sunday>N</tvb-tp:Sunday>
+            </Days>
+          </DayTime>
+        </DayTimes>
+        <DaypartName>Sports</DaypartName>
+        <AvailName>Saturday Evening games</AvailName>
+        <SpotLength>00:00:30</SpotLength>
+        <Periods>
+          <DetailedPeriod startDate="2007-04-28" endDate="2007-04-28">
+            <Rate>6000.00</Rate>
+            <SpotsPerWeek>2</SpotsPerWeek>
+            <DemoValues>
+              <DemoValue demoRef="DM3">13.5</DemoValue>
+            </DemoValues>
+          </DetailedPeriod>
+          <DetailedPeriod startDate="2007-05-12" endDate="2007-05-12">
+            <Rate>6000.00</Rate>
+            <SpotsPerWeek>1</SpotsPerWeek>
+            <DemoValues>
+              <DemoValue demoRef="DM3">13.5</DemoValue>
+            </DemoValues>
+          </DetailedPeriod>
+        </Periods>
+      </AvailLineWithDetailedPeriods>
+    </AvailList>
+    <SalesInformation title="YAAA 2007 Baseball Schedule" salesInfoId="SI0">
+      <Content>
+        <html>
+          <body leftmargin="0" topmargin="0" marginwidth="0" marginheight="0">
+            <table border="0" cellpadding="10" width="80%">
+              <tr align="center">
+                <th colspan="4">YAAA's 2007 Baseball Schedule</th>
+              </tr>
+              <tr bgcolor="#CCCC99">
+                <th>Date</th>
+                <th>Opposing Team</th>
+                <th>Time</th>
+                <th>Location</th>
+              </tr>
+              <tr align="center">
+                <td>Sat 4/21</td>
+                <td>Phillies</td>
+                <td>1PM</td>
+                <td>Home</td>
+              </tr>
+              <tr align="center">
+                <td>Sun 4/22</td>
+                <td>Marlins</td>
+                <td>1PM</td>
+                <td>Home</td>
+              </tr>
+              <tr align="center">
+                <td>Sat 4/28</td>
+                <td>Brewers</td>
+                <td>1PM</td>
+                <td>Away</td>
+              </tr>
+              <tr align="center">
+                <td>Sat 4/28</td>
+                <td>Brewers</td>
+                <td>7PM</td>
+                <td>Away</td>
+              </tr>
+              <tr align="center">
+                <td>Sun 4/29</td>
+                <td>Brewers</td>
+                <td>1PM</td>
+                <td>Away</td>
+              </tr>
+              <tr align="center">
+                <td>Sat 5/05</td>
+                <td>New York Yankees</td>
+                <td>1PM</td>
+                <td>Home</td>
+              </tr>
+              <tr align="center">
+                <td>Sun 5/06</td>
+                <td>New York Yankees</td>
+                <td>1PM</td>
+                <td>Home</td>
+              </tr>
+              <tr align="center">
+                <td>Sat 5/12</td>
+                <td>Nationals</td>
+                <td>7PM</td>
+                <td>Home</td>
+              </tr>
+            </table>
+          </body>
+        </html>
+      </Content>
+    </SalesInformation>
+  </Proposal>
+</AAAA-Message>
