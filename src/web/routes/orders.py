@@ -3126,7 +3126,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 cur.execute(
                     f"""SELECT TOP {n} ID_FILMATI, COD_PROGRA, DESCRIZIO, DURATA, NEWTYPE
                         FROM FILMATI
-                        WHERE NEWTYPE = 'PGM' AND (COD_PROGRA LIKE %s OR DESCRIZIO LIKE %s)
+                        WHERE NEWTYPE = 'PGM'
+                          AND (DATA_SCAD IS NULL OR DATA_SCAD >= CAST(GETDATE() AS DATE))
+                          AND (COD_PROGRA LIKE %s OR DESCRIZIO LIKE %s)
                         ORDER BY ID_FILMATI DESC""",
                     (like, like),
                 )
