@@ -112,6 +112,10 @@
         .run-btn:disabled { opacity: 0.45; cursor: default; }
         .pp-row.ok { border-color: rgba(163,190,140,0.5); }
         .pp-row.fail { border-color: rgba(191,97,106,0.5); }
+
+        .edl-drop { border: 2px dashed var(--border-color); border-radius: 8px; padding: 20px; text-align: center; font-size: 0.84rem; color: var(--text-muted); cursor: pointer; transition: all 0.15s; }
+        .edl-drop:hover { border-color: var(--nord10); color: var(--nord10); }
+        .edl-drop.drag { border-color: var(--nord10); background: rgba(94,129,172,0.12); color: var(--nord10); }
     </style>
 </head>
 <body>
@@ -217,6 +221,17 @@
             <div class="fm-filler-status" id="fmFillerStatus"></div>
             <div id="fmChosen" class="fm-chosen"></div>
             <button type="button" id="fmDone" class="fm-done" disabled>Use these fillers</button>
+        </div>
+
+        <div id="fmEdlPanel" style="display:none;">
+            <div class="fm-filler-status" id="fmEdlStatus"></div>
+            <div id="fmEdlDrop" class="edl-drop">⬇ Drop an EDIUS marker <b>.csv</b> here — or click to browse / paste below</div>
+            <input type="file" id="fmEdlFile" accept=".csv,text/csv,text/plain" style="display:none;" />
+            <textarea id="fmEdlText" class="field-input"
+                      style="width:100%; box-sizing:border-box; height:90px; font-family:monospace; font-size:0.76rem; margin-top:8px;"
+                      placeholder="…or paste the CSV contents here"></textarea>
+            <button type="button" id="fmEdlImport" class="fm-done" style="margin-top:10px;">Import &amp; validate EDL</button>
+            <div id="fmEdlResult" style="margin-top:8px; font-size:0.82rem;"></div>
         </div>
 
         <input type="text" id="fmSearch" class="field-input" style="width:100%; box-sizing:border-box;"
@@ -391,11 +406,19 @@
     const fmFillerStatus = document.getElementById('fmFillerStatus');
     const fmChosen = document.getElementById('fmChosen');
     const fmDone = document.getElementById('fmDone');
+    const fmEdlPanel = document.getElementById('fmEdlPanel');
+    const fmEdlStatus = document.getElementById('fmEdlStatus');
+    const fmEdlDrop = document.getElementById('fmEdlDrop');
+    const fmEdlFile = document.getElementById('fmEdlFile');
+    const fmEdlText = document.getElementById('fmEdlText');
+    const fmEdlImport = document.getElementById('fmEdlImport');
+    const fmEdlResult = document.getElementById('fmEdlResult');
     let modalIdx = null;
     let lastResults = [];
     let searchTimer = null;
-    let modalPhase = 'file';   // 'file' | 'fillers'
+    let modalPhase = 'file';   // 'file' | 'fillers' | 'edl'
     let fillerDraft = null;
+    let edlDraft = null;
 
     progList.addEventListener('click', function (e) {
         const row = e.target.closest('.prog-row');
@@ -406,7 +429,11 @@
         modalIdx = idx;
         modalPhase = 'file';
         fillerDraft = null;
+        edlDraft = null;
         fmFillerPanel.style.display = 'none';
+        fmEdlPanel.style.display = 'none';
+        fmSearch.style.display = '';
+        fmResults.style.display = '';
         fmHint.style.display = 'block';
         fmSearch.placeholder = 'Search media library (e.g. NEWSTODAY)…';
         const p = state.programs[idx];
@@ -424,8 +451,11 @@
 
     function closeModal() {
         modal.style.display = 'none';
-        modalIdx = null; modalPhase = 'file'; fillerDraft = null;
+        modalIdx = null; modalPhase = 'file'; fillerDraft = null; edlDraft = null;
         fmFillerPanel.style.display = 'none';
+        fmEdlPanel.style.display = 'none';
+        fmSearch.style.display = '';
+        fmResults.style.display = '';
     }
 
     async function searchFiles() {
@@ -480,6 +510,13 @@
         } catch (e) { /* leave pd empty */ }
 
         if (pd.error) { setAssignText(modalIdx, '→ ' + file.code + ' · ' + pd.error, true); closeModal(); return; }
+
+        // Single whole file, no EDL, no a/b/c pieces, but the slot has multiple
+        // program breaks → it must be EDL-marked. Offer the CSV import path.
+        if (!pd.has_pieces && (pd.prgs_slots || 0) > 1) {
+            enterEdlPhase(file, pd);
+            return;
+        }
 
         const fillers = pd.fillers_needed || 0;
         if (pd.status === 'fillers_needed' && fillers > 0) {
@@ -543,6 +580,72 @@
         setAssignText(modalIdx, '→ ' + d.pieces.length + ' pieces + ' + d.chosen.length + ' fillers / ' + d.slots + ' breaks', false);
         closeModal();
     });
+
+    // ── EDL-markup phase (single file, no EDL, no pieces, multiple breaks) ──
+    function enterEdlPhase(file, pd) {
+        modalPhase = 'edl';
+        edlDraft = { file: file, slots: pd.prgs_slots };
+        fmHint.style.display = 'none';
+        fmFillerPanel.style.display = 'none';
+        fmSearch.style.display = 'none';
+        fmResults.style.display = 'none';
+        fmEdlPanel.style.display = 'block';
+        fmEdlStatus.innerHTML = '<b>' + escHtml(file.code) + '</b> is a single file with no EDL and no a/b/c pieces, ' +
+            'but this slot has <b>' + pd.prgs_slots + ' breaks</b>. It needs EDL markup — enter it in Etere, ' +
+            'or drop today’s EDIUS marker CSV here (last marker = EOM, the rest = splits).';
+        fmEdlText.value = '';
+        fmEdlResult.innerHTML = '';
+        setAssignText(modalIdx, '→ ' + file.code + ' · needs EDL markup', true);
+    }
+
+    async function importEdl() {
+        if (!edlDraft) return;
+        const csv = fmEdlText.value.trim();
+        if (!csv) { fmEdlResult.innerHTML = '<span style="color:var(--nord11)">Paste or drop a CSV first.</span>'; return; }
+        const cu = (state.codUsers && state.codUsers[0]) || 1;
+        fmEdlResult.innerHTML = 'Writing &amp; validating EDL (transaction-safe)…';
+        fmEdlImport.disabled = true;
+        try {
+            const r = await fetch('/api/master-control/daily-programming/import-edl', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filmati: edlDraft.file.id, csv: csv, coduser: cu })
+            });
+            const data = await r.json();
+            if (!data.ok) {
+                fmEdlResult.innerHTML = '<span style="color:var(--nord11)">✗ ' +
+                    escHtml(data.error || data.message || 'failed') + '</span>';
+                return;
+            }
+            state.assignments[modalIdx] = { mode: 'explode', file: edlDraft.file, segments: data.count };
+            setAssignText(modalIdx, '→ ' + edlDraft.file.code + ' · explode (' + data.count + ' parts, EDL from CSV)', false);
+            closeModal();
+        } catch (e) {
+            fmEdlResult.innerHTML = '<span style="color:var(--nord11)">Error: ' + escHtml(e.message) + '</span>';
+        } finally {
+            fmEdlImport.disabled = false;
+        }
+    }
+
+    function readCsvFile(f) {
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = function () { fmEdlText.value = reader.result; };
+        reader.readAsText(f);
+    }
+
+    fmEdlDrop.addEventListener('click', function () { fmEdlFile.click(); });
+    fmEdlFile.addEventListener('change', function () { readCsvFile(fmEdlFile.files && fmEdlFile.files[0]); });
+    ['dragover', 'dragenter'].forEach(function (ev) {
+        fmEdlDrop.addEventListener(ev, function (e) { e.preventDefault(); fmEdlDrop.classList.add('drag'); });
+    });
+    ['dragleave', 'dragend'].forEach(function (ev) {
+        fmEdlDrop.addEventListener(ev, function (e) { e.preventDefault(); fmEdlDrop.classList.remove('drag'); });
+    });
+    fmEdlDrop.addEventListener('drop', function (e) {
+        e.preventDefault(); fmEdlDrop.classList.remove('drag');
+        readCsvFile(e.dataTransfer.files && e.dataTransfer.files[0]);
+    });
+    fmEdlImport.addEventListener('click', importEdl);
 
     fmSearch.addEventListener('input', function () {
         clearTimeout(searchTimer);

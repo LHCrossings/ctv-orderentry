@@ -3208,6 +3208,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 rows = cur.fetchall()
                 pieces = [r for r in rows
                           if len(r["COD_PROGRA"]) == len(base) + 1 and r["COD_PROGRA"][-1:].isalpha()]
+                has_pieces = bool(pieces)   # real a/b/c… siblings exist (vs single whole file)
                 if not pieces:  # no a/b/c siblings → single whole-file program
                     cur.execute("SELECT ID_FILMATI, COD_PROGRA, DURATA FROM FILMATI WHERE COD_PROGRA=%s", (code,))
                     pieces = cur.fetchall()
@@ -3216,7 +3217,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     cur.execute(_DP_PRGS_COUNT_SQL, (coduser, d, lo, hi))
                     slots = int(cur.fetchone()["n"])
             n = len(pieces)
-            out = {"base": base, "count": n, "prgs_slots": slots,
+            out = {"base": base, "count": n, "has_pieces": has_pieces, "prgs_slots": slots,
                    "pieces": [{"id": r["ID_FILMATI"], "code": r["COD_PROGRA"], "durata": r["DURATA"]} for r in pieces]}
             if slots is not None:
                 out["fillers_needed"] = max(0, slots - n)
@@ -3224,6 +3225,32 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             return out
         except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
             return {"error": f"Piece check failed: {exc}", "pieces": []}
+
+    @router.post("/api/master-control/daily-programming/import-edl")
+    async def daily_programming_import_edl(body: dict = Body(...)):
+        """Write an EDL to a single-file program from a dropped EDIUS marker CSV,
+        then self-validate via dbo.ExplodeEdl. Commits only if it explodes into
+        exactly the expected parts; otherwise rolls back untouched."""
+        from browser_automation.etere_direct_client import connect as _db_connect
+        from src.business_logic.services.edl_import import apply_edl_from_csv, parse_edius_csv
+        try:
+            filmati = int(body.get("filmati"))
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "Missing/invalid filmati"}
+        coduser = int(body.get("coduser") or 1)
+        try:
+            splits, eom = parse_edius_csv(body.get("csv") or "")
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+        try:
+            with _db_connect() as conn:
+                res = apply_edl_from_csv(conn, filmati, splits, eom, coduser)
+        except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
+            return {"ok": False, "error": f"EDL import failed: {exc}"}
+        res["splits"] = splits
+        res["eom"] = eom
+        res["count"] = len(splits) + 1
+        return res
 
     @router.get("/api/master-control/daily-programming/placement")
     async def daily_programming_placement(network: str, date: str):
