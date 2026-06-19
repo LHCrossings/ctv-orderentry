@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified" attributeFormDefault="unqualified">
+	<xsd:annotation>
+		<xsd:documentation>This schema has no namespace so it can be used in chameleon style for redefining restricted values as part of the aaaaMessageTemplate or other media specific schemas</xsd:documentation>
+	</xsd:annotation>
+	<xsd:element name="AAAA-Message" type="aaaaMessageType"/>
+	<!-- -->
+	<xsd:simpleType name="schemaNameString">
+		<xsd:restriction base="xsd:string"/>
+	</xsd:simpleType>
+	<!-- -->
+	<xsd:simpleType name="schemaVersionString">
+		<xsd:restriction base="xsd:string"/>
+	</xsd:simpleType>
+	<!-- -->
+	<xsd:simpleType name="mediaString">
+		<xsd:restriction base="xsd:string"/>
+	</xsd:simpleType>
+	<!-- -->
+	<xsd:simpleType name="businessObjectString">
+		<xsd:restriction base="xsd:string"/>
+	</xsd:simpleType>
+	<!-- -->
+	<xsd:simpleType name="actionString">
+		<xsd:restriction base="xsd:string"/>
+	</xsd:simpleType>
+	<!---->
+	<xsd:simpleType name="guid">
+		<xsd:annotation>
+			<xsd:documentation>TODO: Find a standard definition no reason for us to invent.</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string"/>
+	</xsd:simpleType>
+	<!---->
+	<xsd:simpleType name="uniqueMessageId">
+		<xsd:restriction base="guid"/>
+	</xsd:simpleType>
+	<!---->
+	<xsd:complexType name="aaaaMessageType">
+		<xsd:annotation>
+			<xsd:documentation>The root of all media documents, this element will be extended to include the media content</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="AAAA-Values">
+				<xsd:complexType>
+					<xsd:sequence>
+						<xsd:element name="SchemaName" type="schemaNameString">
+							<xsd:annotation>
+								<xsd:documentation>Name of the Schema (XSD) file used for validation of the data.  This value will be restricted in the media document. For example: spotRadioOrder</xsd:documentation>
+							</xsd:annotation>
+						</xsd:element>
+						<xsd:element name="SchemaVersion" type="schemaVersionString">
+							<xsd:annotation>
+								<xsd:documentation>Version number of the Schema (XSD) file used for validation of the data.  This value will be restricted in the media document. For example: 0.2e.2</xsd:documentation>
+							</xsd:annotation>
+						</xsd:element>
+						<xsd:element name="Media" type="mediaString">
+							<xsd:annotation>
+								<xsd:documentation>Identifies the media for this transmission. This value will be restricted in the media document. For example: SpotRadio</xsd:documentation>
+							</xsd:annotation>
+						</xsd:element>
+						<xsd:element name="BusinessObject" type="businessObjectString">
+							<xsd:annotation>
+								<xsd:documentation>Identifies the object for this message. This value will be restricted in the media document. For example: Order, Invoice.</xsd:documentation>
+							</xsd:annotation>
+						</xsd:element>
+						<xsd:element name="Action" type="actionString">
+							<xsd:annotation>
+								<xsd:documentation>The action to apply to the business object e.g. Create, Revise, Delete, etc.  This value will be restricted in the media document.</xsd:documentation>
+							</xsd:annotation>
+						</xsd:element>
+						<xsd:element name="UniqueMessageID" type="uniqueMessageId">
+							<xsd:annotation>
+								<xsd:documentation>Unique message id.  Created by message originator and used throughout message lifetime.  Message acknowledgement from receiver must include it.  Intermediaries (hub, gateway, etc.) use and reference for troubleshooting purposes in the routing and delivery of the message.</xsd:documentation>
+							</xsd:annotation>
+						</xsd:element>
+					</xsd:sequence>
+				</xsd:complexType>
+			</xsd:element>
+		</xsd:sequence>
+	</xsd:complexType>
+</xsd:schema>

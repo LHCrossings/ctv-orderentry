@@ -1,0 +1,367 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://www.AAAA.org/schemas/TVBGeneralTypes" targetNamespace="http://www.AAAA.org/schemas/TVBGeneralTypes" elementFormDefault="qualified" attributeFormDefault="unqualified" version="1">
+	<!-- -->
+	<xsd:attributeGroup name="sourceAttr">
+		<xsd:annotation>
+			<xsd:documentation>Group of attributes to specify the source system or organization for a data item</xsd:documentation>
+		</xsd:annotation>
+		<xsd:attribute name="source" type="sourceType" use="optional">
+			<xsd:annotation>
+				<xsd:documentation>Source for code definitions (agency, rep, station, other)</xsd:documentation>
+			</xsd:annotation>
+		</xsd:attribute>
+		<xsd:attribute name="sourceDescription" type="xsd:string" use="optional">
+			<xsd:annotation>
+				<xsd:documentation>used when source=Other</xsd:documentation>
+			</xsd:annotation>
+		</xsd:attribute>
+	</xsd:attributeGroup>
+	<!-- -->
+	<xsd:simpleType name="sourceType">
+		<xsd:annotation>
+			<xsd:documentation>Type defining Sources for Comments, IDs, etc</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string">
+			<xsd:enumeration value="Rep"/>
+			<xsd:enumeration value="Agency"/>
+			<xsd:enumeration value="Station"/>
+			<xsd:enumeration value="Other"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<!-- -->
+	<xsd:complexType name="sourceStringType">
+		<xsd:annotation>
+			<xsd:documentation>String type with source attributes</xsd:documentation>
+		</xsd:annotation>
+		<xsd:simpleContent>
+			<xsd:extension base="xsd:string">
+				<xsd:attributeGroup ref="sourceAttr"/>
+			</xsd:extension>
+		</xsd:simpleContent>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:complexType name="simpleCommentType">
+		<xsd:annotation>
+			<xsd:documentation>A simple comment for use when the source is known, such as with a status.</xsd:documentation>
+			<xsd:documentation>Each Comment line is limited to 255 characters</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="CommentLine" type="string255Type" maxOccurs="unbounded"/>
+		</xsd:sequence>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:complexType name="commentType">
+		<xsd:annotation>
+			<xsd:documentation>A group of comment elements that belong to a specific source.</xsd:documentation>
+		</xsd:annotation>
+		<xsd:complexContent>
+			<xsd:extension base="simpleCommentType">
+				<xsd:attributeGroup ref="sourceAttr"/>
+			</xsd:extension>
+		</xsd:complexContent>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:simpleType name="costType">
+		<xsd:annotation>
+			<xsd:documentation>Decimal format for currency</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:decimal">
+			<xsd:fractionDigits value="2"/>
+			<xsd:minInclusive value="0.00"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<!-- -->
+	<xsd:simpleType name="emailSimpleType">
+		<xsd:annotation>
+			<xsd:documentation>Valid e-mail format</xsd:documentation>
+		</xsd:annotation>
+		<xsd:union>
+			<xsd:simpleType>
+				<xsd:restriction base="xsd:string">
+					<xsd:pattern value="(\w[\w_\-\.]+)@((\[([0-9]{1,3}\.){3}[0-9]{1,3}\])|(([\w\-]+\.)+)([a-zA-Z]{2,4}))"/>
+				</xsd:restriction>
+			</xsd:simpleType>
+			<xsd:simpleType>
+				<xsd:restriction base="xsd:string">
+					<xsd:pattern value="(([-\w \.]+)|(&quot;\w[-\w \._]+&quot;) )?&lt;(\w[\w\-\._]+)@((\[([0-9]{1,3}\.){3}[0-9]{1,3}\])|(([\w\-]+\.)+)([a-zA-Z]{2,4}))&gt;"/>
+				</xsd:restriction>
+			</xsd:simpleType>
+		</xsd:union>
+	</xsd:simpleType>
+	<!-- -->
+	<xsd:simpleType name="hmTime">
+		<xsd:annotation>
+			<xsd:documentation>Time uses 12 hour or 24 hour format</xsd:documentation>
+		</xsd:annotation>
+		<xsd:union>
+			<xsd:simpleType>
+				<xsd:restriction base="xsd:string">
+					<xsd:pattern value="((01)|(02)|(03)|(04)|(05)|(06)|(07)|(08)|(09)|(10)|(11)|(12)):[012345][0123456789][aApP]"/>
+				</xsd:restriction>
+			</xsd:simpleType>
+			<xsd:simpleType>
+				<xsd:restriction base="xsd:string">
+					<xsd:pattern value="((00)|(01)|(02)|(03)|(04)|(05)|(06)|(07)|(08)|(09)|(10)|(11)|(12)|(13)|(14)|(15)|(16)|(17)|(18)|(19)|(20)|(21)|(22)|(23)):[012345][0123456789]"/>
+				</xsd:restriction>
+			</xsd:simpleType>
+		</xsd:union>
+	</xsd:simpleType>
+	<!-- -->
+	<xsd:simpleType name="dayOfWeekType">
+		<xsd:restriction base="xsd:string">
+			<xsd:enumeration value="Mo"/>
+			<xsd:enumeration value="Tu"/>
+			<xsd:enumeration value="We"/>
+			<xsd:enumeration value="Th"/>
+			<xsd:enumeration value="Fr"/>
+			<xsd:enumeration value="Sa"/>
+			<xsd:enumeration value="Su"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<!-- -->
+	<xsd:complexType name="daysOfWeekType">
+		<xsd:sequence>
+			<xsd:element name="Monday" type="yesNoType"/>
+			<xsd:element name="Tuesday" type="yesNoType"/>
+			<xsd:element name="Wednesday" type="yesNoType"/>
+			<xsd:element name="Thursday" type="yesNoType"/>
+			<xsd:element name="Friday" type="yesNoType"/>
+			<xsd:element name="Saturday" type="yesNoType"/>
+			<xsd:element name="Sunday" type="yesNoType"/>
+		</xsd:sequence>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:simpleType name="adIdType">
+		<xsd:annotation>
+			<xsd:documentation>AdID type</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string">
+			<xsd:length value="12"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<!-- -->
+	<xsd:simpleType name="string255Type">
+		<xsd:annotation>
+			<xsd:documentation>String type with 255 character limit</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string">
+			<xsd:maxLength value="255"/>
+			<xsd:minLength value="1"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<!-- -->
+	<xsd:simpleType name="yesNoType">
+		<xsd:annotation>
+			<xsd:documentation>Type for representing Yes/No values</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string">
+			<xsd:enumeration value="Y"/>
+			<xsd:enumeration value="N"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<!-- -->
+	<xsd:simpleType name="countryType">
+		<xsd:annotation>
+			<xsd:documentation>Orders only allow USA or Canada</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string">
+			<xsd:enumeration value="USA"/>
+			<xsd:enumeration value="Canada"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<!-- -->
+	<xsd:simpleType name="phoneSimpleType">
+		<xsd:annotation>
+			<xsd:documentation>Valid telephone number format</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string">
+			<xsd:pattern value="1? ?(\(\d{3}\))? ?\d{3}\-\d{4} ?(x\d+)?"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<!-- -->
+	<xsd:complexType name="addressType">
+		<xsd:annotation>
+			<xsd:documentation>Address type defintion</xsd:documentation>
+		</xsd:annotation>
+		<xsd:choice>
+			<xsd:sequence>
+				<xsd:element name="Street1" type="xsd:string" minOccurs="0">
+					<xsd:annotation>
+						<xsd:documentation>First line of street address</xsd:documentation>
+					</xsd:annotation>
+				</xsd:element>
+				<xsd:element name="Street2" type="xsd:string" minOccurs="0">
+					<xsd:annotation>
+						<xsd:documentation>Second line of street address</xsd:documentation>
+					</xsd:annotation>
+				</xsd:element>
+				<xsd:element name="Street3" type="xsd:string" minOccurs="0">
+					<xsd:annotation>
+						<xsd:documentation>Third line of street address</xsd:documentation>
+					</xsd:annotation>
+				</xsd:element>
+				<xsd:element name="City" type="xsd:string" minOccurs="0">
+					<xsd:annotation>
+						<xsd:documentation>City of address</xsd:documentation>
+					</xsd:annotation>
+				</xsd:element>
+				<xsd:element name="State" type="stateType" minOccurs="0"/>
+				<xsd:element name="PostalCode" type="postalCodeType" minOccurs="0"/>
+			</xsd:sequence>
+			<xsd:element name="AddressBlockLine" maxOccurs="4">
+				<xsd:annotation>
+					<xsd:documentation>Section to clearly handle addresses where explicit fields are not available</xsd:documentation>
+				</xsd:annotation>
+			</xsd:element>
+		</xsd:choice>
+		<xsd:attribute name="country" type="countryType" use="optional" default="USA">
+			<xsd:annotation>
+				<xsd:documentation>Country of address</xsd:documentation>
+			</xsd:annotation>
+		</xsd:attribute>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:complexType name="emailType">
+		<xsd:annotation>
+			<xsd:documentation>Valid Email Address</xsd:documentation>
+		</xsd:annotation>
+		<xsd:simpleContent>
+			<xsd:extension base="emailSimpleType">
+				<xsd:attribute name="type" use="optional">
+					<xsd:annotation>
+						<xsd:documentation>Email type (primary, secondary, home)</xsd:documentation>
+					</xsd:annotation>
+					<xsd:simpleType>
+						<xsd:restriction base="xsd:string">
+							<xsd:enumeration value="primary"/>
+							<xsd:enumeration value="secondary"/>
+							<xsd:enumeration value="home"/>
+						</xsd:restriction>
+					</xsd:simpleType>
+				</xsd:attribute>
+			</xsd:extension>
+		</xsd:simpleContent>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:complexType name="phoneType">
+		<xsd:annotation>
+			<xsd:documentation>Valid US phone number: Example: (312) 555-1234.</xsd:documentation>
+		</xsd:annotation>
+		<xsd:simpleContent>
+			<xsd:extension base="phoneSimpleType">
+				<xsd:attribute name="type" use="required">
+					<xsd:simpleType>
+						<xsd:restriction base="xsd:string">
+							<xsd:enumeration value="fax"/>
+							<xsd:enumeration value="voice"/>
+							<xsd:enumeration value="pager"/>
+						</xsd:restriction>
+					</xsd:simpleType>
+				</xsd:attribute>
+				<xsd:attribute name="location" use="optional">
+					<xsd:simpleType>
+						<xsd:restriction base="xsd:string">
+							<xsd:enumeration value="work"/>
+							<xsd:enumeration value="home"/>
+							<xsd:enumeration value="cell"/>
+						</xsd:restriction>
+					</xsd:simpleType>
+				</xsd:attribute>
+				<xsd:attribute name="country" type="countryType" use="optional" default="USA"/>
+			</xsd:extension>
+		</xsd:simpleContent>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:simpleType name="postalCodeType">
+		<xsd:annotation>
+			<xsd:documentation>US ZIP Code or Canadian Postal Code. For US: #####-XXXX (5 digit number with opptional 4 digit extension).  For Canada:  L#L #L# (Letter+Number+Letter+Space+Number+Letter+Number)</xsd:documentation>
+		</xsd:annotation>
+		<xsd:union>
+			<xsd:simpleType>
+				<xsd:restriction base="xsd:string">
+					<xsd:pattern value="\d{5}(-\d\d\d\d)?"/>
+				</xsd:restriction>
+			</xsd:simpleType>
+			<xsd:simpleType>
+				<xsd:restriction base="xsd:string">
+					<xsd:pattern value="[A-Z]\d[A-Z]\s\d[A-Z]\d"/>
+				</xsd:restriction>
+			</xsd:simpleType>
+		</xsd:union>
+	</xsd:simpleType>
+	<!-- -->
+	<xsd:simpleType name="stateType">
+		<xsd:annotation>
+			<xsd:documentation>US State/Territory or Canadian Province Abbreviations</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string">
+			<xsd:enumeration value="AL"/>
+			<xsd:enumeration value="AK"/>
+			<xsd:enumeration value="AZ"/>
+			<xsd:enumeration value="AR"/>
+			<xsd:enumeration value="CA"/>
+			<xsd:enumeration value="CO"/>
+			<xsd:enumeration value="CT"/>
+			<xsd:enumeration value="DE"/>
+			<xsd:enumeration value="DC"/>
+			<xsd:enumeration value="FL"/>
+			<xsd:enumeration value="GA"/>
+			<xsd:enumeration value="GU"/>
+			<xsd:enumeration value="HI"/>
+			<xsd:enumeration value="ID"/>
+			<xsd:enumeration value="IL"/>
+			<xsd:enumeration value="IN"/>
+			<xsd:enumeration value="IA"/>
+			<xsd:enumeration value="KS"/>
+			<xsd:enumeration value="KY"/>
+			<xsd:enumeration value="LA"/>
+			<xsd:enumeration value="ME"/>
+			<xsd:enumeration value="MD"/>
+			<xsd:enumeration value="MA"/>
+			<xsd:enumeration value="MI"/>
+			<xsd:enumeration value="MN"/>
+			<xsd:enumeration value="MS"/>
+			<xsd:enumeration value="MO"/>
+			<xsd:enumeration value="MT"/>
+			<xsd:enumeration value="NE"/>
+			<xsd:enumeration value="NV"/>
+			<xsd:enumeration value="NH"/>
+			<xsd:enumeration value="NJ"/>
+			<xsd:enumeration value="NM"/>
+			<xsd:enumeration value="NY"/>
+			<xsd:enumeration value="NC"/>
+			<xsd:enumeration value="ND"/>
+			<xsd:enumeration value="OH"/>
+			<xsd:enumeration value="OK"/>
+			<xsd:enumeration value="OR"/>
+			<xsd:enumeration value="PA"/>
+			<xsd:enumeration value="PR"/>
+			<xsd:enumeration value="RI"/>
+			<xsd:enumeration value="SC"/>
+			<xsd:enumeration value="SD"/>
+			<xsd:enumeration value="TN"/>
+			<xsd:enumeration value="TX"/>
+			<xsd:enumeration value="UT"/>
+			<xsd:enumeration value="VT"/>
+			<xsd:enumeration value="VI"/>
+			<xsd:enumeration value="VA"/>
+			<xsd:enumeration value="WA"/>
+			<xsd:enumeration value="WV"/>
+			<xsd:enumeration value="WI"/>
+			<xsd:enumeration value="WY"/>
+			<xsd:enumeration value="AB"/>
+			<xsd:enumeration value="BC"/>
+			<xsd:enumeration value="MB"/>
+			<xsd:enumeration value="NB"/>
+			<xsd:enumeration value="NF"/>
+			<xsd:enumeration value="NT"/>
+			<xsd:enumeration value="NS"/>
+			<xsd:enumeration value="ON"/>
+			<xsd:enumeration value="PE"/>
+			<xsd:enumeration value="QC"/>
+			<xsd:enumeration value="SK"/>
+			<xsd:enumeration value="YT"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<!-- -->
+</xsd:schema>

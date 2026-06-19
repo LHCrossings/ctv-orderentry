@@ -1,0 +1,868 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+  xmlns:proposal="http://www.AAAA.org/schemas/spotTVCableProposal"
+  xmlns:tvb="http://www.AAAA.org/schemas/spotTV"
+  xmlns:tvb-tp="http://www.AAAA.org/schemas/TVBGeneralTypes"
+  targetNamespace="http://www.AAAA.org/schemas/spotTVCableProposal" elementFormDefault="qualified"
+  attributeFormDefault="unqualified">
+  <!--=============================================================================-->
+  <xsd:annotation>
+    <xsd:documentation> Schema definition for proposal document </xsd:documentation>
+  </xsd:annotation>
+  <!--=============================================================================-->
+  <xsd:import namespace="http://www.AAAA.org/schemas/spotTV" schemaLocation="spotTV-2.4.1.0.xsd"/>
+  <xsd:import namespace="http://www.AAAA.org/schemas/TVBGeneralTypes"
+    schemaLocation="TVBGeneralTypes-0.0.1.xsd"/>
+  <!-- -->
+  <xsd:redefine schemaLocation="aaaaMessageHeader-0.2.0.1.xsd">
+    <!-- -->
+    <xsd:simpleType name="schemaNameString">
+      <xsd:restriction base="proposal:schemaNameString">
+        <xsd:enumeration value="SpotTVCableProposal"/>
+      </xsd:restriction>
+    </xsd:simpleType>
+    <!-- -->
+    <xsd:simpleType name="schemaVersionString">
+      <xsd:restriction base="proposal:schemaVersionString">
+        <xsd:enumeration value="0.3.0.5"/>
+      	<xsd:enumeration value="0.3.0.5A"/>
+      </xsd:restriction>
+    </xsd:simpleType>
+    <!-- -->
+    <xsd:simpleType name="mediaString">
+      <xsd:restriction base="proposal:mediaString">
+        <xsd:enumeration value="SpotCable"/>
+        <xsd:enumeration value="SpotTV"/>
+      </xsd:restriction>
+    </xsd:simpleType>
+    <!-- -->
+    <xsd:simpleType name="businessObjectString">
+      <xsd:restriction base="proposal:businessObjectString">
+        <xsd:enumeration value="Proposal"/>
+      </xsd:restriction>
+    </xsd:simpleType>
+    <!-- -->
+    <xsd:simpleType name="actionString">
+      <xsd:restriction base="proposal:actionString">
+        <xsd:enumeration value="New"/>
+        <xsd:enumeration value="Revised"/>
+      </xsd:restriction>
+    </xsd:simpleType>
+    <!-- -->
+    <xsd:complexType name="aaaaMessageType">
+      <xsd:complexContent>
+        <xsd:extension base="proposal:aaaaMessageType">
+          <xsd:sequence>
+            <xsd:element ref="proposal:Proposal"/>
+          </xsd:sequence>
+        </xsd:extension>
+      </xsd:complexContent>
+    </xsd:complexType>
+  </xsd:redefine>
+  <!--=============================================================================-->
+  <xsd:annotation>
+    <xsd:documentation> Element Definitions For Proposal Entities </xsd:documentation>
+  </xsd:annotation>
+  <!--=============================================================================-->
+  <xsd:element name="Proposal">
+    <xsd:annotation>
+      <xsd:documentation>Avail inventory the seller is sending to the buyer in this transaction.
+        Sales information may also be included. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:complexType>
+      <xsd:complexContent>
+        <xsd:extension base="proposal:dateSpanType">
+          <xsd:sequence>
+            <xsd:element ref="proposal:Seller"/>
+            <xsd:element ref="proposal:Buyer"/>
+            <xsd:element ref="proposal:Advertiser" minOccurs="0"/>
+            <xsd:element name="Name" type="tvb-tp:string255Type">
+              <xsd:annotation>
+                <xsd:documentation>A name for the proposal the seller includes. </xsd:documentation>
+              </xsd:annotation>
+            </xsd:element>
+            <xsd:element name="SellerReference" type="tvb-tp:string255Type" minOccurs="0">
+              <xsd:annotation>
+                <xsd:documentation>A reference identifier the seller includes with the proposal, and
+                  may not be unique for the seller. For example this may be a contract number.
+                </xsd:documentation>
+              </xsd:annotation>
+            </xsd:element>
+            <xsd:element name="Outlets" type="proposal:outletsForProposalType">
+              <xsd:annotation>
+                <xsd:documentation>The list of outlets offering avails for this proposal. All the
+                  outlets on the proposal must be for a single media, from a single market and
+                  offered for sale by the seller. The list of outlets are added on the proposal, and
+                  referenced directly in the avail lists and indirectly in the avail lines, to
+                  enforce a single media type across the entire proposal. </xsd:documentation>
+              </xsd:annotation>
+            </xsd:element>
+            <xsd:element ref="proposal:AvailList" maxOccurs="unbounded"/>
+            <xsd:element ref="proposal:SalesInformation" minOccurs="0" maxOccurs="unbounded"/>
+          </xsd:sequence>
+          <xsd:attribute name="uniqueIdentifier" type="tvb-tp:string255Type" use="required">
+            <xsd:annotation>
+              <xsd:documentation>A proposal identifier unique for the seller and constructed by the
+                seller. This value will be used to associate revisions to this proposal in the
+                workflow. </xsd:documentation>
+            </xsd:annotation>
+          </xsd:attribute>
+          <xsd:attribute name="version" type="xsd:positiveInteger" use="required">
+            <xsd:annotation>
+              <xsd:documentation>An increasing positive integer value that will be used to sequence
+                proposal revisions. The count does not need to be sequential. It can be a send count
+                or a change count. Change of value is initiated by a seller change. For the first
+                send of a proposal, e.g. a new proposal, the count should be set to 1.
+              </xsd:documentation>
+            </xsd:annotation>
+          </xsd:attribute>
+          <xsd:attribute name="sendDateTime" type="xsd:dateTime" use="required">
+            <xsd:annotation>
+              <xsd:documentation>The date and time when this version of the proposal was transmitted
+                from the seller to the buyer. </xsd:documentation>
+            </xsd:annotation>
+          </xsd:attribute>
+          <xsd:attribute name="weekStartDay" type="tvb-tp:dayOfWeekType" use="required">
+            <xsd:annotation>
+              <xsd:documentation>Specifies which day the week starts on for this proposal. 'Mo' is
+                for a normal broadcast week. </xsd:documentation>
+            </xsd:annotation>
+          </xsd:attribute>
+        </xsd:extension>
+      </xsd:complexContent>
+    </xsd:complexType>
+    <xsd:unique name="AvailListIdentifier">
+      <xsd:annotation>
+        <xsd:documentation>Constraint requires the avail list identifier to be unique within the
+          proposal. </xsd:documentation>
+      </xsd:annotation>
+      <xsd:selector xpath="proposal:AvailList"/>
+      <xsd:field xpath="@identifier"/>
+    </xsd:unique>
+  </xsd:element>
+  <!-- -->
+  <xsd:element name="Seller">
+    <xsd:annotation>
+      <xsd:documentation>The entity sending the proposal. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:complexType>
+      <xsd:sequence>
+        <xsd:element name="OfficeName" type="tvb-tp:string255Type" minOccurs="0">
+          <xsd:annotation>
+            <xsd:documentation>For example if the seller had offices in more than one city, this
+              field may contain the office location. </xsd:documentation>
+          </xsd:annotation>
+        </xsd:element>
+        <xsd:element name="Salesperson">
+          <xsd:complexType>
+            <xsd:sequence>
+              <xsd:element name="Phone" type="tvb-tp:phoneType" minOccurs="0" maxOccurs="unbounded"/>
+              <xsd:element name="Email" type="tvb-tp:emailType" minOccurs="0" maxOccurs="unbounded"
+              />
+            </xsd:sequence>
+            <xsd:attribute name="name" type="tvb-tp:string255Type" use="required"/>
+          </xsd:complexType>
+        </xsd:element>
+      </xsd:sequence>
+      <xsd:attribute name="companyName" type="tvb-tp:string255Type" use="required"/>
+    </xsd:complexType>
+  </xsd:element>
+  <!--  -->
+  <xsd:element name="Buyer">
+    <xsd:annotation>
+      <xsd:documentation>The entity receiving the proposal. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:complexType>
+      <xsd:sequence>
+        <xsd:element name="OfficeName" type="tvb-tp:string255Type" minOccurs="0">
+          <xsd:annotation>
+            <xsd:documentation>For example if the buyer had offices in more than one city, this
+              field may contain the office location. </xsd:documentation>
+          </xsd:annotation>
+        </xsd:element>
+        <xsd:element name="BuyerName" type="tvb-tp:string255Type" minOccurs="0"/>
+      </xsd:sequence>
+      <xsd:attribute name="buyingCompanyName" type="tvb-tp:string255Type" use="required"/>
+    </xsd:complexType>
+  </xsd:element>
+  <!--  -->
+  <xsd:element name="Advertiser">
+    <xsd:annotation>
+      <xsd:documentation>The entity the buyer is preparing to order for. The product, or piggy back
+        pair of products, to be advertised can also be included. The advertiser must exists if a
+        product is to be included on the proposal. This rule is enforced here but not by the
+        advertiser and product elements from the TVB spot TV library. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:complexType>
+      <xsd:sequence>
+        <xsd:element name="Product" minOccurs="0">
+          <xsd:annotation>
+            <xsd:documentation>Product to be advertised. Include piggyback product if this is for a
+              piggyback pair. </xsd:documentation>
+          </xsd:annotation>
+          <xsd:complexType>
+            <xsd:complexContent>
+              <xsd:extension base="proposal:productType">
+                <xsd:sequence>
+                  <xsd:element name="PiggybackProduct" type="proposal:productType" minOccurs="0">
+                    <xsd:annotation>
+                      <xsd:documentation>Piggyback product for piggyback pair. </xsd:documentation>
+                    </xsd:annotation>
+                  </xsd:element>
+                </xsd:sequence>
+              </xsd:extension>
+            </xsd:complexContent>
+          </xsd:complexType>
+        </xsd:element>
+      </xsd:sequence>
+      <xsd:attribute name="name" type="tvb-tp:string255Type" use="required"/>
+    </xsd:complexType>
+  </xsd:element>
+  <!--  -->
+  <xsd:element name="AvailList" type="proposal:availListType">
+    <xsd:annotation>
+      <xsd:documentation>A group of uploadable avails for the buyer. The avail may include
+      spots.</xsd:documentation>
+    </xsd:annotation>
+    <xsd:key name="AvailListOutletKey">
+      <xsd:annotation>
+        <xsd:documentation>Defines the outlet ids from the outlet list on this avail list as unique
+          keys. </xsd:documentation>
+      </xsd:annotation>
+      <xsd:selector xpath="proposal:OutletReferences/proposal:OutletReference"/>
+      <xsd:field xpath="@outletForListId"/>
+    </xsd:key>
+    <xsd:keyref name="AvailListOutletKeyReference" refer="proposal:AvailListOutletKey">
+      <xsd:annotation>
+        <xsd:documentation>Constrains the outlet ids on the avail lines to be from the outlet list
+          on this avail list. </xsd:documentation>
+      </xsd:annotation>
+      <xsd:selector
+        xpath="proposal:AvailLineWithPeriods/proposal:OutletReference | proposal:AvailLineWithDetailedPeriods/proposal:OutletReference"/>
+      <xsd:field xpath="@outletFromListRef"/>
+    </xsd:keyref>
+    <xsd:key name="AvailListDemoCategoryKey">
+      <xsd:annotation>
+        <xsd:documentation>Defines the demo categories on this avail list as unique keys.
+        </xsd:documentation>
+      </xsd:annotation>
+      <xsd:selector xpath="proposal:DemoCategories/proposal:DemoCategory"/>
+      <xsd:field xpath="@DemoId"/>
+    </xsd:key>
+    <xsd:keyref name="AvailListDemoCategoryKeyReference" refer="proposal:AvailListDemoCategoryKey">
+      <xsd:annotation>
+        <xsd:documentation>Constrains the target demo and the demo values to be for a demo category
+          from this avail list. </xsd:documentation>
+      </xsd:annotation>
+      <xsd:selector
+        xpath="proposal:TargetDemo | proposal:AvailLineWithPeriods/proposal:DemoValues/proposal:DemoValue | proposal:AvailLineWithDetailedPeriods/proposal:Periods/proposal:DetailedPeriod/proposal:DemoValues/proposal:DemoValue | proposal:AvailLineWithDetailedPeriods/proposal:Periods/proposal:DayDetailedPeriod/proposal:DemoValues/proposal:DemoValue"/>
+      <xsd:field xpath="@demoRef "/>
+    </xsd:keyref>
+  </xsd:element>
+  <!--  -->
+  <xsd:element name="SalesInformation">
+    <xsd:annotation>
+      <xsd:documentation>Supporting HTML documents the seller includes for the proposal. These
+        documents may consist of additional research data, detailed information about the station or
+        avails, or other sales information. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:complexType>
+      <xsd:sequence>
+        <xsd:element name="Content" type="xsd:anyType"/>
+      </xsd:sequence>
+      <xsd:attribute name="title" type="tvb-tp:string255Type" use="required">
+        <xsd:annotation>
+          <xsd:documentation>Title for the sales information.
+          </xsd:documentation>
+        </xsd:annotation>
+      </xsd:attribute>      
+      <xsd:attribute name="salesInfoId" use="required">
+        <xsd:annotation>
+          <xsd:documentation>Unique identifier for sales information, used by salesInfoRef.
+          </xsd:documentation>
+        </xsd:annotation>
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:ID">
+            <xsd:pattern value="SI[0-9]+"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:attribute>
+    </xsd:complexType>
+  </xsd:element>
+  <!--  -->
+  <xsd:element name="DemoValues">
+    <xsd:annotation>
+      <xsd:documentation>Demo values for any, or all, of the demo categories defined on the avail
+        list. A demo value includes a reference to the category it applies to and a value in the
+        appropriate format. Each demo category may only have a single demo value within this group
+        of demo values. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:complexType>
+      <xsd:sequence>
+        <xsd:element name="DemoValue" type="tvb:demoValueType" maxOccurs="20"/>
+      </xsd:sequence>
+    </xsd:complexType>
+    <xsd:unique name="DemoValueConstraint">
+      <xsd:annotation>
+        <xsd:documentation>Constraint allows only up to one demo value for a demo category.
+        </xsd:documentation>
+      </xsd:annotation>
+      <xsd:selector xpath="proposal:DemoValue"/>
+      <xsd:field xpath="@demoRef"/>
+    </xsd:unique>
+  </xsd:element>
+  <!--  -->
+  <!--=============================================================================-->
+  <xsd:annotation>
+    <xsd:documentation> Complex Type Definitions For Proposal Entities </xsd:documentation>
+  </xsd:annotation>
+  <!--=============================================================================-->
+  <xsd:complexType name="dateSpanType">
+    <xsd:annotation>
+      <xsd:documentation>A date range with a required start date and a required end date.
+      </xsd:documentation>
+    </xsd:annotation>
+    <xsd:attribute name="startDate" type="xsd:date" use="required"/>
+    <xsd:attribute name="endDate" type="xsd:date" use="required"/>
+  </xsd:complexType>
+  <!--  -->
+  <xsd:complexType name="dayTimeType">
+    <xsd:annotation>
+      <xsd:documentation>Type for representing a period of time within a day or group of days. This
+        data type is used to specify the time and days a program airs, and can include a program
+        name. The time is represented in a 30 hour format to reflect the broadcast day. The program
+        name should be used when there are multiple programs associated with an avail line, e.g., an
+        orbit. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:sequence>
+      <xsd:element name="StartTime" type="proposal:broadcastDayTimeType"/>
+      <xsd:element name="EndTime" type="proposal:broadcastDayTimeType"/>
+      <xsd:element name="Days" type="tvb-tp:daysOfWeekType"/>
+      <xsd:element name="ProgramName" type="tvb-tp:string255Type" minOccurs="0"/>
+    </xsd:sequence>
+  </xsd:complexType>
+  <!-- -->
+  <xsd:complexType name="productType">
+    <xsd:annotation>
+      <xsd:documentation>Name of the product to be advertised. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:attribute name="name" type="tvb-tp:string255Type" use="required"/>
+  </xsd:complexType>
+  <!--  -->
+  <xsd:complexType name="availListType">
+    <xsd:annotation>
+      <xsd:documentation>Defines basic information for all avail lists. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:complexContent>
+      <xsd:extension base="proposal:dateSpanType">
+        <xsd:sequence>
+          <xsd:element name="Name" type="tvb-tp:string255Type">
+            <xsd:annotation>
+              <xsd:documentation>A name the seller includes for this list of avails.
+              </xsd:documentation>
+            </xsd:annotation>
+          </xsd:element>
+          <xsd:element name="OutletReferences">
+            <xsd:annotation>
+              <xsd:documentation>A list of the outlets offering avails for this avail list.
+              </xsd:documentation>
+            </xsd:annotation>
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="OutletReference" type="proposal:outletForListType"
+                  maxOccurs="unbounded"/>
+              </xsd:sequence>
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="DemoCategories" minOccurs="0">
+            <xsd:annotation>
+              <xsd:documentation>A list of demo categories, up to 20, the seller includes.
+              </xsd:documentation>
+            </xsd:annotation>
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="DemoCategory" type="tvb:demoType" maxOccurs="20"/>
+              </xsd:sequence>
+            </xsd:complexType>
+            <xsd:unique name="DemoCategory">
+              <xsd:annotation>
+                <xsd:documentation>Constraint requires the demo categories to be unique within the
+                  avail list. </xsd:documentation>
+              </xsd:annotation>
+              <xsd:selector xpath="proposal:DemoCategory"/>
+              <xsd:field xpath="tvb:DemoType"/>
+              <xsd:field xpath="tvb:Group"/>
+              <xsd:field xpath="tvb:AgeFrom"/>
+              <xsd:field xpath="tvb:AgeTo"/>
+            </xsd:unique>
+          </xsd:element>
+          <xsd:element name="TargetDemo" minOccurs="0">
+            <xsd:annotation>
+              <xsd:documentation>Reference to the target or primary demo category for this avail
+                list. </xsd:documentation>
+            </xsd:annotation>
+            <xsd:complexType>
+              <xsd:attribute name="demoRef" type="tvb:demoRefType" use="required"/>
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="SupplementalSalesInfo" minOccurs="0">
+            <xsd:annotation>
+              <xsd:documentation>Reference to additional sales information related to this avail
+                list. </xsd:documentation>
+            </xsd:annotation>
+            <xsd:complexType>
+              <xsd:attribute name="salesInfoRef" type="proposal:salesInfoRefType" use="required">
+                <xsd:annotation>
+                  <xsd:documentation>Used to refer to a specific set of sales information by unique
+                    identifier. </xsd:documentation>
+                </xsd:annotation>
+              </xsd:attribute>
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="Comment" type="tvb-tp:simpleCommentType" minOccurs="0">
+            <xsd:annotation>
+              <xsd:documentation>Comments related to this avail list provided by the seller.
+              </xsd:documentation>
+            </xsd:annotation>
+          </xsd:element>
+          <xsd:choice>
+            <xsd:annotation>
+              <xsd:documentation>There are two formats of avail offers. </xsd:documentation>
+            </xsd:annotation>
+            <xsd:element name="AvailLineWithPeriods" type="proposal:availLineWithPeriodsType"
+              maxOccurs="unbounded">
+              <xsd:annotation>
+                <xsd:documentation> These avails have one rate, and possibly a total number of spots
+                  and/or a set of demo values, for all of the available periods on the avail line.
+                </xsd:documentation>
+              </xsd:annotation>
+            </xsd:element>
+            <xsd:element name="AvailLineWithDetailedPeriods"
+              type="proposal:availLineWithDetailedPeriodsType" maxOccurs="unbounded">
+              <xsd:annotation>
+                <xsd:documentation> These avails have a rate, and possibly the schedule of spots
+                  and/or a set of demo values, for each available period. The schedule of spots may
+                  be the number of spots per week or the number of spots by day.
+                </xsd:documentation>
+              </xsd:annotation>
+            </xsd:element>
+          </xsd:choice>
+        </xsd:sequence>
+        <xsd:attribute name="identifier" type="tvb-tp:string255Type" use="required">
+          <xsd:annotation>
+            <xsd:documentation>Unique identifier for this avail list. Must be unique for the
+              proposal, and in combination with the proposal identifier is unique for the seller.
+            </xsd:documentation>
+          </xsd:annotation>
+        </xsd:attribute>
+        <xsd:attribute name="isPackage" type="tvb-tp:yesNoType" use="required">
+          <xsd:annotation>
+            <xsd:documentation>Is a flag indicating if the seller is offering this avail list as a
+              package. A package is a group of avails, which may include spots, that is being
+              offered together. Packages typically include discounted rates and may include some
+              less desirable inventory. </xsd:documentation>
+          </xsd:annotation>
+        </xsd:attribute>
+      </xsd:extension>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <!--  -->
+  <xsd:complexType name="televisionStationType">
+    <xsd:annotation>
+      <xsd:documentation>Description of a television station offering avails. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:attribute name="callLetters" type="tvb-tp:string255Type" use="required"/>
+    <xsd:attribute name="parentPlus" type="tvb-tp:yesNoType" use="required"/>
+    <xsd:attribute name="outletId" type="proposal:outletIdType" use="required"/>
+  </xsd:complexType>
+  <!-- -->
+  <xsd:complexType name="cableStationType">
+    <xsd:annotation>
+      <xsd:documentation>Description of a cable station, e.g. a cable system or a cable network,
+        offering avails. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:attribute name="syscode" type="tvb-tp:string255Type" use="required"/>
+    <xsd:attribute name="network" type="tvb-tp:string255Type" use="optional"/>
+    <xsd:attribute name="outletId" type="proposal:outletIdType" use="required"/>
+  </xsd:complexType>
+  <!-- -->
+  <xsd:complexType name="outletsForProposalType">
+    <xsd:annotation>
+      <xsd:documentation>List of all the outlets on the proposal, which is required to be either all
+        television stations or all cable stations. Outlets defined on the proposal are referenced in
+        the avail list. Outlet references on the avail list are then referenced in the avail line.
+        This is to ensure a single consistent media type throughout the entire proposal.
+      </xsd:documentation>
+    </xsd:annotation>
+    <xsd:choice>
+      <xsd:element name="TelevisionStation" type="proposal:televisionStationType"
+        maxOccurs="unbounded"/>
+      <xsd:element name="CableStation" type="proposal:cableStationType" maxOccurs="unbounded"/>
+    </xsd:choice>
+  </xsd:complexType>
+  <!--  -->
+  <xsd:complexType name="outletForListType">
+    <xsd:annotation>
+      <xsd:documentation>An outlet, television station or cable station, from the list of outlets on
+        the proposal for an avail list. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:sequence>
+      <xsd:element name="Comment" type="tvb-tp:simpleCommentType" minOccurs="0"/>
+    </xsd:sequence>
+    <xsd:attribute name="outletFromProposalRef" type="proposal:outletFromProposalRefType"
+      use="required"/>
+    <xsd:attribute name="outletForListId" use="required">
+      <xsd:annotation>
+        <xsd:documentation>Unique identifier for an outlet on an avail list, which can be either a
+          television station or a cable station. Used by OutletFromListRef. </xsd:documentation>
+      </xsd:annotation>
+      <xsd:simpleType>
+        <xsd:restriction base="xsd:ID">
+          <xsd:pattern value="OUL[0-9]+"/>
+        </xsd:restriction>
+      </xsd:simpleType>
+    </xsd:attribute>
+  </xsd:complexType>
+  <!--  -->
+  <xsd:complexType name="outletForAvailType">
+    <xsd:annotation>
+      <xsd:documentation>A television station or cable station for an avail line from the list of
+        outlets on the avail list. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:attribute name="outletFromListRef" type="proposal:outletFromListRefType" use="required">
+      <xsd:annotation>
+        <xsd:documentation>Refers to a television station or cable station on the avail list.
+        </xsd:documentation>
+      </xsd:annotation>
+    </xsd:attribute>
+  </xsd:complexType>
+  <!--  -->
+  <xsd:complexType name="availLineBaseType">
+    <xsd:annotation>
+      <xsd:documentation>Defines basic information for all avail lines. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:sequence>
+      <xsd:element name="OutletReference" type="proposal:outletForAvailType">
+        <xsd:annotation>
+          <xsd:documentation>Refers to an outlet for an avail line. </xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="DayTimes">
+        <xsd:annotation>
+          <xsd:documentation>The days and times the avail airs. Multiple air times and program names
+            are allowed to support orbits. The times are in a 30 hour time format.
+          </xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="DayTime" type="proposal:dayTimeType" maxOccurs="unbounded"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="DaypartName" type="tvb-tp:string255Type" minOccurs="0">
+        <xsd:annotation>
+          <xsd:documentation>The name of the seller's daypart, or time segment, for the avail.
+          </xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="AvailName" type="tvb-tp:string255Type">
+        <xsd:annotation>
+          <xsd:documentation>The name or description of the avail. </xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="SpotLength" type="proposal:hmsDurationType">
+        <xsd:annotation>
+          <xsd:documentation>The length of the spot being offered and can be up to one day.
+          </xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name="Comment" type="tvb-tp:simpleCommentType" minOccurs="0">
+        <xsd:annotation>
+          <xsd:documentation>Additional avail line comment text provided by the seller.
+          </xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+    </xsd:sequence>
+  </xsd:complexType>
+  <!-- -->
+  <xsd:complexType name="availLineWithPeriodsType">
+    <xsd:annotation>
+      <xsd:documentation>Avail offer with one rate for all of the available periods, and possibly a
+        total number of spots and/or a set of demo values for the entire group of available periods.
+      </xsd:documentation>
+    </xsd:annotation>
+    <xsd:complexContent>
+      <xsd:extension base="proposal:availLineBaseType">
+        <xsd:sequence>
+          <xsd:element name="Rate" type="tvb-tp:costType">
+            <xsd:annotation>
+              <xsd:documentation>Cost per spot for this avail. The money format requires cents.
+              </xsd:documentation>
+            </xsd:annotation>
+          </xsd:element>
+          <xsd:element name="TotalSpots" type="xsd:positiveInteger" minOccurs="0">
+            <xsd:annotation>
+              <xsd:documentation>Total number of spots for the avail across all the available
+                periods. Value must be 1 or more. </xsd:documentation>
+            </xsd:annotation>
+          </xsd:element>
+          <xsd:element ref="proposal:DemoValues" minOccurs="0"/>
+          <xsd:element name="Periods">
+            <xsd:annotation>
+              <xsd:documentation>Defines the group of periods the avail is being offered for. A
+                period is a date range, specified by a start date and end date. This group is
+                specified when the avail being offered has one rate for all the periods. If there is
+                a number of spots it represents the total number across the entire group of
+                available periods. If there is a set of demo values it is also for the entire group
+                of available periods. The rate, number of spots and demo values are specified
+                separately under the avail line. </xsd:documentation>
+            </xsd:annotation>
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="Period" type="proposal:periodType" maxOccurs="unbounded">
+                  <xsd:annotation>
+                    <xsd:documentation>A date range the avail is being offered for.
+                    </xsd:documentation>
+                  </xsd:annotation>
+                </xsd:element>
+              </xsd:sequence>
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:sequence>
+      </xsd:extension>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <!--  -->
+  <xsd:complexType name="availLineWithDetailedPeriodsType">
+    <xsd:annotation>
+      <xsd:documentation>Avail offer with a rate, and possibly number of spots and/or set of demo
+        values, for each available period. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:complexContent>
+      <xsd:extension base="proposal:availLineBaseType">
+        <xsd:sequence>
+          <xsd:element name="Periods">
+            <xsd:annotation>
+              <xsd:documentation>Defines the group of periods the avail is being offered for along
+                with period specific details. The rate per spot, and possibly the number of spots
+                and/or set of demo values, is specified for each period. A period is a date range,
+                specified by a start date and end date. The detailed periods should be used when the
+                rate, and/or the number of spots per week, and/or the set of demo values varies
+                across two or more available periods. The rate, number of spots and demo values are
+                not specified directly under the avail line but are specified under the available
+                period. </xsd:documentation>
+            </xsd:annotation>
+            <xsd:complexType>
+              <xsd:choice>
+                <xsd:element name="DetailedPeriod" type="proposal:detailedPeriodType"
+                  maxOccurs="unbounded">
+                  <xsd:annotation>
+                    <xsd:documentation>A date range, spot rate and possible number of spots per week
+                      and/or set of demo values the avail is being offered for. </xsd:documentation>
+                  </xsd:annotation>
+                </xsd:element>
+                <xsd:element name="DayDetailedPeriod" type="proposal:dayDetailedPeriodType"
+                  maxOccurs="unbounded">
+                  <xsd:annotation>
+                    <xsd:documentation>A date range, spot rate and possible number of spots by day
+                      and/or set of demo values the avail is being offered for. </xsd:documentation>
+                  </xsd:annotation>
+                </xsd:element>
+              </xsd:choice>
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:sequence>
+      </xsd:extension>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <!--  -->
+  <xsd:complexType name="periodType">
+    <xsd:annotation>
+      <xsd:documentation>Defines a period the avail is being offered for. A period is a date range,
+        specified by a start date and end date. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:complexContent>
+      <xsd:restriction base="proposal:dateSpanType"/>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <!--  -->
+  <xsd:complexType name="detailedPeriodType">
+    <xsd:annotation>
+      <xsd:documentation>Defines a period the avail is being offered for along with offer specific
+        details for the period. A period is a date range, specified by a start date and end date.
+        The offer specific details are a required rate and optionally the number of spots per week
+        and/or a set of demo values. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:complexContent>
+      <xsd:extension base="proposal:periodType">
+        <xsd:sequence>
+          <xsd:element name="Rate" type="tvb-tp:costType">
+            <xsd:annotation>
+              <xsd:documentation>Cost per spot for this avail within the period. The money format
+                requires cents. </xsd:documentation>
+            </xsd:annotation>
+          </xsd:element>
+          <xsd:element name="SpotsPerWeek" type="xsd:positiveInteger" minOccurs="0">
+            <xsd:annotation>
+              <xsd:documentation>Number of spots offered per broadcast week for this period. Value
+                must be 1 or more. </xsd:documentation>
+            </xsd:annotation>
+          </xsd:element>
+          <xsd:element ref="proposal:DemoValues" minOccurs="0"/>
+        </xsd:sequence>
+      </xsd:extension>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <!-- -->
+  <xsd:complexType name="dayDetailedPeriodType">
+    <xsd:annotation>
+      <xsd:documentation>Defines a period the avail is being offered for along with offer specific
+        details for the period and possible for the day. A period is a date range, specified by a
+        start date and end date. The offer specific details are a required rate and optionally the
+        number of spots by day and/or a set of demo values. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:complexContent>
+      <xsd:extension base="proposal:periodType">
+        <xsd:sequence>
+          <xsd:element name="Rate" type="tvb-tp:costType">
+            <xsd:annotation>
+              <xsd:documentation>Cost per spot for this avail within the period. The money format
+                requires cents. </xsd:documentation>
+            </xsd:annotation>
+          </xsd:element>
+          <xsd:element name="SpotsByDay" type="proposal:numberByDayOfWeekType" minOccurs="0">
+            <xsd:annotation>
+              <xsd:documentation>Number of spots offered by day for this period. Value must be 1 or
+                more. </xsd:documentation>
+            </xsd:annotation>
+          </xsd:element>
+          <xsd:element ref="proposal:DemoValues" minOccurs="0"/>
+        </xsd:sequence>
+      </xsd:extension>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <!--  -->
+  <xsd:complexType name="numberByDayOfWeekType">
+    <xsd:sequence>
+      <xsd:element name="Monday" type="xsd:nonNegativeInteger"/>
+      <xsd:element name="Tuesday" type="xsd:nonNegativeInteger"/>
+      <xsd:element name="Wednesday" type="xsd:nonNegativeInteger"/>
+      <xsd:element name="Thursday" type="xsd:nonNegativeInteger"/>
+      <xsd:element name="Friday" type="xsd:nonNegativeInteger"/>
+      <xsd:element name="Saturday" type="xsd:nonNegativeInteger"/>
+      <xsd:element name="Sunday" type="xsd:nonNegativeInteger"/>
+    </xsd:sequence>
+  </xsd:complexType>
+  <!--=============================================================================-->
+  <xsd:annotation>
+    <xsd:documentation> Simple Type Definitions For Proposal Entities </xsd:documentation>
+  </xsd:annotation>
+  <!--=============================================================================-->
+  <xsd:simpleType name="outletIdType">
+    <xsd:annotation>
+      <xsd:documentation>Unique identifier for a outlet. Used by
+      outletFromProposalRef</xsd:documentation>
+    </xsd:annotation>
+    <xsd:restriction base="xsd:ID">
+      <xsd:pattern value="OUT[0-9]+"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <!--  -->
+  <xsd:simpleType name="outletFromProposalRefType">
+    <xsd:annotation>
+      <xsd:documentation>Used to refer to an outlet, e.g. television station or cable station, from
+        the proposal by unique id. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:restriction base="xsd:IDREF">
+      <xsd:pattern value="OUT[0-9]+"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <!--  -->
+  <xsd:simpleType name="outletFromListRefType">
+    <xsd:annotation>
+      <xsd:documentation>Used to refer to an outlet, e.g. television station or cable station,
+        included on an avail list by unique id. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:restriction base="xsd:IDREF">
+      <xsd:pattern value="OUL[0-9]+"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <!--  -->
+  <xsd:simpleType name="salesInfoRefType">
+    <xsd:annotation>
+      <xsd:documentation>Used to refer to a specific set of sales information by unique identifier.
+      </xsd:documentation>
+    </xsd:annotation>
+    <xsd:restriction base="xsd:IDREF">
+      <xsd:pattern value="SI[0-9]+"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <!--  -->
+  <xsd:simpleType name="hmsDurationType">
+    <xsd:annotation>
+      <xsd:documentation>A time duration represented in units of hours, minutes and seconds. The
+        format of the value is HH:MM:SS, where HH is the number of hours (from 00 to 23), MM is the
+        number of minutes (from 00 to 59), and SS is the number of seconds (00 to 59)., except
+        00:00:00 is not a valid value. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:restriction base="xsd:string">
+      <xsd:pattern value="00:[012345][0123456789]:[012345][123456789]">
+        <xsd:annotation>
+          <xsd:documentation> For lengths of less than an hour except for formats of 00:**:*0
+          </xsd:documentation>
+        </xsd:annotation>
+      </xsd:pattern>
+      <xsd:pattern value="00:[012345][0123456789]:[12345][0123456789]">
+        <xsd:annotation>
+          <xsd:documentation> For lengths of less than an hour except for formats of 00:**:0*
+          </xsd:documentation>
+        </xsd:annotation>
+      </xsd:pattern>
+      <xsd:pattern value="00:[012345][123456789]:[012345][0123456789]">
+        <xsd:annotation>
+          <xsd:documentation> For lengths of less than an hour except for formats of 00:*0:**
+          </xsd:documentation>
+        </xsd:annotation>
+      </xsd:pattern>
+      <xsd:pattern value="00:[12345][0123456789]:[012345][0123456789]">
+        <xsd:annotation>
+          <xsd:documentation> For lengths of less than an hour except for formats of 00:0*:**
+          </xsd:documentation>
+        </xsd:annotation>
+      </xsd:pattern>
+      <xsd:pattern
+        value="(01|02|03|04|05|06|07|08|09|10|11|12|13|14|15|16|17|18|19|20|21|22|23):[012345][0123456789]:[012345][0123456789]">
+        <xsd:annotation>
+          <xsd:documentation> For lengths from 1 hour to 23 hours, 59 minutes and 59 seconds
+          </xsd:documentation>
+        </xsd:annotation>
+      </xsd:pattern>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <!-- -->
+  <xsd:simpleType name="broadcastDayTimeType">
+    <xsd:annotation>
+      <xsd:documentation> This time format is a modified version of the 30-hour time format used to
+        represent the entire broadcast day within a single day. It is similar to the military time
+        format except it adds 24 hours to the times of the broadcast day that fall into the next
+        calendar day. This format currently supports broadcast days that start at either 5 AM or 6
+        AM. The format is HH:MM where HH are two digits representing hours and MM are two digits
+        representing minutes. For a broadcast day that starts at 5 AM and ends at 4:59 AM the next
+        calendar day, the time format for 5 AM is 05:00, for midnight is 24:00, and for 4:59 AM the
+        following calendar day is 28:59. For a broadcast day that starts at 6 AM and ends at 5:59 AM
+        the next calendar day, the time format for 6 AM is 06:00, for midnight is 24:00, and for
+        5:59 AM the following calendar day is 29:59. In this format for the broadcast day that
+        starts at 6AM, 30:00 current day is the same point in time as 06:00 of the following day.
+        The same is true for 29:00 current day and 05:00 next day when the broadcast day starts at 5
+        AM. This is allowed for convenience, for example when referring to the exact end of a day in
+        a time interval. </xsd:documentation>
+    </xsd:annotation>
+    <xsd:restriction base="xsd:string">
+      <xsd:pattern
+        value="(05|06|07|08|09|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29):[012345][0123456789]"/>
+      <xsd:pattern value="30:00"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <!-- -->
+  <!--=============================================================================-->
+</xsd:schema>

@@ -1,0 +1,603 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:tvb-tp="http://www.AAAA.org/schemas/TVBGeneralTypes" xmlns="http://www.AAAA.org/schemas/spotTV" targetNamespace="http://www.AAAA.org/schemas/spotTV" elementFormDefault="qualified" attributeFormDefault="unqualified" version="1">
+	<xsd:import namespace="http://www.AAAA.org/schemas/TVBGeneralTypes" schemaLocation="TVBGeneralTypes-0.0.1.xsd"/>
+	<!-- -->
+	<xsd:element name="Header">
+		<xsd:annotation>
+			<xsd:documentation>Common header for all TVB message documents</xsd:documentation>
+		</xsd:annotation>
+		<xsd:complexType>
+			<xsd:sequence>
+				<xsd:element name="BuyingCompany" type="buyingCompanyType"/>
+				<xsd:element name="Buyer" type="contactType" minOccurs="0"/>
+				<xsd:element name="SellingCompany">
+					<xsd:complexType>
+						<xsd:choice>
+							<xsd:element name="SellingRep" type="sellingCompanyType1"/>
+							<xsd:element name="SellingStation" type="sellingCompanyType2"/>
+						</xsd:choice>
+					</xsd:complexType>
+				</xsd:element>
+				<xsd:element name="Seller" type="contactType" minOccurs="0"/>
+				<xsd:element name="UniqueAgencyOrderId">
+					<xsd:complexType>
+						<xsd:simpleContent>
+							<xsd:extension base="uniqueAgencyOrderIdType">
+								<xsd:attribute name="orderVersion" type="xsd:nonNegativeInteger" use="required">
+									<xsd:annotation>
+										<xsd:documentation>This is the version of the order either being sent or  acknowledged in a receipt.</xsd:documentation>
+									</xsd:annotation>
+								</xsd:attribute>
+							</xsd:extension>
+						</xsd:simpleContent>
+					</xsd:complexType>
+				</xsd:element>
+				<xsd:element name="OrderReferences" type="orderReferencesType"/>
+				<xsd:element name="Advertiser" type="advertiserType"/>
+				<xsd:element name="Product" type="productType" minOccurs="0" maxOccurs="2">
+					<xsd:annotation>
+						<xsd:documentation>Use 2 Product elements for a piggyback pair </xsd:documentation>
+					</xsd:annotation>
+				</xsd:element>
+				<xsd:element name="CPE" type="cpeCodesType" minOccurs="0"/>
+				<xsd:element name="Station" type="stationType"/>
+			</xsd:sequence>
+		</xsd:complexType>
+	</xsd:element>
+	<!-- -->
+	<xsd:element name="SystemCode" type="tvb-tp:sourceStringType">
+		<xsd:annotation>
+			<xsd:documentation>Formerly ID but really only a simple system code is necessary</xsd:documentation>
+		</xsd:annotation>
+	</xsd:element>
+	<!-- -->
+	<xsd:complexType name="stationType">
+		<xsd:annotation>
+			<xsd:documentation>Description of the station where order is being placed.</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:annotation>
+				<xsd:documentation>single station</xsd:documentation>
+			</xsd:annotation>
+			<xsd:element name="Name" type="tvb-tp:string255Type">
+				<xsd:annotation>
+					<xsd:documentation>For example Station Call Letters</xsd:documentation>
+				</xsd:annotation>
+			</xsd:element>
+			<xsd:element ref="SystemCode" maxOccurs="unbounded"/>
+		</xsd:sequence>
+		<xsd:attribute name="parentPlus" type="tvb-tp:yesNoType"/>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:complexType name="advertiserType">
+		<xsd:annotation>
+			<xsd:documentation>Advertiser (often called client) selling/promoting the Product.</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="Name" type="tvb-tp:string255Type"/>
+			<xsd:element ref="SystemCode" minOccurs="0" maxOccurs="unbounded"/>
+		</xsd:sequence>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:complexType name="productType">
+		<xsd:annotation>
+			<xsd:documentation>Name of Product being Advertised (limited to 255 characters)</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="Name" type="tvb-tp:string255Type"/>
+			<xsd:element ref="SystemCode" minOccurs="0" maxOccurs="unbounded"/>
+		</xsd:sequence>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:complexType name="estimateType">
+		<xsd:annotation>
+			<xsd:documentation>Estimate Definition, only an ID is required.</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="Description" minOccurs="0">
+				<xsd:annotation>
+					<xsd:documentation>Estimate description</xsd:documentation>
+				</xsd:annotation>
+				<xsd:simpleType>
+					<xsd:restriction base="xsd:string"/>
+				</xsd:simpleType>
+			</xsd:element>
+			<xsd:element name="StartDate" type="xsd:date" minOccurs="0">
+				<xsd:annotation>
+					<xsd:documentation>Estimate Starting Date.  The Estimate the transmission is based on may begin before or on the same date as the transmission.</xsd:documentation>
+				</xsd:annotation>
+			</xsd:element>
+			<xsd:element name="EndDate" type="xsd:date" minOccurs="0">
+				<xsd:annotation>
+					<xsd:documentation>Estimate Ending Date.  The Estimate the transmission is based on may end after or on the same date as the transmission.</xsd:documentation>
+				</xsd:annotation>
+			</xsd:element>
+			<xsd:element ref="SystemCode" maxOccurs="unbounded"/>
+		</xsd:sequence>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:complexType name="cpeCodesType">
+		<xsd:annotation>
+			<xsd:documentation>Agency Client Product Estimate (CPE) codes.     Use 2 product code elements
+for a piggyback pair.</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="ClientCode" type="xsd:string" minOccurs="0"/>
+			<xsd:element name="ProductCode" type="xsd:string" minOccurs="0" maxOccurs="2"/>
+			<xsd:element name="Estimate" type="estimateType" minOccurs="0"/>
+		</xsd:sequence>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:complexType name="orderReferencesType">
+		<xsd:annotation>
+			<xsd:documentation>Internal references for this Order.  For example the agency's order number.</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element ref="SystemCode" maxOccurs="unbounded"/>
+		</xsd:sequence>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:simpleType name="uniqueAgencyOrderIdType">
+		<xsd:annotation>
+			<xsd:documentation>This field is generated by the agency system.  It will uniquely identify the 
+          order for this agency trading partner.  In many cases it will simply be the order number. 
+          but some systems might reset order numbers on a yearly or some other basis and need addtional
+          characteristics to create a unique id.              
+      </xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string"/>
+	</xsd:simpleType>
+	<!-- -->
+	<xsd:complexType name="dayTimeType">
+		<xsd:sequence>
+			<xsd:element name="StartTime" type="tvb-tp:hmTime">
+				<xsd:annotation>
+					<xsd:documentation>Earliest Time Spots can Air</xsd:documentation>
+				</xsd:annotation>
+			</xsd:element>
+			<xsd:element name="EndTime" type="tvb-tp:hmTime">
+				<xsd:annotation>
+					<xsd:documentation>Latest Time Spots can Air</xsd:documentation>
+				</xsd:annotation>
+			</xsd:element>
+			<xsd:element name="Days" type="tvb-tp:daysOfWeekType"/>
+		</xsd:sequence>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:simpleType name="nationalLocalType">
+		<xsd:restriction base="xsd:string">
+			<xsd:enumeration value="national"/>
+			<xsd:enumeration value="local"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<!-- -->
+	<xsd:complexType name="demoBasisType">
+		<xsd:annotation>
+			<xsd:documentation>Custom type for demo basis elements</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="BookName" type="xsd:string" minOccurs="0" maxOccurs="unbounded">
+				<xsd:annotation>
+					<xsd:documentation>A single book is designated by one BookName element.  An average is designated by listing multiple BookName elements.  The BookName should include the survey period.</xsd:documentation>
+				</xsd:annotation>
+			</xsd:element>
+			<xsd:element name="RatingService">
+				<xsd:annotation>
+					<xsd:documentation>Rating Service being used (eg. Nielsen, Arbitron)</xsd:documentation>
+				</xsd:annotation>
+				<xsd:simpleType>
+					<xsd:restriction base="xsd:string">
+						<xsd:enumeration value="Nielsen"/>
+						<xsd:enumeration value="Arbitron"/>
+					</xsd:restriction>
+				</xsd:simpleType>
+			</xsd:element>
+			<xsd:element name="Geography">
+				<xsd:annotation>
+					<xsd:documentation>Geography description of surveyed area (MSA, TSA, DMA)</xsd:documentation>
+				</xsd:annotation>
+				<xsd:simpleType>
+					<xsd:restriction base="xsd:string">
+						<xsd:enumeration value="MSA"/>
+						<xsd:enumeration value="TSA"/>
+						<xsd:enumeration value="DMA"/>
+					</xsd:restriction>
+				</xsd:simpleType>
+			</xsd:element>
+			<xsd:element name="Profile" minOccurs="0">
+				<xsd:annotation>
+					<xsd:documentation>Used to define a specialized survey category (eg. Hispanic, Black, Cable).</xsd:documentation>
+				</xsd:annotation>
+				<xsd:simpleType>
+					<xsd:restriction base="xsd:string">
+						<xsd:enumeration value="Black"/>
+						<xsd:enumeration value="Hispanic"/>
+						<xsd:enumeration value="Olympic"/>
+						<xsd:enumeration value="Standard"/>
+						<xsd:enumeration value="Metro"/>
+					</xsd:restriction>
+				</xsd:simpleType>
+			</xsd:element>
+			<xsd:element name="Comment" type="tvb-tp:commentType" minOccurs="0" maxOccurs="unbounded"/>
+		</xsd:sequence>
+		<xsd:attribute name="DemoBasisId" use="required">
+			<xsd:simpleType>
+				<xsd:restriction base="xsd:ID">
+					<xsd:pattern value="DB[0-9]+"/>
+				</xsd:restriction>
+			</xsd:simpleType>
+		</xsd:attribute>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:simpleType name="demoBasisRefType">
+		<xsd:annotation>
+			<xsd:documentation>Used to refer to a demo basis by unique id</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:IDREF">
+			<xsd:pattern value="DB[0-9]+"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<!---->
+	<xsd:complexType name="demoType">
+		<xsd:annotation>
+			<xsd:documentation>An element for generic demo categories</xsd:documentation>
+		</xsd:annotation>
+		<xsd:complexContent>
+			<xsd:extension base="demoBaseType">
+				<xsd:attribute name="DemoId" use="required">
+					<xsd:simpleType>
+						<xsd:restriction base="xsd:ID">
+							<xsd:pattern value="DM[0-9]+"/>
+						</xsd:restriction>
+					</xsd:simpleType>
+				</xsd:attribute>
+			</xsd:extension>
+		</xsd:complexContent>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:complexType name="demoBaseType">
+		<xsd:annotation>
+			<xsd:documentation>Base custom type for demo elements</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="DemoType">
+				<xsd:simpleType>
+					<xsd:restriction base="xsd:string">
+						<xsd:enumeration value="Rating"/>
+						<xsd:enumeration value="Impression"/>
+					</xsd:restriction>
+				</xsd:simpleType>
+			</xsd:element>
+			<xsd:element name="Group">
+				<!-- there should only be one way to define a given item.  Homes or Households not both -->
+				<xsd:simpleType>
+					<xsd:annotation>
+						<xsd:documentation>Defines the demographic grouping.</xsd:documentation>
+					</xsd:annotation>
+					<xsd:restriction base="xsd:string">
+						<xsd:enumeration value="Adults">
+							<xsd:annotation>
+								<xsd:documentation>Persons 18+</xsd:documentation>
+							</xsd:annotation>
+						</xsd:enumeration>
+						<xsd:enumeration value="Men"/>
+						<xsd:enumeration value="Women"/>
+						<xsd:enumeration value="Teens">
+							<xsd:annotation>
+								<xsd:documentation>persons 12 - 17</xsd:documentation>
+							</xsd:annotation>
+						</xsd:enumeration>
+						<xsd:enumeration value="Children">
+							<xsd:annotation>
+								<xsd:documentation>persons 2 - 12</xsd:documentation>
+							</xsd:annotation>
+						</xsd:enumeration>
+						<xsd:enumeration value="Persons">
+							<xsd:annotation>
+								<xsd:documentation>anyone 2+ or total</xsd:documentation>
+							</xsd:annotation>
+						</xsd:enumeration>
+						<xsd:enumeration value="Homes">
+							<xsd:annotation>
+								<xsd:documentation>same as HH or Households</xsd:documentation>
+							</xsd:annotation>
+						</xsd:enumeration>
+						<xsd:enumeration value="WWomen">
+							<xsd:annotation>
+								<xsd:documentation>Working Women</xsd:documentation>
+							</xsd:annotation>
+						</xsd:enumeration>
+					</xsd:restriction>
+				</xsd:simpleType>
+			</xsd:element>
+			<xsd:element name="AgeFrom">
+				<xsd:annotation>
+					<xsd:documentation>The lower age limit of the demographic.  Values are industry typical.  0 should be used for Households and Homes.  Should be less than AgeTo.</xsd:documentation>
+				</xsd:annotation>
+				<xsd:simpleType>
+					<xsd:restriction base="xsd:nonNegativeInteger">
+						<xsd:enumeration value="0"/>
+						<xsd:enumeration value="2"/>
+						<xsd:enumeration value="6"/>
+						<xsd:enumeration value="12"/>
+						<xsd:enumeration value="18"/>
+						<xsd:enumeration value="21"/>
+						<xsd:enumeration value="25"/>
+						<xsd:enumeration value="35"/>
+						<xsd:enumeration value="45"/>
+						<xsd:enumeration value="50"/>
+						<xsd:enumeration value="55"/>
+						<xsd:enumeration value="65"/>
+					</xsd:restriction>
+				</xsd:simpleType>
+			</xsd:element>
+			<xsd:element name="AgeTo">
+				<xsd:annotation>
+					<xsd:documentation>The upper age limit for the demographic.  Values are industry typical.  The value should be greater than AgeFrom.  Use 99 for Households and Homes and when wanting to define no upper age limit.</xsd:documentation>
+				</xsd:annotation>
+				<xsd:simpleType>
+					<xsd:restriction base="xsd:nonNegativeInteger">
+						<xsd:enumeration value="5"/>
+						<xsd:enumeration value="11"/>
+						<xsd:enumeration value="17"/>
+						<xsd:enumeration value="20"/>
+						<xsd:enumeration value="24"/>
+						<xsd:enumeration value="34"/>
+						<xsd:enumeration value="44"/>
+						<xsd:enumeration value="49"/>
+						<xsd:enumeration value="54"/>
+						<xsd:enumeration value="64"/>
+						<xsd:enumeration value="99"/>
+					</xsd:restriction>
+				</xsd:simpleType>
+			</xsd:element>
+		</xsd:sequence>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:simpleType name="demoRefType">
+		<xsd:annotation>
+			<xsd:documentation>Used to refer to a demo by unique id</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:IDREF">
+			<xsd:pattern value="DM[0-9]+"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<!---->
+	<xsd:complexType name="demoValueType">
+		<xsd:simpleContent>
+			<xsd:extension base="number.2Type">
+				<xsd:attribute name="demoRef" type="demoRefType" use="required"/>
+			</xsd:extension>
+		</xsd:simpleContent>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:simpleType name="number.2Type">
+		<xsd:restriction base="xsd:decimal">
+			<xsd:minInclusive value="0.00"/>
+			<xsd:fractionDigits value="2"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<!---->
+	<xsd:complexType name="sellingCompanyType1">
+		<xsd:annotation>
+			<xsd:documentation>Base type for selling companies that requires an office.</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="Name" type="tvb-tp:string255Type"/>
+			<xsd:element name="Office">
+				<xsd:complexType>
+					<xsd:sequence>
+						<xsd:element name="Name" type="tvb-tp:string255Type">
+							<xsd:annotation>
+								<xsd:documentation>Office Name (can be used for regional office name or for mailing label), limited to 255 characters.</xsd:documentation>
+							</xsd:annotation>
+						</xsd:element>
+						<xsd:element name="Phone" type="tvb-tp:phoneType" minOccurs="0" maxOccurs="unbounded"/>
+						<xsd:element name="Address" minOccurs="0" maxOccurs="unbounded">
+							<xsd:complexType>
+								<xsd:complexContent>
+									<xsd:extension base="tvb-tp:addressType">
+										<xsd:attribute name="type" use="optional">
+											<xsd:simpleType>
+												<xsd:restriction base="xsd:string">
+													<xsd:enumeration value="billing"/>
+													<xsd:enumeration value="business"/>
+												</xsd:restriction>
+											</xsd:simpleType>
+										</xsd:attribute>
+									</xsd:extension>
+								</xsd:complexContent>
+							</xsd:complexType>
+						</xsd:element>
+						<xsd:element ref="SystemCode" minOccurs="0" maxOccurs="unbounded"/>
+					</xsd:sequence>
+					<xsd:attribute name="locationCode" type="xsd:nonNegativeInteger" use="optional">
+						<xsd:annotation>
+							<xsd:documentation>The a code for the city in which the office resides.  This value is used to provide 
+          common context for the office location across trading partners regardless of spelling or formats.  Intitially the closest NSI market code should be used.</xsd:documentation>
+						</xsd:annotation>
+					</xsd:attribute>
+					<xsd:attribute name="officeId">
+						<xsd:simpleType>
+							<xsd:restriction base="xsd:ID">
+								<xsd:pattern value="OF[0-9]+"/>
+							</xsd:restriction>
+						</xsd:simpleType>
+					</xsd:attribute>
+				</xsd:complexType>
+			</xsd:element>
+			<xsd:element ref="SystemCode" minOccurs="0" maxOccurs="unbounded"/>
+		</xsd:sequence>
+		<xsd:attribute name="companyId">
+			<xsd:simpleType>
+				<xsd:restriction base="xsd:ID">
+					<xsd:pattern value="CO[0-9]+"/>
+				</xsd:restriction>
+			</xsd:simpleType>
+		</xsd:attribute>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:complexType name="sellingCompanyType2">
+		<xsd:annotation>
+			<xsd:documentation>Base type for selling companies that does not require an office.</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="Name" type="tvb-tp:string255Type"/>
+			<xsd:element name="Office" minOccurs="0">
+				<xsd:complexType>
+					<xsd:sequence>
+						<xsd:element name="Name" type="tvb-tp:string255Type">
+							<xsd:annotation>
+								<xsd:documentation>Office Name (can be used for regional office name or for mailing label), limited to 255 characters.</xsd:documentation>
+							</xsd:annotation>
+						</xsd:element>
+						<xsd:element name="Phone" type="tvb-tp:phoneType" minOccurs="0" maxOccurs="unbounded"/>
+						<xsd:element name="Address" minOccurs="0" maxOccurs="unbounded">
+							<xsd:complexType>
+								<xsd:complexContent>
+									<xsd:extension base="tvb-tp:addressType">
+										<xsd:attribute name="type" use="optional">
+											<xsd:simpleType>
+												<xsd:restriction base="xsd:string">
+													<xsd:enumeration value="billing"/>
+													<xsd:enumeration value="business"/>
+												</xsd:restriction>
+											</xsd:simpleType>
+										</xsd:attribute>
+									</xsd:extension>
+								</xsd:complexContent>
+							</xsd:complexType>
+						</xsd:element>
+						<xsd:element ref="SystemCode" minOccurs="0" maxOccurs="unbounded"/>
+					</xsd:sequence>
+					<xsd:attribute name="locationCode" type="xsd:nonNegativeInteger" use="optional">
+						<xsd:annotation>
+							<xsd:documentation>The a code for the city in which the office resides.  This value is used to provide 
+          common context for the office location across trading partners regardless of spelling or formats.  Intitially the closest NSI market code should be used.</xsd:documentation>
+						</xsd:annotation>
+					</xsd:attribute>
+					<xsd:attribute name="officeId">
+						<xsd:simpleType>
+							<xsd:restriction base="xsd:ID">
+								<xsd:pattern value="OF[0-9]+"/>
+							</xsd:restriction>
+						</xsd:simpleType>
+					</xsd:attribute>
+				</xsd:complexType>
+			</xsd:element>
+			<xsd:element ref="SystemCode" minOccurs="0" maxOccurs="unbounded"/>
+		</xsd:sequence>
+		<xsd:attribute name="companyId">
+			<xsd:simpleType>
+				<xsd:restriction base="xsd:ID">
+					<xsd:pattern value="CO[0-9]+"/>
+				</xsd:restriction>
+			</xsd:simpleType>
+		</xsd:attribute>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:complexType name="buyingCompanyType">
+		<xsd:annotation>
+			<xsd:documentation>Base type for buying companies.</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="Name" type="tvb-tp:string255Type"/>
+			<xsd:element name="Office">
+				<xsd:complexType>
+					<xsd:sequence>
+						<xsd:element name="Name" type="tvb-tp:string255Type">
+							<xsd:annotation>
+								<xsd:documentation>Office Name (can be used for regional office name or for mailing label), limited to 255 characters.</xsd:documentation>
+							</xsd:annotation>
+						</xsd:element>
+						<xsd:element name="Phone" type="tvb-tp:phoneType" minOccurs="0" maxOccurs="unbounded"/>
+						<xsd:element name="BillingAddress">
+							<xsd:complexType>
+								<xsd:complexContent>
+									<xsd:extension base="tvb-tp:addressType"/>
+								</xsd:complexContent>
+							</xsd:complexType>
+						</xsd:element>
+						<xsd:element name="BusinessAddress" minOccurs="0">
+							<xsd:complexType>
+								<xsd:complexContent>
+									<xsd:extension base="tvb-tp:addressType"/>
+								</xsd:complexContent>
+							</xsd:complexType>
+						</xsd:element>
+						<xsd:element ref="SystemCode" minOccurs="0" maxOccurs="unbounded"/>
+					</xsd:sequence>
+					<xsd:attribute name="locationCode" type="xsd:nonNegativeInteger" use="optional">
+						<xsd:annotation>
+							<xsd:documentation>The a code for the city in which the office resides.  This value is used to provide 
+          common context for the office location across trading partners regardless of spelling or formats.  Intitially the closest NSI market code should be used.</xsd:documentation>
+						</xsd:annotation>
+					</xsd:attribute>
+					<xsd:attribute name="officeId">
+						<xsd:simpleType>
+							<xsd:restriction base="xsd:ID">
+								<xsd:pattern value="OF[0-9]+"/>
+							</xsd:restriction>
+						</xsd:simpleType>
+					</xsd:attribute>
+				</xsd:complexType>
+			</xsd:element>
+			<xsd:element ref="SystemCode" minOccurs="0" maxOccurs="unbounded"/>
+		</xsd:sequence>
+		<xsd:attribute name="companyId">
+			<xsd:simpleType>
+				<xsd:restriction base="xsd:ID">
+					<xsd:pattern value="CO[0-9]+"/>
+				</xsd:restriction>
+			</xsd:simpleType>
+		</xsd:attribute>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:complexType name="contactType">
+		<xsd:annotation>
+			<xsd:documentation>Contact Information person on the order</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="FirstName" type="tvb-tp:string255Type"/>
+			<xsd:element name="LastName" type="tvb-tp:string255Type"/>
+			<xsd:element name="Email" type="tvb-tp:emailType" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="Phone" type="tvb-tp:phoneType" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="SystemCode" minOccurs="0"/>
+		</xsd:sequence>
+		<xsd:attribute name="contactId">
+			<xsd:simpleType>
+				<xsd:restriction base="xsd:ID">
+					<xsd:pattern value="PS[0-9]+"/>
+				</xsd:restriction>
+			</xsd:simpleType>
+		</xsd:attribute>
+	</xsd:complexType>
+	<!-- -->
+	<xsd:simpleType name="CompanyRef">
+		<xsd:annotation>
+			<xsd:documentation>Used to refer to a company by unique id</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:IDREF">
+			<xsd:pattern value="CO[0-9]+"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<!-- -->
+	<xsd:simpleType name="ContactRef">
+		<xsd:annotation>
+			<xsd:documentation>Used to refer to a contact by unique id</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:IDREF">
+			<xsd:pattern value="PS[0-9]+"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<!-- -->
+	<xsd:simpleType name="OfficeRef">
+		<xsd:annotation>
+			<xsd:documentation>Used to refer to a office by unique id</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:IDREF">
+			<xsd:pattern value="OF[0-9]+"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<!-- -->
+</xsd:schema>
