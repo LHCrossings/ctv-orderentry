@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Created with Liquid XML Studio 1.0.8.0 (http://www.liquid-technologies.com) -->
+<xsd:schema xmlns:aaaa-tp="http://www.AAAA.org/schemas/types" xmlns="http://www.AAAA.org/schemas/spotRadioOrderStatus" xmlns:rdo="http://www.AAAA.org/schemas/spotRadio" attributeFormDefault="unqualified" elementFormDefault="qualified" targetNamespace="http://www.AAAA.org/schemas/spotRadioOrderStatus" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:import schemaLocation="spotRadio-0.8.0.4.xsd" namespace="http://www.AAAA.org/schemas/spotRadio">
+    <xsd:annotation>
+      <xsd:documentation />
+    </xsd:annotation>
+  </xsd:import>
+  <xsd:import schemaLocation="aaaa-types-0.4.7.xsd" namespace="http://www.AAAA.org/schemas/types" />
+  <xsd:redefine schemaLocation="aaaaMessageHeader-0.2.0.0.xsd">
+    <xsd:annotation>
+      <xsd:documentation />
+    </xsd:annotation>
+    <xsd:simpleType name="schemaNameString">
+      <xsd:annotation>
+        <xsd:documentation />
+      </xsd:annotation>
+      <xsd:restriction base="schemaNameString">
+        <xsd:enumeration value="SpotRadioOrderStatus" />
+      </xsd:restriction>
+    </xsd:simpleType>
+    <xsd:simpleType name="schemaVersionString">
+      <xsd:annotation>
+        <xsd:documentation />
+      </xsd:annotation>
+      <xsd:restriction base="schemaVersionString">
+        <xsd:enumeration value="0.8.0.4" />
+      </xsd:restriction>
+    </xsd:simpleType>
+    <xsd:simpleType name="mediaString">
+      <xsd:annotation>
+        <xsd:documentation />
+      </xsd:annotation>
+      <xsd:restriction base="mediaString">
+        <xsd:enumeration value="SpotRadio" />
+      </xsd:restriction>
+    </xsd:simpleType>
+    <xsd:simpleType name="transactionString">
+      <xsd:annotation>
+        <xsd:documentation />
+      </xsd:annotation>
+      <xsd:restriction base="transactionString">
+        <xsd:enumeration value="OrderStatus" />
+      </xsd:restriction>
+    </xsd:simpleType>
+    <xsd:complexType name="aaaaMessageType">
+      <xsd:annotation>
+        <xsd:documentation />
+      </xsd:annotation>
+      <xsd:complexContent mixed="false">
+        <xsd:extension base="aaaaMessageType">
+          <xsd:sequence>
+            <xsd:element ref="rdo:Header" />
+            <xsd:element ref="OrderStatus" />
+          </xsd:sequence>
+        </xsd:extension>
+      </xsd:complexContent>
+    </xsd:complexType>
+  </xsd:redefine>
+  <xsd:annotation>
+    <xsd:documentation />
+  </xsd:annotation>
+  <xsd:element name="OrderStatus">
+    <xsd:annotation>
+      <xsd:documentation />
+    </xsd:annotation>
+    <xsd:complexType>
+      <xsd:sequence>
+        <xsd:annotation>
+          <xsd:documentation />
+        </xsd:annotation>
+        <xsd:choice>
+          <xsd:annotation>
+            <xsd:documentation />
+          </xsd:annotation>
+          <xsd:element name="Error">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="FailureCode" type="xsd:int" />
+                <xsd:element name="FailureDescription" type="xsd:string" />
+                <xsd:element name="OrignalTransactionType" type="xsd:string" />
+              </xsd:sequence>
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:sequence>
+            <xsd:annotation>
+              <xsd:documentation />
+            </xsd:annotation>
+            <xsd:element name="OrderReplyAction" type="rdo:OrderReplyStatus" />
+            <xsd:element minOccurs="0" name="OrderComment" type="aaaa-tp:simpleCommentType" />
+            <xsd:element minOccurs="0" maxOccurs="unbounded" name="BuyLine">
+              <xsd:complexType>
+                <xsd:sequence>
+                  <xsd:element name="BuyNumber" type="xsd:positiveInteger">
+                    <xsd:annotation>
+                      <xsd:documentation>Unique identifier for the BuyLine</xsd:documentation>
+                    </xsd:annotation>
+                  </xsd:element>
+                  <xsd:element minOccurs="0" name="BuyComment" type="aaaa-tp:simpleCommentType" />
+                </xsd:sequence>
+                <xsd:attribute name="action" type="xsd:string" />
+              </xsd:complexType>
+            </xsd:element>
+          </xsd:sequence>
+          <xsd:element name="OrderInfoUpdate">
+            <xsd:simpleType>
+              <xsd:annotation>
+                <xsd:documentation>This status is used to send a 20 character information update</xsd:documentation>
+              </xsd:annotation>
+              <xsd:restriction base="xsd:string">
+                <xsd:maxLength value="20" />
+              </xsd:restriction>
+            </xsd:simpleType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:sequence>
+      <xsd:attribute name="version" type="xsd:nonNegativeInteger" use="required">
+        <xsd:annotation>
+          <xsd:documentation>Number of times order has been created/modified</xsd:documentation>
+        </xsd:annotation>
+      </xsd:attribute>
+      <xsd:attribute name="revision" type="xsd:nonNegativeInteger" use="optional">
+        <xsd:annotation>
+          <xsd:documentation>Number of times order has been confirmed</xsd:documentation>
+        </xsd:annotation>
+      </xsd:attribute>
+    </xsd:complexType>
+  </xsd:element>
+</xsd:schema>

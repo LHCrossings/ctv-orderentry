@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Created with Liquid XML Studio 1.0.8.0 (http://www.liquid-technologies.com) -->
+<xsd:schema attributeFormDefault="unqualified" elementFormDefault="qualified" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:annotation>
+    <xsd:documentation>This schema has no namespace so it can be used in chameleon style for redefining restricted values as part of the aaaaMessageTemplate or other media specific schemas</xsd:documentation>
+  </xsd:annotation>
+  <xsd:element name="AAAA-Message" type="aaaaMessageType" />
+  <xsd:simpleType name="schemaNameString">
+    <xsd:annotation>
+      <xsd:documentation />
+    </xsd:annotation>
+    <xsd:restriction base="xsd:string" />
+  </xsd:simpleType>
+  <xsd:simpleType name="schemaVersionString">
+    <xsd:annotation>
+      <xsd:documentation />
+    </xsd:annotation>
+    <xsd:restriction base="xsd:string" />
+  </xsd:simpleType>
+  <xsd:simpleType name="mediaString">
+    <xsd:annotation>
+      <xsd:documentation />
+    </xsd:annotation>
+    <xsd:restriction base="xsd:string" />
+  </xsd:simpleType>
+  <xsd:simpleType name="transactionString">
+    <xsd:annotation>
+      <xsd:documentation />
+    </xsd:annotation>
+    <xsd:restriction base="xsd:string" />
+  </xsd:simpleType>
+  <xsd:complexType name="aaaaMessageType">
+    <xsd:annotation>
+      <xsd:documentation>The root of all media documents, this element will be extended to include the media content
+ </xsd:documentation>
+    </xsd:annotation>
+    <xsd:sequence>
+      <xsd:element name="AAAA-Values">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="SchemaName" xmlns:q1="http://www.AAAA.org/schemas/spotRadioOrder" type="q1:schemaNameString">
+              <xsd:annotation>
+                <xsd:documentation>Name of the Schema (XSD) file used for validation of the data.  This value will be restricted in the media document. For example: spotRadioOrder</xsd:documentation>
+              </xsd:annotation>
+            </xsd:element>
+            <xsd:element name="SchemaVersion" xmlns:q2="http://www.AAAA.org/schemas/spotRadioOrder" type="q2:schemaVersionString">
+              <xsd:annotation>
+                <xsd:documentation>Version number of the Schema (XSD) file used for validation of the data.  This value will be restricted in the media document. For example: 0.2e.2</xsd:documentation>
+              </xsd:annotation>
+            </xsd:element>
+            <xsd:element name="Media" xmlns:q3="http://www.AAAA.org/schemas/spotRadioOrder" type="q3:mediaString">
+              <xsd:annotation>
+                <xsd:documentation>Identifies the media for this transmission. This value will be restricted in the media document. For example: SpotRadio</xsd:documentation>
+              </xsd:annotation>
+            </xsd:element>
+            <xsd:element name="TransactionType" xmlns:q4="http://www.AAAA.org/schemas/spotRadioOrder" type="q4:transactionString">
+              <xsd:annotation>
+                <xsd:documentation>Identifies the transaction type for this transmission and may be used during routing. This value will be restricted in the media document. For example: Invoice as a value sends all messages to the SAP reciever</xsd:documentation>
+              </xsd:annotation>
+            </xsd:element>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+    </xsd:sequence>
+  </xsd:complexType>
+</xsd:schema>

@@ -1,0 +1,24 @@
+Changes SpotRadio 0.8.0.4 Schema (updated as of 06/23/2008)
+
+
+
+Following Changes were applied to spotRadio-0.8.0.2 Schema from 05/18/2006
+
+
+
+* Header - Typo is corrected under Header - TVB is changed to RAB - 
+
+* outletType - In order to accommodate HD designations, following changes were made:
+
+	1. HD is now an acceptable value for Band and CallLetters maximum size is changed from 4 to 9.
+	2. Band possible values are changed and are as follow: AM,  FM, HD1, HD2, HD3, Stream
+
+* OrderStatus - possible values are changed to NEW, CHANGED, or CANCELED. 
+
+* OrderReplyStatus- purpose is changed to be seller's response to buyer. and  possible values are changed to ASBOOKEDWITHDETAIL, DELIVERED, ACKNOWLEDGED, ACCEPTED, ACCEPTED WITH CHANGES, REJECTED, AS BOOKED, CANCEL-CONFIRMED, or CANCEL-REJECTED
+
+* demoBaseType - changed so none of the child elements are required.
+
+
+
+
