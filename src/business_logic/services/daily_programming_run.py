@@ -161,6 +161,24 @@ def _ensure_bumper(cur, cod_user, d, slot, spec, existing):
     return {"id": nid, "xorder": int(cur.fetchone()[0])}
 
 
+def _sync_checksums(cur, ids):
+    """Re-sync each row's stored SCHEDULE_CHECKSUM to the freshly-computed value.
+
+    Etere's yellow 'event modified — needs Explode - all breakpoints' triangle is
+    driven solely by `ISNULL(dbo.sch_getFilmatiCheckSum(id_tpalinse),0) <> stored
+    SCHEDULE_CHECKSUM` (confirmed from the EE requery's ChecksumChanged logic).
+    'Explode - all breakpoints' clears it by rewriting the stored checksum — so we
+    do the same. Idempotent; also auto-heals rows left stale by an earlier run.
+    """
+    for rid in ids:
+        if rid is None:
+            continue
+        cur.execute(
+            "UPDATE TPALINSE SET SCHEDULE_CHECKSUM = dbo.sch_getFilmatiCheckSum(%s) WHERE id_tpalinse=%s",
+            (rid, rid),
+        )
+
+
 def _rebuild(cur, d, cod_user, fromid):
     cur.execute("EXEC dbo.sch_rebuildStartTimeSchedule %s,%s,0,0,NULL,%s,-1,0,1", (d, cod_user, fromid))
     try:
@@ -280,6 +298,9 @@ def run_market(conn, cod_user, d, assignment):
             _close_guarantee(cur, cod_user, d, ids[-1], close_b)
 
         _rebuild(cur, d, cod_user, first_id)
+        # Clear Etere's "needs Explode - all breakpoints" warning by re-syncing the
+        # stored schedule checksum on every row we placed (parts + bumpers).
+        _sync_checksums(cur, list(ids) + [b["id"] for b in (open_b, close_b) if b])
         ok, msg = _verify_sequence(cur, ids, open_b, close_b)
         if ok:
             conn.commit()
