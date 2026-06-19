@@ -717,6 +717,7 @@
             if (!a) return;
             assignments.push({
                 programIndex: i, title: p.title, mode: a.mode, start: p.start, end: p.end,
+                label: p.kind || '',   // grid kind tag (e.g. "Children") → drives label-matched profiles
                 fileId: a.file.id, fileCode: a.file.code,
                 pieces: (a.pieces || []).map(function (x) { return x.id; }),
                 fillers: (a.fillers || []).map(function (x) { return x.id; })

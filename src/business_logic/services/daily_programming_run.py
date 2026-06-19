@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import re
 
-from src.business_logic.services.show_profiles import profile_for
+from src.business_logic.services.show_profiles import elements_for, profile_for
 
 FPS = 29.97
 EVENT_BASE = 100000000000  # Event_P = EVENT_BASE + id_tpalinse
@@ -29,8 +29,9 @@ def _frames(hhmm: str):
     return int((int(m.group(1)) * 3600 + int(m.group(2)) * 60) * FPS) if m else None
 
 
-def _prgs_slots(cur, cod_user, d, lo, hi):
-    """PRGS slots in the window, ordered by start time: list of dicts."""
+def _slots(cur, cod_user, d, lo, hi, seg_type="PRGS"):
+    """Segments of `seg_type` ('PRGS' program breaks or 'COMS' commercial breaks)
+    in the window, ordered by start time: list of dicts."""
     cur.execute(
         """SELECT sb.ID_TrafficSchedule sch, bl.ID_TrafficBlock blk, seg.ID_TrafficSegment seg,
                   (sb.offset+seg.Offset) st
@@ -45,10 +46,10 @@ def _prgs_slots(cur, cod_user, d, lo, hi):
                WHERE se.ID_TrafficBlock=bl.ID_TrafficBlock AND se.visible=1
                AND (SELECT COUNT(*) FROM trf_instancesegment WITH(NOLOCK) WHERE ID_TrafficBlock=bl.ID_TrafficBlock AND COD_USER=ca.Cod_User AND INSTANCEDATE=ca.Date)=0
            ) seg
-           WHERE ca.Cod_User=%s AND ca.Date=%s AND bl.expired=0 AND seg.Type='PRGS'
+           WHERE ca.Cod_User=%s AND ca.Date=%s AND bl.expired=0 AND seg.Type=%s
              AND (sb.offset+seg.Offset)>=%s AND (sb.offset+seg.Offset)<%s
            ORDER BY st""",
-        (cod_user, d, lo, hi),
+        (cod_user, d, seg_type, lo, hi),
     )
     return [{"sched": r[0], "block": r[1], "seg": r[2], "ora": int(r[3])} for r in cur.fetchall()]
 
@@ -179,6 +180,51 @@ def _sync_checksums(cur, ids):
         )
 
 
+def _place_element(cur, cod_user, d, lo, hi, prgs_slots, el, program_first_id):
+    """Place one profile element (e.g. an FCC ID) for this market, on top of the
+    already-placed program.
+
+    Resolves the asset (by `id`, else by `code`), finds the target break of the
+    element's segment type ('PRGS' or 'COMS') at the 1-based `break` index (or
+    "last"), inserts it, sets EVENT_TYPE, and positions it:
+      * "first": if the element is the anchor it becomes the F-lock — the program's
+        first piece is flipped to 'T' and ordered after the element.
+      * "last": best-effort — left where it lands; the break optimizer carries IDs
+        to final position.
+    Returns {id, xorder} or None if the asset or target break can't be found.
+    """
+    fid = el.get("id")
+    if not fid:
+        cur.execute("SELECT ID_FILMATI FROM FILMATI WHERE COD_PROGRA=%s", (el.get("code"),))
+        r = cur.fetchone()
+        if not r:
+            return None
+        fid = r[0]
+    fid = int(fid)
+
+    seg_type = el.get("segment", "PRGS")
+    seg_slots = prgs_slots if seg_type == "PRGS" else _slots(cur, cod_user, d, lo, hi, seg_type)
+    brk = el.get("break", 1)
+    if brk == "last":
+        slot = seg_slots[-1] if seg_slots else None
+    else:
+        slot = seg_slots[brk - 1] if 0 < brk <= len(seg_slots) else None
+    if slot is None:
+        return None
+
+    nid = _insert_event(cur, cod_user, d, slot["sched"], slot["block"], slot["seg"],
+                        slot["ora"], fid, _durata(cur, fid))
+    cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
+    cur.execute("UPDATE TPalinse SET EVENT_TYPE=%s WHERE id_tpalinse=%s", (el.get("event_type", "T"), nid))
+    cur.execute("SELECT XORDER FROM TPALINSE WHERE id_tpalinse=%s", (nid,))
+    xo = int(cur.fetchone()[0])
+
+    if el.get("position") == "first" and el.get("anchor") and program_first_id is not None:
+        cur.execute("UPDATE TPalinse SET EVENT_TYPE='T' WHERE id_tpalinse=%s", (program_first_id,))
+        _ensure_after(cur, cod_user, d, program_first_id, xo)
+    return {"id": nid, "xorder": xo}
+
+
 def _rebuild(cur, d, cod_user, fromid):
     cur.execute("EXEC dbo.sch_rebuildStartTimeSchedule %s,%s,0,0,NULL,%s,-1,0,1", (d, cod_user, fromid))
     try:
@@ -227,9 +273,9 @@ def run_market(conn, cod_user, d, assignment):
     if _is_placed(cur, cod_user, d, lo, hi):
         return {"cu": cod_user, "ok": True, "skipped": True, "message": "already placed"}
 
-    slots = _prgs_slots(cur, cod_user, d, lo, hi)
+    slots = _slots(cur, cod_user, d, lo, hi)
     open_b, close_b = _bumpers(cur, cod_user, d, lo, hi)
-    profile = profile_for(assignment.get("fileCode"))
+    profile = profile_for(assignment.get("fileCode"), assignment.get("label"))
     try:
         if assignment["mode"] == "explode":
             fid = int(assignment["fileId"])
@@ -297,10 +343,23 @@ def run_market(conn, cod_user, d, assignment):
             cur.execute("UPDATE TPalinse SET EVENT_TYPE='T' WHERE id_tpalinse=%s", (close_b["id"],))
             _close_guarantee(cur, cod_user, d, ids[-1], close_b)
 
+        # Profile elements (e.g. FCC IDs) that apply to this market, placed on top
+        # of the program. SFO/CVC anchor flips piece A to T; DAL drops the ID into
+        # the 3rd COMS break (best-effort position — the break optimizer finalizes).
+        extra_ids = []
+        for el in (elements_for(profile, cod_user) if profile else []):
+            placed = _place_element(cur, cod_user, d, lo, hi, slots, el, first_id)
+            if placed is None:
+                conn.rollback()
+                return {"cu": cod_user, "ok": False, "skipped": False,
+                        "message": f"element {el.get('code') or el.get('id')} could not be placed "
+                                   f"({el.get('segment')} break {el.get('break')})"}
+            extra_ids.append(placed["id"])
+
         _rebuild(cur, d, cod_user, first_id)
         # Clear Etere's "needs Explode - all breakpoints" warning by re-syncing the
-        # stored schedule checksum on every row we placed (parts + bumpers).
-        _sync_checksums(cur, list(ids) + [b["id"] for b in (open_b, close_b) if b])
+        # stored schedule checksum on every row we placed (parts + bumpers + elements).
+        _sync_checksums(cur, list(ids) + [b["id"] for b in (open_b, close_b) if b] + extra_ids)
         ok, msg = _verify_sequence(cur, ids, open_b, close_b)
         if ok:
             conn.commit()
