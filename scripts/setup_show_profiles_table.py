@@ -9,6 +9,10 @@ Run once per environment after deploying the exceptions feature:
     uv run python scripts/setup_show_profiles_table.py
 """
 import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))  # project root → import like the other scripts
 
 from browser_automation.etere_direct_client import connect
 from src.business_logic.services.show_profiles import default_profiles, to_config
