@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import re
 
+from src.business_logic.services.show_profiles import profile_for
+
 FPS = 29.97
 EVENT_BASE = 100000000000  # Event_P = EVENT_BASE + id_tpalinse
 
@@ -140,6 +142,25 @@ def _close_guarantee(cur, cod_user, d, last_id, close_b):
     cur.execute("UPDATE TPALINSE SET XORDER=%s WHERE id_tpalinse=%s", (newx, close_b["id"]))
 
 
+def _ensure_bumper(cur, cod_user, d, slot, spec, existing):
+    """Ensure a required bumper exists. If one is already in the window (`existing`,
+    from _bumpers) return it. Otherwise insert the bumper file (resolved by code)
+    into `slot` and return the new {id, xorder}. Type/order conform is done by the
+    caller. Returns None only if the bumper file can't be found in the library."""
+    if existing:
+        return existing
+    cur.execute("SELECT ID_FILMATI, DURATA FROM FILMATI WHERE COD_PROGRA=%s", (spec["code"],))
+    r = cur.fetchone()
+    if not r:
+        return None
+    fid, dur = int(r[0]), int(r[1] or 0)
+    nid = _insert_event(cur, cod_user, d, slot["sched"], slot["block"], slot["seg"],
+                        slot["ora"], fid, dur)
+    cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
+    cur.execute("SELECT XORDER FROM TPALINSE WHERE id_tpalinse=%s", (nid,))
+    return {"id": nid, "xorder": int(cur.fetchone()[0])}
+
+
 def _rebuild(cur, d, cod_user, fromid):
     cur.execute("EXEC dbo.sch_rebuildStartTimeSchedule %s,%s,0,0,NULL,%s,-1,0,1", (d, cod_user, fromid))
     try:
@@ -190,6 +211,7 @@ def run_market(conn, cod_user, d, assignment):
 
     slots = _prgs_slots(cur, cod_user, d, lo, hi)
     open_b, close_b = _bumpers(cur, cod_user, d, lo, hi)
+    profile = profile_for(assignment.get("fileCode"))
     try:
         if assignment["mode"] == "explode":
             fid = int(assignment["fileId"])
@@ -227,13 +249,35 @@ def run_market(conn, cod_user, d, assignment):
                 ids.append(nid)
             first_id = ids[0]
 
-        # Bumper rules: open bumper present → first element after it (parts/pieces stay T).
-        # No open bumper → the first element is the locked piece-one (EVENT_TYPE='F').
+        # Per-show profile: ensure required bumpers exist (insert if master control
+        # didn't pre-place them). The bumper file is resolved by code at runtime.
+        if profile:
+            for spec, slot, label in ((profile.get("open_bumper"), slots[0], "open"),
+                                      (profile.get("close_bumper"), slots[-1], "close")):
+                if not spec:
+                    continue
+                got = _ensure_bumper(cur, cod_user, d, slot, spec,
+                                     open_b if label == "open" else close_b)
+                if not got:
+                    conn.rollback()
+                    return {"cu": cod_user, "ok": False, "skipped": False,
+                            "message": f"{label} bumper {spec['code']} not found in media library"}
+                if label == "open":
+                    open_b = got
+                else:
+                    close_b = got
+
+        # Conform type + order.
+        # Open bumper present → it is the F-locked anchor, first; program parts stay T.
+        # No open bumper → the first program element is the locked piece-one (F).
         if open_b:
+            cur.execute("UPDATE TPalinse SET EVENT_TYPE='F' WHERE id_tpalinse=%s", (open_b["id"],))
             _ensure_after(cur, cod_user, d, first_id, open_b["xorder"])
         else:
             cur.execute("UPDATE TPalinse SET EVENT_TYPE='F' WHERE id_tpalinse=%s", (first_id,))
-        _close_guarantee(cur, cod_user, d, ids[-1], close_b)
+        if close_b:
+            cur.execute("UPDATE TPalinse SET EVENT_TYPE='T' WHERE id_tpalinse=%s", (close_b["id"],))
+            _close_guarantee(cur, cod_user, d, ids[-1], close_b)
 
         _rebuild(cur, d, cod_user, first_id)
         ok, msg = _verify_sequence(cur, ids, open_b, close_b)
