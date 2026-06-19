@@ -30,6 +30,12 @@ from __future__ import annotations
 import json
 import re
 
+# Market code → COD_USER, and the named "OTA" (over-the-air) market group used by
+# element scopes. OTA spans both networks: SFO/CVC are CTV, DAL is TAC.
+MARKET_CODE_TO_CU = {"NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4, "SEA": 5,
+                     "LAX": 6, "CVC": 7, "WDC": 8, "MMT": 9, "DAL": 10}
+OTA_MARKETS = ["SFO", "CVC", "DAL"]
+
 _DEFAULT_PROFILES = [
     {
         "name": "Korean News",
@@ -37,8 +43,27 @@ _DEFAULT_PROFILES = [
         "networks": ["CTV"],              # CTV markets only (no DAL)
         "days": "M-F",
         "window": ("08:00", "09:00"),
+        # NOTE: still in the legacy open_bumper/close_bumper shape — the validated
+        # run_market bumper path reads these directly. Migrate to `elements` when the
+        # UI lands (the engine will normalize both).
         "open_bumper": {"code": "BUMP_MBCNEWSTODAY_OPEN", "event_type": "F"},
         "close_bumper": {"code": "BUMP_MBCNEWSTODAY_CLOSE", "event_type": "T"},
+    },
+    {
+        "name": "Children",
+        "label": "Children",              # matches the K: grid kind tag (e.g. "Mandarin Children")
+        "elements": [
+            # SFO + CVC: FCC ID is the F-anchor at the top of the first PRGS break;
+            # the program's piece A then follows as T.
+            {"kind": "fcc_id", "id": 2891, "code": "IDKIDS15E04",
+             "markets": ["SFO", "CVC"], "segment": "PRGS", "break": 1,
+             "position": "first", "event_type": "F", "anchor": True},
+            # DAL: FCC ID floats at the final position of the 3rd COMS break;
+            # piece A stays the F-anchor in the PRGS breaks (anchor=False here).
+            {"kind": "fcc_id", "id": 83128, "code": "ID - TACDAL - FCC",
+             "markets": ["DAL"], "segment": "COMS", "break": 3,
+             "position": "last", "event_type": "T", "anchor": False},
+        ],
     },
 ]
 
@@ -50,8 +75,8 @@ def default_profiles():
 
 def to_config(profile):
     """The JSON `config` payload for a profile row — everything except the
-    name/code_re columns (networks, days, window, bumpers, future elements)."""
-    return {k: v for k, v in profile.items() if k not in ("name", "code_re")}
+    name/code_re/label columns (networks, days, window, bumpers, elements, …)."""
+    return {k: v for k, v in profile.items() if k not in ("name", "code_re", "label")}
 
 
 def load_profiles():
@@ -66,16 +91,19 @@ def load_profiles():
         with connect() as conn:
             cur = conn.cursor()
             cur.execute(
-                "SELECT name, code_re, config FROM chat.show_profiles "
+                "SELECT name, code_re, label, config FROM chat.show_profiles "
                 "WHERE enabled = 1 ORDER BY sort_order, id"
             )
             rows = cur.fetchall()
         if rows:
             out = []
-            for name, code_re, cfg in rows:
+            for name, code_re, label, cfg in rows:
                 p = json.loads(cfg) if cfg else {}
                 p["name"] = name
-                p["code_re"] = code_re
+                if code_re:
+                    p["code_re"] = code_re
+                if label:
+                    p["label"] = label
                 out.append(p)
             return out
     except Exception:
@@ -83,10 +111,41 @@ def load_profiles():
     return default_profiles()
 
 
-def profile_for(file_code):
-    """Return the setup profile whose code_re matches this file code, or None."""
+def profile_for(file_code, label=None):
+    """Return the setup profile matching this show, or None.
+
+    A profile matches by either `code_re` (regex on the file's COD_PROGRA, e.g.
+    Korean News) OR `label` (the program's grid kind tag, e.g. "Children"). First
+    match wins (ordered by sort_order). `label` is optional so existing callers
+    that pass only a file code keep working (code_re profiles still match).
+    """
     code = (file_code or "").strip()
+    lab = (label or "").strip().lower()
     for p in load_profiles():
-        if re.match(p["code_re"], code, re.IGNORECASE):
+        cre = p.get("code_re")
+        if cre and code and re.match(cre, code, re.IGNORECASE):
+            return p
+        plabel = p.get("label")
+        if plabel and lab and plabel.strip().lower() == lab:
             return p
     return None
+
+
+def elements_for(profile, cod_user):
+    """Elements from a profile that apply to this market (COD_USER).
+
+    Each element's `markets` is `"all"`, `"ota"`, or a list of market codes
+    (e.g. ["SFO","CVC"]). Returns the elements whose scope includes cod_user.
+    """
+    out = []
+    for el in (profile or {}).get("elements", []):
+        mk = el.get("markets", "all")
+        if mk == "all":
+            cus = set(MARKET_CODE_TO_CU.values())
+        elif mk == "ota":
+            cus = {MARKET_CODE_TO_CU[c] for c in OTA_MARKETS}
+        else:
+            cus = {MARKET_CODE_TO_CU[c] for c in mk if c in MARKET_CODE_TO_CU}
+        if cod_user in cus:
+            out.append(el)
+    return out
