@@ -102,6 +102,11 @@ def apply_edl_from_csv(conn, filmati: int, splits, eom: int, cod_user: int):
     d0 = durs[0]
 
     try:
+        # The tail trim (EOM out-point) is what dbo.ExplodeEdl actually reads from
+        # FILMATI.POS_FIN — NOT FEDLDESCRIPTION.EOM. DURATA = usable length =
+        # POS_FIN - POS_INI + 1 (POS_INI stays 0; no head trim yet). The physical
+        # file length (DUR_FISICA / DURATA_PUB) is left untouched.
+        cur.execute("UPDATE FILMATI SET POS_FIN=%s, DURATA=%s WHERE ID_FILMATI=%s", (eom, eom + 1, filmati))
         for v, dn in durs.items():
             r = dn / d0
             new_eom = round(eom * r)
