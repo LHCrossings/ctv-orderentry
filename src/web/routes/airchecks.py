@@ -30,7 +30,7 @@ MARKET_NAMES = {
 }
 
 PRE_ROLL_SECS  = 20
-POST_ROLL_SECS = 20
+POST_ROLL_SECS = 30
 
 
 def _fetch_etere_spots(contract_id: int) -> list[dict]:
