@@ -1,0 +1,234 @@
+# Lessons Learned — Archive
+
+Parser-specific quirks, historical bugs, and one-off findings that don't apply broadly. Moved from `lessons.md` to keep the active rulebook lean.
+
+---
+
+## Make-Good Lines Must Use row_status=2 (Change Data), Not row_status=1
+
+**Session:** Make Goods (2026-05-29)
+
+**Rule:** From `add_contract_line` signature: `row_status: int = 0 — 0=Ready, 2=Change Data`. Use:
+- `row_status=0` — line is ready, scheduler picks it up immediately
+- `row_status=2` — line requires approval (Change Data gate) before scheduling
+
+Any line inserted as a revision, make-good, or correction to an already-approved contract must use `row_status=2`. Only use `row_status=0` for fresh new lines on contracts that haven't been approved yet.
+
+## assign_blocks_for_existing_line Strips All Asterisks From DESCRIZIONE
+
+**Session:** Make Goods (2026-05-29)
+
+**Rule:** `assign_blocks_for_existing_line` runs this SQL after every block refresh:
+```sql
+UPDATE CONTRATTIRIGHE
+SET    DESCRIZIONE = RTRIM(REPLACE(DESCRIZIONE, '*', ''))
+WHERE  ID_CONTRATTIRIGHE = %s AND DESCRIZIONE LIKE '%*%'
+```
+
+This strips ALL asterisks from any description that contains one — by design, to clean up trailing `*` Etere appends after block operations.
+
+**How to apply:** Never use `*` in programmatically-set description prefixes on lines that go through block refresh. Use hyphens or brackets instead: `-MG-`, `[MG]`, etc.
+
+---
+
+## Time Advertising "Thematic" Is a Creative Title, Not a Paid/Bonus Indicator
+
+**Session:** Time Advertising direct DB conversion (2026-05-29)
+
+**Rule:** In Time Advertising broadcast orders, "Thematic" (or "Thematic … Existing") is the **title of the ad creative** to air — a traffic instruction to use the spot called "Thematic." It has nothing to do with whether the line is paid or bonus.
+
+Paid vs. bonus is determined exclusively by whether the line has a **rate**:
+- Rate > 0 → Paid Commercial (`booking_code=2`)
+- Rate = 0 → BNS (`booking_code=10`)
+
+**Do NOT** use `is_thematic` or section header keywords ("thematic", "free") to infer booking code.
+
+**Applies to:** `timeadvertising_automation.py` and any future Time Advertising parser work.
+
+---
+
+## Time Suffix Inheritance Must Never Produce a Midnight-Crossing Range
+
+**Session:** Lexus EST (2026-05-11)
+
+**What happened:** Program name `Ss 1130-12N Vt Variety` parsed as `23:30–12:00`. Start `1130` had no suffix, so it inherited `PM` from end `12N` (noon→PM). Result: 11:30 PM to noon — crosses midnight.
+
+**Rule:** A valid daypart never crosses midnight. After inheriting the end suffix, compare start vs. end in 24-hour minutes. If `start_minutes > end_minutes`, the inherited suffix is wrong — flip it (PM→AM or AM→PM). Only flip when the suffix was inferred (no explicit suffix on start); never override an explicit user-written suffix.
+
+```python
+if not start_sfx_raw:
+    if _to_mins(start_h, start_sfx) > _to_mins(end_h, end_sfx):
+        start_sfx = 'AM' if start_sfx == 'PM' else 'PM'
+```
+
+**Applies to:** `_extract_time_from_program` in `lexus_parser.py`, and any future parser that infers AM/PM from context.
+
+---
+
+## Melissa Uses "Ss" to Mean Saturday+Sunday
+
+**Session:** Lexus EST 210 (2026-03-13)
+
+**What happened:** Program name `Ss 12N-1P Vt Drama` had `Ss` as the day token. The tokenizer matched `S` (Saturday) and dropped the trailing `s`, producing Saturday-only instead of Sa-Su.
+
+**Rule:** `Ss` (mixed case, exactly 2 characters) = Melissa's shorthand for Saturday+Sunday.
+Normalise to `Sa-Su` before tokenizing in `_extract_days_from_program`. Check for similar shorthand variants if new notation appears.
+
+**Applies to:** Lexus and Melissa-based PDFs.
+
+---
+
+## 12N (Noon) Must Be Handled in All Time Extraction Regexes
+
+**Session:** Lexus EST 207 / EST 210 (2026-03-13)
+
+**What happened:** Program names like `M-Su 1130A-12N VT Variety` and `M-Su 12N-1P Vt Drama`
+were entered as `06:00–23:59` (the empty-time fallback). The time extraction regex only
+included `[AaPpMm]` as valid suffix characters — `N` (noon) was not in the set, so `12N`
+failed to match entirely.
+
+**Rule:** ANY time extraction regex that accepts `A`, `P`, or `M` as a suffix MUST also accept
+`N`/`n` for noon. The `_normalise_suffix` function must map `N`/`NOON` → `'PM'` (noon = 12 PM).
+Be **extremely careful** with `11:30A-12N`, `12N-1P`, and any range ending or starting at noon.
+The silent fallback to `06:00–23:59` means the error will pass validation with no warning.
+
+**Applies to:** `lexus_parser.py`, `imprenta_parser.py`, and any future parser with embedded time extraction logic.
+
+---
+
+## Tests Are Not Authoritative for String Constants
+
+**Session:** Market code mismatch fix (2026-02-19)
+
+**What happened:** `test_chinese_block_abbreviation` expected `"C/M"` but
+`Language.MANDARIN.get_block_abbreviation()` returned `"M/C"`. The test was stale — the code
+was correct. Correctly flagged this as a pre-existing failure (not introduced by the change),
+then fixed the test when user confirmed `"M/C"` is correct.
+
+**Rule:** When a test and implementation disagree on a string constant, do NOT silently fix
+either side. Surface the conflict explicitly, state which side you believe is correct and why,
+and let the user confirm before touching anything.
+
+---
+
+## OCR Parser Failures Are Silent by Default — Always Verify Spot/Line Counts
+
+**Session:** RPM Muckleshoot 10868 (2026-02-24)
+
+**What happened:** RPM parser silently dropped 3 of 8 lines (37% of spots, $1,932). No error
+was raised — the parser just returned fewer lines. Two distinct OCR artifact patterns:
+
+1. **Space in time range:** `6:00a- 8:00p` → column shift → rate field received `RT` → Decimal
+   parse failed → line silently skipped. Fix: preprocess `(\d+:\d+[ap])-\s+(\d+:\d+[ap])` → join.
+
+2. **Doubled letter in day code:** `MTuWTHhF` (OCR doubled the `h` in `Th`) → exact-match regex
+   `MTuWThF` didn't match → line skipped. Fix: use `MT[A-Za-z]+F` pattern everywhere the day
+   code is matched or parsed.
+
+**Rule:** After any RPM parser change, run `parse_rpm_pdf` on the PDF and verify:
+- Line count matches the PDF's line count
+- Total spots match the PDF's "Total Spots" footer
+- Total cost matches the PDF's "Total Cost" footer
+Never trust "parsed successfully" without checking the numbers.
+
+**Applies to:** RPM parser work.
+
+---
+
+## Image-Based PDFs Have Structural Variants — Min-Column Guards Must Be Dynamic
+
+**Session:** Misfit Supplemental Budget (2026-02-24)
+
+**What happened:** Misfit parser used `len(row) < 10` to skip short rows. Supplemental budget
+PDFs cover only 3 weeks → 8 columns → ALL data rows skipped silently. Additionally the header
+Market cell was Python None (not a string), producing `order.markets = ['None']` which matched
+no parsed lines. 0 lines entered despite a valid contract being created.
+
+**Rule:** Column count guards should reflect the minimum structure (≥5 for Misfit tables), not
+the typical case. Always derive `markets` from parsed `line.market` values, not the header field
+which can be absent in supplemental/non-standard PDFs.
+
+**Applies to:** Misfit and other image-based PDF parsers.
+
+---
+
+## Static Day-Pattern Dict in _select_days Silently Defaults to All Days
+
+**Session:** Admerasia McDonald's SEA 11-MD10-2603CT (2026-02-25)
+
+**What happened:** `_select_days` used a hardcoded dict mapping known strings to checkbox
+indices. Any unrecognised string (M,W,R,F / M-R / M,R / S / U) silently fell through to the
+default `[0,1,2,3,4,5,6]` = M-Su. Result: every Admerasia line got all 7 days checked.
+
+**Rule:** Never use a static dict + silent all-day default for day-pattern parsing. Use a
+proper parser (`_parse_day_codes`) that handles ranges, comma lists, and single codes, and
+**warns explicitly** on unknown input rather than defaulting silently. Verify by running
+`_parse_day_codes` against every pattern a parser can produce before shipping.
+
+**Applies to:** Admerasia and any other parser using hardcoded day dicts.
+
+---
+
+## Admerasia Day Selection Must Come From Calendar Grid, Not Program Bracket
+
+**Session:** Admerasia McDonald's SEA 11-MD10-2603CT (2026-02-25)
+
+**What happened:** Misread user complaint about day selection. Thought the fix was to use
+the program name bracket `(M-F)` as the Etere day string. This was wrong — it caused Etere
+to freely distribute 10 spots across 15 available M-F slots instead of placing them on the
+exact days specified in the calendar grid.
+
+Admerasia orders are ordered **day by day**. Each cell in the calendar grid specifies the
+exact number of spots for that exact date. The Etere day selection must reflect precisely
+which days have spots (and per_day_max must match the count in the cell).
+
+**Rule:** Never use the program name bracket to override calendar-derived day strings for
+Admerasia. The bracket describes when the program airs; the calendar grid is the purchase
+order. Use the grid to build exact per-week Etere lines with precise day patterns and
+per_day_max values.
+
+**Applies to:** Admerasia parser.
+
+---
+
+## Admerasia Chinese Format Detection Must Check Col 0, Not Just Col 1
+
+**Session:** Admerasia McDonald's SEA 11-MD10-2603CT (2026-02-25)
+
+**What happened:** Parser detected "Vietnamese format" for a Chinese-language order, producing
+0 lines. The Vietnamese/Chinese format detection checked `first_data_row[1]` for `:\d+s?` (spot
+length). In this order the spot length (`:15`) was in col 0 and an ad title text was in col 1
+(`ACM Yes/ACM Name/`), so the check failed and col offsets were set to Vietnamese mode
+(`program_col=2`). Column 2 is `None` for all data rows → every line skipped silently.
+
+Also found: PDF typo `10:300p` (3-digit minute). The normalizer's pre-process regex
+`re.sub(r'(\d+):(\d{2})\d+([ap])', ...)` trims extra minute digits before pattern matching.
+
+**Rules:**
+1. Chinese format detection must check **both col 0 and col 1** for the `:\d+s?` spot length
+   pattern — the column position varies across orders.
+2. When 0 lines are found, immediately dump the raw table rows around `row_offset` to identify
+   which skip condition is firing (no program, no rate, garbled time, etc.).
+3. Add the `10:300p`-style 3-digit minute sanitization as a pre-process step in
+   `_normalize_time_to_colon_format` to handle PDF OCR/typo artifacts silently.
+
+**Applies to:** Admerasia parser.
+
+---
+
+## Bookend Orders: Halve Spot Counts, Double Rate Before Etere Entry
+
+**Session:** Imprenta PG&E bookend fix (2026-03-16)
+
+**Rule:** When an order is a bookend order, Etere's "Top and Bottom" scheduling fires **2 spots per line entry** — one at the top of the break and one at the bottom. Entering the PDF spot count directly would double the spots on air.
+
+**Fix (universal — applies to Imprenta, Impact, and any future bookend order):**
+- `spots_per_week` ÷ 2
+- `total_spots` ÷ 2
+- `rate` × 2 (paid lines only — bonus lines stay at $0)
+- Halving applies to **all** lines in a bookend order, including bonus lines (they also air top+bottom)
+- If any bookend line has an odd spot count, **abort with an error** — bookends must run in pairs and the AE must correct the order before entry.
+
+**Key distinction:** Use the order-level `is_bookend` flag (e.g. `parse_result.is_bookend`) for BOTH the spot-halving condition AND the `is_bookend` key passed to Etere — not the line-level flag (which is False for bonus lines). Using `line.is_bookend` for the Etere scheduling flag causes bonus lines to enter as rotation instead of Top/Bottom.
+
+**Applies to:** Imprenta, Impact, and any other bookend order parser.
