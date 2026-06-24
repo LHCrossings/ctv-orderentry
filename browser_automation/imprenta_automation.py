@@ -254,7 +254,8 @@ def gather_imprenta_inputs(file_path: str) -> Optional[dict]:
         result = parse_imprenta_file(file_path)
     except Exception as e:
         print(f"[PARSE] ✗ Failed: {e}")
-        import traceback; traceback.print_exc()
+        import traceback
+        traceback.print_exc()
         return None
 
     print(f"[PARSE] ✓ Campaign:  {result.campaign}")

@@ -888,7 +888,7 @@ def _parse_line_items_coordinate_based(pdf: pdfplumber.PDF, week_start_dates: Li
         rate_str = rate_match.group(1).replace(' ', '').strip()
         try:
             net_rate = Decimal(rate_str)
-        except:
+        except Exception:
             print(f"[COORDINATE WARNING] Could not parse rate from: '{rate_match.group(1)}'")
             continue
         
@@ -1226,14 +1226,14 @@ def _parse_line_items_table_based(pdf: pdfplumber.PDF, week_start_dates: List[da
         
         try:
             net_rate = Decimal(rate_str_clean)
-        except:
+        except Exception:
             # Try salvaging from garbled/interleaved text — same approach as time salvage.
             # e.g. "ve$l S h o w s / ( F ) T e c 2 h5 i.n5 0Ou" → strip non-digits/dots → "25.50"
             salvaged_rate = re.sub(r'[^0-9.]', '', rate_str.replace('$', '', 1)).strip('.')
             try:
                 net_rate = Decimal(salvaged_rate)
                 print(f"[INFO] Row {row_idx}: salvaged rate from garbled column: ${net_rate}")
-            except:
+            except Exception:
                 print(f"[WARNING] Could not parse rate: {rate_str}")
                 continue
         
@@ -1271,14 +1271,14 @@ def _parse_line_items_table_based(pdf: pdfplumber.PDF, week_start_dates: List[da
             if total_cell and total_cell.strip():
                 try:
                     expected_total = int(total_cell.strip())
-                except:
+                except Exception:
                     # Try next column
                     if total_col_idx + 1 < len(row):
                         total_cell = row[total_col_idx + 1]
                         if total_cell and total_cell.strip():
                             try:
                                 expected_total = int(total_cell.strip())
-                            except:
+                            except Exception:
                                 pass
         
         # Calculate actual total from daily spots

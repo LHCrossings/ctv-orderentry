@@ -148,10 +148,14 @@ def _create_opad_contract_direct(pdf_path: str, user_input) -> bool:
 
     except Exception as exc:
         print(f"[OPAD DIRECT] ✗ {exc}")
-        import traceback; traceback.print_exc()
+        import traceback
+        traceback.print_exc()
         if conn:
-            try: conn.rollback(); conn.close()
-            except: pass
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
         return False
 # ═══════════════════════════════════════════════════════════════════════════════
 # PRE-GATHER (called before processing begins)

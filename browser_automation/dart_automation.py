@@ -115,10 +115,14 @@ def _create_dart_contract_direct(xlsx_path: str, user_input: dict) -> Optional[s
 
     except Exception as exc:
         print(f"[DART DIRECT] ✗ {exc}")
-        import traceback; traceback.print_exc()
+        import traceback
+        traceback.print_exc()
         if conn:
-            try: conn.rollback(); conn.close()
-            except: pass
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
         return None
 
 

@@ -129,7 +129,8 @@ def _create_tcaa_av_contract_direct(order: ToyotaAVOrder, inputs: dict) -> Optio
                 row = cur.fetchone()
             if not row:
                 print(f"[TCAA_AV DIRECT] ✗ Contract {existing_num!r} not found in CONTRATTITESTATA")
-                conn.rollback(); conn.close()
+                conn.rollback()
+                conn.close()
                 return None
             contract_id = row[0]
             print(f"[TCAA_AV DIRECT] Adding to existing contract ID={contract_id} ({existing_num})")

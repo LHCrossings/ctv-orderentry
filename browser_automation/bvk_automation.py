@@ -129,10 +129,14 @@ def _create_bvk_contract_direct(order: 'BVKOrder', inputs: dict) -> Optional[int
 
     except Exception as exc:
         print(f"[BVK DIRECT] ✗ {exc}")
-        import traceback; traceback.print_exc()
+        import traceback
+        traceback.print_exc()
         if conn:
-            try: conn.rollback(); conn.close()
-            except: pass
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
         return None
 
 

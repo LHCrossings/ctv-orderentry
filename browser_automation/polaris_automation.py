@@ -116,10 +116,14 @@ def _create_polaris_contracts_direct(order: 'PolarisOrder', user_input: dict) ->
 
     except Exception as exc:
         print(f"[POLARIS DIRECT] ✗ {exc}")
-        import traceback; traceback.print_exc()
+        import traceback
+        traceback.print_exc()
         if conn:
-            try: conn.rollback(); conn.close()
-            except: pass
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
         return None
 
 

@@ -186,10 +186,14 @@ def _create_threeolives_contract_direct(order: 'ThreeOlivesOrder', inputs: dict)
 
     except Exception as exc:
         print(f"[3OLIVES DIRECT] ✗ {exc}")
-        import traceback; traceback.print_exc()
+        import traceback
+        traceback.print_exc()
         if conn:
-            try: conn.rollback(); conn.close()
-            except: pass
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
         return False
 
 

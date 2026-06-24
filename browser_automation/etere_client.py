@@ -275,7 +275,7 @@ class EtereClient:
                 desc_field = self.driver.find_element(By.ID, "description")
                 desc_field.clear()
                 desc_field.send_keys(description)
-            except:
+            except Exception:
                 pass
             
             # Handle customer
@@ -453,7 +453,7 @@ class EtereClient:
                         try:
                             option = self.wait.until(EC.element_to_be_clickable((By.XPATH, pattern)))
                             break
-                        except:
+                        except Exception:
                             continue
                     
                     if option:
@@ -467,7 +467,7 @@ class EtereClient:
                     print(f"[HEADER] ⚠ Charge To: {e}")
                     try:
                         self.driver.find_element(By.TAG_NAME, "body").click()
-                    except:
+                    except Exception:
                         pass
             
             # Invoice Header (Select2)
@@ -492,7 +492,7 @@ class EtereClient:
                         try:
                             option = self.wait.until(EC.element_to_be_clickable((By.XPATH, pattern)))
                             break
-                        except:
+                        except Exception:
                             continue
                     
                     if option:
@@ -506,7 +506,7 @@ class EtereClient:
                     print(f"[HEADER] ⚠ Invoice Header: {e}")
                     try:
                         self.driver.find_element(By.TAG_NAME, "body").click()
-                    except:
+                    except Exception:
                         pass
             
             # Save details
