@@ -16,10 +16,10 @@ for _p in (_root, _root / "browser_automation"):
 
 from browser_automation.added_value import (
     SPOT_CODE_AV,
+    add_av_line,
     av_total_spots,
     format_languages,
     widest_window,
-    add_av_line,
 )
 
 

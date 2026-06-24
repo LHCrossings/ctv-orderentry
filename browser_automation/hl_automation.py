@@ -52,8 +52,8 @@ SEPARATION_INTERVALS = (25, 0, 0)
 SPOT_CODE_PAID = 2       # Paid Commercial
 SPOT_CODE_BONUS = 10     # BNS / Bonus Spot
 
-from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMERS_DB_PATH
 from browser_automation.added_value import add_av_line, prompt_add_av, widest_window
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMERS_DB_PATH
 
 # Market mapping for H&L (SFO and CVC only)
 HL_MARKET_MAPPING = {
@@ -249,7 +249,7 @@ def _execute_order(pdf_path: str, user_input: dict) -> bool:
 
             # Optional Added Value line (one spot/day across the flight)
             if all_success and add_av and estimate.lines:
-                window = widest_window([l.time for l in estimate.lines])
+                window = widest_window([ln.time for ln in estimate.lines])
                 duration_str = f"00:00:{estimate.lines[0].duration:02d}:00"
                 av_id = add_av_line(
                     client,
@@ -259,7 +259,7 @@ def _execute_order(pdf_path: str, user_input: dict) -> bool:
                     date_to=flight_end,
                     duration=duration_str,
                     separation=separation,
-                    languages=[l.program.split()[0] for l in estimate.lines if l.program],
+                    languages=[extract_language_from_program(ln.program) for ln in estimate.lines],
                     fallback_time=window,
                 )
                 if av_id > 0:
@@ -611,7 +611,7 @@ def gather_hl_inputs(pdf_path: str) -> dict | None:
     print(f"[INTERVALS] ✓ Customer={separation[0]}, Order={separation[1]}, Event={separation[2]}")
 
     # Offer Added Value when the order carries no bonus (rate == 0) lines
-    has_bonus = any(l.is_bonus() for e in estimates for l in e.lines)
+    has_bonus = any(ln.is_bonus() for e in estimates for ln in e.lines)
     add_av = prompt_add_av(has_bonus)
 
     print("\n" + "=" * 70)
