@@ -730,7 +730,7 @@ class OrderDetectionService:
         elif order_type == OrderType.OPAD:
             return self._extract_opad_client(first_page_text)
 
-        elif order_type in (OrderType.HL, OrderType.MEDIASOL):
+        elif order_type in (OrderType.HL, OrderType.HL_BDR, OrderType.MEDIASOL):
             return self._extract_hl_client(first_page_text)
 
         elif order_type == OrderType.DAVISELEN:
