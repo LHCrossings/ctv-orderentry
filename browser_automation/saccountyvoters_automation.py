@@ -24,15 +24,11 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from browser_automation.etere_client import EtereClient
-from browser_automation.ros_definitions import ROS_SCHEDULES
 from browser_automation.parsers.saccountyvoters_parser import (
-    SacCountyVotersOrder,
-    SacCountyVotersPhase,
-    SacCountyVotersLine,
     parse_saccountyvoters_pdf,
 )
+from browser_automation.ros_definitions import ROS_SCHEDULES
 from src.domain.enums import OrderType, SeparationInterval
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONSTANTS
@@ -41,6 +37,7 @@ from src.domain.enums import OrderType, SeparationInterval
 SAC_MARKET = "CVC"
 SAC_SEPARATION = SeparationInterval.SACCOUNTYVOTERS.value   # (15, 0, 0)
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CUSTOMER DATABASE LOOKUP
 # ─────────────────────────────────────────────────────────────────────────────

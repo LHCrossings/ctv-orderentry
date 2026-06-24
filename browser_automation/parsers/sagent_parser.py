@@ -17,12 +17,12 @@ PDF Structure:
 - Bonus lines: $0.00 net rate
 """
 
-from dataclasses import dataclass
-from typing import List, Optional, Tuple
-from datetime import datetime, date
-from decimal import Decimal, ROUND_HALF_UP
-import pdfplumber
 import re
+from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Decimal
+from typing import List, Tuple
+
+import pdfplumber
 
 
 @dataclass(frozen=True)
@@ -376,7 +376,7 @@ def parse_sagent_pdf(pdf_path: str) -> SagentOrder:
                     break
         
         if not week_start_dates:
-            print(f"[PARSER] WARNING: Could not parse week columns - will use contract dates")
+            print("[PARSER] WARNING: Could not parse week columns - will use contract dates")
         
         print(f"[PARSER] Week columns: {week_start_dates}")
         

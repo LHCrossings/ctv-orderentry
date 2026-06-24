@@ -5,12 +5,13 @@ Handles Pechanga Resort Casino and Sky River Casino orders
 Format: Single-page order with ad codes and spot allocations
 """
 
-import pdfplumber
-import re
-from datetime import datetime, timedelta
-from dataclasses import dataclass
-from typing import List, Dict, Optional, Tuple
 import math
+import re
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple
+
+import pdfplumber
 
 
 @dataclass
@@ -142,8 +143,8 @@ def _verify_spot_duration(text: str, parsed_duration: int, paid_spots: int, bonu
     Returns:
         Confirmed spot duration (user's choice if mismatch detected)
     """
-    import re
     import hashlib
+    import re
     
     # Create a cache key from the text content
     cache_key = hashlib.md5(text.encode()).hexdigest()

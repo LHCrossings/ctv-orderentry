@@ -14,12 +14,13 @@ PDF structure:
 - "Fix/ROS" column: "ROS" means run-of-schedule, "Fixed" means specific daypart
 """
 
-import pdfplumber
 import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
+
+import pdfplumber
 
 _project_root = Path(__file__).parent.parent.parent
 if str(_project_root) not in sys.path:

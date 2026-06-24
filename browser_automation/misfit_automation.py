@@ -19,34 +19,31 @@ Key Misfit Business Rules:
 - Separation: Customer=15, Order=0, Event=0
 """
 
-from dataclasses import dataclass
-from datetime import date, datetime
-from typing import Optional
-from pathlib import Path
 import sys
+from datetime import date, datetime
+from pathlib import Path
+from typing import Optional
 
 # Add paths for imports
 _src_path = Path(__file__).parent.parent
 if str(_src_path) not in sys.path:
     sys.path.insert(0, str(_src_path))
 
-from browser_automation.etere_client import EtereClient
-from browser_automation.ros_definitions import get_ros_schedule
 from parsers.misfit_parser import (
-    parse_misfit_pdf,
     MisfitOrder,
-    MisfitLine,
-    prompt_for_spot_duration,
     _parse_week_date,
     analyze_weekly_distribution,
+    parse_misfit_pdf,
+    prompt_for_spot_duration,
 )
+
+from browser_automation.etere_client import EtereClient
+from src.business_logic.services.customer_matching_service import CustomerMatchingService
+from src.data_access.repositories.customer_repository import CustomerRepository
+from src.domain.entities import Customer
 
 # Customer detection
 from src.domain.enums import OrderType
-from src.domain.entities import Customer
-from src.data_access.repositories.customer_repository import CustomerRepository
-from src.business_logic.services.customer_matching_service import CustomerMatchingService
-
 
 # ============================================================================
 # ROS (Run of Schedule) DEFINITIONS - Now using universal definitions
@@ -184,7 +181,7 @@ def gather_upfront_inputs(order: MisfitOrder, etere_client: EtereClient) -> dict
         # Save the search term for later
         search_term = input("Enter search term to use (or press Enter for blank): ").strip()
         
-        print(f"\n[INFO] Customer search will open automatically during contract creation")
+        print("\n[INFO] Customer search will open automatically during contract creation")
         print(f"      Search term: '{search_term}' (you can modify it there)")
     
     else:
@@ -476,7 +473,7 @@ def process_misfit_order(
         print(f"✗ Failed to parse PDF: {e}")
         return False
 
-    print(f"✓ Parsed order")
+    print("✓ Parsed order")
     print(f"  Agency: {order.agency}")
     print(f"  Contact: {order.contact}")
     print(f"  Markets: {', '.join(order.markets)}")

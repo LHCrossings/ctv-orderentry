@@ -20,7 +20,7 @@ Calendar month handling:
 """
 
 import sys
-from datetime import datetime, timedelta, date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -29,9 +29,11 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from browser_automation.etere_client import EtereClient
-from browser_automation.parsers.rwny_parser import RWNYOrder, RWNYLine, RWNYMonthColumn, parse_rwny_pdf
+from browser_automation.parsers.rwny_parser import (
+    RWNYOrder,
+    parse_rwny_pdf,
+)
 from src.domain.enums import OrderType, SeparationInterval
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONSTANTS
@@ -41,6 +43,7 @@ RWNY_CUSTOMER_ID  = 432
 RWNY_MARKET       = 'NYC'
 RWNY_SEPARATION   = SeparationInterval.RWNY.value   # (25, 0, 0)
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+
 _DAY_SETS: dict[str, set] = {
     'M-Su':  {0, 1, 2, 3, 4, 5, 6},
     'M-F':   {0, 1, 2, 3, 4},

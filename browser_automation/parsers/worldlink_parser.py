@@ -22,7 +22,8 @@ def _ocr_first_page(pdf_path, dpi=200):
     except ImportError:
         return ""
     try:
-        import os, sys
+        import os
+        import sys
         if sys.platform == "win32":
             default = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
             if os.path.exists(default):

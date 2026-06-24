@@ -16,10 +16,8 @@ Business Rules:
   - Billing: Agency (Prosio is an agency)
 """
 
-import os
 import sys
 from datetime import datetime
-from decimal import Decimal
 from pathlib import Path
 from typing import Optional
 
@@ -28,11 +26,12 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from browser_automation.etere_client import EtereClient
-from browser_automation.parsers.prosio_parser import ProsioOrder, ProsioLine, parse_prosio_excel
-from src.domain.enums import OrderType, SeparationInterval
+from browser_automation.parsers.prosio_parser import ProsioOrder, parse_prosio_excel
+from src.domain.enums import SeparationInterval
 
 PROSIO_SEPARATION = SeparationInterval.DEFAULT.value   # (15, 0, 0)
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CUSTOMER DATABASE
 # ─────────────────────────────────────────────────────────────────────────────

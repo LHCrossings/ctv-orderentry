@@ -11,12 +11,13 @@ PDF has a unique header format with two campaign phases on one page:
 Rate OCR artifacts: "$ 2 5.00" → 25.0 (strip all non-digit/non-decimal chars).
 """
 
-import pdfplumber
 import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
+
+import pdfplumber
 
 _project_root = Path(__file__).parent.parent.parent
 if str(_project_root) not in sys.path:
@@ -440,12 +441,12 @@ if __name__ == "__main__":
             print(f"  Paid:    {len(paid_lines)} lines")
             print(f"  Bonus:   {len(bonus_lines)} lines")
 
-            print(f"\n  Paid lines:")
+            print("\n  Paid lines:")
             for line in paid_lines:
                 print(f"    [{line.language}] {line.daypart!r}  ${line.rate}  "
                       f"spots={line.weekly_spots}  total={line.total_spots}")
 
-            print(f"\n  Bonus lines:")
+            print("\n  Bonus lines:")
             for line in bonus_lines:
                 print(f"    [{line.language}] {line.daypart!r}  "
                       f"spots={line.weekly_spots}  total={line.total_spots}")

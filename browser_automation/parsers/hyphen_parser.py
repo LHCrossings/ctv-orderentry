@@ -33,12 +33,12 @@ Key Business Rules:
   - Rate: gross_rate is the advertiser-facing rate; automation uses gross
 """
 
-from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
-from typing import List, Optional, Dict, Any
-from pathlib import Path
 import re
 import sys
+from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Decimal
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 _project_root = Path(__file__).parent.parent.parent
 if str(_project_root) not in sys.path:
@@ -47,7 +47,6 @@ if str(_project_root) not in sys.path:
 import pdfplumber
 
 from browser_automation.parsers.sagent_parser import normalize_market_code
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONSTANTS

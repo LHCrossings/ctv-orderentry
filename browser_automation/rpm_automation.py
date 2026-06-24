@@ -46,16 +46,15 @@ if str(project_root) not in sys.path:
 from etere_client import EtereClient
 from etere_direct_client import EtereDirectClient, connect
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONSTANTS
+# ═══════════════════════════════════════════════════════════════════════════════
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 from browser_automation.parsers.rpm_parser import (
     parse_rpm_pdf,
 )
 from src.domain.enums import BillingType, OrderType, SeparationInterval
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# CONSTANTS
-# ═══════════════════════════════════════════════════════════════════════════════
-
-from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 RPM_DEFAULT_SEPARATION = SeparationInterval.RPM.value  # (25, 0, 15)
 
 
@@ -398,7 +397,7 @@ def _execute_direct(user_input: dict) -> bool:
                     separation_intervals=separation,
                 )
                 if line_id <= 0:
-                    print(f"  ✗ Failed")
+                    print("  ✗ Failed")
                     all_success = False
                 else:
                     print(f"  → line_id={line_id}")

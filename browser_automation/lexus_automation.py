@@ -53,7 +53,6 @@ Melissa Check:
 """
 
 import math
-import os
 import re
 import sys
 from datetime import date, datetime, timedelta
@@ -87,6 +86,7 @@ LEXUS_CUSTOMER_ID = 13
 LEXUS_SEPARATION = (25, 0, 0)      # customer=25, event=0, order=0
 LEXUS_BILLING = BillingType.CUSTOMER_SHARE_AGENCY
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+
 # ───────────────────────────────────────────────────────────────────────────
 # QUARTER HELPERS
 # ───────────────────────────────────────────────────────────────────────────
@@ -604,7 +604,7 @@ def gather_lexus_inputs(file_path: str) -> Optional[dict]:
 
     # Validate market — prompt if missing or not a recognized Etere code
     if not market:
-        print(f"\n  ⚠ Market not detected from filename or document.")
+        print("\n  ⚠ Market not detected from filename or document.")
         market = input("  Market code (NYC, SFO, SEA, LAX, CVC, etc.): ").strip().upper()
     elif market.upper() not in _VALID_MARKETS:
         print(f"\n  ⚠ Market detected as '{market}' which is not a recognized Etere market code.")

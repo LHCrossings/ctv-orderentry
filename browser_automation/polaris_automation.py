@@ -10,21 +10,19 @@ Billing: agency (charge_to="Customer share indicating agency %", invoice_header=
 
 import os
 import sqlite3
-from decimal import Decimal
 from typing import Optional
 
-from browser_automation.etere_client import EtereClient
-from browser_automation.parsers.polaris_parser import PolarisOrder, PolarisLine, parse_polaris_file as parse_polaris_xlsx
-
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
-
+from browser_automation.etere_client import EtereClient
+from browser_automation.parsers.polaris_parser import PolarisOrder
+from browser_automation.parsers.polaris_parser import parse_polaris_file as parse_polaris_xlsx
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DIRECT DB HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _parse_date(s):
-    from datetime import datetime, date
+    from datetime import date, datetime
     if isinstance(s, date):
         return s
     for fmt in ('%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d'):
@@ -234,13 +232,13 @@ def gather_polaris_inputs(xlsx_path: str) -> Optional[dict]:
     # ── Flight date confirmation (political orders often arrive day-of) ────────
     print(f"\n  Sheet start date: {order.flight_start}")
     start_input = input(
-        f"  Use this start date? [Enter=yes / type override, e.g. 4/17/2026]: "
+        "  Use this start date? [Enter=yes / type override, e.g. 4/17/2026]: "
     ).strip()
     actual_start = start_input if start_input and start_input.lower() not in ('y', 'yes') else order.flight_start
 
     print(f"\n  Sheet end date: {order.flight_end}")
     end_input = input(
-        f"  Use this end date? [Enter=yes / type override, e.g. 4/20/2026]: "
+        "  Use this end date? [Enter=yes / type override, e.g. 4/20/2026]: "
     ).strip()
     actual_end = end_input if end_input and end_input.lower() not in ('y', 'yes') else order.flight_end
 

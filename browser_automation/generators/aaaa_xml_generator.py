@@ -19,12 +19,10 @@ Usage (standalone):
 import io
 import re
 import sys
-from dataclasses import dataclass, field
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
-import xml.etree.ElementTree as ET
-
 
 # ============================================================================
 # NAMESPACE CONSTANTS  (mirror of aaaa_xml_parser.py)

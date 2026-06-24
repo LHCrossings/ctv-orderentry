@@ -20,7 +20,7 @@ Multi-daypart lines (e.g. Chinese M-F + Sat-Sun):
 import math
 import os
 import sys
-from datetime import datetime, timedelta, date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -29,7 +29,7 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from browser_automation.etere_client import EtereClient
-from browser_automation.parsers.sierra_parser import SierraOrder, SierraLine, parse_sierra
+from browser_automation.parsers.sierra_parser import SierraOrder, parse_sierra
 from src.domain.enums import OrderType
 
 # ─────────────────────────────────────────────────────────────────────────────

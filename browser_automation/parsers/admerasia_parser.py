@@ -18,13 +18,13 @@ BUSINESS RULES:
 11. Time format: "7-730p" = 7:00pm-7:30pm (suffix applies to both if only at end)
 """
 
-import pdfplumber
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, date, timedelta
-from typing import List, Dict, Optional, Tuple
-from decimal import Decimal, ROUND_HALF_UP
+from datetime import date, datetime, timedelta
+from decimal import ROUND_HALF_UP, Decimal
+from typing import Dict, List, Optional, Tuple
 
+import pdfplumber
 
 # Market code mapping for estimate numbers
 MARKET_CODES = {
@@ -353,7 +353,7 @@ def parse_admerasia_pdf(pdf_path: str, time_overrides: dict = None) -> Admerasia
                 print(f"  {context}")
                 
                 while True:
-                    user_input = input(f"  Enter time (or press Enter for 11:30a-12:00p): ").strip()
+                    user_input = input("  Enter time (or press Enter for 11:30a-12:00p): ").strip()
                     
                     # Allow default
                     if not user_input:
@@ -365,7 +365,7 @@ def parse_admerasia_pdf(pdf_path: str, time_overrides: dict = None) -> Admerasia
                         time_overrides[row_idx] = user_input
                         break
                     else:
-                        print(f"  ✗ Invalid format. Use: 11:30a-12:00p")
+                        print("  ✗ Invalid format. Use: 11:30a-12:00p")
                 
                 print()  # Blank line between entries
             
@@ -777,7 +777,7 @@ def _parse_line_items(pdf: pdfplumber.PDF, week_start_dates: List[date],
     except ValueError as e:
         # If table parsing fails, try coordinate-based extraction
         if "Spot count verification failed" in str(e) or "Calendar days not consecutive" in str(e):
-            print(f"\n[PARSE] Table extraction failed, trying coordinate-based extraction...")
+            print("\n[PARSE] Table extraction failed, trying coordinate-based extraction...")
             
             try:
                 return _parse_line_items_coordinate_based(pdf, week_start_dates)

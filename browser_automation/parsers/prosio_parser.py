@@ -28,20 +28,19 @@ Key Business Rules:
   - Day pattern: union of day segments across semicolon-separated parts
 """
 
-from dataclasses import dataclass, field
-from decimal import Decimal
-from datetime import datetime
-from pathlib import Path
-from typing import List, Optional
 import re
 import sys
+from dataclasses import dataclass, field
+from datetime import datetime
+from decimal import Decimal
+from pathlib import Path
+from typing import List, Optional
 
 _project_root = Path(__file__).parent.parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 import openpyxl
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPERS

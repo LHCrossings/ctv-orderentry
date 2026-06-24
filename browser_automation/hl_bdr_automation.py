@@ -15,15 +15,17 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from browser_automation.etere_client import EtereClient  # check_sunday_6_7a_rule + parse_time_range utilities
+from browser_automation.added_value import add_av_line, prompt_add_av, widest_window
+from browser_automation.etere_client import (
+    EtereClient,  # check_sunday_6_7a_rule + parse_time_range utilities
+)
 from browser_automation.etere_direct_client import (
     AGENCY_IDS,
-    EtereDirectClient,
     MEDIA_CENTER_IDS,
+    EtereDirectClient,
     connect,
 )
-from browser_automation.parsers.hl_bdr_parser import BDROrder, BDRLine, parse_bdr_pdf
-from browser_automation.added_value import add_av_line, prompt_add_av, widest_window
+from browser_automation.parsers.hl_bdr_parser import BDRLine, BDROrder, parse_bdr_pdf
 
 # ── Same constants as HL — BDR is the same agency ────────────────────────────
 AGENCY_NAME = "hl"
@@ -31,7 +33,6 @@ SEPARATION_INTERVALS = (25, 0, 0)
 SPOT_CODE_PAID = 2
 
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMERS_DB_PATH
-
 
 # ── Default code/description resolution for BDR ───────────────────────────────
 
@@ -136,11 +137,11 @@ def gather_hl_bdr_inputs(pdf_path: str) -> dict | None:
     if len(orders) > 1:
         print(f"[PARSE] ℹ {len(orders)} estimates — each becomes a separate contract")
 
-        print(f"\n[SELECT] Which estimates do you want to enter?")
+        print("\n[SELECT] Which estimates do you want to enter?")
         for i, o in enumerate(orders, 1):
             total_spots = sum(ln.total_spots for ln in o.lines)
             print(f"  [{i}] Est {o.estimate_number}: {o.market}  {o.flight_start}–{o.flight_end}  {total_spots} spots")
-        print(f"  Enter numbers (e.g. '1 3'), ranges (e.g. '1-3'), or 'all' [all]: ", end="")
+        print("  Enter numbers (e.g. '1 3'), ranges (e.g. '1-3'), or 'all' [all]: ", end="")
         sel_input = input().strip()
         if sel_input and sel_input.lower() != "all":
             selected_indices: list[int] = []
@@ -175,7 +176,7 @@ def gather_hl_bdr_inputs(pdf_path: str) -> dict | None:
 
     suggested_code, suggested_desc = _get_bdr_defaults(orders)
 
-    print(f"\n[CONTRACT]")
+    print("\n[CONTRACT]")
     contract_code = input(f"  Code [{suggested_code}]: ").strip() or suggested_code
     description = input(f"  Description [{suggested_desc}]: ").strip() or suggested_desc
 
@@ -187,7 +188,7 @@ def gather_hl_bdr_inputs(pdf_path: str) -> dict | None:
             print(f"  Est {o.estimate_number} → {est_code}  |  {est_desc}")
 
     separation = SEPARATION_INTERVALS
-    print(f"\n[BILLING] ✓ Customer share indicating agency % / Agency")
+    print("\n[BILLING] ✓ Customer share indicating agency % / Agency")
     print(f"[INTERVALS] ✓ Customer={separation[0]}, Order={separation[1]}, Event={separation[2]}")
 
     # Offer Added Value when the order carries no bonus (rate == 0) lines

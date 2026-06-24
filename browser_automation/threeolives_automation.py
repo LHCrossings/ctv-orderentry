@@ -24,17 +24,15 @@ _project_root = Path(__file__).parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 from browser_automation.etere_client import EtereClient
 from browser_automation.parsers.threeolives_parser import (
-    ThreeOlivesLine,
     ThreeOlivesOrder,
-    parse_threeolives,
     parse_daypart,
+    parse_threeolives,
 )
-from browser_automation.ros_definitions import ROS_SCHEDULES
 from src.domain.enums import OrderType, SeparationInterval
 
-from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 DEFAULT_MARKET = 'LAX'   # Riverside County is in the LA DMA
 THREEOLIVES_SEPARATION = SeparationInterval.for_order_type(OrderType.THREEOLIVES)
 
@@ -90,7 +88,7 @@ def _save_customer(customer_id: str, client_name: str) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _parse_date(s):
-    from datetime import datetime, date
+    from datetime import date, datetime
     if isinstance(s, date):
         return s
     for fmt in ('%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d'):

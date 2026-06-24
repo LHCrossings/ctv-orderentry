@@ -10,12 +10,13 @@ Key Features:
 - Bonus lines with $0.00 rates
 """
 
+import re
 from dataclasses import dataclass
-from datetime import datetime, date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Optional
+
 import pdfplumber
-import re
 
 
 @dataclass(frozen=True)
@@ -168,7 +169,7 @@ def _ocr_extract_text(pdf_path: str, dpi: int = 300) -> str:
     columns sequentially, which splits multi-column tables.
     """
     try:
-        import fitz          # PyMuPDF
+        import fitz  # PyMuPDF
         import pytesseract
         from PIL import Image
     except ImportError as e:
@@ -700,7 +701,7 @@ def parse_rpm_pdf(pdf_path: str) -> tuple[Optional[RPMOrder], list[RPMLine]]:
             week_dates=week_dates,
         )
 
-        print(f"\n[RPM PARSER] ✓ Parsed order successfully")
+        print("\n[RPM PARSER] ✓ Parsed order successfully")
         print(f"  Client: {order.client}")
         print(f"  Estimate: {order.estimate_number}")
         print(f"  Market: {order.market}")

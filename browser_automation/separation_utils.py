@@ -82,12 +82,12 @@ def confirm_separation_intervals(
 
     if detected_separation is not None:
         print(f"✓ PDF specifies separation: {detected_separation} minutes")
-        print(f"  This will be applied as CUSTOMER separation")
+        print("  This will be applied as CUSTOMER separation")
         print(f"  Recommended: Customer={detected_separation}, Order=0, Event=0")
         print()
         suggested_customer = detected_separation
     else:
-        print(f"No separation specified in PDF")
+        print("No separation specified in PDF")
         print(f"Default: Customer={default_customer}, Order=0, Event=0 (industry standard)")
         print()
         suggested_customer = default_customer
@@ -96,7 +96,7 @@ def confirm_separation_intervals(
     print("Options:")
     print(f"  1. Use recommended: Customer={suggested_customer}, Order=0, Event=0")
     print(f"  2. Use default: Customer={default_customer}, Order=0, Event=0")
-    print(f"  3. Custom (enter your own values)")
+    print("  3. Custom (enter your own values)")
     print()
 
     while True:
@@ -250,12 +250,12 @@ def confirm_time_and_capacity(
     # Detect midnight crossing
     if '12a' in original_time.lower() or '1a' in original_time.lower() or '2a' in original_time.lower():
         time_adjusted = True
-        adjustment_notes.append(f"End time capped at 23:59 (midnight crossing detected)")
+        adjustment_notes.append("End time capped at 23:59 (midnight crossing detected)")
     
     # Detect early start
     if parsed_from == "06:00" and not original_time.lower().startswith('6'):
         time_adjusted = True
-        adjustment_notes.append(f"Start time adjusted to 06:00 (minimum allowed)")
+        adjustment_notes.append("Start time adjusted to 06:00 (minimum allowed)")
     
     # If no adjustments and capacity is fine, skip confirmation
     can_fit, capacity_msg = validate_spot_capacity(
@@ -302,7 +302,7 @@ def confirm_time_and_capacity(
             
             print(f"\nCurrent separation: {separation_minutes} minutes (doesn't fit)")
             print(f"Maximum separation that fits: {max_separation} minutes")
-            print(f"Recommended: 10 minutes (common fallback for tight windows)")
+            print("Recommended: 10 minutes (common fallback for tight windows)")
             print()
             
             while True:

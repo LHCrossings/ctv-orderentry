@@ -26,34 +26,26 @@ IMPORTS - Universal utilities, no duplication
 """
 
 import json
-import sqlite3
 import os
-import math
+import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-from browser_automation.etere_client import EtereClient
-from browser_automation.etere_direct_client import EtereDirectClient, connect
-from browser_automation.ros_definitions import ROS_SCHEDULES
-from browser_automation.language_utils import (
-    extract_language_from_program,
-)
-from src.domain.enums import BillingType, OrderType, OrderBillingType, detect_order_billing_type
-
-from browser_automation.parsers.charmaine_parser import (
-    parse_charmaine_pdf,
-    CharmaineOrder,
-    CharmaineLine,
-)
-
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONSTANTS
 # ═══════════════════════════════════════════════════════════════════════════════
-
 # Default customer DB path (relative to project root)
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+from browser_automation.etere_client import EtereClient
+from browser_automation.etere_direct_client import EtereDirectClient, connect
+from browser_automation.parsers.charmaine_parser import (
+    CharmaineOrder,
+    parse_charmaine_pdf,
+)
+from browser_automation.ros_definitions import ROS_SCHEDULES
+from src.domain.enums import BillingType, OrderBillingType, detect_order_billing_type
+
 # Known agency keywords - if detected, order type = AGENCY
 # (Also defined in enums.py — this is for quick reference)
 KNOWN_AGENCIES = [
@@ -210,7 +202,7 @@ def _update_customer_id(
         if updated > 0:
             print(f"[CUSTOMER DB] ✓ Updated {customer_name} → ID {new_id}")
         else:
-            print(f"[CUSTOMER DB] ⚠ No matching customer found to update")
+            print("[CUSTOMER DB] ⚠ No matching customer found to update")
             
     except Exception as e:
         print(f"[CUSTOMER DB] ✗ Update failed: {e}")
@@ -402,7 +394,7 @@ def collect_user_input(order: CharmaineOrder) -> dict:
             order.market = overrides["market"]
             print(f"\n[MARKET] Using web override: {order.market}")
         else:
-            print(f"\n[MARKET] ⚠ Market not detected in PDF.")
+            print("\n[MARKET] ⚠ Market not detected in PDF.")
             print(f"  Valid markets: {', '.join(_VALID_MARKETS)}")
             while True:
                 m = input("  Enter market code: ").strip().upper()
@@ -433,7 +425,7 @@ def collect_user_input(order: CharmaineOrder) -> dict:
                 print(f"\n[DATES] ⚠ Flight start {order.flight_start} is in the past.")
                 adjust = input("  Adjust flight dates? (Y/n): ").strip().lower()
                 if adjust in ('', 'y', 'yes'):
-                    new_start = input(f"  New start date (M/D/YY or MM/DD/YYYY): ").strip()
+                    new_start = input("  New start date (M/D/YY or MM/DD/YYYY): ").strip()
                     if new_start:
                         order.flight_start = _normalize_date(new_start)
                     new_end = input(
@@ -457,7 +449,7 @@ def collect_user_input(order: CharmaineOrder) -> dict:
         print(f"\n[BILLING] Agency detected: '{matched_keyword}' → Agency billing")
         order_type = OrderBillingType.AGENCY
     else:
-        print(f"\n[BILLING] No agency detected — this appears to be a CLIENT order.")
+        print("\n[BILLING] No agency detected — this appears to be a CLIENT order.")
         confirm = input("  Is this a client (direct) order? (Y/n): ").strip().lower()
         if confirm in ('', 'y', 'yes'):
             order_type = OrderBillingType.CLIENT
@@ -480,7 +472,7 @@ def collect_user_input(order: CharmaineOrder) -> dict:
     confirmed_customer_info = None  # Set only when user confirms the DB match
 
     if customer_info:
-        print(f"\n[CUSTOMER] Found in database:")
+        print("\n[CUSTOMER] Found in database:")
         print(f"  Name:         {customer_info['customer_name']}")
         print(f"  ID:           {customer_info['customer_id']}")
         print(f"  Abbreviation: {customer_info.get('abbreviation', 'N/A')}")
@@ -509,10 +501,10 @@ def collect_user_input(order: CharmaineOrder) -> dict:
             customer_id = None  # Will trigger browser search
         
         # Get abbreviation for contract code
-        abbreviation = input(f"  Abbreviation for contract codes (e.g., SRCF): ").strip()
+        abbreviation = input("  Abbreviation for contract codes (e.g., SRCF): ").strip()
         
         # Confirm separation intervals
-        print(f"\n  Separation intervals (default: 15, 0, 0)")
+        print("\n  Separation intervals (default: 15, 0, 0)")
         sep_input = input("  Customer,Event,Order (or Enter for defaults): ").strip()
         if sep_input:
             parts = sep_input.split(',')
@@ -548,7 +540,7 @@ def collect_user_input(order: CharmaineOrder) -> dict:
     if code_name:
         # Stored prefix — prompt for optional suffix (e.g., yymm like 2603)
         print(f"\n[CONTRACT] Code prefix: {code_name}")
-        suffix = input(f"  Suffix to append (e.g., 2603, or Enter to use prefix only): ").strip()
+        suffix = input("  Suffix to append (e.g., 2603, or Enter to use prefix only): ").strip()
         contract_code = f"{code_name} {suffix}" if suffix else code_name
     else:
         # No stored prefix — build default suggestion
@@ -557,18 +549,18 @@ def collect_user_input(order: CharmaineOrder) -> dict:
         else:
             suggested_code = f"{order.advertiser} {order.year}"
         print(f"\n[CONTRACT] Suggested code: {suggested_code}")
-        code_input = input(f"  Contract code (or Enter for suggested): ").strip()
+        code_input = input("  Contract code (or Enter for suggested): ").strip()
         contract_code = code_input if code_input else suggested_code
 
     if description_name:
         # Stored prefix — prompt for optional suffix
         print(f"[CONTRACT] Desc prefix: {description_name}")
-        suffix = input(f"  Suffix to append (e.g., 2603, or Enter to use prefix only): ").strip()
+        suffix = input("  Suffix to append (e.g., 2603, or Enter to use prefix only): ").strip()
         contract_description = f"{description_name} {suffix}" if suffix else description_name
     else:
         suggested_description = f"{order.advertiser} {order.campaign}" if order.campaign else order.advertiser
         print(f"[CONTRACT] Suggested description: {suggested_description}")
-        desc_input = input(f"  Description (or Enter for suggested): ").strip()
+        desc_input = input("  Description (or Enter for suggested): ").strip()
         contract_description = desc_input if desc_input else suggested_description
     
     # ═══════════════════════════════════════════════════════════════
@@ -580,7 +572,7 @@ def collect_user_input(order: CharmaineOrder) -> dict:
     if order.contact:
         default_notes += f"\nContact: {order.contact}"
     
-    print(f"\n[NOTES] Default notes:")
+    print("\n[NOTES] Default notes:")
     for line in default_notes.split('\n'):
         print(f"  {line}")
     notes_input = input("  Edit notes (or Enter to keep): ").strip()
@@ -630,7 +622,7 @@ def collect_user_input(order: CharmaineOrder) -> dict:
             print(f"  Raw text: \"{daypart_clean}\"")
             print(f"  Fallback: {days} {time_range}")
             
-            user_time = input(f"  Enter correct time range (e.g., 7p-8p): ").strip()
+            user_time = input("  Enter correct time range (e.g., 7p-8p): ").strip()
             if user_time:
                 time_range = user_time
             
@@ -690,11 +682,11 @@ def collect_user_input(order: CharmaineOrder) -> dict:
             print(f"  PDF says:     {daypart_clean}")
             print(f"  → Parsed as:  {pdf_days} {pdf_time}")
             print(f"  Standard ROS: {ros_days} {ros_time}")
-            print(f"  Options:")
+            print("  Options:")
             print(f"    1 = Use standard ROS defaults ({ros_days} {ros_time})")
             print(f"    2 = Use PDF time range ({pdf_days} {pdf_time})")
             
-            choice = input(f"  Choice (1/2, default=2): ").strip()
+            choice = input("  Choice (1/2, default=2): ").strip()
             
             if choice == "1":
                 # Standard ROS — no override needed
@@ -703,7 +695,7 @@ def collect_user_input(order: CharmaineOrder) -> dict:
                 # Use PDF times — ask for custom description
                 default_desc = f"BNS {language} ROS"
                 print(f"  Default description: {default_desc}")
-                custom_desc = input(f"  Line description (or Enter for default): ").strip()
+                custom_desc = input("  Line description (or Enter for default): ").strip()
                 
                 bonus_overrides[idx] = {
                     'days': pdf_days,

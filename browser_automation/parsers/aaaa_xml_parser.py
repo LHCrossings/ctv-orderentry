@@ -26,11 +26,11 @@ Architecture note:
     It is called by: browser_automation/xml_automation.py
 """
 
+import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
-import sys
 
 # Add project root to path
 _project_root = Path(__file__).parent.parent
@@ -38,7 +38,6 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from parsers.tcaa_parser import TCAAEstimate, TCAALine
-
 
 # ============================================================================
 # XML NAMESPACE CONSTANTS

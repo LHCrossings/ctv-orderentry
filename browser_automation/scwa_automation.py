@@ -22,9 +22,8 @@ ROS schedule (as of Apr 1, 2026):
 
 import math
 import os
-import re
 import sys
-from datetime import datetime, timedelta, date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -33,9 +32,8 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from browser_automation.etere_client import EtereClient
-from browser_automation.parsers.scwa_parser import SCWAOrder, SCWALine, parse_scwa_pdf
+from browser_automation.parsers.scwa_parser import SCWAOrder, parse_scwa_pdf
 from src.domain.enums import OrderType, SeparationInterval
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONSTANTS
@@ -44,6 +42,7 @@ from src.domain.enums import OrderType, SeparationInterval
 SCWA_MARKET     = "CVC"
 SCWA_SEPARATION = SeparationInterval.SCWA.value   # (15, 0, 0)
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+
 # ROS schedule per language key → (days, time_str)
 # Vietnamese updated Apr 1, 2026: was 11a-1p, now 10a-1p
 _ROS_MAP: dict[str, tuple[str, str]] = {

@@ -46,7 +46,6 @@ Orchestrator interface (matches iGraphix pattern):
 """
 
 import math
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -58,16 +57,14 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from etere_client import EtereClient
-from src.domain.enums import BillingType, OrderType
 
 from browser_automation.parsers.impact_parser import (
     ImpactQuarterOrder,
-    ImpactLine,
     analyze_weekly_distribution,
     parse_impact_pdf,
     prompt_for_spot_duration,
 )
-
+from src.domain.enums import BillingType, OrderType
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # DOMAIN CONSTANTS
@@ -85,6 +82,7 @@ SPOT_CODE_PAID  = 2   # "Paid Commercial"
 SPOT_CODE_BONUS = 10  # "BNS"
 
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # CUSTOMER DATABASE (self-learning)
 # ═══════════════════════════════════════════════════════════════════════════════

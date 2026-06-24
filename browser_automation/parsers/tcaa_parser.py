@@ -4,11 +4,11 @@ Parses TCAA (The Asian Channel) annual buy PDFs for Seattle market.
 Each estimate number represents a separate contract.
 """
 
-import pdfplumber
 import re
-from datetime import datetime
 from dataclasses import dataclass
-from typing import List, Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
+
+import pdfplumber
 
 
 @dataclass

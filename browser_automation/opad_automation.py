@@ -17,18 +17,16 @@ opAD Business Rules:
 """
 
 import sqlite3
-from pathlib import Path
 from typing import Optional
 
 from etere_client import EtereClient
 from parsers.opad_parser import (
-    OpADOrder,
     OpADLine,
+    OpADOrder,
     analyze_weekly_distribution,
     format_time_for_description,
     parse_opad_pdf,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONSTANTS
@@ -51,13 +49,12 @@ SPOT_CODE_BONUS = 10     # BNS / Bonus Spot
 # Customer database path (relative to project root)
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMERS_DB_PATH
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # DIRECT DB HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _parse_date(s):
-    from datetime import datetime, date
+    from datetime import date, datetime
     if isinstance(s, date):
         return s
     for fmt in ('%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d'):

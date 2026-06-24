@@ -4,11 +4,11 @@ Parses H&L Partners agency insertion order PDFs using Strata IO system.
 Each estimate number represents a separate contract.
 """
 
-import pdfplumber
 import re
-from datetime import datetime
 from dataclasses import dataclass
-from typing import List, Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
+
+import pdfplumber
 
 
 @dataclass
@@ -52,11 +52,12 @@ def _ocr_page_hl(pdf_path: str, page_num: int) -> str:
     Returns empty string if OCR dependencies are unavailable.
     """
     try:
+        import os
+        import sys
+
         import fitz
         import pytesseract
         from PIL import Image
-        import sys
-        import os
         if sys.platform == "win32":
             default = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
             if os.path.exists(default):
@@ -485,7 +486,6 @@ def convert_hl_days_to_etere(hl_days: str) -> str:
 
 from browser_automation.language_utils import (
     extract_language_from_program,
-    get_language_block_prefixes as get_language_block_prefix,
 )
 
 

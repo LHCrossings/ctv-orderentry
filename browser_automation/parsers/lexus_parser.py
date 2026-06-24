@@ -14,13 +14,11 @@ Business Rules:
 """
 
 import calendar
-import math
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
-
 
 # ───────────────────────────────────────────────────────────────────────────
 # DATA CLASSES
@@ -917,7 +915,7 @@ def _extract_days_from_program(program: str) -> str:
         "M-SAT 6A-7A NEWS"           → "M-Sa"
         "SA-SU HINDI VARIETY 1-4P"   → "Sa-Su"
     """
-    from day_utils import tokenize, to_etere
+    from day_utils import to_etere, tokenize
     first_token = program.strip().split()[0] if program.strip() else ""
     # Melissa uses "Ss" to mean Saturday+Sunday — normalise before tokenizing
     if re.match(r'^[Ss][Ss]$', first_token):
@@ -1111,8 +1109,9 @@ def parse_lexus_xlsx(path: str | Path, filename_meta: Optional[dict] = None) -> 
         LexusParseResult
     """
     try:
-        import openpyxl
         import warnings as _warnings
+
+        import openpyxl
         _warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
     except ImportError:
         raise ImportError("openpyxl is required for XLSX parsing. Run: uv add openpyxl")

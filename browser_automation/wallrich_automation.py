@@ -14,14 +14,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from browser_automation.etere_client import EtereClient
-from browser_automation.language_utils import extract_language_from_program
 from parsers.wallrich_parser import (
     WallrichEstimate,
     WallrichLine,
     consolidate_wallrich_weeks,
     parse_wallrich_pdf,
 )
+
+from browser_automation.etere_client import EtereClient
+from browser_automation.language_utils import extract_language_from_program
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -37,13 +38,13 @@ SPOT_CODE_BONUS = 10
 
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMERS_DB_PATH
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # DIRECT DB HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _parse_date(s):
-    from datetime import datetime as _dt, date
+    from datetime import date
+    from datetime import datetime as _dt
     if isinstance(s, date):
         return s
     for fmt in ('%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d'):

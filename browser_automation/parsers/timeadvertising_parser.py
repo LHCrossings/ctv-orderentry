@@ -53,11 +53,11 @@ KEY CHARACTERISTICS:
 """
 
 import re
-import pdfplumber
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Optional
 
+import pdfplumber
 
 # Day code order for display and sorting (matches Admerasia convention)
 # M=Mon, T=Tue, W=Wed, R=Thu, F=Fri, S=Sat, U=Sun
@@ -703,7 +703,7 @@ if __name__ == "__main__":
     print(f"  From:        {order.from_name}")
     print(f"  Agency:      {order.agency}")
     print(f"  Flight:      {order.flight_start} → {order.flight_end}")
-    print(f"  Ad Titles:")
+    print("  Ad Titles:")
     for t in order.ad_titles:
         print(f"    • {t}")
     print(f"  Lines:  {len(order.lines)} ({len(order.paid_lines)} paid, {len(order.bonus_lines)} bonus)")

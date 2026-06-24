@@ -47,11 +47,10 @@ IMPORTS
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
-import os
-import sys
 import math
-from pathlib import Path
+import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 # Add project root to path
@@ -60,20 +59,18 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from etere_client import EtereClient
-from src.domain.enums import BillingType, OrderType, SeparationInterval
-
-from browser_automation.parsers.igraphix_parser import (
-    parse_igraphix_pdf,
-    IGraphixOrder,
-    IGraphixAdCode,
-)
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CUSTOMER DATABASE ACCESS
 # ═══════════════════════════════════════════════════════════════════════════════
-
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+from browser_automation.parsers.igraphix_parser import (
+    IGraphixOrder,
+    parse_igraphix_pdf,
+)
+from src.domain.enums import BillingType, OrderType
+
+
 def save_new_customer(
     customer_id: str,
     customer_name: str,
@@ -203,7 +200,7 @@ def gather_igraphix_inputs(pdf_path: str) -> Optional[dict]:
     suggested_code = order.get_contract_code()
     suggested_desc = order.get_contract_description()
 
-    print(f"\n[CONTRACT]")
+    print("\n[CONTRACT]")
     contract_code = input(f"  Code [{suggested_code}]: ").strip() or suggested_code
     description = input(f"  Description [{suggested_desc}]: ").strip() or suggested_desc
 
@@ -215,7 +212,7 @@ def gather_igraphix_inputs(pdf_path: str) -> Optional[dict]:
 
     # Billing (UNIVERSAL for ALL agency orders)
     billing = BillingType.CUSTOMER_SHARE_AGENCY
-    print(f"\n[BILLING] ✓ Customer share indicating agency % / Agency")
+    print("\n[BILLING] ✓ Customer share indicating agency % / Agency")
 
     print("\n" + "=" * 70)
     print("INPUT COLLECTION COMPLETE - Ready for automation")
@@ -239,7 +236,6 @@ def gather_igraphix_inputs(pdf_path: str) -> Optional[dict]:
 
 def _parse_date_yy(date_str: str):
     """Convert 'MM/DD/YY' string to date object (2-digit year)."""
-    from datetime import date as _date
     return datetime.strptime(date_str.strip(), '%m/%d/%y').date()
 
 
@@ -256,7 +252,8 @@ def process_igraphix_order_direct(user_input: dict) -> Optional[str]:
 
     Returns COD_CONTRATTO string on success, None on failure (rolls back fully).
     """
-    from browser_automation.etere_direct_client import EtereDirectClient, connect as db_connect
+    from browser_automation.etere_direct_client import EtereDirectClient
+    from browser_automation.etere_direct_client import connect as db_connect
 
     order: IGraphixOrder = user_input['order']
 

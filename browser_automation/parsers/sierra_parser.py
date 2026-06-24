@@ -30,11 +30,11 @@ Key Business Rules:
   - Rate: "$ 36.00" → 36.0 (strip $ and spaces); "$ -" → 0.0
 """
 
-from dataclasses import dataclass
-from typing import List, Tuple, Optional
-from pathlib import Path
 import re
 import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import List, Optional, Tuple
 
 _project_root = Path(__file__).parent.parent.parent
 if str(_project_root) not in sys.path:

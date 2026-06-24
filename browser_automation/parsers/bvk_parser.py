@@ -26,11 +26,11 @@ Implementation note:
   columns, then use extract_text() for all line-item parsing.
 """
 
-from dataclasses import dataclass, field
-from typing import List, Optional
 import re
-import pdfplumber
+from dataclasses import dataclass
+from typing import List
 
+import pdfplumber
 
 # ---------------------------------------------------------------------------
 # Constants

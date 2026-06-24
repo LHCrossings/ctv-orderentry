@@ -38,10 +38,10 @@ IMPORTS
 """
 
 import atexit
+import math
 import os
 import sys
-import math
-from datetime import datetime, date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -50,10 +50,9 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from etere_client import EtereClient
-from src.domain.enums import BillingType, OrderType, SeparationInterval
 
 from browser_automation.parsers.worldlink_parser import parse_worldlink_pdf
-
+from src.domain.enums import BillingType, OrderType, SeparationInterval
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SESSION SUMMARY — revised contracts accumulator
@@ -79,6 +78,7 @@ atexit.register(_print_session_summary)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+
 WL_DEFAULT_SEPARATION = SeparationInterval.WORLDLINK.value  # (5, 15, 0)
 
 
@@ -337,7 +337,7 @@ def gather_worldlink_inputs(pdf_path: str) -> Optional[dict]:
             save_new_customer(customer_id, advertiser, abbreviation, separation)
 
     billing = BillingType.CUSTOMER_SHARE_AGENCY
-    print(f"\n[BILLING] ✓ Customer share indicating agency % / Agency")
+    print("\n[BILLING] ✓ Customer share indicating agency % / Agency")
 
     print("\n" + "="*70)
     print("INPUT COLLECTION COMPLETE - Ready for automation")
@@ -661,7 +661,8 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
     Returns COD_CONTRATTO string on success, None on failure (rolls back fully).
     Crossings TV: enters all 9 markets explicitly — block refresh not required.
     """
-    from browser_automation.etere_direct_client import EtereDirectClient, connect as db_connect
+    from browser_automation.etere_direct_client import EtereDirectClient
+    from browser_automation.etere_direct_client import connect as db_connect
 
     order_data = user_input['order_data']
     network = user_input['network']
@@ -824,20 +825,20 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
                     print(f"    Locked before {doc_str}:  {locked} spot{'s' if locked != 1 else ''}")
                     print(f"    Unschedule {doc_str}+:     {removable_paid} spot{'s' if removable_paid != 1 else ''}{total_note}")
                     if remaining == 0:
-                        print(f"    Remaining to place:  0 — no rescheduling needed")
-                        print(f"    Status → Scheduled (no re-approval needed)")
+                        print("    Remaining to place:  0 — no rescheduling needed")
+                        print("    Status → Scheduled (no re-approval needed)")
                     else:
                         max_note = f" → new max/day: {new_max_daily}" if new_max_daily else ""
                         print(f"    Remaining to place:  {remaining} on {rem_days} "
                               f"day{'s' if rem_days != 1 else ''}{max_note}")
-                        print(f"    Status → Needs re-approval")
+                        print("    Status → Needs re-approval")
 
                     if action != 'CANCEL' and locked > n_io:
                         print(f"\n    ⚠ CONFLICT — IO orders {n_io} spots but {locked} are already locked.")
-                        print(f"    Cannot proceed. Manual correction required.")
+                        print("    Cannot proceed. Manual correction required.")
                         continue
 
-                    answer = input(f"\n  Apply? [y/n]: ").strip().lower()
+                    answer = input("\n  Apply? [y/n]: ").strip().lower()
                     if answer != 'y':
                         print(f"  [Line {wl_num}] Skipped.")
                         continue
@@ -912,7 +913,8 @@ def _perform_block_refresh_direct(
     from CONTRATTIRIGHE and inserts into CONTRATTIFASCE in one SQL call per
     line — no browser navigation or 8-second waits required.
     """
-    from browser_automation.etere_direct_client import EtereDirectClient, connect as db_connect
+    from browser_automation.etere_direct_client import EtereDirectClient
+    from browser_automation.etere_direct_client import connect as db_connect
 
     print(f"\n{'='*60}")
     print(f"BLOCK REFRESH (direct DB): Contract {contract_number}")
@@ -945,7 +947,7 @@ def _perform_block_refresh_direct(
                 ok_count += 1
                 print(f"[REFRESH] ✓ {count} block(s)")
             else:
-                print(f"[REFRESH] ✗ failed (see above)")
+                print("[REFRESH] ✗ failed (see above)")
 
     print(f"\n[REFRESH] Complete — {ok_count}/{len(all_ids)} succeeded")
     return ok_count == len(all_ids)
@@ -994,7 +996,7 @@ def _add_crossings_lines(
             rate=rate, separation_intervals=separation,
         )
         if not ok:
-            print(f"  ✗ NYC line failed")
+            print("  ✗ NYC line failed")
             all_success = False
 
         # CMP line: $0 — replicated to other markets via Options tab selection
@@ -1008,7 +1010,7 @@ def _add_crossings_lines(
             other_markets=["CVC", "SFO", "LAX", "SEA", "HOU", "WDC", "MMT"],
         )
         if not ok:
-            print(f"  ✗ CMP line failed")
+            print("  ✗ CMP line failed")
             all_success = False
 
     return all_success

@@ -4,11 +4,12 @@ Parses opAD agency insertion order PDFs for NYC market (Crossings TV Network)
 Handles weekly spot distribution, language-based programming, and bonus lines
 """
 
-import pdfplumber
 import re
-from datetime import datetime, timedelta
 from dataclasses import dataclass
-from typing import List, Dict, Optional
+from datetime import datetime
+from typing import Dict, List, Optional
+
+import pdfplumber
 
 
 @dataclass

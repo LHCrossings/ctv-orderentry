@@ -33,13 +33,13 @@ from browser_automation.parsers.timeadvertising_parser import (
 )
 from src.domain.enums import OrderType, SeparationInterval
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # CONSTANTS
 # ─────────────────────────────────────────────────────────────────────────────
 
 TIMEADVERTISING_SEPARATION = SeparationInterval.TIMEADVERTISING.value  # (15, 0, 0)
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CUSTOMER DATABASE LOOKUP
 # ─────────────────────────────────────────────────────────────────────────────
@@ -151,7 +151,7 @@ def _gather_inputs(order: TimeAdvertisingOrder) -> Optional[dict]:
 
     # ── Contract code ─────────────────────────────────────────────────────
     default_code = _default_contract_code(order)
-    print(f"\n[1/2] Contract Code")
+    print("\n[1/2] Contract Code")
     print(f"  Default: {default_code}")
     resp = input("  Use default? (y/n): ").strip().lower()
     contract_code = default_code if resp == 'y' else input("  Enter code: ").strip()
@@ -161,7 +161,7 @@ def _gather_inputs(order: TimeAdvertisingOrder) -> Optional[dict]:
 
     # ── Description ───────────────────────────────────────────────────────
     default_desc = _default_description(order)
-    print(f"\n[2/2] Contract Description")
+    print("\n[2/2] Contract Description")
     print(f"  Default: {default_desc}")
     resp = input("  Use default? (y/n): ").strip().lower()
     description = default_desc if resp == 'y' else input("  Enter description: ").strip()
@@ -281,7 +281,6 @@ def _create_timeadvertising_contract(
     2. For each line (paid + bonus), expand to Etere lines via get_etere_lines()
     3. Add each Etere line to the contract
     """
-    from datetime import date as _date
 
     customer_id = inputs.get('customer_id')
     separation  = inputs.get('separation', TIMEADVERTISING_SEPARATION)

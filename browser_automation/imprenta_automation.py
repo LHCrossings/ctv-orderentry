@@ -33,7 +33,6 @@ Contract Format (prompted, defaults shown):
 """
 
 import math
-import os
 import re
 import sys
 from datetime import date, datetime, timedelta
@@ -45,9 +44,9 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from etere_client import EtereClient
-from src.domain.enums import BillingType
+from parsers.imprenta_parser import ImprentaParseResult, parse_imprenta_file
 
-from parsers.imprenta_parser import ImprentaLine, ImprentaParseResult, parse_imprenta_file
+from src.domain.enums import BillingType
 
 # ───────────────────────────────────────────────────────────────────────────
 # CONSTANTS
@@ -344,10 +343,10 @@ def gather_imprenta_inputs(file_path: str) -> Optional[dict]:
             )
 
     if start_day_issues:
-        print(f"\n  ⚠ START DATE WARNING(S):")
+        print("\n  ⚠ START DATE WARNING(S):")
         for msg in start_day_issues:
             print(f"    • {msg}")
-        print(f"  Lines will be entered as-is — adjust day pattern in Etere if needed.")
+        print("  Lines will be entered as-is — adjust day pattern in Etere if needed.")
 
     # ── Contract details ──────────────────────────────────────────────────
     campaign_short = re.sub(r'\s+\d{4}.*$', '', result.campaign).strip()  # e.g. "Traditional Safety"

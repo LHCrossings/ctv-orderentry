@@ -33,7 +33,7 @@ Description:      "CA State Lottery Est {estimate} - {product}"  e.g. "CA State 
 """
 
 import sys
-from datetime import datetime, date
+from datetime import date, datetime
 from pathlib import Path
 
 # Add project root to sys.path
@@ -45,14 +45,13 @@ if str(_src_path) not in sys.path:
     sys.path.insert(0, str(_src_path))
 
 from etere_client import EtereClient
-from src.domain.enums import BillingType
 
 from browser_automation.parsers.intertrend_parser import (
-    parse_intertrend_pdf,
     IntertrendOrder,
-    IntertrendLine,
     format_time_for_description,
+    parse_intertrend_pdf,
 )
+from src.domain.enums import BillingType
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # HELPERS
@@ -123,7 +122,7 @@ def gather_intertrend_inputs(pdf_path: str) -> dict:
         print(f'           Weekly: {line.weekly_spots}')
 
     # ─── Gross-up ───────────────────────────────────────────────────────────
-    print(f'\n[GROSS-UP] Rates in this IO are NET. Agency fee must be applied.')
+    print('\n[GROSS-UP] Rates in this IO are NET. Agency fee must be applied.')
     print(f'Agency fee % [{_DEFAULT_AGENCY_FEE}]: ', end='')
     raw = input().strip()
     agency_fee = float(raw) if raw else _DEFAULT_AGENCY_FEE
@@ -161,7 +160,7 @@ def gather_intertrend_inputs(pdf_path: str) -> dict:
     raw = input().strip()
     customer_order_ref = raw if raw else default_ref
 
-    print(f'[NOTES] Notes (optional): ', end='')
+    print('[NOTES] Notes (optional): ', end='')
     notes = input().strip()
 
     print('\n' + '=' * 70)
@@ -201,8 +200,8 @@ def _create_intertrend_contract_direct(order: IntertrendOrder, inputs: dict) -> 
 
     Returns contract_id on success, None on failure (rolls back fully).
     """
+
     from browser_automation.etere_direct_client import EtereDirectClient, connect
-    from typing import Optional as _Opt
 
     customer_id     = inputs.get('customer_id', _CUSTOMER_ID)
     gross_up_factor = inputs.get('gross_up_factor', 1.0 / (1.0 - _DEFAULT_AGENCY_FEE / 100.0))

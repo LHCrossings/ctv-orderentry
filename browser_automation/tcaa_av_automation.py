@@ -11,18 +11,18 @@ the regular TCAA cable buy.  All lines are:
 
 Master market is NYC (set by session).  All lines use market=SEA.
 """
+import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple
-import sys
+from typing import Optional
 
 _src_path = Path(__file__).parent.parent
 if str(_src_path) not in sys.path:
     sys.path.insert(0, str(_src_path))
 
-from browser_automation.etere_client import EtereClient
-from parsers.tcaa_av_parser import parse_toyota_av_pdf, ToyotaAVOrder, ToyotaAVLine
+from parsers.tcaa_av_parser import ToyotaAVOrder, parse_toyota_av_pdf
 
+from browser_automation.etere_client import EtereClient
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -56,7 +56,7 @@ def gather_inputs(order: ToyotaAVOrder) -> dict:
     contract_code = code_input or default_code
 
     # Contract description
-    default_desc = f"Toyota SEA AAPI May 2026"
+    default_desc = "Toyota SEA AAPI May 2026"
     desc_input = input(f"Contract description [{default_desc}]: ").strip()
     contract_desc = desc_input or default_desc
 

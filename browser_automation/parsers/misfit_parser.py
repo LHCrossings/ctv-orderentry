@@ -9,11 +9,12 @@ Format: Crossings TV Media Proposal with:
 - Summary table at bottom
 """
 
-import pdfplumber
 import re
-from datetime import datetime, timedelta
 from dataclasses import dataclass
-from typing import List, Dict, Optional
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional
+
+import pdfplumber
 
 
 @dataclass

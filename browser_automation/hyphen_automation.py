@@ -23,13 +23,11 @@ _project_root = Path(__file__).parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from browser_automation.etere_client import EtereClient
-from browser_automation.parsers.hyphen_parser import HyphenEstimate, HyphenLine, parse_hyphen_pdf
-from browser_automation.ros_definitions import ROS_SCHEDULES
-from src.domain.enums import BillingType, OrderType
-
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
-
+from browser_automation.etere_client import EtereClient
+from browser_automation.parsers.hyphen_parser import HyphenEstimate, parse_hyphen_pdf
+from browser_automation.ros_definitions import ROS_SCHEDULES
+from src.domain.enums import OrderType
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DATE / DURATION HELPERS (direct DB)
@@ -37,7 +35,7 @@ from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_
 
 def _parse_date(s):
     """Parse MM/DD/YYYY, MM/DD/YY, or date objects to datetime.date."""
-    from datetime import datetime, date
+    from datetime import date, datetime
     if isinstance(s, date):
         return s
     s = str(s).strip()

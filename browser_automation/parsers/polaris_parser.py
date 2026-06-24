@@ -26,20 +26,19 @@ Data row columns (0-indexed):
   8: Gross cost  (for verification only)
 """
 
-from dataclasses import dataclass
-from datetime import date
-from decimal import Decimal, ROUND_HALF_UP
-from typing import List
 import re
 import sys
+from dataclasses import dataclass
+from datetime import date
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
+from typing import List
 
 _project_root = Path(__file__).parent.parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from browser_automation.day_utils import to_etere
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MARKET DETECTION

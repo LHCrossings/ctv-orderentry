@@ -24,27 +24,28 @@ Architecture:
     tcaa_automation.py          ← _create_tcaa_contract_direct() is reused directly
 """
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
-import sys
 
 # Add project root to path
 _project_root = Path(__file__).parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
+from parsers.tcaa_parser import TCAAEstimate
+
+# Path to customer database (relative to project root)
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as _DB_PATH
 from browser_automation.parsers.aaaa_xml_parser import parse_aaaa_xml, print_parse_summary
 from browser_automation.tcaa_automation import (
     prompt_for_bonus_lines,
 )
-from parsers.tcaa_parser import TCAAEstimate
-from src.data_access.repositories.customer_repository import CustomerRepository
 from src.business_logic.services.customer_matching_service import CustomerMatchingService
+from src.data_access.repositories.customer_repository import CustomerRepository
 from src.domain.enums import OrderType
 
-# Path to customer database (relative to project root)
-from browser_automation.customer_defaults import DEFAULT_DB_PATH as _DB_PATH
 # ============================================================================
 # KNOWN MARKETS (for prompting when XML cannot detect market)
 # ============================================================================
@@ -96,7 +97,7 @@ def gather_xml_inputs(xml_path: str) -> Optional[XmlOrderInputs]:
         or None if cancelled.
     """
     print(f"\n{'='*70}")
-    print(f"XML ORDER PROCESSING")
+    print("XML ORDER PROCESSING")
     print(f"{'='*70}\n")
 
     # ── Parse XML ──
@@ -450,13 +451,13 @@ if __name__ == "__main__":
     inputs = gather_xml_inputs(xml_file)
 
     if inputs:
-        print(f"\n✓ Inputs gathered successfully:")
+        print("\n✓ Inputs gathered successfully:")
         print(f"  Agency:      {inputs.agency}")
         print(f"  Client:      {inputs.client}  (ID: {inputs.client_id})")
         print(f"  Market:      {inputs.market}")
         print(f"  Estimates:   {len(inputs.estimates)}")
         print(f"  Separation:  {inputs.separation_intervals}")
         print(f"  Order code:  {inputs.order_code or '(auto)'}")
-        print(f"\nReady for browser automation.")
+        print("\nReady for browser automation.")
     else:
         print("\n✗ Input gathering cancelled or failed")

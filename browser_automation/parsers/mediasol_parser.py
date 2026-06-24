@@ -10,18 +10,13 @@ Format is the same family as H&L Partners (Strata IO system) with these differen
   - A language tag line (VIETNAMESE, BONUS, etc.) appears after the program name
 """
 
-import pdfplumber
 import re
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Dict
+from typing import Dict, List, Optional, Tuple
+
+import pdfplumber
 
 # Import shared utilities from hl_parser to avoid duplication
-from browser_automation.parsers.hl_parser import (
-    analyze_weekly_distribution,
-    convert_hl_days_to_etere,
-    format_time_for_description,
-    extract_language_from_program,
-)
 
 
 @dataclass

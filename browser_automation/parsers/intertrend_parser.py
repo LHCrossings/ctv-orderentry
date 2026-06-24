@@ -4,11 +4,12 @@ Parses Intertrend agency insertion order PDFs (Brand Time Schedule format)
 Similar to Daviselen — weekly spot distribution, Chinese programming, bonus lines
 """
 
-import pdfplumber
 import re
-from datetime import datetime
 from dataclasses import dataclass
+from datetime import datetime
 from typing import List, Optional
+
+import pdfplumber
 
 _MONTH_MAP = {
     'JAN': ('Jan', 1), 'FEB': ('Feb', 2), 'MAR': ('Mar', 3),

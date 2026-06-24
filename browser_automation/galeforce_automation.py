@@ -14,9 +14,7 @@ Business Rules:
 """
 
 import os
-import re
 import sys
-from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Optional
 
@@ -26,14 +24,12 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from browser_automation.etere_client import EtereClient
-from browser_automation.ros_definitions import ROS_SCHEDULES
 from browser_automation.parsers.galeforce_parser import (
     GaleForceOrder,
-    GaleForceLine,
     parse_galeforce_pdf,
 )
-from src.domain.enums import BillingType, OrderType, SeparationInterval
-
+from browser_automation.ros_definitions import ROS_SCHEDULES
+from src.domain.enums import OrderType, SeparationInterval
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONSTANTS
@@ -42,14 +38,13 @@ from src.domain.enums import BillingType, OrderType, SeparationInterval
 GALEFORCE_SEPARATION = SeparationInterval.GALEFORCE.value  # (25, 0, 0)
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # DATE / DURATION HELPERS (direct DB)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _parse_date(s):
     """Parse MM/DD/YYYY, MM/DD/YY, or date objects to datetime.date."""
-    from datetime import datetime, date
+    from datetime import date, datetime
     if isinstance(s, date):
         return s
     s = str(s).strip()

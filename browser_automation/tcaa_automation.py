@@ -11,27 +11,26 @@ This file contains ONLY:
 NO Etere browser code lives here - it's all in etere_client.py.
 """
 
+import sys
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
 from pathlib import Path
-import sys
+from typing import Optional
 
 # Add src to path for imports
 _src_path = Path(__file__).parent.parent
 if str(_src_path) not in sys.path:
     sys.path.insert(0, str(_src_path))
 
-from browser_automation.etere_client import EtereClient
-from browser_automation.ros_definitions import ROS_SCHEDULES
-from browser_automation.language_utils import extract_language_from_program
 from parsers.tcaa_parser import (
-    parse_tcaa_pdf,
     TCAAEstimate,
-    TCAALine,
     format_time_for_description,
+    parse_tcaa_pdf,
 )
 
+from browser_automation.etere_client import EtereClient
+from browser_automation.language_utils import extract_language_from_program
+from browser_automation.ros_definitions import ROS_SCHEDULES
 
 # ============================================================================
 # DOMAIN MODELS (User Input)
@@ -474,8 +473,8 @@ def process_tcaa_order(
     all_estimates = parse_tcaa_pdf(pdf_path)
     
     # Detect separation intervals from PDF
+
     import pdfplumber
-    from pathlib import Path
     
     detected_separation = None
     try:
@@ -500,7 +499,7 @@ def process_tcaa_order(
         # Check if there are other estimates we could batch process
         if len(all_estimates) > 1:
             print(f"{'='*70}")
-            print(f"BATCH PROCESSING OPPORTUNITY")
+            print("BATCH PROCESSING OPPORTUNITY")
             print(f"{'='*70}")
             print(f"You selected estimate {estimate_number}, but this PDF contains {len(all_estimates)} total estimates:")
             for est in all_estimates:
@@ -530,7 +529,7 @@ def process_tcaa_order(
         estimates = all_estimates
         
         print(f"{'='*70}")
-        print(f"ESTIMATE SELECTION")
+        print("ESTIMATE SELECTION")
         print(f"{'='*70}")
         print(f"Found {len(estimates)} total estimates in this PDF:")
         for idx, est in enumerate(estimates, 1):
@@ -546,12 +545,12 @@ def process_tcaa_order(
         
         if batch_all not in ['', 'y', 'yes']:
             # User wants to select specific ones
-            print(f"\nWhich estimates do you want to process?")
-            print(f"Options:")
-            print(f"  - Enter numbers separated by commas (e.g., 1,2,4)")
-            print(f"  - Enter ranges (e.g., 1-3,5)")
-            print(f"  - Enter 'all' to process all")
-            print(f"  - Press Enter to cancel")
+            print("\nWhich estimates do you want to process?")
+            print("Options:")
+            print("  - Enter numbers separated by commas (e.g., 1,2,4)")
+            print("  - Enter ranges (e.g., 1-3,5)")
+            print("  - Enter 'all' to process all")
+            print("  - Press Enter to cancel")
             
             selection = input("\nYour selection: ").strip().lower()
             
@@ -580,7 +579,7 @@ def process_tcaa_order(
                     estimates = [estimates[i] for i in selected_indices]
                     
                     if not estimates:
-                        print(f"\n✗ No valid estimates selected")
+                        print("\n✗ No valid estimates selected")
                         return False
                     
                     print(f"\n✓ Will process {len(estimates)} estimate(s): {', '.join(est.estimate_number for est in estimates)}\n")
@@ -646,7 +645,7 @@ def process_tcaa_order(
                     all_bonus_inputs[estimate.estimate_number] = bonus_inputs
         else:
             # Different structures, must configure individually
-            print(f"✗ Estimates have different structures - individual configuration required")
+            print("✗ Estimates have different structures - individual configuration required")
             print()
             print(f"{'='*70}")
             print("GATHERING BONUS LINE INPUTS")
@@ -679,7 +678,7 @@ def process_tcaa_order(
         if detected_separation is not None:
             print(f"✓ PDF specifies separation: {detected_separation} minutes")
         else:
-            print(f"No separation specified in PDF (will use default 15 minutes)")
+            print("No separation specified in PDF (will use default 15 minutes)")
         
         print()
         print("Separation Configuration:")

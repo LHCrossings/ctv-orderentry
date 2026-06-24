@@ -19,20 +19,20 @@ Business Rules:
 """
 
 import sqlite3
-from pathlib import Path
 from typing import Optional
 
 from browser_automation.etere_client import EtereClient
-from browser_automation.parsers.mediasol_parser import (
-    MediasolEstimate,
-    MediasolLine,
+from browser_automation.parsers.hl_parser import (
     analyze_weekly_distribution,
     convert_hl_days_to_etere,
     extract_language_from_program,
     format_time_for_description,
+)
+from browser_automation.parsers.mediasol_parser import (
+    MediasolEstimate,
+    MediasolLine,
     parse_mediasol_pdf,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONSTANTS
@@ -55,13 +55,12 @@ SPOT_CODE_BONUS = 10
 # Customer database path (relative to project root)
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMERS_DB_PATH
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # DIRECT DB HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _parse_date(s):
-    from datetime import datetime, date
+    from datetime import date, datetime
     if isinstance(s, date):
         return s
     for fmt in ('%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d'):
@@ -421,7 +420,7 @@ def gather_mediasol_inputs(pdf_path: str) -> dict | None:
         _save_customer_to_db(est.client, customer_id)
 
     suggested_code, suggested_desc = get_mediasol_defaults(pdf_path)
-    print(f"\n[CONTRACT]")
+    print("\n[CONTRACT]")
     contract_code = input(f"  Code [{suggested_code}]: ").strip() or suggested_code
     description = input(f"  Description [{suggested_desc}]: ").strip() or suggested_desc
 
@@ -432,7 +431,7 @@ def gather_mediasol_inputs(pdf_path: str) -> dict | None:
     )
     existing_contract_number = None
     if is_revision:
-        print(f"\n[REVISION] ⚠ Detected 'revised' in order description.")
+        print("\n[REVISION] ⚠ Detected 'revised' in order description.")
     revision_input = input(
         f"  Is this a revision of an existing Etere contract? [{'Y/n' if is_revision else 'y/N'}]: "
     ).strip().lower()

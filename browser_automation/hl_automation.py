@@ -19,15 +19,8 @@ H&L Partners Business Rules:
 
 import sqlite3
 from datetime import datetime
-from pathlib import Path
 from typing import Optional
 
-from browser_automation.etere_direct_client import (
-    AGENCY_IDS,
-    EtereDirectClient,
-    MEDIA_CENTER_IDS,
-    connect,
-)
 from parsers.hl_parser import (
     HLEstimate,
     HLLine,
@@ -38,6 +31,12 @@ from parsers.hl_parser import (
     parse_hl_pdf,
 )
 
+from browser_automation.etere_direct_client import (
+    AGENCY_IDS,
+    MEDIA_CENTER_IDS,
+    EtereDirectClient,
+    connect,
+)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONSTANTS
@@ -438,9 +437,10 @@ def _save_customer_to_db(client_name: str, customer_id: int) -> None:
 def _seed_known_template(client_name: str) -> None:
     """If client_name matches a known H&L template, seed it into the DB."""
     try:
-        from seed_customer_templates import KNOWN_TEMPLATES
-        from browser_automation.customer_defaults import ensure_template_columns
         import sqlite3 as _sqlite3
+
+        from browser_automation.customer_defaults import ensure_template_columns
+        from seed_customer_templates import KNOWN_TEMPLATES
 
         ensure_template_columns(CUSTOMERS_DB_PATH)
         name_lower = client_name.lower()
@@ -555,7 +555,7 @@ def gather_hl_inputs(pdf_path: str) -> dict | None:
 
     suggested_code, suggested_desc = get_hl_defaults(pdf_path)
 
-    print(f"\n[CONTRACT]")
+    print("\n[CONTRACT]")
     contract_code = input(f"  Code [{suggested_code}]: ").strip() or suggested_code
     description = input(f"  Description [{suggested_desc}]: ").strip() or suggested_desc
 
@@ -566,7 +566,7 @@ def gather_hl_inputs(pdf_path: str) -> dict | None:
     )
     existing_contract_number = None
     if is_revision:
-        print(f"\n[REVISION] ⚠ Detected 'revised' in order description.")
+        print("\n[REVISION] ⚠ Detected 'revised' in order description.")
     revision_input = input(
         f"  Is this a revision of an existing Etere contract? [{'Y/n' if is_revision else 'y/N'}]: "
     ).strip().lower()
@@ -607,7 +607,7 @@ def gather_hl_inputs(pdf_path: str) -> dict | None:
         print('!'*70)
 
     separation = SEPARATION_INTERVALS
-    print(f"\n[BILLING] ✓ Customer share indicating agency % / Agency")
+    print("\n[BILLING] ✓ Customer share indicating agency % / Agency")
     print(f"[INTERVALS] ✓ Customer={separation[0]}, Order={separation[1]}, Event={separation[2]}")
 
     # Offer Added Value when the order carries no bonus (rate == 0) lines

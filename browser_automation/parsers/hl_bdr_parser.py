@@ -11,11 +11,9 @@ OCR dependencies: PyMuPDF (fitz), pytesseract, Pillow
 
 from __future__ import annotations
 
-import io
 import re
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -296,7 +294,8 @@ def _parse_bdr_page(text: str) -> Optional[BDROrder]:
             if (tokens_after_dur
                     and re.match(r"^\d{1,2}$", tokens_after_dur[0])
                     and raw_dates):
-                from datetime import datetime as _dt, timedelta as _td
+                from datetime import datetime as _dt
+                from datetime import timedelta as _td
                 try:
                     second_wk = _dt.strptime(f"{raw_dates[0]}/{year}", "%m/%d/%Y")
                     first_wk = second_wk - _td(days=7)

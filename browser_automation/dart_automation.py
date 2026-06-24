@@ -11,21 +11,18 @@ Billing: client (charge_to="Customer", invoice_header="Customer")
 
 import os
 import sqlite3
-from decimal import Decimal
 from typing import Optional
 
-from browser_automation.etere_client import EtereClient
-from browser_automation.parsers.dart_parser import DartOrder, parse_dart_xlsx, parse_dart_schedule
-
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
-
+from browser_automation.etere_client import EtereClient
+from browser_automation.parsers.dart_parser import DartOrder, parse_dart_schedule, parse_dart_xlsx
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DIRECT DB HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _parse_date(s):
-    from datetime import datetime, date
+    from datetime import date, datetime
     if isinstance(s, date):
         return s
     for fmt in ('%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d'):

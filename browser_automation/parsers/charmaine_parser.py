@@ -34,12 +34,13 @@ KEY CHARACTERISTICS:
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
-import pdfplumber
-import re
 import os
-from datetime import datetime, timedelta
+import re
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Optional
+
+import pdfplumber
 
 
 @dataclass(frozen=True)
@@ -511,7 +512,8 @@ def _parse_page_text_fallback(
 
     # Derive flight dates from week columns when not in the PDF header
     if not flight_start or not flight_end:
-        from datetime import datetime as _dt, timedelta as _td
+        from datetime import datetime as _dt
+        from datetime import timedelta as _td
         valid_cols = [w for w in week_columns if w.start_date]
         if valid_cols:
             if not flight_start:
@@ -1120,7 +1122,8 @@ def _parse_page(
 
     # Derive flight dates from week columns when not in the PDF header
     if not flight_start or not flight_end:
-        from datetime import datetime as _dt, timedelta as _td
+        from datetime import datetime as _dt
+        from datetime import timedelta as _td
         valid_cols = [w for w in week_columns if w.start_date]
         if valid_cols:
             if not flight_start:

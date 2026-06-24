@@ -22,19 +22,17 @@ _project_root = Path(__file__).parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 from browser_automation.etere_client import EtereClient
 from browser_automation.parsers.bvk_parser import BVKOrder, parse_bvk_pdf
-from src.domain.enums import BillingType, OrderType
-
-from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
-
+from src.domain.enums import OrderType
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DIRECT DB HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _parse_date(s):
-    from datetime import datetime, date
+    from datetime import date, datetime
     if isinstance(s, date):
         return s
     for fmt in ('%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d'):

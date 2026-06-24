@@ -11,7 +11,6 @@ Used by: TCAA, Misfit, WorldLink, opAD, RPM, H&L, Daviselen, etc.
 
 from typing import Optional
 
-
 # Universal language to block prefix mapping
 # These prefixes are used in Etere to filter programming blocks
 LANGUAGE_BLOCK_PREFIXES = {

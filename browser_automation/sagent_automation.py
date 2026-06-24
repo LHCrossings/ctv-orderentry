@@ -22,25 +22,21 @@ Key SAGENT Business Rules:
 - Separation: Customer=15, Order=0, Event=0
 """
 
-from dataclasses import dataclass
-from typing import Optional, Tuple
-from pathlib import Path
 import sys
+from pathlib import Path
+from typing import Optional
 
 # Add paths for imports
 _src_path = Path(__file__).parent.parent
 if str(_src_path) not in sys.path:
     sys.path.insert(0, str(_src_path))
 
-from browser_automation.etere_client import EtereClient
-from browser_automation.ros_definitions import get_ros_schedule
 from parsers.sagent_parser import (
-    parse_sagent_pdf,
     SagentOrder,
-    SagentLine,
+    parse_sagent_pdf,
 )
-from src.domain.enums import OrderType, BillingType
 
+from browser_automation.etere_client import EtereClient
 
 # ============================================================================
 # SAGENT CONSTANTS
@@ -56,7 +52,7 @@ SAGENT_SEPARATION = (10, 0, 0)  # Customer=10, Order=0, Event=0
 
 def _parse_date(s):
     """Parse MM/DD/YYYY, MM/DD/YY, or date objects to datetime.date."""
-    from datetime import datetime, date
+    from datetime import date, datetime
     if isinstance(s, date):
         return s
     s = str(s).strip()
@@ -239,9 +235,10 @@ def gather_upfront_inputs(order: SagentOrder) -> dict:
         _src = _Path(__file__).parent.parent / "src"
         if str(_src) not in _sys.path:
             _sys.path.insert(0, str(_src))
+        import sqlite3 as _sqlite3
+
         from browser_automation.customer_defaults import DEFAULT_DB_PATH as _DB_PATH
         from data_access.repositories.customer_repository import CustomerRepository as _CR
-        import sqlite3 as _sqlite3
         _conn = _sqlite3.connect(str(_DB_PATH))
         _conn.row_factory = _sqlite3.Row
         _rows = _conn.execute(
@@ -268,7 +265,7 @@ def gather_upfront_inputs(order: SagentOrder) -> dict:
     default_code = order.get_default_contract_code()
     print(f"Default: {default_code}")
     
-    use_default = input(f"Use default? (y/n): ").strip().lower()
+    use_default = input("Use default? (y/n): ").strip().lower()
     if use_default == 'y':
         contract_code = default_code
     else:
@@ -283,7 +280,7 @@ def gather_upfront_inputs(order: SagentOrder) -> dict:
     default_desc = order.get_default_description()
     print(f"Default: {default_desc}")
     
-    use_default = input(f"Use default? (y/n): ").strip().lower()
+    use_default = input("Use default? (y/n): ").strip().lower()
     if use_default == 'y':
         description = default_desc
     else:
@@ -298,7 +295,7 @@ def gather_upfront_inputs(order: SagentOrder) -> dict:
     default_notes = order.get_default_notes()
     print(f"Default: {default_notes}")
     
-    use_default = input(f"Use default? (y/n): ").strip().lower()
+    use_default = input("Use default? (y/n): ").strip().lower()
     if use_default == 'y':
         notes = default_notes
     else:

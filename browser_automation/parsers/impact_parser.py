@@ -36,11 +36,12 @@ DEFAULT VALUES:
 - Billing: "Customer share indicating agency %" / "Agency"
 """
 
-import pdfplumber
 import re
-from datetime import datetime, timedelta
 from dataclasses import dataclass
-from typing import List, Dict, Optional, Tuple
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Tuple
+
+import pdfplumber
 
 
 @dataclass

@@ -27,24 +27,23 @@ This file extracts ALL Etere operations from ALL agencies:
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 _project_root = Path(__file__).parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait, Select
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.keys import Keys
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
-from datetime import date, datetime
-from decimal import Decimal
-from typing import Optional, List, Tuple
-import re
 import time
+from datetime import date, datetime
+from typing import List, Optional, Tuple
+
+from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import Select, WebDriverWait
 
 from src.domain.enums import Market
 
@@ -215,7 +214,7 @@ class EtereClient:
             time.sleep(2)
             
             print(f"[CUSTOMER] Search results for: {client_name}")
-            print(f"[CUSTOMER] Please click 'Insert' to select customer")
+            print("[CUSTOMER] Please click 'Insert' to select customer")
             
         except Exception as e:
             print(f"[CUSTOMER] ✗ Search failed: {e}")
@@ -342,7 +341,7 @@ class EtereClient:
                 if "/sales/contract/" in current_url:
                     break
             else:
-                print(f"[CONTRACT] ✗ No redirect to contract page")
+                print("[CONTRACT] ✗ No redirect to contract page")
                 return None
             
             # Extract contract number
@@ -428,7 +427,7 @@ class EtereClient:
                     field = self.driver.find_element(By.ID, "notes")
                     field.clear()
                     field.send_keys(notes)
-                    print(f"[HEADER] ✓ Notes populated")
+                    print("[HEADER] ✓ Notes populated")
                 except Exception as e:
                     print(f"[HEADER] ⚠ Notes: {e}")
             
@@ -460,9 +459,9 @@ class EtereClient:
                     if option:
                         option.click()
                         time.sleep(0.5)
-                        print(f"[HEADER] ✓ Charge To set")
+                        print("[HEADER] ✓ Charge To set")
                     else:
-                        print(f"[HEADER] ⚠ Option not found")
+                        print("[HEADER] ⚠ Option not found")
                         
                 except Exception as e:
                     print(f"[HEADER] ⚠ Charge To: {e}")
@@ -499,9 +498,9 @@ class EtereClient:
                     if option:
                         option.click()
                         time.sleep(0.5)
-                        print(f"[HEADER] ✓ Invoice Header set")
+                        print("[HEADER] ✓ Invoice Header set")
                     else:
-                        print(f"[HEADER] ⚠ Option not found")
+                        print("[HEADER] ⚠ Option not found")
                         
                 except Exception as e:
                     print(f"[HEADER] ⚠ Invoice Header: {e}")
@@ -559,7 +558,7 @@ class EtereClient:
                     EC.presence_of_element_located((By.ID, "date"))
                 )
             except TimeoutException:
-                print(f"[DATES] First navigation didn't land — retrying...")
+                print("[DATES] First navigation didn't land — retrying...")
                 self.driver.get(contract_url)
                 time.sleep(3)
                 self.wait.until(EC.presence_of_element_located((By.ID, "date")))
@@ -572,7 +571,7 @@ class EtereClient:
             contract_end = datetime.strptime(current_to_str, '%m/%d/%Y')
 
             if latest_end <= contract_end:
-                print(f"[DATES] ✓ No extension needed")
+                print("[DATES] ✓ No extension needed")
                 return True
 
             new_end_str = latest_end.strftime('%m/%d/%Y')
@@ -607,7 +606,7 @@ class EtereClient:
                 return True
             else:
                 print(f"[DATES] ✗ Date save failed — expected {new_end_str}, got {saved}")
-                print(f"[DATES] *** STOPPING — fix contract end date before adding lines ***")
+                print("[DATES] *** STOPPING — fix contract end date before adding lines ***")
                 return False
 
         except Exception as e:
@@ -846,9 +845,9 @@ class EtereClient:
             print(f"[REFRESH] {idx}/{len(lines_data)}: {label}")
             if self.refresh_line_blocks(line_id):
                 ok_count += 1
-                print(f"[REFRESH] ✓")
+                print("[REFRESH] ✓")
             else:
-                print(f"[REFRESH] ✗")
+                print("[REFRESH] ✗")
             time.sleep(2)
 
         print(f"\n[REFRESH] ✓ Complete — {ok_count}/{len(lines_data)} succeeded")
@@ -1032,7 +1031,7 @@ class EtereClient:
                 spots_per_week = 0
 
             if is_bookend:
-                print(f"[LINE] Setting bookend scheduling (Top and Bottom)...")
+                print("[LINE] Setting bookend scheduling (Top and Bottom)...")
                 try:
                     radio = self.driver.find_element(
                         By.CSS_SELECTOR, 'input[name="selectedSchedulingType"][value="6"]'
@@ -1040,11 +1039,11 @@ class EtereClient:
                     parent = radio.find_element(By.XPATH, "..")
                     parent.click()
                     time.sleep(0.5)
-                    print(f"[LINE] ✓ Bookend set")
+                    print("[LINE] ✓ Bookend set")
                 except Exception as e:
                     print(f"[LINE] ⚠ Bookend: {e}")
             elif is_billboard:
-                print(f"[LINE] Setting billboard scheduling (Top)...")
+                print("[LINE] Setting billboard scheduling (Top)...")
                 try:
                     radio = self.driver.find_element(
                         By.CSS_SELECTOR, 'input[name="selectedSchedulingType"][value="4"]'
@@ -1052,7 +1051,7 @@ class EtereClient:
                     parent = radio.find_element(By.XPATH, "..")
                     parent.click()
                     time.sleep(0.5)
-                    print(f"[LINE] ✓ Billboard set")
+                    print("[LINE] ✓ Billboard set")
                 except Exception as e:
                     print(f"[LINE] ⚠ Billboard: {e}")
             elif _force_rotation:
@@ -1065,11 +1064,11 @@ class EtereClient:
                     parent = radio.find_element(By.XPATH, "..")
                     parent.click()
                     time.sleep(0.5)
-                    print(f"[LINE] ✓ Rotation set")
+                    print("[LINE] ✓ Rotation set")
                 except Exception as e:
                     print(f"[LINE] ⚠ Rotation: {e}")
             elif is_priority and not is_bookend and not is_billboard:
-                print(f"[LINE] Setting priority scheduling...")
+                print("[LINE] Setting priority scheduling...")
                 try:
                     radio = self.driver.find_element(
                         By.CSS_SELECTOR, 'input[name="selectedSchedulingType"][value="0"]'
@@ -1077,11 +1076,11 @@ class EtereClient:
                     parent = radio.find_element(By.XPATH, "..")
                     parent.click()
                     time.sleep(0.5)
-                    print(f"[LINE] ✓ Priority set")
+                    print("[LINE] ✓ Priority set")
                 except Exception as e:
                     print(f"[LINE] ⚠ Priority: {e}")
             elif is_optimization:
-                print(f"[LINE] Setting optimization scheduling...")
+                print("[LINE] Setting optimization scheduling...")
                 try:
                     radio = self.driver.find_element(
                         By.CSS_SELECTOR, 'input[name="selectedSchedulingType"][value="2"]'
@@ -1089,11 +1088,11 @@ class EtereClient:
                     parent = radio.find_element(By.XPATH, "..")
                     parent.click()
                     time.sleep(0.5)
-                    print(f"[LINE] ✓ Optimization set")
+                    print("[LINE] ✓ Optimization set")
                 except Exception as e:
                     print(f"[LINE] ⚠ Optimization: {e}")
             elif is_bottom:
-                print(f"[LINE] Setting bottom scheduling...")
+                print("[LINE] Setting bottom scheduling...")
                 try:
                     radio = self.driver.find_element(
                         By.CSS_SELECTOR, 'input[name="selectedSchedulingType"][value="5"]'
@@ -1101,7 +1100,7 @@ class EtereClient:
                     parent = radio.find_element(By.XPATH, "..")
                     parent.click()
                     time.sleep(0.5)
-                    print(f"[LINE] ✓ Bottom set")
+                    print("[LINE] ✓ Bottom set")
                 except Exception as e:
                     print(f"[LINE] ⚠ Bottom: {e}")
 
@@ -1233,7 +1232,7 @@ class EtereClient:
             save_btn.click()
             time.sleep(3)
             
-            print(f"[LINE] ✓ Line added successfully")
+            print("[LINE] ✓ Line added successfully")
             return True
             
         except Exception as e:

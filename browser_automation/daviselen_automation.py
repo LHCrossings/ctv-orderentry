@@ -39,9 +39,8 @@ IMPORTS - Universal utilities, no duplication
 
 import os
 import sys
-import math
+from datetime import date, datetime
 from pathlib import Path
-from datetime import date, datetime, timedelta
 from typing import Optional
 
 # Add project root to path
@@ -50,27 +49,21 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from etere_client import EtereClient
-from ros_definitions import ROS_SCHEDULES
-from language_utils import (
-    extract_language_from_program,
-)
-from src.domain.enums import BillingType, OrderType, SeparationInterval
-
-from browser_automation.parsers.daviselen_parser import (
-    parse_daviselen_pdf,
-    DaviselenOrder,
-    DaviselenLine,
-    format_time_for_description,
-    analyze_weekly_distribution,
-)
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CUSTOMER DATABASE ACCESS
 # ═══════════════════════════════════════════════════════════════════════════════
-
 # Default database path
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+from browser_automation.parsers.daviselen_parser import (
+    DaviselenOrder,
+    analyze_weekly_distribution,
+    format_time_for_description,
+    parse_daviselen_pdf,
+)
+from src.domain.enums import BillingType, OrderType
+
+
 def lookup_customer(
     client_name: str,
     db_path: str = CUSTOMER_DB_PATH
@@ -92,7 +85,6 @@ def lookup_customer(
     if os.path.exists(db_path):
         try:
             from src.data_access.repositories.customer_repository import CustomerRepository
-            from src.domain.entities import Customer
             
             repo = CustomerRepository(db_path)
             
@@ -311,7 +303,7 @@ def gather_daviselen_inputs(pdf_path: str) -> dict:
     customer = lookup_customer(order.client, order.client_code)
     
     if customer:
-        print(f"\n[CUSTOMER] ✓ Found in database:")
+        print("\n[CUSTOMER] ✓ Found in database:")
         print(f"  ID: {customer['customer_id']}")
         print(f"  Abbreviation: {customer['abbreviation']}")
         print(f"  Market: {customer['market']}")
@@ -323,7 +315,7 @@ def gather_daviselen_inputs(pdf_path: str) -> dict:
         
         # Verify market matches
         if customer['market'] != market:
-            print(f"\n[WARNING] Market mismatch!")
+            print("\n[WARNING] Market mismatch!")
             print(f"  Customer default: {customer['market']}")
             print(f"  PDF market: {market}")
             print(f"  Using PDF market: {market}")
@@ -404,7 +396,7 @@ def gather_daviselen_inputs(pdf_path: str) -> dict:
             suggested_code = f"Daviselen {estimate}"
             suggested_desc = f"{order.client} Est {estimate}"
     
-    print(f"\n[CONTRACT]")
+    print("\n[CONTRACT]")
     contract_code = input(f"  Code [{suggested_code}]: ").strip() or suggested_code
     description = input(f"  Description [{suggested_desc}]: ").strip() or suggested_desc
     
@@ -430,13 +422,13 @@ def gather_daviselen_inputs(pdf_path: str) -> dict:
     
     notes = f"{client_line}\n{product_line}\n{estimate_line}"
     
-    print(f"  Notes:")
+    print("  Notes:")
     for line in notes.split('\n'):
         print(f"    {line}")
     
     # Billing (UNIVERSAL for ALL agency orders)
     billing = BillingType.CUSTOMER_SHARE_AGENCY
-    print(f"\n[BILLING] ✓ Customer share indicating agency % / Agency")
+    print("\n[BILLING] ✓ Customer share indicating agency % / Agency")
     
     print("\n" + "="*70)
     print("INPUT COLLECTION COMPLETE - Ready for automation")
