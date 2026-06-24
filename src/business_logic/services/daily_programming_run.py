@@ -163,21 +163,41 @@ def _ensure_bumper(cur, cod_user, d, slot, spec, existing):
 
 
 def _sync_checksums(cur, ids):
-    """Re-sync each row's stored SCHEDULE_CHECKSUM to the freshly-computed value.
+    """Re-sync each row's stored SCHEDULE_CHECKSUM and metadata to prevent yellow triangles.
 
-    Etere's yellow 'event modified — needs Explode - all breakpoints' triangle is
-    driven solely by `ISNULL(dbo.sch_getFilmatiCheckSum(id_tpalinse),0) <> stored
-    SCHEDULE_CHECKSUM` (confirmed from the EE requery's ChecksumChanged logic).
-    'Explode - all breakpoints' clears it by rewriting the stored checksum — so we
-    do the same. Idempotent; also auto-heals rows left stale by an earlier run.
+    Etere's yellow 'event modified — needs Explode - all breakpoints' triangle appears
+    when metadata fields diverge from what Etere Aligner populates during file sync.
+    'Explode - all breakpoints' fixes this by updating SCHEDULE_CHECKSUM + metadata fields
+    (tipo_tc, aspect, audio_ty, supporto, visionato, CRAWL_DESC). We do the same.
+
+    When Etere's file verification/Aligner populates these fields, the SCHEDULE_CHECKSUM
+    recalculates based on the updated metadata, so we must pre-populate them to match
+    what the checksum function will see. Idempotent; also auto-heals stale rows.
     """
     for rid in ids:
         if rid is None:
             continue
-        cur.execute(
-            "UPDATE TPALINSE SET SCHEDULE_CHECKSUM = dbo.sch_getFilmatiCheckSum(%s) WHERE id_tpalinse=%s",
-            (rid, rid),
-        )
+        # Get the program code so we can set supporto correctly
+        cur.execute("SELECT COD_PROGRA FROM TPALINSE WHERE id_tpalinse=%s", (rid,))
+        row = cur.fetchone()
+        prog_code = row[0] if row and row[0] else ""
+
+        # Populate the metadata fields that Etere's file sync/verification will set,
+        # then update the checksum based on the now-complete metadata.
+        supporto_val = f"0ETX      {prog_code}"
+        crawl_desc = "[EDL]\nEdl_Version=0\n[Aspect Conversion]\nCode=HL"
+
+        cur.execute("""
+            UPDATE TPALINSE SET
+                tipo_tc='C',
+                aspect='H',
+                audio_ty='M',
+                supporto=%s,
+                visionato='X',
+                CRAWL_DESC=%s,
+                SCHEDULE_CHECKSUM = dbo.sch_getFilmatiCheckSum(%s)
+            WHERE id_tpalinse=%s
+        """, (supporto_val, crawl_desc, rid, rid))
 
 
 def _place_element(cur, cod_user, d, lo, hi, prgs_slots, el, program_first_id):
