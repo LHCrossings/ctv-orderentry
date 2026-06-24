@@ -921,8 +921,6 @@ def process_lexus_order(driver=None, file_path: str = "", user_input: dict = Non
 
     return _execute_direct(user_input)
 
-    return all_success
-
 
 # ───────────────────────────────────────────────────────────────────────────
 # STANDALONE ENTRY POINT

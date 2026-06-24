@@ -63,6 +63,11 @@ def _secs_to_duration(secs: int) -> str:
     return f"{h:02d}:{m:02d}:{s:02d}:00"
 
 
+def _gross_up(net_rate: float) -> float:
+    """Gross up a net rate for the standard 15% agency commission (net ÷ 0.85)."""
+    return round(net_rate / 0.85, 2)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # DIRECT DB ENTRY
 # ─────────────────────────────────────────────────────────────────────────────

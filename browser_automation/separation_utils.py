@@ -295,6 +295,10 @@ def confirm_time_and_capacity(
         choice = input("\nSelect option (1-4) [default: 2]: ").strip() or "2"
         
         if choice == "2":
+            # Available time window in minutes (same calc as validate_spot_capacity)
+            _f = parsed_from.split(':')
+            _t = parsed_to.split(':')
+            available_minutes = (int(_t[0]) * 60 + int(_t[1])) - (int(_f[0]) * 60 + int(_f[1]))
             # Calculate what separation would work
             # Required: (spots_per_day - 1) × separation ≤ available_minutes
             # So: separation ≤ available_minutes / (spots_per_day - 1)

@@ -35,6 +35,7 @@ Description:      "CA State Lottery Est {estimate} - {product}"  e.g. "CA State 
 import sys
 from datetime import date, datetime
 from pathlib import Path
+from typing import Optional
 
 # Add project root to sys.path
 _project_root = Path(__file__).parent.parent
