@@ -127,7 +127,9 @@ def get_language_details(csv_bytes: bytes) -> list:
     Run language detection and return per-unique-description results.
 
     Returns [{"description": str, "lang": str, "count": int}, ...] sorted by
-    (lang, description).  Returns [] if EtereBridge is unavailable.
+    Etere line number (the "Line" column = id_contrattirighe), matching the
+    order of the final backwrite spreadsheet.  Returns [] if EtereBridge is
+    unavailable.
     """
     if not _AVAILABLE:
         return []
@@ -151,22 +153,48 @@ def get_language_details(csv_bytes: bytes) -> list:
             )
             return []
 
+        # "Line" holds the numeric Etere line number (id_contrattirighe) once
+        # load_and_clean_data has renamed/coerced it. Fall back gracefully if
+        # the column is absent so ordering never crashes detection.
+        has_line = "Line" in df.columns
+
         unique: dict = {}
         for idx, desc in df["rowdescription"].items():
             if not isinstance(desc, str):
                 desc = str(desc) if desc is not None else ""
             lang = row_languages.get(idx, "E")
+            line = 0
+            if has_line:
+                try:
+                    line = int(df["Line"].get(idx, 0) or 0)
+                except (ValueError, TypeError):
+                    line = 0
             if desc not in unique:
-                unique[desc] = {"lang": lang, "count": 0}
+                unique[desc] = {"lang": lang, "count": 0, "line": line}
+            else:
+                # Multiple spots share a description — keep the lowest line number.
+                unique[desc]["line"] = min(unique[desc]["line"], line)
             unique[desc]["count"] += 1
 
-        return sorted(
-            [
-                {"description": d, "lang": info["lang"], "count": info["count"]}
-                for d, info in unique.items()
-            ],
-            key=lambda x: (x["lang"], x["description"]),
-        )
+        rows = [
+            {
+                "description": d,
+                "lang": info["lang"],
+                "count": info["count"],
+                "line": info["line"],
+            }
+            for d, info in unique.items()
+        ]
+        # Order by Etere line number when available, else fall back to
+        # description so the table is at least stable/deterministic.
+        if has_line:
+            rows.sort(key=lambda x: (x["line"], x["description"]))
+        else:
+            rows.sort(key=lambda x: x["description"])
+        # "line" was only needed for sorting — drop it from the payload.
+        for r in rows:
+            r.pop("line", None)
+        return rows
     except Exception as exc:
         logging.warning("[EtereBridge] Language details failed: %s", exc, exc_info=True)
         return []
