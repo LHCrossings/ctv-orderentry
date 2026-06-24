@@ -53,6 +53,7 @@ SPOT_CODE_PAID = 2       # Paid Commercial
 SPOT_CODE_BONUS = 10     # BNS / Bonus Spot
 
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMERS_DB_PATH
+from browser_automation.added_value import add_av_line, prompt_add_av, widest_window
 
 # Market mapping for H&L (SFO and CVC only)
 HL_MARKET_MAPPING = {
@@ -118,6 +119,7 @@ def _execute_order(pdf_path: str, user_input: dict) -> bool:
     separation              = user_input.get('separation') or SEPARATION_INTERVALS
     existing_contract_id    = user_input.get('existing_contract_number')
     gross_up_factor         = user_input.get('gross_up_factor', 1.0)
+    add_av                  = user_input.get('add_av', False)
 
     if customer_id is None:
         customer_id, _ = _resolve_customer_id(pdf_path)
@@ -244,6 +246,29 @@ def _execute_order(pdf_path: str, user_input: dict) -> bool:
 
                 if not all_success:
                     break
+
+            # Optional Added Value line (one spot/day across the flight)
+            if all_success and add_av and estimate.lines:
+                window = widest_window([l.time for l in estimate.lines])
+                duration_str = f"00:00:{estimate.lines[0].duration:02d}:00"
+                av_id = add_av_line(
+                    client,
+                    contract_id=contract_id,
+                    market=market_code,
+                    date_from=flight_start,
+                    date_to=flight_end,
+                    duration=duration_str,
+                    separation=separation,
+                    languages=[l.program.split()[0] for l in estimate.lines if l.program],
+                    fallback_time=window,
+                )
+                if av_id > 0:
+                    line_count += 1
+                    print(
+                        f"\n  [ADDED VALUE] M-Su {window}"
+                        f"  {estimate.flight_start}–{estimate.flight_end}"
+                        f"  1/day={(flight_end - flight_start).days + 1} total → line_id={av_id}"
+                    )
 
             print(f"\n{'='*60}")
             print(f"✓ H&L ESTIMATE {estimate.estimate_number} COMPLETE")
@@ -585,6 +610,10 @@ def gather_hl_inputs(pdf_path: str) -> dict | None:
     print(f"\n[BILLING] ✓ Customer share indicating agency % / Agency")
     print(f"[INTERVALS] ✓ Customer={separation[0]}, Order={separation[1]}, Event={separation[2]}")
 
+    # Offer Added Value when the order carries no bonus (rate == 0) lines
+    has_bonus = any(l.is_bonus() for e in estimates for l in e.lines)
+    add_av = prompt_add_av(has_bonus)
+
     print("\n" + "=" * 70)
     print("INPUT COLLECTION COMPLETE - Ready for automation")
     print("=" * 70)
@@ -596,4 +625,5 @@ def gather_hl_inputs(pdf_path: str) -> dict | None:
         'separation': separation,
         'existing_contract_number': existing_contract_number,
         'gross_up_factor': gross_up_factor,
+        'add_av': add_av,
     }

@@ -1,64 +1,84 @@
-# Fix: TOYOTA CRSF-TV Q3 ORDERS (clean-text H/L Buy Detail Report)
+# Feature: Offer to add Added Value (AV) when a Hoffman Lewis order has no bonus
 
-## Problem
-`TOYOTA CRSF-TV Q3 ORDERS_NEW.pdf` is a 3-estimate H/L **Buy Detail Report**
-(Est 13934 Jul, 13935 Aug, 13936 Sep). It fails parsing:
+## Context
+Hoffman Lewis (H/L Agency) used to include bonus on every order. CVC/Sacramento
+still does; SFO stopped putting bonus on the IO. When an order has **no bonus at
+all**, offer to add a single Added Value line.
 
-1. **Detection misroute** — `is_bdr_pdf()` only recognizes BDRs by a **Type3 font
-   fingerprint**. This newer export has a normal embedded font + extractable text,
-   so `is_bdr_pdf` → False and detection falls through to `OrderType.HL`
-   (shares the "H/L Agency San Francisco" marker).
-2. **`hl_parser` can't read this layout** → returns 0 estimates silently
-   (rows have no line number, no daypart code, station is `CRSF-TV` not `CRTV-TV`,
-   no rating column).
-3. **`parse_bdr_pdf` is OCR-only** — always rasterizes with rotation and OCRs.
-   On this clean, un-rotated PDF that yields garbage → 0 orders even when called
-   directly.
+Applies to **both** parsers (HL and HL_BDR) — both are Hoffman Lewis. CVC orders
+that already carry bonus won't trigger the prompt, so applying it to both is safe.
 
-The whole HL_BDR pipeline (gather → select estimates → one contract per estimate →
-process) already exists and already handles multiple estimates. It just never
-receives them.
+## Ground truth (verified)
+- **Bonus = `rate == 0.0`** — canonical in HL (`HLLine.is_bonus()`). BDR lines have
+  no bonus field, so a BDR line with `rate == 0` is bonus.
+- **AV spot type = booking code `1`** (`trf_bookingcode`: code `AV`, "Added Value",
+  whitelist priority 70).
+- `is_added_value=True` in `add_contract_line` already → NEWTYPE `AV;COMS` and
+  forces Rotation (PRENOTAZIONE=1). No client change needed.
+- Each estimate = its own contract; inject AV line once per contract after the
+  paid-line loop.
 
-## Verified
-- `_parse_bdr_page()` fed the **clean pdfplumber text** parses all 3 pages
-  correctly (Est 13934 SFO 3 lines, etc.). The row regex already matches this layout.
+## AV line spec (per estimate/contract)
+- Days: **M-Su** (all 7) — required so 1/day across the flight = total.
+- Total spots: `(flight_end - flight_start).days + 1` (one per calendar day,
+  inclusive). e.g. 7/7–8/2 → 27; 7/7–7/10 → 4; 7/7–7/27 → 21.
+- `max_daily_run=1`, `spots_per_week=7`.
+- Scheduling: Rotation (auto, via `is_added_value=True`).
+- Time window: **widest window across that estimate's paid lines**
+  (min start → max end; this order → 16:00–19:00).
+- Duration: match the order's spot duration (first paid line; default :30).
+- Spot type: `booking_code=1`, `is_added_value=True`, `whitelist_priority=70`.
+- Description: `"M-Su {time} AV ROS"` (mirrors HL bonus `"... BNS ROS"`).
+- Rate: 0.0.
 
-## Plan (minimal, 2 files)
-- [ ] `hl_bdr_parser.py`: add `_extract_page_text(pdf_path, page_num)` — pdfplumber
-      text first; fall back to `_ocr_page` only when text is `(cid:`-garbled or
-      < 50 chars. Use it in `parse_bdr_pdf` instead of always calling `_ocr_page`.
-- [ ] `hl_bdr_parser.py`: add `is_bdr_text(text)` — content-based BDR detector
-      (markers + the day-pattern-first row layout). Self-validating so it never
-      steals genuine line-numbered `hl_parser` orders.
-- [ ] `order_detection_service.py`: add `_is_bdr(text)` and check it **before**
-      `_is_hl_partners` in `detect_from_text`. Covers both detection entry points.
+## Plan
+- [ ] **New shared helper** `browser_automation/added_value.py`:
+  - `SPOT_CODE_AV = 1`
+  - `order_has_bonus(line_rates: list[float]) -> bool`
+  - `prompt_add_av(has_bonus: bool) -> bool` — the y/N prompt (no bonus → ask)
+  - `widest_window(times: list[str]) -> str` — min start–max end via
+    `EtereClient.parse_time_range`, returns `"HH:MM-HH:MM"`
+  - `add_av_line(client, *, contract_id, market, time_range, date_from, date_to,
+    duration, separation) -> int` — calls `add_contract_line(is_added_value=True,
+    booking_code=1, days="M-Su", max_daily_run=1, spots_per_week=7,
+    whitelist_priority=70, total=days_in_flight)`
+- [ ] **HL_BDR**: in `gather_hl_bdr_inputs`, set
+      `inputs["add_av"] = prompt_add_av(any rate==0 across all estimates)`.
+      In `_execute_order`, after the per-order line loop, if `add_av`, add one AV
+      line using that order's flight dates + widest window + duration.
+- [ ] **HL**: same two hooks in `gather_hl_inputs` / `_execute_order`
+      (`estimate.lines`, `estimate.flight_start/_end`, `estimate.market`).
+- [ ] Print the AV line in the same `[BDR]/[H&L] ✓ ...` style; count it.
 
 ## Verification
-- [ ] `parse_bdr_pdf(toyota_pdf)` returns 3 orders with correct spots
-      (Jul 31, Aug 31, Sep 24).
-- [ ] `detect_from_text(page1)` → `OrderType.HL_BDR`.
-- [ ] Old Type3/rotated BDRs still detect (is_bdr_pdf) and still OCR.
-- [ ] Genuine `hl_parser` order still detects as `OrderType.HL`.
+- [ ] Toyota CRSF-TV (no bonus): prompt fires; answer "no" → unchanged 3×5 lines;
+      answer "yes" → each contract gets +1 AV line (Est 13934 → 27 spots, M-Su,
+      16:00–19:00, Rotation, booking 1, desc contains "AV").
+- [ ] A CVC HL order WITH bonus ($0 lines): prompt does NOT fire.
+- [ ] Validate via DB read: AV line present, NEWTYPE AV, PRENOTAZIONE=1,
+      max daily=1, total=days-in-flight.
+- [ ] Existing hl/bdr tests still pass.
 
 ## Review
-Done. Two files changed, no new pipeline code needed (HL_BDR gather/process/
-multi-estimate selection already existed).
+Done. Refined per request: description lists the **languages ordered** instead of
+the time window (single → full name "Filipino"; multiple → comma abbreviations
+"M,C,V"); falls back to the time window if no language is recognized.
 
-- `hl_bdr_parser.py`:
-  - `_extract_page_text()` — pdfplumber text first, OCR fallback only on
-    `(cid:` garble or <50 chars. `parse_bdr_pdf` now uses it.
-  - `is_bdr_text()` — content-based detector; row-layout guard makes it
-    self-validating (rejects line-numbered `hl_parser` rows).
-- `order_detection_service.py`:
-  - `_is_bdr()` delegates to `is_bdr_text`; checked before `_is_hl_partners`
-    in `detect_from_text`.
+Files:
+- NEW `browser_automation/added_value.py` — shared helper: `prompt_add_av`,
+  `widest_window`, `format_languages`, `av_total_spots`, `add_av_line`
+  (booking_code=1, is_added_value=True, M-Su, max_daily=1, whitelist 70).
+  Language map reused from `hl_bdr_parser._BLOCK_PREFIX`.
+- `hl_bdr_automation.py` — gather prompt (no-bonus → ask) + per-contract AV line.
+- `hl_automation.py` — same two hooks (languages from first word of program).
+- NEW `tests/unit/test_added_value.py` — 16 tests.
 
 Verified:
-- [x] `parse_bdr_pdf(toyota_pdf)` → 3 orders: Est 13934 (31 spots, 7/7–8/2),
-      13935 (31 spots, 8/4–8/30), 13936 (24 spots, 9/1–9/30). Totals match the
-      PDF "Total Spots" footers.
-- [x] `detect_from_text(page1)` → `OrderType.HL_BDR`; runtime
-      `PDFOrderDetector.detect_order_type` → `OrderType.HL_BDR`.
-- [x] Genuine line-numbered HL row → `is_bdr_text` False (stays `OrderType.HL`).
-- [x] Old Type3 path unchanged (is_bdr_pdf still first; OCR fallback preserved).
-- [x] 55 existing bdr/hl/detect tests pass.
+- [x] Toyota CRSF-TV (no bonus): prompt fires; each contract gets +1 AV line —
+      Est 13934/13935 → 27 spots, Est 13936 → 30 spots, all "M-Su Filipino AV ROS",
+      16:00–19:00, M-Su, booking 1, is_added_value (Rotation).
+- [x] Bonus detection = any rate==0 line (CVC orders with $0 lines won't prompt).
+- [x] Helper math: 7/7–8/2=27, 7/7–7/10=4, 7/7–7/27=21 (1/day inclusive).
+- [x] 61 hl/bdr/detect tests + 16 new added_value tests pass.
+- [ ] Live-DB confirmation deferred — would create real contracts; logic verified
+      via fake client + real-PDF dry run instead.

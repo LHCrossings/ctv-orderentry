@@ -23,6 +23,7 @@ from browser_automation.etere_direct_client import (
     connect,
 )
 from browser_automation.parsers.hl_bdr_parser import BDROrder, BDRLine, parse_bdr_pdf
+from browser_automation.added_value import add_av_line, prompt_add_av, widest_window
 
 # ── Same constants as HL — BDR is the same agency ────────────────────────────
 AGENCY_NAME = "hl"
@@ -189,6 +190,10 @@ def gather_hl_bdr_inputs(pdf_path: str) -> dict | None:
     print(f"\n[BILLING] ✓ Customer share indicating agency % / Agency")
     print(f"[INTERVALS] ✓ Customer={separation[0]}, Order={separation[1]}, Event={separation[2]}")
 
+    # Offer Added Value when the order carries no bonus (rate == 0) lines
+    has_bonus = any(ln.rate == 0 for o in orders for ln in o.lines)
+    add_av = prompt_add_av(has_bonus)
+
     print("\n" + "=" * 70)
     print("INPUT COLLECTION COMPLETE - Ready for automation")
     print("=" * 70)
@@ -199,6 +204,7 @@ def gather_hl_bdr_inputs(pdf_path: str) -> dict | None:
         "customer_id": customer_id,
         "separation": separation,
         "orders": orders,
+        "add_av": add_av,
     }
 
 
@@ -286,6 +292,29 @@ def _execute_order(pdf_path: str, user_input: dict) -> list[str]:
             line_count = 0
             for line in order.lines:
                 line_count += _add_bdr_line(client, order, line, contract_id, separation)
+
+            # Optional Added Value line (one spot/day across the flight)
+            if user_input.get("add_av") and order.lines:
+                window = widest_window([ln.time for ln in order.lines])
+                duration_str = f"00:00:{order.lines[0].duration:02d}:00"
+                av_id = add_av_line(
+                    client,
+                    contract_id=contract_id,
+                    market=order.market,
+                    date_from=flight_start,
+                    date_to=flight_end,
+                    duration=duration_str,
+                    separation=separation,
+                    languages=[ln.language for ln in order.lines],
+                    fallback_time=window,
+                )
+                if av_id > 0:
+                    line_count += 1
+                    print(
+                        f"  [BDR] ✓ ADDED VALUE M-Su {window}"
+                        f"  {order.flight_start}–{order.flight_end}"
+                        f"  1/day={(flight_end - flight_start).days + 1} total → line_id={av_id}"
+                    )
 
             print(f"\n{'='*60}")
             print(f"✓ H&L BDR ESTIMATE {order.estimate_number} COMPLETE")
