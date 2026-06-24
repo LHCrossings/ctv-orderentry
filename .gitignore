@@ -28,6 +28,10 @@ MANIFEST
 *.manifest
 *.spec
 
+# Windows metadata (NTFS Alternate Data Streams)
+*:Zone.Identifier
+.claude/worktrees/
+
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
