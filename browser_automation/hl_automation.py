@@ -582,7 +582,7 @@ def gather_hl_inputs(pdf_path: str) -> dict | None:
     # ── Net rate check ──
     gross_up_factor = 1.0
     if any(e.rates_are_net for e in estimates):
-        paid_rates = [l.rate for e in estimates for l in e.lines if not l.is_bonus()]
+        paid_rates = [ln.rate for e in estimates for ln in e.lines if not ln.is_bonus()]
         print(f"\n{'!'*70}")
         print("  WARNING: This order's rates are labeled NET in the PDF.")
         sample = ", ".join(f"${r:.2f}" for r in paid_rates[:5])
@@ -595,11 +595,11 @@ def gather_hl_inputs(pdf_path: str) -> dict | None:
                 gross_up_factor = 1.0 / (1.0 - pct / 100.0)
                 print(f"  Gross-up factor: {gross_up_factor:.6f}  (net ÷ {1 - pct/100:.2f})")
                 for e in estimates:
-                    for l in e.lines:
-                        if not l.is_bonus():
-                            l.rate = round(l.rate * gross_up_factor, 2)
+                    for ln in e.lines:
+                        if not ln.is_bonus():
+                            ln.rate = round(ln.rate * gross_up_factor, 2)
                 grossed_sample = ", ".join(
-                    f"${l.rate:.2f}" for e in estimates for l in e.lines if not l.is_bonus()
+                    f"${ln.rate:.2f}" for e in estimates for ln in e.lines if not ln.is_bonus()
                 )[:80]
                 print(f"  Grossed rates (first several): {grossed_sample}")
             except ValueError:

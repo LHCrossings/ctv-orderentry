@@ -385,7 +385,7 @@ if __name__ == "__main__":
         print(f"Flight:      {order.flight_start} – {order.flight_end}")
         print(f"Weeks ({len(order.week_start_dates)}): {order.week_start_dates}")
         print(f"Lines:       {len(order.lines)}")
-        print(f"Total spots: {sum(l.total_spots for l in order.lines)}")
+        print(f"Total spots: {sum(ln.total_spots for ln in order.lines)}")
         print("\n" + "=" * 70)
         print("LINES")
         print("=" * 70)

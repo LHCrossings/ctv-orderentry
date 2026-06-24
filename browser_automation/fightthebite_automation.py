@@ -248,8 +248,8 @@ def gather_fightthebite_inputs(file_path: str) -> Optional[dict]:
         print("[PARSE] ✗ No order found in file")
         return None
 
-    paid_spots  = sum(sum(l.weekly_spots) for l in order.paid_lines)
-    bonus_spots = sum(sum(l.weekly_spots) for l in order.bonus_lines)
+    paid_spots  = sum(sum(ln.weekly_spots) for ln in order.paid_lines)
+    bonus_spots = sum(sum(ln.weekly_spots) for ln in order.bonus_lines)
 
     print(f"\n  Title:      {order.title}")
     print(f"  Source:     {order.source.upper()}")

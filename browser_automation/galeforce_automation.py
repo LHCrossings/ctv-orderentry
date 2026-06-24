@@ -285,7 +285,7 @@ def gather_galeforce_inputs(pdf_path: str) -> Optional[dict]:
     print(f"Estimate #:  {order.estimate_number} (stripped: {order.estimate_stripped})")
     print(f"Agency:      {order.agency}")
     print(f"Lines:       {len(order.lines)}")
-    print(f"Total spots: {sum(l.total_spots for l in order.lines)}")
+    print(f"Total spots: {sum(ln.total_spots for ln in order.lines)}")
     print()
 
     # ── Customer lookup ──────────────────────────────────────────────────────

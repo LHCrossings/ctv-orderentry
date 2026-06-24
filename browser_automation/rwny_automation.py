@@ -294,10 +294,10 @@ def gather_rwny_inputs(pdf_path: str) -> Optional[dict]:
 
     order = orders[0]
 
-    paid_lines  = [l for l in order.lines if not l.is_bonus]
-    bonus_lines = [l for l in order.lines if l.is_bonus]
-    total_spots = sum(l.total_spots for l in order.lines)
-    total_cost  = sum(l.total_spots * l.rate for l in paid_lines)
+    paid_lines  = [ln for ln in order.lines if not ln.is_bonus]
+    bonus_lines = [ln for ln in order.lines if ln.is_bonus]
+    total_spots = sum(ln.total_spots for ln in order.lines)
+    total_cost  = sum(ln.total_spots * ln.rate for ln in paid_lines)
 
     print(f'\n  Client:   {order.client}')
     print(f'  Contact:  {order.contact}  {order.email}')
@@ -399,7 +399,7 @@ def process_rwny_order(
         print(f'  Market:  {order.market}  (:30s)')
         print(f'  Flight:  {order.flight_start} – {order.flight_end}')
         print(f'  Months:  {[c.label for c in order.month_columns]}')
-        print(f'  Lines:   {len(order.lines)}  ({sum(l.total_spots for l in order.lines)} total spots)')
+        print(f'  Lines:   {len(order.lines)}  ({sum(ln.total_spots for ln in order.lines)} total spots)')
         print(f'{"=" * 70}\n')
 
         if pre_gathered_inputs:

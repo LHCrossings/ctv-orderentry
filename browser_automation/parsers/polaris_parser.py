@@ -288,7 +288,7 @@ def parse_polaris_pdf(path: str) -> PolarisOrder:
         raise ValueError(f"No lines parsed from Polaris PDF: {path}")
 
     print(f"[POLARIS PARSER] Total: {len(lines)} lines, "
-          f"{sum(l.total_spots for l in lines)} spots")
+          f"{sum(ln.total_spots for ln in lines)} spots")
 
     return PolarisOrder(
         advertiser=advertiser,
@@ -439,7 +439,7 @@ def parse_polaris_xlsx(path: str) -> PolarisOrder:
         raise ValueError(f"No lines parsed from Polaris xlsx: {path}")
 
     print(f"[POLARIS PARSER] Total: {len(lines)} lines, "
-          f"{sum(l.total_spots for l in lines)} spots")
+          f"{sum(ln.total_spots for ln in lines)} spots")
 
     return PolarisOrder(
         advertiser=advertiser,

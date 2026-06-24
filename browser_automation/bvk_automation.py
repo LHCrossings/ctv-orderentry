@@ -287,10 +287,10 @@ def _interactive_time_check(order) -> bool:
     """
     # ── Paid line time validation ─────────────────────────────────────────────
     flagged_paid = [
-        l for l in order.lines
-        if not l.is_bonus
-        and l.total_spots > 0
-        and _time_outside_window(l.time_str, l.language)
+        ln for ln in order.lines
+        if not ln.is_bonus
+        and ln.total_spots > 0
+        and _time_outside_window(ln.time_str, ln.language)
     ]
 
     if flagged_paid:
@@ -313,7 +313,7 @@ def _interactive_time_check(order) -> bool:
         print()
 
     # ── Bonus line language + ROS time review ────────────────────────────────
-    active_bonus = [l for l in order.lines if l.is_bonus and l.total_spots > 0]
+    active_bonus = [ln for ln in order.lines if ln.is_bonus and ln.total_spots > 0]
 
     if active_bonus:
         print("[BONUS LINE REVIEW] Confirming language and ROS schedule times")
@@ -409,7 +409,7 @@ def gather_bvk_inputs(pdf_path: str) -> Optional[dict]:
     if not _interactive_time_check(order):
         return None
 
-    active_lines = [l for l in order.lines if l.total_spots > 0]
+    active_lines = [ln for ln in order.lines if ln.total_spots > 0]
 
     print(f"\nClient:      {order.client}")
     print(f"Product:     {order.product}")
@@ -419,7 +419,7 @@ def gather_bvk_inputs(pdf_path: str) -> Optional[dict]:
     print(f"CPE:         {order.estimate}")
     print(f"Separation:  {order.separation_min} min → will enter as 25")
     print(f"Lines:       {len(order.lines)} ({len(active_lines)} with spots)")
-    print(f"Total spots: {sum(l.total_spots for l in order.lines)}")
+    print(f"Total spots: {sum(ln.total_spots for ln in order.lines)}")
     print()
 
     # ── Separation (30 min PDF → 25 per lessons rule) ─────────────────────────

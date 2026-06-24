@@ -107,7 +107,7 @@ def _create_sagent_contract_direct(order: SagentOrder, inputs: dict) -> Optional
         print(f"[SAGENT DIRECT] ✓ Contract header ID={contract_id}")
 
         line_count = 0
-        for line in sorted(order.lines, key=lambda l: l.line_number):
+        for line in sorted(order.lines, key=lambda ln: ln.line_number):
             is_bonus     = line.is_bonus()
             booking_code = 10 if is_bonus else 2
             duration_str = _secs_to_duration(line.get_duration_seconds())

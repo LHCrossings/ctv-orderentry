@@ -439,17 +439,17 @@ def parse_galeforce_pdf(pdf_path: str) -> GaleForceOrder:
         # ── Billboard detection ───────────────────────────────────────────────
         # A :05 or :10 line is a billboard if there is a :30 line with the
         # same time period (shares the daypart → airs first in break).
-        thirty_time_periods = {l.time_period for l in lines if l.length == ':30'}
+        thirty_time_periods = {ln.time_period for ln in lines if ln.length == ':30'}
         from dataclasses import replace as _dc_replace
         lines = [
-            _dc_replace(l, is_billboard=True)
-            if l.length in (':05', ':10') and l.time_period in thirty_time_periods
-            else l
-            for l in lines
+            _dc_replace(ln, is_billboard=True)
+            if ln.length in (':05', ':10') and ln.time_period in thirty_time_periods
+            else ln
+            for ln in lines
         ]
-        for l in lines:
-            if l.is_billboard:
-                print(f"[GALEFORCE PARSER] Line {l.line_number}: BILLBOARD detected ({l.length})")
+        for ln in lines:
+            if ln.is_billboard:
+                print(f"[GALEFORCE PARSER] Line {ln.line_number}: BILLBOARD detected ({ln.length})")
 
         return GaleForceOrder(
             advertiser=advertiser,
@@ -496,7 +496,7 @@ if __name__ == "__main__":
         print(f"Default Desc:  {order.get_default_description()}")
         print(f"Default Notes: {order.get_default_notes()}")
         print(f"\nTotal Lines:   {len(order.lines)}")
-        print(f"Total Spots:   {sum(l.total_spots for l in order.lines)}")
+        print(f"Total Spots:   {sum(ln.total_spots for ln in order.lines)}")
 
         print("\n" + "=" * 70)
         print("LINES")

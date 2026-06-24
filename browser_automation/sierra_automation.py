@@ -136,8 +136,8 @@ def _create_sierra_contract_direct(order: SierraOrder, inputs: dict) -> Optional
 
         separation = inputs.get('separation', SIERRA_SEPARATION)
 
-        flight_start = min(order.lines, key=lambda l: datetime.strptime(l.start_date, '%m/%d/%Y')).start_date
-        flight_end   = max(order.lines, key=lambda l: datetime.strptime(l.end_date,   '%m/%d/%Y')).end_date
+        flight_start = min(order.lines, key=lambda ln: datetime.strptime(ln.start_date, '%m/%d/%Y')).start_date
+        flight_end   = max(order.lines, key=lambda ln: datetime.strptime(ln.end_date,   '%m/%d/%Y')).end_date
 
         contract_id = client.create_contract_header(
             code=inputs['contract_code'],
@@ -243,9 +243,9 @@ def gather_sierra_inputs(pdf_path: str) -> Optional[dict]:
         print(f"[ERROR] Failed to parse PDF: {exc}")
         return None
 
-    total_paid  = sum(l.total_spots for l in order.lines if not l.is_bonus)
-    total_bonus = sum(l.total_spots for l in order.lines if l.is_bonus)
-    total_cost  = sum(l.total_spots * l.rate for l in order.lines)
+    total_paid  = sum(ln.total_spots for ln in order.lines if not ln.is_bonus)
+    total_bonus = sum(ln.total_spots for ln in order.lines if ln.is_bonus)
+    total_cost  = sum(ln.total_spots * ln.rate for ln in order.lines)
     print(f"\nAdvertiser: {order.advertiser}")
     print(f"Market:     {order.market}")
     print(f"Acct Rep:   {order.acct_rep}")
@@ -271,7 +271,7 @@ def gather_sierra_inputs(pdf_path: str) -> Optional[dict]:
 
     # Derive yymm from earliest flight start
     sorted_starts = sorted(
-        order.lines, key=lambda l: datetime.strptime(l.start_date, '%m/%d/%Y')
+        order.lines, key=lambda ln: datetime.strptime(ln.start_date, '%m/%d/%Y')
     )
     yymm = (
         datetime.strptime(sorted_starts[0].start_date, '%m/%d/%Y').strftime('%m%y')

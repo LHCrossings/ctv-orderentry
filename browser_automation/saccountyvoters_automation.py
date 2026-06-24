@@ -228,9 +228,9 @@ def gather_saccountyvoters_inputs(pdf_path: str) -> Optional[dict]:
     print(f"Market:   {order.market}")
 
     for phase in order.phases:
-        paid  = [l for l in phase.lines if not l.is_bonus]
-        bonus = [l for l in phase.lines if l.is_bonus]
-        total = sum(l.total_spots for l in phase.lines)
+        paid  = [ln for ln in phase.lines if not ln.is_bonus]
+        bonus = [ln for ln in phase.lines if ln.is_bonus]
+        total = sum(ln.total_spots for ln in phase.lines)
         print(f"\n  Phase {phase.phase_number}: :{phase.duration_seconds}s  "
               f"{phase.flight_start} – {phase.flight_end}")
         print(f"    {len(paid)} paid lines, {len(bonus)} bonus lines, {total} total spots")

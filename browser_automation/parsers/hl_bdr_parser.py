@@ -455,7 +455,7 @@ def parse_bdr_pdf(pdf_path: str) -> list[BDROrder]:
                 f"Est {order.estimate_number}, "
                 f"{order.market}, "
                 f"{len(order.lines)} line(s), "
-                f"total {sum(l.total_spots for l in order.lines)} spots"
+                f"total {sum(ln.total_spots for ln in order.lines)} spots"
             )
 
     return orders

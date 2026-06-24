@@ -572,9 +572,9 @@ if __name__ == '__main__':
     print(f"Lines:   {len(order.lines)}")
     print()
 
-    paid_total = sum(l.total_spots for l in order.lines if not l.is_bonus)
-    bonus_total = sum(l.total_spots for l in order.lines if l.is_bonus)
-    cost_total = sum(l.rate * l.total_spots for l in order.lines)
+    paid_total = sum(ln.total_spots for ln in order.lines if not ln.is_bonus)
+    bonus_total = sum(ln.total_spots for ln in order.lines if ln.is_bonus)
+    cost_total = sum(ln.rate * ln.total_spots for ln in order.lines)
 
     print(f"Paid spots:  {paid_total}")
     print(f"Bonus spots: {bonus_total}")

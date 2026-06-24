@@ -473,7 +473,7 @@ if __name__ == '__main__':
     print(f"Sep (PDF):   {order.separation_min} min")
     print(f"Week dates:  {order.week_dates}")
     print(f"Lines total: {len(order.lines)}")
-    print(f"Total spots: {sum(l.total_spots for l in order.lines)}")
+    print(f"Total spots: {sum(ln.total_spots for ln in order.lines)}")
 
     print(f"\n{'='*70}")
     print("LINES")

@@ -108,10 +108,10 @@ def gather_prosio_inputs(file_path: str) -> Optional[dict]:
         print(f"[PARSE] ✗ Failed: {exc}")
         return None
 
-    paid_lines  = [l for l in order.lines if not l.is_bonus]
-    bonus_lines = [l for l in order.lines if l.is_bonus]
-    total_paid  = sum(l.total_spots for l in paid_lines)
-    total_bonus = sum(l.total_spots for l in bonus_lines)
+    paid_lines  = [ln for ln in order.lines if not ln.is_bonus]
+    bonus_lines = [ln for ln in order.lines if ln.is_bonus]
+    total_paid  = sum(ln.total_spots for ln in paid_lines)
+    total_bonus = sum(ln.total_spots for ln in bonus_lines)
 
     print(f"\nAgency:      {order.agency}")
     print(f"Advertiser:  {order.advertiser}")

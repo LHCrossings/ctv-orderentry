@@ -539,11 +539,11 @@ def charmaine_order_to_proposal_spec(
         week_boundaries.append((week_start, week_end))
 
     # ── Separate paid and bonus lines ──
-    paid_lines    = [l for l in order.lines if not l.is_bonus]
+    paid_lines    = [ln for ln in order.lines if not ln.is_bonus]
     bonus_by_lang = {
-        l.language.lower().strip(): l
-        for l in order.lines
-        if l.is_bonus
+        ln.language.lower().strip(): ln
+        for ln in order.lines
+        if ln.is_bonus
     }
 
     # ── Build ProposalLines: paid line, then its bonus counterpart ──

@@ -432,8 +432,8 @@ if __name__ == "__main__":
         print(f"Market:   {order.market}")
 
         for phase in order.phases:
-            paid_lines  = [l for l in phase.lines if not l.is_bonus]
-            bonus_lines = [l for l in phase.lines if l.is_bonus]
+            paid_lines  = [ln for ln in phase.lines if not ln.is_bonus]
+            bonus_lines = [ln for ln in phase.lines if ln.is_bonus]
             print(f"\n{'─'*70}")
             print(f"Phase {phase.phase_number}: :{phase.duration_seconds}s")
             print(f"  Flight:  {phase.flight_start} – {phase.flight_end}")

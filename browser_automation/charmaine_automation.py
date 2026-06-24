@@ -380,7 +380,7 @@ def collect_user_input(order: CharmaineOrder) -> dict:
     print(f"  Market:     {order.market}")
     print(f"  Duration:   :{order.duration_seconds}s")
     print(f"  Flight:     {order.flight_start} - {order.flight_end}")
-    print(f"  Lines:      {len(order.lines)} ({sum(1 for l in order.lines if not l.is_bonus)} paid + {sum(1 for l in order.lines if l.is_bonus)} bonus)")
+    print(f"  Lines:      {len(order.lines)} ({sum(1 for ln in order.lines if not ln.is_bonus)} paid + {sum(1 for ln in order.lines if ln.is_bonus)} bonus)")
     print("=" * 70)
 
     # ═══════════════════════════════════════════════════════════════

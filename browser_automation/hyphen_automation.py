@@ -254,7 +254,7 @@ def gather_hyphen_inputs(pdf_path: str) -> Optional[dict]:
     print(f"Separation:  {estimate.separation} min")
     print(f"Buyer:       {estimate.buyer}")
     print(f"Lines:       {len(estimate.lines)}")
-    print(f"Total spots: {sum(l.total_spots for l in estimate.lines)}")
+    print(f"Total spots: {sum(ln.total_spots for ln in estimate.lines)}")
     print()
 
     # ── Customer lookup ──────────────────────────────────────────────────────

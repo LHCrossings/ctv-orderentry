@@ -676,8 +676,8 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
     print(f"WORLDLINK DIRECT DB ENTRY — {network} / {order_type_str.upper()}")
     print("="*70)
 
-    flight_start = min(_parse_date(l['start_date']) for l in lines)
-    flight_end   = max(_parse_date(l['end_date'])   for l in lines)
+    flight_start = min(_parse_date(ln['start_date']) for ln in lines)
+    flight_end   = max(_parse_date(ln['end_date'])   for ln in lines)
 
     conn = None
     try:

@@ -188,8 +188,8 @@ def _create_scwa_contract_direct(order: SCWAOrder, inputs: dict) -> Optional[int
 
         separation = inputs.get('separation', SCWA_SEPARATION)
 
-        flight_start = min(order.lines, key=lambda l: datetime.strptime(l.start_date, '%m/%d/%Y')).start_date
-        flight_end   = max(order.lines, key=lambda l: datetime.strptime(l.end_date,   '%m/%d/%Y')).end_date
+        flight_start = min(order.lines, key=lambda ln: datetime.strptime(ln.start_date, '%m/%d/%Y')).start_date
+        flight_end   = max(order.lines, key=lambda ln: datetime.strptime(ln.end_date,   '%m/%d/%Y')).end_date
 
         contract_id = client.create_contract_header(
             code=inputs['contract_code'],
@@ -292,8 +292,8 @@ def gather_scwa_inputs(pdf_path: str) -> Optional[dict]:
     print(f"Contact:    {order.contact}  {order.email}")
     print(f"Campaign:   {order.campaign}")
     print(f"Market:     {order.market}")
-    total_spots = sum(l.total_spots for l in order.lines)
-    total_cost  = sum(l.total_spots * l.rate for l in order.lines)
+    total_spots = sum(ln.total_spots for ln in order.lines)
+    total_cost  = sum(ln.total_spots * ln.rate for ln in order.lines)
     print(f"Lines:      {len(order.lines)}  ({total_spots} spots, ${total_cost:,.2f})")
     print()
 
@@ -315,8 +315,8 @@ def gather_scwa_inputs(pdf_path: str) -> Optional[dict]:
 
     # Build yymm from flight dates
     from datetime import datetime as _dt
-    _starts = sorted(order.lines, key=lambda l: _dt.strptime(l.start_date, '%m/%d/%Y'))
-    _ends   = sorted(order.lines, key=lambda l: _dt.strptime(l.end_date,   '%m/%d/%Y'))
+    _starts = sorted(order.lines, key=lambda ln: _dt.strptime(ln.start_date, '%m/%d/%Y'))
+    _ends   = sorted(order.lines, key=lambda ln: _dt.strptime(ln.end_date,   '%m/%d/%Y'))
     fs = _starts[0].start_date   # earliest start (MM/DD/YYYY)
     fe = _ends[-1].end_date      # latest end
     yy = fs[8:10]

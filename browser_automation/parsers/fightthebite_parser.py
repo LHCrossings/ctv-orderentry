@@ -160,7 +160,7 @@ def _parse_excel(path: str) -> Optional[FTBOrder]:
         )
         (bonus_lines if in_bonus else paid_lines).append(line)
 
-    total_cost = sum(sum(l.weekly_spots) * l.rate for l in paid_lines)
+    total_cost = sum(sum(ln.weekly_spots) * ln.rate for ln in paid_lines)
 
     return FTBOrder(
         title="Fight The Bite",
@@ -272,7 +272,7 @@ def _parse_pdf(path: str) -> Optional[FTBOrder]:
             continue
 
         # Paid rows start with a known language name
-        matched_lang = next((l for l in _KNOWN if stripped.startswith(l)), None)
+        matched_lang = next((lang for lang in _KNOWN if stripped.startswith(lang)), None)
         if not matched_lang:
             continue
         if "total" in stripped.lower():
@@ -302,7 +302,7 @@ def _parse_pdf(path: str) -> Optional[FTBOrder]:
             is_bonus=False,
         ))
 
-    total_cost = sum(sum(l.weekly_spots) * l.rate for l in paid_lines)
+    total_cost = sum(sum(ln.weekly_spots) * ln.rate for ln in paid_lines)
 
     return FTBOrder(
         title="Fight The Bite",

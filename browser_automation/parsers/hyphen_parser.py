@@ -568,7 +568,7 @@ if __name__ == "__main__":
         print(f"Separation:  {order.separation} min")
         print(f"Buyer:       {order.buyer}")
         print(f"Total Lines: {len(order.lines)}")
-        print(f"Total Spots: {sum(l.total_spots for l in order.lines)}")
+        print(f"Total Spots: {sum(ln.total_spots for ln in order.lines)}")
 
         print("\n" + "=" * 70)
         print("LINES")
