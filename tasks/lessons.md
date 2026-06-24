@@ -4,6 +4,23 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## Format Detectors Must Not Hinge on a Single Encoding Trait — Detect by Content, Not Font
+
+**Session:** Toyota CRSF-TV Q3 BDR parse failure (2026-06-24)
+
+**Rule:** When a detector keys on an *encoding* artifact (custom font, `(cid:)` garble, rotation, image-only page) rather than the *content* of the document, it silently misroutes the day the source system changes its export. A new, valid file fails with **zero estimates and no error** — the worst kind of failure.
+
+**What happened:** `is_bdr_pdf()` detected H/L Buy Detail Reports *only* by a Type3 custom-font fingerprint. H/L started exporting clean-text BDRs (normal embedded font, extractable text). Those fell through to the generic `hl_parser`, which can't read the BDR layout → returned `[]` silently. Compounding it, `parse_bdr_pdf` was OCR-only (always rasterize + rotate), so even called directly it produced garbage on the un-rotated clean PDF.
+
+**How to apply:**
+1. **Detect by content with a self-validating signature.** Add a text-based check (`is_bdr_text`) that matches the actual *row layout* (BDR rows are day-pattern-first, no line number, no daypart code). A layout guard means it won't steal sibling formats (`hl_parser` rows are line-numbered) even when header markers ("Buy Detail Report", "H/L Agency") overlap. Keep the font-fingerprint check too — it still catches the old Type3 variant cheaply.
+2. **Text-source must degrade gracefully.** Parsers that OCR should try `pdfplumber.extract_text()` first and fall back to OCR only when the text is `(cid:`-garbled or < ~50 chars. Never assume a format always needs OCR.
+3. **Order matters:** check the more-specific format before the format it shares markers with (`_is_bdr` before `_is_hl_partners` in `detect_from_text`).
+
+**Why:** Two parsers (`hl_parser`, `hl_bdr_parser`) share the same agency markers and differ only in table layout. The discriminator must be the layout, available in the extractable text — never a transient encoding trait.
+
+---
+
 ## New Parser Checklist for Direct DB (All Future Parsers Are Direct DB)
 
 **Session:** Pink-pill testing sweep (2026-06-09)

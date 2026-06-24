@@ -90,6 +90,12 @@ class OrderDetectionService:
         if self._is_worldlink(first_page_text):
             return OrderType.WORLDLINK
 
+        # H/L Buy Detail Report, clean-text variant (before HL — shares markers).
+        # Type3-font/rotated BDRs are caught earlier in pdf_order_detector via
+        # is_bdr_pdf(); this catches newer exports with extractable text.
+        if self._is_bdr(first_page_text):
+            return OrderType.HL_BDR
+
         # H&L Partners (before TCAA - both use CRTV)
         if self._is_hl_partners(first_page_text):
             return OrderType.HL
@@ -311,6 +317,20 @@ class OrderDetectionService:
             "WorldLink Ventures"
         ]
         return any(pattern in text for pattern in patterns)
+
+    def _is_bdr(self, text: str) -> bool:
+        """
+        Detect a clean-text H/L Buy Detail Report (non-Type3 font).
+
+        Delegates to the parser's content-based check so the row-layout
+        signature lives in one place. Must be checked before _is_hl_partners
+        since both share the "H/L Agency" header marker.
+        """
+        try:
+            from browser_automation.parsers.hl_bdr_parser import is_bdr_text
+        except Exception:
+            return False
+        return is_bdr_text(text)
 
     def _is_hl_partners(self, text: str) -> bool:
         """

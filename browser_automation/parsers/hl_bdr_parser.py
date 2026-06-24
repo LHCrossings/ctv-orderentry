@@ -136,6 +136,33 @@ def _ocr_page(pdf_path: str, page_num: int = 0) -> str:
         return ""
 
 
+def _extract_page_text(pdf_path: str, page_num: int) -> str:
+    """
+    Get the text of one BDR page, preferring pdfplumber's embedded text.
+
+    Older BDR exports use a custom Type3 font that pdfplumber cannot decode
+    (yields ``(cid:...)`` garbage) and are page-rotated, so they need OCR.
+    Newer exports embed normal fonts with extractable text — OCRing those
+    (with the 90°/180° rotation `_ocr_page` applies) produces garbage and zero
+    parsed rows.  Use the embedded text when it is clean; fall back to OCR only
+    when it is cid-garbled or too short to be a real page.
+    """
+    text = ""
+    try:
+        import pdfplumber
+        with pdfplumber.open(pdf_path) as pdf:
+            if page_num < len(pdf.pages):
+                text = pdf.pages[page_num].extract_text() or ""
+    except Exception:
+        text = ""
+
+    if "(cid:" in text or len(text.strip()) < 50:
+        ocr = _ocr_page(pdf_path, page_num)
+        if ocr.strip():
+            return ocr
+    return text
+
+
 # ── Date helpers ──────────────────────────────────────────────────────────────
 
 def _parse_date(raw: str) -> str:
@@ -418,7 +445,7 @@ def parse_bdr_pdf(pdf_path: str) -> list[BDROrder]:
 
     orders: list[BDROrder] = []
     for page_num in range(page_count):
-        text = _ocr_page(pdf_path, page_num)
+        text = _extract_page_text(pdf_path, page_num)
         if not text:
             continue
         order = _parse_bdr_page(text)
@@ -451,3 +478,32 @@ def is_bdr_pdf(pdf_path: str) -> bool:
         return any(f[2] == "Type3" for f in fonts)
     except Exception:
         return False
+
+
+def is_bdr_text(text: str) -> bool:
+    """
+    Content-based BDR detection for clean-text (non-Type3) Buy Detail Reports.
+
+    Distinguishes the BDR layout from the generic H/L (`hl_parser`) layout:
+    BDR data rows are *day-pattern-first* with no leading line number and no
+    daypart code, e.g.::
+
+        TuWThF 4:00p- 7:00p $100.00 30 3 0 0 0 3
+
+    The generic H/L layout starts each row with a line number and carries a
+    2-letter daypart code (e.g. ``1 MTuWThF 1:00p- 2:00p EF $50.00 30 ...``),
+    so the row guard below makes this check self-validating — it will not steal
+    genuine `hl_parser` orders even though both share the "Buy Detail Report"
+    and "H/L Agency" header markers.
+    """
+    if "Buy Detail Report" not in text or "H/L Agency" not in text:
+        return False
+    return bool(
+        re.search(
+            r"^[A-Za-z]{2,}\s+"                          # day token (no leading digit)
+            r"\d{1,2}:\d{2}[ap]-\s*\d{1,2}:\d{2}[ap]\s+"  # time range
+            r"\$?[\d,]+\.?\d*\s+\d+\s",                   # rate then duration (no daypart code)
+            text,
+            re.MULTILINE,
+        )
+    )
