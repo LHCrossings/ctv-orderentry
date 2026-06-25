@@ -788,8 +788,16 @@ class OrderDetectionService:
         return None
 
     def _extract_worldlink_client(self, text: str) -> str | None:
-        """Extract client from WorldLink order - look for 'Advertiser:' field."""
-        match = re.search(r'Advertiser:\s*([^\n]+)', text)
+        """Extract client from WorldLink order - look for 'Advertiser:' field.
+
+        Stop at the next field label so a single-line layout (e.g. OCR'd
+        scanned PDFs, where "Advertiser:Feeding America Product Desc:..." has no
+        newline) doesn't swallow the trailing fields into the client name.
+        """
+        match = re.search(
+            r'Advertiser:\s*(.+?)(?:\s+(?:Product\s*Desc|Product|Estimate|Buyer)\b|\n|$)',
+            text,
+        )
         return match.group(1).strip() if match else None
 
     def _extract_tcaa_client(self, text: str) -> str | None:

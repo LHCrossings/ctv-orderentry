@@ -40,6 +40,192 @@ def _ocr_first_page(pdf_path, dpi=200):
         return ""
 
 
+# ─── Claude vision extraction for image-only (scanned) WorldLink PDFs ─────────
+#
+# Scanned "uwOrderPrintVersion" PDFs have no extractable text. OCR+regex on them
+# is slow (page-1 only) and error-prone (misreads, dropped line tables). Instead
+# we hand the whole PDF to Claude Opus 4.8, whose native vision reads scanned
+# pages directly, and force a structured result that mirrors the regex output —
+# so the downstream automator consumes the same dict either way.
+#
+# Model + structured-output pattern mirror browser_automation/parsers/ai_parser.py.
+
+_VISION_MODEL = "claude-opus-4-8"
+
+_VISION_SYSTEM = """You read a WorldLink / Unwired television advertising insertion order (a "uwOrderPrintVersion") and extract it into structured data. The page is scanned — read it carefully.
+
+Header facts:
+- tracking_number: the "Unwired Tracking No." / "WL Tracking No." value (digits only).
+- agency: the value after "Agency:" (e.g. "Direct Donor TV c/o WorldLink Ventures").
+- advertiser: the value after "Advertiser:" — the actual client the campaign is for (e.g. "Feeding America"). Distinct from the agency.
+- network: "ASIAN" if Station/Region is "The Asian Channel", otherwise "CROSSINGS".
+- order_comment: any free-text comment/note on the order; empty string if none.
+
+Each airtime line (the numbered rows in the line table):
+- line_number: the LINE NO integer.
+- action: ADD, CHANGE, or CANCEL (exactly as shown).
+- The day columns are headed M Tu W Th F Sa Su. Set mon..sun true where that column is marked (X), false where it is blank or 0.
+- time_range: the air-time window EXACTLY as printed, e.g. "10:00 AM - 11:00 PM". 12:00 AM means midnight / end of broadcast day.
+- length_seconds: the LEN column value as an integer (it is already in seconds, e.g. 120, 30, 15).
+- weeks: the Wks column integer.
+- spots_per_week: the Spt/Wk column integer.
+- total_spots: the Units / total-spots column integer.
+- rate: the per-spot RATE in dollars as a number (0 for $0.00 / bonus lines).
+- start_date / end_date: the line's flight date range, each as MM/DD/YYYY.
+
+Rules: extract every numbered airtime line, paid and bonus. Do not invent lines or include summary/total rows. If a value is genuinely unreadable, give your best reading."""
+
+_VISION_INSTRUCTION = "Extract this WorldLink insertion order into the required structured schema. Include every numbered airtime line."
+
+
+def _wl_vision_schema():
+    """WorldLink vision output schema (Pydantic). Imported lazily so the module
+    loads even when `pydantic` / `anthropic` are absent (text-PDF path only)."""
+    from pydantic import BaseModel, Field
+
+    class WLVisionLine(BaseModel):
+        line_number: int = Field(description="LINE NO integer.")
+        action: str = Field(description="ADD, CHANGE, or CANCEL.")
+        program: str = Field(default="", description="Program/daypart name, e.g. ROS.")
+        mon: bool = Field(description="True if the Monday (M) column is marked.")
+        tue: bool = Field(description="True if the Tuesday (Tu) column is marked.")
+        wed: bool = Field(description="True if the Wednesday (W) column is marked.")
+        thu: bool = Field(description="True if the Thursday (Th) column is marked.")
+        fri: bool = Field(description="True if the Friday (F) column is marked.")
+        sat: bool = Field(description="True if the Saturday (Sa) column is marked.")
+        sun: bool = Field(description="True if the Sunday (Su) column is marked.")
+        time_range: str = Field(description="Air-time window exactly as printed, e.g. '10:00 AM - 11:00 PM'.")
+        length_seconds: int = Field(description="LEN column value in seconds.")
+        weeks: int = Field(description="Wks column integer.")
+        spots_per_week: int = Field(description="Spt/Wk column integer.")
+        total_spots: int = Field(description="Total spots (Units column) integer.")
+        rate: float = Field(description="Per-spot rate in dollars; 0 for bonus.")
+        start_date: str = Field(description="Line flight start, MM/DD/YYYY.")
+        end_date: str = Field(description="Line flight end, MM/DD/YYYY.")
+
+    class WLVisionOrder(BaseModel):
+        tracking_number: str = Field(description="Unwired/WL tracking number, digits only.")
+        agency: str = Field(description="Agency placing the order.")
+        advertiser: str = Field(description="Advertiser the campaign is for.")
+        network: str = Field(description="'ASIAN' or 'CROSSINGS'.")
+        order_comment: str = Field(default="", description="Free-text order comment; empty if none.")
+        lines: list[WLVisionLine] = Field(description="Every numbered airtime line.")
+
+    return WLVisionOrder
+
+
+def _vision_line_to_dict(vl):
+    """Convert one vision line into the exact dict shape the regex path produces,
+    reusing the shared day/time/duration helpers so both paths are identical."""
+    # Day flags → "X 0" string → existing formatter (identical to the text path).
+    flags = [vl.mon, vl.tue, vl.wed, vl.thu, vl.fri, vl.sat, vl.sun]
+    days_str = " ".join("X" if f else "0" for f in flags)
+
+    parts = re.split(r"\s*-\s*", (vl.time_range or "").strip())
+    if len(parts) >= 2:
+        from_raw = _convert_to_24hr(parts[0])
+        to_raw = _convert_to_24hr(parts[-1])
+        from_time, to_time = _apply_time_bounds(from_raw, to_raw)
+    else:
+        from_time, to_time = "06:00", "23:59"
+
+    length = str(int(vl.length_seconds))
+    return {
+        "line_number": int(vl.line_number),
+        "action": (vl.action or "ADD").strip().upper(),
+        "start_date": vl.start_date.strip(),
+        "end_date": vl.end_date.strip(),
+        "time_range": (vl.time_range or "").strip(),
+        "from_time": from_time,
+        "to_time": to_time,
+        "duration": length,
+        "duration_formatted": _format_duration_for_etere(length),
+        "spots": int(vl.spots_per_week),
+        "weeks": int(vl.weeks),
+        "total_spots": int(vl.total_spots),
+        "rate": str(vl.rate),
+        "days_of_week": _parse_days_pattern(days_str),
+    }
+
+
+def _wl_sidecar_path(pdf_path):
+    return str(pdf_path) + ".wl.json"
+
+
+def _vision_extract_worldlink(pdf_path, refresh=False):
+    """Extract a scanned WorldLink PDF via Claude vision into the order_data dict.
+
+    Result is cached in a `<file>.wl.json` sidecar so detection/preview/entry
+    share a single API call. Returns the order_data dict, or None on failure.
+    """
+    import json
+    import os
+
+    sidecar = _wl_sidecar_path(pdf_path)
+    if not refresh and os.path.exists(sidecar):
+        try:
+            return json.loads(open(sidecar, encoding="utf-8").read())
+        except Exception:
+            pass  # corrupt sidecar — re-extract
+
+    try:
+        import base64
+
+        import anthropic
+    except ImportError as e:
+        print(f"[PARSER] WorldLink vision unavailable ({e}); cannot read scanned PDF.")
+        return None
+
+    try:
+        pdf_b64 = base64.standard_b64encode(open(pdf_path, "rb").read()).decode("utf-8")
+        client = anthropic.Anthropic()  # ANTHROPIC_API_KEY from env (.env loaded by app)
+        resp = client.messages.parse(
+            model=_VISION_MODEL,
+            max_tokens=16000,
+            system=_VISION_SYSTEM,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "document",
+                     "source": {"type": "base64", "media_type": "application/pdf", "data": pdf_b64}},
+                    {"type": "text", "text": _VISION_INSTRUCTION},
+                ],
+            }],
+            output_format=_wl_vision_schema(),
+        )
+        vo = resp.parsed_output
+    except Exception as e:
+        print(f"[PARSER] WorldLink vision extraction failed: {e}")
+        return None
+
+    agency = (vo.agency or "Unknown").strip() or "Unknown"
+    tracking = (vo.tracking_number or "Unknown").strip() or "Unknown"
+    agency_first = agency.split()[0] if agency != "Unknown" else "Unknown"
+    if tracking != "Unknown":
+        order_code = f"WL {agency_first} {tracking}" if agency_first != "Unknown" else f"WL {tracking}"
+    else:
+        order_code = "Unknown"
+
+    order_data = {
+        "tracking_number": tracking,
+        "agency": agency,
+        "advertiser": (vo.advertiser or "Unknown").strip() or "Unknown",
+        "network": "ASIAN" if (vo.network or "").strip().upper() == "ASIAN" else "CROSSINGS",
+        "order_comment": (vo.order_comment or "").strip(),
+        "order_code": order_code,
+        "lines": [_vision_line_to_dict(vl) for vl in vo.lines],
+    }
+
+    print(f"[PARSER] WorldLink vision: {order_data['advertiser']} / {tracking} "
+          f"({len(order_data['lines'])} line(s))")
+
+    try:
+        open(sidecar, "w", encoding="utf-8").write(json.dumps(order_data, indent=2))
+    except Exception:
+        pass  # caching is best-effort
+    return order_data
+
+
 def parse_worldlink_pdf(pdf_path):
     """
     Parse a WorldLink PDF and extract order data
@@ -57,20 +243,17 @@ def parse_worldlink_pdf(pdf_path):
             first_page = pdf.pages[0]
             text = first_page.extract_text() or ""
 
-        # Image-based PDFs yield no text — fall back to OCR
         if len(text.strip()) < 50:
-            text = _ocr_first_page(pdf_path)
-
-        if text:
-
-            # Parse header information
+            # Image-only (scanned) PDF — read it with Claude vision instead of
+            # OCR+regex. Returns the same order_data dict shape (header + lines).
+            order_data = _vision_extract_worldlink(pdf_path)
+        else:
+            # Parse header + line items + network from the extractable text.
             order_data = _parse_header(text)
-
-            # Parse line items from text
             order_data['lines'] = _parse_line_items_from_text(text)
-
-            # Determine network from Station/Region (needed for description prefix)
             order_data['network'] = _extract_network(text)
+
+        if order_data:
 
             # Build description after lines are parsed: "WL {Agency First} {Advertiser First} {Spot Length} {Tracking}"
             # For Asian Channel, add "TAC - " prefix

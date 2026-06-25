@@ -406,6 +406,16 @@ class PDFOrderDetector:
                 if len(pdf.pages) > 1:
                     second_page_text = pdf.pages[1].extract_text()
 
+            # Image-only (scanned) PDF — extract_text() yields nothing, so the
+            # client-name patterns never match and the UI shows "Unknown".
+            # OCR the first page so at least a display label resolves (the same
+            # fallback detect_order_type already uses). The authoritative data
+            # for entry is extracted separately (e.g. WorldLink Claude vision).
+            if len(first_page_text.strip()) < 50:
+                ocr_text = self._ocr_first_page(pdf_path)
+                if len(ocr_text.strip()) >= 50:
+                    first_page_text = ocr_text
+
                 # Charmaine template: look for "Advertiser" field
                 if order_type == OrderType.CHARMAINE:
                     return self._extract_charmaine_client_name(first_page_text)
