@@ -294,15 +294,19 @@ def run_eterebridge_pipeline(
         # 7. Compute Month column (Calendar vs. Broadcast logic)
         df = transform_month_column(df)
 
-        # 8. Sort: Line (M) → Air Date (B) → Program/airtime (I)
+        # 8. Restore correctly-snapped durations, overriding EtereBridge's nearest-15
+        #    rounding (:25 → :30, etc.).  Only applied when row counts match exactly.
+        #    MUST run before the sort below: _raw_durations is in CSV/DB order, so the
+        #    positional assignment is only valid while df is still in that order.  Doing
+        #    this after sort_values() scrambles durations across lines (a :15 spot's
+        #    length lands on a :30 row, and vice-versa).
+        if _raw_durations and "Length" in df.columns and len(_raw_durations) == len(df):
+            df["Length"] = [_snap_duration(d) for d in _raw_durations]
+
+        # 9. Sort: Line (M) → Air Date (B) → Program/airtime (I)
         sort_cols = [c for c in ["Line", "Air Date", "Program"] if c in df.columns]
         if sort_cols:
             df = df.sort_values(sort_cols).reset_index(drop=True)
-
-        # 9. Restore correctly-snapped durations, overriding EtereBridge's nearest-15
-        #    rounding (:25 → :30, etc.).  Only applied when row counts match exactly.
-        if _raw_durations and "Length" in df.columns and len(_raw_durations) == len(df):
-            df["Length"] = [_snap_duration(d) for d in _raw_durations]
 
         return df
 
