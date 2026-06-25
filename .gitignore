@@ -144,3 +144,6 @@ incoming/
 credentials.env
 # Local-only archive of superseded code — never sync
 Old Code/
+
+# Per-file scan classification cache (runtime)
+.scan_cache.json

@@ -4,6 +4,7 @@ Order Scanner - Scan directories for order PDFs.
 Responsible for discovering and organizing order files from the filesystem.
 """
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -17,6 +18,21 @@ from business_logic.services.order_detection_service import detect_from_filename
 from business_logic.services.pdf_order_detector import PDFOrderDetector
 from domain.entities import Order
 from domain.enums import OrderStatus, OrderType
+
+# Per-file scan cache. Classifying a PDF means OCR'ing scanned pages and (for
+# WorldLink) a vision read — ~seconds per file, re-run on every scan, and the
+# web UI re-scans on every poll. Cache the classification keyed by file
+# size+mtime so repeat scans are instant; a changed/new file misses and is
+# re-detected. Bump the version to invalidate every entry after detection logic
+# changes.
+_SCAN_CACHE_VERSION = 1
+_SCAN_CACHE_NAME = ".scan_cache.json"
+
+
+def _file_sig(path: Path) -> str:
+    """Cheap change-detector for a file: size + mtime (nanoseconds)."""
+    st = path.stat()
+    return f"{st.st_size}:{st.st_mtime_ns}"
 
 
 def _ai_fallback_enabled() -> bool:
@@ -102,6 +118,28 @@ class OrderScanner:
         self._detection_service = detection_service
         self._incoming_dir = incoming_dir
 
+    def _cache_file(self) -> Path:
+        # Stored in incoming's parent so it never shows up in the scan listing.
+        return self._incoming_dir.parent / _SCAN_CACHE_NAME
+
+    def _load_scan_cache(self) -> dict:
+        try:
+            data = json.loads(self._cache_file().read_text(encoding="utf-8"))
+            if data.get("version") == _SCAN_CACHE_VERSION:
+                return data.get("entries", {})
+        except Exception:
+            pass  # missing/corrupt/old-version → start fresh
+        return {}
+
+    def _save_scan_cache(self, entries: dict) -> None:
+        try:
+            self._cache_file().write_text(
+                json.dumps({"version": _SCAN_CACHE_VERSION, "entries": entries}),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass  # caching is best-effort
+
     def scan_for_orders(self) -> list[Order]:
         """
         Scan the incoming directory for order PDFs.
@@ -129,8 +167,30 @@ class OrderScanner:
         pdf_files = sorted(f for f in _all if f.suffix.lower() == ".pdf")
         xml_files = sorted(f for f in _all if f.suffix.lower() == ".xml")
 
+        # Per-file classification cache (see _SCAN_CACHE_VERSION). The AI-fallback
+        # routing flags are part of the key so toggling them re-detects.
+        _scan_cache = self._load_scan_cache()
+        _fresh_cache: dict = {}
+        _ai = _ai_fallback_enabled()
+        _charm = _charmaine_ai_enabled()
+
         for pdf_path in pdf_files:
             try:
+                # Fast path: unchanged file already classified → skip all OCR/vision.
+                _sig = _file_sig(pdf_path)
+                _hit = _scan_cache.get(pdf_path.name)
+                if (_hit and _hit.get("sig") == _sig
+                        and _hit.get("ai") == _ai and _hit.get("charm") == _charm):
+                    orders.append(Order(
+                        pdf_path=pdf_path,
+                        order_type=OrderType[_hit["order_type"]],
+                        customer_name=_hit["customer_name"],
+                        status=OrderStatus.PENDING,
+                        estimate_number=_hit["estimate_number"],
+                    ))
+                    _fresh_cache[pdf_path.name] = _hit
+                    continue
+
                 # Check if this PDF contains multiple orders
                 order_type, count = self._detection_service.detect_multi_order_pdf(pdf_path)
 
@@ -202,6 +262,18 @@ class OrderScanner:
                     )
 
                     orders.append(order)
+
+                # Record the freshly-computed classification for next scan.
+                _new = orders[-1]
+                _ot = _new.order_type
+                _fresh_cache[pdf_path.name] = {
+                    "sig": _sig,
+                    "ai": _ai,
+                    "charm": _charm,
+                    "order_type": _ot.name if hasattr(_ot, "name") else str(_ot),
+                    "customer_name": _new.customer_name,
+                    "estimate_number": _new.estimate_number,
+                }
 
             except Exception as e:
                 # Log error but continue scanning
@@ -283,6 +355,10 @@ class OrderScanner:
             except Exception as e:
                 print(f"Warning: Failed to process {file_path.name}: {e}")
                 continue
+
+        # Persist the PDF classification cache (only current files are kept, so
+        # entries for deleted/processed files drop out automatically).
+        self._save_scan_cache(_fresh_cache)
 
         return orders
 
