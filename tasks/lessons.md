@@ -223,6 +223,16 @@ Multi-market proposal grids end with a **"Summary of investment"** block. These 
 
 **Known full single-char set:** M=Monday, T=Tuesday, W=Wednesday, R=Thursday, F=Friday, S=Saturday, U=Sunday.
 
+### `parse_day_bits` comma branch must expand range segments, not just single tokens
+
+**Session:** WorldLink contract 2899 — "M-F,Su" entered Sunday only (2026-06-25)
+
+**Bug:** A mixed pattern like `"M-F,Su"` failed the whole-string range `fullmatch` (the comma breaks it), fell into the comma-list branch, split into `["M-F", "SU"]`, and ran `_TOKEN_MAP.get("M-F")` → `None`. Only `SU` survived → Sunday-only line. Block auto-load then loaded only Sunday blocks, so the M–F airtime silently never scheduled.
+
+**Fix:** Treat each comma segment uniformly — it may itself be a range *or* a single token. `parse_day_bits` now splits on commas and runs `_apply_day_segment()` (range-aware) on each piece. Handles `"M-F,Su"`, `"M-F,Sa-Su"`, pure ranges, and pure token lists with one code path.
+
+**Why not delegate to `day_utils.tokenize`?** Tempting (it's the richer parser the Selenium path uses), but `day_utils` is **case-sensitive** and relies on mixed case to tokenize concatenated forms (`"MTuWThF"` → `M,Tu,W,Th,F`). `parse_day_bits` uppercases its input, and uppercase `"TU"` would greedily tokenize as `T`+`U` = Tuesday+**Sunday**. The two parsers have incompatible case contracts — keep `parse_day_bits` self-contained with its uppercase `_TOKEN_MAP`.
+
 ---
 
 ## Language-Targeted Traffic Instructions Must Use Day/Time Window Filters — Never Line Description Matching

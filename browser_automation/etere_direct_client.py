@@ -330,7 +330,9 @@ def _duration_str_to_seconds(duration: str) -> int:
 
 _DAY_KEYS = ("lun", "mar", "mer", "gio", "ven", "sab", "dom")  # Mon-Sun
 
-# Tokens recognised as individual days
+# Tokens recognised as individual days. Keyed on UPPERCASE — parse_day_bits
+# uppercases its input first, so this map (unlike the case-sensitive
+# day_utils tokenizer) must carry every uppercase variant.
 _TOKEN_MAP: dict[str, str] = {
     "M":   "lun",
     "MO":  "lun",
@@ -366,6 +368,28 @@ _TOKEN_TO_INDEX: dict[str, int] = {
 }
 
 
+def _apply_day_segment(segment: str, result: dict[str, bool]) -> bool:
+    """
+    Apply one comma-free day segment (a range like "M-F" or a single token
+    like "SU") to ``result``. Returns True if the segment was recognised.
+    """
+    range_m = re.fullmatch(r"([A-Z]+)-([A-Z]+)", segment)
+    if range_m:
+        start = _TOKEN_TO_INDEX.get(range_m.group(1))
+        end   = _TOKEN_TO_INDEX.get(range_m.group(2))
+        if start is not None and end is not None:
+            for i in range(start, end + 1):
+                result[_DAY_ORDER[i]] = True
+            return True
+        return False
+
+    key = _TOKEN_MAP.get(segment)
+    if key:
+        result[key] = True
+        return True
+    return False
+
+
 def parse_day_bits(days: str) -> dict[str, bool]:
     """
     Convert a day-pattern string to a dict of Italian day keys (lun…dom).
@@ -373,6 +397,7 @@ def parse_day_bits(days: str) -> dict[str, bool]:
     Accepts:
         "M-F", "M-Su", "M-Sa", "Sa-Su"     — range
         "M,W,F", "TU,TH"                    — comma list
+        "M-F,Su", "M-F,Sa-Su"               — mixed range + token list
         "SAT", "SUN"                         — single day
     Returns:
         {"lun": True, "mar": True, …}
@@ -383,31 +408,19 @@ def parse_day_bits(days: str) -> dict[str, bool]:
     # Normalise separators between tokens
     raw = re.sub(r"\s*,\s*", ",", raw)
 
-    # Range:  TOKEN-TOKEN
-    range_m = re.fullmatch(r"([A-Z]+)-([A-Z]+)", raw)
-    if range_m:
-        start = _TOKEN_TO_INDEX.get(range_m.group(1))
-        end   = _TOKEN_TO_INDEX.get(range_m.group(2))
-        if start is not None and end is not None:
-            for i in range(start, end + 1):
-                result[_DAY_ORDER[i]] = True
-            return result
+    # Each comma-separated segment may itself be a range or a single token,
+    # e.g. "M-F,SU" → expand "M-F" *and* set "SU". Handling them uniformly
+    # means a single token, a pure range, and a mixed list all work. The
+    # original bug entered only "SU" because the comma branch ran _TOKEN_MAP
+    # on the whole "M-F" range token and got None.
+    any_set = False
+    for segment in raw.split(","):
+        segment = segment.strip()
+        if segment and _apply_day_segment(segment, result):
+            any_set = True
 
-    # Comma list:  TOKEN,TOKEN,…
-    if "," in raw:
-        for tok in raw.split(","):
-            key = _TOKEN_MAP.get(tok.strip())
-            if key:
-                result[key] = True
-        return result
-
-    # Single token
-    key = _TOKEN_MAP.get(raw)
-    if key:
-        result[key] = True
-        return result
-
-    print(f"[DIRECT] Warning: unrecognised day pattern '{days}' — no days set")
+    if not any_set:
+        print(f"[DIRECT] Warning: unrecognised day pattern '{days}' — no days set")
     return result
 
 
