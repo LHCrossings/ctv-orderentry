@@ -826,26 +826,25 @@ EXEC web_sales_savecontractgeneral
         newtype = _build_newtype(is_bonus, is_billboard, is_bookend, is_added_value, is_barter, is_trade)
 
         # Scheduling type (PRENOTAZIONE)
-        # Caller may pass scheduling_type to override all auto-detection.
-        # Bookend/billboard: always 0 — capofila/finefila + priority=3 control placement
-        # BNS or AV (non-bookend): always Rotation (1)
-        # Monthly (flight >7 days, spots_per_week=0): always Rotation (1)
-        # Time window >2 hours: always Rotation (1)
-        # Otherwise: use Etere's configured default (read from inifiles at init)
-        if scheduling_type is not None:
+        # Bookend/billboard/bottom: always 0 — capofila/finefila + priority=3/997 control placement.
+        # BNS or AV (non-position-locked): ALWAYS Rotation (1) — system rule. This
+        #   wins even over an explicit caller scheduling_type (e.g. WorldLink passes
+        #   0 for every line); bonus must never schedule as Priority.
+        # Otherwise: honor caller scheduling_type, else auto-detect
+        #   (monthly / time window >2h → Rotation, else Etere's configured default).
+        _is_position_locked = is_bookend or is_billboard or is_bottom
+        if (is_bonus or is_added_value) and not _is_position_locked:
+            prenotazione = 1
+        elif scheduling_type is not None:
             prenotazione = scheduling_type
+        elif _is_position_locked:
+            prenotazione = 0
         else:
-            _is_position_locked = is_bookend or is_billboard or is_bottom
-            if _is_position_locked:
-                prenotazione = 0
-            elif is_bonus or is_added_value:
-                prenotazione = 1
-            else:
-                _flight_days = (date_to - date_from).days if date_from and date_to else 0
-                _is_monthly = _flight_days > 7 and spots_per_week == 0
-                _window_minutes = (end_h * 60 + end_m) - (start_h * 60 + start_m)
-                _wide_window = _window_minutes > 120
-                prenotazione = 1 if (_is_monthly or _wide_window) else self._default_prenotazione
+            _flight_days = (date_to - date_from).days if date_from and date_to else 0
+            _is_monthly = _flight_days > 7 and spots_per_week == 0
+            _window_minutes = (end_h * 60 + end_m) - (start_h * 60 + start_m)
+            _wide_window = _window_minutes > 120
+            prenotazione = 1 if (_is_monthly or _wide_window) else self._default_prenotazione
 
         # capofila (top of break): bookend or billboard
         # finefila (bottom of break): bookend or bottom

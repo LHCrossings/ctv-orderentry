@@ -350,6 +350,29 @@ Never rely on `is_bonus=True` to set the booking code automatically.
 
 ---
 
+## Bonus / Added-Value Is ALWAYS Rotation — Even When a Caller Passes `scheduling_type`
+
+**Session:** WorldLink AATV BNS-as-Priority fix (2026-06-25)
+
+**Rule:** A BNS (bonus) or AV line must schedule as **Rotation (PRENOTAZIONE=1)**, never Priority — unless it's position-locked (bookend/billboard/bottom). This is enforced centrally in `add_contract_line()` and **overrides any explicit `scheduling_type` the caller passes.**
+
+**What happened:** `worldlink_automation.py` passes `scheduling_type=0` (Priority) on *every* line. `add_contract_line` used to honor an explicit `scheduling_type` verbatim (`if scheduling_type is not None: prenotazione = scheduling_type`), which **bypassed** the bonus→Rotation rule — so all 69 bonus lines across 11 contracts entered as Priority and couldn't be scheduled as intended.
+
+**How to apply:**
+1. In `add_contract_line`, the bonus/AV rule is checked **before** the caller's `scheduling_type`:
+   ```python
+   _is_position_locked = is_bookend or is_billboard or is_bottom
+   if (is_bonus or is_added_value) and not _is_position_locked:
+       prenotazione = 1            # system rule — wins over scheduling_type
+   elif scheduling_type is not None:
+       prenotazione = scheduling_type
+   ...
+   ```
+2. Paid lines still honor the caller's `scheduling_type` (WorldLink paid stays Priority).
+3. To repair already-entered bonus lines: `UPDATE CONTRATTIRIGHE SET PRENOTAZIONE=1 WHERE ID_BOOKINGCODE=10 AND CONTROLLACAPOFILA=0 AND CONTROLLAFINEFILA=0 AND PRENOTAZIONE<>1` (scoped to the affected contracts). capofila/finefila already 0 and priorita 500, so flipping PRENOTAZIONE alone is the complete Priority→Rotation transition.
+
+---
+
 ## EtereDirectClient SP Calls Must Use `self._ph`, Not Hardcoded `?`
 
 **Session:** Trade entry direct DB write (2026-05-21)
