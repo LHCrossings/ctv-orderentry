@@ -1320,6 +1320,8 @@ async function handleWlFile(file) {
         const d = await resp.json();
         showStatus(status, 'Parsed successfully', 'info');
         renderWlPreview(d);
+        // Pre-fill the contract number from the Etere DB lookup (still editable).
+        if (d.contract_number) document.getElementById('wl-contract').value = d.contract_number;
         document.getElementById('wl-preview-card').style.display = '';
         const isRevision = d.order_type && d.order_type !== 'new';
         document.getElementById('wl-prev-card').style.display  = isRevision ? '' : 'none';
@@ -1341,6 +1343,7 @@ function renderWlPreview(d) {
         fmt('Agency',      d.agency) +
         fmt('Advertiser',  d.advertiser) +
         fmt('Tracking #',  d.tracking_number) +
+        fmt('Contract #',  d.contract_number ? (d.contract_number + ' (found in Etere)') : 'not found — enter manually') +
         fmt('Buyer',       d.buyer) +
         fmt('IO Lines',    d.line_count) +
         fmt('Total Gross', fmtMoney(d.total_gross || 0)) +

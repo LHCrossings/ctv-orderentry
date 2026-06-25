@@ -33,6 +33,43 @@ SALES_PEOPLE = [
 ]
 
 
+def _lookup_wl_contract_by_tracking(tracking: str) -> Optional[dict]:
+    """Find the Etere contract for a WorldLink IO by its tracking number.
+
+    WorldLink contracts are coded ``WL <agency> <tracking>`` / ``WL Direct
+    <tracking>``, so the tracking number locates the contract. Returns
+    ``{"id": int, "code": str}`` for the most recent match, or None. Best-effort:
+    never raises — a DB hiccup just leaves the contract-number field blank for
+    manual entry.
+    """
+    tracking = (tracking or "").strip()
+    if not tracking:
+        return None
+    try:
+        from browser_automation.etere_direct_client import connect
+        conn = connect()
+        try:
+            ph = "%s" if type(conn).__module__.startswith("pymssql") else "?"
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT TOP 1 ID_CONTRATTITESTATA, COD_CONTRATTO FROM CONTRATTITESTATA "
+                f"WHERE COD_CONTRATTO LIKE {ph} ORDER BY ID_CONTRATTITESTATA DESC",
+                ("%" + tracking + "%",),
+            )
+            row = cur.fetchone()
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        if row:
+            return {"id": int(row[0]), "code": str(row[1])}
+    except Exception:
+        import traceback
+        traceback.print_exc()
+    return None
+
+
 def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
     router = APIRouter(prefix="/backwrite")
 
@@ -120,6 +157,9 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
                 for bm, gross in sorted(monthly_rev.items())
             ]
             total_gross = sum(monthly_rev.values())
+            # Look up the Etere contract by tracking number so the form can
+            # pre-fill the contract-number field instead of asking for it.
+            wl_contract = _lookup_wl_contract_by_tracking(io_data.get("tracking_number", ""))
             return JSONResponse({
                 "agency":           io_data.get("agency", ""),
                 "advertiser":       io_data.get("advertiser", ""),
@@ -131,6 +171,8 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
                 "line_count":       len(lines),
                 "total_gross":      round(total_gross, 2),
                 "monthly_breakdown": monthly_breakdown,
+                "contract_number":  wl_contract["id"] if wl_contract else "",
+                "contract_code":    wl_contract["code"] if wl_contract else "",
             })
         except HTTPException:
             raise
