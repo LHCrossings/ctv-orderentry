@@ -12,8 +12,6 @@ without touching real files, OCR, or the Claude API (all mocked).
 import sys
 from pathlib import Path
 
-import pytest
-
 _ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(_ROOT))            # browser_automation (vision parser)
 sys.path.insert(0, str(_ROOT / "src"))    # business_logic / domain
