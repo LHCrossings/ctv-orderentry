@@ -996,7 +996,11 @@
     }
 
     function toggleDuration(btn) {
-        btn.classList.toggle('active');
+        // Durations are mutually exclusive — selecting one length deselects any other,
+        // so :15 copy can never be assigned to :30 spots (or vice-versa).
+        const wasActive = btn.classList.contains('active');
+        document.querySelectorAll('#durationPills .pill-toggle').forEach(b => b.classList.remove('active'));
+        if (!wasActive) btn.classList.add('active');
         clearPreview();
     }
 
