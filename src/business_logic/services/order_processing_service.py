@@ -7,6 +7,7 @@ and browser automation to process orders into Etere contracts.
 
 import shutil
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -308,7 +309,7 @@ class OrderProcessingService:
             result = self._process_single_order(order, shared_session)
             results.append(result)
 
-        return results
+        return self._enrich_results(results)
 
     def _process_single_order(
         self,
@@ -332,6 +333,69 @@ class OrderProcessingService:
         if method_name:
             return getattr(self, method_name)(order, shared_session)
         return self.process_order(order, shared_session)  # RPM + future agencies
+
+    def _enrich_results(self, results: list[ProcessingResult]) -> list[ProcessingResult]:
+        """Populate Contract.etere_id (the Etere DB contract ID) for every
+        successful contract by looking up its code in CONTRATTITESTATA.
+
+        This makes EVERY parser's final summary print "(ID: NNNN)" the way
+        WorldLink already does, instead of just the contract code. Contracts
+        that already carry an etere_id (e.g. WorldLink, which sets it itself)
+        are left untouched.
+
+        Best-effort and idempotent: opens ONE DB connection for the whole
+        batch; any DB error or unmatched code leaves etere_id=None and the
+        summary falls back to just the code — never raises.
+        """
+        pending = [
+            c for r in results if r and r.success
+            for c in r.contracts if c.etere_id is None and c.contract_number
+        ]
+        if not pending:
+            return results
+
+        ids: dict[str, int] = {}
+        try:
+            from browser_automation.etere_direct_client import connect as _db_connect
+            with _db_connect() as conn:
+                ph = '%s' if type(conn).__module__.startswith('pymssql') else '?'
+                cur = conn.cursor()
+                for code in {str(c.contract_number) for c in pending}:
+                    # Exact match first; fall back to prefix match (most recent)
+                    # to catch duplicate-code renames that append '*'.
+                    cur.execute(
+                        f"SELECT TOP 1 ID_CONTRATTITESTATA FROM CONTRATTITESTATA "
+                        f"WHERE COD_CONTRATTO = {ph} ORDER BY ID_CONTRATTITESTATA DESC",
+                        (code,),
+                    )
+                    row = cur.fetchone()
+                    if not row:
+                        like = code.replace('[', '[[]').replace('%', '[%]').replace('_', '[_]') + '%'
+                        cur.execute(
+                            f"SELECT TOP 1 ID_CONTRATTITESTATA FROM CONTRATTITESTATA "
+                            f"WHERE COD_CONTRATTO LIKE {ph} ORDER BY ID_CONTRATTITESTATA DESC",
+                            (like,),
+                        )
+                        row = cur.fetchone()
+                    if row:
+                        ids[code] = int(row[0])
+        except Exception:
+            return results
+        if not ids:
+            return results
+
+        enriched: list[ProcessingResult] = []
+        for r in results:
+            if not r or not r.success or not r.contracts:
+                enriched.append(r)
+                continue
+            new_contracts = [
+                replace(c, etere_id=ids[str(c.contract_number)])
+                if (c.etere_id is None and str(c.contract_number) in ids) else c
+                for c in r.contracts
+            ]
+            enriched.append(replace(r, contracts=new_contracts))
+        return enriched
 
     def _process_orders_fallback(self, orders: list[Order]) -> list[ProcessingResult]:
         """
@@ -381,7 +445,7 @@ class OrderProcessingService:
             result = self.process_order(order, None)
             results.append(result)
 
-        return results
+        return self._enrich_results(results)
 
     def _process_tcaa_orders_batch(self, orders: list[Order], shared_session: Any = None) -> ProcessingResult:
         """
