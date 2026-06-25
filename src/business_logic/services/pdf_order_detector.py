@@ -407,24 +407,37 @@ class PDFOrderDetector:
                     second_page_text = pdf.pages[1].extract_text()
 
             # Image-only (scanned) PDF — extract_text() yields nothing, so the
-            # client-name patterns never match and the UI shows "Unknown".
-            # OCR the first page so at least a display label resolves (the same
-            # fallback detect_order_type already uses). The authoritative data
-            # for entry is extracted separately (e.g. WorldLink Claude vision).
+            # text-based client-name patterns never match and the UI shows
+            # "Unknown".
             if len(first_page_text.strip()) < 50:
+                # WorldLink scans: Claude vision reads the advertiser cleanly
+                # (OCR misreads it, e.g. "Feeding"->"Eeeding"). Cached in a
+                # sidecar, so this shares the one call used for entry.
+                if order_type == OrderType.WORLDLINK:
+                    try:
+                        from browser_automation.parsers.worldlink_parser import (
+                            _vision_extract_worldlink,
+                        )
+                        od = _vision_extract_worldlink(pdf_path)
+                        advertiser = (od or {}).get("advertiser", "")
+                        if advertiser and advertiser != "Unknown":
+                            return advertiser
+                    except Exception:
+                        pass  # fall back to OCR below
+                # Otherwise OCR the first page for a rough display label.
                 ocr_text = self._ocr_first_page(pdf_path)
                 if len(ocr_text.strip()) >= 50:
                     first_page_text = ocr_text
 
-                # Charmaine template: look for "Advertiser" field
-                if order_type == OrderType.CHARMAINE:
-                    return self._extract_charmaine_client_name(first_page_text)
+            # Charmaine template: look for "Advertiser" field
+            if order_type == OrderType.CHARMAINE:
+                return self._extract_charmaine_client_name(first_page_text)
 
-                return self._service.extract_client_name(
-                    first_page_text,
-                    second_page_text,
-                    order_type
-                )
+            return self._service.extract_client_name(
+                first_page_text,
+                second_page_text,
+                order_type
+            )
 
         except Exception as e:
             print(f"[EXTRACT] Error extracting client name: {e}")
