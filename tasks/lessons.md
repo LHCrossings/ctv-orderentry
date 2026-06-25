@@ -40,6 +40,8 @@ label = (inp.get('contract_code') if isinstance(inp, dict) else None) or str(con
 contracts = [Contract(contract_number=label, order_type=OrderType.X)] if success else []
 ```
 
+**Do NOT set `etere_id` yourself** (2026-06-25). `OrderProcessingService._enrich_results()` runs once per batch and auto-resolves the Etere DB contract ID from each contract's code (`CONTRATTITESTATA.COD_CONTRATTO`), so every parser's pre-close and final summaries print `Contract <code> (ID: NNNN)` like WorldLink — for free. Just keep returning the gathered code as `contract_number`; the ID appears automatically. (WorldLink still sets `etere_id` itself; it's skipped by the enricher, which only fills `etere_id is None`.)
+
 ### 3. `booking_code` must always be explicit — never rely on `is_bonus`
 Pass `booking_code=10 if is_bonus else 2` to every `add_contract_line()` call. `is_bonus=True` only sets the scheduling type; it does NOT set the booking code.
 
