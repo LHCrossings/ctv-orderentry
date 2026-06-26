@@ -6751,6 +6751,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             codes = [p["code"] for p in pairs]
             placeholders = ",".join(["%s"] * len(codes))
 
+            # Candidate new codes that actually change the spot code — these must
+            # not already belong to a *different* asset (COD_PROGRA must stay unique).
+            new_codes = sorted({
+                p["new_code"] for p in pairs
+                if p.get("new_code") and p["new_code"] != p["code"]
+            })
+
             with _db_connect() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
@@ -6760,27 +6767,51 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 )
                 found = {r[1]: {"id": r[0], "current_desc": r[2] or ""} for r in cursor.fetchall()}
 
+                # Map each candidate new code → assets already using it (id, desc).
+                existing_new: dict = {}
+                if new_codes:
+                    nc_ph = ",".join(["%s"] * len(new_codes))
+                    cursor.execute(
+                        f"SELECT ID_FILMATI, COD_PROGRA, DESCRIZIO FROM FILMATI"
+                        f" WHERE COD_PROGRA IN ({nc_ph})",
+                        new_codes
+                    )
+                    for r in cursor.fetchall():
+                        existing_new.setdefault(r[1], []).append({"id": r[0], "desc": r[2] or ""})
+
             results = []
             for p in pairs:
                 code     = p["code"]
                 title    = p["title"]
                 new_code = p.get("new_code")  # None = no ISCI, keep COD_PROGRA as-is
-                if code in found:
-                    results.append({
-                        "code":         code,
-                        "new_code":     new_code,
-                        "title":        title,
-                        "current_desc": found[code]["current_desc"],
-                        "asset_id":     found[code]["id"],
-                        "found":        True,
-                    })
-                else:
+                if code not in found:
                     results.append({
                         "code":     code,
                         "new_code": new_code,
                         "title":    title,
                         "found":    False,
                     })
+                    continue
+
+                target_id = found[code]["id"]
+                # Conflict: the new code is already held by some OTHER asset.
+                conflict = None
+                if new_code and new_code != code:
+                    others = [a for a in existing_new.get(new_code, []) if a["id"] != target_id]
+                    if others:
+                        conflict = {"id": others[0]["id"], "desc": others[0]["desc"]}
+
+                results.append({
+                    "code":          code,
+                    "new_code":      new_code,
+                    "title":         title,
+                    "current_desc":  found[code]["current_desc"],
+                    "asset_id":      target_id,
+                    "found":         True,
+                    "conflict":      bool(conflict),
+                    "conflict_id":   conflict["id"]   if conflict else None,
+                    "conflict_desc": conflict["desc"] if conflict else None,
+                })
 
             return JSONResponse({"results": results})
 
@@ -6804,23 +6835,53 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             with _db_connect() as conn:
                 cursor = conn.cursor()
                 updated = 0
+                conflicts: list = []   # new_code already held by a different asset
+                skipped:   list = []   # source code not found in the library
                 for p in pairs:
+                    code     = p["code"]
+                    title    = p["title"]
                     new_code = p.get("new_code")
-                    if new_code:
-                        cursor.execute(
-                            "UPDATE FILMATI SET DESCRIZIO = %s, COD_PROGRA = %s"
-                            " WHERE COD_PROGRA = %s",
-                            [p["title"], new_code, p["code"]]
-                        )
-                    else:
+
+                    # Description-only update — code unchanged, no uniqueness risk.
+                    if not new_code or new_code == code:
                         cursor.execute(
                             "UPDATE FILMATI SET DESCRIZIO = %s WHERE COD_PROGRA = %s",
-                            [p["title"], p["code"]]
+                            [title, code]
                         )
+                        updated += cursor.rowcount
+                        continue
+
+                    # Resolve the asset(s) being renamed (by current code).
+                    cursor.execute(
+                        "SELECT ID_FILMATI FROM FILMATI WHERE COD_PROGRA = %s", [code]
+                    )
+                    target_ids = [r[0] for r in cursor.fetchall()]
+                    if not target_ids:
+                        skipped.append(code)
+                        continue
+
+                    # HARD GUARD: refuse if new_code is already used by any OTHER asset.
+                    # Same-connection read also sees earlier renames in this batch,
+                    # so two pairs targeting the same new_code can't both succeed.
+                    tgt_ph = ",".join(["%s"] * len(target_ids))
+                    cursor.execute(
+                        f"SELECT TOP 1 ID_FILMATI FROM FILMATI"
+                        f" WHERE COD_PROGRA = %s AND ID_FILMATI NOT IN ({tgt_ph})",
+                        [new_code, *target_ids]
+                    )
+                    if cursor.fetchone():
+                        conflicts.append({"code": code, "new_code": new_code})
+                        continue
+
+                    cursor.execute(
+                        "UPDATE FILMATI SET DESCRIZIO = %s, COD_PROGRA = %s"
+                        " WHERE COD_PROGRA = %s",
+                        [title, new_code, code]
+                    )
                     updated += cursor.rowcount
                 conn.commit()
 
-            return JSONResponse({"updated": updated})
+            return JSONResponse({"updated": updated, "conflicts": conflicts, "skipped": skipped})
 
         except HTTPException:
             raise

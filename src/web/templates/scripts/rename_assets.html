@@ -136,6 +136,19 @@
 
         .lines-table tr:last-child td { border-bottom: none; }
         .lines-table tr.not-found td { background: color-mix(in srgb, var(--nord11) 6%, transparent); color: var(--text-muted); }
+        .lines-table tr.conflict td { background: color-mix(in srgb, var(--nord13) 12%, transparent); }
+
+        .conflict-badge {
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--nord11);
+            background: color-mix(in srgb, var(--nord11) 12%, var(--nord6));
+            border: 1px solid color-mix(in srgb, var(--nord11) 30%, transparent);
+            padding: 2px 7px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-top: 4px;
+        }
 
         .code-cell { font-family: monospace; font-weight: 700; font-size: 0.82rem; }
         .arrow { color: var(--text-muted); margin: 0 6px; }
@@ -286,13 +299,19 @@ async function preview() {
 }
 
 function renderPreview(results) {
-    const found   = results.filter(r => r.found);
-    const missing = results.filter(r => !r.found);
+    const found     = results.filter(r => r.found);
+    const missing   = results.filter(r => !r.found);
+    const conflicts = found.filter(r => r.conflict);
+    const ok        = found.filter(r => !r.conflict);
 
     document.getElementById('previewTitle').textContent =
-        `${found.length} asset(s) found` + (missing.length ? `, ${missing.length} not found` : '');
+        `${found.length} asset(s) found`
+        + (conflicts.length ? `, ${conflicts.length} blocked (code already exists)` : '')
+        + (missing.length ? `, ${missing.length} not found` : '');
 
-    _previewPairs = found.map(r => ({ code: r.code, title: r.title, new_code: r.new_code }));
+    // Only non-conflicting assets are eligible to apply — never send a rename
+    // that would create a duplicate COD_PROGRA.
+    _previewPairs = ok.map(r => ({ code: r.code, title: r.title, new_code: r.new_code }));
 
     const tbody = document.getElementById('previewBody');
     tbody.innerHTML = '';
@@ -303,6 +322,20 @@ function renderPreview(results) {
             tr.innerHTML = `
                 <td class="code-cell">${escHtml(r.code)}</td>
                 <td colspan="3"><span class="not-found-badge">Not found in media library</span></td>
+            `;
+        } else if (r.conflict) {
+            tr.className = 'conflict';
+            const conflictWith = r.conflict_desc
+                ? ` <span class="desc-before">(#${escHtml(r.conflict_id)} — ${escHtml(r.conflict_desc)})</span>`
+                : ` <span class="desc-before">(#${escHtml(r.conflict_id)})</span>`;
+            tr.innerHTML = `
+                <td class="code-cell">${escHtml(r.code)}</td>
+                <td>
+                    <span class="code-cell">${escHtml(r.code)}</span><span class="arrow">→</span><span class="new-code code-cell">${escHtml(r.new_code)}</span>
+                    <div><span class="conflict-badge">Spot code already exists — will skip</span>${conflictWith}</div>
+                </td>
+                <td><span class="desc-before">${escHtml(r.current_desc)}</span></td>
+                <td><span class="desc-after">${escHtml(r.title)}</span></td>
             `;
         } else {
             const codeChanging = r.new_code && r.new_code !== r.code;
@@ -319,7 +352,7 @@ function renderPreview(results) {
         tbody.appendChild(tr);
     });
 
-    document.getElementById('applyBtn').disabled = found.length === 0;
+    document.getElementById('applyBtn').disabled = _previewPairs.length === 0;
     document.getElementById('previewSection').classList.add('visible');
 }
 
@@ -342,8 +375,13 @@ async function applyChanges() {
             throw new Error(err.detail || `HTTP ${resp.status}`);
         }
         const data = await resp.json();
-        statusEl.textContent = `✓ ${data.updated} asset(s) updated`;
-        statusEl.className = 'apply-status';
+        const nConf = (data.conflicts || []).length;
+        const nSkip = (data.skipped || []).length;
+        let msg = `✓ ${data.updated} asset(s) updated`;
+        if (nConf) msg += ` · ${nConf} skipped (code already exists)`;
+        if (nSkip) msg += ` · ${nSkip} not found`;
+        statusEl.textContent = msg;
+        statusEl.className = (nConf || nSkip) ? 'apply-status err' : 'apply-status';
         statusEl.style.display = '';
     } catch (e) {
         statusEl.textContent = `✗ ${e.message}`;
