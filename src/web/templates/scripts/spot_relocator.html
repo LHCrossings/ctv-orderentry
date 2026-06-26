@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spot Relocator — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 1080px; }
+        .tool-card { background: var(--nord6); border: 1px solid var(--border-color); border-radius: 12px; padding: 28px; box-shadow: 0 1px 4px var(--shadow-color); }
+        .tool-card h2 { font-size: 1rem; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+        .tool-card > p { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 18px; line-height: 1.5; }
+        .wip-note { background: rgba(235,203,139,0.18); border: 1px solid rgba(235,203,139,0.5); color: #8a6500; border-radius: 8px; padding: 10px 14px; font-size: 0.8rem; margin-bottom: 22px; font-weight: 600; }
+        .lookup-row { display: flex; gap: 12px; align-items: flex-end; }
+        .field-label { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+        .field-input { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; font-size: 1rem; font-family: 'Inter', sans-serif; font-weight: 600; color: var(--text-primary); outline: none; width: 100%; }
+        .field-input:focus { border-color: var(--nord10); box-shadow: 0 0 0 3px rgba(94,129,172,0.15); }
+        .btn { padding: 10px 20px; border: none; border-radius: 8px; font-size: 0.88rem; font-weight: 600; font-family: 'Inter', sans-serif; cursor: pointer; height: 42px; white-space: nowrap; }
+        .btn-primary { background: var(--nord10); color: white; }
+        .btn-primary:hover:not(:disabled) { background: var(--nord9); }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .loading-msg { font-size: 0.85rem; color: var(--text-muted); margin-top: 16px; }
+        .results { margin-top: 26px; display: none; }
+        .results.visible { display: block; }
+        .line-row { border: 1px solid var(--border-color); border-radius: 10px; padding: 16px 18px; margin-bottom: 12px; background: var(--bg-secondary); }
+        .line-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .line-title { font-weight: 700; font-size: 0.9rem; color: var(--text-primary); }
+        .line-meta { font-size: 0.78rem; color: var(--text-muted); }
+        .pill { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 3px 9px; border-radius: 8px; }
+        .pill.direct   { background: rgba(163,190,140,0.2); color: var(--nord14); border: 1px solid rgba(163,190,140,0.45); }
+        .pill.repack   { background: rgba(129,161,193,0.2); color: var(--nord10); border: 1px solid rgba(129,161,193,0.45); }
+        .pill.evict    { background: rgba(235,203,139,0.22); color: #8a6500; border: 1px solid rgba(235,203,139,0.55); }
+        .pill.makegood { background: rgba(191,97,106,0.18); color: var(--nord11); border: 1px solid rgba(191,97,106,0.45); }
+        .plan { margin-top: 10px; font-size: 0.82rem; color: var(--text-primary); line-height: 1.6; }
+        .plan .lbl { color: var(--text-muted); font-weight: 600; }
+        .mono { font-variant-numeric: tabular-nums; }
+        .moves { margin: 6px 0 0 0; padding-left: 18px; }
+        .moves li { font-size: 0.8rem; color: var(--text-primary); }
+        .warn-short { font-size: 0.74rem; color: #8a6500; margin-top: 6px; }
+        .search-wrap { position: relative; flex: 1; max-width: 420px; }
+        .search-dropdown { position: absolute; top: 100%; left: 0; z-index: 200; background: var(--nord6); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: 0 4px 16px var(--shadow-color); min-width: 380px; max-height: 280px; overflow-y: auto; }
+        .dropdown-item { padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border-color); }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover { background: var(--bg-secondary); }
+        .dropdown-code { font-weight: 700; font-size: 0.88rem; color: var(--text-primary); }
+        .dropdown-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 1px; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="home-btn">🏠</a>
+            <div class="logo-icon">🧩</div>
+            <div>
+                <h1>Spot <span>Relocator</span></h1>
+                <div class="logo-sub">Scripts · Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="tool-card">
+        <h2>Spot Relocator — placement analysis</h2>
+        <p>For each line that didn't fully place, find a feasible shuffle: a direct slot, a repack of the advertiser's own spots, or evicting a moveable WL spot to free a pod (then re-homing it). Respects per-advertiser separation and pod capacity.</p>
+        <div class="wip-note">⚠ In progress — read-only. This shows a proposed plan only; it does <strong>not</strong> change anything in Etere yet. Multi-shortfall lines currently plan one spot at a time.</div>
+
+        <div class="lookup-row">
+            <div class="search-wrap">
+                <label class="field-label">Contract</label>
+                <input class="field-input" id="contractSearch" placeholder="Search by code, name, or ID…" autocomplete="off" />
+                <div id="contractDropdown" class="search-dropdown" style="display:none;"></div>
+            </div>
+            <button id="analyzeBtn" class="btn btn-primary" onclick="analyze()">Analyze</button>
+        </div>
+
+        <div id="loadingMsg" class="loading-msg" style="display:none;">Analyzing… (this can take a few seconds)</div>
+        <div id="results" class="results"></div>
+    </div>
+</main>
+
+<script>
+let selectedContractId = null;
+const contractSearchEl = document.getElementById('contractSearch');
+const contractDropdown = document.getElementById('contractDropdown');
+let _cTimer = null;
+
+contractSearchEl.addEventListener('input', () => {
+    selectedContractId = null;
+    if (!contractSearchEl.value.trim()) { contractDropdown.style.display = 'none'; return; }
+    clearTimeout(_cTimer);
+    _cTimer = setTimeout(searchContracts, 350);
+});
+contractSearchEl.addEventListener('keydown', e => { if (e.key === 'Enter') { clearTimeout(_cTimer); searchContracts(); } });
+document.addEventListener('click', e => { if (!e.target.closest('.search-wrap')) contractDropdown.style.display = 'none'; });
+
+async function searchContracts() {
+    const q = contractSearchEl.value.trim();
+    if (!q) return;
+    const resp = await fetch(`/api/traffic/contract-search?q=${encodeURIComponent(q)}`);
+    const rows = await resp.json();
+    contractDropdown.innerHTML = rows.length
+        ? rows.map(r => `<div class="dropdown-item" data-id="${r.id}" data-code="${escHtml(r.code||'')}">
+              <div class="dropdown-code">${escHtml(r.code)}</div>
+              <div class="dropdown-desc">${escHtml(r.description||'')} &nbsp;·&nbsp; ${r.date_start} – ${r.date_end}</div></div>`).join('')
+        : '<div class="dropdown-item"><span class="dropdown-desc">No contracts found.</span></div>';
+    contractDropdown.style.display = 'block';
+}
+contractDropdown.addEventListener('click', e => {
+    const item = e.target.closest('.dropdown-item[data-id]');
+    if (!item) return;
+    selectedContractId = parseInt(item.dataset.id);
+    contractSearchEl.value = item.dataset.code;
+    contractDropdown.style.display = 'none';
+});
+
+async function analyze() {
+    if (!selectedContractId) { contractSearchEl.focus(); return; }
+    const btn = document.getElementById('analyzeBtn'), loading = document.getElementById('loadingMsg'), out = document.getElementById('results');
+    btn.disabled = true; loading.style.display = ''; out.classList.remove('visible'); out.innerHTML = '';
+    try {
+        const resp = await fetch(`/api/scripts/spot-relocator/analyze?contract_id=${encodeURIComponent(selectedContractId)}`);
+        if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e.detail || `HTTP ${resp.status}`); }
+        render(await resp.json());
+    } catch (e) {
+        out.innerHTML = `<div class="line-row" style="color:var(--nord11)">✗ ${escHtml(e.message)}</div>`;
+        out.classList.add('visible');
+    } finally { btn.disabled = false; loading.style.display = 'none'; }
+}
+
+function render(data) {
+    const out = document.getElementById('results');
+    if (data.error) { out.innerHTML = `<div class="line-row">${escHtml(data.error)}</div>`; out.classList.add('visible'); return; }
+    const lines = (data.lines || []).filter(l => l.status !== 'ok');
+    if (!lines.length) { out.innerHTML = `<div class="line-row">✓ No lines with a shortfall on ${escHtml(data.cod_contratto)} — nothing to relocate.</div>`; out.classList.add('visible'); return; }
+    out.innerHTML = `<div class="line-meta" style="margin-bottom:10px">Contract <strong>${escHtml(data.cod_contratto)}</strong> · ${lines.length} line(s) with a shortfall</div>`
+        + lines.map(renderLine).join('');
+    out.classList.add('visible');
+}
+
+function renderLine(l) {
+    const labels = { direct:'Direct', repack:'Repack', evict:'Evict + Repack', makegood:'Make-good' };
+    let plan = '';
+    if (l.status === 'makegood') {
+        plan = `<div class="plan">No feasible single-level shuffle on any eligible day — genuine under-delivery / needs a wider window.</div>`;
+    } else {
+        const moves = (l.moves || []).map(m => `<li>${escHtml(m.contract)} <span class="mono">${m.from} → ${m.to}</span></li>`).join('');
+        let evict = '';
+        if (l.evict) {
+            const e = l.evict;
+            evict = `<div><span class="lbl">Evict:</span> ${escHtml(e.client)} (${escHtml(e.contract)}, ${e.dur_s}s, ${e.keep_creative ? 'keep creative' : 'no creative'}) <span class="mono">${e.from} → ${e.to}</span></div>`;
+        }
+        plan = `<div class="plan">
+            <div><span class="lbl">Seat the spot:</span> <span class="mono">${l.day} ${l.date} @ ${l.seat}</span></div>
+            ${evict}
+            ${moves ? `<div><span class="lbl">Reposition ${escHtml(l.client)}:</span><ul class="moves">${moves}</ul></div>` : '<div><span class="lbl">No other spots move.</span></div>'}
+        </div>`;
+    }
+    const shortWarn = l.short > 1 ? `<div class="warn-short">⚠ ${l.short} spots short — plan shown for 1 (multi-shortfall looping is not built yet).</div>` : '';
+    return `<div class="line-row">
+        <div class="line-head">
+            <span class="pill ${l.status}">${labels[l.status] || l.status}</span>
+            <span class="line-title">Line ${l.line_id} · ${escHtml(l.market)}</span>
+            <span class="line-meta">${escHtml(l.client)} · ${escHtml(l.window)} · sep ${l.sep_min}m · ordered ${l.ordered}/placed ${l.placed} (short ${l.short})</span>
+        </div>
+        ${plan}${shortWarn}
+    </div>`;
+}
+
+function escHtml(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+
+</body>
+</html>

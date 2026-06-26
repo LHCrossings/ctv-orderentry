@@ -7569,6 +7569,23 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     # ── Release Blacklist ─────────────────────────────────────────────────────
 
+    @router.get("/scripts/spot-relocator", response_class=HTMLResponse)
+    async def scripts_spot_relocator(request: Request):
+        return templates.TemplateResponse(request, "scripts/spot_relocator.html")
+
+    @router.get("/api/scripts/spot-relocator/analyze")
+    async def spot_relocator_analyze(contract_id: int = Query(..., gt=0)):
+        # READ-ONLY: compute a feasible relocation plan per stuck line. No DB writes.
+        try:
+            from browser_automation.etere_direct_client import connect as _db_connect
+            from browser_automation.spot_relocator import analyze_contract
+            with _db_connect() as conn:
+                return JSONResponse(analyze_contract(conn.cursor(), int(contract_id)))
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     @router.get("/scripts/release-blacklist", response_class=HTMLResponse)
     async def scripts_release_blacklist(request: Request):
         return templates.TemplateResponse(request, "scripts/release_blacklist.html")
