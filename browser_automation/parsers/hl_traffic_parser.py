@@ -43,6 +43,14 @@ class HLTrafficSpot:
     dialect: str         # raw from PDF: "Cantonese", "Hindi", "Tagalog", etc.
     system_dialect: str  # normalised: "Cantonese", "SouthAsian", "Filipino", etc.
     rotation_pct: float
+    # Per-spot flight dates. One PDF can carry several flights (e.g. 6/2–6/8,
+    # 6/9–6/30, 6/30–7/6), each with its own ISCI per dialect. The spot must be
+    # assigned only to scheduled spots inside *its* window, so dates are tracked
+    # per spot — not once at the instruction level.
+    date_from_sql: Optional[str] = None  # "YYYY-MM-DD" for SQL
+    date_to_sql: Optional[str] = None
+    start_date: str = ""                 # display, e.g. "6/2/26"
+    end_date: str = ""
 
 
 @dataclass
@@ -102,17 +110,24 @@ def parse_hl_traffic_pdf(pdf_bytes: bytes) -> HLTrafficInstruction:
     # Real ISCI codes always contain at least one digit (e.g. TYRN39271H).
     # This excludes header keywords like CAMPAIGN, ESTIMATE, TRAFFIC, etc.
     _ISCI_RE = re.compile(r'^([A-Z][A-Z0-9]*\d[A-Z0-9]{2,})\s+(.*)')
+    # End-of-table / page markers. These close the current block so the last
+    # ISCI on a page never absorbs the *next* page's header lines (which carry
+    # their own dates — "EXACT FLIGHT DATES: 6/2/26 – 7/6/26" — and would
+    # otherwise be mistaken for the spot's flight dates on a multi-page PDF).
+    _BLOCK_END_RE = re.compile(r'^(Link to new spots|Page\s+\d+\s+of)\b', re.IGNORECASE)
 
     # Group lines into blocks: each block starts at an ISCI line.
     blocks: List[List[str]] = []
     current: Optional[List[str]] = None
     for line in lines:
-        m = _ISCI_RE.match(line.strip())
+        stripped = line.strip()
+        m = _ISCI_RE.match(stripped)
         if m:
-            current = [line.strip()]
+            current = [stripped]
             blocks.append(current)
+        elif _BLOCK_END_RE.match(stripped):
+            current = None
         elif current is not None:
-            stripped = line.strip()
             if stripped:
                 current.append(stripped)
 
@@ -127,9 +142,14 @@ def parse_hl_traffic_pdf(pdf_bytes: bytes) -> HLTrafficInstruction:
         if not isci_m:
             continue
 
-        isci      = isci_m.group(1)
+        isci       = isci_m.group(1)
         line1_rest = isci_m.group(2).strip()
         rest_text  = " ".join(block[1:])  # lines 2+
+        # Whole block after the ISCI code. Both HL layouts are covered:
+        #   • single-line  — everything (dur, rotation, dialect, dates) on line 1
+        #   • multi-line   — ISCI/title on line 1, ":30 100% dates" on line 2,
+        #                    "(Dialect)" on line 3
+        full_text = (line1_rest + " " + rest_text).strip()
 
         # Duration: look for ":NN" — prefer on line 2+ (avoid ":30" in title)
         dur = 30
@@ -143,16 +163,19 @@ def parse_hl_traffic_pdf(pdf_bytes: bytes) -> HLTrafficInstruction:
 
         # Rotation: "NN%" anywhere in the block
         rot = 100.0
-        rot_m = re.search(r'(\d+(?:\.\d+)?)%', block[0] + " " + rest_text)
+        rot_m = re.search(r'(\d+(?:\.\d+)?)%', full_text)
         if rot_m:
             rot = float(rot_m.group(1))
 
-        # Dates: M/D/YY pairs — take the last two occurrences (start, end)
-        date_matches = re.findall(r'\d{1,2}/\d{1,2}/\d{2,4}', rest_text)
+        # Dates: M/D/YY pairs — take the FIRST two slash-dates after the ISCI.
+        # First (not last) so a trailing "@ 12 NOON"/"@ 1201p" annotation or any
+        # stray date can't shift the window. Block-end markers already prevent
+        # cross-page bleed, so the first pair is always this spot's own flight.
+        date_matches = re.findall(r'\d{1,2}/\d{1,2}/\d{2,4}', full_text)
         spot_from_sql = spot_to_sql = spot_start = spot_end = ""
         if len(date_matches) >= 2:
-            spot_start    = date_matches[-2]
-            spot_end      = date_matches[-1]
+            spot_start    = date_matches[0]
+            spot_end      = date_matches[1]
             spot_from_sql = _date_to_sql(spot_start) or ""
             spot_to_sql   = _date_to_sql(spot_end)   or ""
 
@@ -166,8 +189,13 @@ def parse_hl_traffic_pdf(pdf_bytes: bytes) -> HLTrafficInstruction:
 
         system_dialect = _HL_DIALECT_MAP.get(dialect_raw, dialect_raw)
 
-        # Title: line 1 rest, strip trailing ":NN%" or rotation artefacts
-        title = re.sub(r'\s+\d+%\s*$', '', line1_rest).strip()
+        # Title: line-1 text up to the first " :NN" duration marker. Everything
+        # after it (duration, "ACM TV", "(Dialect)", rotation, dates) is metadata.
+        title = line1_rest
+        cut = re.search(r'\s+:\d+\b', title)
+        if cut:
+            title = title[:cut.start()]
+        title = title.strip()
 
         spots.append(HLTrafficSpot(
             isci=isci,
@@ -176,6 +204,10 @@ def parse_hl_traffic_pdf(pdf_bytes: bytes) -> HLTrafficInstruction:
             dialect=dialect_raw,
             system_dialect=system_dialect,
             rotation_pct=rot,
+            date_from_sql=spot_from_sql or None,
+            date_to_sql=spot_to_sql or None,
+            start_date=spot_start,
+            end_date=spot_end,
         ))
 
         if not first_from_sql and spot_from_sql:
@@ -185,11 +217,13 @@ def parse_hl_traffic_pdf(pdf_bytes: bytes) -> HLTrafficInstruction:
             first_end      = spot_end
             first_dur      = dur
 
-    # Use per-ISCI dates if found, else fall back to header dates
-    from_sql   = first_from_sql or hdr_from_sql
-    to_sql     = first_to_sql   or hdr_to_sql
-    start_disp = first_start    or hdr_start
-    end_disp   = first_end      or hdr_end
+    # Instruction-level dates are for DISPLAY only (per-spot dates drive the
+    # actual assignment). Prefer the header EXACT FLIGHT DATES — the full flight
+    # across every table — else fall back to the first spot's window.
+    from_sql   = hdr_from_sql or first_from_sql
+    to_sql     = hdr_to_sql   or first_to_sql
+    start_disp = hdr_start    or first_start
+    end_disp   = hdr_end      or first_end
 
     return HLTrafficInstruction(
         advertiser=advertiser,

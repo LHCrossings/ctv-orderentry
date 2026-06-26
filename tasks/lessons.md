@@ -4,6 +4,25 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## Multi-Flight Traffic PDFs: Track Dates Per-Spot, Never at the Instruction Level
+
+**Session:** HL traffic parser — Toyota June 2026 ACM #13933 R1 (2026-06-26)
+
+**Rule:** A single traffic-instruction PDF often carries **several flights** (e.g. 6/2–6/8, 6/9–6/30, 6/30–7/6), each with its **own ISCI per dialect** (the same dialect gets a different creative each flight). The flight dates therefore belong on the **spot/ISCI**, not on the instruction. Two failure modes if you store one date range for the whole PDF:
+1. Every spot inherits the header's full-flight range, so each creative is matched against the entire flight instead of its own window.
+2. Downstream code that keys a `dialect → filmati` map collapses the flights — the last creative for a dialect overwrites the earlier two, and the right spots get the wrong creative.
+
+**How to apply (traffic parsers + the `/traffic/assign-assets` route):**
+1. Put `date_from_sql/date_to_sql/start_date/end_date` on the **spot** dataclass (`HLTrafficSpot`), parsed from that spot's own row. Keep instruction-level dates only for display (use the header EXACT FLIGHT DATES = full flight).
+2. In the route, group found spots by `(system_dialect, date_from, date_to)` → one `dialect_assignment` per group, and put that group's **own** date range into `filters` (`date_from`/`date_to`). `_build_spot_filter` then counts/assigns only spots inside that window. Never reduce to `{dialect: filmati}`.
+3. Many HL rows are **single-line** (ISCI, title, `(Dialect)`, dur, rotation, dates all on one line) — scan the **whole block** (line 1 + following) for the date pair, and take the **first** pair (a trailing `@ 12 NOON`/`@ 1201p` annotation must not shift the window).
+4. **Multi-page bleed:** block-grouping that appends every non-ISCI line to the current block lets the last ISCI on a page absorb the *next* page's header (incl. its `EXACT FLIGHT DATES`). Close the open block on end-of-table markers (`Link to new spots`, `Page N of`).
+5. The same collapse pattern exists in the **RPM** branch (`format == 'rpm'`) of the route — fix it the same way if a multi-flight RPM PDF appears.
+
+**Verify:** parse → assert N distinct date windows; then run the real per-group COUNT query against the matched contracts and confirm the same dialect routes *different* spot counts to *different* windows.
+
+---
+
 ## Format Detectors Must Not Hinge on a Single Encoding Trait — Detect by Content, Not Font
 
 **Session:** Toyota CRSF-TV Q3 BDR parse failure (2026-06-24)

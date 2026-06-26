@@ -5947,23 +5947,44 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         }
 
                         spots_out, not_found = [], []
-                        dialect_to_filmati: dict = {}  # system_dialect → filmati_id
+                        # One PDF can carry several flights (e.g. 6/2–6/8, 6/9–6/30,
+                        # 6/30–7/6), each with its own ISCI per dialect. Group the found
+                        # spots by (system_dialect, date_from, date_to) so each flight's
+                        # creative is assigned only to spots inside its OWN window —
+                        # never collapsed to a single dialect→filmati map.
+                        flight_groups: dict = {}  # (sys_dialect, from, to) → spot info
                         for s in instr.spots:
                             found = s.isci in filmati_map
                             fid   = filmati_map[s.isci]["filmati_id"] if found else None
-                            if found:
-                                dialect_to_filmati[s.system_dialect] = fid
                             spots_out.append({
                                 "isci":           s.isci,
                                 "title":          s.title or (filmati_map[s.isci]["db_title"] if found else ""),
                                 "dialect":        s.dialect,
                                 "system_dialect": s.system_dialect,
                                 "rotation_pct":   s.rotation_pct,
+                                "date_from_sql":  s.date_from_sql,
+                                "date_to_sql":    s.date_to_sql,
+                                "start_date":     s.start_date,
+                                "end_date":       s.end_date,
                                 "filmati_id":     fid,
                                 "found":          found,
                             })
                             if not found:
                                 not_found.append(s.isci)
+                                continue
+                            key = (s.system_dialect, s.date_from_sql, s.date_to_sql)
+                            if key not in flight_groups:
+                                flight_groups[key] = {
+                                    "system_dialect": s.system_dialect,
+                                    "dialect":        s.dialect,
+                                    "isci":           s.isci,
+                                    "filmati_id":     fid,
+                                    "duration_sec":   s.duration_sec,
+                                    "date_from_sql":  s.date_from_sql or instr.date_from_sql,
+                                    "date_to_sql":    s.date_to_sql or instr.date_to_sql,
+                                    "start_date":     s.start_date,
+                                    "end_date":       s.end_date,
+                                }
 
                         # Find ALL contracts matching the estimate number
                         term = f"%{instr.estimate}%"
@@ -5986,15 +6007,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         contracts_out = []
                         for ct in contracts_raw:
                             dialect_assignments = []
-                            for sys_dialect, fid in dialect_to_filmati.items():
+                            for grp in flight_groups.values():
                                 filters_dict = {
-                                    "languages": [sys_dialect],
-                                    "duration":  instr.duration_sec,
+                                    "languages": [grp["system_dialect"]],
+                                    "duration":  grp["duration_sec"],
                                 }
-                                if instr.date_from_sql:
-                                    filters_dict["date_from"] = instr.date_from_sql
-                                if instr.date_to_sql:
-                                    filters_dict["date_to"] = instr.date_to_sql
+                                if grp["date_from_sql"]:
+                                    filters_dict["date_from"] = grp["date_from_sql"]
+                                if grp["date_to_sql"]:
+                                    filters_dict["date_to"] = grp["date_to_sql"]
                                 filter_sql = _build_spot_filter(filters_dict)
                                 cur.execute(f"""
                                     SELECT COUNT(*) AS cnt
@@ -6005,16 +6026,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                     {filter_sql}
                                 """)
                                 spot_count = (cur.fetchone() or {}).get("cnt", 0) or 0
-                                # Retrieve display dialect from spots_out
-                                raw_dialect = next(
-                                    (s["dialect"] for s in spots_out if s["system_dialect"] == sys_dialect),
-                                    sys_dialect,
-                                )
                                 dialect_assignments.append({
-                                    "system_dialect": sys_dialect,
-                                    "dialect":        raw_dialect,
-                                    "filmati_id":     fid,
-                                    "isci":           next(s["isci"] for s in spots_out if s["system_dialect"] == sys_dialect),
+                                    "system_dialect": grp["system_dialect"],
+                                    "dialect":        grp["dialect"],
+                                    "filmati_id":     grp["filmati_id"],
+                                    "isci":           grp["isci"],
+                                    "start_date":     grp["start_date"],
+                                    "end_date":       grp["end_date"],
                                     "spot_count":     spot_count,
                                     "filters":        filters_dict,
                                 })

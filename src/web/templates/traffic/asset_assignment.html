@@ -1617,7 +1617,7 @@
                     .filter(da => da.spot_count > 0)
                     .map(da => `<tr>
                         <td style="padding:6px 10px;font-family:monospace;font-size:0.82rem;color:var(--nord14);">${esc(da.isci)}</td>
-                        <td style="padding:6px 10px;font-size:0.82rem;">${esc(da.dialect)}</td>
+                        <td style="padding:6px 10px;font-size:0.82rem;">${esc(da.dialect)}${da.start_date ? `<span style="color:var(--text-muted);margin-left:6px;">${esc(da.start_date)}–${esc(da.end_date)}</span>` : ''}</td>
                         <td style="padding:6px 10px;font-size:0.82rem;text-align:right;color:var(--nord10);font-weight:600;">${da.spot_count}</td>
                     </tr>`);
                 if (!ctRows.length) continue;
