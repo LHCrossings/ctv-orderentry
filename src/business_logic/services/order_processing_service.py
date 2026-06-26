@@ -1734,12 +1734,14 @@ class OrderProcessingService:
                 user_input=order.order_input
             )
 
-            contracts = []
-
             if success:
                 print("\n✓ iGraphix order processed successfully")
             else:
                 print("\n✗ iGraphix order processing failed")
+
+            inp = order.order_input
+            contract_label = (inp.get('contract_code') if isinstance(inp, dict) else None) or "IGRAPHIX"
+            contracts = [Contract(contract_number=contract_label, order_type=OrderType.IGRAPHIX)] if success else []
 
             return ProcessingResult(
                 success=success,
