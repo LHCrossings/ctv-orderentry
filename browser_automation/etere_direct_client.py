@@ -238,6 +238,46 @@ MEDIA_CENTER_IDS: dict[str, int] = {
     "SAGENT":   316,
 }
 
+def _classify_spot_type(
+    is_bonus: bool = False,
+    is_billboard: bool = False,
+    is_bookend: bool = False,
+    is_added_value: bool = False,
+    is_barter: bool = False,
+    is_trade: bool = False,
+) -> str:
+    """Return the specific spot-type code for a line (single source of truth for
+    NEWTYPE and priority). Precedence matches Etere's classification order."""
+    if is_trade:
+        return "TRD"
+    elif is_bonus:
+        return "BNS"
+    elif is_added_value:
+        return "AV"
+    elif is_billboard:
+        return "BB"
+    elif is_bookend:
+        return "BOOK"
+    elif is_barter:
+        return "BART"
+    return "COM"
+
+
+# Ideal station-wide PRIORITA per spot type. White List priority = PRIORITA // 10.
+# Position-locked lines (BB/BOOK/bottom) force PRIORITA 3/997 for break placement;
+# their whitelist still derives from the underlying commercial priority (500 → 50).
+# Promos (750), PSA (800), PI (900) are entered via separate mechanisms, not line flags.
+SPOT_TYPE_PRIORITY = {
+    "COM":  500,   # paid commercials
+    "BNS":  550,   # bonus
+    "TRD":  600,   # trade
+    "BART": 650,   # barter
+    "AV":   700,   # added value
+    "BB":   500,   # billboard — underlying commercial (priorita forced to 3)
+    "BOOK": 500,   # bookend   — underlying commercial (priorita forced to 3)
+}
+
+
 def _build_newtype(
     is_bonus: bool = False,
     is_billboard: bool = False,
@@ -247,20 +287,9 @@ def _build_newtype(
     is_trade: bool = False,
 ) -> str:
     """Build semicolon-delimited NEWTYPE string: specific type first, COMS second."""
-    if is_trade:
-        specific = "TRD"
-    elif is_bonus:
-        specific = "BNS"
-    elif is_added_value:
-        specific = "AV"
-    elif is_billboard:
-        specific = "BB"
-    elif is_bookend:
-        specific = "BOOK"
-    elif is_barter:
-        specific = "BART"
-    else:
-        specific = "COM"
+    specific = _classify_spot_type(
+        is_bonus, is_billboard, is_bookend, is_added_value, is_barter, is_trade
+    )
     return f"{specific};COMS"
 
 # Default Nielsen target ID (Adults 35-64)
@@ -775,8 +804,8 @@ EXEC web_sales_savecontractgeneral
         note: str = "",
         separation_intervals: tuple[int, int, int] = (15, 0, 0),
         contract_id: Optional[int] = None,
-        priority: int = 500,
-        whitelist_priority: int = 50,
+        priority: Optional[int] = None,          # None → derive from spot type
+        whitelist_priority: Optional[int] = None,  # None → derive as priority // 10
         booking_code: int = 2,
         scheduling_type: Optional[int] = None,
         row_status: int = 0,   # 0=Ready, 2=Change Data (use 2 for revision lines on approved contracts)
@@ -851,13 +880,23 @@ EXEC web_sales_savecontractgeneral
         capofila = is_bookend or is_billboard
         finefila = is_bookend or is_bottom
 
-        # Priority: forced by break position; caller value for all other types
+        # Base priority from the ideal spot-type table (SPOT_TYPE_PRIORITY); an
+        # explicit caller `priority` overrides it. White List priority is always
+        # base // 10 unless the caller passes one explicitly.
+        _spot_type = _classify_spot_type(
+            is_bonus, is_billboard, is_bookend, is_added_value, is_barter, is_trade
+        )
+        base_priority = priority if priority is not None else SPOT_TYPE_PRIORITY.get(_spot_type, 500)
+        effective_whitelist = whitelist_priority if whitelist_priority is not None else base_priority // 10
+
+        # Priority: forced by break position (3 top / 997 bottom); spot-type base
+        # for all other lines. Whitelist is NOT forced — it tracks the spot type.
         if is_bookend or is_billboard:
             effective_priority = 3
         elif is_bottom:
             effective_priority = 997
         else:
-            effective_priority = priority
+            effective_priority = base_priority
 
         # Convert date -> datetime for legacy ODBC driver
         datefrom_dt = datetime(date_from.year, date_from.month, date_from.day)
@@ -957,7 +996,7 @@ EXEC web_sales_InsertContractLine
             True,               # @manualprice
             booking_code,       # @idbooking
             0,                  # @id (new line; SP returns the assigned ID)
-            whitelist_priority, # @priwhitelist
+            effective_whitelist, # @priwhitelist
             row_status,         # @rowstatus — 0=Ready, 2=Change Data (revision lines on approved contracts)
             intcomm,            # @intcomm
             intsrighe,          # @intsrighe
