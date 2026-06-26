@@ -600,7 +600,8 @@ def _update_change_lines(
     Also updates max/day (PASSAGGI_GIORNALIERI) when spots still need placement.
     Does NOT touch: start date, times, rate, weekly cap.
 
-    ROWSTATUS: 1 if no spots remain to place, 2 if Etere must re-schedule.
+    ROWSTATUS: 1 if no spots remain to place, else 0 (Ready) so the line passes
+    straight to the scheduler — revisions no longer use 2 (Change Data).
     """
     from browser_automation.etere_direct_client import parse_day_bits
 
@@ -610,7 +611,7 @@ def _update_change_lines(
 
     n_passaggi = locked_count if is_cancel else int(io_line['total_spots'])
     remaining  = n_passaggi - locked_count
-    rowstatus  = 1 if remaining == 0 else 2
+    rowstatus  = 1 if remaining == 0 else 0
     day_bits   = parse_day_bits(io_line['days_of_week'])
 
     new_max_daily = (math.ceil(remaining / remaining_days)
@@ -753,10 +754,11 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
                 client._nielsen_code = wl_defaults["nielsen_code"]
                 print(f"[DB] Nielsen → id={client._nielsen_id}  code={client._nielsen_code}")
 
-        # Revision lines on an approved contract must use ROWSTATUS=2 (Change Data)
-        # so the traffic engine doesn't schedule them without manual re-approval.
-        # New contract lines use ROWSTATUS=0 (Ready) — the Proposal contract type gates them.
-        line_row_status = 2 if is_revision else 0
+        # All WorldLink lines use ROWSTATUS=0 (Ready) so they pass straight to the
+        # scheduler. New orders are gated by the Proposal contract type (we still
+        # monitor those). Revision/change lines go directly to the scheduler — no
+        # ROWSTATUS=2 (Change Data) / manual re-approval step.
+        line_row_status = 0
 
         print(f"[LINES] Processing {len(lines)} PDF line(s) ({order_type_str.upper()})...")
         if order_type_str == 'revision_change':
@@ -831,7 +833,7 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
                         max_note = f" → new max/day: {new_max_daily}" if new_max_daily else ""
                         print(f"    Remaining to place:  {remaining} on {rem_days} "
                               f"day{'s' if rem_days != 1 else ''}{max_note}")
-                        print("    Status → Needs re-approval")
+                        print("    Status → Ready — sent straight to scheduler")
 
                     if action != 'CANCEL' and locked > n_io:
                         print(f"\n    ⚠ CONFLICT — IO orders {n_io} spots but {locked} are already locked.")
@@ -848,7 +850,7 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
                                          is_cancel=(action == 'CANCEL'),
                                          remaining_days=rem_days,
                                          paid_market_id=paid_market_id)
-                    status_str = "Scheduled" if remaining == 0 else "Needs re-approval"
+                    status_str = "Scheduled" if remaining == 0 else "Ready (sent to scheduler)"
                     print(f"  [Line {wl_num}] ✓ Applied — {removed} spot(s) unscheduled across all markets, "
                           f"status: {status_str}")
 
@@ -858,9 +860,9 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
             if add_lines:
                 print(f"\n[LINES] Adding {len(add_lines)} new ADD line(s)...")
                 if network == "ASIAN":
-                    _add_asian_lines_direct(client, add_lines, separation, row_status=2)
+                    _add_asian_lines_direct(client, add_lines, separation, row_status=0)
                 else:
-                    _add_crossings_lines_direct(client, add_lines, separation, row_status=2)
+                    _add_crossings_lines_direct(client, add_lines, separation, row_status=0)
         else:
             # new and revision_add: add all lines
             if network == "ASIAN":
