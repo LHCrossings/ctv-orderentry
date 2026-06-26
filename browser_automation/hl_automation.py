@@ -80,7 +80,7 @@ def process_hl_order(
     pdf_path: str = "",
     user_input: dict | None = None,       # legacy kwarg name
     pre_gathered_inputs: dict | None = None,
-) -> bool:
+) -> list[str]:
     """
     Process an H&L Partners order end-to-end via direct DB entry.
 
@@ -93,12 +93,12 @@ def process_hl_order(
         pre_gathered_inputs:  Dict from gather_hl_inputs()
 
     Returns:
-        True if ALL estimates processed successfully, False otherwise
+        List of created contract codes (one per estimate); empty list on failure.
     """
     inputs = pre_gathered_inputs or user_input
     if not inputs:
         print("[H&L] No inputs provided")
-        return False
+        return []
 
     try:
         return _execute_order(pdf_path, inputs)
@@ -106,10 +106,10 @@ def process_hl_order(
         print(f"[H&L] ✗ Order failed: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        return []
 
 
-def _execute_order(pdf_path: str, user_input: dict) -> bool:
+def _execute_order(pdf_path: str, user_input: dict) -> list[str]:
     """Execute the full order workflow via direct DB."""
 
     order_code              = user_input['order_code']
@@ -130,7 +130,7 @@ def _execute_order(pdf_path: str, user_input: dict) -> bool:
     estimates = parse_hl_pdf(pdf_path)
     if not estimates:
         print("[H&L] ✗ No estimates found in PDF")
-        return False
+        return []
 
     print(f"[PARSE] ✓ Found {len(estimates)} estimate(s)")
 
@@ -148,6 +148,7 @@ def _execute_order(pdf_path: str, user_input: dict) -> bool:
         client.set_master_market("NYC")
 
         all_success = True
+        created_codes: list[str] = []
 
         for est_idx, estimate in enumerate(estimates, 1):
             print(f"\n[ESTIMATE {est_idx}/{len(estimates)}]")
@@ -198,6 +199,8 @@ def _execute_order(pdf_path: str, user_input: dict) -> bool:
                     continue
 
                 print(f"[H&L] ✓ Contract created: #{contract_id}")
+
+            created_codes.append(est_order_code)
 
             if customer_id:
                 _save_customer_to_db(estimate.client, customer_id)
@@ -275,7 +278,7 @@ def _execute_order(pdf_path: str, user_input: dict) -> bool:
             print(f"  Lines Added: {line_count}")
             print(f"{'='*60}")
 
-        return all_success
+        return created_codes
 
     finally:
         conn.close()

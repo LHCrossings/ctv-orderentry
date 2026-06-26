@@ -748,21 +748,22 @@ def collect_user_input(order: CharmaineOrder) -> dict:
 def process_charmaine_order(
     pdf_path: str,
     shared_session=None,  # unused — kept for interface compatibility
-) -> bool:
+) -> list[str]:
     """
     Process a Charmaine client order end-to-end.
-    
+
     1. Parse PDF
     2. Collect user input (all upfront)
     3. Create contract header
     4. Add all lines (paid + bonus)
-    
+
     Args:
         pdf_path: Path to the PDF file
         shared_session: Optional shared EtereClient (for batch processing)
-        
+
     Returns:
-        True if successful
+        List of created contract codes (one per order in the PDF). Empty list
+        on failure — still truthy-compatible with callers that check the result.
     """
     # ═══════════════════════════════════════════════════════════════
     # STEP 1: PARSE
@@ -776,9 +777,9 @@ def process_charmaine_order(
         return False
     
     print(f"[PARSER] Found {len(orders)} order(s)")
-    
-    all_success = True
-    
+
+    created_codes: list[str] = []
+
     for order_idx, order in enumerate(orders):
         if len(orders) > 1:
             print(f"\n{'#'*70}")
@@ -839,10 +840,10 @@ def process_charmaine_order(
 
             if not contract_number:
                 print("[CONTRACT] ✗ Failed to create contract")
-                all_success = False
                 continue
 
             print(f"[CONTRACT] ✓ Created: {contract_number}")
+            created_codes.append(user_input['contract_code'])
 
             # ───────────────────────────────────────────────────────
             # CONTRACT LINES
@@ -941,7 +942,6 @@ def process_charmaine_order(
 
                     if line_id <= 0:
                         print(f"  [LINE {line_num}] ✗ Failed for {group_start} - {group_end}")
-                        all_success = False
 
             print(f"\n[COMPLETE] Contract {contract_number} — {line_num} lines processed")
 
@@ -949,11 +949,10 @@ def process_charmaine_order(
             print(f"\n[CONTRACT] ✗ Error: {exc}")
             import traceback
             traceback.print_exc()
-            all_success = False
         finally:
             conn.close()
-    
-    return all_success
+
+    return created_codes
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

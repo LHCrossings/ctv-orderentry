@@ -1369,10 +1369,11 @@ class OrderProcessingService:
                 print(f"Customer: {order.customer_name}")
             print(f"{'='*70}\n")
 
-            success = process_charmaine_order(str(order.pdf_path))
-            if success:
+            codes = process_charmaine_order(str(order.pdf_path))
+            if codes:
                 print("\n✓ CHARMAINE order processed successfully")
-                return ProcessingResult(success=True, contracts=[], order_type=OrderType.CHARMAINE)
+                contracts = [Contract(contract_number=c, order_type=OrderType.CHARMAINE) for c in codes]
+                return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.CHARMAINE)
             print("\n✗ CHARMAINE order processing failed")
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.CHARMAINE,
@@ -1501,19 +1502,21 @@ class OrderProcessingService:
                     error_message="Order inputs not collected",
                 )
 
-            success = process_hl_order(
+            codes = process_hl_order(
                 pdf_path=str(order.pdf_path),
                 pre_gathered_inputs=order.order_input,
             )
 
+            success = bool(codes)
             if success:
                 print("\n✓ H&L Partners order processed successfully")
             else:
                 print("\n✗ H&L Partners order processing failed")
 
+            contracts = [Contract(contract_number=c, order_type=OrderType.HL) for c in codes]
             return ProcessingResult(
                 success=success,
-                contracts=[],
+                contracts=contracts,
                 order_type=OrderType.HL,
                 error_message=None if success else "Processing failed",
             )
@@ -1807,18 +1810,18 @@ class OrderProcessingService:
                     error_message="Order inputs not collected"
                 )
 
-            success = process_impact_order(
+            codes = process_impact_order(
                 pdf_path=str(order.pdf_path),
-                user_input=order.order_input
+                pre_gathered_inputs=order.order_input
             )
 
-            contracts = []
-
+            success = bool(codes)
             if success:
                 print("\n✓ Impact Marketing order processed successfully")
             else:
                 print("\n✗ Impact Marketing order processing failed")
 
+            contracts = [Contract(contract_number=c, order_type=OrderType.IMPACT) for c in codes]
             return ProcessingResult(
                 success=success,
                 contracts=contracts,
@@ -2011,9 +2014,12 @@ class OrderProcessingService:
             else:
                 print("\n✗ RPM order processing failed")
 
+            inp = order.order_input
+            contract_label = (inp.get('contract_code') if isinstance(inp, dict) else None) or "RPM"
+            contracts = [Contract(contract_number=contract_label, order_type=OrderType.RPM)] if success else []
             return ProcessingResult(
                 success=success,
-                contracts=[],
+                contracts=contracts,
                 order_type=OrderType.RPM,
                 error_message=None if success else "Processing failed"
             )
@@ -2161,9 +2167,10 @@ class OrderProcessingService:
             else:
                 print("\n✗ DART order processing failed")
 
+            contracts = [Contract(contract_number=str(contract_num), order_type=OrderType.DART)] if success else []
             return ProcessingResult(
                 success=success,
-                contracts=[],
+                contracts=contracts,
                 order_type=OrderType.DART,
                 error_message=None if success else "Processing failed",
             )

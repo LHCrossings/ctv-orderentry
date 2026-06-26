@@ -289,9 +289,9 @@ def _parse_date(s):
     raise ValueError(f"Cannot parse date: {s!r}")
 
 
-def _create_impact_contracts_direct(user_input: dict) -> bool:
+def _create_impact_contracts_direct(user_input: dict) -> list[str]:
     """Enter all selected Impact quarters directly via DB stored procedures (no browser).
-    Returns True on success, False on failure.
+    Returns the list of created contract codes (one per quarter); empty list on failure.
     """
     from browser_automation.etere_direct_client import EtereDirectClient, connect
 
@@ -300,6 +300,7 @@ def _create_impact_contracts_direct(user_input: dict) -> bool:
     spot_duration  = user_input["spot_duration"]
     is_bookend     = user_input["is_bookend"]
 
+    created_codes: list[str] = []
     conn = None
     try:
         conn = connect()
@@ -330,6 +331,7 @@ def _create_impact_contracts_direct(user_input: dict) -> bool:
                 allow_rename=True,
             )
             print(f"[IMPACT DIRECT] ✓ Contract ID={contract_id} ({order_code})")
+            created_codes.append(order_code)
 
             lines_added = 0
             for line in order.lines:
@@ -391,7 +393,7 @@ def _create_impact_contracts_direct(user_input: dict) -> bool:
 
         conn.commit()
         conn.close()
-        return True
+        return created_codes
 
     except Exception as exc:
         print(f"[IMPACT DIRECT] ✗ {exc}")
@@ -403,7 +405,7 @@ def _create_impact_contracts_direct(user_input: dict) -> bool:
                 conn.close()
             except Exception:
                 pass
-        return False
+        return []
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -414,7 +416,7 @@ def process_impact_order(
     pdf_path: str,
     shared_session=None,
     pre_gathered_inputs=None,
-) -> bool:
+) -> list[str]:
     """
     Process Impact Marketing order via direct DB entry.
 
@@ -424,13 +426,13 @@ def process_impact_order(
         pre_gathered_inputs:  Pre-collected inputs from gather_impact_inputs() (optional)
 
     Returns:
-        True if all contracts succeeded, False if any failed.
+        List of created contract codes (one per quarter); empty list on failure.
     """
     user_input = pre_gathered_inputs
     if user_input is None:
         user_input = gather_impact_inputs(pdf_path)
         if not user_input:
-            return False
+            return []
 
     return _create_impact_contracts_direct(user_input)
 
