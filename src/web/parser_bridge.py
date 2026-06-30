@@ -57,7 +57,7 @@ _DISPLAY_NAMES = {
     "FIGHTTHEBITE":    "Fight the Bite",
     "ACM":             "American Community Media",
     "TT":              "T&T Public Relations",
-    "EQC":             "Emerald Queen Casino / TH Media",
+    "EQC":             "EQC / TH Media",
     "LRCCD":           "LRCCD / 3Fold Communications",
     "AI_FALLBACK":     "AI Fallback (Claude-extracted)",
 }
@@ -326,6 +326,7 @@ def _normalize_order(order_obj) -> dict:
 
     return {
         "client": client,
+        "agency": _str(_get(order_obj, "agency", "agency_name")),
         "estimate_number": estimate,
         "description": description,
         "markets": markets,

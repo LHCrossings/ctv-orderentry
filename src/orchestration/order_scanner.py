@@ -340,6 +340,8 @@ class OrderScanner:
                     customer_name = ' '.join(_parts) if _parts else "Unknown"
                 elif order_type == OrderType.PROSIO:
                     customer_name = "AQMD"
+                elif order_type == OrderType.EQC:
+                    customer_name = "EQC"   # Emerald Queen Casino (agency TH Media)
                 else:
                     customer_name = "Unknown"
 

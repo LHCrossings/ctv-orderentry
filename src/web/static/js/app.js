@@ -114,7 +114,7 @@ async function loadQueue() {
             <tr class="clickable" data-filename="${esc(o.filename)}" data-order-type="${esc(o.order_type)}" data-detail-base="${esc(detailBase)}">
                 <td class="cb-cell">${isHistory ? '' : `<input type="checkbox" class="order-cb" data-filename="${esc(o.filename)}">`}</td>
                 <td class="filename" title="${esc(o.filename)}">${esc(o.filename)}</td>
-                <td><span class="agency-badge ${o.order_type === 'Unknown' ? 'unknown' : ''}">${esc(o.order_type)}</span></td>
+                <td><span class="agency-badge ${o.order_type === 'Unknown' ? 'unknown' : ''}">${esc(o.agency_label || o.order_type)}</span></td>
                 <td class="meta">${esc(o.customer_name)}</td>
                 <td class="meta">${o.size_kb} KB &nbsp;·&nbsp; ${esc(o.modified)}</td>
                 <td>${isHistory
@@ -426,7 +426,7 @@ async function showDetail(filename, orderType, detailBase) {
         }
 
         const metaFields = [
-            ['Agency',      orderType],
+            ['Agency',      d.agency || orderType],
             ['Client',      d.client],
             ['Estimate',    d.estimate_number],
             ['Market(s)',   (d.markets || []).join(', ')],

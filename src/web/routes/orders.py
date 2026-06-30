@@ -372,9 +372,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         result = []
         for order in orders:
             stat = order.pdf_path.stat()
+            ov = order.order_type.value if order.order_type else "Unknown"
+            # Agency column label. For most parsers the order-type code IS the
+            # agency; EQC is named after the client (Emerald Queen Casino), so
+            # surface its real agency (TH Media) instead of the "eqc" code.
+            agency_label = "TH Media" if ov == "eqc" else ov
             result.append({
                 "filename": order.pdf_path.name,
-                "order_type": order.order_type.value if order.order_type else "Unknown",
+                "order_type": ov,
+                "agency_label": agency_label,
                 "customer_name": order.customer_name or "Unknown",
                 "estimate_number": order.estimate_number,
                 "size_kb": round(stat.st_size / 1024, 1),
