@@ -332,6 +332,8 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             "order_date":       header.order_date,
             "address":          header.address,
             "city":             header.city,
+            "ae":               header.ae,
+            "notes":            header.notes,
             "agency_flag":      "Agency" if header.agency else "Direct",
             "markets":          markets,
             "spot_count":       len(spots),

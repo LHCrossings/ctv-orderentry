@@ -420,10 +420,13 @@ def build_placement_csv_from_db(
                    RTRIM(ag.RAG_SOCIAL)     AS agency_name,
                    RTRIM(comm.RAG_SOCIAL)   AS client_name,
                    ISNULL(ag.VIA,   '')     AS agency_address,
-                   ISNULL(ag.CITTA, '')     AS agency_city
+                   ISNULL(ag.CITTA, '')     AS agency_city,
+                   RTRIM(ISNULL(ae.RAG_SOCIAL, '')) AS ae_name,
+                   ISNULL(ct.NOTE,  '')     AS notes
             FROM CONTRATTITESTATA ct
             LEFT JOIN ANAGRAF ag   ON ag.ID_ANAGRAF   = ct.AGENZIA
             LEFT JOIN ANAGRAF comm ON comm.ID_ANAGRAF = ct.COMMITTENTE
+            LEFT JOIN ANAGRAF ae   ON ae.ID_ANAGRAF   = ct.AGENTE1
             WHERE ct.ID_CONTRATTITESTATA = %d
         """ % contract_id)
         hdr = cur.fetchone()
@@ -465,6 +468,10 @@ def build_placement_csv_from_db(
     client_name     = hdr["client_name"]     or ""
     agency_address  = hdr["agency_address"]  or ""
     agency_city     = hdr["agency_city"]     or ""
+    ae_name         = hdr["ae_name"]         or ""  # account executive (CONTRATTITESTATA.AGENTE1)
+    # Notes may be multi-line in Etere; collapse to one line so it survives the
+    # single-row CSV header encoding read back by parse_csv.
+    notes           = (hdr["notes"] or "").replace("\r", " ").replace("\n", "; ").strip()
 
     buf = _io.StringIO()
     w   = _csv.writer(buf)
@@ -473,10 +480,10 @@ def build_placement_csv_from_db(
     w.writerow([""] * 10)
     # Row 1: bill-code / header values row.
     # parse_csv reads: agency=col0, contract_code=col1, description=col3,
-    #                  address=col4, client=col5, city=col6
+    #                  address=col4, client=col5, city=col6, ae=col7, notes=col8
     # _extract_header_values reads: tb180=col0, tb171=col5 (for EtereBridge bill code)
     w.writerow([agency_name, contract_code, "", description,
-                agency_address, client_name, agency_city, "", "", ""])
+                agency_address, client_name, agency_city, ae_name, notes, ""])
     # Row 2: dummy (skipped by parser)
     w.writerow([""] * 10)
     # Row 3: column headers (triggers data-section detection via "dateschedule")

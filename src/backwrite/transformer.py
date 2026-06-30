@@ -94,6 +94,8 @@ class CsvHeader:
     order_date:    str
     address:       str
     city:          str
+    ae:            str = ""   # account executive (Etere AGENTE1), DB path only
+    notes:         str = ""   # contract notes (Etere CONTRATTITESTATA.NOTE), DB path only
 
 
 @dataclass
@@ -194,6 +196,8 @@ def parse_csv(data: bytes) -> Tuple[CsvHeader, List[SpotRow]]:
         address       = h_parts[4].strip() if len(h_parts) > 4 else "",
         client        = h_parts[5].strip() if len(h_parts) > 5 else "",
         city          = h_parts[6].strip() if len(h_parts) > 6 else "",
+        ae            = h_parts[7].strip() if len(h_parts) > 7 else "",
+        notes         = h_parts[8].strip() if len(h_parts) > 8 else "",
     )
 
     # ── Find data column header row ───────────────────────────────────────

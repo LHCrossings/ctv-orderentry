@@ -856,6 +856,9 @@ function prefillFromCSV(d) {
     if (d.address)       setIfEmpty('address',  d.address);
     if (d.city)          setIfEmpty('city',     d.city);
     if (d.agency_flag)   fill('agency_flag',    d.agency_flag);
+    // AE + notes pulled from Etere on the from-DB path (empty for uploaded CSVs)
+    if (d.ae)            setIfEmpty('sales_person', d.ae);
+    if (d.notes)         setIfEmpty('notes',        d.notes);
 }
 
 function setIfEmpty(id, val) {
