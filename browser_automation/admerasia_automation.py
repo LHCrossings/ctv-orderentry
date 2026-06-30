@@ -541,6 +541,7 @@ def process_admerasia_order(
                     date_to=line_spec['end_date'],
                     duration=duration,
                     booking_code=2,  # always Paid — Admerasia has no bonus spots
+                    scheduling_type=0,  # Priority — Admerasia buys specific dayparts, never Rotation
                     separation_intervals=separation,
                 )
                 print(f"  [LINE {line_idx}] ✓ Added")

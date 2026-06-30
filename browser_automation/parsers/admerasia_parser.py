@@ -332,47 +332,81 @@ def parse_admerasia_pdf(pdf_path: str, time_overrides: dict = None) -> Admerasia
         campaign_period = _extract_campaign_period(text)
         week_start_dates = _calculate_week_starts(campaign_period)
         
-        # First pass: check for any ambiguous times that need user input
-        ambiguous_times = _check_for_ambiguous_times(pdf)
-        
-        # Prompt user for any ambiguous times BEFORE processing
-        # (unless time_overrides already provided from a previous scan)
-        if time_overrides is None:
-            time_overrides = {}
-            
-        if ambiguous_times and not time_overrides:
-            print(f"\n{'='*70}")
-            print("TIME CLARIFICATION NEEDED")
-            print('='*70)
-            print(f"\n{len(ambiguous_times)} line(s) have garbled/ambiguous times in the PDF.")
-            print("Please enter the correct time for each line.\n")
-            print("Format: HH:MMa-HH:MMp (example: 11:30a-12:00p)\n")
-            
-            for row_idx, context in ambiguous_times.items():
-                print(f"Line {row_idx}:")
-                print(f"  {context}")
-                
-                while True:
-                    user_input = input("  Enter time (or press Enter for 11:30a-12:00p): ").strip()
-                    
-                    # Allow default
-                    if not user_input:
-                        user_input = "11:30a-12:00p"
-                        print(f"  Using default: {user_input}")
-                    
-                    # Validate format
-                    if re.match(r'\d{1,2}:\d{2}[ap]?-\d{1,2}:\d{2}[ap]', user_input, re.IGNORECASE):
-                        time_overrides[row_idx] = user_input
-                        break
-                    else:
-                        print("  ✗ Invalid format. Use: 11:30a-12:00p")
-                
-                print()  # Blank line between entries
-            
-            print(f"{'='*70}\n")
-        
-        # Parse line items from table (with time overrides)
-        lines = _parse_line_items(pdf, week_start_dates, time_overrides)
+        # Read the grid two independent ways and reconcile (replaces pdfplumber
+        # extract_tables, which collapsed merged cells and shifted spot days):
+        #   • POSITIONAL  — each printed digit bucketed under its calendar column
+        #                   by x-coordinate. Exact, deterministic. SOURCE OF TRUTH
+        #                   for the per-day spot counts.
+        #   • VISION      — Claude reads the rendered page for ROW STRUCTURE +
+        #                   METADATA (spot_length, daypart, net_rate, printed Total
+        #                   Spots), which the char-garbled Type3 text layer can't
+        #                   give reliably. Also a soft cross-check on the cells.
+        # The rows are zipped top-to-bottom, and each row's positional spot count
+        # MUST reconcile to vision's printed Total Spots — otherwise we refuse.
+        try:
+            from .admerasia_vision import AdmerasiaVisionError, extract_grid
+            from .admerasia_positional import read_grid as read_grid_positional
+        except ImportError:
+            from admerasia_vision import AdmerasiaVisionError, extract_grid
+            from admerasia_positional import read_grid as read_grid_positional
+
+        pos = read_grid_positional(pdf_path)   # calendar_days + ordered daily_spots (truth)
+        vis = extract_grid(pdf_path)           # ordered rows with metadata (+ soft cross-check)
+
+        if len(pos.rows) != len(vis.lines):
+            raise AdmerasiaVisionError(
+                f"Row-count mismatch: positional grid found {len(pos.rows)} program "
+                f"rows but vision found {len(vis.lines)}. Manual review required."
+            )
+
+        calendar_days = pos.calendar_days
+        nday = len(calendar_days)
+        lines = []
+        xcheck_notes: List[str] = []
+        for i, (daily, vl) in enumerate(zip(pos.rows, vis.lines), start=1):
+            # Arithmetic guardrail — positional spots must reconcile to the printed total.
+            if sum(daily) != vl.printed_total:
+                raise AdmerasiaVisionError(
+                    f"Row {i} ({vl.daypart}): positional spots sum to {sum(daily)} but the "
+                    f"order's printed Total Spots is {vl.printed_total}. Manual review required."
+                )
+            # Soft cross-check: where vision's own cell read differs, positional wins.
+            if len(vl.daily_spots) == nday and list(vl.daily_spots) != daily:
+                diffs = [f"day {calendar_days[j]}: vis {vl.daily_spots[j]}≠pos {daily[j]}"
+                         for j in range(nday) if vl.daily_spots[j] != daily[j]]
+                xcheck_notes.append(f"{vl.daypart}: {', '.join(diffs)}")
+
+            ln = AdmerasiaLine(
+                days="VARIES",  # actual days derived from the grid downstream
+                time=vl.daypart,
+                net_rate=Decimal(str(vl.net_rate)),
+                weekly_spots=[],
+                spot_length=vl.spot_length,
+            )
+            ln._daily_spots = list(daily)
+            ln._calendar_days = list(calendar_days)
+            lines.append(ln)
+
+        if xcheck_notes:
+            print("[ADMERASIA] vision/positional cell cross-check (positional used as truth):")
+            for n in xcheck_notes:
+                print(f"   - {n}")
+
+        # Alignment guardrail: the scheduler maps grid column i to
+        # (campaign_start + i days), so the first grid column must be the campaign
+        # start date — otherwise every day-of-week label would shift.
+        if week_start_dates and calendar_days and calendar_days[0] != week_start_dates[0].day:
+            raise AdmerasiaVisionError(
+                f"Grid starts on day {calendar_days[0]} but campaign period starts "
+                f"{week_start_dates[0]} — date alignment can't be trusted. Manual review required."
+            )
+
+        # Prefer vision's header reads when the text helpers came up empty.
+        order_number = order_number if order_number != "Unknown" else (vis.order_number or order_number)
+        if not markets and vis.market:
+            markets = [vis.market]
+        if vis.language:
+            language = vis.language
 
         # Vietnamese time-window validation (10:00a–1:00p is the only valid window as of 2026)
         if 'vietnamese' in language.lower() and lines:
@@ -413,9 +447,9 @@ def parse_admerasia_pdf(pdf_path: str, time_overrides: dict = None) -> Admerasia
             week_start_dates=week_start_dates
         )
         
-        # Store time_overrides as hidden attribute for reuse
-        order._time_overrides = time_overrides
-        
+        # Vestigial (vision needs no time overrides); kept for signature compat.
+        order._time_overrides = time_overrides or {}
+
         return order
 
 
