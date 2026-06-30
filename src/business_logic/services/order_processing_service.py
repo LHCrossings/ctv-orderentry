@@ -115,6 +115,7 @@ class OrderProcessingService:
         OrderType.FIGHTTHEBITE:     "_process_fightthebite_order",
         OrderType.ACM:               "_process_acm_order",
         OrderType.TT:                "_process_tt_order",
+        OrderType.EQC:               "_process_eqc_order",
         OrderType.LRCCD:             "_process_lrccd_order",
         OrderType.AI_FALLBACK:       "_process_ai_fallback_order",
     }
@@ -156,6 +157,7 @@ class OrderProcessingService:
         OrderType.FIGHTTHEBITE,
         OrderType.ACM,
         OrderType.TT,
+        OrderType.EQC,
         OrderType.LRCCD,
         OrderType.AI_FALLBACK,
     }
@@ -2645,6 +2647,36 @@ class OrderProcessingService:
             print(f"\n✗ T&T processing failed: {exc}")
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.TT,
+                error_message=error_detail,
+            )
+
+    def _process_eqc_order(self, order: Order, shared_session=None) -> ProcessingResult:
+        """Process an Emerald Queen Casino / TH Media order — one contract per quarter."""
+        inp = order.order_input if isinstance(order.order_input, dict) else {}
+        try:
+            from browser_automation.eqc_automation import run_eqc_order
+            from browser_automation.parsers.eqc_parser import parse_eqc_xlsx
+
+            parsed  = parse_eqc_xlsx(str(order.pdf_path))
+            results = run_eqc_order(parsed, inp)  # list of (code, success)
+
+            contracts = [
+                Contract(contract_number=code, order_type=OrderType.EQC)
+                for code, ok in results if ok
+            ]
+            if not contracts:
+                return ProcessingResult(
+                    success=False, contracts=[], order_type=OrderType.EQC,
+                    error_message="EQC processing failed — check output above",
+                )
+            return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.EQC)
+
+        except Exception as exc:
+            import traceback
+            error_detail = f"EQC processing error: {exc}\n{traceback.format_exc()}"
+            print(f"\n✗ EQC processing failed: {exc}")
+            return ProcessingResult(
+                success=False, contracts=[], order_type=OrderType.EQC,
                 error_message=error_detail,
             )
 

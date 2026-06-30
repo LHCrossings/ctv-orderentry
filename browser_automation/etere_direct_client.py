@@ -227,6 +227,7 @@ AGENCY_IDS: dict[str, int] = {
     "SAGENT":   69,
     "TT": 439,   # T&T Public Relations
     "3FOLD": 203,  # 3Fold Communications (LRCCD)
+    "THMEDIA": 19,  # TH Media (Emerald Queen Casino)
 }
 
 # Media center (CENTROMEDIA) IDs

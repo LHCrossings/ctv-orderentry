@@ -945,6 +945,9 @@ def detect_from_filename(filename: str) -> OrderType:
     # template branding in the filename, so match either token.
     if "BRENTAN" in name_upper or "T&T" in name_upper:
         return OrderType.TT
+    # Emerald Queen Casino via TH Media — filename always carries "EQC".
+    if "EQC" in name_upper or "EMERALD QUEEN" in name_upper or "TH MEDIA" in name_upper:
+        return OrderType.EQC
     # Imprenta XLSX files don't carry "Imprenta" in the filename —
     # fall through to content-based detection in the scanner.
     return OrderType.UNKNOWN

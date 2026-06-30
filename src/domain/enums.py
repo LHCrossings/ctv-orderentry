@@ -50,6 +50,7 @@ class OrderType(Enum):
     FIGHTTHEBITE = "fightthebite"
     ACM = "acm"
     TT = "tt"
+    EQC = "eqc"
     LRCCD = "lrccd"
     AI_FALLBACK = "ai_fallback"
     UNKNOWN = "unknown"
@@ -316,6 +317,7 @@ class SeparationInterval(Enum):
     RWNY = (25, 0, 0)
     FIGHTTHEBITE = (15, 0, 0)
     ACM = (15, 0, 0)
+    EQC = (15, 0, 0)
     DEFAULT = (15, 0, 0)
 
     @classmethod
@@ -354,5 +356,6 @@ class SeparationInterval(Enum):
             OrderType.RWNY:        cls.RWNY.value,
             OrderType.FIGHTTHEBITE: cls.FIGHTTHEBITE.value,
             OrderType.ACM:          cls.ACM.value,
+            OrderType.EQC:          cls.EQC.value,
         }
         return mapping.get(order_type, cls.DEFAULT.value)
