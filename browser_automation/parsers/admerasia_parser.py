@@ -1237,29 +1237,52 @@ def _parse_line_items_table_based(pdf: pdfplumber.PDF, week_start_dates: List[da
                 print(f"[WARNING] Could not parse rate: {rate_str}")
                 continue
         
-        # Extract daily spot counts from calendar columns (starting at column 6)
-        daily_spots = []
-        for col_idx in range(calendar_start_col, calendar_start_col + len(calendar_days)):
-            if col_idx < len(row):
-                cell_value = row[col_idx]
-                if cell_value and cell_value.strip() and cell_value.strip().isdigit():
-                    try:
-                        count = int(cell_value.strip())
-                        daily_spots.append(count)
-                    except ValueError:
-                        daily_spots.append(0)
-                else:
-                    # Try to salvage a spot count from garbled cells (overflow text + digit).
-                    # e.g. 'e1' → 1, 'r L1if' → 1, 'r Lif' → 0.
-                    # Only accept exactly one digit run of 1-2 chars (avoids multi-digit
-                    # program names like "CBS 11 News" producing false spot counts).
-                    digit_runs = re.findall(r'\d+', (cell_value or '').strip())
-                    if len(digit_runs) == 1 and len(digit_runs[0]) <= 2:
-                        daily_spots.append(int(digit_runs[0]))
-                    else:
-                        daily_spots.append(0)
+        # Extract daily spot counts from calendar columns.
+        # Two calendar layouts appear in Admerasia IOs:
+        #   (a) one day per column — each cell is '' or a single count ('1').
+        #       (Chinese template)
+        #   (b) merged week cells — a single cell holds the whole week's counts,
+        #       space-separated ('1 1 1 1 1' or '2 2 2'), with None in the columns
+        #       it visually spans. (Vietnamese / Filipino template)
+        # In both cases pdfplumber anchors a cell's text at the LEFTMOST grid column
+        # it covers, and the space-separated values read left→right == chronological
+        # day order. So map each token to consecutive day positions starting at the
+        # cell's own column index. Gaps (e.g. Sat/Sun with no spots) are None columns
+        # that stay 0; the next group starts fresh at its own column index.
+        daily_spots = [0] * len(calendar_days)
+        for col_idx in range(calendar_start_col, len(row)):
+            pos = col_idx - calendar_start_col
+            if pos >= len(calendar_days):
+                break  # reached Total Spots / Total Cost columns
+            cell_value = row[col_idx]
+            if not cell_value or not str(cell_value).strip():
+                continue
+
+            # The spot counts always sit on the cell's FIRST line; long program
+            # names that overflow into a calendar cell wrap onto a following line
+            # ('1 1 1\ne'). Tokenize only the first line so trailing overflow text
+            # doesn't corrupt an otherwise-clean week of counts.
+            first_line = str(cell_value).split('\n')[0].strip()
+            tokens = first_line.split()
+            # A genuine merged-week cell has every token a clean 1-2 digit count.
+            all_counts = bool(tokens) and all(re.fullmatch(r'\d{1,2}', tok) for tok in tokens)
+
+            if len(tokens) > 1 and all_counts:
+                # Merged week cell — distribute counts across consecutive days.
+                for offset, tok in enumerate(tokens):
+                    tpos = pos + offset
+                    if tpos < len(calendar_days):
+                        daily_spots[tpos] = int(tok)
+            elif len(tokens) == 1 and tokens[0].isdigit() and len(tokens[0]) <= 2:
+                # One day per column.
+                daily_spots[pos] = int(tokens[0])
             else:
-                daily_spots.append(0)
+                # Garbled cell (program-name overflow + a stray digit). Only accept
+                # exactly one digit run of 1-2 chars — avoids multi-digit program
+                # text like "CBS 11 News" producing a false spot count.
+                digit_runs = re.findall(r'\d+', str(cell_value).strip())
+                if len(digit_runs) == 1 and len(digit_runs[0]) <= 2:
+                    daily_spots[pos] = int(digit_runs[0])
         
         # CRITICAL VERIFICATION: Extract expected total from "Total Spots" column
         # This is typically in the column after the calendar days
