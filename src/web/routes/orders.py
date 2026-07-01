@@ -5113,6 +5113,81 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+    @router.post("/api/traffic/admerasia/auto-color")
+    async def admerasia_auto_color(file: UploadFile):
+        """Drop-first Admerasia colour-match auto-assigner.
+
+        Finds the entered contract by the IO order number (CUSTOMERREF), reads each
+        grid cell's colour + the vision ISCI legend, and returns a per-spot creative
+        assignment preview. The write goes through /assign-spots. Returns
+        {is_admerasia: False} fast if the PDF isn't an Admerasia IO (no vision spent)."""
+        pdf_bytes = await file.read()
+        filename = file.filename or "io.pdf"
+
+        def _run():
+            import io as _io
+            import os
+            import tempfile
+            from collections import Counter
+
+            import pdfplumber
+
+            from browser_automation.etere_direct_client import connect as _db_connect
+            from browser_automation.parsers.admerasia_traffic import resolve_traffic
+
+            # Cheap gate: every Admerasia IO carries the agency name. Avoids spending
+            # a vision read on non-Admerasia drops routed here.
+            try:
+                with pdfplumber.open(_io.BytesIO(pdf_bytes)) as pdf:
+                    text = pdf.pages[0].extract_text() or ""
+            except Exception:
+                return {"is_admerasia": False, "filename": filename}
+            if "admerasia" not in text.lower():
+                return {"is_admerasia": False, "filename": filename}
+
+            tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+            try:
+                tmp.write(pdf_bytes)
+                tmp.close()
+                with _db_connect() as conn:
+                    res = resolve_traffic(tmp.name, conn.cursor(as_dict=True))
+            finally:
+                for p in (tmp.name, tmp.name + ".adm.json", tmp.name + ".adm-legend.json"):
+                    try:
+                        os.unlink(p)
+                    except OSError:
+                        pass
+
+            ok_asg = [a for a in res.assignments if a.ok]
+            per = Counter(a.isci for a in ok_asg)
+            legend_map = {isci: {"duration": d, "rgb": list(rgb), "name": name}
+                          for isci, d, rgb, name in res.legend}
+            return {
+                "is_admerasia":  True,
+                "filename":      filename,
+                "order_number":  res.order_number,
+                "contract_id":   res.contract_id,
+                "contract_code": res.contract_code,
+                "ok":            res.ok,
+                "warnings":      res.warnings,
+                "total":         len(res.assignments),
+                "assignable":    len(ok_asg),
+                "assignments":   [{"tp_id": a.tp_id, "filmati_id": a.filmati_id, "isci": a.isci,
+                                   "duration_ok": a.duration_ok, "ok": a.ok, "reason": a.reason}
+                                  for a in res.assignments],
+                "summary":       [{"isci": isci, "count": per[isci],
+                                   "name": legend_map.get(isci, {}).get("name"),
+                                   "rgb":  legend_map.get(isci, {}).get("rgb"),
+                                   "duration": legend_map.get(isci, {}).get("duration")}
+                                  for isci in sorted(per, key=lambda k: -per[k])],
+            }
+
+        try:
+            result = await asyncio.get_running_loop().run_in_executor(None, _run)
+            return JSONResponse(result)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     @router.post("/api/traffic/daviselen/parse-instructions")
     async def daviselen_parse_instructions(files: List[UploadFile] = File(...)):
         """Parse one or more Davis Elen traffic instruction PDFs.
