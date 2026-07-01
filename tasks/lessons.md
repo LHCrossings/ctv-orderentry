@@ -233,6 +233,29 @@ Multi-market proposal grids end with a **"Summary of investment"** block. These 
 
 ---
 
+## Never Cluster on `round(coordinate)` — Round Manufactures Phantom Gaps at .5 Boundaries
+
+**Session:** Admerasia positional reader — Vietnamese McValue July SF (2026-07-01)
+
+**Rule:** When grouping PDF words into rows/columns by a coordinate (`top`/`x0`),
+cluster the **raw float** values, never `round()`-ed ones. Rounding to int buckets
+first splits a single row whose baseline straddles a .5 boundary into two buckets
+(e.g. `top=299.48→299` and `299.81→300`), inventing a phantom row. In Admerasia this
+made positional return 4 rows vs vision's 3 → `AdmerasiaVisionError` row-count
+mismatch → the order silently refused to enter.
+
+**How to apply:**
+1. Sort the words by raw coordinate and start a new cluster only when the gap exceeds
+   a tolerance that sits **between the intra-row jitter and the inter-row pitch**.
+   Measure both before picking the tolerance — don't assume. In these grids the pitch
+   is only ~5-7pt (dense 12-row Chinese order), and jitter is <0.5pt, so `ROW_TOL=2.0`.
+   A too-big tolerance is as bad as rounding: a first attempt at `6` merged distinct
+   rows in nearly every order (dense Chinese collapsed to 1 row of 73 spots).
+2. **Regression-sweep coordinate changes across ALL known-good fixtures** before
+   shipping — assert the new splitter reproduces the old row counts on every prior file
+   and only changes the one you meant to fix. Cheap: the positional/coordinate half
+   needs no API key, so batch it over the whole fixtures folder.
+
 ## `parse_day_bits` (DirectDB) and `_select_days` (Selenium) Must Stay in Sync
 
 **Session:** Admerasia DirectDB conversion (2026-06-08)

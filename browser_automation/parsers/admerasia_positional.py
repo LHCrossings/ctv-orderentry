@@ -58,24 +58,36 @@ def read_grid(path: str) -> PositionalGrid:
         best = min(range(len(col_x)), key=lambda i: abs(cx - col_x[i]))
         return best if abs(cx - col_x[best]) < tol else None
 
-    # Program rows = contiguous digit-rows below the header that carry grid marks.
-    # Stop at the first big vertical gap (footer notes / totals block).
-    def has_grid(y) -> bool:
-        return any(to_col(w) is not None for w in by_y[y])
+    # Program rows = grid-bearing digit words below the day-number header, clustered
+    # into rows by their RAW `top`. Bucketing by round(top) first (as the header
+    # detection above does) can split ONE program row across two integer buckets when
+    # its baseline straddles a .5 boundary — e.g. one cell at top=299.48 → 299 and the
+    # rest at 299.81 → 300 — inventing a phantom row and breaking the row-count guard.
+    # Clustering the raw tops avoids that: intra-row baseline jitter is sub-pixel
+    # (<0.5pt) while adjacent program rows sit ~5-7pt apart, so a small tolerance
+    # separates real rows without splitting a jittered one.
+    ROW_TOL = 2.0        # between the <0.5pt intra-row jitter and the ~5pt row pitch
+    FOOTER_GAP = 45      # a large vertical jump = end of grid (totals / notes block)
 
-    cand = sorted(y for y in by_y if y > dn_y and has_grid(y))
+    grid_words = sorted(
+        (w for w in digits if w["top"] > dn_y + 0.5 and to_col(w) is not None),
+        key=lambda w: w["top"],
+    )
     rows: list[list[int]] = []
-    prev = None
-    for y in cand:
-        if prev is not None and y - prev > 45:
-            break
-        prev = y
-        daily = [0] * len(col_x)
-        for w in by_y[y]:
-            c = to_col(w)
-            if c is not None:
-                daily[c] += int(w["text"])
-        if sum(daily) > 0:
-            rows.append(daily)
+    daily: list[int] | None = None
+    row_top = prev_top = None
+    for w in grid_words:
+        top = w["top"]
+        if prev_top is not None and top - prev_top > FOOTER_GAP:
+            break                       # footer gap — end of grid
+        if daily is None or top - row_top > ROW_TOL:
+            if daily is not None and sum(daily) > 0:
+                rows.append(daily)      # flush the completed program row
+            daily = [0] * len(col_x)    # start a new program row
+            row_top = top
+        daily[to_col(w)] += int(w["text"])
+        prev_top = top
+    if daily is not None and sum(daily) > 0:
+        rows.append(daily)
 
     return PositionalGrid(calendar_days=calendar_days, rows=rows)
