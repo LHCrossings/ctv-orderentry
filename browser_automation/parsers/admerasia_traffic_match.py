@@ -44,13 +44,20 @@ class MatchResult:
         return [a for a in self.assignments if a.ok]
 
 
-def match_creatives(color_grid, row_meta, cluster_isci, flight_start, spots,
+def match_creatives(color_grid, row_dur, row_window, cluster_isci, flight_start, spots,
                     filmati_by_isci) -> MatchResult:
+    """
+    row_dur    : {grid_row_index: duration_sec}  (derived from the row's own cells' ISCI)
+    row_window : {grid_row_index: (start_frames, end_frames)}  (vision daypart; tie-break only)
+
+    A spot is assigned the colour of the grid cell for the ONE program row that (a) has
+    that spot's duration and (b) actually has a coloured cell on that spot's date. When
+    two same-duration programs air the same day, the daypart window breaks the tie —
+    this is what makes dense multi-programme orders (e.g. Chinese) unambiguous.
+    """
     res = MatchResult()
 
-    # index cells by (row, column)
     cell_by_rc = {(c.row, c.col): c for c in color_grid.cells}
-    col_of_day = {d: i for i, d in enumerate(color_grid.calendar_days)}
 
     # Guardrail: each grid row must be single-duration (a :15 row can't hold :30 colour)
     row_iscis = defaultdict(set)
@@ -59,29 +66,33 @@ def match_creatives(color_grid, row_meta, cluster_isci, flight_start, spots,
         if isci:
             row_iscis[c.row].add(isci)
     for r, iscis in row_iscis.items():
-        durs = {filmati_by_isci.get(i, {}).get("duration") for i in iscis}
-        durs.discard(None)
-        secs = {round(d / _FPS) for d in durs}
+        secs = {round(filmati_by_isci[i]["duration"] / _FPS) for i in iscis if i in filmati_by_isci}
         if len(secs) > 1:
             res.warnings.append(f"grid row {r} mixes creative durations {sorted(secs)}s — check colour legend")
 
     matched_counts = defaultdict(int)   # (row,col) -> spots matched, for reconciliation
 
-    for s in spots:
+    # Process spots in time order so that when two programmes' windows overlap on a
+    # day, earlier spots claim their cell first and a filled cell drops out of the
+    # candidates for later spots (capacity-aware).
+    for s in sorted(spots, key=lambda s: (s["date"], s["ora"])):
         dur_sec = round(s["duration"] / _FPS)
         col = (s["date"] - flight_start).days
-        # find the grid row whose duration + daypart window contains this spot
-        cand = [r for r, (d, ws, we) in row_meta.items()
-                if d == dur_sec and ws <= s["ora"] < we]
+        # rows of this duration with a coloured cell on this date that still has capacity
+        cand = [r for r, d in row_dur.items()
+                if d == dur_sec and (r, col) in cell_by_rc
+                and matched_counts[(r, col)] < cell_by_rc[(r, col)].count]
+        if len(cand) > 1:
+            # two same-duration programmes on the same day → break by daypart window
+            win = [r for r in cand
+                   if r in row_window and row_window[r][0] <= s["ora"] < row_window[r][1]]
+            if win:
+                cand = win
         if len(cand) != 1:
             res.assignments.append(SpotAssignment(s["id"], None, None, False, False,
-                f"spot dur={dur_sec}s @{s['ora']}fr matched {len(cand)} grid rows"))
+                f"spot dur={dur_sec}s on day-col {col} @{s['ora']}fr matched {len(cand)} grid rows"))
             continue
-        cell = cell_by_rc.get((cand[0], col))
-        if cell is None:
-            res.assignments.append(SpotAssignment(s["id"], None, None, False, False,
-                f"no grid cell for row {cand[0]} day {color_grid.calendar_days[col] if 0<=col<len(color_grid.calendar_days) else '?'}"))
-            continue
+        cell = cell_by_rc[(cand[0], col)]
         isci = cluster_isci.get(cell.cluster)
         fil = filmati_by_isci.get(isci) if isci else None
         if not fil:

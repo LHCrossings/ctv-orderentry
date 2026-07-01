@@ -12,22 +12,62 @@ count vector), and spot matching (duration + daypart window + date).
 
 from __future__ import annotations
 
-from collections import defaultdict
+import re
 from dataclasses import dataclass, field
 from datetime import date
 
 try:
     from .admerasia_traffic_color import read_color_grid
     from .admerasia_traffic_match import match_creatives
-    from .admerasia_vision import extract_isci_legend
+    from .admerasia_vision import extract_isci_legend, extract_grid
     from . import admerasia_parser as _ap
 except ImportError:
     from admerasia_traffic_color import read_color_grid
     from admerasia_traffic_match import match_creatives
-    from admerasia_vision import extract_isci_legend
+    from admerasia_vision import extract_isci_legend, extract_grid
     import admerasia_parser as _ap
 
 _FPS = 29.97
+
+
+def _daypart_to_frames(daypart: str):
+    """'6:00a-7:00a' / '9:00p-10:00p' / '10:30p-12:00a' / '11:30-12:00p' → (start, end)
+    frames, end exclusive. 12:00p = noon; a 12:00a END = end-of-broadcast-day (24:00)."""
+    if not daypart:
+        return None
+    parts = daypart.replace(" ", "").lower().split("-")
+    if len(parts) != 2:
+        return None
+
+    def tok(t):
+        m = re.match(r"(\d{1,2})(?::(\d{2}))?([ap])?", t)
+        return (int(m.group(1)), int(m.group(2) or 0), m.group(3)) if m else None
+
+    a, b = tok(parts[0]), tok(parts[1])
+    if not a or not b:
+        return None
+
+    def mins(h, mn, suf, is_end=False):
+        if suf == "a":
+            return (1440 if (h == 12 and is_end) else (0 if h == 12 else h * 60)) + mn
+        if suf == "p":
+            return (12 * 60 if h == 12 else (h + 12) * 60) + mn
+        return None  # unknown period — resolved by caller
+
+    end_suf = b[2] or a[2] or "p"
+    end = mins(b[0], b[1], end_suf, is_end=True)
+    if a[2]:
+        start = mins(a[0], a[1], a[2])
+    else:
+        # try the end's period; if that runs backwards (e.g. 11:30-12:00p), flip it
+        s_same = mins(a[0], a[1], end_suf)
+        start = s_same if (s_same is not None and s_same < end) else \
+            mins(a[0], a[1], "a" if end_suf == "p" else "p")
+    if start is None or end is None or end <= start:
+        return None
+    if end - start > 240:      # >4h daypart = vision typo (e.g. '10:300p'); don't trust it
+        return None
+    return (round(start * 60 * _FPS), round(end * 60 * _FPS))
 
 
 @dataclass
@@ -45,11 +85,16 @@ def _dist(a, b):
     return sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5
 
 
-def _order_number(pdf_path: str) -> str:
+def _io_header(pdf_path: str):
+    """(order_number, flight_start) from the IO text. flight_start is the campaign
+    start = the date of calendar-grid column 0 (what the entry parser aligns to) —
+    NOT the earliest contract line, which may begin a day or two into the grid."""
     import pdfplumber
     with pdfplumber.open(pdf_path) as pdf:
         text = pdf.pages[0].extract_text() or ""
-    return _ap._extract_order_number(text)
+    order_no = _ap._extract_order_number(text)
+    weeks = _ap._calculate_week_starts(_ap._extract_campaign_period(text))
+    return order_no, (weeks[0] if weeks else None)
 
 
 def find_contract(cur, order_number: str):
@@ -91,18 +136,8 @@ def _filmati_by_isci(cur, iscis):
     return {r["cod"]: {"filmati_id": r["fid"], "duration": r["dur"]} for r in cur.fetchall()}
 
 
-def _contract_lines_and_spots(cur, contract_id):
-    """Return (line-groups, spots, flight_start). A group is a distinct
-    (duration, ORA_INIZIO, ORA_FINE); spots carry id/date/ora/duration."""
-    cur.execute(
-        "SELECT DISTINCT cr.DURATA AS dur, cr.ORA_INIZIO AS oi, cr.ORA_FINE AS ofn,"
-        " CONVERT(VARCHAR(10), MIN(cr.DATA_INIZIO) OVER (), 120) AS flight0"
-        " FROM CONTRATTIRIGHE cr WHERE cr.ID_CONTRATTITESTATA = %d",
-        (contract_id,),
-    )
-    grp = cur.fetchall()
-    groups = [{"dur": g["dur"], "oi": g["oi"], "ofn": g["ofn"]} for g in grp]
-    flight0 = date.fromisoformat(grp[0]["flight0"]) if grp else None
+def _contract_spots(cur, contract_id):
+    """Scheduled spots (id/date/ora/duration) for the contract."""
     cur.execute(
         "SELECT t.ID_TPALINSE AS id, CONVERT(VARCHAR(10),t.DATA,120) AS dt, t.ORA AS ora, t.DURATION AS dur"
         " FROM TPALINSE t JOIN trafficPalinse tp ON tp.id_tpalinse = t.ID_TPALINSE"
@@ -112,53 +147,17 @@ def _contract_lines_and_spots(cur, contract_id):
     )
     spots = [{"id": r["id"], "date": date.fromisoformat(r["dt"]), "ora": r["ora"], "duration": r["dur"]}
              for r in cur.fetchall()]
-    return groups, spots, flight0
-
-
-def _map_rows_to_groups(color_grid, groups, spots, flight_start, warnings):
-    """Map each grid row -> a contract line-group by matching per-date spot-count
-    vectors (deterministic; no vision). Returns {row_index: group}."""
-    # per-group date->count
-    def in_group(s, g):
-        return s["duration"] == g["dur"] and g["oi"] <= s["ora"] < g["ofn"]
-    group_counts = []
-    for g in groups:
-        dc = defaultdict(int)
-        for s in spots:
-            if in_group(s, g):
-                dc[s["date"]] += 1
-        group_counts.append(dict(dc))
-    # per-row date->count from the grid
-    row_counts = defaultdict(lambda: defaultdict(int))
-    for c in color_grid.cells:
-        d = flight_start.fromordinal(flight_start.toordinal() + c.col)
-        row_counts[c.row][d] += c.count
-    mapping = {}
-    used = set()
-    for r in sorted(row_counts):
-        rc = dict(row_counts[r])
-        # exact match first, else best overlap
-        exact = [gi for gi, gc in enumerate(group_counts) if gc == rc and gi not in used]
-        if exact:
-            mapping[r] = groups[exact[0]]; used.add(exact[0]); continue
-        scored = sorted(
-            ((sum(min(rc.get(d, 0), gc.get(d, 0)) for d in set(rc) | set(gc)), gi)
-             for gi, gc in enumerate(group_counts) if gi not in used),
-            reverse=True,
-        )
-        if scored and scored[0][0] > 0:
-            gi = scored[0][1]; mapping[r] = groups[gi]; used.add(gi)
-            warnings.append(f"grid row {r} matched line-group by best-overlap (counts differ slightly) — verify")
-        else:
-            warnings.append(f"grid row {r} could not be matched to any contract line-group")
-    return mapping
+    return spots
 
 
 def resolve_traffic(pdf_path: str, cur, legend=None) -> TrafficResult:
     """Full pipeline. `cur` is a live as_dict DB cursor. `legend` (list of LegendRow)
     may be injected for testing; otherwise read via vision."""
-    order_no = _order_number(pdf_path)
+    order_no, flight_start = _io_header(pdf_path)
     res = TrafficResult(order_number=order_no, contract_id=None, contract_code=None)
+    if flight_start is None:
+        res.warnings.append("Could not determine campaign start (grid column 0 date) from the IO")
+        return res
 
     found = find_contract(cur, order_no)
     if not found:
@@ -184,15 +183,32 @@ def resolve_traffic(pdf_path: str, cur, legend=None) -> TrafficResult:
     if missing:
         res.warnings.append(f"ISCIs not found in FILMATI: {missing}")
 
-    groups, spots, flight_start = _contract_lines_and_spots(cur, res.contract_id)
+    spots = _contract_spots(cur, res.contract_id)
     if not spots:
         res.warnings.append("Contract has no scheduled spots to assign")
         return res
 
-    row_group = _map_rows_to_groups(color_grid, groups, spots, flight_start, res.warnings)
-    row_meta = {r: (round(g["dur"] / _FPS), g["oi"], g["ofn"]) for r, g in row_group.items()}
+    # per-row duration from the row's own cells' ISCI (single-duration by coherence)
+    row_dur: dict = {}
+    for c in color_grid.cells:
+        isci = cluster_isci.get(c.cluster)
+        d = filmati.get(isci, {}).get("duration") if isci else None
+        if d:
+            row_dur.setdefault(c.row, round(d / _FPS))
 
-    m = match_creatives(color_grid, row_meta, cluster_isci, flight_start, spots, filmati)
+    # per-row daypart window from the entry vision read — only to break ties when two
+    # same-duration programmes air the same day.
+    row_window: dict = {}
+    try:
+        vis = extract_grid(pdf_path)
+        for i, ln in enumerate(vis.lines):
+            w = _daypart_to_frames(ln.daypart)
+            if w:
+                row_window[i] = w
+    except Exception as exc:  # noqa: BLE001
+        res.warnings.append(f"daypart windows unavailable ({exc}); same-day same-duration ties may fail")
+
+    m = match_creatives(color_grid, row_dur, row_window, cluster_isci, flight_start, spots, filmati)
     res.assignments = m.assignments
     res.warnings.extend(m.warnings)
     res.ok = bool(m.writable) and not any(not a.ok for a in m.assignments)
