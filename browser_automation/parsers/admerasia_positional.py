@@ -29,7 +29,29 @@ class PositionalGrid:
     rows: list[list[int]] = field(default_factory=list)  # one daily_spots list per program row, top→bottom
 
 
-def read_grid(path: str) -> PositionalGrid:
+@dataclass
+class GridCell:
+    row: int      # program-row index, top→bottom (0-based)
+    col: int      # index into calendar_days
+    count: int    # spots printed in this cell
+    x0: float
+    x1: float
+    top: float
+    bottom: float
+
+
+@dataclass
+class GridGeometry:
+    calendar_days: list[int]
+    col_x: list[float]        # x-center of each calendar column
+    cells: list[GridCell]     # every printed spot-cell (has a digit)
+
+
+def read_grid_cells(path: str) -> GridGeometry:
+    """Single source of grid geometry: locate the calendar columns + program rows and
+    return every printed spot-cell with its row/col index, count, and bbox. Both the
+    count reader (`read_grid`) and the traffic colour reader build on this, so the two
+    can never drift."""
     with pdfplumber.open(path) as pdf:
         words = pdf.pages[0].extract_words()
 
@@ -73,21 +95,29 @@ def read_grid(path: str) -> PositionalGrid:
         (w for w in digits if w["top"] > dn_y + 0.5 and to_col(w) is not None),
         key=lambda w: w["top"],
     )
-    rows: list[list[int]] = []
-    daily: list[int] | None = None
+    cells: list[GridCell] = []
+    row_idx = -1
     row_top = prev_top = None
     for w in grid_words:
         top = w["top"]
         if prev_top is not None and top - prev_top > FOOTER_GAP:
             break                       # footer gap — end of grid
-        if daily is None or top - row_top > ROW_TOL:
-            if daily is not None and sum(daily) > 0:
-                rows.append(daily)      # flush the completed program row
-            daily = [0] * len(col_x)    # start a new program row
+        if row_top is None or top - row_top > ROW_TOL:
+            row_idx += 1                # start a new program row
             row_top = top
-        daily[to_col(w)] += int(w["text"])
+        cells.append(GridCell(row=row_idx, col=to_col(w), count=int(w["text"]),
+                              x0=w["x0"], x1=w["x1"], top=w["top"], bottom=w["bottom"]))
         prev_top = top
-    if daily is not None and sum(daily) > 0:
-        rows.append(daily)
+    return GridGeometry(calendar_days=calendar_days, col_x=col_x, cells=cells)
 
-    return PositionalGrid(calendar_days=calendar_days, rows=rows)
+
+def read_grid(path: str) -> PositionalGrid:
+    """Per-program-row daily spot counts (top→bottom). Rows summing to 0 are dropped,
+    preserving the original contract-entry behaviour."""
+    g = read_grid_cells(path)
+    n = 1 + max((c.row for c in g.cells), default=-1)
+    rows = [[0] * len(g.calendar_days) for _ in range(n)]
+    for c in g.cells:
+        rows[c.row][c.col] += c.count
+    rows = [r for r in rows if sum(r) > 0]
+    return PositionalGrid(calendar_days=g.calendar_days, rows=rows)

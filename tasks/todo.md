@@ -1,85 +1,82 @@
-# Break Optimization — PI duplicates resolved in-place (no cross-break moves)
+# Admerasia Traffic Auto-Assigner (color-match) — design
 
-## Request
-On `/master-control/break-optimization`, PI-spot optimization currently pulls a
-same-length PI out of another break up to ±1 hour away and swaps the two. The
-team wants **all PI switching kept within the program** — nothing moved back/
-forward an hour. Instead, when a break has duplicate PIs, replace one of the
-duplicates **in place** with a valid same-length PI from the FILMATI library.
+## Goal
+DROP-FIRST auto-parse: drop one Admerasia McDonald's IO on the assign-traffic page
+→ it detects the format, FINDS THE CONTRACT ITSELF, and auto-assigns each scheduled
+spot its creative (ISCI) by matching the spot's grid-cell color to the ISCI legend.
+Replaces today's "search contract → pick Admerasia from dropdown → drop IO" AND the
+all-manual per-spot dropdown picking. Highest-effort orders; accuracy > cost.
 
-## Decisions (confirmed with user)
-- Remove the cross-break / ±1hr swap entirely; resolve duplicates via in-place
-  library substitution only. Nothing moves between breaks or times.
-- Duplicate detection stays at the **break (pod)** level (matches today).
-- Library pick: **PI first, PSA fallback** at the same length (±5 frames), not
-  expired, excluding `DO NOT%`, and excluding any product key already present in
-  that break (so we never create a new duplicate). PSA only used if no PI fits.
-- If nothing fits at that length → leave both duplicates, flag `pi_unresolvable`.
+## Contract auto-match (VERIFIED against the 7 entered July contracts)
+PRIMARY KEY = the IO Order Number, stored verbatim on the contract in
+`CONTRATTITESTATA.CUSTOMERREF` (written at entry by `get_default_customer_order_ref`
+→ `order.order_number`). The IO header prints it ("Order Number: 07-MD10-2607VT")
+and `_extract_order_number` already parses it. Match = exact
+`SELECT ... WHERE CUSTOMERREF = '<order#>'`. Verified: 2939=07-MD10-2607VT (SF),
+2933=12-MD10-2607CT (CN-SEA), 2935=04-MD10-2607FT (FIL-NY), etc. Handles revisions
+(same order# → same contract). No derivation needed; immune to code-format changes.
+Fallbacks if CUSTOMERREF miss: (a) derived code `"Admerasia McD {estimate}"`
+(`get_default_order_code`); (b) client McDonald's + market + campaign dates + total
+spots. If >1 match or fallback used → show candidates, confirm with user.
 
-## Mechanism (grounded in existing code)
-- `TPALINSE.ID_FILMATI` holds the creative. In-place swap = one UPDATE of the
-  creative-identity fields, mirroring auto-assign at orders.py:1370 and the
-  filler pattern at orders.py:2200-2268:
-  `UPDATE TPALINSE SET ID_FILMATI, COD_PROGRA, NEWTYPE, TITLE, SUPPORTO WHERE ID_TPALINSE=?`
-  Keep the original ORA / XORDER / DURATION (library match is within ±5 frames,
-  so downstream timing is unaffected — no re-timing needed).
+## What already exists (reuse, don't rebuild)
+- `POST /api/traffic/admerasia/parse-io` — extracts ISCIs grouped by duration.
+- `GET /api/traffic/contract/{id}/tpalinse-spots` — scheduled spots w/ date/time/dur/line.
+- `POST /api/traffic/contract/{id}/assign-spots` — 1:1 {tp_id→filmati_id} write
+  (TPALINSE + CONTRATTIFILMATI + MaterialAddToAssetListC + air-check flag).
+- Frontend Admerasia flow: drop IO → manual per-spot ISCI dropdowns → Apply.
+- `admerasia_positional.read_grid` (row,date,count) and `parse_admerasia_io_iscis`.
 
-## Changes
+## Proven by this session's testing (7 clean July IOs)
+- **Per-cell color = pixel ring-median around each spot digit @300dpi**: 100% of
+  cells read across all 7; clusters to the exact palette (2 or 5 colors); per-color
+  totals reconcile to each order's spot total; every program row duration-coherent.
+- **Legend via pixels is NOT reliable**: ISCI list position varies per file + codes
+  are garbled Type3 → positional heuristics mislabeled (Chinese→address block,
+  VN-Seattle→off-by-one, Filipino→grid header). Must not ship.
 
-### 1. `_bo_fix_pi_conflicts` → `_bo_resolve_pi_duplicates(cur, breaks)` (orders.py ~3416)
-- Take a DB cursor (needs the library query).
-- For each break, detect duplicate PI product keys (same `_pi_product_key`).
-- For each duplicate, query FILMATI for a replacement of the same duration:
-  PI first then PSA, `ABS(DURATA - dur) <= 5`, `DATA_SCAD` valid, not `DO NOT%`,
-  and `_pi_product_key(DESCRIZIO)` not already in the break. `ORDER BY NEWID()`.
-- On match: rewrite that optimized spot's identity fields in place and attach
-  replacement payload keys (`replace_filmati_id`, `replace_title`,
-  `replace_cod_progra`, `replace_newtype`) + a `pi_replacement` diagnostic
-  (`"PI-504-030 → PI-497-030"`). Recompute `changed`/`violation`.
-- No match at that length → `pi_unresolvable = True` (leave both).
-- Delete the ±1hr `one_hour` cross-break search block and `pi_swap_source`.
+## Design — division of labor (mirrors the entry parser)
+1. **Positional grid** (`read_grid`): (program_row, date) → spot count. WHERE spots are.
+2. **Pixel color** (new `admerasia_traffic_color.py`): ring-median around each grid
+   digit → cell RGB; cluster into the order's palette. WHICH color each cell is.
+3. **High-res vision** (extend `admerasia_vision.py` or a small dedicated call):
+   read the ISCI legend → ordered `[(isci_code, duration, swatch_color)]`. The
+   authoritative color→creative map. Trivial for vision (2-5 rows), no dense-grid
+   counting weakness. Codes are read from the rendered image (garble-free).
+4. **Match**: grid cluster color → nearest vision legend color (one-to-one) → ISCI
+   → FILMATI id (COD_PROGRA = ISCI). Grid row i ↔ contract line i (entered from this
+   grid, same order); each line's TPALINSE spots on date D take cell (row i, D)'s ISCI.
+5. Emit `{tp_id → filmati_id}` and feed the existing `assign-spots` endpoint.
 
-### 2. `_bo_process_market` (orders.py ~3729)
-- Call `_bo_resolve_pi_duplicates(cur, breaks)` instead of `_bo_fix_pi_conflicts(breaks)`.
+## Guardrails (hard-fail → preview shows error, excluded from write)
+1. **Assigned creative length == ordered spot length** (±5 frames) — per spot. [user req]
+2. Palette colors map to DISTINCT ISCIs; #colors used == #creatives used.
+3. Per-program-row duration coherence (a :15 row cannot contain a :30 color).
+4. Reconciliation: per-color totals sum to order total; per-(row,date) spot counts
+   match grid; line count == grid row count, per-line totals match.
+5. Contract auto-matched by order#/estimate → code "Admerasia McD <est> <yymm>";
+   confirm before assign.
 
-### 3. Apply endpoints (orders.py ~3762 apply, ~3803 bulk-apply)
-- When an update carries `replace_filmati_id`, add the creative-swap UPDATE
-  (ID_FILMATI, COD_PROGRA, NEWTYPE, TITLE, SUPPORTO) alongside the existing
-  ORA/ORA_P/XORDER write. bulk-apply reads `brk["optimized"]` directly (already
-  has the fields); apply reads them from the posted `updates`.
+## UI
+- Reuse the existing Admerasia drop-zone. On drop: parse IO + color + vision legend
+  → PRE-FILL the per-spot ISCI dropdowns (the ones done by hand today) with the
+  color-matched creative, flagged with the swatch color + any guardrail failures.
+- User eyeballs the preview (visually easy) → Apply. Never auto-commit.
 
-### 4. Template `break_optimization.html`
-- Frontend must forward the `replace_*` fields in the apply POST body.
-- Show the replacement in the break diff (e.g. badge "↻ replaced PI-504-030 →
-  PI-497-030") and keep the `pi_unresolvable` warning wording.
+## Build order
+1. `admerasia_traffic_color.py`: cell-color sampler + palette clustering (done as
+   validated scratch prototype — port it). Unit-check vs the 7 IOs' known totals.
+2. Vision legend read (high-res) → ordered ISCI+color. Cross-check codes vs
+   `parse_admerasia_io_iscis`.
+3. Matcher + guardrails → produce `{tp_id→filmati_id}` + per-spot diagnostics.
+4. New/extended endpoint: `POST /api/traffic/admerasia/auto-color` (contract_id +
+   IO) → returns pre-filled assignments + warnings. Writes via existing assign-spots.
+5. Frontend: pre-fill dropdowns + swatch/warning display.
+6. Verify end-to-end on all 7 IOs against the entered contracts (per-line, per-date).
 
-## Verification
-- Load a date/market with a known duplicate-PI break; confirm the plan now shows
-  an in-place replacement (same time slot) instead of a cross-break swap, and no
-  spot's ORA changes except the intended pod ordering.
-- Confirm a :15 duplicate with no library match flags `pi_unresolvable` and is
-  left untouched.
-- Apply on a single break; verify TPALINSE row's ID_FILMATI/TITLE changed and
-  ORA/XORDER unchanged; re-load shows no remaining duplicate.
-- Bulk-apply dry check across markets: counts reflect replacements.
+## Open confirmations
+- Preview-then-Apply (recommended) vs auto-apply. → preview, given precision needs.
+- One IO → one contract per drop (7 separate). OK?
 
 ## Review
-
-Done — all edits in `src/web/routes/orders.py` + `templates/master_control/break_optimization.html`:
-- `_bo_fix_pi_conflicts` (±1hr cross-break swap) removed → `_bo_resolve_pi_duplicates(cur, breaks)`
-  + `_bo_pi_library_pick(cur, dur, exclude_keys)` (in-place library substitution).
-- `_bo_apply_pi_replacement(cur, u, id)` writes the creative swap on apply + bulk-apply.
-- Template: `↻ PI Replaced` badge/panel, `↻` spot marker, replacement fields forwarded in
-  applyBreak + applyAll. Removed obsolete `pi_conflict_detail`/`pi_swap_source` UI.
-
-Verified (read-only, live DB via load endpoint, no writes):
-- NYC 2026-07-01 Break @9:25 — dup PI-504 → `PI-504-060` replaced with `PI-497-060: eZwell`
-  (:60, filmati 119139), ORA unchanged, payload complete.
-- SFO 2026-06-30 Break @8:58 — exact dup `PI-481-030`×`PI-481-030` → one replaced with
-  `PI-505-030: Alien Power` (:30, filmati 136877), ORA unchanged.
-- Library inventory: :30=8 PI, :60=20 PI, :15=0 PI/8 PSA (PSA fallback path exercised on :15).
-- orders.py byte-compiles; no leftover refs to removed fields.
-
-NOT executed: the apply write against live Etere (mutates on-air scheduling). Code mirrors the
-proven auto-assign `UPDATE ...ID_FILMATI` (line ~1370) and blacklist filler pattern. Recommend
-the team click **Apply Fix** on one break in the UI as the final confirmation.
+(after implementation)

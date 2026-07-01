@@ -140,6 +140,108 @@ def _extract_once(path: str, model: str = MODEL, max_tokens: int = 16000) -> Vis
     return resp.parsed_output
 
 
+# ─── ISCI legend (colour → creative) ───────────────────────────────────────────
+# Used by the traffic auto-assigner. The deterministic pixel reader nails which
+# COLOUR each grid cell is, but not which CREATIVE a colour maps to: the ISCI list
+# sits at a different spot on every IO and the codes are a garbled Type3 font, so
+# pixel/positional heuristics mislabel. Vision reads the small (2-5 row) legend the
+# way a human does — trivially — and returns the colour of each ISCI's row.
+
+
+class LegendRow(BaseModel):
+    isci_code: str = Field(description="The ISCI/house code for this row, exactly as printed in the rendered image (e.g. 'MCIV089526VH'). Read the glyphs from the image, not the text layer. The 4th char is a letter and chars 5-10 are digits — never confuse letter O with digit 0.")
+    duration_sec: int = Field(description="Spot length for this creative in seconds (15 or 30), from the ':15'/':30' on the row.")
+    color_name: str = Field(description="Plain-language name of THIS row's background/highlight fill colour, e.g. 'white', 'lavender/mauve', 'light cyan', 'gold/orange', 'pale green'. This is the colour used to mark this creative's cells in the calendar grid below.")
+    color_rgb: list[int] = Field(description="Best-estimate [R,G,B] (each 0-255) of this row's fill colour. White ≈ [255,255,255].")
+
+
+class VisionLegend(BaseModel):
+    rows: list[LegendRow] = Field(description="Every creative row in the top ISCI/version list, top-to-bottom, one per ISCI. Do NOT include address, header, or grid rows.")
+    warnings: list[str] = Field(default_factory=list, description="Anything ambiguous — cite the ISCI.")
+
+
+_LEGEND_SYSTEM = """You read the small ISCI / creative-version list near the top of an Admerasia / McDonald's TV insertion order. Each row lists one creative: language, spot length (:15 or :30), an ISCI/house code (e.g. MCIV089526VH), and a title. Crucially, each row is highlighted with a FILL COLOUR — that colour is how the creative is marked in the calendar grid lower on the page. One row may be plain white (that is still a valid, meaningful colour).
+
+Your job: output every creative row, top-to-bottom, with its exact ISCI code, duration, and the row's fill colour (a plain name AND a best-estimate RGB). Read the ISCI codes from the rendered image glyphs (the embedded text is garbled) — the 4th character is a letter, the next six are digits; never read a letter 'O' where a digit '0' belongs. Do not include the mailing address, page header, or the calendar grid — only the ISCI/version list rows."""
+
+_LEGEND_INSTRUCTION = (
+    "You are given the PDF plus a high-resolution image of the top of the page. Read the "
+    "ISCI/version list into the schema: one row per creative, top-to-bottom, each with its "
+    "exact ISCI code, spot length, and the fill colour of that row (name + RGB). Include a "
+    "plain-white row if present — white is a meaningful colour here."
+)
+
+
+def _legend_png(path: str, dpi: int = 400) -> bytes:
+    """High-res render of the page area ABOVE the calendar grid (where the ISCI list
+    lives). High DPI + tight crop gives the model clean glyphs and true fill colours."""
+    import io
+
+    import pdfplumber
+    from collections import defaultdict
+
+    with pdfplumber.open(path) as pdf:
+        p = pdf.pages[0]
+        digs = [w for w in p.extract_words() if w["text"].isdigit()]
+        byy: dict = defaultdict(list)
+        for w in digs:
+            byy[round(w["top"])].append(w)
+        dn_y = max(byy, key=lambda y: sum(1 for w in byy[y] if 1 <= int(w["text"]) <= 31))
+        crop = p.crop((0, 0, p.width, min(p.height, dn_y + 2)))
+        img = crop.to_image(resolution=dpi)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+
+
+def _extract_legend_once(path: str, model: str = MODEL, max_tokens: int = 4000) -> VisionLegend:
+    import anthropic
+
+    pdf_b64 = base64.standard_b64encode(Path(path).read_bytes()).decode("utf-8")
+    png = _legend_png(path)
+    content = [
+        {"type": "document",
+         "source": {"type": "base64", "media_type": "application/pdf", "data": pdf_b64}},
+        {"type": "image",
+         "source": {"type": "base64", "media_type": "image/png",
+                    "data": base64.standard_b64encode(png).decode("utf-8")}},
+        {"type": "text", "text": _LEGEND_INSTRUCTION},
+    ]
+    client = anthropic.Anthropic()
+    resp = client.messages.parse(
+        model=model,
+        max_tokens=max_tokens,
+        system=_LEGEND_SYSTEM,
+        messages=[{"role": "user", "content": content}],
+        output_format=VisionLegend,
+    )
+    return resp.parsed_output
+
+
+def extract_isci_legend(path: str, refresh: bool = False) -> VisionLegend:
+    """Vision read of the ISCI legend → ordered [(isci_code, duration_sec, colour)].
+    Two independent passes must agree on the ISCI set + durations (colours may differ
+    slightly), else AdmerasiaVisionError. Cached in a `<file>.adm-legend.json` sidecar."""
+    sc = str(path) + ".adm-legend.json"
+    if not refresh and os.path.exists(sc):
+        return VisionLegend.model_validate(json.loads(Path(sc).read_text())["legend"])
+
+    a = _extract_legend_once(path)
+    b = _extract_legend_once(path)
+    ka = [(r.isci_code, r.duration_sec) for r in a.rows]
+    kb = [(r.isci_code, r.duration_sec) for r in b.rows]
+    if ka != kb:
+        raise AdmerasiaVisionError(
+            "Admerasia ISCI-legend vision read disagreed between passes — manual review:\n"
+            f"  pass1: {ka}\n  pass2: {kb}"
+        )
+    try:
+        Path(sc).write_text(json.dumps({"legend": a.model_dump()}, indent=2, default=str))
+    except Exception as exc:
+        print(f"[ADM-VISION] Warning: could not cache legend: {exc}")
+    return a
+
+
 # ─── Guardrails ───────────────────────────────────────────────────────────────
 
 def _norm_dp(dp: str) -> str:
