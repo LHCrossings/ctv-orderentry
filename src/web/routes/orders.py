@@ -3413,107 +3413,108 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
         return result
 
-    def _bo_fix_pi_conflicts(breaks: list) -> None:
-        """Cross-break swap: if two PI spots with the same product number land in the same
-        break, swap one with a same-duration PI spot from another break that won't cause a
-        new conflict.  Modifies breaks in-place; updates 'changed' and 'violation' flags."""
+    def _bo_pi_library_pick(cur, duration: int, exclude_keys: set):
+        """Pick a valid replacement filler of the same length (±5 frames) from the
+        FILMATI library — PI first, PSA fallback — whose product key is not already
+        used in the break. Returns a filmati dict or None. Mirrors the proven
+        blacklist filler-selection query."""
+        for pattern in ("PI-%%", "PSA-%%"):
+            cur.execute(
+                "SELECT TOP 20 ID_FILMATI, COD_PROGRA, DESCRIZIO, DURATA, NEWTYPE"
+                " FROM FILMATI"
+                " WHERE DESCRIZIO LIKE %s"
+                "   AND DESCRIZIO NOT LIKE 'DO NOT%%'"
+                "   AND (DATA_SCAD IS NULL OR DATA_SCAD > GETDATE())"
+                "   AND ABS(DURATA - %s) <= 5"
+                " ORDER BY NEWID()",
+                (pattern, duration),
+            )
+            for row in cur.fetchall():
+                if _pi_product_key(row["DESCRIZIO"]) not in exclude_keys:
+                    return dict(row)
+        return None
+
+    def _bo_resolve_pi_duplicates(cur, breaks: list) -> None:
+        """When a break contains two PI spots of the same product (e.g. two PI-504),
+        replace one of them IN PLACE with a different valid same-length PI from the
+        FILMATI library (PSA fallback). Nothing moves between breaks or time slots —
+        the switch stays inside the pod/program. Modifies breaks in-place: sets the
+        replacement payload on the affected optimized spot and updates the
+        'changed' / 'violation' / 'pi_unresolvable' flags."""
 
         def _pi_keys(brk):
             return [_pi_product_key(s["title"]) for s in brk["optimized"] if s["label"] == "PI"]
 
-        for _pass in range(20):            # cap iterations
-            made_swap = False
-            for i, brk_a in enumerate(breaks):
-                keys_a = _pi_keys(brk_a)
-                if len(keys_a) == len(set(keys_a)):
-                    continue               # no conflict in this break
-
-                # Find both indices involved in the first PI conflict (first + second occurrence).
-                # We try swapping either one out — different lengths mean one may have a
-                # valid partner in another break while the other doesn't.
-                seen: dict = {}
-                conflict_pair: tuple = (-1, -1)
-                for j, s in enumerate(brk_a["optimized"]):
-                    if s["label"] != "PI":
-                        continue
-                    k = _pi_product_key(s["title"])
-                    if k in seen:
-                        conflict_pair = (seen[k], j)
-                        break
-                    seen[k] = j
-
-                if conflict_pair[0] < 0:
-                    continue
-
-                # Try second occurrence first, then first — either can be moved out
-                for conflict_idx in (conflict_pair[1], conflict_pair[0]):
-                    conflict_spot = brk_a["optimized"][conflict_idx]
-                    conflict_key  = _pi_product_key(conflict_spot["title"])
-
-                    # Search other breaks for a swap candidate within ±1 hour only
-                    one_hour = round(3600 * _BO_FPS)
-                    brk_a_ora = brk_a["current"][0]["ora"] if brk_a["current"] else 0
-                    for k, brk_b in enumerate(breaks):
-                        if k == i:
-                            continue
-                        brk_b_ora = brk_b["current"][0]["ora"] if brk_b["current"] else 0
-                        if abs(brk_a_ora - brk_b_ora) > one_hour:
-                            continue
-                        for m, cand in enumerate(brk_b["optimized"]):
-                            if cand["label"] != "PI":
-                                continue
-                            cand_key = _pi_product_key(cand["title"])
-
-                            # Would cand create a new conflict in break A?
-                            other_keys_a = [_pi_product_key(s["title"])
-                                            for j, s in enumerate(brk_a["optimized"])
-                                            if s["label"] == "PI" and j != conflict_idx]
-                            if cand_key in other_keys_a:
-                                continue
-
-                            # Would conflict_spot create a new conflict in break B?
-                            other_keys_b = [_pi_product_key(s["title"])
-                                            for mm, s in enumerate(brk_b["optimized"])
-                                            if s["label"] == "PI" and mm != m]
-                            if conflict_key in other_keys_b:
-                                continue
-
-                            # Perform the swap (keep each spot's time slot)
-                            ora_a, time_a = conflict_spot["new_ora"], conflict_spot["new_time"]
-                            ora_b, time_b = cand["new_ora"], cand["new_time"]
-                            dup_a = brk_a["optimized"][conflict_pair[0]]["title"]
-                            dup_b = conflict_spot["title"]
-                            brk_a["optimized"][conflict_idx] = {**cand, "new_ora": ora_a, "new_time": time_a}
-                            brk_b["optimized"][m] = {**conflict_spot, "new_ora": ora_b, "new_time": time_b}
-
-                            # Record what triggered the swap for diagnostics
-                            brk_a["pi_conflict_detail"] = f"{dup_a}  ×  {dup_b}"
-                            brk_b["pi_swap_source"] = f"Break {i + 1}: {dup_a}  ×  {dup_b}"
-
-                            # Recalculate changed + violation for both breaks
-                            for brk in (brk_a, brk_b):
-                                cur_ids  = [s["id"] for s in brk["current"]]
-                                opt_ids  = [s["id"] for s in brk["optimized"]]
-                                brk["changed"] = cur_ids != opt_ids
-                                new_pi_keys = _pi_keys(brk)
-                                brk["ordering_violation"] = brk["violation"] = brk["changed"] or (len(new_pi_keys) != len(set(new_pi_keys)))
-
-                            made_swap = True
-                            break
-                        if made_swap:
-                            break
-                    if made_swap:
-                        break
-
-                if made_swap:
-                    break
-            if not made_swap:
-                break
-
-        # Mark any remaining PI conflicts as unresolvable (no valid swap partner found)
         for brk in breaks:
             keys = _pi_keys(brk)
-            brk["pi_unresolvable"] = len(keys) != len(set(keys))
+            if len(keys) == len(set(keys)):
+                brk["pi_unresolvable"] = False
+                continue
+
+            # Extra occurrences (2nd, 3rd, … of any product key) are the duplicates
+            # to replace. Positions never shift (replacement is in-place), so a single
+            # pass over the pre-computed indices is safe.
+            seen: set = set()
+            dup_indices: list = []
+            for j, s in enumerate(brk["optimized"]):
+                if s["label"] != "PI":
+                    continue
+                k = _pi_product_key(s["title"])
+                if k in seen:
+                    dup_indices.append(j)
+                else:
+                    seen.add(k)
+
+            replacements: list = []
+            for dup_idx in dup_indices:
+                dup_spot = brk["optimized"][dup_idx]
+                # Replacement must differ from every OTHER PI product left in the break
+                exclude = {_pi_product_key(s["title"])
+                           for m, s in enumerate(brk["optimized"])
+                           if s["label"] == "PI" and m != dup_idx}
+                pick = _bo_pi_library_pick(cur, dup_spot["duration"], exclude)
+                if not pick:
+                    continue                        # nothing fits at this length
+                old_title = dup_spot["title"]
+                new_title = (pick["DESCRIZIO"] or "").strip()
+                brk["optimized"][dup_idx] = {
+                    **dup_spot,
+                    "title":              new_title,
+                    "replace_filmati_id": int(pick["ID_FILMATI"]),
+                    "replace_title":      new_title,
+                    "replace_cod_progra": (pick["COD_PROGRA"] or "").strip(),
+                    "replace_newtype":    (pick["NEWTYPE"] or "PER").strip(),
+                    "pi_replacement":     f"{old_title} → {new_title}",
+                }
+                replacements.append(f"{old_title} → {new_title}")
+
+            new_keys = _pi_keys(brk)
+            brk["pi_replacements"] = replacements
+            # Any product key still duplicated had no same-length filler → manual fix
+            brk["pi_unresolvable"] = len(new_keys) != len(set(new_keys))
+            # A creative swap keeps the id order, so flag 'changed' explicitly.
+            cur_ids = [s["id"] for s in brk["current"]]
+            opt_ids = [s["id"] for s in brk["optimized"]]
+            brk["changed"] = brk["changed"] or bool(replacements) or cur_ids != opt_ids
+            brk["ordering_violation"] = brk["violation"] = brk["changed"] or brk["pi_unresolvable"]
+
+    def _bo_apply_pi_replacement(cur, u: dict, id_tpalinse: int) -> None:
+        """If an optimized-spot payload carries a library PI/PSA replacement, swap the
+        creative on its TPALINSE row in place (ID_FILMATI + identity fields). ORA /
+        XORDER / DURATION are left untouched — the library match is within ±5 frames,
+        so downstream pod timing is unaffected. Mirrors the auto-assign creative
+        update (ID_FILMATI) and the blacklist filler SUPPORTO convention."""
+        fid = u.get("replace_filmati_id")
+        if not fid:
+            return
+        title    = (u.get("replace_title") or "").strip()
+        supporto = ("0ETX      " + title)[:30]
+        cur.execute(
+            "UPDATE TPALINSE SET ID_FILMATI = %d, COD_PROGRA = %s, NEWTYPE = %s,"
+            " TITLE = %s, SUPPORTO = %s WHERE ID_TPALINSE = %d",
+            (int(fid), (u.get("replace_cod_progra") or ""), (u.get("replace_newtype") or "PER"),
+             title, supporto, id_tpalinse),
+        )
 
     def _bo_fetch_sep_context(cur, market_id: int, date: str, from_frames: int, to_frames: int) -> list:
         """COM/BNS spots in a ±1-hr window — used for separation checking."""
@@ -3726,7 +3727,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         "pi_unresolvable":    False,
                     })
 
-        _bo_fix_pi_conflicts(breaks)
+        _bo_resolve_pi_duplicates(cur, breaks)
         _bo_check_separation(breaks, _bo_fetch_sep_context(cur, market_id, date, from_frames, to_frames))
         return breaks
 
@@ -3792,6 +3793,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             "UPDATE TPALINSE SET ORA = %d, ORA_P = %d WHERE ID_TPALINSE = %d",
                             (new_ora, new_ora, int(u["id_tpalinse"])),
                         )
+                    _bo_apply_pi_replacement(cur2, u, int(u["id_tpalinse"]))
                 conn.commit()
 
         try:
@@ -3853,6 +3855,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 "UPDATE TPALINSE SET ORA = %d, ORA_P = %d WHERE ID_TPALINSE = %d",
                                 (new_ora, new_ora, int(u["id"])),
                             )
+                        _bo_apply_pi_replacement(cur3, u, int(u["id"]))
                     conn.commit()
                     results.append({
                         "market":         market_name,

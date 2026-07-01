@@ -309,12 +309,11 @@ function renderBreaks(data) {
 function renderBreak(brk, bi) {
     const badges = [];
     if (brk.bookend_warning)                                           badges.push('<span class="badge badge-bookend">⚠ Multiple Bookends</span>');
-    if (brk.pi_unresolvable)                                           badges.push('<span class="badge badge-danger">⚠ PI Conflict — Manual Fix</span>');
-    if (brk.pi_conflict_detail)                                        badges.push('<span class="badge badge-pi-swap">⚠ PI Duplicate</span>');
-    if (brk.pi_swap_source)                                            badges.push('<span class="badge badge-pi-swap">↔ PI Swap</span>');
+    if (brk.pi_unresolvable)                                           badges.push('<span class="badge badge-danger">⚠ PI Duplicate — No Same-Length Filler</span>');
+    if (brk.pi_replacements?.length)                                   badges.push(`<span class="badge badge-pi-swap">↻ PI Replaced (${brk.pi_replacements.length})</span>`);
     if (brk.sep_violations?.length)                                    badges.push(`<span class="badge badge-sep">⚠ Separation (${brk.sep_violations.length})</span>`);
     if (brk.ordering_violation && !brk.pi_unresolvable
-        && !brk.pi_conflict_detail && !brk.pi_swap_source)             badges.push('<span class="badge badge-violation">⚠ Out of Order</span>');
+        && !brk.pi_replacements?.length)                              badges.push('<span class="badge badge-violation">⚠ Out of Order</span>');
     if (!badges.length)                                                badges.push('<span class="badge badge-ok">✓ OK</span>');
     const badgeHtml = badges.join(' ');
 
@@ -326,9 +325,12 @@ function renderBreak(brk, bi) {
     const optIds  = brk.optimized.map(s => s.id);
 
     const renderSpot = (s, newTime, isMoved, isRight) => {
-        const movedClass = isMoved ? ' moved' : '';
+        const replaced = isRight && s.pi_replacement;
+        const movedClass = (isMoved || replaced) ? ' moved' : '';
         const rightClass = isRight ? ' right-col' : '';
-        const arrow = isMoved ? '<span class="moved-arrow">↕</span>' : '';
+        const arrow = isMoved   ? '<span class="moved-arrow">↕</span>'
+                    : replaced  ? `<span class="moved-arrow" title="${esc(s.pi_replacement)}">↻</span>`
+                    :             '';
         const time = isRight ? (newTime || s.time) : s.time;
         return `<div class="spot-row${movedClass}${rightClass}">
             <span class="spot-time">${esc(time)}</span>
@@ -400,14 +402,20 @@ function renderBreak(brk, bi) {
             </div>
         </div>
         ${sepHtml}
-        ${brk.pi_conflict_detail ? `<div class="pi-debug-panel"><div class="pi-debug-title">⚠ PI Duplicate in this break</div>${esc(brk.pi_conflict_detail)}</div>` : ''}
-        ${brk.pi_swap_source     ? `<div class="pi-debug-panel"><div class="pi-debug-title">↔ Swapped to resolve conflict in ${esc(brk.pi_swap_source.split(':')[0])}</div>${esc(brk.pi_swap_source.split(':').slice(1).join(':').trim())}</div>` : ''}
+        ${brk.pi_replacements?.length ? `<div class="pi-debug-panel"><div class="pi-debug-title">↻ PI duplicate resolved in place (same slot, within program)</div>${brk.pi_replacements.map(esc).join('<br>')}</div>` : ''}
+        ${brk.pi_unresolvable ? `<div class="pi-debug-panel"><div class="pi-debug-title">⚠ PI duplicate — no same-length filler in library</div>Left unchanged for manual fix.</div>` : ''}
     </div>`;
 }
 
 async function applyBreak(bi) {
     const brk = breakData[bi];
-    const updates = brk.optimized.map(s => ({ id_tpalinse: s.id, new_ora: s.new_ora }));
+    const updates = brk.optimized.map(s => ({
+        id_tpalinse: s.id, new_ora: s.new_ora,
+        replace_filmati_id: s.replace_filmati_id,
+        replace_cod_progra: s.replace_cod_progra,
+        replace_newtype: s.replace_newtype,
+        replace_title: s.replace_title,
+    }));
     const btn = document.getElementById(`apply-${bi}`);
     btn.disabled = true; btn.textContent = 'Applying…';
 
@@ -435,7 +443,13 @@ async function applyBreak(bi) {
 async function applyAll() {
     const allUpdates = breakData
         .filter(b => b.changed)
-        .flatMap(b => b.optimized.map(s => ({ id_tpalinse: s.id, new_ora: s.new_ora })));
+        .flatMap(b => b.optimized.map(s => ({
+            id_tpalinse: s.id, new_ora: s.new_ora,
+            replace_filmati_id: s.replace_filmati_id,
+            replace_cod_progra: s.replace_cod_progra,
+            replace_newtype: s.replace_newtype,
+            replace_title: s.replace_title,
+        })));
 
     const btn = document.getElementById('applyAllBtn');
     btn.disabled = true; btn.textContent = 'Applying…';
