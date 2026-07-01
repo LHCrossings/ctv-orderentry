@@ -109,6 +109,7 @@ _CTV_LANG_WINDOWS["SouthAsian"] = _CTV_LANG_WINDOWS["Hindi"]    + _CTV_LANG_WIND
 # Canonical list of supported traffic instruction formats — rendered as badges on the assign-assets page.
 # Add one entry here whenever a new parser is wired into _detect_format().
 _TRAFFIC_FORMAT_LABELS = [
+    "Admerasia (McDonald's)",
     "Davis Elen",
     "IW Group (Lexus)",
     "Tatari (WorldLink)",
