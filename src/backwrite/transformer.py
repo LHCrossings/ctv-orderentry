@@ -743,8 +743,16 @@ def _fill_sales_confirmation(
     ws.column_dimensions["H"].width = min(max_len + 2, 80)
 
 
-def _fill_run_sheet(ws, run_rows: List[dict]) -> None:
-    """Fill the Run Sheet with one row per spot using the template."""
+def _fill_run_sheet(
+    ws, run_rows: List[dict], agency_fee: float = 0.0, is_agency: bool = False
+) -> None:
+    """Fill the Run Sheet with one row per spot using the template.
+
+    Broker Fees (col T) is written as a live formula ``=P{row}*{fee}`` for agency
+    orders rather than a pre-rounded value, so Spot Value (``=P``) and Station Net
+    (``=P-T``) reconcile to the Gross Rate cell with no rounding drift and stay
+    traceable in Excel. Direct orders keep broker fees at 0.
+    """
     # Find template rows (rows 2+ that contain any <placeholder>)
     tmpl_rows: List[int] = []
     for row in ws.iter_rows(min_row=2):
@@ -794,6 +802,9 @@ def _fill_run_sheet(ws, run_rows: List[dict]) -> None:
                     lambda m, nr=row_num: f'{m.group(1)}{nr}',
                     spec[1],
                 )
+            elif spec == 'broker_fees' and is_agency and agency_fee > 0:
+                # Live formula so gross/broker/net reconcile inside Excel (no drift).
+                cell.value = f'=P{row_num}*{agency_fee:g}'
             elif spec in rr:
                 cell.value = rr[spec]
 
@@ -1340,7 +1351,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
     _fill_sales_confirmation(wb["Sales Confirmation"], ctx, sc_lines, monthly_gross, monthly_net, agency_fee)
     if not is_agency:
         _apply_direct_mode(wb["Sales Confirmation"])
-    _fill_run_sheet(wb["Run Sheet"], run_rows)
+    _fill_run_sheet(wb["Run Sheet"], run_rows, agency_fee=agency_fee, is_agency=is_agency)
     _fill_pivot(wb["Sheet1"], run_rows)
 
     buf = BytesIO()
