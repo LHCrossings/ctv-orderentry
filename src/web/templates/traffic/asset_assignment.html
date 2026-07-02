@@ -1953,7 +1953,7 @@
                 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                     <span style="font-size:0.95rem;font-weight:700;color:var(--nord14);">TCAA Traffic</span>
                     ${stationHtml}
-                    <span style="font-size:0.8rem;color:var(--text-muted);">${esc(r.estimate || '')} · ${esc(r.product || '')} · ${esc(r.filename)}</span>
+                    <span style="font-size:0.8rem;color:var(--text-muted);">${esc(r.product || '')} · ${esc(r.filename)}</span>
                 </div>
                 ${warnHtml}
                 ${notFoundHtml}
@@ -2050,7 +2050,7 @@
                 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                     <span style="font-size:0.95rem;font-weight:700;color:var(--nord14);">TCAA Traffic</span>
                     ${r.station ? `<span style="font-size:0.8rem;color:var(--nord14);">📄 ${esc(r.station)} page</span>` : ''}
-                    <span style="font-size:0.8rem;color:var(--text-muted);">${esc(r.estimate || '')} · ${esc(r.product || '')} · ${esc(r.filename)}</span>
+                    <span style="font-size:0.8rem;color:var(--text-muted);">${esc(r.product || '')} · ${esc(r.filename)}</span>
                 </div>
                 <p style="margin:8px 0 2px;font-size:0.85rem;">Contract: ${contractHtml}</p>
                 ${warnHtml}
