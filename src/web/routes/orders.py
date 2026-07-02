@@ -5114,6 +5114,124 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+    # ── TCAA (Toyota) IO traffic ─────────────────────────────────────────────
+
+    @router.post("/api/traffic/tcaa/parse-io")
+    async def tcaa_parse_io(file: UploadFile, contract_id: int = Query(...)):
+        """Parse a TCAA CABLE Traffic Instructions PDF for a pre-selected contract.
+
+        TCAA's printed estimate does not match the Etere contract, so the operator
+        selects the contract first; this endpoint reads the creatives + rotation %
+        and resolves the contract's duration-matched lines to assign onto.
+        Returns {is_tcaa: False} fast if the PDF is not a TCAA sheet."""
+        pdf_bytes = await file.read()
+        filename = file.filename or "io.pdf"
+
+        def _run():
+            import io as _io
+
+            import pdfplumber
+
+            from browser_automation.etere_direct_client import connect as _db_connect
+            from browser_automation.parsers.tcaa_traffic_parser import (
+                parse_tcaa_traffic_pdf,
+            )
+
+            try:
+                with pdfplumber.open(_io.BytesIO(pdf_bytes)) as pdf:
+                    text = "\n".join(p.extract_text() or "" for p in pdf.pages)
+            except Exception:
+                return {"is_tcaa": False, "filename": filename}
+            if "TCAA" not in text.upper():
+                return {"is_tcaa": False, "filename": filename}
+
+            instr = parse_tcaa_traffic_pdf(pdf_bytes)
+            if not instr.spots:
+                raise ValueError("No creative rows found in TCAA PDF")
+
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+
+                isci_codes   = [s.isci for s in instr.spots]
+                placeholders = ",".join(f"'{c}'" for c in isci_codes)
+                cur.execute(
+                    f"SELECT ID_FILMATI, COD_PROGRA, DESCRIZIO FROM FILMATI"
+                    f" WHERE COD_PROGRA IN ({placeholders})"
+                )
+                filmati_map = {
+                    r["COD_PROGRA"]: {"filmati_id": r["ID_FILMATI"],
+                                      "db_title":   r["DESCRIZIO"] or ""}
+                    for r in cur.fetchall()
+                }
+
+                spots_out, not_found = [], []
+                for s in instr.spots:
+                    found = s.isci in filmati_map
+                    spots_out.append({
+                        "isci":         s.isci,
+                        "title":        s.title or (filmati_map[s.isci]["db_title"] if found else ""),
+                        "duration_sec": s.duration_sec,
+                        "rotation_pct": s.rotation_pct,
+                        "filmati_id":   filmati_map[s.isci]["filmati_id"] if found else None,
+                        "found":        found,
+                    })
+                    if not found:
+                        not_found.append(s.isci)
+
+                # Contract's lines matching the sheet's duration(s), with scheduled
+                # spot counts inside the campaign window. "RUN IN ALL PROGRAMMING" →
+                # every duration-matched line (paid + bonus) receives the rotation.
+                durations = sorted({s["duration_sec"] for s in spots_out})
+                dur_clause = " OR ".join(
+                    f"CAST(ROUND(CAST(cr.DURATA AS FLOAT) / {_FPS_GLOBAL}, 0) AS INT) = {d}"
+                    for d in durations
+                )
+                date_filter = ""
+                if instr.date_from_sql:
+                    date_filter += f" AND tp.DATA >= '{instr.date_from_sql}'"
+                if instr.date_to_sql:
+                    date_filter += f" AND tp.DATA <= '{instr.date_to_sql}'"
+                cur.execute(f"""
+                    SELECT cr.ID_CONTRATTIRIGHE AS line_id,
+                           cr.DESCRIZIONE       AS description,
+                           ISNULL(sc.spot_count, 0) AS spot_count
+                    FROM CONTRATTIRIGHE cr
+                    LEFT JOIN (
+                        SELECT tpa.id_contrattirighe, COUNT(*) AS spot_count
+                        FROM trafficPalinse tpa
+                        JOIN TPALINSE tp ON tp.ID_TPALINSE = tpa.id_tpalinse
+                        WHERE 1=1 {date_filter}
+                        GROUP BY tpa.id_contrattirighe
+                    ) sc ON sc.id_contrattirighe = cr.ID_CONTRATTIRIGHE
+                    WHERE cr.ID_CONTRATTITESTATA = {int(contract_id)}
+                      AND ({dur_clause})
+                    ORDER BY cr.ID_CONTRATTIRIGHE
+                """)
+                lines = [{"line_id": r["line_id"], "description": r["description"],
+                          "spot_count": r["spot_count"]} for r in cur.fetchall()]
+
+            return {
+                "is_tcaa":       True,
+                "filename":      filename,
+                "estimate":      instr.estimate,
+                "product":       instr.product,
+                "station":       instr.station,
+                "warning":       instr.warning,
+                "duration_sec":  durations[0] if durations else None,
+                "date_range":    f"{instr.start_date}–{instr.end_date}",
+                "date_from_sql": instr.date_from_sql,
+                "date_to_sql":   instr.date_to_sql,
+                "spots":         spots_out,
+                "not_found":     not_found,
+                "lines":         lines,
+            }
+
+        try:
+            result = await asyncio.get_running_loop().run_in_executor(None, _run)
+            return JSONResponse(result)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     @router.post("/api/traffic/admerasia/auto-color")
     async def admerasia_auto_color(file: UploadFile):
         """Drop-first Admerasia colour-match auto-assigner.
