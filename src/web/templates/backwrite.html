@@ -1094,7 +1094,25 @@ bwForm.addEventListener('submit', async e => {
         const link = document.createElement('a');
         link.href = url; link.download = fname; link.click();
         URL.revokeObjectURL(url);
-        showStatus(formStatus, `Downloaded: ${fname}`, 'info');
+
+        // Totals reconciliation banner (run sheet vs SC lines vs monthly breakdown)
+        let recon = null;
+        try { recon = JSON.parse(resp.headers.get('X-Backwrite-Reconcile') || 'null'); }
+        catch (_e) { recon = null; }
+        formStatus.style.whiteSpace = 'pre-line';
+        if (recon && recon.ok === false) {
+            showStatus(formStatus,
+                `⚠ Downloaded ${fname} — but totals DON'T reconcile:\n` +
+                (recon.messages || []).join('\n'),
+                'error');
+        } else if (recon && recon.ok) {
+            const g = recon.gross || {};
+            showStatus(formStatus,
+                `✓ Downloaded ${fname} — totals reconcile ($${(g.run_sheet||0).toLocaleString()} gross).`,
+                'info');
+        } else {
+            showStatus(formStatus, `Downloaded: ${fname}`, 'info');
+        }
     } catch (err) {
         showStatus(formStatus, 'Error: ' + err.message, 'error');
     } finally {

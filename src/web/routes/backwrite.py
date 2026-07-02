@@ -547,8 +547,10 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
                 user_inputs["gross_up_rates"] = gross_up_dict
                 print(f"[backwrite/generate] Auto gross-up from IO net rates: {gross_up_dict}")
 
+        reconcile: dict = {}
         try:
-            xlsx_bytes = generate_excel(header, spots, user_inputs, raw_csv=data, io_detail=io_detail)
+            xlsx_bytes = generate_excel(header, spots, user_inputs, raw_csv=data,
+                                        io_detail=io_detail, validation_out=reconcile)
         except Exception as exc:
             import traceback
             traceback.print_exc()
@@ -572,10 +574,14 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
                 raw_name += f" rev{rev_num}"
             filename = re.sub(r'[\\/:*?"<>|]', "", raw_name) + ".xlsx"
 
+        resp_headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+        # Surface the totals reconciliation to the UI via a header (fetch reads it).
+        if reconcile:
+            resp_headers["X-Backwrite-Reconcile"] = json.dumps(reconcile)
         return StreamingResponse(
             io.BytesIO(xlsx_bytes),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            headers=resp_headers,
         )
 
     @router.post("/fetch-report")

@@ -422,9 +422,17 @@ def _apply_snapshot(
 
 
 def _fill_monthly_breakdown(
-    ws, monthly_gross: dict, monthly_net: dict, last_line_row: int
+    ws, monthly_gross: dict, monthly_net: dict, last_line_row: int,
+    agency_fee: float = 0.0,
 ) -> None:
-    """Replace the hardcoded monthly breakdown table with actual monthly totals."""
+    """Replace the hardcoded monthly breakdown table with actual monthly totals.
+
+    Gross per month is written full-precision (no rounding); Net per month and
+    both Total cells are live Excel formulas (``=Gross*(1-fee)`` and ``=SUM(...)``)
+    so the breakdown totals reconcile exactly with the Gross Rate figures and
+    never drift from Python-side rounding.
+    """
+    from openpyxl.utils import get_column_letter
     # Find "Month" header row below the data lines
     month_hdr_row: Optional[int] = None
     for row in ws.iter_rows(min_row=last_line_row + 1):
@@ -487,9 +495,12 @@ def _fill_monthly_breakdown(
         if month_col:
             ws.cell(row=rn, column=month_col).value = month_name_str
         if gross_col:
-            ws.cell(row=rn, column=gross_col).value = round(monthly_gross[month_name_str], 2)
+            # Full precision — no rounding (rounding here drifts from the run sheet)
+            ws.cell(row=rn, column=gross_col).value = monthly_gross[month_name_str]
         if net_col:
-            ws.cell(row=rn, column=net_col).value = round(monthly_net.get(month_name_str, 0), 2)
+            # Net as a live formula off the gross cell → can't drift from rounding
+            gcl = get_column_letter(gross_col)
+            ws.cell(row=rn, column=net_col).value = f'={gcl}{rn}*{(1 - agency_fee):g}'
 
     # Delete extra template rows (shrink to exactly n_needed data rows)
     extra_rows = data_rows[n_needed:]
@@ -509,12 +520,16 @@ def _fill_monthly_breakdown(
                 b = cell.border
                 cell.border = Border(left=b.left, right=b.right, top=b.top, bottom=double)
 
-    # Update Total row
+    # Update Total row — SUM formulas over the month rows (no Python rounding)
     if total_row and n_needed > 0:
+        first_dr = data_rows[0]
+        last_dr  = data_rows[n_needed - 1]
         if gross_col:
-            ws.cell(row=total_row, column=gross_col).value = round(sum(monthly_gross.values()), 2)
+            gcl = get_column_letter(gross_col)
+            ws.cell(row=total_row, column=gross_col).value = f'=SUM({gcl}{first_dr}:{gcl}{last_dr})'
         if net_col:
-            ws.cell(row=total_row, column=net_col).value = round(sum(monthly_net.values()), 2)
+            ncl = get_column_letter(net_col)
+            ws.cell(row=total_row, column=net_col).value = f'=SUM({ncl}{first_dr}:{ncl}{last_dr})'
 
 
 def _apply_direct_mode(ws) -> None:
@@ -733,7 +748,7 @@ def _fill_sales_confirmation(
 
     # Fill the monthly breakdown section
     last_line_row = line_rows[-1] if line_rows else 20
-    _fill_monthly_breakdown(ws, monthly_gross, monthly_net, last_line_row)
+    _fill_monthly_breakdown(ws, monthly_gross, monthly_net, last_line_row, agency_fee)
 
     # Auto-size column H (line description) based on content
     max_len = max(
@@ -1125,8 +1140,14 @@ def _sc_lines_from_io(io_detail: dict) -> List[dict]:
 # MAIN ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────────────
 
-def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, raw_csv: bytes = b"", io_detail: dict = None) -> bytes:
-    """Generate backwrite Excel from template and return raw bytes."""
+def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, raw_csv: bytes = b"", io_detail: dict = None, validation_out: Optional[dict] = None) -> bytes:
+    """Generate backwrite Excel from template and return raw bytes.
+
+    If ``validation_out`` (a dict) is provided, it is populated with a totals
+    reconciliation: gross & net computed three ways (run sheet / SC lines /
+    monthly breakdown). ``validation_out["ok"]`` is False when they disagree,
+    with human-readable ``messages`` describing each mismatch and by how much.
+    """
     billing_type = user_inputs.get("billing_type", "Broadcast")
     agency_flag  = user_inputs.get("agency_flag",  "Agency")
     agency_fee   = float(user_inputs.get("agency_fee", 0.15) or 0)
@@ -1287,7 +1308,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
 
     # ── Single-value context ──────────────────────────────────────────────────
     total_gross = sum(_grossed_up(s.gross_rate) for s in spots) if spots else 0.0
-    total_net   = round(total_gross * (1 - agency_fee), 2) if is_agency else total_gross
+    total_net   = total_gross * (1 - agency_fee) if is_agency else total_gross
     markets     = sorted(set(s.market for s in spots))
     d_start_all = min(s.air_date for s in spots) if spots else date.today()
     d_end_all   = max(s.air_date for s in spots) if spots else date.today()
@@ -1345,14 +1366,50 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
         m = rr.get('month')
         if isinstance(m, datetime):
             _mg[m.strftime('%B')] += rr.get('gross_rate', 0) or 0
-    monthly_gross = {k: round(v, 2) for k, v in _mg.items()}
-    monthly_net   = {k: round(v * (1 - agency_fee), 2) for k, v in monthly_gross.items()}
+    # Full precision — the Sales Confirmation breakdown writes gross as-is and
+    # derives net + totals with Excel formulas, so nothing rounds until display.
+    monthly_gross = {k: v for k, v in _mg.items()}
+    monthly_net   = {k: v * (1 - agency_fee) for k, v in monthly_gross.items()}
 
     _fill_sales_confirmation(wb["Sales Confirmation"], ctx, sc_lines, monthly_gross, monthly_net, agency_fee)
     if not is_agency:
         _apply_direct_mode(wb["Sales Confirmation"])
     _fill_run_sheet(wb["Run Sheet"], run_rows, agency_fee=agency_fee, is_agency=is_agency)
     _fill_pivot(wb["Sheet1"], run_rows)
+
+    # ── Totals reconciliation ─────────────────────────────────────────────────
+    # Gross computed three ways; they must all agree. Divergence means either a
+    # residual rounding issue or a structural one (e.g. a line whose
+    # spots/week × weeks ≠ its actual spot count).
+    if validation_out is not None:
+        factor  = (1 - agency_fee) if is_agency else 1.0
+        g_run   = sum(_grossed_up(s.gross_rate) for s in spots)
+        g_sc    = sum(l.get('spot_count', 0) * l.get('weeks', 1) * l.get('gross_rate', 0)
+                      for l in sc_lines)
+        g_month = sum(monthly_gross.values())
+        rec = {
+            "ok": True,
+            "gross": {"run_sheet": round(g_run, 2), "sc_lines": round(g_sc, 2),
+                      "monthly": round(g_month, 2)},
+            "net":   {"run_sheet": round(g_run * factor, 2), "sc_lines": round(g_sc * factor, 2),
+                      "monthly": round(g_month * factor, 2)},
+            "messages": [],
+        }
+        eps = 0.01
+        checks = [
+            ("Gross", "run sheet", g_run,   "SC lines", g_sc),
+            ("Gross", "run sheet", g_run,   "monthly breakdown", g_month),
+            ("Net",   "run sheet", g_run * factor, "SC lines", g_sc * factor),
+            ("Net",   "run sheet", g_run * factor, "monthly breakdown", g_month * factor),
+        ]
+        for label, a_name, a_val, b_name, b_val in checks:
+            if abs(a_val - b_val) > eps:
+                rec["ok"] = False
+                rec["messages"].append(
+                    f"{label}: {a_name} ${a_val:,.2f} vs {b_name} ${b_val:,.2f} "
+                    f"(off ${abs(a_val - b_val):,.2f})"
+                )
+        validation_out.update(rec)
 
     buf = BytesIO()
     wb.save(buf)
