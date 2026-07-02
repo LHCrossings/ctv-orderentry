@@ -1450,11 +1450,15 @@
         const grid = document.getElementById('daviselenGrid');
         grid.style.display = 'none';
         grid.innerHTML     = '';
+        const tGrid = document.getElementById('tcaaGrid');
+        tGrid.style.display = 'none';
+        tGrid.innerHTML     = '';
 
         try {
-            // Drop-first Admerasia: try colour-match auto-assign on each file. It finds
-            // the contract itself; non-Admerasia files return fast and fall through.
-            const admResults = [];
+            // Drop-first Admerasia + TCAA: each finds its own contract; non-matching
+            // files return fast (is_* false) and fall through to the generic dispatcher.
+            const admResults  = [];
+            const tcaaResults = [];
             const rest = [];
             for (const f of input.files) {
                 let handled = false;
@@ -1465,10 +1469,21 @@
                         const ad = await ar.json();
                         if (ad.is_admerasia) { admResults.push(ad); handled = true; }
                     }
-                } catch (_e) { /* fall through to the generic dispatcher */ }
+                } catch (_e) { /* fall through */ }
+                if (!handled) {
+                    try {
+                        const tfd = new FormData(); tfd.append('file', f);
+                        const tr = await fetch('/api/traffic/tcaa/auto-match', { method: 'POST', body: tfd });
+                        if (tr.ok) {
+                            const td = await tr.json();
+                            if (td.is_tcaa) { tcaaResults.push(td); handled = true; }
+                        }
+                    } catch (_e) { /* fall through */ }
+                }
                 if (!handled) rest.push(f);
             }
-            if (admResults.length) renderAdmerasiaColorGrids(admResults);
+            if (admResults.length)  renderAdmerasiaColorGrids(admResults);
+            if (tcaaResults.length) renderTcaaAutoGrids(tcaaResults);
             if (!rest.length) return;
 
             const fd = new FormData();
@@ -1988,6 +2003,103 @@
                 + (d.needs_airchecks ? ' · ⚠ air-checks required' : '') + '</span>';
         } catch (e) {
             btn.disabled = false; btn.textContent = 'Apply Traffic';
+            status.innerHTML = `<span style="color:var(--nord11);">${esc(e.message)}</span>`;
+        }
+    }
+
+    // Drop-first TCAA: one card per file, contract found by TCAA + dates. The
+    // matched contract is shown for the operator to confirm before applying.
+    function renderTcaaAutoGrids(results) {
+        window.tcaaAutoResults = results;
+        const grid = document.getElementById('tcaaGrid');
+        grid.style.display = 'block';
+        grid.innerHTML = results.map((r, i) => {
+            if (r.error) {
+                return `<div class="tool-card" style="margin-bottom:12px;">
+                    <span style="color:var(--nord11);">${esc(r.filename)}: ${esc(r.error)}</span></div>`;
+            }
+            const allFound   = r.spots.length && r.spots.every(s => s.found);
+            const totalSpots = (r.lines || []).reduce((a, l) => a + l.spot_count, 0);
+            const ready      = allFound && r.contract && r.lines.length > 0;
+
+            const contractHtml = r.contract
+                ? `<span style="color:var(--nord14);font-weight:700;">${esc(r.contract.code)}</span>
+                   <span style="font-size:0.8rem;color:var(--text-muted);">#${r.contract.id} · ${esc(r.contract.description)} · ${r.contract.date_start}–${r.contract.date_end}</span>`
+                : `<span style="color:var(--nord11);">No matching contract found</span>`;
+
+            const spotRows = r.spots.map(s => {
+                const icon = s.found ? '✓' : '✗';
+                const col  = s.found ? 'var(--nord14)' : 'var(--nord11)';
+                return `<tr>
+                    <td style="padding:4px 8px;color:${col};font-family:monospace;">${icon} ${esc(s.isci)}</td>
+                    <td style="padding:4px 8px;color:var(--text-muted);">${esc(s.title)}</td>
+                    <td style="padding:4px 8px;text-align:center;">:${s.duration_sec}</td>
+                    <td style="padding:4px 8px;text-align:center;font-weight:600;">${s.rotation_pct}%</td>
+                </tr>`;
+            }).join('');
+
+            const warnHtml = r.warning
+                ? `<p style="color:var(--nord13);font-size:0.82rem;margin:6px 0;">⚠ ${esc(r.warning)}</p>` : '';
+            const notFoundHtml = (r.not_found && r.not_found.length)
+                ? `<p style="color:var(--nord13);font-size:0.82rem;margin:6px 0;">⚠ ISCI not found in library: ${r.not_found.map(esc).join(', ')}</p>` : '';
+            const linesHtml = r.lines.length
+                ? `Rotation will apply to <strong>${r.lines.length}</strong> :${r.duration_sec} line${r.lines.length !== 1 ? 's' : ''} (<strong>${totalSpots}</strong> scheduled spots).`
+                : `<span style="color:var(--nord11);">No :${r.duration_sec} lines on this contract.</span>`;
+
+            return `<div class="tool-card" style="margin-bottom:12px;" id="tcaaAuto-${i}">
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                    <span style="font-size:0.95rem;font-weight:700;color:var(--nord14);">TCAA Traffic</span>
+                    ${r.station ? `<span style="font-size:0.8rem;color:var(--nord14);">📄 ${esc(r.station)} page</span>` : ''}
+                    <span style="font-size:0.8rem;color:var(--text-muted);">${esc(r.estimate || '')} · ${esc(r.product || '')} · ${esc(r.filename)}</span>
+                </div>
+                <p style="margin:8px 0 2px;font-size:0.85rem;">Contract: ${contractHtml}</p>
+                ${warnHtml}
+                ${notFoundHtml}
+                <table style="width:100%;border-collapse:collapse;font-size:0.83rem;margin-top:8px;">
+                    <thead><tr style="text-align:left;color:var(--text-muted);border-bottom:1px solid var(--border-color);">
+                        <th style="padding:4px 8px;">ISCI</th><th style="padding:4px 8px;">Creative</th>
+                        <th style="padding:4px 8px;text-align:center;">Len</th>
+                        <th style="padding:4px 8px;text-align:center;">Rot</th></tr></thead>
+                    <tbody>${spotRows}</tbody>
+                </table>
+                <p style="font-size:0.83rem;margin:10px 0 0;">${linesHtml}</p>
+                <div style="margin-top:10px;display:flex;align-items:center;gap:10px;">
+                    <button class="run-btn apply" id="tcaaAutoBtn-${i}" onclick="applyTcaaAuto(${i})"
+                            ${ready ? '' : 'disabled title="Resolve the contract and all ISCI codes first"'}>
+                        Apply Traffic${r.contract ? ` → ${esc(r.contract.code)}` : ''}</button>
+                    <span id="tcaaAutoStatus-${i}" style="font-size:0.83rem;"></span>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    async function applyTcaaAuto(i) {
+        const r = window.tcaaAutoResults[i];
+        if (!r || !r.contract) return;
+        const foundSpots = r.spots.filter(s => s.found);
+        if (!foundSpots.length || !r.lines.length) { alert('Nothing to assign.'); return; }
+
+        const btn    = document.getElementById(`tcaaAutoBtn-${i}`);
+        const status = document.getElementById(`tcaaAutoStatus-${i}`);
+        btn.disabled = true; btn.textContent = 'Assigning…'; status.textContent = '';
+        try {
+            const filmatiIds  = buildRotationList(foundSpots);
+            const assignments = r.lines.map(l => ({ line_id: l.line_id, filmati_ids: filmatiIds }));
+            const payload = { assignments };
+            if (r.date_from_sql) payload.date_from = r.date_from_sql;
+            if (r.date_to_sql)   payload.date_to   = r.date_to_sql;
+
+            const resp = await fetch(`/api/traffic/contract/${r.contract.id}/auto-assign`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const d = await resp.json();
+            if (!resp.ok) throw new Error(d.detail || 'Assign failed');
+            btn.style.display = 'none';
+            status.innerHTML = `<span style="color:var(--nord14);font-weight:600;">✓ Assigned across ${d.lines_updated ?? r.lines.length} line(s)`
+                + (d.needs_airchecks ? ' · ⚠ air-checks required' : '') + '</span>';
+        } catch (e) {
+            btn.disabled = false; btn.textContent = `Apply Traffic → ${r.contract.code}`;
             status.innerHTML = `<span style="color:var(--nord11);">${esc(e.message)}</span>`;
         }
     }
