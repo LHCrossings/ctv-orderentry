@@ -1384,8 +1384,8 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
     if validation_out is not None:
         factor  = (1 - agency_fee) if is_agency else 1.0
         g_run   = sum(_grossed_up(s.gross_rate) for s in spots)
-        g_sc    = sum(l.get('spot_count', 0) * l.get('weeks', 1) * l.get('gross_rate', 0)
-                      for l in sc_lines)
+        g_sc    = sum(ln.get('spot_count', 0) * ln.get('weeks', 1) * ln.get('gross_rate', 0)
+                      for ln in sc_lines)
         g_month = sum(monthly_gross.values())
         rec = {
             "ok": True,
