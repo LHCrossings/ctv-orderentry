@@ -4,6 +4,24 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## The Broadcast Day Runs 06:00→30:00 — Post-Midnight Is 24:00–29:59 on the SAME Date
+
+**Session:** Daily Programming late-night / DAL midnight feedback (2026-07-06)
+
+**Rule:** Etere stores traffic block/segment offsets (`traffic_scheduleblock.offset + traffic_segment.Offset`) and `TPALINSE.ORA` as **frame-of-day at 29.97fps**, but the broadcast day spans **06:00 → 30:00**. So the post-midnight tail (00:00–05:59) is stored at **24:00–29:59** frames, on the **same `DATA`** as the 06:00 start (NOT on the next calendar date, and NEVER at 0–6h — nothing lives there). Verified live: min block offset = 647352 (=6.000h) for both CTV and DAL; placed post-midnight rows carry ORA up to ~29.9h on the 06:00-start DATA.
+
+**The bug it caused:** naive `(H*3600+M*60)*fps` conversion put a 01:00 block at ~1h (where no segments exist → "0 breaks / too many pieces", silent refusal) and a block ending at midnight got `end="00:00"` → `hi=0 < lo` → empty window → silent no-placement (CTV 11:30p; weekend 10:30p final show).
+
+**How to apply — any time you convert an HH:MM to frame-of-day for an Etere schedule query:**
+1. If `hour < 6`, add 24h (post-midnight tail). `_frames()` in `daily_programming_run.py` does this.
+2. For a [start,end) **window**, after the shift, if `hi <= lo` add a further 24h — that's the day's final block ending at 06:00 next morning (30:00). See `_window()`.
+3. Keep `DATA` = the 06:00-start date; do NOT roll it to the next calendar day for post-midnight content.
+4. This lives in three places for Daily Programming (keep them in sync): the run engine (`_frames`/`_window`), the `program-pieces` preflight (imports `_window`), and the client-side badge math in `daily_programming.html` (`hhmmToFrames`/`hhmmWindow`).
+
+**⚠ Latent elsewhere:** other frame-of-day converters (`_hhmm_to_frames`, break-optimizer `_bo_time_to_frames`, traffic-assign time filters) do NOT apply this shift. They're fine only where inputs are always ≥06:00; audit before using them on late-night/post-midnight windows.
+
+---
+
 ## Multi-Flight Traffic PDFs: Track Dates Per-Spot, Never at the Instruction Level
 
 **Session:** HL traffic parser — Toyota June 2026 ACM #13933 R1 (2026-06-26)
