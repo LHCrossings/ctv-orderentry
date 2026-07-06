@@ -24,6 +24,7 @@ NETWORK_FILE = {"CTV": "Crossings TV", "TAC": "The Asian Channel"}
 # Footer / non-program markers that signal the end of the day's lineup.
 _FOOTER_RE = re.compile(
     r"local channels|xfinity|spectrum|\bch\.|thick borders denote|"
+    r"^\s*legend\s*$|"  # 'LEGEND' key header — anchored so drama titles ("The Legend of…") aren't caught
     r"^\s*\d{1,2}/\d{1,2}/\d{2,4}\s*$", re.I)
 
 
