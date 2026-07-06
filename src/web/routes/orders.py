@@ -151,9 +151,28 @@ _DAL_LANG_WINDOWS: dict = {
 _DAL_LANG_WINDOWS["Chinese"] = _DAL_LANG_WINDOWS["Mandarin"] + _DAL_LANG_WINDOWS["Cantonese"]
 
 
+def _bcast_time_to_frames(t: str, fps: float) -> int:
+    """Convert an 'HH:MM[:SS]' time-of-day to a broadcast-day frame count.
+
+    The broadcast day runs 06:00 → 30:00, and Etere stores TPALINSE.ORA (and traffic
+    block/segment offsets) on that scale — so the post-midnight tail 00:00–05:59
+    lives at 24:00–29:59, on the same DATA. Any hour < 6 therefore belongs to that
+    tail and must be shifted +24h; otherwise an ORA comparison lands at 0–6h where
+    nothing exists (silent no-match). See tasks/lessons.md "Broadcast Day 06:00→30:00".
+
+    This is the shared converter for every HH:MM→frame used against TPALINSE.ORA
+    (traffic-assign filters/language windows, program-spot fill, break optimizer)."""
+    parts = t.split(":")
+    h = int(parts[0])
+    mn = int(parts[1]) if len(parts) > 1 else 0
+    s = int(parts[2]) if len(parts) > 2 else 0
+    if h < 6:  # post-midnight tail of the broadcast day
+        h += 24
+    return round((h * 3600 + mn * 60 + s) * fps)
+
+
 def _hhmm_to_frames(hhmm: str) -> int:
-    h, m = map(int, hhmm.split(":"))
-    return round((h * 3600 + m * 60) * _FPS_GLOBAL)
+    return _bcast_time_to_frames(hhmm, _FPS_GLOBAL)
 
 
 def _broadcast_month_folder(monday) -> tuple[int, str]:
@@ -233,11 +252,7 @@ def _mc_fill_program_spots(
         return any(pair <= s for s in _LANG_COMPAT)
 
     def _time_to_frames(t: str) -> int:
-        parts = t.split(":")
-        h = int(parts[0])
-        mn = int(parts[1]) if len(parts) > 1 else 0
-        s = int(parts[2]) if len(parts) > 2 else 0
-        return round((h * 3600 + mn * 60 + s) * fps)
+        return _bcast_time_to_frames(t, fps)  # broadcast-day aware (post-midnight = 24:00–29:59)
 
     by_asset: dict = defaultdict(list)
     for spot in spots:
@@ -3336,11 +3351,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         return f"{h:02d}:{mn // 60:02d}"
 
     def _bo_time_to_frames(t: str) -> int:
-        parts = t.split(":")
-        h = int(parts[0])
-        mn = int(parts[1]) if len(parts) > 1 else 0
-        s = int(parts[2]) if len(parts) > 2 else 0
-        return round((h * 3600 + mn * 60 + s) * _BO_FPS)
+        return _bcast_time_to_frames(t, _BO_FPS)  # broadcast-day aware (post-midnight = 24:00–29:59)
 
     def _bo_classify(newtype: str, capo, fine, is_wl: bool, prev_label: str, prev_contract: str = "", contract: str = ""):
         if capo and fine:

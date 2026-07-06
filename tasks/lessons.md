@@ -16,9 +16,11 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 1. If `hour < 6`, add 24h (post-midnight tail). `_frames()` in `daily_programming_run.py` does this.
 2. For a [start,end) **window**, after the shift, if `hi <= lo` add a further 24h — that's the day's final block ending at 06:00 next morning (30:00). See `_window()`.
 3. Keep `DATA` = the 06:00-start date; do NOT roll it to the next calendar day for post-midnight content.
-4. This lives in three places for Daily Programming (keep them in sync): the run engine (`_frames`/`_window`), the `program-pieces` preflight (imports `_window`), and the client-side badge math in `daily_programming.html` (`hhmmToFrames`/`hhmmWindow`).
+4. This lives in several places (keep them in sync): Daily Programming run engine (`_frames`/`_window` in `daily_programming_run.py`), the `program-pieces` preflight (imports `_window`), the client-side badge math in `daily_programming.html` (`hhmmToFrames`/`hhmmWindow`), and the shared `_bcast_time_to_frames(t, fps)` in `orders.py` that all TPALINSE.ORA converters now route through.
 
-**⚠ Latent elsewhere:** other frame-of-day converters (`_hhmm_to_frames`, break-optimizer `_bo_time_to_frames`, traffic-assign time filters) do NOT apply this shift. They're fine only where inputs are always ≥06:00; audit before using them on late-night/post-midnight windows.
+**Audited + fixed (2026-07-06, commit see git):** the traffic-assign filters (`_hhmm_to_frames`), the DAL language windows in `_build_spot_filter` (which literally contain post-midnight ranges — Mandarin `00:00–01:00`/`02:00–05:30`, Cantonese `01:00–02:00`/`05:30–05:59`), the program-spot fill (`_time_to_frames`), and the break optimizer (`_bo_time_to_frames`) were ALL affected — they now delegate to `_bcast_time_to_frames`. This had been silently dropping every DAL post-midnight spot from language-window assignment (verified: Mandarin 00:00–01:00 matched 0 → 140 spots/week; 02:00–05:30 matched 0 → 436). CTV windows are all ≥06:00 so were unaffected either way.
+
+**Note:** the inverse display converters (`_bo_frames_to_hhmm`, `_frames_to_ampm`) render a post-midnight ORA as "27:00"/"3:00 AM" style broadcast time — that's cosmetic, not a matching bug; leave unless a display looks wrong.
 
 ---
 
