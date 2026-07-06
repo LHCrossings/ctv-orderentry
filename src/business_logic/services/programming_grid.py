@@ -100,6 +100,46 @@ def _parse_title(raw: str) -> dict:
     return {"title": title, "language": language, "kind": kind, "raw": text}
 
 
+def _hhmm_to_min(hhmm: str):
+    m = re.match(r"\s*(\d{1,2}):(\d{2})", hhmm or "")
+    return int(m.group(1)) * 60 + int(m.group(2)) if m else None
+
+
+def _min_to_hhmm(mins: int) -> str:
+    mins %= 24 * 60
+    return f"{mins // 60:02d}:{mins % 60:02d}"
+
+
+def _split_shared_block(prog: dict) -> list[dict]:
+    """A single grid cell can carry two (or more) shorter shows whose titles are
+    joined with '/', e.g. 'Headline News / Culture & Travel (Vietnamese News)' — a
+    30-min block holding two 15-min shows. Etere carries them as separate blocks, so
+    emit one program per title and divide the block's duration evenly among them.
+
+    Only a '/' in the TITLE separates shows. A '/' inside the trailing
+    '(language kind)' — e.g. '(Vietnamese Culture/Education)' — is NOT a separator;
+    _parse_title has already split that parenthetical off `title`, so we never see
+    it here. Requires a valid start+end, which also filters out section-header rows
+    like 'Tagalog / Filipino' / 'MultiAsian/ English' (no time label)."""
+    parts = [t.strip() for t in (prog.get("title") or "").split("/")]
+    parts = [t for t in parts if t]
+    s, e = _hhmm_to_min(prog.get("start")), _hhmm_to_min(prog.get("end"))
+    if len(parts) < 2 or s is None or e is None:
+        return [prog]
+    if e <= s:  # block crosses midnight (e.g. 23:45–00:15)
+        e += 24 * 60
+    n = len(parts)
+    step = (e - s) / n
+    out = []
+    for i, t in enumerate(parts):
+        seg = dict(prog)
+        seg["title"] = t
+        seg["start"] = _min_to_hhmm(int(round(s + i * step)))
+        seg["end"] = _min_to_hhmm(int(round(s + (i + 1) * step)))
+        out.append(seg)
+    return out
+
+
 def get_day_programs(network: str, d: datetime.date) -> dict:
     """Return the program lineup for one network/day from the K: grid.
 
@@ -168,6 +208,6 @@ def get_day_programs(network: str, d: datetime.date) -> dict:
             break  # reached the channel-listing footer
         prog = _parse_title(raw)
         prog["start"], prog["end"] = start, end
-        programs.append(prog)
+        programs.extend(_split_shared_block(prog))
 
     return {"found": True, "file": str(path), "date": d.isoformat(), "programs": programs}
