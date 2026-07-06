@@ -163,17 +163,54 @@ def _ensure_bumper(cur, cod_user, d, slot, spec, existing):
 
 
 def _sync_checksums(cur, ids):
-    """Re-sync each row's stored SCHEDULE_CHECKSUM and metadata to prevent yellow triangles.
+    """Store each row's SCHEDULE_CHECKSUM so Etere never shows the yellow
+    'event modified — needs Explode - all breakpoints' triangle.
 
-    Etere's yellow 'event modified — needs Explode - all breakpoints' triangle appears
-    when metadata fields diverge from what Etere Aligner populates during file sync.
-    'Explode - all breakpoints' fixes this by updating SCHEDULE_CHECKSUM + metadata fields
-    (tipo_tc, aspect, audio_ty, supporto, visionato, CRAWL_DESC). We do the same.
+    The triangle appears when the row's stored TPALINSE.SCHEDULE_CHECKSUM differs
+    from the live value of dbo.sch_getFilmatiCheckSum(id_tpalinse). That function
+    reads exactly six FILMATI columns (verified empirically 2026-07-06):
+        POS_INI, POS_FIN, INF_DIGIT, AUDIO, AUDIO_LANGUAGE, LIVE_ID
+    Nothing about the physical media bytes (DUR_FISICA, BITRATE, etc.) feeds it.
 
-    When Etere's file verification/Aligner populates these fields, the SCHEDULE_CHECKSUM
-    recalculates based on the updated metadata, so we must pre-populate them to match
-    what the checksum function will see. Idempotent; also auto-heals stale rows.
+    Historically we synced the checksum at placement while the file was still on
+    S3 (green triangle). Etere's Aligner then pulled the file down and normalised
+    a couple of those input fields to their canonical settled state, which changed
+    the live checksum — so our frozen copy went stale and the triangle stuck (and
+    never cleared until an operator ran Explode-all-breakpoints post-download).
+
+    The settled/canonical state of every asset in the library is deterministic and
+    fully known at placement time — INF_DIGIT=0 and AUDIO/AUDIO_LANGUAGE/LIVE_ID
+    NULL (POS_INI/POS_FIN are the file's real trim, already correct from ingest/EDL
+    import, so we leave them). So we force those input fields to canonical *before*
+    computing the checksum: the value we store then equals what Etere computes after
+    the download, and the triangle never appears — no dependency on Aligner timing.
+
+    NOTE: the tipo_tc/aspect/audio_ty/supporto/visionato/CRAWL_DESC fields set below
+    are NOT inputs to the checksum — they are cosmetic (they mirror what Explode
+    writes so the row looks identical in the UI). The FILMATI normalisation above is
+    what actually prevents the triangle. Idempotent; also auto-heals stale rows.
     """
+    # Normalise the checksum-input fields on each distinct FILMATI to their
+    # canonical settled state, so the checksum we compute below is the value the
+    # file converges to after Aligner pulls it down.
+    fids = set()
+    for rid in ids:
+        if rid is None:
+            continue
+        cur.execute("SELECT ID_FILMATI FROM TPALINSE WHERE id_tpalinse=%s", (rid,))
+        row = cur.fetchone()
+        if row and row[0]:
+            fids.add(row[0])
+    for fid in fids:
+        cur.execute("""
+            UPDATE FILMATI SET
+                INF_DIGIT=0,
+                AUDIO=NULL,
+                AUDIO_LANGUAGE=NULL,
+                LIVE_ID=NULL
+            WHERE ID_FILMATI=%s
+        """, (fid,))
+
     for rid in ids:
         if rid is None:
             continue
@@ -182,8 +219,8 @@ def _sync_checksums(cur, ids):
         row = cur.fetchone()
         prog_code = row[0] if row and row[0] else ""
 
-        # Populate the metadata fields that Etere's file sync/verification will set,
-        # then update the checksum based on the now-complete metadata.
+        # Cosmetic metadata (mirrors Explode's UI appearance), then freeze the
+        # checksum against the now-canonical FILMATI input fields.
         supporto_val = f"0ETX      {prog_code}"
         crawl_desc = "[EDL]\nEdl_Version=0\n[Aspect Conversion]\nCode=HL"
 
