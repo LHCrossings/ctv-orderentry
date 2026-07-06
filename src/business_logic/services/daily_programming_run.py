@@ -24,9 +24,35 @@ FPS = 29.97
 EVENT_BASE = 100000000000  # Event_P = EVENT_BASE + id_tpalinse
 
 
+DAY_FRAMES = int(24 * 3600 * FPS)  # one broadcast-day's worth of frames
+
+
 def _frames(hhmm: str):
+    """Frame-of-day for a broadcast-day time.
+
+    The broadcast day runs 06:00 → 30:00 (i.e. 06:00 today through 05:59 the next
+    morning), and Etere stores block/segment offsets and TPALINSE.ORA on that scale:
+    06:00 = 6h, and the post-midnight tail 00:00–05:59 lives at 24:00–29:59 on the
+    SAME date. So a grid time whose hour is < 6 belongs to that tail and must be
+    shifted by +24h; otherwise the window would land at 0–6h where nothing exists
+    (the "0 breaks / too many pieces" and silent no-placement bugs)."""
     m = re.match(r"\s*(\d{1,2}):(\d{2})", hhmm or "")
-    return int((int(m.group(1)) * 3600 + int(m.group(2)) * 60) * FPS) if m else None
+    if not m:
+        return None
+    h, mins = int(m.group(1)), int(m.group(2))
+    if h < 6:  # post-midnight tail of the broadcast day
+        h += 24
+    return int((h * 3600 + mins * 60) * FPS)
+
+
+def _window(start: str, end: str):
+    """(lo, hi) broadcast-day frame window for a grid block. Handles the day's final
+    block, which ends at 06:00 the next morning (30:00): after the <6h shift its end
+    can still wrap below its start, so bump it a further 24h."""
+    lo, hi = _frames(start), _frames(end)
+    if lo is not None and hi is not None and hi <= lo:
+        hi += DAY_FRAMES
+    return lo, hi
 
 
 def _slots(cur, cod_user, d, lo, hi, seg_type="PRGS"):
@@ -324,7 +350,7 @@ def run_market(conn, cod_user, d, assignment):
     Returns {cu, ok, skipped, message}.
     """
     cur = conn.cursor()
-    lo, hi = _frames(assignment["start"]), _frames(assignment["end"])
+    lo, hi = _window(assignment["start"], assignment["end"])
     if lo is None or hi is None:
         return {"cu": cod_user, "ok": False, "skipped": False, "message": "bad time window"}
     if _is_placed(cur, cod_user, d, lo, hi):

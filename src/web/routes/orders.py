@@ -3190,14 +3190,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         """No-EDL path: find the show's a/b/c/d pieces and compare the count to the
         PRGS program-break count in that market/time-window (fewer pieces ⇒ fillers)."""
         import datetime as _dt
-        import re as _re
 
         from browser_automation.etere_direct_client import connect as _db_connect
-        fps = 29.97
-
-        def _frames(hhmm):
-            m = _re.match(r"\s*(\d{1,2}):(\d{2})", hhmm or "")
-            return int((int(m.group(1)) * 3600 + int(m.group(2)) * 60) * fps) if m else None
+        # Broadcast-day-aware frame window (06:00→30:00; post-midnight = 24:00–29:59).
+        from src.business_logic.services.daily_programming_run import _window as _bcast_window
 
         try:
             d = _dt.datetime.strptime(date, "%Y-%m-%d").date()
@@ -3207,7 +3203,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         base = code or ""
         if base[-1:].isalpha() and base[-1:].isupper():
             base = base[:-1]  # strip the piece letter (A/B/C/…) to get the show base
-        lo, hi = _frames(start), _frames(end)
+        lo, hi = _bcast_window(start, end)
         try:
             with _db_connect() as conn:
                 cur = conn.cursor(as_dict=True)

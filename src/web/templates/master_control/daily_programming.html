@@ -361,16 +361,29 @@
         }
     }
 
+    // Broadcast-day-aware: the day runs 06:00→30:00, so times 00:00–05:59 are the
+    // post-midnight tail and map to 24:00–29:59 (matching TPALINSE.ORA storage).
+    const DAY_FRAMES = Math.round(24 * 3600 * 29.97);
     function hhmmToFrames(s) {
         const m = /^\s*(\d{1,2}):(\d{2})/.exec(s || '');
-        return m ? Math.round((parseInt(m[1], 10) * 3600 + parseInt(m[2], 10) * 60) * 29.97) : null;
+        if (!m) return null;
+        let h = parseInt(m[1], 10);
+        if (h < 6) h += 24;   // post-midnight tail
+        return Math.round((h * 3600 + parseInt(m[2], 10) * 60) * 29.97);
+    }
+    // [lo, hi) window; the day's final block ends at 06:00 next morning (30:00),
+    // so bump the end another 24h if it still wraps below the start.
+    function hhmmWindow(start, end) {
+        let lo = hhmmToFrames(start), hi = hhmmToFrames(end);
+        if (lo != null && hi != null && hi <= lo) hi += DAY_FRAMES;
+        return [lo, hi];
     }
 
     // Set of COD_USERs that already have live content in this program's time window.
     function placedMarketsFor(p) {
         const out = {};
         if (!state.placementData) return out;
-        const lo = hhmmToFrames(p.start), hi = hhmmToFrames(p.end);
+        const w = hhmmWindow(p.start, p.end), lo = w[0], hi = w[1];
         if (lo == null || hi == null) return out;
         state.placementData.placed.forEach(function (x) { if (x.ora >= lo && x.ora < hi) out[x.cu] = 1; });
         return out;
@@ -392,7 +405,7 @@
         state.programs.forEach(function (p, i) {
             const span = document.getElementById('placed-' + i);
             if (!span) return;
-            const lo = hhmmToFrames(p.start), hi = hhmmToFrames(p.end);
+            const w = hhmmWindow(p.start, p.end), lo = w[0], hi = w[1];
             if (lo == null || hi == null || !M) { span.textContent = ''; span.className = 'prog-placed'; return; }
             const set = {};
             placed.forEach(function (x) { if (x.ora >= lo && x.ora < hi) set[x.cu] = 1; });
