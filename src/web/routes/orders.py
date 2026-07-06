@@ -3207,6 +3207,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         import datetime as _dt
 
         from browser_automation.etere_direct_client import connect as _db_connect
+
         # Broadcast-day-aware frame window (06:00→30:00; post-midnight = 24:00–29:59).
         from src.business_logic.services.daily_programming_run import _window as _bcast_window
 
