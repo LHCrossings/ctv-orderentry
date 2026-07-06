@@ -22,7 +22,9 @@ NETWORK_DIR = {"CTV": "! Crossings TV", "TAC": "! The Asian Channel"}
 NETWORK_FILE = {"CTV": "Crossings TV", "TAC": "The Asian Channel"}
 
 # Footer / non-program markers that signal the end of the day's lineup.
-_FOOTER_RE = re.compile(r"local channels|xfinity|spectrum|\bch\.|^\s*\d{1,2}/\d{1,2}/\d{2,4}\s*$", re.I)
+_FOOTER_RE = re.compile(
+    r"local channels|xfinity|spectrum|\bch\.|thick borders denote|"
+    r"^\s*\d{1,2}/\d{1,2}/\d{2,4}\s*$", re.I)
 
 
 def _week_monday(d: datetime.date) -> datetime.date:
@@ -110,6 +112,62 @@ def _min_to_hhmm(mins: int) -> str:
     return f"{mins // 60:02d}:{mins % 60:02d}"
 
 
+def _norm_time(tok: str):
+    """Normalise a single time token to 24-hour 'HH:MM', or None.
+
+    Handles the 24-hour labels from `datetime.time` cells ('22:30') AND the am/pm
+    text labels the grids use for the overnight block ('12a', '6a', '1230a', '12n',
+    '12p'). Midnight '12a' → '00:00' (the broadcast-day tail; the +24h shift for
+    ORA math happens later in the frame converters, not here)."""
+    tok = (tok or "").strip().lower().replace(" ", "")
+    m = re.match(r"^(\d{1,2})(?::?(\d{2}))?([apn])?m?$", tok)
+    if not m:
+        return None
+    h = int(m.group(1))
+    mn = int(m.group(2) or 0)
+    suf = m.group(3)
+    if suf == "n":          # 12n = noon
+        h = 12
+    elif suf == "a":        # am; 12a = midnight
+        if h == 12:
+            h = 0
+    elif suf == "p":        # pm; 12p = noon
+        if h != 12:
+            h += 12
+    if h > 23 or mn > 59:
+        return None
+    return f"{h:02d}:{mn:02d}"
+
+
+def _split_time_label(label: str):
+    """(start, end) for a grid time cell. A range cell like '12a-6a' yields both ends
+    ('00:00', '06:00'); a plain cell yields (start, None). Falls back to the raw label
+    if it can't be parsed, preserving prior behaviour for unexpected text."""
+    if not label:
+        return None, None
+    if "-" in label:
+        a, _, b = label.partition("-")
+        na = _norm_time(a)
+        if na:
+            return na, _norm_time(b)
+        return label, None
+    return (_norm_time(label) or label), None
+
+
+def _block_times(ws, this_row: int, next_row: int, span: int):
+    """Start/end (HH:MM) for a grid block. Normalises am/pm + range labels, takes the
+    end from the block's own range cell if present else the next row's start, and —
+    for the day's final block, whose following row has no time label — derives the end
+    from the block's 30-min row span (each grid row = 30 min, so 04:30 over 3 rows → 06:00)."""
+    own_start, own_end = _split_time_label(_time_label(ws, this_row))
+    next_start, _ = _split_time_label(_time_label(ws, next_row))
+    start = own_start
+    end = own_end or next_start
+    if _hhmm_to_min(end) is None and _hhmm_to_min(start) is not None:
+        end = _min_to_hhmm(_hhmm_to_min(start) + span * 30)
+    return start, end
+
+
 def _split_shared_block(prog: dict) -> list[dict]:
     """A single grid cell can carry two (or more) shorter shows whose titles are
     joined with '/', e.g. 'Headline News / Culture & Travel (Vietnamese News)' — a
@@ -187,14 +245,14 @@ def get_day_programs(network: str, d: datetime.date) -> dict:
         if mr is not None:
             key = mr.min_row
             val = ws.cell(mr.min_row, mr.min_col).value
-            start, end = _time_label(ws, mr.min_row), _time_label(ws, mr.max_row + 1)
+            start, end = _block_times(ws, mr.min_row, mr.max_row + 1, mr.max_row - mr.min_row + 1)
             r = mr.max_row + 1
             if key in seen:
                 continue
             seen.add(key)
         else:
             val = ws.cell(r, daycol).value
-            start, end = _time_label(ws, r), _time_label(ws, r + 1)
+            start, end = _block_times(ws, r, r + 1, 1)
             r += 1
 
         if not val:
