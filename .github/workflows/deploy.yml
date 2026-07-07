@@ -57,4 +57,12 @@ jobs:
             git checkout "${{ github.ref_name }}"
             git pull --ff-only origin "${{ github.ref_name }}"
             docker compose build control-room
-            docker compose up -d control-room
+            # up can fail with a name conflict if a previous recreate was
+            # interrupted and left a renamed container (e.g. <id>_ctv-control-room)
+            # holding the fixed container_name. Self-heal: remove anything
+            # matching the name and retry once.
+            docker compose up -d control-room || {
+              echo "compose up failed — removing stale ctv-control-room containers and retrying"
+              docker ps -aq --filter "name=ctv-control-room" | xargs -r docker rm -f
+              docker compose up -d control-room
+            }
