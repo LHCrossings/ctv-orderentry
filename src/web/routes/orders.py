@@ -4,6 +4,7 @@ Order queue routes: list, upload, move-to-used, history, restore, detail.
 
 import asyncio
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -195,12 +196,20 @@ def _broadcast_month_folder(monday) -> tuple[int, str]:
     return first_prev.year, first_prev.strftime("%m %B %Y")
 
 
+# Weekly traffic-log tree; K: on Windows, the SMB mount elsewhere (override via env).
+_TRAFFIC_LOG_ROOT = Path(
+    os.environ.get(
+        "TRAFFIC_LOG_ROOT",
+        "K:/Traffic/logs" if sys.platform == "win32" else "/mnt/k/Traffic/logs",
+    )
+)
+
+
 def _find_traffic_log(mkt: str, target: _date_cls) -> Optional[Path]:
     """Locate weekly traffic log .xlsm for a market and any date in that broadcast week."""
     monday = target - timedelta(days=target.weekday())
     year, month_folder = _broadcast_month_folder(monday)
-    log_root = Path("K:/Traffic/logs") if sys.platform == "win32" else Path("/mnt/k/Traffic/logs")
-    base = log_root / str(year) / month_folder
+    base = _TRAFFIC_LOG_ROOT / str(year) / month_folder
     for file_date in (monday.strftime("%y%m%d"), monday.strftime("%m%d%y")):
         for subfolder in ("", "done", "Done", "!Done"):
             folder = base / subfolder if subfolder else base
@@ -2774,7 +2783,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             target = _date_cls.fromisoformat(date)
             monday = target - timedelta(days=target.weekday())
             month_folder = monday.strftime("%m %B %Y")
-            folder = Path("K:/Traffic/logs") / str(monday.year) / month_folder
+            folder = _TRAFFIC_LOG_ROOT / str(monday.year) / month_folder
             if not folder.exists():
                 return {"error": f"Folder not found: {folder}", "monday": monday.isoformat()}
             files = sorted(f.name for f in folder.iterdir() if f.suffix in (".xlsm", ".xlsx", ".xls"))

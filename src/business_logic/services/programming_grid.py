@@ -11,12 +11,16 @@ from __future__ import annotations
 import datetime
 import os
 import re
+import sys
 from pathlib import Path
 
 import openpyxl
 
-# Override for non-Windows/dev (e.g. PROGRAMMING_GRID_ROOT=/mnt/k/Programming).
-GRID_ROOT = os.environ.get("PROGRAMMING_GRID_ROOT", r"K:\Programming")
+# K: on Windows, the SMB mount elsewhere; override via PROGRAMMING_GRID_ROOT.
+GRID_ROOT = os.environ.get(
+    "PROGRAMMING_GRID_ROOT",
+    r"K:\Programming" if sys.platform == "win32" else "/mnt/k/Programming",
+)
 
 NETWORK_DIR = {"CTV": "! Crossings TV", "TAC": "! The Asian Channel"}
 NETWORK_FILE = {"CTV": "Crossings TV", "TAC": "The Asian Channel"}

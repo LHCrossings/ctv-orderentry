@@ -25,8 +25,15 @@ REPORTSORT_DIR = Path(__file__).parent.parent.parent / "ReportSort"
 INPUT_CSV      = REPORTSORT_DIR / "input" / "placement-confirmation.csv"
 MAIN_PY        = REPORTSORT_DIR / "main.py"
 
-POST_LOG_BASE = Path(r"K:\!Archives\Post Logs")
-PRE_LOG_BASE  = Path(r"K:\!Archives\Pre Logs")
+# K: on Windows, the SMB mount elsewhere; override via K_ARCHIVES_ROOT.
+_ARCHIVES_ROOT = Path(
+    os.environ.get(
+        "K_ARCHIVES_ROOT",
+        r"K:\!Archives" if sys.platform == "win32" else "/mnt/k/!Archives",
+    )
+)
+POST_LOG_BASE = _ARCHIVES_ROOT / "Post Logs"
+PRE_LOG_BASE  = _ARCHIVES_ROOT / "Pre Logs"
 
 
 def parse_date(date_str: str) -> datetime:
