@@ -1,82 +1,102 @@
-# Admerasia Traffic Auto-Assigner (color-match) — design
+# Tier 1 Conformance to ctv-common / ctv-template standard
 
-## Goal
-DROP-FIRST auto-parse: drop one Admerasia McDonald's IO on the assign-traffic page
-→ it detects the format, FINDS THE CONTRACT ITSELF, and auto-assigns each scheduled
-spot its creative (ISCI) by matching the spot's grid-cell color to the ISCI legend.
-Replaces today's "search contract → pick Admerasia from dropdown → drop IO" AND the
-all-manual per-spot dropdown picking. Highest-effort orders; accuracy > cost.
+**Goal:** Align `ctv-orderentry`'s toolchain & repo hygiene with the CTV house
+style (`daseme/ctv-common`, `daseme/ctv-template`). **Zero runtime risk** — no
+changes to application code, only dev tooling / CI / packaging metadata / docs.
 
-## Contract auto-match (VERIFIED against the 7 entered July contracts)
-PRIMARY KEY = the IO Order Number, stored verbatim on the contract in
-`CONTRATTITESTATA.CUSTOMERREF` (written at entry by `get_default_customer_order_ref`
-→ `order.order_number`). The IO header prints it ("Order Number: 07-MD10-2607VT")
-and `_extract_order_number` already parses it. Match = exact
-`SELECT ... WHERE CUSTOMERREF = '<order#>'`. Verified: 2939=07-MD10-2607VT (SF),
-2933=12-MD10-2607CT (CN-SEA), 2935=04-MD10-2607FT (FIL-NY), etc. Handles revisions
-(same order# → same contract). No derivation needed; immune to code-format changes.
-Fallbacks if CUSTOMERREF miss: (a) derived code `"Admerasia McD {estimate}"`
-(`get_default_order_code`); (b) client McDonald's + market + campaign dates + total
-spots. If >1 match or fallback used → show candidates, confirm with user.
+**Out of scope (deferred):** adopting `ctv-common` as a dependency (Tier 2),
+Flask migration / Tailscale auth (Tier 3). Deployment model (bee/systemd/Tailscale)
+is UNKNOWN — flagged for the team, not acted on here.
 
-## What already exists (reuse, don't rebuild)
-- `POST /api/traffic/admerasia/parse-io` — extracts ISCIs grouped by duration.
-- `GET /api/traffic/contract/{id}/tpalinse-spots` — scheduled spots w/ date/time/dur/line.
-- `POST /api/traffic/contract/{id}/assign-spots` — 1:1 {tp_id→filmati_id} write
-  (TPALINSE + CONTRATTIFILMATI + MaterialAddToAssetListC + air-check flag).
-- Frontend Admerasia flow: drop IO → manual per-spot ISCI dropdowns → Apply.
-- `admerasia_positional.read_grid` (row,date,count) and `parse_admerasia_io_iscis`.
+---
 
-## Proven by this session's testing (7 clean July IOs)
-- **Per-cell color = pixel ring-median around each spot digit @300dpi**: 100% of
-  cells read across all 7; clusters to the exact palette (2 or 5 colors); per-color
-  totals reconcile to each order's spot total; every program row duration-coherent.
-- **Legend via pixels is NOT reliable**: ISCI list position varies per file + codes
-  are garbled Type3 → positional heuristics mislabeled (Chinese→address block,
-  VN-Seattle→off-by-one, Filipino→grid header). Must not ship.
+## Context: why this is only a partial match
+The standard targets small **Flask + SQLite + Tailscale** tools. This app is
+**FastAPI + SQL Server (Etere) + SQLite + Selenium**. So the shared *library*
+(`ctv-common`, all Flask-specific) does not drop in. Tier 1 conforms the parts
+that are framework-agnostic: toolchain, CI, packaging conventions, repo hygiene.
 
-## Design — division of labor (mirrors the entry parser)
-1. **Positional grid** (`read_grid`): (program_row, date) → spot count. WHERE spots are.
-2. **Pixel color** (new `admerasia_traffic_color.py`): ring-median around each grid
-   digit → cell RGB; cluster into the order's palette. WHICH color each cell is.
-3. **High-res vision** (extend `admerasia_vision.py` or a small dedicated call):
-   read the ISCI legend → ordered `[(isci_code, duration, swatch_color)]`. The
-   authoritative color→creative map. Trivial for vision (2-5 rows), no dense-grid
-   counting weakness. Codes are read from the rendered image (garble-free).
-4. **Match**: grid cluster color → nearest vision legend color (one-to-one) → ISCI
-   → FILMATI id (COD_PROGRA = ISCI). Grid row i ↔ contract line i (entered from this
-   grid, same order); each line's TPALINSE spots on date D take cell (row i, D)'s ISCI.
-5. Emit `{tp_id → filmati_id}` and feed the existing `assign-spots` endpoint.
+---
 
-## Guardrails (hard-fail → preview shows error, excluded from write)
-1. **Assigned creative length == ordered spot length** (±5 frames) — per spot. [user req]
-2. Palette colors map to DISTINCT ISCIs; #colors used == #creatives used.
-3. Per-program-row duration coherence (a :15 row cannot contain a :30 color).
-4. Reconciliation: per-color totals sum to order total; per-(row,date) spot counts
-   match grid; line count == grid row count, per-line totals match.
-5. Contract auto-matched by order#/estimate → code "Admerasia McD <est> <yymm>";
-   confirm before assign.
+## Plan (checkable)
 
-## UI
-- Reuse the existing Admerasia drop-zone. On drop: parse IO + color + vision legend
-  → PRE-FILL the per-spot ISCI dropdowns (the ones done by hand today) with the
-  color-matched creative, flagged with the swatch color + any guardrail failures.
-- User eyeballs the preview (visually easy) → Apply. Never auto-commit.
+### A. Packaging & lint config (`pyproject.toml`)
+- [ ] Migrate `[project.optional-dependencies] dev` → `[dependency-groups] dev`
+      (house style; uv-native). Refresh lock: `uv lock`.
+- [ ] ruff lint: add `"B"` and `"UP"` to `select` (standard set is E,F,W,I,B,UP).
+      **Judgment call:** keep `ignore = ["E501","E402"]` for now (removing them
+      is a separate cleanup); keep the `exclude` list (Old Code, archived
+      scripts, browser_automation) — legacy dirs the standard doesn't have.
+- [ ] Run `uv run ruff check` and review new B/UP findings BEFORE letting
+      pre-commit `--fix` auto-rewrite anything (UP fixes modernize syntax = code
+      changes; want them reviewed, not silent).
 
-## Build order
-1. `admerasia_traffic_color.py`: cell-color sampler + palette clustering (done as
-   validated scratch prototype — port it). Unit-check vs the 7 IOs' known totals.
-2. Vision legend read (high-res) → ordered ISCI+color. Cross-check codes vs
-   `parse_admerasia_io_iscis`.
-3. Matcher + guardrails → produce `{tp_id→filmati_id}` + per-spot diagnostics.
-4. New/extended endpoint: `POST /api/traffic/admerasia/auto-color` (contract_id +
-   IO) → returns pre-filled assignments + warnings. Writes via existing assign-spots.
-5. Frontend: pre-fill dropdowns + swatch/warning display.
-6. Verify end-to-end on all 7 IOs against the entered contracts (per-line, per-date).
+### B. Type checker — DECISION NEEDED
+Standard = `mypy --strict` on `src/`. Current = pyright. Flipping strict mypy on
+a large existing FastAPI codebase produces a large error backlog — NOT a quick
+hygiene item. Recommended default: **keep pyright, document the divergence**, and
+track "adopt mypy" as its own future effort. (Alt: add non-strict mypy as an
+extra gate.) *Do not enable strict mypy in this pass.*
 
-## Open confirmations
-- Preview-then-Apply (recommended) vs auto-apply. → preview, given precision needs.
-- One IO → one contract per drop (7 separate). OK?
+### C. pre-commit (`.pre-commit-config.yaml`)
+- [ ] Add the **gitleaks** hook (secret scanning) — matches standard, pure win.
+- [ ] Bump `ruff-pre-commit` rev v0.3.0 → v0.6.9 (match standard).
+- [ ] (mypy hook only if B decides to adopt mypy.)
+
+### D. CI (`.github/workflows/ci.yml`)
+- [ ] Add a **gitleaks** job (with `permissions: pull-requests: read`, per the
+      standard's documented fork quirk).
+- [ ] Add `ruff format --check` as a gate (standard requires format-clean).
+- [ ] Keep the `unixodbc-dev` apt step (needed for pyodbc) and py3.12.
+- [ ] Optionally switch pip → uv (`setup-uv` + `uv sync --group dev`) to match
+      house style, since the repo already ships `uv.lock`.
+
+### E. New standard files
+- [ ] `Makefile` with `bootstrap / dev / test / lint / format` targets adapted
+      to this project (uvicorn dev server, `uv sync`). No `migrate` target
+      (SQL Server schema is managed in Etere, not `schema.sql`).
+- [ ] `CHANGELOG.md` seeded with `[Unreleased]` + the current `0.1.0`.
+- [ ] `.github/CODEOWNERS` (placeholder, mirroring the template).
+- [ ] `.github/pull_request_template.md` (mirroring the template).
+
+### F. Flag-only (no action this pass)
+- [ ] `.claude/` layout differs (root `CLAUDE.md` + root `tasks/` vs template's
+      nested `.claude/CLAUDE.md` + `.claude/tasks/`). Both valid for Claude Code;
+      relayout is cosmetic + churny + would break the `@`-imports. **Leave as-is,
+      note divergence.**
+- [ ] Repo hygiene: top level has `MSBuildTemp*`, UUID dirs, `pytest-of-scrib`,
+      `__pycache__`, `Old Code`, `archived scripts`. Confirm all are gitignored
+      (git status is clean, so likely yes) — no cleanup unless something's tracked.
+- [ ] Deployment model unknown — record as an open question for the team.
+
+---
 
 ## Review
-(after implementation)
+_(to be filled in after implementation)_
+
+---
+---
+
+# (archived) TCAA (Toyota) traffic auto-assign
+
+## Context
+- New client: TCAA "CABLE Traffic Instructions" PDF (Toyota Dealer's Assoc).
+- 2 station pages (Asian American TV Corp + Crossings TV) — identical ISCIs; dedupe by ISCI.
+- 3 creatives, rotation % (30/40/30), all :30, "RUN IN ALL PROGRAMMING" (no language targeting).
+- **Estimate mismatch:** traffic sheet says `TCAA-9179`; Etere contract is `TCAA Toyota 9712`.
+  So NOT an auto-parse (can't find contract by estimate). Instead: **select contract, then drop
+  PDF to auto-assign** — operator confirms the contract maps to their estimate.
+- Assign rotation to **all :30 lines** (matches "RUN IN ALL PROGRAMMING").
+
+## Plan
+- [ ] Parser `browser_automation/parsers/tcaa_traffic_parser.py` (modeled on daviselen):
+      estimate (display), product, campaign dates → SQL, spots [isci,title,pct,dur], dedupe by ISCI.
+- [ ] Endpoint `POST /api/traffic/tcaa/parse-io?contract_id=` — gate on "TCAA"; resolve filmati;
+      load contract's duration-matched lines w/ spot counts; return spots + lines + dates.
+- [ ] Frontend: add "TCAA (Toyota)" to Auto-Assign dropdown; drop-zone row + grid;
+      parseTcaaIo → renderTcaaGrid → applyTcaaTraffic (buildRotationList → existing /auto-assign).
+- [ ] Reset TCAA UI in selectContract(); wire drop-zone dragover/drop.
+
+## Verify
+- [ ] Parse the sample PDF → 3 unique spots, all found in FILMATI, dates 2026-07-06..26.
+- [ ] Against contract 2478: 11 :30 lines resolved; rotation list built 30/40/30.
