@@ -100,3 +100,26 @@ _(to be filled in after implementation)_
 ## Verify
 - [ ] Parse the sample PDF → 3 unique spots, all found in FILMATI, dates 2026-07-06..26.
 - [ ] Against contract 2478: 11 :30 lines resolved; rotation list built 30/40/30.
+
+---
+
+# EDI Billing Redesign — PDF drop → validation → upload-ready ZIP
+
+**Full spec: `tasks/edi-billing-redesign.md`** (read it first — written for a
+fresh session; includes current-state map, the customer-ID template-matching
+design, TVB EDI validation rules, and phase details).
+
+- [ ] Phase 0: golden `.txt` fixtures + byte-identical test; fix path traversal
+      in `/edi/export/generate(-batch)`; log the silent except-pass swallows
+- [ ] Phase 1: consolidate duplicated PDF/CSV/EDI logic from `edi.py` +
+      `edi_export.py` into `src/business_logic/services/edi_billing.py`
+- [ ] Phase 2: template matching by `CONTRATTITESTATA.COMMITTENTE` customer ID
+      (+ market tie-break); backfill script w/ confirm; wire into existing scan
+- [ ] Phase 3: unified `/edi/billing` page — PDF drop → intake → [Fetch post
+      logs] (single Etere session) → validation screen (reconcile badges,
+      spec-driven field validation, template override, diff modal) → export ZIP
+- [ ] Phase 4: cutover nav; retire `/edi/post-log` + `/edi/export` after one
+      clean billing cycle
+- [ ] Verify: goldens byte-identical; real month w/ Lee — McD→McD, Toyota→Toyota;
+      no-template contract flagged not guessed; mid-batch fetch failure logs out
+      the Etere seat and is retryable
