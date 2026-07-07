@@ -52,6 +52,18 @@ Two separate utilities + manual glue between them:
    words → first alphabetical wins regardless of advertiser.
 3. Pass 3 = `templates[0]` (alphabetically `bvk_ucdavis`). Never correct on purpose.
 
+**Confirmed misdetections reported by Lee (2026-07-07) — all must become
+regression tests for the new matcher:**
+- McDonald's invoices → `davis_elen_socal_toyota` (4 Davis Elen templates share
+  agency words; alphabetical winner).
+- RPM **Thunder Valley** invoices → `rpm_muckleshoot` (3 RPM templates share
+  "rpm"; `rpm_muckleshoot` sorts first). Thunder Valley also needs the market
+  tie-break: two TVC templates exist (`rpm_tvc_cvc`, `rpm_tvc_sfo`).
+- Unrelated invoices → `ocean_media_betmgm`: pass 2 matches ANY ≥3-letter word
+  of the agency name in the filename, and "**media**" is generic — any filename
+  containing "media" pulls the BetMGM template. Generic agency words must never
+  match on their own.
+
 ### Known bugs in this code (from the 2026-07-07 audit — fix during this work)
 - **Path traversal:** `csv_filename` from JSON body joined into `INCOMING / csv_fn`
   unsanitized in `/generate` (edi_export.py:459) and `/generate-batch` (:491).
@@ -259,6 +271,12 @@ Create `src/business_logic/services/edi_billing.py`; MOVE (don't copy):
       matches a McD template and every Toyota invoice a Toyota template
       (the original bug); reconcile catches at least one known mismatch if one
       exists; export ZIP uploads clean to the EDI portal.
+- [ ] Matcher regression tests for the three confirmed misdetections (sec. 1):
+      Thunder Valley contract ID → `rpm_tvc_*` (never Muckleshoot) with CVC/SFO
+      resolved by market; McD ID → McD template (never Toyota); a filename
+      containing the word "media" with a non-Ocean contract ID must NOT match
+      `ocean_media_betmgm`. In the legacy fuzzy fallback, drop generic words
+      ("media", "group", "partners", "agency") from the agency word list.
 - [ ] A PDF whose contract has NO template → row flagged, not mis-assigned.
 - [ ] Fetch failure mid-batch (kill network) → session logged out, partial rows
       show errors, retry re-fetches only failed rows.
