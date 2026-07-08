@@ -52,6 +52,7 @@ class OrderType(Enum):
     TT = "tt"
     EQC = "eqc"
     LRCCD = "lrccd"
+    SACRT = "sacrt"
     AI_FALLBACK = "ai_fallback"
     UNKNOWN = "unknown"
 

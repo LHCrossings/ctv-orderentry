@@ -595,5 +595,52 @@ class TestSacCountyVotersDetection:
         assert client == "Sacramento County Voter/Registration"
 
 
+class TestSacRTDetection:
+    """Tests for SacRT (Sacramento Regional Transit) media-plan detection."""
+
+    @pytest.fixture
+    def service(self):
+        return OrderDetectionService()
+
+    def test_detect_sacrt(self, service):
+        """Should detect SacRT from the advertiser name on the media plan."""
+        text = """
+        Crossings TV MEDIA PLAN
+        BILLING: Bill Sacramento Regioanl Transit (below)
+        Media Buying Agency: 3Fold Comunications
+        Buyer Email: christie@3foldcomm.com
+        Advertiser: Sacramento Regional Transit
+        Campaign Name: 26 Fall Awareness Market: CVC
+        """
+        assert service.detect_from_text(text) == OrderType.SACRT
+
+    def test_sacrt_not_misrouted_to_lrccd(self, service):
+        """3foldcomm.com marker must NOT swallow a SacRT media plan (both come
+        through 3Fold Communications)."""
+        text = """
+        Buyer Email: christie@3foldcomm.com
+        Advertiser: Sacramento Regional Transit
+        """
+        assert service.detect_from_text(text) == OrderType.SACRT
+
+    def test_lrccd_still_detected(self, service):
+        """LRCCD media plans (also via 3Fold) still route to LRCCD."""
+        text = """
+        Crossings TV MEDIA PLAN
+        Media Buying Agency: 3Fold Communications
+        Buyer Email: christie@3foldcomm.com
+        Advertiser: Los Rios Community College District
+        """
+        assert service.detect_from_text(text) == OrderType.LRCCD
+
+    def test_detect_sacrt_short_name(self, service):
+        """SacRT short name + media plan form → SACRT."""
+        text = """
+        Crossings TV MEDIA PLAN
+        SacRT - Awareness CVC Chinese Weekday PM M-F (7p-12a)
+        """
+        assert service.detect_from_text(text) == OrderType.SACRT
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

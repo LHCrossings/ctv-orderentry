@@ -117,6 +117,7 @@ class OrderProcessingService:
         OrderType.TT:                "_process_tt_order",
         OrderType.EQC:               "_process_eqc_order",
         OrderType.LRCCD:             "_process_lrccd_order",
+        OrderType.SACRT:             "_process_sacrt_order",
         OrderType.AI_FALLBACK:       "_process_ai_fallback_order",
     }
 
@@ -159,6 +160,7 @@ class OrderProcessingService:
         OrderType.TT,
         OrderType.EQC,
         OrderType.LRCCD,
+        OrderType.SACRT,
         OrderType.AI_FALLBACK,
     }
 
@@ -2709,6 +2711,38 @@ class OrderProcessingService:
             print(f"\n✗ LRCCD processing failed: {exc}")
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.LRCCD,
+                error_message=error_detail,
+            )
+
+    def _process_sacrt_order(self, order: Order, shared_session=None) -> ProcessingResult:
+        """Process a SacRT / Sacramento Regional Transit order — one contract, billed direct."""
+        inp = order.order_input if isinstance(order.order_input, dict) else {}
+        try:
+            from browser_automation.parsers.sacrt_parser import parse_sacrt_pdf
+            from browser_automation.sacrt_automation import run_sacrt_order
+
+            parsed  = parse_sacrt_pdf(str(order.pdf_path))
+            results = run_sacrt_order(parsed, inp)  # [(label, success)]
+
+            contracts = [
+                Contract(contract_number=label, order_type=OrderType.SACRT)
+                for label, ok in results if ok
+            ]
+            overall_success = bool(contracts)
+
+            if not overall_success:
+                return ProcessingResult(
+                    success=False, contracts=[], order_type=OrderType.SACRT,
+                    error_message="SacRT processing failed — check output above",
+                )
+            return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.SACRT)
+
+        except Exception as exc:
+            import traceback
+            error_detail = f"SacRT processing error: {exc}\n{traceback.format_exc()}"
+            print(f"\n✗ SacRT processing failed: {exc}")
+            return ProcessingResult(
+                success=False, contracts=[], order_type=OrderType.SACRT,
                 error_message=error_detail,
             )
 

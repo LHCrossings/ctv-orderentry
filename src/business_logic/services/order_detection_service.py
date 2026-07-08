@@ -70,6 +70,11 @@ class OrderDetectionService:
         """
         # Detection order matters! More specific checks first
 
+        # SacRT (check BEFORE LRCCD — SacRT media plans also come through
+        # 3Fold, so the 3foldcomm marker alone would misroute them)
+        if self._is_sacrt(first_page_text):
+            return OrderType.SACRT
+
         # LRCCD / 3Fold (check first — very distinctive 3foldcomm.com marker)
         if self._is_lrccd(first_page_text):
             return OrderType.LRCCD
@@ -191,16 +196,33 @@ class OrderDetectionService:
         """Definitive marker: 'Fight The Bite' (campaign title)."""
         return "Fight The Bite" in text or "Fight the Bite" in text
 
+    def _is_sacrt(self, text: str) -> bool:
+        """
+        Check if text matches a SacRT (Sacramento Regional Transit) media plan.
+
+        SacRT orders arrive on the same 3Fold Communications media-plan form as
+        LRCCD, so this MUST run before _is_lrccd. Definitive marker: the
+        advertiser name (the billing header sometimes typos it, so also accept
+        the SacRT short name on a media plan).
+        """
+        lower = text.lower()
+        if "sacramento regional transit" in lower:
+            return True
+        return "sacrt" in lower and "media plan" in lower
+
     def _is_lrccd(self, text: str) -> bool:
         """
         Check if text matches a 3Fold Communications / LRCCD media plan.
 
         3Fold patterns:
-        - "3foldcomm.com"  (agency email domain — decisive on its own)
+        - "3foldcomm.com"  (agency email domain — decisive UNLESS the
+          advertiser is another 3Fold client, e.g. SacRT — checked earlier)
         - "3Fold" + "MEDIA PLAN"  (agency name on the Crossings TV media-plan form)
         - "Los Rios Community College"  (the advertiser)
         """
         lower = text.lower()
+        if self._is_sacrt(text):
+            return False
         if "3foldcomm" in lower:
             return True
         if "3fold" in lower and "media plan" in lower:
