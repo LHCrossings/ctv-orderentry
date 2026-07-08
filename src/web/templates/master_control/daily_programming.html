@@ -194,6 +194,13 @@
 
     <div class="tool-card" id="programsCard" style="display:none;">
         <div class="step-label">Programs for the day — click one to assign a file</div>
+        <div id="shopLcRow" class="prog-row" style="display:none; margin-bottom: 10px;">
+            <span class="prog-time">12:00a–6:00a</span>
+            <span class="prog-title">Shop LC Overnight</span>
+            <span class="prog-lang">Live · fixed setup</span>
+            <span class="prog-placed" id="shopLcPlaced"></span>
+            <span class="prog-assign empty" id="shopLcAssign">+ set up Shop LC</span>
+        </div>
         <div id="programList" class="prog-list"></div>
     </div>
 
@@ -325,6 +332,23 @@
         return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
+    // ── Shop LC overnight — fixed program exception, CTV only ──
+    // No file picking: the engine's SHOP_LC map assigns the CVC/SFO ID-overlay
+    // assets (exploded per EDL) and the generic 6h live asset everywhere else.
+    const SHOPLC_P = { title: 'Shop LC Overnight', start: '00:00', end: '06:00' };
+    const shopLcRow = document.getElementById('shopLcRow');
+    const shopLcAssign = document.getElementById('shopLcAssign');
+    function shopLcAvailable() { return state.network === 'CTV'; }
+    function renderShopLc() {
+        shopLcRow.style.display = shopLcAvailable() ? 'flex' : 'none';
+        shopLcAssign.textContent = state.shopLC ? '✓ queued — CVC/SFO exploded, others generic' : '+ set up Shop LC';
+        shopLcAssign.className = 'prog-assign' + (state.shopLC ? '' : ' empty');
+    }
+    shopLcRow.addEventListener('click', function () {
+        state.shopLC = !state.shopLC;
+        renderShopLc();
+    });
+
     async function loadGrid() {
         state.date = dateEl.value;
         const previewCard = document.getElementById('previewCard');
@@ -338,8 +362,15 @@
             const data = await r.json();
             state.programs = data.programs || [];
             state.assignments = {};
+            state.shopLC = false;
+            renderShopLc();
             if (!data.found || !state.programs.length) {
                 progList.innerHTML = '<div class="prog-empty">' + escHtml(data.error || 'No programs found for this date.') + '</div>';
+                if (shopLcAvailable()) {   // Shop LC doesn't need the grid Excel
+                    loadPlacement();
+                    previewCard.style.display = 'block';
+                    document.getElementById('previewPlan').innerHTML = '';
+                }
                 return;
             }
             progList.innerHTML = state.programs.map(function (p, i) {
@@ -391,7 +422,8 @@
 
     // Pre-flight: show how many of the network's markets already have this program placed.
     async function loadPlacement() {
-        if (!state.network || !state.date || !state.programs || !state.programs.length) return;
+        if (!state.network || !state.date) return;
+        if ((!state.programs || !state.programs.length) && !shopLcAvailable()) return;
         let data;
         try {
             const r = await fetch('/api/master-control/daily-programming/placement?network=' +
@@ -402,7 +434,16 @@
         const placed = data.placed || [];
         state.placementData = { markets: markets, placed: placed };
         const M = markets.length;
-        state.programs.forEach(function (p, i) {
+        if (shopLcAvailable()) {
+            const span = document.getElementById('shopLcPlaced');
+            const w = hhmmWindow(SHOPLC_P.start, SHOPLC_P.end), lo = w[0], hi = w[1];
+            const set = {};
+            placed.forEach(function (x) { if (x.ora >= lo && x.ora < hi) set[x.cu] = 1; });
+            const n = markets.filter(function (cu) { return set[cu]; }).length;
+            span.textContent = M ? n + '/' + M + ' placed' : '';
+            span.className = 'prog-placed ' + (n === 0 ? 'none' : (n === M ? 'all' : 'partial'));
+        }
+        (state.programs || []).forEach(function (p, i) {
             const span = document.getElementById('placed-' + i);
             if (!span) return;
             const w = hhmmWindow(p.start, p.end), lo = w[0], hi = w[1];
@@ -693,11 +734,23 @@
         (state.programs || []).forEach(function (p, i) {
             if (state.assignments[i]) items.push({ p: p, a: state.assignments[i] });
         });
-        if (!items.length) {
+        if (!items.length && !state.shopLC) {
             plan.innerHTML = '<div class="pp-empty">Assign a file to at least one program first (click a program above).</div>';
             return;
         }
-        plan.innerHTML = items.map(function (it) {
+        let shopHtml = '';
+        if (state.shopLC) {
+            const placedSet = placedMarketsFor(SHOPLC_P);
+            const targets = universe.filter(function (cu) { return !placedSet[cu]; });
+            const skipped = universe.filter(function (cu) { return placedSet[cu]; });
+            const tnames = targets.map(function (cu) { return codeOf[cu] || cu; }).join(', ') || '(none — all already placed)';
+            const snames = skipped.length ? ' · skip (already placed): ' + skipped.map(function (cu) { return codeOf[cu] || cu; }).join(', ') : '';
+            shopHtml = '<div class="pp-row">' +
+                '<div class="pp-prog">Shop LC Overnight <span style="font-weight:400;color:var(--text-muted)">12:00a–6:00a</span></div>' +
+                '<div class="pp-detail">CVC + SFO: ID-overlay asset exploded per EDL (6×1h, first fixed at 12:00a) · all other markets: generic 6h live event</div>' +
+                '<div class="pp-targets">→ set up in: ' + escHtml(tnames) + '<span class="pp-skip">' + escHtml(snames) + '</span></div></div>';
+        }
+        plan.innerHTML = shopHtml + items.map(function (it) {
             const p = it.p, a = it.a;
             const placedSet = placedMarketsFor(p);
             const targets = universe.filter(function (cu) { return !placedSet[cu]; });
@@ -725,6 +778,13 @@
     async function runSetup() {
         const universe = state.codUsers || [];
         const assignments = [];
+        if (state.shopLC) {
+            assignments.push({
+                programIndex: -1, title: SHOPLC_P.title, mode: 'shoplc',
+                start: SHOPLC_P.start, end: SHOPLC_P.end, label: '',
+                fileId: null, fileCode: null, pieces: [], fillers: []
+            });
+        }
         (state.programs || []).forEach(function (p, i) {
             const a = state.assignments[i];
             if (!a) return;

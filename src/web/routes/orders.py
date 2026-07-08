@@ -3338,7 +3338,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             with _db_connect() as conn:
                 for a in assignments:
                     label = a.get("title") or ("program " + str(a.get("programIndex")))
-                    for cu in codusers:
+                    targets = codusers
+                    if a.get("mode") == "shoplc":  # Shop LC never airs on DAL
+                        targets = [cu for cu in codusers if int(cu) != 10]
+                    for cu in targets:
                         r = run_market(conn, int(cu), d, a)
                         r["program"] = label
                         results.append(r)

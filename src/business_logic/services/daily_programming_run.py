@@ -8,6 +8,11 @@ transaction-safe. Two paths:
                grouped under Part-1's Event_P, timecodes carved per segment.
   * pieces   – N standalone whole-file pieces (a/b/c…) + fillers, each its own
                event, placed one per PRGS slot in order (shows first, fillers next).
+  * shoplc   – fixed overnight Shop LC setup (SHOP_LC map): CVC/SFO get their
+               ID-overlay live asset exploded per EDL, every other CTV market gets
+               the generic live asset as one unexploded 6-hour event. First piece
+               is always the fixed-time (F) anchor — a live feed joins at 00:00
+               sharp. Profiles and bumper logic do not apply.
 
 Both honour the open/close bumper rules and the slot/break count. Every market
 is committed only if it passes the verify gate, else rolled back untouched.
@@ -25,6 +30,15 @@ EVENT_BASE = 100000000000  # Event_P = EVENT_BASE + id_tpalinse
 
 
 DAY_FRAMES = int(24 * 3600 * FPS)  # one broadcast-day's worth of frames
+
+# Shop LC overnight (00:00–06:00) — static setup, CTV markets only, never DAL.
+# All three assets are live events (FILMATI.LIVE_ID='1'); _sync_checksums leaves
+# live assets' FILMATI fields untouched.
+SHOP_LC = {
+    "window": ("00:00", "06:00"),
+    "explode": {4: 2152, 7: 2810},  # SFO, CVC — EDL-sliced hourly (station-ID overlay)
+    "generic": 2811,                # every other CTV market — single 6h event
+}
 
 
 def _frames(hhmm: str):
@@ -360,11 +374,16 @@ def _verify_sequence(cur, ids, open_b, close_b):
 def run_market(conn, cod_user, d, assignment):
     """Place one program assignment into one market, transaction-safe.
 
-    assignment = {mode:'explode'|'pieces', fileId, fileCode, start, end,
-                  pieces:[id,...], fillers:[id,...]}.
+    assignment = {mode:'explode'|'pieces'|'shoplc', fileId, fileCode, start, end,
+                  pieces:[id,...], fillers:[id,...]}. 'shoplc' ignores fileId —
+    the asset and per-market treatment come from the SHOP_LC map.
     Returns {cu, ok, skipped, message}.
     """
     cur = conn.cursor()
+    shoplc = assignment["mode"] == "shoplc"
+    if shoplc and cod_user == 10:
+        return {"cu": cod_user, "ok": False, "skipped": False,
+                "message": "Shop LC is CTV-only — not aired on The Asian Channel"}
     lo, hi = _window(assignment["start"], assignment["end"])
     if lo is None or hi is None:
         return {"cu": cod_user, "ok": False, "skipped": False, "message": "bad time window"}
@@ -373,10 +392,19 @@ def run_market(conn, cod_user, d, assignment):
 
     slots = _slots(cur, cod_user, d, lo, hi)
     open_b, close_b = _bumpers(cur, cod_user, d, lo, hi)
-    profile = profile_for(assignment.get("fileCode"), assignment.get("label"))
+    if shoplc:
+        # Static setup: no profile, and any pre-placed bumpers in the window are
+        # left exactly as they are — the first Shop LC piece is its own F anchor.
+        open_b = close_b = None
+        profile = None
+        mode = "explode" if cod_user in SHOP_LC["explode"] else "single"
+        fid = SHOP_LC["explode"].get(cod_user, SHOP_LC["generic"])
+    else:
+        profile = profile_for(assignment.get("fileCode"), assignment.get("label"))
+        mode = assignment["mode"]
+        fid = int(assignment["fileId"]) if mode == "explode" else None
     try:
-        if assignment["mode"] == "explode":
-            fid = int(assignment["fileId"])
+        if mode == "explode":
             plan = _explode_plan(cur, fid, cod_user)
             if len(plan) != len(slots):
                 conn.rollback()
@@ -396,6 +424,19 @@ def run_market(conn, cod_user, d, assignment):
                 cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
                 ids.append(nid)
             first_id = ids[0]
+        elif mode == "single":  # shoplc generic — one unexploded 6-hour live event
+            # The overnight window has 6 hourly PRGS slots in every market; the
+            # unexploded event goes into the first and spans the rest (exactly
+            # what master control's manual drop produces: one PART=0 row at 24:00).
+            if not slots:
+                conn.rollback()
+                return {"cu": cod_user, "ok": False, "skipped": False,
+                        "message": "no PRGS slot found in the overnight window"}
+            nid = _insert_event(cur, cod_user, d, slots[0]["sched"], slots[0]["block"],
+                                slots[0]["seg"], slots[0]["ora"], fid, _durata(cur, fid))
+            cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
+            ids = [nid]
+            first_id = nid
         else:  # pieces
             content = [int(x) for x in (assignment.get("pieces") or [])] + \
                       [int(x) for x in (assignment.get("fillers") or [])]
