@@ -612,7 +612,10 @@ class EtereDirectClient:
             elif agency_id is None:
                 agency_id = 0
             # else: no agency in ANAGRAF — keep the caller-supplied fallback agency_id
-            agency_pct      = agency_pct       if agency_pct       is not None else (defaults.get("agency_pct") or 15.0)
+            if agency_pct is None:
+                # No agency on the contract → no commission. Only fall back to
+                # 15% when an agency IS attached but ANAGRAF has no Commissione.
+                agency_pct = (defaults.get("agency_pct") or 15.0) if agency_id else 0.0
             agent_id        = agent_id         if agent_id         is not None else defaults.get("agent_id", 11)
             media_center_id = media_center_id  if media_center_id  is not None else defaults.get("media_center_id", 316)
             payment_id      = payment_id       if payment_id       is not None else defaults.get("payment_id", 1)
