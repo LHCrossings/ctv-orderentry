@@ -194,13 +194,6 @@
 
     <div class="tool-card" id="programsCard" style="display:none;">
         <div class="step-label">Programs for the day — click one to assign a file</div>
-        <div id="shopLcRow" class="prog-row" style="display:none; margin-bottom: 10px;">
-            <span class="prog-time">12:00a–6:00a</span>
-            <span class="prog-title">Shop LC Overnight</span>
-            <span class="prog-lang">Live · fixed setup</span>
-            <span class="prog-placed" id="shopLcPlaced"></span>
-            <span class="prog-assign empty" id="shopLcAssign">+ set up Shop LC</span>
-        </div>
         <div id="programList" class="prog-list"></div>
     </div>
 
@@ -333,21 +326,13 @@
     }
 
     // ── Shop LC overnight — fixed program exception, CTV only ──
+    // The grid's own ShopLC line item (last row, 00:00–06:00) IS the entry point:
+    // clicking it toggles the fixed setup instead of opening the file modal.
     // No file picking: the engine's SHOP_LC map assigns the CVC/SFO ID-overlay
     // assets (exploded per EDL) and the generic 6h live asset everywhere else.
-    const SHOPLC_P = { title: 'Shop LC Overnight', start: '00:00', end: '06:00' };
-    const shopLcRow = document.getElementById('shopLcRow');
-    const shopLcAssign = document.getElementById('shopLcAssign');
-    function shopLcAvailable() { return state.network === 'CTV'; }
-    function renderShopLc() {
-        shopLcRow.style.display = shopLcAvailable() ? 'flex' : 'none';
-        shopLcAssign.textContent = state.shopLC ? '✓ queued — CVC/SFO exploded, others generic' : '+ set up Shop LC';
-        shopLcAssign.className = 'prog-assign' + (state.shopLC ? '' : ' empty');
+    function isShopLcProgram(p) {
+        return state.network === 'CTV' && /shop\s*lc/i.test(p && p.title || '');
     }
-    shopLcRow.addEventListener('click', function () {
-        state.shopLC = !state.shopLC;
-        renderShopLc();
-    });
 
     async function loadGrid() {
         state.date = dateEl.value;
@@ -362,15 +347,8 @@
             const data = await r.json();
             state.programs = data.programs || [];
             state.assignments = {};
-            state.shopLC = false;
-            renderShopLc();
             if (!data.found || !state.programs.length) {
                 progList.innerHTML = '<div class="prog-empty">' + escHtml(data.error || 'No programs found for this date.') + '</div>';
-                if (shopLcAvailable()) {   // Shop LC doesn't need the grid Excel
-                    loadPlacement();
-                    previewCard.style.display = 'block';
-                    document.getElementById('previewPlan').innerHTML = '';
-                }
                 return;
             }
             progList.innerHTML = state.programs.map(function (p, i) {
@@ -378,11 +356,12 @@
                     ? '<span class="prog-lang">' + escHtml(p.language + (p.kind ? ' ' + p.kind : '')) + '</span>'
                     : '';
                 const time = escHtml(p.start || '') + (p.end ? '–' + escHtml(p.end) : '');
+                const hint = isShopLcProgram(p) ? '+ set up Shop LC' : '+ choose file';
                 return '<div class="prog-row" data-idx="' + i + '">' +
                     '<span class="prog-time">' + time + '</span>' +
                     '<span class="prog-title">' + escHtml(p.title) + '</span>' + tag +
                     '<span class="prog-placed" id="placed-' + i + '"></span>' +
-                    '<span class="prog-assign empty" id="assign-' + i + '">+ choose file</span></div>';
+                    '<span class="prog-assign empty" id="assign-' + i + '">' + hint + '</span></div>';
             }).join('');
             loadPlacement();
             previewCard.style.display = 'block';
@@ -422,8 +401,7 @@
 
     // Pre-flight: show how many of the network's markets already have this program placed.
     async function loadPlacement() {
-        if (!state.network || !state.date) return;
-        if ((!state.programs || !state.programs.length) && !shopLcAvailable()) return;
+        if (!state.network || !state.date || !state.programs || !state.programs.length) return;
         let data;
         try {
             const r = await fetch('/api/master-control/daily-programming/placement?network=' +
@@ -434,15 +412,6 @@
         const placed = data.placed || [];
         state.placementData = { markets: markets, placed: placed };
         const M = markets.length;
-        if (shopLcAvailable()) {
-            const span = document.getElementById('shopLcPlaced');
-            const w = hhmmWindow(SHOPLC_P.start, SHOPLC_P.end), lo = w[0], hi = w[1];
-            const set = {};
-            placed.forEach(function (x) { if (x.ora >= lo && x.ora < hi) set[x.cu] = 1; });
-            const n = markets.filter(function (cu) { return set[cu]; }).length;
-            span.textContent = M ? n + '/' + M + ' placed' : '';
-            span.className = 'prog-placed ' + (n === 0 ? 'none' : (n === M ? 'all' : 'partial'));
-        }
         (state.programs || []).forEach(function (p, i) {
             const span = document.getElementById('placed-' + i);
             if (!span) return;
@@ -485,7 +454,21 @@
 
     progList.addEventListener('click', function (e) {
         const row = e.target.closest('.prog-row');
-        if (row && row.dataset.idx !== undefined) openModal(parseInt(row.dataset.idx, 10));
+        if (!row || row.dataset.idx === undefined) return;
+        const idx = parseInt(row.dataset.idx, 10);
+        const p = state.programs[idx];
+        if (isShopLcProgram(p)) {   // fixed setup — toggle, no file modal
+            if (state.assignments[idx]) {
+                delete state.assignments[idx];
+                setAssignText(idx, '+ set up Shop LC', false);
+                document.getElementById('assign-' + idx).classList.add('empty');
+            } else {
+                state.assignments[idx] = { mode: 'shoplc' };
+                setAssignText(idx, '→ CVC/SFO exploded per EDL · others generic live', false);
+            }
+            return;
+        }
+        openModal(idx);
     });
 
     function openModal(idx) {
@@ -734,29 +717,19 @@
         (state.programs || []).forEach(function (p, i) {
             if (state.assignments[i]) items.push({ p: p, a: state.assignments[i] });
         });
-        if (!items.length && !state.shopLC) {
+        if (!items.length) {
             plan.innerHTML = '<div class="pp-empty">Assign a file to at least one program first (click a program above).</div>';
             return;
         }
-        let shopHtml = '';
-        if (state.shopLC) {
-            const placedSet = placedMarketsFor(SHOPLC_P);
-            const targets = universe.filter(function (cu) { return !placedSet[cu]; });
-            const skipped = universe.filter(function (cu) { return placedSet[cu]; });
-            const tnames = targets.map(function (cu) { return codeOf[cu] || cu; }).join(', ') || '(none — all already placed)';
-            const snames = skipped.length ? ' · skip (already placed): ' + skipped.map(function (cu) { return codeOf[cu] || cu; }).join(', ') : '';
-            shopHtml = '<div class="pp-row">' +
-                '<div class="pp-prog">Shop LC Overnight <span style="font-weight:400;color:var(--text-muted)">12:00a–6:00a</span></div>' +
-                '<div class="pp-detail">CVC + SFO: ID-overlay asset exploded per EDL (6×1h, first fixed at 12:00a) · all other markets: generic 6h live event</div>' +
-                '<div class="pp-targets">→ set up in: ' + escHtml(tnames) + '<span class="pp-skip">' + escHtml(snames) + '</span></div></div>';
-        }
-        plan.innerHTML = shopHtml + items.map(function (it) {
+        plan.innerHTML = items.map(function (it) {
             const p = it.p, a = it.a;
             const placedSet = placedMarketsFor(p);
             const targets = universe.filter(function (cu) { return !placedSet[cu]; });
             const skipped = universe.filter(function (cu) { return placedSet[cu]; });
             let detail;
-            if (a.mode === 'explode') {
+            if (a.mode === 'shoplc') {
+                detail = 'CVC + SFO: ID-overlay asset exploded per EDL (6×1h, first fixed at 12:00a) · all other markets: generic 6h live event';
+            } else if (a.mode === 'explode') {
                 detail = 'Explode ' + (a.segments || 0) + ' parts · ' + a.file.code;
             } else {
                 const np = a.pieces ? a.pieces.length : 0;
@@ -778,16 +751,16 @@
     async function runSetup() {
         const universe = state.codUsers || [];
         const assignments = [];
-        if (state.shopLC) {
-            assignments.push({
-                programIndex: -1, title: SHOPLC_P.title, mode: 'shoplc',
-                start: SHOPLC_P.start, end: SHOPLC_P.end, label: '',
-                fileId: null, fileCode: null, pieces: [], fillers: []
-            });
-        }
         (state.programs || []).forEach(function (p, i) {
             const a = state.assignments[i];
             if (!a) return;
+            if (a.mode === 'shoplc') {   // fixed setup — the engine's SHOP_LC map picks the assets
+                assignments.push({
+                    programIndex: i, title: p.title, mode: 'shoplc', start: p.start, end: p.end,
+                    label: '', fileId: null, fileCode: null, pieces: [], fillers: []
+                });
+                return;
+            }
             assignments.push({
                 programIndex: i, title: p.title, mode: a.mode, start: p.start, end: p.end,
                 label: p.kind || '',   // grid kind tag (e.g. "Children") → drives label-matched profiles
