@@ -204,12 +204,21 @@ def _sync_checksums(cur, ids):
     the live checksum — so our frozen copy went stale and the triangle stuck (and
     never cleared until an operator ran Explode-all-breakpoints post-download).
 
-    The settled/canonical state of every asset in the library is deterministic and
-    fully known at placement time — INF_DIGIT=0 and AUDIO/AUDIO_LANGUAGE/LIVE_ID
-    NULL (POS_INI/POS_FIN are the file's real trim, already correct from ingest/EDL
-    import, so we leave them). So we force those input fields to canonical *before*
-    computing the checksum: the value we store then equals what Etere computes after
-    the download, and the triangle never appears — no dependency on Aligner timing.
+    The settled/canonical state of every FILE-BASED asset in the library is
+    deterministic and fully known at placement time — INF_DIGIT=0 and
+    AUDIO/AUDIO_LANGUAGE/LIVE_ID NULL (POS_INI/POS_FIN are the file's real trim,
+    already correct from ingest/EDL import, so we leave them). So we force those
+    input fields to canonical *before* computing the checksum: the value we store
+    then equals what Etere computes after the download, and the triangle never
+    appears — no dependency on Aligner timing.
+
+    LIVE EVENTS ARE EXEMPT (2026-07-08). An asset with LIVE_ID set (e.g. Shop LC
+    overnight feeds 2810/2152/2811) takes a live feed instead of a file — the
+    Aligner never touches it, so its current field values already ARE the settled
+    state. Nulling LIVE_ID here permanently severed the live-feed link on the
+    FILMATI record itself (asset 2810 went dark for CVC), which is an asset-library
+    mutation, not a schedule-row one. For live assets we skip the normalisation
+    entirely and freeze the checksum against the fields as-is.
 
     NOTE: the tipo_tc/aspect/audio_ty/supporto/visionato/CRAWL_DESC fields set below
     are NOT inputs to the checksum — they are cosmetic (they mirror what Explode
@@ -228,6 +237,12 @@ def _sync_checksums(cur, ids):
         if row and row[0]:
             fids.add(row[0])
     for fid in fids:
+        cur.execute("SELECT LIVE_ID FROM FILMATI WHERE ID_FILMATI=%s", (fid,))
+        row = cur.fetchone()
+        if row and row[0] is not None:
+            # Live event: LIVE_ID is the live-feed link and the asset never goes
+            # through the Aligner — its fields as-is are the settled state.
+            continue
         cur.execute("""
             UPDATE FILMATI SET
                 INF_DIGIT=0,
