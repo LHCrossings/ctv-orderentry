@@ -274,6 +274,7 @@ def run_sacrt_order(doc: SacRTDocument, inputs: dict) -> list[tuple[str, bool]]:
                 rate=ln.rate,               # NET entered as-is — direct bill, no gross-up
                 total_spots=ln.total_spots,
                 spots_per_week=0,           # flight-total → Rotation
+                max_daily_run=1,            # few spots over a long flight — never 2 in one day
                 date_from=date_from,
                 date_to=date_to,
                 duration=str(ln.duration),
