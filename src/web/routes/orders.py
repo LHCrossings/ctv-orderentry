@@ -3319,8 +3319,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def daily_programming_run(body: dict = Body(...)):
         """Set up across markets: place each assignment into each target market
         (transaction-safe per market, skips already-placed). Returns per
-        (program, market) results."""
+        (program, market) results.
+
+        Each market gets its own DB connection and runs on its own thread —
+        every query in run_market() is scoped to a single COD_USER, so markets
+        never touch each other's rows. Running them in parallel (instead of one
+        long serial loop over every program x market pair) keeps a full-network
+        run well under the reverse proxy's read timeout."""
         import datetime as _dt
+        from concurrent.futures import ThreadPoolExecutor
 
         from browser_automation.etere_direct_client import connect as _db_connect
         from src.business_logic.services.daily_programming_run import run_market
@@ -3333,20 +3340,27 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             return {"results": [], "error": "Invalid date"}
         if not codusers or not assignments:
             return {"results": [], "error": "Nothing to set up (no markets or assignments)"}
-        results = []
-        try:
-            with _db_connect() as conn:
-                for a in assignments:
-                    label = a.get("title") or ("program " + str(a.get("programIndex")))
-                    targets = codusers
-                    if a.get("mode") == "shoplc":  # Shop LC never airs on DAL
-                        targets = [cu for cu in codusers if int(cu) != 10]
-                    for cu in targets:
-                        r = run_market(conn, int(cu), d, a)
+
+        def _run_market_all(cu):
+            cu = int(cu)
+            out = []
+            try:
+                with _db_connect() as conn:
+                    for a in assignments:
+                        if a.get("mode") == "shoplc" and cu == 10:
+                            continue  # Shop LC never airs on DAL
+                        label = a.get("title") or ("program " + str(a.get("programIndex")))
+                        r = run_market(conn, cu, d, a)
                         r["program"] = label
-                        results.append(r)
-        except Exception as exc:  # noqa: BLE001 - surface connection-level errors
-            return {"results": results, "error": f"Run failed: {exc}"}
+                        out.append(r)
+            except Exception as exc:  # noqa: BLE001 - surface connection-level errors for this market
+                out.append({"cu": cu, "ok": False, "skipped": False, "message": f"Run failed: {exc}"})
+            return out
+
+        results = []
+        with ThreadPoolExecutor(max_workers=len(codusers)) as ex:
+            for out in ex.map(_run_market_all, codusers):
+                results.extend(out)
         return {"results": results}
 
     _BO_MARKET_IDS = {"NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4, "SEA": 5, "LAX": 6, "CVC": 7, "WDC": 8, "MMT": 9, "DAL": 10}
