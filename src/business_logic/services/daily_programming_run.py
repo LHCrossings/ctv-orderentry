@@ -250,12 +250,14 @@ def _sync_checksums(cur, ids):
         row = cur.fetchone()
         if row and row[0]:
             fids.add(row[0])
+    live_fids = set()
     for fid in fids:
         cur.execute("SELECT LIVE_ID FROM FILMATI WHERE ID_FILMATI=%s", (fid,))
         row = cur.fetchone()
         if row and row[0] is not None:
             # Live event: LIVE_ID is the live-feed link and the asset never goes
             # through the Aligner — its fields as-is are the settled state.
+            live_fids.add(fid)
             continue
         cur.execute("""
             UPDATE FILMATI SET
@@ -269,10 +271,22 @@ def _sync_checksums(cur, ids):
     for rid in ids:
         if rid is None:
             continue
-        # Get the program code so we can set supporto correctly
-        cur.execute("SELECT COD_PROGRA FROM TPALINSE WHERE id_tpalinse=%s", (rid,))
+        cur.execute("SELECT COD_PROGRA, ID_FILMATI FROM TPALINSE WHERE id_tpalinse=%s", (rid,))
         row = cur.fetchone()
         prog_code = row[0] if row and row[0] else ""
+        rid_fid = row[1] if row else None
+
+        if rid_fid in live_fids:
+            # Live-asset row: sch_UpdateSupportAndProperties already wrote the REAL
+            # supporto ('0LIVE<channel>' — the live-feed binding EE renders as the
+            # LIVE badge / '1-Channel 1' source) and CRAWL_DESC (the station-ID
+            # overlay config on CVC/SFO Shop LC). The Explode-mimicking cosmetics
+            # below would DESTROY both (root cause of the 2026-07-08 Shop LC
+            # dead-air incident) — freeze the checksum only.
+            cur.execute(
+                "UPDATE TPALINSE SET SCHEDULE_CHECKSUM = dbo.sch_getFilmatiCheckSum(%s) WHERE id_tpalinse=%s",
+                (rid, rid))
+            continue
 
         # Cosmetic metadata (mirrors Explode's UI appearance), then freeze the
         # checksum against the now-canonical FILMATI input fields.
@@ -422,6 +436,14 @@ def run_market(conn, cod_user, d, assignment):
                     (k, mi, mo, mo - mi + 1, base, nid),
                 )
                 cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
+                if shoplc:
+                    # Mirror master control's live-asset custom-parts explode:
+                    # parts carry the WHOLE program's Ora_P/Duration_P, not their own.
+                    # AFTER the SP — sch_UpdateSupportAndProperties rewrites row
+                    # fields (it resets EVENT_TYPE, for one) and would clobber this.
+                    cur.execute(
+                        "UPDATE TPalinse SET Ora_P=0, Duration_P=%s WHERE ID_Tpalinse=%s",
+                        (plan[-1][1], nid))
                 ids.append(nid)
             first_id = ids[0]
         elif mode == "single":  # shoplc generic — one unexploded 6-hour live event
