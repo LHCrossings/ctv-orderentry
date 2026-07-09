@@ -1,359 +1,74 @@
 """
 EDI Export — generate TVB EDI .txt files from Etere post-log CSVs.
+
+Parsing, template store, and EDI generation live in
+business_logic.services.edi_billing (Phase 1 of tasks/edi-billing-redesign.md);
+this module is the thin route layer for the /edi/export page.
 """
 
 from __future__ import annotations
 
-import csv
 import io
 import json
 import logging
 import re
 import zipfile
-from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
+from business_logic.services.edi_billing import (
+    INCOMING_DIR as INCOMING,
+    TEMPLATE_DIR as TMPL_DIR,
+    all_templates as _all_templates,
+    generate_edi as _generate_edi,
+    get_template as _get_template,
+    invoice_info as _invoice_info,
+    parse_affidavit,
+    parse_postlog_csv,
+    slug as _slug,
+    suggest_template as _suggest_template,
+)
 
 logger = logging.getLogger(__name__)
-
-_BASE = Path(__file__).resolve().parent.parent.parent.parent
-TMPL_DIR    = _BASE / "data" / "edi_templates"
-INCOMING    = _BASE / "incoming" / "EDI"
 
 TMPL_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ---------------------------------------------------------------------------
-# CSV parsing
+# Back-compat dict shapes over the service dataclasses
 # ---------------------------------------------------------------------------
 
 def _parse_export_csv(csv_bytes: bytes) -> dict:
-    """Parse an Etere post-log CSV; return spots + auto-fill fields."""
-    text = csv_bytes.decode("utf-8-sig")
-    rows = list(csv.reader(io.StringIO(text)))
-
-    # Structure: row0=labels, row1=values, row2=blank, row3=data-headers, row4+=data
-    meta = rows[1] if len(rows) > 1 else []
-    est_desc  = meta[3].strip() if len(meta) > 3 else ""
-
-    m = re.search(r'\bEst\.?\s+(\S+)', est_desc, re.IGNORECASE)
-    if m:
-        estimate_code = m.group(1).rstrip(",.:")
-    else:
-        # Fallback: trailing number in meta[3], then meta[1]
-        for src in [est_desc, meta[1].strip() if len(meta) > 1 else ""]:
-            fb = re.search(r'(\d+)\s*$', src)
-            if fb:
-                estimate_code = fb.group(1)
-                break
-        else:
-            estimate_code = ""
-
-    hdr = rows[3] if len(rows) > 3 else []
-    col = {name.strip(): i for i, name in enumerate(hdr)}
-
-    spots = []
-    for row in rows[4:]:
-        if not row or all(c.strip() == "" for c in row):
-            continue
-
-        def g(name: str) -> str:
-            i = col.get(name)
-            return row[i].strip() if i is not None and i < len(row) else ""
-
-        date_str    = g("dateschedule")
-        airtime_str = g("airtimep")
-        duration    = g("duration3")
-        copy_id     = g("bookingcode2")
-        rate_str    = g("IMPORTO2")
-        market_raw  = g("nome2")
-
-        if not date_str or not airtime_str:
-            continue
-
-        try:
-            dt = datetime.strptime(date_str, "%m/%d/%Y")
-            run_date = dt.strftime("%y%m%d")
-        except ValueError:
-            continue
-
-        parts = airtime_str.split(":")
-        time_hhmm = parts[0].zfill(2) + (parts[1] if len(parts) > 1 else "00")
-
-        try:
-            rate_cents = int(round(float(rate_str) * 100))
-        except (ValueError, TypeError):
-            rate_cents = 0
-
-        try:
-            dur_secs = int(float(duration))
-        except (ValueError, TypeError):
-            dur_secs = 0
-
-        spots.append({
-            "run_date":   run_date,
-            "time_hhmm":  time_hhmm,
-            "duration":   dur_secs,
-            "copy_id":    copy_id,
-            "rate_cents": rate_cents,
-            "market":     market_raw,
-        })
-
-    dates       = sorted(s["run_date"] for s in spots if s["run_date"])
-    gross_cents = sum(s["rate_cents"] for s in spots)
-    advertiser  = meta[5].strip() if len(meta) > 5 else ""
-    market      = spots[0]["market"] if spots else ""
-
+    d = parse_postlog_csv(csv_bytes)
     return {
-        "spots":         spots,
-        "spot_count":    len(spots),
-        "gross_cents":   gross_cents,
-        "bcast_start":   dates[0] if dates else "",
-        "bcast_end":     dates[-1] if dates else "",
-        "estimate_code": estimate_code,
-        "advertiser":    advertiser,
-        "market":        market,
-    }
-
-
-# ---------------------------------------------------------------------------
-# EDI record builders
-# ---------------------------------------------------------------------------
-
-def _pad(lst: list, n: int) -> list[str]:
-    out = [str(x) for x in lst]
-    while len(out) < n:
-        out.append("")
-    return out[:n]
-
-
-def _r21(t: dict) -> str:
-    aa = _pad(t.get("agency_address", []), 4)
-    return ";".join(["21", t.get("edi_code",""), t.get("agency_name",""), *aa]) + ";"
-
-
-def _r22(t: dict) -> str:
-    return f"22;{t.get('call_letters','')};TV;TV;;;;;;;;;"
-
-
-def _r23(t: dict) -> str:
-    pa = _pad(t.get("payee_address", []), 4)
-    return ";".join(["23", t.get("payee_name",""), *pa]) + ";"
-
-
-def _r31(t: dict, inv: dict) -> str:
-    f = _pad([], 42)
-    f[0]  = "31"
-    f[1]  = t.get("representative", "")
-    f[2]  = t.get("salesperson", "")
-    f[3]  = inv.get("advertiser_name", "") or t.get("advertiser_name", "")
-    f[4]  = inv.get("product_name", "")    or t.get("product_name", "")
-    f[5]  = inv.get("invoice_date", "")
-    f[7]  = inv.get("estimate_code", "")
-    f[8]  = inv.get("invoice_number", "")
-    f[9]  = inv.get("broadcast_month", "")
-    f[10] = inv.get("bcast_start", "")
-    f[11] = inv.get("bcast_end", "")
-    f[12] = inv.get("bcast_start", "")
-    f[13] = inv.get("bcast_end", "")
-    f[14] = inv.get("bcast_start", "")
-    f[15] = inv.get("bcast_end", "")
-    f[18] = "Y"
-    f[21] = inv.get("rep_order_number", "")
-    f[22] = inv.get("order_number", "")
-    f[24] = inv.get("agency_ad_code", "")  or t.get("agency_ad_code", "")
-    f[26] = inv.get("agency_prod_code", "") or t.get("agency_prod_code", "")
-    return ";".join(f) + ";"
-
-
-def _r33_lines(inv: dict) -> list[str]:
-    out = []
-    for key in ("comment_bottom", "comment_bottom_2", "comment_bottom_3", "comment_bottom_4"):
-        val = inv.get(key, "").strip()
-        if val:
-            out.append(f"33;{val};")
-    return out
-
-
-def _r51(spot: dict) -> str:
-    f = _pad([], 28)
-    f[0] = "51"
-    f[1] = "Y"
-    f[2] = spot["run_date"]
-    f[4] = spot["time_hhmm"]
-    f[5] = str(spot["duration"])
-    f[6] = spot["copy_id"]
-    f[7] = str(spot["rate_cents"])
-    return ";".join(f) + ";"
-
-
-def _r34(t: dict, gross: int, spot_count: int) -> str:
-    pct  = float(t.get("commission_pct", 15.0))
-    comm = int(round(gross * pct / 100))
-    net  = gross - comm
-    f = _pad([], 16)
-    f[0] = "34"
-    f[2] = str(gross)
-    f[3] = str(comm)
-    f[4] = str(net)
-    f[12] = str(spot_count)
-    return ";".join(f) + ";"
-
-
-# ---------------------------------------------------------------------------
-# Full file generator
-# ---------------------------------------------------------------------------
-
-def _generate_edi(template: dict, inv: dict, spots: list[dict]) -> str:
-    gross = inv.get("gross_cents", sum(s["rate_cents"] for s in spots))
-    count = inv.get("spot_count", len(spots))
-    lines = [
-        _r21(template),
-        _r22(template),
-        _r23(template),
-        _r31(template, inv),
-    ]
-    comment = inv.get("comment_top", "").strip()
-    if comment:
-        lines.append(f"32;{comment};")
-    for spot in spots:
-        lines.append(_r51(spot))
-    lines.extend(_r33_lines(inv))
-    lines.append(_r34(template, gross, count))
-    lines.append(f"12;1;{gross};")
-    return "\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
-# Template helpers
-# ---------------------------------------------------------------------------
-
-def _slug(name: str) -> str:
-    return re.sub(r'[^a-z0-9]+', '_', name.lower()).strip('_')
-
-
-def _all_templates() -> list[dict]:
-    out = []
-    for p in sorted(TMPL_DIR.glob("*.json")):
-        try:
-            out.append(json.loads(p.read_text()))
-        except Exception as e:
-            logger.warning("Skipping unreadable EDI template %s: %s", p.name, e)
-    return out
-
-
-def _get_template(name: str) -> dict | None:
-    p = TMPL_DIR / f"{_slug(name)}.json"
-    return json.loads(p.read_text()) if p.exists() else None
-
-
-# ---------------------------------------------------------------------------
-# Invoice metadata from filename
-# ---------------------------------------------------------------------------
-
-def _invoice_info(filename: str) -> dict:
-    stem = Path(filename).stem
-    inv_m = re.match(r'^(\d{4}-\d{3})', stem)
-    invoice_number = inv_m.group(1) if inv_m else ""
-    bcast_month    = invoice_number[:4] if len(invoice_number) >= 4 else ""
-
-    # Derive last day of billing month for invoice_date
-    invoice_date = ""
-    if len(bcast_month) == 4:
-        import calendar
-        yy, mm = int(bcast_month[:2]), int(bcast_month[2:])
-        full_year = 2000 + yy
-        last_day = calendar.monthrange(full_year, mm)[1]
-        invoice_date = f"{bcast_month}{last_day:02d}"
-
-    # Etere contract number from _NNNN_postlog
-    cont_m = re.search(r'_(\d+)_postlog', stem)
-    order_number = cont_m.group(1) if cont_m else ""
-
-    return {
-        "invoice_number":  invoice_number,
-        "broadcast_month": bcast_month,
-        "invoice_date":    invoice_date,
-        "order_number":    order_number,
+        "spots":         d.spots,
+        "spot_count":    d.spot_count,
+        "gross_cents":   d.gross_cents,
+        "bcast_start":   d.bcast_start,
+        "bcast_end":     d.bcast_end,
+        "estimate_code": d.estimate_code,
+        "advertiser":    d.advertiser,
+        "market":        d.market,
+        "warnings":      d.warnings,
     }
 
 
 def _parse_affidavit_pdf(pdf_path: Path) -> dict:
-    """Extract fields from the affidavit PDF — header page and comment box."""
-    result = {
-        "advertiser": "", "market": "",
-        "rep_order_number": "", "agency_ad_code": "", "agency_prod_code": "",
-        "product_name": "", "comment_top": "", "comment_bottom": "",
-        "warnings": [],
+    a = parse_affidavit(pdf_path.read_bytes(), source=pdf_path.name)
+    return {
+        "advertiser":       a.advertiser,
+        "market":           a.market,
+        "rep_order_number": a.rep_order_number,
+        "agency_ad_code":   a.agency_ad_code,
+        "agency_prod_code": a.agency_prod_code,
+        "product_name":     a.product_name,
+        "comment_top":      a.comment_top,
+        "comment_bottom":   a.comment_bottom,
+        "warnings":         a.warnings,
     }
-    try:
-        import pdfplumber
-        with pdfplumber.open(pdf_path) as pdf:
-            page2_text = (pdf.pages[1] if len(pdf.pages) > 1 else pdf.pages[0]).extract_text() or ""
-            full_text  = "\n".join(p.extract_text() or "" for p in pdf.pages)
-
-        # Advertiser + Market from affidavit header (page 2)
-        adv_m = re.search(r'Advertiser\s+(.+)$', page2_text, re.MULTILINE)
-        mkt_m = re.search(r'Market\s+(\S+)', page2_text)
-        if adv_m:
-            result["advertiser"] = adv_m.group(1).strip()
-        if mkt_m:
-            result["market"] = mkt_m.group(1).strip()
-
-        # Comment box fields (may span pages)
-        if m := re.search(r'Order\s*#:\s*(\d+)', full_text):
-            result["rep_order_number"] = m.group(1).strip()
-        if m := re.search(r'CLIENT\s+(\w+)', full_text):
-            result["agency_ad_code"] = m.group(1).strip()
-        if m := re.search(r'PRODUCT\s+(\w+)\s+(.+?)(?:\s+http|\s+CPE\b|\n|$)', full_text):
-            result["agency_prod_code"] = m.group(1).strip()
-            raw_name = m.group(2).strip().replace("-", " ")
-            result["product_name"] = raw_name.title()
-        if m := re.search(r'ESTIMATE\s+\d+\s+(\S+)', full_text):
-            result["comment_top"] = m.group(1).strip()
-        # HL-style: COMMENTS section — line after "ATTN:" before "Phone:" or URL
-        if m := re.search(r'COMMENTS\s+ATTN:.*?\n(.+?)\s+(?:Phone:|http)', full_text, re.DOTALL):
-            result["comment_bottom"] = m.group(1).strip()
-
-    except Exception as e:
-        logger.warning("Affidavit parse failed for %s: %s", pdf_path.name, e)
-        result["warnings"].append(f"Affidavit parse failed: {e}")
-    return result
-
-
-def _suggest_template(filename: str, templates: list[dict],
-                      advertiser: str = "", market: str = "") -> str:
-    fn  = filename.lower()
-    adv = advertiser.lower()
-    mkt = market.upper()
-
-    def _words(s: str) -> list[str]:
-        return re.findall(r'[a-z]{3,}', s.lower())
-
-    # Pass 1: exact advertiser_match + optional market_match (user-configured)
-    for t in templates:
-        am = t.get("advertiser_match", "").strip()
-        mm = t.get("market_match", "").strip().upper()
-        if not am:
-            continue
-        if am.lower() == adv:
-            if mm and mm != mkt:
-                continue
-            return t.get("name", "")
-
-    # Pass 2: fuzzy fallback (agency name in filename)
-    for t in templates:
-        if any(w in fn for w in _words(t.get("agency_name", ""))):
-            return t.get("name", "")
-
-    return templates[0].get("name", "") if templates else ""
 
 
 # ---------------------------------------------------------------------------
@@ -406,6 +121,7 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
                     "bcast_end":     parsed["bcast_end"],
                     "estimate_code": parsed["estimate_code"],
                 })
+                info["warnings"].extend(parsed["warnings"])
                 advertiser = parsed.get("advertiser", "")
                 market     = parsed.get("market", "")
             except Exception as e:

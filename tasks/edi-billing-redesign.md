@@ -175,6 +175,12 @@ Upload to tvinvoices.com stays manual for now (the future step-4 automation in
 [VALIDATION SCREEN — the peek-and-fix]
   per row: 🟢 spots+gross match / 🔴 mismatch (click → spot-level diff modal,
   reuse _diff_pdf_csv) / 🟡 fuzzy template match or missing fields.
+  ROUNDING RULE (Lee, 2026-07-09): fractional-cent rates are legitimate — the
+  affidavit subtotal sums unrounded rates, the CSV sums rounded per-spot values
+  (e.g. 2606-042 ct 2763: $6,588.24 vs $6,588.40, 56 × $117.647…). If spot
+  counts match AND |gross diff| ≤ spot_count × $0.005, badge 🟡 "rounding",
+  NOT 🔴 — exportable without force. TVInvoices flags it on upload and Lee
+  confirms there; that is the expected workflow.
   Template dropdown (override), all EDI invoice fields editable
   (reuse export.html's editors). Export blocked until every row is green
   or explicitly checked "export anyway".
@@ -209,21 +215,21 @@ fetch. ✅ CONFIRMED with Lee 2026-07-09: broadcast month is the right default.
   $6,588.24 vs CSV $6,588.40 — fractional-cent rate (56 × $117.647… vs 56 ×
   rounded $117.65). Good future test case for the reconcile badge + R34 validator.
 
-### Phase 1 — Consolidate the duplicated logic into a service module
-Create `src/business_logic/services/edi_billing.py`; MOVE (don't copy):
-- [ ] Affidavit parsing: merge `edi.py:_parse_pdf_affidavit` +
-      `edi_export.py:_parse_affidavit_pdf` into one `parse_affidavit(pdf_bytes) -> AffidavitData`
-      (dataclass: invoice_id, contract_no, advertiser, market, total_spots,
-      gross_amount, rep_order_number, agency_ad_code, agency_prod_code,
-      product_name, comment_top, comment_bottom, warnings).
-- [ ] CSV parsing: merge `_parse_export_csv` (spots) + `_parse_csv_totals`
-      (totals) — one parser returning both (totals = derived from spots; keep the
-      last-line totals read as a cross-check, mismatch → warning).
-- [ ] EDI generation (`_generate_edi` + `_r*` builders) — move verbatim
-      (golden test must still pass).
-- [ ] Template store helpers + the new customer-ID matcher (section 2).
-- [ ] Routes in `edi.py` / `edi_export.py` become thin wrappers; existing pages
-      keep working unchanged.
+### Phase 1 — Consolidate the duplicated logic into a service module ✅ DONE 2026-07-09
+Created `src/business_logic/services/edi_billing.py`; MOVED (not copied):
+- [x] `parse_affidavit(pdf_bytes, source="") -> AffidavitData` — merged both
+      affidavit parsers (header + totals + comment-box in one pdfplumber pass).
+      Never raises; failures land in `.warnings`. `edi.py` wrappers re-raise on
+      warnings to preserve the reconcile route's per-file error contract.
+- [x] `parse_postlog_csv(csv_bytes, filename="") -> PostLogData` — merged spot
+      parse + totals-row read; derived-vs-totals-row disagreement → warning.
+- [x] `generate_edi` + `_r*` builders moved verbatim; golden test now imports
+      from the service and passes byte-identical.
+- [x] Template store (`slug`/`all_templates`/`get_template`), `invoice_info`,
+      and legacy `suggest_template` (Phase 2 replaces it there).
+- [x] Routes are thin wrappers; verified against the June batch: scan output
+      and reconcile results identical pre/post move; 288 tests green.
+- Deferred to Phase 3 as planned: `_diff_pdf_csv`, `_fetch_all_reports_sync`.
 
 ### Phase 2 — Template customer-ID matching
 - [ ] Add matcher + schema fields (section 2). Extend the template editor UI

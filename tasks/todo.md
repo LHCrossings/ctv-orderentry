@@ -5,7 +5,8 @@ questions resolved — broadcast month, flag-don't-reject, drill-down diff,
 deliberate fetch button).
 
 - [x] Phase 0 — golden tests + safety fixes (2026-07-09; details in spec)
-- [ ] Phase 1 — consolidate into `src/business_logic/services/edi_billing.py`
+- [x] Phase 1 — consolidated into `src/business_logic/services/edi_billing.py`
+      (2026-07-09; scan + reconcile verified identical on the June batch)
 - [ ] Phase 2 — customer-ID template matcher + backfill script (run with Lee)
 - [ ] Phase 3 — unified `/edi/billing` page
 - [ ] Phase 4 — cutover, then retire `/edi/post-log` + `/edi/export` after one

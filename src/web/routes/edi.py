@@ -1,5 +1,9 @@
 """
 EDI Tool routes: post-log CSV batch download and invoice reconciliation.
+
+Affidavit/CSV parsing lives in business_logic.services.edi_billing
+(Phase 1 of tasks/edi-billing-redesign.md); the wrappers below preserve
+this module's original dict/exception contracts for the routes.
 """
 
 import asyncio
@@ -12,92 +16,36 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
+from business_logic.services.edi_billing import parse_affidavit, parse_postlog_csv
+
 # ---------------------------------------------------------------------------
 # PDF helpers
 # ---------------------------------------------------------------------------
 
 def _extract_contract_number(pdf_bytes: bytes) -> tuple[str, str]:
     """Return (invoice_id, contract_no) from the affidavit page (page 2)."""
-    import pdfplumber
-
-    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        pages = [pdf.pages[1]] if len(pdf.pages) >= 2 else pdf.pages
-        for page in pages:
-            text = page.extract_text() or ""
-            m = re.search(r'Contract\s+Number\s+(\d+)', text)
-            if m:
-                contract_no = m.group(1)
-                inv_m = re.search(r'Affidavit\s+([\w-]+)', text)
-                invoice_id = inv_m.group(1) if inv_m else "unknown"
-                return invoice_id, contract_no
-
-    raise ValueError("Contract number not found in affidavit (page 2)")
+    a = parse_affidavit(pdf_bytes)
+    if a.warnings:
+        raise ValueError("; ".join(a.warnings))
+    if not a.contract_no:
+        raise ValueError("Contract number not found in affidavit (page 2)")
+    return a.invoice_id or "unknown", a.contract_no
 
 
 def _parse_pdf_affidavit(pdf_bytes: bytes) -> dict:
     """
     Extract total spots and gross amount from the CTV invoice affidavit.
-
-    Primary source: 'COPY LIST Subtotals N $ X.XX' summary line.
-    Fallback: sum individual spot rows.
-
     Returns: {invoice_id, contract_no, total_spots, gross_amount}
+    Raises on unreadable PDFs (the reconcile route reports these per-file).
     """
-    import pdfplumber
-
-    SUBTOTAL_RE = re.compile(
-        r'COPY LIST Subtotals\s+(\d+)\s+\$\s*([\d,]+\.?\d*)'
-    )
-    ROW_RE = re.compile(
-        r'^\d{1,2}/\d{1,2}/\d{2,4}'
-        r'\s+\w+'
-        r'(?:\s+\d+:\d+:\d+){4}'
-        r'\s+\w+'
-        r'\s+(\d+)'
-        r'\s+\S+'
-        r'\s+\S+'          # estimate number — may be alphanumeric (e.g. 13931-SF)
-        r'\s+\$\s*([\d,]+\.?\d*)'
-    )
-
-    total_spots = None
-    gross_amount = None
-    contract_no = None
-    invoice_id = None
-    row_spots = 0
-    row_gross = 0.0
-
-    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        for page_idx, page in enumerate(pdf.pages):
-            text = page.extract_text() or ""
-
-            if page_idx == 1:
-                m = re.search(r'Contract\s+Number\s+(\d+)', text)
-                if m:
-                    contract_no = m.group(1)
-                inv_m = re.search(r'Affidavit\s+([\w-]+)', text)
-                if inv_m:
-                    invoice_id = inv_m.group(1)
-
-            if page_idx >= 1:
-                sub_m = SUBTOTAL_RE.search(text)
-                if sub_m:
-                    total_spots = int(sub_m.group(1))
-                    gross_amount = float(sub_m.group(2).replace(',', ''))
-
-                for line in text.splitlines():
-                    row_m = ROW_RE.match(line.strip())
-                    if row_m:
-                        cnt = int(row_m.group(1))
-                        rate = float(row_m.group(2).replace(',', ''))
-                        row_spots += cnt
-                        if rate > 0:
-                            row_gross += cnt * rate
-
+    a = parse_affidavit(pdf_bytes)
+    if a.warnings:
+        raise ValueError("; ".join(a.warnings))
     return {
-        "invoice_id": invoice_id or "unknown",
-        "contract_no": contract_no,
-        "total_spots": total_spots if total_spots is not None else row_spots,
-        "gross_amount": round(gross_amount if gross_amount is not None else row_gross, 2),
+        "invoice_id":   a.invoice_id or "unknown",
+        "contract_no":  a.contract_no,
+        "total_spots":  a.total_spots,
+        "gross_amount": a.gross_amount,
     }
 
 
@@ -107,55 +55,16 @@ def _parse_pdf_affidavit(pdf_bytes: bytes) -> dict:
 
 def _parse_csv_totals(filename: str, csv_bytes: bytes) -> dict:
     """
-    Extract total spots and gross from an Etere post-log CSV.
-
-    The report's last non-empty line is a totals row:
-      col 0 = gross amount  (e.g. "9,975.00")
-      col 1 = spot count    (e.g. 549)
-
-    Contract number comes from filename pattern *_12345_postlog.csv.
+    Extract total spots and gross from an Etere post-log CSV's totals row
+    (last non-empty line). Contract number comes from the *_12345_postlog
+    filename pattern.
     """
-    contract_no = None
-    fn_match = re.search(r'_(\d+)_postlog', filename, re.IGNORECASE)
-    if fn_match:
-        contract_no = fn_match.group(1)
-
-    text = csv_bytes.decode("utf-8-sig", errors="replace")
-    # Find the last non-empty line
-    last_line = None
-    for line in reversed(text.splitlines()):
-        if line.strip():
-            last_line = line
-            break
-
-    if not last_line:
-        return {
-            "contract_no": contract_no,
-            "total_spots": None,
-            "gross_amount": None,
-            "error": "CSV appears empty",
-        }
-
-    parts = next(csv_mod.reader([last_line]), [])
-
-    def _clean_num(s):
-        return s.replace(',', '').replace('$', '').strip()
-
-    try:
-        gross_amount = round(float(_clean_num(parts[0])), 2)
-    except (ValueError, IndexError):
-        gross_amount = None
-
-    try:
-        total_spots = int(_clean_num(parts[1]))
-    except (ValueError, IndexError):
-        total_spots = None
-
+    d = parse_postlog_csv(csv_bytes, filename)
     return {
-        "contract_no": contract_no,
-        "total_spots": total_spots,
-        "gross_amount": gross_amount,
-        "error": None,
+        "contract_no":  d.contract_no,
+        "total_spots":  d.totals_row_spots,
+        "gross_amount": d.totals_row_gross,
+        "error": "CSV appears empty" if "CSV appears empty" in d.warnings else None,
     }
 
 

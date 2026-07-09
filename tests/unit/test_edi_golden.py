@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from web.routes.edi_export import _generate_edi
+from business_logic.services.edi_billing import generate_edi as _generate_edi
 
 FIXTURE_DIR = Path(__file__).parent.parent / "fixtures" / "edi_golden"
 CASES = sorted(FIXTURE_DIR.glob("*_input.json"))
