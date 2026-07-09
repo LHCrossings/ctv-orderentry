@@ -289,10 +289,12 @@ Routes: `src/web/routes/edi_billing.py`; page: `templates/edi/billing.html`.
       force overrides. 320 tests green.
 
 ### Phase 4 — Cutover
-- [ ] Nav: point the EDI menu entry at `/edi/billing`.
-- [ ] Keep `/edi/post-log` + `/edi/export` for one real billing cycle as
-      fallback, then delete their pages (routes' logic already lives in the
-      service module).
+- [x] Nav (2026-07-09): billing hub card "EDI Billing" → `/edi/billing`;
+      old Post Log + Export cards demoted to "Legacy" badges.
+- [ ] Run one real billing cycle (next month's invoices) on `/edi/billing`;
+      old pages remain as fallback.
+- [ ] After that clean cycle: delete `/edi/post-log` + `/edi/export` pages,
+      routes, and hub cards (logic already lives in the service module).
 
 ## Verify (definition of done)
 - [ ] Golden `.txt` outputs byte-identical through Phases 1–3.

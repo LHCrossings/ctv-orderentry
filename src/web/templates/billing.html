@@ -92,24 +92,34 @@
             <span class="module-badge live">Live</span>
         </a>
 
-        <!-- EDI TOOL — ACTIVE -->
-        <a href="/edi/post-log" class="module-card active">
-            <div class="module-icon">📤</div>
+        <!-- EDI BILLING — ACTIVE (unified page, replaces Post Log + Export) -->
+        <a href="/edi/billing" class="module-card active">
+            <div class="module-icon">🧾</div>
             <div class="module-body">
-                <div class="module-name">EDI Post Log</div>
-                <div class="module-desc">Export post-log CSVs from Etere and reconcile against invoice affidavits.</div>
+                <div class="module-name">EDI Billing</div>
+                <div class="module-desc">Drop the month's affidavit PDFs, fetch post logs, reconcile, and export the TVB EDI ZIP — one page.</div>
             </div>
             <span class="module-badge live">Live</span>
         </a>
 
-        <!-- EDI EXPORT — ACTIVE -->
-        <a href="/edi/export" class="module-card active">
-            <div class="module-icon">🧾</div>
+        <!-- LEGACY EDI PAGES — fallback for one billing cycle, then delete
+             (tasks/edi-billing-redesign.md Phase 4) -->
+        <a href="/edi/post-log" class="module-card active">
+            <div class="module-icon">📤</div>
             <div class="module-body">
-                <div class="module-name">EDI Export</div>
-                <div class="module-desc">Generate TVB EDI .txt files from post-log CSVs for submission to tvinvoices.com.</div>
+                <div class="module-name">EDI Post Log (legacy)</div>
+                <div class="module-desc">Replaced by EDI Billing — kept as fallback for one billing cycle.</div>
             </div>
-            <span class="module-badge live">Live</span>
+            <span class="module-badge coming">Legacy</span>
+        </a>
+
+        <a href="/edi/export" class="module-card active">
+            <div class="module-icon">📤</div>
+            <div class="module-body">
+                <div class="module-name">EDI Export (legacy)</div>
+                <div class="module-desc">Replaced by EDI Billing — kept as fallback for one billing cycle.</div>
+            </div>
+            <span class="module-badge coming">Legacy</span>
         </a>
 
     </div>
