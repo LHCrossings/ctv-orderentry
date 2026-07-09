@@ -23,5 +23,8 @@
     "95814"
   ],
   "advertiser_match": "Thunder Valley Casino",
-  "market_match": "SFO"
+  "market_match": "SFO",
+  "etere_customer_ids": [
+    68
+  ]
 }

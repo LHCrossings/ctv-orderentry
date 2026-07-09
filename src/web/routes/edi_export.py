@@ -8,6 +8,7 @@ this module is the thin route layer for the /edi/export page.
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import logging
@@ -26,10 +27,12 @@ from business_logic.services.edi_billing import (
     generate_edi as _generate_edi,
     get_template as _get_template,
     invoice_info as _invoice_info,
+    lookup_contract_customers,
+    match_template,
     parse_affidavit,
     parse_postlog_csv,
+    resolve_market,
     slug as _slug,
-    suggest_template as _suggest_template,
 )
 
 logger = logging.getLogger(__name__)
@@ -103,6 +106,16 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
                 pairs[key]["pdf"] = f.name
 
         tmpl_list = _all_templates()
+
+        # Authoritative customer lookup — one Etere query for the whole batch.
+        contract_nos = []
+        for p in pairs.values():
+            if p["csv"] and (m2 := re.search(r'_(\d+)_postlog', p["csv"])):
+                contract_nos.append(m2.group(1))
+        customer_by_contract, lookup_err = await asyncio.to_thread(
+            lookup_contract_customers, contract_nos
+        )
+
         result = []
         for key in sorted(pairs):
             p = pairs[key]
@@ -123,26 +136,47 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
                 })
                 info["warnings"].extend(parsed["warnings"])
                 advertiser = parsed.get("advertiser", "")
-                market     = parsed.get("market", "")
+                csv_market = parsed.get("market", "")
             except Exception as e:
                 logger.warning("Post-log CSV parse failed for %s: %s", p["csv"], e)
                 info["warnings"].append(f"CSV parse failed: {e}")
                 info.update(spot_count=0, gross_cents=0,
                             bcast_start="", bcast_end="", estimate_code="")
-                advertiser = market = ""
-            # PDF affidavit is authoritative for advertiser/market matching + pre-fill
+                advertiser = csv_market = ""
+            # PDF affidavit is authoritative for the advertiser text; the
+            # market comes from resolve_market (CSV spot-level data first —
+            # affidavit headers can be blank or wrong).
+            pdf_market = ""
             if p.get("pdf"):
                 pdf = _parse_affidavit_pdf(INCOMING / p["pdf"])
                 info["warnings"].extend(pdf["warnings"])
                 if pdf["advertiser"]:
                     advertiser = pdf["advertiser"]
-                if pdf["market"]:
-                    market = pdf["market"]
+                pdf_market = pdf["market"]
                 for key in ("rep_order_number", "agency_ad_code", "agency_prod_code",
                             "product_name", "comment_top", "comment_bottom"):
                     if pdf[key]:
                         info[key] = pdf[key]
-            info["suggested_template"] = _suggest_template(p["csv"], tmpl_list, advertiser, market)
+            market = resolve_market(csv_market, pdf_market)
+            cust = None
+            if (on := info.get("order_number", "")) and on.isdigit():
+                cust = customer_by_contract.get(int(on))
+            if lookup_err:
+                info["warnings"].append(lookup_err)
+            m = match_template(
+                tmpl_list,
+                customer_id=cust["customer_id"] if cust else None,
+                agency_id=cust["agency_id"] if cust else None,
+                market=market,
+                filename=p["csv"],
+                advertiser=advertiser,
+            )
+            info["suggested_template"] = m.name
+            info["match_confidence"]   = m.confidence
+            info["match_candidates"]   = m.candidates
+            info["match_detail"]       = m.detail
+            info["etere_customer_id"]   = cust["customer_id"] if cust else None
+            info["etere_customer_name"] = cust["customer_name"] if cust else ""
             # Apply market-based comment_top from template if not already set
             if not info.get("comment_top") and market:
                 tmpl = next((t for t in tmpl_list if t["name"] == info["suggested_template"]), {})

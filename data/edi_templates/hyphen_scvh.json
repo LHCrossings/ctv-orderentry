@@ -23,5 +23,9 @@
     "95814"
   ],
   "advertiser_match": "Santa Clara Valley Hospital",
-  "market_match": ""
+  "market_match": "",
+  "etere_customer_ids": [
+    398,
+    285
+  ]
 }

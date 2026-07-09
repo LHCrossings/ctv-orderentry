@@ -96,7 +96,9 @@ def parse_affidavit(pdf_bytes: bytes, source: str = "") -> AffidavitData:
             out.invoice_id = m.group(1)
         if m := re.search(r'Advertiser\s+(.+)$', page2_text, re.MULTILINE):
             out.advertiser = m.group(1).strip()
-        if m := re.search(r'Market\s+(\S+)', page2_text):
+        # [ \t] not \s: the Market value column can be blank, and \s would
+        # walk across the newline and grab the next line's label ("Fax")
+        if m := re.search(r'Market[ \t]+(\S+)', page2_text):
             out.market = m.group(1).strip()
 
         # --- totals: last subtotal line wins; sum of rows as fallback ---
@@ -417,37 +419,176 @@ def get_template(name: str) -> dict | None:
     return json.loads(p.read_text()) if p.exists() else None
 
 
-def suggest_template(filename: str, templates: list[dict],
-                     advertiser: str = "", market: str = "") -> str:
+# ---------------------------------------------------------------------------
+# Template matching (Phase 2 — tasks/edi-billing-redesign.md §2)
+# ---------------------------------------------------------------------------
+
+MARKET_CODES = {"NYC", "CMP", "HOU", "SFO", "SEA", "LAX", "CVC", "WDC", "MMT", "DAL"}
+
+# Post-log CSVs (nome2) sometimes carry full market names where affidavits
+# carry codes — normalize both to the code form used in template market_match.
+MARKET_NAME_TO_CODE = {
+    "NEW YORK": "NYC", "NEW YORK CITY": "NYC",
+    "CHICAGO": "CMP", "MINNEAPOLIS": "CMP",
+    "HOUSTON": "HOU",
+    "SAN FRANCISCO": "SFO",
+    "SEATTLE": "SEA",
+    "LOS ANGELES": "LAX",
+    "CENTRAL VALLEY": "CVC", "SACRAMENTO": "CVC",
+    "WASHINGTON DC": "WDC", "WASHINGTON": "WDC",
+    "DALLAS": "DAL",
+}
+
+
+def normalize_market(value: str) -> str:
+    v = (value or "").strip().upper()
+    return MARKET_NAME_TO_CODE.get(v, v)
+
+
+def resolve_market(csv_market: str, pdf_market: str) -> str:
     """
-    Legacy string-based template suggestion. Known-flawed (see
-    tasks/edi-billing-redesign.md §1) — replaced by the customer-ID matcher
-    in Phase 2; this survives only as the fuzzy fallback.
+    Market used for template tie-breaks and comment_top_by_market.
+    The CSV's spot-level market (where the spots actually aired) outranks the
+    affidavit header, which can be blank or wrong (contract 2590's affidavit
+    said SEA while every spot aired CVC — June 2026 batch).
     """
+    csv_m, pdf_m = normalize_market(csv_market), normalize_market(pdf_market)
+    if csv_m in MARKET_CODES:
+        return csv_m
+    if pdf_m in MARKET_CODES:
+        return pdf_m
+    return csv_m or pdf_m
+
+
+# Words too generic to identify an agency on their own. "media" in a filename
+# used to pull the Ocean Media BetMGM template for anything (confirmed
+# misdetection, spec §1).
+GENERIC_AGENCY_WORDS = {
+    "media", "group", "partners", "agency", "advertising", "solutions",
+    "communications", "the", "and", "llc", "inc", "dba",
+}
+
+
+@dataclass
+class TemplateMatch:
+    name: str = ""                 # matched template name; "" = no match / needs pick
+    confidence: str = "none"       # 'customer-id' | 'fuzzy' | 'ambiguous' | 'none'
+    candidates: list[str] = field(default_factory=list)  # for 'ambiguous'
+    detail: str = ""               # human-readable reason for the UI
+
+
+def lookup_contract_customers(contract_nos: list[str | int]) -> tuple[dict[int, dict], str | None]:
+    """
+    One MSSQL query: Etere contract IDs → authoritative customer/agency.
+    The affidavit's "Contract Number" is CONTRATTITESTATA.ID_CONTRATTITESTATA
+    (verified live 2026-07-09).
+
+    Returns ({contract_id: {customer_id, customer_name, agency_id, agency_name}},
+    error) — on DB failure the dict is empty and error holds the message so
+    callers can fall back to fuzzy matching with a visible warning.
+    """
+    nos = sorted({int(n) for n in contract_nos if str(n).strip().isdigit()})
+    if not nos:
+        return {}, None
+    try:
+        import sys
+        for p in [str(_BASE), str(_BASE / "browser_automation")]:
+            if p not in sys.path:
+                sys.path.insert(0, p)
+        from browser_automation.etere_direct_client import connect
+
+        conn = connect()
+        try:
+            cur = conn.cursor()
+            ph = ",".join("%s" for _ in nos)
+            cur.execute(f"""
+                SELECT ct.ID_CONTRATTITESTATA, ct.COMMITTENTE, cust.RAG_SOCIAL,
+                       ct.AGENZIA, ag.RAG_SOCIAL
+                FROM CONTRATTITESTATA ct
+                LEFT JOIN ANAGRAF cust ON cust.ID_ANAGRAF = ct.COMMITTENTE
+                LEFT JOIN ANAGRAF ag   ON ag.ID_ANAGRAF = ct.AGENZIA
+                WHERE ct.ID_CONTRATTITESTATA IN ({ph})
+            """, tuple(nos))
+            out = {}
+            for cid, cust_id, cust_name, ag_id, ag_name in cur.fetchall():
+                out[int(cid)] = {
+                    "customer_id":   int(cust_id) if cust_id is not None else None,
+                    "customer_name": (cust_name or "").strip(),
+                    "agency_id":     int(ag_id) if ag_id is not None else None,
+                    "agency_name":   (ag_name or "").strip(),
+                }
+            return out, None
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning("Etere customer lookup failed for contracts %s: %s", nos, e)
+        return {}, f"Etere customer lookup failed: {e}"
+
+
+def match_template(templates: list[dict], *,
+                   customer_id: int | None = None,
+                   agency_id: int | None = None,
+                   market: str = "",
+                   filename: str = "",
+                   advertiser: str = "") -> TemplateMatch:
+    """
+    Pick the EDI template for an invoice. Deterministic pass order:
+
+    0. Etere customer ID (authoritative): templates whose etere_customer_ids
+       contains the contract's COMMITTENTE. Several → narrow by market_match,
+       then etere_agency_id. Still several → 'ambiguous', do NOT guess.
+    1. Legacy exact advertiser_match (+ market_match) → 'fuzzy' (amber in UI).
+    2. Legacy agency-name words in filename, generic words excluded → 'fuzzy'.
+
+    No default-to-first-template pass: an unmatched invoice returns 'none'
+    so the UI forces an explicit pick.
+    """
+    mkt = market.strip().upper()
+
+    if customer_id is not None:
+        hits = [t for t in templates
+                if customer_id in (t.get("etere_customer_ids") or [])]
+        if len(hits) > 1 and mkt:
+            narrowed = [t for t in hits
+                        if t.get("market_match", "").strip().upper() == mkt]
+            if narrowed:
+                hits = narrowed
+        if len(hits) > 1 and agency_id is not None:
+            narrowed = [t for t in hits if t.get("etere_agency_id") == agency_id]
+            if narrowed:
+                hits = narrowed
+        if len(hits) == 1:
+            return TemplateMatch(hits[0].get("name", ""), "customer-id",
+                                 detail=f"Etere customer {customer_id}")
+        if len(hits) > 1:
+            return TemplateMatch("", "ambiguous", [t.get("name", "") for t in hits],
+                                 detail=f"{len(hits)} templates for customer "
+                                        f"{customer_id} — pick one")
+
+    # --- legacy string passes (fuzzy fallback) ---
     fn  = filename.lower()
-    adv = advertiser.lower()
-    mkt = market.upper()
+    adv = advertiser.lower().strip()
 
-    def _words(s: str) -> list[str]:
-        return re.findall(r'[a-z]{3,}', s.lower())
-
-    # Pass 1: exact advertiser_match + optional market_match (user-configured)
-    for t in templates:
-        am = t.get("advertiser_match", "").strip()
-        mm = t.get("market_match", "").strip().upper()
-        if not am:
-            continue
-        if am.lower() == adv:
-            if mm and mm != mkt:
+    if adv:
+        for t in templates:
+            am = t.get("advertiser_match", "").strip()
+            mm = t.get("market_match", "").strip().upper()
+            if not am:
                 continue
-            return t.get("name", "")
+            if am.lower() == adv:
+                if mm and mkt and mm != mkt:
+                    continue
+                return TemplateMatch(t.get("name", ""), "fuzzy",
+                                     detail="advertiser text match — verify")
 
-    # Pass 2: fuzzy fallback (agency name in filename)
     for t in templates:
-        if any(w in fn for w in _words(t.get("agency_name", ""))):
-            return t.get("name", "")
+        words = [w for w in re.findall(r'[a-z]{3,}', t.get("agency_name", "").lower())
+                 if w not in GENERIC_AGENCY_WORDS]
+        if words and any(w in fn for w in words):
+            return TemplateMatch(t.get("name", ""), "fuzzy",
+                                 detail="agency name in filename — verify")
 
-    return templates[0].get("name", "") if templates else ""
+    return TemplateMatch("", "none", detail="no template matched — pick one")
 
 
 # ---------------------------------------------------------------------------

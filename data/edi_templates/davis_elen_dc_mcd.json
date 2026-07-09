@@ -24,5 +24,8 @@
     "95814"
   ],
   "advertiser_match": "Capital Business Unit (McD)",
-  "market_match": "WDC"
+  "market_match": "WDC",
+  "etere_customer_ids": [
+    416
+  ]
 }

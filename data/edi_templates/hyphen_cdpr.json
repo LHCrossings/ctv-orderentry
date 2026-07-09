@@ -27,5 +27,9 @@
     "LAX": "LOS ANGELES MARKET"
   },
   "advertiser_match": "CA Dept of Pesticide Regulation",
-  "market_match": ""
+  "market_match": "",
+  "etere_customer_ids": [
+    389
+  ],
+  "etere_agency_id": 150
 }

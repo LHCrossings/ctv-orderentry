@@ -78,8 +78,12 @@
     }
     .field-group input[readonly] { color: var(--text-secondary); cursor: default; }
     .field-comment { grid-column: 1 / -1; }
-    .field-group input.field-error { border-color: var(--accent-danger) !important; }
-    .field-group input.field-warn  { border-color: #d08770 !important; }
+    .field-group input.field-error, .field-group select.field-error { border-color: var(--accent-danger) !important; }
+    .field-group input.field-warn,  .field-group select.field-warn  { border-color: #d08770 !important; }
+    .match-badge { font-size: .75rem; font-weight: 600; margin-left: auto; }
+    .match-badge.ok   { color: #2d6a4f; }
+    .match-badge.warn { color: #d08770; }
+    .match-badge.err  { color: var(--accent-danger); }
     .char-counter { font-size: .7rem; color: var(--text-secondary); text-align: right; margin-top: 1px; }
     .char-counter.near { color: #d08770; }
     .char-counter.over { color: var(--accent-danger); font-weight: 700; }
@@ -199,10 +203,14 @@
         <div class="field-group tmpl-full" style="border-top:1px solid var(--border-color);padding-top:.8rem;margin-top:.4rem;">
           <label style="color:var(--accent-primary)">Auto-Match Settings</label>
         </div>
-        <div class="field-group tmpl-full"><label>Advertiser Match (exact text from PDF affidavit)</label>
+        <div class="field-group"><label>Etere Customer IDs (authoritative match — comma-separated)</label>
+          <input id="te-cust-ids" placeholder="e.g. 122 or 68, 431"/></div>
+        <div class="field-group"><label>Etere Agency ID (optional tie-breaker)</label>
+          <input id="te-agency-id" placeholder="e.g. 121"/></div>
+        <div class="field-group tmpl-full"><label>Advertiser Match (legacy fallback — exact text from PDF affidavit)</label>
           <input id="te-adv-match" placeholder="e.g. Southern CA Toyota Dealers Association"/></div>
-        <div class="field-group"><label>Market Match (optional, for CVC/SFO disambiguation)</label>
-          <input id="te-mkt-match" placeholder="e.g. CENTRAL VALLEY or SAN FRANCISCO"/></div>
+        <div class="field-group"><label>Market Match (tie-breaker, e.g. CVC / SFO / SEA)</label>
+          <input id="te-mkt-match" placeholder="e.g. CVC"/></div>
       </div>
       <div style="display:flex;gap:.6rem;margin-top:1rem;">
         <button class="btn btn-primary btn-sm" id="btn-save-tmpl">Save</button>
@@ -346,6 +354,8 @@ function openEditor(editSlug) {
   document.getElementById('te-prod-code').value    = t?.agency_prod_code || '';
   document.getElementById('te-payee-name').value   = t?.payee_name || 'Crossings TV';
   document.getElementById('te-payee-addr').value   = t ? (t.payee_address||[]).join(', ') : 'Accounts Receivable, 901 H Street Ste 120 PMB 91, Sacramento CA, 95814';
+  document.getElementById('te-cust-ids').value     = (t?.etere_customer_ids || []).join(', ');
+  document.getElementById('te-agency-id').value    = t?.etere_agency_id ?? '';
   document.getElementById('te-adv-match').value    = t?.advertiser_match || '';
   document.getElementById('te-mkt-match').value    = t?.market_match || '';
   document.getElementById('btn-del-tmpl').style.display = editSlug ? '' : 'none';
@@ -362,7 +372,11 @@ document.getElementById('btn-save-tmpl').addEventListener('click', async () => {
   const name = document.getElementById('te-name').value.trim();
   if (!name) { alert('Template name is required.'); return; }
   const addrSplit = s => s.split(',').map(x => x.trim()).filter(Boolean);
+  // Merge over the existing template so keys the modal doesn't edit
+  // (e.g. comment_top_by_market) survive a UI save.
+  const existing = editingSlug ? (templates.find(x => slug(x.name) === editingSlug) || {}) : {};
   const data = {
+    ...existing,
     name,
     edi_code:        document.getElementById('te-edi-code').value.trim(),
     call_letters:    document.getElementById('te-call-letters').value.trim(),
@@ -379,7 +393,11 @@ document.getElementById('btn-save-tmpl').addEventListener('click', async () => {
     payee_address:    addrSplit(document.getElementById('te-payee-addr').value),
     advertiser_match: document.getElementById('te-adv-match').value.trim(),
     market_match:     document.getElementById('te-mkt-match').value.trim(),
+    etere_customer_ids: document.getElementById('te-cust-ids').value
+      .split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n)),
   };
+  const agencyId = parseInt(document.getElementById('te-agency-id').value.trim(), 10);
+  if (!isNaN(agencyId)) data.etere_agency_id = agencyId;
   await fetch('/edi/export/templates', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
   document.getElementById('tmpl-editor').classList.remove('open');
   editingSlug = null;
@@ -460,17 +478,26 @@ function renderFileList() {
     const tmpl = templates.find(t => t.name === item.suggested_template) || {};
     const tmplOpts = '<option value="">— select —</option>' +
       templates.map(t => `<option value="${t.name}" ${t.name===item.suggested_template?'selected':''}>${t.name}</option>`).join('');
+    const conf = item.match_confidence || (item.suggested_template ? 'fuzzy' : 'none');
+    const custNote = item.etere_customer_name ? ` (${item.etere_customer_name})` : '';
+    const matchBadge =
+      conf === 'customer-id' ? `<span class="match-badge ok" title="${item.match_detail||''}">✓ matched by customer ID${custNote}</span>` :
+      conf === 'fuzzy'       ? `<span class="match-badge warn" title="${item.match_detail||''}">⚠ fuzzy match — verify</span>` :
+      conf === 'ambiguous'   ? `<span class="match-badge warn" title="Candidates: ${(item.match_candidates||[]).join(', ')}">⚠ pick template (${(item.match_candidates||[]).length} candidates)</span>` :
+                               `<span class="match-badge err" title="${item.match_detail||''}">✗ no template match — pick one</span>`;
+    const selWarn = conf === 'customer-id' ? '' : (conf === 'none' ? 'field-error' : 'field-warn');
     return `
     <div class="file-card" data-idx="${idx}">
       <div class="file-card-header">
         <span class="inv-num">${item.invoice_number || '—'}</span>
         <span class="filename">${item.csv_filename}</span>
         <span class="meta">${item.spot_count} spots · ${gross}</span>
+        ${matchBadge}
       </div>
       <div class="file-card-body">
         <div class="field-group" style="grid-column:1/-1">
           <label>Template</label>
-          <select class="tmpl-select">
+          <select class="tmpl-select ${selWarn}">
             ${tmplOpts}
           </select>
         </div>
@@ -559,6 +586,8 @@ function renderFileList() {
   document.querySelectorAll('.tmpl-select').forEach(sel => {
     sel.addEventListener('change', () => {
       const card = sel.closest('.file-card');
+      // An explicit user pick resolves the auto-match warning
+      if (sel.value) sel.classList.remove('field-warn', 'field-error');
       const t = templates.find(x => x.name === sel.value) || {};
       card.querySelector('.f-advertiser-name').value = t.advertiser_name || '';
       card.querySelector('.f-product-name').value    = t.product_name    || '';

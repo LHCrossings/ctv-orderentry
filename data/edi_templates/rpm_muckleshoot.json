@@ -23,5 +23,8 @@
     "95814"
   ],
   "advertiser_match": "Muckleshoot Casino",
-  "market_match": "SEA"
+  "market_match": "SEA",
+  "etere_customer_ids": [
+    129
+  ]
 }

@@ -24,5 +24,8 @@
   ],
   "comment_top": "SAN FRANCISCO MARKET",
   "advertiser_match": "Northern California Toyota Dealer's Assocation",
-  "market_match": "SFO"
+  "market_match": "SFO",
+  "etere_customer_ids": [
+    9
+  ]
 }

@@ -231,15 +231,29 @@ Created `src/business_logic/services/edi_billing.py`; MOVED (not copied):
       and reconcile results identical pre/post move; 288 tests green.
 - Deferred to Phase 3 as planned: `_diff_pdf_csv`, `_fetch_all_reports_sync`.
 
-### Phase 2 — Template customer-ID matching
-- [ ] Add matcher + schema fields (section 2). Extend the template editor UI
-      (export.html template modal) with `etere_customer_ids` /
-      `etere_agency_id` inputs.
-- [ ] `scripts/backfill_edi_template_customers.py` with confirm gate; run it
-      with Lee, commit the updated 18 JSONs.
-- [ ] Wire matcher into the existing `/edi/export/scan` immediately (drop-in
-      improvement even before the new page exists) with `match_confidence` in
-      the response; UI shows amber for fuzzy.
+### Phase 2 — Template customer-ID matching ✅ DONE 2026-07-09
+- [x] Verified live: affidavit "Contract Number" = `ID_CONTRATTITESTATA`;
+      `CONTRATTITESTATA.AGENZIA` exists. Names via `ANAGRAF.RAG_SOCIAL`.
+- [x] `match_template()` + `lookup_contract_customers()` (batch, one query,
+      graceful DB-failure fallback to fuzzy) in the service. Legacy passes are
+      the fuzzy fallback (flagged); generic agency words excluded; no
+      default-to-first-template pass. `suggest_template` removed.
+- [x] Market handling hardened: `resolve_market()` — CSV spot-level market
+      (normalized, e.g. SAN FRANCISCO→SFO) outranks the affidavit header,
+      which can be blank (2736 — regex grabbed "Fax" across newline, fixed)
+      or wrong (2590 header says SEA, spots aired CVC).
+- [x] Backfill run with Lee 2026-07-09: all 19 templates mapped. Notables:
+      LA McD=368 (42 is Admerasia's McDonald's), SCVH=[398, 285] (renamed
+      org, both), NYSDOH=44 only (22=NYC DOHMH is a different body), CDPR
+      twins share 389 disambiguated by etere_agency_id (Hyphen 150 /
+      iHeartMedia 388), Pulsar=364 (ANAGRAF name ≠ "OCHCA").
+- [x] Scan returns match_confidence/candidates/detail + etere customer;
+      export.html shows ✓/⚠/✗ badge, warn-bordered select, editor fields for
+      the new keys, and save now merges over the existing template (was
+      silently dropping keys the modal doesn't edit, e.g. comment_top_by_market).
+- [x] Verified on the June batch: 15/15 customer-id matches (was 10/15
+      correct-by-luck under string matching). 16 matcher/market unit tests
+      incl. the three confirmed-misdetection regressions.
 
 ### Phase 3 — The unified `/edi/billing` page
 - [ ] `POST /edi/billing/intake` — accept PDF uploads; parse; write PDFs into

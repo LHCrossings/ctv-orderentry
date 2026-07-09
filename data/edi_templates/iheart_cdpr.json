@@ -24,5 +24,9 @@
     "95814"
   ],
   "advertiser_match": "",
-  "market_match": ""
+  "market_match": "",
+  "etere_customer_ids": [
+    389
+  ],
+  "etere_agency_id": 388
 }

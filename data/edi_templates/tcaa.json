@@ -24,5 +24,8 @@
     "95814"
   ],
   "advertiser_match": "WWTDAA - Seattle-Tacoma, WA ADI",
-  "market_match": "SEA"
+  "market_match": "SEA",
+  "etere_customer_ids": [
+    75
+  ]
 }

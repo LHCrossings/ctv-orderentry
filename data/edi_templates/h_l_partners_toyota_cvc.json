@@ -23,5 +23,8 @@
     "95814"
   ],
   "advertiser_match": "Northern California Toyota Dealer's Assocation",
-  "market_match": "CVC"
+  "market_match": "CVC",
+  "etere_customer_ids": [
+    9
+  ]
 }

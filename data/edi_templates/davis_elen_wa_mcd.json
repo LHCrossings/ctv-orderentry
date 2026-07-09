@@ -24,5 +24,8 @@
     "95814"
   ],
   "advertiser_match": "Western WA Operator Association (McD)",
-  "market_match": "SEA"
+  "market_match": "SEA",
+  "etere_customer_ids": [
+    122
+  ]
 }

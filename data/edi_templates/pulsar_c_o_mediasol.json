@@ -24,5 +24,8 @@
     "95814"
   ],
   "advertiser_match": "OCHCA",
-  "market_match": "LAX"
+  "market_match": "LAX",
+  "etere_customer_ids": [
+    364
+  ]
 }
