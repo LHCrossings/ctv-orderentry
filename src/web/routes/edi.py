@@ -316,18 +316,6 @@ def _diff_pdf_csv(pdf_bytes: bytes, csv_bytes: bytes) -> dict:
 # Etere fetch (single session for whole batch)
 # ---------------------------------------------------------------------------
 
-def _fetch_report_sync(contract_no: str, start_date: str, end_date: str) -> bytes:
-    from web.etere_report_fetcher import fetch_etere_report
-    return fetch_etere_report(
-        contract_number=int(contract_no),
-        report_code="R100018_C18236_postlog_with_contract_no",
-        is_system="False",
-        use_date_range=True,
-        start_date=start_date,
-        end_date=end_date,
-    )
-
-
 def _fetch_all_reports_sync(contracts: list[dict], start_date: str, end_date: str) -> list[dict]:
     """
     Fetch all post-log reports in a single Etere session to avoid
@@ -335,7 +323,7 @@ def _fetch_all_reports_sync(contracts: list[dict], start_date: str, end_date: st
     """
     import sys
     from pathlib import Path
-    root = Path(__file__).parent.parent.parent
+    root = Path(__file__).resolve().parents[3]
     for p in [str(root), str(root / "browser_automation")]:
         if p not in sys.path:
             sys.path.insert(0, p)

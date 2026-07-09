@@ -1,0 +1,1958 @@
+{
+  "comment": "Frozen from real pair '2606-009 BVK' (June 2026); template 'BVK UC Davis Health'.",
+  "template": {
+    "name": "BVK UC Davis Health",
+    "edi_code": "9913227",
+    "call_letters": "CRSE",
+    "commission_pct": 15,
+    "representative": "Charmaine Lane",
+    "salesperson": "Jennifer Murphy",
+    "agency_name": "BVK",
+    "advertiser_name": "UC Davis Health",
+    "product_name": "UC Davis Health",
+    "agency_address": [
+      "250 W Coventry Court",
+      "Ste 300",
+      "Milwaukee, WI",
+      "53217"
+    ],
+    "agency_ad_code": "",
+    "agency_prod_code": "",
+    "payee_name": "Crossings TV",
+    "payee_address": [
+      "Accounts Receivable",
+      "901 H Street Ste 120 PMB 91",
+      "Sacramento CA",
+      "95814"
+    ],
+    "advertiser_match": "",
+    "market_match": ""
+  },
+  "inv": {
+    "invoice_number": "2606-009",
+    "broadcast_month": "2606",
+    "invoice_date": "260630",
+    "order_number": "2738",
+    "spot_count": 239,
+    "gross_cents": 447500,
+    "bcast_start": "260601",
+    "bcast_end": "260628",
+    "estimate_code": "4807",
+    "comment_bottom": "UCDH BIB Crossing TV"
+  },
+  "spots": [
+    {
+      "run_date": "260601",
+      "time_hhmm": "0810",
+      "duration": 15,
+      "copy_id": "UCD15K19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260601",
+      "time_hhmm": "0908",
+      "duration": 15,
+      "copy_id": "UCD15K20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260601",
+      "time_hhmm": "0956",
+      "duration": 15,
+      "copy_id": "UCD15K19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260601",
+      "time_hhmm": "1021",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260601",
+      "time_hhmm": "1111",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260601",
+      "time_hhmm": "1141",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260601",
+      "time_hhmm": "1208",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260601",
+      "time_hhmm": "1308",
+      "duration": 15,
+      "copy_id": "UCD15SA19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260601",
+      "time_hhmm": "1339",
+      "duration": 15,
+      "copy_id": "UCD15SA20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260601",
+      "time_hhmm": "1413",
+      "duration": 15,
+      "copy_id": "UCD15SA19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260601",
+      "time_hhmm": "1709",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260601",
+      "time_hhmm": "1812",
+      "duration": 15,
+      "copy_id": "UCD15T19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260601",
+      "time_hhmm": "1841",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260601",
+      "time_hhmm": "1908",
+      "duration": 15,
+      "copy_id": "UCD15C19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260601",
+      "time_hhmm": "2017",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260601",
+      "time_hhmm": "2105",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260601",
+      "time_hhmm": "2225",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260601",
+      "time_hhmm": "2338",
+      "duration": 15,
+      "copy_id": "UCD15C20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "0641",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "0808",
+      "duration": 15,
+      "copy_id": "UCD15K20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "0909",
+      "duration": 15,
+      "copy_id": "UCD15K19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "1106",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "1141",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "1206",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "1309",
+      "duration": 15,
+      "copy_id": "UCD15SA20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "1338",
+      "duration": 15,
+      "copy_id": "UCD15SA19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "1411",
+      "duration": 15,
+      "copy_id": "UCD15SA20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "1709",
+      "duration": 15,
+      "copy_id": "UCD15T19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "1809",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "1842",
+      "duration": 15,
+      "copy_id": "UCD15T19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "1908",
+      "duration": 15,
+      "copy_id": "UCD15C19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "2015",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "2106",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "2211",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "2340",
+      "duration": 15,
+      "copy_id": "UCD15C20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260603",
+      "time_hhmm": "1310",
+      "duration": 15,
+      "copy_id": "UCD15SA19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260603",
+      "time_hhmm": "1705",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260603",
+      "time_hhmm": "1909",
+      "duration": 15,
+      "copy_id": "UCD15C19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260603",
+      "time_hhmm": "2016",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260604",
+      "time_hhmm": "1140",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260604",
+      "time_hhmm": "1559",
+      "duration": 15,
+      "copy_id": "UCD15SA20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260604",
+      "time_hhmm": "2308",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260605",
+      "time_hhmm": "1235",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260605",
+      "time_hhmm": "1719",
+      "duration": 15,
+      "copy_id": "UCD15T19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260606",
+      "time_hhmm": "1151",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260606",
+      "time_hhmm": "1401",
+      "duration": 15,
+      "copy_id": "UCD15SA19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260606",
+      "time_hhmm": "1609",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260606",
+      "time_hhmm": "1639",
+      "duration": 15,
+      "copy_id": "UCD15T19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260606",
+      "time_hhmm": "1805",
+      "duration": 15,
+      "copy_id": "UCD15H20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260606",
+      "time_hhmm": "1921",
+      "duration": 15,
+      "copy_id": "UCD15H19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260606",
+      "time_hhmm": "2018",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260606",
+      "time_hhmm": "2047",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260606",
+      "time_hhmm": "2126",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260607",
+      "time_hhmm": "0809",
+      "duration": 15,
+      "copy_id": "UCD15K20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260607",
+      "time_hhmm": "1029",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260607",
+      "time_hhmm": "1136",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260607",
+      "time_hhmm": "1623",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260607",
+      "time_hhmm": "1705",
+      "duration": 15,
+      "copy_id": "UCD15T19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260607",
+      "time_hhmm": "1806",
+      "duration": 15,
+      "copy_id": "UCD15H20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260607",
+      "time_hhmm": "1947",
+      "duration": 15,
+      "copy_id": "UCD15H19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260607",
+      "time_hhmm": "2013",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "0717",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "0811",
+      "duration": 15,
+      "copy_id": "UCD15K19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "0911",
+      "duration": 15,
+      "copy_id": "UCD15K20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "1034",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "1108",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "1137",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "1210",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "1309",
+      "duration": 15,
+      "copy_id": "UCD15SA20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "1339",
+      "duration": 15,
+      "copy_id": "UCD15SA19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "1411",
+      "duration": 15,
+      "copy_id": "UCD15SA20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "1528",
+      "duration": 15,
+      "copy_id": "UCD15SA19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "1711",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "1809",
+      "duration": 15,
+      "copy_id": "UCD15T19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "1840",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "1918",
+      "duration": 15,
+      "copy_id": "UCD15C20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "2031",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "2104",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "2226",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "2337",
+      "duration": 15,
+      "copy_id": "UCD15C19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "0809",
+      "duration": 15,
+      "copy_id": "UCD15K19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "0910",
+      "duration": 15,
+      "copy_id": "UCD15K20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "0959",
+      "duration": 15,
+      "copy_id": "UCD15K19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "1107",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "1142",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "1213",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "1310",
+      "duration": 15,
+      "copy_id": "UCD15SA20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "1339",
+      "duration": 15,
+      "copy_id": "UCD15SA19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "1411",
+      "duration": 15,
+      "copy_id": "UCD15SA20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "1710",
+      "duration": 15,
+      "copy_id": "UCD15T19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "1809",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "1840",
+      "duration": 15,
+      "copy_id": "UCD15T19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "1930",
+      "duration": 15,
+      "copy_id": "UCD15C20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "2022",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "2108",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "2209",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "2339",
+      "duration": 15,
+      "copy_id": "UCD15C19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260610",
+      "time_hhmm": "1217",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260610",
+      "time_hhmm": "1410",
+      "duration": 15,
+      "copy_id": "UCD15SA19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260610",
+      "time_hhmm": "1658",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260610",
+      "time_hhmm": "1922",
+      "duration": 15,
+      "copy_id": "UCD15C20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260611",
+      "time_hhmm": "1411",
+      "duration": 15,
+      "copy_id": "UCD15SA20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260611",
+      "time_hhmm": "1706",
+      "duration": 15,
+      "copy_id": "UCD15T19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260611",
+      "time_hhmm": "1929",
+      "duration": 15,
+      "copy_id": "UCD15C19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260612",
+      "time_hhmm": "1049",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260613",
+      "time_hhmm": "0836",
+      "duration": 15,
+      "copy_id": "UCD15K20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260613",
+      "time_hhmm": "1111",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260613",
+      "time_hhmm": "1151",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260613",
+      "time_hhmm": "1250",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260613",
+      "time_hhmm": "1613",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260613",
+      "time_hhmm": "1814",
+      "duration": 15,
+      "copy_id": "UCD15H20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260613",
+      "time_hhmm": "1843",
+      "duration": 15,
+      "copy_id": "UCD15H19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260613",
+      "time_hhmm": "1938",
+      "duration": 15,
+      "copy_id": "UCD15H20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260613",
+      "time_hhmm": "2011",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260614",
+      "time_hhmm": "0747",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260614",
+      "time_hhmm": "1136",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260614",
+      "time_hhmm": "1706",
+      "duration": 15,
+      "copy_id": "UCD15T19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260614",
+      "time_hhmm": "1806",
+      "duration": 15,
+      "copy_id": "UCD15H19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260614",
+      "time_hhmm": "1910",
+      "duration": 15,
+      "copy_id": "UCD15H20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260614",
+      "time_hhmm": "2013",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "0810",
+      "duration": 15,
+      "copy_id": "UCD15K19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "0912",
+      "duration": 15,
+      "copy_id": "UCD15K20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "1012",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "1113",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "1142",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "1214",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "1309",
+      "duration": 15,
+      "copy_id": "UCD15SA19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "1339",
+      "duration": 15,
+      "copy_id": "UCD15SA20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "1410",
+      "duration": 15,
+      "copy_id": "UCD15SA19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "1438",
+      "duration": 15,
+      "copy_id": "UCD15SA20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "1709",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "1807",
+      "duration": 15,
+      "copy_id": "UCD15T19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "1841",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "1917",
+      "duration": 15,
+      "copy_id": "UCD15C20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "2030",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "2112",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "2234",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "2335",
+      "duration": 15,
+      "copy_id": "UCD15C19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "0809",
+      "duration": 15,
+      "copy_id": "UCD15K19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "0913",
+      "duration": 15,
+      "copy_id": "UCD15K20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "1107",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "1141",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "1208",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "1308",
+      "duration": 15,
+      "copy_id": "UCD15SA19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "1340",
+      "duration": 15,
+      "copy_id": "UCD15SA20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "1413",
+      "duration": 15,
+      "copy_id": "UCD15SA19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "1629",
+      "duration": 15,
+      "copy_id": "UCD15T19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "1712",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "1809",
+      "duration": 15,
+      "copy_id": "UCD15T19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "1838",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "1928",
+      "duration": 15,
+      "copy_id": "UCD15C20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "2032",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "2113",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "2207",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "2334",
+      "duration": 15,
+      "copy_id": "UCD15C19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260617",
+      "time_hhmm": "0909",
+      "duration": 15,
+      "copy_id": "UCD15K19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260617",
+      "time_hhmm": "1309",
+      "duration": 15,
+      "copy_id": "UCD15SA20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260617",
+      "time_hhmm": "1922",
+      "duration": 15,
+      "copy_id": "UCD15C20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260617",
+      "time_hhmm": "2013",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260618",
+      "time_hhmm": "0657",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260618",
+      "time_hhmm": "0857",
+      "duration": 15,
+      "copy_id": "UCD15K20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260618",
+      "time_hhmm": "1050",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260619",
+      "time_hhmm": "1207",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260619",
+      "time_hhmm": "1547",
+      "duration": 15,
+      "copy_id": "UCD15SA19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260620",
+      "time_hhmm": "0752",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260620",
+      "time_hhmm": "1050",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260620",
+      "time_hhmm": "1150",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260620",
+      "time_hhmm": "1610",
+      "duration": 15,
+      "copy_id": "UCD15T19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260620",
+      "time_hhmm": "1637",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260620",
+      "time_hhmm": "1741",
+      "duration": 15,
+      "copy_id": "UCD15T19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260620",
+      "time_hhmm": "1808",
+      "duration": 15,
+      "copy_id": "UCD15H19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260620",
+      "time_hhmm": "1830",
+      "duration": 15,
+      "copy_id": "UCD15H20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260620",
+      "time_hhmm": "2015",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260620",
+      "time_hhmm": "2047",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260621",
+      "time_hhmm": "0748",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260621",
+      "time_hhmm": "1134",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260621",
+      "time_hhmm": "1706",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260621",
+      "time_hhmm": "1816",
+      "duration": 15,
+      "copy_id": "UCD15H19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260621",
+      "time_hhmm": "1837",
+      "duration": 15,
+      "copy_id": "UCD15H20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260621",
+      "time_hhmm": "2014",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260622",
+      "time_hhmm": "0811",
+      "duration": 15,
+      "copy_id": "UCD15K19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260622",
+      "time_hhmm": "0908",
+      "duration": 15,
+      "copy_id": "UCD15K20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260622",
+      "time_hhmm": "1112",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260622",
+      "time_hhmm": "1142",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260622",
+      "time_hhmm": "1207",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260622",
+      "time_hhmm": "1238",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260622",
+      "time_hhmm": "1309",
+      "duration": 15,
+      "copy_id": "UCD15SA20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260622",
+      "time_hhmm": "1338",
+      "duration": 15,
+      "copy_id": "UCD15SA19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260622",
+      "time_hhmm": "1410",
+      "duration": 15,
+      "copy_id": "UCD15SA20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260622",
+      "time_hhmm": "1538",
+      "duration": 15,
+      "copy_id": "UCD15SA19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260622",
+      "time_hhmm": "1710",
+      "duration": 15,
+      "copy_id": "UCD15T19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260622",
+      "time_hhmm": "1810",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260622",
+      "time_hhmm": "1835",
+      "duration": 15,
+      "copy_id": "UCD15T19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260622",
+      "time_hhmm": "1911",
+      "duration": 15,
+      "copy_id": "UCD15C19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260622",
+      "time_hhmm": "2014",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260622",
+      "time_hhmm": "2106",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260622",
+      "time_hhmm": "2226",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260622",
+      "time_hhmm": "2335",
+      "duration": 15,
+      "copy_id": "UCD15C20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260623",
+      "time_hhmm": "0810",
+      "duration": 15,
+      "copy_id": "UCD15K19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260623",
+      "time_hhmm": "0912",
+      "duration": 15,
+      "copy_id": "UCD15K20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260623",
+      "time_hhmm": "1028",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260623",
+      "time_hhmm": "1106",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260623",
+      "time_hhmm": "1142",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260623",
+      "time_hhmm": "1207",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260623",
+      "time_hhmm": "1309",
+      "duration": 15,
+      "copy_id": "UCD15SA20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260623",
+      "time_hhmm": "1338",
+      "duration": 15,
+      "copy_id": "UCD15SA19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260623",
+      "time_hhmm": "1410",
+      "duration": 15,
+      "copy_id": "UCD15SA20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260623",
+      "time_hhmm": "1639",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260623",
+      "time_hhmm": "1711",
+      "duration": 15,
+      "copy_id": "UCD15T19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260623",
+      "time_hhmm": "1811",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260623",
+      "time_hhmm": "1838",
+      "duration": 15,
+      "copy_id": "UCD15T19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260623",
+      "time_hhmm": "1931",
+      "duration": 15,
+      "copy_id": "UCD15C19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260623",
+      "time_hhmm": "2028",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260623",
+      "time_hhmm": "2107",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260623",
+      "time_hhmm": "2208",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260623",
+      "time_hhmm": "2335",
+      "duration": 15,
+      "copy_id": "UCD15C20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260624",
+      "time_hhmm": "0640",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260624",
+      "time_hhmm": "0939",
+      "duration": 15,
+      "copy_id": "UCD15K19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260624",
+      "time_hhmm": "1413",
+      "duration": 15,
+      "copy_id": "UCD15SA19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260624",
+      "time_hhmm": "1622",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260624",
+      "time_hhmm": "1908",
+      "duration": 15,
+      "copy_id": "UCD15C19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260626",
+      "time_hhmm": "0719",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260627",
+      "time_hhmm": "1112",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260627",
+      "time_hhmm": "1151",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260627",
+      "time_hhmm": "1217",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260627",
+      "time_hhmm": "1611",
+      "duration": 15,
+      "copy_id": "UCD15T19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260627",
+      "time_hhmm": "1802",
+      "duration": 15,
+      "copy_id": "UCD15H19",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260627",
+      "time_hhmm": "1833",
+      "duration": 15,
+      "copy_id": "UCD15H20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260627",
+      "time_hhmm": "1911",
+      "duration": 15,
+      "copy_id": "UCD15H19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260627",
+      "time_hhmm": "2012",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260627",
+      "time_hhmm": "2148",
+      "duration": 15,
+      "copy_id": "UCD15M19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260628",
+      "time_hhmm": "0810",
+      "duration": 15,
+      "copy_id": "UCD15K20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260628",
+      "time_hhmm": "1135",
+      "duration": 15,
+      "copy_id": "UCD15V20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260628",
+      "time_hhmm": "1229",
+      "duration": 15,
+      "copy_id": "UCD15V19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260628",
+      "time_hhmm": "1322",
+      "duration": 15,
+      "copy_id": "UCD15SA20",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260628",
+      "time_hhmm": "1707",
+      "duration": 15,
+      "copy_id": "UCD15T20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260628",
+      "time_hhmm": "1805",
+      "duration": 15,
+      "copy_id": "UCD15H20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260628",
+      "time_hhmm": "1903",
+      "duration": 15,
+      "copy_id": "UCD15H19",
+      "rate_cents": 0,
+      "market": "CVC"
+    },
+    {
+      "run_date": "260628",
+      "time_hhmm": "2012",
+      "duration": 15,
+      "copy_id": "UCD15M20",
+      "rate_cents": 2500,
+      "market": "CVC"
+    }
+  ],
+  "expected": "2606-009.txt"
+}

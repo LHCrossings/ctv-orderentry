@@ -1,3 +1,18 @@
+# EDI Billing Redesign — progress tracker
+
+Spec: `tasks/edi-billing-redesign.md` (approved by Lee 2026-07-09; open
+questions resolved — broadcast month, flag-don't-reject, drill-down diff,
+deliberate fetch button).
+
+- [x] Phase 0 — golden tests + safety fixes (2026-07-09; details in spec)
+- [ ] Phase 1 — consolidate into `src/business_logic/services/edi_billing.py`
+- [ ] Phase 2 — customer-ID template matcher + backfill script (run with Lee)
+- [ ] Phase 3 — unified `/edi/billing` page
+- [ ] Phase 4 — cutover, then retire `/edi/post-log` + `/edi/export` after one
+      real billing cycle
+
+---
+
 # Tier 1 Conformance to ctv-common / ctv-template standard
 
 **Goal:** Align `ctv-orderentry`'s toolchain & repo hygiene with the CTV house

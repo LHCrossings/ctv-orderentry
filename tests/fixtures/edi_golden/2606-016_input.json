@@ -1,0 +1,627 @@
+{
+  "comment": "Frozen from real pair '2606-016 Davis Elen' (June 2026); template 'Davis Elen WA McD'.",
+  "template": {
+    "name": "Davis Elen WA McD",
+    "edi_code": "9912567",
+    "call_letters": "CROS",
+    "commission_pct": 15,
+    "representative": "Charmaine Lane",
+    "salesperson": "Rosa Lina Quiones Diaz",
+    "agency_name": "Davis Elen",
+    "advertiser_name": "DMWW West WA Op Ass",
+    "product_name": "QSR",
+    "agency_address": [
+      "856 Figueroa Street",
+      "12th Floor",
+      "Los Angeles CA",
+      "90017"
+    ],
+    "agency_ad_code": "DCBU",
+    "agency_prod_code": "QSR",
+    "payee_name": "Crossings TV",
+    "payee_address": [
+      "Accounts Receivable",
+      "901 H Street Ste 120 PMB 91",
+      "Sacramento CA",
+      "95814"
+    ],
+    "advertiser_match": "Western WA Operator Association (McD)",
+    "market_match": "SEA"
+  },
+  "inv": {
+    "invoice_number": "2606-016",
+    "broadcast_month": "2606",
+    "invoice_date": "260630",
+    "order_number": "2685",
+    "spot_count": 72,
+    "gross_cents": 161100,
+    "bcast_start": "260601",
+    "bcast_end": "260621",
+    "estimate_code": "48",
+    "rep_order_number": "26695",
+    "agency_ad_code": "DMWW",
+    "agency_prod_code": "QSR",
+    "product_name": "Quick Service Restaurant",
+    "comment_top": "26_05_06_T__MAN_AM_BRK",
+    "comment_bottom": "Order #: 26695"
+  },
+  "spots": [
+    {
+      "run_date": "260601",
+      "time_hhmm": "2016",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260601",
+      "time_hhmm": "2048",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260601",
+      "time_hhmm": "2105",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2900,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260601",
+      "time_hhmm": "2225",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260601",
+      "time_hhmm": "2245",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 0,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "0622",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 0,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "2015",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "2052",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "2106",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2900,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260602",
+      "time_hhmm": "2126",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260603",
+      "time_hhmm": "0613",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 0,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260603",
+      "time_hhmm": "2015",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260603",
+      "time_hhmm": "2046",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260603",
+      "time_hhmm": "2107",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2900,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260603",
+      "time_hhmm": "2126",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260604",
+      "time_hhmm": "0613",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 0,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260604",
+      "time_hhmm": "2010",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260604",
+      "time_hhmm": "2052",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260604",
+      "time_hhmm": "2109",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2900,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260605",
+      "time_hhmm": "2013",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260605",
+      "time_hhmm": "2049",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 0,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260605",
+      "time_hhmm": "2107",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2900,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260606",
+      "time_hhmm": "2017",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260607",
+      "time_hhmm": "2012",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "2019",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "2048",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "2105",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2900,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "2226",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260608",
+      "time_hhmm": "2256",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 0,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "0617",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 0,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "2022",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "2051",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "2108",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2900,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260609",
+      "time_hhmm": "2126",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260610",
+      "time_hhmm": "0615",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 0,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260610",
+      "time_hhmm": "2021",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260610",
+      "time_hhmm": "2051",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260610",
+      "time_hhmm": "2111",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2900,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260610",
+      "time_hhmm": "2127",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260611",
+      "time_hhmm": "0620",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 0,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260611",
+      "time_hhmm": "2015",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260611",
+      "time_hhmm": "2050",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260611",
+      "time_hhmm": "2108",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2900,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260612",
+      "time_hhmm": "2014",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260612",
+      "time_hhmm": "2051",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 0,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260612",
+      "time_hhmm": "2109",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2900,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260613",
+      "time_hhmm": "2012",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260614",
+      "time_hhmm": "2013",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "2012",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "2046",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "2112",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2900,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "2234",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260615",
+      "time_hhmm": "2251",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 0,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "0625",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 0,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "2016",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "2049",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "2125",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2900,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260616",
+      "time_hhmm": "2134",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260617",
+      "time_hhmm": "0617",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 0,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260617",
+      "time_hhmm": "2013",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260617",
+      "time_hhmm": "2047",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260617",
+      "time_hhmm": "2107",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2900,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260617",
+      "time_hhmm": "2128",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260618",
+      "time_hhmm": "0623",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 0,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260618",
+      "time_hhmm": "2010",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260618",
+      "time_hhmm": "2048",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260618",
+      "time_hhmm": "2108",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2900,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260619",
+      "time_hhmm": "2017",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260619",
+      "time_hhmm": "2050",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 0,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260619",
+      "time_hhmm": "2106",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2900,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260620",
+      "time_hhmm": "2015",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    },
+    {
+      "run_date": "260621",
+      "time_hhmm": "2013",
+      "duration": 15,
+      "copy_id": "MCIM027526VH",
+      "rate_cents": 2800,
+      "market": "SEATTLE"
+    }
+  ],
+  "expected": "2606-016.txt"
+}

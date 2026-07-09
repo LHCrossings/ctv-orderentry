@@ -187,25 +187,27 @@ Date range for the fetch: derive from the invoice-number `MMYY` prefix
 broadcast month** (Mon of week containing the 1st → Sun of week containing the
 month's last day — helpers exist in `src/backwrite/transformer.py`
 `compute_broadcast_month` area), but show the range in an editable field before
-fetch. ASK LEE at first demo whether billing wants broadcast or calendar month;
-current tool makes him type it manually so there is no precedent in code.
+fetch. ✅ CONFIRMED with Lee 2026-07-09: broadcast month is the right default.
 
 ---
 
 ## 5. Implementation plan (ordered; each phase shippable)
 
-### Phase 0 — Golden tests + safety fixes (do FIRST, no behavior change)
-- [ ] Capture golden outputs: for 2–3 real invoice CSV/PDF pairs (ask Lee for a
-      recent month, or use any pair already in `incoming/EDI/`), run today's
-      `/edi/export/generate` and commit the resulting `.txt` under
-      `tests/fixtures/edi_golden/`. Add a unit test that `_generate_edi` with the
-      same template+inv+spots reproduces them byte-for-byte.
-- [ ] Fix path traversal in `/generate` + `/generate-batch` (reject
-      `Path(csv_fn).name != csv_fn`).
-- [ ] Replace the two silent `except Exception: pass` with logged warnings that
-      propagate a `warnings: []` list to the API response.
-- [ ] Delete dead `_fetch_report_sync`; fix the sys.path root in
-      `_fetch_all_reports_sync` (or move it, Phase 2).
+### Phase 0 — Golden tests + safety fixes ✅ DONE 2026-07-09
+- [x] Golden fixtures captured from 3 real June-2026 pairs (2606-009 BVK UC Davis,
+      2606-016 Davis Elen WA McD, 2606-058 TCAA — 239/72/549 spots) via the real
+      scan→generate flow. `tests/fixtures/edi_golden/` holds frozen
+      `*_input.json` (template+inv+spots) + byte-exact `.txt`;
+      `tests/unit/test_edi_golden.py` locks them.
+- [x] Path traversal fixed in `/generate` (400) + `/generate-batch` (skip+log).
+- [x] Silent `except: pass` in `_parse_affidavit_pdf` + `_all_templates` (and the
+      scan CSV catch) → logged warnings; scan rows now carry `warnings: []`.
+- [x] Dead `_fetch_report_sync` deleted; `_fetch_all_reports_sync` sys.path root
+      fixed to repo root (`parents[3]`).
+- June 2026 full-batch reconcile run as validation: 15/15 contract numbers OK;
+  14/15 totals exact. 2606-042 (Media Solutions, ct 2763): PDF subtotal
+  $6,588.24 vs CSV $6,588.40 — fractional-cent rate (56 × $117.647… vs 56 ×
+  rounded $117.65). Good future test case for the reconcile badge + R34 validator.
 
 ### Phase 1 — Consolidate the duplicated logic into a service module
 Create `src/business_logic/services/edi_billing.py`; MOVE (don't copy):
@@ -284,9 +286,12 @@ Create `src/business_logic/services/edi_billing.py`; MOVE (don't copy):
       tie-break, ambiguous → no-guess, fuzzy fallback flag), affidavit parser on
       2+ real PDFs, CSV parser totals cross-check.
 
-## Open questions for Lee (ask at first demo, don't block)
-1. Fetch range: broadcast month vs calendar month? (Default: broadcast.)
-2. Should intake reject PDFs whose invoice `MMYY` differs from the batch's
-   month, or just flag them?
-3. Post-cutover: is spot-level diff still needed as a standalone tool, or only
-   as the red-badge drill-down?
+## Open questions — RESOLVED with Lee (2026-07-09)
+1. **Fetch range:** broadcast month (Mon of week containing the 1st → Sun of
+   week containing the month's last day), shown in an editable field before fetch.
+2. **Off-month PDFs:** flag with an amber warning, keep the row — never reject,
+   never silently accept. Lee decides per row whether to fetch/export.
+3. **Spot-level diff:** drill-down only (modal behind the red reconcile badge).
+   The standalone `/edi/post-log` reconcile page goes away at Phase 4 cutover.
+4. **Fetch trigger:** deliberate [Fetch post logs] button after intake review —
+   never auto-fetch on drop (license seat + mis-parsed contract number risk).

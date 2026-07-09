@@ -7,6 +7,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import logging
 import re
 import zipfile
 from datetime import datetime
@@ -19,6 +20,8 @@ from fastapi.templating import Jinja2Templates
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
+
+logger = logging.getLogger(__name__)
 
 _BASE = Path(__file__).resolve().parent.parent.parent.parent
 TMPL_DIR    = _BASE / "data" / "edi_templates"
@@ -241,8 +244,8 @@ def _all_templates() -> list[dict]:
     for p in sorted(TMPL_DIR.glob("*.json")):
         try:
             out.append(json.loads(p.read_text()))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Skipping unreadable EDI template %s: %s", p.name, e)
     return out
 
 
@@ -288,6 +291,7 @@ def _parse_affidavit_pdf(pdf_path: Path) -> dict:
         "advertiser": "", "market": "",
         "rep_order_number": "", "agency_ad_code": "", "agency_prod_code": "",
         "product_name": "", "comment_top": "", "comment_bottom": "",
+        "warnings": [],
     }
     try:
         import pdfplumber
@@ -318,8 +322,9 @@ def _parse_affidavit_pdf(pdf_path: Path) -> dict:
         if m := re.search(r'COMMENTS\s+ATTN:.*?\n(.+?)\s+(?:Phone:|http)', full_text, re.DOTALL):
             result["comment_bottom"] = m.group(1).strip()
 
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Affidavit parse failed for %s: %s", pdf_path.name, e)
+        result["warnings"].append(f"Affidavit parse failed: {e}")
     return result
 
 
@@ -391,6 +396,7 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
             info = _invoice_info(p["csv"])
             info["csv_filename"] = p["csv"]
             info["pdf_filename"] = p.get("pdf") or ""
+            info["warnings"] = []
             try:
                 parsed = _parse_export_csv((INCOMING / p["csv"]).read_bytes())
                 info.update({
@@ -402,13 +408,16 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
                 })
                 advertiser = parsed.get("advertiser", "")
                 market     = parsed.get("market", "")
-            except Exception:
+            except Exception as e:
+                logger.warning("Post-log CSV parse failed for %s: %s", p["csv"], e)
+                info["warnings"].append(f"CSV parse failed: {e}")
                 info.update(spot_count=0, gross_cents=0,
                             bcast_start="", bcast_end="", estimate_code="")
                 advertiser = market = ""
             # PDF affidavit is authoritative for advertiser/market matching + pre-fill
             if p.get("pdf"):
                 pdf = _parse_affidavit_pdf(INCOMING / p["pdf"])
+                info["warnings"].extend(pdf["warnings"])
                 if pdf["advertiser"]:
                     advertiser = pdf["advertiser"]
                 if pdf["market"]:
@@ -456,6 +465,8 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
         tmpl_nm = body.get("template_name", "")
         inv     = body.get("invoice_fields", {})
 
+        if not csv_fn or Path(csv_fn).name != csv_fn:
+            raise HTTPException(400, f"Invalid filename: {csv_fn}")
         csv_path = INCOMING / csv_fn
         if not csv_path.exists():
             raise HTTPException(404, f"Not found: {csv_fn}")
@@ -488,6 +499,9 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
                 csv_fn  = item.get("csv_filename", "")
                 tmpl_nm = item.get("template_name", "")
                 inv     = item.get("invoice_fields", {})
+                if not csv_fn or Path(csv_fn).name != csv_fn:
+                    logger.warning("Rejected invalid filename in batch: %r", csv_fn)
+                    continue
                 csv_path = INCOMING / csv_fn
                 if not csv_path.exists():
                     continue
