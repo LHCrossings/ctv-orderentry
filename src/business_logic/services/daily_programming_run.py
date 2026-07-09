@@ -47,6 +47,24 @@ _FILMATI_LOCKS = {}
 _FILMATI_LOCKS_GUARD = threading.Lock()
 _FILMATI_RETRY_SECONDS = 2
 
+# SQL Server 1205 (deadlock victim) can still happen even with the FILMATI
+# lock above — that lock only covers contention among OUR OWN market threads.
+# Etere's own Aligner independently reads/writes FILMATI (see _sync_checksums'
+# docstring) on its own schedule, outside this process entirely; we can't lock
+# against an actor we don't share memory with. SQL Server's own error text
+# says to rerun the transaction, so run_market() does exactly that — a bounded
+# retry, not a preemptive lock, since we can't identify every possible party.
+_DEADLOCK_MAX_ATTEMPTS = 3
+_DEADLOCK_RETRY_SECONDS = 1
+
+
+def _is_deadlock(exc):
+    """True for SQL Server error 1205. pymssql surfaces DB-Lib errors as an
+    exception whose first arg is the numeric error code, e.g.
+    args == (1205, b"...deadlock victim...")."""
+    args = getattr(exc, "args", None)
+    return bool(args) and args[0] == 1205
+
 
 def _filmati_lock(fid):
     with _FILMATI_LOCKS_GUARD:
@@ -291,10 +309,14 @@ def _drain_pending_filmati_syncs(cur, conn, pending):
                 finally:
                     lock.release()
                 progressed = True
+                print(f"[daily-programming] FILMATI fid={fid} sync drained "
+                      f"(rows={[r for r, _ in fid_rows]})")
             else:
                 remaining.append((fid, fid_rows))
         pending = remaining
         if pending and not progressed:
+            print(f"[daily-programming] FILMATI still contended for fids="
+                  f"{[fid for fid, _ in pending]}, retrying in {_FILMATI_RETRY_SECONDS}s")
             time.sleep(_FILMATI_RETRY_SECONDS)
 
 
@@ -367,6 +389,8 @@ def _sync_checksums(cur, ids, pending):
             finally:
                 lock.release()
         else:
+            print(f"[daily-programming] FILMATI fid={fid} locked by another "
+                  f"market's thread — deferring sync for rows={[r for r, _ in fid_rows]}")
             pending.append((fid, fid_rows))
 
 
@@ -450,6 +474,30 @@ def _verify_sequence(cur, ids, open_b, close_b):
 
 
 def run_market(conn, cod_user, d, assignment, pending):
+    """Place one program assignment into one market, transaction-safe.
+    Thin retry wrapper around _place_once — see its docstring for the actual
+    placement logic. Retries up to _DEADLOCK_MAX_ATTEMPTS times on a 1205
+    deadlock (see _is_deadlock); any other failure returns immediately since
+    retrying a deterministic mismatch (bad window, missing asset, etc.) would
+    just fail the same way again. Each attempt is a fresh, fully rolled-back
+    transaction, so retrying from scratch is safe."""
+    result = None
+    for attempt in range(1, _DEADLOCK_MAX_ATTEMPTS + 1):
+        result = _place_once(conn, cod_user, d, assignment, pending)
+        if not result.pop("_deadlock", False):
+            return result
+        if attempt < _DEADLOCK_MAX_ATTEMPTS:
+            print(f"[daily-programming] cu={cod_user} 1205 deadlock on attempt "
+                  f"{attempt}/{_DEADLOCK_MAX_ATTEMPTS} ({result['message']}) — retrying "
+                  f"in {_DEADLOCK_RETRY_SECONDS}s")
+            time.sleep(_DEADLOCK_RETRY_SECONDS)
+        else:
+            print(f"[daily-programming] cu={cod_user} 1205 deadlock persisted after "
+                  f"{_DEADLOCK_MAX_ATTEMPTS} attempts, giving up ({result['message']})")
+    return result
+
+
+def _place_once(conn, cod_user, d, assignment, pending):
     """Place one program assignment into one market, transaction-safe.
 
     assignment = {mode:'explode'|'pieces'|'shoplc', fileId, fileCode, start, end,
@@ -598,4 +646,5 @@ def run_market(conn, cod_user, d, assignment, pending):
         return {"cu": cod_user, "ok": False, "skipped": False, "message": f"verify failed: {msg}"}
     except Exception as exc:  # noqa: BLE001 - report per-market failure, leave market untouched
         conn.rollback()
-        return {"cu": cod_user, "ok": False, "skipped": False, "message": f"error: {exc}"}
+        return {"cu": cod_user, "ok": False, "skipped": False, "message": f"error: {exc}",
+                "_deadlock": _is_deadlock(exc)}
