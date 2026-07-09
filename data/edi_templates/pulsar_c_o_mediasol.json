@@ -1,0 +1,28 @@
+{
+  "name": "Pulsar c/o MediaSol",
+  "edi_code": "9912591",
+  "call_letters": "CRTV",
+  "commission_pct": 15,
+  "representative": "Charmaine Lane",
+  "salesperson": "Kelly Wheeler",
+  "agency_name": "Media Solutions",
+  "advertiser_name": "OCHCA",
+  "product_name": "Crisis Crossings LA",
+  "agency_address": [
+    "707 Commons Drive",
+    "Ste 201",
+    "Sacramento CA",
+    "95825"
+  ],
+  "agency_ad_code": "",
+  "agency_prod_code": "",
+  "payee_name": "Crossings TV",
+  "payee_address": [
+    "Accounts Receivable",
+    "901 H Street Ste 120 PMB 91",
+    "Sacramento CA",
+    "95814"
+  ],
+  "advertiser_match": "OCHCA",
+  "market_match": "LAX"
+}
