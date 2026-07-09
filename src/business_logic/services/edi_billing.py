@@ -20,7 +20,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -589,6 +589,373 @@ def match_template(templates: list[dict], *,
                                  detail="agency name in filename — verify")
 
     return TemplateMatch("", "none", detail="no template matched — pick one")
+
+
+# ---------------------------------------------------------------------------
+# Broadcast calendar
+# ---------------------------------------------------------------------------
+
+def broadcast_month_range(yy: int, mm: int) -> tuple[date, date]:
+    """
+    Date range of a broadcast month (weeks run Mon–Sun; a broadcast month
+    starts on the Monday of the week containing the calendar 1st and ends the
+    day before the next broadcast month starts). Broadcast June 2026 =
+    6/1–6/28 — matches the R31 period dates on the validated June invoices.
+    """
+    def _start(y: int, m: int) -> date:
+        first = date(y, m, 1)
+        return first - timedelta(days=first.weekday())
+
+    year = 2000 + yy if yy < 100 else yy
+    ny, nm = (year + 1, 1) if mm == 12 else (year, mm + 1)
+    return _start(year, mm), _start(ny, nm) - timedelta(days=1)
+
+
+# ---------------------------------------------------------------------------
+# Reconcile: affidavit vs post-log totals
+# ---------------------------------------------------------------------------
+
+def reconcile_status(pdf_spots: int | None, pdf_gross: float | None,
+                     csv_spots: int | None, csv_gross: float | None) -> dict:
+    """
+    Compare affidavit totals against post-log totals.
+
+    status: 'match' | 'rounding' | 'mismatch' | 'missing'
+    Rounding rule (Lee, 2026-07-09): fractional-cent rates are legitimate —
+    the affidavit subtotal sums unrounded rates while the CSV sums rounded
+    per-spot values. If spot counts match and the gross difference is within
+    spot_count × $0.005, badge 'rounding' (exportable); TVInvoices flags it
+    on upload and Lee confirms there.
+    """
+    if None in (pdf_spots, pdf_gross, csv_spots, csv_gross):
+        return {"status": "missing", "detail": "totals unavailable on one side"}
+    if pdf_spots != csv_spots:
+        return {"status": "mismatch",
+                "detail": f"spots: affidavit {pdf_spots} vs post-log {csv_spots}"}
+    diff = abs(pdf_gross - csv_gross)
+    if diff < 0.005:
+        return {"status": "match", "detail": ""}
+    if diff <= csv_spots * 0.005 + 1e-9:
+        return {"status": "rounding",
+                "detail": f"gross differs ${diff:.2f} — fractional-cent rate "
+                          f"rounding ({pdf_spots} spots); OK to export"}
+    return {"status": "mismatch",
+            "detail": f"gross: affidavit ${pdf_gross:,.2f} vs post-log ${csv_gross:,.2f}"}
+
+
+# ---------------------------------------------------------------------------
+# Field validation (TVB EDI spec — see reference_edi_spec / redesign spec §3)
+# ---------------------------------------------------------------------------
+
+_YYMMDD = re.compile(r"^\d{6}$")
+_YYMM   = re.compile(r"^\d{4}$")
+_HHMM   = re.compile(r"^\d{4}$")
+
+
+def validate_invoice(template: dict, inv: dict, spots: list[dict]) -> list[dict]:
+    """
+    Validate one invoice against the TVB EDI field rules. Returns a list of
+    {field, level, message}; level 'error' blocks export, 'warn' is amber.
+    Used by both the UI (per-row display) and the export endpoint (gate).
+    """
+    issues: list[dict] = []
+
+    def err(fieldname: str, msg: str) -> None:
+        issues.append({"field": fieldname, "level": "error", "message": msg})
+
+    def warn(fieldname: str, msg: str) -> None:
+        issues.append({"field": fieldname, "level": "warn", "message": msg})
+
+    def _maxlen(fieldname: str, value: str, n: int, level: str = "error") -> None:
+        if value and len(value) > n:
+            (err if level == "error" else warn)(
+                fieldname, f"'{value[:30]}…' is {len(value)} chars — max {n}")
+
+    # R21/R31 name fields ≤ 25
+    _maxlen("advertiser_name", inv.get("advertiser_name") or template.get("advertiser_name", ""), 25)
+    _maxlen("product_name",    inv.get("product_name")    or template.get("product_name", ""), 25)
+    _maxlen("agency_name",     template.get("agency_name", ""), 25)
+    _maxlen("representative",  template.get("representative", ""), 25)
+    _maxlen("salesperson",     template.get("salesperson", ""), 25)
+
+    # Codes
+    _maxlen("agency_ad_code",   inv.get("agency_ad_code")   or template.get("agency_ad_code", ""), 8)
+    _maxlen("agency_prod_code", inv.get("agency_prod_code") or template.get("agency_prod_code", ""), 8)
+    if not (inv.get("agency_ad_code") or template.get("agency_ad_code")):
+        warn("agency_ad_code", "empty — strongly recommended by the spec")
+    if not (inv.get("agency_prod_code") or template.get("agency_prod_code")):
+        warn("agency_prod_code", "empty — strongly recommended by the spec")
+
+    # Template plumbing
+    _maxlen("edi_code", template.get("edi_code", ""), 8)
+    cl = template.get("call_letters", "")
+    if len(cl) != 4:
+        err("call_letters", f"'{cl}' must be exactly 4 characters")
+    for i, line in enumerate(template.get("agency_address", [])):
+        _maxlen(f"agency_address[{i}]", line, 30)
+    for i, line in enumerate(template.get("payee_address", [])):
+        _maxlen(f"payee_address[{i}]", line, 30)
+    if len(template.get("agency_address", [])) > 4:
+        err("agency_address", "more than 4 lines — R21 carries 4; the rest are dropped")
+
+    # Dates
+    for f_ in ("invoice_date", "bcast_start", "bcast_end"):
+        v = str(inv.get(f_, "") or "")
+        if not _YYMMDD.match(v):
+            err(f_, f"'{v}' must be 6-digit YYMMDD")
+    bm = str(inv.get("broadcast_month", "") or "")
+    if not _YYMM.match(bm):
+        err("broadcast_month", f"'{bm}' must be 4-digit YYMM")
+
+    # Identifiers
+    _maxlen("invoice_number",   str(inv.get("invoice_number", "") or ""), 10)
+    if not inv.get("invoice_number"):
+        err("invoice_number", "required")
+    _maxlen("estimate_code",    str(inv.get("estimate_code", "") or ""), 10)
+    _maxlen("rep_order_number", str(inv.get("rep_order_number", "") or ""), 10)
+    _maxlen("order_number",     str(inv.get("order_number", "") or ""), 10)
+
+    # Comments ≤ 130
+    for f_ in ("comment_top", "comment_bottom", "comment_bottom_2",
+               "comment_bottom_3", "comment_bottom_4"):
+        _maxlen(f_, str(inv.get(f_, "") or ""), 130)
+
+    # Spots (R51) — at least one required
+    if not spots:
+        err("spots", "no spots — an invoice needs at least one R51 record")
+    for i, s in enumerate(spots):
+        if not _YYMMDD.match(str(s.get("run_date", ""))):
+            err("spots", f"spot {i+1}: run_date '{s.get('run_date')}' not YYMMDD")
+            break
+    for i, s in enumerate(spots):
+        if not _HHMM.match(str(s.get("time_hhmm", ""))):
+            err("spots", f"spot {i+1}: airtime '{s.get('time_hhmm')}' not HHMM")
+            break
+    for i, s in enumerate(spots):
+        if len(str(s.get("copy_id", ""))) > 30:
+            err("spots", f"spot {i+1}: copy id '{s.get('copy_id')}' over 30 chars")
+            break
+    for i, s in enumerate(spots):
+        if not isinstance(s.get("rate_cents"), int):
+            err("spots", f"spot {i+1}: rate must be integer cents")
+            break
+
+    return issues
+
+
+# ---------------------------------------------------------------------------
+# Spot-level diff: affidavit PDF vs post-log CSV — moved verbatim from edi.py
+# ---------------------------------------------------------------------------
+
+def _norm_date(s: str) -> str:
+    """Normalise M/D/YY or M/D/YYYY → MM/DD/YYYY."""
+    parts = s.strip().split("/")
+    m, d = parts[0].zfill(2), parts[1].zfill(2)
+    y = parts[2] if len(parts[2]) == 4 else f"20{parts[2]}"
+    return f"{m}/{d}/{y}"
+
+
+def diff_pdf_csv(pdf_bytes: bytes, csv_bytes: bytes) -> dict:
+    """
+    Compare individual spots between the affidavit PDF and the post-log CSV.
+    Match key: (normalised air date, actual airtime ±10 min, rate).
+    Returns missing_from_csv and extra_in_csv spot lists.
+    """
+    import pdfplumber
+
+    SPOT_RE = re.compile(
+        r'^(\d{1,2}/\d{1,2}/\d{2,4})'   # date
+        r'\s+\w+'                          # day
+        r'\s+\d+:\d+:\d+'                 # time_in
+        r'\s+\d+:\d+:\d+'                 # time_out
+        r'\s+\d+:\d+:\d+'                 # length
+        r'\s+(\d+:\d+:\d+)'               # actual airtime
+        r'\s+(\w+)'                        # language
+        r'\s+\d+'                          # count
+        r'\s+(\S+)'                        # type (COM/BNS)
+        r'\s+\S+'                          # estimate (alphanumeric)
+        r'\s+\$\s*([\d,]+\.?\d*)'         # rate
+    )
+
+    # --- PDF spots ---
+    pdf_spots = []
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+        for page_idx, page in enumerate(pdf.pages):
+            if page_idx == 0:
+                continue
+            for line in (page.extract_text() or "").splitlines():
+                m = SPOT_RE.match(line.strip())
+                if m:
+                    pdf_spots.append({
+                        "date":      _norm_date(m.group(1)),
+                        "airtime":   m.group(2),
+                        "lang":      m.group(3),
+                        "spot_type": m.group(4),
+                        "rate":      float(m.group(5).replace(",", "")),
+                    })
+
+    # --- CSV spots ---
+    text = csv_bytes.decode("utf-8-sig", errors="replace")
+    lines = text.splitlines(keepends=True)
+    header_idx = None
+    for i, line in enumerate(lines):
+        parts = next(csv_mod.reader([line]), [])
+        if "dateschedule" in {p.strip().lower() for p in parts}:
+            header_idx = i
+            break
+
+    csv_spots = []
+    if header_idx is not None:
+        reader = csv_mod.DictReader(io.StringIO("".join(lines[header_idx:])))
+        hl = {(h or "").strip().lower(): h for h in (reader.fieldnames or [])}
+        date_col = hl.get("dateschedule")
+        time_col = hl.get("airtimep")
+        code_col = hl.get("bookingcode2")
+        rate_col = hl.get("importo2")
+        desc_col = hl.get("rowdescription")
+        for row in reader:
+            if not any((v or "").strip() for v in row.values()):
+                continue
+            raw_date = (row.get(date_col) or "").strip()
+            airtime  = (row.get(time_col) or "").strip()
+            if not raw_date or not airtime:
+                continue
+            try:
+                nd = _norm_date(raw_date)
+            except (IndexError, ValueError):
+                nd = raw_date
+            try:
+                rate = float((row.get(rate_col) or "0").replace(",", ""))
+            except ValueError:
+                rate = 0.0
+            csv_spots.append({
+                "date":        nd,
+                "airtime":     airtime,
+                "spot_code":   (row.get(code_col) or "").strip(),
+                "rate":        rate,
+                "description": (row.get(desc_col) or "").strip(),
+            })
+
+    # --- Diff (±10 min tolerance on airtime, rate must match) ---
+    from collections import defaultdict
+
+    def _secs(t: str) -> int:
+        h, m, s = t.split(":")
+        return int(h) * 3600 + int(m) * 60 + int(s)
+
+    pdf_by_date: dict[str, list] = defaultdict(list)
+    for s in pdf_spots:
+        pdf_by_date[s["date"]].append(s)
+
+    csv_by_date: dict[str, list] = defaultdict(list)
+    for s in csv_spots:
+        csv_by_date[s["date"]].append(s)
+
+    missing, extra = [], []
+    for date_ in sorted(set(pdf_by_date) | set(csv_by_date)):
+        pdf_day = list(pdf_by_date[date_])
+        csv_day = list(csv_by_date[date_])
+        used_csv = [False] * len(csv_day)
+        used_pdf = [False] * len(pdf_day)
+
+        for pi, ps in enumerate(pdf_day):
+            try:
+                ps_secs = _secs(ps["airtime"])
+            except ValueError:
+                continue
+            best_dist, best_ci = 601, -1  # sentinel > 600 s (10 min)
+            for ci, cs in enumerate(csv_day):
+                if used_csv[ci]:
+                    continue
+                try:
+                    dist = abs(_secs(cs["airtime"]) - ps_secs)
+                except ValueError:
+                    continue
+                rate_match = abs(cs.get("rate", 0) - ps.get("rate", 0)) < 0.01
+                if rate_match and dist <= 600 and dist < best_dist:
+                    best_dist, best_ci = dist, ci
+            if best_ci >= 0:
+                used_csv[best_ci] = True
+                used_pdf[pi] = True
+
+        for pi, ps in enumerate(pdf_day):
+            if not used_pdf[pi]:
+                missing.append(dict(ps))
+        for ci, cs in enumerate(csv_day):
+            if not used_csv[ci]:
+                extra.append(dict(cs))
+
+    missing.sort(key=lambda s: (s["date"], s["airtime"]))
+    extra.sort(key=lambda s:   (s["date"], s["airtime"]))
+
+    return {
+        "pdf_total":        len(pdf_spots),
+        "csv_total":        len(csv_spots),
+        "missing_from_csv": missing,
+        "extra_in_csv":     extra,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Etere post-log fetch (single web session for the whole batch) — moved
+# verbatim from edi.py. A leaked session locks the account: keep the logout
+# in `finally` (see data-reference EtereClient rules).
+# ---------------------------------------------------------------------------
+
+def fetch_postlog_reports(contracts: list[dict], start_date: str, end_date: str) -> list[dict]:
+    """
+    Fetch post-log CSVs for [{contract_no, filename}, ...] in ONE Etere web
+    session (limited license seats). Dates are M/D/YYYY strings. Returns
+    [{name, data, error}] per contract; a failure on one contract does not
+    abort the rest.
+    """
+    import sys
+    for p in [str(_BASE), str(_BASE / "browser_automation")]:
+        if p not in sys.path:
+            sys.path.insert(0, p)
+
+    from browser_automation.etere_direct_client import (
+        ETERE_WEB_URL,
+        etere_web_login,
+        etere_web_logout,
+    )
+
+    session = etere_web_login()
+    results = []
+    try:
+        for c in contracts:
+            try:
+                params = {
+                    "reportCode": "R100018_C18236_postlog_with_contract_no",
+                    "isSystem":   "False",
+                    "reportType": "DOWNLOADCSV",
+                    "customerid": 0,
+                    "agencyid":   0,
+                    "filters[0]": str(c["contract_no"]),
+                    "filters[1]": "",
+                    "filters[2]": "true",
+                    "filters[3]": "true",
+                    "filters[4]": start_date,
+                    "filters[5]": end_date,
+                }
+                resp = session.get(
+                    f"{ETERE_WEB_URL}/reportsetere/report",
+                    params=params,
+                    timeout=180,
+                )
+                resp.raise_for_status()
+                stem = c["filename"].rsplit(".", 1)[0] if "." in c["filename"] else c["filename"]
+                results.append({
+                    "name":  f"{stem}_{c['contract_no']}_postlog.csv",
+                    "data":  resp.content,
+                    "error": None,
+                })
+            except Exception as e:
+                results.append({"name": None, "data": None, "error": f"{c['filename']}: {e}"})
+    finally:
+        etere_web_logout(session)
+
+    return results
 
 
 # ---------------------------------------------------------------------------

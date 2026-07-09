@@ -9,7 +9,8 @@ deliberate fetch button).
       (2026-07-09; scan + reconcile verified identical on the June batch)
 - [x] Phase 2 — customer-ID matcher + backfill (2026-07-09; 19 templates
       mapped, June batch 15/15 ID matches, misdetection regressions pinned)
-- [ ] Phase 3 — unified `/edi/billing` page
+- [x] Phase 3 — unified `/edi/billing` page (2026-07-09; June batch 15/15
+      green end-to-end, export byte-identical to golden, live fetch verified)
 - [ ] Phase 4 — cutover, then retire `/edi/post-log` + `/edi/export` after one
       real billing cycle
 

@@ -255,31 +255,38 @@ Created `src/business_logic/services/edi_billing.py`; MOVED (not copied):
       correct-by-luck under string matching). 16 matcher/market unit tests
       incl. the three confirmed-misdetection regressions.
 
-### Phase 3 — The unified `/edi/billing` page
-- [ ] `POST /edi/billing/intake` — accept PDF uploads; parse; write PDFs into
-      `incoming/EDI/` (sanitize filenames!); return row objects.
-- [ ] `POST /edi/billing/fetch` — body: rows + date range; single Etere session
-      (reuse `_fetch_all_reports_sync`, moved into the service); write CSVs into
-      `incoming/EDI/` named `<invoiceprefix>_<contract>_postlog.csv`; return
-      per-row success/error. Keep `finally: etere_web_logout` — a leaked seat
-      locks the account (see CLAUDE.md/data-reference logout rule).
-- [ ] Row assembly endpoint (or fold into fetch response): CSV totals + spot
-      parse + reconcile flags + template match + prefilled invoice fields —
-      i.e. today's `/scan` result + reconcile in one object.
-- [ ] `POST /edi/billing/diff` — thin wrapper over existing `_diff_pdf_csv`,
-      reading both files from `incoming/EDI/` (no re-upload).
-- [ ] Field validators from the spec table in section 3 — one
-      `validate_invoice(template, inv, spots) -> list[Issue]` in the service
-      module, used by BOTH the UI (live, per-field) and the export endpoint
-      (server-side gate). Issue = {field, level: error|warn, message}.
-- [ ] `POST /edi/billing/export` — same as `/generate-batch` but takes row
-      selection + the edited fields, refuses rows that are red (reconcile
-      mismatch OR validation errors) unless `force: true` per row.
-- [ ] Page `templates/edi/billing.html` — start from `export.html` (its field
-      editors, char counters, template modal are reusable); add drop zone,
-      fetch button + progress, reconcile badges, diff modal, export gating.
-      UI rules: existing CSS classes only (memory `feedback_ui_styling`), 🏠
-      home button not back-arrow (memory `feedback_home_button`).
+### Phase 3 — The unified `/edi/billing` page ✅ DONE 2026-07-09
+Routes: `src/web/routes/edi_billing.py`; page: `templates/edi/billing.html`.
+- [x] `POST /intake` — PDFs parsed + saved (sanitized, MMYY-NNN-prefixed);
+      unparseable/no-invoice-id files rejected per-file; off-batch-month rows
+      flagged amber (Lee's rule), never rejected.
+- [x] `POST /fetch` — deliberate button; `fetch_postlog_reports` (moved into
+      the service verbatim) — ONE Etere session, per-contract try/except,
+      logout in `finally`. Default range = broadcast month
+      (`broadcast_month_range`; bcast June 2026 = 6/1–6/28 ✓ matches R31),
+      editable M/D/YYYY fields. Live-verified: single-contract fetch returns
+      the identical June file. Retry = click again; only rows missing a CSV
+      are fetched.
+- [x] `GET /rows` — full assembly: affidavit + post-log totals,
+      `reconcile_status` (match/rounding/mismatch/missing — rounding rule
+      implemented: spots equal AND |Δgross| ≤ spots×$0.005), customer-ID
+      template match, prefilled invoice fields, validation issues.
+- [x] `POST /diff` — red-badge drill-down over `diff_pdf_csv` (moved to
+      service), no re-upload.
+- [x] `validate_invoice()` in the service — full spec §3 table; used by
+      `POST /validate` (live, debounced from the UI) and the export gate.
+- [x] `POST /export` — all-or-nothing: any red row (validation errors or
+      reconcile mismatch, both recomputed server-side) → 409 with per-row
+      reasons unless `force: true`; otherwise ZIP.
+- [x] `billing.html` — drop zone, fetch bar, row cards with 🟢/🟡 rounding/🔴
+      badges (red opens diff modal), match badges, field editors, live
+      validation, per-row force checkbox, export gating. 🏠 home button.
+- [x] Verified on the full June batch: 15/15 rows green (14 match +
+      2606-042 rounding), all customer-id, 0 validation errors after fixing
+      two genuinely over-spec template fields (H&L agency_name 26→"H&L
+      Partners", TVC advertiser_name 28→"Thunder Valley Casino" — confirmed
+      with Lee); export byte-identical to golden 2606-009; bad row 409s;
+      force overrides. 320 tests green.
 
 ### Phase 4 — Cutover
 - [ ] Nav: point the EDI menu entry at `/edi/billing`.

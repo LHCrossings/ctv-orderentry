@@ -7,16 +7,19 @@ this module's original dict/exception contracts for the routes.
 """
 
 import asyncio
-import csv as csv_mod
 import io
-import re
 import zipfile
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
-from business_logic.services.edi_billing import parse_affidavit, parse_postlog_csv
+from business_logic.services.edi_billing import (
+    diff_pdf_csv,
+    fetch_postlog_reports,
+    parse_affidavit,
+    parse_postlog_csv,
+)
 
 # ---------------------------------------------------------------------------
 # PDF helpers
@@ -69,218 +72,14 @@ def _parse_csv_totals(filename: str, csv_bytes: bytes) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Spot-level diff
+# Spot-level diff + Etere fetch — logic lives in the edi_billing service
 # ---------------------------------------------------------------------------
 
-def _norm_date(s: str) -> str:
-    """Normalise M/D/YY or M/D/YYYY → MM/DD/YYYY."""
-    parts = s.strip().split("/")
-    m, d = parts[0].zfill(2), parts[1].zfill(2)
-    y = parts[2] if len(parts[2]) == 4 else f"20{parts[2]}"
-    return f"{m}/{d}/{y}"
-
-
-def _diff_pdf_csv(pdf_bytes: bytes, csv_bytes: bytes) -> dict:
-    """
-    Compare individual spots between the affidavit PDF and the post-log CSV.
-    Match key: (normalised air date, actual airtime HH:MM:SS).
-    Returns missing_from_csv and extra_in_csv spot lists.
-    """
-    import pdfplumber
-
-    SPOT_RE = re.compile(
-        r'^(\d{1,2}/\d{1,2}/\d{2,4})'   # date
-        r'\s+\w+'                          # day
-        r'\s+\d+:\d+:\d+'                 # time_in
-        r'\s+\d+:\d+:\d+'                 # time_out
-        r'\s+\d+:\d+:\d+'                 # length
-        r'\s+(\d+:\d+:\d+)'               # actual airtime
-        r'\s+(\w+)'                        # language
-        r'\s+\d+'                          # count
-        r'\s+(\S+)'                        # type (COM/BNS)
-        r'\s+\S+'                          # estimate (alphanumeric)
-        r'\s+\$\s*([\d,]+\.?\d*)'         # rate
-    )
-
-    # --- PDF spots ---
-    pdf_spots = []
-    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        for page_idx, page in enumerate(pdf.pages):
-            if page_idx == 0:
-                continue
-            for line in (page.extract_text() or "").splitlines():
-                m = SPOT_RE.match(line.strip())
-                if m:
-                    pdf_spots.append({
-                        "date":      _norm_date(m.group(1)),
-                        "airtime":   m.group(2),
-                        "lang":      m.group(3),
-                        "spot_type": m.group(4),
-                        "rate":      float(m.group(5).replace(",", "")),
-                    })
-
-    # --- CSV spots ---
-    text = csv_bytes.decode("utf-8-sig", errors="replace")
-    lines = text.splitlines(keepends=True)
-    header_idx = None
-    for i, line in enumerate(lines):
-        parts = next(csv_mod.reader([line]), [])
-        if "dateschedule" in {p.strip().lower() for p in parts}:
-            header_idx = i
-            break
-
-    csv_spots = []
-    if header_idx is not None:
-        reader = csv_mod.DictReader(io.StringIO("".join(lines[header_idx:])))
-        hl = {(h or "").strip().lower(): h for h in (reader.fieldnames or [])}
-        date_col = hl.get("dateschedule")
-        time_col = hl.get("airtimep")
-        code_col = hl.get("bookingcode2")
-        rate_col = hl.get("importo2")
-        desc_col = hl.get("rowdescription")
-        for row in reader:
-            if not any((v or "").strip() for v in row.values()):
-                continue
-            raw_date = (row.get(date_col) or "").strip()
-            airtime  = (row.get(time_col) or "").strip()
-            if not raw_date or not airtime:
-                continue
-            try:
-                nd = _norm_date(raw_date)
-            except (IndexError, ValueError):
-                nd = raw_date
-            try:
-                rate = float((row.get(rate_col) or "0").replace(",", ""))
-            except ValueError:
-                rate = 0.0
-            csv_spots.append({
-                "date":        nd,
-                "airtime":     airtime,
-                "spot_code":   (row.get(code_col) or "").strip(),
-                "rate":        rate,
-                "description": (row.get(desc_col) or "").strip(),
-            })
-
-    # --- Diff (±5 s tolerance on airtime) ---
-    from collections import defaultdict
-
-    def _secs(t: str) -> int:
-        h, m, s = t.split(":")
-        return int(h) * 3600 + int(m) * 60 + int(s)
-
-    pdf_by_date: dict[str, list] = defaultdict(list)
-    for s in pdf_spots:
-        pdf_by_date[s["date"]].append(s)
-
-    csv_by_date: dict[str, list] = defaultdict(list)
-    for s in csv_spots:
-        csv_by_date[s["date"]].append(s)
-
-    missing, extra = [], []
-    for date in sorted(set(pdf_by_date) | set(csv_by_date)):
-        pdf_day = list(pdf_by_date[date])
-        csv_day = list(csv_by_date[date])
-        used_csv = [False] * len(csv_day)
-        used_pdf = [False] * len(pdf_day)
-
-        for pi, ps in enumerate(pdf_day):
-            try:
-                ps_secs = _secs(ps["airtime"])
-            except ValueError:
-                continue
-            best_dist, best_ci = 601, -1  # sentinel > 600 s (10 min)
-            for ci, cs in enumerate(csv_day):
-                if used_csv[ci]:
-                    continue
-                try:
-                    dist = abs(_secs(cs["airtime"]) - ps_secs)
-                except ValueError:
-                    continue
-                rate_match = abs(cs.get("rate", 0) - ps.get("rate", 0)) < 0.01
-                if rate_match and dist <= 600 and dist < best_dist:
-                    best_dist, best_ci = dist, ci
-            if best_ci >= 0:
-                used_csv[best_ci] = True
-                used_pdf[pi] = True
-
-        for pi, ps in enumerate(pdf_day):
-            if not used_pdf[pi]:
-                missing.append(dict(ps))
-        for ci, cs in enumerate(csv_day):
-            if not used_csv[ci]:
-                extra.append(dict(cs))
-
-    missing.sort(key=lambda s: (s["date"], s["airtime"]))
-    extra.sort(key=lambda s:   (s["date"], s["airtime"]))
-
-    return {
-        "pdf_total":        len(pdf_spots),
-        "csv_total":        len(csv_spots),
-        "missing_from_csv": missing,
-        "extra_in_csv":     extra,
-    }
+_diff_pdf_csv = diff_pdf_csv
+_fetch_all_reports_sync = fetch_postlog_reports
 
 
 # ---------------------------------------------------------------------------
-# Etere fetch (single session for whole batch)
-# ---------------------------------------------------------------------------
-
-def _fetch_all_reports_sync(contracts: list[dict], start_date: str, end_date: str) -> list[dict]:
-    """
-    Fetch all post-log reports in a single Etere session to avoid
-    exhausting the limited concurrent license seats.
-    """
-    import sys
-    from pathlib import Path
-    root = Path(__file__).resolve().parents[3]
-    for p in [str(root), str(root / "browser_automation")]:
-        if p not in sys.path:
-            sys.path.insert(0, p)
-
-    from browser_automation.etere_direct_client import (
-        ETERE_WEB_URL,
-        etere_web_login,
-        etere_web_logout,
-    )
-
-    session = etere_web_login()
-    results = []
-    try:
-        for c in contracts:
-            try:
-                params = {
-                    "reportCode": "R100018_C18236_postlog_with_contract_no",
-                    "isSystem":   "False",
-                    "reportType": "DOWNLOADCSV",
-                    "customerid": 0,
-                    "agencyid":   0,
-                    "filters[0]": str(c["contract_no"]),
-                    "filters[1]": "",
-                    "filters[2]": "true",
-                    "filters[3]": "true",
-                    "filters[4]": start_date,
-                    "filters[5]": end_date,
-                }
-                resp = session.get(
-                    f"{ETERE_WEB_URL}/reportsetere/report",
-                    params=params,
-                    timeout=180,
-                )
-                resp.raise_for_status()
-                stem = c["filename"].rsplit(".", 1)[0] if "." in c["filename"] else c["filename"]
-                results.append({
-                    "name":  f"{stem}_{c['contract_no']}_postlog.csv",
-                    "data":  resp.content,
-                    "error": None,
-                })
-            except Exception as e:
-                results.append({"name": None, "data": None, "error": f"{c['filename']}: {e}"})
-    finally:
-        etere_web_logout(session)
-
-    return results
-
-
 # ---------------------------------------------------------------------------
 # Router
 # ---------------------------------------------------------------------------

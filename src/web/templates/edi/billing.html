@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>EDI Billing — Control Room</title>
+  <link rel="stylesheet" href="/static/css/_variables.css"/>
+  <link rel="stylesheet" href="/static/css/portal.css"/>
+  <link rel="stylesheet" href="/static/css/app.css"/>
+  <style>
+    .page-header { margin-bottom: 1.5rem; }
+    .page-header h1 { font-size: 1.4rem; font-weight: 700; color: var(--text-primary); margin: 0 0 .25rem; }
+    .page-header p  { color: var(--text-secondary); margin: 0; font-size: .9rem; }
+
+    .btn {
+      padding: .45rem .9rem; border-radius: 4px; font-size: .85rem; font-weight: 600;
+      cursor: pointer; border: none; transition: background .15s, opacity .15s;
+    }
+    .btn-primary { background: var(--accent-primary); color: #fff; }
+    .btn-primary:hover { opacity: .88; }
+    .btn-secondary {
+      background: var(--bg-secondary); color: var(--text-primary);
+      border: 1px solid var(--border-color);
+    }
+    .btn-secondary:hover { background: var(--border-color); }
+    .btn-sm { padding: .3rem .65rem; font-size: .8rem; }
+    .btn:disabled { opacity: .45; cursor: default; }
+
+    .step {
+      background: var(--bg-secondary); border: 1px solid var(--border-color);
+      border-radius: 6px; padding: 1rem; margin-bottom: 1.25rem;
+    }
+    .step h2 { font-size: .95rem; font-weight: 700; color: var(--text-primary); margin: 0 0 .6rem; }
+    .step h2 .step-n {
+      display: inline-block; width: 1.4rem; height: 1.4rem; line-height: 1.4rem;
+      text-align: center; border-radius: 50%; background: var(--accent-primary);
+      color: #fff; font-size: .8rem; margin-right: .45rem;
+    }
+
+    .drop-zone {
+      border: 2px dashed var(--border-color); border-radius: 6px; padding: 1.5rem;
+      text-align: center; color: var(--text-secondary); cursor: pointer;
+      transition: border-color .15s, background .15s;
+    }
+    .drop-zone.drag-over { border-color: var(--accent-primary); background: var(--bg-tertiary, var(--bg-secondary)); }
+    .drop-zone input[type=file] { display: none; }
+
+    .fetch-bar { display: flex; align-items: end; gap: .8rem; flex-wrap: wrap; }
+    .fetch-bar .field-group { min-width: 130px; }
+
+    .status { font-size: .82rem; color: var(--text-secondary); }
+    .status.ok { color: #2d6a4f; }
+    .status.err { color: var(--accent-danger); }
+
+    .file-list { display: flex; flex-direction: column; gap: 1rem; }
+    .file-card {
+      background: var(--bg-secondary); border: 1px solid var(--border-color);
+      border-radius: 6px; overflow: hidden;
+    }
+    .file-card-header {
+      display: flex; align-items: center; gap: .75rem; padding: .7rem 1rem;
+      border-bottom: 1px solid var(--border-color);
+      background: var(--bg-tertiary, var(--bg-secondary));
+    }
+    .file-card-header .inv-num { font-weight: 700; color: var(--text-primary); }
+    .file-card-header .meta { font-size: .8rem; color: var(--text-secondary); }
+    .file-card-body { padding: .85rem 1rem; display: grid; grid-template-columns: 1fr 1fr; gap: .6rem 1.2rem; }
+    .file-card-footer {
+      display: flex; align-items: center; gap: .8rem; padding: .6rem 1rem;
+      border-top: 1px solid var(--border-color);
+    }
+    .field-group { display: flex; flex-direction: column; gap: .2rem; }
+    .field-group label { font-size: .75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
+    .field-group input, .field-group select {
+      padding: .35rem .5rem; border: 1px solid var(--border-color); border-radius: 4px;
+      font-size: .85rem; background: var(--bg-primary); color: var(--text-primary);
+    }
+    .field-group input[readonly] { color: var(--text-secondary); cursor: default; }
+    .field-group input.field-error, .field-group select.field-error { border-color: var(--accent-danger) !important; }
+    .field-group input.field-warn,  .field-group select.field-warn  { border-color: #d08770 !important; }
+    .field-comment { grid-column: 1 / -1; }
+
+    .badge { font-size: .78rem; font-weight: 700; padding: .15rem .55rem; border-radius: 10px; white-space: nowrap; }
+    .badge.green { background: rgba(45,106,79,.14); color: #2d6a4f; }
+    .badge.amber { background: rgba(208,135,112,.16); color: #b35c3e; }
+    .badge.red   { background: rgba(191,97,106,.16); color: var(--accent-danger); cursor: pointer; }
+    .badge.gray  { background: var(--bg-primary); color: var(--text-secondary); border: 1px solid var(--border-color); }
+    .match-badge { font-size: .75rem; font-weight: 600; }
+    .match-badge.ok   { color: #2d6a4f; }
+    .match-badge.warn { color: #d08770; }
+    .match-badge.err  { color: var(--accent-danger); }
+
+    .issues { grid-column: 1 / -1; font-size: .8rem; display: none; }
+    .issues.has-issues { display: block; }
+    .issues .issue-err  { color: var(--accent-danger); }
+    .issues .issue-warn { color: #b35c3e; }
+    .row-warnings { grid-column: 1 / -1; font-size: .8rem; color: #b35c3e; }
+
+    .export-bar { display: flex; align-items: center; gap: 1rem; margin-top: 1rem; }
+    .force-label { font-size: .8rem; color: var(--accent-danger); display: none; align-items: center; gap: .3rem; }
+    .force-label.show { display: inline-flex; }
+
+    .empty { color: var(--text-secondary); font-size: .9rem; padding: 1rem; text-align: center; }
+
+    /* Diff modal */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 60;
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px;
+      max-width: 780px; width: 92%; max-height: 82vh; overflow: auto; padding: 1.2rem;
+    }
+    .modal h3 { margin: 0 0 .6rem; font-size: 1rem; color: var(--text-primary); }
+    .modal table { width: 100%; border-collapse: collapse; font-size: .82rem; margin-bottom: 1rem; }
+    .modal th, .modal td { text-align: left; padding: .3rem .5rem; border-bottom: 1px solid var(--border-color); color: var(--text-primary); }
+    .modal th { color: var(--text-secondary); font-size: .75rem; text-transform: uppercase; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="logo">
+      <a href="/" class="home-btn">🏠</a>
+      <div class="logo-icon">🧾</div>
+      <div>
+        <h1>Control <span>Room</span></h1>
+        <div class="logo-sub">EDI Billing</div>
+      </div>
+    </div>
+    <span class="header-badge">EDI Tools</span>
+  </div>
+</header>
+
+<main class="container" style="padding-top:1.5rem;">
+  <div class="page-header">
+    <h1>Monthly EDI Billing</h1>
+    <p>Drop the month's affidavit PDFs → fetch post logs → verify → export the EDI ZIP.</p>
+  </div>
+
+  <!-- Step 1: intake -->
+  <div class="step">
+    <h2><span class="step-n">1</span>Drop affidavit invoice PDFs</h2>
+    <div class="drop-zone" id="pdf-drop">
+      📄 Drop PDFs here or click to browse
+      <input type="file" id="pdf-input" multiple accept=".pdf"/>
+    </div>
+    <div class="status" id="intake-status"></div>
+  </div>
+
+  <!-- Step 2: fetch -->
+  <div class="step">
+    <h2><span class="step-n">2</span>Fetch post logs from Etere</h2>
+    <div class="fetch-bar">
+      <div class="field-group">
+        <label>Start date (M/D/YYYY)</label>
+        <input id="fetch-start" placeholder="6/1/2026"/>
+      </div>
+      <div class="field-group">
+        <label>End date (M/D/YYYY)</label>
+        <input id="fetch-end" placeholder="6/28/2026"/>
+      </div>
+      <button class="btn btn-primary" id="btn-fetch">Fetch post logs</button>
+      <span class="status" id="fetch-status"></span>
+    </div>
+    <p class="status" style="margin:.5rem 0 0;">Default range is the broadcast month. Fetching opens one shared Etere session (license seat) — nothing is fetched until you click.</p>
+  </div>
+
+  <!-- Step 3: verify + export -->
+  <div class="step">
+    <h2><span class="step-n">3</span>Verify &amp; export</h2>
+    <div class="file-list" id="row-list"><div class="empty">Drop PDFs to begin.</div></div>
+    <div class="export-bar">
+      <button class="btn btn-primary" id="btn-export" disabled>Export selected → ZIP</button>
+      <span class="status" id="export-status"></span>
+    </div>
+  </div>
+</main>
+
+<!-- Diff modal -->
+<div class="modal-overlay" id="diff-modal">
+  <div class="modal">
+    <h3 id="diff-title">Spot-level diff</h3>
+    <div id="diff-body">Loading…</div>
+    <button class="btn btn-secondary btn-sm" onclick="document.getElementById('diff-modal').classList.remove('open')">Close</button>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let rows = [];
+let templates = [];
+
+const $ = id => document.getElementById(id);
+
+function fmt_dollars(v) {
+  if (v === null || v === undefined) return '—';
+  return '$' + Number(v).toLocaleString('en-US', {minimumFractionDigits: 2});
+}
+
+// ── Load ───────────────────────────────────────────────────────────────────
+async function loadTemplates() {
+  templates = await (await fetch('/edi/export/templates')).json();
+}
+
+async function loadRows() {
+  const data = await (await fetch('/edi/billing/rows')).json();
+  rows = data.rows;
+  if (data.fetch_range.start_date && !$('fetch-start').value) {
+    $('fetch-start').value = data.fetch_range.start_date;
+    $('fetch-end').value   = data.fetch_range.end_date;
+  }
+  renderRows();
+}
+
+// ── Step 1: intake ─────────────────────────────────────────────────────────
+const dropZone = $('pdf-drop');
+dropZone.addEventListener('click', () => $('pdf-input').click());
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  intakeFiles(e.dataTransfer.files);
+});
+$('pdf-input').addEventListener('change', e => intakeFiles(e.target.files));
+
+async function intakeFiles(files) {
+  const fd = new FormData();
+  let n = 0;
+  for (const f of files) { fd.append('files', f); n++; }
+  if (!n) return;
+  $('intake-status').textContent = `Uploading ${n} file(s)…`;
+  const res = await fetch('/edi/billing/intake', { method: 'POST', body: fd });
+  const data = await res.json();
+  const errs = data.errors.map(e => `${e.filename}: ${e.error}`).join(' · ');
+  $('intake-status').textContent =
+    `${data.saved.length} accepted${data.errors.length ? ' — ' + errs : ''}`;
+  $('intake-status').className = 'status ' + (data.errors.length ? 'err' : 'ok');
+  await loadRows();
+}
+
+// ── Step 2: fetch ──────────────────────────────────────────────────────────
+$('btn-fetch').addEventListener('click', async () => {
+  const need = rows.filter(r => r.pdf_filename && !r.csv_filename && r.contract_no);
+  if (!need.length) { $('fetch-status').textContent = 'All rows already have post logs.'; return; }
+  const btn = $('btn-fetch');
+  btn.disabled = true;
+  $('fetch-status').textContent = `Fetching ${need.length} post log(s) — one Etere session…`;
+  try {
+    const res = await fetch('/edi/billing/fetch', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        contracts: need.map(r => ({ contract_no: r.contract_no, filename: r.pdf_filename })),
+        start_date: $('fetch-start').value.trim(),
+        end_date:   $('fetch-end').value.trim(),
+      }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+    const data = await res.json();
+    const bad = data.results.filter(r => !r.ok);
+    $('fetch-status').textContent = `${data.results.length - bad.length} fetched` +
+      (bad.length ? ` — ${bad.length} failed: ${bad.map(b => b.error).join(' · ')}` : '');
+    $('fetch-status').className = 'status ' + (bad.length ? 'err' : 'ok');
+  } catch (err) {
+    $('fetch-status').textContent = 'Fetch failed: ' + err.message;
+    $('fetch-status').className = 'status err';
+  } finally {
+    btn.disabled = false;
+    await loadRows();
+  }
+});
+
+// ── Step 3: render rows ────────────────────────────────────────────────────
+function reconcileBadge(r) {
+  const rec = r.reconcile || {status: 'missing', detail: ''};
+  if (rec.status === 'match')    return `<span class="badge green" title="spots + gross match">🟢 reconciled</span>`;
+  if (rec.status === 'rounding') return `<span class="badge amber" title="${rec.detail}">🟡 rounding</span>`;
+  if (rec.status === 'mismatch') return `<span class="badge red" data-diff="${r.invoice_number}" title="${rec.detail} — click for spot-level diff">🔴 mismatch</span>`;
+  return `<span class="badge gray" title="${rec.detail}">⏳ ${rec.detail || 'pending'}</span>`;
+}
+
+function matchBadge(r) {
+  const conf = r.match_confidence;
+  const cust = r.etere_customer_name ? ` (${r.etere_customer_name})` : '';
+  if (conf === 'customer-id') return `<span class="match-badge ok" title="${r.match_detail}">✓ customer ID${cust}</span>`;
+  if (conf === 'fuzzy')       return `<span class="match-badge warn" title="${r.match_detail}">⚠ fuzzy — verify</span>`;
+  if (conf === 'ambiguous')   return `<span class="match-badge warn" title="Candidates: ${(r.match_candidates||[]).join(', ')}">⚠ pick template (${(r.match_candidates||[]).length})</span>`;
+  return `<span class="match-badge err" title="${r.match_detail}">✗ no match</span>`;
+}
+
+function rowExportable(r) {
+  const recOk = r.reconcile && (r.reconcile.status === 'match' || r.reconcile.status === 'rounding');
+  return recOk && !r.has_errors && r.csv_filename && r.suggested_template;
+}
+
+function renderRows() {
+  const el = $('row-list');
+  if (!rows.length) { el.innerHTML = '<div class="empty">Drop PDFs to begin.</div>'; updateExportBtn(); return; }
+  el.innerHTML = rows.map((r, idx) => {
+    const inv = r.invoice_fields || {};
+    const tmpl = templates.find(t => t.name === r.suggested_template) || {};
+    const tmplOpts = '<option value="">— select —</option>' +
+      templates.map(t => `<option value="${t.name}" ${t.name === r.suggested_template ? 'selected' : ''}>${t.name}</option>`).join('');
+    const conf = r.match_confidence;
+    const selWarn = conf === 'customer-id' ? '' : (conf === 'none' ? 'field-error' : 'field-warn');
+    const exportable = rowExportable(r);
+    const issuesHtml = (r.issues || []).map(i =>
+      `<div class="issue-${i.level === 'error' ? 'err' : 'warn'}">${i.level === 'error' ? '✗' : '⚠'} ${i.field}: ${i.message}</div>`).join('');
+    return `
+    <div class="file-card" data-idx="${idx}">
+      <div class="file-card-header">
+        <input type="checkbox" class="row-select" ${exportable ? '' : 'disabled'}/>
+        <span class="inv-num">${r.invoice_number}</span>
+        ${reconcileBadge(r)}
+        <span class="meta">affidavit ${r.pdf_spots ?? '—'} / ${fmt_dollars(r.pdf_gross)} · post-log ${r.csv_spots ?? '—'} / ${fmt_dollars(r.csv_gross)}</span>
+        <span style="margin-left:auto"></span>
+        ${matchBadge(r)}
+      </div>
+      <div class="file-card-body">
+        <div class="field-group" style="grid-column:1/-1">
+          <label>Template</label>
+          <select class="tmpl-select ${selWarn}">${tmplOpts}</select>
+        </div>
+        <div class="field-group"><label>Invoice Number</label>
+          <input class="f-invoice-number" value="${inv.invoice_number || ''}"/></div>
+        <div class="field-group"><label>Invoice Date (YYMMDD)</label>
+          <input class="f-invoice-date" value="${inv.invoice_date || ''}"/></div>
+        <div class="field-group"><label>Estimate Code</label>
+          <input class="f-estimate-code" value="${inv.estimate_code || ''}"/></div>
+        <div class="field-group"><label>Order / Contract #</label>
+          <input class="f-order-number" value="${inv.order_number || ''}"/></div>
+        <div class="field-group"><label>Broadcast Month (YYMM)</label>
+          <input class="f-bcast-month" value="${inv.broadcast_month || ''}" readonly/></div>
+        <div class="field-group"><label>Rep Order Number</label>
+          <input class="f-rep-order" value="${inv.rep_order_number || ''}"/></div>
+        <div class="field-group"><label>Start Date</label>
+          <input class="f-bcast-start" value="${inv.bcast_start || ''}" readonly/></div>
+        <div class="field-group"><label>End Date</label>
+          <input class="f-bcast-end" value="${inv.bcast_end || ''}" readonly/></div>
+        <div class="field-group"><label>Advertiser Name (R31)</label>
+          <input class="f-advertiser-name" value="${inv.advertiser_name || tmpl.advertiser_name || ''}"/></div>
+        <div class="field-group"><label>Product Name (R31)</label>
+          <input class="f-product-name" value="${inv.product_name || tmpl.product_name || ''}"/></div>
+        <div class="field-group"><label>Agency Ad Code (R31)</label>
+          <input class="f-ad-code" value="${inv.agency_ad_code || tmpl.agency_ad_code || ''}"/></div>
+        <div class="field-group"><label>Agency Prod Code (R31)</label>
+          <input class="f-prod-code" value="${inv.agency_prod_code || tmpl.agency_prod_code || ''}"/></div>
+        <div class="field-group field-comment"><label>Record 32 — Top Comment</label>
+          <input class="f-comment-top" value="${inv.comment_top || tmpl.comment_top || ''}"/></div>
+        <div class="field-group field-comment"><label>Record 33 — Comment Bottom 1</label>
+          <input class="f-comment-bottom" value="${inv.comment_bottom || ''}"/></div>
+        <div class="field-group field-comment"><label>Record 33 — Comment Bottom 2 (optional)</label>
+          <input class="f-comment-bottom-2" value="${inv.comment_bottom_2 || ''}"/></div>
+        ${(r.warnings || []).length ? `<div class="row-warnings">⚠ ${(r.warnings || []).join(' · ')}</div>` : ''}
+        <div class="issues ${(r.issues || []).length ? 'has-issues' : ''}">${issuesHtml}</div>
+      </div>
+      <div class="file-card-footer">
+        <label class="force-label ${exportable ? '' : 'show'}">
+          <input type="checkbox" class="row-force"/> export anyway (override red)
+        </label>
+        <span class="status card-status"></span>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Red badge → diff modal
+  document.querySelectorAll('.badge.red[data-diff]').forEach(b =>
+    b.addEventListener('click', () => openDiff(b.dataset.diff)));
+
+  // Selection / force logic
+  document.querySelectorAll('.row-select, .row-force').forEach(cb =>
+    cb.addEventListener('change', onSelectChange));
+
+  // Template change: refill template-sourced fields, clear warn, revalidate
+  document.querySelectorAll('.tmpl-select').forEach(sel =>
+    sel.addEventListener('change', () => {
+      const card = sel.closest('.file-card');
+      if (sel.value) sel.classList.remove('field-warn', 'field-error');
+      const t = templates.find(x => x.name === sel.value) || {};
+      card.querySelector('.f-advertiser-name').value = t.advertiser_name || '';
+      card.querySelector('.f-product-name').value    = t.product_name || '';
+      card.querySelector('.f-ad-code').value         = t.agency_ad_code || '';
+      card.querySelector('.f-prod-code').value       = t.agency_prod_code || '';
+      revalidate(card);
+    }));
+
+  // Live validation on edit (debounced per card)
+  document.querySelectorAll('.file-card input:not([type=checkbox]):not([readonly])').forEach(inp =>
+    inp.addEventListener('input', () => {
+      const card = inp.closest('.file-card');
+      clearTimeout(card._vt);
+      card._vt = setTimeout(() => revalidate(card), 500);
+    }));
+
+  updateExportBtn();
+}
+
+function onSelectChange(e) {
+  const card = e.target.closest('.file-card');
+  const r = rows[Number(card.dataset.idx)];
+  const sel = card.querySelector('.row-select');
+  if (e.target.classList.contains('row-force')) {
+    sel.disabled = !(rowExportable(r) || e.target.checked);
+    if (!e.target.checked && !rowExportable(r)) sel.checked = false;
+  }
+  updateExportBtn();
+}
+
+function updateExportBtn() {
+  const any = [...document.querySelectorAll('.row-select')].some(cb => cb.checked);
+  $('btn-export').disabled = !any;
+}
+
+// ── Live validation ────────────────────────────────────────────────────────
+function collectFields(card) {
+  const r = rows[Number(card.dataset.idx)];
+  const v = cls => card.querySelector('.' + cls).value.trim();
+  return {
+    ...r.invoice_fields,
+    invoice_number:   v('f-invoice-number'),
+    invoice_date:     v('f-invoice-date'),
+    estimate_code:    v('f-estimate-code'),
+    order_number:     v('f-order-number'),
+    rep_order_number: v('f-rep-order'),
+    advertiser_name:  v('f-advertiser-name'),
+    product_name:     v('f-product-name'),
+    agency_ad_code:   v('f-ad-code'),
+    agency_prod_code: v('f-prod-code'),
+    comment_top:      v('f-comment-top'),
+    comment_bottom:   v('f-comment-bottom'),
+    comment_bottom_2: v('f-comment-bottom-2'),
+  };
+}
+
+async function revalidate(card) {
+  const r = rows[Number(card.dataset.idx)];
+  const res = await fetch('/edi/billing/validate', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      template_name:  card.querySelector('.tmpl-select').value,
+      invoice_fields: collectFields(card),
+      csv_filename:   r.csv_filename,
+    }),
+  });
+  const data = await res.json();
+  r.issues = data.issues;
+  r.has_errors = data.has_errors;
+  const box = card.querySelector('.issues');
+  box.innerHTML = data.issues.map(i =>
+    `<div class="issue-${i.level === 'error' ? 'err' : 'warn'}">${i.level === 'error' ? '✗' : '⚠'} ${i.field}: ${i.message}</div>`).join('');
+  box.classList.toggle('has-issues', data.issues.length > 0);
+  const sel = card.querySelector('.row-select');
+  const force = card.querySelector('.row-force');
+  const ok = rowExportable(r);
+  card.querySelector('.force-label').classList.toggle('show', !ok);
+  sel.disabled = !(ok || force.checked);
+  if (sel.disabled) sel.checked = false;
+  updateExportBtn();
+}
+
+// ── Diff modal ─────────────────────────────────────────────────────────────
+async function openDiff(invNo) {
+  const modal = $('diff-modal');
+  $('diff-title').textContent = `Spot-level diff — ${invNo}`;
+  $('diff-body').innerHTML = 'Loading…';
+  modal.classList.add('open');
+  const res = await fetch('/edi/billing/diff', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ invoice_number: invNo }),
+  });
+  if (!res.ok) { $('diff-body').textContent = 'Diff failed: ' + res.statusText; return; }
+  const d = await res.json();
+  const table = (title, spots, cols) => spots.length ? `
+    <h3>${title} (${spots.length})</h3>
+    <table><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr>
+      ${spots.map(s => `<tr>${cols.map(c => `<td>${s[c] ?? ''}</td>`).join('')}</tr>`).join('')}
+    </table>` : '';
+  $('diff-body').innerHTML =
+    `<p class="status">Affidavit spots: ${d.pdf_total} · Post-log spots: ${d.csv_total}</p>` +
+    table('On affidavit, missing from post-log', d.missing_from_csv, ['date', 'airtime', 'lang', 'spot_type', 'rate']) +
+    table('In post-log, not on affidavit', d.extra_in_csv, ['date', 'airtime', 'spot_code', 'rate', 'description']) +
+    (!d.missing_from_csv.length && !d.extra_in_csv.length
+      ? '<p class="status ok">Every spot pairs up — totals difference is rate rounding.</p>' : '');
+}
+
+// ── Export ─────────────────────────────────────────────────────────────────
+$('btn-export').addEventListener('click', async () => {
+  const items = [];
+  document.querySelectorAll('.file-card').forEach(card => {
+    if (!card.querySelector('.row-select').checked) return;
+    const r = rows[Number(card.dataset.idx)];
+    items.push({
+      csv_filename:   r.csv_filename,
+      template_name:  card.querySelector('.tmpl-select').value,
+      invoice_fields: collectFields(card),
+      force:          card.querySelector('.row-force').checked,
+    });
+  });
+  $('export-status').textContent = `Exporting ${items.length} invoice(s)…`;
+  $('export-status').className = 'status';
+  const res = await fetch('/edi/billing/export', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ items }),
+  });
+  if (res.status === 409) {
+    const detail = JSON.parse((await res.json()).detail);
+    $('export-status').textContent = 'Blocked — ' +
+      detail.refused.map(x => `${x.row}: ${x.reason}`).join(' · ');
+    $('export-status').className = 'status err';
+    return;
+  }
+  if (!res.ok) {
+    $('export-status').textContent = 'Export failed: ' + res.statusText;
+    $('export-status').className = 'status err';
+    return;
+  }
+  const blob = await res.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'edi_billing.zip';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  $('export-status').textContent = `Exported ${items.length} invoice(s).`;
+  $('export-status').className = 'status ok';
+});
+
+// ── Init ───────────────────────────────────────────────────────────────────
+(async () => { await loadTemplates(); await loadRows(); })();
+</script>
+</body>
+</html>

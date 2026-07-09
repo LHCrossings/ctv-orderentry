@@ -19,6 +19,7 @@ from web.routes.airchecks import build_airchecks_router
 from web.routes.assets import build_assets_router
 from web.routes.backwrite import build_backwrite_router
 from web.routes.edi import build_edi_router
+from web.routes.edi_billing import build_edi_billing_router
 from web.routes.edi_export import build_edi_export_router
 from web.routes.live_view import build_live_view_router
 from web.routes.orders import build_router
@@ -46,6 +47,7 @@ def create_app(config: ApplicationConfig | None = None) -> FastAPI:
     app.include_router(build_reports_router(templates))
     app.include_router(build_edi_router(templates))
     app.include_router(build_edi_export_router(templates))
+    app.include_router(build_edi_billing_router(templates))
     app.include_router(build_live_view_router(templates))
     app.include_router(build_airchecks_router(templates))
     app.include_router(build_assets_router(templates))
