@@ -3321,16 +3321,28 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         (transaction-safe per market, skips already-placed). Returns per
         (program, market) results.
 
-        Each market gets its own DB connection and runs on its own thread —
-        every query in run_market() is scoped to a single COD_USER, so markets
-        never touch each other's rows. Running them in parallel (instead of one
-        long serial loop over every program x market pair) keeps a full-network
-        run well under the reverse proxy's read timeout."""
+        Each market gets its own DB connection and runs on its own thread.
+        Every TPALINSE query in run_market() is scoped to a single COD_USER,
+        so the placement itself never crosses markets. Running them in
+        parallel (instead of one long serial loop over every program x market
+        pair) keeps a full-network run well under the reverse proxy's read
+        timeout.
+
+        FILMATI (the asset library) IS shared across markets — a show file
+        exploded into every market, a shared bumper, a shared FCC-ID element
+        is one row multiple markets' threads touch. run_market()'s checksum
+        sync guards that with a per-asset lock and defers to `pending` on
+        contention instead of blocking (2026-07-09, fixed the 1205 deadlock
+        this parallelism introduced); each market thread drains its own
+        pending list once it's placed everything it was given."""
         import datetime as _dt
         from concurrent.futures import ThreadPoolExecutor
 
         from browser_automation.etere_direct_client import connect as _db_connect
-        from src.business_logic.services.daily_programming_run import run_market
+        from src.business_logic.services.daily_programming_run import (
+            _drain_pending_filmati_syncs,
+            run_market,
+        )
         date = body.get("date")
         codusers = body.get("codUsers") or []
         assignments = body.get("assignments") or []
@@ -3344,15 +3356,18 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         def _run_market_all(cu):
             cu = int(cu)
             out = []
+            pending = []
             try:
                 with _db_connect() as conn:
                     for a in assignments:
                         if a.get("mode") == "shoplc" and cu == 10:
                             continue  # Shop LC never airs on DAL
                         label = a.get("title") or ("program " + str(a.get("programIndex")))
-                        r = run_market(conn, cu, d, a)
+                        r = run_market(conn, cu, d, a, pending)
                         r["program"] = label
                         out.append(r)
+                    if pending:
+                        _drain_pending_filmati_syncs(conn.cursor(), conn, pending)
             except Exception as exc:  # noqa: BLE001 - surface connection-level errors for this market
                 out.append({"cu": cu, "ok": False, "skipped": False, "message": f"Run failed: {exc}"})
             return out

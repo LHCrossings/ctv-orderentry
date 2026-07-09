@@ -22,6 +22,8 @@ See tasks/daily_programming_discovery.md + the project memory for the recipe.
 from __future__ import annotations
 
 import re
+import threading
+import time
 
 from src.business_logic.services.show_profiles import elements_for, profile_for
 
@@ -30,6 +32,28 @@ EVENT_BASE = 100000000000  # Event_P = EVENT_BASE + id_tpalinse
 
 
 DAY_FRAMES = int(24 * 3600 * FPS)  # one broadcast-day's worth of frames
+
+# Per-asset locks guarding the FILMATI read-then-write in _apply_filmati_sync.
+# Market threads run in parallel on separate connections; a shared asset (one
+# show file exploded into every market, a shared bumper, a shared FCC-ID
+# element) is the SAME FILMATI row for all of them. Two sessions each holding
+# a SELECT's shared lock on that row and then both trying to UPDATE it is a
+# textbook SQL Server 1205 deadlock (lock-conversion cycle). Serializing the
+# read-then-write in Python turns that race into a plain, safe wait instead.
+# A thread never holds one fid's lock while waiting on another's (acquire is
+# always non-blocking, release always precedes any further wait), so a cycle
+# among these locks can't form. See _sync_checksums / _drain_pending_filmati_syncs.
+_FILMATI_LOCKS = {}
+_FILMATI_LOCKS_GUARD = threading.Lock()
+_FILMATI_RETRY_SECONDS = 2
+
+
+def _filmati_lock(fid):
+    with _FILMATI_LOCKS_GUARD:
+        lock = _FILMATI_LOCKS.get(fid)
+        if lock is None:
+            lock = _FILMATI_LOCKS[fid] = threading.Lock()
+        return lock
 
 # Shop LC overnight (00:00–06:00) — static setup, CTV markets only, never DAL.
 # All three assets are live events (FILMATI.LIVE_ID='1'); _sync_checksums leaves
@@ -202,7 +226,79 @@ def _ensure_bumper(cur, cod_user, d, slot, spec, existing):
     return {"id": nid, "xorder": int(cur.fetchone()[0])}
 
 
-def _sync_checksums(cur, ids):
+def _apply_filmati_sync(cur, fid, fid_rows):
+    """The actual read-then-write against one FILMATI row (normalize its
+    checksum-input fields) plus the checksum freeze on each of its TPALINSE
+    rows. Must only ever run under _filmati_lock(fid) — see callers."""
+    cur.execute("SELECT LIVE_ID FROM FILMATI WHERE ID_FILMATI=%s", (fid,))
+    r = cur.fetchone()
+    is_live = bool(r and r[0] is not None)
+    if not is_live:
+        # Live event: LIVE_ID is the live-feed link and the asset never goes
+        # through the Aligner — its fields as-is are the settled state.
+        cur.execute("""
+            UPDATE FILMATI SET
+                INF_DIGIT=0,
+                AUDIO=NULL,
+                AUDIO_LANGUAGE=NULL,
+                LIVE_ID=NULL
+            WHERE ID_FILMATI=%s
+        """, (fid,))
+
+    for rid, prog_code in fid_rows:
+        if is_live:
+            # Live-asset row: sch_UpdateSupportAndProperties already wrote the
+            # REAL supporto/CRAWL_DESC — the Explode-mimicking cosmetics below
+            # would destroy both (root cause of the 2026-07-08 Shop LC dead-air
+            # incident) — freeze the checksum only.
+            cur.execute(
+                "UPDATE TPALINSE SET SCHEDULE_CHECKSUM = dbo.sch_getFilmatiCheckSum(%s) WHERE id_tpalinse=%s",
+                (rid, rid))
+            continue
+
+        supporto_val = f"0ETX      {prog_code}"
+        crawl_desc = "[EDL]\nEdl_Version=0\n[Aspect Conversion]\nCode=HL"
+        cur.execute("""
+            UPDATE TPALINSE SET
+                tipo_tc='C',
+                aspect='H',
+                audio_ty='M',
+                supporto=%s,
+                visionato='X',
+                CRAWL_DESC=%s,
+                SCHEDULE_CHECKSUM = dbo.sch_getFilmatiCheckSum(%s)
+            WHERE id_tpalinse=%s
+        """, (supporto_val, crawl_desc, rid, rid))
+
+
+def _drain_pending_filmati_syncs(cur, conn, pending):
+    """Retry any FILMATI syncs _sync_checksums deferred because another
+    market's thread held the lock on that same asset. Called once a market
+    thread has placed everything it was given, so there's nothing left to
+    interleave with. Round-robins the remaining items so one stubborn fid
+    can't starve the others; sleeps between full passes only if every item
+    in that pass was still contended. Never skips — retries until each item
+    lands, then commits it."""
+    while pending:
+        remaining = []
+        progressed = False
+        for fid, fid_rows in pending:
+            lock = _filmati_lock(fid)
+            if lock.acquire(blocking=False):
+                try:
+                    _apply_filmati_sync(cur, fid, fid_rows)
+                    conn.commit()
+                finally:
+                    lock.release()
+                progressed = True
+            else:
+                remaining.append((fid, fid_rows))
+        pending = remaining
+        if pending and not progressed:
+            time.sleep(_FILMATI_RETRY_SECONDS)
+
+
+def _sync_checksums(cur, ids, pending):
     """Store each row's SCHEDULE_CHECKSUM so Etere never shows the yellow
     'event modified — needs Explode - all breakpoints' triangle.
 
@@ -238,72 +334,40 @@ def _sync_checksums(cur, ids):
     are NOT inputs to the checksum — they are cosmetic (they mirror what Explode
     writes so the row looks identical in the UI). The FILMATI normalisation above is
     what actually prevents the triangle. Idempotent; also auto-heals stale rows.
-    """
-    # Normalise the checksum-input fields on each distinct FILMATI to their
-    # canonical settled state, so the checksum we compute below is the value the
-    # file converges to after Aligner pulls it down.
-    fids = set()
-    for rid in ids:
-        if rid is None:
-            continue
-        cur.execute("SELECT ID_FILMATI FROM TPALINSE WHERE id_tpalinse=%s", (rid,))
-        row = cur.fetchone()
-        if row and row[0]:
-            fids.add(row[0])
-    live_fids = set()
-    for fid in fids:
-        cur.execute("SELECT LIVE_ID FROM FILMATI WHERE ID_FILMATI=%s", (fid,))
-        row = cur.fetchone()
-        if row and row[0] is not None:
-            # Live event: LIVE_ID is the live-feed link and the asset never goes
-            # through the Aligner — its fields as-is are the settled state.
-            live_fids.add(fid)
-            continue
-        cur.execute("""
-            UPDATE FILMATI SET
-                INF_DIGIT=0,
-                AUDIO=NULL,
-                AUDIO_LANGUAGE=NULL,
-                LIVE_ID=NULL
-            WHERE ID_FILMATI=%s
-        """, (fid,))
 
+    CONCURRENCY (2026-07-09): rows are grouped by their FILMATI id and each
+    group's read-then-write runs under _filmati_lock(fid). Daily Programming
+    runs one market per thread, and a shared asset (a show file exploded into
+    every market, a shared bumper, a shared FCC-ID element) is the SAME
+    FILMATI row across all of them — two threads racing a SELECT-then-UPDATE
+    on that row is what produced the 1205 deadlock ("Frontline Pilipinas ·
+    SFO", 2026-07-09). If another thread already holds that fid's lock, this
+    group is appended to `pending` instead of blocking — the caller places
+    the rest of its assignments first and retries pending items once it has
+    nothing else to do (see _drain_pending_filmati_syncs).
+    """
+    rows = []
     for rid in ids:
         if rid is None:
             continue
         cur.execute("SELECT COD_PROGRA, ID_FILMATI FROM TPALINSE WHERE id_tpalinse=%s", (rid,))
         row = cur.fetchone()
-        prog_code = row[0] if row and row[0] else ""
-        rid_fid = row[1] if row else None
+        if row and row[1]:
+            rows.append((rid, row[0] or "", row[1]))
 
-        if rid_fid in live_fids:
-            # Live-asset row: sch_UpdateSupportAndProperties already wrote the REAL
-            # supporto ('0LIVE<channel>' — the live-feed binding EE renders as the
-            # LIVE badge / '1-Channel 1' source) and CRAWL_DESC (the station-ID
-            # overlay config on CVC/SFO Shop LC). The Explode-mimicking cosmetics
-            # below would DESTROY both (root cause of the 2026-07-08 Shop LC
-            # dead-air incident) — freeze the checksum only.
-            cur.execute(
-                "UPDATE TPALINSE SET SCHEDULE_CHECKSUM = dbo.sch_getFilmatiCheckSum(%s) WHERE id_tpalinse=%s",
-                (rid, rid))
-            continue
+    by_fid = {}
+    for rid, prog_code, fid in rows:
+        by_fid.setdefault(fid, []).append((rid, prog_code))
 
-        # Cosmetic metadata (mirrors Explode's UI appearance), then freeze the
-        # checksum against the now-canonical FILMATI input fields.
-        supporto_val = f"0ETX      {prog_code}"
-        crawl_desc = "[EDL]\nEdl_Version=0\n[Aspect Conversion]\nCode=HL"
-
-        cur.execute("""
-            UPDATE TPALINSE SET
-                tipo_tc='C',
-                aspect='H',
-                audio_ty='M',
-                supporto=%s,
-                visionato='X',
-                CRAWL_DESC=%s,
-                SCHEDULE_CHECKSUM = dbo.sch_getFilmatiCheckSum(%s)
-            WHERE id_tpalinse=%s
-        """, (supporto_val, crawl_desc, rid, rid))
+    for fid, fid_rows in by_fid.items():
+        lock = _filmati_lock(fid)
+        if lock.acquire(blocking=False):
+            try:
+                _apply_filmati_sync(cur, fid, fid_rows)
+            finally:
+                lock.release()
+        else:
+            pending.append((fid, fid_rows))
 
 
 def _place_element(cur, cod_user, d, lo, hi, prgs_slots, el, program_first_id):
@@ -385,12 +449,16 @@ def _verify_sequence(cur, ids, open_b, close_b):
     return True, "ok"
 
 
-def run_market(conn, cod_user, d, assignment):
+def run_market(conn, cod_user, d, assignment, pending):
     """Place one program assignment into one market, transaction-safe.
 
     assignment = {mode:'explode'|'pieces'|'shoplc', fileId, fileCode, start, end,
                   pieces:[id,...], fillers:[id,...]}. 'shoplc' ignores fileId —
     the asset and per-market treatment come from the SHOP_LC map.
+
+    `pending` is the caller's list for FILMATI syncs deferred by a lock
+    conflict with another market's thread (see _sync_checksums) — the
+    caller is responsible for retrying it once it's done placing.
     Returns {cu, ok, skipped, message}.
     """
     cur = conn.cursor()
@@ -520,7 +588,7 @@ def run_market(conn, cod_user, d, assignment):
         _rebuild(cur, d, cod_user, first_id)
         # Clear Etere's "needs Explode - all breakpoints" warning by re-syncing the
         # stored schedule checksum on every row we placed (parts + bumpers + elements).
-        _sync_checksums(cur, list(ids) + [b["id"] for b in (open_b, close_b) if b] + extra_ids)
+        _sync_checksums(cur, list(ids) + [b["id"] for b in (open_b, close_b) if b] + extra_ids, pending)
         ok, msg = _verify_sequence(cur, ids, open_b, close_b)
         if ok:
             conn.commit()
