@@ -184,10 +184,13 @@ def _assemble_rows() -> list[dict]:
                 v = getattr(a, f_)
                 if v:
                     inv[f_] = v
-        if not inv.get("comment_top") and market and m.name:
+        # comment_top precedence: PDF comment box → template per-market map →
+        # template default (e.g. H&L CVC/SFO always carry their market comment)
+        if not inv.get("comment_top") and m.name:
             tmpl = next((t for t in tmpl_list if t["name"] == m.name), {})
-            if market in tmpl.get("comment_top_by_market", {}):
-                inv["comment_top"] = tmpl["comment_top_by_market"][market]
+            by_mkt = tmpl.get("comment_top_by_market", {})
+            inv["comment_top"] = (by_mkt.get(market) if market else "") \
+                or tmpl.get("comment_top", "")
         row["invoice_fields"] = inv
 
         # --- validation (with the suggested template if any) ---
