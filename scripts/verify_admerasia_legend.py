@@ -16,8 +16,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from browser_automation.parsers.admerasia_traffic_color import read_color_grid  # noqa: E402
 from browser_automation.parsers.admerasia_traffic import _assign_clusters, _dist  # noqa: E402
+from browser_automation.parsers.admerasia_traffic_color import read_color_grid  # noqa: E402
 from browser_automation.parsers.admerasia_vision import extract_isci_legend  # noqa: E402
 
 _ORDERS = "/mnt/c/Work Temp/!New/!Orders"

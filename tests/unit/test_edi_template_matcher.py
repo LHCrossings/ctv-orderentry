@@ -7,7 +7,6 @@ tasks/edi-billing-redesign.md §1:
 - Thunder Valley invoices pulled RPM Muckleshoot
 - any filename containing "media" pulled Ocean Media BetMGM
 """
-import pytest
 
 from business_logic.services.edi_billing import (
     TemplateMatch,
