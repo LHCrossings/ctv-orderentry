@@ -1613,6 +1613,28 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         result = await loop.run_in_executor(None, _scan_dir, config.incoming_dir)
         return JSONResponse(content=result)
 
+    @router.get("/api/orders/counts")
+    async def order_counts():
+        """Cheap tab-badge counts for all three queue states — plain directory
+        listings, no order detection, so all badges can populate on page load."""
+        def _count_files(d: Path) -> int:
+            if not d.exists():
+                return 0
+            return sum(
+                1 for f in d.iterdir()
+                if f.is_file() and not f.name.startswith(('.', '~$'))
+                and not f.name.endswith('.manifest.json')
+            )
+        def _run():
+            _sweep_entered_strays()
+            return {
+                "pending":  _count_files(config.incoming_dir),
+                "awaiting": len(list(entered_dir.glob("*.manifest.json"))) if entered_dir.exists() else 0,
+                "history":  _count_files(used_dir),
+            }
+        loop = asyncio.get_running_loop()
+        return JSONResponse(content=await loop.run_in_executor(None, _run))
+
     @router.post("/api/orders/upload")
     async def upload_order(file: UploadFile):
         if not file.filename:

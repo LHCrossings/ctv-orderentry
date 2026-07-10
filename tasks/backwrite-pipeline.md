@@ -185,6 +185,16 @@ may upsert when they learn something new.
   — the manual escape hatch for the legacy-parallel period. Endpoints:
   `GET /api/orders/awaiting-backwrite`, `POST /api/orders/awaiting-backwrite/{file}/done`.
   Verified end-to-end via TestClient (7 checks incl. stray sweep and Used archive).
+  **First production manifest reviewed 2026-07-10** (Daviselen Est 1463 entered on
+  Jumpbox): two findings that bind Phase 2 —
+  (a) **`user_inputs[].order` is the authoritative line source** (it's what was
+  actually gathered/entered, including user overrides at entry); `io_detail` is a
+  fresh re-parse kept for audit — the two CAN differ (they did on the bonus line).
+  (b) The gathered order carries `week_start_dates` + per-line `weekly_spots`
+  arrays, so per-line flight dates are derivable without touching parser_bridge —
+  the "empty start/end dates" gap noted under Phase 0 is closed by reading these
+  instead. Also: `io_path` is machine-specific (Jumpbox vs desktop paths) —
+  always key by `io_filename`, never `io_path`.
 - **Phase 2 — one-click backwrite.** Verify against a real contract: generated Excel is
   cell-identical to one produced through the legacy page with correct manual inputs
   (H&L net-rate case AND Daviselen gross-rate case AND one WorldLink order).

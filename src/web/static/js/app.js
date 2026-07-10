@@ -70,10 +70,26 @@ function setStatus(msg, type) {
 
 // ── Queue / History ────────────────────────────────────────────────────────
 
+async function refreshCounts() {
+    // Populate the inactive tabs' badges (the active tab gets its exact count
+    // from its own list load) so nothing shows a stale 0 before first visit.
+    try {
+        const res    = await fetch('/api/orders/counts');
+        const counts = await res.json();
+        const badges = { pending: queueCount, awaiting: awaitingCount, history: historyCount };
+        for (const [tab, el] of Object.entries(badges)) {
+            if (tab === currentTab) continue;
+            el.textContent = counts[tab];
+            el.className   = 'queue-count' + (counts[tab] === 0 ? ' zero' : '');
+        }
+    } catch (err) { /* badges are cosmetic — never block the queue on them */ }
+}
+
 async function loadQueue() {
     const isHistory  = currentTab === 'history';
     const isAwaiting = currentTab === 'awaiting';
     const isPending  = currentTab === 'pending';
+    refreshCounts();
     const url = isHistory ? '/api/history'
               : isAwaiting ? '/api/orders/awaiting-backwrite'
               : '/api/orders';
