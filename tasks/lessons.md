@@ -4,6 +4,21 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## Daily Programming Placement: Never Trust Traffic_InsertEvent's XORDER — Conform the Window Yourself
+
+**Session:** Korean News 7/10 five-market failure (2026-07-10)
+
+**Rule:** `Traffic_InsertEvent` derives a new row's XORDER from its ORA-neighbors **including soft-deleted (LIVELLO=666) rows with stale xorders**. Three interacting hazards break placement into an hour that has sat unplaced for a while:
+1. **NOOP gap-fillers:** Etere's playlist generation drops a `NEWTYPE='NOOP'` filler (~50 min) into any unfilled program hole. A live NOOP in the window corrupts the rebuild — every 7/10 market with an active 8:10a NOOP failed, every market without one placed clean. `_clear_noop_fillers()` now soft-deletes (666, Etere's own pattern) overlapping NOOPs inside the placement transaction before inserting parts.
+2. **BO-packed spots:** running Break Optimization on a program-less hour collapses ALL the hour's break spots into one contiguous pod at the top (the whole hour is one non-fixed block). TPALINSE.ORA then no longer reflects break membership — but **`trafficPalinse.offset` still holds each spot's true break position** (BO never touches it). Use it as the sort key to put spots back with their breaks.
+3. **Stale-xorder inheritance:** parts inserted over dead NOOPs literally copy the dead row's years-stale xorder → parts interleave wrongly with the pod → `sch_rebuildStartTimeSchedule` chains a nonsense order → "verify failed: overlap at element N".
+
+**Fix (in `daily_programming_run.py`):** after inserting parts + bumpers, `_conform_window_xorder()` reassigns the window's active rows the SAME multiset of xorders they already hold, ordered: open bumper, part1, break-1 spots (by trafficPalinse.offset), part2, …, close bumper after last part. Same-multiset reassignment can't collide with anything outside the window. The rebuild then produces the HOU-style interleaved layout.
+
+**Deadlocks (1205) across market threads:** identical fixed retry delays re-collide in lockstep — four markets all slept exactly 1s and exhausted 3 attempts together. Retries need **jitter** (`_DEADLOCK_RETRY_SECONDS * attempt + random.uniform(0.1, 1.5)`, 5 attempts) and the rebuild SP (the most lock-hungry statement) is serialized process-wide via `_REBUILD_LOCK`. For manual remediation runs, just go sequential — one market at a time never deadlocks.
+
+---
+
 ## The Broadcast Day Runs 06:00→30:00 — Post-Midnight Is 24:00–29:59 on the SAME Date
 
 **Session:** Daily Programming late-night / DAL midnight feedback (2026-07-06)

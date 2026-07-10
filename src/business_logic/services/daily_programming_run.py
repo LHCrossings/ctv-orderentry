@@ -21,6 +21,7 @@ See tasks/daily_programming_discovery.md + the project memory for the recipe.
 """
 from __future__ import annotations
 
+import random
 import re
 import threading
 import time
@@ -54,8 +55,19 @@ _FILMATI_RETRY_SECONDS = 2
 # against an actor we don't share memory with. SQL Server's own error text
 # says to rerun the transaction, so run_market() does exactly that — a bounded
 # retry, not a preemptive lock, since we can't identify every possible party.
-_DEADLOCK_MAX_ATTEMPTS = 3
+# Retry delays carry random jitter: on the 2026-07-10 Korean News run, four
+# market threads deadlocked each other, all slept exactly 1s, and re-collided
+# on every retry until all four exhausted their attempts. Desynchronized
+# sleeps break that lockstep.
+_DEADLOCK_MAX_ATTEMPTS = 5
 _DEADLOCK_RETRY_SECONDS = 1
+
+# sch_rebuildStartTimeSchedule is the most lock-hungry statement in a placement
+# (it rescans and rewrites TPALINSE start times for the whole day). Concurrent
+# rebuilds from different market threads are the likeliest 1205 parties, so run
+# only one at a time process-wide; each market's data is disjoint, so ordering
+# between them doesn't matter.
+_REBUILD_LOCK = threading.Lock()
 
 
 def _is_deadlock(exc):
@@ -160,6 +172,26 @@ def _bumpers(cur, cod_user, d, lo, hi):
         elif "CLOS" in u:
             cl = {"id": idt, "xorder": int(xo)}
     return op, cl
+
+
+def _clear_noop_fillers(cur, cod_user, d, lo, hi):
+    """Soft-delete Etere's NOOP gap-filler events overlapping the window.
+
+    When a program hole sits unfilled, Etere's playlist generation drops a
+    NEWTYPE='NOOP' filler event spanning the hole (~50 min for a news hour).
+    Placing program parts around a live NOOP corrupts the start-time rebuild —
+    the parts land overlapping each other and verify fails ("Korean News · NYC",
+    2026-07-10: every market whose 8:10a NOOP was still active failed, every
+    market without one placed cleanly). Etere itself soft-deletes consumed
+    NOOPs to LIVELLO=666, so mirror that. Runs inside the placement
+    transaction — a verify failure rolls the NOOPs back to active."""
+    cur.execute(
+        """UPDATE TPALINSE SET LIVELLO=666
+           WHERE COD_USER=%s AND DATA=%s AND NEWTYPE='NOOP' AND LIVELLO=0
+             AND ORA < %s AND ORA + DURATION > %s""",
+        (cod_user, d, hi, lo),
+    )
+    return cur.rowcount
 
 
 def _is_placed(cur, cod_user, d, lo, hi):
@@ -439,13 +471,69 @@ def _place_element(cur, cod_user, d, lo, hi, prgs_slots, el, program_first_id):
     return {"id": nid, "xorder": xo}
 
 
+def _conform_window_xorder(cur, cod_user, d, lo, hi, part_ids, part_keys, open_b, close_b):
+    """Reassign the window's XORDERs so the play order is the intended one:
+    open bumper, part 1, break-1 spots, part 2, break-2 spots, …, last part,
+    close bumper, final-break spots.
+
+    Traffic_InsertEvent derives a new row's XORDER from its ORA-neighbors —
+    including soft-deleted (LIVELLO=666) rows with STALE xorders, and spot rows
+    whose ORA a break-optimization pass packed to the top of a program-less
+    hour. On the 2026-07-10 Korean News run that gave parts 2–5 xorders
+    interleaved wrongly with the commercial pod (two literally duplicated a
+    dead NOOP's xorder), so the start-time rebuild chained the rows in a
+    nonsense order and verify failed with overlapping parts.
+
+    Spots carry their true break in trafficPalinse.offset (the BO pass moves
+    TPALINSE.ORA but not that), so the intended order is fully recoverable:
+    sort by (break offset — or current ORA for non-traffic rows, current ORA,
+    current xorder), with parts keyed at their slot's nominal ora, the open
+    bumper first, and the close bumper right after the last part. The SAME
+    multiset of xorders the active window rows already hold is reassigned in
+    that order, so relative order against everything outside the window is
+    untouched."""
+    cur.execute(
+        """SELECT ID_TPALINSE, ORA, XORDER FROM TPALINSE
+           WHERE COD_USER=%s AND DATA=%s AND ORA>=%s AND ORA<%s AND LIVELLO=0""",
+        (cod_user, d, lo, hi),
+    )
+    rows = {r[0]: (int(r[1]), int(r[2])) for r in cur.fetchall()}
+    if not rows:
+        return
+    ids_csv = ",".join(str(i) for i in rows)
+    cur.execute(
+        f"SELECT id_tpalinse, offset FROM trafficPalinse WHERE id_tpalinse IN ({ids_csv})"
+    )
+    tp_off = {r[0]: int(r[1]) for r in cur.fetchall()}
+
+    keys = {rid: (tp_off.get(rid, ora), ora, xo) for rid, (ora, xo) in rows.items()}
+    for rid, slot_ora in zip(part_ids, part_keys):
+        if rid in keys:
+            keys[rid] = (slot_ora, 0, 0)
+    if open_b and open_b["id"] in keys:
+        keys[open_b["id"]] = (lo - 1, 0, 0)
+    if close_b and close_b["id"] in keys:
+        keys[close_b["id"]] = (max(part_keys) + 1, 0, 0)
+
+    order = sorted(rows, key=lambda rid: keys[rid])
+    xorders = sorted(xo for _, xo in rows.values())
+    for rid, xo in zip(order, xorders):
+        if rows[rid][1] != xo:
+            cur.execute("UPDATE TPALINSE SET XORDER=%s WHERE id_tpalinse=%s", (xo, rid))
+    # keep the in-memory bumper xorders current for the element/close steps
+    for b in (open_b, close_b):
+        if b and b["id"] in rows:
+            b["xorder"] = xorders[order.index(b["id"])]
+
+
 def _rebuild(cur, d, cod_user, fromid):
-    cur.execute("EXEC dbo.sch_rebuildStartTimeSchedule %s,%s,0,0,NULL,%s,-1,0,1", (d, cod_user, fromid))
-    try:
-        while cur.nextset():
+    with _REBUILD_LOCK:
+        cur.execute("EXEC dbo.sch_rebuildStartTimeSchedule %s,%s,0,0,NULL,%s,-1,0,1", (d, cod_user, fromid))
+        try:
+            while cur.nextset():
+                pass
+        except Exception:
             pass
-    except Exception:
-        pass
 
 
 def _verify_sequence(cur, ids, open_b, close_b):
@@ -487,10 +575,11 @@ def run_market(conn, cod_user, d, assignment, pending):
         if not result.pop("_deadlock", False):
             return result
         if attempt < _DEADLOCK_MAX_ATTEMPTS:
+            delay = _DEADLOCK_RETRY_SECONDS * attempt + random.uniform(0.1, 1.5)
             print(f"[daily-programming] cu={cod_user} 1205 deadlock on attempt "
                   f"{attempt}/{_DEADLOCK_MAX_ATTEMPTS} ({result['message']}) — retrying "
-                  f"in {_DEADLOCK_RETRY_SECONDS}s")
-            time.sleep(_DEADLOCK_RETRY_SECONDS)
+                  f"in {delay:.1f}s")
+            time.sleep(delay)
         else:
             print(f"[daily-programming] cu={cod_user} 1205 deadlock persisted after "
                   f"{_DEADLOCK_MAX_ATTEMPTS} attempts, giving up ({result['message']})")
@@ -520,6 +609,10 @@ def _place_once(conn, cod_user, d, assignment, pending):
     if _is_placed(cur, cod_user, d, lo, hi):
         return {"cu": cod_user, "ok": True, "skipped": True, "message": "already placed"}
 
+    cleared = _clear_noop_fillers(cur, cod_user, d, lo, hi)
+    if cleared:
+        print(f"[daily-programming] cu={cod_user} cleared {cleared} NOOP gap-filler(s) "
+              f"from the target window before placing")
     slots = _slots(cur, cod_user, d, lo, hi)
     open_b, close_b = _bumpers(cur, cod_user, d, lo, hi)
     if shoplc:
@@ -619,6 +712,13 @@ def _place_once(conn, cod_user, d, assignment, pending):
         if close_b:
             cur.execute("UPDATE TPalinse SET EVENT_TYPE='T' WHERE id_tpalinse=%s", (close_b["id"],))
             _close_guarantee(cur, cod_user, d, ids[-1], close_b)
+
+        # Make the window's XORDER sequence match the intended play order —
+        # Traffic_InsertEvent's neighbor-derived xorders are unreliable when the
+        # window holds stale soft-deleted rows or BO-packed spots (see docstring).
+        if not shoplc:
+            _conform_window_xorder(cur, cod_user, d, lo, hi, ids,
+                                   [s["ora"] for s in slots[:len(ids)]], open_b, close_b)
 
         # Profile elements (e.g. FCC IDs) that apply to this market, placed on top
         # of the program. SFO/CVC anchor flips piece A to T; DAL drops the ID into
