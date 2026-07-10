@@ -278,6 +278,9 @@ class OrderProcessingService:
             List of ProcessingResults
         """
         results = []
+        # Order groups paired 1:1 with results — consumed by the backwrite
+        # manifest writer after enrichment (tasks/backwrite-pipeline.md Phase 0).
+        order_groups: list[list[Order]] = []
 
         # Group TCAA orders by PDF (for multi-estimate batch processing)
         tcaa_groups = {}
@@ -304,16 +307,21 @@ class OrderProcessingService:
 
                 result = self._process_tcaa_orders_batch(tcaa_orders, shared_session)
                 results.append(result)
+                order_groups.append(tcaa_orders)
             else:
                 result = self._process_single_order(tcaa_orders[0], shared_session)
                 results.append(result)
+                order_groups.append([tcaa_orders[0]])
 
         # Process all other orders (Misfit, WorldLink, opAD, etc.) with shared session
         for order in other_orders:
             result = self._process_single_order(order, shared_session)
             results.append(result)
+            order_groups.append([order])
 
-        return self._enrich_results(results)
+        enriched = self._enrich_results(results)
+        self._write_backwrite_manifests(order_groups, enriched)
+        return enriched
 
     def _process_single_order(
         self,
@@ -412,6 +420,7 @@ class OrderProcessingService:
             List of ProcessingResults
         """
         results = []
+        order_groups: list[list[Order]] = []  # paired 1:1 with results (manifests)
 
         # Group TCAA orders by PDF path
         tcaa_groups = {}
@@ -440,16 +449,32 @@ class OrderProcessingService:
                 # Process all estimates together
                 result = self._process_tcaa_orders_batch(tcaa_orders, None)
                 results.append(result)
+                order_groups.append(tcaa_orders)
             else:
                 result = self.process_order(tcaa_orders[0], None)
                 results.append(result)
+                order_groups.append([tcaa_orders[0]])
 
         # Process non-TCAA orders
         for order in non_tcaa_orders:
             result = self.process_order(order, None)
             results.append(result)
+            order_groups.append([order])
 
-        return self._enrich_results(results)
+        enriched = self._enrich_results(results)
+        self._write_backwrite_manifests(order_groups, enriched)
+        return enriched
+
+    @staticmethod
+    def _write_backwrite_manifests(order_groups: list[list[Order]], results: list[ProcessingResult]) -> None:
+        """Freeze each successful entry's backwrite knowledge to a JSON sidecar
+        (tasks/backwrite-pipeline.md Phase 0). Best-effort by contract: a
+        manifest problem must never fail or slow the entry itself."""
+        try:
+            from business_logic.services.backwrite_manifest import write_backwrite_manifests
+            write_backwrite_manifests(order_groups, results)
+        except Exception as exc:  # noqa: BLE001 - manifests are strictly additive
+            print(f"[manifest] WARNING: backwrite manifest pass failed: {exc}")
 
     def _process_tcaa_orders_batch(self, orders: list[Order], shared_session: Any = None) -> ProcessingResult:
         """
