@@ -5,6 +5,7 @@ const fileInput   = document.getElementById('file-input');
 const uploadStatus= document.getElementById('upload-status');
 const queueBody   = document.getElementById('queue-body');
 const queueCount  = document.getElementById('queue-count');
+const awaitingCount = document.getElementById('awaiting-count');
 const historyCount= document.getElementById('history-count');
 
 let currentTab = 'pending';
@@ -13,8 +14,8 @@ let currentTab = 'pending';
 
 function switchTab(tab) {
     currentTab = tab;
-    document.getElementById('tab-pending').classList.toggle('active',  tab === 'pending');
-    document.getElementById('tab-history').classList.toggle('active',  tab === 'history');
+    ['pending', 'awaiting', 'history'].forEach(t =>
+        document.getElementById('tab-' + t).classList.toggle('active', t === tab));
     document.getElementById('drop-zone').style.display = tab === 'pending' ? '' : 'none';
     loadQueue();
 }
@@ -70,8 +71,12 @@ function setStatus(msg, type) {
 // ── Queue / History ────────────────────────────────────────────────────────
 
 async function loadQueue() {
-    const isHistory = currentTab === 'history';
-    const url = isHistory ? '/api/history' : '/api/orders';
+    const isHistory  = currentTab === 'history';
+    const isAwaiting = currentTab === 'awaiting';
+    const isPending  = currentTab === 'pending';
+    const url = isHistory ? '/api/history'
+              : isAwaiting ? '/api/orders/awaiting-backwrite'
+              : '/api/orders';
 
     try {
         const res    = await fetch(url);
@@ -79,31 +84,34 @@ async function loadQueue() {
 
         // Run button — only active on pending tab with orders present
         const runBtn = document.getElementById('run-btn');
-        runBtn.style.display = isHistory ? 'none' : '';
-        runBtn.disabled = isHistory || orders.length === 0;
+        runBtn.style.display = isPending ? '' : 'none';
+        runBtn.disabled = !isPending || orders.length === 0;
 
         // Update counts
-        if (isHistory) {
-            historyCount.textContent = orders.length;
-            historyCount.className   = 'queue-count' + (orders.length === 0 ? ' zero' : '');
-        } else {
-            queueCount.textContent = orders.length;
-            queueCount.className   = 'queue-count' + (orders.length === 0 ? ' zero' : '');
-        }
+        const countEl = isHistory ? historyCount : isAwaiting ? awaitingCount : queueCount;
+        countEl.textContent = orders.length;
+        countEl.className   = 'queue-count' + (orders.length === 0 ? ' zero' : '');
 
-        // Reset select-all when reloading
+        // Reset select-all when reloading (pending only)
         const selectAll = document.getElementById('select-all');
         if (selectAll) {
-            selectAll.style.display = isHistory ? 'none' : '';
+            selectAll.style.display = isPending ? '' : 'none';
             selectAll.checked = false;
         }
-        document.getElementById('col-check').style.display = isHistory ? 'none' : '';
+        document.getElementById('col-check').style.display = isPending ? '' : 'none';
+        document.getElementById('col-meta').textContent =
+            isAwaiting ? 'Contract(s) / Entered' : 'Size / Modified';
 
         if (orders.length === 0) {
+            const empty = isHistory
+                ? { icon: '🗂️', msg: 'No completed orders in history.' }
+                : isAwaiting
+                ? { icon: '⏳', msg: 'No orders awaiting backwrite. Entered orders land here automatically.' }
+                : { icon: '📭', msg: 'No orders in queue. Drop a PDF above to get started.' };
             queueBody.innerHTML = `<tr><td colspan="6">
                 <div class="empty-state">
-                    <div class="empty-icon">${isHistory ? '🗂️' : '📭'}</div>
-                    <p>${isHistory ? 'No completed orders in history.' : 'No orders in queue. Drop a PDF above to get started.'}</p>
+                    <div class="empty-icon">${empty.icon}</div>
+                    <p>${empty.msg}</p>
                 </div></td></tr>`;
             return;
         }
@@ -112,13 +120,16 @@ async function loadQueue() {
 
         queueBody.innerHTML = orders.map(o => `
             <tr class="clickable" data-filename="${esc(o.filename)}" data-order-type="${esc(o.order_type)}" data-detail-base="${esc(detailBase)}">
-                <td class="cb-cell">${isHistory ? '' : `<input type="checkbox" class="order-cb" data-filename="${esc(o.filename)}">`}</td>
-                <td class="filename" title="${esc(o.filename)}">${esc(o.filename)}</td>
+                <td class="cb-cell">${isPending ? `<input type="checkbox" class="order-cb" data-filename="${esc(o.filename)}">` : ''}</td>
+                <td class="filename" title="${esc(o.filename)}">${esc(o.filename)}${o.io_parse_error ? ' <span class="agency-badge unknown" title="The IO could not be re-parsed — open the manifest for details">IO?</span>' : ''}</td>
                 <td><span class="agency-badge ${o.order_type === 'Unknown' ? 'unknown' : ''}">${esc(o.agency_label || o.order_type)}</span></td>
                 <td class="meta">${esc(o.customer_name)}</td>
-                <td class="meta">${o.size_kb} KB &nbsp;·&nbsp; ${esc(o.modified)}</td>
+                <td class="meta">${isAwaiting ? awaitingMeta(o) : `${o.size_kb} KB &nbsp;·&nbsp; ${esc(o.modified)}`}</td>
                 <td>${isHistory
                     ? `<button class="restore-btn" data-filename="${esc(o.filename)}">Restore</button>`
+                    : isAwaiting
+                    ? `<button class="restore-btn" disabled title="One-click backwrite arrives in Phase 2 — use the Backwrite page for now">Backwrite</button>
+                       <button class="delete-btn awaiting-done-btn" data-filename="${esc(o.filename)}">Done</button>`
                     : `<button class="delete-btn"  data-filename="${esc(o.filename)}">Mark Done</button>`
                 }</td>
             </tr>`).join('');
@@ -137,8 +148,16 @@ async function loadQueue() {
             cb.addEventListener('change', updateRunBtn);
         });
 
+        // Awaiting: Done → archive IO + manifest to Used
+        queueBody.querySelectorAll('.awaiting-done-btn').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                awaitingDone(btn.dataset.filename);
+            });
+        });
+
         // Pending: Mark Done → move to Used
-        queueBody.querySelectorAll('.delete-btn').forEach(btn => {
+        queueBody.querySelectorAll('.delete-btn:not(.awaiting-done-btn)').forEach(btn => {
             btn.addEventListener('click', e => {
                 e.stopPropagation();
                 markDone(btn.dataset.filename);
@@ -286,6 +305,27 @@ function closeTerminal() {
         _termSessionId = null;
     }
     document.getElementById('terminal-overlay').classList.add('hidden');
+}
+
+function awaitingMeta(o) {
+    const contracts = (o.contracts || [])
+        .map(c => esc(c.code) + (c.etere_id ? ` <span title="Etere contract ID">(${c.etere_id})</span>` : ''))
+        .join(', ') || '—';
+    const entered = o.entered_at ? esc(o.entered_at.replace('T', ' ')) : '';
+    return `${contracts}${entered ? ' &nbsp;·&nbsp; ' + entered : ''}`;
+}
+
+async function awaitingDone(filename) {
+    if (!confirm(`Archive "${filename}" and its manifest to Used?`)) return;
+    try {
+        const res  = await fetch('/api/orders/awaiting-backwrite/' + encodeURIComponent(filename) + '/done',
+                                 { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) { alert(data.detail || 'Archive failed.'); return; }
+        loadQueue();
+    } catch (err) {
+        alert('Archive error: ' + err.message);
+    }
 }
 
 async function markDone(filename) {

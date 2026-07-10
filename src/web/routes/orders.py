@@ -371,9 +371,34 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     router = APIRouter()
 
     used_dir = config.incoming_dir / "Used"
+    # Entered-but-not-yet-backwritten IOs + their manifests live here
+    # (tasks/backwrite-pipeline.md Phase 1). Manifests are written by
+    # business_logic/services/backwrite_manifest.py at entry time.
+    entered_dir = config.incoming_dir / "Entered"
 
     def _ensure_used_dir():
         used_dir.mkdir(parents=True, exist_ok=True)
+
+    def _sweep_entered_strays() -> None:
+        """Self-heal: an IO whose manifest is in Entered/ but whose file is
+        still in the incoming root was locked (open in a viewer) when entry
+        tried to move it — move it now. Best-effort; retried on every load."""
+        try:
+            if not entered_dir.exists():
+                return
+            for mf in entered_dir.glob("*.manifest.json"):
+                stray = config.incoming_dir / mf.name[: -len(".manifest.json")]
+                if not stray.is_file():
+                    continue
+                dest = entered_dir / stray.name
+                try:
+                    if dest.exists():
+                        dest.unlink()
+                    shutil.move(str(stray), str(dest))
+                except OSError:
+                    pass  # still locked — next load will retry
+        except Exception:  # noqa: BLE001 - a sweep problem must never break the queue
+            pass
 
     def _purge_used_folder(days: int = 30) -> int:
         """Delete files in Used/ older than `days` days. Returns count deleted."""
@@ -1584,6 +1609,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     @router.get("/api/orders")
     async def list_orders():
         loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, _sweep_entered_strays)
         result = await loop.run_in_executor(None, _scan_dir, config.incoming_dir)
         return JSONResponse(content=result)
 
@@ -1811,13 +1837,92 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         return JSONResponse(content={"message": f"'{filename}' restored to incoming."})
 
     # ------------------------------------------------------------------
+    # Awaiting Backwrite (Entered folder — tasks/backwrite-pipeline.md Phase 1)
+    # ------------------------------------------------------------------
+
+    @router.get("/api/orders/awaiting-backwrite")
+    async def list_awaiting_backwrite():
+        """Entered orders awaiting backwrite — one row per manifest."""
+        def _run():
+            _sweep_entered_strays()
+            rows = []
+            if not entered_dir.exists():
+                return rows
+            for mf in entered_dir.glob("*.manifest.json"):
+                try:
+                    m = json.loads(mf.read_text(encoding="utf-8"))
+                except Exception:
+                    rows.append({
+                        "filename": mf.name[: -len(".manifest.json")],
+                        "order_type": "Unknown", "agency_label": "Unknown",
+                        "customer_name": "(unreadable manifest)",
+                        "entered_at": "", "contracts": [],
+                        "io_parse_error": True, "io_present": False,
+                    })
+                    continue
+                io_name = m.get("io_filename") or mf.name[: -len(".manifest.json")]
+                ov = (m.get("order_type") or "Unknown")
+                detail = m.get("io_detail") or {}
+                rows.append({
+                    "filename": io_name,
+                    "order_type": ov,
+                    "agency_label": "TH Media" if ov == "eqc" else ov,
+                    "customer_name": m.get("customer_name") or detail.get("client") or "Unknown",
+                    "entered_at": m.get("entered_at") or "",
+                    "contracts": m.get("contracts") or [],
+                    "rates_are_net": bool(m.get("rates_are_net")),
+                    "io_parse_error": bool(m.get("io_parse_error")),
+                    "io_present": (entered_dir / io_name).exists(),
+                })
+            rows.sort(key=lambda r: r["entered_at"], reverse=True)
+            return rows
+        loop = asyncio.get_running_loop()
+        return JSONResponse(content=await loop.run_in_executor(None, _run))
+
+    @router.post("/api/orders/awaiting-backwrite/{filename:path}/done")
+    async def awaiting_backwrite_done(filename: str):
+        """Archive an awaiting order (IO + manifest) to Used/.
+
+        Manual escape hatch for the legacy-parallel period: the user
+        backwrites through the legacy page, then archives here. Phase 2's
+        Backwrite button will do this automatically after generating."""
+        io_target = (entered_dir / filename).resolve()
+        if not str(io_target).startswith(str(entered_dir.resolve())):
+            raise HTTPException(status_code=400, detail="Invalid filename.")
+        manifest = entered_dir / f"{filename}.manifest.json"
+        if not io_target.exists() and not manifest.exists():
+            raise HTTPException(status_code=404, detail="File not found.")
+
+        _ensure_used_dir()
+        moved = []
+        for src in (io_target, manifest):
+            if not src.exists():
+                continue
+            dest = used_dir / src.name
+            if dest.exists():
+                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                dest = used_dir / f"{src.stem}_{ts}{src.suffix}"
+            try:
+                shutil.move(str(src), str(dest))
+            except OSError as exc:
+                return JSONResponse(
+                    status_code=409,
+                    content={"detail": (
+                        f"Could not move '{src.name}': {exc}. If it's open in "
+                        "another program, close it and try again."
+                    )},
+                )
+            moved.append(src.name)
+        return JSONResponse(content={"message": f"Archived {', '.join(moved)} to Used."})
+
+    # ------------------------------------------------------------------
     # Detail (works for both pending and history files)
     # ------------------------------------------------------------------
 
     def _resolve_file(filename: str) -> tuple[Path, str]:
-        """Find the file in incoming/ or Used/ and return (path, order_type)."""
+        """Find the file in incoming/, Entered/ or Used/ and return (path, order_type)."""
         # Try incoming/ first
-        for search_dir in [config.incoming_dir, used_dir]:
+        for search_dir in [config.incoming_dir, entered_dir, used_dir]:
             candidate = (search_dir / filename).resolve()
             base = str(search_dir.resolve())
             if not str(candidate).startswith(base):

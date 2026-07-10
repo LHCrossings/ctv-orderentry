@@ -55,6 +55,9 @@
         <button id="tab-pending"  class="tab-btn active" onclick="switchTab('pending')">
             Pending &nbsp;<span id="queue-count" class="queue-count zero">0</span>
         </button>
+        <button id="tab-awaiting" class="tab-btn" onclick="switchTab('awaiting')">
+            Awaiting Backwrite &nbsp;<span id="awaiting-count" class="queue-count zero">0</span>
+        </button>
         <button id="tab-history" class="tab-btn" onclick="switchTab('history')">
             History &nbsp;<span id="history-count" class="queue-count zero">0</span>
         </button>
@@ -71,7 +74,7 @@
                     <th>Filename</th>
                     <th>Agency</th>
                     <th>Client</th>
-                    <th>Size / Modified</th>
+                    <th id="col-meta">Size / Modified</th>
                     <th></th>
                 </tr>
             </thead>
@@ -148,6 +151,6 @@
     </div>
 </div>
 
-<script src="/static/js/app.js?v=20260630"></script>
+<script src="/static/js/app.js?v=20260710"></script>
 </body>
 </html>

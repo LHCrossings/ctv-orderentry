@@ -177,7 +177,14 @@ may upsert when they learn something new.
   `io_detail`) before it can build flight-dated Excel lines.
 - **Phase 1 — Entered/ state + Awaiting Backwrite UI.** Verify: entered order disappears
   from pending, appears in Awaiting with correct contract(s); never-entered files still
-  delete to Used.
+  delete to Used. **DONE 2026-07-10.** Entry auto-moves IO+manifest to `incoming/Entered/`
+  (locked files self-heal via a sweep on every queue load); orders page gained an
+  "Awaiting Backwrite" tab (rows show contracts + Etere IDs + entered date, detail modal
+  works from Entered/, `IO?` badge on parse-failed manifests); each row has a disabled
+  Backwrite button (Phase 2) and a **Done** button that archives IO+manifest to `Used/`
+  — the manual escape hatch for the legacy-parallel period. Endpoints:
+  `GET /api/orders/awaiting-backwrite`, `POST /api/orders/awaiting-backwrite/{file}/done`.
+  Verified end-to-end via TestClient (7 checks incl. stray sweep and Used archive).
 - **Phase 2 — one-click backwrite.** Verify against a real contract: generated Excel is
   cell-identical to one produced through the legacy page with correct manual inputs
   (H&L net-rate case AND Daviselen gross-rate case AND one WorldLink order).

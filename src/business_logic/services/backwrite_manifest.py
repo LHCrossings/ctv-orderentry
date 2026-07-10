@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -102,7 +103,31 @@ def write_backwrite_manifest(orders: list, result) -> Path | None:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(manifest, indent=2, default=_jsonable), encoding="utf-8")
     print(f"[manifest] wrote backwrite manifest: {out}")
+    _move_io_to_entered(io_path)
     return out
+
+
+def _move_io_to_entered(io_path: Path) -> bool:
+    """Move the entered IO next to its manifest — the 'Awaiting Backwrite'
+    queue state (spec Phase 1). Re-entering the same filename (a corrected
+    run) replaces the earlier copy, matching the manifest overwrite.
+
+    Best-effort: on Windows the PDF is often still open in a viewer, so a
+    locked file is left in place with a note — the orders API sweeps such
+    strays into Entered/ on the next queue load."""
+    try:
+        dest = io_path.parent / ENTERED_DIRNAME / io_path.name
+        if not io_path.exists():
+            return False
+        if dest.exists():
+            dest.unlink()
+        shutil.move(str(io_path), str(dest))
+        print(f"[manifest] moved entered IO to {dest}")
+        return True
+    except OSError as exc:
+        print(f"[manifest] NOTE: IO stays in incoming for now ({exc}) — "
+              f"it will be swept into Entered/ on the next queue load")
+        return False
 
 
 def write_backwrite_manifests(order_groups: list[list], results: list) -> None:
