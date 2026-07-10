@@ -1901,20 +1901,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         loop = asyncio.get_running_loop()
         return JSONResponse(content=await loop.run_in_executor(None, _run))
 
-    @router.post("/api/orders/awaiting-backwrite/{filename:path}/done")
-    async def awaiting_backwrite_done(filename: str):
-        """Archive an awaiting order (IO + manifest) to Used/.
-
-        Manual escape hatch for the legacy-parallel period: the user
-        backwrites through the legacy page, then archives here. Phase 2's
-        Backwrite button will do this automatically after generating."""
+    def _archive_entered(filename: str) -> tuple[list, str | None]:
+        """Move an entered IO + its manifest to Used/. Returns (moved, error)."""
         io_target = (entered_dir / filename).resolve()
         if not str(io_target).startswith(str(entered_dir.resolve())):
-            raise HTTPException(status_code=400, detail="Invalid filename.")
+            return [], "Invalid filename."
         manifest = entered_dir / f"{filename}.manifest.json"
         if not io_target.exists() and not manifest.exists():
-            raise HTTPException(status_code=404, detail="File not found.")
-
+            return [], "File not found."
         _ensure_used_dir()
         moved = []
         for src in (io_target, manifest):
@@ -1927,15 +1921,180 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             try:
                 shutil.move(str(src), str(dest))
             except OSError as exc:
-                return JSONResponse(
-                    status_code=409,
-                    content={"detail": (
-                        f"Could not move '{src.name}': {exc}. If it's open in "
-                        "another program, close it and try again."
-                    )},
+                return moved, (
+                    f"Could not move '{src.name}': {exc}. If it's open in "
+                    "another program, close it and try again."
                 )
             moved.append(src.name)
+        return moved, None
+
+    @router.post("/api/orders/awaiting-backwrite/{filename:path}/done")
+    async def awaiting_backwrite_done(filename: str):
+        """Archive an awaiting order (IO + manifest) to Used/.
+
+        Manual escape hatch for the legacy-parallel period: the user
+        backwrites through the legacy page, then archives here. The
+        one-click backwrite endpoint archives automatically on success."""
+        moved, err = _archive_entered(filename)
+        if err:
+            code = 400 if err == "Invalid filename." else 404 if err == "File not found." else 409
+            return JSONResponse(status_code=code, content={"detail": err})
         return JSONResponse(content={"message": f"Archived {', '.join(moved)} to Used."})
+
+    @router.post("/api/orders/awaiting-backwrite/{filename:path}/backwrite")
+    async def awaiting_backwrite_generate(filename: str, body: dict = Body(default={})):
+        """One-click backwrite (tasks/backwrite-pipeline.md Phase 2).
+
+        Everything is derived — nothing re-keyed by a human:
+          * manifest       → IO line structure, rates_are_net, gathered inputs
+          * Etere contract → billing type (CENTROMEDIA — hard stop if unset),
+                             agency % (P_AGENZIA), salesperson (AGENTE1)
+          * Etere report   → the commercial-log CSV (same report the legacy
+                             page fetches), which supplies the actual spots
+        On success the IO + manifest are archived to Used/ automatically.
+        """
+        contract_idx = int(body.get("contract_index") or 0)
+
+        def _run():
+            mf = (entered_dir / f"{filename}.manifest.json").resolve()
+            if not str(mf).startswith(str(entered_dir.resolve())):
+                raise HTTPException(status_code=400, detail="Invalid filename.")
+            if not mf.exists():
+                raise HTTPException(status_code=404, detail="Manifest not found.")
+            m = json.loads(mf.read_text(encoding="utf-8"))
+
+            otype = (m.get("order_type") or "").lower()
+            if otype == "worldlink":
+                raise HTTPException(status_code=409, detail=(
+                    "WorldLink orders use the dedicated WorldLink backwrite "
+                    "(revision merge, MLBF tab) — open the Backwrite page."
+                ))
+
+            contracts = m.get("contracts") or []
+            if not contracts:
+                raise HTTPException(status_code=409, detail="Manifest has no contracts.")
+            c = contracts[min(contract_idx, len(contracts) - 1)]
+            etere_id = c.get("etere_id")
+            if not etere_id:
+                raise HTTPException(status_code=409, detail=(
+                    f"Contract {c.get('code')} has no Etere ID in the manifest — "
+                    "cannot fetch its commercial log."
+                ))
+
+            # ── Live contract facts: billing window, agency %, AE ────────────
+            from browser_automation.etere_direct_client import connect as _db_connect
+            with _db_connect() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    """SELECT ct.CENTROMEDIA, ct.P_AGENZIA,
+                              LTRIM(RTRIM(CASE WHEN ae.Nome IS NOT NULL AND ae.Nome != ''
+                                   THEN ae.Nome + ' ' + ae.RAG_SOCIAL ELSE ae.RAG_SOCIAL END))
+                       FROM CONTRATTITESTATA ct
+                       LEFT JOIN ANAGRAF ae ON ae.ID_ANAGRAF = ct.AGENTE1
+                       WHERE ct.ID_CONTRATTITESTATA = %s""",
+                    (int(etere_id),),
+                )
+                row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail=f"Etere contract {etere_id} not found.")
+            centromedia = int(row[0] or 0)
+            p_agenzia = float(row[1] or 0)
+            ae_name = (row[2] or "").strip()
+            if centromedia == 316:
+                billing_type = "Broadcast"
+            elif centromedia == 317:
+                billing_type = "Calendar"
+            else:
+                # Never default silently — this is the template-drag error class.
+                raise HTTPException(status_code=409, detail=(
+                    f"Contract {c.get('code')} (ID {etere_id}) has NO billing type "
+                    "set in Etere. Set Broadcast/Calendar on the contract "
+                    "(Booked Business page has an editor), then retry."
+                ))
+
+            # ── Placement CSV straight from the Etere DB ─────────────────────
+            # (Same data the legacy page's Etere-web report fetch returns, but
+            # direct SQL: no web login, no license seat, no 3-minute report
+            # queue. Same builder the WorldLink placement flow uses.)
+            from backwrite.eterebridge_runner import build_placement_csv_from_db
+            from backwrite.transformer import generate_excel, parse_csv
+            try:
+                csv_bytes = build_placement_csv_from_db(int(etere_id))
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc))
+            header, spots = parse_csv(csv_bytes)
+            if not spots:
+                raise HTTPException(status_code=409, detail=(
+                    "No scheduled spots found for this contract — has it been "
+                    "approved and scheduled yet?"
+                ))
+
+            # ── Inputs: manifest + live facts, zero re-keyed fields ──────────
+            gi = (m.get("user_inputs") or [{}])[0] or {}
+            gorder = gi.get("order") if isinstance(gi, dict) else {}
+            gorder = gorder if isinstance(gorder, dict) else {}
+            io_detail = m.get("io_detail") or None
+            if io_detail and io_detail.get("error"):
+                io_detail = None
+
+            agency_flag = "Agency" if p_agenzia > 0 else "Direct"
+            agency_fee = p_agenzia / 100 if p_agenzia > 1 else p_agenzia
+            gross_up = {}
+            if m.get("rates_are_net") and agency_flag == "Agency" and io_detail:
+                nets = {
+                    round(float(ln.get("rate") or 0), 4)
+                    for ln in io_detail.get("lines", []) if ln.get("rate")
+                }
+                gross_up = {r: r for r in nets}
+
+            estimates = m.get("estimates") or []
+            estimate = str(gorder.get("estimate_number") or (estimates[0] if estimates else "") or "")
+
+            user_inputs = {
+                "sales_person":   ae_name,
+                "billing_type":   billing_type,
+                "revenue_type":   "Internal Ad Sales",
+                "agency_flag":    agency_flag,
+                "agency_fee":     agency_fee,
+                "estimate":       estimate,
+                "estimate_run":   "",
+                "contract":       str(c.get("code") or ""),
+                "affidavit":      "Y",
+                "order_date":     "",
+                "contact_person": "", "phone": "", "fax": "",
+                "email_1": "", "email_2": "", "email_3": "", "email_4": "",
+                "address": "", "city": "", "state": "", "zip": "",
+                "notes":          str((gi.get("notes") if isinstance(gi, dict) else "") or ""),
+                "gross_up_rates": gross_up,
+                "language_corrections": {},
+                "revision":       "",
+            }
+
+            reconcile: dict = {}
+            xlsx = generate_excel(header, spots, user_inputs, raw_csv=csv_bytes,
+                                  io_detail=io_detail, validation_out=reconcile)
+
+            import re as _re
+            base = Path(m.get("io_filename") or filename).stem
+            out_name = _re.sub(r'[\\/:*?"<>|]', "", base).strip() + ".xlsx"
+
+            moved, archive_err = _archive_entered(filename)
+            return xlsx, out_name, reconcile, archive_err
+
+        loop = asyncio.get_running_loop()
+        xlsx, out_name, reconcile, archive_err = await loop.run_in_executor(None, _run)
+
+        import io as _io
+        headers = {"Content-Disposition": f'attachment; filename="{out_name}"'}
+        if reconcile:
+            headers["X-Backwrite-Reconcile"] = json.dumps(reconcile)
+        if archive_err:
+            headers["X-Backwrite-Archive-Error"] = json.dumps(archive_err)
+        return StreamingResponse(
+            _io.BytesIO(xlsx),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers=headers,
+        )
 
     # ------------------------------------------------------------------
     # Detail (works for both pending and history files)

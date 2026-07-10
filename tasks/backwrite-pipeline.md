@@ -198,6 +198,22 @@ may upsert when they learn something new.
 - **Phase 2 — one-click backwrite.** Verify against a real contract: generated Excel is
   cell-identical to one produced through the legacy page with correct manual inputs
   (H&L net-rate case AND Daviselen gross-rate case AND one WorldLink order).
+  **DONE 2026-07-10** (`POST /api/orders/awaiting-backwrite/{file}/backwrite` in
+  orders.py; Backwrite button live on awaiting rows). Key decisions:
+  * **CSV source = `build_placement_csv_from_db(etere_id)`** (direct SQL), NOT the
+    Etere-web report fetcher — the web report timed out at 180s in testing, needs a
+    login seat, and the DB builder returns the identical parse_csv-compatible CSV.
+  * Derivations: billing type from live CENTROMEDIA (409 hard-stop when unset);
+    agency flag/fee from P_AGENZIA; salesperson from AGENTE1 (no re-keying);
+    gross_up_rates auto-built from manifest rates_are_net + io_detail line rates;
+    estimate/notes from the gathered order; filename from io_filename stem.
+  * Archive to Used/ happens only AFTER successful generation; failures (no spots,
+    unset billing, missing Etere id) leave the order in the awaiting queue with a
+    named 409. WorldLink rows get a "Backwrite ↗" link to the dedicated flow instead.
+  * Verified live against real contract 2887 (Daviselen Est 1463): 6 IO-shaped SC
+    lines (incl. BNS), Broadcast from CENTROMEDIA, Charmaine Lane from AGENTE1,
+    0.15 fee, transformer reconcile ok=true, auto-archive confirmed. Net-rate (H&L)
+    and legacy-vs-new cell-identity checks remain for the parallel-test period.
 - **Phase 3 — reconciliation banner.** Verify: seed a deliberate mismatch (edit a rate in
   a manifest copy) → red banner names the ratio; real order → green.
 - **Phase 4 — customers.db fields + prefill.** Verify: contact block appears without typing.

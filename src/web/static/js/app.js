@@ -144,8 +144,10 @@ async function loadQueue() {
                 <td>${isHistory
                     ? `<button class="restore-btn" data-filename="${esc(o.filename)}">Restore</button>`
                     : isAwaiting
-                    ? `<button class="restore-btn" disabled title="One-click backwrite arrives in Phase 2 — use the Backwrite page for now">Backwrite</button>
-                       <button class="delete-btn awaiting-done-btn" data-filename="${esc(o.filename)}">Done</button>`
+                    ? (o.order_type === 'worldlink'
+                        ? `<button class="restore-btn" onclick="event.stopPropagation();window.open('/backwrite','_blank')" title="WorldLink uses its dedicated backwrite flow (revision merge, MLBF tab)">Backwrite ↗</button>`
+                        : `<button class="restore-btn backwrite-btn" data-filename="${esc(o.filename)}" title="Generate the backwrite Excel from Etere + this order's manifest">Backwrite</button>`)
+                      + ` <button class="delete-btn awaiting-done-btn" data-filename="${esc(o.filename)}">Done</button>`
                     : `<button class="delete-btn"  data-filename="${esc(o.filename)}">Mark Done</button>`
                 }</td>
             </tr>`).join('');
@@ -169,6 +171,14 @@ async function loadQueue() {
             btn.addEventListener('click', e => {
                 e.stopPropagation();
                 awaitingDone(btn.dataset.filename);
+            });
+        });
+
+        // Awaiting: Backwrite → one-click generate + download + archive
+        queueBody.querySelectorAll('.backwrite-btn').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                doBackwrite(btn);
             });
         });
 
@@ -329,6 +339,54 @@ function awaitingMeta(o) {
         .join(', ') || '—';
     const entered = o.entered_at ? esc(o.entered_at.replace('T', ' ')) : '';
     return `${contracts}${entered ? ' &nbsp;·&nbsp; ' + entered : ''}`;
+}
+
+async function doBackwrite(btn) {
+    const filename = btn.dataset.filename;
+    btn.disabled = true;
+    const oldLabel = btn.textContent;
+    btn.textContent = 'Generating…';
+    try {
+        const res = await fetch('/api/orders/awaiting-backwrite/' + encodeURIComponent(filename) + '/backwrite',
+                                { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            alert(data.detail || `Backwrite failed (${res.status}).`);
+            return;
+        }
+        // Download the Excel
+        const blob = await res.blob();
+        const cd   = res.headers.get('Content-Disposition') || '';
+        const mFn  = cd.match(/filename="?([^";]+)"?/);
+        const a    = document.createElement('a');
+        a.href     = URL.createObjectURL(blob);
+        a.download = mFn ? mFn[1] : filename.replace(/\.[^.]+$/, '') + '.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(a.href);
+
+        // Surface reconciliation + archive status
+        const rec = res.headers.get('X-Backwrite-Reconcile');
+        if (rec) {
+            try {
+                const r = JSON.parse(rec);
+                if (r.ok === false && (r.messages || []).length) {
+                    alert('Backwrite generated, but totals need a look:\n\n' + r.messages.join('\n'));
+                }
+            } catch (e) { /* cosmetic */ }
+        }
+        const archErr = res.headers.get('X-Backwrite-Archive-Error');
+        if (archErr) {
+            try { alert('Excel generated, but archiving failed: ' + JSON.parse(archErr)); } catch (e) {}
+        }
+        loadQueue();
+    } catch (err) {
+        alert('Backwrite error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = oldLabel;
+    }
 }
 
 async function awaitingDone(filename) {
