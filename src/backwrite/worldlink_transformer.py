@@ -106,12 +106,17 @@ def read_sc_lines_from_excel(xlsx_bytes: bytes):
         except (TypeError, ValueError):
             pass
         dur_raw = ws.cell(r, 14).value or ":30"
+        try:
+            weeks = int(ws.cell(r, 9).value or 0)
+        except (TypeError, ValueError):
+            weeks = 0
         lines.append({
             "line_number":   line_no,
             "action":        None,
             "start_date":    _d(ws.cell(r, 4).value),
             "end_date":      _d(ws.cell(r, 5).value),
             "spots":         int(ws.cell(r, 6).value or 0),
+            "weeks":         weeks,
             "rate":          rate,
             "program_label": str(ws.cell(r, 8).value or ""),
             "duration":      str(dur_raw).lstrip(":"),
