@@ -328,6 +328,20 @@ mismatch → the order silently refused to enter.
 
 ---
 
+## Cache-Bust EVERY Static Asset You Change, Not Just app.js — and `.hidden` Only Works Where a Rule Defines It
+
+**Session:** Backwrite Phase 4 contact modal (2026-07-13)
+
+**Rule:** `index.html` versions its assets with `?v=YYYYMMDD` query strings so the browser refetches after a deploy (Lee runs on the Jumpbox behind pull+restart; without the bump the browser serves stale files). It's easy to bump **only `app.js`** and forget the CSS/other links. Symptom seen live: a modal whose *box* was styled (old cached `.detail-*` rules present) but whose *new fields* were completely unstyled — because `app.css` had no `?v=` and the browser never loaded the new `.bwc-*` rules. Looked like "the CSS is broken" for two rounds; it was pure caching.
+
+**How to apply:**
+1. When you edit `app.css` (or any linked static asset), bump its `?v=` in `index.html` in the SAME change as the JS bump. Keep the version tag consistent across the assets you touched.
+2. If new markup renders with browser-default styling but the surrounding chrome is fine, suspect a stale cached stylesheet before suspecting your CSS.
+
+**Related gotcha (same session):** there is **no global `.hidden { display:none }`** in `app.css` — `.hidden` is defined per-component (`.detail-overlay.hidden`, `.detail-error.hidden`, …). A new element given `class="... hidden"` will NOT hide unless you add its own `#id.hidden { display:none }` rule. The Phase 4 form stayed visible in the error path for exactly this reason until `.bwc-form.hidden` was added.
+
+---
+
 ## Showing/Hiding `<tr>` Elements in JavaScript Requires `display='table-row'`
 
 **Session:** Make Goods (2026-05-29)
