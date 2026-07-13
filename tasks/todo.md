@@ -1,26 +1,22 @@
-# Backwrite Pipeline — Phase 4 (contact prefill) ✓ DONE 2026-07-13
+# Backwrite Pipeline — NEXT: multi-contract fix (NOT done)
 
-Spec: tasks/backwrite-pipeline.md §2.6 + Phase 4 line.
-(Phase 3 reconciliation banner committed earlier today, 9e1bd29.)
+Spec: tasks/backwrite-pipeline.md — see the "⚠ KNOWN GAP" bullet in §3.
 
-Re-scoped mid-build (Lee): source the contact block LIVE from Etere ANAGRAF
-and let the user override at review time — NOT customers.db, which drifts
-across the Jumpbox/desktop machines.
+Phases 0–4 work for SINGLE-contract orders. **Multi-contract PDFs are broken:**
+a Toyota HL PDF made 3 contracts (2949/2950/2951, one manifest); the awaiting
+flow backwrote only contract[0], then archived the whole manifest — the other
+two were dropped. (Found 2026-07-13; Lee out of time that night.)
 
-- [x] `_contact_from_anagraf()` — poll bill-to (agency else committente) contact block
-- [x] `GET /awaiting-backwrite/{file}/contact` — prefill source for the modal
-- [x] POST endpoint: poll ANAGRAF base + overlay `{contact:{...}}` user overrides → user_inputs
-- [x] Review modal (index.html `#bw-contact-overlay`, app.js `openBwContact`) — prefilled + editable
-- [x] Backwrite button routes through the modal; Generate feeds the Phase 3 reconcile gate
-- [x] Verify: live poll (contract 2887), TestClient GET (200/404), POST override lands in Excel
+Three coupled causes (all in the awaiting flow, orders.py + app.js):
+- [ ] `list_awaiting_backwrite` (~orders.py:1866) returns one row per manifest FILE,
+      not per contract → expand to one row per (manifest, contract_index), labeled by code
+- [ ] `doBackwrite` + contact modal (app.js) always POST with no contract_index (defaults
+      to 0) → each row must carry + send its own contract_index (GET /contact already takes it)
+- [ ] POST archives the whole manifest on first success → archive to Used/ ONLY when every
+      contract is backwritten. Track completed indexes (e.g. write `backwritten:[...]` into
+      the manifest); archive when the set is complete.
 
-## Review
+Verify: enter/refetch a 3-contract manifest → 3 awaiting rows → backwrite each →
+manifest stays until the 3rd, then archives. Single-contract path must still work.
 
-ANAGRAF fill for 2026 bill-to entities: address/city/zip ~80%, email 78%,
-phone 65%, state 63%, contact-person 0%. The modal prefills what Etere has;
-the user types contact-person + any gaps. Nothing persisted — ANAGRAF stays
-the single source of truth.
-
-Remaining pipeline: Phase 5 (legacy cutover) — after a full clean billing
-cycle of parallel use, mark the /backwrite card "(legacy)" then delete.
-Still-open watch item: first real H&L net-rate one-click (Phase 3 guards it).
+Then Phase 5 (legacy cutover) after a full clean billing cycle.
