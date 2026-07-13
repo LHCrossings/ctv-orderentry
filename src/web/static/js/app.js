@@ -174,11 +174,11 @@ async function loadQueue() {
             });
         });
 
-        // Awaiting: Backwrite → one-click generate + download + archive
+        // Awaiting: Backwrite → review ANAGRAF contact, then generate
         queueBody.querySelectorAll('.backwrite-btn').forEach(btn => {
             btn.addEventListener('click', e => {
                 e.stopPropagation();
-                doBackwrite(btn);
+                openBwContact(btn);
             });
         });
 
@@ -341,14 +341,68 @@ function awaitingMeta(o) {
     return `${contracts}${entered ? ' &nbsp;·&nbsp; ' + entered : ''}`;
 }
 
-async function doBackwrite(btn) {
+// ── Backwrite contact review (Phase 4) ──────────────────────────────────────
+// Poll ANAGRAF for the bill-to contact block, let the user override any field,
+// then generate. Nothing is persisted — the edits apply to this backwrite only.
+const BW_CONTACT_FIELDS = ['contact_person', 'address', 'city', 'state', 'zip', 'phone', 'fax', 'email_1'];
+let _bwContactBtn = null;
+
+async function openBwContact(btn) {
+    _bwContactBtn = btn;
+    const filename = btn.dataset.filename;
+    const overlay = document.getElementById('bw-contact-overlay');
+    const form    = document.getElementById('bw-contact-form');
+    const loading = document.getElementById('bw-contact-loading');
+    const errBox  = document.getElementById('bw-contact-error');
+    form.classList.add('hidden');
+    errBox.classList.add('hidden');
+    loading.classList.remove('hidden');
+    overlay.classList.remove('hidden');
+
+    try {
+        const res = await fetch('/api/orders/awaiting-backwrite/' + encodeURIComponent(filename) + '/contact');
+        const data = await res.json();
+        loading.classList.add('hidden');
+        if (!res.ok) {
+            errBox.textContent = data.detail || `Could not load contact info (${res.status}).`;
+            errBox.classList.remove('hidden');
+            return;
+        }
+        document.getElementById('bw-contact-title').textContent =
+            'Review contact — ' + (data.contract_code || filename);
+        const contact = data.contact || {};
+        BW_CONTACT_FIELDS.forEach(f => {
+            const el = document.getElementById('bwc-' + f);
+            if (el) el.value = contact[f] || '';
+        });
+        form.classList.remove('hidden');
+        document.getElementById('bwc-generate').onclick = () => {
+            const edited = {};
+            BW_CONTACT_FIELDS.forEach(f => {
+                const el = document.getElementById('bwc-' + f);
+                if (el) edited[f] = el.value.trim();
+            });
+            closeBwContact();
+            doBackwrite(_bwContactBtn, edited);
+        };
+    } catch (err) {
+        loading.classList.add('hidden');
+        errBox.textContent = 'Failed to load contact info: ' + err.message;
+        errBox.classList.remove('hidden');
+    }
+}
+
+function closeBwContact() { document.getElementById('bw-contact-overlay').classList.add('hidden'); }
+
+async function doBackwrite(btn, contact) {
     const filename = btn.dataset.filename;
     btn.disabled = true;
     const oldLabel = btn.textContent;
     btn.textContent = 'Generating…';
     try {
         const res = await fetch('/api/orders/awaiting-backwrite/' + encodeURIComponent(filename) + '/backwrite',
-                                { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+                                { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify(contact ? { contact } : {}) });
         if (!res.ok) {
             const data = await res.json().catch(() => ({}));
             alert(data.detail || `Backwrite failed (${res.status}).`);
@@ -596,7 +650,7 @@ async function showDetail(filename, orderType, detailBase) {
 function closeDetailModal() { detailOverlay.classList.add('hidden'); }
 function closeDetail(event) { if (event.target === detailOverlay) closeDetailModal(); }
 document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { closeDetailModal(); closeTerminal(); }
+    if (e.key === 'Escape') { closeDetailModal(); closeTerminal(); closeBwContact(); }
 });
 document.getElementById('terminal-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.stopPropagation(); _sendTerminalInput(); }

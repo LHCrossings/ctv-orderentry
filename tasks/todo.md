@@ -1,46 +1,26 @@
-# Backwrite Pipeline — Phase 3 (reconciliation banner)
+# Backwrite Pipeline — Phase 4 (contact prefill) ✓ DONE 2026-07-13
 
-Spec: tasks/backwrite-pipeline.md §2.4. Resuming 2026-07-13.
-(Prior tracker — EDI Billing Redesign, phases 0–3 done — lives in
-tasks/edi-billing-redesign.md.)
+Spec: tasks/backwrite-pipeline.md §2.6 + Phase 4 line.
+(Phase 3 reconciliation banner committed earlier today, 9e1bd29.)
 
-The existing `validation_out` proves the Excel is internally self-consistent
-(run sheet == SC lines == monthly). It CANNOT catch a wrong input that produces
-a consistent-but-wrong Excel — which is exactly the July 2026 error class.
-Phase 3 adds the manifest-IO-vs-Etere comparison.
+Re-scoped mid-build (Lee): source the contact block LIVE from Etere ANAGRAF
+and let the user override at review time — NOT customers.db, which drifts
+across the Jumpbox/desktop machines.
 
-- [x] 1. `reconcile_io_vs_etere()` in `src/backwrite/transformer.py`
-      - gross-up direction error: Etere gross vs IO expected gross ratio ≈ 1/(1-fee) (double) or (1-fee) (missing)
-      - paid-spot-count gap (revision / partial entry)
-      - missing market ordered on the IO
-      - returns {ok, messages, detail}; ok=True + no messages when nothing reliable to compare
-- [x] 2. Wire into one-click endpoint (`awaiting_backwrite_generate`, orders.py)
-      - merge into the `reconcile` dict (extend messages, AND ok, add io_check)
-      - gate `_archive_entered` on reconcile.ok — a discrepancy stays in the queue
-      - `X-Backwrite-Archived` header so the frontend knows
-- [x] 3. Frontend `doBackwrite` (app.js): green auto-saves; red holds blob behind a confirm naming the discrepancy
-- [x] 4. Merge into legacy `/generate` (backwrite.py) server-side — richer messages in the existing banner
-- [x] 5. Verify: real contract → green; seeded rate mismatch → red names the ratio
+- [x] `_contact_from_anagraf()` — poll bill-to (agency else committente) contact block
+- [x] `GET /awaiting-backwrite/{file}/contact` — prefill source for the modal
+- [x] POST endpoint: poll ANAGRAF base + overlay `{contact:{...}}` user overrides → user_inputs
+- [x] Review modal (index.html `#bw-contact-overlay`, app.js `openBwContact`) — prefilled + editable
+- [x] Backwrite button routes through the modal; Generate feeds the Phase 3 reconcile gate
+- [x] Verify: live poll (contract 2887), TestClient GET (200/404), POST override lands in Excel
 
-## Review (2026-07-13)
+## Review
 
-Phase 3 done and verified. The reconciliation is a standalone
-`reconcile_io_vs_etere()` (pure comparison of manifest-IO vs placement-CSV,
-no Excel coupling), merged into the same `reconcile` payload both flows
-already emit via `X-Backwrite-Reconcile`.
+ANAGRAF fill for 2026 bill-to entities: address/city/zip ~80%, email 78%,
+phone 65%, state 63%, contact-person 0%. The modal prefills what Etere has;
+the user types contact-person + any gaps. Nothing persisted — ANAGRAF stays
+the single source of truth.
 
-Behavior change worth noting: the one-click endpoint now **archives to Used/
-only when the order reconciles**. A flagged order stays in the Awaiting queue
-(logged, visible) instead of being silently filed — same "never default
-silently" philosophy as the CENTROMEDIA hard-stop. Frontend holds the file
-behind a confirm that names the discrepancy; "Download anyway" saves it but
-still leaves the order in the queue for a manual Done once Etere is fixed.
-
-Verified: 8 unit cases (all July error classes named correctly, incl. the
-~1/(1-fee) ratio) + live end-to-end on real contract 2887 (green) and a
-seeded double gross-up (red, both rates named). py_compile + JS parse clean.
-
-Remaining pipeline: Phase 4 (customers.db contact/salesperson prefill),
-Phase 5 (legacy cutover after a full clean billing cycle). Still-open
-parallel-test watch item: first real H&L net-rate one-click (auto gross-up
-built, never exercised live) — Phase 3 now guards exactly that case.
+Remaining pipeline: Phase 5 (legacy cutover) — after a full clean billing
+cycle of parallel use, mark the /backwrite card "(legacy)" then delete.
+Still-open watch item: first real H&L net-rate one-click (Phase 3 guards it).

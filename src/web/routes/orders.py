@@ -1901,6 +1901,66 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         loop = asyncio.get_running_loop()
         return JSONResponse(content=await loop.run_in_executor(None, _run))
 
+    def _contact_from_anagraf(cur, etere_id: int) -> dict:
+        """Poll Etere ANAGRAF for the bill-to's contact block — the agency when
+        the contract has one, else the client (committente), matching how the
+        backwrite bill code is chosen. Every field falls back to '' when ANAGRAF
+        has no value; the user fills gaps at review time (Phase 4). Nothing is
+        persisted on our side — ANAGRAF is the single source of truth (customers.db
+        was rejected: it drifts across machines)."""
+        cur.execute(
+            """SELECT LTRIM(RTRIM(ISNULL(bt.VIA, ''))),
+                      LTRIM(RTRIM(ISNULL(bt.CITTA, ''))),
+                      LTRIM(RTRIM(ISNULL(bt.PROVINCIA, ''))),
+                      LTRIM(RTRIM(ISNULL(bt.CAP, ''))),
+                      LTRIM(RTRIM(ISNULL(bt.TELEFONO, ''))),
+                      LTRIM(RTRIM(ISNULL(bt.FAX, ''))),
+                      LTRIM(RTRIM(ISNULL(bt.E_MAIL, ''))),
+                      LTRIM(RTRIM(ISNULL(bt.Nome, '') + ' ' + ISNULL(bt.NomeDue, '')))
+               FROM CONTRATTITESTATA ct
+               LEFT JOIN ANAGRAF bt
+                 ON bt.ID_ANAGRAF = COALESCE(NULLIF(ct.AGENZIA, 0), ct.COMMITTENTE)
+               WHERE ct.ID_CONTRATTITESTATA = %s""",
+            (int(etere_id),),
+        )
+        r = cur.fetchone() or []
+        g = lambda i: (r[i] or "").strip() if i < len(r) else ""  # noqa: E731
+        return {
+            "address": g(0), "city": g(1), "state": g(2), "zip": g(3),
+            "phone": g(4), "fax": g(5), "email_1": g(6), "contact_person": g(7),
+        }
+
+    _CONTACT_KEYS = ("contact_person", "address", "city", "state", "zip",
+                     "phone", "fax", "email_1", "email_2", "email_3", "email_4")
+
+    @router.get("/api/orders/awaiting-backwrite/{filename:path}/contact")
+    async def awaiting_backwrite_contact(filename: str, contract_index: int = 0):
+        """Poll ANAGRAF for the bill-to contact block so the Backwrite review
+        modal can prefill it (Phase 4). Live Etere read — no persistence."""
+        mf = (entered_dir / f"{filename}.manifest.json").resolve()
+        if not str(mf).startswith(str(entered_dir.resolve())):
+            return JSONResponse(status_code=400, content={"detail": "Invalid filename."})
+        if not mf.exists():
+            return JSONResponse(status_code=404, content={"detail": "Manifest not found."})
+        m = json.loads(mf.read_text(encoding="utf-8"))
+        contracts = m.get("contracts") or []
+        if not contracts:
+            return JSONResponse(status_code=409, content={"detail": "Manifest has no contracts."})
+        c = contracts[min(contract_index, len(contracts) - 1)]
+        etere_id = c.get("etere_id")
+        if not etere_id:
+            return JSONResponse(status_code=409,
+                                content={"detail": f"Contract {c.get('code')} has no Etere ID."})
+
+        def _run():
+            from browser_automation.etere_direct_client import connect as _db_connect
+            with _db_connect() as conn:
+                return _contact_from_anagraf(conn.cursor(), int(etere_id))
+
+        loop = asyncio.get_running_loop()
+        contact = await loop.run_in_executor(None, _run)
+        return JSONResponse(content={"contract_code": str(c.get("code") or ""), "contact": contact})
+
     def _archive_entered(filename: str) -> tuple[list, str | None]:
         """Move an entered IO + its manifest to Used/. Returns (moved, error)."""
         io_target = (entered_dir / filename).resolve()
@@ -1995,8 +2055,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     (int(etere_id),),
                 )
                 row = cur.fetchone()
-            if not row:
-                raise HTTPException(status_code=404, detail=f"Etere contract {etere_id} not found.")
+                if not row:
+                    raise HTTPException(status_code=404, detail=f"Etere contract {etere_id} not found.")
+                # Phase 4: prefill the contact block from ANAGRAF (live), then
+                # apply any per-field overrides the user made in the review modal.
+                contact = _contact_from_anagraf(cur, int(etere_id))
+            body_contact = (body.get("contact") or {}) if isinstance(body, dict) else {}
+            for k in _CONTACT_KEYS:
+                if k in body_contact:
+                    v = body_contact[k]
+                    contact[k] = ("" if v is None else str(v)).strip()
             centromedia = int(row[0] or 0)
             p_agenzia = float(row[1] or 0)
             ae_name = (row[2] or "").strip()
@@ -2061,9 +2129,17 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 "contract":       str(c.get("code") or ""),
                 "affidavit":      "Y",
                 "order_date":     "",
-                "contact_person": "", "phone": "", "fax": "",
-                "email_1": "", "email_2": "", "email_3": "", "email_4": "",
-                "address": "", "city": "", "state": "", "zip": "",
+                "contact_person": contact.get("contact_person", ""),
+                "phone":          contact.get("phone", ""),
+                "fax":            contact.get("fax", ""),
+                "email_1":        contact.get("email_1", ""),
+                "email_2":        contact.get("email_2", ""),
+                "email_3":        contact.get("email_3", ""),
+                "email_4":        contact.get("email_4", ""),
+                "address":        contact.get("address", ""),
+                "city":           contact.get("city", ""),
+                "state":          contact.get("state", ""),
+                "zip":            contact.get("zip", ""),
                 "notes":          str((gi.get("notes") if isinstance(gi, dict) else "") or ""),
                 "gross_up_rates": gross_up,
                 "language_corrections": {},

@@ -135,6 +135,46 @@
     </div>
 </div>
 
+<!-- ── Backwrite Contact Review Modal (Phase 4) ───────────────────────── -->
+<div id="bw-contact-overlay" class="detail-overlay hidden" onclick="if(event.target===this)closeBwContact()">
+    <div class="detail-modal">
+        <div class="detail-header">
+            <div>
+                <div id="bw-contact-title" class="detail-title">Review contact info</div>
+                <div class="detail-subtitle">Prefilled from Etere — edit anything before generating. Nothing is saved.</div>
+            </div>
+            <button class="detail-close" onclick="closeBwContact()">✕</button>
+        </div>
+        <div id="bw-contact-error" class="detail-error hidden"></div>
+        <div id="bw-contact-loading" class="detail-loading">
+            <div class="spinner"></div>
+            Polling Etere…
+        </div>
+        <div id="bw-contact-form" class="req-fields-block hidden">
+            <div class="req-field-row"><label class="req-field-label">Contact person</label>
+                <input class="req-field-select" id="bwc-contact_person" type="text" placeholder="(not in Etere — type if needed)"></div>
+            <div class="req-field-row"><label class="req-field-label">Address</label>
+                <input class="req-field-select" id="bwc-address" type="text"></div>
+            <div class="req-field-row"><label class="req-field-label">City</label>
+                <input class="req-field-select" id="bwc-city" type="text"></div>
+            <div class="req-field-row"><label class="req-field-label">State</label>
+                <input class="req-field-select" id="bwc-state" type="text"></div>
+            <div class="req-field-row"><label class="req-field-label">ZIP</label>
+                <input class="req-field-select" id="bwc-zip" type="text"></div>
+            <div class="req-field-row"><label class="req-field-label">Phone</label>
+                <input class="req-field-select" id="bwc-phone" type="text"></div>
+            <div class="req-field-row"><label class="req-field-label">Fax</label>
+                <input class="req-field-select" id="bwc-fax" type="text"></div>
+            <div class="req-field-row"><label class="req-field-label">Email</label>
+                <input class="req-field-select" id="bwc-email_1" type="text"></div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+                <button class="delete-btn" onclick="closeBwContact()">Cancel</button>
+                <button class="restore-btn" id="bwc-generate">Generate backwrite</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ── Web Terminal Modal ─────────────────────────────────────────────── -->
 <div id="terminal-overlay" class="terminal-overlay hidden" onclick="if(event.target===this)closeTerminal()">
     <div class="terminal-modal">
@@ -151,6 +191,6 @@
     </div>
 </div>
 
-<script src="/static/js/app.js?v=20260710c"></script>
+<script src="/static/js/app.js?v=20260713a"></script>
 </body>
 </html>

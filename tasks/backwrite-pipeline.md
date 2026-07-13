@@ -156,11 +156,21 @@ revision number. Full line state lives in each manifest (never deltas — the 20
 WorldLink weeks bug came from losing carried-over line state).
 
 ### 2.6 Customer-stable fields (last manual re-key)
-Add to `customers.db` via `_migrate_schema()` (backward-compatible, precedent in
-`customer_repository.py`): `sales_person`, `contact_person`, `phone`, `fax`,
-`email_1..4`, `address`, `city`, `state`, `zip`, `revenue_type`, `affidavit_flag`.
-Editable in the existing customers UI. Backwrite prefill reads them; gather functions
-may upsert when they learn something new.
+**REVISED 2026-07-13 (Lee) — source from Etere ANAGRAF live, NOT customers.db.**
+customers.db was rejected: it exists on multiple machines (Jumpbox, desktop) in
+different states, so a stored contact block would drift. Instead the backwrite polls
+ANAGRAF for the bill-to (agency when present, else committente) and lets the user
+override any field at review time — nothing persisted.
+
+Measured ANAGRAF fill (51 bill-to entities on 2026 contracts): address/city/zip ~80%,
+email 78%, phone 65%, state 63%, fax 6%, contact-person 0%. So ANAGRAF covers most of
+the block; the user fills contact-person and any gaps in the review modal.
+
+Fields pulled: `VIA→address`, `CITTA→city`, `PROVINCIA→state`, `CAP→zip`,
+`TELEFONO→phone`, `FAX→fax`, `E_MAIL→email_1`, `Nome+NomeDue→contact_person`.
+`sales_person` already comes from AGENTE1 (Phase 2). `revenue_type`/`affidavit` keep
+their universal defaults ("Internal Ad Sales" / "Y") — per-customer override deferred,
+not worth a store given the sync problem.
 
 ---
 
@@ -228,7 +238,17 @@ may upsert when they learn something new.
     order queued for a manual Done).
   Verified: 8 unit cases (incl. Daviselen double-gross-up + H&L missing-gross-up, ratio
   named) and live end-to-end on real contract 2887 (green) + seeded mismatch (red).
-- **Phase 4 — customers.db fields + prefill.** Verify: contact block appears without typing.
+- **Phase 4 — ANAGRAF contact prefill + user override. DONE 2026-07-13.** (Re-scoped off
+  customers.db — see §2.6.) `_contact_from_anagraf()` in orders.py polls the bill-to's
+  ANAGRAF contact block; `GET /api/orders/awaiting-backwrite/{file}/contact` returns it;
+  the Backwrite button now opens a review modal (index.html `#bw-contact-overlay` +
+  `openBwContact` in app.js) prefilled from ANAGRAF and editable. On Generate, the edited
+  block posts as `{contact:{...}}` to the backwrite endpoint, which polls ANAGRAF as the
+  base and overlays the user's per-field overrides into user_inputs — nothing persisted.
+  Verified: live ANAGRAF poll on contract 2887 (Daviselen — address/city/zip/phone/email
+  populated, contact-person blank); TestClient GET (200 + correct block, 404 on missing);
+  TestClient POST with an override string confirmed present in the generated Excel, green
+  reconcile, auto-archived. app.js cache-buster bumped to v=20260713a.
 - **Phase 5 — legacy cutover.** Mark the `/backwrite` card "(legacy)" + Legacy badge.
   After a full billing cycle of parallel use with no divergence: delete the legacy cards
   (keep routes one release longer, then remove).
