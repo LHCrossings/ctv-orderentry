@@ -1901,6 +1901,42 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         loop = asyncio.get_running_loop()
         return JSONResponse(content=await loop.run_in_executor(None, _run))
 
+    def _resolve_etere_id(c: dict) -> int | None:
+        """The contract's Etere DB id. Prefer the manifest's stored etere_id;
+        if absent — older manifests, or a multi-contract parser that recorded
+        the id as the code and never set etere_id — resolve it live from the
+        code via COD_CONTRATTO (exact then prefix, the same lookup the batch
+        enricher uses), and finally treat an all-digit code as the id itself.
+        Returns None only when nothing matches."""
+        if c.get("etere_id"):
+            return int(c["etere_id"])
+        code = str(c.get("code") or "").strip()
+        if not code:
+            return None
+        try:
+            from browser_automation.etere_direct_client import connect as _db_connect
+            with _db_connect() as conn:
+                ph = "%s" if type(conn).__module__.startswith("pymssql") else "?"
+                cur = conn.cursor()
+                cur.execute(
+                    f"SELECT TOP 1 ID_CONTRATTITESTATA FROM CONTRATTITESTATA "
+                    f"WHERE COD_CONTRATTO = {ph} ORDER BY ID_CONTRATTITESTATA DESC", (code,))
+                row = cur.fetchone()
+                if not row:
+                    like = code.replace("[", "[[]").replace("%", "[%]").replace("_", "[_]") + "%"
+                    cur.execute(
+                        f"SELECT TOP 1 ID_CONTRATTITESTATA FROM CONTRATTITESTATA "
+                        f"WHERE COD_CONTRATTO LIKE {ph} ORDER BY ID_CONTRATTITESTATA DESC", (like,))
+                    row = cur.fetchone()
+                if not row and code.isdigit():
+                    cur.execute(
+                        f"SELECT ID_CONTRATTITESTATA FROM CONTRATTITESTATA "
+                        f"WHERE ID_CONTRATTITESTATA = {ph}", (int(code),))
+                    row = cur.fetchone()
+                return int(row[0]) if row else None
+        except Exception:  # noqa: BLE001 - best-effort; caller reports "not found"
+            return None
+
     def _contact_from_anagraf(cur, etere_id: int) -> dict:
         """Poll Etere ANAGRAF for the bill-to's contact block — the agency when
         the contract has one, else the client (committente), matching how the
@@ -1947,18 +1983,22 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         if not contracts:
             return JSONResponse(status_code=409, content={"detail": "Manifest has no contracts."})
         c = contracts[min(contract_index, len(contracts) - 1)]
-        etere_id = c.get("etere_id")
-        if not etere_id:
-            return JSONResponse(status_code=409,
-                                content={"detail": f"Contract {c.get('code')} has no Etere ID."})
 
         def _run():
+            etere_id = _resolve_etere_id(c)
+            if not etere_id:
+                return None, None
             from browser_automation.etere_direct_client import connect as _db_connect
             with _db_connect() as conn:
-                return _contact_from_anagraf(conn.cursor(), int(etere_id))
+                return etere_id, _contact_from_anagraf(conn.cursor(), int(etere_id))
 
         loop = asyncio.get_running_loop()
-        contact = await loop.run_in_executor(None, _run)
+        etere_id, contact = await loop.run_in_executor(None, _run)
+        if not etere_id:
+            return JSONResponse(status_code=409, content={"detail": (
+                f"Contract {c.get('code')} could not be matched in Etere "
+                "(no stored ID and its code did not resolve). Use the legacy "
+                "Backwrite page for this one.")})
         return JSONResponse(content={"contract_code": str(c.get("code") or ""), "contact": contact})
 
     def _archive_entered(filename: str) -> tuple[list, str | None]:
@@ -2034,11 +2074,12 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             if not contracts:
                 raise HTTPException(status_code=409, detail="Manifest has no contracts.")
             c = contracts[min(contract_idx, len(contracts) - 1)]
-            etere_id = c.get("etere_id")
+            etere_id = _resolve_etere_id(c)
             if not etere_id:
                 raise HTTPException(status_code=409, detail=(
-                    f"Contract {c.get('code')} has no Etere ID in the manifest — "
-                    "cannot fetch its commercial log."
+                    f"Contract {c.get('code')} could not be matched in Etere "
+                    "(no stored ID and its code did not resolve) — cannot fetch "
+                    "its commercial log. Use the legacy Backwrite page."
                 ))
 
             # ── Live contract facts: billing window, agency %, AE ────────────
