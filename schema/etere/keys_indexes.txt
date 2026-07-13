@@ -1,0 +1,1229 @@
+chat.Conversation                             PK PK__Conversa__FB2FEEF7E63F6703 (CLUSTERED) ON (id_Conversation)
+chat.Conversation                             UNIQUE INDEX chat.Conversation#identifier (NONCLUSTERED) ON (identifier)
+chat.ConversationType                         PK PK__Conversa__24D76F3B93A1808A (CLUSTERED) ON (id_ConversationType)
+chat.Message                                  PK PK__Message__D7379C213067DA0C (CLUSTERED) ON (id_Message)
+chat.Message                                  INDEX chat.Message#id_Conversation (NONCLUSTERED) ON (id_Conversation, sendtime)
+chat.MessageBox                               PK PK__MessageB__0D5904F2822C696B (CLUSTERED) ON (id_MessageBox)
+chat.MessageBox                               UNIQUE INDEX chat.MessageBox#id_Message (NONCLUSTERED) ON (id_Message, id_Participant)
+chat.MessageBox                               UNIQUE INDEX chat.MessageBox#id_Participant (NONCLUSTERED) ON (id_Participant, id_Message, readed)
+chat.MessageType                              PK PK__MessageT__51D47F68764B525F (CLUSTERED) ON (id_MessageType)
+chat.Object                                   PK PK__Object__ABABF4D89FA2B931 (CLUSTERED) ON (id_Object)
+chat.Object                                   UNIQUE INDEX chat.Object#id (NONCLUSTERED) ON (id, type)
+chat.ObjectFavorite                           PK PK__ObjectFa__4E496B41821D3361 (CLUSTERED) ON (id_ObjectFavorite)
+chat.ObjectFavorite                           UNIQUE INDEX chat.ObjectFavorite#id_Object_Owner (NONCLUSTERED) ON (id_Object_Owner, id_Object_Item)
+chat.ObjectLink                               PK PK__ObjectLi__68EF84A5339C237F (CLUSTERED) ON (id_ObjectLink)
+chat.ObjectLink                               UNIQUE INDEX chat.ObjectLink#id_Object_Parent (NONCLUSTERED) ON (id_Object_Parent, id_Object_Child)
+chat.ObjectType                               PK PK__ObjectTy__AD6EB67C8DD59BCC (CLUSTERED) ON (id_ObjectType)
+chat.Participant                              PK PK__Particip__FD7CB14F063FAB15 (CLUSTERED) ON (id_Participant)
+chat.Participant                              UNIQUE INDEX chat.Participant#id_Conversation (NONCLUSTERED) ON (id_Conversation, id_Object)
+chat.Subscription                             PK PK__Subscrip__87092880E6B1D422 (CLUSTERED) ON (id_Subscription)
+chat.Subscription                             UNIQUE INDEX chat.Subscription#id_Conversation (NONCLUSTERED) ON (id_Conversation, id_Object)
+chat.show_profiles                            PK PK__show_pro__3213E83FC4E5BF9C (CLUSTERED) ON (id)
+chat.zz_explode_trace                         PK PK__zz_explo__AAAC09D846267205 (CLUSTERED) ON (RowNumber)
+dbo.ADINSERTIONCOMMANDS                       PK PK_ID_ADINSERTIONCOMMANDS (CLUSTERED) ON (ID)
+dbo.ALOG                                      PK PK__ALOG__C5B19602BC68BAE3 (CLUSTERED) ON (UID)
+dbo.ANAGRAF                                   INDEX ANAGRAF#COD_CONTO (NONCLUSTERED) ON (COD_CONTO)
+dbo.ANAGRAF                                   INDEX ANAGRAF#E_MAIL_INV (NONCLUSTERED) ON (E_MAIL_INV)
+dbo.ANAGRAF                                   INDEX ANAGRAF#USERNAME (NONCLUSTERED) ON (USERNAME)
+dbo.ANAGRAF                                   PK PK__ANAGRAF__E723546457CC3AC8 (CLUSTERED) ON (ID_ANAGRAF)
+dbo.ANAGRAFICABANCHE                          PK PK__ANAGRAFI__63BDA40B938B36A1 (CLUSTERED) ON (ID_ANAGRAFICABANCHE)
+dbo.ARCHIVES2                                 PK PK_ID_ARCHIVES2_ARCHIVES2 (CLUSTERED) ON (ID_ARCHIVES2)
+dbo.ARGOMENTIQUERY                            PK PK__ARGOMENT__640807F2D7A620A2 (CLUSTERED) ON (ID_ARGOMENTIQUERY)
+dbo.ARTISTI                                   INDEX ARTISTI#DESCRIZIO (NONCLUSTERED) ON (DESCRIZIO)
+dbo.ARTISTI                                   INDEX ARTISTI#GRUPPO (NONCLUSTERED) ON (GRUPPO)
+dbo.ARTISTI                                   INDEX ARTISTI#NOME (NONCLUSTERED) ON (NOME, COGNOME)
+dbo.ARTISTI                                   PK PK__ARTISTI__2ADEC5C4FFADA906 (CLUSTERED) ON (ID_ARTISTI)
+dbo.Accesso                                   INDEX ACCESSO#ID_ANAGRAF (NONCLUSTERED) ON (Id_Anagraf)
+dbo.Accesso                                   PK PK__Accesso__8579E18A9D30EDD0 (CLUSTERED) ON (Id_Accesso)
+dbo.AnagrafBindingFields                      PK PK__AnagrafB__28DD69A2B41A80D3 (CLUSTERED) ON (Id_AnagrafBindingFields)
+dbo.AnagrafWorkflow                           PK PK__AnagrafW__072450BAE78C0803 (CLUSTERED) ON (Id_AnagrafWorkflow)
+dbo.AspectRatio                               PK PK_Id_AspectRatio_AspectRatio (CLUSTERED) ON (Id_AspectRatio)
+dbo.AspectRatioConv                           PK PK_Id_AspectRatioConv_AspectRatioConv (CLUSTERED) ON (Id_AspectRatioConv)
+dbo.AutomationStatus                          PK PK__Automati__953385009188CACC (CLUSTERED) ON (ID_AutomationStatus)
+dbo.BANCHE                                    PK PK__BANCHE__9491EF998CFDB6F1 (CLUSTERED) ON (ID_BANCHE)
+dbo.BrandConfiguration                        PK PK_ID_BRANDCONFIGURATION_BrandConfiguration (CLUSTERED) ON (ID_BRANDCONFIGURATION)
+dbo.BrandDefinition                           PK PK_ID_BRAND_BrandDefinition (CLUSTERED) ON (ID_BRAND)
+dbo.CAL_SCAD                                  PK PK__CAL_SCAD__5D11C83EB9C59C3D (CLUSTERED) ON (id_CAL_SCAD)
+dbo.CAMERAS                                   PK PK__CAMERAS__3214EC275BAAD788 (CLUSTERED) ON (ID)
+dbo.CAMERAS_OWNERS                            PK PK__CAMERAS___3214EC271E093BC7 (CLUSTERED) ON (ID)
+dbo.CAMERA_PRESETS                            PK PK__CAMERA_P__3214EC27BB83FEBC (CLUSTERED) ON (ID)
+dbo.CHIUSURE                                  PK PK__CHIUSURE__4F077EF644438983 (CLUSTERED) ON (ID_CHIUSURE)
+dbo.CODECICON                                 PK PK__CODECICO__6B92812D93A81732 (CLUSTERED) ON (Id_CodecIcon)
+dbo.CODECS                                    UNIQUE INDEX CODECS#TYPE (NONCLUSTERED) ON (type)
+dbo.CODECS                                    PK PK__CODECS__32A4CE8ED509BAC0 (CLUSTERED) ON (ID_CODEC)
+dbo.CODEC_AESSENCE                            UNIQUE INDEX CODEC_AESSENCE#ID_AESSENCE (NONCLUSTERED) ON (ID_AESSENCE)
+dbo.CODEC_AESSENCE                            PK PK__CODEC_AE__FC75541809A75761 (CLUSTERED) ON (ID_AESSENCE)
+dbo.CODEC_AQUALITY                            UNIQUE INDEX CODEC_AQUALITY#ID_AQUALITY (NONCLUSTERED) ON (ID_AQUALITY)
+dbo.CODEC_AQUALITY                            PK PK__CODEC_AQ__FE9BFE8F52E8D0A6 (CLUSTERED) ON (ID_AQUALITY)
+dbo.CODEC_FESSENCE                            UNIQUE INDEX CODEC_FESSENCE#ID_FESSENCE (NONCLUSTERED) ON (ID_FESSENCE)
+dbo.CODEC_FESSENCE                            PK PK__CODEC_FE__2544D1E4BB1487D2 (CLUSTERED) ON (ID_FESSENCE)
+dbo.CODEC_FQUALITY                            UNIQUE INDEX CODEC_FQUALITY#ID_FQUALITY (NONCLUSTERED) ON (ID_FQUALITY)
+dbo.CODEC_FQUALITY                            PK PK__CODEC_FQ__8457CD3CC4704331 (CLUSTERED) ON (ID_FQUALITY)
+dbo.CODEC_TUPLE                               PK PK__CODEC_TU__F643374AAC117E4B (CLUSTERED) ON (ID_TUPLE)
+dbo.CODEC_VESSENCE                            UNIQUE INDEX CODEC_VESSENCE#ID_VESSENCE (NONCLUSTERED) ON (ID_VESSENCE)
+dbo.CODEC_VESSENCE                            PK PK__CODEC_VE__DA6DB4EB9E42DA2B (CLUSTERED) ON (ID_VESSENCE)
+dbo.CODEC_VQUALITY                            UNIQUE INDEX CODEC_VQUALITY#ID_VQUALITY (NONCLUSTERED) ON (ID_VQUALITY)
+dbo.CODEC_VQUALITY                            PK PK__CODEC_VQ__791E980DBAEF8C01 (CLUSTERED) ON (ID_VQUALITY)
+dbo.CODEC_WRAPPING                            UNIQUE INDEX CODEC_WRAPPING#ID_WRAPPING (NONCLUSTERED) ON (ID_WRAPPING)
+dbo.CODEC_WRAPPING                            PK PK__CODEC_WR__DE054D120C8EEB15 (CLUSTERED) ON (ID_WRAPPING)
+dbo.COMUNI                                    PK PK__COMUNI__168CF005F5C8E6C8 (CLUSTERED) ON (ID_COMUNI)
+dbo.CONFIGURAZIONI                            PK PK__CONFIGUR__7E88B4D553E1821F (CLUSTERED) ON (ID_CONF)
+dbo.CONTRATTIFASCE                            INDEX CONTRATTIFASCE#ID_CONTRATTIRIGHE (NONCLUSTERED) ON (ID_CONTRATTIRIGHE)
+dbo.CONTRATTIFASCE                            PK PK__CONTRATT__6A854F7972B078D5 (CLUSTERED) ON (ID_CONTRATTIFASCE)
+dbo.CONTRATTIFILMATI                          INDEX CONTRATTIFILMATI#IDCONTRATTIRIGHE (NONCLUSTERED) ON (ID_CONTRATTIRIGHE)
+dbo.CONTRATTIFILMATI                          PK PK__CONTRATT__64D54D2D5BDC1F50 (CLUSTERED) ON (ID_CONTRATTIFILMATI)
+dbo.CONTRATTIPACKAGE                          PK PK__CONTRATT__357C27F3157B445A (CLUSTERED) ON (id_contrattipackage)
+dbo.CONTRATTIPIANOCONTIINDUSTRIALE            PK PK_ID_CONTRATTIPI_CONTRATTIPIANOCONTIINDUSTRIALE (CLUSTERED) ON (ID_CONTRATTIPI)
+dbo.CONTRATTIRATE                             INDEX CONTRATTIRATE#ID_CONTRATTITESTATA (NONCLUSTERED) ON (ID_CONTRATTITESTATA)
+dbo.CONTRATTIRATE                             PK PK__CONTRATT__74AD05B993D16C99 (CLUSTERED) ON (ID_CONTRATTIRATE)
+dbo.CONTRATTIRIGHE                            INDEX CONTRATTIRIGHE#IDTOPUPSOURCE (NONCLUSTERED) ON (ID_TOPUPSOURCE)
+dbo.CONTRATTIRIGHE                            INDEX CONTRATTIRIGHE#ID_CONTRATTITESTATA (NONCLUSTERED) ON (ID_CONTRATTITESTATA)
+dbo.CONTRATTIRIGHE                            INDEX CONTRATTIRIGHE#LOGO (NONCLUSTERED) ON (COD_USER, Logo, CTM) INCLUDE (DATEEND, DATESTART, DESCRIZIONE, ID_CONTRATTIRIGHE, ID_CONTRATTITESTATA, N_PASSAGGI, ORA_FINEF, ORA_INIZIOF, SECEVENTTYPE)
+dbo.CONTRATTIRIGHE                            INDEX CONTRATTIRIGHE#VIEWGROUP (NONCLUSTERED) ON (VIEWGROUP)
+dbo.CONTRATTIRIGHE                            PK PK__CONTRATT__23E9965ED761DB67 (CLUSTERED) ON (ID_CONTRATTIRIGHE)
+dbo.CONTRATTIRIGHE                            INDEX WLBLSEARCHLIST (NONCLUSTERED) ON (COD_USER) INCLUDE (DATEEND, DATESTART, DESCRIZIONE, DOMENICA, DURATA, GIOVEDI, ID_BOOKINGCODE, ID_CONTRATTIRIGHE, ID_CONTRATTITESTATA, IMPORTO, LUNEDI, MARTEDI, MERCOLEDI, ORA_FINEF, ORA_INIZIOF, PRIORITA, PrioritaWhiteList, SABATO, VENERDI)
+dbo.CONTRATTISPESE                            PK PK__CONTRATT__BF3EDCA6EFA15CFA (CLUSTERED) ON (ID_CONTRATTISPESE)
+dbo.CONTRATTITESTATA                          INDEX CONTRATTITESTATA#COD_CONTRATTO (NONCLUSTERED) ON (COD_CONTRATTO)
+dbo.CONTRATTITESTATA                          INDEX CONTRATTITESTATA#ID_CONTRATTITESTATA (NONCLUSTERED) ON (ID_CONTRATTITESTATA, COD_CONTRATTO, DATA_INIZIO, DATA_TERMINE, COMMITTENTE, DESCRIZIONE, RATE, FLAG, INVOICEBEFORE)
+dbo.CONTRATTITESTATA                          PK PK__CONTRATT__6D61796019701687 (CLUSTERED) ON (ID_CONTRATTITESTATA)
+dbo.COPYREQUESTS                              INDEX COPYREQUESTS#STATUS_DATETIME (NONCLUSTERED) ON (RQ_STATUS, RQ_DATETIME)
+dbo.COPYREQUESTS                              PK PK__COPYREQU__063BC43D00BC5EF9 (CLUSTERED) ON (ID_COPYREQUESTS)
+dbo.CP_DATAMODULEHEADER                       PK PK__CP_DATAM__8BBB8B35D5840000 (CLUSTERED) ON (ID_CPDATAMODULEHEADER)
+dbo.CP_DATAMODULEROW                          PK PK__CP_DATAM__3524BA4CA3884D16 (CLUSTERED) ON (ID_CPDATAMODULEROW)
+dbo.CP_FatturaNumerazione                     PK PK__CP_Fattu__7F014B49EBD8687B (CLUSTERED) ON (ID_FATTURANUMERAZIONECP)
+dbo.CURRENCY                                  PK PK__CURRENCY__3D0BD498D5B00047 (CLUSTERED) ON (ID_CURRENCY)
+dbo.Cl_collection                             PK PK__Cl_colle__4D67320665FFE3E7 (CLUSTERED) ON (Id_collection)
+dbo.Cl_folder                                 PK PK__Cl_folde__54BED7C5AFEEBC3A (CLUSTERED) ON (Id_folder)
+dbo.Cl_item                                   INDEX CL_ITEM#ID_COLLECTION (NONCLUSTERED) ON (id_collection)
+dbo.Cl_item                                   INDEX CL_ITEM#ITEMID (NONCLUSTERED) ON (itemId, id_collection, itemType)
+dbo.Cl_item                                   PK PK__Cl_item__87C9438BC24C2A52 (CLUSTERED) ON (id_item)
+dbo.Cl_itemType                               PK PK__Cl_itemT__BB4DE54711837177 (CLUSTERED) ON (itemType)
+dbo.Cl_rowtype                                PK PK__Cl_rowty__847205E067255D6E (CLUSTERED) ON (rowType)
+dbo.Cl_sharing                                INDEX CL_SHARING#FIELDS (NONCLUSTERED) ON (id_collection, id_external, rowType)
+dbo.Cl_sharing                                INDEX CL_SHARING#ID_COLLECTION (NONCLUSTERED) ON (id_collection)
+dbo.Cl_sharing                                PK PK__Cl_shari__634B30EED54301B2 (CLUSTERED) ON (id_sharing)
+dbo.CodecMapping                              PK PK__CodecMap__0643F970F6B5BC09 (CLUSTERED) ON (Id_CodecMapping)
+dbo.CodecMediaInfoMapping                     PK PK__CodecMed__15B087225F56BDF8 (CLUSTERED) ON (Id_CodecMediaInfoMapping)
+dbo.Codes                                     PK PK__Codes__D9C4A045E7A4B40C (CLUSTERED) ON (Id_Codes)
+dbo.ContractHistory                           PK PK__Contract__471EBA34A6165D05 (CLUSTERED) ON (ID_CONTRACTHISTORY)
+dbo.ContrattiControllo                        PK PK_ID_ContrattiControllo_ContrattiControllo (CLUSTERED) ON (ID_ContrattiControllo)
+dbo.ContrattiImportiGiornalieri               PK PK__Contratt__68CB159C0669D652 (CLUSTERED) ON (ID_ContrattiImportiGiornalieri)
+dbo.ContrattiRigheEliminate                   PK PK__Contratt__BB9E2C6B214E7514 (CLUSTERED) ON (ID_ContrattiRigheEliminate)
+dbo.ContrattiRigheLinked                      INDEX CONTRATTIRIGHELINKED#LINKED (NONCLUSTERED) ON (ID_Linked, ID_Master)
+dbo.ContrattiRigheLinked                      INDEX CONTRATTIRIGHELINKED#PKMASTER (CLUSTERED) ON (ID_Master, ID_Linked)
+dbo.ContrattiRigheLinked                      PK PK_ID_ContrattiRigheLinked_ContrattiRigheLinked (NONCLUSTERED) ON (ID_ContrattiRigheLinked)
+dbo.ContrattiSplit                            PK PK__Contratt__8E61845428767EC3 (CLUSTERED) ON (ID_CONTRATTISPLIT)
+dbo.Country                                   INDEX COUNTRY#CODE (NONCLUSTERED) ON (code)
+dbo.Country                                   INDEX COUNTRY#NAME (NONCLUSTERED) ON (name)
+dbo.Country                                   PK PK_id_country_Country (CLUSTERED) ON (id_country)
+dbo.CtmPosition                               UNIQUE INDEX CtmPosition#code (NONCLUSTERED) ON (code, device, cod_user, pos_x, pos_y)
+dbo.CtmPosition                               UNIQUE INDEX CtmPosition#pos_x (NONCLUSTERED) ON (pos_x, pos_y, code, device, cod_user)
+dbo.CtmPosition                               PK PK__CtmPosit__EE431C4DE5BD627F (CLUSTERED) ON (id_ctmposition)
+dbo.DISREG                                    PK PK__DISREG__08D38F26E997B652 (CLUSTERED) ON (ID_DISREG)
+dbo.DISTRICTS                                 PK PK__DISTRICT__F442E20C826C3DE9 (CLUSTERED) ON (ID_DISTRICTS)
+dbo.DOCNUMBER                                 PK PK__DOCNUMBE__80D5C8A4EE5DC0A6 (NONCLUSTERED) ON (ID_DOCNUMBER)
+dbo.DOCNUMBERPROG                             PK PK__DOCNUMBE__E86F807B12EF6765 (NONCLUSTERED) ON (ID_DOCNUMBERPROG)
+dbo.DOCTYPE                                   PK PK__DOCTYPE__D460A04943646CF0 (NONCLUSTERED) ON (ID_DOCTYPE)
+dbo.DaVinciPlugin                             PK PK__DaVinciP__3214EC07C309565B (CLUSTERED) ON (Id)
+dbo.DefaultAsset                              PK PK__DefaultA__25BC7526C7C70E67 (CLUSTERED) ON (id_DefaultAsset)
+dbo.Device                                    INDEX DEVICE#COD_USER (NONCLUSTERED) ON (cod_user)
+dbo.Device                                    INDEX DEVICE#NAME (NONCLUSTERED) ON (name)
+dbo.Device                                    PK PK__Device__3F5E977160A7A5BC (CLUSTERED) ON (id_device)
+dbo.Etere2LouthActionMap                      PK PK_id_Etere2LouthActionMap_Etere2LouthActionMap (CLUSTERED) ON (id_Etere2LouthActionMap)
+dbo.Etere2LouthDeviceMap                      PK PK_id_Etere2LouthDeviceMap_Etere2LouthDeviceMap (CLUSTERED) ON (id_Etere2LouthDeviceMap)
+dbo.EtereIdentifier                           PK PK__EtereIde__E528CE75605C28B8 (CLUSTERED) ON (ID_Identifier)
+dbo.EtereSys                                  PK PK__EtereSys__C9FF419660428EF6 (CLUSTERED) ON (Id_Eteresys)
+dbo.EtereUpdate                               PK PK__EtereUpd__72E12F1AD83ECFFC (CLUSTERED) ON (name)
+dbo.EventHistory                              INDEX EVENTHISTORY#ID_TPALINSE (CLUSTERED) ON (ID_TPalinse)
+dbo.EventHistory                              PK PK__EventHis__ACD2BC5BBADCAF2C (NONCLUSTERED) ON (ID_EventHistory)
+dbo.FASCE                                     PK PK__FASCE__6C3E433BEB252D78 (CLUSTERED) ON (ID_FASCE)
+dbo.FATTRIBUTES                               INDEX FATTRIBUTES#ID_CONTAINER (NONCLUSTERED) ON (ID_CONTAINER)
+dbo.FATTRIBUTES                               PK PK__FATTRIBU__6388197204CE0720 (CLUSTERED) ON (ID_ATTRIBUTES)
+dbo.FATTURADESCRIZIONE                        PK PK__FATTURAD__CA5009A7A2CD0BA2 (CLUSTERED) ON (ID_FATTURADESCRIZIONE)
+dbo.FATTURARIGHE                              INDEX FATTURARIGHE#ID_FATTURATESTATA (NONCLUSTERED) ON (ID_FATTURATESTATA, ID_FATTURARIGHE)
+dbo.FATTURARIGHE                              PK PK__FATTURAR__0A8EBBBD133D2577 (CLUSTERED) ON (ID_FATTURARIGHE)
+dbo.FATTURATESTATA                            INDEX FATTURATESTATA#NUMERO (NONCLUSTERED) ON (Numero)
+dbo.FATTURATESTATA                            PK PK__FATTURAT__065271822B0DC1FC (CLUSTERED) ON (ID_FatturaTestata)
+dbo.FAssetRights                              PK PK__FAssetRi__FE3BD25E64CC4098 (CLUSTERED) ON (Id_FAssetRights)
+dbo.FCAROUSEL                                 PK PK__FCAROUSE__C9F221E2F6647C2D (CLUSTERED) ON (ID_CAROUSEL)
+dbo.FCAROUSELPLAN                             PK PK__FCAROUSE__C8E3C6D8D321D515 (CLUSTERED) ON (ID_CAROUSELPLAN)
+dbo.FEDLDESCRIPTION                           INDEX FEDLDESCRIPTION#ID_FILMATI (NONCLUSTERED) ON (ID_FILMATI)
+dbo.FEDLDESCRIPTION                           PK PK__FEDLDESC__9C18F864734CFE61 (CLUSTERED) ON (ID_EDLDESCRIPTION)
+dbo.FExternalAsset                            PK PK_ID_FExternalAsset_FExternalAsset (CLUSTERED) ON (ID_FExternalAsset)
+dbo.FILMATI                                   INDEX FILMATI#COD_PROGRA (NONCLUSTERED) ON (COD_PROGRA)
+dbo.FILMATI                                   INDEX FILMATI#DATA_ACQUI (NONCLUSTERED) ON (DATA_ACQUI, NEWTYPE)
+dbo.FILMATI                                   INDEX FILMATI#DATA_DIGIT (NONCLUSTERED) ON (DATA_DIGIT)
+dbo.FILMATI                                   INDEX FILMATI#DESCRIZIO (NONCLUSTERED) ON (DESCRIZIO)
+dbo.FILMATI                                   INDEX FILMATI#DURATA (NONCLUSTERED) ON (DURATA, COD_PROGRA)
+dbo.FILMATI                                   INDEX FILMATI#EXTERNALID (NONCLUSTERED) ON (EXTERNALID)
+dbo.FILMATI                                   INDEX FILMATI#ID_FEED (NONCLUSTERED) ON (ID_FEED)
+dbo.FILMATI                                   INDEX FILMATI#ID_FORNITORE (NONCLUSTERED) ON (ID_FORNITORE)
+dbo.FILMATI                                   INDEX FILMATI#ID_SERIE (NONCLUSTERED) ON (ID_SERIE)
+dbo.FILMATI                                   INDEX FILMATI#INSTALLATION (NONCLUSTERED) ON (INSTALLATION)
+dbo.FILMATI                                   INDEX FILMATI#NEWTYPE2 (NONCLUSTERED) ON (NEWTYPE, DATA_DIGIT)
+dbo.FILMATI                                   INDEX FILMATI#SERIE_ATTR (NONCLUSTERED) ON (ID_SERIE, DURATA, NEWTYPE, DATA_INIZIO_VALIDITA, DATA_SCAD)
+dbo.FILMATI                                   PK PK__FILMATI__5496952B6F42B4EE (CLUSTERED) ON (ID_FILMATI)
+dbo.FINTERRUZIONI                             INDEX FINTERRUZIONI#ID_FILMATI2 (NONCLUSTERED) ON (ID_FILMATI, VERSION, MARKIN)
+dbo.FINTERRUZIONI                             INDEX FINTERRUZIONI#ID_FILMATI_LNK (NONCLUSTERED) ON (ID_FILMATI_LNK, ID_FILMATI, VERSION)
+dbo.FINTERRUZIONI                             PK PK__FINTERRU__5AEC2F8BA3186003 (CLUSTERED) ON (ID_INTERRUZIONI)
+dbo.FPassage                                  INDEX FPASSAGE#ID_FILMATI (CLUSTERED) ON (ID_Filmati, Cod_User)
+dbo.FPassage                                  PK PK__FPassage__B6C0C69D21906550 (NONCLUSTERED) ON (ID_Passage)
+dbo.FREGISTRAZIONI                            INDEX FREGISTRAZIONI#FILMATI_PARTE_SUPPORTI (NONCLUSTERED) ON (ID_FILMATI, PARTE, ID_SUPPORTI)
+dbo.FREGISTRAZIONI                            INDEX FREGISTRAZIONI#ID_FILMATI (NONCLUSTERED) ON (ID_FILMATI)
+dbo.FREGISTRAZIONI                            INDEX FREGISTRAZIONI#ID_SUPPORTI (NONCLUSTERED) ON (ID_SUPPORTI, ID_FILMATI)
+dbo.FREGISTRAZIONI                            PK PK__FREGISTR__1D1410E6A536868D (CLUSTERED) ON (ID_REGISTRAZIONI)
+dbo.FRemoteAsset                              PK PK__FRemoteA__8F3241B7E62F5A56 (CLUSTERED) ON (Id_fRemoteAsset)
+dbo.FSUPPORTI                                 INDEX FSUPPORTI#BARCODE (NONCLUSTERED) ON (BARCODE)
+dbo.FSUPPORTI                                 INDEX FSUPPORTI#COD_SUPP (NONCLUSTERED) ON (COD_SUPP)
+dbo.FSUPPORTI                                 PK PK__FSUPPORT__09C0B83116057F27 (CLUSTERED) ON (ID_SUPPORTI)
+dbo.FSUPP_TYPES                               PK PK__FSUPP_TY__F51BACAAFE96038F (CLUSTERED) ON (ID_FSUPP_TYPES)
+dbo.FS_BASEPATH                               PK PK__FS_BASEP__B8D43F5713BDB2E1 (CLUSTERED) ON (ID_BASEPATH)
+dbo.FS_FILE                                   INDEX FS_FILE#ID_METAFILE (NONCLUSTERED) ON (ID_METAFILE)
+dbo.FS_FILE                                   PK PK__FS_FILE__62C9DB04D3CE513D (CLUSTERED) ON (ID_FILE)
+dbo.FS_METADEVICE                             PK PK__FS_METAD__2F2570CA71AAAEA2 (CLUSTERED) ON (ID_METADEVICE)
+dbo.FS_METAFILE                               INDEX FS_METAFILE#FILE_ID (NONCLUSTERED) ON (FILE_ID)
+dbo.FS_METAFILE                               PK PK__FS_METAF__5488CAE1B02D0C0B (CLUSTERED) ON (ID_METAFILE)
+dbo.FS_PATH                                   INDEX FS_PATH#FULL_PATHNAME (NONCLUSTERED) ON (FULL_PATHNAME)
+dbo.FS_PATH                                   UNIQUE INDEX FS_PATH#UNIQUE_PATH (NONCLUSTERED) ON (ID_BASEPATH, SUBPATH)
+dbo.FS_PATH                                   PK PK__FS_PATH__B68AC4A04D988E7E (CLUSTERED) ON (ID_PATH)
+dbo.FS_SPACE                                  PK PK_ID_FS_SPACE_FS_SPACE (CLUSTERED) ON (ID_FS_SPACE)
+dbo.FS_XFILEFILM                              INDEX FS_XFILEFILM#ID_FILMATI (NONCLUSTERED) ON (ID_FILMATI)
+dbo.FS_XFILEFILM                              INDEX FS_XFILEFILM#ID_METAFILE (NONCLUSTERED) ON (ID_METAFILE)
+dbo.FS_XFILEFILM                              PK PK_ID_XFILEFILM_FS_XFILEFILM (CLUSTERED) ON (ID_XFILEFILM)
+dbo.FSec                                      INDEX FSEC#ID_EVENT (NONCLUSTERED) ON (id_event)
+dbo.FSec                                      PK PK__FSec__6D7E1951EE5246C1 (CLUSTERED) ON (id_sec)
+dbo.FSec_command                              INDEX FSEC_COMMAND#ID_SEC (NONCLUSTERED) ON (id_sec, som)
+dbo.FSec_command                              PK PK__FSec_com__E3B44EDB3E03E04B (CLUSTERED) ON (id_sec_command)
+dbo.FSec_plan                                 INDEX FSEC_PLAN#ID_EVENT (NONCLUSTERED) ON (id_event)
+dbo.FSec_plan                                 PK PK__FSec_pla__641485135027DCC9 (CLUSTERED) ON (id_sec_plan)
+dbo.FSec_planning                             INDEX FSEC_PLANNING#ID_EVENT (NONCLUSTERED) ON (id_event, cod_user, number)
+dbo.FSec_planning                             INDEX FSEC_PLANNING#STARTTIME1 (NONCLUSTERED) ON (starttime, cod_user)
+dbo.FSec_planning                             INDEX FSEC_PLANNING#STARTTIME2 (NONCLUSTERED) ON (starttime, id_slot, id_event, id_sec, cod_user)
+dbo.FSec_planning                             PK PK__FSec_pla__B06D30D872297E1F (CLUSTERED) ON (id_sec_planning)
+dbo.FSec_station                              INDEX FSEC_STATION#ID_SEC_COD_USER (NONCLUSTERED) ON (id_sec, cod_user)
+dbo.FSec_station                              PK PK__FSec_sta__46885D5A82127607 (CLUSTERED) ON (id_sec_station)
+dbo.FStoriaSupporti                           PK PK__FStoriaS__9988A5B302FF9D66 (CLUSTERED) ON (Id_StoriaSupporti)
+dbo.FSystemAssets                             PK PK__FSystemA__23F73E1EF5D48DE3 (CLUSTERED) ON (Id_FSystemAssets)
+dbo.FTIPOLOGIEPROP                            INDEX FTIPOLOGIEPROP#ID_FILMATI (NONCLUSTERED) ON (ID_FILMATI, PROP)
+dbo.FTIPOLOGIEPROP                            PK PK_id_ftipologieprop_FTIPOLOGIEPROP (CLUSTERED) ON (id_ftipologieprop)
+dbo.FUSERS                                    INDEX FUSERS#ID_SERIE_COD_USER (NONCLUSTERED) ON (ID_SERIE, COD_USER)
+dbo.FUSERS                                    PK PK__FUSERS__C6C27EDBB1A5C318 (CLUSTERED) ON (ID_FUSERS)
+dbo.FUsersDef                                 PK PK__FUsersDe__FB99985C6756FA9D (CLUSTERED) ON (Id_fUsersDef)
+dbo.FatturaNumerazione                        PK PK__FatturaN__EF8A462095A94540 (CLUSTERED) ON (ID_FATTURANUMERAZIONE)
+dbo.GENERI                                    INDEX GENERI#DESCRIZIO (NONCLUSTERED) ON (DESCRIZIO)
+dbo.GENERI                                    INDEX GENERI#IDTIPOGENERI (NONCLUSTERED) ON (ID_TIPOGENERI)
+dbo.GENERI                                    PK PK__GENERI__F35167FFDB88C794 (CLUSTERED) ON (ID_GENERI)
+dbo.HSM_FILE                                  INDEX HSM_FILE#SUPPORTI (NONCLUSTERED) ON (id_supporti, iniblock)
+dbo.HSM_FILE                                  PK PK_id_hsmfile_HSM_FILE (CLUSTERED) ON (id_hsmfile)
+dbo.InstallationCollections                   PK PK_Id_InstallationCollections_InstallationCollections (CLUSTERED) ON (Id_InstallationCollections)
+dbo.Installations                             PK PK_Id_Installations_Installations (CLUSTERED) ON (Id_Installations)
+dbo.LISTAQUERY                                PK PK__LISTAQUE__660132B6DA6C28E9 (CLUSTERED) ON (ID_LISTAQUERY)
+dbo.LOGINS                                    INDEX LOGINS#LOGINNAME (NONCLUSTERED) ON (LOGINNAME)
+dbo.LOGINS                                    PK PK__LOGINS__B54BCF24E3B1A24C (CLUSTERED) ON (ID_LOGINS)
+dbo.LogoAspect                                PK PK__LogoAspe__3CFE0451B139C055 (CLUSTERED) ON (id_logoaspect)
+dbo.LogoAspectLink                            PK PK__LogoAspe__93173C1778A6613A (CLUSTERED) ON (id_logoaspectlink)
+dbo.MAM_FKEYWORDS                             INDEX MAM_FKEYWORDS#ID_MAM_KEY_KEY (NONCLUSTERED) ON (ID_MAM_key_key)
+dbo.MAM_FKEYWORDS                             PK PK__MAM_FKEY__DCF51DAC52DE8717 (CLUSTERED) ON (ID_MAM_FKeywords)
+dbo.MAM_FPeople                               PK PK_ID_MAM_FPeople_MAM_FPeople (CLUSTERED) ON (ID_MAM_FPeople)
+dbo.MAM_KEYPADS                               PK PK__MAM_KEYP__52230BCFB8938A4C (CLUSTERED) ON (ID_MAM_KEYPADS)
+dbo.MAM_KEYWORDS                              PK PK__MAM_KEYW__9B856675EC2A9249 (CLUSTERED) ON (ID_MAM_Keywords)
+dbo.MAM_KEY_KEY                               PK PK__MAM_KEY___C1A2946D337B1F20 (CLUSTERED) ON (ID_MAM_KEY_KEY)
+dbo.MEDIASETTRANS                             INDEX MEDIASETTRANS#COD_USER (NONCLUSTERED) ON (COD_USER)
+dbo.MEDIASETTRANS                             INDEX MEDIASETTRANS#NEWTYPE1 (NONCLUSTERED) ON (NEWTYPE1, NEWTYPE2, COD_USER)
+dbo.MEDIASETTRANS                             PK PK_ID_MEDIASETTRANS_MEDIASETTRANS (CLUSTERED) ON (ID_MEDIASETTRANS)
+dbo.MOVIMENTI_STANDARD                        PK PK__MOVIMENT__E6E43E5BDD1D246C (CLUSTERED) ON (ID_MOVIMENTI_STANDARD)
+dbo.Multilanguage                             PK PK__Multilan__092C118E0D117AC4 (CLUSTERED) ON (id_multilanguage)
+dbo.MultilanguageConfig                       PK PK__Multilan__92C6331E9258935F (CLUSTERED) ON (id_multilanguageConfig)
+dbo.NFY_LIST                                  PK PK__NFY_LIST__99804307499218B7 (CLUSTERED) ON (id_list)
+dbo.NFY_SUBSCRIPTIONS                         INDEX NFY_SUBSCRIPTIONS#CLIENT_MACHINE (NONCLUSTERED) ON (CLIENT_MACHINE, CLIENT_PID)
+dbo.NFY_SUBSCRIPTIONS                         INDEX NFY_SUBSCRIPTIONS#TYPE-COD_USER (CLUSTERED) ON (SUBSCRIPTION_TYPE, SUBSCRIPTION_COD_USER)
+dbo.NFY_SUBSCRIPTIONS                         PK PK_SUBSCRIPTION_ID_NFY_SUBSCRIPTIONS (NONCLUSTERED) ON (SUBSCRIPTION_ID)
+dbo.NIELSEN                                   PK PK__NIELSEN__520487C4009C8555 (CLUSTERED) ON (ID_NIELSEN)
+dbo.PAGAMENTI                                 PK PK__PAGAMENT__F3C896C1E8A08359 (CLUSTERED) ON (ID_PAGAMENTI)
+dbo.PIANOCONTI                                PK PK__PIANOCON__D4E2355641BE6522 (CLUSTERED) ON (ID_PIANOCONTI)
+dbo.PIANOCONTI_CEE                            PK PK__PIANOCON__5A2EBFB7B60B07FE (CLUSTERED) ON (ID_PIANOCONTI_CEE)
+dbo.PIANOCONTI_INDUSTRIALE                    PK PK__PIANOCON__42959E90A5A58D80 (CLUSTERED) ON (ID_PIANOCONTI_INDUSTRIALE)
+dbo.PRIMANOTA_RIGHE                           PK PK__PRIMANOT__4112139974CDC3AF (CLUSTERED) ON (ID_PRIMANOTA_RIGHE)
+dbo.PRIMANOTA_TESTATA                         PK PK__PRIMANOT__50EE8CB267515CB0 (CLUSTERED) ON (ID_PRIMANOTA_TESTATA)
+dbo.PROPSLOTS                                 PK PK_ID_propslots_PROPSLOTS (CLUSTERED) ON (ID_propslots)
+dbo.PROVVIGIONIAGENTI                         PK PK__PROVVIGI__9420E62AB152E4D3 (CLUSTERED) ON (ID_PROVVIGIONIAGENTI)
+dbo.PrimeCast                                 PK PK__PrimeCas__F670A5F82B5DFA32 (CLUSTERED) ON (ID_PrimeCast)
+dbo.ProfileData                               PK PK_id_ProfileData_ProfileData (CLUSTERED) ON (id_ProfileData)
+dbo.ProfileData                               INDEX ProfileData#id_ProfileHeader (NONCLUSTERED) ON (id_ProfileHeader, TableName, TableId, priority)
+dbo.ProfileHeader                             PK PK_id_ProfileHeader_ProfileHeader (CLUSTERED) ON (id_ProfileHeader)
+dbo.ProfileType                               PK PK_id_ProfileType_ProfileType (CLUSTERED) ON (id_ProfileType)
+dbo.Promo                                     PK PK_ID_Promo_Promo (CLUSTERED) ON (ID_Promo)
+dbo.RACKS                                     PK PK_ID_racks_RACKS (CLUSTERED) ON (ID_racks)
+dbo.RACKS                                     INDEX RACKS#ID_RACKS (NONCLUSTERED) ON (ID_racks)
+dbo.RESOURCE_INI                              PK PK__RESOURCE__230B46683BF8E94A (CLUSTERED) ON (id_RESOURCE_INI)
+dbo.RIGHTS                                    PK PK__RIGHTS__08FDF6844E5810D6 (CLUSTERED) ON (ID_rights)
+dbo.RIGHTS                                    INDEX RIGHTS#EXT_ID (NONCLUSTERED) ON (ext_id, ext_table)
+dbo.RIGHTS                                    UNIQUE INDEX RIGHTS#RIGHTNAMEUNIQUE (NONCLUSTERED) ON (rightname)
+dbo.ROUTERS                                   PK PK_ID_ROUTERS_ROUTERS (CLUSTERED) ON (ID_ROUTERS)
+dbo.RT_webJobEvtr                             PK PK__RT_webJo__0CD8DCD79CE333B6 (CLUSTERED) ON (IdJob)
+dbo.RUOLI                                     PK PK__RUOLI__F3B9898E67A1FC32 (CLUSTERED) ON (ID_RUOLI)
+dbo.RUOLI                                     INDEX RUOLI#DESCRIZIO (NONCLUSTERED) ON (DESCRIZIO)
+dbo.ReportSpotReel                            PK PK__ReportSp__2A42F71A82FF2B79 (CLUSTERED) ON (ID_ReportSpotReel)
+dbo.ReportSpotReel                            INDEX REPORTSPOTREEL#CASS (NONCLUSTERED) ON (cass)
+dbo.ReportSpotReel                            INDEX REPORTSPOTREEL#DATAORA_RETE (NONCLUSTERED) ON (dataora, rete)
+dbo.Reti                                      PK PK__Reti__478EDC9A79B382A0 (CLUSTERED) ON (id_Reti)
+dbo.Rig_ContractHeader                        PK PK__Rig_Cont__7D0E546DE3F6C142 (CLUSTERED) ON (ID_CONTRACTHEADER)
+dbo.Rig_ContractRow                           PK PK__Rig_Cont__48AF6652857D8E67 (CLUSTERED) ON (ID_CONTRACTROW)
+dbo.Rig_Frights                               PK PK__Rig_Frig__D197C485EB6A3CF7 (CLUSTERED) ON (ID_FRIGHTS)
+dbo.Rig_Frights                               INDEX RIGFRIGHTS#IDFILASSETTYPE (NONCLUSTERED) ON (ID_FILMATI, ASSETTYPE)
+dbo.Rig_Header                                PK PK__Rig_Head__4E89970E040A8C95 (CLUSTERED) ON (ID_RIGHTSHEADER)
+dbo.Rig_HeaderLanguages_Sell                  PK PK__Rig_Head__3533BBACB0FA9557 (CLUSTERED) ON (ID_HEADERLANGUAGESELL)
+dbo.Rig_HeaderStation                         PK PK__Rig_Head__0A1B65C0D40A2AE0 (CLUSTERED) ON (ID_HEADERSTATION)
+dbo.Rig_HeaderStationExclude                  PK PK__Rig_Head__ABF29B91FBEBF168 (CLUSTERED) ON (ID_HEADERSTATIONEXCLUDE)
+dbo.Rig_HeaderStation_Sell                    PK PK__Rig_Head__087CA103D511ED6A (CLUSTERED) ON (ID_HEADERSTATIONSELL)
+dbo.Rig_HeaderStationp                        PK PK__Rig_Head__2B3AFC2016D3565A (CLUSTERED) ON (ID_HEADERSTATIONP)
+dbo.Rig_Media                                 PK PK__Rig_Medi__0395534D5C2C2775 (CLUSTERED) ON (ID_MEDIA)
+dbo.Rig_Platform                              PK PK__Rig_Plat__4434E872BE13A1C4 (CLUSTERED) ON (ID_PLATFORM)
+dbo.Rig_PlatformConfig                        PK PK__Rig_Plat__1B68B31F26FC7FF4 (CLUSTERED) ON (ID_PLATFORMCONFIG)
+dbo.Rig_Rerun                                 PK PK__Rig_Reru__315B4B1F77EE885F (CLUSTERED) ON (ID_RERUN)
+dbo.Rig_RowExtraData                          PK PK__Rig_RowE__3EA21FC31F485B56 (CLUSTERED) ON (ID_ROWEXTRADATA)
+dbo.Rig_SMPTEMandatory                        PK PK__Rig_SMPT__7ED22776C3D4B4BE (CLUSTERED) ON (ID_SMPTEMandatory)
+dbo.Rig_Scadenz                               PK PK__Rig_Scad__3092365E3C36F1CB (CLUSTERED) ON (ID_SCADENZ)
+dbo.Rig_Territory                             PK PK__Rig_Terr__AA2B1CA724E63AC4 (CLUSTERED) ON (ID_TERRITORY)
+dbo.Rig_Zone                                  PK PK__Rig_Zone__0920FFD95D630939 (CLUSTERED) ON (ID_ZONE)
+dbo.Rig_ZoneDetail                            PK PK__Rig_Zone__813E91AE05BF2AAF (CLUSTERED) ON (ID_ZONEDETAIL)
+dbo.Rig_ZoneUser                              PK PK__Rig_Zone__544DAA55AF9E23AD (CLUSTERED) ON (ID_ZONEUSER)
+dbo.Rig_rights                                PK PK__Rig_righ__9C46ED4B224CDE37 (CLUSTERED) ON (ID_RIGHTS)
+dbo.Rig_rightsSimulation                      PK PK__Rig_righ__9C46ED4BD29A10E9 (CLUSTERED) ON (ID_RIGHTS)
+dbo.Rig_rightsmatch                           PK PK__Rig_righ__A6A74E21F414A098 (CLUSTERED) ON (ID_RIGHTSMATCH)
+dbo.SCADENZE                                  PK PK__SCADENZE__808C67E2B84154EF (CLUSTERED) ON (ID_SCADENZE)
+dbo.SCADENZE                                  INDEX SCADENZE#ID_FATTURATESTATA (NONCLUSTERED) ON (ID_FATTURATESTATA, SCADENZA, ID_SCADENZE)
+dbo.SLOTS                                     PK PK_ID_slots_SLOTS (CLUSTERED) ON (ID_slots)
+dbo.SLOTS                                     INDEX SLOTS#ID_SLOTS (NONCLUSTERED) ON (ID_slots)
+dbo.SNMPError                                 PK PK__SNMPErro__16D039D351E90AB2 (NONCLUSTERED) ON (id_snmperror)
+dbo.SNMPError                                 INDEX SNMPError#IPAddress (NONCLUSTERED) ON (IPAddress)
+dbo.SNMPError                                 INDEX SNMPError#IPAddress_State_Severity (NONCLUSTERED) ON (IPAddress, State, Severity)
+dbo.SNMPError                                 INDEX SNMPError#ReceiveTime (NONCLUSTERED) ON (ReceiveTime)
+dbo.SNMPFILTER                                PK PK__SNMPFILT__24893A35CDB9B6D2 (CLUSTERED) ON (id_snmpfilter)
+dbo.SNMPWS                                    PK PK__SNMPWS__FC7EC48DC5688285 (CLUSTERED) ON (id_snmpws)
+dbo.SPESE_FATTURA                             PK PK__SPESE_FA__714B5A30632D7E21 (CLUSTERED) ON (ID_SPESE_FATTURA)
+dbo.STATES                                    PK PK__STATES__C55995786B65BF57 (CLUSTERED) ON (ID_STATES)
+dbo.STATES                                    INDEX STATES#CODE (NONCLUSTERED) ON (CODE)
+dbo.STATES                                    INDEX STATES#DESCRIPTION (NONCLUSTERED) ON (DESCRIPTION)
+dbo.SmpteLayout                               PK PK_Id_SmpteLayout_SmpteLayout (CLUSTERED) ON (Id_SmpteLayout)
+dbo.SmpteLayoutItems                          PK PK_id_SmpteLayoutItems_SmpteLayoutItems (CLUSTERED) ON (id_SmpteLayoutItems)
+dbo.SmpteLayoutUsers                          PK PK_id_SmpteLayoutUsers_SmpteLayoutUsers (CLUSTERED) ON (id_SmpteLayoutUsers)
+dbo.SmpteSearchGroups                         PK PK__SmpteSea__EC4E70024F4D289A (CLUSTERED) ON (Id_SmpteSearchGroups)
+dbo.SmpteSearchItem                           PK PK_id_SmpteSearchItem_SmpteSearchItem (CLUSTERED) ON (id_SmpteSearchItem)
+dbo.SmpteTemplate                             PK PK__SmpteTem__B5D0BF9635DE9D5E (CLUSTERED) ON (Id_SmpteTemplate)
+dbo.StampaMateriale                           PK PK_ID_StampaMat_StampaMateriale (CLUSTERED) ON (ID_StampaMat)
+dbo.SubFingerprints                           PK PK__SubFinge__3214EC0722AFEC2B (CLUSTERED) ON (Id)
+dbo.SubFingerprints                           INDEX SubFingerprints#TrackId (NONCLUSTERED) ON (TrackId)
+dbo.SystemData                                PK PK_id_systemdata_SystemData (CLUSTERED) ON (id_systemdata)
+dbo.SystemData                                INDEX SystemData#name2 (NONCLUSTERED) ON (name, cod_user) INCLUDE (bitvalue, intvalue, strvalue, timevalue)
+dbo.TABELLEIVA                                PK PK__TABELLEI__D03339C4DD0F6BFA (CLUSTERED) ON (ID_TABELLEIVA)
+dbo.TIMEREC                                   PK PK__TIMEREC__50A7439FFD1AAA7B (CLUSTERED) ON (ID_TIMEREC)
+dbo.TIPOGENERI                                PK PK__TIPOGENE__8E86BBCE38C9A118 (CLUSTERED) ON (ID_TIPOGENERI)
+dbo.TIPOGENERI                                INDEX TIPOGENERI#DESCRIZIONE (NONCLUSTERED) ON (DESCRIZIONE)
+dbo.TIPOLOGIE                                 PK PK__TIPOLOGI__AA4C4B422D41DF43 (CLUSTERED) ON (ID_TIPOLOGIE)
+dbo.TIPOLOGIE                                 UNIQUE INDEX TIPOLOGIE#COD_TYPE2 (NONCLUSTERED) ON (COD_TYPE)
+dbo.TIPOLOGIE                                 INDEX TIPOLOGIE#COD_TYPE_GROUP (NONCLUSTERED) ON (COD_TYPE_GROUP, COD_TYPE)
+dbo.TIPOLOGIE                                 INDEX TIPOLOGIE#DESCRIZIO (NONCLUSTERED) ON (DESCRIZIO)
+dbo.TIPOLOGIEPROP                             PK PK__TIPOLOGI__EF4D8EBFCCA8A413 (CLUSTERED) ON (id_TipologieProp)
+dbo.TIPOLOGIEPROP                             INDEX TIPOLOGIEPROP#COD_TYPE2 (NONCLUSTERED) ON (COD_TYPE, PROP)
+dbo.TIPOLOGIEPROP                             INDEX TIPOLOGIEPROP#PROP (NONCLUSTERED) ON (PROP, COD_TYPE)
+dbo.TPALINSE                                  PK PK__TPALINSE__296CD454B3A87646 (CLUSTERED) ON (ID_TPALINSE)
+dbo.TPALINSE                                  INDEX TPALINSE#DATACOD_USER2 (NONCLUSTERED) ON (DATA, COD_USER, LIVELLO, SPLIT, ID_SPLIT_START, XORDER)
+dbo.TPALINSE                                  INDEX TPALINSE#DATALIVELLO2 (NONCLUSTERED) ON (DATA, LIVELLO, COD_USER) INCLUDE (DURATION, ID_TPALINSE, NEWTYPE, ORDINALE, SPLIT)
+dbo.TPALINSE                                  INDEX TPALINSE#DATAORA (NONCLUSTERED) ON (DATA, COD_USER, LIVELLO, ORA, SPLIT)
+dbo.TPALINSE                                  INDEX TPALINSE#DATAORAP (NONCLUSTERED) ON (DATA_P, COD_USER, LIVELLO, ORA_P, SPLIT)
+dbo.TPALINSE                                  INDEX TPALINSE#EVENT (NONCLUSTERED) ON (EVENT)
+dbo.TPALINSE                                  INDEX TPALINSE#EVENT_P (NONCLUSTERED) ON (EVENT_P)
+dbo.TPALINSE                                  INDEX TPALINSE#EXTERNALID (NONCLUSTERED) ON (EXTERNALID)
+dbo.TPALINSE                                  INDEX TPALINSE#EXTERSTRID (NONCLUSTERED) ON (EXTERSTRID)
+dbo.TPALINSE                                  INDEX TPALINSE#ID_FILMATI2 (NONCLUSTERED) ON (ID_FILMATI, DATA, LIVELLO, COD_USER)
+dbo.TPALINSE                                  INDEX TPALINSE#ID_TPALINSE_RK (NONCLUSTERED) ON (ID_TPALINSE_RK)
+dbo.TPALINSE                                  INDEX TPALINSE#SUPPORTO (NONCLUSTERED) ON (SUPPORTO)
+dbo.TPALINSE                                  INDEX TPALINSE#TRAFFICID (NONCLUSTERED) ON (TRAFFICID)
+dbo.TPALINSE_LOCKTABLE                        PK PK__TPALINSE__D41326746E1208AD (CLUSTERED) ON (ID_TPALINSE_LOCKTABLE)
+dbo.TPALINSE_LOCKTABLE                        INDEX TPALINSE_LOCKTABLE#ALL3 (NONCLUSTERED) ON (PALDATE, IDUSER, LIVELLO, OWNER, REFCOUNT)
+dbo.TPALINSE_LOCKTABLE                        INDEX TPALINSE_LOCKTABLE#OWNER (NONCLUSTERED) ON (OWNER)
+dbo.TRANSAZIONI                               PK PK_ID_TRANSAZIONI_TRANSAZIONI (NONCLUSTERED) ON (ID_TRANSAZIONI)
+dbo.TRANSAZIONI                               INDEX data (CLUSTERED) ON (DATA)
+dbo.TRANSAZIONI                               INDEX id_filmati (NONCLUSTERED) ON (ID_FILMATI)
+dbo.TRANSAZIONI                               UNIQUE INDEX id_transazioni (NONCLUSTERED) ON (ID_TRANSAZIONI)
+dbo.TRFCONTRACTSTATION                        PK PK__TRFCONTR__6B5F05628488B94E (CLUSTERED) ON (ID_TRFCONTRACTSTATION)
+dbo.TSec                                      PK PK__TSec__6D7E1951A4508C5B (CLUSTERED) ON (id_sec)
+dbo.TSec                                      INDEX TSEC#EXTERNALID (NONCLUSTERED) ON (externalid, provenienza)
+dbo.TSec                                      INDEX TSEC#ID_ASSET (NONCLUSTERED) ON (ID_ASSET)
+dbo.TSec                                      INDEX TSEC#ID_CONTRATTIRIGHE (NONCLUSTERED) ON (id_device, id_event, ASRUN_STATUS_M, ASRUN_STATUS_C)
+dbo.TSec                                      INDEX TSEC#ID_EVENT3 (NONCLUSTERED) ON (id_event, externalid, provenienza)
+dbo.TSec                                      INDEX TSEC#ID_TSEC_RK (NONCLUSTERED) ON (ID_TSEC_RK)
+dbo.TSec_command                              PK PK__TSec_com__E3B44EDB4883E7C2 (CLUSTERED) ON (id_sec_command)
+dbo.TSec_command                              INDEX TSEC_COMMAND#ID_SEC (NONCLUSTERED) ON (id_sec, som)
+dbo.Temporary_Mam                             PK PK__Temporar__7587C600E5C950A2 (CLUSTERED) ON (ID_TEMPMAM)
+dbo.ToDoParam                                 PK PK__ToDoPara__27ECC31FC8A0A5C1 (CLUSTERED) ON (ID_TODOPARAM)
+dbo.Tracks                                    PK PK__Tracks__3214EC076098C835 (CLUSTERED) ON (Id)
+dbo.TrafficBatchOperations                    PK PK__TrafficB__AEA9AAD38FC0306A (CLUSTERED) ON (ID_TrafficBatchOperations)
+dbo.TrafficBatchOperations                    INDEX TRAFFICBATCHOPERATIONS#ID_OPERATION (NONCLUSTERED) ON (ID_Operation)
+dbo.TrafficBatchOperations                    INDEX trafficbatchoperations#id_contrattirighe (NONCLUSTERED) ON (ID_ContrattiRighe) INCLUDE (Cod_User, OperationDate, Status)
+dbo.TrafficBatchSegments                      PK PK__TrafficB__3214EC27AE424556 (CLUSTERED) ON (ID)
+dbo.TrafficBatchSegments                      INDEX TRAFFICBATCHSEGMENTS#ID_TrafficBatchOperations (NONCLUSTERED) ON (ID_TrafficBatchOperations) INCLUDE (cod_user, ID_Block, ID_Segment)
+dbo.TrafficClusterLinks                       PK PK__TrafficC__8BA480A0E9BDAC15 (CLUSTERED) ON (ID_TrafficClusterLinks)
+dbo.Traffic_Audience                          PK PK__Traffic___09790822CCCB2E9B (CLUSTERED) ON (ID_Traffic_Audience)
+dbo.Traffic_AudienceArea                      PK PK__Traffic___2A8FF12C673DA402 (CLUSTERED) ON (ID_AUDIENCEAREA)
+dbo.Traffic_Block                             PK PK__Traffic___BE49545436AF5D02 (CLUSTERED) ON (ID_TrafficBlock)
+dbo.Traffic_Block                             INDEX TRAFFIC_BLOCK#NAME (NONCLUSTERED) ON (Name)
+dbo.Traffic_Calendar                          PK PK__Traffic___155A564F0C3FAC4E (NONCLUSTERED) ON (ID_TrafficCalendar)
+dbo.Traffic_Calendar                          INDEX TRAFFIC_CALENDAR#DATECOD_USER (CLUSTERED) ON (Date, Cod_User)
+dbo.Traffic_Depreciation                      PK PK__Traffic___11FC09BFF97F798E (CLUSTERED) ON (ID_TrafficDepreciation)
+dbo.Traffic_Hour                              PK PK__Traffic___31D5447317EEE09F (CLUSTERED) ON (ID_Traffic_Hour)
+dbo.Traffic_Jingle                            PK PK__Traffic___46467E691D07213A (NONCLUSTERED) ON (ID_Traffic_Jingle)
+dbo.Traffic_List                              PK PK__Traffic___495B52F8AB730C57 (CLUSTERED) ON (ID_TrafficList)
+dbo.Traffic_Manualsched                       PK PK__Traffic___493F5EBEDE8FA637 (CLUSTERED) ON (ID_MANUALSCHED)
+dbo.Traffic_MusicTemplates                    PK PK__Traffic___3631E13D9D0B1BC5 (NONCLUSTERED) ON (ID_TrafficMusicTemplates)
+dbo.Traffic_MusicTemplates                    INDEX Traffic_MusicTemplates#NAME (CLUSTERED) ON (Name)
+dbo.Traffic_MusicTemplatesDetails             PK PK__Traffic___2386B21FD27A9ED8 (NONCLUSTERED) ON (ID_TrafficMusicTemplatesDetails)
+dbo.Traffic_MusicTemplatesDetails             INDEX Traffic_MusicTemplatesDetails#TEMPLATE (CLUSTERED) ON (ID_TrafficMusicTemplates, Prog)
+dbo.Traffic_RotationTable                     PK PK__Traffic___C39C2557F3EE1C78 (CLUSTERED) ON (ID_TrafficRotationTable)
+dbo.Traffic_RotationTableDetails              PK PK__Traffic___C8C98815F32FBDB9 (NONCLUSTERED) ON (ID_TrafficRotationTableDetails)
+dbo.Traffic_RotationTableDetails              INDEX Traffic_RotationTableDetails#RotTable (CLUSTERED) ON (ID_TrafficRotationTable)
+dbo.Traffic_Schedule                          PK PK__Traffic___3D3C0658F6E77061 (CLUSTERED) ON (ID_TrafficSchedule)
+dbo.Traffic_ScheduleBlock                     PK PK__Traffic___F048FB531CD44D23 (NONCLUSTERED) ON (ID_TrafficScheduleBlock)
+dbo.Traffic_ScheduleBlock                     INDEX TRAFFIC_SCHEDULEBLOCK#SCHEDULE (CLUSTERED) ON (ID_TrafficSchedule, Offset)
+dbo.Traffic_ScheduleList                      PK PK__Traffic___494DDB5C260461B6 (NONCLUSTERED) ON (ID_TrafficScheduleList)
+dbo.Traffic_ScheduleList                      INDEX TrafficScheduleList#DATE (CLUSTERED) ON (Date, ID_ContrattiRighe)
+dbo.Traffic_ScheduleList                      INDEX trafficschedulelist#idcr (NONCLUSTERED) ON (ID_ContrattiRighe, BlackList)
+dbo.Traffic_Segment                           PK PK__Traffic___B8FC8234F6773C48 (NONCLUSTERED) ON (ID_TrafficSegment)
+dbo.Traffic_Segment                           INDEX TRAFFIC_SEGMENT#SCHEDULE (CLUSTERED) ON (ID_TrafficBlock, Offset)
+dbo.Traffic_SegmentList                       PK PK__Traffic___87F724E722E46E33 (NONCLUSTERED) ON (ID_TrafficSegmentList)
+dbo.Traffic_Trash                             PK PK__Traffic___0B41406D8B188015 (CLUSTERED) ON (ID_TRAFFICTRASH)
+dbo.Traffic_WorkFlow                          PK PK__Traffic___3CAD86A3A6C005A4 (CLUSTERED) ON (ID_Traffic_WorkFlow)
+dbo.Transactionfilter                         PK PK__Transact__49C77E78AEAB3C4F (CLUSTERED) ON (ID_TRANSACTIONFILTER)
+dbo.Trf_instanceblock                         PK PK__Trf_inst__58232F337494DB08 (CLUSTERED) ON (ID_instanceblock)
+dbo.Trf_pricelistratio                        PK PK__Trf_pric__3F72DA6B9A86FCD0 (CLUSTERED) ON (ID_pricelistratio)
+dbo.UIDGEN                                    PK PK__UIDGEN__24A7E323E82577EA (CLUSTERED) ON (id_uidgen)
+dbo.Users                                     PK PK_id_users_Users (CLUSTERED) ON (id_users)
+dbo.Users                                     INDEX USERS#COD_USER (NONCLUSTERED) ON (cod_user)
+dbo.VIDEOSTD                                  PK PK__VIDEOSTD__7EBD3C51BF7EFA65 (CLUSTERED) ON (ID_VIDEOSTD)
+dbo.VIDEOSTD                                  UNIQUE INDEX VIDEOSTD#VIDEOSTD_CODE (NONCLUSTERED) ON (VIDEOSTD_CODE)
+dbo.VIDEOSTD                                  UNIQUE INDEX VIDEOSTD#VIDEOSTD_ID (NONCLUSTERED) ON (VIDEOSTD_ID)
+dbo.VRInputs                                  PK PK__VRInputs__5B9AE5D271921C0F (CLUSTERED) ON (id_VRInputs)
+dbo.VRLevels                                  PK PK__VRLevels__652C8E7258EF7E0B (CLUSTERED) ON (id_VRLevels)
+dbo.VROutputs                                 PK PK__VROutput__D21AD634B3964699 (CLUSTERED) ON (id_VROutputs)
+dbo.VRPRouters                                PK PK__VRPRoute__3214EC07C25A7A2A (CLUSTERED) ON (Id)
+dbo.VRVRouters                                PK PK__VRVRoute__4D45927B37762EE2 (CLUSTERED) ON (VRId)
+dbo.VideoStdConv                              PK PK__VideoStd__51C749BDC21B7CCE (CLUSTERED) ON (IdVideoStdConv)
+dbo.WEBXDCAMEXPORT                            PK PK__WEBXDCAM__F7370956D7D31513 (CLUSTERED) ON (ID_WEBXDCAMEXPORT)
+dbo.WORKSTATIONS                              PK PK__WORKSTAT__B94B40E876A7723A (CLUSTERED) ON (ID_WORKSTATIONS)
+dbo.WORKSTATIONS                              INDEX WORKSTATIONS#PCNAME (NONCLUSTERED) ON (PCNAME)
+dbo.WORKSTATIONSERVICECONFIG                  PK PK__WORKSTAT__F60777EBE43AA23A (CLUSTERED) ON (ID_WORKSTATIONSERVICECONFIG)
+dbo.WebLog                                    PK PK__WebLog__3214EC077B924D0B (CLUSTERED) ON (Id)
+dbo.WebUserPreferences                        PK PK__WebUserP__3214EC07884DCA22 (CLUSTERED) ON (Id)
+dbo.Web_Messages                              PK PK_Id_Web_Messages (CLUSTERED) ON (Id)
+dbo.Web_UserMsg                               PK PK__Web_User__3214EC07F767CDF7 (CLUSTERED) ON (Id)
+dbo.Weblogins                                 PK PK__Weblogin__8476B160F3857AAF (CLUSTERED) ON (ID_WEBLOGIN)
+dbo.Weblogins                                 INDEX weblogins#IdAnagraf (NONCLUSTERED) ON (IDANAGRAF, DATA_LOGOUT)
+dbo.accesslog_Application                     PK PK__accesslo__93DE63E919ACFF89 (CLUSTERED) ON (id_application)
+dbo.accesslog_Function                        PK PK__accesslo__61A6138848051BE8 (CLUSTERED) ON (id_function)
+dbo.accesslog_History                         PK PK__accesslo__0B4F24D3144A2B66 (CLUSTERED) ON (id_history)
+dbo.accesslog_History                         INDEX accesslog_History#starttime_utc (NONCLUSTERED) ON (starttime_utc, cod_user, id_operator, id_machine, id_application, id_function)
+dbo.accesslog_Machine                         PK PK__accesslo__3C2F8914AC3333FE (CLUSTERED) ON (id_machine)
+dbo.accesslog_Operator                        PK PK__accesslo__883427EB25E78CF5 (CLUSTERED) ON (id_operator)
+dbo.acdir_Domain                              PK PK__acdir_Do__6F4C7854531A3B4E (CLUSTERED) ON (id_domain)
+dbo.acdir_Group                               PK PK__acdir_Gr__8BE8BA1BA35F90AA (CLUSTERED) ON (id_group)
+dbo.acdir_Group                               INDEX acdir_Group#name (NONCLUSTERED) ON (name, id_domain)
+dbo.acdir_Group                               INDEX acdir_Group#right_name (NONCLUSTERED) ON (right_name, id_domain)
+dbo.acdir_GroupUser                           PK PK__acdir_Gr__5C1DA1A44E61DD3F (CLUSTERED) ON (id_groupuser)
+dbo.acdir_GroupUser                           INDEX acdir_GroupUser#id_group (NONCLUSTERED) ON (id_group, id_user)
+dbo.acdir_User                                PK PK__acdir_Us__D2D146376B528F6A (CLUSTERED) ON (id_user)
+dbo.acdir_User                                INDEX acdir_User#right_name (NONCLUSTERED) ON (right_name, id_domain)
+dbo.ai_LanguageModel                          PK PK__ai_Langu__958CECC13BA0E051 (CLUSTERED) ON (id_LanguageModel)
+dbo.ai_SearchHistory                          PK PK__ai_Searc__5134ACF040CB60A4 (CLUSTERED) ON (id_SearchHistory)
+dbo.ai_SearchHistory                          INDEX ai_SearchHistory#accesslog_id_history (NONCLUSTERED) ON (accesslog_id_history)
+dbo.anagrafReparti                            PK PK__anagrafR__2EF8DB6C007BB0AE (CLUSTERED) ON (Id_AnagrafReparti)
+dbo.anagrafSupporti                           PK PK__anagrafS__2E52666BA37AA853 (CLUSTERED) ON (id_anagrafSupporti)
+dbo.anagraflink                               PK PK__anagrafl__028F6D0F70406226 (CLUSTERED) ON (Id_link)
+dbo.anagroups                                 PK PK__anagroup__C0758F593E40D40C (CLUSTERED) ON (id_anagroups)
+dbo.assetQuery                                PK PK__assetQue__1BF30F123A9BEB4B (CLUSTERED) ON (id_assetquery)
+dbo.assetqueryfolder                          PK PK__assetque__52D19BED4DA13B17 (CLUSTERED) ON (Id_assetqueryfolder)
+dbo.assetsearch                               PK PK__assetsea__4D02E8E5F023FD6F (CLUSTERED) ON (id_assetsearch)
+dbo.astanagraf                                PK PK_id_astanagraf_astanagraf (CLUSTERED) ON (id_astanagraf)
+dbo.astrandomlist                             PK PK_id_astrandomlist_astrandomlist (CLUSTERED) ON (id_astrandomlist)
+dbo.blog                                      PK PK__blog__D920E861973F253F (CLUSTERED) ON (id_blog)
+dbo.blogattach                                PK PK__blogatta__0F935A4684D62367 (CLUSTERED) ON (id_blogattach)
+dbo.blogowner                                 PK PK__blogowne__684FF9F5B23D3DA2 (CLUSTERED) ON (id_blogowner)
+dbo.blogpost                                  PK PK__blogpost__AE459D47FC15555C (CLUSTERED) ON (id_blogpost)
+dbo.bms_eventlog                              PK PK__bms_even__55EA476341136B1E (CLUSTERED) ON (ID_BMSEVENTLOG)
+dbo.cartwall                                  INDEX CARTWALL#NOME_DJ (NONCLUSTERED) ON (cod_user, nome_dj, tasto_j)
+dbo.cartwall                                  PK PK__cartwall__9F560D8E2514A51B (CLUSTERED) ON (id_cartwall)
+dbo.censorshipClass                           PK PK__censorsh__9D6F3D17A265B8CC (CLUSTERED) ON (id_censorshipClass)
+dbo.censorshipValues                          PK PK__censorsh__9D49797B085F9649 (CLUSTERED) ON (id_censorshipValues)
+dbo.certifica_classi                          PK PK_id_classe_certifica_classi (CLUSTERED) ON (id_classe)
+dbo.codecs_prop                               PK PK__codecs_p__4667E845AE4DA6C7 (CLUSTERED) ON (prop)
+dbo.codecs_propval                            UNIQUE INDEX CODECS_PROPVAL#UNIQUE (NONCLUSTERED) ON (id_codec, prop)
+dbo.codecs_propval                            PK PK_id_codecs_propval_codecs_propval (CLUSTERED) ON (id_codecs_propval)
+dbo.codecsgroups                              PK PK__codecsgr__2D897008660E5E8F (CLUSTERED) ON (id_codecsgroup)
+dbo.codecsgroups                              UNIQUE CONSTRAINT UQ__codecsgr__72E12F1BD5F914BF (NONCLUSTERED) ON (name)
+dbo.codecstogroup                             PK PK_id_codecstogroup_codecstogroup (CLUSTERED) ON (id_codecstogroup)
+dbo.costs                                     PK PK__costs__F101E7D2CAE3BF13 (CLUSTERED) ON (Id_Costs)
+dbo.creative_PromoProgramming                 PK PK__creative__3214EC2716B5DB86 (CLUSTERED) ON (ID)
+dbo.ctmgroups                                 UNIQUE INDEX CtmGroups#UniqueId (NONCLUSTERED) ON (id_ctmgroups)
+dbo.ctmgroups                                 UNIQUE INDEX CtmGroups#UniqueName (NONCLUSTERED) ON (name)
+dbo.ctmgroups                                 PK PK_id_ctmgroups_ctmgroups (CLUSTERED) ON (id_ctmgroups)
+dbo.dba_objSummary                            PK PK__dba_objS__3213E83F6EB4ADD1 (CLUSTERED) ON (id)
+dbo.dbarchivelog                              PK PK__dbarchiv__4D09F8E2668AEFB1 (CLUSTERED) ON (id_dbarchivelog)
+dbo.dbarchiveprogress                         PK PK__dbarchiv__8F359BC87940B458 (CLUSTERED) ON (ID_dbarchiveprogress)
+dbo.drives                                    PK PK_id_drives_drives (CLUSTERED) ON (id_drives)
+dbo.ei_component                              PK PK__ei_compo__015144A493FFC3E0 (CLUSTERED) ON (id_component)
+dbo.ei_component                              INDEX ei_component#code (NONCLUSTERED) ON (code)
+dbo.ei_componentfile                          PK PK__ei_compo__9F490538E0A7DABD (CLUSTERED) ON (id_componentfile)
+dbo.ei_componentfile                          INDEX ei_componentfile#id_component (NONCLUSTERED) ON (id_component, id_file)
+dbo.ei_feature                                PK PK__ei_featu__03AA6FED5926C303 (CLUSTERED) ON (id_feature)
+dbo.ei_feature                                INDEX ei_feature#code (NONCLUSTERED) ON (code)
+dbo.ei_featurecomponent                       PK PK__ei_featu__AB16B61CAD9EDC8A (CLUSTERED) ON (id_featurecomponent)
+dbo.ei_featurecomponent                       INDEX ei_featurecomponent#id_feature (NONCLUSTERED) ON (id_feature, id_component)
+dbo.ei_featureinstalled                       PK PK__ei_featu__A72306C68C1A6D11 (CLUSTERED) ON (id_featureinstalled)
+dbo.ei_featureinstalled                       INDEX ei_featureinstalled#id_feature (NONCLUSTERED) ON (id_feature, id_machine)
+dbo.ei_file                                   PK PK__ei_file__648EA6DF9AD80D6B (CLUSTERED) ON (id_file)
+dbo.ei_file                                   INDEX ei_file#name (NONCLUSTERED) ON (name)
+dbo.ei_machine                                PK PK__ei_machi__3C2F891451235873 (CLUSTERED) ON (id_machine)
+dbo.ei_machine                                INDEX ei_machine#name (NONCLUSTERED) ON (name)
+dbo.ei_version                                PK PK__ei_versi__870B7DE98195E06C (CLUSTERED) ON (id_version)
+dbo.ei_version                                INDEX ei_version#id_file (NONCLUSTERED) ON (id_file, id_machine)
+dbo.ei_version                                INDEX ei_version#id_machine (NONCLUSTERED) ON (id_machine, id_file)
+dbo.ei_version                                INDEX ei_version#id_machine2 (NONCLUSTERED) ON (id_machine, id_file, version, size, ver)
+dbo.ei_version                                INDEX ei_version#id_machine3 (NONCLUSTERED) ON (id_machine, id_file, size)
+dbo.ei_version                                INDEX ei_version#id_machine4 (NONCLUSTERED) ON (id_machine, id_file, version, size, ver, product_version, product_ver)
+dbo.ei_version                                INDEX ei_version#size (NONCLUSTERED) ON (size, ver, id_machine, id_file)
+dbo.ei_version                                INDEX ei_version#version (NONCLUSTERED) ON (version, size, ver, id_machine)
+dbo.env_Language                              INDEX ENV_LANGUAGE#LCID (NONCLUSTERED) ON (lcid)
+dbo.env_Language                              INDEX ENV_LANGUAGE#NAME (NONCLUSTERED) ON (Name)
+dbo.env_Language                              PK PK_id_language_env_Language (CLUSTERED) ON (id_language)
+dbo.env_process                               PK PK_id_process_env_process (CLUSTERED) ON (id_process)
+dbo.env_process                               INDEX env_process#hostprocess (NONCLUSTERED) ON (hostprocess, hostname)
+dbo.env_process                               INDEX env_process#spid2 (NONCLUSTERED) ON (spid)
+dbo.environment                               PK PK__environm__09CC8ABEFAB1B675 (CLUSTERED) ON (Id_environment)
+dbo.eo_operations                             PK PK__eo_opera__9C03380C0938430E (CLUSTERED) ON (id_operations)
+dbo.eo_operationsUrl                          PK PK__eo_opera__06112C11D632119E (CLUSTERED) ON (id_operationsUrl)
+dbo.epg_data                                  PK PK__epg_data__2D4D85AA9CB53D13 (CLUSTERED) ON (ID_EPG)
+dbo.epg_dataLayer                             PK PK__epg_data__6C742AC463C482CA (CLUSTERED) ON (ID_EPGLAYER)
+dbo.epg_value                                 PK PK__epg_valu__1F6854BF84DCFCA9 (CLUSTERED) ON (ID_EPGVALUE)
+dbo.etapiProcesses                            PK PK__etapiPro__11EBAE66488B04F7 (CLUSTERED) ON (PROCESSID)
+dbo.eterehlp                                  INDEX ETEREHLP#ID_EXTERNAL (NONCLUSTERED) ON (id_external)
+dbo.eterehlp                                  INDEX ETEREHLP#SORGENTE (NONCLUSTERED) ON (sorgente)
+dbo.eterehlp                                  PK PK_id_eterehlp_eterehlp (CLUSTERED) ON (id_eterehlp)
+dbo.etereln                                   INDEX ETERELN#ID_EXTERNAL (NONCLUSTERED) ON (id_external)
+dbo.etereln                                   INDEX ETERELN#SORGENTE (NONCLUSTERED) ON (sorgente)
+dbo.etereln                                   PK PK_id_etereln_etereln (CLUSTERED) ON (id_etereln)
+dbo.etereprofanity                            INDEX ETEREPROFANITY#ID_EXTERNAL (NONCLUSTERED) ON (id_external)
+dbo.etereprofanity                            INDEX ETEREPROFANITY#LASTUPDATE (NONCLUSTERED) ON (lastupdate)
+dbo.etereprofanity                            PK PK_id_EtereProfanity_etereprofanity (CLUSTERED) ON (id_EtereProfanity)
+dbo.eticons                                   PK PK__eticons__6F71C0DD0F33C771 (CLUSTERED) ON (nome)
+dbo.etlang                                    PK PK_id_etlang_etlang (CLUSTERED) ON (id_etlang)
+dbo.ext_Data                                  PK PK__ext_Data__95283FF060A28B46 (CLUSTERED) ON (id_data)
+dbo.ext_Data                                  UNIQUE INDEX ext_Data#rowid (NONCLUSTERED) ON (rowid, objectid)
+dbo.ext_Object                                PK PK__ext_Obje__6C52ACBC24DB8453 (CLUSTERED) ON (id_object)
+dbo.ext_Object                                UNIQUE INDEX ext_Object#column_name (NONCLUSTERED) ON (column_name, table_name, application_name)
+dbo.ext_Object                                UNIQUE INDEX ext_Object#objectid (NONCLUSTERED) ON (objectid)
+dbo.f90_operations                            PK PK__f90_oper__7B9ADBA1F68DB772 (CLUSTERED) ON (id_f90_operation)
+dbo.fanagraf                                  PK PK__fanagraf__AE20E69F2215DD9A (CLUSTERED) ON (Id_FAnagraf)
+dbo.fanagraf                                  INDEX fanagraf#id_anagraf (NONCLUSTERED) ON (Id_Anagraf, Id_Ruoli, Id_Filmati)
+dbo.fanagraf                                  INDEX fanagraf#id_filmati (NONCLUSTERED) ON (Id_Filmati, Id_Ruoli, Id_Anagraf)
+dbo.fartisti                                  INDEX FARTISTI#ID_SERIE (NONCLUSTERED) ON (ID_SERIE, ID_FILMATI)
+dbo.fartisti                                  PK PK__fartisti__5AA51AACC3F34B82 (CLUSTERED) ON (ID_FARTISTI)
+dbo.fcertifica_classi                         PK PK_id_fclassi_fcertifica_classi (CLUSTERED) ON (id_fclassi)
+dbo.fcosts                                    PK PK__fcosts__9F942EA06F5F3B08 (CLUSTERED) ON (Id_fcosts)
+dbo.ffasce                                    PK PK__ffasce__FF2A79BBE425AA81 (CLUSTERED) ON (id_ffasce)
+dbo.fgeneri                                   INDEX FGENERI#ID_SERIE (NONCLUSTERED) ON (ID_SERIE, ID_GENERI)
+dbo.fgeneri                                   PK PK__fgeneri__15570E6EFF82C1D2 (CLUSTERED) ON (ID_FGENERI)
+dbo.flink                                     INDEX FLINK#ID_FILMATI1 (NONCLUSTERED) ON (Id_Filmati1)
+dbo.flink                                     INDEX FLINK#ID_FILMATI2 (NONCLUSTERED) ON (Id_Filmati2)
+dbo.flink                                     PK PK__flink__EEE19D36CB609695 (CLUSTERED) ON (Id_flink)
+dbo.flinkdescription                          PK PK__flinkdes__F1EB9FD9371F31E8 (CLUSTERED) ON (LinkCode)
+dbo.fparentaladvice                           INDEX FPARENTALADVICE#ID_FILMATI (NONCLUSTERED) ON (ID_Filmati)
+dbo.fparentaladvice                           PK PK__fparenta__49657BAC5AFFBD89 (CLUSTERED) ON (Id_fparentaladvice)
+dbo.fprestiti                                 INDEX FPRESTITI#FLAGS (NONCLUSTERED) ON (FLAGS)
+dbo.fprestiti                                 PK PK__fprestit__536C2ADD863A9B00 (CLUSTERED) ON (ID_FPrestiti)
+dbo.fprestitimulti                            INDEX FPRESTITIMULTI#ID_FPRESTITI (NONCLUSTERED) ON (ID_FPrestiti)
+dbo.fprestitimulti                            INDEX FPRESTITIMULTI#ID_SUPPORTI (NONCLUSTERED) ON (ID_Supporti)
+dbo.fprestitimulti                            PK PK__fprestit__7BAB1F5A7C4C3D7E (CLUSTERED) ON (ID_FPrestMulti)
+dbo.fpropslots                                PK PK_ID_fpropslots_fpropslots (CLUSTERED) ON (ID_fpropslots)
+dbo.fs_storageLayout                          PK PK__fs_stora__8D1251DCEF355DCF (CLUSTERED) ON (ID_STORAGELAYOUT)
+dbo.fs_storageLayout                          UNIQUE CONSTRAINT UQ__fs_stora__BA156CCCFBDA665F (NONCLUSTERED) ON (UCODE)
+dbo.fs_xPathStorage                           PK PK__fs_xPath__C9061B3FA62207D3 (CLUSTERED) ON (ID_XSTORAGE)
+dbo.fserie                                    INDEX FSERIE#DESCRIZIO (NONCLUSTERED) ON (DESCRIZIO)
+dbo.fserie                                    PK PK__fserie__03B8CDC61222AE69 (CLUSTERED) ON (ID_SERIE)
+dbo.fsmpte                                    PK PK__fsmpte__E2B1AAF8A89B5635 (CLUSTERED) ON (ID_Fsmpte)
+dbo.ftamponi                                  PK PK__ftamponi__3DB85016FF2BEF26 (CLUSTERED) ON (id_tamponi)
+dbo.gr_paramvalue                             PK PK_id_paramvalue_gr_paramvalue (CLUSTERED) ON (id_paramvalue)
+dbo.grafx                                     PK PK_id_grafx_grafx (CLUSTERED) ON (id_grafx)
+dbo.grafx                                     UNIQUE INDEX grafx#name#size#stylegroup#mediatype (NONCLUSTERED) ON (name, size, stylegroup, mediatype)
+dbo.holiday                                   PK PK__holiday__AFFC0129EFE3CA6D (CLUSTERED) ON (ID_Holiday)
+dbo.holidayType                               PK PK__holidayT__BCB599B77E2037CA (CLUSTERED) ON (ID_HolidayType)
+dbo.hsm_pool                                  PK PK__hsm_pool__3840E700E4082C3E (CLUSTERED) ON (id_pool)
+dbo.hsm_poolcopy                              PK PK_id_poolcopy_hsm_poolcopy (CLUSTERED) ON (id_poolcopy)
+dbo.hsmdrivescope                             PK PK_id_hsmdrivescope_hsmdrivescope (CLUSTERED) ON (id_hsmdrivescope)
+dbo.hsmhistory                                PK PK_id_hsmhistory_hsmhistory (CLUSTERED) ON (id_hsmhistory)
+dbo.hsmoperatorreqs                           PK PK_id_hsmoperatorreqs_hsmoperatorreqs (CLUSTERED) ON (id_hsmoperatorreqs)
+dbo.hsmreport                                 PK PK__hsmrepor__558C5A1E7FCB3217 (CLUSTERED) ON (id_hsmreport)
+dbo.hsmworkqueue                              INDEX HSMWORKQUEUE#COMPLETED (NONCLUSTERED) ON (expired, terminated)
+dbo.hsmworkqueue                              INDEX HSMWORKQUEUE#METAFILE (NONCLUSTERED) ON (file_id, id_codec)
+dbo.hsmworkqueue                              PK PK__hsmworkq__8208C2A8F8B31F3C (CLUSTERED) ON (id_hsmworkqueue)
+dbo.hsmwqfiles                                PK PK_id_hsmwqfiles_hsmwqfiles (CLUSTERED) ON (id_hsmwqfiles)
+dbo.inifiles                                  INDEX INIFILES#OBJ_NAME (NONCLUSTERED) ON (OBJ_NAME)
+dbo.inifiles                                  INDEX INIFILES#OBJ_NAME2 (NONCLUSTERED) ON (OBJ_NAME, COD_USER, PC_NAME, LOGIN_NAME)
+dbo.inifiles                                  PK PK__inifiles__353B05F407755131 (CLUSTERED) ON (ID_INIFILES)
+dbo.invoice_emaillog                          PK PK__invoice___B5BC18963685634C (NONCLUSTERED) ON (id_invoiceemaillog)
+dbo.livinsoluto                               PK PK__livinsol__6D721132B08FF808 (CLUSTERED) ON (cod_livinsoluto)
+dbo.lock_object                               PK PK__lock_obj__6C52ACBC9688B259 (CLUSTERED) ON (id_object)
+dbo.lock_owner                                PK PK__lock_own__390DB56E4B87421B (CLUSTERED) ON (id_owner)
+dbo.loghi                                     PK PK__loghi__1DEA738E4248B091 (CLUSTERED) ON (id_loghi)
+dbo.loghi                                     INDEX loghi#num_logo (NONCLUSTERED) ON (num_logo, cod_user, device)
+dbo.mediaInfoData                             PK PK_id_mediaInfoData_mediaInfoData (CLUSTERED) ON (id_mediaInfoData)
+dbo.membookmarks                              PK PK_id_membookmarks_membookmarks (CLUSTERED) ON (id_membookmarks)
+dbo.memory_ctype                              PK PK_Id_memory_ctype_memory_ctype (CLUSTERED) ON (Id_memory_ctype)
+dbo.memory_defects                            PK PK_Id_memory_defects_memory_defects (CLUSTERED) ON (Id_memory_defects)
+dbo.memory_defects                            INDEX memory_defects#channel_rec_date (NONCLUSTERED) ON (Channel, Rec_date) INCLUDE (Defect)
+dbo.memory_job                                PK PK_Id_memory_job_memory_job (CLUSTERED) ON (Id_memory_job)
+dbo.memory_list                               PK PK_Id_memory_list_memory_list (CLUSTERED) ON (Id_memory_list)
+dbo.memory_list                               INDEX memory_list#LastUpdate (NONCLUSTERED) ON (LastUpdate) INCLUDE (Channel)
+dbo.memory_list                               INDEX memory_list#filename (NONCLUSTERED) ON (Filename) INCLUDE (CType, Length)
+dbo.memory_list                               INDEX memory_list#recdate (NONCLUSTERED) ON (Channel, Rec_date)
+dbo.memory_list                               INDEX memory_list#recdatePath (NONCLUSTERED) ON (Channel, Rec_date) INCLUDE (CType, Filename, Length, Path1, Path2, Size)
+dbo.memory_path                               PK PK_Id_memory_path_memory_path (CLUSTERED) ON (Id_memory_path)
+dbo.memtimeslots                              PK PK_id_memtimeslots_memtimeslots (CLUSTERED) ON (id_memtimeslots)
+dbo.mm_data                                   PK PK__mm_data__95283FF03672DF92 (CLUSTERED) ON (id_data)
+dbo.mtx_cfg_template                          PK PK__mtx_cfg___8F0A1FB29317F3B0 (CLUSTERED) ON (id_config)
+dbo.mtx_cfg_template                          UNIQUE INDEX mtx_cfg_template#id (NONCLUSTERED) ON (id)
+dbo.nz_Approval                               PK PK__nz_Appro__35A0397AE17659B2 (CLUSTERED) ON (id_Approval)
+dbo.nz_Approval                               INDEX nz_Approval#id_filmati (NONCLUSTERED) ON (id_filmati, timestamp_utc)
+dbo.nz_Calendar                               PK PK__nz_Calen__F7D11FF59498D8A3 (CLUSTERED) ON (id_calendar)
+dbo.nz_Calendar                               UNIQUE INDEX nz_calendar#schedule_date (NONCLUSTERED) ON (schedule_date, cod_user, level)
+dbo.nz_CodecPriority                          PK PK__nz_Codec__5D084B96EA18C7DB (CLUSTERED) ON (id_codecpriority)
+dbo.nz_Element                                PK PK__nz_Eleme__504C23527D228779 (CLUSTERED) ON (id_Element)
+dbo.nz_Element                                INDEX nz_Element#id_interruzioni (NONCLUSTERED) ON (id_interruzioni)
+dbo.nz_Element                                INDEX nz_Element#id_sec (NONCLUSTERED) ON (id_sec)
+dbo.nz_ElementType                            PK PK__nz_Eleme__D040BE51EB5C904F (CLUSTERED) ON (id_ElementType)
+dbo.nz_ElementType                            INDEX nz_ElementType#Code (NONCLUSTERED) ON (code, ExternalObjectId)
+dbo.nz_Function                               PK PK__nz_Funct__61A613883528751E (CLUSTERED) ON (id_function)
+dbo.nz_MosActivityMonitor                     PK PK__nz_MosAc__B3CB2C09204C8DFD (CLUSTERED) ON (id_ActivityMonitor)
+dbo.nz_MosCategory                            PK PK__nz_MosCa__5C2BE259F525A77E (CLUSTERED) ON (id_Category)
+dbo.nz_MosCategory                            UNIQUE INDEX nz_MosCategory#Code (NONCLUSTERED) ON (Code)
+dbo.nz_MosConnectionStatus                    PK PK__nz_MosCo__01E73F54EB0ACF9B (CLUSTERED) ON (id_ConnectionStatus)
+dbo.nz_MosDevice                              PK PK__nz_MosDe__A4405056C7B1A3EA (CLUSTERED) ON (id_Device)
+dbo.nz_MosDevice                              UNIQUE INDEX nz_MosDevice#ServerId (NONCLUSTERED) ON (ServerType, ServerId)
+dbo.nz_MosGateway                             PK PK__nz_MosGa__04E25129BFA451C8 (CLUSTERED) ON (id_Gateway)
+dbo.nz_MosGateway                             UNIQUE INDEX nz_MosGateway#cod_user (NONCLUSTERED) ON (cod_user, Mode)
+dbo.nz_MosGatewayDevice                       PK PK__nz_MosGa__90FF95F296E2FE0D (CLUSTERED) ON (id_GatewayDevice)
+dbo.nz_MosGatewayDevice                       UNIQUE INDEX nz_MosGatewayDevice#id_Gateway (NONCLUSTERED) ON (id_Gateway, id_Device)
+dbo.nz_MosGatewayStudio                       PK PK__nz_MosGa__C175432E907BB619 (CLUSTERED) ON (id_GatewayStudio)
+dbo.nz_MosGatewayStudioDevice                 PK PK__nz_MosGa__8E251989FB5DCE68 (CLUSTERED) ON (id_GatewayStudioDevice)
+dbo.nz_MosObjects                             PK PK__nz_MosOb__3214EC2737C3393F (CLUSTERED) ON (ID)
+dbo.nz_MosObjects                             INDEX nz_mosObjects#active_mosID (NONCLUSTERED) ON (active, mosID)
+dbo.nz_MosObjects                             UNIQUE INDEX nz_mosObjects_mosID_objID (NONCLUSTERED) ON (mosID, objID)
+dbo.nz_MosOperationStatus                     PK PK__nz_MosOp__2A4458CB0815BE84 (CLUSTERED) ON (id_OperationStatus)
+dbo.nz_MosOperationStatus                     INDEX nz_MosOperationStatus#NcsId (NONCLUSTERED) ON (NcsId)
+dbo.nz_MosOperationStatus                     UNIQUE INDEX nz_MosOperationStatus#Time (NONCLUSTERED) ON (TimeId, OperationId)
+dbo.nz_MosOperationStatusDevice               PK PK__nz_MosOp__C357B2309B2162B0 (CLUSTERED) ON (id_OperationStatusDevice)
+dbo.nz_MosOperationStatusDevice               UNIQUE INDEX nz_MosOperationStatusDevice#id_OperationStatus (NONCLUSTERED) ON (id_OperationStatus, MosId)
+dbo.nz_MosProtocol                            PK PK__nz_MosPr__8895C93B64F3690A (CLUSTERED) ON (id_Protocol)
+dbo.nz_MosProtocol                            UNIQUE INDEX nz_MosProtocol#Code (NONCLUSTERED) ON (Code)
+dbo.nz_Rundown                                PK PK__nz_Rundo__FACC50C0AF3F26FA (CLUSTERED) ON (id_rundown)
+dbo.nz_Rundown                                INDEX nz_Rundown#externalid (NONCLUSTERED) ON (externalid)
+dbo.nz_Rundown                                INDEX nz_Rundown#id_calendar (NONCLUSTERED) ON (id_calendar, id_header)
+dbo.nz_RundownTemplateRule                    PK PK__nz_Rundo__25E64C282EFD0EE5 (CLUSTERED) ON (id_RundownTemplateRule)
+dbo.nz_Shortcut                               PK PK__nz_Short__1215BE78ED967793 (CLUSTERED) ON (id_shortcut)
+dbo.nz_SocialMedia                            PK PK__nz_Socia__09FF60C663FBF166 (CLUSTERED) ON (id_SocialMedia)
+dbo.nz_SocialMedia                            UNIQUE INDEX dbo.nz_SocialMedia#Code (NONCLUSTERED) ON (code)
+dbo.nz_SocialMediaProp                        PK PK__nz_Socia__E585C09ABCB15FCE (CLUSTERED) ON (id_SocialMediaProp)
+dbo.nz_SocialMediaProp                        UNIQUE INDEX dbo.nz_SocialMediaProp#Prop (NONCLUSTERED) ON (SocialMediaCode, prop)
+dbo.nz_SocialMediaTask                        PK PK_id_SocialMediaTask_nz_SocialMediaTask (CLUSTERED) ON (id_SocialMediaTask)
+dbo.nz_SocialMediaTask                        INDEX nz_SocialMediaTask#starttime (NONCLUSTERED) ON (starttime, cod_user, level, id_asset, id_socialmedia)
+dbo.nz_SocialMediaTaskFile                    PK PK_id_SocialMediaTaskFile_nz_SocialMediaTaskFile (CLUSTERED) ON (id_SocialMediaTaskFile)
+dbo.nz_SocialMediaTaskFile                    INDEX nz_SocialMediaTaskFile#Task (NONCLUSTERED) ON (id_SocialMediaTask, id_asset)
+dbo.nz_Story                                  PK PK__nz_Story__3DB1BF8FD31E4D14 (CLUSTERED) ON (id_Story)
+dbo.nz_Story                                  INDEX nz_Story#id_filmati (NONCLUSTERED) ON (id_filmati)
+dbo.nz_StoryTemplate                          PK PK__nz_Story__1F205B71415E4C95 (CLUSTERED) ON (id_StoryTemplate)
+dbo.nz_StoryTemplate                          INDEX nz_StoryTemplate#id_category (NONCLUSTERED) ON (id_category, id_filmati)
+dbo.nz_UserInCharge                           PK PK__nz_UserI__65B592E425B1D254 (CLUSTERED) ON (id_UserInCharge)
+dbo.nz_UserInCharge                           INDEX nz_UserInCharge#id_fanagraf (NONCLUSTERED) ON (id_fanagraf)
+dbo.nz_category                               PK PK__nz_categ__E548B67374F279E5 (CLUSTERED) ON (id_category)
+dbo.nz_category                               UNIQUE CONSTRAINT UQ__nz_categ__72E12F1B3C9EAE1E (NONCLUSTERED) ON (name)
+dbo.nz_feed                                   INDEX NZ_FEED#INDEX0 (NONCLUSTERED) ON (uid)
+dbo.nz_feed                                   PK PK__nz_feed__65B74D23F08D6FAA (CLUSTERED) ON (id_feed)
+dbo.nz_feedtag                                PK PK__nz_feedt__9A2CDA2F7B922E6A (CLUSTERED) ON (id_feedtag)
+dbo.nz_feedtagclass                           PK PK__nz_feedt__0AF9B2E50E2B203E (CLUSTERED) ON (class_code)
+dbo.nz_mosRunningOrders                       PK PK_ID_nz_mosRunningOrders (CLUSTERED) ON (ID)
+dbo.nz_subscription                           PK PK__nz_subsc__5F1F3D1582527942 (CLUSTERED) ON (id_subscription)
+dbo.nz_subscription                           UNIQUE CONSTRAINT UQ__nz_subsc__DD77841742737CBD (NONCLUSTERED) ON (url)
+dbo.nz_subscriptioncategory                   UNIQUE INDEX NZ_SUBSCRIPTIONCATEGORY#UNIQUE (CLUSTERED) ON (id_subscription, id_category)
+dbo.nz_subscriptioncategory                   PK PK_id_subscriptioncategory_nz_subscriptioncategory (NONCLUSTERED) ON (id_subscriptioncategory)
+dbo.nz_ticker                                 PK PK__nz_ticke__48C6F53D5913E9FC (CLUSTERED) ON (id_ticker)
+dbo.parentaladvice                            PK PK__parental__2DDF1A2FDCA472DB (CLUSTERED) ON (ID_ParentalAdvice)
+dbo.parentalrate                              PK PK__parental__8BF2F353AE34A126 (CLUSTERED) ON (ID_ParentalRate)
+dbo.parentalrateexcl                          PK PK_id_parentalrateexcl_parentalrateexcl (CLUSTERED) ON (id_parentalrateexcl)
+dbo.parentalrateprot                          PK PK_id_parentalrateprot_parentalrateprot (CLUSTERED) ON (id_parentalrateprot)
+dbo.pl_AsRun                                  PK PK__pl_AsRun__6BD34FB31531F056 (CLUSTERED) ON (id_asrun)
+dbo.pl_AsRun                                  UNIQUE INDEX pl_AsRun#id_object_playout2 (NONCLUSTERED) ON (id_object, playout, foreign_table, foreign_id, foreign_chain)
+dbo.pl_Header                                 PK PK__pl_Heade__75F6DF6B80EA4B8D (CLUSTERED) ON (id_header)
+dbo.pl_Object                                 PK PK__pl_Objec__6C52ACBCAB104A0A (CLUSTERED) ON (id_object)
+dbo.pl_Object                                 INDEX pl_Object#id_section (NONCLUSTERED) ON (id_section, xorder)
+dbo.pl_Section                                PK PK__pl_Secti__83EAD1E8504E03E5 (CLUSTERED) ON (id_section)
+dbo.pl_Section                                INDEX pl_Section#id_header (NONCLUSTERED) ON (id_header, xorder)
+dbo.pm_config                                 PK PK__pm_confi__8F0A1FB214DF468A (CLUSTERED) ON (id_config)
+dbo.pm_queue                                  PK PK__pm_queue__B9DB7F38AB9003DB (CLUSTERED) ON (id_queue)
+dbo.pm_queue                                  INDEX pm_queue#id_filmati,cod_user (NONCLUSTERED) ON (id_filmati, cod_user)
+dbo.pr_postfix                                PK PK__pr_postf__FD17EBF371294DE9 (CLUSTERED) ON (id_pr_postfix)
+dbo.provvigioni                               PK PK__provvigi__38B2069780162F8B (CLUSTERED) ON (ID_PROVVIGIONI)
+dbo.r_header                                  PK PK__r_header__75F6DF6B1F2A2D11 (CLUSTERED) ON (id_header)
+dbo.r_rules_groups                            PK PK__r_rules___0E6FEF9715657180 (CLUSTERED) ON (id_rule_group)
+dbo.r_rules_groups                            INDEX r_rules_groups#id_header (NONCLUSTERED) ON (id_header, id_group, cod_user)
+dbo.r_rules_logins                            PK PK__r_rules___5B9382A4A0F678E4 (CLUSTERED) ON (id_rule_login)
+dbo.r_rules_logins                            INDEX r_rules_logins#id_header (NONCLUSTERED) ON (id_header, id_login, cod_user)
+dbo.registro_ROF                              PK PK_ID_registro_ROF (CLUSTERED) ON (ID)
+dbo.registro_SIAE                             PK PK_ID_registro_SIAE (CLUSTERED) ON (ID)
+dbo.registro_interruzioni                     PK PK_id_registro_interruzioni_registro_interruzioni (CLUSTERED) ON (id_registro_interruzioni)
+dbo.rig_ErrorMessage                          PK PK__rig_Erro__5715330AC0A8BAA3 (CLUSTERED) ON (ID_ERRORMESSAGE)
+dbo.rig_eventlog                              PK PK__rig_even__F2EB4F22E4246924 (CLUSTERED) ON (ID_RIGEVENTLOG)
+dbo.rig_installments                          PK PK__rig_inst__0DE8A719E211585B (CLUSTERED) ON (ID_installments)
+dbo.right_grouping                            PK PK_id_right_grouping_right_grouping (CLUSTERED) ON (id_right_grouping)
+dbo.right_grouping                            UNIQUE INDEX RIGHT_GROUPING#UNIQUE (NONCLUSTERED) ON (id_subject, id_group)
+dbo.right_groups                              PK PK__right_gr__8BE8BA1BB8393ED1 (CLUSTERED) ON (id_group)
+dbo.right_objects                             PK PK__right_ob__357D4CF8E4036446 (CLUSTERED) ON (code)
+dbo.right_objects                             UNIQUE INDEX RIGHT_OBJECTS#UNIQUE (NONCLUSTERED) ON (code)
+dbo.right_rules                               PK PK_id_right_rules_right_rules (CLUSTERED) ON (id_right_rules)
+dbo.right_rules                               UNIQUE INDEX RIGHT_RULES#UNIQUE (NONCLUSTERED) ON (id_group, id_right, cod_user)
+dbo.right_subjects                            PK PK__right_su__8F848F601E661869 (CLUSTERED) ON (id_subject)
+dbo.right_subjects                            UNIQUE INDEX RIGHT_SUBJECTS#UNIQUE (NONCLUSTERED) ON (foreign_object, foreign_id)
+dbo.rl_eccontainer                            PK PK_id_container_rl_eccontainer (CLUSTERED) ON (id_container)
+dbo.rl_eccontainerdetail                      PK PK_id_containerdetail_rl_eccontainerdetail (CLUSTERED) ON (id_containerdetail)
+dbo.rl_eccontainerschedule                    PK PK_id_containerschedule_rl_eccontainerschedule (CLUSTERED) ON (id_containerschedule)
+dbo.rl_graphicparams                          PK PK__rl_graph__91EE16F49074C5F6 (CLUSTERED) ON (ID_graphicparams)
+dbo.rl_graphicparams                          INDEX rl_graphicparams#id_filmati (NONCLUSTERED) ON (id_filmati, xorder, cod_user)
+dbo.rl_mmrules                                PK PK_id_rules_rl_mmrules (CLUSTERED) ON (id_rules)
+dbo.rl_mmtemplates                            PK PK_id_templates_rl_mmtemplates (CLUSTERED) ON (id_templates)
+dbo.rl_mmtemplatesdetails                     PK PK_id_templatesdetails_rl_mmtemplatesdetails (CLUSTERED) ON (id_templatesdetails)
+dbo.rpt_anagraf                               PK PK_id_anagraf_rpt_anagraf (CLUSTERED) ON (id_anagraf)
+dbo.rpt_anagraf                               INDEX rpt_anagraf#code (NONCLUSTERED) ON (code)
+dbo.rpt_email                                 PK PK_id_email_rpt_email (CLUSTERED) ON (id_email)
+dbo.rpt_email                                 INDEX rpt_email#code (NONCLUSTERED) ON (code, idUser)
+dbo.rpt_emaillog                              PK PK_id_emaillog_rpt_emaillog (CLUSTERED) ON (id_emaillog)
+dbo.rpt_file                                  PK PK_id_rpt_file_rpt_file (CLUSTERED) ON (id_rpt_file)
+dbo.rpt_file                                  UNIQUE INDEX RPT_FILE#UNIQUE (NONCLUSTERED) ON (iscustom, rdl_name)
+dbo.rpt_station                               PK PK_id_station_rpt_station (CLUSTERED) ON (id_station)
+dbo.rpt_station                               INDEX rpt_station#code (NONCLUSTERED) ON (code, idUser)
+dbo.rpt_tmp_pricelist                         PK PK__rpt_tmp___3214EC27D079A40F (CLUSTERED) ON (ID)
+dbo.rs_MediaType                              PK PK__rs_Media__51F3EED863B48246 (CLUSTERED) ON (id_MediaType)
+dbo.rs_MediaTypeCodecs                        PK PK__rs_Media__27E99E8DA6EA907A (CLUSTERED) ON (id_MediaTypeCodecs)
+dbo.rs_MediaTypeCodecs                        INDEX rs_MediaTypeCodecs#id_mediatype (NONCLUSTERED) ON (id_mediatype, codec_type)
+dbo.rs_defaultcolor                           PK PK__rs_defau__8430AB64170E20B9 (CLUSTERED) ON (id_defaultcolor)
+dbo.rs_designConn                             PK PK__rs_desig__C368D56C08257D89 (CLUSTERED) ON (ID_DESIGNCONN)
+dbo.rs_designConn                             INDEX RS_DESIGNCONN#DEVICEIDFROM (NONCLUSTERED) ON (DEVICEIDFROM)
+dbo.rs_designConn                             INDEX RS_DESIGNCONN#DEVICEIDTO (NONCLUSTERED) ON (DEVICEIDTO)
+dbo.rs_designRes                              PK PK__rs_desig__8415D2D4D6AD993C (CLUSTERED) ON (ID_DESIGNRES)
+dbo.rs_designRes                              INDEX RS_DESIGNRES#DEVICEID (NONCLUSTERED) ON (DEVICEID)
+dbo.rs_deviceRouting                          PK PK_ID_DEVICEROUTING_rs_deviceRouting (CLUSTERED) ON (ID_DEVICEROUTING)
+dbo.rs_devices                                PK PK__rs_devic__84BE14D763793D5C (CLUSTERED) ON (deviceId)
+dbo.rs_devices                                INDEX RS_DEVICES#PARENTID (NONCLUSTERED) ON (parentId)
+dbo.rs_devicesprop                            PK PK__rs_devic__F2D69657A294A0A1 (CLUSTERED) ON (ID_DEVICESPROP)
+dbo.rs_drivers                                PK PK__rs_drive__3213E83F3E67E548 (CLUSTERED) ON (id)
+dbo.rs_editorLock                             PK PK__rs_edito__269E5D88E4BDCC22 (CLUSTERED) ON (ID_EDITORLOCK)
+dbo.rs_fclasses                               PK PK__rs_fclas__6187C73D6096FE35 (CLUSTERED) ON (ID_FCLASSES)
+dbo.rs_iclasses                               PK PK__rs_iclas__92D33B346ACC8934 (CLUSTERED) ON (ID_ICLASSES)
+dbo.rs_iniFiles                               PK PK__rs_iniFi__353B05F42B3D4835 (CLUSTERED) ON (ID_INIFILES)
+dbo.rs_lock                                   PK PK__rs_lock__994C49AACD953038 (CLUSTERED) ON (ID_LOCK)
+dbo.rs_logdevice                              PK PK__rs_logde__359220D813BE340B (CLUSTERED) ON (id_logdevice)
+dbo.rs_modules                                PK PK__rs_modul__3214EC276D5E6B06 (CLUSTERED) ON (ID)
+dbo.rs_rackdef                                PK PK__rs_rackd__B3BC686B9D958B76 (CLUSTERED) ON (ID_RACKDEF)
+dbo.rs_rclasses                               PK PK__rs_rclas__69F4482209DC4E9F (CLUSTERED) ON (id_rclasses)
+dbo.rs_resources                              PK PK__rs_resou__E14FC3512B7AF38A (CLUSTERED) ON (id_resources)
+dbo.rs_roles                                  PK PK__rs_roles__74154EFFDCADDBDC (CLUSTERED) ON (ID_ROLES)
+dbo.rs_rolesprop                              PK PK__rs_roles__E6AFCE3B05FE6577 (CLUSTERED) ON (ID_ROLESPROP)
+dbo.rs_schematics                             PK PK__rs_schem__A84EA06681B6BE8B (CLUSTERED) ON (schematicId)
+dbo.rs_searchFilter                           PK PK_ID_FILTER_rs_searchFilter (CLUSTERED) ON (ID_FILTER)
+dbo.rs_tclasses                               PK PK__rs_tclas__3214EC276B9D117D (CLUSTERED) ON (ID)
+dbo.rs_workstationcode                        PK PK__rs_works__12A7027B17A5208E (CLUSTERED) ON (id_workstationcode)
+dbo.sbt_EbuLanguageSettings                   PK PK__sbt_EbuL__D52A5DFB1C1010EB (CLUSTERED) ON (id_ebu)
+dbo.sbt_fheader                               PK PK__sbt_fhea__A44BD24B4E0E0F61 (CLUSTERED) ON (id_fheader)
+dbo.sbt_fheader                               INDEX sbt_fheader#id_filmati (NONCLUSTERED) ON (id_filmati, lcid)
+dbo.sbt_fheader                               INDEX sbt_fheader#id_filmati_lang (NONCLUSTERED) ON (id_filmati, lang, vs)
+dbo.sbt_fheader                               INDEX sbt_fheader#id_filmati_level (NONCLUSTERED) ON (id_filmati, level, lang, vs)
+dbo.sbt_ftext                                 PK PK__sbt_ftex__F5163A74A1298745 (CLUSTERED) ON (id_ftext)
+dbo.sbt_ftext                                 INDEX sbt_ftext#id_fheader (NONCLUSTERED) ON (id_fheader, som, eom)
+dbo.sbt_ftext                                 INDEX sbt_ftext#id_ftext_source (NONCLUSTERED) ON (id_fheader, id_ftext_source)
+dbo.sbt_ftext                                 INDEX sbt_ftext#lastupdate (NONCLUSTERED) ON (id_fheader, lastupdate)
+dbo.sbt_ftext                                 INDEX sbt_ftext#xorder (NONCLUSTERED) ON (id_fheader, xorder, som)
+dbo.sbt_fwarning                              PK PK__sbt_fwar__108FC3FE2F7B34C2 (CLUSTERED) ON (id_fwarning)
+dbo.sbt_fwarning                              INDEX sbt_fwarning#id_ftext (NONCLUSTERED) ON (id_ftext, code)
+dbo.sbt_level                                 PK PK__sbt_leve__4B7C48FFDE1B98B4 (CLUSTERED) ON (id_level)
+dbo.sbt_level                                 INDEX sbt_level#active (NONCLUSTERED) ON (active, type, level)
+dbo.sbt_level                                 INDEX sbt_level#level (NONCLUSTERED) ON (level, active, type)
+dbo.sbt_warning                               PK PK__sbt_warn__0C7166786815CA37 (CLUSTERED) ON (id_waring)
+dbo.sbtlang                                   PK PK_id_sbtlang_sbtlang (CLUSTERED) ON (id_sbtlang)
+dbo.sbtlangpath                               PK PK_id_sbtlangpath_sbtlangpath (CLUSTERED) ON (id_sbtlangpath)
+dbo.sc_codecwkfmap                            PK PK__sc_codec__C6CDC9F2555635F0 (CLUSTERED) ON (id_sccodecwkfmap)
+dbo.sc_headerconfig                           PK PK__sc_heade__3644D7CF356B75FE (CLUSTERED) ON (id_scheaderconfig)
+dbo.sc_headerworklist                         PK PK__sc_heade__36902346508C2C0F (CLUSTERED) ON (id_scheaderworklist)
+dbo.sc_log                                    PK PK__sc_log__59643E7C98B62A44 (CLUSTERED) ON (id_sclog)
+dbo.sc_rowconfig                              PK PK__sc_rowco__094A07CC3A954C4F (CLUSTERED) ON (id_scrowconfig)
+dbo.sc_rowconfigwkf                           PK PK__sc_rowco__A0D5E3BE57A20FE6 (CLUSTERED) ON (id_scrowconfigwkf)
+dbo.sc_rowworklist                            PK PK__sc_rowwo__F096AE84E8D8EF03 (CLUSTERED) ON (id_scrowworklist)
+dbo.sc_statussc                               PK PK__sc_statu__E4CAB8E9CC32363C (CLUSTERED) ON (id_statussc)
+dbo.sc_usermanagerconfig                      PK PK__sc_userm__686FDA6CBF425F79 (CLUSTERED) ON (id_usermanagerconfig)
+dbo.sch_Certification                         PK PK__sch_Cert__E12AF758E0D88D08 (CLUSTERED) ON (ID_CERTIFICATION)
+dbo.sch_Certification                         INDEX SCH_CERTIFICATION#ID_HEADER (NONCLUSTERED) ON (ID_HEADER)
+dbo.sch_Certification                         INDEX SCH_CERTIFICATION#ID_OPERATOR (NONCLUSTERED) ON (ID_OPERATOR)
+dbo.sch_GraphicCodec                          PK PK__sch_Grap__18F89666DDF05FD0 (CLUSTERED) ON (id_GraphicCodec)
+dbo.sch_GraphicMetadevice                     PK PK__sch_Grap__E60D8B9C288B4123 (CLUSTERED) ON (id_GraphicMetadevice)
+dbo.sch_Header                                PK PK__sch_Head__1C1E59EF19AB3BEE (CLUSTERED) ON (ID_HEADER)
+dbo.sch_Header                                INDEX SCH_HEADER#DATE (NONCLUSTERED) ON (DATE, ID_USER, LEVEL, SPLIT)
+dbo.sch_Locking                               PK PK__sch_Lock__6DD21ECD69EAB055 (CLUSTERED) ON (ID_LOCKING)
+dbo.sch_Locking                               INDEX SCH_LOCKING#ID_HEADER (NONCLUSTERED) ON (ID_HEADER)
+dbo.sch_OnAirCodec                            PK PK__sch_OnAi__206925C807211B0A (CLUSTERED) ON (id_onairmetacodec)
+dbo.sch_OnAirMetaDevice                       PK PK__sch_OnAi__AE935EEDE81A6EA3 (CLUSTERED) ON (id_onairmetadevice)
+dbo.sch_template                              PK PK__sch_temp__2D82625A833B01C2 (CLUSTERED) ON (ID_template)
+dbo.sec_Error                                 PK PK__sec_Erro__F2369A8ADCB4FCD9 (CLUSTERED) ON (id_error)
+dbo.sec_Error                                 INDEX SEC_ERROR#CODE (NONCLUSTERED) ON (code)
+dbo.sec_ErrorStation                          PK PK__sec_Erro__76E062FA051DFC35 (CLUSTERED) ON (id_errorStation)
+dbo.sec_ErrorStation                          INDEX SEC_ERRORSTATION#CODE (NONCLUSTERED) ON (code, cod_user)
+dbo.sec_Macro                                 PK PK__sec_Macr__41802C996BCD84E5 (CLUSTERED) ON (id_macro)
+dbo.sec_Macro                                 INDEX SEC_MACRO#DESCRIPTION (NONCLUSTERED) ON (cod_user, description)
+dbo.sec_Station                               PK PK__sec_Stat__13EE0DCE258A84C7 (CLUSTERED) ON (id_station)
+dbo.si_alarm                                  PK PK__si_alarm__745B21C3263C3E1A (CLUSTERED) ON (id_alarm)
+dbo.si_counter                                PK PK__si_count__294EA1CD76789450 (CLUSTERED) ON (id_counter)
+dbo.si_counter                                UNIQUE INDEX SI_COUNTER#UNIQUE (NONCLUSTERED) ON (code)
+dbo.si_counteralarm                           PK PK_id_counteralarm_si_counteralarm (NONCLUSTERED) ON (id_counteralarm)
+dbo.si_counteralarm                           UNIQUE CONSTRAINT SI_COUNTERALARM#U#ALARM (NONCLUSTERED) ON (id_alarm)
+dbo.si_counteralarm                           UNIQUE CONSTRAINT SI_COUNTERALARM#U#COUNTER (NONCLUSTERED) ON (id_counter)
+dbo.si_counteralarm                           UNIQUE INDEX SI_COUNTERALARM#UNIQUE (CLUSTERED) ON (id_counter, id_alarm)
+dbo.si_data                                   PK PK_id_data_si_data (CLUSTERED) ON (id_data)
+dbo.smpteconstraint                           PK PK_id_smpteconstraint_smpteconstraint (CLUSTERED) ON (id_smpteconstraint)
+dbo.smptedictionary                           PK PK__smptedic__99B8822B55360014 (CLUSTERED) ON (item)
+dbo.smptelang                                 PK PK_id_smptelang_smptelang (CLUSTERED) ON (id_smptelang)
+dbo.smptemetadata                             PK PK__smptemet__2B3B06BE73AC36DA (CLUSTERED) ON (id_smptemetadata)
+dbo.smptemetadata                             INDEX smptemetadata#ID_FILMATI (NONCLUSTERED) ON (id_filmati, item)
+dbo.smptemetadata                             INDEX smptemetadata#ID_INTERRUZIONI (NONCLUSTERED) ON (id_interruzioni, item)
+dbo.smptemetadata                             INDEX smptemetadata#ID_METAFILE (NONCLUSTERED) ON (id_metafile, item)
+dbo.smpteselected                             PK PK_id_smpteselected_smpteselected (CLUSTERED) ON (id_smpteselected)
+dbo.smpteselgroups                            PK PK__smptesel__0AEEB0A37A8D60D8 (CLUSTERED) ON (id_smpteselgroups)
+dbo.stat_application                          PK PK__stat_app__437D51884D294644 (CLUSTERED) ON (ID_STATAPPLICATION)
+dbo.stat_appopera                             PK PK__stat_app__3E08411D22AF6553 (CLUSTERED) ON (ID_STATAPPOPERA)
+dbo.stat_operation                            PK PK__stat_ope__71072F68DF5CD0B1 (CLUSTERED) ON (ID_STATOPERATION)
+dbo.stringhectm                               PK PK__stringhe__40F9C18A448DB1A8 (CLUSTERED) ON (cod_user, codice)
+dbo.stringhectm                               INDEX StringheCtm#Codice (NONCLUSTERED) ON (codice, cod_user)
+dbo.stringhectm                               UNIQUE INDEX StringheCtm#UniqueId (NONCLUSTERED) ON (id_stringhectm)
+dbo.stringhectmgroups                         PK PK_id_stringhectmgroups_stringhectmgroups (CLUSTERED) ON (id_stringhectmgroups)
+dbo.stringhectmgroups                         UNIQUE INDEX StringheCtmGroups#OneToOneLink (NONCLUSTERED) ON (id_stringhectm, id_ctmgroups)
+dbo.studio_history                            PK PK__studio_h__0B4F24D370A75B1F (CLUSTERED) ON (id_history)
+dbo.studio_items                              PK PK__studio_i__87C9438B11D68CD9 (CLUSTERED) ON (id_item)
+dbo.studio_playlist                           PK PK__studio_p__666FAF75B652D3C4 (CLUSTERED) ON (id_playlist)
+dbo.tapetypes                                 PK PK__tapetype__04065C43CA9266E6 (CLUSTERED) ON (cod_tapetypes)
+dbo.td_data                                   PK PK__td_data__95283FF0E1066BA2 (CLUSTERED) ON (id_data)
+dbo.tipicliente                               PK PK__tipiclie__76A5FC5D00C941F1 (CLUSTERED) ON (Cod_tipocliente)
+dbo.tipiditta                                 PK PK__tipiditt__C7DDE0E576798EEF (CLUSTERED) ON (Cod_tipoditta)
+dbo.tipologieUsers                            PK PK__tipologi__C7515481A5265E05 (CLUSTERED) ON (id_tipologieUsers)
+dbo.tipologieUsers                            INDEX TIPOLOGIEUSERS#COD_TYPE_COD_USER (NONCLUSTERED) ON (Cod_type, Cod_user)
+dbo.tipologie_ext                             PK PK__tipologi__678439C6E0FFE330 (CLUSTERED) ON (id_Tipologie_ext)
+dbo.tlfasceorarie                             PK PK__tlfasceo__D2D440FB9A221754 (CLUSTERED) ON (id_tlfasceorarie)
+dbo.tlfasceorarieh                            PK PK__tlfasceo__E390BF1D319AEA5C (CLUSTERED) ON (id_tlfasceorarieh)
+dbo.tllock                                    PK PK__tllock__B53A7A5395BD6BAE (CLUSTERED) ON (id_filmati)
+dbo.tlrotaz                                   PK PK__tlrotaz__B1D09243D734C65A (CLUSTERED) ON (id_tlrotaz)
+dbo.tlrotazg                                  PK PK__tlrotazg__5AC8EF74DC4F5F57 (CLUSTERED) ON (id_tlrotazg)
+dbo.tlrotazh                                  PK PK__tlrotazh__5AC8EF7B47749EDC (CLUSTERED) ON (id_tlrotazh)
+dbo.tpalinse_snapshot                         PK PK__tpalinse__0A8D8FF16C7EA756 (CLUSTERED) ON (id_tpalinse_snapshot)
+dbo.tpalinse_snapshot                         INDEX TPALINSE_SNAPSHOT#DATA (NONCLUSTERED) ON (data, cod_user, livello, split, mode)
+dbo.tpalinse_snapshot                         INDEX tpalinse_snapshot#params (XML) ON (params)
+dbo.tpalinse_storicolock                      PK PK_ID_TPALINSE_STORICOLOCK_tpalinse_storicolock (CLUSTERED) ON (ID_TPALINSE_STORICOLOCK)
+dbo.tpalinse_storicolock                      INDEX TPALINSE_STORICOLOCK#INSERT_DATE (NONCLUSTERED) ON (INSERT_DATE)
+dbo.tpalinse_storicolock                      INDEX TPALINSE_STORICOLOCK#PALDATE (NONCLUSTERED) ON (PALDATE, IDUSER, STATE)
+dbo.trafficPalinse                            PK PK__trafficP__792F0BDDAABC294C (NONCLUSTERED) ON (id_trafficPalinse)
+dbo.trafficPalinse                            INDEX TRAFFICPALINSE#BLOCKSEG (NONCLUSTERED) ON (id_fascia, clusterIndex)
+dbo.trafficPalinse                            INDEX TRAFFICPALINSE#CLUSTERINDEX (NONCLUSTERED) ON (clusterIndex)
+dbo.trafficPalinse                            INDEX TRAFFICPALINSE#EVENTTYPE (NONCLUSTERED) ON (EVENTTYPE) INCLUDE (ID_ContrattiRighe, id_fascia, id_palinsesto, id_tpalinse)
+dbo.trafficPalinse                            INDEX TRAFFICPALINSE#ID_CONTRATTIRIGHE (NONCLUSTERED) ON (ID_ContrattiRighe, Date, Cod_User)
+dbo.trafficPalinse                            INDEX TRAFFICPALINSE#ID_TPALINSE (CLUSTERED) ON (id_tpalinse)
+dbo.trafficPalinse                            INDEX TRAFFICPALINSE#ID_TPALINSEDATA (NONCLUSTERED) ON (id_tpalinse, id_palinsesto, id_fascia, clusterIndex, ID_ContrattiRighe)
+dbo.trafficPalinse                            INDEX TRAFFICPALINSE#ID_TPALINSEDATA1 (NONCLUSTERED) ON (Date) INCLUDE (clusterIndex, EVENTTYPE, ID_ContrattiRighe, id_fascia, ID_FATTURAAGENZIA, ID_FATTURAEMITTENTE, ID_Operation, id_tpalinse, id_trafficPalinse, scadenza, TrafficFlag, TrafficNotes)
+dbo.trafficPalinse                            INDEX TRAFFICPALINSE#ID_TRAFFICPALINSEDATA (NONCLUSTERED) ON (id_tpalinse, id_trafficPalinse) INCLUDE (EVENTTYPE, ID_ContrattiRighe, ID_FATTURAAGENZIA, ID_FATTURAEMITTENTE, ID_Operation, scadenza, TrafficFlag, TrafficNotes)
+dbo.trafficPalinse                            INDEX TRAFFICPALINSE#NRSCHEDLE (NONCLUSTERED) ON (ID_ContrattiRighe, EVENTTYPE) INCLUDE (id_tpalinse)
+dbo.trafficPalinse                            INDEX TRAFFICPALINSE#STRUCTURE (NONCLUSTERED) ON (Date, Cod_User, id_palinsesto, id_fascia, clusterIndex)
+dbo.traffic_Fcontra                           PK PK__traffic___10B4087BCA9C1D75 (CLUSTERED) ON (ID_TRFFCONTRA)
+dbo.traffic_audienceAGB                       PK PK_ID_Traffic_Audience_traffic_audienceAGB (CLUSTERED) ON (ID_Traffic_Audience)
+dbo.traffic_credit                            PK PK__traffic___985D5802CA15E604 (CLUSTERED) ON (ID_TRAFFICCREDIT)
+dbo.traffic_listclasschema                    PK PK__traffic___40BEB1A0E1765FC8 (CLUSTERED) ON (ID_LISTCLASSSCHEMA)
+dbo.traffic_listclasscolor                    PK PK__traffic___A13E2CD31F77D8FC (CLUSTERED) ON (ID_LISTCLASSCOLOR)
+dbo.traffic_listschema                        PK PK__traffic___43AF30E76205964C (CLUSTERED) ON (ID_LISTSCHEMA)
+dbo.traffic_musicweek                         PK PK_id_trafficmusicweek_traffic_musicweek (CLUSTERED) ON (id_trafficmusicweek)
+dbo.traffic_ratecategory                      PK PK_ID_RATECATEGORY_traffic_ratecategory (CLUSTERED) ON (ID_RATECATEGORY)
+dbo.traffic_rightsassegna                     PK PK_ID_TRAFFICRIGHTSASSEGNA_traffic_rightsassegna (CLUSTERED) ON (ID_TRAFFICRIGHTSASSEGNA)
+dbo.traffic_rightscountry                     PK PK_ID_RIGA_traffic_rightscountry (CLUSTERED) ON (ID_RIGA)
+dbo.traffic_rightsdiritti                     PK PK_ID_TRAFFICRIGHTSDIRITTI_traffic_rightsdiritti (CLUSTERED) ON (ID_TRAFFICRIGHTSDIRITTI)
+dbo.traffic_rightsrighe                       PK PK_ID_TRAFFICRIGHTSRIGHE_traffic_rightsrighe (CLUSTERED) ON (ID_TRAFFICRIGHTSRIGHE)
+dbo.traffic_schedlog                          PK PK__traffic___A27E658EF8923D41 (CLUSTERED) ON (ID_TRAFFICSCHEDLOG)
+dbo.traffic_sigle                             PK PK__traffic___1C10C9202AD11ADF (CLUSTERED) ON (id_trafficsigle)
+dbo.traffic_todo                              PK PK__traffic___DCCD660D4247D269 (CLUSTERED) ON (ID_TODO)
+dbo.trf_HistoricalChangeSchedTime             PK PK__trf_Hist__B6E8D82F06799B2B (CLUSTERED) ON (ID_HistoricalChangeSegDur)
+dbo.trf_ammountreg                            PK PK__trf_ammo__D6A29B506F54CEB4 (CLUSTERED) ON (ID_ammountreg)
+dbo.trf_bookingcode                           PK PK__trf_book__836694A69899E391 (NONCLUSTERED) ON (id_bookingcode)
+dbo.trf_budget                                PK PK__trf_budg__F79D5F989AE9ACE7 (CLUSTERED) ON (id_trfbudget)
+dbo.trf_budgetdetail                          PK PK__trf_budg__8C1620416C19816D (CLUSTERED) ON (id_trfbudgetdetail)
+dbo.trf_contractdateexclude                   PK PK_id_contractdateexclude_trf_contractdateexclude (CLUSTERED) ON (id_contractdateexclude)
+dbo.trf_contrattirigheMultiContract           PK PK__trf_cont__34488E96AF389A2B (CLUSTERED) ON (id_multicontract)
+dbo.trf_customfillers                         PK PK_id_customfiller_trf_customfillers (CLUSTERED) ON (id_customfiller)
+dbo.trf_eventlog                              PK PK__trf_even__AB08BA951080580C (CLUSTERED) ON (ID_TRFEVENTLOG)
+dbo.trf_eventlog                              INDEX TRF_EVENTLOG#APPLICATION (NONCLUSTERED) ON (APPLICATION, OPERATIONDAY, COD_USER) INCLUDE (DATE, ID_CONTRATTIRIGHE, ID_FILMATI, OPERATION, USERNAME)
+dbo.trf_eventlog                              INDEX TRF_EVENTLOG#ID_CONTRATTIRIGHE (NONCLUSTERED) ON (ID_CONTRATTIRIGHE)
+dbo.trf_instancesegment                       PK PK__trf_inst__8F83473096738161 (NONCLUSTERED) ON (ID_INSTANCESEGMENT)
+dbo.trf_instancesegment                       INDEX TRFINSTANCESEGMENT#DATI (NONCLUSTERED) ON (ID_TrafficBlock, INSTANCEDATE, COD_USER)
+dbo.trf_instancesegment                       INDEX TRF_INSTANCESEGMENT#ID_TRAFFICSEGMENT (NONCLUSTERED) ON (ID_TrafficSegment)
+dbo.trf_priceblock                            PK PK__trf_pric__4567A87CE1E3F58C (CLUSTERED) ON (id_trfpriceblock)
+dbo.trf_priceblock                            INDEX trf_priceblock#pricedate (NONCLUSTERED) ON (date) INCLUDE (coduser, id_trafficblock, id_trafficsegment, pricelist)
+dbo.trf_schlogocp                             PK PK__trf_schl__1E6533C01E6398C0 (CLUSTERED) ON (ID_TRFSCHLOGOCP)
+dbo.trf_trafficpalinseMultiContract           PK PK__trf_traf__29FBEF4E3B8F7F3C (CLUSTERED) ON (ID_INVOICEMULTICONTRACT)
+dbo.trf_trafficpalinseMultiContract           INDEX trf_trafficpalinseMulticontract#ID_contrattirighechild (NONCLUSTERED) ON (ID_CONTRATTIRIGHECHILD)
+dbo.trf_trafficpalinseMultiContract           INDEX trf_trafficpalinseMulticontract#ID_trafficpalinse (NONCLUSTERED) ON (ID_TRAFFICPALINSE)
+dbo.trf_userparameters                        PK PK__trf_user__F586BDD1A7305476 (NONCLUSTERED) ON (id_trfuserparameters)
+dbo.utc_zone                                  PK PK__utc_zone__D2115E85A5296FA4 (NONCLUSTERED) ON (ID_utczone)
+dbo.webAssetCodePlugin                        PK PK__webAsset__3214EC073BCF0C11 (CLUSTERED) ON (Id)
+dbo.webColumnsIdAnagraf                       PK PK__webColum__93C0E0A0788F925A (CLUSTERED) ON (id_webColumnsIdAnagraf)
+dbo.webColumnsIdAnagraf                       UNIQUE INDEX webColumnsIdAnagraf#idAnagraf (NONCLUSTERED) ON (idAnagraf, idWebColumn, typeSearch)
+dbo.webConfigPlugin                           PK PK__webConfi__3214EC07F61871E8 (CLUSTERED) ON (Id)
+dbo.webCuttingData                            PK PK__webCutti__3213E83F874715EF (CLUSTERED) ON (id)
+dbo.webMam_Playlist                           PK PK__webMam_P__3F0FA36C8E0A0C2C (CLUSTERED) ON (ID_PLAYLIST)
+dbo.webMam_lightbox                           PK PK__webMam_l__48891A8388D92454 (CLUSTERED) ON (Id_lightbox)
+dbo.webSearchFilter                           PK PK__webSearc__3214EC072E2756F2 (CLUSTERED) ON (Id)
+dbo.webUpload_State                           PK PK__webUploa__FD4EF3717AEBBB24 (CLUSTERED) ON (Id_state)
+dbo.webXdCamRequest                           PK PK__webXdCam__2C35101EB11DB123 (CLUSTERED) ON (id_webXdCamRequest)
+dbo.web_FavoritesItem                         PK PK__web_Favo__085BD2A20FEFB4CC (CLUSTERED) ON (IdFavorites)
+dbo.web_FavoritesList                         PK PK__web_Favo__0CCAA211CC1292E8 (CLUSTERED) ON (Id_List)
+dbo.web_News                                  PK PK__web_News__3214EC07114871D4 (CLUSTERED) ON (Id)
+dbo.web_anagrafwidget                         PK PK__web_anag__3213E83FFA83319B (CLUSTERED) ON (id)
+dbo.web_appear_configs                        PK PK__web_appe__33BD78473EB95129 (CLUSTERED) ON (config)
+dbo.web_appear_sites                          PK PK__web_appe__2B1892FE35F0DCF7 (CLUSTERED) ON (website)
+dbo.web_appear_templates                      PK PK__web_appe__A20502DAF05E9258 (CLUSTERED) ON (template)
+dbo.web_appear_values                         PK PK__web_appe__B64C87C30E3B89D9 (CLUSTERED) ON (id_appear_values)
+dbo.web_appear_values                         UNIQUE INDEX web_appear_values#unique (NONCLUSTERED) ON (config, var_name)
+dbo.web_appear_vars                           PK PK__web_appe__EA8846F6905CFD94 (CLUSTERED) ON (id_appear_vars)
+dbo.web_appear_vars                           UNIQUE INDEX web_appear_vars#unique (NONCLUSTERED) ON (template, name)
+dbo.web_columns                               PK PK__web_colu__4EE9E99AC1AE1D31 (CLUSTERED) ON (id_web_columns)
+dbo.web_menuLinks                             PK PK__web_menu__31D8A6ED45A2F34B (CLUSTERED) ON (IdLink)
+dbo.web_menuUser                              PK PK__web_menu__3214EC077DF5C87A (CLUSTERED) ON (Id)
+dbo.web_sales_lightbox                        PK PK__web_sale__5646C9D86E96D4CA (NONCLUSTERED) ON (id_lightbox)
+dbo.web_widgets                               PK PK__web_widg__3213E83F2996E2ED (CLUSTERED) ON (id)
+dbo.webassetpaths                             PK PK__webasset__6ACA97E6F122E12E (CLUSTERED) ON (id_webassetpaths)
+dbo.webassetpaths                             UNIQUE INDEX WEBASSETPATHS#UNIQUE (NONCLUSTERED) ON (ID_PATH, network, funccod)
+dbo.webassetpathsfunc                         PK PK__webasset__F75E52BFFFD3F736 (CLUSTERED) ON (funccod)
+dbo.webcmd                                    PK PK__webcmd__4622F460E787885B (CLUSTERED) ON (id_webcmd)
+dbo.webmam_Search                             PK PK__webmam_S__138F8BFC5BA4BA79 (CLUSTERED) ON (IDSEARCH)
+dbo.webtemplates                              PK PK__webtempl__2647B3A8ED96E3DC (CLUSTERED) ON (id_webtemplates)
+dbo.webtpl_columns                            PK PK__webtpl_c__89D83EEC367533BF (CLUSTERED) ON (id_webtpl_columns)
+dbo.webtpl_metadevice                         PK PK__webtpl_m__05ADB177F7D42522 (CLUSTERED) ON (id_webtpl_metadevice)
+dbo.webtpl_parms                              PK PK__webtpl_p__2647B3A8855C511C (CLUSTERED) ON (id_webtemplates)
+dbo.webtpl_urgency                            PK PK__webtpl_u__44C8FFB26FE1529D (CLUSTERED) ON (id_webtpl_urgency)
+dbo.webtpl_users                              PK PK__webtpl_u__97F742ACB7D5BCC8 (CLUSTERED) ON (id_webtpl_users)
+dbo.wf_action                                 PK PK__wf_actio__7887BBB8838942E1 (CLUSTERED) ON (id_action)
+dbo.wf_actionclass                            PK PK__wf_actio__EE750C540E7D4D08 (CLUSTERED) ON (id_actionclass)
+dbo.wf_actionclass                            UNIQUE CONSTRAINT UQ__wf_actio__A607AC69FA65F121 (NONCLUSTERED) ON (ucode)
+dbo.wf_actionclass                            INDEX WF_ACTIONCLASS#DATA_XML (XML) ON (data_xml)
+dbo.wf_assignAction                           PK PK__wf_assig__2E84EC989B2AA39D (CLUSTERED) ON (id_AssignAction)
+dbo.wf_assignResources                        PK PK__wf_assig__1BFDD492679B3D7B (CLUSTERED) ON (id_AssignResources)
+dbo.wf_avaiableconnector                      PK PK__wf_avaia__48D3A84C4EB1F6CD (CLUSTERED) ON (ID_AVAIABLECONNECTOR)
+dbo.wf_designBlock                            PK PK__wf_desig__3D962F7756606698 (CLUSTERED) ON (ID_DESIGNBLOCK)
+dbo.wf_designConn                             PK PK__wf_desig__C368D56CA0FBF8FB (CLUSTERED) ON (ID_DESIGNCONN)
+dbo.wf_designProp                             PK PK__wf_desig__E72DD6B5153659A4 (CLUSTERED) ON (id_designProp)
+dbo.wf_foreignobject                          PK PK__wf_forei__72C71E46EF1D3742 (CLUSTERED) ON (id_foreignobject)
+dbo.wf_foreignobject                          UNIQUE CONSTRAINT UQ__wf_forei__A607AC6905B6D0DB (NONCLUSTERED) ON (ucode)
+dbo.wf_instance                               PK PK__wf_insta__A4FC503140C4DE82 (CLUSTERED) ON (id_instance)
+dbo.wf_instance                               INDEX WF_INSTANCE#ACTIVITY_STATE (NONCLUSTERED) ON (activity_state)
+dbo.wf_instance                               INDEX WF_INSTANCE#FOREIGN_KEY (NONCLUSTERED) ON (foreign_key)
+dbo.wf_instance                               INDEX WF_INSTANCE#OBJECTINSTANCE (NONCLUSTERED) ON (id_foreignobject) INCLUDE (activity_state, foreign_key, id_instance, id_instanceclass)
+dbo.wf_instanceclass                          PK PK__wf_insta__684E8DFC2B5AB593 (CLUSTERED) ON (id_instanceclass)
+dbo.wf_instanceclass                          UNIQUE CONSTRAINT UQ__wf_insta__A607AC69CB154655 (NONCLUSTERED) ON (ucode)
+dbo.wf_job                                    PK PK__wf_job__D366B1F7FAA2D4D8 (CLUSTERED) ON (id_job)
+dbo.wf_job                                    INDEX WF_JOB#ID_INSTANCE_DELAY_TIME (NONCLUSTERED) ON (id_instance, delay_time)
+dbo.wf_job                                    INDEX WF_JOB#ID_INSTANCE_ID_ACTION (NONCLUSTERED) ON (id_instance, id_action) INCLUDE (id_job, worker_cod_user, worker_info, worker_loginname)
+dbo.wf_languages                              PK PK__wf_langu__977D1324DDB38318 (CLUSTERED) ON (id_languageWkf)
+dbo.wf_log                                    PK PK__wf_log__6CC851FE450B690E (CLUSTERED) ON (id_log)
+dbo.wf_log                                    INDEX WF_LOG#ID_INSTANCE (NONCLUSTERED) ON (id_instance)
+dbo.wf_log                                    INDEX WF_LOG#ID_STATE (NONCLUSTERED) ON (id_state)
+dbo.wf_log_historical                         PK PK__wf_log_h__6CC851FEA3ED8550 (CLUSTERED) ON (id_log)
+dbo.wf_log_historical                         INDEX WF_LOG_HISTORICAL#ID_INSTANCE (NONCLUSTERED) ON (id_instance)
+dbo.wf_parameter                              PK PK__wf_param__3D24DA4A37AA65C2 (CLUSTERED) ON (id_parameter)
+dbo.wf_parameterclass                         PK PK__wf_param__FCB6DDB46A9ADC3B (CLUSTERED) ON (id_parameterclass)
+dbo.wf_parameterclass                         UNIQUE CONSTRAINT UQ__wf_param__A607AC691D8E3489 (NONCLUSTERED) ON (ucode)
+dbo.wf_parameterclass                         INDEX WF_PARAMETERCLASS#UCODE (NONCLUSTERED) ON (ucode)
+dbo.wf_replacementsHistory                    PK PK__wf_repla__15B4290013C94011 (CLUSTERED) ON (id_replacementsHistory)
+dbo.wf_rule                                   PK PK__wf_rule__33C9EB497AE773F5 (CLUSTERED) ON (id_rule)
+dbo.wf_state                                  PK PK__wf_state__12FD6C494C64443D (CLUSTERED) ON (id_state)
+dbo.wf_state                                  UNIQUE CONSTRAINT UQ__wf_state__A607AC6967761A32 (NONCLUSTERED) ON (ucode)
+dbo.wf_transition                             PK PK__wf_trans__889F04F70F70EE23 (CLUSTERED) ON (id_transition)
+dbo.xslt                                      PK PK__xslt__6FF4748C685B1155 (CLUSTERED) ON (id_xslt)
+lock.List                                     PK PK__List__0AE083D9A5F657E7 (CLUSTERED) ON (id_List)
+lock.List                                     UNIQUE INDEX lock.List#external_object (NONCLUSTERED) ON (external_object)
+lock.Subscription                             PK PK__Subscrip__5F1F3D15A381ADF7 (CLUSTERED) ON (id_subscription)
+lock.Subscription                             INDEX lock.Subscription#active (NONCLUSTERED) ON (external_object, active, username)
+lock.Subscription                             INDEX lock.Subscription#external_id (NONCLUSTERED) ON (external_id, external_object, active)
+lock.Subscription                             INDEX lock.Subscription#lock_time (NONCLUSTERED) ON (external_object, lock_time)
+
+FK fke_acdir_Group_id_domain__acdir_Domain_id_domain: dbo.acdir_Group.id_domain -> dbo.acdir_Domain.id_domain
+FK fke_acdir_GroupUser_id_group__acdir_Group_id_group: dbo.acdir_GroupUser.id_group -> dbo.acdir_Group.id_group
+FK fke_acdir_GroupUser_id_user__acdir_User_id_user: dbo.acdir_GroupUser.id_user -> dbo.acdir_User.id_user
+FK fke_acdir_User_id_domain__acdir_Domain_id_domain: dbo.acdir_User.id_domain -> dbo.acdir_Domain.id_domain
+FK fke_ANAGRAF_ID_IVAESENZIONE__tabelleiva_id_tabelleiva: dbo.ANAGRAF.ID_IVAESENZIONE -> dbo.TABELLEIVA.ID_TABELLEIVA
+FK fke_ANAGRAF_ID_IVAFORNITORE__tabelleiva_id_tabelleiva: dbo.ANAGRAF.ID_IVAFORNITORE -> dbo.TABELLEIVA.ID_TABELLEIVA
+FK fke_ANAGRAF_ID_PAGAMENTI__pagamenti_id_pagamenti: dbo.ANAGRAF.ID_PAGAMENTI -> dbo.PAGAMENTI.ID_PAGAMENTI
+FK fke_ANAGRAF_ID_PIANOCONTI__pianoconti_id_pianoconti: dbo.ANAGRAF.ID_PIANOCONTI -> dbo.PIANOCONTI.ID_PIANOCONTI
+FK fke_ANAGRAFICABANCHE_ID_ANAGRAF__anagraf_id_anagraf: dbo.ANAGRAFICABANCHE.ID_ANAGRAF -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_ANAGRAFICABANCHE_ID_BANCHE__banche_id_banche: dbo.ANAGRAFICABANCHE.ID_BANCHE -> dbo.BANCHE.ID_BANCHE
+FK fke_ARTISTI_ID_RUOLI__ruoli_id_ruoli: dbo.ARTISTI.ID_RUOLI -> dbo.RUOLI.ID_RUOLI
+FK fke_blog_id_blogowner__blogowner_id_blogowner: dbo.blog.id_blogowner -> dbo.blogowner.id_blogowner
+FK fke_blogattach_id_blogpost__blogpost_id_blogpost: dbo.blogattach.id_blogpost -> dbo.blogpost.id_blogpost
+FK fke_blogpost_id_blog__blog_id_blog: dbo.blogpost.id_blog -> dbo.blog.id_blog
+FK fke_CHIUSURE_ID_ANAGRAF__anagraf_id_anagraf: dbo.CHIUSURE.ID_ANAGRAF -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_CHIUSURE_ID_PIANOCONTI__pianoconti_id_pianoconti: dbo.CHIUSURE.ID_PIANOCONTI -> dbo.PIANOCONTI.ID_PIANOCONTI
+FK fke_Cl_collection_id_folder__cl_folder_id_folder: dbo.Cl_collection.id_folder -> dbo.Cl_folder.Id_folder
+FK fke_Cl_item_id_collection__cl_collection_id_collection: dbo.Cl_item.id_collection -> dbo.Cl_collection.Id_collection
+FK fke_Cl_item_itemType__cl_itemtype_itemType: dbo.Cl_item.itemType -> dbo.Cl_itemType.itemType
+FK fke_Cl_sharing_id_collection__cl_collection_id_collection: dbo.Cl_sharing.id_collection -> dbo.Cl_collection.Id_collection
+FK fke_Cl_sharing_rowType__cl_rowtype_rowType: dbo.Cl_sharing.rowType -> dbo.Cl_rowtype.rowType
+FK fke_CODEC_TUPLE_ID_AESSENCE__CODEC_AESSENCE_ID_AESSENCE: dbo.CODEC_TUPLE.ID_AESSENCE -> dbo.CODEC_AESSENCE.ID_AESSENCE
+FK fke_CODEC_TUPLE_ID_AQUALITY__CODEC_AQUALITY_ID_AQUALITY: dbo.CODEC_TUPLE.ID_AQUALITY -> dbo.CODEC_AQUALITY.ID_AQUALITY
+FK fke_CODEC_TUPLE_ID_FESSENCE__CODEC_FESSENCE_ID_FESSENCE: dbo.CODEC_TUPLE.ID_FESSENCE -> dbo.CODEC_FESSENCE.ID_FESSENCE
+FK fke_CODEC_TUPLE_ID_FQUALITY__CODEC_FQUALITY_ID_FQUALITY: dbo.CODEC_TUPLE.ID_FQUALITY -> dbo.CODEC_FQUALITY.ID_FQUALITY
+FK fke_CODEC_TUPLE_ID_MEDIATYPE__rs_mediatype_id_mediatype: dbo.CODEC_TUPLE.ID_MEDIATYPE -> dbo.rs_MediaType.id_MediaType
+FK fke_CODEC_TUPLE_ID_VESSENCE__CODEC_VESSENCE_ID_VESSENCE: dbo.CODEC_TUPLE.ID_VESSENCE -> dbo.CODEC_VESSENCE.ID_VESSENCE
+FK fke_CODEC_TUPLE_ID_VQUALITY__CODEC_VQUALITY_ID_VQUALITY: dbo.CODEC_TUPLE.ID_VQUALITY -> dbo.CODEC_VQUALITY.ID_VQUALITY
+FK fke_CODEC_TUPLE_ID_WRAPPING__CODEC_WRAPPING_ID_WRAPPING: dbo.CODEC_TUPLE.ID_WRAPPING -> dbo.CODEC_WRAPPING.ID_WRAPPING
+FK fke_CODEC_TUPLE_VIDEOSTD_CODE__VIDEOSTD_VIDEOSTD_CODE: dbo.CODEC_TUPLE.VIDEOSTD_CODE -> dbo.VIDEOSTD.VIDEOSTD_CODE
+FK fke_CodecMapping_Id_Codec__codecs_id_codec: dbo.CodecMapping.Id_Codec -> dbo.CODECS.ID_CODEC
+FK fke_CodecMediaInfoMapping_Id_Codec__codecs_id_codec: dbo.CodecMediaInfoMapping.Id_Codec -> dbo.CODECS.ID_CODEC
+FK fke_codecs_propval_id_codec__codecs_id_codec: dbo.codecs_propval.id_codec -> dbo.CODECS.ID_CODEC
+FK fke_codecs_propval_prop__codecs_prop_prop: dbo.codecs_propval.prop -> dbo.codecs_prop.prop
+FK fke_codecstogroup_id_codec__codecs_id_codec: dbo.codecstogroup.id_codec -> dbo.CODECS.ID_CODEC
+FK fke_codecstogroup_id_codecsgroup__codecsgroups_id_codecsgroup: dbo.codecstogroup.id_codecsgroup -> dbo.codecsgroups.id_codecsgroup
+FK fke_ContrattiControllo_ID_ContrattiTestata__ContrattiTestata_ID_ContrattiTestata: dbo.ContrattiControllo.ID_ContrattiTestata -> dbo.CONTRATTITESTATA.ID_CONTRATTITESTATA
+FK fke_CONTRATTIFASCE_ID_CONTRATTIRIGHE__ContrattiRighe_ID_ContrattiRighe: dbo.CONTRATTIFASCE.ID_CONTRATTIRIGHE -> dbo.CONTRATTIRIGHE.ID_CONTRATTIRIGHE
+FK fke_CONTRATTIFASCE_ID_FASCE__Traffic_Block_ID_TrafficBlock: dbo.CONTRATTIFASCE.ID_FASCE -> dbo.Traffic_Block.ID_TrafficBlock
+FK fke_CONTRATTIFILMATI_ID_CONTRATTIRIGHE__ContrattiRighe_ID_ContrattiRighe: dbo.CONTRATTIFILMATI.ID_CONTRATTIRIGHE -> dbo.CONTRATTIRIGHE.ID_CONTRATTIRIGHE
+FK fke_CONTRATTIFILMATI_ID_FILMATI__Filmati_ID_filmati: dbo.CONTRATTIFILMATI.ID_FILMATI -> dbo.FILMATI.ID_FILMATI
+FK fke_ContrattiImportiGiornalieri_ID_ContrattiRighe__ContrattiRighe_ID_ContrattiRighe: dbo.ContrattiImportiGiornalieri.ID_ContrattiRighe -> dbo.CONTRATTIRIGHE.ID_CONTRATTIRIGHE
+FK fke_CONTRATTIPIANOCONTIINDUSTRIALE_ID_CONTRATTIRIGHE__ContrattiRighe_ID_ContrattiRighe: dbo.CONTRATTIPIANOCONTIINDUSTRIALE.ID_CONTRATTIRIGHE -> dbo.CONTRATTIRIGHE.ID_CONTRATTIRIGHE
+FK fke_CONTRATTIRATE_ID_CONTRATTITESTATA__ContrattiTestata_ID_ContrattiTestata: dbo.CONTRATTIRATE.ID_CONTRATTITESTATA -> dbo.CONTRATTITESTATA.ID_CONTRATTITESTATA
+FK fke_CONTRATTIRATE_ID_FATTURAAGENZIA__FatturaTestata_ID_FatturaTestata: dbo.CONTRATTIRATE.ID_FATTURAAGENZIA -> dbo.FATTURATESTATA.ID_FatturaTestata
+FK fke_CONTRATTIRATE_ID_FATTURAEMITTENTE__FatturaTestata_ID_FatturaTestata: dbo.CONTRATTIRATE.ID_FATTURAEMITTENTE -> dbo.FATTURATESTATA.ID_FatturaTestata
+FK fke_CONTRATTIRIGHE_ID_CONTRATTITESTATA__ContrattiTestata_ID_contrattiTestata: dbo.CONTRATTIRIGHE.ID_CONTRATTITESTATA -> dbo.CONTRATTITESTATA.ID_CONTRATTITESTATA
+FK fke_CONTRATTIRIGHE_ID_TRAFFICLIST__Traffic_List_ID_TrafficList: dbo.CONTRATTIRIGHE.ID_TRAFFICLIST -> dbo.Traffic_List.ID_TrafficList
+FK fke_ContrattiRigheEliminate_ID_ContrattiRighe__ContrattiRighe_ID_ContrattiRighe: dbo.ContrattiRigheEliminate.ID_ContrattiRighe -> dbo.CONTRATTIRIGHE.ID_CONTRATTIRIGHE
+FK fke_CONTRATTISPESE_ID_CONTRATTIRIGHE__ContrattiRighe_ID_ContrattiRighe: dbo.CONTRATTISPESE.ID_CONTRATTIRIGHE -> dbo.CONTRATTIRIGHE.ID_CONTRATTIRIGHE
+FK fke_CONTRATTISPESE_ID_FATTURAAGENZIA__FatturaTestata_ID_FatturaTestata: dbo.CONTRATTISPESE.ID_FATTURAAGENZIA -> dbo.FATTURATESTATA.ID_FatturaTestata
+FK fke_CONTRATTISPESE_ID_FATTURAEMITTENTE__FatturaTestata_ID_FatturaTestata: dbo.CONTRATTISPESE.ID_FATTURAEMITTENTE -> dbo.FATTURATESTATA.ID_FatturaTestata
+FK fke_ContrattiSplit_ID_CONTRATTIRIGHE__ContrattiRighe_ID_ContrattiRighe: dbo.ContrattiSplit.ID_CONTRATTIRIGHE -> dbo.CONTRATTIRIGHE.ID_CONTRATTIRIGHE
+FK fke_CONTRATTITESTATA_AGENTE1__Anagraf_ID_Anagraf: dbo.CONTRATTITESTATA.AGENTE1 -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_CONTRATTITESTATA_AGENTE2__Anagraf_ID_Anagraf: dbo.CONTRATTITESTATA.AGENTE2 -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_CONTRATTITESTATA_AGENTE3__Anagraf_ID_Anagraf: dbo.CONTRATTITESTATA.AGENTE3 -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_CONTRATTITESTATA_AGENTE4__Anagraf_ID_Anagraf: dbo.CONTRATTITESTATA.AGENTE4 -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_CONTRATTITESTATA_AGENTE5__Anagraf_ID_Anagraf: dbo.CONTRATTITESTATA.AGENTE5 -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_CONTRATTITESTATA_AGENZIA__Anagraf_ID_Anagraf: dbo.CONTRATTITESTATA.AGENZIA -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_CONTRATTITESTATA_CENTROMEDIA__Anagraf_ID_Anagraf: dbo.CONTRATTITESTATA.CENTROMEDIA -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_CONTRATTITESTATA_COMMITTENTE__Anagraf_ID_Anagraf: dbo.CONTRATTITESTATA.COMMITTENTE -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_CONTRATTITESTATA_ID_BANCHE__Banche_ID_Banche: dbo.CONTRATTITESTATA.ID_BANCHE -> dbo.BANCHE.ID_BANCHE
+FK fke_CONTRATTITESTATA_ID_PAGAMENTI__Pagamenti_ID_Pagamenti: dbo.CONTRATTITESTATA.ID_PAGAMENTI -> dbo.PAGAMENTI.ID_PAGAMENTI
+FK fke_CONTRATTITESTATA_ID_TRAFFICLIST__Traffic_List_ID_TrafficList: dbo.CONTRATTITESTATA.ID_TRAFFICLIST -> dbo.Traffic_List.ID_TrafficList
+FK fke_CONTRATTITESTATA_UT_FINALE__Anagraf_ID_Anagraf: dbo.CONTRATTITESTATA.UT_FINALE -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_ei_componentfile_id_component__ei_component_id_component: dbo.ei_componentfile.id_component -> dbo.ei_component.id_component
+FK fke_ei_componentfile_id_file__ei_file_id_file: dbo.ei_componentfile.id_file -> dbo.ei_file.id_file
+FK fke_ei_featurecomponent_id_component__ei_component_id_component: dbo.ei_featurecomponent.id_component -> dbo.ei_component.id_component
+FK fke_ei_featurecomponent_id_feature__ei_feature_id_feature: dbo.ei_featurecomponent.id_feature -> dbo.ei_feature.id_feature
+FK fke_ei_featureinstalled_id_feature__ei_feature_id_feature: dbo.ei_featureinstalled.id_feature -> dbo.ei_feature.id_feature
+FK fke_ei_featureinstalled_id_machine__ei_machine_id_machine: dbo.ei_featureinstalled.id_machine -> dbo.ei_machine.id_machine
+FK fke_ei_version_id_file__ei_file_id_file: dbo.ei_version.id_file -> dbo.ei_file.id_file
+FK fke_ei_version_id_machine__ei_machine_id_machine: dbo.ei_version.id_machine -> dbo.ei_machine.id_machine
+FK fke_fanagraf_Id_Anagraf__anagraf_id_anagraf: dbo.fanagraf.Id_Anagraf -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_fanagraf_Id_Filmati__filmati_id_filmati: dbo.fanagraf.Id_Filmati -> dbo.FILMATI.ID_FILMATI
+FK fke_fanagraf_Id_Ruoli__ruoli_id_ruoli: dbo.fanagraf.Id_Ruoli -> dbo.RUOLI.ID_RUOLI
+FK fke_fartisti_ID_ARTISTI__artisti_id_artisti: dbo.fartisti.ID_ARTISTI -> dbo.ARTISTI.ID_ARTISTI
+FK fke_fartisti_ID_RUOLI__ruoli_id_ruoli: dbo.fartisti.ID_RUOLI -> dbo.RUOLI.ID_RUOLI
+FK fke_fartisti_ID_SERIE__fserie_id_serie: dbo.fartisti.ID_SERIE -> dbo.fserie.ID_SERIE
+FK fke_FATTURARIGHE_ID_ContrattiRighe__contrattirighe_ID_contrattirighe: dbo.FATTURARIGHE.ID_ContrattiRighe -> dbo.CONTRATTIRIGHE.ID_CONTRATTIRIGHE
+FK fke_FATTURARIGHE_ID_ContrattiSpese__contrattispese_ID_contrattispese: dbo.FATTURARIGHE.ID_ContrattiSpese -> dbo.CONTRATTISPESE.ID_CONTRATTISPESE
+FK fke_FATTURARIGHE_ID_FATTURATESTATA__fatturatestata_ID_FATTURATESTATA: dbo.FATTURARIGHE.ID_FATTURATESTATA -> dbo.FATTURATESTATA.ID_FatturaTestata
+FK fke_FATTURARIGHE_ID_PIANOCONTI__pianoconti_id_pianoconti: dbo.FATTURARIGHE.ID_PIANOCONTI -> dbo.PIANOCONTI.ID_PIANOCONTI
+FK fke_FATTURARIGHE_ID_TABELLEIVA__tabelleiva_id_tabelleiva: dbo.FATTURARIGHE.ID_TABELLEIVA -> dbo.TABELLEIVA.ID_TABELLEIVA
+FK fke_FATTURATESTATA_ID_Cliente__anagraf_id_anagraf: dbo.FATTURATESTATA.ID_Cliente -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_FATTURATESTATA_ID_ContrattiTestata__contrattitestata_ID_contrattitestata: dbo.FATTURATESTATA.ID_ContrattiTestata -> dbo.CONTRATTITESTATA.ID_CONTRATTITESTATA
+FK fke_FATTURATESTATA_ID_Destinazione__anagraf_id_anagraf: dbo.FATTURATESTATA.ID_Destinazione -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_FATTURATESTATA_ID_FATTURATESTATA_NC__fatturatestata_ID_FATTURATESTATA: dbo.FATTURATESTATA.ID_FATTURATESTATA_NC -> dbo.FATTURATESTATA.ID_FatturaTestata
+FK fke_FATTURATESTATA_ID_Pagamenti__pagamenti_id_pagamenti: dbo.FATTURATESTATA.ID_Pagamenti -> dbo.PAGAMENTI.ID_PAGAMENTI
+FK fke_ffasce_ID_FASCE__fasce_id_fasce: dbo.ffasce.ID_FASCE -> dbo.FASCE.ID_FASCE
+FK fke_ffasce_ID_SERIE__fserie_id_serie: dbo.ffasce.ID_SERIE -> dbo.fserie.ID_SERIE
+FK fke_fgeneri_ID_GENERI__generi_id_generi: dbo.fgeneri.ID_GENERI -> dbo.GENERI.ID_GENERI
+FK fke_fgeneri_ID_SERIE__fserie_id_serie: dbo.fgeneri.ID_SERIE -> dbo.fserie.ID_SERIE
+FK fke_FILMATI_ID_SERIE__fserie_id_serie: dbo.FILMATI.ID_SERIE -> dbo.fserie.ID_SERIE
+FK fke_FINTERRUZIONI_ID_FILMATI__filmati_id_filmati: dbo.FINTERRUZIONI.ID_FILMATI -> dbo.FILMATI.ID_FILMATI
+FK fke_FREGISTRAZIONI_ID_FILMATI__filmati_id_filmati: dbo.FREGISTRAZIONI.ID_FILMATI -> dbo.FILMATI.ID_FILMATI
+FK fke_FREGISTRAZIONI_ID_SUPPORTI__fsupporti_id_supporti: dbo.FREGISTRAZIONI.ID_SUPPORTI -> dbo.FSUPPORTI.ID_SUPPORTI
+FK fke_FS_BASEPATH_ID_METADEVICE__fs_metadevice_id_metadevice: dbo.FS_BASEPATH.ID_METADEVICE -> dbo.FS_METADEVICE.ID_METADEVICE
+FK fke_FS_FILE_ID_METAFILE__fs_metafile_id_metafile: dbo.FS_FILE.ID_METAFILE -> dbo.FS_METAFILE.ID_METAFILE
+FK fke_FS_FILE_ID_PATH__fs_path_id_path: dbo.FS_FILE.ID_PATH -> dbo.FS_PATH.ID_PATH
+FK fke_FS_METAFILE_ID_CODEC__codecs_id_codec: dbo.FS_METAFILE.ID_CODEC -> dbo.CODECS.ID_CODEC
+FK fke_FS_METAFILE_ID_METADEVICE__fs_metadevice_id_metadevice: dbo.FS_METAFILE.ID_METADEVICE -> dbo.FS_METADEVICE.ID_METADEVICE
+FK fke_FS_PATH_ID_BASEPATH__fs_basepath_id_basepath: dbo.FS_PATH.ID_BASEPATH -> dbo.FS_BASEPATH.ID_BASEPATH
+FK fke_FS_XFILEFILM_ID_FILMATI__filmati_id_filmati: dbo.FS_XFILEFILM.ID_FILMATI -> dbo.FILMATI.ID_FILMATI
+FK fke_FS_XFILEFILM_ID_METAFILE__fs_metafile_id_metafile: dbo.FS_XFILEFILM.ID_METAFILE -> dbo.FS_METAFILE.ID_METAFILE
+FK fke_FSec_command_id_sec__fsec_id_sec: dbo.FSec_command.id_sec -> dbo.FSec.id_sec
+FK fke_FSec_ID_ContrattiRighe__contrattirighe_id_contrattirighe: dbo.FSec.ID_ContrattiRighe -> dbo.CONTRATTIRIGHE.ID_CONTRATTIRIGHE
+FK fke_FSec_id_device__device_id_device: dbo.FSec.id_device -> dbo.Device.id_device
+FK fke_FSec_id_event__filmati_id_filmati: dbo.FSec.id_event -> dbo.FILMATI.ID_FILMATI
+FK fke_FSec_plan_id_event__filmati_id_filmati: dbo.FSec_plan.id_event -> dbo.FILMATI.ID_FILMATI
+FK fke_FSec_planning_id_event__filmati_id_filmati: dbo.FSec_planning.id_event -> dbo.FILMATI.ID_FILMATI
+FK fke_FSec_planning_id_sec__fsec_id_sec: dbo.FSec_planning.id_sec -> dbo.FSec.id_sec
+FK fke_FSec_station_id_sec__fsec_id_sec: dbo.FSec_station.id_sec -> dbo.FSec.id_sec
+FK fke_fserie_NEWTYPE__tipologie_cod_type: dbo.fserie.NEWTYPE -> dbo.TIPOLOGIE.COD_TYPE
+FK fke_fsmpte_Item__smptedictionary_item: dbo.fsmpte.Item -> dbo.smptedictionary.item
+FK fke_ftamponi_id_filmati__filmati_id_filmati: dbo.ftamponi.id_filmati -> dbo.FILMATI.ID_FILMATI
+FK fke_FTIPOLOGIEPROP_ID_FILMATI__filmati_id_filmati: dbo.FTIPOLOGIEPROP.ID_FILMATI -> dbo.FILMATI.ID_FILMATI
+FK fke_FUSERS_ID_SERIE__fserie_id_serie: dbo.FUSERS.ID_SERIE -> dbo.fserie.ID_SERIE
+FK fke_hsm_poolcopy_id_pool__hsm_pool_id_pool: dbo.hsm_poolcopy.id_pool -> dbo.hsm_pool.id_pool
+FK fke_hsmwqfiles_id_hsmworkqueue__hsmworkqueue_id_hsmworkqueue: dbo.hsmwqfiles.id_hsmworkqueue -> dbo.hsmworkqueue.id_hsmworkqueue
+FK fke_lock_owner_id_object__lock_object_id_object: dbo.lock_owner.id_object -> dbo.lock_object.id_object
+FK fke_MAM_FKEYWORDS_ID_MAM_key_key__mam_key_key_id_mam_key_key: dbo.MAM_FKEYWORDS.ID_MAM_key_key -> dbo.MAM_KEY_KEY.ID_MAM_KEY_KEY
+FK fke_MAM_FPeople_ID_Artisti__artisti_id_artisti: dbo.MAM_FPeople.ID_Artisti -> dbo.ARTISTI.ID_ARTISTI
+FK fke_MAM_FPeople_ID_FInterruzioni__finterruzioni_id_interruzioni: dbo.MAM_FPeople.ID_FInterruzioni -> dbo.FINTERRUZIONI.ID_INTERRUZIONI
+FK fke_MAM_KEY_KEY_ID_MAM_KeyPads__mam_keypads_id_mam_keypads: dbo.MAM_KEY_KEY.ID_MAM_KeyPads -> dbo.MAM_KEYPADS.ID_MAM_KEYPADS
+FK fke_MAM_KEY_KEY_ID_MAM_Keywords__mam_keywords_id_mam_keywords: dbo.MAM_KEY_KEY.ID_MAM_Keywords -> dbo.MAM_KEYWORDS.ID_MAM_Keywords
+FK fke_nz_feed_id_subscription__nz_subscription_id_subscription: dbo.nz_feed.id_subscription -> dbo.nz_subscription.id_subscription
+FK fke_nz_feedtag_class_code__nz_feedtagclass_class_code: dbo.nz_feedtag.class_code -> dbo.nz_feedtagclass.class_code
+FK fke_nz_feedtag_id_anagraf__anagraf_id_anagraf: dbo.nz_feedtag.id_anagraf -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_nz_feedtag_id_feed__nz_feed_id_feed: dbo.nz_feedtag.id_feed -> dbo.nz_feed.id_feed
+FK fke_nz_MosDevice_Category__nz_MosCategory_Code: dbo.nz_MosDevice.Category -> dbo.nz_MosCategory.Code
+FK fke_nz_MosDevice_id_workstations__workstations_id_workstations: dbo.nz_MosDevice.id_workstations -> dbo.WORKSTATIONS.ID_WORKSTATIONS
+FK fke_nz_MosDevice_Protocol__nz_MosProtocol_Code: dbo.nz_MosDevice.Protocol -> dbo.nz_MosProtocol.Code
+FK fke_nz_MosGateway_id_Device__nz_MosDevice_id_Device: dbo.nz_MosGateway.id_Device -> dbo.nz_MosDevice.id_Device
+FK fke_nz_MosGatewayDevice_id_Device__nz_MosDevice_id_Device: dbo.nz_MosGatewayDevice.id_Device -> dbo.nz_MosDevice.id_Device
+FK fke_nz_MosGatewayDevice_id_Gateway__nz_MosGateway_id_Gateway: dbo.nz_MosGatewayDevice.id_Gateway -> dbo.nz_MosGateway.id_Gateway
+FK fke_nz_MosGatewayDevice_Protocol__nz_MosProtocol_Code: dbo.nz_MosGatewayDevice.Protocol -> dbo.nz_MosProtocol.Code
+FK fke_nz_MosGatewayStudioDevice_id_Device__nz_MosDevice_id_Device: dbo.nz_MosGatewayStudioDevice.id_Device -> dbo.nz_MosDevice.id_Device
+FK fke_nz_MosGatewayStudioDevice_id_GatewayStudio__nz_MosGatewayStudio_id_GatewayStudio: dbo.nz_MosGatewayStudioDevice.id_GatewayStudio -> dbo.nz_MosGatewayStudio.id_GatewayStudio
+FK fke_nz_subscription_id_agency__anagraf_id_anagraf: dbo.nz_subscription.id_agency -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_nz_subscription_id_metadevice__fs_metadevice_id_metadevice: dbo.nz_subscription.id_metadevice -> dbo.FS_METADEVICE.ID_METADEVICE
+FK fke_nz_subscriptioncategory_id_category__nz_category_id_category: dbo.nz_subscriptioncategory.id_category -> dbo.nz_category.id_category
+FK fke_nz_subscriptioncategory_id_subscription__nz_subscription_id_subscription: dbo.nz_subscriptioncategory.id_subscription -> dbo.nz_subscription.id_subscription
+FK fke_PRIMANOTA_RIGHE_ID_ANAGRAF__anagraf_id_anagraf: dbo.PRIMANOTA_RIGHE.ID_ANAGRAF -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_PRIMANOTA_RIGHE_ID_PIANOCONTI__pianoconti_id_pianoconti: dbo.PRIMANOTA_RIGHE.ID_PIANOCONTI -> dbo.PIANOCONTI.ID_PIANOCONTI
+FK fke_PRIMANOTA_RIGHE_ID_PRIMANOTA_TESTATA__primanota_testata_ID_PRIMANOTA_TESTATA: dbo.PRIMANOTA_RIGHE.ID_PRIMANOTA_TESTATA -> dbo.PRIMANOTA_TESTATA.ID_PRIMANOTA_TESTATA
+FK fke_PRIMANOTA_RIGHE_ID_TABELLEIVA__tabelleiva_id_tabelleiva: dbo.PRIMANOTA_RIGHE.ID_TABELLEIVA -> dbo.TABELLEIVA.ID_TABELLEIVA
+FK fke_PRIMANOTA_TESTATA_ID_FATTURATESTATA__fatturatestata_ID_FATTURATESTATA: dbo.PRIMANOTA_TESTATA.ID_FATTURATESTATA -> dbo.FATTURATESTATA.ID_FatturaTestata
+FK fke_PRIMANOTA_TESTATA_ID_PAGAMENTI__pagamenti_id_pagamenti: dbo.PRIMANOTA_TESTATA.ID_PAGAMENTI -> dbo.PAGAMENTI.ID_PAGAMENTI
+FK fke_provvigioni_ID_AGENTE__anagraf_id_anagraf: dbo.provvigioni.ID_AGENTE -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_provvigioni_ID_CONTRATTIRIGHE__contrattirighe_ID_contrattirighe: dbo.provvigioni.ID_CONTRATTIRIGHE -> dbo.CONTRATTIRIGHE.ID_CONTRATTIRIGHE
+FK fke_provvigioni_ID_FATTURATESTATA__fatturatestata_ID_FATTURATESTATA: dbo.provvigioni.ID_FATTURATESTATA -> dbo.FATTURATESTATA.ID_FatturaTestata
+FK fke_PROVVIGIONIAGENTI_ID_AGENTE__anagraf_id_anagraf: dbo.PROVVIGIONIAGENTI.ID_AGENTE -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_PROVVIGIONIAGENTI_ID_CLIENTE__anagraf_id_anagraf: dbo.PROVVIGIONIAGENTI.ID_CLIENTE -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_r_rules_groups_id_header__r_header_id_header: dbo.r_rules_groups.id_header -> dbo.r_header.id_header
+FK fke_r_rules_logins_id_header__r_header_id_header: dbo.r_rules_logins.id_header -> dbo.r_header.id_header
+FK fke_r_rules_logins_id_login__logins_id_logins: dbo.r_rules_logins.id_login -> dbo.LOGINS.ID_LOGINS
+FK fke_right_grouping_id_group__right_groups_id_group: dbo.right_grouping.id_group -> dbo.right_groups.id_group
+FK fke_right_grouping_id_subject__right_subjects_id_subject: dbo.right_grouping.id_subject -> dbo.right_subjects.id_subject
+FK fke_right_rules_id_group__right_groups_id_group: dbo.right_rules.id_group -> dbo.right_groups.id_group
+FK fke_right_rules_id_right__rights_id_rights: dbo.right_rules.id_right -> dbo.RIGHTS.ID_rights
+FK fke_right_subjects_foreign_object__right_objects_code: dbo.right_subjects.foreign_object -> dbo.right_objects.code
+FK fke_rl_graphicparams_id_paramvalue__gr_paramvalue_id_paramvalue: dbo.rl_graphicparams.id_paramvalue -> dbo.gr_paramvalue.id_paramvalue
+FK fke_rs_MediaTypeCodecs_codec_type__codecs_type: dbo.rs_MediaTypeCodecs.codec_type -> dbo.CODECS.type
+FK fke_rs_MediaTypeCodecs_id_mediatype__rs_mediatype_id_mediatype: dbo.rs_MediaTypeCodecs.id_mediatype -> dbo.rs_MediaType.id_MediaType
+FK fke_sbt_ftext_id_fheader__sbt_fheader_id_fheader: dbo.sbt_ftext.id_fheader -> dbo.sbt_fheader.id_fheader
+FK fke_sbt_fwarning_id_ftext__sbt_ftext_id_ftext: dbo.sbt_fwarning.id_ftext -> dbo.sbt_ftext.id_ftext
+FK fke_SCADENZE_ID_ANAGRAF__anagraf_id_anagraf: dbo.SCADENZE.ID_ANAGRAF -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_SCADENZE_ID_FATTURATESTATA__fatturatestata_ID_FATTURATESTATA: dbo.SCADENZE.ID_FATTURATESTATA -> dbo.FATTURATESTATA.ID_FatturaTestata
+FK fke_SCADENZE_ID_PAGAMENTI__pagamenti_id_pagamenti: dbo.SCADENZE.ID_PAGAMENTI -> dbo.PAGAMENTI.ID_PAGAMENTI
+FK fke_SCADENZE_ID_PIANOCONTI__pianoconti_id_pianoconti: dbo.SCADENZE.ID_PIANOCONTI -> dbo.PIANOCONTI.ID_PIANOCONTI
+FK fke_SCADENZE_ID_PRIMANOTA_TESTATA__primanota_testata_ID_PRIMANOTA_TESTATA: dbo.SCADENZE.ID_PRIMANOTA_TESTATA -> dbo.PRIMANOTA_TESTATA.ID_PRIMANOTA_TESTATA
+FK fke_sch_Certification_ID_HEADER__sch_Header_id_header: dbo.sch_Certification.ID_HEADER -> dbo.sch_Header.ID_HEADER
+FK fke_sch_Certification_ID_OPERATOR__anagraf_id_anagraf: dbo.sch_Certification.ID_OPERATOR -> dbo.ANAGRAF.ID_ANAGRAF
+FK fke_sch_GraphicCodec_id_codec__codecs_id_codec: dbo.sch_GraphicCodec.id_codec -> dbo.CODECS.ID_CODEC
+FK fke_sch_GraphicMetadevice_id_metadevice__fs_metadevice_id_metadevice: dbo.sch_GraphicMetadevice.id_metadevice -> dbo.FS_METADEVICE.ID_METADEVICE
+FK fke_sch_Locking_ID_HEADER__sch_Header_id_header: dbo.sch_Locking.ID_HEADER -> dbo.sch_Header.ID_HEADER
+FK fke_sch_OnAirCodec_id_codec__codecs_id_codec: dbo.sch_OnAirCodec.id_codec -> dbo.CODECS.ID_CODEC
+FK fke_sch_OnAirMetaDevice_id_metadevice__fs_metadevice_id_metadevice: dbo.sch_OnAirMetaDevice.id_metadevice -> dbo.FS_METADEVICE.ID_METADEVICE
+FK fke_sec_Station_ID_device__device_id_device: dbo.sec_Station.ID_device -> dbo.Device.id_device
+FK fke_si_counteralarm_id_alarm__si_alarm_id_alarm: dbo.si_counteralarm.id_alarm -> dbo.si_alarm.id_alarm
+FK fke_si_counteralarm_id_counter__si_counter_id_counter: dbo.si_counteralarm.id_counter -> dbo.si_counter.id_counter
+FK fke_si_data_id_counter__si_counter_id_counter: dbo.si_data.id_counter -> dbo.si_counter.id_counter
+FK fke_smptemetadata_id_filmati__filmati_id_filmati: dbo.smptemetadata.id_filmati -> dbo.FILMATI.ID_FILMATI
+FK fke_smptemetadata_id_interruzioni__finterruzioni_id_interruzioni: dbo.smptemetadata.id_interruzioni -> dbo.FINTERRUZIONI.ID_INTERRUZIONI
+FK fke_smptemetadata_id_metafile__fs_metafile_id_metafile: dbo.smptemetadata.id_metafile -> dbo.FS_METAFILE.ID_METAFILE
+FK fke_smptemetadata_item__smptedictionary_item: dbo.smptemetadata.item -> dbo.smptedictionary.item
+FK fke_SmpteSearchItem_Id_SmpteSearchGroups__SmpteSearchGroups_Id_SmpteSearchGroups: dbo.SmpteSearchItem.Id_SmpteSearchGroups -> dbo.SmpteSearchGroups.Id_SmpteSearchGroups
+FK fke_SmpteSearchItem_item__smptedictionary_item: dbo.SmpteSearchItem.item -> dbo.smptedictionary.item
+FK fke_smpteselected_id_smpteselgroups__smpteselgroups_id_smpteselgroups: dbo.smpteselected.id_smpteselgroups -> dbo.smpteselgroups.id_smpteselgroups
+FK fke_smpteselected_item__smptedictionary_item: dbo.smpteselected.item -> dbo.smptedictionary.item
+FK fke_stringhectmgroups_id_ctmgroups__ctmgroups_id_ctmgroups: dbo.stringhectmgroups.id_ctmgroups -> dbo.ctmgroups.id_ctmgroups
+FK fke_stringhectmgroups_id_stringhectm__stringhectm_id_stringhectm: dbo.stringhectmgroups.id_stringhectm -> dbo.stringhectm.id_stringhectm
+FK fke_studio_history_id_playlist__studio_playlist_id_playlist: dbo.studio_history.id_playlist -> dbo.studio_playlist.id_playlist
+FK fke_studio_items_id_filmati__filmati_id_filmati: dbo.studio_items.id_filmati -> dbo.FILMATI.ID_FILMATI
+FK fke_studio_items_id_playlist__studio_playlist_id_playlist: dbo.studio_items.id_playlist -> dbo.studio_playlist.id_playlist
+FK fke_studio_playlist_newtype__tipologie_cod_type: dbo.studio_playlist.newtype -> dbo.TIPOLOGIE.COD_TYPE
+FK fke_SubFingerprints_TrackId__Tracks_Id: dbo.SubFingerprints.TrackId -> dbo.Tracks.Id
+FK fke_TIMEREC_ID_FILMATI__filmati_id_filmati: dbo.TIMEREC.ID_FILMATI -> dbo.FILMATI.ID_FILMATI
+FK fke_TIMEREC_ID_SUPPORTI__fsupporti_id_supporti: dbo.TIMEREC.ID_SUPPORTI -> dbo.FSUPPORTI.ID_SUPPORTI
+FK fke_tipologie_ext_cod_type__tipologie_cod_type: dbo.tipologie_ext.cod_type -> dbo.TIPOLOGIE.COD_TYPE
+FK fke_TIPOLOGIEPROP_COD_TYPE__tipologie_cod_type: dbo.TIPOLOGIEPROP.COD_TYPE -> dbo.TIPOLOGIE.COD_TYPE
+FK fke_tipologieUsers_Cod_type__tipologie_cod_type: dbo.tipologieUsers.Cod_type -> dbo.TIPOLOGIE.COD_TYPE
+FK fke_tlfasceorarieh_id_tlfasceorarie__tlfasceorarie_id_tlfasceorarie: dbo.tlfasceorarieh.id_tlfasceorarie -> dbo.tlfasceorarie.id_tlfasceorarie
+FK fke_tlrotazg_id_tlrotaz__tlrotaz_id_tlrotaz: dbo.tlrotazg.id_tlrotaz -> dbo.tlrotaz.id_tlrotaz
+FK fke_tlrotazh_id_tlrotazg__tlrotazg_id_tlrotazg: dbo.tlrotazh.id_tlrotazg -> dbo.tlrotazg.id_tlrotazg
+FK fke_TPALINSE_ID_FILMATI__filmati_id_filmati: dbo.TPALINSE.ID_FILMATI -> dbo.FILMATI.ID_FILMATI
+FK fke_TPALINSE_NEWTYPE__tipologie_cod_type: dbo.TPALINSE.NEWTYPE -> dbo.TIPOLOGIE.COD_TYPE
+FK fke_Traffic_Calendar_ID_TrafficSchedule__Traffic_Schedule_ID_TrafficSchedule: dbo.Traffic_Calendar.ID_TrafficSchedule -> dbo.Traffic_Schedule.ID_TrafficSchedule
+FK fke_Traffic_Jingle_ID_Filmati__Filmati_ID_Filmati: dbo.Traffic_Jingle.ID_Filmati -> dbo.FILMATI.ID_FILMATI
+FK fke_Traffic_MusicTemplatesDetails_ID_TrafficMusicTemplates__Traffic_MusicTemplates_ID_TrafficMusicTemplates: dbo.Traffic_MusicTemplatesDetails.ID_TrafficMusicTemplates -> dbo.Traffic_MusicTemplates.ID_TrafficMusicTemplates
+FK fke_traffic_musicweek_id_trafficmusictemplates__traffic_musictemplates_id_trafficmusictemplates: dbo.traffic_musicweek.id_trafficmusictemplates -> dbo.Traffic_MusicTemplates.ID_TrafficMusicTemplates
+FK fke_Traffic_ScheduleBlock_ID_TrafficBlock__Traffic_Block_ID_TrafficBlock: dbo.Traffic_ScheduleBlock.ID_TrafficBlock -> dbo.Traffic_Block.ID_TrafficBlock
+FK fke_Traffic_ScheduleBlock_ID_TrafficSchedule__Traffic_Schedule_ID_TrafficSchedule: dbo.Traffic_ScheduleBlock.ID_TrafficSchedule -> dbo.Traffic_Schedule.ID_TrafficSchedule
+FK fke_Traffic_Segment_ID_TrafficBlock__Traffic_Block_ID_TrafficBlock: dbo.Traffic_Segment.ID_TrafficBlock -> dbo.Traffic_Block.ID_TrafficBlock
+FK fke_Traffic_Segment_ID_TrafficMusicTemplates__Traffic_MusicTemplates_ID_TrafficMusicTemplates: dbo.Traffic_Segment.ID_TrafficMusicTemplates -> dbo.Traffic_MusicTemplates.ID_TrafficMusicTemplates
+FK fke_trafficPalinse_clusterIndex__traffic_Segment_ID_TrafficSegment: dbo.trafficPalinse.clusterIndex -> dbo.Traffic_Segment.ID_TrafficSegment
+FK fke_trafficPalinse_ID_ContrattiRighe__contrattirighe_id_contrattirighe: dbo.trafficPalinse.ID_ContrattiRighe -> dbo.CONTRATTIRIGHE.ID_CONTRATTIRIGHE
+FK fke_trafficPalinse_id_fascia__traffic_block_ID_TrafficBlock: dbo.trafficPalinse.id_fascia -> dbo.Traffic_Block.ID_TrafficBlock
+FK fke_trafficPalinse_ID_FATTURAAGENZIA__FatturaTestata_ID_FatturaTestata: dbo.trafficPalinse.ID_FATTURAAGENZIA -> dbo.FATTURATESTATA.ID_FatturaTestata
+FK fke_trafficPalinse_ID_FATTURAEMITTENTE__FatturaTestata_ID_fatturaTestata: dbo.trafficPalinse.ID_FATTURAEMITTENTE -> dbo.FATTURATESTATA.ID_FatturaTestata
+FK fke_trafficPalinse_id_palinsesto__traffic_schedule_id_trafficschedule: dbo.trafficPalinse.id_palinsesto -> dbo.Traffic_Schedule.ID_TrafficSchedule
+FK fke_trafficPalinse_id_tpalinse__tpalinse_id_tpalinse: dbo.trafficPalinse.id_tpalinse -> dbo.TPALINSE.ID_TPALINSE
+FK fke_TRANSAZIONI_ID_FILMATI__filmati_id_filmati: dbo.TRANSAZIONI.ID_FILMATI -> dbo.FILMATI.ID_FILMATI
+FK fke_TRANSAZIONI_ID_REGISTRAZIONI__fregistrazioni_id_registrazioni: dbo.TRANSAZIONI.ID_REGISTRAZIONI -> dbo.FREGISTRAZIONI.ID_REGISTRAZIONI
+FK fke_trf_instancesegment_ID_TrafficBlock__Traffic_Block_ID_TrafficBlock: dbo.trf_instancesegment.ID_TrafficBlock -> dbo.Traffic_Block.ID_TrafficBlock
+FK fke_trf_instancesegment_ID_TrafficMusicTemplates__Traffic_MusicTemplates_ID_TrafficMusicTemplates: dbo.trf_instancesegment.ID_TrafficMusicTemplates -> dbo.Traffic_MusicTemplates.ID_TrafficMusicTemplates
+FK fke_TSec_command_id_sec__tsec_id_sec: dbo.TSec_command.id_sec -> dbo.TSec.id_sec
+FK fke_TSec_ID_ContrattiRighe__contrattirighe_id_contrattirighe: dbo.TSec.ID_ContrattiRighe -> dbo.CONTRATTIRIGHE.ID_CONTRATTIRIGHE
+FK fke_TSec_id_device__device_id_device: dbo.TSec.id_device -> dbo.Device.id_device
+FK fke_TSec_id_event__tpalinse_id_tpalinse: dbo.TSec.id_event -> dbo.TPALINSE.ID_TPALINSE
+FK fke_VRInputs_VRouterId__VRVRouters_VRId: dbo.VRInputs.VRouterId -> dbo.VRVRouters.VRId
+FK fke_VRLevels_VRouterId__VRVRouters_VRId: dbo.VRLevels.VRouterId -> dbo.VRVRouters.VRId
+FK fke_VROutputs_VRouterId__VRVRouters_VRId: dbo.VROutputs.VRouterId -> dbo.VRVRouters.VRId
+FK fke_web_appear_configs_template__web_appear_templates_template: dbo.web_appear_configs.template -> dbo.web_appear_templates.template
+FK fke_web_appear_sites_config__web_appear_configs_config: dbo.web_appear_sites.config -> dbo.web_appear_configs.config
+FK fke_web_appear_values_config__web_appear_configs_config: dbo.web_appear_values.config -> dbo.web_appear_configs.config
+FK fke_web_appear_vars_template__web_appear_templates_template: dbo.web_appear_vars.template -> dbo.web_appear_templates.template
+FK fke_webassetpaths_ID_PATH__fs_path_id_path: dbo.webassetpaths.ID_PATH -> dbo.FS_PATH.ID_PATH
+FK fke_webtpl_columns_id_web_columns__web_columns_id_web_columns: dbo.webtpl_columns.id_web_columns -> dbo.web_columns.id_web_columns
+FK fke_webtpl_columns_id_webtemplates__webtemplates_id_webtemplates: dbo.webtpl_columns.id_webtemplates -> dbo.webtemplates.id_webtemplates
+FK fke_webtpl_columns_item_smpte__smptedictionary_item: dbo.webtpl_columns.item_smpte -> dbo.smptedictionary.item
+FK fke_webtpl_parms_id_webtemplates__webtemplates_id_webtemplates: dbo.webtpl_parms.id_webtemplates -> dbo.webtemplates.id_webtemplates
+FK fke_webtpl_urgency_id_webtemplates__webtemplates_id_webtemplates: dbo.webtpl_urgency.id_webtemplates -> dbo.webtemplates.id_webtemplates
+FK fke_wf_action_id_actionclass__wf_actionclass_id_actionclass: dbo.wf_action.id_actionclass -> dbo.wf_actionclass.id_actionclass
+FK fke_wf_action_id_instanceclass__wf_instanceclass_id_instanceclass: dbo.wf_action.id_instanceclass -> dbo.wf_instanceclass.id_instanceclass
+FK fke_wf_assignAction_id_action__wf_action_id_action: dbo.wf_assignAction.id_action -> dbo.wf_action.id_action
+FK fke_wf_assignAction_id_instance__wf_instance_id_instance: dbo.wf_assignAction.id_instance -> dbo.wf_instance.id_instance
+FK fke_wf_assignResources_id_AssignAction__wf_assignAction_id_AssignAction: dbo.wf_assignResources.id_AssignAction -> dbo.wf_assignAction.id_AssignAction
+FK fke_wf_instance_activity_state__wf_state_id_state: dbo.wf_instance.activity_state -> dbo.wf_state.id_state
+FK fke_wf_instance_id_foreignobject__wf_foreignobject_id_foreignobject: dbo.wf_instance.id_foreignobject -> dbo.wf_foreignobject.id_foreignobject
+FK fke_wf_instance_id_foreignobject2__wf_foreignobject_id_foreignobject: dbo.wf_instance.id_foreignobject2 -> dbo.wf_foreignobject.id_foreignobject
+FK fke_wf_instance_id_instanceclass__wf_instanceclass_id_instanceclass: dbo.wf_instance.id_instanceclass -> dbo.wf_instanceclass.id_instanceclass
+FK fke_wf_job_id_action__wf_action_id_action: dbo.wf_job.id_action -> dbo.wf_action.id_action
+FK fke_wf_job_id_instance__wf_instance_id_instance: dbo.wf_job.id_instance -> dbo.wf_instance.id_instance
+FK fke_wf_job_id_state__wf_state_id_state: dbo.wf_job.id_state -> dbo.wf_state.id_state
+FK fke_wf_log_id_action__wf_action_id_action: dbo.wf_log.id_action -> dbo.wf_action.id_action
+FK fke_wf_log_id_instance__wf_instance_id_instance: dbo.wf_log.id_instance -> dbo.wf_instance.id_instance
+FK fke_wf_log_id_state__wf_state_id_state: dbo.wf_log.id_state -> dbo.wf_state.id_state
+FK fke_wf_parameter_id_instanceclass__wf_instanceclass_id_instanceclass: dbo.wf_parameter.id_instanceclass -> dbo.wf_instanceclass.id_instanceclass
+FK fke_wf_parameter_id_parameterclass__wf_parameterclass_id_parameterclass: dbo.wf_parameter.id_parameterclass -> dbo.wf_parameterclass.id_parameterclass
+FK fke_wf_rule_id_foreignobject__wf_foreignobject_id_foreignobject: dbo.wf_rule.id_foreignobject -> dbo.wf_foreignobject.id_foreignobject
+FK fke_wf_state_id_actionclass__wf_actionclass_id_actionclass: dbo.wf_state.id_actionclass -> dbo.wf_actionclass.id_actionclass
+FK fke_wf_transition_id_from_action__wf_action_id_action: dbo.wf_transition.id_from_action -> dbo.wf_action.id_action
+FK fke_wf_transition_id_from_state__wf_state_id_state: dbo.wf_transition.id_from_state -> dbo.wf_state.id_state
+FK fke_wf_transition_id_to_action__wf_action_id_action: dbo.wf_transition.id_to_action -> dbo.wf_action.id_action
