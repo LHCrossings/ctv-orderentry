@@ -203,6 +203,52 @@ def _split_shared_block(prog: dict) -> list[dict]:
     return out
 
 
+def _coalesce_hmong_weekend(programs: list[dict], d: datetime.date) -> list[dict]:
+    """Override: Hmong on Sat/Sun 18:00–20:00 is always TWO one-hour fillable
+    blocks (18:00–19:00, 19:00–20:00).
+
+    The K: grids we receive split that window into :30/:30 for public posting,
+    but the actual media is delivered as ONE file per hour — so the placement
+    tool must show one fillable block per hour, not the :30 breakdown. Only
+    Hmong entries fully inside the window are merged; anything else (and any
+    weekday) is left untouched. Idempotent: a grid already carrying two 1-hour
+    Hmong blocks comes back unchanged. Hmong is CTV-only, so this never fires on
+    a DAL grid."""
+    if d.weekday() not in (5, 6):  # Saturday=5, Sunday=6
+        return programs
+    win_s, win_e = 18 * 60, 20 * 60
+
+    def _is_hmong(p: dict) -> bool:
+        return (p.get("language") or "").strip().lower().startswith("hm") \
+            or "hmong" in (p.get("raw") or "").lower()
+
+    def _inside(p: dict, s: int, e: int) -> bool:
+        ps, pe = _hhmm_to_min(p.get("start")), _hhmm_to_min(p.get("end"))
+        return ps is not None and pe is not None and ps < pe and s <= ps and pe <= e
+
+    hmong = [p for p in programs if _is_hmong(p) and _inside(p, win_s, win_e)]
+    if not hmong:
+        return programs
+
+    hmong_ids = {id(p) for p in hmong}
+    kept = [p for p in programs if id(p) not in hmong_ids]
+
+    new_blocks: list[dict] = []
+    for hs in (win_s, win_s + 60):          # 18:00–19:00, then 19:00–20:00
+        he = hs + 60
+        covering = [p for p in hmong if _hhmm_to_min(p["start"]) < he and _hhmm_to_min(p["end"]) > hs]
+        if not covering:
+            continue
+        covering.sort(key=lambda p: _hhmm_to_min(p["start"]))
+        block = dict(covering[0])            # keep title/language/kind of the hour's first show
+        block["start"], block["end"] = _min_to_hhmm(hs), _min_to_hhmm(he)
+        new_blocks.append(block)
+
+    out = kept + new_blocks
+    out.sort(key=lambda p: (_hhmm_to_min(p.get("start")) if _hhmm_to_min(p.get("start")) is not None else 9999))
+    return out
+
+
 def get_day_programs(network: str, d: datetime.date) -> dict:
     """Return the program lineup for one network/day from the K: grid.
 
@@ -273,4 +319,5 @@ def get_day_programs(network: str, d: datetime.date) -> dict:
         prog["start"], prog["end"] = start, end
         programs.extend(_split_shared_block(prog))
 
+    programs = _coalesce_hmong_weekend(programs, d)
     return {"found": True, "file": str(path), "date": d.isoformat(), "programs": programs}
