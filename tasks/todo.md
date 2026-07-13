@@ -20,3 +20,23 @@ Verify: enter/refetch a 3-contract manifest → 3 awaiting rows → backwrite ea
 manifest stays until the 3rd, then archives. Single-contract path must still work.
 
 Then Phase 5 (legacy cutover) after a full clean billing cycle.
+
+---
+
+# ALSO UNFIXED: Pending tab badge/hang (found 2026-07-13)
+
+Pending badge shows 0 on-tab but flips to 15 when you click Awaiting; clicking
+Pending then hangs. NOT a backwrite bug — the order queue.
+
+- Badge (`/api/orders/counts` → `_count_files`) = raw file count in incoming = 15.
+- List (`/api/orders` → `_scan_dir`/`scan_for_orders`) = detected orders only = 0.
+  So 15 files in incoming/ aren't recognized as orders.
+- `refreshCounts()` skips the active tab's badge, so Pending's badge only updates
+  to 15 once you leave Pending → the confusing 0→15 flip.
+- Hang: clicking Pending runs order detection (maybe OCR) on all 15 unrecognized
+  files with no spinner/timeout.
+
+Fix directions: (1) list should show undetectable files as "Unknown" rows (badge
+then matches, user can delete cruft); (2) per-file detection timeout + loading
+spinner; (3) inspect/clear the 15 stray files in the Jumpbox's incoming/.
+Full detail: memory `project_pending_queue_badge_hang.md`.
