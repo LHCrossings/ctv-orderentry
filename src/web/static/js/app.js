@@ -142,7 +142,7 @@ async function loadQueue() {
                 <td class="meta">${esc(o.customer_name)}</td>
                 <td class="meta">${isAwaiting ? awaitingMeta(o) : `${o.size_kb} KB &nbsp;·&nbsp; ${esc(o.modified)}`}</td>
                 <td>${isHistory
-                    ? `<button class="restore-btn" data-filename="${esc(o.filename)}">Restore</button>`
+                    ? `<button class="restore-btn history-restore-btn" data-filename="${esc(o.filename)}">Restore</button>`
                     : isAwaiting
                     ? (o.order_type === 'worldlink'
                         ? `<button class="restore-btn" onclick="event.stopPropagation();window.open('/backwrite','_blank')" title="WorldLink uses its dedicated backwrite flow (revision merge, MLBF tab)">Backwrite ↗</button>`
@@ -190,8 +190,10 @@ async function loadQueue() {
             });
         });
 
-        // History: Restore → move back to incoming
-        queueBody.querySelectorAll('.restore-btn').forEach(btn => {
+        // History: Restore → move back to incoming. Scoped to the dedicated
+        // class so it never fires on the Backwrite / WorldLink buttons, which
+        // share the .restore-btn style class only for appearance.
+        queueBody.querySelectorAll('.history-restore-btn').forEach(btn => {
             btn.addEventListener('click', e => {
                 e.stopPropagation();
                 restoreOrder(btn.dataset.filename);

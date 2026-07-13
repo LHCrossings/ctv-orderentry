@@ -137,11 +137,11 @@
 
 <!-- ── Backwrite Contact Review Modal (Phase 4) ───────────────────────── -->
 <div id="bw-contact-overlay" class="detail-overlay hidden" onclick="if(event.target===this)closeBwContact()">
-    <div class="detail-modal">
+    <div class="detail-modal bwc-modal">
         <div class="detail-header">
             <div>
                 <div id="bw-contact-title" class="detail-title">Review contact info</div>
-                <div class="detail-subtitle">Prefilled from Etere — edit anything before generating. Nothing is saved.</div>
+                <div class="detail-subtitle bwc-subtitle">Prefilled from Etere — edit anything before generating. Nothing is saved.</div>
             </div>
             <button class="detail-close" onclick="closeBwContact()">✕</button>
         </div>
@@ -150,26 +150,26 @@
             <div class="spinner"></div>
             Polling Etere…
         </div>
-        <div id="bw-contact-form" class="req-fields-block hidden">
-            <div class="req-field-row"><label class="req-field-label">Contact person</label>
-                <input class="req-field-select" id="bwc-contact_person" type="text" placeholder="(not in Etere — type if needed)"></div>
-            <div class="req-field-row"><label class="req-field-label">Address</label>
-                <input class="req-field-select" id="bwc-address" type="text"></div>
-            <div class="req-field-row"><label class="req-field-label">City</label>
-                <input class="req-field-select" id="bwc-city" type="text"></div>
-            <div class="req-field-row"><label class="req-field-label">State</label>
-                <input class="req-field-select" id="bwc-state" type="text"></div>
-            <div class="req-field-row"><label class="req-field-label">ZIP</label>
-                <input class="req-field-select" id="bwc-zip" type="text"></div>
-            <div class="req-field-row"><label class="req-field-label">Phone</label>
-                <input class="req-field-select" id="bwc-phone" type="text"></div>
-            <div class="req-field-row"><label class="req-field-label">Fax</label>
-                <input class="req-field-select" id="bwc-fax" type="text"></div>
-            <div class="req-field-row"><label class="req-field-label">Email</label>
-                <input class="req-field-select" id="bwc-email_1" type="text"></div>
-            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
-                <button class="delete-btn" onclick="closeBwContact()">Cancel</button>
-                <button class="restore-btn" id="bwc-generate">Generate backwrite</button>
+        <div id="bw-contact-form" class="bwc-form hidden">
+            <div class="bwc-grid">
+                <div class="bwc-field bwc-full">
+                    <label for="bwc-contact_person">Contact person</label>
+                    <input id="bwc-contact_person" type="text" placeholder="Not stored in Etere — type it in if you want it on the confirmation">
+                </div>
+                <div class="bwc-field bwc-full">
+                    <label for="bwc-address">Address</label>
+                    <input id="bwc-address" type="text">
+                </div>
+                <div class="bwc-field bwc-full"><label for="bwc-city">City</label><input id="bwc-city" type="text"></div>
+                <div class="bwc-field"><label for="bwc-state">State</label><input id="bwc-state" type="text"></div>
+                <div class="bwc-field"><label for="bwc-zip">ZIP</label><input id="bwc-zip" type="text"></div>
+                <div class="bwc-field"><label for="bwc-phone">Phone</label><input id="bwc-phone" type="text"></div>
+                <div class="bwc-field"><label for="bwc-fax">Fax</label><input id="bwc-fax" type="text"></div>
+                <div class="bwc-field bwc-full"><label for="bwc-email_1">Email</label><input id="bwc-email_1" type="text"></div>
+            </div>
+            <div class="bwc-footer">
+                <button class="bwc-btn bwc-btn-secondary" onclick="closeBwContact()">Cancel</button>
+                <button class="bwc-btn bwc-btn-primary" id="bwc-generate">Generate backwrite</button>
             </div>
         </div>
     </div>
@@ -191,6 +191,6 @@
     </div>
 </div>
 
-<script src="/static/js/app.js?v=20260713a"></script>
+<script src="/static/js/app.js?v=20260713b"></script>
 </body>
 </html>
