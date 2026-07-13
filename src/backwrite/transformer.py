@@ -1137,6 +1137,117 @@ def _sc_lines_from_io(io_detail: dict) -> List[dict]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# PHASE 3 — IO-vs-Etere reconciliation (tasks/backwrite-pipeline.md §2.4)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _rates_match(a: float, b: float) -> bool:
+    """Two dollar rates are the same buy. Half-a-cent-per-dollar plus a 2¢ floor
+    absorbs legitimate rounding; the gross-up ratio 1/(1-.15)=1.176 (a 17.6%
+    gap) blows straight past it, so a real gross-up error never reads as a match."""
+    return abs(a - b) <= max(0.02, 0.005 * max(abs(a), abs(b)))
+
+
+def reconcile_io_vs_etere(
+    io_detail: Optional[dict],
+    spots: List[SpotRow],
+    agency_fee: float,
+    rates_are_net: bool,
+    is_agency: bool,
+) -> dict:
+    """Compare what the IO ordered (manifest io_detail) against what Etere
+    actually scheduled (the placement CSV spots).
+
+    generate_excel's ``validation_out`` proves the Excel is internally
+    self-consistent (run sheet == SC lines == monthly). It CANNOT catch a wrong
+    INPUT that yields a consistent-but-wrong Excel — which is exactly the July
+    2026 booked-business error class. This is that missing check:
+
+      * Gross-up direction error (Daviselen, $1,164 net): Etere's gross rate
+        differs from the IO's expected gross by a factor of ~1/(1-fee) (grossed
+        one time too many) or ~(1-fee) (never grossed).
+      * Spot-count gap (revision / partial entry): paid-spot totals differ.
+      * Missing market: a market the IO ordered has no Etere spots at all.
+
+    Etere's rate (CONTRATTIRIGHE.IMPORTO / CSV gross_rate) is ALWAYS gross (spec
+    invariant §1). The IO's expected gross is io_rate/(1-fee) for a net-rate
+    agency order, else io_rate itself.
+
+    Returns {ok, messages: [str], detail: {...}}. ok=True with an empty messages
+    list when there's nothing reliable to compare (no io_detail, or the IO
+    carries no rates/counts) — the internal-totals check still runs regardless.
+    """
+    rec = {"ok": True, "messages": [], "detail": {}}
+    lines = (io_detail or {}).get("lines") or []
+    if not lines or not spots:
+        return rec
+
+    factor = (1 - agency_fee) if (rates_are_net and is_agency and agency_fee > 0) else 1.0
+
+    # ── Rate check: every distinct non-zero IO rate should appear (grossed to
+    #    the same amount Etere stores) in the Etere rate set. ─────────────────
+    io_rates = sorted({round(float(ln.get("rate") or 0), 4)
+                       for ln in lines if (ln.get("rate") or 0) > 0})
+    etere_rates = sorted({round(s.gross_rate, 4) for s in spots if s.gross_rate > 0})
+    rate_findings = []
+    for io_rate in io_rates:
+        expected = io_rate / factor if factor else io_rate
+        if any(_rates_match(expected, g) for g in etere_rates):
+            continue  # ordered exactly as scheduled
+        # Not found at the expected gross — diagnose the gross-up direction.
+        if is_agency and agency_fee > 0 and any(_rates_match(expected / (1 - agency_fee), g)
+                                                for g in etere_rates):
+            rec["ok"] = False
+            rate_findings.append(
+                f"rate ${io_rate:,.2f} → Etere has ${expected / (1 - agency_fee):,.2f}, "
+                f"~1/(1-{agency_fee:.0%}) too high (grossed up one time too many)"
+            )
+        elif is_agency and agency_fee > 0 and any(_rates_match(expected * (1 - agency_fee), g)
+                                                  for g in etere_rates):
+            rec["ok"] = False
+            rate_findings.append(
+                f"rate ${io_rate:,.2f} → Etere has ${expected * (1 - agency_fee):,.2f}, "
+                f"~(1-{agency_fee:.0%}) too low (net rate never grossed up)"
+            )
+        else:
+            rec["ok"] = False
+            rate_findings.append(
+                f"rate ${io_rate:,.2f} (expected gross ${expected:,.2f}) not scheduled in Etere"
+            )
+    if rate_findings:
+        rec["messages"].append("Rate mismatch: " + "; ".join(rate_findings))
+    rec["detail"]["io_rates"] = io_rates
+    rec["detail"]["etere_rates"] = etere_rates
+
+    # ── Paid-spot-count check: revision or partial entry. Bonus counts are
+    #    unreliable on many IOs, so paid is the hard check, bonus a soft note. ─
+    io_paid = sum(int(ln.get("total_spots") or 0)
+                  for ln in lines if not ln.get("is_bonus") and (ln.get("rate") or 0) > 0)
+    etere_paid = sum(1 for s in spots if s.gross_rate > 0)
+    rec["detail"]["io_paid_spots"] = io_paid
+    rec["detail"]["etere_paid_spots"] = etere_paid
+    if io_paid > 0 and io_paid != etere_paid:
+        rec["ok"] = False
+        rec["messages"].append(
+            f"Spot-count gap: IO ordered {io_paid} paid spot(s), Etere scheduled "
+            f"{etere_paid} (revision or partial entry — confirm which is right)"
+        )
+
+    # ── Missing-market check ─────────────────────────────────────────────────
+    io_markets = {(ln.get("market") or "").strip().upper() for ln in lines if (ln.get("market") or "").strip()}
+    etere_markets = {(s.market or "").strip().upper() for s in spots if (s.market or "").strip()}
+    if io_markets:
+        missing = sorted(io_markets - etere_markets)
+        if missing:
+            rec["ok"] = False
+            rec["messages"].append(
+                f"Missing market(s): IO ordered {', '.join(missing)} but Etere "
+                f"scheduled none (has: {', '.join(sorted(etere_markets)) or 'none'})"
+            )
+
+    return rec
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # MAIN ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────────────
 

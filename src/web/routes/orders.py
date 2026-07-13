@@ -2074,15 +2074,41 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             xlsx = generate_excel(header, spots, user_inputs, raw_csv=csv_bytes,
                                   io_detail=io_detail, validation_out=reconcile)
 
+            # Phase 3 (tasks/backwrite-pipeline.md §2.4): compare what the IO
+            # ordered (manifest) against what Etere actually scheduled. Catches
+            # the July 2026 error class — a wrong INPUT (double gross-up, wrong
+            # billing, revision gap) that yields a consistent-but-wrong Excel,
+            # which the internal-totals check structurally cannot see.
+            from backwrite.transformer import reconcile_io_vs_etere
+            io_check = reconcile_io_vs_etere(
+                io_detail, spots, agency_fee,
+                bool(m.get("rates_are_net")), agency_flag == "Agency",
+            )
+            if io_check.get("messages"):
+                reconcile["messages"] = list(reconcile.get("messages") or []) + io_check["messages"]
+                reconcile["ok"] = bool(reconcile.get("ok", True)) and io_check["ok"]
+                reconcile["io_check"] = io_check.get("detail", {})
+
             import re as _re
             base = Path(m.get("io_filename") or filename).stem
             out_name = _re.sub(r'[\\/:*?"<>|]', "", base).strip() + ".xlsx"
 
-            moved, archive_err = _archive_entered(filename)
-            return xlsx, out_name, reconcile, archive_err
+            # Archive to Used/ only when everything reconciles. A flagged order
+            # stays in the Awaiting queue (visible, logged) so the human can fix
+            # Etere and retry — the same "never file something wrong silently"
+            # philosophy as the CENTROMEDIA hard-stop above.
+            archived = False
+            archive_err = None
+            if reconcile.get("ok", True):
+                moved, archive_err = _archive_entered(filename)
+                archived = bool(moved) and not archive_err
+            else:
+                print(f"[backwrite] {filename} NOT archived — reconciliation flagged: "
+                      f"{'; '.join(reconcile.get('messages') or [])}")
+            return xlsx, out_name, reconcile, archive_err, archived
 
         loop = asyncio.get_running_loop()
-        xlsx, out_name, reconcile, archive_err = await loop.run_in_executor(None, _run)
+        xlsx, out_name, reconcile, archive_err, archived = await loop.run_in_executor(None, _run)
 
         import io as _io
         headers = {"Content-Disposition": f'attachment; filename="{out_name}"'}
@@ -2090,6 +2116,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             headers["X-Backwrite-Reconcile"] = json.dumps(reconcile)
         if archive_err:
             headers["X-Backwrite-Archive-Error"] = json.dumps(archive_err)
+        headers["X-Backwrite-Archived"] = "1" if archived else "0"
         return StreamingResponse(
             _io.BytesIO(xlsx),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

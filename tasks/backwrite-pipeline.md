@@ -214,8 +214,20 @@ may upsert when they learn something new.
     lines (incl. BNS), Broadcast from CENTROMEDIA, Charmaine Lane from AGENTE1,
     0.15 fee, transformer reconcile ok=true, auto-archive confirmed. Net-rate (H&L)
     and legacy-vs-new cell-identity checks remain for the parallel-test period.
-- **Phase 3 — reconciliation banner.** Verify: seed a deliberate mismatch (edit a rate in
-  a manifest copy) → red banner names the ratio; real order → green.
+- **Phase 3 — reconciliation banner. DONE 2026-07-13.** `reconcile_io_vs_etere()` in
+  `transformer.py` compares manifest-IO vs placement-CSV: gross-up direction error
+  (ratio ≈ 1/(1−fee) double / ≈ (1−fee) missing), paid-spot-count gap, missing market.
+  Merged into the existing `reconcile` payload (`X-Backwrite-Reconcile`) in BOTH the
+  one-click endpoint (orders.py) and legacy `/generate` (backwrite.py — the human-typed
+  path where the July errors happened). Two decisions made during build:
+  * **Archive is now gated on `reconcile.ok`** — the one-click flow files to Used/ only
+    when everything reconciles; a flagged order stays in the Awaiting queue (logged,
+    `X-Backwrite-Archived: 0`) for a fix-and-retry. Previously it always archived.
+  * **Frontend gate** (`doBackwrite`, app.js): green auto-downloads; red holds the blob
+    behind a confirm that names each discrepancy ("Download anyway" saves but leaves the
+    order queued for a manual Done).
+  Verified: 8 unit cases (incl. Daviselen double-gross-up + H&L missing-gross-up, ratio
+  named) and live end-to-end on real contract 2887 (green) + seeded mismatch (red).
 - **Phase 4 — customers.db fields + prefill.** Verify: contact block appears without typing.
 - **Phase 5 — legacy cutover.** Mark the `/backwrite` card "(legacy)" + Legacy badge.
   After a full billing cycle of parallel use with no divergence: delete the legacy cards

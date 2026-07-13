@@ -556,6 +556,22 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             traceback.print_exc()
             raise HTTPException(status_code=500, detail=f"Excel generation error: {exc}")
 
+        # Phase 3 (tasks/backwrite-pipeline.md §2.4): when an IO is provided,
+        # also reconcile what it ordered against what Etere scheduled — the
+        # same check the one-click flow runs. Merges into the reconcile payload
+        # the page already renders. Highest value here: this is the human-typed
+        # legacy path where the July 2026 gross-up/billing errors originated.
+        if io_detail:
+            from backwrite.transformer import reconcile_io_vs_etere
+            io_check = reconcile_io_vs_etere(
+                io_detail, spots, fee,
+                bool(io_detail.get("rates_are_net")), agency_flag == "Agency",
+            )
+            if io_check.get("messages"):
+                reconcile["messages"] = list(reconcile.get("messages") or []) + io_check["messages"]
+                reconcile["ok"] = bool(reconcile.get("ok", True)) and io_check["ok"]
+                reconcile["io_check"] = io_check.get("detail", {})
+
         # Build output filename
         rev_num = int(revision) if str(revision).isdigit() and int(revision) > 0 else 0
         if base_filename:

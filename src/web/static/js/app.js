@@ -354,31 +354,44 @@ async function doBackwrite(btn) {
             alert(data.detail || `Backwrite failed (${res.status}).`);
             return;
         }
-        // Download the Excel
-        const blob = await res.blob();
-        const cd   = res.headers.get('Content-Disposition') || '';
-        const mFn  = cd.match(/filename="?([^";]+)"?/);
-        const a    = document.createElement('a');
-        a.href     = URL.createObjectURL(blob);
-        a.download = mFn ? mFn[1] : filename.replace(/\.[^.]+$/, '') + '.xlsx';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(a.href);
+        // Hold the Excel in memory; whether we actually save it depends on the
+        // Phase 3 reconciliation result below.
+        const blob  = await res.blob();
+        const cd    = res.headers.get('Content-Disposition') || '';
+        const mFn   = cd.match(/filename="?([^";]+)"?/);
+        const fname = mFn ? mFn[1] : filename.replace(/\.[^.]+$/, '') + '.xlsx';
+        const save  = () => {
+            const a    = document.createElement('a');
+            a.href     = URL.createObjectURL(blob);
+            a.download = fname;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(a.href);
+        };
 
-        // Surface reconciliation + archive status
-        const rec = res.headers.get('X-Backwrite-Reconcile');
-        if (rec) {
-            try {
-                const r = JSON.parse(rec);
-                if (r.ok === false && (r.messages || []).length) {
-                    alert('Backwrite generated, but totals need a look:\n\n' + r.messages.join('\n'));
-                }
-            } catch (e) { /* cosmetic */ }
+        // Reconciliation gate: a green result auto-downloads; a flagged
+        // discrepancy holds the file behind a confirm that names the problem.
+        // The server did NOT archive a flagged order — it stays in the queue
+        // so the numbers can be fixed in Etere and the backwrite retried.
+        let recon = null;
+        try { recon = JSON.parse(res.headers.get('X-Backwrite-Reconcile') || 'null'); } catch (e) {}
+
+        if (recon && recon.ok === false && (recon.messages || []).length) {
+            const proceed = confirm(
+                '⚠ This backwrite does NOT reconcile with Etere:\n\n' +
+                recon.messages.map(m => '  • ' + m).join('\n') +
+                '\n\nThe order was left in the Awaiting queue so you can fix Etere ' +
+                'and retry.\n\nDownload the Excel anyway?'
+            );
+            if (proceed) save();
+        } else {
+            save();
         }
+
         const archErr = res.headers.get('X-Backwrite-Archive-Error');
         if (archErr) {
-            try { alert('Excel generated, but archiving failed: ' + JSON.parse(archErr)); } catch (e) {}
+            try { alert('Excel generated, but archiving to Used failed:\n' + JSON.parse(archErr)); } catch (e) {}
         }
         loadQueue();
     } catch (err) {
