@@ -568,7 +568,9 @@ def run_market(conn, cod_user, d, assignment, pending):
     deadlock (see _is_deadlock); any other failure returns immediately since
     retrying a deterministic mismatch (bad window, missing asset, etc.) would
     just fail the same way again. Each attempt is a fresh, fully rolled-back
-    transaction, so retrying from scratch is safe."""
+    transaction, so retrying from scratch is safe. A result that still failed
+    on a deadlock after every attempt carries `_deadlock: True` so the caller
+    can rerun that market without the parallel contention that caused it."""
     result = None
     for attempt in range(1, _DEADLOCK_MAX_ATTEMPTS + 1):
         result = _place_once(conn, cod_user, d, assignment, pending)
@@ -583,6 +585,10 @@ def run_market(conn, cod_user, d, assignment, pending):
         else:
             print(f"[daily-programming] cu={cod_user} 1205 deadlock persisted after "
                   f"{_DEADLOCK_MAX_ATTEMPTS} attempts, giving up ({result['message']})")
+            # Re-tag so the caller can tell "lost every deadlock coin flip" apart
+            # from a deterministic failure and rerun this market without the
+            # parallel contention that caused it.
+            result["_deadlock"] = True
     return result
 
 

@@ -3620,7 +3620,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         sync guards that with a per-asset lock and defers to `pending` on
         contention instead of blocking (2026-07-09, fixed the 1205 deadlock
         this parallelism introduced); each market thread drains its own
-        pending list once it's placed everything it was given."""
+        pending list once it's placed everything it was given.
+
+        Markets that still exhaust run_market()'s deadlock retries during the
+        parallel fan-out get one solo rerun at the end, after every sibling
+        thread has finished (2026-07-13) — see the second-pass loop below."""
         import datetime as _dt
         from concurrent.futures import ThreadPoolExecutor
 
@@ -3651,6 +3655,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         label = a.get("title") or ("program " + str(a.get("programIndex")))
                         r = run_market(conn, cu, d, a, pending)
                         r["program"] = label
+                        if r.get("_deadlock"):
+                            r["_assignment"] = a  # for the sequential second pass
                         out.append(r)
                     if pending:
                         _drain_pending_filmati_syncs(conn.cursor(), conn, pending)
@@ -3662,6 +3668,29 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         with ThreadPoolExecutor(max_workers=len(codusers)) as ex:
             for out in ex.map(_run_market_all, codusers):
                 results.extend(out)
+
+        # Sequential second pass: a market that lost the 1205 deadlock coin flip
+        # on every retry during the parallel fan-out reruns here one at a time,
+        # after all sibling threads have finished — a lone market has nothing of
+        # ours to deadlock with (verified 2026-07-13: HOU+SFO failed the parallel
+        # run 5/5 attempts, then placed cleanly on a solo rerun).
+        for i, r in enumerate(results):
+            if not r.pop("_deadlock", False):
+                continue
+            a = r.pop("_assignment")
+            cu = int(r["cu"])
+            print(f"[daily-programming] cu={cu} rerunning solo after parallel-pass deadlock")
+            pending = []
+            try:
+                with _db_connect() as conn:
+                    retry = run_market(conn, cu, d, a, pending)
+                    if pending:
+                        _drain_pending_filmati_syncs(conn.cursor(), conn, pending)
+            except Exception as exc:  # noqa: BLE001 - surface connection-level errors for this market
+                retry = {"cu": cu, "ok": False, "skipped": False, "message": f"Run failed: {exc}"}
+            retry.pop("_deadlock", None)
+            retry["program"] = r["program"]
+            results[i] = retry
         return {"results": results}
 
     _BO_MARKET_IDS = {"NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4, "SEA": 5, "LAX": 6, "CVC": 7, "WDC": 8, "MMT": 9, "DAL": 10}
