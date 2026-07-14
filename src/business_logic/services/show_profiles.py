@@ -19,6 +19,10 @@ and any future element types) — so new element kinds need no schema change.
 
 Element types so far:
   * fillers — handled separately (the pieces/fillers path in the modal).
+  * fcc_id — per-show (Children: segment/break/position/anchor, placed by
+    run_market) or on a `daily: true` profile (one placement per broadcast day
+    in the last COMS break before midnight; swept by the run route via
+    daily_elements/sweep_daily_ids, independent of any show).
   * bumpers — {code, event_type}; the engine inserts the bumper if it isn't
     pre-placed and conforms its type/order:
       open  bumper → break 1, first position, EVENT_TYPE 'F' (locked anchor)
@@ -54,15 +58,27 @@ _DEFAULT_PROFILES = [
         "label": "Children",              # matches the K: grid kind tag (e.g. "Mandarin Children")
         "elements": [
             # SFO + CVC: FCC ID is the F-anchor at the top of the first PRGS break;
-            # the program's piece A then follows as T.
+            # the program's piece A then follows as T. (DAL no longer gets a
+            # per-show ID — see the daily profile below; group decision 2026-07.)
             {"kind": "fcc_id", "id": 2891, "code": "IDKIDS15E04",
              "markets": ["SFO", "CVC"], "segment": "PRGS", "break": 1,
              "position": "first", "event_type": "F", "anchor": True},
-            # DAL: FCC ID floats at the final position of the 3rd COMS break;
-            # piece A stays the F-anchor in the PRGS breaks (anchor=False here).
+        ],
+    },
+    {
+        # Standing DAILY element — not show-matched (no code_re/label, so
+        # profile_for never returns it). All programming carries the E/I logo,
+        # so the FCC only requires a daily public notice of where the children's
+        # programming records reside: one ID per broadcast day, in the last COMS
+        # break before midnight (24:00), type T so master control can settle it
+        # as the final item aired in the calendar day. Swept by the run route
+        # (today → +7) whenever a Daily Programming run includes the market.
+        "name": "DAL FCC ID (daily)",
+        "daily": True,
+        "elements": [
             {"kind": "fcc_id", "id": 83128, "code": "ID - TACDAL - FCC",
-             "markets": ["DAL"], "segment": "COMS", "break": 3,
-             "position": "last", "event_type": "T", "anchor": False},
+             "markets": ["DAL"], "placement": "last_coms_before_midnight",
+             "event_type": "T"},
         ],
     },
 ]
@@ -148,4 +164,16 @@ def elements_for(profile, cod_user):
             cus = {MARKET_CODE_TO_CU[c] for c in mk if c in MARKET_CODE_TO_CU}
         if cod_user in cus:
             out.append(el)
+    return out
+
+
+def daily_elements(cod_user):
+    """Standing elements that place once per broadcast day for this market
+    (COD_USER), independent of any show being set up — from profiles flagged
+    `daily` in their config (e.g. the DAL end-of-day FCC children's-records ID).
+    Show matching (profile_for) never returns these: they carry no code_re/label."""
+    out = []
+    for p in load_profiles():
+        if p.get("daily"):
+            out.extend(elements_for(p, cod_user))
     return out

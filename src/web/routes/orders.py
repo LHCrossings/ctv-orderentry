@@ -3776,6 +3776,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         from src.business_logic.services.daily_programming_run import (
             _drain_pending_filmati_syncs,
             run_market,
+            sweep_daily_ids,
         )
         date = body.get("date")
         codusers = body.get("codUsers") or []
@@ -3835,6 +3836,45 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             retry.pop("_deadlock", None)
             retry["program"] = r["program"]
             results[i] = retry
+
+        # Standing daily elements (the DAL end-of-day FCC ID): any run that
+        # includes a market with daily elements also sweeps today → today+7
+        # (plus the run's own date), filling whichever days are published and
+        # missing the element. Idempotent — unpublished days are reported and
+        # picked up by a later run's sweep. Runs after all placement threads
+        # so it never contends with them.
+        for cu in {int(c) for c in codusers}:
+            sweep_dates = [_dt.date.today() + _dt.timedelta(days=i) for i in range(8)]
+            if d not in sweep_dates:
+                sweep_dates.append(d)
+            pending = []
+            try:
+                with _db_connect() as conn:
+                    sweep = sweep_daily_ids(conn, cu, sweep_dates, pending)
+                    if pending:
+                        _drain_pending_filmati_syncs(conn.cursor(), conn, pending)
+            except Exception as exc:  # noqa: BLE001 - surface sweep-level errors as a result row
+                sweep = [{"date": "", "ok": False, "skipped": False,
+                          "message": f"sweep failed: {exc}"}]
+            if not sweep:
+                continue  # market has no daily elements configured — no row
+
+            def _md(iso):  # 'YYYY-MM-DD' → 'M/D' (calendar-safe, no %-d)
+                try:
+                    _y, m, day = iso.split("-")
+                    return f"{int(m)}/{int(day)}"
+                except ValueError:
+                    return iso
+            by_msg = {}
+            for r in sweep:
+                by_msg.setdefault(r["message"], []).append(_md(r["date"]))
+            results.append({
+                "cu": cu,
+                "ok": all(r["ok"] for r in sweep),
+                "skipped": all(r["skipped"] for r in sweep),
+                "program": "End-of-day FCC ID",
+                "message": " · ".join(f"{m}: {', '.join(ds)}" for m, ds in by_msg.items()),
+            })
         return {"results": results}
 
     _BO_MARKET_IDS = {"NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4, "SEA": 5, "LAX": 6, "CVC": 7, "WDC": 8, "MMT": 9, "DAL": 10}

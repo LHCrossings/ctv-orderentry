@@ -26,7 +26,7 @@ import re
 import threading
 import time
 
-from src.business_logic.services.show_profiles import elements_for, profile_for
+from src.business_logic.services.show_profiles import daily_elements, elements_for, profile_for
 
 FPS = 29.97
 EVENT_BASE = 100000000000  # Event_P = EVENT_BASE + id_tpalinse
@@ -753,4 +753,79 @@ def _place_once(conn, cod_user, d, assignment, pending):
     except Exception as exc:  # noqa: BLE001 - report per-market failure, leave market untouched
         conn.rollback()
         return {"cu": cod_user, "ok": False, "skipped": False, "message": f"error: {exc}",
+                "_deadlock": _is_deadlock(exc)}
+
+
+def sweep_daily_ids(conn, cod_user, dates, pending):
+    """Place this market's standing daily elements (see show_profiles
+    daily_elements — e.g. the DAL end-of-day FCC children's-records ID) for
+    every date in `dates`. Each date is independent and idempotent: skipped if
+    the element is already live before midnight that day, or if the day's
+    schedule isn't published yet (the next run's sweep picks it up). Returns a
+    list of {date, ok, skipped, message} — empty when the market has no daily
+    elements configured, so callers can omit the result row entirely."""
+    out = []
+    for el in daily_elements(cod_user):
+        for d in dates:
+            result = None
+            for attempt in range(1, _DEADLOCK_MAX_ATTEMPTS + 1):
+                result = _place_daily_once(conn, cod_user, d, el, pending)
+                if not result.pop("_deadlock", False):
+                    break
+                if attempt < _DEADLOCK_MAX_ATTEMPTS:
+                    delay = _DEADLOCK_RETRY_SECONDS * attempt + random.uniform(0.1, 1.5)
+                    print(f"[daily-programming] cu={cod_user} daily-ID 1205 deadlock on "
+                          f"attempt {attempt}/{_DEADLOCK_MAX_ATTEMPTS} for {d} — retrying "
+                          f"in {delay:.1f}s")
+                    time.sleep(delay)
+            out.append(result)
+    return out
+
+
+def _place_daily_once(conn, cod_user, d, el, pending):
+    """One attempt to place one daily element on one date, transaction-safe.
+
+    Target = the last COMS break starting before midnight (ORA < DAY_FRAMES;
+    the broadcast day runs 06:00→30:00, so post-midnight breaks sit at 24h+ and
+    are never picked). The element goes in at the break's start as EVENT_TYPE
+    'T' — it floats, so break optimization / master control can settle it as
+    the final item aired in the calendar day."""
+    cur = conn.cursor()
+    label = str(d)
+    try:
+        fid = el.get("id")
+        if not fid:
+            cur.execute("SELECT ID_FILMATI FROM FILMATI WHERE COD_PROGRA=%s", (el.get("code"),))
+            r = cur.fetchone()
+            if not r:
+                conn.rollback()
+                return {"date": label, "ok": False, "skipped": False,
+                        "message": f"asset {el.get('code')} not found"}
+            fid = r[0]
+        fid = int(fid)
+        cur.execute(
+            """SELECT COUNT(*) FROM TPALINSE WHERE COD_USER=%s AND DATA=%s
+               AND ID_FILMATI=%s AND LIVELLO=0 AND ORA<%s""",
+            (cod_user, d, fid, DAY_FRAMES),
+        )
+        if cur.fetchone()[0] > 0:
+            conn.rollback()
+            return {"date": label, "ok": True, "skipped": True, "message": "already placed"}
+        slots = _slots(cur, cod_user, d, _frames("06:00"), DAY_FRAMES, "COMS")
+        if not slots:
+            conn.rollback()
+            return {"date": label, "ok": True, "skipped": True, "message": "not published yet"}
+        slot = slots[-1]
+        nid = _insert_event(cur, cod_user, d, slot["sched"], slot["block"], slot["seg"],
+                            slot["ora"], fid, _durata(cur, fid))
+        cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
+        cur.execute("UPDATE TPalinse SET EVENT_TYPE=%s WHERE id_tpalinse=%s",
+                    (el.get("event_type", "T"), nid))
+        _rebuild(cur, d, cod_user, nid)
+        _sync_checksums(cur, [nid], pending)
+        conn.commit()
+        return {"date": label, "ok": True, "skipped": False, "message": "placed"}
+    except Exception as exc:  # noqa: BLE001 - report per-date failure, leave the day untouched
+        conn.rollback()
+        return {"date": label, "ok": False, "skipped": False, "message": f"error: {exc}",
                 "_deadlock": _is_deadlock(exc)}
