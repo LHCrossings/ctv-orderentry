@@ -529,15 +529,29 @@ def _count_spots(conn, ph: str, line_ids: list, first_available_date,
 
 
 def _unschedule_spots(conn, ph: str, line_ids: list, first_available_date) -> int:
-    """Delete trafficPalinse rows on or after cutoff. Returns deleted count."""
+    """Delete spots on/after cutoff from BOTH trafficPalinse and TPALINSE.
+
+    Deleting only trafficPalinse (the pre-2026-07-14 behavior) leaves the
+    playlist row behind: the spot disappears from SE but still AIRS from EE —
+    an unbilled ghost spot. Returns the unscheduled spot count."""
     id_ph = ','.join([ph] * len(line_ids))
     cur = conn.cursor()
+    cur.execute(
+        f"SELECT id_tpalinse FROM trafficPalinse "
+        f"WHERE ID_ContrattiRighe IN ({id_ph}) AND Date >= {ph}",
+        (*line_ids, first_available_date)
+    )
+    tpal_ids = [int(r[0]) for r in cur.fetchall()]
     cur.execute(
         f"DELETE FROM trafficPalinse "
         f"WHERE ID_ContrattiRighe IN ({id_ph}) AND Date >= {ph}",
         (*line_ids, first_available_date)
     )
-    return cur.rowcount
+    removed = cur.rowcount
+    if tpal_ids:
+        tid_ph = ','.join([ph] * len(tpal_ids))
+        cur.execute(f"DELETE FROM TPALINSE WHERE ID_TPALINSE IN ({tid_ph})", tuple(tpal_ids))
+    return removed
 
 
 def _count_remaining_days(first_available_date: date, new_end_date: date, day_bits: dict) -> int:
@@ -654,6 +668,199 @@ def _update_change_lines(
         )
 
 
+def _match_rebook_add_lines(io_line: dict, add_lines: list) -> list:
+    """ADD lines in the same IO that rebook a CHANGEd line: identical days,
+    time window, duration and rate, starting after the CHANGE line's new end.
+    Returned in flight-date order."""
+    matches = []
+    for al in add_lines:
+        if (al['days_of_week'] == io_line['days_of_week']
+                and al['from_time'] == io_line['from_time']
+                and al['to_time'] == io_line['to_time']
+                and int(al['duration']) == int(io_line['duration'])
+                and float(al['rate']) == float(io_line['rate'])
+                and _parse_date(al['start_date']) > _parse_date(io_line['end_date'])):
+            matches.append(al)
+    return sorted(matches, key=lambda al: _parse_date(al['start_date']))
+
+
+def _apply_reattribution(conn, ph: str, contract_id: int, item: dict,
+                         first_available: date, paid_market_id: int) -> bool:
+    """Resolve a CHANGE line whose locked spots exceed the IO's new total by
+    re-attributing them to the rebook ADD line(s) — the "2919 flow"
+    (WL 215717 Coterie, 2026-07-14).
+
+    Per market: spots placed after the CHANGE line's new end date are taken
+    earliest-first; those inside an in-progress-week ADD line's window are
+    re-pointed to it (up to that line's total — this is how already-aired
+    spots fulfill the rebooked line), the remainder erased from BOTH
+    trafficPalinse and TPALINSE. Future-week ADD lines are never fed from
+    old placements — they stay unplaced for normal scheduling. The whole
+    plan is validated before anything is written; an aired spot no ADD line
+    can absorb aborts the line untouched (manual correction, as before).
+    """
+    io_line = item['io_line']
+    wl_num = io_line['line_number']
+    new_end = _parse_date(io_line['end_date'])
+    week_mon = first_available - timedelta(days=first_available.weekday())
+    week_sun = week_mon + timedelta(days=6)
+    cur = conn.cursor()
+
+    plans = []   # (moves: [(tp_id, add_line_id, add_total)], deletes: [(tp_id, tpal_id)])
+    for change_line_id, cod_user in item['etere_lines']:
+        cur.execute(
+            f"SELECT id_trafficPalinse, id_tpalinse, Date FROM trafficPalinse "
+            f"WHERE ID_ContrattiRighe = {ph} AND Date > {ph} ORDER BY Date",
+            (change_line_id, new_end)
+        )
+        excess = [(int(r[0]), int(r[1]), r[2].date() if hasattr(r[2], 'date') else r[2])
+                  for r in cur.fetchall()]
+        moves, taken = [], set()
+        for rb in item['rebooks']:
+            rb_start, rb_end = _parse_date(rb['start_date']), _parse_date(rb['end_date'])
+            if rb_start > week_sun or rb_end < week_mon:
+                continue   # future-week rebook — leave unplaced for the scheduler
+            add_row = next((r for r in _find_wl_line_ids(conn, ph, contract_id, rb['line_number'])
+                            if r[1] == cod_user), None)
+            if add_row is None:
+                print(f"  [Line {wl_num}] ✗ Re-attribution aborted — ADD line "
+                      f"{rb['line_number']} not found for market {cod_user}. Line left untouched.")
+                return False
+            quota = int(rb['total_spots'])
+            for tp_id, _tpal, d in excess:
+                if quota == 0:
+                    break
+                if tp_id in taken or not (rb_start <= d <= rb_end):
+                    continue
+                moves.append((tp_id, int(add_row[0]), rb))
+                taken.add(tp_id)
+                quota -= 1
+        stranded_aired = [str(d) for tp_id, _tpal, d in excess
+                          if tp_id not in taken and d < first_available]
+        if stranded_aired:
+            print(f"  [Line {wl_num}] ✗ Re-attribution aborted — market {cod_user} has aired "
+                  f"spot(s) on {', '.join(stranded_aired)} that fit no ADD line. Line left untouched.")
+            return False
+        deletes = [(tp_id, tpal_id) for tp_id, tpal_id, _d in excess if tp_id not in taken]
+        plans.append((moves, deletes))
+
+    n_moved = n_del = 0
+    fulfilled = {}   # add_line_id -> [moved, total]
+    for moves, deletes in plans:
+        for tp_id, add_line_id, rb in moves:
+            cur.execute(
+                f"UPDATE trafficPalinse SET ID_ContrattiRighe = {ph} WHERE id_trafficPalinse = {ph}",
+                (add_line_id, tp_id)
+            )
+            n_moved += 1
+            f = fulfilled.setdefault(add_line_id, [0, int(rb['total_spots'])])
+            f[0] += 1
+        if deletes:
+            d_ph = ','.join([ph] * len(deletes))
+            cur.execute(f"DELETE FROM trafficPalinse WHERE id_trafficPalinse IN ({d_ph})",
+                        tuple(t for t, _ in deletes))
+            cur.execute(f"DELETE FROM TPALINSE WHERE ID_TPALINSE IN ({d_ph})",
+                        tuple(t for _, t in deletes))
+            n_del += len(deletes)
+
+    # Conform the CHANGE line. locked=new total → remaining 0 → ROWSTATUS 1.
+    _update_change_lines(conn, ph, item['etere_lines'], io_line, int(io_line['total_spots']),
+                         is_cancel=False, remaining_days=0, paid_market_id=paid_market_id)
+
+    # A rebook market line whose total was fully covered by moved spots has
+    # nothing left to schedule — flip to fulfilled so it doesn't sit at
+    # status 0 forever (the scheduler skips fully-placed lines but never
+    # closes them; see 2919 Line 9).
+    done_ids = [lid for lid, (got, tot) in fulfilled.items() if got >= tot]
+    if done_ids:
+        d_ph = ','.join([ph] * len(done_ids))
+        cur.execute(f"UPDATE CONTRATTIRIGHE SET ROWSTATUS = 1 WHERE ID_CONTRATTIRIGHE IN ({d_ph})",
+                    tuple(done_ids))
+    print(f"  [Line {wl_num}] ✓ Re-attributed {n_moved} placed spot(s) to rebook line(s), "
+          f"erased {n_del}, line conformed to IO; {len(done_ids)} rebook market line(s) "
+          f"fully covered → status 1")
+    return True
+
+
+def _rewrite_change_cig(conn, ph: str, etere_lines: list, io_line: dict) -> None:
+    """Rewrite ContrattiImportiGiornalieri for a changed line's market rows.
+
+    The line-insert SP spreads a line's total evenly across its active days;
+    a raw CONTRATTIRIGHE update leaves the old spread behind (2919's Line 5
+    kept 15 days × $5 after dropping to 5 spots). Reads the freshly-updated
+    CONTRATTIRIGHE row, so call AFTER _update_change_lines. $0 market lines
+    carry no rows."""
+    from browser_automation.etere_direct_client import parse_day_bits
+    day_bits = parse_day_bits(io_line['days_of_week'])
+    keys = ['lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom']
+    cur = conn.cursor()
+    for line_id, _cu in etere_lines:
+        cur.execute(
+            f"SELECT DATA_INIZIO, DATA_FINE, N_PASSAGGI, IMPORTO "
+            f"FROM CONTRATTIRIGHE WHERE ID_CONTRATTIRIGHE = {ph}", (line_id,)
+        )
+        row = cur.fetchone()
+        if not row:
+            continue
+        d0 = row[0].date() if hasattr(row[0], 'date') else row[0]
+        d1 = row[1].date() if hasattr(row[1], 'date') else row[1]
+        total = (int(row[2] or 0)) * float(row[3] or 0)
+        cur.execute(f"DELETE FROM ContrattiImportiGiornalieri WHERE ID_ContrattiRighe = {ph}",
+                    (line_id,))
+        if total <= 0:
+            continue
+        days, d = [], d0
+        while d <= d1:
+            if day_bits[keys[d.weekday()]]:
+                days.append(d)
+            d += timedelta(days=1)
+        if not days:
+            continue
+        per = round(total / len(days), 4)
+        amounts = [per] * (len(days) - 1) + [round(total - per * (len(days) - 1), 4)]
+        for d, amt in zip(days, amounts):
+            cur.execute(
+                f"INSERT INTO ContrattiImportiGiornalieri (ID_ContrattiRighe, DATA, IMPORTO) "
+                f"VALUES ({ph}, {ph}, {ph})",
+                (line_id, d.strftime('%Y-%m-%d'), amt)
+            )
+
+
+def _refresh_header_totals(conn, ph: str, contract_id: int) -> None:
+    """Recompute the header list totals from the lines. Raw CHANGE updates leave
+    them stale (2919 sat at $250 vs the IO's $200 until fixed by hand)."""
+    cur = conn.cursor()
+    cur.execute(
+        f"SELECT COALESCE(SUM(N_PASSAGGI * IMPORTO), 0) FROM CONTRATTIRIGHE "
+        f"WHERE ID_CONTRATTITESTATA = {ph}", (contract_id,)
+    )
+    total = float(cur.fetchone()[0] or 0)
+    cur.execute(
+        f"UPDATE CONTRATTITESTATA SET LISTINO = {ph}, SCONTATO = {ph}, LISTINOORIGINALE = {ph} "
+        f"WHERE ID_CONTRATTITESTATA = {ph}",
+        (total, total, total, contract_id)
+    )
+    print(f"  [HEADER] ✓ Contract total refreshed to ${total:,.2f}")
+
+
+def _warn_ghost_spots(conn, ph: str) -> None:
+    """Watchdog: future commercial playlist rows with no contract backing.
+    These air unbilled (visible in EE, absent from SE). 45 found live on
+    2026-07-14; historical ones trace to 2022, so the cause isn't only our
+    code — check after every run so a recurrence surfaces immediately."""
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT COUNT(*) FROM TPALINSE t "
+        "LEFT JOIN trafficPalinse tp ON tp.id_tpalinse = t.ID_TPALINSE "
+        "WHERE t.LIVELLO = 0 AND t.NEWTYPE = 'COM' AND t.ID_FILMATI > 0 "
+        "AND t.DATA > GETDATE() AND tp.id_trafficPalinse IS NULL"
+    )
+    n = cur.fetchone()[0] or 0
+    if n:
+        print(f"\n  ⚠ GHOST-SPOT WATCHDOG: {n} future commercial spot(s) in the playlist have "
+              f"no contract backing and would air unbilled. Run scripts/check_ghost_spots.py "
+              f"for the list.")
+
 
 def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
     """
@@ -767,6 +974,9 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
             paid_market_id  = 10 if network == "ASIAN" else 1
             doc_str         = f"{first_available.month}/{first_available.day}"
             add_lines = []
+            all_adds = [ln for ln in lines if (ln.get('action') or 'ADD').upper() == 'ADD']
+            deferred_reattr = []   # conflicted CHANGEs resolved after their ADD lines exist
+            applied_changes = []   # (etere_lines, io_line) — get CIG + header conform at the end
 
             for io_line in lines:
                 action  = (io_line.get('action') or 'ADD').upper()
@@ -836,8 +1046,23 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
                         print("    Status → Ready — sent straight to scheduler")
 
                     if action != 'CANCEL' and locked > n_io:
-                        print(f"\n    ⚠ CONFLICT — IO orders {n_io} spots but {locked} are already locked.")
-                        print("    Cannot proceed. Manual correction required.")
+                        rebooks = _match_rebook_add_lines(io_line, all_adds)
+                        if not rebooks:
+                            print(f"\n    ⚠ CONFLICT — IO orders {n_io} spots but {locked} are already locked.")
+                            print("    No matching ADD (rebook) line in this IO. Manual correction required.")
+                            continue
+                        rb_nums = ', '.join(str(r['line_number']) for r in rebooks)
+                        print(f"\n    ⚠ {locked} spots locked vs {n_io} ordered — rebook detected (ADD line(s) {rb_nums}).")
+                        print(f"    Placed spots after {new_end_str} will be re-attributed to the")
+                        print("    in-progress week's rebook line (earliest first, up to its total —")
+                        print("    aired spots count toward it); the rest are erased. Future-week")
+                        print("    rebook lines stay unplaced for normal scheduling.")
+                        answer = input("\n  Queue re-attribution (runs after ADD lines are entered)? [y/n]: ").strip().lower()
+                        if answer != 'y':
+                            print(f"  [Line {wl_num}] Skipped.")
+                            continue
+                        deferred_reattr.append({'io_line': io_line, 'etere_lines': etere_lines,
+                                                'rebooks': rebooks})
                         continue
 
                     answer = input("\n  Apply? [y/n]: ").strip().lower()
@@ -850,6 +1075,7 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
                                          is_cancel=(action == 'CANCEL'),
                                          remaining_days=rem_days,
                                          paid_market_id=paid_market_id)
+                    applied_changes.append((etere_lines, io_line))
                     status_str = "Scheduled" if remaining == 0 else "Ready (sent to scheduler)"
                     print(f"  [Line {wl_num}] ✓ Applied — {removed} spot(s) unscheduled across all markets, "
                           f"status: {status_str}")
@@ -863,6 +1089,19 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
                     _add_asian_lines_direct(client, add_lines, separation, row_status=0)
                 else:
                     _add_crossings_lines_direct(client, add_lines, separation, row_status=0)
+
+            # Conflicted CHANGEs queued above — their rebook ADD lines exist now.
+            for item in deferred_reattr:
+                if _apply_reattribution(conn, ph, contract_id, item, first_available,
+                                        paid_market_id):
+                    applied_changes.append((item['etere_lines'], item['io_line']))
+
+            # Raw CONTRATTIRIGHE updates leave the per-day revenue spread and the
+            # header totals stale — conform both for every applied CHANGE/CANCEL.
+            if applied_changes:
+                for chg_lines, chg_io in applied_changes:
+                    _rewrite_change_cig(conn, ph, chg_lines, chg_io)
+                _refresh_header_totals(conn, ph, contract_id)
         else:
             # new and revision_add: add all lines
             if network == "ASIAN":
@@ -871,6 +1110,7 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
                 _add_crossings_lines_direct(client, lines, separation, row_status=line_row_status)
 
         conn.commit()
+        _warn_ghost_spots(conn, ph)
 
         cur = conn.cursor()
         cur.execute(

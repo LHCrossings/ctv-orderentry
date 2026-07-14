@@ -4,6 +4,26 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## Unscheduling a Placed Spot Means BOTH Tables — a trafficPalinse-Only Delete Creates a Ghost Spot
+
+**Session:** WL 2919 Coterie revision (2026-07-14)
+
+**Rule:** A placed spot is `trafficPalinse` (contract side, what SE shows) + `TPALINSE`
+(playlist side, what EE airs). Deleting only `trafficPalinse` makes the spot vanish
+from SE while it still AIRS from EE — an unbilled ghost that also violates separation.
+`_unschedule_spots` in `worldlink_automation.py` did exactly this; 45 live ghosts were
+found (and deleted) on 2026-07-14, and historical ones trace back to 2022 (~2,900 —
+manual EE/SE ops cause them too; leave aired ones alone, they're the as-run record).
+
+**How to apply:** any delete of a scheduled spot must remove the `trafficPalinse` row
+AND its `TPALINSE` row (collect `id_tpalinse` first). Detection: `scripts/check_ghost_spots.py`
+lists future COM rows with no trafficPalinse backing; the WL automation runs the same
+check as a watchdog after every commit. Re-attributing a spot to another line is the
+opposite operation: update `trafficPalinse.ID_ContrattiRighe` only (TPALINSE carries
+no line reference) — see `_apply_reattribution` for the revision rebook flow.
+
+---
+
 ## Daily Programming Placement: Never Trust Traffic_InsertEvent's XORDER — Conform the Window Yourself
 
 **Session:** Korean News 7/10 five-market failure (2026-07-10)
