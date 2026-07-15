@@ -19,10 +19,12 @@ and any future element types) — so new element kinds need no schema change.
 
 Element types so far:
   * fillers — handled separately (the pieces/fillers path in the modal).
-  * fcc_id — per-show (Children: segment/break/position/anchor, placed by
-    run_market) or on a `daily: true` profile (one placement per broadcast day
+  * fcc_id — on a `daily: true` profile (one placement per broadcast day
     in the last COMS break before midnight; swept by the run route via
-    daily_elements/sweep_daily_ids, independent of any show).
+    daily_elements/sweep_daily_ids, independent of any show). Per-show
+    placement (segment/break/position/anchor, placed by run_market) is still
+    supported by the engine but no longer used — the Children profile that
+    used it was retired 2026-07-15.
   * bumpers — {code, event_type}; the engine inserts the bumper if it isn't
     pre-placed and conforms its type/order:
       open  bumper → break 1, first position, EVENT_TYPE 'F' (locked anchor)
@@ -53,18 +55,10 @@ _DEFAULT_PROFILES = [
         "open_bumper": {"code": "BUMP_MBCNEWSTODAY_OPEN", "event_type": "F"},
         "close_bumper": {"code": "BUMP_MBCNEWSTODAY_CLOSE", "event_type": "T"},
     },
-    {
-        "name": "Children",
-        "label": "Children",              # matches the K: grid kind tag (e.g. "Mandarin Children")
-        "elements": [
-            # SFO + CVC: FCC ID is the F-anchor at the top of the first PRGS break;
-            # the program's piece A then follows as T. (DAL no longer gets a
-            # per-show ID — see the daily profile below; group decision 2026-07.)
-            {"kind": "fcc_id", "id": 2891, "code": "IDKIDS15E04",
-             "markets": ["SFO", "CVC"], "segment": "PRGS", "break": 1,
-             "position": "first", "event_type": "F", "anchor": True},
-        ],
-    },
+    # (The per-show "Children" profile — kids FCC ID 2891 anchored at the top of
+    # the first PRGS break on SFO/CVC — was retired 2026-07-15 when all three
+    # OTA markets moved to the daily end-of-day ID below. Its chat.show_profiles
+    # row is disabled, not deleted, in case it ever needs to come back.)
     {
         # Standing DAILY element — not show-matched (no code_re/label, so
         # profile_for never returns it). All programming carries the E/I logo,
@@ -73,11 +67,18 @@ _DEFAULT_PROFILES = [
         # break before midnight (24:00), type T so master control can settle it
         # as the final item aired in the calendar day. Swept by the run route
         # (today → +7) whenever a Daily Programming run includes the market.
-        "name": "DAL FCC ID (daily)",
+        # Each OTA market has its own ID asset, hence one element per market.
+        "name": "OTA FCC ID (daily)",
         "daily": True,
         "elements": [
             {"kind": "fcc_id", "id": 83128, "code": "ID - TACDAL - FCC",
              "markets": ["DAL"], "placement": "last_coms_before_midnight",
+             "event_type": "T"},
+            {"kind": "fcc_id", "id": 142947, "code": "ID - CTVCVC - FCC",
+             "markets": ["CVC"], "placement": "last_coms_before_midnight",
+             "event_type": "T"},
+            {"kind": "fcc_id", "id": 142948, "code": "ID - CTVSFO - FCC",
+             "markets": ["SFO"], "placement": "last_coms_before_midnight",
              "event_type": "T"},
         ],
     },
