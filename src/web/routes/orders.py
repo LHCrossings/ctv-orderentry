@@ -3837,14 +3837,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             retry["program"] = r["program"]
             results[i] = retry
 
-        # Standing daily elements (the DAL end-of-day FCC ID): any run that
-        # includes a market with daily elements also sweeps today → today+7
+        # Standing daily elements (the OTA end-of-day FCC IDs): any run that
+        # includes a market with daily elements also sweeps today → today+2
         # (plus the run's own date), filling whichever days are published and
         # missing the element. Idempotent — unpublished days are reported and
         # picked up by a later run's sweep. Runs after all placement threads
         # so it never contends with them.
         for cu in {int(c) for c in codusers}:
-            sweep_dates = [_dt.date.today() + _dt.timedelta(days=i) for i in range(8)]
+            sweep_dates = [_dt.date.today() + _dt.timedelta(days=i) for i in range(3)]
             if d not in sweep_dates:
                 sweep_dates.append(d)
             pending = []

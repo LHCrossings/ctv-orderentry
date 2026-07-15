@@ -66,7 +66,7 @@ _DEFAULT_PROFILES = [
         # programming records reside: one ID per broadcast day, in the last COMS
         # break before midnight (24:00), type T so master control can settle it
         # as the final item aired in the calendar day. Swept by the run route
-        # (today → +7) whenever a Daily Programming run includes the market.
+        # (today → +2) whenever a Daily Programming run includes the market.
         # Each OTA market has its own ID asset, hence one element per market.
         "name": "OTA FCC ID (daily)",
         "daily": True,
