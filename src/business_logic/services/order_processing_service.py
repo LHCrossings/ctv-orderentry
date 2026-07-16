@@ -490,6 +490,13 @@ class OrderProcessingService:
         ]
         if not contract_ids:
             return
+        # WorldLink is ALWAYS English (business rule) — auto-catalog, no prompt.
+        # Also mops up a WL contract's pre-catalog lines during revisions.
+        worldlink_ids = {
+            c.etere_id for r in results if r and r.success
+            and r.order_type == OrderType.WORLDLINK
+            for c in r.contracts if c.etere_id
+        }
         try:
             from browser_automation.etere_direct_client import (
                 connect as _db_connect,
@@ -516,8 +523,15 @@ class OrderProcessingService:
                     todo = [(lid, desc) for lid, desc in lines if lid not in cataloged]
                     if not todo:
                         continue
-                    # One prompt per unique description (a WorldLink contract has
-                    # 9 identical market lines — ask once, apply to all of them)
+                    if cid in worldlink_ids:
+                        upsert_line_languages(
+                            cur, {lid: "E" for lid, _ in todo}, source='entry')
+                        conn.commit()
+                        print(f"[LANGUAGE] ✓ WorldLink contract {cid}: "
+                              f"{len(todo)} line(s) auto-cataloged as E (always English)")
+                        continue
+                    # One prompt per unique description (identical lines across
+                    # markets — ask once, apply to all of them)
                     groups: dict[str, list[int]] = {}
                     for lid, desc in todo:
                         groups.setdefault(desc, []).append(lid)

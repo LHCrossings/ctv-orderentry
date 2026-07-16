@@ -426,6 +426,7 @@ def _add_crossings_lines_direct(client, lines: list, separation: tuple, row_stat
             date_from=date_from, date_to=date_to, duration=duration,
             is_bonus=is_bonus, booking_code=booking, separation_intervals=separation,
             scheduling_type=0, row_status=row_status,
+            language="E",  # WorldLink is ALWAYS English — business rule, not a guess
         )
         print(f"    NYC line_id={nyc_id}  rate=${rate}")
 
@@ -436,6 +437,7 @@ def _add_crossings_lines_direct(client, lines: list, separation: tuple, row_stat
                 date_from=date_from, date_to=date_to, duration=duration,
                 is_bonus=is_bonus, booking_code=booking, separation_intervals=separation,
                 scheduling_type=0, row_status=row_status,
+                language="E",  # WorldLink is ALWAYS English
             )
             print(f"    {mkt} line_id={mkt_id}  rate=$0.00")
 
@@ -468,6 +470,7 @@ def _add_asian_lines_direct(client, lines: list, separation: tuple, row_status: 
             date_from=date_from, date_to=date_to, duration=duration,
             is_bonus=is_bonus, booking_code=10 if is_bonus else 2,
             separation_intervals=separation, scheduling_type=0, row_status=row_status,
+            language="E",  # WorldLink is ALWAYS English
         )
         print(f"    DAL line_id={dal_id}  rate=${rate}")
 
