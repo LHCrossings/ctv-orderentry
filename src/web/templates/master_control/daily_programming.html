@@ -197,26 +197,6 @@
         <div id="programList" class="prog-list"></div>
     </div>
 
-    <div class="tool-card" id="replaceCard" style="display:none;">
-        <h2>Replace a piece (revised file)</h2>
-        <div class="modal-check-hint" style="margin: 10px 0;">
-            Swap ONE placed piece — e.g. a revised Piece B — for this date without touching the
-            show's other pieces, bumpers, or spots. Pieces-mode (a/b/c) shows only; explode/EDL
-            shows need their EDL re-imported instead.
-        </div>
-        <button type="button" id="rpLoad" class="fm-done">Load placed pieces</button>
-        <div id="rpGroups" class="preview-plan" style="margin-top:10px;"></div>
-        <div id="rpDetail" style="display:none; margin-top:12px;">
-            <div id="rpMarkets" style="margin:8px 0;"></div>
-            <input type="text" id="rpSearch" class="field-input" style="width:100%; box-sizing:border-box;"
-                   placeholder="Search the replacement file (min 2 chars)…" />
-            <div id="rpResults" class="fm-results"></div>
-            <div id="rpChosen" class="fm-chosen"></div>
-            <button type="button" id="rpGo" class="run-btn" style="margin-top:10px;" disabled>Replace piece</button>
-            <div id="rpOut" class="preview-plan" style="margin-top:10px;"></div>
-        </div>
-    </div>
-
     <div class="tool-card" id="previewCard" style="display:none;">
         <div class="step-label">Step 4 · Review & set up</div>
         <button type="button" id="previewBtn" class="fm-done" style="margin-bottom: 12px;">Preview setup</button>
@@ -357,12 +337,9 @@
     async function loadGrid() {
         state.date = dateEl.value;
         const previewCard = document.getElementById('previewCard');
-        const replaceCard = document.getElementById('replaceCard');
-        if (!state.network || !state.date) { progCard.style.display = 'none'; previewCard.style.display = 'none'; replaceCard.style.display = 'none'; return; }
+        if (!state.network || !state.date) { progCard.style.display = 'none'; previewCard.style.display = 'none'; return; }
         progCard.style.display = 'block';
         previewCard.style.display = 'none';
-        replaceCard.style.display = 'block';
-        rpReset();
         progList.innerHTML = '<div class="prog-empty">Loading…</div>';
         try {
             const r = await fetch('/api/master-control/daily-programming/grid?network=' +
@@ -445,6 +422,12 @@
             const n = markets.filter(function (cu) { return set[cu]; }).length;
             span.textContent = n + '/' + M + ' placed';
             span.className = 'prog-placed ' + (n === 0 ? 'none' : (n === M ? 'all' : 'partial'));
+            // Fully placed + nothing assigned → the row's action is replacing a
+            // revised piece, and its hint says so ('+ choose file' is pointless).
+            const hintSpan = document.getElementById('assign-' + i);
+            if (hintSpan && hintSpan.classList.contains('empty') && !isShopLcProgram(p)) {
+                hintSpan.textContent = (n === M) ? '↻ replace piece' : '+ choose file';
+            }
         });
     }
 
@@ -457,6 +440,7 @@
     const fmSearch = document.getElementById('fmSearch');
     const fmResults = document.getElementById('fmResults');
     const fmHint = document.getElementById('fmHint');
+    const FM_HINT_DEFAULT = fmHint.textContent;
     const fmFillerPanel = document.getElementById('fmFillerPanel');
     const fmFillerStatus = document.getElementById('fmFillerStatus');
     const fmChosen = document.getElementById('fmChosen');
@@ -491,6 +475,18 @@
             }
             return;
         }
+        // Fully placed in every selected market + nothing assigned → the only
+        // sensible action is swapping a revised piece, so the modal opens in
+        // replace mode. Partially placed rows keep the normal assign modal
+        // (to fill the missing markets); focus a single market with the pills
+        // to replace a piece there.
+        const placedSet = placedMarketsFor(p);
+        const universe = state.codUsers || [];
+        const fullyPlaced = universe.length && universe.every(function (cu) { return placedSet[cu]; });
+        if (fullyPlaced && !state.assignments[idx]) {
+            openReplaceModal(idx);
+            return;
+        }
         openModal(idx);
     });
 
@@ -499,6 +495,8 @@
         modalPhase = 'file';
         fillerDraft = null;
         edlDraft = null;
+        replaceCtx = null;
+        fmHint.textContent = FM_HINT_DEFAULT;
         fmFillerPanel.style.display = 'none';
         fmEdlPanel.style.display = 'none';
         fmSearch.style.display = '';
@@ -521,6 +519,8 @@
     function closeModal() {
         modal.style.display = 'none';
         modalIdx = null; modalPhase = 'file'; fillerDraft = null; edlDraft = null;
+        replaceCtx = null;
+        fmHint.textContent = FM_HINT_DEFAULT;
         fmFillerPanel.style.display = 'none';
         fmEdlPanel.style.display = 'none';
         fmSearch.style.display = '';
@@ -723,9 +723,15 @@
     fmResults.addEventListener('click', function (e) {
         const el = e.target.closest('.fm-result');
         if (!el) return;
+        if (modalPhase === 'replace-piece') {
+            if (el.dataset.pi !== undefined) pickReplacePiece(parseInt(el.dataset.pi, 10));
+            return;
+        }
+        if (modalPhase === 'replace-done') return;
         const f = lastResults.find(function (x) { return String(x.id) === el.dataset.id; });
         if (!f) return;
-        if (modalPhase === 'fillers') addFiller(f);
+        if (modalPhase === 'replace-file') doReplacePiece(f);
+        else if (modalPhase === 'fillers') addFiller(f);
         else pickShowFile(f);
     });
     document.getElementById('fmClose').addEventListener('click', closeModal);
@@ -826,10 +832,11 @@
     document.getElementById('runBtn').addEventListener('click', runSetup);
 
     // ── Replace a piece (revised file) ──────────────────────────────────────
-    const rp = { groups: [], sel: null, file: null };
-    const rpGroups = document.getElementById('rpGroups');
-    const rpDetail = document.getElementById('rpDetail');
-    const rpResults = document.getElementById('rpResults');
+    // A fully-placed program row's hint reads '↻ replace piece'; clicking the
+    // row opens the SAME modal everyone already uses, in replace mode: click
+    // the placed piece being replaced, then click its replacement file — the
+    // swap runs across the markets selected at the top of the page.
+    let replaceCtx = null;   // {p, groups, chosen} while the modal is in replace mode
 
     function framesToLabel(fr) {
         let s = Math.round(fr / 29.97);
@@ -839,135 +846,99 @@
         return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
     }
 
-    function rpReset() {
-        rp.groups = []; rp.sel = null; rp.file = null;
-        rpGroups.innerHTML = '';
-        rpDetail.style.display = 'none';
-        document.getElementById('rpOut').innerHTML = '';
-        document.getElementById('rpChosen').innerHTML = '';
-        document.getElementById('rpGo').disabled = true;
+    function pieceLetter(code) {
+        const m = /([A-Z])$/.exec(code || '');
+        return m ? m[1] : '';
     }
 
-    async function rpLoadPieces() {
-        rpReset();
-        rpGroups.innerHTML = '<div class="pp-empty">Loading placed pieces…</div>';
+    async function openReplaceModal(idx) {
+        const p = state.programs[idx];
+        replaceCtx = { p: p, groups: [], chosen: null };
+        modalPhase = 'replace-piece';
+        fmFillerPanel.style.display = 'none';
+        fmEdlPanel.style.display = 'none';
+        fmSearch.style.display = 'none';
+        fmResults.style.display = '';
+        fmHint.style.display = 'block';
+        fmTitle.textContent = 'Replace a piece — ' + p.title;
+        const mkts = (state.codUsers || []).map(function (cu) { return codeOf[cu] || cu; }).join(', ');
+        fmSub.textContent = (p.start || '') + (p.end ? '–' + p.end : '') + ' · ' + mkts;
+        fmHint.textContent = 'Click the piece being replaced. The swap leaves the other pieces, bumpers and spots untouched.';
+        fmResults.innerHTML = '<div class="fm-empty">Loading placed pieces…</div>';
+        modal.style.display = 'flex';
         try {
             const r = await fetch('/api/master-control/daily-programming/placed-pieces?network=' +
                 encodeURIComponent(state.network) + '&date=' + encodeURIComponent(state.date));
             const data = await r.json();
-            if (data.error) { rpGroups.innerHTML = '<div class="pp-empty">' + escHtml(data.error) + '</div>'; return; }
-            // Group identical pieces across markets: same air time + same asset
+            if (data.error) { fmResults.innerHTML = '<div class="fm-empty">' + escHtml(data.error) + '</div>'; return; }
+            const w = hhmmWindow(p.start, p.end), lo = w[0], hi = w[1];
+            const sel = {};
+            (state.codUsers || []).forEach(function (cu) { sel[cu] = 1; });
             const byKey = {};
-            (data.pieces || []).forEach(function (p) {
-                const key = p.ora + ':' + p.fid;
-                if (!byKey[key]) byKey[key] = { ora: p.ora, fid: p.fid, code: p.code,
-                                                description: p.description, duration: p.duration, cus: [] };
-                byKey[key].cus.push(p.cu);
+            (data.pieces || []).forEach(function (x) {
+                if (lo == null || x.ora < lo || x.ora >= hi || !sel[x.cu]) return;
+                const key = x.ora + ':' + x.fid;
+                if (!byKey[key]) byKey[key] = { ora: x.ora, fid: x.fid, code: x.code, cus: [] };
+                byKey[key].cus.push(x.cu);
             });
-            rp.groups = Object.values(byKey).sort(function (a, b) { return a.ora - b.ora || a.fid - b.fid; });
-            if (!rp.groups.length) {
-                rpGroups.innerHTML = '<div class="pp-empty">No pieces-mode placements found for this date.</div>';
+            replaceCtx.groups = Object.values(byKey).sort(function (a, b) { return a.ora - b.ora; });
+            if (!replaceCtx.groups.length) {
+                fmResults.innerHTML = '<div class="fm-empty">No pieces-mode placements in this window for the selected markets. (Explode/EDL shows aren\'t swappable — re-import the EDL instead.)</div>';
                 return;
             }
-            rpGroups.innerHTML = rp.groups.map(function (g, i) {
-                const mkts = g.cus.map(function (cu) { return codeOf[cu] || cu; }).join(' ');
-                return '<div class="pp-row rp-group" data-i="' + i + '" style="cursor:pointer;">' +
-                    '<div class="pp-prog">' + framesToLabel(g.ora) + ' · ' + escHtml(g.code) +
-                    ' <span style="opacity:.65;">(file ' + g.fid + ')</span></div>' +
-                    '<div class="pp-detail">' + escHtml(g.description || '') + ' · placed in: ' + escHtml(mkts) + '</div></div>';
+            fmResults.innerHTML = replaceCtx.groups.map(function (g, i) {
+                const letter = pieceLetter(g.code);
+                return '<div class="fm-result" data-pi="' + i + '">' +
+                    '<span class="fm-slot-num">' + (letter ? 'PIECE ' + letter : framesToLabel(g.ora)) + '</span>' +
+                    '<span class="fm-code">' + escHtml(g.code) + '</span>' +
+                    '<span class="fm-meta">' + framesToLabel(g.ora) + ' · ' + g.cus.length + ' market' + (g.cus.length === 1 ? '' : 's') + '</span></div>';
             }).join('');
         } catch (e) {
-            rpGroups.innerHTML = '<div class="pp-empty">Error: ' + escHtml(e.message) + '</div>';
+            fmResults.innerHTML = '<div class="fm-empty">Error: ' + escHtml(e.message) + '</div>';
         }
     }
 
-    rpGroups.addEventListener('click', function (e) {
-        const row = e.target.closest('.rp-group');
-        if (!row) return;
-        rpGroups.querySelectorAll('.rp-group').forEach(function (r) { r.style.outline = ''; });
-        row.style.outline = '2px solid var(--nord8)';
-        rp.sel = rp.groups[parseInt(row.dataset.i, 10)];
-        rp.file = null;
-        document.getElementById('rpChosen').innerHTML = '';
-        document.getElementById('rpOut').innerHTML = '';
-        document.getElementById('rpGo').disabled = true;
-        document.getElementById('rpMarkets').innerHTML =
-            'Replace in: ' + rp.sel.cus.map(function (cu) {
-                return '<label style="margin-right:12px; white-space:nowrap;">' +
-                    '<input type="checkbox" class="rp-mkt" value="' + cu + '" checked> ' +
-                    escHtml(String(codeOf[cu] || cu)) + '</label>';
-            }).join('');
-        rpDetail.style.display = 'block';
-        rpResults.innerHTML = '';
-        document.getElementById('rpSearch').value = '';
-    });
+    function pickReplacePiece(i) {
+        replaceCtx.chosen = replaceCtx.groups[i];
+        modalPhase = 'replace-file';
+        const g = replaceCtx.chosen;
+        fmHint.textContent = 'Replacing ' + g.code + ' (' + framesToLabel(g.ora) + ') — now search and click the NEW file.';
+        fmSearch.style.display = '';
+        fmSearch.value = '';
+        fmSearch.placeholder = 'Search the replacement file…';
+        fmResults.innerHTML = '';
+        lastResults = [];
+        fmSearch.focus();
+    }
 
-    let rpTimer = null;
-    document.getElementById('rpSearch').addEventListener('input', function () {
-        clearTimeout(rpTimer);
-        rpTimer = setTimeout(async function () {
-            const q = document.getElementById('rpSearch').value.trim();
-            if (q.length < 2) { rpResults.innerHTML = ''; return; }
-            rpResults.innerHTML = '<div class="fm-empty">Searching…</div>';
-            try {
-                const r = await fetch('/api/master-control/daily-programming/search-files?q=' + encodeURIComponent(q));
-                const data = await r.json();
-                const files = data.files || [];
-                if (!files.length) { rpResults.innerHTML = '<div class="fm-empty">No files found.</div>'; return; }
-                rpResults.innerHTML = files.map(function (f) {
-                    return '<div class="fm-result rp-file" data-id="' + f.id + '" data-code="' + escHtml(f.code) + '">' +
-                        '<span class="fm-code">' + escHtml(f.code) + '</span>' +
-                        '<span class="fm-meta">id ' + f.id + (f.tipo ? ' · ' + escHtml(f.tipo) : '') + '</span></div>';
-                }).join('');
-            } catch (e) {
-                rpResults.innerHTML = '<div class="fm-empty">Error: ' + escHtml(e.message) + '</div>';
-            }
-        }, 300);
-    });
-
-    rpResults.addEventListener('click', function (e) {
-        const row = e.target.closest('.rp-file');
-        if (!row) return;
-        rp.file = { id: parseInt(row.dataset.id, 10), code: row.dataset.code };
-        document.getElementById('rpChosen').innerHTML =
-            'Replacement: <b>' + escHtml(rp.file.code) + '</b> (id ' + rp.file.id + ')';
-        document.getElementById('rpGo').disabled = false;
-    });
-
-    document.getElementById('rpGo').addEventListener('click', async function () {
-        if (!rp.sel || !rp.file) return;
-        const markets = Array.prototype.slice.call(document.querySelectorAll('.rp-mkt:checked'))
-            .map(function (c) { return parseInt(c.value, 10); });
-        if (!markets.length) { alert('Select at least one market.'); return; }
+    async function doReplacePiece(file) {
+        const g = replaceCtx.chosen;
+        const markets = g.cus;
         const mkts = markets.map(function (cu) { return codeOf[cu] || cu; }).join(', ');
-        if (!confirm('Replace ' + rp.sel.code + ' (file ' + rp.sel.fid + ') at ' + framesToLabel(rp.sel.ora) +
-            ' with ' + rp.file.code + ' (file ' + rp.file.id + ') in: ' + mkts +
-            '?\n\nThis edits the live schedule. The other pieces, bumpers and spots stay untouched.')) return;
-        const out = document.getElementById('rpOut');
-        const btn = document.getElementById('rpGo');
-        out.innerHTML = '<div class="pp-empty">Replacing…</div>';
-        btn.disabled = true;
+        if (!confirm('Replace ' + g.code + ' (' + framesToLabel(g.ora) + ') with ' + file.code +
+            ' in: ' + mkts + '?\n\nThis edits the live schedule.')) return;
+        fmSearch.style.display = 'none';
+        fmResults.innerHTML = '<div class="fm-empty">Replacing…</div>';
+        modalPhase = 'replace-done';
         try {
             const r = await fetch('/api/master-control/daily-programming/replace-piece', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ network: state.network, date: state.date, ora: rp.sel.ora,
-                                       oldFileId: rp.sel.fid, newFileId: rp.file.id, markets: markets })
+                body: JSON.stringify({ network: state.network, date: state.date, ora: g.ora,
+                                       oldFileId: g.fid, newFileId: file.id, markets: markets })
             });
             const data = await r.json();
-            if (data.error) { out.innerHTML = '<div class="pp-empty">Error: ' + escHtml(data.error) + '</div>'; return; }
-            out.innerHTML = (data.results || []).map(function (x) {
-                return '<div class="pp-row ' + (x.ok ? 'ok' : 'fail') + '"><div class="pp-prog">' +
-                    (x.ok ? '✓' : '✗') + ' ' + escHtml(String(codeOf[x.cu] || x.cu)) + '</div>' +
-                    '<div class="pp-detail">' + escHtml(x.message) + '</div></div>';
-            }).join('') || '<div class="pp-empty">No results.</div>';
+            if (data.error) { fmResults.innerHTML = '<div class="fm-empty">Error: ' + escHtml(data.error) + '</div>'; return; }
+            fmHint.textContent = 'Done — ' + g.code + ' → ' + file.code + '. Close this window when ready.';
+            fmResults.innerHTML = (data.results || []).map(function (x) {
+                return '<div class="fm-result" style="cursor:default;">' +
+                    '<span class="fm-code">' + (x.ok ? '✓' : '✗') + ' ' + escHtml(String(codeOf[x.cu] || x.cu)) + '</span>' +
+                    '<span class="fm-meta">' + escHtml(x.message) + '</span></div>';
+            }).join('');
+            loadPlacement();
         } catch (e) {
-            out.innerHTML = '<div class="pp-empty">Error: ' + escHtml(e.message) + '</div>';
-        } finally {
-            btn.disabled = false;
+            fmResults.innerHTML = '<div class="fm-empty">Error: ' + escHtml(e.message) + '</div>';
         }
-    });
-
-    document.getElementById('rpLoad').addEventListener('click', rpLoadPieces);
+    }
 </script>
 
 </body>
