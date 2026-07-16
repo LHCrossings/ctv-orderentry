@@ -37,7 +37,13 @@ jobs:
       - name: Connect Tailscale
         uses: tailscale/github-action@v4
         with:
-          version: latest
+          # Pinned (not 'latest'): resolving 'latest' queries pkgs.tailscale.com
+          # on EVERY run, so a package-server outage fails the whole deploy
+          # (2026-07-16, two deploys lost). With a pinned version the action's
+          # cache serves the binary and pkgs is only needed once per version
+          # bump. 1.98.8 = the version our own machines run.
+          version: 1.98.8
+          use-cache: 'true'
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
           # Wait until deploy host is reachable on tailnet.
           ping: ${{ vars.DEPLOY_HOST }}
