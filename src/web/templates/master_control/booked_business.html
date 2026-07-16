@@ -448,6 +448,21 @@
             ? clients
             : clients.filter(c => !c.markets || c.markets.length === 0 || c.markets.some(m => selectedMarkets.has(m)));
 
+        // Amount for a client under the current pill selection: with every market
+        // selected use the exact stored total; with a subset, sum that client's
+        // per-market split over the selected markets. Rows with no market data
+        // (legacy/unknown) always show their full amount.
+        const allSelected = selectedMarkets.size === 0 ||
+            (data.all_markets || []).every(m => selectedMarkets.has(m));
+        const amt = c => {
+            if (allSelected || !c.by_market || !Object.keys(c.by_market).length) return c[col];
+            let s = 0;
+            for (const [m, v] of Object.entries(c.by_market)) {
+                if (selectedMarkets.has(m)) s += v[col];
+            }
+            return s;
+        };
+
         let html = `<table class="bb-table">
             <thead>
                 <tr>
@@ -462,7 +477,7 @@
         for (const ae of data.ae_groups) {
             const visibleClients = filterClients(ae.clients);
             if (!visibleClients.length) continue;
-            const aeTotal = visibleClients.reduce((s, c) => s + c[col], 0);
+            const aeTotal = visibleClients.reduce((s, c) => s + amt(c), 0);
             grandTotal += aeTotal;
             html += `<tr class="ae-heading">
                 <td colspan="2">${ae.ae}</td>
@@ -478,7 +493,7 @@
                 html += `<tr>
                     <td>&nbsp;&nbsp;&nbsp;${c.client}${warn}</td>
                     <td>${badge}</td>
-                    <td class="num">${fmt(c[col])}</td>
+                    <td class="num">${fmt(amt(c))}</td>
                 </tr>`;
             }
             html += `<tr class="ae-subtotal">
@@ -495,31 +510,36 @@
         </tr>`;
 
         if (data.trade_groups && data.trade_groups.length > 0) {
+            let tradeTotal = 0;
             html += `<tr class="trade-section-header">
                 <td colspan="3">TRADE</td>
             </tr>`;
             for (const ae of data.trade_groups) {
+                const visibleTrade = filterClients(ae.clients);
+                if (!visibleTrade.length) continue;
+                const tradeAeTotal = visibleTrade.reduce((s, c) => s + amt(c), 0);
+                tradeTotal += tradeAeTotal;
                 html += `<tr class="ae-heading">
                     <td colspan="2">${ae.ae}</td>
-                    <td class="num">${fmt(ae[col])}</td>
+                    <td class="num">${fmt(tradeAeTotal)}</td>
                 </tr>`;
-                for (const c of ae.clients) {
+                for (const c of visibleTrade) {
                     html += `<tr>
                         <td>&nbsp;&nbsp;&nbsp;${c.client}</td>
                         <td><span class="billing-badge badge-trade">Trade</span></td>
-                        <td class="num">${fmt(c[col])}</td>
+                        <td class="num">${fmt(amt(c))}</td>
                     </tr>`;
                 }
                 html += `<tr class="ae-subtotal">
                     <td>&nbsp;&nbsp;&nbsp;${ae.ae} Total</td>
                     <td></td>
-                    <td class="num">${fmt(ae[col])}</td>
+                    <td class="num">${fmt(tradeAeTotal)}</td>
                 </tr>`;
             }
             html += `<tr class="trade-total">
                 <td>Trade Total</td>
                 <td></td>
-                <td class="num">${fmt(data['trade_' + col])}</td>
+                <td class="num">${fmt(tradeTotal)}</td>
             </tr>`;
         }
 

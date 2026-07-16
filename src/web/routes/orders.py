@@ -8200,13 +8200,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             _MKT_ORDER = ["NYC","CMP","HOU","SFO","SEA","LAX","CVC","WDC","MMT","DAL"]
 
             clients: dict = defaultdict(
-                lambda: {"gross": 0.0, "net": 0.0, "centromedia": None, "unset": False, "markets": set()}
+                lambda: {"gross": 0.0, "net": 0.0, "centromedia": None, "unset": False,
+                         "markets": set(), "by_market": defaultdict(lambda: {"gross": 0.0, "net": 0.0})}
             )
             trade_clients: dict = defaultdict(
-                lambda: {"gross": 0.0, "net": 0.0, "markets": set()}
+                lambda: {"gross": 0.0, "net": 0.0, "markets": set(),
+                         "by_market": defaultdict(lambda: {"gross": 0.0, "net": 0.0})}
             )
 
             wl_fee_by_ae: dict = defaultdict(float)
+            wl_fee_by_ae_mkt: dict = defaultdict(float)
 
             for r in rows:
                 cm    = r["CENTROMEDIA"] or 0
@@ -8229,6 +8232,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     trade_clients[key]["net"]   += net
                     if mkt:
                         trade_clients[key]["markets"].add(mkt)
+                        trade_clients[key]["by_market"][mkt]["gross"] += gross
+                        trade_clients[key]["by_market"][mkt]["net"]   += net
                 else:
                     key = (ae, cli)
                     clients[key]["gross"] += gross
@@ -8239,9 +8244,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         clients[key]["unset"] = True
                     if mkt:
                         clients[key]["markets"].add(mkt)
+                        clients[key]["by_market"][mkt]["gross"] += gross
+                        clients[key]["by_market"][mkt]["net"]   += net
                     if agency == "Worldlink":
-                        # Round fee per contract (matches spreadsheet per-contract rounding)
+                        # Round fee per contract (matches spreadsheet per-contract rounding).
+                        # Rows arrive per (contract, market), so the per-market fee
+                        # split uses the same rounding as the total.
                         wl_fee_by_ae[ae] += round(-0.10 * net, 2)
+                        if mkt:
+                            wl_fee_by_ae_mkt[(ae, mkt)] += round(-0.10 * net, 2)
 
             # Inject WorldLink broker fee line (DO NOT INVOICE)
             for ae, fee in wl_fee_by_ae.items():
@@ -8250,6 +8261,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 clients[key]["net"]   += fee
                 if clients[key]["centromedia"] is None:
                     clients[key]["centromedia"] = 316
+            for (ae, mkt), fee in wl_fee_by_ae_mkt.items():
+                key = (ae, "WorldLink Broker Fees (DO NOT INVOICE)")
+                clients[key]["markets"].add(mkt)
+                clients[key]["by_market"][mkt]["gross"] += fee
+                clients[key]["by_market"][mkt]["net"]   += fee
 
             def _build_ae_groups(client_map, include_billing=True):
                 ae_map: dict = defaultdict(list)
@@ -8260,6 +8276,12 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         "net":     round(data["net"],   2),
                         "markets": sorted(data.get("markets", set()),
                                           key=lambda m: _MKT_ORDER.index(m) if m in _MKT_ORDER else 99),
+                        # Per-market split so the UI's market pills can show
+                        # per-market REVENUE, not just filter row visibility.
+                        "by_market": {
+                            m: {"gross": round(v["gross"], 2), "net": round(v["net"], 2)}
+                            for m, v in data.get("by_market", {}).items()
+                        },
                     }
                     if include_billing:
                         cm = data.get("centromedia") or 0
