@@ -3827,9 +3827,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         from browser_automation.etere_direct_client import connect as _db_connect
         from src.business_logic.services.daily_programming_run import (
             _drain_pending_filmati_syncs,
+            _window,
             replace_piece,
         )
-        from src.business_logic.services.daily_programming_run import _window
         try:
             d = _dt.datetime.strptime(body.get("date") or "", "%Y-%m-%d").date()
         except (ValueError, TypeError):
@@ -8201,7 +8201,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 # when the Orders app left DATA null. Net uses the header
                 # agency % — by convention a net-only production deal carries
                 # P_AGENZIA=0 on its (standalone) contract.
-                cur.execute(f"""
+                cur.execute("""
                     SELECT
                         ct.ID_CONTRATTITESTATA             AS id,
                         ct.CENTROMEDIA, ct.P_AGENZIA, ct.COD_CONTRATTO,
