@@ -3782,6 +3782,87 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
             return {"markets": cus, "placed": [], "error": f"Placement check failed: {exc}"}
 
+    @router.get("/api/master-control/daily-programming/placed-pieces")
+    async def daily_programming_placed_pieces(network: str, date: str):
+        """All live pieces-mode program rows for the network's markets on one
+        date, grouped client-side for the Replace-a-piece panel. Explode-mode
+        parts (PART>=1) are excluded by design — replacing those means
+        re-importing the EDL, not swapping a file."""
+        import datetime as _dt
+
+        from browser_automation.etere_direct_client import connect as _db_connect
+        from src.business_logic.services.daily_programming_run import list_placed_pieces
+        cus = _DP_NETWORK_CODUSERS.get((network or "").upper())
+        if not cus:
+            return {"pieces": [], "error": f"Unknown network '{network}'"}
+        try:
+            d = _dt.datetime.strptime(date, "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            return {"pieces": [], "error": "Invalid date"}
+
+        def _run():
+            out = []
+            with _db_connect() as conn:
+                cur = conn.cursor()
+                for cu in cus:
+                    for p in list_placed_pieces(cur, int(cu), d):
+                        p["cu"] = int(cu)
+                        out.append(p)
+            return out
+
+        loop = asyncio.get_running_loop()
+        try:
+            return {"pieces": await loop.run_in_executor(None, _run)}
+        except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
+            return {"pieces": [], "error": f"Lookup failed: {exc}"}
+
+    @router.post("/api/master-control/daily-programming/replace-piece")
+    async def daily_programming_replace_piece(body: dict = Body(...)):
+        """Replace one placed piece (e.g. revised Piece B) with a new asset in
+        the selected markets, leaving the rest of the show untouched. Markets
+        run sequentially — a piece swap is quick and a lone transaction never
+        deadlocks."""
+        import datetime as _dt
+
+        from browser_automation.etere_direct_client import connect as _db_connect
+        from src.business_logic.services.daily_programming_run import (
+            _drain_pending_filmati_syncs,
+            replace_piece,
+        )
+        try:
+            d = _dt.datetime.strptime(body.get("date") or "", "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            return {"results": [], "error": "Invalid date"}
+        try:
+            ora = int(body.get("ora"))
+            old_fid = int(body.get("oldFileId"))
+            new_fid = int(body.get("newFileId"))
+            markets = [int(c) for c in (body.get("markets") or [])]
+        except (TypeError, ValueError):
+            return {"results": [], "error": "ora, oldFileId, newFileId and markets are required"}
+        if not markets:
+            return {"results": [], "error": "No markets selected"}
+        if old_fid == new_fid:
+            return {"results": [], "error": "Replacement is the same asset as the placed piece"}
+
+        def _run():
+            results = []
+            pending = []
+            with _db_connect() as conn:
+                for cu in markets:
+                    r = replace_piece(conn, cu, d, ora, old_fid, new_fid, pending)
+                    r.pop("_deadlock", None)
+                    results.append(r)
+                if pending:
+                    _drain_pending_filmati_syncs(conn.cursor(), conn, pending)
+            return results
+
+        loop = asyncio.get_running_loop()
+        try:
+            return {"results": await loop.run_in_executor(None, _run)}
+        except Exception as exc:  # noqa: BLE001 - surface connection-level errors
+            return {"results": [], "error": f"Replace failed: {exc}"}
+
     @router.post("/api/master-control/daily-programming/run")
     async def daily_programming_run(body: dict = Body(...)):
         """Set up across markets: place each assignment into each target market

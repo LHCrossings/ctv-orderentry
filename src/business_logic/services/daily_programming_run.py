@@ -756,6 +756,110 @@ def _place_once(conn, cod_user, d, assignment, pending):
                 "_deadlock": _is_deadlock(exc)}
 
 
+def list_placed_pieces(cur, cod_user, d):
+    """All live pieces-mode program rows for one market/date, for the
+    Replace-a-piece UI. Pieces rows are PART=0 (explode parts are 1..N),
+    NEWTYPE='PGM', non-bumper. Returns dicts sorted by air order."""
+    cur.execute(
+        """SELECT t.id_tpalinse, t.ORA, t.ID_FILMATI, t.COD_PROGRA, t.Duration,
+                  t.EVENT_TYPE, LTRIM(RTRIM(ISNULL(f.DESCRIZIO, '')))
+           FROM TPALINSE t LEFT JOIN FILMATI f ON f.ID_FILMATI = t.ID_FILMATI
+           WHERE t.COD_USER=%s AND t.DATA=%s AND t.NEWTYPE='PGM' AND t.LIVELLO=0
+             AND t.PART=0 AND t.ID_FILMATI>0 AND t.COD_PROGRA NOT LIKE 'BUMP%%'
+           ORDER BY t.ORA, t.XORDER""",
+        (cod_user, d),
+    )
+    return [
+        {"id_tpalinse": int(r[0]), "ora": int(r[1]), "fid": int(r[2]),
+         "code": (r[3] or "").strip(), "duration": int(r[4] or 0),
+         "event_type": (r[5] or "").strip(), "description": r[6] or ""}
+        for r in cur.fetchall()
+    ]
+
+
+def replace_piece(conn, cod_user, d, ora, old_fid, new_fid, pending):
+    """Swap ONE placed pieces-mode program row to a new asset — e.g. a revised
+    Piece B — leaving the other pieces, bumpers, FCC IDs, and every spot in the
+    window untouched. Transaction-safe with the same deadlock retry as
+    run_market. Returns {cu, ok, message}.
+
+    The row keeps its identity (id_tpalinse, XORDER position, Event_P) — only
+    the asset binding changes: ID_FILMATI, Duration, TimeCode_O, plus
+    sch_UpdateSupportAndProperties for COD_PROGRA/SUPPORTO/etc. The SP resets
+    EVENT_TYPE, so the original F/T lock is restored afterwards. A rebuild
+    re-flows downstream start times when the new duration differs. NOTE: the
+    swapped file behaves like any fresh placement in EE — green triangle while
+    the CIB servers pull it from S3, then the usual manual Explode.
+    Explode-mode shows (PART>=1) are out of scope by design.
+    """
+    result = None
+    for attempt in range(1, _DEADLOCK_MAX_ATTEMPTS + 1):
+        result = _replace_piece_once(conn, cod_user, d, ora, old_fid, new_fid, pending)
+        if not result.pop("_deadlock", False):
+            return result
+        if attempt < _DEADLOCK_MAX_ATTEMPTS:
+            delay = _DEADLOCK_RETRY_SECONDS * attempt + random.uniform(0.1, 1.5)
+            time.sleep(delay)
+    return result
+
+
+def _replace_piece_once(conn, cod_user, d, ora, old_fid, new_fid, pending):
+    cur = conn.cursor()
+    try:
+        # Old fid in the WHERE is a guard: if the schedule shifted since the UI
+        # loaded, we refuse rather than re-point whatever now sits at that time.
+        cur.execute(
+            """SELECT id_tpalinse, EVENT_TYPE FROM TPALINSE
+               WHERE COD_USER=%s AND DATA=%s AND ORA=%s AND ID_FILMATI=%s
+                 AND NEWTYPE='PGM' AND LIVELLO=0 AND PART=0""",
+            (cod_user, d, ora, old_fid),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"cu": cod_user, "ok": False,
+                    "message": "placed piece not found (schedule changed since the list loaded?)"}
+        rid, event_type = int(row[0]), (row[1] or "T").strip() or "T"
+
+        new_dur = _durata(cur, new_fid)
+        if not new_dur:
+            return {"cu": cod_user, "ok": False,
+                    "message": f"replacement asset {new_fid} has no duration"}
+        cur.execute("SELECT LIVE_ID FROM FILMATI WHERE ID_FILMATI=%s", (new_fid,))
+        r = cur.fetchone()
+        if r and r[0] is not None:
+            return {"cu": cod_user, "ok": False,
+                    "message": "replacement asset is a live event — pieces must be files"}
+
+        cur.execute(
+            "UPDATE TPALINSE SET ID_FILMATI=%s, Duration=%s, TimeCode_I=0, TimeCode_O=%s "
+            "WHERE id_tpalinse=%s",
+            (new_fid, new_dur, new_dur - 1, rid),
+        )
+        cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (rid, new_fid))
+        # The SP resets EVENT_TYPE — restore the original F/T lock.
+        cur.execute("UPDATE TPALINSE SET EVENT_TYPE=%s WHERE id_tpalinse=%s",
+                    (event_type, rid))
+
+        _rebuild(cur, d, cod_user, rid)
+        _sync_checksums(cur, [rid], pending)
+
+        cur.execute(
+            "SELECT ID_FILMATI, Duration FROM TPALINSE WHERE id_tpalinse=%s AND LIVELLO=0",
+            (rid,),
+        )
+        chk = cur.fetchone()
+        if not chk or int(chk[0]) != int(new_fid):
+            conn.rollback()
+            return {"cu": cod_user, "ok": False, "message": "verify failed after swap"}
+        conn.commit()
+        return {"cu": cod_user, "ok": True,
+                "message": f"row {rid} re-pointed {old_fid} → {new_fid} ({new_dur} frames)"}
+    except Exception as exc:  # noqa: BLE001 - report per-market failure, leave market untouched
+        conn.rollback()
+        return {"cu": cod_user, "ok": False, "message": f"error: {exc}",
+                "_deadlock": _is_deadlock(exc)}
+
+
 def sweep_daily_ids(conn, cod_user, dates, pending):
     """Place this market's standing daily elements (see show_profiles
     daily_elements — e.g. the DAL end-of-day FCC children's-records ID) for

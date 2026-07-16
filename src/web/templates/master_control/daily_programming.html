@@ -197,6 +197,26 @@
         <div id="programList" class="prog-list"></div>
     </div>
 
+    <div class="tool-card" id="replaceCard" style="display:none;">
+        <h2>Replace a piece (revised file)</h2>
+        <div class="modal-check-hint" style="margin: 10px 0;">
+            Swap ONE placed piece — e.g. a revised Piece B — for this date without touching the
+            show's other pieces, bumpers, or spots. Pieces-mode (a/b/c) shows only; explode/EDL
+            shows need their EDL re-imported instead.
+        </div>
+        <button type="button" id="rpLoad" class="fm-done">Load placed pieces</button>
+        <div id="rpGroups" class="preview-plan" style="margin-top:10px;"></div>
+        <div id="rpDetail" style="display:none; margin-top:12px;">
+            <div id="rpMarkets" style="margin:8px 0;"></div>
+            <input type="text" id="rpSearch" class="field-input" style="width:100%; box-sizing:border-box;"
+                   placeholder="Search the replacement file (min 2 chars)…" />
+            <div id="rpResults" class="fm-results"></div>
+            <div id="rpChosen" class="fm-chosen"></div>
+            <button type="button" id="rpGo" class="run-btn" style="margin-top:10px;" disabled>Replace piece</button>
+            <div id="rpOut" class="preview-plan" style="margin-top:10px;"></div>
+        </div>
+    </div>
+
     <div class="tool-card" id="previewCard" style="display:none;">
         <div class="step-label">Step 4 · Review & set up</div>
         <button type="button" id="previewBtn" class="fm-done" style="margin-bottom: 12px;">Preview setup</button>
@@ -337,9 +357,12 @@
     async function loadGrid() {
         state.date = dateEl.value;
         const previewCard = document.getElementById('previewCard');
-        if (!state.network || !state.date) { progCard.style.display = 'none'; previewCard.style.display = 'none'; return; }
+        const replaceCard = document.getElementById('replaceCard');
+        if (!state.network || !state.date) { progCard.style.display = 'none'; previewCard.style.display = 'none'; replaceCard.style.display = 'none'; return; }
         progCard.style.display = 'block';
         previewCard.style.display = 'none';
+        replaceCard.style.display = 'block';
+        rpReset();
         progList.innerHTML = '<div class="prog-empty">Loading…</div>';
         try {
             const r = await fetch('/api/master-control/daily-programming/grid?network=' +
@@ -801,6 +824,150 @@
     }
 
     document.getElementById('runBtn').addEventListener('click', runSetup);
+
+    // ── Replace a piece (revised file) ──────────────────────────────────────
+    const rp = { groups: [], sel: null, file: null };
+    const rpGroups = document.getElementById('rpGroups');
+    const rpDetail = document.getElementById('rpDetail');
+    const rpResults = document.getElementById('rpResults');
+
+    function framesToLabel(fr) {
+        let s = Math.round(fr / 29.97);
+        let h = Math.floor(s / 3600) % 30;
+        if (h >= 24) h -= 24;   // post-midnight tail displays as clock time
+        const m = Math.floor((s % 3600) / 60);
+        return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+    }
+
+    function rpReset() {
+        rp.groups = []; rp.sel = null; rp.file = null;
+        rpGroups.innerHTML = '';
+        rpDetail.style.display = 'none';
+        document.getElementById('rpOut').innerHTML = '';
+        document.getElementById('rpChosen').innerHTML = '';
+        document.getElementById('rpGo').disabled = true;
+    }
+
+    async function rpLoadPieces() {
+        rpReset();
+        rpGroups.innerHTML = '<div class="pp-empty">Loading placed pieces…</div>';
+        try {
+            const r = await fetch('/api/master-control/daily-programming/placed-pieces?network=' +
+                encodeURIComponent(state.network) + '&date=' + encodeURIComponent(state.date));
+            const data = await r.json();
+            if (data.error) { rpGroups.innerHTML = '<div class="pp-empty">' + escHtml(data.error) + '</div>'; return; }
+            // Group identical pieces across markets: same air time + same asset
+            const byKey = {};
+            (data.pieces || []).forEach(function (p) {
+                const key = p.ora + ':' + p.fid;
+                if (!byKey[key]) byKey[key] = { ora: p.ora, fid: p.fid, code: p.code,
+                                                description: p.description, duration: p.duration, cus: [] };
+                byKey[key].cus.push(p.cu);
+            });
+            rp.groups = Object.values(byKey).sort(function (a, b) { return a.ora - b.ora || a.fid - b.fid; });
+            if (!rp.groups.length) {
+                rpGroups.innerHTML = '<div class="pp-empty">No pieces-mode placements found for this date.</div>';
+                return;
+            }
+            rpGroups.innerHTML = rp.groups.map(function (g, i) {
+                const mkts = g.cus.map(function (cu) { return codeOf[cu] || cu; }).join(' ');
+                return '<div class="pp-row rp-group" data-i="' + i + '" style="cursor:pointer;">' +
+                    '<div class="pp-prog">' + framesToLabel(g.ora) + ' · ' + escHtml(g.code) +
+                    ' <span style="opacity:.65;">(file ' + g.fid + ')</span></div>' +
+                    '<div class="pp-detail">' + escHtml(g.description || '') + ' · placed in: ' + escHtml(mkts) + '</div></div>';
+            }).join('');
+        } catch (e) {
+            rpGroups.innerHTML = '<div class="pp-empty">Error: ' + escHtml(e.message) + '</div>';
+        }
+    }
+
+    rpGroups.addEventListener('click', function (e) {
+        const row = e.target.closest('.rp-group');
+        if (!row) return;
+        rpGroups.querySelectorAll('.rp-group').forEach(function (r) { r.style.outline = ''; });
+        row.style.outline = '2px solid var(--nord8)';
+        rp.sel = rp.groups[parseInt(row.dataset.i, 10)];
+        rp.file = null;
+        document.getElementById('rpChosen').innerHTML = '';
+        document.getElementById('rpOut').innerHTML = '';
+        document.getElementById('rpGo').disabled = true;
+        document.getElementById('rpMarkets').innerHTML =
+            'Replace in: ' + rp.sel.cus.map(function (cu) {
+                return '<label style="margin-right:12px; white-space:nowrap;">' +
+                    '<input type="checkbox" class="rp-mkt" value="' + cu + '" checked> ' +
+                    escHtml(String(codeOf[cu] || cu)) + '</label>';
+            }).join('');
+        rpDetail.style.display = 'block';
+        rpResults.innerHTML = '';
+        document.getElementById('rpSearch').value = '';
+    });
+
+    let rpTimer = null;
+    document.getElementById('rpSearch').addEventListener('input', function () {
+        clearTimeout(rpTimer);
+        rpTimer = setTimeout(async function () {
+            const q = document.getElementById('rpSearch').value.trim();
+            if (q.length < 2) { rpResults.innerHTML = ''; return; }
+            rpResults.innerHTML = '<div class="fm-empty">Searching…</div>';
+            try {
+                const r = await fetch('/api/master-control/daily-programming/search-files?q=' + encodeURIComponent(q));
+                const data = await r.json();
+                const files = data.files || [];
+                if (!files.length) { rpResults.innerHTML = '<div class="fm-empty">No files found.</div>'; return; }
+                rpResults.innerHTML = files.map(function (f) {
+                    return '<div class="fm-result rp-file" data-id="' + f.id + '" data-code="' + escHtml(f.code) + '">' +
+                        '<span class="fm-code">' + escHtml(f.code) + '</span>' +
+                        '<span class="fm-meta">id ' + f.id + (f.tipo ? ' · ' + escHtml(f.tipo) : '') + '</span></div>';
+                }).join('');
+            } catch (e) {
+                rpResults.innerHTML = '<div class="fm-empty">Error: ' + escHtml(e.message) + '</div>';
+            }
+        }, 300);
+    });
+
+    rpResults.addEventListener('click', function (e) {
+        const row = e.target.closest('.rp-file');
+        if (!row) return;
+        rp.file = { id: parseInt(row.dataset.id, 10), code: row.dataset.code };
+        document.getElementById('rpChosen').innerHTML =
+            'Replacement: <b>' + escHtml(rp.file.code) + '</b> (id ' + rp.file.id + ')';
+        document.getElementById('rpGo').disabled = false;
+    });
+
+    document.getElementById('rpGo').addEventListener('click', async function () {
+        if (!rp.sel || !rp.file) return;
+        const markets = Array.prototype.slice.call(document.querySelectorAll('.rp-mkt:checked'))
+            .map(function (c) { return parseInt(c.value, 10); });
+        if (!markets.length) { alert('Select at least one market.'); return; }
+        const mkts = markets.map(function (cu) { return codeOf[cu] || cu; }).join(', ');
+        if (!confirm('Replace ' + rp.sel.code + ' (file ' + rp.sel.fid + ') at ' + framesToLabel(rp.sel.ora) +
+            ' with ' + rp.file.code + ' (file ' + rp.file.id + ') in: ' + mkts +
+            '?\n\nThis edits the live schedule. The other pieces, bumpers and spots stay untouched.')) return;
+        const out = document.getElementById('rpOut');
+        const btn = document.getElementById('rpGo');
+        out.innerHTML = '<div class="pp-empty">Replacing…</div>';
+        btn.disabled = true;
+        try {
+            const r = await fetch('/api/master-control/daily-programming/replace-piece', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ network: state.network, date: state.date, ora: rp.sel.ora,
+                                       oldFileId: rp.sel.fid, newFileId: rp.file.id, markets: markets })
+            });
+            const data = await r.json();
+            if (data.error) { out.innerHTML = '<div class="pp-empty">Error: ' + escHtml(data.error) + '</div>'; return; }
+            out.innerHTML = (data.results || []).map(function (x) {
+                return '<div class="pp-row ' + (x.ok ? 'ok' : 'fail') + '"><div class="pp-prog">' +
+                    (x.ok ? '✓' : '✗') + ' ' + escHtml(String(codeOf[x.cu] || x.cu)) + '</div>' +
+                    '<div class="pp-detail">' + escHtml(x.message) + '</div></div>';
+            }).join('') || '<div class="pp-empty">No results.</div>';
+        } catch (e) {
+            out.innerHTML = '<div class="pp-empty">Error: ' + escHtml(e.message) + '</div>';
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    document.getElementById('rpLoad').addEventListener('click', rpLoadPieces);
 </script>
 
 </body>
