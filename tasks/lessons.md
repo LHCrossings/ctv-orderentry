@@ -288,6 +288,29 @@ Multi-market proposal grids end with a **"Summary of investment"** block. These 
 
 ---
 
+## Table Headers Are Not Always Row 0 — pdfplumber Merges Section Banners Into Tables; Scan for the Header Row and Reconcile Totals
+
+**Session:** SCWA Aug-Sept partial entry (2026-07-16)
+
+**Rule:** `extract_tables()` can absorb a section banner ("Central Valley, CA
+(KBTV 8.2, ...)") as a table's row 0, pushing the real column header to row 1.
+A parser that tests only `table[0]` for its header markers silently DROPS that
+table. SCWA Aug-Sept: the August table had the banner merged, September didn't
+→ contract 2958 entered with only the September month (5 of 10 lines), no error.
+
+**How to apply (any multi-table grid parser):**
+1. Scan each table's rows for the header row (`"Language Block" and "Total Unit"
+   in row_text`), keep `(table, header_row_index)`, and parse rows from
+   `header_ri + 1`. Map columns per table, not from the first table only.
+2. Reconcile `sum(spots × rate)` against the PDF's own summary total
+   ("Total (Net)") and **raise** on mismatch — a dropped table must refuse to
+   enter, never enter partially. (Same family as the Brentan totals lesson.)
+3. Partial-entry symptom: parsed subtotal equals ONE month's subtotal and all
+   line dates carry the later month (later table overwrote nothing — the earlier
+   one was never seen).
+
+---
+
 ## Never Cluster on `round(coordinate)` — Round Manufactures Phantom Gaps at .5 Boundaries
 
 **Session:** Admerasia positional reader — Vietnamese McValue July SF (2026-07-01)

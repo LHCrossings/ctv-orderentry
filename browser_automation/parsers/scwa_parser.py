@@ -137,13 +137,16 @@ def parse_scwa_pdf(pdf_path: str) -> SCWAOrder:
     # ── Find all airtime tables ────────────────────────────────────────────
     # PDFs may have one table per month (e.g. May + June = two tables).
     # Collect all tables that have "Language Block" and "Total Unit" headers.
-    airtime_tables = []
+    # The header row is NOT always row 0: pdfplumber can merge the section
+    # banner ("Central Valley, CA (KBTV 8.2, ...)") into the table as its
+    # first row, pushing the real column header down. Scan for it.
+    airtime_tables = []   # (table, header_row_index)
     for table in tables:
-        if not table or not table[0]:
-            continue
-        header_text = " ".join(str(c or "") for c in table[0])
-        if "Language Block" in header_text and "Total Unit" in header_text:
-            airtime_tables.append(table)
+        for ri, row in enumerate(table or []):
+            row_text = " ".join(str(c or "") for c in (row or []))
+            if "Language Block" in row_text and "Total Unit" in row_text:
+                airtime_tables.append((table, ri))
+                break
 
     if not airtime_tables:
         raise ValueError("[SCWA PARSER] Could not find airtime table in PDF.")
@@ -151,40 +154,38 @@ def parse_scwa_pdf(pdf_path: str) -> SCWAOrder:
     if len(airtime_tables) > 1:
         print(f"[SCWA PARSER] Found {len(airtime_tables)} airtime tables — combining into one order")
 
-    # Column indices come from the first table's header (all tables share the same structure)
-    header = airtime_tables[0][0]
-
-    # Map column names to indices
-    def _col(name: str) -> Optional[int]:
-        for i, cell in enumerate(header):
-            if name.lower() in (cell or "").lower():
-                return i
-        return None
-
-    col_language  = _col("Language Block")
-    col_fix_ros   = _col("Fix/ROS")
-    col_length    = _col("Length")
-    col_start     = _col("Start")
-    col_end       = _col("End Date")
-    col_spot_type = _col("Spot Type")
-    col_total     = _col("Total Unit")
-    col_rate      = _col("Promo Unit Cost")
-
-    # Validate required columns
-    missing = [name for name, idx in [
-        ("Language Block", col_language),
-        ("Fix/ROS",        col_fix_ros),
-        ("Total Unit #",   col_total),
-        ("Promo Unit Cost",col_rate),
-    ] if idx is None]
-    if missing:
-        raise ValueError(f"[SCWA PARSER] Missing columns: {missing}")
-
     # ── Parse rows from all matching tables ────────────────────────────────
     lines: List[SCWALine] = []
 
-    for airtime_table in airtime_tables:
-        for row in airtime_table[1:]:
+    for airtime_table, header_ri in airtime_tables:
+        # Map column names to indices per table (headers can shift per table)
+        header = airtime_table[header_ri]
+
+        def _col(name: str) -> Optional[int]:
+            for i, cell in enumerate(header):
+                if name.lower() in (cell or "").lower():
+                    return i
+            return None
+
+        col_language  = _col("Language Block")
+        col_fix_ros   = _col("Fix/ROS")
+        col_length    = _col("Length")
+        col_start     = _col("Start")
+        col_end       = _col("End Date")
+        col_spot_type = _col("Spot Type")
+        col_total     = _col("Total Unit")
+        col_rate      = _col("Promo Unit Cost")
+
+        missing = [name for name, idx in [
+            ("Language Block", col_language),
+            ("Fix/ROS",        col_fix_ros),
+            ("Total Unit #",   col_total),
+            ("Promo Unit Cost",col_rate),
+        ] if idx is None]
+        if missing:
+            raise ValueError(f"[SCWA PARSER] Missing columns: {missing}")
+
+        for row in airtime_table[header_ri + 1:]:
             if not row:
                 continue
 
@@ -233,6 +234,23 @@ def parse_scwa_pdf(pdf_path: str) -> SCWAOrder:
         raise ValueError("[SCWA PARSER] No airtime lines parsed from PDF.")
 
     print(f"[SCWA PARSER] Total lines: {len(lines)}")
+
+    # ── Reconcile against the PDF's own summary total ──────────────────────
+    # The SUMMARY block carries "Total (Net) $ N,NNN.NN". If our parsed lines
+    # don't sum to it, a table or row was silently dropped — refuse to enter.
+    m = re.search(r'\bTotal \(Net\)\s*\n?\s*\$\s*([\d,]+\.\d{2})', full_text)
+    if m:
+        pdf_total = float(m.group(1).replace(',', ''))
+        parsed_total = sum(ln.total_spots * ln.rate for ln in lines)
+        if abs(parsed_total - pdf_total) > 0.01:
+            raise ValueError(
+                f"[SCWA PARSER] Parsed lines total ${parsed_total:,.2f} but the "
+                f"PDF summary says ${pdf_total:,.2f} — a table or row was likely "
+                f"dropped. Refusing to enter a partial order."
+            )
+        print(f"[SCWA PARSER] ✓ Totals reconcile: ${parsed_total:,.2f}")
+    else:
+        print("[SCWA PARSER] ⚠ No 'Total (Net)' summary found — skipping reconciliation")
 
     return SCWAOrder(
         advertiser=advertiser or "Sacramento County Water Agency",
