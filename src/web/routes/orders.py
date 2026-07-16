@@ -1987,19 +1987,41 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         def _run():
             etere_id = _resolve_etere_id(c)
             if not etere_id:
-                return None, None
+                return None, None, [], []
             from browser_automation.etere_direct_client import connect as _db_connect
             with _db_connect() as conn:
-                return etere_id, _contact_from_anagraf(conn.cursor(), int(etere_id))
+                contact = _contact_from_anagraf(conn.cursor(), int(etere_id))
+            # Per-line detected languages for the review modal — same detection
+            # the generate step runs, so what the user confirms is what applies.
+            # Best-effort: no scheduled spots yet (or EtereBridge absent) just
+            # hides the language section, it never blocks the contact prefill.
+            languages, language_options = [], []
+            try:
+                from backwrite.eterebridge_runner import (
+                    build_placement_csv_from_db,
+                    get_language_details,
+                    get_language_options,
+                )
+                csv_bytes = build_placement_csv_from_db(int(etere_id))
+                languages = get_language_details(csv_bytes)
+                language_options = list(dict.fromkeys(get_language_options()))
+            except Exception:  # noqa: BLE001 - review modal degrades gracefully
+                pass
+            return etere_id, contact, languages, language_options
 
         loop = asyncio.get_running_loop()
-        etere_id, contact = await loop.run_in_executor(None, _run)
+        etere_id, contact, languages, language_options = await loop.run_in_executor(None, _run)
         if not etere_id:
             return JSONResponse(status_code=409, content={"detail": (
                 f"Contract {c.get('code')} could not be matched in Etere "
                 "(no stored ID and its code did not resolve). Use the legacy "
                 "Backwrite page for this one.")})
-        return JSONResponse(content={"contract_code": str(c.get("code") or ""), "contact": contact})
+        return JSONResponse(content={
+            "contract_code": str(c.get("code") or ""),
+            "contact": contact,
+            "languages": languages,
+            "language_options": language_options,
+        })
 
     def _archive_entered(filename: str) -> tuple[list, str | None]:
         """Move an entered IO + its manifest to Used/. Returns (moved, error)."""
@@ -2054,6 +2076,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         On success the IO + manifest are archived to Used/ automatically.
         """
         contract_idx = int(body.get("contract_index") or 0)
+        # Per-line language overrides from the review modal ({description: code}).
+        # Detected values echoed back unchanged are harmless no-op corrections.
+        raw_langs = body.get("language_corrections") or {}
+        lang_corrections = {
+            str(k): str(v).strip()
+            for k, v in raw_langs.items()
+            if isinstance(raw_langs, dict) and str(v).strip()
+        } if isinstance(raw_langs, dict) else {}
 
         def _run():
             mf = (entered_dir / f"{filename}.manifest.json").resolve()
@@ -2183,7 +2213,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 "zip":            contact.get("zip", ""),
                 "notes":          str((gi.get("notes") if isinstance(gi, dict) else "") or ""),
                 "gross_up_rates": gross_up,
-                "language_corrections": {},
+                "language_corrections": lang_corrections,
                 "revision":       "",
             }
 

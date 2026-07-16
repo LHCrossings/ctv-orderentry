@@ -563,7 +563,7 @@ tbody tr.clickable {
 }
 
 /* ── Backwrite contact review modal (Phase 4) ─────────────────────────── */
-.bwc-modal { max-width: 560px; }
+.bwc-modal { max-width: 640px; }
 .bwc-subtitle { font-family: inherit; }
 
 .bwc-form { padding: 20px 24px 22px; }
@@ -636,6 +636,72 @@ tbody tr.clickable {
     color: #fff;
 }
 .bwc-btn-primary:hover { background: var(--accent-primary-hover, #4c6f9c); }
+
+/* Backwrite language verification (mirrors the legacy Backwrite page UI) */
+.bwl-section { margin-top: 18px; }
+.bwl-section.hidden { display: none; }
+.bwl-heading {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+}
+.bwl-hint { font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 10px; }
+.bwl-bulk {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+.bwl-bulk select,
+.bwl-bulk button {
+    font-size: 0.85rem;
+    padding: 3px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+.bwl-bulk button { cursor: pointer; white-space: nowrap; }
+.bwl-table-wrap { max-height: 260px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 6px; }
+.bwl-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.bwl-table th {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    text-align: left;
+    padding: 6px 8px;
+    background: var(--bg-secondary);
+    position: sticky;
+    top: 0;
+}
+.bwl-table td { padding: 5px 8px; border-top: 1px solid var(--border-color); color: var(--text-primary); }
+.bwl-chk-col { width: 32px; text-align: center; }
+.bwl-lang-col { width: 90px; }
+.bwl-count-col { width: 60px; text-align: right; }
+.bwl-desc { word-break: break-word; }
+.bwl-sel {
+    width: 100%;
+    font-size: 0.85rem;
+    padding: 2px 4px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+.bwl-changed td { background: color-mix(in srgb, var(--accent-primary, #5e81ac) 12%, transparent); }
+.bwl-unavailable { margin-top: 14px; font-size: 0.82rem; color: var(--warning, #ebcb8b); }
+.bwl-unavailable.hidden { display: none; }
 
 .meta-item {
     display: flex;

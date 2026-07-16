@@ -377,6 +377,7 @@ async function openBwContact(btn) {
             const el = document.getElementById('bwc-' + f);
             if (el) el.value = contact[f] || '';
         });
+        bwlRender(data.languages || [], data.language_options || []);
         form.classList.remove('hidden');
         document.getElementById('bwc-generate').onclick = () => {
             const edited = {};
@@ -384,8 +385,9 @@ async function openBwContact(btn) {
                 const el = document.getElementById('bwc-' + f);
                 if (el) edited[f] = el.value.trim();
             });
+            const langCorrections = bwlSerialize();
             closeBwContact();
-            doBackwrite(_bwContactBtn, edited);
+            doBackwrite(_bwContactBtn, edited, langCorrections);
         };
     } catch (err) {
         loading.classList.add('hidden');
@@ -396,15 +398,113 @@ async function openBwContact(btn) {
 
 function closeBwContact() { document.getElementById('bw-contact-overlay').classList.add('hidden'); }
 
-async function doBackwrite(btn, contact) {
+// ── Language verification (same architecture as the legacy Backwrite page:
+//    per-line tick boxes, apply-to-selected, per-line dropdowns) ─────────────
+function bwlRender(details, options) {
+    const section = document.getElementById('bwl-section');
+    const unavail = document.getElementById('bwl-unavailable');
+    const tbody   = document.getElementById('bwl-tbody');
+    tbody.textContent = '';
+    if (!details.length) {
+        section.classList.add('hidden');
+        unavail.classList.remove('hidden');
+        return;
+    }
+    unavail.classList.add('hidden');
+    const opts = options.length ? options : ['E', 'C', 'M', 'V', 'T', 'K', 'J', 'SA', 'Hm'];
+
+    const bulkSel = document.getElementById('bwl-bulk-select');
+    bulkSel.textContent = '';
+    opts.forEach(code => bulkSel.appendChild(new Option(code, code)));
+
+    details.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.dataset.desc     = item.description;
+        tr.dataset.origLang = item.lang;
+
+        const tdChk = document.createElement('td');
+        tdChk.className = 'bwl-chk-col';
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.className = 'bwl-row-chk';
+        chk.onchange = bwlUpdateCount;
+        tdChk.appendChild(chk);
+
+        const tdDesc = document.createElement('td');
+        tdDesc.className = 'bwl-desc';
+        tdDesc.textContent = item.description;
+
+        const tdLang = document.createElement('td');
+        tdLang.className = 'bwl-lang-col';
+        const sel = document.createElement('select');
+        sel.className = 'bwl-sel';
+        opts.forEach(code => sel.appendChild(new Option(code, code, false, code === item.lang)));
+        if (!opts.includes(item.lang)) sel.appendChild(new Option(item.lang, item.lang, false, true));
+        sel.onchange = () => tr.classList.toggle('bwl-changed', sel.value !== tr.dataset.origLang);
+        tdLang.appendChild(sel);
+
+        const tdCount = document.createElement('td');
+        tdCount.className = 'bwl-count-col';
+        tdCount.textContent = item.count != null ? item.count : '';
+
+        tr.append(tdChk, tdDesc, tdLang, tdCount);
+        tbody.appendChild(tr);
+    });
+    document.getElementById('bwl-select-all').checked = false;
+    bwlUpdateCount();
+    section.classList.remove('hidden');
+}
+
+function bwlToggleSelectAll(chk) {
+    document.querySelectorAll('.bwl-row-chk').forEach(c => c.checked = chk.checked);
+    bwlUpdateCount();
+}
+
+function bwlUpdateCount() {
+    const total    = document.querySelectorAll('.bwl-row-chk').length;
+    const selected = document.querySelectorAll('.bwl-row-chk:checked').length;
+    document.getElementById('bwl-bulk-count').textContent =
+        selected > 0 ? `${selected} of ${total} selected` : '';
+    const allChk = document.getElementById('bwl-select-all');
+    if (allChk) allChk.checked = selected === total && total > 0;
+}
+
+function bwlApplyBulk() {
+    const lang = document.getElementById('bwl-bulk-select').value;
+    document.querySelectorAll('#bwl-tbody tr').forEach(row => {
+        const chk = row.querySelector('.bwl-row-chk');
+        if (!chk || !chk.checked) return;
+        const sel = row.querySelector('.bwl-sel');
+        if (sel) {
+            sel.value = lang;
+            row.classList.toggle('bwl-changed', lang !== row.dataset.origLang);
+        }
+    });
+}
+
+function bwlSerialize() {
+    const map = {};
+    document.querySelectorAll('#bwl-tbody tr').forEach(row => {
+        const sel = row.querySelector('.bwl-sel');
+        if (sel && row.dataset.origLang && sel.value !== row.dataset.origLang) {
+            map[row.dataset.desc] = sel.value;
+        }
+    });
+    return map;
+}
+
+async function doBackwrite(btn, contact, langCorrections) {
     const filename = btn.dataset.filename;
     btn.disabled = true;
     const oldLabel = btn.textContent;
     btn.textContent = 'Generating…';
     try {
+        const payload = {};
+        if (contact) payload.contact = contact;
+        if (langCorrections && Object.keys(langCorrections).length) payload.language_corrections = langCorrections;
         const res = await fetch('/api/orders/awaiting-backwrite/' + encodeURIComponent(filename) + '/backwrite',
                                 { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify(contact ? { contact } : {}) });
+                                  body: JSON.stringify(payload) });
         if (!res.ok) {
             const data = await res.json().catch(() => ({}));
             alert(data.detail || `Backwrite failed (${res.status}).`);

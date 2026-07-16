@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
     <link rel="stylesheet" href="/static/css/_variables.css" />
     <link rel="stylesheet" href="/static/css/portal.css" />
-    <link rel="stylesheet" href="/static/css/app.css?v=20260713b" />
+    <link rel="stylesheet" href="/static/css/app.css?v=20260716" />
 </head>
 <body>
 
@@ -167,6 +167,32 @@
                 <div class="bwc-field"><label for="bwc-fax">Fax</label><input id="bwc-fax" type="text"></div>
                 <div class="bwc-field bwc-full"><label for="bwc-email_1">Email</label><input id="bwc-email_1" type="text"></div>
             </div>
+            <div id="bwl-section" class="bwl-section hidden">
+                <div class="bwl-heading">Language Verification</div>
+                <div class="bwl-hint">What language did the customer buy for each line? Detection is only a guess from the line description — verify every line.</div>
+                <div class="bwl-bulk">
+                    <span>Set selected to:</span>
+                    <select id="bwl-bulk-select"></select>
+                    <button type="button" id="bwl-bulk-apply" onclick="bwlApplyBulk()">Apply to selected</button>
+                    <span id="bwl-bulk-count"></span>
+                </div>
+                <div class="bwl-table-wrap">
+                    <table class="bwl-table">
+                        <thead>
+                            <tr>
+                                <th class="bwl-chk-col"><input type="checkbox" id="bwl-select-all" onclick="bwlToggleSelectAll(this)" title="Select all"></th>
+                                <th>Line Description</th>
+                                <th class="bwl-lang-col">Language</th>
+                                <th class="bwl-count-col">Spots</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bwl-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="bwl-unavailable" class="bwl-unavailable hidden">
+                ⚠ Language detection unavailable for this contract (no scheduled spots found yet). Languages will fall back to auto-detection at generate time.
+            </div>
             <div class="bwc-footer">
                 <button class="bwc-btn bwc-btn-secondary" onclick="closeBwContact()">Cancel</button>
                 <button class="bwc-btn bwc-btn-primary" id="bwc-generate">Generate backwrite</button>
@@ -191,6 +217,6 @@
     </div>
 </div>
 
-<script src="/static/js/app.js?v=20260713b"></script>
+<script src="/static/js/app.js?v=20260716"></script>
 </body>
 </html>
