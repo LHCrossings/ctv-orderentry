@@ -4,6 +4,33 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## New UI Features Extend the Page's Existing Interaction Pattern — Never Add a Parallel One
+
+**Session:** Daily Programming replace-piece (2026-07-16)
+
+**Rule:** When adding a capability to an existing page, express it through the
+interaction the team already knows, scoped by the page's existing selections.
+Lee's verdict on v1 ("way too overcomplicated") came from three parallel
+concepts: a separate card, its own Load button, and per-action market
+checkboxes — when the page already had row→modal as its verb and network/market
+pills as its scope. v2 (row hint '↻ replace piece' → same modal → pick piece →
+pick file) was ~30 lines SMALLER and instantly accepted.
+
+**How to apply:**
+1. Before designing, name the page's existing verb (here: "click a line, the
+   modal opens") and its existing scope selector (market pills). The feature
+   must reuse both; new selectors need justification.
+2. Design for the common case; drop edge-case affordances (partial-market
+   checkboxes) when the existing scope selector already covers them.
+3. **Group lists by what the USER means, not by DB identity.** v2's modal
+   listed one row per (air time, file) — but air times drift minutes between
+   markets, so one piece rendered 8 times. The user's mental object was "piece
+   B of this show" = the FILE within the show's window; per Lee the operation
+   is "find this file, swap with this file, in the chosen markets, only in the
+   time period of the show in question."
+
+---
+
 ## Unscheduling a Placed Spot Means BOTH Tables — a trafficPalinse-Only Delete Creates a Ghost Spot
 
 **Session:** WL 2919 Coterie revision (2026-07-14)
