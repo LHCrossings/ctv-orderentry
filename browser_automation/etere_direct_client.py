@@ -420,6 +420,57 @@ def _apply_day_segment(segment: str, result: dict[str, bool]) -> bool:
     return False
 
 
+def upsert_line_languages(cursor, rows: dict[int, str], source: str) -> int:
+    """Upsert {line_id: lang_code} into dbo.CTV_LineLanguage.
+
+    CTV-owned catalog table (NOT an Etere table): the verified language of each
+    contract line, written at order entry and read by backwrite so the user is
+    never re-asked. `source` records who vouched for the value:
+    'entry' (verified at order entry), 'user' (verified in the backwrite modal),
+    'billing-book' (historical backfill). A 'billing-book' write never
+    overwrites an existing row; 'entry'/'user' always win.
+    Caller commits. Returns number of rows written.
+    """
+    ph = '%s' if type(cursor).__module__.startswith('pymssql') else '?'
+    written = 0
+    for line_id, lang in rows.items():
+        lang = (lang or "").strip()
+        if not line_id or not lang:
+            continue
+        guard = "" if source != 'billing-book' else " AND SOURCE = 'billing-book'"
+        cursor.execute(
+            f"UPDATE CTV_LineLanguage SET LANG={ph}, SOURCE={ph}, UPDATED_AT=GETDATE() "
+            f"WHERE ID_CONTRATTIRIGHE={ph}{guard}",
+            (lang, source, int(line_id)),
+        )
+        if cursor.rowcount == 0:
+            cursor.execute(
+                f"INSERT INTO CTV_LineLanguage (ID_CONTRATTIRIGHE, LANG, SOURCE) "
+                f"SELECT {ph}, {ph}, {ph} WHERE NOT EXISTS "
+                f"(SELECT 1 FROM CTV_LineLanguage WHERE ID_CONTRATTIRIGHE={ph})",
+                (int(line_id), lang, source, int(line_id)),
+            )
+        written += cursor.rowcount
+    return written
+
+
+def fetch_line_languages(cursor, line_ids: list[int]) -> dict[int, str]:
+    """Return {line_id: lang} for the ids that exist in CTV_LineLanguage."""
+    ids = sorted({int(i) for i in line_ids if i})
+    if not ids:
+        return {}
+    ph = '%s' if type(cursor).__module__.startswith('pymssql') else '?'
+    out: dict[int, str] = {}
+    for i in range(0, len(ids), 500):
+        chunk = ids[i:i + 500]
+        marks = ",".join([ph] * len(chunk))
+        cursor.execute(
+            f"SELECT ID_CONTRATTIRIGHE, LANG FROM CTV_LineLanguage "
+            f"WHERE ID_CONTRATTIRIGHE IN ({marks})", chunk)
+        out.update({int(r[0]): r[1] for r in cursor.fetchall()})
+    return out
+
+
 def parse_day_bits(days: str) -> dict[str, bool]:
     """
     Convert a day-pattern string to a dict of Italian day keys (lun…dom).
@@ -813,6 +864,7 @@ EXEC web_sales_savecontractgeneral
         booking_code: int = 2,
         scheduling_type: Optional[int] = None,
         row_status: int = 0,   # 0=Ready, 2=Change Data (use 2 for revision lines on approved contracts)
+        language: Optional[str] = None,  # user-VERIFIED language code → CTV_LineLanguage
         # Unused kwargs kept for interface compatibility with EtereClient
         **_kwargs,
     ) -> int:
@@ -1065,9 +1117,17 @@ EXEC web_sales_InsertContractLine
                 date_to=dateto_dt,
             )
 
+        # Catalog the line's language (must be user-verified upstream — never a
+        # silent guess; the gather step is responsible for confirmation)
+        if line_id and language and language.strip():
+            upsert_line_languages(cursor, {line_id: language.strip()}, source='entry')
+            if self._autocommit:
+                self._conn.commit()
+
         label = "BNS" if is_bonus else "PAID"
+        lang_note = f" | lang={language}" if language else ""
         print(f"[DIRECT]   Line #{line_id} [{label}] {days} {time_range} | "
-              f"{date_from}-{date_to} | {total_spots} spots @ ${rate:.2f}")
+              f"{date_from}-{date_to} | {total_spots} spots @ ${rate:.2f}{lang_note}")
         return line_id
 
     def _assign_blocks(

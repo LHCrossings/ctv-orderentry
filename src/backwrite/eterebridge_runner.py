@@ -122,6 +122,87 @@ def get_language_options() -> list:
     return list(_eb_app_config.language_options)
 
 
+def _apply_stored_line_languages(df, row_languages) -> set:
+    """Override detected languages with the CTV_LineLanguage catalog.
+
+    Catalog rows are user-VERIFIED (at order entry or a prior backwrite), so
+    they beat description-based detection. Detection remains the fallback for
+    uncataloged lines. Mutates `row_languages` in place; returns the set of
+    Line ids that were overridden. Best-effort: no DB / no Line column → no-op.
+    """
+    if "Line" not in df.columns:
+        return set()
+    try:
+        from browser_automation.etere_direct_client import connect, fetch_line_languages
+        line_ids = []
+        for v in df["Line"].tolist():
+            try:
+                line_ids.append(int(v))
+            except (ValueError, TypeError):
+                line_ids.append(0)
+        with connect() as conn:
+            stored = fetch_line_languages(conn.cursor(), [i for i in line_ids if i])
+        if not stored:
+            return set()
+        overridden = set()
+        for idx, line_id in zip(df.index, line_ids):
+            if line_id in stored:
+                row_languages.at[idx] = stored[line_id]
+                overridden.add(line_id)
+        logging.info("[EtereBridge] %d line language(s) from CTV_LineLanguage catalog", len(overridden))
+        return overridden
+    except Exception as exc:  # noqa: BLE001 - catalog is an enhancement, never a blocker
+        logging.warning("[EtereBridge] CTV_LineLanguage lookup failed: %s", exc)
+        return set()
+
+
+def writeback_line_languages(csv_bytes: bytes, lang_by_desc: dict) -> int:
+    """Persist user-verified languages to CTV_LineLanguage (source='user').
+
+    `lang_by_desc` is the review modal's full table at generate time —
+    {row description: language code}. The user saw every row and clicked
+    Generate, so each value is verified. Maps descriptions to Etere line ids
+    via the placement CSV and upserts. Returns rows written (best-effort 0).
+    """
+    if not (_AVAILABLE and lang_by_desc):
+        return 0
+    with tempfile.NamedTemporaryFile(
+        suffix=".csv", prefix="eterebridge_langwb_", delete=False
+    ) as tmp:
+        tmp.write(csv_bytes)
+        tmp_path = tmp.name
+    try:
+        df = _file_processor.load_and_clean_data(tmp_path)
+        df.columns = df.columns.str.strip()
+        if "rowdescription" not in df.columns or "Line" not in df.columns:
+            return 0
+        rows: dict = {}
+        for idx, desc in df["rowdescription"].items():
+            lang = lang_by_desc.get(desc if isinstance(desc, str) else str(desc))
+            if not lang:
+                continue
+            try:
+                line_id = int(df["Line"].get(idx, 0) or 0)
+            except (ValueError, TypeError):
+                continue
+            if line_id:
+                rows[line_id] = lang
+        if not rows:
+            return 0
+        from browser_automation.etere_direct_client import connect, upsert_line_languages
+        with connect() as conn:
+            cur = conn.cursor()
+            n = upsert_line_languages(cur, rows, source="user")
+            conn.commit()
+        logging.info("[EtereBridge] Wrote %d line language(s) back to CTV_LineLanguage", n)
+        return n
+    except Exception as exc:  # noqa: BLE001 - writeback must never fail the backwrite
+        logging.warning("[EtereBridge] Language writeback failed: %s", exc)
+        return 0
+    finally:
+        os.unlink(tmp_path)
+
+
 def get_language_details(csv_bytes: bytes) -> list:
     """
     Run language detection and return per-unique-description results.
@@ -144,6 +225,7 @@ def get_language_details(csv_bytes: bytes) -> list:
         df = _file_processor.load_and_clean_data(tmp_path)
         df.columns = df.columns.str.strip()
         _detected_counts, row_languages = _file_processor.detect_languages(df)
+        stored_lines = _apply_stored_line_languages(df, row_languages)
 
         # rowdescription stays unrenamed by load_and_clean_data
         if "rowdescription" not in df.columns:
@@ -170,11 +252,13 @@ def get_language_details(csv_bytes: bytes) -> list:
                 except (ValueError, TypeError):
                     line = 0
             if desc not in unique:
-                unique[desc] = {"lang": lang, "count": 0, "line": line}
+                unique[desc] = {"lang": lang, "count": 0, "line": line, "stored_n": 0}
             else:
                 # Multiple spots share a description — keep the lowest line number.
                 unique[desc]["line"] = min(unique[desc]["line"], line)
             unique[desc]["count"] += 1
+            if line and line in stored_lines:
+                unique[desc]["stored_n"] += 1
 
         rows = [
             {
@@ -182,6 +266,8 @@ def get_language_details(csv_bytes: bytes) -> list:
                 "lang": info["lang"],
                 "count": info["count"],
                 "line": info["line"],
+                # every spot under this description came from the verified catalog
+                "stored": info["stored_n"] == info["count"],
             }
             for d, info in unique.items()
         ]
@@ -248,7 +334,11 @@ def run_eterebridge_pipeline(
         # 3. Language detection — auto, no stdin prompt
         _detected_counts, row_languages = _file_processor.detect_languages(df)
 
-        # 3a. Apply user corrections over auto-detected languages
+        # 3a. Verified catalog (CTV_LineLanguage) overrides detection;
+        #     this-run user corrections (below) override the catalog.
+        _apply_stored_line_languages(df, row_languages)
+
+        # 3b. Apply user corrections over auto-detected languages
         language_corrections = user_inputs.get("language_corrections") or {}
         if language_corrections:
             applied = 0

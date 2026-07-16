@@ -700,6 +700,7 @@ tbody tr.clickable {
     color: var(--text-primary);
 }
 .bwl-changed td { background: color-mix(in srgb, var(--accent-primary, #5e81ac) 12%, transparent); }
+.bwl-stored .bwl-desc { color: var(--success, #a3be8c); }
 .bwl-unavailable { margin-top: 14px; font-size: 0.82rem; color: var(--warning, #ebcb8b); }
 .bwl-unavailable.hidden { display: none; }
 

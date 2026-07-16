@@ -2236,6 +2236,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 reconcile["ok"] = bool(reconcile.get("ok", True)) and io_check["ok"]
                 reconcile["io_check"] = io_check.get("detail", {})
 
+            # The modal's language table was on screen when the user clicked
+            # Generate — every value is user-verified. Persist to the
+            # CTV_LineLanguage catalog so future backwrites never re-ask.
+            if lang_corrections:
+                from backwrite.eterebridge_runner import writeback_line_languages
+                writeback_line_languages(csv_bytes, lang_corrections)
+
             import re as _re
             base = Path(m.get("io_filename") or filename).stem
             out_name = _re.sub(r'[\\/:*?"<>|]', "", base).strip() + ".xlsx"

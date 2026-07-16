@@ -409,6 +409,17 @@ def gather_daviselen_inputs(pdf_path: str) -> dict:
     for line in notes.split('\n'):
         print(f"    {line}")
     
+    # Language verification (CTV_LineLanguage catalog) — one language per
+    # Daviselen order; the estimate code's suffix names the channel/language
+    # (e.g. 26_08_08_T_NCA_MTV_AM_M → M). Guess only — user must verify.
+    from browser_automation.line_language import confirm_line_languages, _normalize
+    _suffix = (order.estimate_detail or "").rsplit('_', 1)[-1].strip()
+    lang_guess = _normalize(_suffix) if len(_suffix) <= 3 else None
+    order_language = confirm_line_languages([
+        {"label": f"ALL lines — Est {order.estimate_number} {order.estimate_detail}",
+         "guess": lang_guess}
+    ])[0]
+
     # Billing (UNIVERSAL for ALL agency orders)
     billing = BillingType.CUSTOMER_SHARE_AGENCY
     print("\n[BILLING] ✓ Customer share indicating agency % / Agency")
@@ -427,6 +438,7 @@ def gather_daviselen_inputs(pdf_path: str) -> dict:
         'notes': notes,
         'billing': billing,
         'separation': separation,
+        'order_language': order_language,
     }
 
 
@@ -477,6 +489,7 @@ def _create_daviselen_contract_direct(order: "DaviselenOrder", user_input: dict)
 
         market     = user_input["market"]
         separation = user_input["separation"]
+        order_language = user_input.get("order_language")
         line_count = 0
 
         for line in order.lines:
@@ -516,6 +529,7 @@ def _create_daviselen_contract_direct(order: "DaviselenOrder", user_input: dict)
                     booking_code=booking_code,
                     separation_intervals=separation,
                     contract_id=contract_id,
+                    language=order_language,
                 )
 
         conn.commit()

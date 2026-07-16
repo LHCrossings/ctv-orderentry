@@ -446,6 +446,11 @@ function bwlRender(details, options) {
         const tdCount = document.createElement('td');
         tdCount.className = 'bwl-count-col';
         tdCount.textContent = item.count != null ? item.count : '';
+        if (item.stored) {
+            tr.classList.add('bwl-stored');
+            tdDesc.title = 'Language previously verified (stored in Etere catalog)';
+            tdDesc.textContent = '✓ ' + tdDesc.textContent;
+        }
 
         tr.append(tdChk, tdDesc, tdLang, tdCount);
         tbody.appendChild(tr);
@@ -483,12 +488,12 @@ function bwlApplyBulk() {
 }
 
 function bwlSerialize() {
+    // Full table, not just edits: the user saw every row and clicked Generate,
+    // so every value is verified — the server persists them to the catalog.
     const map = {};
     document.querySelectorAll('#bwl-tbody tr').forEach(row => {
         const sel = row.querySelector('.bwl-sel');
-        if (sel && row.dataset.origLang && sel.value !== row.dataset.origLang) {
-            map[row.dataset.desc] = sel.value;
-        }
+        if (sel && sel.value) map[row.dataset.desc] = sel.value;
     });
     return map;
 }

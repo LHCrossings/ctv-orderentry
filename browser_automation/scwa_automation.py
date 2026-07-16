@@ -208,8 +208,10 @@ def _create_scwa_contract_direct(order: SCWAOrder, inputs: dict) -> Optional[int
             return None
         print(f"[SCWA DIRECT] ✓ Contract header ID={contract_id}")
 
+        line_languages = inputs.get('line_languages') or []
+
         line_count = 0
-        for line in order.lines:
+        for line_idx, line in enumerate(order.lines):
             lang_key = _language_key(line.language_block)
             if not lang_key or lang_key not in _ROS_MAP:
                 print(f"  ✗ Unknown language block: {line.language_block!r} — skipped")
@@ -246,6 +248,7 @@ def _create_scwa_contract_direct(order: SCWAOrder, inputs: dict) -> Optional[int
                 is_bonus=False,
                 booking_code=2,   # always Paid Commercial for SCWA
                 separation_intervals=separation,
+                language=line_languages[line_idx] if line_idx < len(line_languages) else None,
             )
 
         conn.commit()
@@ -343,6 +346,17 @@ def gather_scwa_inputs(pdf_path: str) -> Optional[dict]:
     raw = input("  Notes [Enter to keep]: ").strip()
     notes = raw or default_notes
 
+    # ── Per-line language verification (CTV_LineLanguage catalog) ──────────
+    from browser_automation.line_language import confirm_line_languages, guess_language
+    line_languages = confirm_line_languages([
+        {
+            "label": f"{ln.language_block.splitlines()[0].strip()}  "
+                     f"{ln.start_date}–{ln.end_date}  {ln.total_spots} spots",
+            "guess": guess_language(ln.language_block),
+        }
+        for ln in order.lines
+    ])
+
     sep = SCWA_SEPARATION
 
     print("=" * 70)
@@ -355,6 +369,7 @@ def gather_scwa_inputs(pdf_path: str) -> Optional[dict]:
         'notes':         notes,
         'customer_id':   customer_id,
         'separation':    sep,
+        'line_languages': line_languages,
     }
 
 
