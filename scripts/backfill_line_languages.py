@@ -26,7 +26,7 @@ _project_root = Path(__file__).parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from browser_automation.etere_direct_client import connect, upsert_line_languages  # noqa: E402
+from browser_automation.etere_direct_client import connect  # noqa: E402
 from browser_automation.line_language import LANGUAGE_CODES  # noqa: E402
 
 BILLING_DIR = Path("/mnt/c/Work Temp/Billing")

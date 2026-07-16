@@ -500,6 +500,8 @@ class OrderProcessingService:
         try:
             from browser_automation.etere_direct_client import (
                 connect as _db_connect,
+            )
+            from browser_automation.etere_direct_client import (
                 fetch_line_languages,
                 upsert_line_languages,
             )
