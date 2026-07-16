@@ -874,14 +874,20 @@
             const w = hhmmWindow(p.start, p.end), lo = w[0], hi = w[1];
             const sel = {};
             (state.codUsers || []).forEach(function (cu) { sel[cu] = 1; });
-            const byKey = {};
+            // One row per FILE: air times drift a few minutes between markets,
+            // so grouping is by asset only — the swap is "find this file in
+            // this show's window, in each selected market".
+            const byFid = {};
             (data.pieces || []).forEach(function (x) {
                 if (lo == null || x.ora < lo || x.ora >= hi || !sel[x.cu]) return;
-                const key = x.ora + ':' + x.fid;
-                if (!byKey[key]) byKey[key] = { ora: x.ora, fid: x.fid, code: x.code, cus: [] };
-                byKey[key].cus.push(x.cu);
+                if (!byFid[x.fid]) byFid[x.fid] = { ora: x.ora, fid: x.fid, code: x.code, cus: {} };
+                byFid[x.fid].ora = Math.min(byFid[x.fid].ora, x.ora);
+                byFid[x.fid].cus[x.cu] = 1;
             });
-            replaceCtx.groups = Object.values(byKey).sort(function (a, b) { return a.ora - b.ora; });
+            replaceCtx.groups = Object.values(byFid).map(function (g) {
+                g.cus = Object.keys(g.cus).map(Number);
+                return g;
+            }).sort(function (a, b) { return a.ora - b.ora; });
             if (!replaceCtx.groups.length) {
                 fmResults.innerHTML = '<div class="fm-empty">No pieces-mode placements in this window for the selected markets. (Explode/EDL shows aren\'t swappable — re-import the EDL instead.)</div>';
                 return;
@@ -923,7 +929,8 @@
         try {
             const r = await fetch('/api/master-control/daily-programming/replace-piece', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ network: state.network, date: state.date, ora: g.ora,
+                body: JSON.stringify({ network: state.network, date: state.date,
+                                       start: replaceCtx.p.start, end: replaceCtx.p.end,
                                        oldFileId: g.fid, newFileId: file.id, markets: markets })
             });
             const data = await r.json();

@@ -3829,17 +3829,20 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             _drain_pending_filmati_syncs,
             replace_piece,
         )
+        from src.business_logic.services.daily_programming_run import _window
         try:
             d = _dt.datetime.strptime(body.get("date") or "", "%Y-%m-%d").date()
         except (ValueError, TypeError):
             return {"results": [], "error": "Invalid date"}
         try:
-            ora = int(body.get("ora"))
             old_fid = int(body.get("oldFileId"))
             new_fid = int(body.get("newFileId"))
             markets = [int(c) for c in (body.get("markets") or [])]
         except (TypeError, ValueError):
-            return {"results": [], "error": "ora, oldFileId, newFileId and markets are required"}
+            return {"results": [], "error": "oldFileId, newFileId and markets are required"}
+        lo, hi = _window(body.get("start") or "", body.get("end") or "")
+        if lo is None or hi is None:
+            return {"results": [], "error": "Invalid show time window"}
         if not markets:
             return {"results": [], "error": "No markets selected"}
         if old_fid == new_fid:
@@ -3850,7 +3853,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             pending = []
             with _db_connect() as conn:
                 for cu in markets:
-                    r = replace_piece(conn, cu, d, ora, old_fid, new_fid, pending)
+                    r = replace_piece(conn, cu, d, lo, hi, old_fid, new_fid, pending)
                     r.pop("_deadlock", None)
                     results.append(r)
                 if pending:

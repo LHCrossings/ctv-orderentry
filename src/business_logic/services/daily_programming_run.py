@@ -777,13 +777,20 @@ def list_placed_pieces(cur, cod_user, d):
     ]
 
 
-def replace_piece(conn, cod_user, d, ora, old_fid, new_fid, pending):
-    """Swap ONE placed pieces-mode program row to a new asset — e.g. a revised
+def replace_piece(conn, cod_user, d, lo, hi, old_fid, new_fid, pending):
+    """Swap a placed pieces-mode program piece to a new asset — e.g. a revised
     Piece B — leaving the other pieces, bumpers, FCC IDs, and every spot in the
     window untouched. Transaction-safe with the same deadlock retry as
     run_market. Returns {cu, ok, message}.
 
-    The row keeps its identity (id_tpalinse, XORDER position, Event_P) — only
+    The target is identified by ASSET within the show's [lo, hi) time window —
+    NOT by exact air time, which drifts by a few minutes market to market
+    (2026-07-16: piece B aired 09:10 NYC / 09:11 SEA / 09:12 CVC+WDC). Every
+    matching row in the window is swapped (a repeated filler is several rows —
+    all of them are the revised file). The window bound keeps a same-day rerun
+    of the same file in ANOTHER show untouched.
+
+    Each row keeps its identity (id_tpalinse, XORDER position, Event_P) — only
     the asset binding changes: ID_FILMATI, Duration, TimeCode_O, plus
     sch_UpdateSupportAndProperties for COD_PROGRA/SUPPORTO/etc. The SP resets
     EVENT_TYPE, so the original F/T lock is restored afterwards. A rebuild
@@ -794,7 +801,7 @@ def replace_piece(conn, cod_user, d, ora, old_fid, new_fid, pending):
     """
     result = None
     for attempt in range(1, _DEADLOCK_MAX_ATTEMPTS + 1):
-        result = _replace_piece_once(conn, cod_user, d, ora, old_fid, new_fid, pending)
+        result = _replace_piece_once(conn, cod_user, d, lo, hi, old_fid, new_fid, pending)
         if not result.pop("_deadlock", False):
             return result
         if attempt < _DEADLOCK_MAX_ATTEMPTS:
@@ -803,22 +810,22 @@ def replace_piece(conn, cod_user, d, ora, old_fid, new_fid, pending):
     return result
 
 
-def _replace_piece_once(conn, cod_user, d, ora, old_fid, new_fid, pending):
+def _replace_piece_once(conn, cod_user, d, lo, hi, old_fid, new_fid, pending):
     cur = conn.cursor()
     try:
         # Old fid in the WHERE is a guard: if the schedule shifted since the UI
-        # loaded, we refuse rather than re-point whatever now sits at that time.
+        # loaded, we refuse rather than re-point whatever now sits there.
         cur.execute(
             """SELECT id_tpalinse, EVENT_TYPE FROM TPALINSE
-               WHERE COD_USER=%s AND DATA=%s AND ORA=%s AND ID_FILMATI=%s
-                 AND NEWTYPE='PGM' AND LIVELLO=0 AND PART=0""",
-            (cod_user, d, ora, old_fid),
+               WHERE COD_USER=%s AND DATA=%s AND ORA>=%s AND ORA<%s AND ID_FILMATI=%s
+                 AND NEWTYPE='PGM' AND LIVELLO=0 AND PART=0
+               ORDER BY ORA""",
+            (cod_user, d, lo, hi, old_fid),
         )
-        row = cur.fetchone()
-        if not row:
+        rows = [(int(r[0]), (r[1] or "T").strip() or "T") for r in cur.fetchall()]
+        if not rows:
             return {"cu": cod_user, "ok": False,
-                    "message": "placed piece not found (schedule changed since the list loaded?)"}
-        rid, event_type = int(row[0]), (row[1] or "T").strip() or "T"
+                    "message": "placed piece not found in this window (schedule changed since the list loaded?)"}
 
         new_dur = _durata(cur, new_fid)
         if not new_dur:
@@ -830,30 +837,33 @@ def _replace_piece_once(conn, cod_user, d, ora, old_fid, new_fid, pending):
             return {"cu": cod_user, "ok": False,
                     "message": "replacement asset is a live event — pieces must be files"}
 
-        cur.execute(
-            "UPDATE TPALINSE SET ID_FILMATI=%s, Duration=%s, TimeCode_I=0, TimeCode_O=%s "
-            "WHERE id_tpalinse=%s",
-            (new_fid, new_dur, new_dur - 1, rid),
-        )
-        cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (rid, new_fid))
-        # The SP resets EVENT_TYPE — restore the original F/T lock.
-        cur.execute("UPDATE TPALINSE SET EVENT_TYPE=%s WHERE id_tpalinse=%s",
-                    (event_type, rid))
+        for rid, event_type in rows:
+            cur.execute(
+                "UPDATE TPALINSE SET ID_FILMATI=%s, Duration=%s, TimeCode_I=0, TimeCode_O=%s "
+                "WHERE id_tpalinse=%s",
+                (new_fid, new_dur, new_dur - 1, rid),
+            )
+            cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (rid, new_fid))
+            # The SP resets EVENT_TYPE — restore the original F/T lock.
+            cur.execute("UPDATE TPALINSE SET EVENT_TYPE=%s WHERE id_tpalinse=%s",
+                        (event_type, rid))
 
-        _rebuild(cur, d, cod_user, rid)
-        _sync_checksums(cur, [rid], pending)
+        _rebuild(cur, d, cod_user, rows[0][0])
+        _sync_checksums(cur, [rid for rid, _ in rows], pending)
 
-        cur.execute(
-            "SELECT ID_FILMATI, Duration FROM TPALINSE WHERE id_tpalinse=%s AND LIVELLO=0",
-            (rid,),
-        )
-        chk = cur.fetchone()
-        if not chk or int(chk[0]) != int(new_fid):
-            conn.rollback()
-            return {"cu": cod_user, "ok": False, "message": "verify failed after swap"}
+        for rid, _ in rows:
+            cur.execute(
+                "SELECT ID_FILMATI FROM TPALINSE WHERE id_tpalinse=%s AND LIVELLO=0",
+                (rid,),
+            )
+            chk = cur.fetchone()
+            if not chk or int(chk[0]) != int(new_fid):
+                conn.rollback()
+                return {"cu": cod_user, "ok": False, "message": "verify failed after swap"}
         conn.commit()
+        n = len(rows)
         return {"cu": cod_user, "ok": True,
-                "message": f"row {rid} re-pointed {old_fid} → {new_fid} ({new_dur} frames)"}
+                "message": f"{n} row(s) re-pointed {old_fid} → {new_fid} ({new_dur} frames)"}
     except Exception as exc:  # noqa: BLE001 - report per-market failure, leave market untouched
         conn.rollback()
         return {"cu": cod_user, "ok": False, "message": f"error: {exc}",
