@@ -8193,6 +8193,47 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 """, (str(bcast_start), str(cal_start), str(bcast_end), str(month_end)))
                 rows = cur.fetchall()
 
+                # Production / non-airtime charges (CONTRATTISPESE) in the same
+                # billing window. Shown as separate "<client> PROD" rows (Lee's
+                # existing tagging convention) so charge money is visibly
+                # distinct from airtime; may merge once entry is automated.
+                # Charge date falls back to the carrier line's flight start
+                # when the Orders app left DATA null. Net uses the header
+                # agency % — by convention a net-only production deal carries
+                # P_AGENZIA=0 on its (standalone) contract.
+                cur.execute(f"""
+                    SELECT
+                        ct.ID_CONTRATTITESTATA             AS id,
+                        ct.CENTROMEDIA, ct.P_AGENZIA, ct.COD_CONTRATTO,
+                        ct.CAMBIOMERCE, ct.ID_PAGAMENTI,
+                        cr.COD_USER                        AS cod_user,
+                        LTRIM(RTRIM(
+                            CASE WHEN ae.Nome IS NOT NULL AND ae.Nome != ''
+                                 THEN ae.Nome + ' ' + ae.RAG_SOCIAL
+                                 ELSE ae.RAG_SOCIAL END
+                        ))                                 AS ae_name,
+                        ag.RAG_SOCIAL                      AS buying_agency,
+                        cl.RAG_SOCIAL                      AS client_name,
+                        ISNULL(SUM(s.IMPORTO), 0)          AS gross
+                    FROM CONTRATTISPESE s
+                    JOIN CONTRATTIRIGHE cr
+                      ON cr.ID_CONTRATTIRIGHE = s.ID_CONTRATTIRIGHE
+                    JOIN CONTRATTITESTATA ct
+                      ON ct.ID_CONTRATTITESTATA = cr.ID_CONTRATTITESTATA
+                    LEFT JOIN ANAGRAF ae ON ae.ID_ANAGRAF = ct.AGENTE1
+                    LEFT JOIN ANAGRAF ag ON ag.ID_ANAGRAF = ct.AGENZIA
+                    LEFT JOIN ANAGRAF cl ON cl.ID_ANAGRAF = ct.COMMITTENTE
+                    WHERE COALESCE(s.DATA, cr.DATA_INIZIO)
+                              >= CASE WHEN ct.CENTROMEDIA = 316 THEN %s ELSE %s END
+                      AND COALESCE(s.DATA, cr.DATA_INIZIO)
+                              <= CASE WHEN ct.CENTROMEDIA = 316 THEN %s ELSE %s END
+                    GROUP BY
+                        ct.ID_CONTRATTITESTATA, ct.CENTROMEDIA, ct.P_AGENZIA, ct.COD_CONTRATTO,
+                        ct.CAMBIOMERCE, ct.ID_PAGAMENTI, cr.COD_USER,
+                        ae.Nome, ae.RAG_SOCIAL, ag.RAG_SOCIAL, cl.RAG_SOCIAL
+                """, (str(bcast_start), str(cal_start), str(bcast_end), str(month_end)))
+                prod_rows = cur.fetchall()
+
             def _is_trade(r):
                 return r["CAMBIOMERCE"] or r["ID_PAGAMENTI"] == 4
 
@@ -8253,6 +8294,41 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         wl_fee_by_ae[ae] += round(-0.10 * net, 2)
                         if mkt:
                             wl_fee_by_ae_mkt[(ae, mkt)] += round(-0.10 * net, 2)
+
+            # Production / non-airtime charges → "<client> PROD" rows.
+            # Same AE/client keying as airtime so the PROD row sorts right
+            # under its airtime sibling; trade-contract charges follow the
+            # same show_trade rules as airtime revenue.
+            for r in prod_rows:
+                gross = float(r["gross"])
+                if not gross:
+                    continue
+                if _is_trade(r) and not show_trade:
+                    continue
+                cm  = r["CENTROMEDIA"] or 0
+                net = gross * (1 - float(r["P_AGENZIA"] or 0) / 100)
+                ae     = r["ae_name"]      or "Unknown AE"
+                agency = (r["buying_agency"] or "").strip()
+                client = (r["client_name"]   or "").strip()
+                if agency and client and agency != client:
+                    cli = f"{agency}:{client}"
+                else:
+                    cli = client or agency or r["COD_CONTRATTO"] or "Unknown"
+                cli += " PROD"
+                mkt = _MKT_CODE.get(r.get("cod_user") or 0, "")
+                key = (ae, cli)
+                bucket = trade_clients if (show_trade and _is_trade(r)) else clients
+                bucket[key]["gross"] += gross
+                bucket[key]["net"]   += net
+                if mkt:
+                    bucket[key]["markets"].add(mkt)
+                    bucket[key]["by_market"][mkt]["gross"] += gross
+                    bucket[key]["by_market"][mkt]["net"]   += net
+                if bucket is clients:
+                    if clients[key]["centromedia"] is None:
+                        clients[key]["centromedia"] = cm
+                    if cm == 0:
+                        clients[key]["unset"] = True
 
             # Inject WorldLink broker fee line (DO NOT INVOICE)
             for ae, fee in wl_fee_by_ae.items():
