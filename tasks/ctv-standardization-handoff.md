@@ -191,8 +191,8 @@ These are the reasons we paused — they're architectural and belong with Kurt.
 ## 6. Reference pointers
 
 - Standardization policy (referenced by both repos, NOT cloned here):
-  `daseme/spotops` → `docs/superpowers/specs/standardization-policy.md`
-  (also cited as `/opt/spotops/docs/superpowers/specs/standardization-policy.md`).
+  fleet governance docs moved out of `spotops/docs/superpowers` into the
+  dedicated `/opt/ctv-fleet` repo — look for `standardization-policy.md` there.
 - Spotops parent `CLAUDE.md`: `/opt/spotops/.claude/CLAUDE.md` (workflow
   inspiration the template's CLAUDE.md points to).
 - ctv-common README covers `db`, `testing`, Tailscale socket perms, releasing.
