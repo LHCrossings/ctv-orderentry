@@ -542,7 +542,7 @@
             fmResults.innerHTML = lastResults.map(function (f) {
                 return '<div class="fm-result" data-id="' + f.id + '">' +
                     '<span class="fm-code">' + escHtml(f.code) + '</span>' +
-                    '<span class="fm-meta">id ' + f.id + (f.tipo ? ' · ' + escHtml(f.tipo) : '') + '</span></div>';
+                    '<span class="fm-meta">' + (durLabel(f.durata) ? durLabel(f.durata) + ' · ' : '') + 'id ' + f.id + (f.tipo ? ' · ' + escHtml(f.tipo) : '') + '</span></div>';
             }).join('');
         } catch (e) {
             fmResults.innerHTML = '<div class="fm-empty">Error: ' + escHtml(e.message) + '</div>';
@@ -618,13 +618,17 @@
 
     function renderChosen() {
         const d = fillerDraft;
+        const totalFr = d.chosen.reduce(function (s, f) { return s + (f.durata || 0); }, 0);
         fmFillerStatus.innerHTML = 'Show <b>' + escHtml(d.showFile.code) + '</b> = ' + d.pieces.length +
             ' piece' + (d.pieces.length === 1 ? '' : 's') + ' in ' + d.slots + ' breaks. ' +
             'Pieces fill the first breaks; choose <b>' + d.needed + '</b> filler' + (d.needed === 1 ? '' : 's') +
-            ' for the rest (' + d.chosen.length + '/' + d.needed + ' chosen).';
+            ' for the rest (' + d.chosen.length + '/' + d.needed + ' chosen' +
+            (totalFr ? ' · ' + durLabel(totalFr) + ' total' : '') + ').';
         fmChosen.innerHTML = d.chosen.map(function (f, i) {
             return '<div class="fm-chosen-row"><span class="fm-slot-num">break ' + (d.pieces.length + i + 1) + '</span>' +
-                '<span>' + escHtml(f.code) + '</span><span class="fm-x" data-i="' + i + '">remove</span></div>';
+                '<span>' + escHtml(f.code) + '</span>' +
+                '<span class="fm-meta">' + durLabel(f.durata) + '</span>' +
+                '<span class="fm-x" data-i="' + i + '">remove</span></div>';
         }).join('');
         fmDone.disabled = d.chosen.length !== d.needed;
     }
@@ -844,6 +848,15 @@
         if (h >= 24) h -= 24;   // post-midnight tail displays as clock time
         const m = Math.floor((s % 3600) / 60);
         return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+    }
+
+    // FILMATI.DURATA (frames @29.97) → 'M:SS' / 'H:MM:SS' for the pickers, so
+    // the team can plan filler counts without cross-referencing a spreadsheet.
+    function durLabel(fr) {
+        if (!fr || fr <= 0) return '';
+        const t = Math.round(fr / 29.97);
+        const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+        return (h ? h + ':' + String(m).padStart(2, '0') : String(m)) + ':' + String(s).padStart(2, '0');
     }
 
     function pieceLetter(code) {
