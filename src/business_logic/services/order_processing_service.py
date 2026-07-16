@@ -2362,7 +2362,6 @@ class OrderProcessingService:
 
             def _run(driver, session):
                 success = process_scwa_order(
-                    driver,
                     str(order.pdf_path),
                     shared_session=session,
                     pre_gathered_inputs=pre_gathered_inputs,
@@ -2410,7 +2409,6 @@ class OrderProcessingService:
 
             def _run(driver, session):
                 success = process_sierra_order(
-                    driver,
                     str(order.pdf_path),
                     shared_session=session,
                     pre_gathered_inputs=pre_gathered_inputs,
@@ -2456,7 +2454,6 @@ class OrderProcessingService:
 
             def _run(driver, session):
                 success = process_rwny_order(
-                    driver,
                     str(order.pdf_path),
                     shared_session=session,
                     pre_gathered_inputs=pre_gathered_inputs,
