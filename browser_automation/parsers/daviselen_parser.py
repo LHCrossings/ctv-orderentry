@@ -1002,42 +1002,59 @@ def get_default_customer_order_ref(order: DaviselenOrder) -> str:
 def get_default_notes(order: DaviselenOrder) -> str:
     """
     Generate default Notes for ALL Daviselen orders.
-    
+
     Format:
+    Order <order_number>
     CLIENT <client_code> <client_name>
     PRODUCT <product_code> <product_name>
     ESTIMATE <estimate_number> <estimate_detail>
-    
+    CPE: <client_code>/<product_code>/<estimate_number>
+
     Args:
         order: DaviselenOrder object
-        
+
     Returns:
         Notes string with line breaks
-        
+
     Example:
         >>> get_default_notes(order)
-        "CLIENT DSCT SO. CAL. TDA
+        "Order 29685
+        CLIENT DSCT SO. CAL. TDA
         PRODUCT NCA NEW CAR
-        ESTIMATE 1295 26_02_02_T_NCA_MTV_AM_M"
+        ESTIMATE 1477 26_08_08_T_NCA_CTV_AM_C
+        CPE: DSCT/NCA/1477"
     """
+    lines = []
+
+    # Order number (page 1 of the PDF) — carried into the backwritten order
+    if order.order_number and order.order_number not in ('Unknown', '0'):
+        lines.append(f"Order {order.order_number}")
+
     # Build client line
     client_line = "CLIENT "
     if order.client_code:
         client_line += f"{order.client_code} "
     client_line += order.client
-    
+    lines.append(client_line)
+
     # Build product line
     product_line = "PRODUCT "
     if order.product_code:
         product_line += f"{order.product_code} "
     product_line += order.product
-    
+    lines.append(product_line)
+
     # Build estimate line
     estimate_line = f"ESTIMATE {order.estimate_number}"
     if order.estimate_detail:
         estimate_line += f" {order.estimate_detail}"
-    
-    return f"{client_line}\n{product_line}\n{estimate_line}"
+    lines.append(estimate_line)
+
+    # CPE summary (Client/Product/Estimate) aggregated from the IO
+    if order.client_code and order.product_code and order.estimate_number:
+        lines.append(f"CPE: {order.client_code}/{order.product_code}/{order.estimate_number}")
+
+    return "\n".join(lines)
 
 
 def get_daviselen_billing_defaults() -> Dict[str, str]:

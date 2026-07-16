@@ -59,6 +59,7 @@ from browser_automation.parsers.daviselen_parser import (
     DaviselenOrder,
     analyze_weekly_distribution,
     format_time_for_description,
+    get_default_notes,
     parse_daviselen_pdf,
 )
 from src.domain.enums import BillingType, OrderType
@@ -400,28 +401,10 @@ def gather_daviselen_inputs(pdf_path: str) -> dict:
     contract_code = input(f"  Code [{suggested_code}]: ").strip() or suggested_code
     description = input(f"  Description [{suggested_desc}]: ").strip() or suggested_desc
     
-    # Notes (auto-populate from order - Etere standard format)
-    # Format:
-    # CLIENT <code> <name>
-    # PRODUCT <code> <name>
-    # ESTIMATE <number> <detail>
-    
-    client_line = "CLIENT "
-    if order.client_code:
-        client_line += f"{order.client_code} "
-    client_line += order.client
-    
-    product_line = "PRODUCT "
-    if order.product_code:
-        product_line += f"{order.product_code} "
-    product_line += order.product
-    
-    estimate_line = f"ESTIMATE {order.estimate_number}"
-    if order.estimate_detail:
-        estimate_line += f" {order.estimate_detail}"
-    
-    notes = f"{client_line}\n{product_line}\n{estimate_line}"
-    
+    # Notes (auto-populate from order - Etere standard format; single source
+    # of truth is get_default_notes in the parser)
+    notes = get_default_notes(order)
+
     print("  Notes:")
     for line in notes.split('\n'):
         print(f"    {line}")
