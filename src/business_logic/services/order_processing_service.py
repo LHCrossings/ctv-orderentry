@@ -320,6 +320,7 @@ class OrderProcessingService:
             order_groups.append([order])
 
         enriched = self._enrich_results(results)
+        self._catalog_line_languages(enriched)
         self._write_backwrite_manifests(order_groups, enriched)
         return enriched
 
@@ -462,8 +463,83 @@ class OrderProcessingService:
             order_groups.append([order])
 
         enriched = self._enrich_results(results)
+        self._catalog_line_languages(enriched)
         self._write_backwrite_manifests(order_groups, enriched)
         return enriched
+
+    @staticmethod
+    def _catalog_line_languages(results: list["ProcessingResult"]) -> None:
+        """Universal per-line language catalog pass (CTV_LineLanguage).
+
+        Runs after enrichment for EVERY successful contract, whatever the
+        parser: fetch the contract's lines from Etere, skip lines the
+        automation already cataloged during entry (wired gathers like
+        SCWA/Daviselen write source='entry' themselves), group the rest by
+        description, and ask the user to verify each group's language —
+        guessed from the description but NEVER silently assumed.
+
+        Interactive only (stdin must be a TTY); best-effort — a failure here
+        never fails the entry.
+        """
+        import sys
+        if not sys.stdin.isatty():
+            return
+        contract_ids = [
+            c.etere_id for r in results if r and r.success
+            for c in r.contracts if c.etere_id
+        ]
+        if not contract_ids:
+            return
+        try:
+            from browser_automation.etere_direct_client import (
+                connect as _db_connect,
+                fetch_line_languages,
+                upsert_line_languages,
+            )
+            from browser_automation.line_language import (
+                confirm_line_languages,
+                guess_language,
+            )
+            with _db_connect() as conn:
+                ph = '%s' if type(conn).__module__.startswith('pymssql') else '?'
+                cur = conn.cursor()
+                for cid in dict.fromkeys(contract_ids):  # unique, order-preserving
+                    cur.execute(
+                        f"SELECT ID_CONTRATTIRIGHE, DESCRIZIONE FROM CONTRATTIRIGHE "
+                        f"WHERE ID_CONTRATTITESTATA = {ph} ORDER BY ID_CONTRATTIRIGHE",
+                        (int(cid),),
+                    )
+                    lines = [(int(r[0]), (r[1] or "").strip()) for r in cur.fetchall()]
+                    if not lines:
+                        continue
+                    cataloged = fetch_line_languages(cur, [lid for lid, _ in lines])
+                    todo = [(lid, desc) for lid, desc in lines if lid not in cataloged]
+                    if not todo:
+                        continue
+                    # One prompt per unique description (a WorldLink contract has
+                    # 9 identical market lines — ask once, apply to all of them)
+                    groups: dict[str, list[int]] = {}
+                    for lid, desc in todo:
+                        groups.setdefault(desc, []).append(lid)
+                    print(f"\n[LANGUAGE] Contract ID {cid}: "
+                          f"{len(todo)} line(s) not yet in the language catalog")
+                    verified = confirm_line_languages([
+                        {"label": f"{desc or '(no description)'}  ({len(lids)} line(s))",
+                         "guess": guess_language(desc)}
+                        for desc, lids in groups.items()
+                    ])
+                    rows = {
+                        lid: lang
+                        for (desc, lids), lang in zip(groups.items(), verified)
+                        for lid in lids
+                    }
+                    upsert_line_languages(cur, rows, source='entry')
+                    conn.commit()
+                    print(f"[LANGUAGE] ✓ {len(rows)} line(s) cataloged for contract {cid}")
+        except (KeyboardInterrupt, EOFError):
+            print("\n[LANGUAGE] Skipped — remaining lines can be verified at backwrite time")
+        except Exception as exc:  # noqa: BLE001 - catalog must never fail the entry
+            print(f"[LANGUAGE] WARNING: language catalog pass failed: {exc}")
 
     @staticmethod
     def _write_backwrite_manifests(order_groups: list[list[Order]], results: list[ProcessingResult]) -> None:
