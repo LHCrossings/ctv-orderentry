@@ -55,6 +55,17 @@ jobs:
             cd /opt/ctv-orderentry
             git fetch origin
             git checkout "${{ github.ref_name }}"
+            # This checkout is a deploy target and must mirror origin exactly.
+            # If commits were made directly on the server (e.g. a live hotfix),
+            # --ff-only would refuse forever. Preserve them on a timestamped
+            # branch, show them in the run log, then reset to origin.
+            if [ "$(git rev-list --count "origin/${{ github.ref_name }}..HEAD")" -gt 0 ]; then
+              backup="server-local/$(date +%Y%m%d-%H%M%S)"
+              echo "::warning title=Local commits on deploy host::preserved on branch $backup"
+              git log --stat "origin/${{ github.ref_name }}..HEAD"
+              git branch "$backup"
+              git reset --hard "origin/${{ github.ref_name }}"
+            fi
             git pull --ff-only origin "${{ github.ref_name }}"
             docker compose build control-room
             # up can fail with a name conflict if a previous recreate was
