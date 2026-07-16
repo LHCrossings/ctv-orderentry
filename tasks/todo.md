@@ -34,6 +34,19 @@ the last gap (commercial-log column J) blocking full live-pull from Etere.
   have blank Line — skip.
 - Language options (EB config): C, E, H, Hm, J, K, L, M, M/C, P, SA, T, V.
 
-## Review
+## Review (2026-07-16 — all items done)
 
-(to fill as work completes)
+- A1–A3, B1–B2, C1–C2, D1–D2 complete. Also: universal post-entry catalog pass
+  in `_catalog_line_languages` (order_processing_service.py) covers every
+  unwired parser, TTY-only, groups identical descriptions, never double-asks
+  (skips cataloged lines). WorldLink = ALWAYS English (business rule): entry
+  passes language='E'; universal pass auto-fills WL contracts silently.
+- Backfill ran live: 47,087 unique lines from books 2201–2607 (2607 CLEANED
+  still empty — July not billed). Distribution: E 24205, M 6676, V 5268,
+  T 2804, SA 2330, C 2015, K 1598, Hm 755, M/C 656, P 497, J 243, H 27, L 13.
+- Coverage vs CONTRATTIRIGHE starting 2022+: 87.3% (96–98% for 2022–24;
+  2025 79% / 2026 63% = flights not yet billed). Converges via entry hook +
+  backwrite writeback; script is idempotent — rerun after each billing close.
+- Backfill perf note: row-by-row upsert was ~hours for 47k rows; switched to
+  temp-table staging + set-based UPDATE/INSERT (~1 min). Keep
+  upsert_line_languages for small entry-time writes only.
