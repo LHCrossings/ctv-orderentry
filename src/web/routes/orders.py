@@ -2167,7 +2167,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 "agency_fee":     agency_fee,
                 "estimate":       estimate,
                 "estimate_run":   "",
-                "contract":       str(c.get("code") or ""),
+                "contract":       str(etere_id),
                 "affidavit":      "Y",
                 "order_date":     "",
                 "contact_person": contact.get("contact_person", ""),
