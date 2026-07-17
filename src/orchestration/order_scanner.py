@@ -25,7 +25,7 @@ from domain.enums import OrderStatus, OrderType
 # size+mtime so repeat scans are instant; a changed/new file misses and is
 # re-detected. Bump the version to invalidate every entry after detection logic
 # changes.
-_SCAN_CACHE_VERSION = 1
+_SCAN_CACHE_VERSION = 2   # v2: BDR Type3 fingerprint now text-validated (RWNY misdetect fix)
 _SCAN_CACHE_NAME = ".scan_cache.json"
 
 

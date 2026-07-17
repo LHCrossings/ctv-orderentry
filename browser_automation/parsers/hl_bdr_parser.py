@@ -468,13 +468,29 @@ def is_bdr_pdf(pdf_path: str) -> bool:
     BDR PDFs use a single custom Type3 font that pdfplumber cannot decode
     (produces cid: codes).  This check uses PyMuPDF to inspect the font
     metadata — no OCR required, so it runs in under a second.
+
+    The Type3 font alone is NOT a sufficient fingerprint: DocuSign signature
+    stamps embed Type3 ArialMT fonts too (an RWNY proposal was misrouted here
+    2026-07-17). A genuine Type3 BDR is unreadable without OCR — its extracted
+    text is control-character garbage — so the font hit must be confirmed by
+    the page text being unreadable (or carrying the BDR header marker).
     """
     try:
         import fitz
         doc = fitz.open(pdf_path)
-        fonts = doc[0].get_fonts()
+        page = doc[0]
+        has_type3 = any(f[2] == "Type3" for f in page.get_fonts())
+        text = page.get_text() if has_type3 else ""
         doc.close()
-        return any(f[2] == "Type3" for f in fonts)
+        if not has_type3:
+            return False
+        clean = text.strip()
+        if "Buy Detail Report" in clean:
+            return True
+        if not clean:
+            return True   # no extractable text at all — the classic BDR case
+        printable = sum(1 for ch in clean if ch.isprintable() or ch in "\r\n\t")
+        return printable / len(clean) < 0.8
     except Exception:
         return False
 
