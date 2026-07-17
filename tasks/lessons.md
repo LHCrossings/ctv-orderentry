@@ -4,6 +4,31 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## "Like Page X" in a User Request Means Page X's Whole Interaction Pattern, Not the One Widget Named
+
+**Session:** Break Optimization log-style redo (2026-07-16)
+
+**Rule:** When a team email asks for something "similar to <existing page>", the
+reference page's complete interaction model is the spec — its layout, its
+expand/collapse verbs, AND its zero-click loading — even if the email names a
+specific widget. The 7/15 email said "show/block selection similar to Edit
+Logs, where we can use a dropdown selection" — we took "dropdown" literally and
+bolted a dropdown onto the classic page (e0a1e49). What they meant was: make
+the page WORK like Edit Logs (log-style show list, click to expand, auto-load
+on pill/date, no Load button).
+
+**How to apply:**
+1. Before building from a "like X" request, open page X and list its
+   interaction verbs (how it loads, selects, expands). The request almost
+   certainly wants all of them, not just the named control.
+2. When the interpretation is ambiguous, ship the trial as a NEW card next to
+   the existing one (as done here) so the team can compare and choose —
+   cheaper than guessing wrong twice on a live page.
+3. Related: "New UI Features Extend the Page's Existing Interaction Pattern"
+   below — same principle from the opposite direction.
+
+---
+
 ## New UI Features Extend the Page's Existing Interaction Pattern — Never Add a Parallel One
 
 **Session:** Daily Programming replace-piece (2026-07-16)
