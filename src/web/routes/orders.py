@@ -422,7 +422,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         scanner = OrderScanner(PDFOrderDetector(), directory)
         orders = scanner.scan_for_orders()
         result = []
+        listed = set()
         for order in orders:
+            listed.add(order.pdf_path.name)
             stat = order.pdf_path.stat()
             ov = order.order_type.value if order.order_type else "Unknown"
             # Agency column label. For most parsers the order-type code IS the
@@ -435,6 +437,27 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 "agency_label": agency_label,
                 "customer_name": order.customer_name or "Unknown",
                 "estimate_number": order.estimate_number,
+                "size_kb": round(stat.st_size / 1024, 1),
+                "modified": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
+            })
+        # Every file the tab badge counts must also get a row — detection
+        # silently skips unrecognized xlsx/images, unparseable files, and
+        # non-order extensions, which otherwise inflate the badge invisibly
+        # and can only be cleaned up with shell access on the deploy host.
+        # These rows render with an "Unknown" badge and the normal Mark
+        # Done button, so strays can be cleared from the UI.
+        for f in sorted(directory.iterdir()):
+            if (not f.is_file() or f.name in listed
+                    or f.name.startswith(('.', '~$'))
+                    or f.name.endswith('.manifest.json')):
+                continue
+            stat = f.stat()
+            result.append({
+                "filename": f.name,
+                "order_type": "Unknown",
+                "agency_label": "Unknown",
+                "customer_name": "Unrecognized file",
+                "estimate_number": None,
                 "size_kb": round(stat.st_size / 1024, 1),
                 "modified": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
             })
