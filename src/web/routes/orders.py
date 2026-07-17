@@ -2221,10 +2221,17 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         def _run():
             etere_id = _resolve_etere_id(c)
             if not etere_id:
-                return None, None, [], []
+                return None, None, None, [], []
             from browser_automation.etere_direct_client import connect as _db_connect
             with _db_connect() as conn:
                 contact = _contact_from_anagraf(conn.cursor(), int(etere_id))
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT COD_CONTRATTO, ISNULL(CUSTOMERREF, '') FROM CONTRATTITESTATA"
+                    " WHERE ID_CONTRATTITESTATA = %s", (int(etere_id),))
+                row = cur.fetchone() or ("", "")
+                header_info = {"code": (row[0] or "").strip(),
+                               "customer_ref": (row[1] or "").strip()}
             # Per-line detected languages for the review modal — same detection
             # the generate step runs, so what the user confirms is what applies.
             # Best-effort: no scheduled spots yet (or EtereBridge absent) just
@@ -2241,18 +2248,42 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 language_options = list(dict.fromkeys(get_language_options()))
             except Exception:  # noqa: BLE001 - review modal degrades gracefully
                 pass
-            return etere_id, contact, languages, language_options
+            return etere_id, contact, header_info, languages, language_options
 
         loop = asyncio.get_running_loop()
-        etere_id, contact, languages, language_options = await loop.run_in_executor(None, _run)
+        etere_id, contact, header_info, languages, language_options = await loop.run_in_executor(None, _run)
         if not etere_id:
             return JSONResponse(status_code=409, content={"detail": (
                 f"Contract {c.get('code')} could not be matched in Etere "
                 "(no stored ID and its code did not resolve). Use the legacy "
                 "Backwrite page for this one.")})
+        # Estimate defaults — same derivation the generate step uses, surfaced
+        # so the operator can confirm/correct them in the modal (Maija 7/17):
+        # 'estimate' fills the front/cover page, 'estimate_run' the Run Sheet
+        # Estimate column.
+        gi = (m.get("user_inputs") or [{}])[0] or {}
+        gorder = gi.get("order") if isinstance(gi, dict) else {}
+        gorder = gorder if isinstance(gorder, dict) else {}
+        estimates = m.get("estimates") or []
+        estimate = str(gorder.get("estimate_number") or (estimates[0] if estimates else "") or "")
+        estimate_run = ""
+        # Admerasia convention (Lee 7/17): front estimate = the Etere header's
+        # customer order ref (e.g. '19-MD10-2607VT'); run-sheet estimate = the
+        # short token from the contract code (e.g. 'Admerasia McD 19SE 2607'
+        # → '19SE 2607').
+        import re as _re
+        hdr_code = (header_info or {}).get("code", "")
+        if (m.get("order_type") or "").lower() == "admerasia" or hdr_code.lower().startswith("admerasia"):
+            estimate = (header_info or {}).get("customer_ref", "") or estimate
+            m_tok = _re.search(r"(\d+[A-Z]{2}\s+\d{4})\s*$", hdr_code)
+            if m_tok:
+                estimate_run = m_tok.group(1)
+
         return JSONResponse(content={
             "contract_code": str(c.get("code") or ""),
             "contact": contact,
+            "estimate": estimate,
+            "estimate_run": estimate_run,
             "languages": languages,
             "language_options": language_options,
         })
@@ -2422,6 +2453,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
             estimates = m.get("estimates") or []
             estimate = str(gorder.get("estimate_number") or (estimates[0] if estimates else "") or "")
+            estimate_run = ""
+            # The review modal shows both estimate fields (front page / run
+            # sheet) — values confirmed there override the derived defaults.
+            body_est = (body.get("estimates") or {}) if isinstance(body, dict) else {}
+            if isinstance(body_est, dict):
+                if body_est.get("estimate") is not None:
+                    estimate = str(body_est["estimate"]).strip()
+                if body_est.get("estimate_run") is not None:
+                    estimate_run = str(body_est["estimate_run"]).strip()
 
             user_inputs = {
                 "sales_person":   ae_name,
@@ -2430,7 +2470,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 "agency_flag":    agency_flag,
                 "agency_fee":     agency_fee,
                 "estimate":       estimate,
-                "estimate_run":   "",
+                "estimate_run":   estimate_run,
                 "contract":       str(etere_id),
                 "affidavit":      "Y",
                 "order_date":     "",

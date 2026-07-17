@@ -377,6 +377,8 @@ async function openBwContact(btn) {
             const el = document.getElementById('bwc-' + f);
             if (el) el.value = contact[f] || '';
         });
+        document.getElementById('bwc-estimate').value     = data.estimate || '';
+        document.getElementById('bwc-estimate_run').value = data.estimate_run || '';
         bwlRender(data.languages || [], data.language_options || []);
         form.classList.remove('hidden');
         document.getElementById('bwc-generate').onclick = () => {
@@ -385,9 +387,13 @@ async function openBwContact(btn) {
                 const el = document.getElementById('bwc-' + f);
                 if (el) edited[f] = el.value.trim();
             });
+            const estimates = {
+                estimate:     document.getElementById('bwc-estimate').value.trim(),
+                estimate_run: document.getElementById('bwc-estimate_run').value.trim(),
+            };
             const langCorrections = bwlSerialize();
             closeBwContact();
-            doBackwrite(_bwContactBtn, edited, langCorrections);
+            doBackwrite(_bwContactBtn, edited, langCorrections, estimates);
         };
     } catch (err) {
         loading.classList.add('hidden');
@@ -498,7 +504,7 @@ function bwlSerialize() {
     return map;
 }
 
-async function doBackwrite(btn, contact, langCorrections) {
+async function doBackwrite(btn, contact, langCorrections, estimates) {
     const filename = btn.dataset.filename;
     btn.disabled = true;
     const oldLabel = btn.textContent;
@@ -506,6 +512,7 @@ async function doBackwrite(btn, contact, langCorrections) {
     try {
         const payload = {};
         if (contact) payload.contact = contact;
+        if (estimates) payload.estimates = estimates;
         if (langCorrections && Object.keys(langCorrections).length) payload.language_corrections = langCorrections;
         const res = await fetch('/api/orders/awaiting-backwrite/' + encodeURIComponent(filename) + '/backwrite',
                                 { method: 'POST', headers: { 'Content-Type': 'application/json' },
