@@ -2719,7 +2719,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     # Entries are keyed by resolved path and validated by mtime; popped on use.
     _log_sync_wb_cache: dict = {}
     _log_sync_wb_lock = _threading.Lock()
-    _log_sync_warming: set = set()
+    _log_sync_warming: dict = {}   # key -> threading.Event (set when done)
 
     def _log_sync_warm(log_path: Path) -> None:
         key = str(log_path)
@@ -2729,21 +2729,29 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 cached = _log_sync_wb_cache.get(key)
                 if (cached and cached[0] == mtime) or key in _log_sync_warming:
                     return
-                _log_sync_warming.add(key)
+                done = _threading.Event()
+                _log_sync_warming[key] = done
             try:
                 wb = _wb_load_fast(log_path)
+                with _log_sync_wb_lock:
+                    _log_sync_wb_cache.clear()   # keep at most one warmed workbook
+                    _log_sync_wb_cache[key] = (mtime, wb)
             finally:
                 with _log_sync_wb_lock:
-                    _log_sync_warming.discard(key)
-            with _log_sync_wb_lock:
-                _log_sync_wb_cache.clear()   # keep at most one warmed workbook
-                _log_sync_wb_cache[key] = (mtime, wb)
+                    _log_sync_warming.pop(key, None)
+                done.set()
         except Exception:
             pass  # warming is best-effort; apply falls back to a cold load
 
     def _log_sync_take_warm(log_path: Path):
-        """Return the warmed workbook if it still matches the file on disk."""
+        """Return the warmed workbook if it still matches the file on disk.
+        If a warm-up for this file is in flight (user clicked Apply quickly),
+        wait for it instead of duplicating the ~40 s parse."""
         key = str(log_path)
+        with _log_sync_wb_lock:
+            in_flight = _log_sync_warming.get(key)
+        if in_flight is not None:
+            in_flight.wait(timeout=180)
         try:
             mtime = log_path.stat().st_mtime_ns
         except OSError:
