@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Crossings TV — Signal Flow — MCR-01</title>
+<style>
+  :root {
+    --bg: #0a0d10;
+    --panel: #14181d;
+    --panel2: #191e24;
+    --panel3: #10141a;
+    --hair: rgba(255,255,255,0.08);
+    --text: #dfe4e8;
+    --text-dim: rgba(223,228,232,0.5);
+    --text-faint: rgba(223,228,232,0.3);
+    --led-ready: #3ecf6e;
+    --led-proc: #f0a83c;
+    --led-air: #eab308;
+    --led-cable: #ec4899;
+    --led-mon: #38bdf8;
+    --bus: #2fb8d6;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Consolas", monospace;
+    --cg: "Arial Narrow", "Helvetica Neue Condensed", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    font-family: var(--mono);
+    color: var(--text);
+    padding: 30px 16px 48px;
+  }
+
+  .rack {
+    max-width: 1120px;
+    margin: 0 auto;
+    background: var(--panel);
+    border: 1px solid var(--hair);
+    border-radius: 6px;
+  }
+
+  .rack-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 22px;
+    border-bottom: 1px solid var(--hair);
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .rack-header h1 {
+    font-family: var(--cg);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+  .rack-header .status {
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
+  .dot.air { background: var(--led-air); box-shadow: 0 0 5px var(--led-air); }
+  .dot.ready { background: var(--led-ready); box-shadow: 0 0 5px var(--led-ready); }
+  .dot.proc  { background: var(--led-proc); box-shadow: 0 0 5px var(--led-proc); }
+  .dot.mon   { background: var(--led-mon); box-shadow: 0 0 5px var(--led-mon); }
+
+  .header-controls { display: flex; align-items: center; gap: 10px; }
+  .ctrl-btn {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    background: var(--panel2);
+    border: 1px solid var(--hair);
+    border-radius: 3px;
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: color .15s ease, border-color .15s ease;
+  }
+  .ctrl-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+
+  .hint-bar {
+    font-size: 9.5px;
+    color: var(--text-faint);
+    text-align: center;
+    padding: 8px 22px 0;
+    letter-spacing: 0.03em;
+  }
+  .hint-bar .k { color: var(--bus); }
+
+  .layout { display: flex; gap: 20px; padding: 14px 22px 22px; align-items: flex-start; }
+  .diagram { flex: 0 0 780px; min-width: 0; }
+  .aside { flex: 1; min-width: 250px; }
+
+  .sec-label {
+    font-family: var(--cg);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin: 4px 0 8px;
+    text-align: center;
+  }
+
+  /* ── bus / trunk line ── */
+  .bus-line {
+    width: 2px;
+    background: var(--bus);
+    box-shadow: 0 0 6px rgba(47,184,214,0.6);
+    margin: 0 auto;
+  }
+  .bus-tick {
+    width: 7px; height: 7px;
+    background: var(--bus);
+    box-shadow: 0 0 6px rgba(47,184,214,0.7);
+    margin: 0 auto;
+    transform: rotate(45deg);
+  }
+  .bus-label {
+    text-align: center;
+    font-size: 9.5px;
+    color: rgba(47,184,214,0.75);
+    letter-spacing: 0.04em;
+    margin: 2px 0;
+  }
+
+  /* ── tiles (click to expand) ── */
+  .tile {
+    background: var(--panel2);
+    border: 1px solid var(--hair);
+    border-radius: 4px;
+    padding: 8px 14px;
+    position: relative;
+    transition: border-color .15s ease;
+  }
+  .tile.full { width: 100%; }
+  .tile-wrap { display: flex; justify-content: center; }
+  .tile-wrap .tile { min-width: 170px; }
+
+  .tile.led-ready { border-color: rgba(62,207,110,0.35); }
+  .tile.led-proc  { border-color: rgba(240,168,60,0.35); }
+  .tile.led-air   { border-color: rgba(234,179,8,0.4); box-shadow: 0 0 10px rgba(234,179,8,0.12); }
+  .tile.led-mon   { border-color: rgba(56,189,248,0.35); }
+  .tile.led-cable { border-color: rgba(236,72,153,0.4); box-shadow: 0 0 10px rgba(236,72,153,0.12); }
+
+  /* ── shape variety, by pipeline role ── */
+  .tile.shape-pill {
+    border-radius: 999px;
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+  .tile.shape-hex {
+    border-radius: 0;
+    clip-path: polygon(3% 0%, 97% 0%, 100% 50%, 97% 100%, 3% 100%, 0% 50%);
+    padding-left: 26px;
+    padding-right: 26px;
+  }
+  .tile.shape-cut {
+    border-radius: 0;
+    clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+  }
+
+  .tile-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    padding: 2px 0;
+    user-select: none;
+  }
+  .tile-head.static { cursor: default; }
+  .tile-title { font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em; color: var(--text); }
+  .tile-sub { font-size: 10px; color: var(--text-dim); line-height: 1.6; }
+
+  .chevron {
+    margin-left: auto;
+    font-size: 9px;
+    color: var(--text-faint);
+    transition: transform .2s ease, color .2s ease;
+    flex: none;
+  }
+  .tile.open .chevron { transform: rotate(90deg); color: var(--bus); }
+  .tile-head:hover .tile-title { color: #fff; }
+  .tile-head:hover .chevron { color: var(--text-dim); }
+
+  .tile-body {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: max-height .28s ease, opacity .22s ease, margin-top .22s ease;
+  }
+  .tile.open .tile-body {
+    max-height: 600px;
+    opacity: 1;
+    margin-top: 7px;
+  }
+  .tile.open { border-color: rgba(255,255,255,0.16); }
+
+  .tag {
+    display: inline-block;
+    font-size: 8px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    border: 1px solid var(--hair);
+    border-radius: 2px;
+    padding: 1px 5px;
+    margin-bottom: 5px;
+  }
+
+  /* ── badge pills — colors match Phoenix TV flowchart's HW/SW convention ── */
+  .tag.bdg {
+    font-weight: 700;
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    padding: 2px 6px;
+  }
+  .tag.bdg-hw   { background: rgb(31,111,176); }  /* hardware — same blue as Phoenix TV */
+  .tag.bdg-sw   { background: rgb(93,83,196); }   /* software — same purple as Phoenix TV */
+  .tag.bdg-src  { background: rgb(196,104,64); }  /* source */
+  .tag.bdg-proc { background: rgb(90,160,224); }  /* protocol / stream, matches MediaLive Group title */
+  .tag.bdg-mon  { background: rgb(48,176,140); }  /* protocol / stream, matches Non-MediaLive Group title */
+
+  /* ── section title colors — pipeline-stage coding, same hue family as Phoenix TV ── */
+  .sec-label.sc-source  { color: rgb(224,130,90); }
+  .sec-label.sc-process { color: rgb(100,168,230); }
+  .sec-label.sc-monitor { color: rgb(64,196,158); }
+  .sec-label.sc-onair    { color: var(--led-air); }
+  .sec-label.sc-router  { color: rgb(158,156,148); }
+  .sec-label.sc-final    { color: rgb(150,198,100); }
+
+  .frame.accent-process { border-left: 3px solid rgb(90,160,224); }
+  .frame.accent-monitor { border-left: 3px solid rgb(48,176,140); }
+  .frame.accent-onair    { border-left: 3px solid var(--led-air); }
+  .frame.accent-router  { border-left: 3px solid rgb(120,150,180); }
+  .frame.accent-final    { border-left: 3px solid rgb(150,198,100); }
+  .frame.accent-source  { border-left: 3px solid rgb(196,104,64); }
+
+  .spec-box {
+    margin-top: 6px;
+    background: var(--panel3);
+    border: 1px solid var(--hair);
+    border-radius: 3px;
+    padding: 7px 9px;
+    font-size: 9.5px;
+    color: var(--text-dim);
+    line-height: 1.65;
+  }
+  .spec-box .row { display: flex; justify-content: space-between; gap: 10px; }
+  .spec-box .row .k { color: var(--text-faint); flex: none; }
+  .spec-box .row .v { color: var(--text-dim); text-align: right; word-break: break-all; }
+
+  .conn { display: flex; flex-direction: column; align-items: center; position: relative; }
+  .conn-line { width: 1.5px; background: rgba(255,255,255,0.15); }
+  .conn-tip {
+    width: 0; height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 7px solid rgba(255,255,255,0.2);
+  }
+  .conn-label {
+    position: absolute;
+    left: calc(50% + 9px);
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 9.5px;
+    color: var(--text-faint);
+    white-space: nowrap;
+  }
+
+  .frame {
+    border: 1px solid var(--hair);
+    border-radius: 5px;
+    padding: 10px 12px 12px;
+    background: rgba(255,255,255,0.015);
+  }
+  .split-row { display: flex; gap: 12px; align-items: flex-start; }
+  .split-col { flex: 1; display: flex; flex-direction: column; align-items: center; }
+
+  .branch-row { display: flex; gap: 4px; align-items: flex-start; }
+  .branch-col-main { flex: 1.15; min-width: 0; display: flex; flex-direction: column; }
+  .branch-col-side { flex: 1.15; min-width: 0; }
+  .stack { display: flex; flex-direction: column; }
+  .stack .tile-wrap { margin-bottom: 8px; }
+  .stack .tile-wrap:last-child { margin-bottom: 0; }
+
+  .branch-arrow {
+    flex: 0 0 26px;
+    margin-top: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .branch-arrow-line { width: 14px; height: 1.5px; background: rgba(240,168,60,0.55); }
+  .branch-arrow-tip {
+    width: 0; height: 0;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    border-left: 7px solid rgba(240,168,60,0.55);
+    margin-left: -1px;
+  }
+
+  .note {
+    text-align: center;
+    font-size: 10px;
+    color: var(--text-faint);
+    padding: 6px 10px;
+    margin-top: 8px;
+    border-top: 1px dashed var(--hair);
+  }
+
+  /* ── aside panels ── */
+  .panel-block { background: var(--panel2); border: 1px solid var(--hair); border-radius: 5px; margin-bottom: 12px; overflow: hidden; }
+  .panel-head {
+    font-family: var(--cg);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--hair);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .panel-head .hint { font-size: 8.5px; color: var(--text-faint); text-transform: none; letter-spacing: 0.02em; }
+
+  .panel-row {
+    border-top: 1px solid var(--hair);
+  }
+  .panel-row:first-of-type { border-top: none; }
+  .panel-row-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 12px;
+    font-size: 10px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .panel-row-head.static { cursor: default; }
+  .panel-row-head .k { color: var(--text); display: flex; align-items: center; gap: 6px; }
+  .panel-row-head .v { color: var(--text-dim); text-align: right; display: flex; align-items: center; gap: 7px; }
+  .panel-row-head:hover .k { color: #fff; }
+  .panel-row .chevron { font-size: 8px; }
+
+  .panel-row-body {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: max-height .28s ease, opacity .22s ease;
+    padding: 0 12px;
+  }
+  .panel-row.open .panel-row-body {
+    max-height: 800px;
+    opacity: 1;
+    padding: 0 12px 10px;
+  }
+  .panel-row.open { background: rgba(255,255,255,0.015); }
+
+  .stream-card {
+    background: var(--panel3);
+    border: 1px solid var(--hair);
+    border-radius: 3px;
+    padding: 6px 9px;
+    margin-top: 6px;
+    font-size: 9px;
+  }
+  .stream-card .name {
+    font-size: 9.5px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 3px;
+    letter-spacing: 0.02em;
+  }
+  .stream-card .row { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
+  .stream-card .row .k { color: var(--text-faint); flex: none; }
+  .stream-card .row .v { color: var(--text-dim); text-align: right; word-break: break-all; }
+
+  .panel-note {
+    font-size: 9.5px;
+    color: var(--text-faint);
+    line-height: 1.55;
+    padding: 8px 12px;
+    border-top: 1px solid var(--hair);
+  }
+
+  .legend-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    border: 1px solid var(--hair);
+    border-radius: 5px;
+    padding: 9px 13px;
+    margin-top: 16px;
+    font-size: 9.5px;
+    color: var(--text-dim);
+  }
+  .legend-strip .item { display: flex; align-items: center; gap: 6px; }
+
+  .footer-note {
+    text-align: center;
+    font-size: 9.5px;
+    color: var(--text-faint);
+    padding: 4px 22px 18px;
+  }
+</style>
+</head>
+<body>
+
+<div class="rack">
+  <div class="rack-header">
+    <h1>Crossings TV — Signal Flow</h1>
+    <div class="header-controls">
+      <button class="ctrl-btn" id="expandAllBtn">Expand All</button>
+      <button class="ctrl-btn" id="collapseAllBtn">Collapse All</button>
+      <div class="status"><span class="dot air"></span> MCR-01 · DRAFT REV B</div>
+    </div>
+  </div>
+  <p class="hint-bar">Click any <span class="k">▸ box or badge</span> to expand technical detail — click again to collapse.</p>
+
+  <div class="layout">
+
+    <!-- ═══════════ DIAGRAM ═══════════ -->
+    <div class="diagram">
+
+      <div class="frame accent-source">
+        <p class="sec-label sc-source">Origin — AWS VPC</p>
+        <div class="tile-wrap">
+          <div class="tile full led-ready shape-pill" data-tile>
+            <div class="tile-head"><span class="dot ready"></span><span class="tile-title">Playout Automation</span><span class="chevron">▸</span></div>
+            <div class="tile-body">
+              <span class="tag bdg bdg-src">Source</span>
+              <div class="tile-sub">Runs on the CIBs — see CIB Encoder Assignments →</div>
+              <div class="tile-sub">Output: 1920×1080, 29.97 interlaced — all channels</div>
+              <div class="tile-sub">Exception: CVC Tower feed (SD NTSC) — see below</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="conn" style="height:22px;">
+        <div class="conn-line" style="height:12px;"></div><div class="conn-tip"></div>
+        <span class="conn-label">Per-market encoding — CIB01, 03–06</span>
+      </div>
+
+      <div class="bus-tick"></div>
+      <div class="bus-line" style="height:14px;"></div>
+
+      <div class="branch-row">
+        <div class="branch-col-main">
+
+          <div class="split-row">
+            <div class="split-col">
+              <div class="frame accent-process" style="width:100%;">
+                <p class="sec-label sc-process">MediaLive Group [7]</p>
+                <div class="tile full led-proc" data-tile>
+                  <div class="tile-head"><span class="dot proc"></span><span class="tile-title">WDC · CHI · MSP · MMT · SEA · SFO · CVC</span><span class="chevron">▸</span></div>
+                  <div class="tile-body">
+                    <span class="tag bdg bdg-proc">RTP · Pro-MPEG</span>
+                    <div class="tile-sub">Encoded on CIB01, 03–06</div>
+                  </div>
+                </div>
+                <div class="conn" style="height:14px;"><div class="conn-line" style="height:6px;"></div><div class="conn-tip"></div></div>
+                <div class="tile full led-proc" data-tile>
+                  <div class="tile-head"><span class="dot proc"></span><span class="tile-title">AWS Elemental MediaLive</span><span class="chevron">▸</span></div>
+                  <div class="tile-body">
+                    <div class="tile-sub">Comcast-specific A/V processing applied</div>
+                  </div>
+                </div>
+                <p class="note">SFO channel — 2 outputs: HD (Comcast) + downsampled HD (SFO Tower)</p>
+              </div>
+            </div>
+            <div class="split-col">
+              <div class="frame accent-monitor" style="width:100%;">
+                <p class="sec-label sc-monitor">Non-MediaLive Group [2]</p>
+                <div class="tile full led-mon" data-tile>
+                  <div class="tile-head"><span class="dot mon"></span><span class="tile-title">NYC · LAX</span><span class="chevron">▸</span></div>
+                  <div class="tile-body">
+                    <span class="tag bdg bdg-mon">DVB · UDP</span>
+                    <div class="tile-sub">Sent as Etere exports — no further processing</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="conn" style="height:20px;">
+            <div class="conn-line" style="height:10px;"></div><div class="conn-tip"></div>
+            <span class="conn-label">All networks converge</span>
+          </div>
+
+          <div class="frame accent-router">
+            <p class="sec-label sc-router">Central Router</p>
+            <div class="tile-wrap">
+              <div class="tile full led-mon shape-hex" data-tile>
+                <div class="tile-head"><span class="dot mon"></span><span class="tile-title">Haivision SRT Gateway — 44.235.103.12</span><span class="chevron">▸</span></div>
+                <div class="tile-body">
+                  <div class="tile-sub">Distributes every network on request — up to 10 simultaneous connections per port</div>
+                  <div class="tile-sub">Comcast collection ports kept separate from public monitoring ports</div>
+                  <div class="spec-box">
+                    <div class="row"><span class="k">WDC</span><span class="v">6206</span></div>
+                    <div class="row"><span class="k">CHI</span><span class="v">6204</span></div>
+                    <div class="row"><span class="k">MSP</span><span class="v">6205</span></div>
+                    <div class="row"><span class="k">MMT</span><span class="v">6207</span></div>
+                    <div class="row"><span class="k">SEA</span><span class="v">6203</span></div>
+                    <div class="row"><span class="k">SFO</span><span class="v">6200</span></div>
+                    <div class="row"><span class="k">CVC</span><span class="v">6201</span></div>
+                  </div>
+                  <div class="tile-sub" style="margin-top:5px;">Reserved for Comcast — do not use for monitoring</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="conn" style="height:20px;">
+            <div class="conn-line" style="height:10px;"></div><div class="conn-tip"></div>
+          </div>
+
+          <div class="frame accent-final">
+            <p class="sec-label sc-final">Final Distribution</p>
+            <div class="split-row">
+              <div class="split-col">
+                <div class="tile full led-cable shape-cut" data-tile>
+                  <div class="tile-head"><span class="dot" style="background:var(--led-cable);box-shadow:0 0 5px var(--led-cable);"></span><span class="tile-title">Comcast Pickup</span><span class="chevron">▸</span></div>
+                  <div class="tile-body">
+                    <div class="tile-sub">Rocky Mountain (Denver, CO) &amp; Stone Mountain (GA)</div>
+                    <div class="tile-sub">WDC, MSP, MMT, CHI, SFO, SEA, CVC</div>
+                  </div>
+                </div>
+              </div>
+              <div class="split-col">
+                <div class="tile full led-cable shape-cut" data-tile>
+                  <div class="tile-head"><span class="dot" style="background:var(--led-cable);box-shadow:0 0 5px var(--led-cable);"></span><span class="tile-title">Colocation America</span><span class="chevron">▸</span></div>
+                  <div class="tile-body">
+                    <span class="tag bdg bdg-hw">Hardware</span>
+                    <div class="tile-sub">Machine in LA — receives from Haivision</div>
+                    <div class="tile-sub">NYC, WDC</div>
+                  </div>
+                </div>
+                <div class="conn" style="height:14px;"><div class="conn-line" style="height:6px;"></div><div class="conn-tip"></div></div>
+                <div class="tile full led-cable shape-cut" data-tile>
+                  <div class="tile-head static"><span class="tile-title">Charter Pickup</span></div>
+                  <div class="tile-sub" style="margin-top:4px;">NYC, WDC — via Colocation America</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /branch-col-main -->
+
+        <div class="branch-arrow" title="MediaLive Group markets (CVC, SFO) also feed Direct to Multiplex">
+          <div class="branch-arrow-line"></div><div class="branch-arrow-tip"></div>
+        </div>
+
+        <div class="branch-col-side">
+          <div class="frame accent-onair">
+            <p class="sec-label sc-onair">Direct to Multiplex</p>
+            <p class="note" style="margin-top:0; border-top:none; padding-top:0;">Fed by Playout Automation + MediaLive Group (CVC, SFO) — bypasses Haivision Central Router</p>
+
+            <svg viewBox="0 0 300 26" height="26" style="display:block;width:100%;overflow:visible;margin-bottom:4px;">
+              <defs>
+                <marker id="arrMx" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M2 1L8 5L2 9" fill="none" stroke="rgba(234,179,8,0.5)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </marker>
+              </defs>
+              <path d="M150 0 L50 0 L50 24" fill="none" stroke="rgba(234,179,8,0.5)" stroke-width="1.5" marker-end="url(#arrMx)"/>
+              <path d="M150 0 L150 24" fill="none" stroke="rgba(234,179,8,0.5)" stroke-width="1.5" marker-end="url(#arrMx)"/>
+              <path d="M150 0 L250 0 L250 24" fill="none" stroke="rgba(234,179,8,0.5)" stroke-width="1.5" marker-end="url(#arrMx)"/>
+            </svg>
+
+            <div class="split-row">
+              <div class="split-col">
+                <div class="tile full led-air" data-tile>
+                  <div class="tile-head"><span class="dot" style="background:var(--led-air);box-shadow:0 0 5px var(--led-air);"></span><span class="tile-title">CVC Tower Feed</span><span class="chevron">▸</span></div>
+                  <div class="tile-body">
+                    <span class="tag bdg bdg-sw">Software</span>
+                    <div class="tile-sub">Etere AV Converter service — CIB05</div>
+                    <div class="tile-sub">SD NTSC 720×486 → MPEG-2 · custom PIDs · muxrate 4M</div>
+                    <div class="spec-box">
+                      <div class="row"><span class="k">Source</span><span class="v">NDI · EC2AMAZ-6VAQA0L</span></div>
+                      <div class="row"><span class="k">Service name</span><span class="v">Crossings Sacramento</span></div>
+                      <div class="row"><span class="k">Video</span><span class="v">mpeg2video · streamid 4281 · 2.5M</span></div>
+                      <div class="row"><span class="k">Audio</span><span class="v">ac3 · streamid 4282 · 320K</span></div>
+                      <div class="row"><span class="k">Format</span><span class="v">NTSC UYVY 720×486@29.97i 4:3</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="split-col">
+                <div class="tile full led-air" data-tile>
+                  <div class="tile-head"><span class="dot" style="background:var(--led-air);box-shadow:0 0 5px var(--led-air);"></span><span class="tile-title">SFO Tower Feed</span><span class="chevron">▸</span></div>
+                  <div class="tile-body">
+                    <span class="tag bdg bdg-sw">Software</span>
+                    <div class="tile-sub">2nd output of SFO channel, AWS Elemental MediaLive</div>
+                    <div class="tile-sub">Downsampled to lower-bitrate HD</div>
+                  </div>
+                </div>
+              </div>
+              <div class="split-col">
+                <div class="tile full led-air" data-tile>
+                  <div class="tile-head"><span class="dot" style="background:var(--led-air);box-shadow:0 0 5px var(--led-air);"></span><span class="tile-title">Dallas</span><span class="chevron">▸</span></div>
+                  <div class="tile-body">
+                    <span class="tag bdg bdg-sw">Software</span>
+                    <div class="tile-sub">Playout Automation (CIB05)</div>
+                    <div class="tile-sub" style="color:var(--led-proc);">TBD — details pending</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="conn" style="height:16px;"><div class="conn-line" style="height:8px;"></div><div class="conn-tip"></div></div>
+
+            <div class="tile-wrap">
+              <div class="tile full led-mon shape-hex" data-tile>
+                <div class="tile-head"><span class="dot mon"></span><span class="tile-title">Multiplex</span><span class="chevron">▸</span></div>
+                <div class="tile-body">
+                  <div class="tile-sub">Third-party distribution vendor — separate from Haivision</div>
+                  <div class="tile-sub" style="color:var(--led-proc);">Location: Iowa — city TBD</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="conn" style="height:16px;"><div class="conn-line" style="height:8px;"></div><div class="conn-tip"></div></div>
+
+            <div class="stack">
+              <div class="tile-wrap">
+                <div class="tile full led-air shape-cut" data-tile>
+                  <div class="tile-head static"><span class="tile-title">HC2 Broadcasting</span></div>
+                  <div class="tile-sub" style="margin-top:4px;">Sacramento, CA — airs ch. 8.2</div>
+                </div>
+              </div>
+              <div class="tile-wrap">
+                <div class="tile full led-air shape-cut" data-tile>
+                  <div class="tile-head static"><span class="tile-title">KQTA-LD 15.3</span></div>
+                  <div class="tile-sub" style="margin-top:4px;">San Francisco tower</div>
+                </div>
+              </div>
+              <div class="tile-wrap">
+                <div class="tile full led-air shape-cut" data-tile>
+                  <div class="tile-head"><span class="dot" style="background:var(--led-air);box-shadow:0 0 5px var(--led-air);"></span><span class="tile-title">KLEG 44.3</span><span class="chevron">▸</span></div>
+                  <div class="tile-body">
+                    <span class="tag">Low power</span>
+                    <div class="tile-sub" style="color:var(--led-proc);">TBD — details pending</div>
+                  </div>
+                </div>
+              </div>
+              <div class="tile-wrap">
+                <div class="tile full led-air shape-cut" data-tile>
+                  <div class="tile-head"><span class="dot" style="background:var(--led-air);box-shadow:0 0 5px var(--led-air);"></span><span class="tile-title">KFWD 52.4</span><span class="chevron">▸</span></div>
+                  <div class="tile-body">
+                    <span class="tag">High power</span>
+                    <div class="tile-sub" style="color:var(--led-proc);">TBD — details pending</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <p class="note">Ends here — does not route through Haivision or Final Distribution</p>
+          </div>
+        </div><!-- /branch-col-side -->
+
+      </div><!-- /branch-row -->
+
+      <div class="legend-strip">
+        <div class="item"><span class="dot ready"></span>Ready / normal path</div>
+        <div class="item"><span class="dot proc"></span>Processing / encoding</div>
+        <div class="item"><span class="dot mon"></span>Monitoring / hub</div>
+        <div class="item"><span class="dot" style="background:var(--led-air);box-shadow:0 0 5px var(--led-air);"></span>On-air / tower broadcast</div>
+        <div class="item"><span class="dot" style="background:var(--led-cable);box-shadow:0 0 5px var(--led-cable);"></span>Cable / final delivery</div>
+      </div>
+      <div class="legend-strip" style="margin-top:8px;">
+        <div class="item"><span class="tag bdg bdg-hw" style="margin:0;">Hardware</span>badge</div>
+        <div class="item"><span class="tag bdg bdg-sw" style="margin:0;">Software</span>badge — same blue/purple as Phoenix TV chart</div>
+      </div>
+
+    </div><!-- /diagram -->
+
+    <!-- ═══════════ ASIDE ═══════════ -->
+    <div class="aside">
+
+      <div class="panel-block">
+        <div class="panel-head" style="color: rgb(100,168,230);">CIB Encoder Assignments <span class="hint">click to expand</span></div>
+
+        <div class="panel-row" data-row>
+          <div class="panel-row-head"><span class="k"><span class="dot proc"></span>CIB01</span><span class="v">10.0.0.248 — ET — NYC, WDC <span class="chevron">▸</span></span></div>
+          <div class="panel-row-body">
+            <div class="stream-card">
+              <div class="name">NYC — DVB / UDP</div>
+              <div class="row"><span class="k">Video</span><span class="v">H.264 · 5M · PID 256</span></div>
+              <div class="row"><span class="k">Audio</span><span class="v">MP2 · 320K · PID 257</span></div>
+              <div class="row"><span class="k">URL</span><span class="v">udp://10.0.0.16:5014</span></div>
+              <div class="row"><span class="k">Muxrate</span><span class="v">6M</span></div>
+            </div>
+            <div class="stream-card">
+              <div class="name">WDC — RTP (Pro-MPEG)</div>
+              <div class="row"><span class="k">Video</span><span class="v">libx264 H.264 · 15M</span></div>
+              <div class="row"><span class="k">Audio</span><span class="v">MP2 · 320K · PID 257</span></div>
+              <div class="row"><span class="k">URL</span><span class="v">rtp://10.0.0.233:5000</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-row" data-row>
+          <div class="panel-row-head"><span class="k"><span class="dot proc"></span>CIB03</span><span class="v">10.0.0.218 — PT — SFO, SEA <span class="chevron">▸</span></span></div>
+          <div class="panel-row-body">
+            <div class="stream-card">
+              <div class="name">SFO — RTP (Pro-MPEG)</div>
+              <div class="row"><span class="k">Video</span><span class="v">libx264 H.264 · 15M</span></div>
+              <div class="row"><span class="k">Audio</span><span class="v">MP2 · 320K · PID 257</span></div>
+              <div class="row"><span class="k">URL</span><span class="v">rtp://10.0.0.240:5000</span></div>
+            </div>
+            <div class="stream-card">
+              <div class="name">SEA — RTP (Pro-MPEG)</div>
+              <div class="row"><span class="k">Video</span><span class="v">libx264 H.264 · 15M</span></div>
+              <div class="row"><span class="k">Audio</span><span class="v">MP2 · 320K · PID 257</span></div>
+              <div class="row"><span class="k">URL</span><span class="v">rtp://10.0.0.230:5000</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-row" data-row>
+          <div class="panel-row-head"><span class="k"><span class="dot proc"></span>CIB04</span><span class="v">10.0.0.203 — PT — LAX, CVC <span class="chevron">▸</span></span></div>
+          <div class="panel-row-body">
+            <div class="stream-card">
+              <div class="name">LAX — DVB / UDP</div>
+              <div class="row"><span class="k">Video</span><span class="v">H.264 · 5M · PID 256</span></div>
+              <div class="row"><span class="k">Audio</span><span class="v">MP2 · 320K · PID 257</span></div>
+              <div class="row"><span class="k">URL</span><span class="v">udp://10.0.0.16:5009</span></div>
+              <div class="row"><span class="k">Muxrate</span><span class="v">6M</span></div>
+            </div>
+            <div class="stream-card">
+              <div class="name">CVC — RTP (Pro-MPEG)</div>
+              <div class="row"><span class="k">Video</span><span class="v">libx264 H.264 · 15M</span></div>
+              <div class="row"><span class="k">Audio</span><span class="v">MP2 · 320K · PID 257</span></div>
+              <div class="row"><span class="k">URL</span><span class="v">rtp://10.0.0.211:5000</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-row" data-row>
+          <div class="panel-row-head"><span class="k"><span class="dot" style="background:var(--led-air);box-shadow:0 0 5px var(--led-air);"></span>CIB05</span><span class="v">10.0.0.238 — CT — MMT, DAL <span class="chevron">▸</span></span></div>
+          <div class="panel-row-body">
+            <div class="stream-card">
+              <div class="name">MMT — RTP (Pro-MPEG)</div>
+              <div class="row"><span class="k">Video</span><span class="v">libx264 H.264 · 15M</span></div>
+              <div class="row"><span class="k">Audio</span><span class="v">MP2 · 320K · PID 257</span></div>
+              <div class="row"><span class="k">URL</span><span class="v">rtp://10.0.0.221:5000</span></div>
+            </div>
+            <div class="stream-card">
+              <div class="name">DAL — <span style="color:var(--led-proc);">TBD</span></div>
+              <div class="row"><span class="k">Status</span><span class="v" style="color:var(--led-proc);">Awaiting details — see "Direct to Multiplex" section</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-row" data-row>
+          <div class="panel-row-head"><span class="k"><span class="dot proc"></span>CIB06</span><span class="v">CT — CHI, MSP <span class="chevron">▸</span></span></div>
+          <div class="panel-row-body">
+            <div class="stream-card">
+              <div class="name">CHI — RTP (Pro-MPEG)</div>
+              <div class="row"><span class="k">Video</span><span class="v">libx264 H.264 · 15M</span></div>
+              <div class="row"><span class="k">Audio</span><span class="v">MP2 · 320K · PID 257</span></div>
+              <div class="row"><span class="k">URL</span><span class="v">rtp://10.0.0.241:5000</span></div>
+              <div class="row"><span class="k">Note</span><span class="v" style="color:var(--led-proc);">carried over from old CIB02 config — verify</span></div>
+            </div>
+            <div class="stream-card">
+              <div class="name">MSP — RTP (Pro-MPEG)</div>
+              <div class="row"><span class="k">Video</span><span class="v">libx264 H.264 · 15M</span></div>
+              <div class="row"><span class="k">Audio</span><span class="v">MP2 · 320K · PID 257</span></div>
+              <div class="row"><span class="k">URL</span><span class="v">rtp://10.0.0.210:5000</span></div>
+              <div class="row"><span class="k">Note</span><span class="v" style="color:var(--led-proc);">carried over from old CIB02 config — verify</span></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="panel-block">
+        <div class="panel-head">Public SRT Addresses</div>
+        <div class="panel-row" data-row>
+          <div class="panel-row-head static"><span class="k">NYC</span><span class="v">:6014</span></div>
+        </div>
+        <div class="panel-row" data-row>
+          <div class="panel-row-head static"><span class="k">WDC</span><span class="v">:6017</span></div>
+        </div>
+        <div class="panel-row" data-row>
+          <div class="panel-row-head static"><span class="k">CHI</span><span class="v">:6010</span></div>
+        </div>
+        <div class="panel-row" data-row>
+          <div class="panel-row-head static"><span class="k">MSP</span><span class="v">:6012</span></div>
+        </div>
+        <div class="panel-row" data-row>
+          <div class="panel-row-head static"><span class="k">MMT</span><span class="v">:6019</span></div>
+        </div>
+        <div class="panel-row" data-row>
+          <div class="panel-row-head static"><span class="k">SEA</span><span class="v">:6002</span></div>
+        </div>
+        <div class="panel-row" data-row>
+          <div class="panel-row-head static"><span class="k">SFO</span><span class="v">:6004</span></div>
+        </div>
+        <div class="panel-row" data-row>
+          <div class="panel-row-head static"><span class="k">CVC</span><span class="v">:6006</span></div>
+        </div>
+        <div class="panel-row" data-row>
+          <div class="panel-row-head static"><span class="k">LAX</span><span class="v">:6008</span></div>
+        </div>
+        <div class="panel-row" data-row>
+          <div class="panel-row-head static"><span class="k">SFO Tower</span><span class="v">:6016</span></div>
+        </div>
+        <div class="panel-row" data-row>
+          <div class="panel-row-head static"><span class="k">CVC Tower</span><span class="v">:6018</span></div>
+        </div>
+        <div class="panel-note">Host 44.235.103.12, mode=caller. Comcast uses separate reserved ports 6200–6207 — do not use.</div>
+      </div>
+
+      <div class="panel-block">
+        <div class="panel-head">Key Contact</div>
+        <div class="panel-note" style="border-top:none;">Comcast maintenance notices:<br/>DCF_PROVIDERNOTIFICATIONS@cable.comcast.com</div>
+      </div>
+
+    </div><!-- /aside -->
+
+  </div><!-- /layout -->
+
+  <p class="footer-note">Recreated from "Crossings TV Signal Flow" reference doc — for internal review</p>
+
+</div>
+
+<script>
+  document.querySelectorAll('[data-tile] > .tile-head:not(.static)').forEach(function (head) {
+    head.addEventListener('click', function () {
+      head.closest('.tile').classList.toggle('open');
+    });
+  });
+
+  document.querySelectorAll('[data-row] > .panel-row-head:not(.static)').forEach(function (head) {
+    head.addEventListener('click', function () {
+      head.closest('.panel-row').classList.toggle('open');
+    });
+  });
+
+  document.getElementById('expandAllBtn').addEventListener('click', function () {
+    document.querySelectorAll('[data-tile]').forEach(function (t) {
+      if (t.querySelector('.tile-head:not(.static)')) t.classList.add('open');
+    });
+    document.querySelectorAll('[data-row]').forEach(function (r) {
+      if (r.querySelector('.panel-row-head:not(.static)')) r.classList.add('open');
+    });
+  });
+
+  document.getElementById('collapseAllBtn').addEventListener('click', function () {
+    document.querySelectorAll('[data-tile].open').forEach(function (t) { t.classList.remove('open'); });
+    document.querySelectorAll('[data-row].open').forEach(function (r) { r.classList.remove('open'); });
+  });
+</script>
+
+</body>
+</html>

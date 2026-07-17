@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Phoenix TV NA Channel — Signal Flow (v5)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #f0efe9;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #141413;
+    padding: 28px 24px 48px;
+  }
+
+  .page-title {
+    text-align: center;
+    font-size: 15px;
+    font-weight: 500;
+    color: #141413;
+    margin-bottom: 24px;
+    letter-spacing: 0.01em;
+  }
+
+  /* ── Two-column layout ── */
+  .layout {
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+    max-width: 1080px;
+    margin: 0 auto;
+  }
+
+  /* ── FLOWCHART column — white card, elevated ── */
+  .flowchart {
+    flex: 0 0 600px;
+    min-width: 0;
+    background: #ffffff;
+    border-radius: 16px;
+    border: 1px solid rgba(31,30,29,0.1);
+    padding: 26px 28px 22px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.05);
+  }
+
+  /* ── SIDEBAR column ── */
+  .sidebar {
+    flex: 1;
+    min-width: 220px;
+    max-width: 280px;
+    position: sticky;
+    top: 28px;
+  }
+
+  /* ── Sidebar section — muted warm tone, recedes visually ── */
+  .sidebar-section {
+    background: #e8e5de;
+    border-radius: 12px;
+    border: 1px solid rgba(31,30,29,0.1);
+    padding: 14px 14px 16px;
+    margin-bottom: 10px;
+  }
+
+  .sb-section-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(61,61,58,0.45);
+    margin-bottom: 10px;
+    text-align: center;
+  }
+
+  .sb-note {
+    font-size: 10px;
+    color: rgba(61,61,58,0.6);
+    line-height: 1.55;
+    margin-bottom: 10px;
+    text-align: center;
+  }
+  .sb-note strong { color: rgba(61,61,58,0.8); }
+
+  /* workstation cards */
+  .sb-ws-card {
+    background: #f5f3ee;
+    border-radius: 7px;
+    border: 1px solid rgba(133,79,11,0.2);
+    padding: 9px 11px;
+    margin-bottom: 7px;
+    text-align: center;
+  }
+  .sb-ws-tag {
+    display: inline-block;
+    font-size: 7.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: rgb(100,55,5);
+    background: rgba(240,184,74,0.35);
+    border-radius: 3px;
+    padding: 2px 6px;
+    margin-bottom: 5px;
+  }
+  .sb-ws-name  { font-size: 12px; font-weight: 600; color: rgb(68,68,65); display: block; margin-bottom: 2px; }
+  .sb-ws-sub   { font-size: 10px; color: rgba(61,61,58,0.6); display: block; line-height: 1.4; }
+  .sb-ws-step  { font-size: 9.5px; color: rgba(133,79,11,0.7); display: block; margin-top: 4px; }
+
+  /* sidebar arrow */
+  .sb-arrow { display: flex; justify-content: center; margin: 3px 0 5px; }
+  .sb-arrow-inner { display: flex; flex-direction: column; align-items: center; }
+  .sb-arrow-line  { width: 1.5px; height: 12px; background: rgba(61,61,58,0.25); }
+  .sb-arrow-tip   {
+    width: 0; height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 6px solid rgba(61,61,58,0.25);
+  }
+
+  /* decoder card in sidebar */
+  .sb-decoder-card {
+    background: #f5f3ee;
+    border: 1px solid rgba(24,95,165,0.25);
+    border-radius: 7px;
+    padding: 8px 11px;
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  .sb-decoder-title { font-size: 11px; font-weight: 600; color: rgb(12,68,124); display: block; margin-bottom: 2px; }
+  .sb-decoder-sub   { font-size: 9.5px; color: rgba(24,95,165,0.65); display: block; line-height: 1.4; }
+
+  /* contact cards */
+  .sb-contact {
+    background: #f5f3ee;
+    border-radius: 7px;
+    border: 1px solid rgba(31,30,29,0.1);
+    padding: 8px 11px;
+    margin-bottom: 7px;
+    text-align: center;
+  }
+  .sb-contact-role  { font-size: 9px; color: rgba(61,61,58,0.45); margin-bottom: 2px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .sb-contact-name  { font-size: 11.5px; font-weight: 600; color: rgb(68,68,65); margin-bottom: 3px; }
+  .sb-contact-email { font-size: 9.5px; color: rgb(24,95,165); word-break: break-all; }
+
+  /* ════════════════════════════════
+     FLOWCHART internals
+  ════════════════════════════════ */
+  .zone-label {
+    text-align: center;
+    font-size: 10.5px;
+    color: rgba(61,61,58,0.5);
+    margin-bottom: 7px;
+  }
+
+  .zone {
+    border: 1px dashed rgba(31,30,29,0.25);
+    border-radius: 10px;
+    padding: 10px 12px 12px;
+    margin-bottom: 4px;
+    background: #fafaf8;
+  }
+  .zone.edit02-zone {
+    border-color: rgba(31,30,29,0.2);
+    border-radius: 8px;
+    padding: 8px 10px 10px;
+    background: #fafaf8;
+  }
+
+  .arrow-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    margin: 1px 0;
+  }
+  .arrow-line { width: 1.5px; background: rgb(115,114,108); flex-shrink: 0; }
+  .arrow-tip {
+    width: 0; height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 8px solid rgb(115,114,108);
+    flex-shrink: 0;
+  }
+  .arrow-label {
+    position: absolute;
+    left: calc(50% + 10px);
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10.5px;
+    color: rgba(61,61,58,0.55);
+    white-space: nowrap;
+  }
+
+  .split-row { display: flex; align-items: flex-start; gap: 12px; margin-top: 3px; }
+  .split-col { flex: 1; display: flex; flex-direction: column; align-items: center; }
+
+  .node {
+    border-radius: 8px;
+    padding: 8px 14px;
+    text-align: center;
+    position: relative;
+  }
+  .node-wrap {
+    display: flex;
+    justify-content: center;
+  }
+  .node-wrap .node {
+    display: inline-block;
+    min-width: 140px;
+    max-width: 100%;
+  }
+  .node-wrap .node .node-title,
+  .node-wrap .node .node-sub { white-space: nowrap; }
+
+  .node.full { width: 100%; display: block; }
+  .node.full .node-title,
+  .node.full .node-sub { white-space: normal; }
+
+  .node-title { font-size: 13px; font-weight: 500; display: block; margin-bottom: 2px; }
+  .node-sub   { font-size: 11px; display: block; line-height: 1.5; }
+
+  /* ── Collapsible detail sections ── */
+  .node.has-details { cursor: pointer; }
+  .node.has-details:hover { filter: brightness(0.975); }
+  .node-details {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-height 0.25s ease, opacity 0.2s ease, margin-top 0.25s ease;
+  }
+  .node.expanded .node-details {
+    max-height: 240px;
+    opacity: 1;
+    margin-top: 3px;
+  }
+  .node-toggle {
+    display: inline-block;
+    font-size: 9px;
+    margin-left: 5px;
+    opacity: 0.45;
+    transition: transform 0.2s ease;
+    transform: rotate(-90deg);
+  }
+  .node.expanded .node-toggle { transform: rotate(0deg); }
+
+  .expand-toggle-row {
+    text-align: center;
+    margin-bottom: 14px;
+  }
+  .expand-toggle-btn {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: rgb(24,95,165);
+    background: rgb(230,241,251);
+    border: 0.5px solid rgba(24,95,165,0.35);
+    border-radius: 20px;
+    padding: 5px 14px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .expand-toggle-btn:hover { background: rgb(220,235,248); }
+
+  .badge {
+    display: inline-block;
+    font-size: 8px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: #fff;
+    margin-bottom: 4px;
+    letter-spacing: 0.04em;
+  }
+
+  /* Node colors — exact v4 */
+  .c-coral  { background: rgb(250,236,231); border: 0.5px solid rgb(153,60,29); }
+  .c-coral  .node-title { color: rgb(113,43,19); }
+  .c-coral  .node-sub   { color: rgb(153,60,29); }
+
+  .c-blue   { background: rgb(230,241,251); border: 0.5px solid rgb(24,95,165); }
+  .c-blue   .node-title { color: rgb(12,68,124); }
+  .c-blue   .node-sub   { color: rgb(24,95,165); }
+
+  .c-gray   { background: rgb(241,239,232); border: 0.5px solid rgb(95,94,90); }
+  .c-gray   .node-title { color: rgb(68,68,65); }
+  .c-gray   .node-sub   { color: rgb(95,94,90); }
+
+  .c-teal   { background: rgb(225,245,238); border: 0.5px solid rgb(15,110,86); }
+  .c-teal   .node-title { color: rgb(8,80,65); }
+  .c-teal   .node-sub   { color: rgb(15,110,86); }
+
+  .c-purple { background: rgb(238,237,254); border: 0.5px solid rgb(83,74,183); }
+  .c-purple .node-title { color: rgb(60,52,137); }
+  .c-purple .node-sub   { color: rgb(83,74,183); }
+
+  .c-green  { background: rgb(234,243,222); border: 0.5px solid rgb(59,109,17); }
+  .c-green  .node-title { color: rgb(38,78,10); }
+  .c-green  .node-sub   { color: rgb(59,109,17); }
+
+  .bdg-hw    { background: rgb(24,95,165); }
+  .bdg-sw    { background: rgb(83,74,183); }
+  .bdg-app   { background: rgb(95,94,90); }
+  .bdg-green { background: rgb(59,109,17); }
+
+  .note-bar {
+    border: 0.6px dashed rgba(31,30,29,0.2);
+    border-radius: 6px;
+    text-align: center;
+    font-size: 10.5px;
+    color: rgba(61,61,58,0.58);
+    padding: 5px 10px;
+    margin: 8px 0 2px;
+  }
+
+  .section-heading {
+    text-align: center;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: rgba(20,20,19,0.8);
+    margin: 12px 0 8px;
+  }
+
+  .legend {
+    border: 0.5px solid rgba(31,30,29,0.13);
+    border-radius: 8px;
+    padding: 9px 13px;
+    margin-top: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px 16px;
+    background: #fafaf8;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: rgb(61,61,58); }
+  .legend-dot  { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+
+  .footer-note {
+    text-align: center;
+    font-size: 10.5px;
+    color: rgba(61,61,58,0.35);
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<p class="page-title">Phoenix TV NA Channel — Signal Flow (v5)</p>
+<div class="expand-toggle-row">
+  <button class="expand-toggle-btn" id="expandAllBtn" onclick="toggleAllNodes()">Expand all details</button>
+</div>
+
+<div class="layout">
+
+  <!-- ══════════════════════════
+       FLOWCHART
+  ══════════════════════════ -->
+  <div class="flowchart">
+
+    <div class="zone">
+      <p class="zone-label">Origin — Los Angeles</p>
+      <div class="node-wrap">
+        <div class="node c-coral has-details" onclick="toggleNode(this)">
+          <span class="node-title">Phoenix TV (LA)<span class="node-toggle">▼</span></span>
+          <div class="node-details">
+            <span class="node-sub">Source broadcast</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-wrap" style="height:30px;">
+      <div class="arrow-line" style="height:18px;"></div>
+      <div class="arrow-tip"></div>
+      <span class="arrow-label">IP stream via SRT — srt://47.181.223.221:6005</span>
+    </div>
+
+    <div class="node-wrap">
+      <div class="node c-gray has-details" onclick="toggleNode(this)">
+        <span class="node-title">Internet<span class="node-toggle">▼</span></span>
+        <div class="node-details">
+          <span class="node-sub">Comcast — Sacramento server room</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-wrap" style="height:26px;">
+      <div class="arrow-line" style="height:14px;"></div>
+      <div class="arrow-tip"></div>
+    </div>
+
+    <div class="zone">
+      <p class="zone-label">Sacramento server room</p>
+
+      <div class="node-wrap">
+        <div class="node c-blue has-details" onclick="toggleNode(this)">
+          <span class="badge bdg-hw">HARDWARE</span>
+          <span class="node-title">Datavideo decoder<span class="node-toggle">▼</span></span>
+          <div class="node-details">
+            <span class="node-sub">SRT caller mode — buffer 1.50s — latency 1000ms</span>
+            <span class="node-sub">SDI output: 1080i 59.94Hz — audio: SDI digital</span>
+            <span class="node-sub">Network: DHCP — IP: 10.1.50.98</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow-wrap" style="height:24px;">
+        <div class="arrow-line" style="height:12px;"></div>
+        <div class="arrow-tip"></div>
+        <span class="arrow-label">SDI out</span>
+      </div>
+
+      <div class="node-wrap" style="margin-bottom:2px;">
+        <div class="node c-gray">
+          <span class="node-title">Signal split</span>
+        </div>
+      </div>
+
+      <svg viewBox="0 0 524 24" height="24" style="display:block;width:100%;overflow:visible;margin-bottom:2px;">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="rgb(115,114,108)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <path d="M262 0 L131 0 L131 22" fill="none" stroke="rgb(115,114,108)" stroke-width="1.5" marker-end="url(#arr)"/>
+        <path d="M262 0 L393 0 L393 22" fill="none" stroke="rgb(115,114,108)" stroke-width="1.5" marker-end="url(#arr)"/>
+      </svg>
+
+      <div class="split-row">
+        <div class="split-col">
+          <div class="node c-teal full has-details" onclick="toggleNode(this)">
+            <span class="badge bdg-hw">HARDWARE</span>
+            <span class="node-title">Blackmagic HD router<span class="node-toggle">▼</span></span>
+            <div class="node-details">
+              <span class="node-sub">Phoenix TV channel only</span>
+            </div>
+          </div>
+          <div class="arrow-wrap" style="height:20px;">
+            <div class="arrow-line" style="height:8px;"></div>
+            <div class="arrow-tip"></div>
+          </div>
+          <div class="node c-teal full has-details" onclick="toggleNode(this)">
+            <span class="badge bdg-hw">HARDWARE</span>
+            <span class="badge bdg-app" style="margin-left:4px;">APP</span>
+            <span class="node-title">Samsung DVR<span class="node-toggle">▼</span></span>
+            <div class="node-details">
+              <span class="node-sub">iPollis app — ATT network</span>
+            </div>
+          </div>
+          <p class="zone-label" style="margin-top:5px;">Quick visual check only</p>
+        </div>
+
+        <div class="split-col">
+          <div class="zone edit02-zone" style="width:100%;">
+            <p class="zone-label">EDIT-02 workstation <span style="opacity:0.5;font-size:9.5px;">[PC / Hardware]</span></p>
+            <div class="node c-purple full has-details" onclick="toggleNode(this)">
+              <span class="badge bdg-sw">HW CARD (PCIe)</span>
+              <span class="node-title">DeckLink Duo 2<span class="node-toggle">▼</span></span>
+              <div class="node-details">
+                <span class="node-sub">SDI port 4 — 1080p29.97</span>
+                <span class="node-sub">Y,Cb,Cr 4:2:2 — SMPTE Level B</span>
+                <span class="node-sub">Output conversion: HD 720 → HD 1080</span>
+              </div>
+            </div>
+            <div class="arrow-wrap" style="height:18px;">
+              <div class="arrow-line" style="height:6px;"></div>
+              <div class="arrow-tip"></div>
+            </div>
+            <div class="node c-purple full has-details" onclick="toggleNode(this)">
+              <span class="badge bdg-sw">SOFTWARE</span>
+              <span class="node-title">Etere Memory — DALLAS [Main #1]<span class="node-toggle">▼</span></span>
+              <div class="node-details">
+                <span class="node-sub">MP4 H.264 — 1080p — 6Mbps</span>
+                <span class="node-sub">AAC 128K — 48kHz stereo</span>
+                <span class="node-sub">Saves to: Drive 2 → !Recordings</span>
+              </div>
+            </div>
+            <p class="zone-label" style="margin-top:5px;">24hr recording + primary A/V confidence check</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="note-bar" style="margin-top:9px;">
+        2 ISPs in server room — <strong>Comcast:</strong> decoder stream + remote access &nbsp;|&nbsp; <strong>ATT:</strong> Samsung DVR / iPollis only
+      </div>
+
+    </div>
+
+    <div class="arrow-wrap" style="height:26px;">
+      <div class="arrow-line" style="height:14px;"></div>
+      <div class="arrow-tip"></div>
+    </div>
+
+    <p class="section-heading">Downstream — post-recording workflow</p>
+
+    <div class="node c-green full has-details" onclick="toggleNode(this)">
+      <span class="node-title">Operator — QC + edit<span class="node-toggle">▼</span></span>
+      <div class="node-details">
+        <span class="node-sub">Review 24hr recording, cut segments, quality check</span>
+        <span class="node-sub">Performed before content is ingested into playout</span>
+      </div>
+    </div>
+
+    <div class="arrow-wrap" style="height:26px;">
+      <div class="arrow-line" style="height:14px;"></div>
+      <div class="arrow-tip"></div>
+    </div>
+
+    <div class="node c-green full has-details" onclick="toggleNode(this)">
+      <span class="badge bdg-green">SOFTWARE</span>
+      <span class="node-title">Etere playout automation<span class="node-toggle">▼</span></span>
+      <div class="node-details">
+        <span class="node-sub">Content ingested after QC pass — handles playout scheduling and automation</span>
+      </div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:rgb(250,236,231);border:1px solid rgb(153,60,29);"></div>Source</div>
+      <div class="legend-item"><div class="legend-dot" style="background:rgb(230,241,251);border:1px solid rgb(24,95,165);"></div>Decoder (HW)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:rgb(225,245,238);border:1px solid rgb(15,110,86);"></div>Monitoring (HW)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:rgb(238,237,254);border:1px solid rgb(83,74,183);"></div>Capture / record</div>
+      <div class="legend-item"><div class="legend-dot" style="background:rgb(234,243,222);border:1px solid rgb(59,109,17);"></div>Post / playout</div>
+      <div class="legend-item"><div class="legend-dot" style="background:rgb(250,238,218);border:1px solid rgb(133,79,11);"></div>Remote access</div>
+      <div class="legend-item"><div class="legend-dot" style="background:rgb(241,239,232);border:1px solid rgb(95,94,90);"></div>Infrastructure</div>
+    </div>
+
+    <p class="footer-note">⚠ Datavideo decoder has a firmware update available — review before initiating</p>
+
+  </div><!-- /flowchart -->
+
+  <!-- ══════════════════════════
+       SIDEBAR — warm muted tone
+  ══════════════════════════ -->
+  <div class="sidebar">
+
+    <div class="sidebar-section">
+      <p class="sb-section-title">Remote Access</p>
+      <p class="sb-note">
+        For <strong>decoder reboot only</strong>. Must be on <strong>Comcast</strong> internet.<br>
+        Login: see <strong>MC Starter Kit spreadsheet</strong>.
+      </p>
+
+      <div class="sb-ws-card">
+        <span class="sb-ws-tag">PC / HARDWARE — PRIMARY</span>
+        <span class="sb-ws-name">OPS-02</span>
+        <span class="sb-ws-sub">Windows 8 — AnyDesk</span>
+        <span class="sb-ws-step">Connect via AnyDesk → open 10.1.50.98 → reboot</span>
+      </div>
+
+      <div class="sb-ws-card">
+        <span class="sb-ws-tag">PC / HARDWARE — BACKUP</span>
+        <span class="sb-ws-name">VIDEO-02</span>
+        <span class="sb-ws-sub">Windows 10 — Tailscale VPN</span>
+        <span class="sb-ws-step">Connect via Tailscale → open 10.1.50.98 → reboot</span>
+      </div>
+
+      <div class="sb-arrow">
+        <div class="sb-arrow-inner">
+          <div class="sb-arrow-line"></div>
+          <div class="sb-arrow-tip"></div>
+        </div>
+      </div>
+
+      <div class="sb-decoder-card">
+        <span class="sb-decoder-title">Datavideo decoder</span>
+        <span class="sb-decoder-sub">10.1.50.98 — reboot via web interface</span>
+        <span class="sb-decoder-sub">Login: see MC Starter Kit spreadsheet</span>
+      </div>
+
+      <p class="sb-note" style="margin-bottom:0;">
+        If not resolved → restart Etere Memory on EDIT-02 → then contact Phoenix TV below.
+      </p>
+    </div>
+
+    <div class="sidebar-section">
+      <p class="sb-section-title">Phoenix TV Escalation Contacts</p>
+      <p class="sb-note" style="margin-bottom:12px;">
+        Contact only after rebooting decoder <em>and</em> restarting Etere Memory.
+      </p>
+
+      <div class="sb-contact">
+        <p class="sb-contact-role">Primary contact</p>
+        <p class="sb-contact-name">Jason Tan</p>
+        <p class="sb-contact-email">jasontan@phoenixtv-us.com</p>
+      </div>
+      <div class="sb-contact">
+        <p class="sb-contact-role">CC — MCR</p>
+        <p class="sb-contact-name">Phoenix TV MCR</p>
+        <p class="sb-contact-email">mcr@phoenixtv-us.com</p>
+      </div>
+      <div class="sb-contact">
+        <p class="sb-contact-role">CC</p>
+        <p class="sb-contact-name">Victor Liang</p>
+        <p class="sb-contact-email">victorl@phoenixtv-us.com</p>
+      </div>
+      <div class="sb-contact">
+        <p class="sb-contact-role">CC</p>
+        <p class="sb-contact-name">Saber Wong</p>
+        <p class="sb-contact-email">saberwong@phoenixtv-us.com</p>
+      </div>
+    </div>
+
+  </div><!-- /sidebar -->
+
+</div><!-- /layout -->
+
+<script>
+  function toggleNode(el) {
+    el.classList.toggle('expanded');
+    syncExpandAllLabel();
+  }
+
+  function toggleAllNodes() {
+    var nodes = document.querySelectorAll('.node.has-details');
+    var anyCollapsed = Array.prototype.some.call(nodes, function(n){ return !n.classList.contains('expanded'); });
+    nodes.forEach(function(n){
+      if (anyCollapsed) { n.classList.add('expanded'); }
+      else { n.classList.remove('expanded'); }
+    });
+    syncExpandAllLabel();
+  }
+
+  function syncExpandAllLabel() {
+    var nodes = document.querySelectorAll('.node.has-details');
+    var allExpanded = Array.prototype.every.call(nodes, function(n){ return n.classList.contains('expanded'); });
+    document.getElementById('expandAllBtn').textContent = allExpanded ? 'Collapse all details' : 'Expand all details';
+  }
+</script>
+
+</body>
+</html>

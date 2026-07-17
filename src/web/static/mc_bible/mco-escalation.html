@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MCO Channel Feed Outage Escalation</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #f0efe9;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #141413;
+    padding: 28px 24px 48px;
+  }
+
+  .page-title {
+    text-align: center;
+    font-size: 15px;
+    font-weight: 500;
+    color: #141413;
+    margin-bottom: 6px;
+    letter-spacing: 0.01em;
+  }
+  .page-sub {
+    text-align: center;
+    font-size: 11px;
+    color: rgba(61,61,58,0.5);
+    margin-bottom: 24px;
+    letter-spacing: 0.02em;
+  }
+
+  /* ── Top two-column layout ── */
+  .layout-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 24px;
+    max-width: 1100px;
+    margin: 0 auto 28px;
+  }
+
+  /* ── Full-width guide below ── */
+  .layout-guide {
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  /* ── FLOWCHART ── */
+  .flowchart {
+    flex: 0 0 560px;
+    min-width: 0;
+    background: #ffffff;
+    border-radius: 16px;
+    border: 1px solid rgba(31,30,29,0.1);
+    padding: 26px 28px 22px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.05);
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    flex: 1;
+    min-width: 240px;
+    max-width: 320px;
+    position: sticky;
+    top: 28px;
+  }
+
+  .sidebar-section {
+    background: #e8e5de;
+    border-radius: 12px;
+    border: 1px solid rgba(31,30,29,0.1);
+    padding: 14px 14px 16px;
+    margin-bottom: 10px;
+  }
+
+  .sb-section-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(61,61,58,0.45);
+    margin-bottom: 10px;
+    text-align: center;
+  }
+
+  .sb-note {
+    font-size: 10px;
+    color: rgba(61,61,58,0.6);
+    line-height: 1.55;
+    margin-bottom: 8px;
+    text-align: center;
+  }
+  .sb-note strong { color: rgba(61,61,58,0.8); }
+
+  .sb-support-card {
+    background: #f5f3ee;
+    border-radius: 7px;
+    border: 1px solid rgba(31,30,29,0.1);
+    padding: 8px 11px;
+    margin-bottom: 7px;
+  }
+  .sb-support-card:last-child { margin-bottom: 0; }
+  .sb-support-service { font-size: 10px; font-weight: 700; color: rgb(68,68,65); margin-bottom: 2px; }
+  .sb-support-purpose { font-size: 9px; color: rgba(61,61,58,0.5); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .sb-support-email   { font-size: 9px; color: rgb(24,95,165); word-break: break-all; line-height: 1.65; }
+  .sb-support-phone   { font-size: 9px; color: rgba(61,61,58,0.6); margin-top: 3px; line-height: 1.5; }
+  .sb-support-label   { font-size: 8.5px; font-weight: 600; color: rgba(61,61,58,0.5); }
+
+  /* ── FLOWCHART internals ── */
+  .arrow-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    margin: 1px 0;
+  }
+  .arrow-line { width: 1.5px; background: rgb(115,114,108); flex-shrink: 0; }
+  .arrow-tip {
+    width: 0; height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 8px solid rgb(115,114,108);
+    flex-shrink: 0;
+  }
+  .arrow-label {
+    position: absolute;
+    left: calc(50% + 10px);
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10.5px;
+    color: rgba(61,61,58,0.55);
+    white-space: nowrap;
+  }
+
+  .decision-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .diamond {
+    width: 80px;
+    height: 80px;
+    transform: rotate(45deg);
+    border-radius: 6px;
+    border: 0.5px solid rgb(133,132,124);
+    background: rgb(248,247,244);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .diamond-text {
+    transform: rotate(-45deg);
+    text-align: center;
+    font-size: 10.5px;
+    color: rgb(68,68,65);
+    line-height: 1.4;
+  }
+  .yes-branch {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    padding-left: 8px;
+  }
+  .yes-label {
+    font-size: 10px;
+    color: rgba(61,61,58,0.55);
+    margin-right: 6px;
+    white-space: nowrap;
+  }
+  .yes-line { height: 1.5px; background: rgb(115,114,108); flex: 1; }
+  .yes-arrowhead {
+    width: 0; height: 0;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-left: 8px solid rgb(115,114,108);
+  }
+  .resolved-node {
+    border-radius: 8px;
+    padding: 7px 12px;
+    text-align: center;
+    white-space: nowrap;
+    min-width: 90px;
+    margin-left: 8px;
+  }
+
+  .node {
+    border-radius: 8px;
+    padding: 8px 14px;
+    text-align: center;
+    width: 100%;
+  }
+  .node-title { font-size: 13px; font-weight: 500; display: block; margin-bottom: 2px; }
+  .node-sub   { font-size: 11px; display: block; line-height: 1.5; }
+  .node-wrap  { display: flex; justify-content: center; }
+
+  .c-coral  { background: rgb(250,236,231); border: 0.5px solid rgb(153,60,29); }
+  .c-coral  .node-title { color: rgb(113,43,19); }
+  .c-coral  .node-sub   { color: rgb(153,60,29); }
+  .c-blue   { background: rgb(230,241,251); border: 0.5px solid rgb(24,95,165); }
+  .c-blue   .node-title { color: rgb(12,68,124); }
+  .c-blue   .node-sub   { color: rgb(24,95,165); }
+  .c-gray   { background: rgb(241,239,232); border: 0.5px solid rgb(95,94,90); }
+  .c-gray   .node-title { color: rgb(68,68,65); }
+  .c-gray   .node-sub   { color: rgb(95,94,90); }
+  .c-teal   { background: rgb(225,245,238); border: 0.5px solid rgb(15,110,86); }
+  .c-teal   .node-title { color: rgb(8,80,65); }
+  .c-teal   .node-sub   { color: rgb(15,110,86); }
+  .c-purple { background: rgb(238,237,254); border: 0.5px solid rgb(83,74,183); }
+  .c-purple .node-title { color: rgb(60,52,137); }
+  .c-purple .node-sub   { color: rgb(83,74,183); }
+
+  .note-bar {
+    border: 0.6px dashed rgba(31,30,29,0.2);
+    border-radius: 6px;
+    text-align: center;
+    font-size: 10.5px;
+    color: rgba(61,61,58,0.58);
+    padding: 5px 10px;
+    margin: 10px 0 2px;
+  }
+
+  .legend {
+    border: 0.5px solid rgba(31,30,29,0.13);
+    border-radius: 8px;
+    padding: 9px 13px;
+    margin-top: 18px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px 16px;
+    background: #fafaf8;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: rgb(61,61,58); }
+  .legend-dot  { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+
+  .fc-title { text-align: center; font-size: 14px; font-weight: 600; color: rgb(20,20,19); margin-bottom: 4px; }
+  .fc-sub   { text-align: center; font-size: 10.5px; color: rgba(61,61,58,0.45); margin-bottom: 18px; letter-spacing: 0.03em; }
+
+  /* ══════════════════════════════
+     GUIDE section
+  ══════════════════════════════ */
+  .guide {
+    background: #ffffff;
+    border-radius: 16px;
+    border: 1px solid rgba(31,30,29,0.1);
+    padding: 32px 36px 36px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.05);
+  }
+
+  .guide-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: rgb(20,20,19);
+    margin-bottom: 4px;
+  }
+  .guide-sub {
+    font-size: 11px;
+    color: rgba(61,61,58,0.45);
+    margin-bottom: 28px;
+    letter-spacing: 0.03em;
+  }
+
+  .g-section-heading {
+    font-size: 13px;
+    font-weight: 700;
+    color: rgb(24,95,165);
+    border-bottom: 2px solid rgb(24,95,165);
+    padding-bottom: 5px;
+    margin: 28px 0 12px;
+    letter-spacing: 0.01em;
+  }
+  .g-section-heading.red {
+    color: rgb(192,50,26);
+    border-color: rgb(192,50,26);
+  }
+
+  .g-para {
+    font-size: 12px;
+    color: rgba(61,61,58,0.75);
+    line-height: 1.6;
+    margin-bottom: 8px;
+  }
+  .g-para.note {
+    font-style: italic;
+    color: rgba(61,61,58,0.5);
+    font-size: 11px;
+  }
+  .g-para.note-red {
+    font-style: italic;
+    color: rgb(192,50,26);
+    font-size: 11px;
+    margin-bottom: 6px;
+  }
+  .g-para.bold-red {
+    font-weight: 600;
+    color: rgb(192,50,26);
+    font-size: 12px;
+    margin-bottom: 8px;
+  }
+
+  /* Level header strip */
+  .level-header {
+    border-radius: 8px;
+    padding: 10px 16px;
+    margin: 24px 0 12px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .lh-blue   { background: rgb(24,95,165);  color: #fff; }
+  .lh-purple { background: rgb(83,74,183);  color: #fff; }
+  .lh-coral  { background: rgb(153,60,29);  color: #fff; }
+
+  /* Bullet lists */
+  .g-list {
+    list-style: none;
+    margin: 0 0 8px 0;
+    padding: 0;
+  }
+  .g-list li {
+    font-size: 12px;
+    color: rgb(68,68,65);
+    line-height: 1.65;
+    padding: 3px 0 3px 18px;
+    position: relative;
+  }
+  .g-list li::before {
+    content: "•";
+    position: absolute;
+    left: 4px;
+    color: rgba(61,61,58,0.4);
+  }
+  .g-list li.bold-item { font-weight: 600; color: rgb(44,44,42); }
+
+  .g-sublist {
+    list-style: none;
+    margin: 2px 0 2px 0;
+    padding: 0;
+  }
+  .g-sublist li {
+    font-size: 11.5px;
+    color: rgba(61,61,58,0.7);
+    line-height: 1.6;
+    padding: 2px 0 2px 28px;
+    position: relative;
+  }
+  .g-sublist li::before {
+    content: "◦";
+    position: absolute;
+    left: 14px;
+    color: rgba(61,61,58,0.35);
+  }
+
+  /* Contact table */
+  .contact-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11.5px;
+    margin-bottom: 10px;
+  }
+  .contact-table th {
+    background: rgb(24,95,165);
+    color: #fff;
+    font-weight: 600;
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 11px;
+  }
+  .contact-table td {
+    padding: 7px 12px;
+    border-bottom: 1px solid rgba(31,30,29,0.08);
+    color: rgb(68,68,65);
+    vertical-align: top;
+  }
+  .contact-table tr:last-child td { border-bottom: none; }
+  .contact-table tr:nth-child(even) td { background: rgba(31,30,29,0.02); }
+
+  /* Support table */
+  .support-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    margin-bottom: 10px;
+  }
+  .support-table th {
+    background: rgb(24,95,165);
+    color: #fff;
+    font-weight: 600;
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 11px;
+  }
+  .support-table td {
+    padding: 7px 12px;
+    border-bottom: 1px solid rgba(31,30,29,0.08);
+    color: rgb(68,68,65);
+    vertical-align: top;
+    line-height: 1.6;
+  }
+  .support-table tr:last-child td { border-bottom: none; }
+  .support-table tr:nth-child(even) td { background: rgba(31,30,29,0.02); }
+  .email-label { font-size: 9.5px; font-weight: 700; color: rgba(61,61,58,0.5); }
+</style>
+</head>
+<body>
+
+<p class="page-title">MCO Channel Feed Outage Escalation</p>
+<p class="page-sub">Master Control Operations — Crossings TV</p>
+
+<div class="layout-top">
+
+  <!-- ══════════ FLOWCHART ══════════ -->
+  <div class="flowchart">
+    <p class="fc-title">Escalation Flowchart</p>
+    <p class="fc-sub">CHANNEL FEED OUTAGE</p>
+
+    <div class="node c-gray">
+      <span class="node-title">Channel feed outage detected</span>
+      <span class="node-sub">Signal loss, feed error, or stream down</span>
+    </div>
+
+    <div class="arrow-wrap" style="height:28px;">
+      <div class="arrow-line" style="height:16px;"></div>
+      <div class="arrow-tip"></div>
+    </div>
+
+    <div class="node c-blue">
+      <span class="node-title">Level 1 — Master Control</span>
+
+      <span class="node-sub">Assess feed, attempt restore, log the issue</span>
+    </div>
+
+    <div class="arrow-wrap" style="height:24px;">
+      <div class="arrow-line" style="height:12px;"></div>
+      <div class="arrow-tip"></div>
+    </div>
+
+    <div class="decision-row">
+      <div style="flex:1;"></div>
+      <div class="diamond"><div class="diamond-text">Feed<br>restored?</div></div>
+      <div class="yes-branch">
+        <span class="yes-label">Yes</span>
+        <div class="yes-line"></div>
+        <div class="yes-arrowhead"></div>
+        <div class="resolved-node c-teal">
+          <span class="node-title" style="font-size:11px;">Resolved</span>
+          <span class="node-sub" style="font-size:10px;">Log + close</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-wrap" style="height:28px;">
+      <div class="arrow-line" style="height:16px;"></div>
+      <div class="arrow-tip"></div>
+      <span class="arrow-label">No — escalate</span>
+    </div>
+
+    <div class="node c-purple">
+      <span class="node-title">Level 2 — Master Control</span>
+
+      <span class="node-sub">Review logs, coordinate fix, escalate if needed</span>
+    </div>
+
+    <div class="arrow-wrap" style="height:24px;">
+      <div class="arrow-line" style="height:12px;"></div>
+      <div class="arrow-tip"></div>
+    </div>
+
+    <div class="decision-row">
+      <div style="flex:1;"></div>
+      <div class="diamond"><div class="diamond-text">Feed<br>restored?</div></div>
+      <div class="yes-branch">
+        <span class="yes-label">Yes</span>
+        <div class="yes-line"></div>
+        <div class="yes-arrowhead"></div>
+        <div class="resolved-node c-teal">
+          <span class="node-title" style="font-size:11px;">Resolved</span>
+          <span class="node-sub" style="font-size:10px;">Log + close</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-wrap" style="height:28px;">
+      <div class="arrow-line" style="height:16px;"></div>
+      <div class="arrow-tip"></div>
+      <span class="arrow-label">No — escalate</span>
+    </div>
+
+    <div class="node c-coral">
+      <span class="node-title">Level 3 — Operations Command</span>
+      <span class="node-sub">Notify management of the issue</span>
+      <span class="node-sub">Call: Lee (Director of Operations)</span>
+    </div>
+
+    <div class="arrow-wrap" style="height:24px;">
+      <div class="arrow-line" style="height:12px;"></div>
+      <div class="arrow-tip"></div>
+    </div>
+
+    <div class="node-wrap">
+      <div class="node c-teal" style="max-width:280px;">
+        <span class="node-title">Post-incident log + review</span>
+        <span class="node-sub">Teams → MC → Outage Report Log</span>
+      </div>
+    </div>
+
+    <div class="note-bar">
+      All incidents must be logged — whether resolved at Level 1 or escalated to Level 3
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:rgb(241,239,232);border:1px solid rgb(95,94,90);"></div>Trigger</div>
+      <div class="legend-item"><div class="legend-dot" style="background:rgb(230,241,251);border:1px solid rgb(24,95,165);"></div>Level 1 — MCO</div>
+      <div class="legend-item"><div class="legend-dot" style="background:rgb(238,237,254);border:1px solid rgb(83,74,183);"></div>Level 2 — MCO</div>
+      <div class="legend-item"><div class="legend-dot" style="background:rgb(250,236,231);border:1px solid rgb(153,60,29);"></div>Level 3 — Operations Command</div>
+      <div class="legend-item"><div class="legend-dot" style="background:rgb(225,245,238);border:1px solid rgb(15,110,86);"></div>Resolved / Log</div>
+    </div>
+  </div><!-- /flowchart -->
+
+
+
+</div><!-- /layout-top -->
+
+<!-- ══════════════════════════════════════
+     GUIDE — full width below
+══════════════════════════════════════ -->
+<div class="layout-guide">
+  <div class="guide">
+
+    <p class="guide-title">MCO Escalation Guide</p>
+    <p class="guide-sub">CHANNEL FEED OUTAGE PROCEDURES — MASTER CONTROL OPERATIONS</p>
+
+    <!-- What Counts as an Outage -->
+    <p class="g-section-heading">What Counts as an Outage</p>
+    <p class="g-para">Begin the escalation process when any of the following occur:</p>
+    <ul class="g-list">
+      <li>Complete signal loss on a channel feed</li>
+      <li>Feed error or stream down affecting broadcast</li>
+      <li>Degraded feed quality impacting air (pixelation, audio dropout, freeze frames)</li>
+      <li>Playout automation failure affecting scheduled programming</li>
+    </ul>
+    <p class="g-para note">Note: Brief glitches under 30 seconds that self-resolve do not require escalation but should still be logged.</p>
+
+    <!-- Contact Information -->
+    <p class="g-section-heading">Contact Information</p>
+    <p class="g-para">All contacts should be reachable by phone and email unless otherwise noted.</p>
+    <table class="contact-table">
+      <thead>
+        <tr><th>Name</th><th>Role</th><th>Email</th><th>Phone</th></tr>
+      </thead>
+      <tbody>
+        <tr style="border-top: 2px solid rgb(24,95,165);"><td colspan="4" style="background:rgb(230,241,251); font-weight:700; font-size:11px; color:rgb(12,68,124); padding:5px 12px; letter-spacing:0.04em;">LEVEL 1</td></tr>
+        <tr><td>Ashe</td><td>MCO Operator</td><td>ashley.mcdarison@crossingstv.com</td><td>262-374-2505</td></tr>
+        <tr><td>Jake</td><td>MCO Operator</td><td>jacob.utter@crossingstv.com</td><td>816-808-0060</td></tr>
+        <tr style="border-top: 2px solid rgb(83,74,183);"><td colspan="4" style="background:rgb(238,237,254); font-weight:700; font-size:11px; color:rgb(60,52,137); padding:5px 12px; letter-spacing:0.04em;">LEVEL 2</td></tr>
+        <tr><td>Maija</td><td>MCO Manager</td><td>maija.her@crossingstv.com</td><td>916-317-2478</td></tr>
+        <tr><td>Jenna</td><td>MCO Operator</td><td>jenna.lee@crossingstv.com</td><td>925-683-5194</td></tr>
+        <tr style="border-top: 2px solid rgb(153,60,29);"><td colspan="4" style="background:rgb(250,236,231); font-weight:700; font-size:11px; color:rgb(113,43,19); padding:5px 12px; letter-spacing:0.04em;">LEVEL 3 — OPERATIONS COMMAND</td></tr>
+        <tr><td>Lee</td><td>Director of Operations</td><td>lee.hudson@crossingstv.com</td><td>808-937-2075</td></tr>
+        <tr><td>Daniel</td><td>Management</td><td>daniel.sakaya@crossingstv.com</td><td>—</td></tr>
+        <tr><td>Kurt</td><td>Management</td><td>kurt.olmstead@crossingstv.com</td><td>—</td></tr>
+      </tbody>
+    </table>
+    <p class="g-para note-red">Note: Lee should be called regardless of time zone at Level 3.</p>
+    <p class="g-para note">Note: If assistance is needed, feel free to contact any MCO. While an immediate response may not always be possible, no one should hesitate to reach out.</p>
+
+    <!-- Level 1 -->
+    <div class="level-header lh-blue">Level 1 — Master Control</div>
+    <p class="g-para">Steps to take when a channel feed outage is first detected:</p>
+    <ul class="g-list">
+      <li>Assess the feed — identify which channel is affected and the nature of the issue
+        <ul class="g-sublist">
+          <li>Review monitoring tool: IP Multiviewer (http://34.208.18.64/files/index.html)</li>
+          <li>Check signal path, encoder status, and playout system</li>
+        </ul>
+      </li>
+      <li>Attempt to restore — apply known fixes based on the issue type</li>
+      <li>Log the issue immediately in the Outage Report Log (Teams &gt; MC):
+        <ul class="g-sublist">
+          <li>Time the outage was detected</li>
+          <li>Channel(s) affected</li>
+          <li>Nature of the issue</li>
+          <li>Steps attempted and results</li>
+        </ul>
+      </li>
+      <li>Contact Level 2 to notify them of the issue</li>
+      <li>If the feed is restored, complete the log entry and close the incident</li>
+      <li>If the issue is related to Multiplex Cloud Dallas Multiviewer, reach out to confirm and check if they are also experiencing issues on their side
+        <ul class="g-sublist">
+          <li>Contact: Support@Multiplex-cloud.com</li>
+        </ul>
+      </li>
+      <li>If the outage is related to Multiplex feeds, email them to inform them of the issue and request a status update on their end</li>
+      <li class="bold-item">If NOT resolved within 5 minutes of assessment and review — escalate to Level 2</li>
+    </ul>
+
+    <!-- Level 2 -->
+    <div class="level-header lh-purple">Level 2 — Master Control</div>
+    <p class="g-para">Steps when Level 1 has been unable to restore the feed:</p>
+    <ul class="g-list">
+      <li>Review the log and all steps already taken by Level 1</li>
+      <li>Coordinate a fix — apply advanced troubleshooting and coordinate with Level 1 on shift</li>
+      <li>Contact Etere Support if the issue involves playout automation:
+        <ul class="g-sublist">
+          <li>Etere is the playout automation program used for scheduled programming</li>
+          <li>Have the following ready: time of issue, channel affected, screenshot of error messages or AU logs</li>
+          <li>Contact: support.ai@etere.com</li>
+        </ul>
+      </li>
+      <li>Contact Multiplex Support if the issue may be related to their service:
+        <ul class="g-sublist">
+          <li>Contact: Support@Multiplex-cloud.com</li>
+        </ul>
+      </li>
+      <li>Continue logging all new steps and updates in the Outage Report Log</li>
+      <li>Contact Level 3 to notify them of the issue</li>
+      <li>If the feed is restored, complete the log entry and close the incident</li>
+      <li class="bold-item">If NOT resolved within 5 minutes of assessment and review — escalate to Level 3</li>
+    </ul>
+
+    <!-- Level 3 -->
+    <div class="level-header lh-coral">Level 3 — Operations Command</div>
+    <p class="g-para">Final escalation step when Levels 1 and 2 have been unable to restore the feed:</p>
+    <ul class="g-list">
+      <li>Notify management of the issue so they are aware — include:
+        <ul class="g-sublist">
+          <li>Channel(s) affected</li>
+          <li>Time the outage began</li>
+          <li>All steps already taken by Level 1 and Level 2</li>
+          <li>Current status of the feed</li>
+          <li>Send to: Daniel, Kurt, and the entire MCO Team</li>
+        </ul>
+      </li>
+      <li>Call the Director of Operations — contact regardless of time zone</li>
+      <li>Brief the Director of Operations on the full situation: issue, timeline, and all steps taken</li>
+      <li>Continue logging all updates in the Outage Report Log until resolved</li>
+    </ul>
+
+    <!-- Outage Report Log -->
+    <p class="g-section-heading red">Outage Report Log</p>
+    <p class="g-para bold-red">All incidents — whether resolved at Level 1 or escalated — must be logged.</p>
+    <ul class="g-list">
+      <li>Location: Teams → MC → Outage Report Log</li>
+      <li>Log every incident at the time it occurs — do not wait until resolution</li>
+      <li>Required fields to complete for every entry:
+        <ul class="g-sublist">
+          <li>Date and time of detection</li>
+          <li>Channel(s) affected</li>
+          <li>Description of the issue</li>
+          <li>Steps taken at each level</li>
+          <li>Time of resolution</li>
+          <li>Root cause (if known)</li>
+        </ul>
+      </li>
+      <li>For Level 3 escalations, note the names of all contacts reached and times contacted</li>
+    </ul>
+
+    <!-- External Support Contacts -->
+    <p class="g-section-heading">External Support Contacts</p>
+    <p class="g-para">The following external teams may be contacted depending on the nature of the outage.</p>
+    <table class="support-table">
+      <thead>
+        <tr><th>Service</th><th>Purpose</th><th>Email(s)</th><th>Phone</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Etere</td>
+          <td>Playout automation support</td>
+          <td>support.ai@etere.com</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>Multiplex</td>
+          <td>KBTV 8.2 and Dallas</td>
+          <td>Support@Multiplex-cloud.com</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>Charter</td>
+          <td>NYC &amp; LAX Feeds</td>
+          <td>
+            <span class="email-label">Paul Plumley: </span>Paul.Plumley@charter.com<br>
+            <span class="email-label">David Matchette: </span>David.Matchette@spectrum.com<br>
+            <span class="email-label">NOC STL: </span>NOC.STL.CEN-NYC-NATVID@charter.com<br>
+            <span class="email-label">DL-VSC: </span>DL-VSC@charter.com<br>
+            <span class="email-label">NOC Tier 1 CS: </span>NOC.Tier1.CS@charter.com
+          </td>
+          <td>866-248-7662<br><span style="font-size:10px;color:rgba(61,61,58,0.6);">Select 1 (regions)<br>Select 4 (west)<br>Call first</span></td>
+        </tr>
+        <tr>
+          <td>Comcast</td>
+          <td>Comcast feed support</td>
+          <td>
+            <span class="email-label">Primary: </span>_CAL-SacramentoHeadendTechs_@comcast.com<br>
+            <span class="email-label">CC: </span>_VACT_VRQ_@comcast.com<br>
+            <span class="email-label">CC: </span>IOP_prod@comcast.com
+          </td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>Colocation America</td>
+          <td>Co-location support (Charter computer)</td>
+          <td>support@colocationamerica.com</td>
+          <td>—</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="g-para note">Note: For Charter, always call the NOC first (866-248-7662) before emailing.</p>
+
+  </div><!-- /guide -->
+</div><!-- /layout-guide -->
+
+</body>
+</html>
