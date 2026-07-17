@@ -1151,7 +1151,10 @@ def _sc_lines_from_io(io_detail: dict) -> List[dict]:
             "line_description": line_desc,
             "type":             "BNS" if is_bonus else "COM",
             "length":           length,
-            "gross_rate":       rate,
+            # A bonus confirmation line always bills $0 — some IOs (e.g. RWNY)
+            # print a nominal "value" rate on bonus rows that must not reach
+            # the SC totals.
+            "gross_rate":       0.0 if is_bonus else rate,
         })
 
     return sc
@@ -1205,9 +1208,12 @@ def reconcile_io_vs_etere(
     factor = (1 - agency_fee) if (rates_are_net and is_agency and agency_fee > 0) else 1.0
 
     # ── Rate check: every distinct non-zero IO rate should appear (grossed to
-    #    the same amount Etere stores) in the Etere rate set. ─────────────────
+    #    the same amount Etere stores) in the Etere rate set. Bonus lines are
+    #    excluded — they schedule at $0 regardless of any nominal "value" rate
+    #    the IO prints on them (RWNY prints the standard rate there). ─────────
     io_rates = sorted({round(float(ln.get("rate") or 0), 4)
-                       for ln in lines if (ln.get("rate") or 0) > 0})
+                       for ln in lines
+                       if not ln.get("is_bonus") and (ln.get("rate") or 0) > 0})
     etere_rates = sorted({round(s.gross_rate, 4) for s in spots if s.gross_rate > 0})
     rate_findings = []
     for io_rate in io_rates:

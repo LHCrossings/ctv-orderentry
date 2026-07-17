@@ -397,7 +397,7 @@ def _parse_rwny_pdf_file(pdf_path: str) -> Optional[RWNYOrder]:
             days=days,
             time_str=time_str,
             is_bonus=is_bonus,
-            rate=rate,
+            rate=0.0 if is_bonus else rate,   # bonus airs at $0; PDF prints a nominal value
             monthly_spots=monthly_spots,
             total_spots=total_spots,
         ))
@@ -573,7 +573,7 @@ def _parse_rwny_xlsx(path: str) -> Optional[RWNYOrder]:
             days=days,
             time_str=time_str,
             is_bonus=is_bonus,
-            rate=rate,
+            rate=0.0 if is_bonus else rate,   # bonus airs at $0; sheet prints a nominal value
             monthly_spots=monthly_spots,
             total_spots=total_spots,
         ))
