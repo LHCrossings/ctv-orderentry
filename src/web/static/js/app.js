@@ -463,6 +463,24 @@ function bwlRender(details, options) {
     });
     document.getElementById('bwl-select-all').checked = false;
     bwlUpdateCount();
+    // The hint must reflect reality: ✓ rows came from the CTV_LineLanguage
+    // catalog (verified by a human at order entry or a prior backwrite) — only
+    // unverified rows are detection guesses that need eyes.
+    const storedN = details.filter(d => d.stored).length;
+    const hint = document.getElementById('bwl-hint');
+    if (hint) {
+        if (storedN === details.length) {
+            hint.innerHTML = '✅ All ' + details.length + ' lines were <strong>verified at order entry</strong> ' +
+                '(✓ = from the language catalog). Nothing to do here — change a value only if something is wrong.';
+        } else if (storedN > 0) {
+            hint.innerHTML = '✓ lines were verified at order entry (from the language catalog). ' +
+                'The remaining <strong>' + (details.length - storedN) + '</strong> are guesses from the ' +
+                'line description — verify those.';
+        } else {
+            hint.textContent = 'What language did the customer buy for each line? Detection is only a ' +
+                'guess from the line description — verify every line.';
+        }
+    }
     section.classList.remove('hidden');
 }
 
