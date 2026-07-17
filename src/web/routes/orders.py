@@ -4392,6 +4392,24 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             (int(fid), (u.get("replace_cod_progra") or ""), (u.get("replace_newtype") or "PER"),
              title, supporto, id_tpalinse),
         )
+        # Yellow-triangle removal: the swap leaves the row's stored
+        # SCHEDULE_CHECKSUM reflecting the OLD creative, so EE flags the spot.
+        # PI/PSA fillers rotate near-daily, so the file already exists locally
+        # on the playout servers — freezing the checksum fully clears the
+        # triangle here (unlike fresh-from-S3 shows, where the per-CIB download
+        # re-stales it). Same recipe as daily programming's _sync_checksums:
+        # normalize the checksum-input FILMATI fields to canonical settled
+        # values — never on live-feed assets (LIVE_ID guard) — then re-store.
+        cur.execute(
+            "UPDATE FILMATI SET INF_DIGIT = 0, AUDIO = NULL, AUDIO_LANGUAGE = NULL"
+            " WHERE ID_FILMATI = %d AND LIVE_ID IS NULL",
+            (int(fid),),
+        )
+        cur.execute(
+            "UPDATE TPALINSE SET SCHEDULE_CHECKSUM = dbo.sch_getFilmatiCheckSum(%d)"
+            " WHERE ID_TPALINSE = %d",
+            (id_tpalinse, id_tpalinse),
+        )
 
     def _bo_fetch_sep_context(cur, market_id: int, date: str, from_frames: int, to_frames: int) -> list:
         """COM/BNS spots in a ±1-hr window — used for separation checking."""
