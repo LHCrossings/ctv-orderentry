@@ -2632,6 +2632,32 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     _LOG_SYNC_DEFAULT_PATH = r"K:\Traffic\Media library\Commercial Log.xlsx"
     _LOG_SYNC_SHEET = "Commercials"
 
+    # Team's standard Custom Sort for the Commercials sheet (Lee 2026-07-17):
+    # Start Date (B) → Market (AC) → Comments (I), all ascending. Excel's own
+    # "last sort" memory kept drifting; log-sync now re-asserts this recipe on
+    # every write so the Sort dialog always shows it. Columns are matched by
+    # header text so a column move can't silently misalign the sort.
+    _LOG_SYNC_SORT_HEADERS = ("Start Date", "Market", "Comments")
+
+    def _log_sync_apply_standard_sort(ws) -> None:
+        from openpyxl.utils import get_column_letter
+        from openpyxl.worksheet.filters import SortCondition, SortState
+        last_row = ws.max_row
+        last_col = get_column_letter(ws.max_column)
+        header = {str(c.value).strip(): c.column
+                  for c in next(ws.iter_rows(min_row=1, max_row=1)) if c.value}
+        conds = []
+        for name in _LOG_SYNC_SORT_HEADERS:
+            col = header.get(name)
+            if col:
+                cl = get_column_letter(col)
+                conds.append(SortCondition(ref=f"{cl}2:{cl}{last_row}"))
+        if not conds:
+            return
+        ws.auto_filter.ref = f"A1:{last_col}{last_row}"
+        ws.auto_filter.sortState = SortState(ref=f"A2:{last_col}{last_row}")
+        ws.auto_filter.sortState.sortCondition = conds
+
     def _log_sync_path(raw: str) -> Path:
         import re as _re
         p = (raw or "").strip() or _LOG_SYNC_DEFAULT_PATH
@@ -2922,6 +2948,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 ws.cell(row=ch["xlrow"], column=7).fill = _pink_fill
                                 ws.cell(row=ch["xlrow"], column=8).fill = _style_copy(_pink_fill)
                 if result["changes"]:
+                    _log_sync_apply_standard_sort(ws)   # re-assert the team's Custom Sort
                     _wb_save_fast(wb, log_path)
             finally:
                 wb.close()
