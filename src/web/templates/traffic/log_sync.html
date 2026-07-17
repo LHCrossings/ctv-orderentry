@@ -328,9 +328,13 @@ function renderPreview(data) {
         return;
     }
 
+    const colorBadge = ch =>
+        ch.color === 'red'    ? '<span style="background:#FF0000;color:#fff;border-radius:4px;padding:1px 7px;font-size:0.7rem;font-weight:700;">A–H → red</span>'
+      : ch.color === 'native' ? '<span style="background:rgba(163,190,140,0.25);color:var(--nord14);border-radius:4px;padding:1px 7px;font-size:0.7rem;font-weight:700;">A–H → network color</span>'
+      : '';
     const shown = data.changes.slice(0, 500);
     html += `<table class="diff-table">
-        <thead><tr><th>Excel Row</th><th>Line</th><th>Air Date</th><th>Current (stale)</th><th>New Spot Name</th></tr></thead>
+        <thead><tr><th>Excel Row</th><th>Line</th><th>Air Date</th><th>Current (stale)</th><th>New Spot Name</th><th>Fill</th></tr></thead>
         <tbody>${shown.map(ch => `
             <tr>
                 <td class="mono">${ch.xlrow}</td>
@@ -338,6 +342,7 @@ function renderPreview(data) {
                 <td class="mono">${esc(ch.date)}</td>
                 <td class="old-name">${esc(ch.old) || '<em>(blank)</em>'}</td>
                 <td class="new-name">${esc(ch.new)}</td>
+                <td>${colorBadge(ch)}</td>
             </tr>`).join('')}
         </tbody></table>`;
     if (data.changes.length > shown.length) {

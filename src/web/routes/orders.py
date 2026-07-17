@@ -2641,10 +2641,21 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 continue
             for r, new in zip(rows, new_names):
                 if r["old"] != new:
+                    # Commercial-log color rules (Lee 2026-07-17): a line that
+                    # goes to NEED COPY turns red in A-H; a NEED COPY line that
+                    # receives traffic gets A-H restored to its network color
+                    # (still present in column J — only A-H ever turn red).
+                    # Same-to-same traffic swaps keep their existing fill.
+                    if new == "NEED COPY" and r["old"] != "NEED COPY":
+                        color = "red"
+                    elif r["old"] == "NEED COPY" and new != "NEED COPY":
+                        color = "native"
+                    else:
+                        color = None
                     changes.append({
                         "xlrow": r["xlrow"], "line": key[0],
                         "date": key[1].isoformat() if key[1] else "?",
-                        "old": r["old"], "new": new,
+                        "old": r["old"], "new": new, "color": color,
                     })
         return {
             "log_rows": log_rows,
@@ -2748,8 +2759,25 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 with _connect() as conn:
                     result = _log_sync_compute(conn.cursor(as_dict=True), contract_id, ws,
                                                d_from, d_to)
+                from copy import copy as _style_copy
+
+                from openpyxl.styles import PatternFill
+                _red_fill = PatternFill(fill_type="solid",
+                                        start_color="FFFF0000", end_color="FFFF0000")
                 for ch in result["changes"]:
                     ws.cell(row=ch["xlrow"], column=8).value = ch["new"]
+                    if ch["color"] == "red":
+                        for col in range(1, 9):   # A-H
+                            ws.cell(row=ch["xlrow"], column=col).fill = _red_fill
+                    elif ch["color"] == "native":
+                        # column J still carries the row's network color; if J
+                        # is unexpectedly red/empty, leave the fill alone
+                        # rather than guess.
+                        native = ws.cell(row=ch["xlrow"], column=10).fill
+                        _rgb = getattr(getattr(native, "start_color", None), "rgb", None)
+                        if native is not None and native.patternType and _rgb != "FFFF0000":
+                            for col in range(1, 9):
+                                ws.cell(row=ch["xlrow"], column=col).fill = _style_copy(native)
                 if result["changes"]:
                     wb.save(str(log_path))
             finally:
