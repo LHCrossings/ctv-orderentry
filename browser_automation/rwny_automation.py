@@ -187,6 +187,13 @@ def _create_rwny_contract_direct(order: RWNYOrder, inputs: dict) -> Optional[int
         separation  = inputs.get('separation', RWNY_SEPARATION)
         flight_start = inputs.get('flight_start', order.flight_start)
         flight_end   = inputs.get('flight_end',   order.flight_end)
+        if not flight_start or not flight_end:
+            # parser derives these from the header range or the month columns;
+            # both missing means the proposal layout changed — fail clearly
+            raise ValueError(
+                "RWNY order has no flight dates — 'Estimate Flight Date' was "
+                "unparseable and no month columns were found. Check the proposal layout."
+            )
 
         contract_id = client.create_contract_header(
             code=inputs['contract_code'],

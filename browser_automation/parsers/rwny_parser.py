@@ -124,18 +124,27 @@ def _month_num(label: str) -> int:
 
 
 def _parse_flight_range(date_range: str, year: int) -> tuple[str, str]:
-    """Parse 'May 15  through  June 30' → ('05/15/2026', '06/30/2026')."""
-    m = re.search(
-        r'([A-Za-z]+)\s+(\d{1,2})\s+through\s+([A-Za-z]+)\s+(\d{1,2})',
-        str(date_range).strip(),
-    )
-    if not m:
-        return '', ''
-    sm = _MONTH_NUMS.get(m.group(1).lower()[:3], 0)
-    em = _MONTH_NUMS.get(m.group(3).lower()[:3], 0)
-    if not sm or not em:
-        return '', ''
-    return f'{sm:02d}/{int(m.group(2)):02d}/{year}', f'{em:02d}/{int(m.group(4)):02d}/{year}'
+    """Parse 'May 15  through  June 30' → ('05/15/2026', '06/30/2026').
+
+    Also accepts the month-only variant 'July through September' seen on the
+    Q3 2026 proposal → first day of the start month, last day of the end month.
+    """
+    s = str(date_range).strip()
+    m = re.search(r'([A-Za-z]+)\s+(\d{1,2})\s+through\s+([A-Za-z]+)\s+(\d{1,2})', s)
+    if m:
+        sm = _MONTH_NUMS.get(m.group(1).lower()[:3], 0)
+        em = _MONTH_NUMS.get(m.group(3).lower()[:3], 0)
+        if sm and em:
+            return (f'{sm:02d}/{int(m.group(2)):02d}/{year}',
+                    f'{em:02d}/{int(m.group(4)):02d}/{year}')
+    m = re.search(r'([A-Za-z]+)\s+through\s+([A-Za-z]+)', s)
+    if m:
+        sm = _MONTH_NUMS.get(m.group(1).lower()[:3], 0)
+        em = _MONTH_NUMS.get(m.group(2).lower()[:3], 0)
+        if sm and em:
+            return (f'{sm:02d}/01/{year}',
+                    f'{em:02d}/{monthrange(year, em)[1]:02d}/{year}')
+    return '', ''
 
 
 def _build_month_columns(
@@ -332,6 +341,11 @@ def _parse_rwny_pdf_file(pdf_path: str) -> Optional[RWNYOrder]:
         return None
 
     month_columns = _build_month_columns(month_labels, flight_start, year)
+    # Fallback: header flight range unparseable but month columns exist —
+    # the flight is simply first month start → last month end.
+    if (not flight_start or not flight_end) and month_columns:
+        flight_start = flight_start or month_columns[0].start_date
+        flight_end   = flight_end   or month_columns[-1].end_date
 
     # ── Parse data rows ───────────────────────────────────────────────────────
     lines: list[RWNYLine] = []
@@ -477,6 +491,11 @@ def _parse_rwny_xlsx(path: str) -> Optional[RWNYOrder]:
     year = _detect_year(date_str) or _detect_year(flight_range) or datetime.now().year
     flight_start, flight_end = _parse_flight_range(flight_range, year)
     month_columns = _build_month_columns(month_labels, flight_start, year)
+    # Fallback: header flight range unparseable but month columns exist —
+    # the flight is simply first month start → last month end.
+    if (not flight_start or not flight_end) and month_columns:
+        flight_start = flight_start or month_columns[0].start_date
+        flight_end   = flight_end   or month_columns[-1].end_date
 
     # ── Parse data rows ───────────────────────────────────────────────────────
     lines: list[RWNYLine] = []
