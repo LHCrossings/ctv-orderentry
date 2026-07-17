@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Traffic → Commercial Log — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 1200px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px 24px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+            margin-bottom: 16px;
+        }
+        .controls-row { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+        .field-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 260px; }
+        .field-label { font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .field-input { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 7px 12px; font-size: 0.9rem; color: var(--text-primary); outline: none; font-family: inherit; width: 100%; }
+        .field-input:focus { border-color: var(--nord10); }
+
+        .result-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+        .result-item {
+            display: flex; align-items: center; gap: 12px;
+            background: var(--bg-secondary); border: 1px solid var(--border-color);
+            border-radius: 8px; padding: 8px 14px; cursor: pointer; font-size: 0.85rem;
+            font-family: inherit; text-align: left; width: 100%;
+        }
+        .result-item:hover { border-color: var(--nord10); }
+        .result-item.selected { border-color: var(--nord10); background: rgba(94,129,172,0.1); }
+        .result-code { font-weight: 700; color: var(--nord10); min-width: 160px; }
+        .result-client { flex: 1; color: var(--text-primary); }
+        .result-dates { color: var(--text-muted); font-size: 0.78rem; white-space: nowrap; }
+
+        .summary-bar { display: flex; align-items: center; gap: 18px; padding: 4px 2px 12px; font-size: 0.85rem; color: var(--text-muted); flex-wrap: wrap; }
+        .summary-bar strong { color: var(--text-primary); }
+        .summary-bar .changes-n { color: var(--nord13); font-weight: 700; }
+
+        .mismatch-panel {
+            background: rgba(208,135,112,0.08); border: 1px solid rgba(208,135,112,0.35);
+            border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 0.82rem;
+        }
+        .mismatch-title { font-weight: 700; color: var(--nord12); margin-bottom: 4px; }
+        .mismatch-panel div { color: var(--text-muted); }
+
+        table.diff-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; background: var(--nord6); border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
+        .diff-table th {
+            text-align: left; padding: 6px 10px; background: var(--bg-secondary);
+            color: var(--text-muted); font-weight: 700; font-size: 0.7rem;
+            text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border-color);
+        }
+        .diff-table td { padding: 5px 10px; border-bottom: 1px solid var(--nord5); color: var(--text-primary); vertical-align: top; }
+        .diff-table tr:last-child td { border-bottom: none; }
+        .old-name { color: var(--text-muted); text-decoration: line-through; }
+        .new-name { color: var(--nord14); font-weight: 600; }
+        .mono { font-family: monospace; font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
+
+        .apply-bar {
+            position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between;
+            gap: 1rem; background: var(--nord6); border: 1px solid var(--border-color);
+            border-radius: 8px; padding: 10px 16px; margin-top: 12px;
+            box-shadow: 0 -4px 12px rgba(0,0,0,0.08); font-size: 0.88rem; color: var(--text-muted);
+        }
+        .apply-btn {
+            background: var(--nord14); color: var(--nord6); border: none; border-radius: 8px;
+            padding: 9px 22px; font-size: 0.9rem; font-weight: 700; cursor: pointer; font-family: inherit;
+        }
+        .apply-btn:hover { background: #8fad7a; }
+        .apply-btn:disabled { opacity: 0.45; cursor: default; }
+
+        .msg-ok {
+            background: rgba(163,190,140,0.2); border: 1px solid var(--nord14); color: #3d6b25;
+            border-radius: 6px; padding: 10px 14px; font-size: 0.88rem; font-weight: 600; margin-bottom: 12px;
+        }
+        .msg-err {
+            background: rgba(191,97,106,0.15); border: 1px solid var(--nord11); color: var(--nord11);
+            border-radius: 6px; padding: 10px 14px; font-size: 0.88rem; margin-bottom: 12px;
+        }
+        .empty-state { text-align: center; padding: 48px 0; color: var(--text-muted); font-size: 0.9rem; }
+        .spinner {
+            display: inline-block; width: 15px; height: 15px;
+            border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff;
+            border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 6px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="home-btn">🏠</a>
+            <div class="logo-icon">🔄</div>
+            <div>
+                <h1>Traffic → <span>Commercial Log</span></h1>
+                <div class="logo-sub">Control Room · Traffic</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="portal-intro">
+        <h2>Traffic → Commercial Log</h2>
+        <p>After assigning or revising traffic on a contract, update the commercial log's spot
+           names in place — no re-backwrite. Matches every log row to its Etere spot by line
+           number, air date, and position; preview shows exactly what changes before anything
+           is written.</p>
+    </div>
+
+    <div class="tool-card">
+        <div class="controls-row">
+            <div class="field-group">
+                <label class="field-label">Contract (code, client, or Etere ID)</label>
+                <input type="text" id="searchBox" class="field-input" placeholder="e.g. BVFL, Big Valley, 2412"
+                       onkeydown="if(event.key==='Enter'){searchContracts();}" />
+                <div class="result-list" id="resultList"></div>
+            </div>
+            <div class="field-group">
+                <label class="field-label">Commercial Log path (on the server)</label>
+                <input type="text" id="pathBox" class="field-input"
+                       value="C:\Work Temp\!New\!Orders\Commercial Log.xlsx"
+                       onkeydown="if(event.key==='Enter'&&selectedContract){preview();}" />
+            </div>
+        </div>
+    </div>
+
+    <div id="msg"></div>
+    <div id="previewArea"><div class="empty-state">Search for a contract to begin.</div></div>
+</main>
+
+<script>
+let selectedContract = null;
+let previewData = null;
+
+function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function setMsg(html) { document.getElementById('msg').innerHTML = html; }
+
+async function searchContracts() {
+    const q = document.getElementById('searchBox').value.trim();
+    if (!q) return;
+    const list = document.getElementById('resultList');
+    list.innerHTML = '<div style="font-size:0.82rem;color:var(--text-muted);padding:6px 2px;">Searching…</div>';
+    try {
+        const resp = await fetch(`/api/traffic/log-sync/search?q=${encodeURIComponent(q)}`);
+        const results = await resp.json();
+        if (!results.length) {
+            list.innerHTML = '<div style="font-size:0.82rem;color:var(--text-muted);padding:6px 2px;">No contracts found.</div>';
+            return;
+        }
+        list.innerHTML = results.map(r => `
+            <button class="result-item" id="contract-${r.id}" onclick='pickContract(${JSON.stringify(r)})'>
+                <span class="result-code">${esc(r.code)}</span>
+                <span class="result-client">${esc(r.client)}</span>
+                <span class="result-dates">${esc(r.start)} → ${esc(r.end)} · #${r.id}</span>
+            </button>`).join('');
+    } catch (e) {
+        list.innerHTML = `<div style="font-size:0.82rem;color:var(--nord11);padding:6px 2px;">Search failed: ${esc(e.message)}</div>`;
+    }
+}
+
+function pickContract(r) {
+    selectedContract = r;
+    document.querySelectorAll('.result-item').forEach(el => el.classList.remove('selected'));
+    document.getElementById(`contract-${r.id}`)?.classList.add('selected');
+    preview();
+}
+
+async function preview() {
+    if (!selectedContract) return;
+    setMsg('');
+    previewData = null;
+    document.getElementById('previewArea').innerHTML =
+        '<div class="empty-state">Loading preview — reading the log and Etere…</div>';
+    const path = document.getElementById('pathBox').value.trim();
+    try {
+        const resp = await fetch(`/api/traffic/log-sync/preview?contract_id=${selectedContract.id}&path=${encodeURIComponent(path)}`);
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+        previewData = data;
+        renderPreview(data);
+    } catch (e) {
+        document.getElementById('previewArea').innerHTML = '';
+        setMsg(`<div class="msg-err">Preview failed: ${esc(e.message)}</div>`);
+    }
+}
+
+function renderPreview(data) {
+    const c = selectedContract;
+    let html = `<div class="summary-bar">
+        <span>▶ <strong>${esc(c.code)}</strong> — ${esc(c.client)}</span>
+        <span><strong>${data.log_rows}</strong> log rows</span>
+        <span><strong>${data.etere_spots}</strong> Etere spots</span>
+        <span><strong>${data.groups}</strong> line/day groups</span>
+        <span class="changes-n">${data.changes.length} rows to update</span>
+    </div>`;
+
+    if (data.mismatches.length) {
+        html += `<div class="mismatch-panel">
+            <div class="mismatch-title">⚠ ${data.mismatches.length} line/day group${data.mismatches.length !== 1 ? 's' : ''} skipped — spot count differs (schedule revision → needs a real re-backwrite)</div>
+            ${data.mismatches.slice(0, 20).map(m =>
+                `<div>Line ${m.line} · ${esc(m.date)}: ${m.log_rows} log rows vs ${m.etere_spots} Etere spots</div>`).join('')}
+            ${data.mismatches.length > 20 ? `<div>…and ${data.mismatches.length - 20} more</div>` : ''}
+        </div>`;
+    }
+
+    if (!data.changes.length) {
+        html += `<div class="empty-state">✅ The commercial log already matches Etere for this contract — nothing to update.</div>`;
+        document.getElementById('previewArea').innerHTML = html;
+        return;
+    }
+
+    const shown = data.changes.slice(0, 500);
+    html += `<table class="diff-table">
+        <thead><tr><th>Excel Row</th><th>Line</th><th>Air Date</th><th>Current (stale)</th><th>New Spot Name</th></tr></thead>
+        <tbody>${shown.map(ch => `
+            <tr>
+                <td class="mono">${ch.xlrow}</td>
+                <td class="mono">${ch.line}</td>
+                <td class="mono">${esc(ch.date)}</td>
+                <td class="old-name">${esc(ch.old) || '<em>(blank)</em>'}</td>
+                <td class="new-name">${esc(ch.new)}</td>
+            </tr>`).join('')}
+        </tbody></table>`;
+    if (data.changes.length > shown.length) {
+        html += `<div style="font-size:0.8rem;color:var(--text-muted);padding:8px 2px;">Showing first ${shown.length} of ${data.changes.length} changes — Apply updates all of them.</div>`;
+    }
+
+    html += `<div class="apply-bar">
+        <span><strong>${data.changes.length}</strong> spot name${data.changes.length !== 1 ? 's' : ''} will be rewritten in <span class="mono">${esc(data.path)}</span></span>
+        <button class="apply-btn" id="applyBtn" onclick="applyChanges()">Apply ${data.changes.length} Update${data.changes.length !== 1 ? 's' : ''}</button>
+    </div>`;
+
+    document.getElementById('previewArea').innerHTML = html;
+}
+
+async function applyChanges() {
+    if (!previewData || !selectedContract) return;
+    if (!confirm(`Rewrite ${previewData.changes.length} spot names in the commercial log for ${selectedContract.code}?\n\nMake sure the workbook is closed in Excel.`)) return;
+
+    const btn = document.getElementById('applyBtn');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Writing…';
+    try {
+        const resp = await fetch('/api/traffic/log-sync/apply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contract_id: selectedContract.id,
+                path: document.getElementById('pathBox').value.trim(),
+            }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+        setMsg(`<div class="msg-ok">✔ ${data.written} spot name${data.written !== 1 ? 's' : ''} updated in ${esc(data.path)}</div>`);
+        await preview();   // re-load — should now show 0 to update
+    } catch (e) {
+        setMsg(`<div class="msg-err">Apply failed: ${esc(e.message)}</div>`);
+        btn.disabled = false; btn.textContent = 'Retry Apply';
+    }
+}
+</script>
+
+</body>
+</html>

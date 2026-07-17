@@ -2536,6 +2536,210 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def traffic_page(request: Request):
         return templates.TemplateResponse(request, "traffic.html")
 
+    # ------------------------------------------------------------------
+    # Traffic → Commercial Log sync (Lee 2026-07-17)
+    #
+    # After traffic is assigned or revised on a contract, the commercial
+    # log's Spot Name column (H) goes stale — previously fixable only by
+    # re-backwriting the whole order. Every log row carries the Etere line
+    # number (column M) plus air date (B), so the sync is a deterministic
+    # join: log rows grouped by (line, date) map 1:1 in time order onto
+    # the line's scheduled TPALINSE spots that day; each row's name is
+    # rewritten from the spot's current FILMATI creative. Rows are written
+    # in _format_copy style — "TITLE (CODE)", but no suffix when the title
+    # already starts with the code (redundant suffixes from older
+    # EtereBridge output get cleaned). Count-mismatched groups are flagged
+    # and skipped — that's a schedule revision, i.e. a true re-backwrite.
+    # ------------------------------------------------------------------
+
+    _LOG_SYNC_DEFAULT_PATH = r"C:\Work Temp\!New\!Orders\Commercial Log.xlsx"
+    _LOG_SYNC_SHEET = "Commercials"
+
+    def _log_sync_path(raw: str) -> Path:
+        import re as _re
+        p = (raw or "").strip() or _LOG_SYNC_DEFAULT_PATH
+        m = _re.match(r"^([A-Za-z]):[\\/](.*)$", p)
+        if m and os.name != "nt":   # WSL/dev: translate C:\ → /mnt/c/
+            p = f"/mnt/{m.group(1).lower()}/" + m.group(2).replace("\\", "/")
+        return Path(p)
+
+    def _log_sync_format_copy(title: str, code: str) -> str:
+        # Canonical spot-name format (mirrors eterebridge_runner._format_copy)
+        if not code:
+            return "NEED COPY"
+        if not title or title == code:
+            return code
+        prefix = title.split(":")[0].strip() if ":" in title else ""
+        if prefix == code:
+            return title
+        return f"{title} ({code})"
+
+    def _log_sync_compute(cur, contract_id: int, ws) -> dict:
+        from collections import defaultdict
+
+        cur.execute(
+            "SELECT ID_CONTRATTIRIGHE AS line FROM CONTRATTIRIGHE WHERE ID_CONTRATTITESTATA = %s",
+            (contract_id,),
+        )
+        line_ids = {r["line"] for r in cur.fetchall()}
+        if not line_ids:
+            raise ValueError(f"Contract {contract_id} has no lines")
+
+        ids = ",".join(str(li) for li in sorted(line_ids))
+        cur.execute(f"""
+            SELECT tp.ID_ContrattiRighe AS line, t.DATA, t.ORA,
+                   RTRIM(ISNULL(f.COD_PROGRA, ''))                    AS code,
+                   RTRIM(ISNULL(NULLIF(f.DESCRIZIO, ''), f.COD_PROGRA)) AS title
+            FROM trafficPalinse tp
+            JOIN TPALINSE t   ON t.ID_TPALINSE = tp.id_tpalinse
+            LEFT JOIN FILMATI f ON f.ID_FILMATI = t.ID_FILMATI
+            WHERE tp.ID_ContrattiRighe IN ({ids}) AND t.LIVELLO = 0
+            ORDER BY tp.ID_ContrattiRighe, t.DATA, t.ORA
+        """)
+        etere = defaultdict(list)
+        etere_spots = 0
+        for r in cur.fetchall():
+            etere[(r["line"], r["DATA"].date())].append(
+                _log_sync_format_copy((r["title"] or "").strip(), (r["code"] or "").strip()))
+            etere_spots += 1
+
+        by_group = defaultdict(list)
+        log_rows = 0
+        for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            try:
+                line = int(row[12])
+            except (TypeError, ValueError):
+                continue
+            if line not in line_ids:
+                continue
+            d = row[1].date() if hasattr(row[1], "date") else row[1]
+            by_group[(line, d)].append({"xlrow": i, "old": (row[7] or "").strip()})
+            log_rows += 1
+
+        changes, mismatches = [], []
+        for key in sorted(by_group.keys() | etere.keys(),
+                          key=lambda k: (k[1] or _date_cls.min, k[0])):
+            rows = by_group.get(key, [])
+            new_names = etere.get(key, [])
+            if len(rows) != len(new_names):
+                mismatches.append({
+                    "line": key[0],
+                    "date": key[1].isoformat() if key[1] else "?",
+                    "log_rows": len(rows), "etere_spots": len(new_names),
+                })
+                continue
+            for r, new in zip(rows, new_names):
+                if r["old"] != new:
+                    changes.append({
+                        "xlrow": r["xlrow"], "line": key[0],
+                        "date": key[1].isoformat() if key[1] else "?",
+                        "old": r["old"], "new": new,
+                    })
+        return {
+            "log_rows": log_rows,
+            "etere_spots": etere_spots,
+            "groups": len(by_group),
+            "changes": changes,
+            "mismatches": mismatches,
+        }
+
+    @router.get("/traffic/log-sync", response_class=HTMLResponse)
+    async def traffic_log_sync_page(request: Request):
+        return templates.TemplateResponse(request, "traffic/log_sync.html")
+
+    @router.get("/api/traffic/log-sync/search")
+    async def traffic_log_sync_search(q: str = Query(...)):
+        def _run():
+            from browser_automation.etere_direct_client import connect as _connect
+            term = q.strip()
+            with _connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                where = ("ct.ID_CONTRATTITESTATA = %s" if term.isdigit()
+                         else "(ct.COD_CONTRATTO LIKE %s OR ct.DESCRIZIONE LIKE %s OR cl.RAG_SOCIAL LIKE %s)")
+                params = (int(term),) if term.isdigit() else ((f"%{term}%",) * 3)
+                cur.execute(f"""
+                    SELECT TOP 12 ct.ID_CONTRATTITESTATA AS id, ct.COD_CONTRATTO AS code,
+                           RTRIM(ISNULL(cl.RAG_SOCIAL, '')) AS client,
+                           ct.DATA_INIZIO, ct.DATA_TERMINE
+                    FROM CONTRATTITESTATA ct
+                    LEFT JOIN ANAGRAF cl ON cl.ID_ANAGRAF = ct.COMMITTENTE
+                    WHERE {where}
+                    ORDER BY ct.ID_CONTRATTITESTATA DESC
+                """, params)
+                return [{
+                    "id": r["id"], "code": r["code"], "client": r["client"],
+                    "start": r["DATA_INIZIO"].date().isoformat() if r["DATA_INIZIO"] else "",
+                    "end": r["DATA_TERMINE"].date().isoformat() if r["DATA_TERMINE"] else "",
+                } for r in cur.fetchall()]
+        return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+
+    @router.get("/api/traffic/log-sync/preview")
+    async def traffic_log_sync_preview(contract_id: int, path: str = ""):
+        def _run():
+            import openpyxl
+
+            from browser_automation.etere_direct_client import connect as _connect
+            log_path = _log_sync_path(path)
+            if not log_path.exists():
+                raise FileNotFoundError(f"Commercial log not found: {log_path}")
+            wb = openpyxl.load_workbook(str(log_path), read_only=True, data_only=True)
+            try:
+                if _LOG_SYNC_SHEET not in wb.sheetnames:
+                    raise ValueError(f"No '{_LOG_SYNC_SHEET}' sheet in {log_path.name}")
+                ws = wb[_LOG_SYNC_SHEET]
+                with _connect() as conn:
+                    result = _log_sync_compute(conn.cursor(as_dict=True), contract_id, ws)
+            finally:
+                wb.close()
+            result["path"] = str(log_path)
+            return result
+
+        try:
+            return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+        except (FileNotFoundError, ValueError) as e:
+            return JSONResponse({"error": str(e)}, status_code=404)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    @router.post("/api/traffic/log-sync/apply")
+    async def traffic_log_sync_apply(body: dict = Body(...)):
+        contract_id = int(body.get("contract_id") or 0)
+        if not contract_id:
+            raise HTTPException(status_code=400, detail="contract_id required")
+
+        def _run():
+            import openpyxl
+
+            from browser_automation.etere_direct_client import connect as _connect
+            log_path = _log_sync_path(body.get("path") or "")
+            if not log_path.exists():
+                raise FileNotFoundError(f"Commercial log not found: {log_path}")
+            # full (non-read-only) load so formulas elsewhere survive the save
+            wb = openpyxl.load_workbook(str(log_path))
+            try:
+                ws = wb[_LOG_SYNC_SHEET]
+                with _connect() as conn:
+                    result = _log_sync_compute(conn.cursor(as_dict=True), contract_id, ws)
+                for ch in result["changes"]:
+                    ws.cell(row=ch["xlrow"], column=8).value = ch["new"]
+                if result["changes"]:
+                    wb.save(str(log_path))
+            finally:
+                wb.close()
+            return {"written": len(result["changes"]),
+                    "mismatches": result["mismatches"], "path": str(log_path)}
+
+        try:
+            return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+        except FileNotFoundError as e:
+            return JSONResponse({"error": str(e)}, status_code=404)
+        except PermissionError:
+            return JSONResponse(
+                {"error": "Could not save — the commercial log is open in Excel. Close it and try again."},
+                status_code=409)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
     @router.get("/api/traffic/diagnose-missing")
     async def diagnose_missing(
         date_from: str = Query(...),
