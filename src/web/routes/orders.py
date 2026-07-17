@@ -808,6 +808,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                       AND t.LIVELLO = 0
                       AND t.STATUS = 'I'
                       AND t.ASRUN_STATUS_M = 'I'
+                      -- station IDs are 25s dynamic fillers placed last in a
+                      -- program, INTENDED to be cut off — never billing-relevant
+                      AND ISNULL(t.NEWTYPE, '') <> 'ID'
                     ORDER BY t.COD_USER, t.DATA, t.ORA
                     """,
                     (str(win_start), str(win_end)),
