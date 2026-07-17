@@ -83,6 +83,39 @@
             border-radius: 6px; padding: 10px 14px; font-size: 0.88rem; margin-bottom: 12px;
         }
         .empty-state { text-align: center; padding: 48px 0; color: var(--text-muted); font-size: 0.9rem; }
+
+        .browse-btn {
+            background: var(--bg-secondary); border: 1px solid var(--border-color);
+            border-radius: 8px; padding: 7px 14px; font-size: 0.85rem; font-weight: 600;
+            color: var(--text-primary); cursor: pointer; font-family: inherit; white-space: nowrap;
+        }
+        .browse-btn:hover { border-color: var(--nord10); color: var(--nord10); }
+
+        .browse-overlay {
+            position: fixed; inset: 0; background: rgba(46,52,64,0.45);
+            display: none; align-items: center; justify-content: center; z-index: 500;
+        }
+        .browse-overlay.open { display: flex; }
+        .browse-modal {
+            background: var(--nord6); border: 1px solid var(--border-color); border-radius: 12px;
+            width: min(620px, 92vw); max-height: 70vh; display: flex; flex-direction: column;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+        }
+        .browse-head {
+            display: flex; align-items: center; gap: 10px;
+            padding: 12px 16px; border-bottom: 1px solid var(--border-color);
+        }
+        .browse-dir { flex: 1; font-family: monospace; font-size: 0.8rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .browse-close { background: none; border: none; font-size: 1.1rem; cursor: pointer; color: var(--text-muted); }
+        .browse-list { overflow-y: auto; padding: 6px 0; }
+        .browse-item {
+            display: flex; align-items: center; gap: 10px; width: 100%;
+            background: none; border: none; text-align: left; font-family: inherit;
+            padding: 8px 18px; font-size: 0.87rem; color: var(--text-primary); cursor: pointer;
+        }
+        .browse-item:hover { background: var(--bg-secondary); }
+        .browse-item .bi-icon { width: 20px; text-align: center; }
+        .browse-empty { padding: 18px; font-size: 0.84rem; color: var(--text-muted); font-style: italic; }
         .spinner {
             display: inline-block; width: 15px; height: 15px;
             border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff;
@@ -123,17 +156,43 @@
                 <input type="text" id="searchBox" class="field-input" placeholder="Search contracts…" autocomplete="off" />
                 <div id="searchDropdown" class="search-dropdown"></div>
             </div>
+            <div class="field-group" style="flex:0; min-width:130px;">
+                <label class="field-label">From</label>
+                <input type="text" id="dateFrom" class="field-input" placeholder="07/01/2026" maxlength="10"
+                       onblur="formatDateInput(this); if(selectedContract) preview();"
+                       onkeydown="if(event.key==='Enter'){this.blur();}" />
+            </div>
+            <div class="field-group" style="flex:0; min-width:130px;">
+                <label class="field-label">To</label>
+                <input type="text" id="dateTo" class="field-input" placeholder="09/30/2026" maxlength="10"
+                       onblur="formatDateInput(this); if(selectedContract) preview();"
+                       onkeydown="if(event.key==='Enter'){this.blur();}" />
+            </div>
             <div class="field-group">
                 <label class="field-label">Commercial Log path (on the server)</label>
-                <input type="text" id="pathBox" class="field-input"
-                       value="K:\Traffic\Media library\Commercial Log.xlsx"
-                       onkeydown="if(event.key==='Enter'&&selectedContract){preview();}" />
+                <div style="display:flex; gap:8px;">
+                    <input type="text" id="pathBox" class="field-input" style="flex:1;"
+                           value="K:\Traffic\Media library\Commercial Log.xlsx"
+                           onkeydown="if(event.key==='Enter'&&selectedContract){preview();}" />
+                    <button class="browse-btn" onclick="openBrowse()">Browse…</button>
+                </div>
             </div>
         </div>
     </div>
 
     <div id="msg"></div>
     <div id="previewArea"><div class="empty-state">Search for a contract to begin.</div></div>
+
+    <div class="browse-overlay" id="browseOverlay" onclick="if(event.target===this)closeBrowse()">
+        <div class="browse-modal">
+            <div class="browse-head">
+                <span style="font-weight:700;">Choose Commercial Log</span>
+                <span class="browse-dir" id="browseDir"></span>
+                <button class="browse-close" onclick="closeBrowse()">✕</button>
+            </div>
+            <div class="browse-list" id="browseList"></div>
+        </div>
+    </div>
 </main>
 
 <script>
@@ -144,6 +203,40 @@ function esc(s) {
     return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 function setMsg(html) { document.getElementById('msg').innerHTML = html; }
+
+// ── Standard date-field helpers (same as Assign Traffic / WorldLink Placement) ──
+function parseDateInput(val) {
+    val = val.trim().replace(/[\/\-]/g, '');
+    if (!val) return null;
+    const year = new Date().getFullYear();
+    let m, d, y;
+    if (/^\d{3}$/.test(val)) {           // MDD  e.g. 501 → May 1
+        m = '0' + val.slice(0, 1); d = val.slice(1); y = year;
+    } else if (/^\d{4}$/.test(val)) {    // MMDD
+        m = val.slice(0, 2); d = val.slice(2); y = year;
+    } else if (/^\d{6}$/.test(val)) {    // MMDDYY
+        m = val.slice(0, 2); d = val.slice(2, 4); y = 2000 + parseInt(val.slice(4));
+    } else if (/^\d{8}$/.test(val)) {    // MMDDYYYY
+        m = val.slice(0, 2); d = val.slice(2, 4); y = val.slice(4);
+    } else {
+        return null;
+    }
+    return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+function formatDateInput(el) {
+    const parsed = parseDateInput(el.value);
+    if (parsed) {
+        const [y, m, d] = parsed.split('-');
+        el.value = `${m}/${d}/${y}`;
+    }
+}
+
+function dateParams() {
+    const f = parseDateInput(document.getElementById('dateFrom').value);
+    const t = parseDateInput(document.getElementById('dateTo').value);
+    return `&date_from=${encodeURIComponent(f || '')}&date_to=${encodeURIComponent(t || '')}`;
+}
 
 // ── Contract super-search (same wiring as Move Lines / Assign Traffic) ──────
 (function wireSearch() {
@@ -158,7 +251,8 @@ function setMsg(html) { document.getElementById('msg').innerHTML = html; }
         if (!resp.ok) return;
         const rows = await resp.json();
         drop.innerHTML = rows.length ? rows.map(r => `
-            <div class="dd-item" data-id="${r.id}" data-code="${esc(r.code || '')}" data-desc="${esc(r.description || '')}">
+            <div class="dd-item" data-id="${r.id}" data-code="${esc(r.code || '')}" data-desc="${esc(r.description || '')}"
+                 data-start="${esc(r.date_start || '')}" data-end="${esc(r.date_end || '')}">
                 <div class="dd-code">${esc(r.code)}</div>
                 <div class="dd-desc">${esc(r.description || '')} &nbsp;·&nbsp; ${esc(r.date_start || '')}–${esc(r.date_end || '')}</div>
             </div>`).join('')
@@ -183,6 +277,9 @@ function setMsg(html) { document.getElementById('msg').innerHTML = html; }
         inp.value = item.dataset.code || item.dataset.id;
         drop.classList.remove('open');
         selectedContract = { id: parseInt(item.dataset.id), code: item.dataset.code, client: item.dataset.desc };
+        // default the range to the contract's flight dates (edit to sync a sub-range)
+        document.getElementById('dateFrom').value = item.dataset.start || '';
+        document.getElementById('dateTo').value   = item.dataset.end || '';
         preview();
     });
 })();
@@ -195,7 +292,7 @@ async function preview() {
         '<div class="empty-state">Loading preview — reading the log and Etere…</div>';
     const path = document.getElementById('pathBox').value.trim();
     try {
-        const resp = await fetch(`/api/traffic/log-sync/preview?contract_id=${selectedContract.id}&path=${encodeURIComponent(path)}`);
+        const resp = await fetch(`/api/traffic/log-sync/preview?contract_id=${selectedContract.id}&path=${encodeURIComponent(path)}${dateParams()}`);
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
         previewData = data;
@@ -255,6 +352,46 @@ function renderPreview(data) {
     document.getElementById('previewArea').innerHTML = html;
 }
 
+// ── Browse modal (server-side folder listing) ───────────────────────────────
+async function browseTo(dir) {
+    const list = document.getElementById('browseList');
+    list.innerHTML = '<div class="browse-empty">Loading…</div>';
+    try {
+        const resp = await fetch(`/api/traffic/log-sync/browse?dir=${encodeURIComponent(dir || '')}`);
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+        document.getElementById('browseDir').textContent = data.dir;
+        let html = '';
+        if (data.parent) {
+            html += `<button class="browse-item" onclick="browseTo(${JSON.stringify(data.parent).replace(/"/g,'&quot;')})">
+                        <span class="bi-icon">⬆️</span>..</button>`;
+        }
+        html += data.folders.map(f =>
+            `<button class="browse-item" onclick="browseTo(${JSON.stringify(f.path).replace(/"/g,'&quot;')})">
+                <span class="bi-icon">📁</span>${esc(f.name)}</button>`).join('');
+        html += data.files.map(f =>
+            `<button class="browse-item" onclick="chooseFile(${JSON.stringify(f.path).replace(/"/g,'&quot;')})">
+                <span class="bi-icon">📄</span>${esc(f.name)}</button>`).join('');
+        if (!data.folders.length && !data.files.length) {
+            html += '<div class="browse-empty">No folders or Excel files here.</div>';
+        }
+        list.innerHTML = html;
+    } catch (e) {
+        list.innerHTML = `<div class="browse-empty">Could not open folder: ${esc(e.message)}</div>`;
+    }
+}
+
+function openBrowse() {
+    document.getElementById('browseOverlay').classList.add('open');
+    browseTo(document.getElementById('pathBox').value.trim());
+}
+function closeBrowse() { document.getElementById('browseOverlay').classList.remove('open'); }
+function chooseFile(path) {
+    document.getElementById('pathBox').value = path;
+    closeBrowse();
+    if (selectedContract) preview();
+}
+
 async function applyChanges() {
     if (!previewData || !selectedContract) return;
     if (!confirm(`Rewrite ${previewData.changes.length} spot names in the commercial log for ${selectedContract.code}?\n\nMake sure the workbook is closed in Excel.`)) return;
@@ -268,6 +405,8 @@ async function applyChanges() {
             body: JSON.stringify({
                 contract_id: selectedContract.id,
                 path: document.getElementById('pathBox').value.trim(),
+                date_from: parseDateInput(document.getElementById('dateFrom').value) || '',
+                date_to: parseDateInput(document.getElementById('dateTo').value) || '',
             }),
         });
         const data = await resp.json();

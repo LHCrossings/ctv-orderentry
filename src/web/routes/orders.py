@@ -2574,7 +2574,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             return title
         return f"{title} ({code})"
 
-    def _log_sync_compute(cur, contract_id: int, ws) -> dict:
+    def _log_sync_compute(cur, contract_id: int, ws,
+                          date_from=None, date_to=None) -> dict:
         from collections import defaultdict
 
         cur.execute(
@@ -2585,6 +2586,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         if not line_ids:
             raise ValueError(f"Contract {contract_id} has no lines")
 
+        date_clause, date_params = "", []
+        if date_from:
+            date_clause += " AND t.DATA >= %s"
+            date_params.append(str(date_from))
+        if date_to:
+            date_clause += " AND t.DATA <= %s"
+            date_params.append(str(date_to))
+
         ids = ",".join(str(li) for li in sorted(line_ids))
         cur.execute(f"""
             SELECT tp.ID_ContrattiRighe AS line, t.DATA, t.ORA,
@@ -2593,9 +2602,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             FROM trafficPalinse tp
             JOIN TPALINSE t   ON t.ID_TPALINSE = tp.id_tpalinse
             LEFT JOIN FILMATI f ON f.ID_FILMATI = t.ID_FILMATI
-            WHERE tp.ID_ContrattiRighe IN ({ids}) AND t.LIVELLO = 0
+            WHERE tp.ID_ContrattiRighe IN ({ids}) AND t.LIVELLO = 0{date_clause}
             ORDER BY tp.ID_ContrattiRighe, t.DATA, t.ORA
-        """)
+        """, tuple(date_params))
         etere = defaultdict(list)
         etere_spots = 0
         for r in cur.fetchall():
@@ -2613,6 +2622,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             if line not in line_ids:
                 continue
             d = row[1].date() if hasattr(row[1], "date") else row[1]
+            if d is not None and ((date_from and d < date_from) or (date_to and d > date_to)):
+                continue
             by_group[(line, d)].append({"xlrow": i, "old": (row[7] or "").strip()})
             log_rows += 1
 
@@ -2647,8 +2658,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def traffic_log_sync_page(request: Request):
         return templates.TemplateResponse(request, "traffic/log_sync.html")
 
+    def _log_sync_parse_date(raw: str):
+        raw = (raw or "").strip()
+        return _date_cls.fromisoformat(raw) if raw else None
+
     @router.get("/api/traffic/log-sync/preview")
-    async def traffic_log_sync_preview(contract_id: int, path: str = ""):
+    async def traffic_log_sync_preview(contract_id: int, path: str = "",
+                                       date_from: str = "", date_to: str = ""):
         def _run():
             import openpyxl
 
@@ -2656,13 +2672,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             log_path = _log_sync_path(path)
             if not log_path.exists():
                 raise FileNotFoundError(f"Commercial log not found: {log_path}")
+            d_from, d_to = _log_sync_parse_date(date_from), _log_sync_parse_date(date_to)
             wb = openpyxl.load_workbook(str(log_path), read_only=True, data_only=True)
             try:
                 if _LOG_SYNC_SHEET not in wb.sheetnames:
                     raise ValueError(f"No '{_LOG_SYNC_SHEET}' sheet in {log_path.name}")
                 ws = wb[_LOG_SYNC_SHEET]
                 with _connect() as conn:
-                    result = _log_sync_compute(conn.cursor(as_dict=True), contract_id, ws)
+                    result = _log_sync_compute(conn.cursor(as_dict=True), contract_id, ws,
+                                               d_from, d_to)
             finally:
                 wb.close()
             result["path"] = str(log_path)
@@ -2672,6 +2690,39 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
         except (FileNotFoundError, ValueError) as e:
             return JSONResponse({"error": str(e)}, status_code=404)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    @router.get("/api/traffic/log-sync/browse")
+    async def traffic_log_sync_browse(dir: str = ""):
+        """Server-side folder listing for the Browse modal (a web page cannot
+        read local file paths, so navigation happens on the server)."""
+        def _run():
+            base = _log_sync_path(dir) if dir.strip() else _log_sync_path("").parent
+            if base.is_file():
+                base = base.parent
+            if not base.is_dir():
+                raise FileNotFoundError(f"Folder not found: {base}")
+            folders, files = [], []
+            for entry in sorted(base.iterdir(), key=lambda p: p.name.lower()):
+                try:
+                    if entry.name.startswith(("~$", ".")):
+                        continue
+                    if entry.is_dir():
+                        folders.append({"name": entry.name, "path": str(entry)})
+                    elif entry.suffix.lower() in (".xlsx", ".xlsm"):
+                        files.append({"name": entry.name, "path": str(entry)})
+                except OSError:
+                    continue
+            parent = str(base.parent) if base.parent != base else None
+            return {"dir": str(base), "parent": parent, "folders": folders, "files": files}
+
+        try:
+            return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+        except FileNotFoundError as e:
+            return JSONResponse({"error": str(e)}, status_code=404)
+        except PermissionError as e:
+            return JSONResponse({"error": f"No access: {e}"}, status_code=403)
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -2688,12 +2739,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             log_path = _log_sync_path(body.get("path") or "")
             if not log_path.exists():
                 raise FileNotFoundError(f"Commercial log not found: {log_path}")
+            d_from = _log_sync_parse_date(body.get("date_from") or "")
+            d_to   = _log_sync_parse_date(body.get("date_to") or "")
             # full (non-read-only) load so formulas elsewhere survive the save
             wb = openpyxl.load_workbook(str(log_path))
             try:
                 ws = wb[_LOG_SYNC_SHEET]
                 with _connect() as conn:
-                    result = _log_sync_compute(conn.cursor(as_dict=True), contract_id, ws)
+                    result = _log_sync_compute(conn.cursor(as_dict=True), contract_id, ws,
+                                               d_from, d_to)
                 for ch in result["changes"]:
                     ws.cell(row=ch["xlrow"], column=8).value = ch["new"]
                 if result["changes"]:
