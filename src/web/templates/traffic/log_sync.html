@@ -24,18 +24,19 @@
         .field-input { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 7px 12px; font-size: 0.9rem; color: var(--text-primary); outline: none; font-family: inherit; width: 100%; }
         .field-input:focus { border-color: var(--nord10); }
 
-        .result-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
-        .result-item {
-            display: flex; align-items: center; gap: 12px;
-            background: var(--bg-secondary); border: 1px solid var(--border-color);
-            border-radius: 8px; padding: 8px 14px; cursor: pointer; font-size: 0.85rem;
-            font-family: inherit; text-align: left; width: 100%;
+        .search-wrap { position: relative; }
+        .search-dropdown {
+            position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+            background: var(--nord6); border: 1px solid var(--border-color);
+            border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.12);
+            z-index: 200; max-height: 260px; overflow-y: auto; display: none;
         }
-        .result-item:hover { border-color: var(--nord10); }
-        .result-item.selected { border-color: var(--nord10); background: rgba(94,129,172,0.1); }
-        .result-code { font-weight: 700; color: var(--nord10); min-width: 160px; }
-        .result-client { flex: 1; color: var(--text-primary); }
-        .result-dates { color: var(--text-muted); font-size: 0.78rem; white-space: nowrap; }
+        .search-dropdown.open { display: block; }
+        .dd-item { padding: 9px 14px; cursor: pointer; border-bottom: 1px solid var(--border-color); }
+        .dd-item:last-child { border-bottom: none; }
+        .dd-item:hover { background: var(--bg-secondary); }
+        .dd-code { font-weight: 700; font-family: monospace; color: var(--nord10); font-size: 0.88rem; }
+        .dd-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
 
         .summary-bar { display: flex; align-items: center; gap: 18px; padding: 4px 2px 12px; font-size: 0.85rem; color: var(--text-muted); flex-wrap: wrap; }
         .summary-bar strong { color: var(--text-primary); }
@@ -117,16 +118,15 @@
 
     <div class="tool-card">
         <div class="controls-row">
-            <div class="field-group">
-                <label class="field-label">Contract (code, client, or Etere ID)</label>
-                <input type="text" id="searchBox" class="field-input" placeholder="e.g. BVFL, Big Valley, 2412"
-                       onkeydown="if(event.key==='Enter'){searchContracts();}" />
-                <div class="result-list" id="resultList"></div>
+            <div class="field-group search-wrap">
+                <label class="field-label">Contract (code, description, or Etere ID)</label>
+                <input type="text" id="searchBox" class="field-input" placeholder="Search contracts…" autocomplete="off" />
+                <div id="searchDropdown" class="search-dropdown"></div>
             </div>
             <div class="field-group">
                 <label class="field-label">Commercial Log path (on the server)</label>
                 <input type="text" id="pathBox" class="field-input"
-                       value="C:\Work Temp\!New\!Orders\Commercial Log.xlsx"
+                       value="K:\Traffic\Media library\Commercial Log.xlsx"
                        onkeydown="if(event.key==='Enter'&&selectedContract){preview();}" />
             </div>
         </div>
@@ -145,35 +145,47 @@ function esc(s) {
 }
 function setMsg(html) { document.getElementById('msg').innerHTML = html; }
 
-async function searchContracts() {
-    const q = document.getElementById('searchBox').value.trim();
-    if (!q) return;
-    const list = document.getElementById('resultList');
-    list.innerHTML = '<div style="font-size:0.82rem;color:var(--text-muted);padding:6px 2px;">Searching…</div>';
-    try {
-        const resp = await fetch(`/api/traffic/log-sync/search?q=${encodeURIComponent(q)}`);
-        const results = await resp.json();
-        if (!results.length) {
-            list.innerHTML = '<div style="font-size:0.82rem;color:var(--text-muted);padding:6px 2px;">No contracts found.</div>';
-            return;
-        }
-        list.innerHTML = results.map(r => `
-            <button class="result-item" id="contract-${r.id}" onclick='pickContract(${JSON.stringify(r)})'>
-                <span class="result-code">${esc(r.code)}</span>
-                <span class="result-client">${esc(r.client)}</span>
-                <span class="result-dates">${esc(r.start)} → ${esc(r.end)} · #${r.id}</span>
-            </button>`).join('');
-    } catch (e) {
-        list.innerHTML = `<div style="font-size:0.82rem;color:var(--nord11);padding:6px 2px;">Search failed: ${esc(e.message)}</div>`;
-    }
-}
+// ── Contract super-search (same wiring as Move Lines / Assign Traffic) ──────
+(function wireSearch() {
+    const inp  = document.getElementById('searchBox');
+    const drop = document.getElementById('searchDropdown');
+    let timer  = null;
 
-function pickContract(r) {
-    selectedContract = r;
-    document.querySelectorAll('.result-item').forEach(el => el.classList.remove('selected'));
-    document.getElementById(`contract-${r.id}`)?.classList.add('selected');
-    preview();
-}
+    async function doSearch() {
+        const q = inp.value.trim();
+        if (!q) { drop.classList.remove('open'); return; }
+        const resp = await fetch(`/api/traffic/contract-search?q=${encodeURIComponent(q)}`);
+        if (!resp.ok) return;
+        const rows = await resp.json();
+        drop.innerHTML = rows.length ? rows.map(r => `
+            <div class="dd-item" data-id="${r.id}" data-code="${esc(r.code || '')}" data-desc="${esc(r.description || '')}">
+                <div class="dd-code">${esc(r.code)}</div>
+                <div class="dd-desc">${esc(r.description || '')} &nbsp;·&nbsp; ${esc(r.date_start || '')}–${esc(r.date_end || '')}</div>
+            </div>`).join('')
+            : '<div style="padding:10px 12px;font-size:0.82rem;color:var(--text-muted);">No contracts found</div>';
+        drop.classList.add('open');
+    }
+
+    inp.addEventListener('input', () => {
+        clearTimeout(timer);
+        timer = setTimeout(doSearch, 300);
+    });
+    inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { clearTimeout(timer); doSearch(); }
+        if (e.key === 'Escape') drop.classList.remove('open');
+    });
+    document.addEventListener('click', e => {
+        if (!inp.contains(e.target) && !drop.contains(e.target)) drop.classList.remove('open');
+    });
+    drop.addEventListener('click', e => {
+        const item = e.target.closest('.dd-item[data-id]');
+        if (!item) return;
+        inp.value = item.dataset.code || item.dataset.id;
+        drop.classList.remove('open');
+        selectedContract = { id: parseInt(item.dataset.id), code: item.dataset.code, client: item.dataset.desc };
+        preview();
+    });
+})();
 
 async function preview() {
     if (!selectedContract) return;

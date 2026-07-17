@@ -2552,7 +2552,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     # and skipped — that's a schedule revision, i.e. a true re-backwrite.
     # ------------------------------------------------------------------
 
-    _LOG_SYNC_DEFAULT_PATH = r"C:\Work Temp\!New\!Orders\Commercial Log.xlsx"
+    _LOG_SYNC_DEFAULT_PATH = r"K:\Traffic\Media library\Commercial Log.xlsx"
     _LOG_SYNC_SHEET = "Commercials"
 
     def _log_sync_path(raw: str) -> Path:
@@ -2646,32 +2646,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     @router.get("/traffic/log-sync", response_class=HTMLResponse)
     async def traffic_log_sync_page(request: Request):
         return templates.TemplateResponse(request, "traffic/log_sync.html")
-
-    @router.get("/api/traffic/log-sync/search")
-    async def traffic_log_sync_search(q: str = Query(...)):
-        def _run():
-            from browser_automation.etere_direct_client import connect as _connect
-            term = q.strip()
-            with _connect() as conn:
-                cur = conn.cursor(as_dict=True)
-                where = ("ct.ID_CONTRATTITESTATA = %s" if term.isdigit()
-                         else "(ct.COD_CONTRATTO LIKE %s OR ct.DESCRIZIONE LIKE %s OR cl.RAG_SOCIAL LIKE %s)")
-                params = (int(term),) if term.isdigit() else ((f"%{term}%",) * 3)
-                cur.execute(f"""
-                    SELECT TOP 12 ct.ID_CONTRATTITESTATA AS id, ct.COD_CONTRATTO AS code,
-                           RTRIM(ISNULL(cl.RAG_SOCIAL, '')) AS client,
-                           ct.DATA_INIZIO, ct.DATA_TERMINE
-                    FROM CONTRATTITESTATA ct
-                    LEFT JOIN ANAGRAF cl ON cl.ID_ANAGRAF = ct.COMMITTENTE
-                    WHERE {where}
-                    ORDER BY ct.ID_CONTRATTITESTATA DESC
-                """, params)
-                return [{
-                    "id": r["id"], "code": r["code"], "client": r["client"],
-                    "start": r["DATA_INIZIO"].date().isoformat() if r["DATA_INIZIO"] else "",
-                    "end": r["DATA_TERMINE"].date().isoformat() if r["DATA_TERMINE"] else "",
-                } for r in cur.fetchall()]
-        return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
 
     @router.get("/api/traffic/log-sync/preview")
     async def traffic_log_sync_preview(contract_id: int, path: str = ""):
