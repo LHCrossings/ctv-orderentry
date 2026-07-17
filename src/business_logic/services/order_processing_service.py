@@ -2553,7 +2553,7 @@ class OrderProcessingService:
                 if success:
                     print("\n✓ RWNY order processed successfully")
                     inp = order.order_input
-                    code = inp.get('order_code') if isinstance(inp, dict) else None
+                    code = (inp.get('contract_code') or inp.get('order_code')) if isinstance(inp, dict) else None
                     contracts = [Contract(contract_number=code or 'RWNY', order_type=OrderType.RWNY)]
                     return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.RWNY)
                 print("\n✗ RWNY order processing failed")
