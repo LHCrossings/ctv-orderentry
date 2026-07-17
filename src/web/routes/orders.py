@@ -2644,7 +2644,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     # Commercial-log color rules (Lee 2026-07-17): a line that
                     # goes to NEED COPY turns red in A-H; a NEED COPY line that
                     # receives traffic gets A-H restored to its network color
-                    # (still present in column J — only A-H ever turn red).
+                    # (still present in column K — only A-H ever turn red, and
+                    # J can be pink for added value).
                     # Same-to-same traffic swaps keep their existing fill.
                     if new == "NEED COPY" and r["old"] != "NEED COPY":
                         color = "red"
@@ -2770,10 +2771,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         for col in range(1, 9):   # A-H
                             ws.cell(row=ch["xlrow"], column=col).fill = _red_fill
                     elif ch["color"] == "native":
-                        # column J still carries the row's network color; if J
-                        # is unexpectedly red/empty, leave the fill alone
-                        # rather than guess.
-                        native = ws.cell(row=ch["xlrow"], column=10).fill
+                        # column K carries the row's network color (col J can
+                        # be pink for added value, col I is no-fill); if K is
+                        # unexpectedly red/empty, leave the fill alone rather
+                        # than guess.
+                        native = ws.cell(row=ch["xlrow"], column=11).fill
                         _rgb = getattr(getattr(native, "start_color", None), "rgb", None)
                         if native is not None and native.patternType and _rgb != "FFFF0000":
                             for col in range(1, 9):
