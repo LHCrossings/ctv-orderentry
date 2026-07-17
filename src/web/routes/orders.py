@@ -205,6 +205,37 @@ _TRAFFIC_LOG_ROOT = Path(
 )
 
 
+def _wb_load_fast(path: Path, **kw):
+    """Load a workbook through one in-memory read. openpyxl's zipfile layer
+    issues thousands of small reads, which is brutally slow on network
+    shares (K:) — a single read_bytes() then BytesIO collapses that to one
+    network transfer."""
+    import io as _io
+
+    import openpyxl
+    return openpyxl.load_workbook(_io.BytesIO(path.read_bytes()), **kw)
+
+
+def _wb_save_fast(wb, path: Path) -> None:
+    """Serialize the workbook in memory, then write it as ONE network
+    transfer via a temp file + atomic replace (also avoids a torn file if
+    the write is interrupted). Raises PermissionError if the target is
+    locked open in Excel."""
+    import io as _io
+    buf = _io.BytesIO()
+    wb.save(buf)
+    tmp = path.with_name(path.name + ".tmp~")
+    try:
+        tmp.write_bytes(buf.getvalue())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
+
 def _find_traffic_log(mkt: str, target: _date_cls) -> Optional[Path]:
     """Locate weekly traffic log .xlsm for a market and any date in that broadcast week."""
     monday = target - timedelta(days=target.weekday())
@@ -2681,18 +2712,57 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         raw = (raw or "").strip()
         return _date_cls.fromisoformat(raw) if raw else None
 
+    # Writable-workbook warm cache. Parsing the commercial log takes ~40 s of
+    # pure CPU (13.8k x 50 cells), which dominated apply time. The preview
+    # endpoint warms the writable copy in the background while the user reads
+    # the preview, so Apply usually only pays for the edit + save (~10 s).
+    # Entries are keyed by resolved path and validated by mtime; popped on use.
+    _log_sync_wb_cache: dict = {}
+    _log_sync_wb_lock = _threading.Lock()
+    _log_sync_warming: set = set()
+
+    def _log_sync_warm(log_path: Path) -> None:
+        key = str(log_path)
+        try:
+            mtime = log_path.stat().st_mtime_ns
+            with _log_sync_wb_lock:
+                cached = _log_sync_wb_cache.get(key)
+                if (cached and cached[0] == mtime) or key in _log_sync_warming:
+                    return
+                _log_sync_warming.add(key)
+            try:
+                wb = _wb_load_fast(log_path)
+            finally:
+                with _log_sync_wb_lock:
+                    _log_sync_warming.discard(key)
+            with _log_sync_wb_lock:
+                _log_sync_wb_cache.clear()   # keep at most one warmed workbook
+                _log_sync_wb_cache[key] = (mtime, wb)
+        except Exception:
+            pass  # warming is best-effort; apply falls back to a cold load
+
+    def _log_sync_take_warm(log_path: Path):
+        """Return the warmed workbook if it still matches the file on disk."""
+        key = str(log_path)
+        try:
+            mtime = log_path.stat().st_mtime_ns
+        except OSError:
+            return None
+        with _log_sync_wb_lock:
+            cached = _log_sync_wb_cache.pop(key, None)
+        return cached[1] if cached and cached[0] == mtime else None
+
     @router.get("/api/traffic/log-sync/preview")
     async def traffic_log_sync_preview(contract_id: int, path: str = "",
                                        date_from: str = "", date_to: str = ""):
         def _run():
-            import openpyxl
 
             from browser_automation.etere_direct_client import connect as _connect
             log_path = _log_sync_path(path)
             if not log_path.exists():
                 raise FileNotFoundError(f"Commercial log not found: {log_path}")
             d_from, d_to = _log_sync_parse_date(date_from), _log_sync_parse_date(date_to)
-            wb = openpyxl.load_workbook(str(log_path), read_only=True, data_only=True)
+            wb = _wb_load_fast(log_path, read_only=True, data_only=True)
             try:
                 if _LOG_SYNC_SHEET not in wb.sheetnames:
                     raise ValueError(f"No '{_LOG_SYNC_SHEET}' sheet in {log_path.name}")
@@ -2706,7 +2776,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             return result
 
         try:
-            return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, _run)
+            # warm the writable workbook while the user reads the preview
+            loop.run_in_executor(None, _log_sync_warm, _log_sync_path(path))
+            return JSONResponse(result)
         except (FileNotFoundError, ValueError) as e:
             return JSONResponse({"error": str(e)}, status_code=404)
         except Exception as e:
@@ -2752,7 +2826,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             raise HTTPException(status_code=400, detail="contract_id required")
 
         def _run():
-            import openpyxl
 
             from browser_automation.etere_direct_client import connect as _connect
             log_path = _log_sync_path(body.get("path") or "")
@@ -2760,8 +2833,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 raise FileNotFoundError(f"Commercial log not found: {log_path}")
             d_from = _log_sync_parse_date(body.get("date_from") or "")
             d_to   = _log_sync_parse_date(body.get("date_to") or "")
-            # full (non-read-only) load so formulas elsewhere survive the save
-            wb = openpyxl.load_workbook(str(log_path))
+            # full (non-read-only) load so formulas elsewhere survive the save;
+            # usually pre-warmed by the preview endpoint (see _log_sync_warm)
+            wb = _log_sync_take_warm(log_path) or _wb_load_fast(log_path)
             try:
                 ws = wb[_LOG_SYNC_SHEET]
                 with _connect() as conn:
@@ -2794,7 +2868,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 ws.cell(row=ch["xlrow"], column=7).fill = _pink_fill
                                 ws.cell(row=ch["xlrow"], column=8).fill = _style_copy(_pink_fill)
                 if result["changes"]:
-                    wb.save(str(log_path))
+                    _wb_save_fast(wb, log_path)
             finally:
                 wb.close()
             return {"written": len(result["changes"]),
@@ -3835,7 +3909,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     @router.get("/api/master-control/logs/load")
     async def load_traffic_log(date: str = Query(...), market: str = Query(...)):
-        import openpyxl
 
         def _fmt_t(val) -> str:
             if val is None:
@@ -3855,7 +3928,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             if log_path is None:
                 return None
             day_name = target.strftime("%A")
-            wb = openpyxl.load_workbook(str(log_path), keep_vba=True, data_only=True)
+            wb = _wb_load_fast(log_path, keep_vba=True, data_only=True)
             if day_name not in wb.sheetnames:
                 return None
             ws = wb[day_name]
@@ -3909,7 +3982,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     @router.post("/api/master-control/logs/fill-program")
     async def fill_program_times(body: dict = Body(...)):
-        import openpyxl
 
         date_str = body["date"]
         market   = body["market"]
@@ -3928,7 +4000,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             if log_path is None:
                 raise FileNotFoundError(f"Log not found for {market} {date_str}")
             day_name = target.strftime("%A")
-            wb = openpyxl.load_workbook(str(log_path), keep_vba=True)
+            wb = _wb_load_fast(log_path, keep_vba=True)
             try:
                 ws = wb[day_name]
                 project_root = Path(__file__).parent.parent.parent.parent
@@ -3941,7 +4013,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         ws, target, market_id, spots, time_in, time_out, cur,
                         program_language=program_language,
                     )
-                wb.save(str(log_path))
+                _wb_save_fast(wb, log_path)
                 return results
             finally:
                 wb.close()
@@ -3956,7 +4028,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     @router.post("/api/master-control/logs/fill-all")
     async def fill_all_program_times(body: dict = Body(...)):
-        import openpyxl
 
         date_str = body["date"]
         market = body["market"]
@@ -3975,7 +4046,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             if log_path is None:
                 raise FileNotFoundError(f"Log not found for {market} {date_str}")
             day_name = target.strftime("%A")
-            wb = openpyxl.load_workbook(str(log_path), keep_vba=True)
+            wb = _wb_load_fast(log_path, keep_vba=True)
             try:
                 ws = wb[day_name]
                 project_root = Path(__file__).parent.parent.parent.parent
@@ -4001,7 +4072,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 program_language=prg.get("language", ""),
                             )
                         )
-                wb.save(str(log_path))
+                _wb_save_fast(wb, log_path)
                 return all_results
             finally:
                 wb.close()
@@ -4016,7 +4087,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     @router.post("/api/master-control/logs/save-airtime")
     async def save_airtime(body: dict = Body(...)):
-        import openpyxl
 
         def _run():
             target = _date_cls.fromisoformat(body["date"])
@@ -4025,7 +4095,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 raise FileNotFoundError(f"Log not found for {body['market']} {body['date']}")
             day_name = target.strftime("%A")
             import datetime as _dt2
-            wb = openpyxl.load_workbook(str(log_path), keep_vba=True)
+            wb = _wb_load_fast(log_path, keep_vba=True)
             ws = wb[day_name]
             raw = str(body["actual_time"]).strip()
             try:
@@ -4035,7 +4105,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             except Exception:
                 cell_val = raw
             ws.cell(row=int(body["excel_row"]), column=9).value = cell_val
-            wb.save(str(log_path))
+            _wb_save_fast(wb, log_path)
 
         try:
             await asyncio.get_running_loop().run_in_executor(None, _run)
