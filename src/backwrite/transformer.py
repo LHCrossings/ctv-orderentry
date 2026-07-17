@@ -121,6 +121,24 @@ class SpotRow:
 # HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 
+def strip_redundant_code(name: str) -> str:
+    """Drop a trailing " (CODE)" when the title already starts with "CODE:".
+
+    Etere's own report export always writes "TITLE (CODE)", which doubles the
+    code when the library title is "CODE: name". Our DB placement generator
+    (_format_copy) never does this, but uploaded report CSVs and legacy
+    backwrite Excels can — normalize them on the way in so the commercial log
+    never shows "CODE: name (CODE)".
+    """
+    name = (name or "").strip()
+    m = re.match(r"^(.*\S)\s*\(([^()]+)\)$", name)
+    if not m:
+        return name
+    title, code = m.group(1).strip(), m.group(2).strip()
+    prefix = title.split(":")[0].strip() if ":" in title else ""
+    return title if prefix == code else name
+
+
 def detect_language(text: str) -> str:
     t = text.lower()
     for keyword, code in _LANG_KEYWORDS:
@@ -273,7 +291,7 @@ def parse_csv(data: bytes) -> Tuple[CsvHeader, List[SpotRow]]:
             market          = _normalise_market(row.get("nome2", "").strip()),
             air_date        = air_date,
             air_time        = row.get("airtimep",    "").strip(),
-            copy_code       = row.get("bookingcode2","").strip(),
+            copy_code       = strip_redundant_code(row.get("bookingcode2","")),
             row_description = row.get("rowdescription","").strip(),
         ))
 
@@ -1033,6 +1051,9 @@ def _eb_df_to_run_rows(df, agency_fee: float, is_agency: bool) -> List[dict]:
         else:
             month_dt = None
 
+        media_val = _clean(row.get("Media"))
+        if isinstance(media_val, str):
+            media_val = strip_redundant_code(media_val)
         rows.append({
             "bill_code":    _clean(row.get("Bill Code")),
             "air_date":     air_date,
@@ -1040,7 +1061,7 @@ def _eb_df_to_run_rows(df, agency_fee: float, is_agency: bool) -> List[dict]:
             "time_in":      _hhmm_to_timedelta(str(_clean(row.get("Time In")) or "")),
             "time_out":     _hhmm_to_timedelta(str(_clean(row.get("Time Out")) or "")),
             "length":       timedelta(seconds=int(_clean(row.get("Length")) or 0)),
-            "media":        _clean(row.get("Media")),
+            "media":        media_val,
             "program":      _clean(row.get("Program")),
             "lang":         _clean(row.get("Lang.")),
             "line":         _clean(row.get("Line")),
