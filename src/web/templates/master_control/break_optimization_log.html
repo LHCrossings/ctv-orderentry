@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Break Optimization (Log Style) — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 1400px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px 24px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+            margin-bottom: 16px;
+        }
+
+        .controls-row { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+        .field-group { display: flex; flex-direction: column; gap: 4px; }
+        .field-label { font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .field-input { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 7px 12px; font-size: 0.9rem; color: var(--text-primary); outline: none; font-family: inherit; width: 90px; }
+        .field-input:focus { border-color: var(--nord10); }
+
+        .pill-group { display: flex; gap: 6px; flex-wrap: wrap; }
+        .mkt-pill { background: transparent; border: 1px solid var(--border-color); border-radius: 20px; padding: 5px 12px; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); cursor: pointer; transition: all 0.15s; font-family: inherit; }
+        .mkt-pill:hover:not(.active) { border-color: var(--nord10); color: var(--nord10); }
+        .mkt-pill.active { background: var(--nord10); border-color: var(--nord10); color: var(--nord6); }
+
+        .log-meta { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+        .expand-btn { background: transparent; border: 1px solid var(--border-color); border-radius: 6px; padding: 2px 10px; font-size: 0.74rem; color: var(--text-muted); cursor: pointer; font-family: inherit; }
+        .expand-btn:hover { border-color: var(--nord10); color: var(--nord10); }
+
+        /* Program block (log style) */
+        .prg-block { margin-bottom: 6px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); }
+        .prg-header {
+            display: flex; align-items: center; gap: 12px;
+            background: var(--nord2); color: var(--nord5);
+            padding: 9px 16px; cursor: pointer; user-select: none;
+        }
+        .prg-header:hover { background: var(--nord3); }
+        .prg-chevron { font-size: 0.7rem; transition: transform 0.15s; color: var(--nord4); flex-shrink: 0; }
+        .prg-block.collapsed .prg-chevron { transform: rotate(-90deg); }
+        .prg-time { font-family: monospace; font-size: 0.83rem; color: var(--nord8); min-width: 130px; }
+        .prg-name { font-weight: 600; font-size: 0.88rem; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .prg-lang { font-size: 0.72rem; background: rgba(136,192,208,0.18); color: var(--nord8); padding: 2px 8px; border-radius: 10px; font-weight: 700; flex-shrink: 0; }
+        .prg-stat { font-size: 0.72rem; color: var(--nord4); flex-shrink: 0; white-space: nowrap; }
+        .prg-stat.warn { color: var(--nord13); font-weight: 700; }
+        .prg-apply-btn { background: rgba(163,190,140,0.15); border: 1px solid rgba(163,190,140,0.4); color: var(--nord14); border-radius: 6px; padding: 3px 10px; font-size: 0.72rem; font-weight: 700; cursor: pointer; font-family: inherit; flex-shrink: 0; }
+        .prg-apply-btn:hover { background: rgba(163,190,140,0.3); }
+        .prg-apply-btn:disabled { opacity: 0.5; cursor: default; }
+
+        .prg-body { background: var(--bg-secondary); padding: 10px 12px; }
+        .prg-block.collapsed .prg-body { display: none; }
+        .prg-loading, .prg-note { padding: 14px 16px; font-size: 0.84rem; color: var(--text-muted); font-style: italic; }
+
+        .summary-bar { display: flex; align-items: center; gap: 16px; padding: 0 4px 8px; font-size: 0.8rem; color: var(--text-muted); flex-wrap: wrap; }
+        .summary-bar strong { color: var(--text-primary); }
+
+        /* Break cards (same as classic Break Optimization) */
+        .break-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            margin-bottom: 12px;
+            overflow: hidden;
+        }
+        .break-card:last-child { margin-bottom: 2px; }
+        .break-card.has-violation { border-color: var(--nord13); }
+        .break-card.has-bookend-warning { border-color: var(--nord11); }
+        .break-card.has-sep-violation { border-color: var(--nord12); }
+
+        .break-header {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 16px;
+            background: var(--nord5);
+            border-bottom: 1px solid var(--border-color);
+        }
+        .break-title { font-weight: 700; font-size: 0.88rem; color: var(--text-primary); }
+        .break-time { font-family: monospace; font-size: 0.82rem; color: var(--text-muted); }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 700; }
+        .badge-violation { background: rgba(235,203,139,0.25); color: var(--nord13); border: 1px solid rgba(235,203,139,0.5); }
+        .badge-bookend { background: rgba(191,97,106,0.2); color: var(--nord11); border: 1px solid rgba(191,97,106,0.4); }
+        .badge-danger { background: rgba(191,97,106,0.2); color: var(--nord11); border: 1px solid rgba(191,97,106,0.4); }
+        .badge-sep { background: rgba(208,135,112,0.2); color: var(--nord12); border: 1px solid rgba(208,135,112,0.4); }
+        .badge-ok { background: rgba(163,190,140,0.2); color: var(--nord14); border: 1px solid rgba(163,190,140,0.4); }
+        .badge-pi-swap { background: rgba(180,142,173,0.2); color: var(--nord15,#b48ead); border: 1px solid rgba(180,142,173,0.4); }
+        .pi-debug-panel { margin-top: 10px; padding: 6px 10px; background: rgba(180,142,173,0.08); border: 1px solid rgba(180,142,173,0.3); border-radius: 4px; font-size: 0.76rem; color: var(--text-muted); }
+        .pi-debug-title { font-weight: 700; color: var(--nord15,#b48ead); margin-bottom: 2px; }
+        .sep-violation-panel { margin-top: 10px; padding: 8px 10px; background: rgba(208,135,112,0.08); border: 1px solid rgba(208,135,112,0.3); border-radius: 4px; font-size: 0.78rem; }
+        .sep-panel-title { font-weight: 700; color: var(--nord12); margin-bottom: 5px; }
+        .sep-row { display: flex; gap: 6px; align-items: baseline; padding: 2px 0; flex-wrap: wrap; }
+        .sep-spot, .sep-conflict { color: var(--text-primary); font-weight: 500; }
+        .sep-at { color: var(--text-muted); font-size: 0.72rem; }
+        .sep-arrow { color: var(--nord12); font-weight: 700; }
+        .sep-gap { margin-left: auto; color: var(--nord12); font-size: 0.72rem; white-space: nowrap; }
+        .sep-valid-row { display: flex; gap: 6px; align-items: center; padding: 1px 0 5px 0; flex-wrap: wrap; }
+        .sep-valid-label { font-size: 0.67rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+        .sep-valid-chip { font-size: 0.72rem; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; padding: 1px 7px; font-family: monospace; }
+        .break-spacer { flex: 1; }
+        .apply-btn { background: var(--nord14); color: var(--nord6); border: none; border-radius: 6px; padding: 4px 14px; font-size: 0.78rem; font-weight: 700; cursor: pointer; font-family: inherit; }
+        .apply-btn:hover { background: #8fad7a; }
+        .apply-btn:disabled { opacity: 0.4; cursor: default; }
+        .apply-done { font-size: 0.75rem; color: var(--nord14); font-weight: 600; }
+
+        .break-body { display: grid; grid-template-columns: 1fr 1fr; }
+        .col-header { padding: 6px 16px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: var(--nord5); border-bottom: 1px solid var(--border-color); }
+        .col-header.right { border-left: 1px solid var(--border-color); }
+        .spot-list { padding: 6px 0; }
+        .spot-row {
+            display: flex; align-items: center; gap: 8px;
+            padding: 5px 16px;
+            font-size: 0.83rem;
+            border-bottom: 1px solid var(--nord5);
+        }
+        .spot-row:last-child { border-bottom: none; }
+        .spot-row.moved { background: rgba(235,203,139,0.12); }
+        .spot-row.right-col { border-left: 1px solid var(--border-color); }
+        .spot-time { font-family: monospace; font-size: 0.78rem; color: var(--text-muted); min-width: 58px; }
+        .spot-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-primary); }
+        .moved-arrow { font-size: 0.7rem; color: var(--nord13); font-weight: 700; }
+
+        .lbl { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 0.65rem; font-weight: 700; white-space: nowrap; min-width: 62px; text-align: center; }
+        .lbl-BOOKEND    { background: rgba(191,97,106,0.2);  color: var(--nord11); }
+        .lbl-BILLBOARD  { background: rgba(208,135,112,0.2); color: var(--nord12); }
+        .lbl-COMPANION  { background: rgba(235,203,139,0.25);color: #b8972a; }
+        .lbl-PAYING     { background: rgba(94,129,172,0.18); color: var(--nord10); }
+        .lbl-WORLDLINK  { background: rgba(129,161,193,0.18);color: var(--nord9); }
+        .lbl-PI         { background: rgba(180,142,173,0.2); color: var(--nord15,#b48ead); }
+        .lbl-PSA        { background: var(--nord5); color: var(--text-muted); }
+        .lbl-STATION-ID { background: var(--nord5); color: var(--text-muted); }
+        .lbl-OTHER      { background: var(--nord5); color: var(--text-muted); }
+
+        .empty-state { text-align: center; padding: 56px 0; color: var(--text-muted); font-size: 0.9rem; }
+
+        /* Bulk optimize */
+        .load-btn { background: var(--nord10); color: var(--nord6); border: none; border-radius: 8px; padding: 8px 20px; font-size: 0.9rem; font-weight: 600; cursor: pointer; font-family: inherit; }
+        .load-btn:hover { background: var(--nord9); }
+        .load-btn:disabled { opacity: 0.5; cursor: default; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="home-btn">🏠</a>
+            <div class="logo-icon">⚙️</div>
+            <div>
+                <h1>Break Optimization <span>(Log Style)</span></h1>
+                <div class="logo-sub">Master Control</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="tool-card">
+        <div class="controls-row">
+            <div class="field-group">
+                <label class="field-label">Date</label>
+                <input type="date" id="datePicker" class="field-input" style="width:140px"
+                       onkeydown="if(event.key==='Enter'){loadPrograms();}" />
+            </div>
+            <div class="field-group">
+                <label class="field-label">Market</label>
+                <div class="pill-group">
+                    <button class="mkt-pill" data-market="NYC" onclick="selectMkt(this)">NYC</button>
+                    <button class="mkt-pill" data-market="CMP" onclick="selectMkt(this)">CMP</button>
+                    <button class="mkt-pill" data-market="HOU" onclick="selectMkt(this)">HOU</button>
+                    <button class="mkt-pill" data-market="SFO" onclick="selectMkt(this)">SFO</button>
+                    <button class="mkt-pill" data-market="SEA" onclick="selectMkt(this)">SEA</button>
+                    <button class="mkt-pill" data-market="LAX" onclick="selectMkt(this)">LAX</button>
+                    <button class="mkt-pill" data-market="CVC" onclick="selectMkt(this)">CVC</button>
+                    <button class="mkt-pill" data-market="WDC" onclick="selectMkt(this)">WDC</button>
+                    <button class="mkt-pill" data-market="MMT" onclick="selectMkt(this)">MMT</button>
+                    <button class="mkt-pill" data-market="DAL" onclick="selectMkt(this)">DAL</button>
+                </div>
+            </div>
+            <div class="field-group">
+                <label class="field-label">From</label>
+                <input type="text" id="timeFrom" class="field-input" placeholder="any"
+                       onfocus="this.select();this.dataset.clearing='1';"
+                       onkeydown="if(event.key==='Enter'){this.blur();applyTimeFilter();}else if(this.dataset.clearing==='1'){if(/^\d$/.test(event.key))this.value='';delete this.dataset.clearing;}"
+                       oninput="fmtAirtime(this)" onblur="applyTimeFilter()" />
+            </div>
+            <div class="field-group">
+                <label class="field-label">To</label>
+                <input type="text" id="timeTo" class="field-input" placeholder="any"
+                       onfocus="this.select();this.dataset.clearing='1';"
+                       onkeydown="if(event.key==='Enter'){this.blur();applyTimeFilter();}else if(this.dataset.clearing==='1'){if(/^\d$/.test(event.key))this.value='';delete this.dataset.clearing;}"
+                       oninput="fmtAirtime(this)" onblur="applyTimeFilter()" />
+            </div>
+        </div>
+    </div>
+
+    <div id="logArea"><div class="empty-state">Pick a market — the day's shows load automatically.</div></div>
+
+    <!-- Bulk Optimization -->
+    <div class="tool-card" style="margin-top:8px">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Bulk Optimize — All Markets</div>
+        <p style="font-size:0.82rem;color:var(--text-muted);margin:0 0 14px">Optimize breaks across all Crossings TV markets at once (Dallas excluded). No preview — changes apply immediately.</p>
+        <div class="controls-row">
+            <div class="field-group">
+                <label class="field-label">Date</label>
+                <input type="date" id="bulkDate" class="field-input" style="width:140px" />
+            </div>
+            <div class="field-group">
+                <label class="field-label">From</label>
+                <input type="text" id="bulkFrom" class="field-input" placeholder="08:00:00" value="08:00:00"
+                       onfocus="this.select();this.dataset.clearing='1';"
+                       onkeydown="if(event.key==='Enter'){this.blur();}else if(this.dataset.clearing==='1'){if(/^\d$/.test(event.key))this.value='';delete this.dataset.clearing;}"
+                       oninput="fmtAirtime(this)" />
+            </div>
+            <div class="field-group">
+                <label class="field-label">To</label>
+                <input type="text" id="bulkTo" class="field-input" placeholder="09:00:00" value="09:00:00"
+                       onfocus="this.select();this.dataset.clearing='1';"
+                       onkeydown="if(event.key==='Enter'){this.blur();}else if(this.dataset.clearing==='1'){if(/^\d$/.test(event.key))this.value='';delete this.dataset.clearing;}"
+                       oninput="fmtAirtime(this)" />
+            </div>
+            <button class="load-btn" id="bulkBtn" onclick="bulkOptimize()" style="background:var(--nord14)">Optimize All Markets</button>
+        </div>
+        <div id="bulkResults" style="margin-top:16px;display:none">
+            <table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+                <thead>
+                    <tr style="background:var(--bg-secondary)">
+                        <th style="padding:6px 10px;text-align:left;font-weight:700;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);border-bottom:1px solid var(--border-color)">Market</th>
+                        <th style="padding:6px 10px;text-align:center;font-weight:700;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);border-bottom:1px solid var(--border-color)">Breaks</th>
+                        <th style="padding:6px 10px;text-align:center;font-weight:700;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);border-bottom:1px solid var(--border-color)">Changed</th>
+                        <th style="padding:6px 10px;text-align:center;font-weight:700;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);border-bottom:1px solid var(--border-color)">Spots Updated</th>
+                    </tr>
+                </thead>
+                <tbody id="bulkResultsBody"></tbody>
+            </table>
+            <div id="bulkStatus" style="margin-top:10px;font-size:0.85rem;font-weight:600;color:var(--nord14)"></div>
+        </div>
+    </div>
+</main>
+
+<script>
+let selectedMarket = null;
+let currentDate    = null;
+let currentMarket  = null;
+let programs       = [];   // from logs/load, filtered to rows with a time window
+let progBreaks     = {};   // pi -> breaks array (lazy-loaded)
+
+function fmtAirtime(input) {
+    const digits = input.value.replace(/\D/g, '').slice(0, 6);
+    let v = digits;
+    if (digits.length > 4)      v = digits.slice(0,2) + ':' + digits.slice(2,4) + ':' + digits.slice(4);
+    else if (digits.length > 2) v = digits.slice(0,2) + ':' + digits.slice(2);
+    input.value = v;
+    input.setSelectionRange(v.length, v.length);
+}
+
+function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function labelClass(lbl) {
+    return 'lbl-' + lbl.replace(/\s+/g, '-');
+}
+
+function normTime(t) {
+    const m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec((t || '').trim());
+    if (!m) return '';
+    return m[1].padStart(2, '0') + ':' + m[2] + ':' + (m[3] || '00');
+}
+
+function fmtTime(t) {
+    if (!t) return '—';
+    const parts = t.split(':');
+    if (parts.length >= 2) return `${parseInt(parts[0])}:${parts[1]}`;
+    return t;
+}
+
+function _toSecs(t) {
+    if (!t) return null;
+    const p = t.split(':');
+    let secs = parseInt(p[0] || 0) * 3600 + parseInt(p[1] || 0) * 60 + parseInt(p[2] || 0);
+    if (parseInt(p[0] || 0) < 6) secs += 24 * 3600;   // broadcast day: post-midnight tail
+    return secs;
+}
+
+function selectMkt(el) {
+    document.querySelectorAll('.mkt-pill').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+    selectedMarket = el.dataset.market;
+    loadPrograms();   // auto-load, no Load button (team request)
+}
+
+async function loadPrograms() {
+    const dateVal = document.getElementById('datePicker').value;
+    if (!dateVal || !selectedMarket) return;
+
+    currentDate   = dateVal;
+    currentMarket = selectedMarket;
+    programs      = [];
+    progBreaks    = {};
+
+    document.getElementById('logArea').innerHTML = '<div class="empty-state">Loading shows…</div>';
+    try {
+        const resp = await fetch(`/api/master-control/logs/load?date=${encodeURIComponent(dateVal)}&market=${encodeURIComponent(selectedMarket)}`);
+        if (!resp.ok) {
+            const err = await resp.json();
+            document.getElementById('logArea').innerHTML =
+                `<div class="empty-state">${esc(err.error || 'Log file not found.')} — no traffic log for this day.<br>
+                 Use the classic <a href="/master-control/break-optimization">Break Optimization</a> page to enter a time window manually.</div>`;
+            return;
+        }
+        const data = await resp.json();
+        programs = (data.programs || []).map(p => ({
+            ...p,
+            from: normTime(p.time_in),
+            to:   normTime(p.time_out),
+        }));
+        renderPrograms(data);
+    } catch (e) {
+        document.getElementById('logArea').innerHTML = `<div class="empty-state">Network error: ${esc(e.message)}</div>`;
+    }
+}
+
+function windowFilter() {
+    const fRaw = document.getElementById('timeFrom').value.trim();
+    const tRaw = document.getElementById('timeTo').value.trim();
+    const lo = fRaw ? _toSecs(normTime(fRaw) || fRaw) : null;
+    const hi = tRaw ? _toSecs(normTime(tRaw) || tRaw) : null;
+    return { lo, hi };
+}
+
+function progVisible(p, flt) {
+    if (!p.from || !p.to) return true;   // no window in log — always show
+    const a = _toSecs(p.from), b = _toSecs(p.to);
+    if (flt.lo !== null && b <= flt.lo) return false;   // ends before window
+    if (flt.hi !== null && a >= flt.hi) return false;   // starts after window
+    return true;
+}
+
+let _lastFilterKey = '';
+
+function applyTimeFilter() {
+    if (!programs.length) return;
+    const flt = windowFilter();
+    const key = `${flt.lo}|${flt.hi}`;
+    const filterChanged = key !== _lastFilterKey;
+    _lastFilterKey = key;
+    const hasBound = flt.lo !== null || flt.hi !== null;
+    let shown = 0;
+    programs.forEach((p, pi) => {
+        const el = document.getElementById(`prg-${pi}`);
+        if (!el) return;
+        const vis = progVisible(p, flt);
+        el.style.display = vis ? '' : 'none';
+        if (vis) {
+            shown++;
+            // a typed time window acts like the old Load: auto-expand (and
+            // thereby load) the shows inside it — no button click needed
+            if (hasBound && filterChanged && el.classList.contains('collapsed')) togglePrg(pi);
+        }
+    });
+    const cnt = document.getElementById('shownCount');
+    if (cnt) cnt.textContent = `${shown} of ${programs.length} shows`;
+}
+
+function renderPrograms(data) {
+    if (!programs.length) {
+        document.getElementById('logArea').innerHTML = '<div class="empty-state">No programs found in this day\'s log.</div>';
+        return;
+    }
+    let html = `<div class="log-meta">
+        <strong>${esc(data.day)}</strong> &nbsp;·&nbsp; ${esc(data.market)} &nbsp;·&nbsp; ${esc(data.date)}
+        &nbsp;&nbsp;<span id="shownCount">${programs.length} of ${programs.length} shows</span>
+        &nbsp;&nbsp;<span style="opacity:0.5;font-size:0.74rem;">${esc(data.file)}</span>
+        &nbsp;&nbsp;
+        <button class="expand-btn" onclick="expandAll()">Expand all</button>
+        <button class="expand-btn" onclick="collapseAll()">Collapse all</button>
+    </div>`;
+
+    programs.forEach((p, pi) => {
+        const timeRange = p.time_in ? `${fmtTime(p.time_in)}&nbsp;–&nbsp;${fmtTime(p.time_out)}` : '—';
+        html += `<div class="prg-block collapsed" id="prg-${pi}">
+  <div class="prg-header" onclick="togglePrg(${pi})">
+    <span class="prg-chevron">▾</span>
+    <span class="prg-time">${timeRange}</span>
+    <span class="prg-name">${esc(p.show_name || p.bill_code || '?')}</span>
+    <span class="prg-lang">${esc(p.language) || '—'}</span>
+    <button class="prg-apply-btn" id="prg-apply-${pi}" style="display:none"
+            onclick="event.stopPropagation();applyProgram(${pi})">Apply All</button>
+    <span class="prg-stat" id="prg-stat-${pi}"></span>
+  </div>
+  <div class="prg-body" id="prg-body-${pi}"><div class="prg-loading">Loading breaks…</div></div>
+</div>`;
+    });
+
+    document.getElementById('logArea').innerHTML = html;
+    applyTimeFilter();
+}
+
+function togglePrg(pi) {
+    const block = document.getElementById(`prg-${pi}`);
+    const wasCollapsed = block.classList.contains('collapsed');
+    block.classList.toggle('collapsed');
+    if (wasCollapsed && !(pi in progBreaks)) loadProgramBreaks(pi);
+}
+
+function expandAll() {
+    programs.forEach((p, pi) => {
+        const block = document.getElementById(`prg-${pi}`);
+        if (!block || block.style.display === 'none') return;   // respect time filter
+        if (block.classList.contains('collapsed')) togglePrg(pi);
+    });
+}
+function collapseAll() { document.querySelectorAll('.prg-block').forEach(b => b.classList.add('collapsed')); }
+
+async function loadProgramBreaks(pi) {
+    const p = programs[pi];
+    const body = document.getElementById(`prg-body-${pi}`);
+    const stat = document.getElementById(`prg-stat-${pi}`);
+    if (!p.from || !p.to) {
+        progBreaks[pi] = [];
+        body.innerHTML = '<div class="prg-note">This log row has no time window — cannot load breaks.</div>';
+        return;
+    }
+    try {
+        const url = `/api/master-control/break-optimization/load?market=${encodeURIComponent(currentMarket)}&date=${encodeURIComponent(currentDate)}&time_from=${encodeURIComponent(p.from)}&time_to=${encodeURIComponent(p.to)}`;
+        const resp = await fetch(url);
+        if (!resp.ok) {
+            const err = await resp.json();
+            body.innerHTML = `<div class="prg-note">${esc(err.error || 'Error loading breaks.')}</div>`;
+            return;
+        }
+        const data = await resp.json();
+        progBreaks[pi] = data.breaks;
+        renderProgramBreaks(pi);
+    } catch (e) {
+        body.innerHTML = `<div class="prg-note">Network error: ${esc(e.message)}</div>`;
+        if (stat) stat.textContent = '';
+    }
+}
+
+function renderProgramBreaks(pi) {
+    const breaks = progBreaks[pi];
+    const body = document.getElementById(`prg-body-${pi}`);
+    const stat = document.getElementById(`prg-stat-${pi}`);
+    const applyBtn = document.getElementById(`prg-apply-${pi}`);
+
+    if (!breaks.length) {
+        body.innerHTML = '<div class="prg-note">No commercial breaks in this show.</div>';
+        stat.textContent = '0 breaks';
+        return;
+    }
+
+    const violations = breaks.filter(b => b.violation || b.bookend_warning);
+    const changed    = breaks.filter(b => b.changed);
+
+    stat.textContent = `${breaks.length} break${breaks.length !== 1 ? 's' : ''}` +
+        (changed.length ? ` · ${changed.length} to fix` : ' · ✓');
+    stat.classList.toggle('warn', changed.length > 0);
+    if (changed.length > 1) {
+        applyBtn.style.display = '';
+        applyBtn.disabled = false;
+        applyBtn.textContent = `Apply All (${changed.length})`;
+    }
+
+    let html = `<div class="summary-bar">
+        <span><strong>${breaks.length}</strong> breaks</span>
+        <span><strong style="color:var(--nord13)">${violations.length}</strong> with violations</span>
+        <span><strong>${changed.length}</strong> need reordering</span>
+    </div>`;
+    html += breaks.map((brk, bi) => renderBreak(brk, pi, bi)).join('');
+    body.innerHTML = html;
+}
+
+function renderBreak(brk, pi, bi) {
+    const badges = [];
+    if (brk.bookend_warning)                                           badges.push('<span class="badge badge-bookend">⚠ Multiple Bookends</span>');
+    if (brk.pi_unresolvable)                                           badges.push('<span class="badge badge-danger">⚠ PI Duplicate — No Same-Length Filler</span>');
+    if (brk.pi_replacements?.length)                                   badges.push(`<span class="badge badge-pi-swap">↻ PI Replaced (${brk.pi_replacements.length})</span>`);
+    if (brk.sep_violations?.length)                                    badges.push(`<span class="badge badge-sep">⚠ Separation (${brk.sep_violations.length})</span>`);
+    if (brk.ordering_violation && !brk.pi_unresolvable
+        && !brk.pi_replacements?.length)                              badges.push('<span class="badge badge-violation">⚠ Out of Order</span>');
+    if (!badges.length)                                                badges.push('<span class="badge badge-ok">✓ OK</span>');
+    const badgeHtml = badges.join(' ');
+
+    const startTime = brk.current[0]?.time || '';
+    const applyDisabled = !brk.changed ? 'disabled' : '';
+
+    const origIds = brk.current.map(s => s.id);
+    const optIds  = brk.optimized.map(s => s.id);
+
+    const renderSpot = (s, newTime, isMoved, isRight) => {
+        const replaced = isRight && s.pi_replacement;
+        const movedClass = (isMoved || replaced) ? ' moved' : '';
+        const rightClass = isRight ? ' right-col' : '';
+        const arrow = isMoved   ? '<span class="moved-arrow">↕</span>'
+                    : replaced  ? `<span class="moved-arrow" title="${esc(s.pi_replacement)}">↻</span>`
+                    :             '';
+        const time = isRight ? (newTime || s.time) : s.time;
+        return `<div class="spot-row${movedClass}${rightClass}">
+            <span class="spot-time">${esc(time)}</span>
+            <span class="lbl ${esc(labelClass(s.label))}">${esc(s.label)}</span>
+            <span class="spot-title" title="${esc(s.title)}">${esc(s.title)}</span>
+            ${arrow}
+        </div>`;
+    };
+
+    const maxLen = Math.max(brk.current.length, brk.optimized.length);
+    let leftRows = '', rightRows = '';
+    for (let i = 0; i < maxLen; i++) {
+        const cur = brk.current[i];
+        const opt = brk.optimized[i];
+        if (cur) {
+            const moved = i < optIds.length && cur.id !== optIds[i];
+            leftRows += renderSpot(cur, null, moved, false);
+        }
+        if (opt) {
+            const moved = i < origIds.length && opt.id !== origIds[i];
+            rightRows += renderSpot(opt, opt.new_time, moved, true);
+        }
+    }
+
+    const cardClass = brk.bookend_warning ? 'has-bookend-warning'
+                    : brk.sep_violations?.length ? 'has-sep-violation'
+                    : brk.violation ? 'has-violation' : '';
+    const sepHtml = brk.sep_violations?.length ? `
+        <div class="sep-violation-panel">
+            <div class="sep-panel-title">⏱ Separation Violations</div>
+            ${brk.sep_violations.map(v => {
+                const vA = v.spot_valid_from     ? `${v.spot_valid_from}–${v.spot_valid_to}`     : null;
+                const vB = v.conflict_valid_from ? `${v.conflict_valid_from}–${v.conflict_valid_to}` : null;
+                let validLine = '';
+                if (vA && vB && vA === vB) {
+                    validLine = `<div class="sep-valid-row"><span class="sep-valid-label">Valid to air</span><span class="sep-valid-chip">${esc(vA)}</span></div>`;
+                } else if (vA || vB) {
+                    const cA = vA ? `<span class="sep-valid-chip">${esc(v.spot_title.slice(0,16))} · ${esc(vA)}</span>` : '';
+                    const cB = vB ? `<span class="sep-valid-chip">${esc(v.conflict_title.slice(0,16))} · ${esc(vB)}</span>` : '';
+                    validLine = `<div class="sep-valid-row"><span class="sep-valid-label">Valid to air</span>${cA}${cB}</div>`;
+                }
+                return `<div class="sep-row">
+                <span class="sep-spot">${esc(v.spot_title)}</span>
+                <span class="sep-at">@${esc(v.spot_time)}</span>
+                <span class="sep-arrow">↔</span>
+                <span class="sep-conflict">${esc(v.conflict_title)}</span>
+                <span class="sep-at">@${esc(v.conflict_time)}</span>
+                <span class="sep-gap">gap&nbsp;${v.actual_mins}m / req&nbsp;${v.req_mins}m</span>
+            </div>${validLine}`;
+            }).join('')}
+        </div>` : '';
+    return `<div class="break-card ${cardClass}" id="break-${pi}-${bi}">
+        <div class="break-header">
+            <span class="break-title">Break ${bi + 1}</span>
+            <span class="break-time">${esc(startTime)}</span>
+            ${badgeHtml}
+            <span class="break-spacer"></span>
+            <span class="apply-done" id="done-${pi}-${bi}" style="display:none">✓ Applied</span>
+            <button class="apply-btn" id="apply-${pi}-${bi}" ${applyDisabled} onclick="applyBreak(${pi},${bi})">Apply Fix</button>
+        </div>
+        <div class="break-body">
+            <div>
+                <div class="col-header">Current Order</div>
+                <div class="spot-list">${leftRows}</div>
+            </div>
+            <div>
+                <div class="col-header right">Optimized Order</div>
+                <div class="spot-list">${rightRows}</div>
+            </div>
+        </div>
+        ${sepHtml}
+        ${brk.pi_replacements?.length ? `<div class="pi-debug-panel"><div class="pi-debug-title">↻ PI duplicate resolved in place (same slot, within program)</div>${brk.pi_replacements.map(esc).join('<br>')}</div>` : ''}
+        ${brk.pi_unresolvable ? `<div class="pi-debug-panel"><div class="pi-debug-title">⚠ PI duplicate — no same-length filler in library</div>Left unchanged for manual fix.</div>` : ''}
+    </div>`;
+}
+
+function updateMap(brk) {
+    return brk.optimized.map(s => ({
+        id_tpalinse: s.id, new_ora: s.new_ora,
+        replace_filmati_id: s.replace_filmati_id,
+        replace_cod_progra: s.replace_cod_progra,
+        replace_newtype: s.replace_newtype,
+        replace_title: s.replace_title,
+    }));
+}
+
+function markApplied(pi, bi) {
+    const applyBtn = document.getElementById(`apply-${pi}-${bi}`);
+    if (applyBtn) applyBtn.style.display = 'none';
+    const done = document.getElementById(`done-${pi}-${bi}`);
+    if (done) done.style.display = '';
+    document.getElementById(`break-${pi}-${bi}`)?.classList.remove('has-violation', 'has-bookend-warning');
+}
+
+async function applyBreak(pi, bi) {
+    const brk = progBreaks[pi][bi];
+    const btn = document.getElementById(`apply-${pi}-${bi}`);
+    btn.disabled = true; btn.textContent = 'Applying…';
+    try {
+        const resp = await fetch('/api/master-control/break-optimization/apply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ updates: updateMap(brk) })
+        });
+        if (!resp.ok) {
+            const err = await resp.json();
+            alert('Error: ' + (err.error || 'Unknown error'));
+            btn.disabled = false; btn.textContent = 'Apply Fix';
+            return;
+        }
+        brk.changed = false;
+        markApplied(pi, bi);
+    } catch(e) {
+        alert('Network error: ' + e.message);
+        btn.disabled = false; btn.textContent = 'Apply Fix';
+    }
+}
+
+async function applyProgram(pi) {
+    const breaks = progBreaks[pi] || [];
+    const changedIdx = breaks.map((b, bi) => b.changed ? bi : -1).filter(bi => bi >= 0);
+    if (!changedIdx.length) return;
+    const allUpdates = changedIdx.flatMap(bi => updateMap(breaks[bi]));
+
+    const btn = document.getElementById(`prg-apply-${pi}`);
+    btn.disabled = true; btn.textContent = 'Applying…';
+    try {
+        const resp = await fetch('/api/master-control/break-optimization/apply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ updates: allUpdates })
+        });
+        if (!resp.ok) {
+            const err = await resp.json();
+            alert('Error: ' + (err.error || 'Unknown error'));
+            btn.disabled = false; btn.textContent = `Apply All (${changedIdx.length})`;
+            return;
+        }
+        changedIdx.forEach(bi => { breaks[bi].changed = false; markApplied(pi, bi); });
+        btn.textContent = '✓ Applied';
+        const stat = document.getElementById(`prg-stat-${pi}`);
+        stat.textContent = `${breaks.length} break${breaks.length !== 1 ? 's' : ''} · ✓`;
+        stat.classList.remove('warn');
+    } catch(e) {
+        alert('Network error: ' + e.message);
+        btn.disabled = false; btn.textContent = `Apply All (${changedIdx.length})`;
+    }
+}
+
+async function bulkOptimize() {
+    const date     = document.getElementById('bulkDate').value;
+    const timeFrom = document.getElementById('bulkFrom').value.trim();
+    const timeTo   = document.getElementById('bulkTo').value.trim();
+    if (!date)             { alert('Please select a date.'); return; }
+    if (!timeFrom || !timeTo) { alert('Please enter a time window.'); return; }
+
+    const btn = document.getElementById('bulkBtn');
+    btn.disabled = true; btn.textContent = 'Optimizing…';
+    document.getElementById('bulkResults').style.display = 'none';
+    document.getElementById('bulkResultsBody').innerHTML = '';
+    document.getElementById('bulkStatus').textContent = '';
+
+    try {
+        const resp = await fetch('/api/master-control/break-optimization/bulk-apply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date, time_from: timeFrom, time_to: timeTo }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) { alert('Error: ' + (data.error || 'Unknown error')); return; }
+
+        const tbody = document.getElementById('bulkResultsBody');
+        let totalChanged = 0, totalSpots = 0;
+        for (const r of data.results) {
+            const tr = document.createElement('tr');
+            const changed = r.breaks_changed > 0;
+            tr.innerHTML = `
+                <td style="padding:6px 10px;font-weight:700;color:var(--text-primary)">${esc(r.market)}</td>
+                <td style="padding:6px 10px;text-align:center;color:var(--text-muted)">${r.breaks_total}</td>
+                <td style="padding:6px 10px;text-align:center;color:${changed ? 'var(--nord14)' : 'var(--text-muted)'};font-weight:${changed ? '700' : '400'}">${r.breaks_changed}</td>
+                <td style="padding:6px 10px;text-align:center;color:${r.spots_updated > 0 ? 'var(--nord14)' : 'var(--text-muted)'};font-weight:${r.spots_updated > 0 ? '700' : '400'}">${r.spots_updated}</td>`;
+            tbody.appendChild(tr);
+            totalChanged += r.breaks_changed;
+            totalSpots   += r.spots_updated;
+        }
+        document.getElementById('bulkStatus').textContent =
+            `✓ Done — ${totalChanged} break${totalChanged !== 1 ? 's' : ''} reordered, ${totalSpots} spot${totalSpots !== 1 ? 's' : ''} updated`;
+        document.getElementById('bulkResults').style.display = '';
+        btn.textContent = '✓ Done';
+    } catch(e) {
+        alert('Network error: ' + e.message);
+        btn.disabled = false; btn.textContent = 'Optimize All Markets';
+    }
+}
+
+// Default date to today; changing it (or Enter) reloads automatically
+const _today = new Date().toISOString().slice(0,10);
+document.getElementById('datePicker').value = _today;
+document.getElementById('datePicker').addEventListener('change', () => { if (selectedMarket) loadPrograms(); });
+document.getElementById('bulkDate').value = _today;
+</script>
+</body>
+</html>

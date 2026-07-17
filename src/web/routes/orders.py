@@ -3776,6 +3776,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def break_optimization_page(request: Request):
         return templates.TemplateResponse(request, "master_control/break_optimization.html")
 
+    # Log-style variant (user email 2026-07-15): Edit Logs-like program list,
+    # expand a show to see its break optimizations; everything auto-loads
+    # (pill click / date change / typed time window), no Load button.
+    # Kept alongside the classic page so the team can compare and pick one.
+    @router.get("/master-control/break-optimization-log", response_class=HTMLResponse)
+    async def break_optimization_log_page(request: Request):
+        return templates.TemplateResponse(request, "master_control/break_optimization_log.html")
+
     # ── Set up Daily Programming ────────────────────────────────────────────────
 
     # Network → set of station COD_USERs the programming fans out across.
