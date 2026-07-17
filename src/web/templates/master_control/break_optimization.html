@@ -280,12 +280,42 @@ async function loadShowPicker() {
     }
 }
 
+// Mark the picked show in the dropdown (✓ + bold) so reopening it shows
+// which program is currently open (Ashe's request 2026-07-17).
+function markPickedShow(sel) {
+    [...sel.options].forEach(o => {
+        o.style.fontWeight = '';
+        o.textContent = o.textContent.replace(/^✓ /, '');
+    });
+    const opt = sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
+    if (opt && opt.value) {
+        opt.style.fontWeight = '700';
+        opt.textContent = '✓ ' + opt.textContent;
+        return opt.textContent.slice(2);
+    }
+    return '';
+}
+
+let currentShowLabel = '';
+
 function pickShow(sel) {
     if (!sel.value) return;
     const parts = sel.value.split('|');
     document.getElementById('timeFrom').value = parts[0];
     document.getElementById('timeTo').value = parts[1];
+    currentShowLabel = markPickedShow(sel);
     loadBreaks();
+}
+
+// If the user typed their own times, the dropdown pick no longer describes
+// what's loaded — clear the ✓ so the indicator never lies.
+function syncShowIndicator(timeFrom, timeTo) {
+    const sel = document.getElementById('showPicker');
+    const want = normTime(timeFrom) + '|' + normTime(timeTo);
+    if (sel.value && sel.value !== want) {
+        sel.value = '';
+        currentShowLabel = markPickedShow(sel);
+    }
 }
 
 function esc(s) {
@@ -313,6 +343,8 @@ async function loadBreaks() {
     applyAllBtn.disabled = false;
     applyAllBtn.textContent = 'Apply All Fixes';
 
+    syncShowIndicator(timeFrom, timeTo);
+
     try {
         const url = `/api/master-control/break-optimization/load?market=${selectedMarket}&date=${date}&time_from=${encodeURIComponent(timeFrom)}&time_to=${encodeURIComponent(timeTo)}`;
         const resp = await fetch(url);
@@ -335,8 +367,9 @@ function renderBreaks(data) {
     const violations = data.breaks.filter(b => b.violation || b.bookend_warning);
     const changed    = data.breaks.filter(b => b.changed);
 
-    // Summary bar
+    // Summary bar (leads with the picked show so it's clear what's open)
     let sb = `<div class="summary-bar">
+        ${currentShowLabel ? `<span>▶ <strong>${esc(currentShowLabel)}</strong></span>` : ''}
         <span><strong>${data.breaks.length}</strong> breaks</span>
         <span><strong style="color:var(--nord13)">${violations.length}</strong> with violations</span>
         <span><strong>${changed.length}</strong> need reordering</span>
