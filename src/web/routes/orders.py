@@ -2579,10 +2579,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         from collections import defaultdict
 
         cur.execute(
-            "SELECT ID_CONTRATTIRIGHE AS line FROM CONTRATTIRIGHE WHERE ID_CONTRATTITESTATA = %s",
+            "SELECT ID_CONTRATTIRIGHE AS line,"
+            " COALESCE(CONTROLLACAPOFILA, 0) AS capo,"
+            " COALESCE(CONTROLLAFINEFILA, 0) AS fine"
+            " FROM CONTRATTIRIGHE WHERE ID_CONTRATTITESTATA = %s",
             (contract_id,),
         )
-        line_ids = {r["line"] for r in cur.fetchall()}
+        _line_rows = cur.fetchall()
+        line_ids = {r["line"] for r in _line_rows}
+        # bookend line (top/bottom) → log convention paints G+H pink
+        bookend_lines = {r["line"] for r in _line_rows if r["capo"] and r["fine"]}
         if not line_ids:
             raise ValueError(f"Contract {contract_id} has no lines")
 
@@ -2657,6 +2663,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         "xlrow": r["xlrow"], "line": key[0],
                         "date": key[1].isoformat() if key[1] else "?",
                         "old": r["old"], "new": new, "color": color,
+                        "bookend": key[0] in bookend_lines,
                     })
         return {
             "log_rows": log_rows,
@@ -2765,6 +2772,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 from openpyxl.styles import PatternFill
                 _red_fill = PatternFill(fill_type="solid",
                                         start_color="FFFF0000", end_color="FFFF0000")
+                _pink_fill = PatternFill(fill_type="solid",
+                                         start_color="FFFF66FF", end_color="FFFF66FF")
                 for ch in result["changes"]:
                     ws.cell(row=ch["xlrow"], column=8).value = ch["new"]
                     if ch["color"] == "red":
@@ -2780,6 +2789,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         if native is not None and native.patternType and _rgb != "FFFF0000":
                             for col in range(1, 9):
                                 ws.cell(row=ch["xlrow"], column=col).fill = _style_copy(native)
+                            if ch.get("bookend"):
+                                # bookend pair convention: G + H in pink
+                                ws.cell(row=ch["xlrow"], column=7).fill = _pink_fill
+                                ws.cell(row=ch["xlrow"], column=8).fill = _style_copy(_pink_fill)
                 if result["changes"]:
                     wb.save(str(log_path))
             finally:

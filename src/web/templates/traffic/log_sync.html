@@ -330,7 +330,9 @@ function renderPreview(data) {
 
     const colorBadge = ch =>
         ch.color === 'red'    ? '<span style="background:#FF0000;color:#fff;border-radius:4px;padding:1px 7px;font-size:0.7rem;font-weight:700;">A–H → red</span>'
-      : ch.color === 'native' ? '<span style="background:rgba(163,190,140,0.25);color:var(--nord14);border-radius:4px;padding:1px 7px;font-size:0.7rem;font-weight:700;">A–H → network color</span>'
+      : ch.color === 'native' ? (ch.bookend
+            ? '<span style="background:rgba(163,190,140,0.25);color:var(--nord14);border-radius:4px;padding:1px 7px;font-size:0.7rem;font-weight:700;">A–F → network</span> <span style="background:#FF66FF;color:#2e3440;border-radius:4px;padding:1px 7px;font-size:0.7rem;font-weight:700;">G/H → bookend pink</span>'
+            : '<span style="background:rgba(163,190,140,0.25);color:var(--nord14);border-radius:4px;padding:1px 7px;font-size:0.7rem;font-weight:700;">A–H → network color</span>')
       : '';
     const shown = data.changes.slice(0, 500);
     html += `<table class="diff-table">
