@@ -184,6 +184,21 @@ def _create_rwny_contract_direct(order: RWNYOrder, inputs: dict) -> Optional[int
         client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
         client.set_master_market("NYC")
 
+        from math import ceil
+
+        from browser_automation.etere_direct_client import parse_day_bits
+        _day_key_by_weekday = ("lun", "mar", "mer", "gio", "ven", "sab", "dom")
+
+        def _active_day_count(days_pattern: str, d_from, d_to) -> int:
+            """Count calendar days in [d_from, d_to] matching the day pattern."""
+            bits = parse_day_bits(days_pattern)
+            n, d = 0, d_from
+            while d <= d_to:
+                if bits.get(_day_key_by_weekday[d.weekday()]):
+                    n += 1
+                d += timedelta(days=1)
+            return n
+
         separation  = inputs.get('separation', RWNY_SEPARATION)
         flight_start = inputs.get('flight_start', order.flight_start)
         flight_end   = inputs.get('flight_end',   order.flight_end)
@@ -215,15 +230,33 @@ def _create_rwny_contract_direct(order: RWNYOrder, inputs: dict) -> Optional[int
         duration_str = _secs_to_duration(order.duration_seconds)
         line_count = 0
 
+        # A late entry (confirmed/overridden start date) must reach the LINE
+        # dates, not just the header: clamp each month column to the actual
+        # start, drop months already fully past, and size max/day from the
+        # days actually remaining (monthly order — no weekly cap).
+        fs_date = _parse_date(flight_start)
+
         for line in order.lines:
             for mi, month in enumerate(order.month_columns):
                 spots = line.monthly_spots[mi] if mi < len(line.monthly_spots) else 0
                 if spots == 0:
                     continue
 
+                m_from = _parse_date(month.start_date)
+                m_to   = _parse_date(month.end_date)
+                if m_to < fs_date:
+                    print(f"  [SKIP] {line.language} — {month.label}: month ends "
+                          f"before flight start {flight_start}")
+                    continue
+                if m_from < fs_date:
+                    m_from = fs_date
+
                 adjusted_days, _ = EtereClient.check_sunday_6_7a_rule(line.days, line.time_str)
                 time_from, time_to = EtereClient.parse_time_range(line.time_str)
                 time_range = f"{time_from}-{time_to}"
+
+                active_days = _active_day_count(adjusted_days, m_from, m_to)
+                max_daily   = ceil(spots / active_days) if active_days else spots
 
                 is_bonus     = line.is_bonus
                 booking_code = 10 if is_bonus else 2
@@ -236,7 +269,8 @@ def _create_rwny_contract_direct(order: RWNYOrder, inputs: dict) -> Optional[int
 
                 line_count += 1
                 print(f"  [LINE {line_count}] {'BNS' if is_bonus else 'PAID'} "
-                      f"{line.language} — {month.label}  {spots} spots")
+                      f"{line.language} — {month.label}  {spots} spots  "
+                      f"{m_from:%m/%d}–{m_to:%m/%d}  max/day {max_daily}")
 
                 client.add_contract_line(
                     market=RWNY_MARKET,
@@ -246,8 +280,9 @@ def _create_rwny_contract_direct(order: RWNYOrder, inputs: dict) -> Optional[int
                     rate=rate,
                     total_spots=spots,
                     spots_per_week=0,      # monthly order → Rotation fires automatically
-                    date_from=_parse_date(month.start_date),
-                    date_to=_parse_date(month.end_date),
+                    max_daily_run=max_daily,
+                    date_from=m_from,
+                    date_to=m_to,
                     duration=duration_str,
                     is_bonus=is_bonus,
                     booking_code=booking_code,
@@ -321,15 +356,16 @@ def gather_rwny_inputs(pdf_path: str) -> Optional[dict]:
     if flight_start:
         try:
             fs_dt = datetime.strptime(flight_start, '%m/%d/%Y')
-            if fs_dt.date() < datetime.today().date():
-                print(f'[DATE CHECK] Start date {flight_start} is in the past.')
-                raw = input(f'  Confirm start date [{flight_start}] or enter new (MM/DD/YYYY): ').strip()
-                if raw:
-                    # Validate format
+            if fs_dt.date() <= date.today() + timedelta(days=1):
+                print(f'[DATE CHECK] This order starts {flight_start} '
+                      f'(today is {date.today():%m/%d/%Y}) — late entry.')
+                raw = input(f'  When will this flight actually start? [{flight_start}]: ').strip()
+                if raw and raw.lower() not in ('y', 'yes'):
                     try:
                         datetime.strptime(raw, '%m/%d/%Y')
                         flight_start = raw
-                        print(f'  ✓ Start date updated to {flight_start}')
+                        print(f'  ✓ Start date updated to {flight_start} — line dates '
+                              f'and max/day will be sized from it')
                     except ValueError:
                         print(f'  ✗ Invalid format — keeping {flight_start}')
                 else:
