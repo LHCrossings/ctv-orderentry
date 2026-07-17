@@ -746,6 +746,177 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         from fastapi.responses import JSONResponse as _JSONResponse
         return _JSONResponse({"month_info": month_info, "results": results})
 
+    # ------------------------------------------------------------------
+    # Off-Air Gap Finder — spots stuck "never aired" after an AU crash +
+    # EE "Reset transmitted events". Stuck signature: STATUS='I' AND
+    # ASRUN_STATUS_M='I' (only end-of-day reconciliation writes
+    # ASRUN_STATUS_M, so in-progress days never match). Marking verified
+    # performs the exact write EE's "check manually the selected events"
+    # does: STATUS='Q', ASRUN_STATUS_O='M'.
+    # ------------------------------------------------------------------
+
+    _OFFAIR_MARKETS = {1: "NYC", 2: "CMP", 3: "HOU", 4: "SFO", 5: "SEA",
+                       6: "LAX", 7: "CVC", 8: "WDC", 9: "MMT", 10: "DAL"}
+    _OFFAIR_FPS = 29.97
+
+    def _offair_bcast_start(yr: int, mo: int) -> "_date_cls":
+        first = _date_cls(yr, mo, 1)
+        return first - timedelta(days=first.weekday())
+
+    def _offair_ampm(frames: int) -> str:
+        total_s = round(frames / _OFFAIR_FPS)
+        h, rem = divmod(total_s, 3600)
+        m = rem // 60
+        nextday = "⁺¹" if h >= 24 else ""  # broadcast-day tail (24:00-29:59)
+        h %= 24
+        suffix = "a" if h < 12 else "p"
+        return f"{h % 12 or 12}:{m:02d}{suffix}{nextday}"
+
+    @router.get("/billing/offair-gaps", response_class=HTMLResponse)
+    async def offair_gaps_page(request: Request):
+        return templates.TemplateResponse(request, "billing/offair_gaps.html")
+
+    @router.get("/api/billing/offair-gaps/scan")
+    async def offair_gaps_scan(year: int, month: int):
+        def _run():
+            import calendar as _cal
+
+            from browser_automation.etere_direct_client import connect as _connect
+
+            cal_start = _date_cls(year, month, 1)
+            cal_end = _date_cls(year, month, _cal.monthrange(year, month)[1])
+            _ny, _nm = (year, month + 1) if month < 12 else (year + 1, 1)
+            bcast_start = _offair_bcast_start(year, month)
+            bcast_end = _offair_bcast_start(_ny, _nm) - timedelta(days=1)
+            win_start = min(bcast_start, cal_start)
+            win_end = max(bcast_end, cal_end)
+
+            with _connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                cur.execute(
+                    """
+                    SELECT t.ID_TPALINSE AS id, t.DATA, t.COD_USER, t.ORA,
+                           t.NEWTYPE, t.TITLE,
+                           ct.COD_CONTRATTO AS contract_code,
+                           cl.RAG_SOCIAL    AS client_name
+                    FROM TPALINSE t
+                    LEFT JOIN trafficTPalinse tp ON tp.ID_TPalinse = t.ID_TPALINSE
+                    LEFT JOIN CONTRATTITESTATA ct
+                           ON ct.ID_CONTRATTITESTATA = tp.ID_CONTRATTITESTATA
+                    LEFT JOIN ANAGRAF cl ON cl.ID_ANAGRAF = ct.COMMITTENTE
+                    WHERE t.DATA BETWEEN %s AND %s
+                      AND t.LIVELLO = 0
+                      AND t.STATUS = 'I'
+                      AND t.ASRUN_STATUS_M = 'I'
+                    ORDER BY t.COD_USER, t.DATA, t.ORA
+                    """,
+                    (str(win_start), str(win_end)),
+                )
+                raw = cur.fetchall()
+
+            # the traffic join can fan out on linked rows — keep first hit per spot
+            rows, seen = [], set()
+            for r in raw:
+                if r["id"] in seen:
+                    continue
+                seen.add(r["id"])
+                rows.append(r)
+
+            split_frames = int(60 * 60 * _OFFAIR_FPS)  # >1h clean = separate gap
+            gaps = []
+            for r in rows:
+                day = r["DATA"].date().isoformat()
+                g = gaps[-1] if gaps else None
+                if (g is None or g["cod_user"] != r["COD_USER"]
+                        or g["date"] != day
+                        or r["ORA"] - g["_last_ora"] > split_frames):
+                    g = {
+                        "cod_user": r["COD_USER"],
+                        "market": _OFFAIR_MARKETS.get(
+                            r["COD_USER"], f"st{r['COD_USER']}"),
+                        "date": day,
+                        "from": _offair_ampm(r["ORA"]),
+                        "to": _offair_ampm(r["ORA"]),
+                        "_last_ora": r["ORA"],
+                        "ids": [],
+                        "n_com": 0,
+                        "clients": set(),
+                        "spots": [],
+                    }
+                    gaps.append(g)
+                g["_last_ora"] = r["ORA"]
+                g["to"] = _offair_ampm(r["ORA"])
+                g["ids"].append(r["id"])
+                is_com = (r["NEWTYPE"] or "").strip().upper() == "COM"
+                if is_com:
+                    g["n_com"] += 1
+                    if r["client_name"]:
+                        g["clients"].add(r["client_name"].strip())
+                g["spots"].append({
+                    "id": r["id"],
+                    "time": _offair_ampm(r["ORA"]),
+                    "type": (r["NEWTYPE"] or "").strip(),
+                    "title": (r["TITLE"] or "").strip(),
+                    "client": (r["client_name"] or "").strip(),
+                    "contract": (r["contract_code"] or "").strip(),
+                })
+            for g in gaps:
+                g["clients"] = sorted(g["clients"])
+                del g["_last_ora"]
+
+            return {
+                "window": {
+                    "start": win_start.isoformat(),
+                    "end": win_end.isoformat(),
+                    "bcast": [bcast_start.isoformat(), bcast_end.isoformat()],
+                    "calendar": [cal_start.isoformat(), cal_end.isoformat()],
+                },
+                "gaps": gaps,
+                "total_spots": sum(len(g["ids"]) for g in gaps),
+                "total_com": sum(g["n_com"] for g in gaps),
+            }
+
+        result = await asyncio.get_running_loop().run_in_executor(None, _run)
+        return JSONResponse(result)
+
+    @router.post("/api/billing/offair-gaps/verify")
+    async def offair_gaps_verify(payload: dict = Body(...)):
+        try:
+            ids = [int(i) for i in (payload.get("ids") or [])]
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="ids must be integers")
+        if not ids:
+            raise HTTPException(status_code=400, detail="No spot IDs supplied")
+
+        def _run():
+            from browser_automation.etere_direct_client import connect as _connect
+
+            updated = 0
+            with _connect() as conn:
+                cur = conn.cursor()
+                for i in range(0, len(ids), 500):
+                    chunk = ids[i:i + 500]
+                    ph = ",".join(["%s"] * len(chunk))
+                    # guarded: only rows still matching the stuck signature
+                    cur.execute(
+                        f"""
+                        UPDATE TPALINSE
+                        SET STATUS = 'Q', ASRUN_STATUS_O = 'M',
+                            LASTUPDATE = GETDATE()
+                        WHERE ID_TPALINSE IN ({ph})
+                          AND LIVELLO = 0
+                          AND STATUS = 'I'
+                          AND ASRUN_STATUS_M = 'I'
+                        """,
+                        tuple(chunk),
+                    )
+                    updated += cur.rowcount
+                conn.commit()
+            return updated
+
+        updated = await asyncio.get_running_loop().run_in_executor(None, _run)
+        return JSONResponse({"updated": updated, "requested": len(ids)})
+
     @router.get("/scripts", response_class=HTMLResponse)
     async def scripts(request: Request):
         return templates.TemplateResponse(request, "scripts.html")

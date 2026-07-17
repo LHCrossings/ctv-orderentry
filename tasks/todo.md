@@ -1,52 +1,41 @@
-# Per-Line Language Catalog (CTV_LineLanguage) — 2026-07-16
+# Off-Air Gap Finder (/billing/offair-gaps) — 2026-07-16
 
-Store the verified language for every contract line in the Etere DB at order
-entry, so backwrite never has to ask. Guesses are allowed as prefills but the
-user ALWAYS verifies — once written, nobody re-checks it. Long-term this closes
-the last gap (commercial-log column J) blocking full live-pull from Etere.
+Lee: billing utility to find spots stuck at "never aired" after an AU crash +
+EE "Reset transmitted events", and mass-mark them manually verified.
+
+Background (discovered via live EE experiment, see memory `ee-status-asrun`):
+- Stuck signature: `STATUS='I' AND ASRUN_STATUS_M='I' AND LIVELLO=0` (only a
+  reconciled past day can carry ASRUN_STATUS_M).
+- Fix write (byte-identical to EE "check manually the selected events"):
+  `STATUS='Q', ASRUN_STATUS_O='M', LASTUPDATE=GETDATE()`.
+- MC re-airs truly-missed commercials after restart, so stuck rows ≈ all aired.
+- Billing window = broadcast ∪ calendar month (July 2026 = 6/29–7/31).
 
 ## Plan
 
-- [ ] **A1** Create `dbo.CTV_LineLanguage` in the Etere DB
-      (ID_CONTRATTIRIGHE PK, LANG, SOURCE, UPDATED_AT; NO FK to Etere tables)
-- [ ] **A2** `etere_direct_client.py`: `upsert_line_languages(cursor, rows, source)`
-      + `fetch_line_languages(cursor, line_ids)` helpers
-- [ ] **A3** `add_contract_line(language=...)` optional param → upsert (source='entry')
-- [ ] **B1** Shared gather helper `confirm_line_languages(items)` — per-line verify,
-      bracket-default prefilled with the guess, apply-to-all, NEVER silently assumed
-- [ ] **B2** Wire into Daviselen + SCWA gather→automation (rest of parsers incremental)
-- [ ] **C1** Backwrite EB pipeline: stored language (by Line id) overrides detection;
-      detection stays as fallback for uncataloged lines
-- [ ] **C2** One-click generate: modal table (already user-verified by the generate
-      click) writes back to CTV_LineLanguage (source='user')
-- [ ] **D1** `scripts/backfill_line_languages.py`: parse CLEANED tab of every
-      Master Billing Sheet (C:\Work Temp\Billing + Miscellany archives, 2022→now),
-      Line col M + Language col J, bulk upsert source='billing-book'
-      (never overwrites 'entry'/'user' rows)
-- [ ] **D2** Run backfill + report coverage
+- [x] Discovery: status alphabet, verify/un-verify writes, reset signature
+- [x] Validate signature on real incidents (7/8 WDC 380, 6/4 HOU 397,
+      6/2 DAL 429, 4/5 SFO 362; 1,631 stuck rows since 6/1)
+- [x] Restore Lee's test row 15092444 to pre-experiment state
+- [x] GET /billing/offair-gaps page route + template (billing/offair_gaps.html)
+- [x] GET /api/billing/offair-gaps/scan?year&month — window calc, stuck-row
+      query, group contiguous gaps per station/day (split on >60 min),
+      client/contract via trafficTPalinse→CONTRATTITESTATA→ANAGRAF
+- [x] POST /api/billing/offair-gaps/verify — {ids:[...]} → guarded UPDATE
+      (only rows still matching the stuck signature), return count
+- [x] Card on billing.html
+- [x] Verify: scan July 2026 (expect 7/8 + 7/11 WDC, 7/2 / 7/13 / 7/15 NYC,
+      7/6 CVC…) and June 2026 (6/2 DAL, 6/4 HOU, 6/8). First real
+      mark-verified click stays with Lee.
 
-## Facts established
+## Review (2026-07-16)
 
-- Books: `/mnt/c/Work Temp/Billing/Master Billing Sheet 2607.xlsm` (live) +
-  `Miscellany/Master Billing Sheet 26xx.xlsm` + `Miscellany/<year>/...` (2022–2025).
-- CLEANED tab: header row 1; col J = Language, col M = Line (= ID_CONTRATTIRIGHE,
-  verified: 74617 etc.), ~31k rows/book. Manual rows (Cornerstone/Desert/WL fees)
-  have blank Line — skip.
-- Language options (EB config): C, E, H, Hm, J, K, L, M, M/C, P, SA, T, V.
-
-## Review (2026-07-16 — all items done)
-
-- A1–A3, B1–B2, C1–C2, D1–D2 complete. Also: universal post-entry catalog pass
-  in `_catalog_line_languages` (order_processing_service.py) covers every
-  unwired parser, TTY-only, groups identical descriptions, never double-asks
-  (skips cataloged lines). WorldLink = ALWAYS English (business rule): entry
-  passes language='E'; universal pass auto-fills WL contracts silently.
-- Backfill ran live: 47,087 unique lines from books 2201–2607 (2607 CLEANED
-  still empty — July not billed). Distribution: E 24205, M 6676, V 5268,
-  T 2804, SA 2330, C 2015, K 1598, Hm 755, M/C 656, P 497, J 243, H 27, L 13.
-- Coverage vs CONTRATTIRIGHE starting 2022+: 87.3% (96–98% for 2022–24;
-  2025 79% / 2026 63% = flights not yet billed). Converges via entry hook +
-  backwrite writeback; script is idempotent — rerun after each billing close.
-- Backfill perf note: row-by-row upsert was ~hours for 47k rows; switched to
-  temp-table staging + set-based UPDATE/INSERT (~1 min). Keep
-  upsert_line_languages for small entry-time writes only.
+- Scan verified live against the WSL test server: July 2026 window 6/29–7/31 →
+  679 stuck rows / 115 COM / 27 gaps incl. 7/8 WDC 377-row incident;
+  June 2026 → 953 rows / 147 COM / 40 gaps incl. 6/4 HOU 396 and 6/2 DAL 429.
+  Page + hub card render (HTTP 200). Post-midnight times show as e.g. 5:30a⁺¹.
+- Verify endpoint is guarded (`AND STATUS='I' AND ASRUN_STATUS_M='I'`) so a
+  double-click or stale scan can never touch rows that changed since.
+  Lee runs the first real mark-verified through the UI.
+- Streaming stations (st11/st12) are listed too — informational; unchecking
+  them is fine, marking them is harmless.

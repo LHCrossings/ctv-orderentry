@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Off-Air Gap Finder — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        .scan-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 1.25rem 1.5rem;
+            max-width: 560px;
+            margin: 0 auto 1.5rem;
+            display: flex;
+            gap: .75rem;
+            align-items: end;
+            flex-wrap: wrap;
+        }
+        .scan-card label {
+            display: block;
+            font-size: .85rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: .35rem;
+        }
+        .scan-card input[type=month] {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            padding: .45rem .75rem;
+            font-size: .9rem;
+        }
+        .btn-scan {
+            background: var(--nord10);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: .55rem 1.25rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .btn-scan:disabled { opacity: .5; cursor: not-allowed; }
+
+        #results { max-width: 1000px; margin: 0 auto; }
+
+        .month-info-banner {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: .65rem 1rem;
+            margin-bottom: 1rem;
+            font-size: .85rem;
+        }
+        .month-label { font-weight: 700; color: var(--nord10); font-size: .95rem; white-space: nowrap; }
+        .month-range-item { color: var(--text-muted); white-space: nowrap; }
+        .range-type { font-weight: 600; color: var(--text-primary); margin-right: .35rem; }
+
+        .gap-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-left: 3px solid var(--nord11);
+            border-radius: 8px;
+            margin-bottom: .75rem;
+            overflow: hidden;
+        }
+        .gap-head {
+            display: flex;
+            align-items: center;
+            gap: .9rem;
+            padding: .65rem .9rem;
+            flex-wrap: wrap;
+            cursor: pointer;
+        }
+        .gap-head input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; }
+        .gap-market {
+            font-weight: 700;
+            color: var(--nord10);
+            min-width: 3.2rem;
+        }
+        .gap-when { font-weight: 600; color: var(--text-primary); white-space: nowrap; }
+        .gap-range { color: var(--text-muted); white-space: nowrap; }
+        .gap-counts { color: var(--text-muted); font-size: .85rem; white-space: nowrap; }
+        .gap-counts strong { color: var(--text-primary); }
+        .gap-clients {
+            flex: 1;
+            font-size: .82rem;
+            color: var(--text-muted);
+            min-width: 12rem;
+        }
+        .gap-toggle { color: var(--text-muted); font-size: .8rem; user-select: none; }
+
+        table.spot-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: .82rem;
+            border-top: 1px solid var(--border-color);
+        }
+        .spot-table th {
+            text-align: left;
+            padding: .4rem .75rem;
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: .74rem;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
+        .spot-table td {
+            padding: .35rem .75rem;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        .spot-table tr:last-child td { border-bottom: none; }
+        .spot-type-com { font-weight: 600; color: var(--nord10); }
+
+        .action-bar {
+            position: sticky;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: .75rem 1rem;
+            margin-top: 1rem;
+            box-shadow: 0 -4px 12px rgba(0,0,0,.08);
+        }
+        .action-bar .sel-summary { font-size: .88rem; color: var(--text-muted); }
+        .action-bar .sel-summary strong { color: var(--text-primary); }
+        .btn-verify {
+            background: var(--nord14);
+            color: #2e3440;
+            border: none;
+            border-radius: 6px;
+            padding: .55rem 1.25rem;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .btn-verify:disabled { opacity: .45; cursor: not-allowed; }
+        .btn-link {
+            background: none;
+            border: none;
+            color: var(--nord10);
+            font-size: .82rem;
+            cursor: pointer;
+            text-decoration: underline;
+            padding: 0;
+        }
+
+        .all-clear {
+            text-align: center;
+            padding: 2.5rem 1rem;
+            color: var(--text-muted);
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+        }
+        .all-clear .big { font-size: 2rem; margin-bottom: .5rem; }
+
+        #error-msg {
+            background: rgba(191,97,106,.15);
+            border: 1px solid var(--nord11);
+            color: var(--nord11);
+            border-radius: 6px;
+            padding: .75rem 1rem;
+            font-size: .9rem;
+            margin: 0 auto 1rem;
+            max-width: 1000px;
+        }
+        #success-msg {
+            background: rgba(163,190,140,.2);
+            border: 1px solid var(--nord14);
+            color: #3d6b25;
+            border-radius: 6px;
+            padding: .75rem 1rem;
+            font-size: .9rem;
+            margin: 0 auto 1rem;
+            max-width: 1000px;
+            font-weight: 600;
+        }
+        .spinner {
+            display: inline-block;
+            width: 16px; height: 16px;
+            border: 2px solid rgba(255,255,255,.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+            vertical-align: middle;
+            margin-right: .4rem;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="home-btn">🏠</a>
+            <div class="logo-icon">📡</div>
+            <div>
+                <h1>Off-Air <span>Gap Finder</span></h1>
+                <div class="logo-sub">Control Room · Billing</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="portal-intro">
+        <h2>Off-Air Gap Finder</h2>
+        <p>Finds spots stuck as "never aired" after an automation crash and
+           "Reset transmitted events" — anything master control forgot to
+           re-verify. Select the gaps that actually aired and mark them
+           manually verified (same write EE's "check manually" does).</p>
+    </div>
+
+    <div class="scan-card">
+        <div>
+            <label for="monthInput">Billing month</label>
+            <input type="month" id="monthInput" />
+        </div>
+        <button class="btn-scan" id="scanBtn" onclick="runScan()">Scan</button>
+    </div>
+
+    <div id="error-msg" style="display:none;"></div>
+    <div id="success-msg" style="display:none;"></div>
+    <div id="results" style="display:none;"></div>
+</main>
+
+<script>
+let gaps = [];
+
+(function initMonth() {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);   // billing time = previous month
+    document.getElementById('monthInput').value =
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+})();
+
+function fmtDate(iso) {
+    const [y, m, d] = iso.split('-').map(Number);
+    return `${m}/${d}/${String(y).slice(2)}`;
+}
+
+async function runScan() {
+    const btn = document.getElementById('scanBtn');
+    const errDiv = document.getElementById('error-msg');
+    const okDiv = document.getElementById('success-msg');
+    const resultsDiv = document.getElementById('results');
+    const val = document.getElementById('monthInput').value;
+    if (!val) { errDiv.textContent = 'Pick a billing month first.'; errDiv.style.display = 'block'; return; }
+    const [year, month] = val.split('-').map(Number);
+
+    errDiv.style.display = 'none';
+    okDiv.style.display = 'none';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Scanning…';
+    try {
+        const resp = await fetch(`/api/billing/offair-gaps/scan?year=${year}&month=${month}`);
+        if (!resp.ok) throw new Error((await resp.json()).detail || `HTTP ${resp.status}`);
+        const data = await resp.json();
+        gaps = data.gaps;
+        render(data, year, month);
+    } catch (e) {
+        errDiv.textContent = 'Scan failed: ' + e.message;
+        errDiv.style.display = 'block';
+        resultsDiv.style.display = 'none';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Scan';
+    }
+}
+
+function render(data, year, month) {
+    const resultsDiv = document.getElementById('results');
+    const monthName = new Date(year, month - 1, 1)
+        .toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    let html = `
+        <div class="month-info-banner">
+            <span class="month-label">${monthName}</span>
+            <span class="month-range-item"><span class="range-type">Scan window</span>${fmtDate(data.window.start)} – ${fmtDate(data.window.end)}</span>
+            <span class="month-range-item"><span class="range-type">Broadcast</span>${fmtDate(data.window.bcast[0])} – ${fmtDate(data.window.bcast[1])}</span>
+            <span class="month-range-item"><span class="range-type">Calendar</span>${fmtDate(data.window.calendar[0])} – ${fmtDate(data.window.calendar[1])}</span>
+            <span class="month-range-item"><span class="range-type">Stuck</span>${data.total_spots} rows (${data.total_com} commercials) in ${data.gaps.length} gap${data.gaps.length === 1 ? '' : 's'}</span>
+        </div>`;
+
+    if (!data.gaps.length) {
+        html += `<div class="all-clear"><div class="big">✅</div>
+                 No stuck spots in this billing window — every reconciled day is clean.</div>`;
+        resultsDiv.innerHTML = html;
+        resultsDiv.style.display = 'block';
+        return;
+    }
+
+    html += data.gaps.map((g, i) => `
+        <div class="gap-card">
+            <div class="gap-head" onclick="toggleDetail(event, ${i})">
+                <input type="checkbox" class="gap-check" data-idx="${i}" checked onclick="event.stopPropagation()" onchange="updateBar()" />
+                <span class="gap-market">${g.market}</span>
+                <span class="gap-when">${fmtDate(g.date)}</span>
+                <span class="gap-range">${g.from} – ${g.to}</span>
+                <span class="gap-counts"><strong>${g.ids.length}</strong> rows · <strong>${g.n_com}</strong> commercials</span>
+                <span class="gap-clients">${g.clients.join(', ') || '—'}</span>
+                <span class="gap-toggle" id="toggle-${i}">▸ detail</span>
+            </div>
+            <div id="detail-${i}" style="display:none;">
+                <table class="spot-table">
+                    <thead><tr><th>Time</th><th>Type</th><th>Title</th><th>Client</th><th>Contract</th></tr></thead>
+                    <tbody>${g.spots.map(s => `
+                        <tr>
+                            <td>${s.time}</td>
+                            <td class="${s.type === 'COM' ? 'spot-type-com' : ''}">${s.type}</td>
+                            <td>${escapeHtml(s.title)}</td>
+                            <td>${escapeHtml(s.client)}</td>
+                            <td>${escapeHtml(s.contract)}</td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>`).join('');
+
+    html += `
+        <div class="action-bar">
+            <span class="sel-summary" id="selSummary"></span>
+            <span>
+                <button class="btn-link" onclick="setAll(true)">select all</button> ·
+                <button class="btn-link" onclick="setAll(false)">none</button>
+                <button class="btn-verify" id="verifyBtn" onclick="runVerify()" style="margin-left:1rem;"></button>
+            </span>
+        </div>`;
+
+    resultsDiv.innerHTML = html;
+    resultsDiv.style.display = 'block';
+    updateBar();
+}
+
+function toggleDetail(ev, i) {
+    if (ev.target.tagName === 'INPUT') return;
+    const d = document.getElementById(`detail-${i}`);
+    const t = document.getElementById(`toggle-${i}`);
+    const open = d.style.display === 'none';
+    d.style.display = open ? 'block' : 'none';
+    t.textContent = open ? '▾ hide' : '▸ detail';
+}
+
+function setAll(v) {
+    document.querySelectorAll('.gap-check').forEach(cb => { cb.checked = v; });
+    updateBar();
+}
+
+function selectedIds() {
+    const ids = [];
+    document.querySelectorAll('.gap-check:checked')
+        .forEach(cb => ids.push(...gaps[Number(cb.dataset.idx)].ids));
+    return ids;
+}
+
+function updateBar() {
+    const n = selectedIds().length;
+    const nGaps = document.querySelectorAll('.gap-check:checked').length;
+    document.getElementById('selSummary').innerHTML =
+        `<strong>${nGaps}</strong> gap${nGaps === 1 ? '' : 's'} selected · <strong>${n}</strong> rows`;
+    const btn = document.getElementById('verifyBtn');
+    btn.textContent = `Mark ${n} rows manually verified`;
+    btn.disabled = n === 0;
+}
+
+async function runVerify() {
+    const ids = selectedIds();
+    if (!ids.length) return;
+    if (!confirm(`Mark ${ids.length} rows as manually verified (aired)?\n\nThis is the same write EE's "check manually the selected events" performs and affects billing. Rows that truly never aired should be unchecked first.`)) return;
+
+    const btn = document.getElementById('verifyBtn');
+    const errDiv = document.getElementById('error-msg');
+    const okDiv = document.getElementById('success-msg');
+    errDiv.style.display = 'none';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Writing…';
+    try {
+        const resp = await fetch('/api/billing/offair-gaps/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids }),
+        });
+        if (!resp.ok) throw new Error((await resp.json()).detail || `HTTP ${resp.status}`);
+        const data = await resp.json();
+        okDiv.textContent = `✔ ${data.updated} of ${data.requested} rows marked manually verified.`;
+        okDiv.style.display = 'block';
+        await runScan();   // refresh — fixed gaps disappear
+    } catch (e) {
+        errDiv.textContent = 'Verify failed: ' + e.message;
+        errDiv.style.display = 'block';
+        btn.disabled = false;
+        updateBar();
+    }
+}
+
+function escapeHtml(s) {
+    return (s || '').replace(/[&<>"']/g,
+        c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+</script>
+
+</body>
+</html>
