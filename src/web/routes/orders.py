@@ -850,7 +850,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 g["_last_ora"] = r["ORA"]
                 g["to"] = _offair_ampm(r["ORA"])
                 g["ids"].append(r["id"])
-                is_com = (r["NEWTYPE"] or "").strip().upper() == "COM"
+                is_com = (r["NEWTYPE"] or "").strip().upper() in ("COM", "BNS", "TRD")
                 if is_com:
                     g["n_com"] += 1
                     if r["client_name"]:

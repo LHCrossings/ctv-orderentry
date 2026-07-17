@@ -324,7 +324,7 @@ function render(data, year, month) {
                     <tbody>${g.spots.map(s => `
                         <tr>
                             <td>${s.time}</td>
-                            <td class="${s.type === 'COM' ? 'spot-type-com' : ''}">${s.type}</td>
+                            <td class="${['COM', 'BNS', 'TRD'].includes(s.type) ? 'spot-type-com' : ''}">${s.type}</td>
                             <td>${escapeHtml(s.title)}</td>
                             <td>${escapeHtml(s.client)}</td>
                             <td>${escapeHtml(s.contract)}</td>
