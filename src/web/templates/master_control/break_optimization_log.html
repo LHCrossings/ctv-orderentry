@@ -33,6 +33,7 @@
         .log-meta { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
         .expand-btn { background: transparent; border: 1px solid var(--border-color); border-radius: 6px; padding: 2px 10px; font-size: 0.74rem; color: var(--text-muted); cursor: pointer; font-family: inherit; }
         .expand-btn:hover { border-color: var(--nord10); color: var(--nord10); }
+        .prg-refresh { flex-shrink: 0; white-space: nowrap; }
 
         /* Program block (log style) */
         .prg-block { margin-bottom: 6px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); }
@@ -389,6 +390,8 @@ function renderPrograms(data) {
     <span class="prg-time">${timeRange}</span>
     <span class="prg-name">${esc(p.show_name || p.bill_code || '?')}</span>
     <span class="prg-lang">${esc(p.language) || '—'}</span>
+    <button class="expand-btn prg-refresh" title="Reload this show's breaks and re-run validation"
+            onclick="event.stopPropagation();refreshProgram(${pi})">↻ Refresh</button>
     <button class="prg-apply-btn" id="prg-apply-${pi}" style="display:none"
             onclick="event.stopPropagation();applyProgram(${pi})">Apply All</button>
     <span class="prg-stat" id="prg-stat-${pi}"></span>
@@ -406,6 +409,18 @@ function togglePrg(pi) {
     const wasCollapsed = block.classList.contains('collapsed');
     block.classList.toggle('collapsed');
     if (wasCollapsed && !(pi in progBreaks)) loadProgramBreaks(pi);
+}
+
+function refreshProgram(pi) {
+    const block = document.getElementById(`prg-${pi}`);
+    block.classList.remove('collapsed');
+    delete progBreaks[pi];
+    document.getElementById(`prg-body-${pi}`).innerHTML = '<div class="prg-loading">Reloading breaks…</div>';
+    const stat = document.getElementById(`prg-stat-${pi}`);
+    stat.textContent = '';
+    stat.classList.remove('warn');
+    document.getElementById(`prg-apply-${pi}`).style.display = 'none';
+    loadProgramBreaks(pi);
 }
 
 function expandAll() {
