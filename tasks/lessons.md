@@ -4,6 +4,23 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## Reusing a CSS Class Means Inheriting Its Background Assumption — Check Contrast Against the Target Row
+
+**Session:** Break Opt log-style refresh button (2026-07-20)
+
+**Rule:** "Reuse existing classes" (the standing styling rule) is about not
+inventing parallel styles — it does NOT mean a class is safe in every context.
+`.expand-btn` uses `--text-muted`, tuned for the light `.log-meta` bar; dropped
+onto the dark `--nord2` `.prg-header` it was unreadable. Every color token in
+this codebase encodes an assumed background.
+
+**How to apply:** when placing a reused class on a differently-colored surface,
+compare its color tokens against what its new siblings use (here: `.prg-stat`
+and `.prg-chevron` both use `--nord4`) and add a small per-context override
+(`.prg-refresh { color: var(--nord4); }`) rather than a new button class.
+
+---
+
 ## "Like Page X" in a User Request Means Page X's Whole Interaction Pattern, Not the One Widget Named
 
 **Session:** Break Optimization log-style redo (2026-07-16)
