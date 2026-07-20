@@ -874,7 +874,7 @@ def sweep_daily_ids(conn, cod_user, dates, pending):
     """Place this market's standing daily elements (see show_profiles
     daily_elements — e.g. the DAL end-of-day FCC children's-records ID) for
     every date in `dates`. Each date is independent and idempotent: skipped if
-    the element is already live before midnight that day, or if the day's
+    the element is already live anywhere that broadcast day, or if the day's
     schedule isn't published yet (the next run's sweep picks it up). Returns a
     list of {date, ok, skipped, message} — empty when the market has no daily
     elements configured, so callers can omit the result row entirely."""
@@ -903,7 +903,13 @@ def _place_daily_once(conn, cod_user, d, el, pending):
     the broadcast day runs 06:00→30:00, so post-midnight breaks sit at 24h+ and
     are never picked). The element goes in at the break's start as EVENT_TYPE
     'T' — it floats, so break optimization / master control can settle it as
-    the final item aired in the calendar day."""
+    the final item aired in the calendar day.
+
+    The already-placed check deliberately has NO ORA bound: a programming gap
+    ahead of the ID pushes the whole tail past midnight (ORA 24h+, same DATA),
+    and an ORA<24:00 check then misses the existing ID — each sweep of the
+    date placed another copy (SFO/CVC 2026-07-17: three IDs, two hand-deleted).
+    Any live copy anywhere on the broadcast date means already placed."""
     cur = conn.cursor()
     label = str(d)
     try:
@@ -919,8 +925,8 @@ def _place_daily_once(conn, cod_user, d, el, pending):
         fid = int(fid)
         cur.execute(
             """SELECT COUNT(*) FROM TPALINSE WHERE COD_USER=%s AND DATA=%s
-               AND ID_FILMATI=%s AND LIVELLO=0 AND ORA<%s""",
-            (cod_user, d, fid, DAY_FRAMES),
+               AND ID_FILMATI=%s AND LIVELLO=0""",
+            (cod_user, d, fid),
         )
         if cur.fetchone()[0] > 0:
             conn.rollback()
