@@ -194,13 +194,53 @@ def _clear_noop_fillers(cur, cod_user, d, lo, hi):
     return cur.rowcount
 
 
+_PIECE_GROUP_GAP = int(3 * 3600 * FPS)  # same-base rows further apart = a repeat airing
+
+
+def _piece_base(code):
+    """Show base of a piece code: NAMASTE071826E → NAMASTE071826 (pieces of one
+    show share the base and differ only in the trailing letter)."""
+    c = (code or "").strip()
+    return c[:-1] if c[-1:].isalpha() and c[-1:].isupper() else c
+
+
+def _group_anchors(rows):
+    """Anchor ORA of each placed program group. rows = (ORA, COD_PROGRA).
+    Same-base rows minutes apart are one show's pieces/parts; a gap over
+    _PIECE_GROUP_GAP starts a new group (a repeat airing of the same file).
+    The group's first ORA is where the show starts — that anchor, not each
+    row's own ORA, decides which show window the group belongs to. Long
+    breaks can push a show's last piece past the next window's start
+    (SFO/CVC 2026-07-18: Namaste piece E at 15:02 inside the India Waves
+    window made IW look placed while it was empty)."""
+    last = {}   # base -> (ora of the base's previous row)
+    anchors = []
+    for ora, code in sorted(rows):
+        base = _piece_base(code)
+        prev = last.get(base)
+        if prev is None or ora - prev > _PIECE_GROUP_GAP:
+            anchors.append(ora)
+        last[base] = ora
+    return anchors
+
+
+_ANCHOR_TOL = int(2 * 60 * FPS)  # a show's piece A chains in ~1s BEFORE its nominal window
+
+
 def _is_placed(cur, cod_user, d, lo, hi):
+    """True if a program GROUP is anchored inside [lo-tol, hi-tol) — the
+    window's own show is placed. Counting raw rows in the window would claim
+    the previous show's drifted last piece as this window's content, and an
+    un-shifted anchor test would miss the window's own piece A (it starts as
+    the previous hour's tail ends, ~1s before the nominal boundary) while
+    catching the NEXT show's piece A at hi-1s."""
     cur.execute(
-        """SELECT COUNT(*) FROM TPALINSE WHERE COD_USER=%s AND DATA=%s AND ORA>=%s AND ORA<%s
+        """SELECT ORA, COD_PROGRA FROM TPALINSE WHERE COD_USER=%s AND DATA=%s
            AND NEWTYPE='PGM' AND LIVELLO=0 AND ID_FILMATI>0 AND COD_PROGRA NOT LIKE 'BUMP%%'""",
-        (cod_user, d, lo, hi),
+        (cod_user, d),
     )
-    return cur.fetchone()[0] > 0
+    rows = [(int(r[0]), r[1] or "") for r in cur.fetchall()]
+    return any(lo - _ANCHOR_TOL <= a < hi - _ANCHOR_TOL for a in _group_anchors(rows))
 
 
 def _durata(cur, filmati):

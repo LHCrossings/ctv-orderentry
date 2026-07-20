@@ -389,13 +389,38 @@
         return [lo, hi];
     }
 
-    // Set of COD_USERs that already have live content in this program's time window.
+    // Pieces of one show share a base code (name minus the trailing piece
+    // letter) and air minutes apart. Group same-market same-base rows (a >3h
+    // gap = a repeat airing, its own group) and stamp each row with the
+    // group's FIRST ora. That anchor — not the row's own air time — decides
+    // which show window a piece belongs to: long breaks can push a show's
+    // last piece past the next window's start (Namaste E at 15:02 inside the
+    // India Waves window, 7/18) and it must still count as its own show.
+    const PIECE_GROUP_GAP = Math.round(3 * 3600 * 29.97);
+    // A show's piece A chains in ~1s BEFORE its nominal window (14:59:59 for a
+    // 15:00 show), so anchor-vs-window tests shift both bounds left by 2 min:
+    // anchor ∈ [lo-TOL, hi-TOL). Without the shift every show's anchor falls
+    // in the PREVIOUS window and the next show's piece A leaks into this one.
+    const ANCHOR_TOL = Math.round(2 * 60 * 29.97);
+    function pieceBase(code) { return (code || '').replace(/([A-Z])$/, ''); }
+    function stampGroupAnchors(rows) {
+        const last = {};   // cu|base -> {ora, anchor}
+        rows.slice().sort(function (a, b) { return a.ora - b.ora; }).forEach(function (x) {
+            const k = x.cu + '|' + pieceBase(x.code);
+            const prev = last[k];
+            x.anchor = (prev && x.ora - prev.ora <= PIECE_GROUP_GAP) ? prev.anchor : x.ora;
+            last[k] = { ora: x.ora, anchor: x.anchor };
+        });
+        return rows;
+    }
+
+    // Set of COD_USERs whose own show is placed in this program's time window.
     function placedMarketsFor(p) {
         const out = {};
         if (!state.placementData) return out;
         const w = hhmmWindow(p.start, p.end), lo = w[0], hi = w[1];
         if (lo == null || hi == null) return out;
-        state.placementData.placed.forEach(function (x) { if (x.ora >= lo && x.ora < hi) out[x.cu] = 1; });
+        state.placementData.placed.forEach(function (x) { if (x.anchor >= lo - ANCHOR_TOL && x.anchor < hi - ANCHOR_TOL) out[x.cu] = 1; });
         return out;
     }
 
@@ -409,7 +434,7 @@
             data = await r.json();
         } catch (e) { return; }
         const markets = data.markets || [];
-        const placed = data.placed || [];
+        const placed = stampGroupAnchors(data.placed || []);
         state.placementData = { markets: markets, placed: placed };
         const M = markets.length;
         (state.programs || []).forEach(function (p, i) {
@@ -418,7 +443,7 @@
             const w = hhmmWindow(p.start, p.end), lo = w[0], hi = w[1];
             if (lo == null || hi == null || !M) { span.textContent = ''; span.className = 'prog-placed'; return; }
             const set = {};
-            placed.forEach(function (x) { if (x.ora >= lo && x.ora < hi) set[x.cu] = 1; });
+            placed.forEach(function (x) { if (x.anchor >= lo - ANCHOR_TOL && x.anchor < hi - ANCHOR_TOL) set[x.cu] = 1; });
             const n = markets.filter(function (cu) { return set[cu]; }).length;
             span.textContent = n + '/' + M + ' placed';
             span.className = 'prog-placed ' + (n === 0 ? 'none' : (n === M ? 'all' : 'partial'));
@@ -889,10 +914,12 @@
             (state.codUsers || []).forEach(function (cu) { sel[cu] = 1; });
             // One row per FILE: air times drift a few minutes between markets,
             // so grouping is by asset only — the swap is "find this file in
-            // this show's window, in each selected market".
+            // this show's window, in each selected market". Window membership
+            // uses the piece's group anchor so the previous show's drifted
+            // last piece isn't offered as one of THIS show's pieces.
             const byFid = {};
-            (data.pieces || []).forEach(function (x) {
-                if (lo == null || x.ora < lo || x.ora >= hi || !sel[x.cu]) return;
+            stampGroupAnchors(data.pieces || []).forEach(function (x) {
+                if (lo == null || x.anchor < lo - ANCHOR_TOL || x.anchor >= hi - ANCHOR_TOL || !sel[x.cu]) return;
                 if (!byFid[x.fid]) byFid[x.fid] = { ora: x.ora, fid: x.fid, code: x.code, cus: {} };
                 byFid[x.fid].ora = Math.min(byFid[x.fid].ora, x.ora);
                 byFid[x.fid].cus[x.cu] = 1;

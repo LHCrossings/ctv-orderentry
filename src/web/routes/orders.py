@@ -4403,12 +4403,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             with _db_connect() as conn:
                 cur = conn.cursor()
                 cur.execute(
-                    f"""SELECT COD_USER, ORA FROM TPALINSE
+                    f"""SELECT COD_USER, ORA, COD_PROGRA FROM TPALINSE
                         WHERE COD_USER IN ({inlist}) AND DATA=%s AND NEWTYPE='PGM'
                           AND LIVELLO=0 AND ID_FILMATI>0 AND COD_PROGRA NOT LIKE 'BUMP%%'""",
                     (d,),
                 )
-                placed = [{"cu": int(r[0]), "ora": int(r[1])} for r in cur.fetchall()]
+                placed = [{"cu": int(r[0]), "ora": int(r[1]), "code": (r[2] or "").strip()}
+                          for r in cur.fetchall()]
             return {"markets": cus, "placed": placed}
         except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
             return {"markets": cus, "placed": [], "error": f"Placement check failed: {exc}"}
