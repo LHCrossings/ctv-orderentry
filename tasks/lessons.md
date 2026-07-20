@@ -21,6 +21,24 @@ and `.prg-chevron` both use `--nord4`) and add a small per-context override
 
 ---
 
+## Idempotency Checks Must Key on Identity, Never on Position — Schedule Rows Drift
+
+**Session:** FCC ID duplicates in SFO/CVC (2026-07-20, Maija report)
+
+**Rule:** A "did I already place this?" check must match on immutable identity
+(DATA + COD_USER + ID_FILMATI), never on where the row currently sits.
+TPALINSE.ORA is recomputed by every start-time rebuild: a programming gap ahead
+of the end-of-day FCC ID pushed the tail past midnight (ORA 24h+, same DATA),
+the `ORA<24:00` dedupe stopped seeing the placed ID, and each daily sweep of the
+date (today→+2 = up to 3 passes) inserted another copy. Position bounds belong
+on the PLACEMENT target (which break to insert into), not on the dedupe.
+
+**How to apply:** any sweep/retry loop that inserts schedule rows checks
+existence by identity columns alone. If a position filter seems needed to
+disambiguate, the asset is doing double duty — split the assets instead.
+
+---
+
 ## "Like Page X" in a User Request Means Page X's Whole Interaction Pattern, Not the One Widget Named
 
 **Session:** Break Optimization log-style redo (2026-07-16)
