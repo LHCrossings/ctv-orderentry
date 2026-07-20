@@ -21,6 +21,28 @@ and `.prg-chevron` both use `--nord4`) and add a small per-context override
 
 ---
 
+## Never Build an Inline `onclick` From Interpolated Data — HTML-Escaping It Still Breaks the JS
+
+**Session:** As-run contract dropdown, Admerasia (2026-07-20)
+
+**Rule:** `onclick="fn('${esc(value)}')"` is broken for any `value` containing
+`'` even WITH an HTML-escaper. Browser order is: HTML-decode the attribute
+first, THEN parse as JS. So `esc`'s `&#39;` decodes back to a literal `'`
+before the JS engine sees it, terminating the string → syntax error → the
+handler silently does nothing. It only "works" until the first apostrophe:
+BVFL contracts opened, Admerasia ("McDonald's …") didn't. HTML-escaping (for
+text nodes) and JS-string-escaping (for code) are different jobs; an attribute
+that is JS needs the latter, and inline handlers make that nearly impossible to
+get right.
+
+**How to apply:** render items with a `data-idx` (or data-id) only, then
+`el.addEventListener('click', () => fn(rows[+el.dataset.idx]))` — pass the
+value straight from the JS array, never embed it in markup. Grep the codebase
+for `onclick="[^"]*\$\{` to find siblings (there's a latent one in this page's
+spot-search — spot codes just never contain apostrophes yet).
+
+---
+
 ## Idempotency Checks Must Key on Identity, Never on Position — Schedule Rows Drift
 
 **Session:** FCC ID duplicates in SFO/CVC (2026-07-20, Maija report)
