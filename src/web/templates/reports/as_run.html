@@ -520,12 +520,20 @@
         if (!rows.length) {
             contractDropdown.innerHTML = '<div class="dropdown-item"><span class="dropdown-desc">No contracts found.</span></div>';
         } else {
-            contractDropdown.innerHTML = rows.map(r =>
-                `<div class="dropdown-item" onclick="selectContract(${r.id}, '${esc2(r.code)}', '${esc2(r.description || '')}')">
+            // Bind via data-idx + delegation, NOT an inline onclick with the
+            // code/description interpolated in: a description like
+            // "McDonald's …" (Admerasia) HTML-decodes back to a literal ' inside
+            // the attribute and breaks the handler, so the item won't open.
+            contractDropdown.innerHTML = rows.map((r, i) =>
+                `<div class="dropdown-item" data-idx="${i}">
                     <div class="dropdown-code">${esc2(r.code)}</div>
                     <div class="dropdown-desc">${esc2(r.description || '')} &nbsp;·&nbsp; ${r.date_start} – ${r.date_end}</div>
                 </div>`
             ).join('');
+            contractDropdown.querySelectorAll('.dropdown-item[data-idx]').forEach(el => {
+                const r = rows[+el.dataset.idx];
+                el.addEventListener('click', () => selectContract(r.id, r.code, r.description || ''));
+            });
         }
         contractDropdown.style.display = 'block';
     }
