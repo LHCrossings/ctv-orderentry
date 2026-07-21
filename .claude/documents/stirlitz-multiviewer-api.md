@@ -75,8 +75,19 @@ path), `NO_PERMISSIONS` (role). Success = 200.
 | GET | `/navigationBar` | modules+role (crossingstv → `["monitor"]`) |
 | POST | `/screenclick/` | tile interaction |
 | GET/PUT | `/users/` | user admin (returns staff accounts + roles — treat as sensitive; do NOT dump) |
-| — | `/files/watch.html#stream=<name>` | per-stream live view page (embeddable) |
+| GET | `/live/screens/{screen}/preview` | JPEG snapshot of a screen — **requires the `session` header** (accessKey is rejected → "Access violation"). Screens are `0.0` and `stream-REALTIME`. |
+| — | `/files/preview.html#screen=<name>` | single-screen preview page (dedupes the default two-grid view) |
+| — | `/files/watch.html#stream=<name>` | per-stream LIVE VIDEO+audio page (embeddable, works in all browsers) |
 | — | `/files/activeAlarms/index.html` | the alarms UI (where the alarm API is used) |
+
+**⚠ Thumbnail previews are Firefox-only.** The vendor viewer loads screen previews via an
+authenticated fetch (`ffFetchImage`) **only on Firefox**; on Chrome/Edge it falls back to a
+plain `<img src=".../preview">` which cannot send the `session` header → 401 "error loading
+image". The **live realtime video (`watch.html`) authenticates via MSE fetch and works
+everywhere.** So the inline `/multiviewer` defaults to the realtime stream, not thumbnails.
+To offer working low-bandwidth thumbnails on Chrome we'd need a **server-side proxy**
+(server holds a session, fetches `/live/screens/{s}/preview`, re-serves the JPEG) — which
+needs a multiviewer **username+password** (the monitor accessKey does NOT work for preview).
 
 ---
 
