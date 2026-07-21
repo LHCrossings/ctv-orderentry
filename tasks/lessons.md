@@ -4,6 +4,41 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## "Penny-Accurate" Means EXACT — Never Round the Gross Rate; Feed the Backwrite the NET Rate + `rates_are_net`
+
+**Session:** iGraphix (Sky River) backwrite gross-up (2026-07-21)
+
+**Rule:** The backwrite's Net Amount is what we bill the customer and MUST equal
+the IO net to the penny — a green check within $0.02 is a FAIL, not a pass (Lee:
+"we aren't trying to get CLOSE"). The killer is rounding the *gross* rate to 2
+decimals: `$52.94 × 18 × 0.85 = $809.98`, not `$810.00`. The clean number is the
+*net* per spot ($45.00); the gross ($52.9411…) must stay full-precision so the
+round-trip lands exactly. Excel money cells are formulas (no `round()`), so the
+ONLY thing that must carry full precision is the gross unit rate.
+
+**What was wrong:** iGraphix pre-grossed and rounded (`round(net/0.85, 2)`) and
+its normalizer omitted `rates_are_net` + handed the backwrite that rounded gross.
+So the backwrite skipped gross-up and billed the rounded value. Unlike
+intertrend/mediasol, whose io_detail carries the **net** rate + `rates_are_net=True`.
+
+**How to apply — any net-rate agency parser:**
+1. `_normalize_<agency>` (parser_bridge.py) MUST set `"rates_are_net": True` and
+   put the **net** per-spot rate on each line (`net_total / paid_spots`), NEVER a
+   pre-grossed/rounded rate. Etere entry can still store gross — that's separate.
+2. The backwrite's auto gross-up fallback maps `{Etere-rounded-gross: net}` (not
+   `{net: net}`) so BOTH the SC tab (reads IO net) and the run sheet (reads
+   Etere's rounded gross) gross to full precision. Key = `round(net/(1-fee), 2)`
+   reconstructs exactly what Etere stored.
+3. Verify by generating the real from-DB workbook and asserting SC net AND run
+   sheet net both equal the IO net to the penny — reconstruct via the formulas,
+   don't eyeball the cached cell.
+
+**Related:** the estimate/purchase number lives in `CONTRATTITESTATA.CUSTOMERREF`
+(the customer order ref set at entry) — pre-fill the backwrite modal's Estimate
+field from there, not a `\d{4,}` scrape of the description.
+
+---
+
 ## Reusing a CSS Class Means Inheriting Its Background Assumption — Check Contrast Against the Target Row
 
 **Session:** Break Opt log-style refresh button (2026-07-20)
