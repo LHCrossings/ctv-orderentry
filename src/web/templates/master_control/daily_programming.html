@@ -390,12 +390,18 @@
     }
 
     // Pieces of one show share a base code (name minus the trailing piece
-    // letter) and air minutes apart. Group same-market same-base rows (a >3h
-    // gap = a repeat airing, its own group) and stamp each row with the
-    // group's FIRST ora. That anchor — not the row's own air time — decides
-    // which show window a piece belongs to: long breaks can push a show's
-    // last piece past the next window's start (Namaste E at 15:02 inside the
-    // India Waves window, 7/18) and it must still count as its own show.
+    // letter) and air minutes apart. Group same-market same-base rows into an
+    // airing and stamp each row with the group's FIRST ora. That anchor — not
+    // the row's own air time — decides which show window a piece belongs to:
+    // long breaks can push a show's last piece past the next window's start
+    // (Namaste E at 15:02 inside the India Waves window, 7/18) and it must still
+    // count as its own show.
+    //   A new airing is detected by the PIECE LETTER resetting: a single airing
+    // ascends A→B→…→F, but a repeat of the SAME show restarts at A (…F → A).
+    // Keying on the letter (not a time gap) correctly splits two airings that
+    // are only ~1h apart — e.g. Vietnamese Drama at 10:00 AND 12:00 both using
+    // codes …-0721A..F (Maija, 7/21): a 3h-gap-only rule merged them, so 12:00
+    // showed 0/9. A large gap is still a backstop for letterless codes.
     const PIECE_GROUP_GAP = Math.round(3 * 3600 * 29.97);
     // A show's piece A chains in ~1s BEFORE its nominal window (14:59:59 for a
     // 15:00 show), so anchor-vs-window tests shift both bounds left by 2 min:
@@ -403,13 +409,19 @@
     // in the PREVIOUS window and the next show's piece A leaks into this one.
     const ANCHOR_TOL = Math.round(2 * 60 * 29.97);
     function pieceBase(code) { return (code || '').replace(/([A-Z])$/, ''); }
+    function pieceLetter(code) { const m = /([A-Z])$/.exec(code || ''); return m ? m[1] : ''; }
     function stampGroupAnchors(rows) {
-        const last = {};   // cu|base -> {ora, anchor}
+        const last = {};   // cu|base -> {ora, anchor, letter}
         rows.slice().sort(function (a, b) { return a.ora - b.ora; }).forEach(function (x) {
             const k = x.cu + '|' + pieceBase(x.code);
+            const letter = pieceLetter(x.code);
             const prev = last[k];
-            x.anchor = (prev && x.ora - prev.ora <= PIECE_GROUP_GAP) ? prev.anchor : x.ora;
-            last[k] = { ora: x.ora, anchor: x.anchor };
+            // New airing when the piece letter doesn't advance (…F → A = a
+            // repeat) or (backstop) after a >3h gap. Ascending letters stay one
+            // group however long a break stretches them (Namaste E drift).
+            const newAiring = !prev || letter <= prev.letter || (x.ora - prev.ora > PIECE_GROUP_GAP);
+            x.anchor = newAiring ? x.ora : prev.anchor;
+            last[k] = { ora: x.ora, anchor: x.anchor, letter: letter };
         });
         return rows;
     }
