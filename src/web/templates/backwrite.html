@@ -769,10 +769,18 @@ function applyAutoGrossup() {
     if (!_ioNetRates.length) return;
     const inputs = document.querySelectorAll('.grossup-net');
     if (!inputs.length) return;   // table not built yet — will be applied in buildGrossupTable()
+    // The IO carries NET rates; each table row is keyed by Etere's GROSS rate
+    // (the net grossed up then rounded to 2dp). Match each IO net against the
+    // net a given gross rate IMPLIES — gross × (1-fee) — never against the gross
+    // itself: a $45 net never equals its $52.94 gross, so the old direct compare
+    // matched nothing and the box never auto-checked.
+    let fee = parseFloat(document.getElementById('agency_fee').value) || 0;
+    if (fee > 1) fee = fee / 100;
     let filled = 0;
     inputs.forEach(inp => {
-        const csvRate = parseFloat(inp.dataset.rate);
-        const match   = _ioNetRates.find(r => Math.abs(r - csvRate) < 0.03);
+        const grossRate  = parseFloat(inp.dataset.rate);
+        const impliedNet = grossRate * (1 - fee);
+        const match = _ioNetRates.find(r => Math.abs(r - impliedNet) < 0.03);
         if (match !== undefined && !inp.value) {
             inp.value = match.toFixed(2);
             inp.title = 'Auto-detected from IO';
