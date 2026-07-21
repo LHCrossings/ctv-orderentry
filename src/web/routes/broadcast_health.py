@@ -19,8 +19,8 @@ import time
 import urllib.request
 from pathlib import Path
 
-from fastapi import APIRouter
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 # The single Stirlitz box (see stirlitz-multiviewer-api.md). Overridable via env
@@ -146,5 +146,9 @@ def build_broadcast_health_router(templates: Jinja2Templates) -> APIRouter:
     @router.get("/api/broadcast-health/status")
     async def broadcast_health_status():
         return JSONResponse(await _get_status())
+
+    @router.get("/multiviewer", response_class=HTMLResponse)
+    async def multiviewer(request: Request):
+        return templates.TemplateResponse(request, "multiviewer.html")
 
     return router

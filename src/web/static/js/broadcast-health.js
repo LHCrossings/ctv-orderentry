@@ -16,7 +16,7 @@
 
   var POLL_MS = 10000;                       // client poll cadence (server caches ~5s)
   var STATUS_URL = "/api/broadcast-health/status";
-  var MULTIVIEWER_URL = "http://34.208.18.64/files/index.html";  // where to look on an outage
+  var MULTIVIEWER_URL = "/multiviewer";          // inline viewer — where to look on an outage
   var ALERTED_KEY = "bhAlertedStations";     // sessionStorage dedupe of toasts
 
   function alerted() {

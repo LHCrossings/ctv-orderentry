@@ -56,7 +56,7 @@ def create_app(config: ApplicationConfig | None = None) -> FastAPI:
     # in one middleware avoids editing ~58 per-page headers (there is no shared
     # base template) and automatically covers future pages. Non-HTML responses
     # (JSON, static assets, SSE streams) are passed through untouched.
-    _BH_TAG = b'<script src="/static/js/broadcast-health.js?v=20260721"></script>'
+    _BH_TAG = b'<script src="/static/js/broadcast-health.js?v=20260721b"></script>'
 
     @app.middleware("http")
     async def inject_broadcast_health(request, call_next):

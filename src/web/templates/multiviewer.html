@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IP Multiviewer — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        html, body { height: 100%; }
+        body { margin: 0; display: flex; flex-direction: column; }
+        main.mv-main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+        .mv-toolbar {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 20px; background: var(--nord1, #3b4252);
+            border-bottom: 1px solid var(--border-color, #434c5e);
+        }
+        .mv-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 8px 14px; border: 1px solid var(--border-color, #434c5e);
+            border-radius: 8px; background: var(--nord2, #434c5e);
+            color: var(--nord4, #d8dee9); font-family: 'Inter', sans-serif;
+            font-size: 0.84rem; font-weight: 600; cursor: pointer; transition: all 0.15s;
+        }
+        .mv-btn:hover { border-color: var(--nord10, #5e81ac); }
+        .mv-btn.active { background: var(--nord10, #5e81ac); color: #fff; border-color: var(--nord10, #5e81ac); }
+        .mv-hint { font-size: 0.76rem; color: var(--text-muted, #9aa4b8); }
+        .mv-open { margin-left: auto; font-size: 0.78rem; color: var(--nord8, #88c0d0); text-decoration: none; }
+        .mv-open:hover { text-decoration: underline; }
+
+        .mv-frame { flex: 1; width: 100%; border: 0; min-height: 0; background: #000; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="home-btn">🏠</a>
+            <div class="logo-icon">🖥️</div>
+            <div>
+                <h1>IP <span>Multiviewer</span></h1>
+                <div class="logo-sub">Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">Live Monitoring</span>
+    </div>
+</header>
+
+<main class="mv-main">
+    <div class="mv-toolbar">
+        <button id="mvThumbs" class="mv-btn active">🖼 Thumbnails</button>
+        <button id="mvRealtime" class="mv-btn">▶ View / Hear Realtime Streams</button>
+        <span class="mv-hint" id="mvHint">Cached thumbnail grid (low bandwidth). If prompted, log into the multiviewer once inside the frame.</span>
+        <a class="mv-open" id="mvOpen" href="http://34.208.18.64/files/index.html" target="_blank" rel="noopener">Open in new tab ↗</a>
+    </div>
+    <iframe id="mvFrame" class="mv-frame"
+            src="http://34.208.18.64/files/index.html"
+            allow="autoplay; fullscreen"></iframe>
+</main>
+
+<script>
+    var THUMBS   = "http://34.208.18.64/files/index.html";
+    var REALTIME = "http://34.208.18.64/files/watch.html#stream=REALTIME";
+    var frame  = document.getElementById("mvFrame");
+    var btnT   = document.getElementById("mvThumbs");
+    var btnR   = document.getElementById("mvRealtime");
+    var hint   = document.getElementById("mvHint");
+    var open   = document.getElementById("mvOpen");
+
+    function show(mode) {
+        var realtime = mode === "realtime";
+        frame.src = realtime ? REALTIME : THUMBS;   // reload the frame at the chosen view
+        open.href = frame.src;
+        btnR.classList.toggle("active", realtime);
+        btnT.classList.toggle("active", !realtime);
+        hint.textContent = realtime
+            ? "Live video + audio — click a network in the grid to hear it."
+            : "Cached thumbnail grid (low bandwidth). If prompted, log into the multiviewer once inside the frame.";
+    }
+
+    btnT.addEventListener("click", function () { show("thumbnails"); });
+    btnR.addEventListener("click", function () { show("realtime"); });
+</script>
+
+</body>
+</html>

@@ -91,8 +91,13 @@ CSS: add a `.bh-indicator` / `.bh-dot` / `.bh-toast` block. Options: put it in
 - Optional later: fold in Haivision SRT route stats (see haivision doc) for a combined view.
 
 ## Deliverable 3 — Inline IP Multiviewer
-- Route `GET /multiviewer` → template `multiviewer.html` that `<iframe>`s
-  `http://34.208.18.64/files/index.html` (the live wall) full-bleed under our header.
+- Route `GET /multiviewer` → template `multiviewer.html` that `<iframe>`s the vendor viewer
+  full-bleed under our header.
+- **Default = thumbnail grid** (`/files/index.html` — cached thumbnails, low bandwidth).
+- **A toggle button "▶ View / Hear Realtime Streams"** switches the iframe to the REALTIME
+  net stream (`/files/watch.html#stream=REALTIME`) — live video + audio; a "◀ Back to
+  thumbnails" button returns. (The button click is also the user gesture browsers require
+  before audio can play — so audio "just works" on that click.)
 - Change the existing portal "IP Multiviewer" card from an external link to `/multiviewer`
   (keep an "open in new tab ↗" affordance).
 - **Mixed content: resolved** — Control Room is HTTP (confirmed), so the HTTP iframe is fine.
@@ -122,11 +127,24 @@ orders.py), returns cached JSON:
 - Derive per-station rollup from `alarmLines` (group the `.N.<type>` lines by `stationId`).
 
 ## Phasing
-- **Phase 1:** backend `/api/broadcast-health/status` (+ cache) and verify against live feed.
-- **Phase 2:** Deliverable 1 (global indicator + middleware injection + popup). Highest value.
-- **Phase 3:** Deliverable 2 (dashboard + portal card).
-- **Phase 4:** Deliverable 3 (inline multiviewer) — after confirming the framing caveats.
-- **Future:** instant push (shared SSE/WebSocket broadcast) instead of 30s polling, if the
+- **Phase 1 — DONE (commit e1efd18):** backend `/api/broadcast-health/status` (+ ~5s cache),
+  verified live (12 stations, 0 off air). Alerts on video off/freeze/black/blue + audio-off.
+- **Phase 2 — DONE (commit d150178):** global header indicator via `static/js/broadcast-health.js`
+  injected on every HTML page by a response middleware in `app.py`. Green/red dot + label +
+  corner toast on new off-air (sessionStorage-deduped). Verified across 8 routes with TestClient.
+  Indicator currently links to the **external** multiviewer; repoint to inline `/multiviewer`
+  when Phase 4 lands.
+  - **Prod action:** `STIRLITZ_MONITOR_KEY` in `credentials.env` on each server (Lee: done on
+    most; "the Bee" pending Jenna).
+- **Phase 3:** Deliverable 2 (dashboard `/broadcast-health` + portal card). Lower priority —
+  the header indicator + toast already surface outages; dashboard is the detailed view.
+- **Phase 4:** Deliverable 3 (inline multiviewer). **Default = thumbnail grid**; a
+  **"View / Hear Realtime Streams" button** swaps the iframe to `/files/watch.html#stream=REALTIME`
+  (live video + audio; the click satisfies the browser audio-gesture requirement), with a
+  "back to thumbnails" toggle. Confirm framing (X-Frame-Options/CSP). Then repoint the header
+  indicator + toasts to this inline page. (Also: the vendor viewer defaults to two grids
+  side-by-side — a layout quirk to tackle separately.)
+- **Future:** instant push (shared SSE/WebSocket broadcast) instead of 10s polling, if the
   poll latency isn't good enough.
 
 ## Decisions (Lee, 2026-07-21)
