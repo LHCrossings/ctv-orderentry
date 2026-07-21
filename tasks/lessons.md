@@ -4,6 +4,30 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## Grouping Program Pieces Into Airings: Split on the Piece LETTER Resetting, Not a Time Gap
+
+**Session:** Daily Programming — Vietnamese Drama 10:00 + 12:00 both 0/9 vs 9/9 (Maija, 2026-07-21)
+
+**Rule:** The Daily Programming placement badge groups a market's PGM pieces into
+airings (`stampGroupAnchors`) and anchors each group to its first ora, so a show's
+drifted last piece still counts as that show (the 7/18 Namaste E fix). The original
+split rule was a **>3h time gap** — but the SAME show can air **twice in one day only
+~1–2h apart**, reusing the identical piece codes (`VD-SCENTOFGRASS15-0721A..F` at both
+10:00 and 12:00). A gap-only rule merged the two airings into one group anchored at
+10:00, so the 12:00 window showed **0/9 placed** while 10:00 showed 9/9 — even though
+Etere clearly had the 12:00 pieces.
+
+**How to apply:** detect a new airing by the **piece letter not advancing** (`…F → A`),
+not by elapsed time. A single airing's letters ascend A→B→…→F and stay one group no
+matter how long a break stretches the tail (preserves the drift fix); a repeat restarts
+at A and splits. `newAiring = !prev || letter <= prev.letter || gap > 3h` (keep the big
+gap only as a backstop for letterless codes). Verify any change to piece→airing grouping
+against a day that has the SAME show airing twice, and reconcile per-window market counts
+against Etere. The grouping lives only in `daily_programming.html`
+(`stampGroupAnchors`/`pieceBase`/`pieceLetter`).
+
+---
+
 ## "Penny-Accurate" Means EXACT — Never Round the Gross Rate; Feed the Backwrite the NET Rate + `rates_are_net`
 
 **Session:** iGraphix (Sky River) backwrite gross-up (2026-07-21)
