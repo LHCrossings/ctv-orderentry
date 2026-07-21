@@ -423,7 +423,14 @@ def _normalize_igraphix(order) -> dict:
     paid_days = _str(getattr(order, "paid_days", "M-Su"))
     paid_time = _str(getattr(order, "paid_time", ""))
     duration  = _str(getattr(order, "spot_duration", ""))
-    rate      = _float(getattr(order, "rate_per_spot", 0.0))
+    # The iGraphix IO quotes a NET total; feed the backwrite the NET per-spot
+    # rate and flag rates_are_net so it grosses up at full precision (like
+    # intertrend/mediasol). Never hand over the pre-grossed rate_per_spot — it
+    # is rounded to 2 decimals, and gross_rate × spots × (1-fee) then drifts a
+    # few cents off the IO net. The clean number is the net per spot.
+    net_total  = _float(getattr(order, "net_total", 0.0))
+    paid_spots = _int(getattr(order, "paid_spots", 0))
+    net_rate   = round(net_total / paid_spots, 2) if paid_spots else 0.0
 
     lines = []
     for i, ac in enumerate(getattr(order, "ad_codes", []) or []):
@@ -435,7 +442,7 @@ def _normalize_igraphix(order) -> dict:
             "duration":    duration,
             "weekly_spots": [],
             "total_spots": _int(getattr(ac, "spots", 0)),
-            "rate":        0.0 if is_bonus else rate,
+            "rate":        0.0 if is_bonus else net_rate,
             "is_bonus":    is_bonus,
             "market":      market,
             "language":    _str(getattr(order, "language", "")),
@@ -458,6 +465,7 @@ def _normalize_igraphix(order) -> dict:
         "total_cost":      round(total_cost, 2),
         "lines":           lines,
         "warnings":        [],
+        "rates_are_net":   True,
     }
 
 

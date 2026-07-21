@@ -122,6 +122,26 @@ def get_language_options() -> list:
     return list(_eb_app_config.language_options)
 
 
+def get_customer_order_ref(contract_id: int) -> str:
+    """Return CONTRATTITESTATA.CUSTOMERREF for a contract — the customer order
+    reference captured at entry (for agency orders this is the estimate /
+    purchase number, e.g. iGraphix stores '31169' here). Empty string if
+    unavailable. Best-effort: never raises."""
+    try:
+        from browser_automation.etere_direct_client import connect
+        cid = int(contract_id)  # validated int → safe to inline (no placeholder)
+        with connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT CUSTOMERREF FROM CONTRATTITESTATA "
+                f"WHERE ID_CONTRATTITESTATA = {cid}"
+            )
+            row = cur.fetchone()
+            return (row[0] or "").strip() if row and row[0] else ""
+    except Exception:
+        return ""
+
+
 def _apply_stored_line_languages(df, row_languages) -> set:
     """Override detected languages with the CTV_LineLanguage catalog.
 

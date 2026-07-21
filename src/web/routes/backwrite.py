@@ -305,8 +305,19 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             raise HTTPException(status_code=400, detail="No spot data found")
 
         markets       = sorted(set(s.market for s in spots))
-        est_match     = re.search(r'(\d{4,})', header.description)
-        estimate_hint = est_match.group(1) if est_match else ""
+        # Prefer the customer order ref captured at entry (Etere CUSTOMERREF) —
+        # the exact estimate/purchase number the parser pulled off the IO — so
+        # the modal's Estimate field pre-fills authoritatively. Fall back to a
+        # digit scrape of the description only when that field is blank.
+        estimate_hint = ""
+        try:
+            from backwrite.eterebridge_runner import get_customer_order_ref
+            estimate_hint = get_customer_order_ref(cid)
+        except Exception:
+            estimate_hint = ""
+        if not estimate_hint:
+            est_match     = re.search(r'(\d{4,})', header.description)
+            estimate_hint = est_match.group(1) if est_match else ""
         unique_rates  = sorted(set(s.gross_rate for s in spots if s.gross_rate > 0))
 
         language_counts: dict = {}
@@ -543,9 +554,20 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
                 if ln.get("rate")
             }
             if io_nets:
-                gross_up_dict = {r: r for r in io_nets}
+                # gross_up_rates maps {Etere/CSV gross rate: IO net rate}; the
+                # transformer then computes full-precision gross = net/(1-fee).
+                # Key on the *gross* rate Etere stored (net grossed then rounded
+                # to 2dp) so BOTH the run sheet (reads Etere's rounded gross) and
+                # the SC tab (reads the IO net) gross up to full precision and
+                # the net lands penny-exact on the IO. Keying {net: net} — the
+                # old behaviour — only fixed the SC tab and left the run sheet
+                # a few cents short.
+                if (1 - fee) > 0:
+                    gross_up_dict = {round(r / (1 - fee), 2): r for r in io_nets}
+                else:
+                    gross_up_dict = {r: r for r in io_nets}
                 user_inputs["gross_up_rates"] = gross_up_dict
-                print(f"[backwrite/generate] Auto gross-up from IO net rates: {gross_up_dict}")
+                print(f"[backwrite/generate] Auto gross-up (Etere gross → IO net): {gross_up_dict}")
 
         reconcile: dict = {}
         try:
