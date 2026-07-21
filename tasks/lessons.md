@@ -34,8 +34,21 @@ intertrend/mediasol, whose io_detail carries the **net** rate + `rates_are_net=T
    don't eyeball the cached cell.
 
 **Related:** the estimate/purchase number lives in `CONTRATTITESTATA.CUSTOMERREF`
-(the customer order ref set at entry) — pre-fill the backwrite modal's Estimate
-field from there, not a `\d{4,}` scrape of the description.
+(the customer order ref set at entry) — pre-fill the backwrite Estimate field
+from there, not a `\d{4,}` scrape of the description.
+
+**Two backwrite generate paths exist — fix BOTH or you've under-fixed:**
+1. **Manual `/backwrite` page** — `backwrite.py::backwrite_generate` (from-DB
+   search or uploaded CSV). Gets `io_detail` ONLY if the user also drops the IO
+   PDF; the from-DB search alone has no IO, so it can't know rates are net.
+2. **One-click** — `orders.py::awaiting_backwrite_generate` (awaiting-queue →
+   review modal). Reads the manifest, which carries `io_detail` + `rates_are_net`,
+   so it grosses up automatically. Modal contact/estimate prefill is a THIRD
+   endpoint (`awaiting_backwrite_contact`).
+The gross-up mapping and the CUSTOMERREF estimate fallback had to be applied in
+all of these. When you change backwrite gross-up/estimate logic, grep for every
+`gross_up`/`rates_are_net`/`estimate` site across `backwrite.py` AND `orders.py`
+— they were copy-paste siblings and drift silently.
 
 ---
 
