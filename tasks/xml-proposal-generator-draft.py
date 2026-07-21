@@ -41,6 +41,7 @@ def build(spec, H):
     s=sub(p,r("Seller"),companyName=H["seller"]); sub(s,r("OfficeName"),H["seller_office"])
     sp=sub(s,r("Salesperson"),name=H["salesperson"])
     sub(sp,r("Phone"),H["seller_phone"],type="voice",location="work")
+    if H.get("seller_fax"): sub(sp,r("Phone"),H["seller_fax"],type="fax")
     sub(sp,r("Email"),H["seller_email"],type="primary")
     b=sub(p,r("Buyer"),buyingCompanyName=H["buyer"]); sub(b,r("OfficeName"),H["buyer_office"]); sub(b,r("BuyerName"),H["buyer_name"])
     adv=sub(p,r("Advertiser"),name=spec.client_name); sub(adv,r("Product"),name=H["product"])
@@ -52,6 +53,8 @@ def build(spec, H):
     dcs=sub(al,r("DemoCategories")); dc=sub(dcs,r("DemoCategory"),DemoId="DM0")
     sub(dc,vb("DemoType"),"Rating"); sub(dc,vb("Group"),"Adults"); sub(dc,vb("AgeFrom"),"25"); sub(dc,vb("AgeTo"),"54")
     sub(al,r("TargetDemo"),demoRef="DM0")
+    if H.get("charge_note"):
+        _c=sub(al,r("Comment")); sub(_c,tp("CommentLine"),H["charge_note"])
     for ln in spec.lines:
         awl=sub(al,r("AvailLineWithDetailedPeriods")); sub(awl,r("OutletReference"),outletFromListRef="OUL0")
         dts=sub(awl,r("DayTimes"))
@@ -74,11 +77,23 @@ o.advertiser="Bay Area Air Quality Management District"
 import dataclasses as _dc
 o.lines=[_dc.replace(_ln, daypart=_ln.daypart.replace("11a-1p","10a-1p")) if "11a-1p" in (_ln.daypart or "") else _ln for _ln in o.lines]
 spec=charmaine_order_to_proposal_spec(o,estimate_number="BAAQMD-2026-REV1",buyer_name="Crispin",call_letters="CRTV")
+# DISCOUNTED rate (col E) + per-line spot length (col F) from the proposal Excel
+import openpyxl
+_wb=openpyxl.load_workbook("/mnt/c/Work Temp/!New/!Orders/Crossings TV Media Proposal_BAAQMD_2026_REV1.xlsm", data_only=True)
+_xmap={}
+for _r in _wb["BAAQMD"].iter_rows(values_only=True):
+    _lang,_disc,_len=_r[2],_r[5],_r[6]
+    if isinstance(_lang,str) and isinstance(_disc,(int,float)) and isinstance(_len,str) and _len.strip().rstrip("s").lstrip(":").isdigit():
+        _xmap[_lang.strip().lower()]=(float(_disc), int(_len.strip().rstrip("s").lstrip(":")))
+for _ln in spec.lines:
+    if _ln.program.strip().lower() in _xmap:
+        _ln.rate,_ln.spot_length_sec=_xmap[_ln.program.strip().lower()]
 H=dict(uid="BAAQMD-2026-REV1",name="BAAQMD 2026",
-       seller="Crossings TV",seller_office="San Francisco",salesperson="TBD",
-       seller_phone="(415)555-0100",seller_email="tbd@crossingstv.com",
+       seller="Crossings TV",seller_office="Sacramento",salesperson="Charmaine Lane",
+       seller_phone="(888)901-5288 x106",seller_fax="(888)878-8936",seller_email="charmaine.lane@crossingstv.com",
        buyer="Crispin",buyer_office="TBD",buyer_name="Alexander Boyle",
-       product="Air Quality",call="CRTV")
+       product="Bay Area AQMD",call="Crossings TV",
+       charge_note="Production & Translation: $2,080.00 (one-time charge, not airtime)")
 root=build(spec,H)
 xml=b'<?xml version="1.0" encoding="UTF-8"?>\n'+ET.tostring(root,encoding="utf-8")
 open("outgoing/BAAQMD-2026.xml","wb").write(xml)
