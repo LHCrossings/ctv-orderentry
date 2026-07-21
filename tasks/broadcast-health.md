@@ -138,12 +138,12 @@ orders.py), returns cached JSON:
     most; "the Bee" pending Jenna).
 - **Phase 3:** Deliverable 2 (dashboard `/broadcast-health` + portal card). Lower priority —
   the header indicator + toast already surface outages; dashboard is the detailed view.
-- **Phase 4:** Deliverable 3 (inline multiviewer). **Default = thumbnail grid**; a
-  **"View / Hear Realtime Streams" button** swaps the iframe to `/files/watch.html#stream=REALTIME`
-  (live video + audio; the click satisfies the browser audio-gesture requirement), with a
-  "back to thumbnails" toggle. Confirm framing (X-Frame-Options/CSP). Then repoint the header
-  indicator + toasts to this inline page. (Also: the vendor viewer defaults to two grids
-  side-by-side — a layout quirk to tackle separately.)
+- **Phase 4 — DONE (commit 6b09981):** inline `/multiviewer` iframes the vendor viewer.
+  Default = thumbnail grid; **"View / Hear Realtime Streams" button** swaps to
+  `/files/watch.html#stream=REALTIME` (live video + audio; click = audio gesture) with a
+  Thumbnails toggle. Device sends no X-Frame-Options/CSP (verified) so framing works.
+  Portal card + health indicator/toast now deep-link to `/multiviewer`. Verified via TestClient.
+  (Remaining: vendor viewer defaults to two grids side-by-side — layout quirk to tackle later.)
 - **Future:** instant push (shared SSE/WebSocket broadcast) instead of 10s polling, if the
   poll latency isn't good enough.
 
