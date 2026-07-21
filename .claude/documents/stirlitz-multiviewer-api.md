@@ -93,11 +93,11 @@ path), `NO_PERMISSIONS` (role). Success = 200.
    `/files/watch.html#stream=<name>` behind a session, instead of the external link.
 
 ### Pending investigation
-4. **Recent/historical alarms view.** The Enterprise blurb says the Web API exposes
-   "current **and recent** alarms" and there's a "SQL database archive of all events + web
-   interface to browse and export events history." `/alarmsState/monitor` is the *current*
-   state; there is likely a companion history/events endpoint (browse the activeAlarms app
-   + an events page to find it). Good for an alarm-history panel.
+4. **Recent/historical alarms view.** The alarms UI links to a **history sub-app**
+   (`/files/historyAlarms/index.html`, found in `activeAlarms.js`) — so an alarm-history
+   browser exists. `/alarmsState/monitor` is the *current* state; the history endpoint lives
+   under that sub-app (map it the same way when we want an alarm-history panel). Enterprise
+   also has a "SQL archive of all events + web interface to export events history."
 5. **Clip export (Airchecks tie-in) needs the separate LOGGER product — future/low
    priority.** Per the Enterprise page, continuous channel recording / DVR / clip export is
    **not** in IP Multiviewer Enterprise — it's the distinct **Stirlitz Media Logger**
