@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Import EDL — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 820px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+        }
+
+        .tool-card h2 { font-size: 1rem; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+        .tool-card > p { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5; }
+
+        .step-label {
+            font-size: 0.72rem; font-weight: 700; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.06em; margin: 18px 0 8px;
+        }
+        .step-label:first-of-type { margin-top: 0; }
+
+        .net-toggle { display: flex; gap: 8px; margin-bottom: 4px; }
+        .net-btn {
+            padding: 8px 16px; border: 1px solid var(--border-color); border-radius: 8px;
+            background: var(--bg-secondary); color: var(--text-primary);
+            font-size: 0.84rem; font-weight: 600; font-family: 'Inter', sans-serif; cursor: pointer;
+            transition: all 0.15s;
+        }
+        .net-btn.active { background: var(--nord10); color: #fff; border-color: var(--nord10); }
+
+        .field-input {
+            width: 100%; box-sizing: border-box; background: var(--bg-secondary);
+            border: 1px solid var(--border-color); border-radius: 8px; padding: 11px 14px;
+            font-size: 0.88rem; font-family: 'Inter', sans-serif; color: var(--text-primary);
+            outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .field-input:focus { border-color: var(--nord10); box-shadow: 0 0 0 3px rgba(94,129,172,0.15); }
+
+        .fm-results { margin-top: 8px; max-height: 240px; overflow-y: auto; }
+        .fm-result {
+            display: flex; justify-content: space-between; align-items: center; gap: 12px;
+            padding: 9px 12px; border: 1px solid var(--border-color); border-radius: 8px;
+            margin-bottom: 6px; cursor: pointer; transition: all 0.12s;
+        }
+        .fm-result:hover { border-color: var(--nord10); background: rgba(94,129,172,0.08); }
+        .fm-result.selected { border-color: var(--nord10); background: rgba(94,129,172,0.14); }
+        .fm-code { font-family: monospace; font-weight: 700; font-size: 0.84rem; color: var(--text-primary); }
+        .fm-meta { font-size: 0.74rem; color: var(--text-muted); }
+        .fm-empty { font-size: 0.82rem; color: var(--text-muted); padding: 10px 2px; }
+
+        .sel-banner {
+            display: none; margin-top: 12px; padding: 12px 14px; border-radius: 8px;
+            background: var(--bg-secondary); border: 1px solid var(--border-color);
+            font-size: 0.84rem; color: var(--text-primary); line-height: 1.5;
+        }
+        .sel-banner.visible { display: block; }
+        .sel-banner .edl-has { color: var(--nord13); font-weight: 600; }
+        .sel-banner .edl-none { color: var(--nord14); font-weight: 600; }
+
+        .edl-block { display: none; margin-top: 22px; }
+        .edl-block.visible { display: block; }
+
+        .edl-drop {
+            border: 2px dashed var(--border-color); border-radius: 8px; padding: 22px;
+            text-align: center; font-size: 0.84rem; color: var(--text-muted); cursor: pointer;
+            transition: all 0.15s;
+        }
+        .edl-drop:hover { border-color: var(--nord10); color: var(--nord10); }
+        .edl-drop.drag { border-color: var(--nord10); background: rgba(94,129,172,0.12); color: var(--nord10); }
+
+        .csv-area {
+            width: 100%; box-sizing: border-box; height: 120px; margin-top: 10px;
+            background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px;
+            padding: 12px 14px; font-family: 'Consolas', 'Courier New', monospace; font-size: 0.78rem;
+            color: var(--text-primary); outline: none; resize: vertical; line-height: 1.5;
+        }
+        .csv-area:focus { border-color: var(--nord10); box-shadow: 0 0 0 3px rgba(94,129,172,0.15); }
+
+        .btn {
+            padding: 10px 20px; border: none; border-radius: 8px; font-size: 0.88rem; font-weight: 600;
+            font-family: 'Inter', sans-serif; cursor: pointer; height: 42px; white-space: nowrap;
+            transition: background 0.2s, transform 0.15s; margin-top: 14px;
+        }
+        .btn-primary { background: var(--nord10); color: #fff; }
+        .btn-primary:hover:not(:disabled) { background: var(--nord9); transform: translateY(-1px); }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+        .result-msg { margin-top: 14px; font-size: 0.85rem; line-height: 1.5; }
+        .result-msg.ok  { color: var(--nord14); font-weight: 600; }
+        .result-msg.err { color: var(--nord11); font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="home-btn">🏠</a>
+            <div class="logo-icon">✂️</div>
+            <div>
+                <h1>Import <span>EDL</span></h1>
+                <div class="logo-sub">Scripts · Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="tool-card">
+        <h2>Attach EDL Markers to a Media Library Asset</h2>
+        <p>Mark up a single-file program with split points ahead of scheduling. Drop an EDIUS marker
+           <code>.csv</code> — the last marker is the EOM (out-point), every earlier marker is a split.
+           The write is transaction-safe: it only commits if the marks explode into exactly the expected
+           number of parts, otherwise the file is left untouched.</p>
+
+        <div class="step-label">Step 1 · Channel</div>
+        <div class="net-toggle">
+            <button type="button" class="net-btn active" data-coduser="1" id="netCTV">Crossings TV</button>
+            <button type="button" class="net-btn" data-coduser="10" id="netTAC">The Asian Channel</button>
+        </div>
+
+        <div class="step-label">Step 2 · Find the asset</div>
+        <input type="text" id="search" class="field-input" placeholder="Search media library (e.g. NEWSTODAY)…" autocomplete="off" />
+        <div id="results" class="fm-results"></div>
+
+        <div id="selBanner" class="sel-banner"></div>
+
+        <div id="edlBlock" class="edl-block">
+            <div class="step-label">Step 3 · Attach the EDIUS marker CSV</div>
+            <div id="drop" class="edl-drop">⬇ Drop an EDIUS marker <b>.csv</b> here — or click to browse</div>
+            <input type="file" id="fileInput" accept=".csv,text/csv,text/plain" style="display:none;" />
+            <textarea id="csvText" class="csv-area" placeholder="…or paste the CSV contents here"></textarea>
+            <button type="button" id="importBtn" class="btn btn-primary">Import &amp; validate EDL</button>
+            <div id="resultMsg" class="result-msg"></div>
+        </div>
+    </div>
+</main>
+
+<script>
+    let coduser = 1;
+    let selected = null;      // { id, code, durata }
+    let searchTimer = null;
+    let lastResults = [];
+
+    const searchEl  = document.getElementById('search');
+    const resultsEl = document.getElementById('results');
+    const selBanner = document.getElementById('selBanner');
+    const edlBlock  = document.getElementById('edlBlock');
+    const dropEl    = document.getElementById('drop');
+    const fileInput = document.getElementById('fileInput');
+    const csvText   = document.getElementById('csvText');
+    const importBtn = document.getElementById('importBtn');
+    const resultMsg = document.getElementById('resultMsg');
+
+    function escHtml(s) {
+        return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    function durLabel(fr) {
+        if (!fr) return '';
+        const s = Math.round(fr / 29.97);
+        const m = Math.floor(s / 60), r = s % 60;
+        return m + ':' + String(r).padStart(2, '0');
+    }
+
+    // ── Channel toggle ──
+    document.querySelectorAll('.net-btn').forEach(function (b) {
+        b.addEventListener('click', function () {
+            document.querySelectorAll('.net-btn').forEach(x => x.classList.remove('active'));
+            b.classList.add('active');
+            coduser = parseInt(b.dataset.coduser, 10);
+        });
+    });
+
+    // ── Search ──
+    searchEl.addEventListener('input', function () {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(searchFiles, 250);
+    });
+
+    async function searchFiles() {
+        const q = searchEl.value.trim();
+        if (q.length < 2) { resultsEl.innerHTML = '<div class="fm-empty">Type at least 2 characters…</div>'; return; }
+        resultsEl.innerHTML = '<div class="fm-empty">Searching…</div>';
+        try {
+            const r = await fetch('/api/master-control/daily-programming/search-files?q=' + encodeURIComponent(q));
+            const data = await r.json();
+            lastResults = data.files || [];
+            if (!lastResults.length) {
+                resultsEl.innerHTML = '<div class="fm-empty">' + escHtml(data.error || 'No files found.') + '</div>';
+                return;
+            }
+            resultsEl.innerHTML = lastResults.map(function (f) {
+                return '<div class="fm-result" data-id="' + f.id + '">' +
+                    '<span class="fm-code">' + escHtml(f.code) + '</span>' +
+                    '<span class="fm-meta">' + (durLabel(f.durata) ? durLabel(f.durata) + ' · ' : '') +
+                    'id ' + f.id + (f.desc ? ' · ' + escHtml(f.desc) : '') + '</span></div>';
+            }).join('');
+        } catch (e) {
+            resultsEl.innerHTML = '<div class="fm-empty">Error: ' + escHtml(e.message) + '</div>';
+        }
+    }
+
+    resultsEl.addEventListener('click', function (e) {
+        const el = e.target.closest('.fm-result');
+        if (!el) return;
+        const file = lastResults.find(f => String(f.id) === el.dataset.id);
+        if (file) selectAsset(file, el);
+    });
+
+    function selectAsset(file, el) {
+        selected = file;
+        document.querySelectorAll('.fm-result').forEach(x => x.classList.remove('selected'));
+        if (el) el.classList.add('selected');
+        resultMsg.textContent = '';
+        resultMsg.className = 'result-msg';
+        edlBlock.classList.add('visible');
+        refreshEdlStatus();
+    }
+
+    async function refreshEdlStatus() {
+        if (!selected) return;
+        const file = selected;
+        selBanner.className = 'sel-banner visible';
+        selBanner.innerHTML = 'Selected <b>' + escHtml(file.code) + '</b> (id ' + file.id + ') — checking current EDL…';
+        try {
+            const r = await fetch('/api/master-control/daily-programming/edl-status?filmati=' + encodeURIComponent(file.id));
+            const s = await r.json();
+            const status = s.has_edl
+                ? '<span class="edl-has">Already has an EDL (' + (s.segments || 0) + ' parts)</span> — importing will overwrite it.'
+                : '<span class="edl-none">No EDL yet</span> — ready to attach one.';
+            selBanner.innerHTML = 'Selected <b>' + escHtml(file.code) + '</b> (id ' + file.id + '). ' + status;
+        } catch (e) {
+            selBanner.innerHTML = 'Selected <b>' + escHtml(file.code) + '</b> (id ' + file.id + '). ' +
+                '<span class="edl-none">EDL status unavailable</span> — you can still import.';
+        }
+    }
+
+    // ── CSV drop / browse ──
+    function readCsvFile(f) {
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = function () { csvText.value = reader.result; };
+        reader.readAsText(f);
+    }
+    dropEl.addEventListener('click', function () { fileInput.click(); });
+    fileInput.addEventListener('change', function () { readCsvFile(fileInput.files && fileInput.files[0]); });
+    ['dragover', 'dragenter'].forEach(function (ev) {
+        dropEl.addEventListener(ev, function (e) { e.preventDefault(); dropEl.classList.add('drag'); });
+    });
+    ['dragleave', 'dragend'].forEach(function (ev) {
+        dropEl.addEventListener(ev, function (e) { e.preventDefault(); dropEl.classList.remove('drag'); });
+    });
+    dropEl.addEventListener('drop', function (e) {
+        e.preventDefault(); dropEl.classList.remove('drag');
+        readCsvFile(e.dataTransfer.files && e.dataTransfer.files[0]);
+    });
+
+    // ── Import ──
+    importBtn.addEventListener('click', async function () {
+        if (!selected) { resultMsg.className = 'result-msg err'; resultMsg.textContent = 'Select an asset first.'; return; }
+        const csv = csvText.value.trim();
+        if (!csv) { resultMsg.className = 'result-msg err'; resultMsg.textContent = 'Drop or paste a CSV first.'; return; }
+        importBtn.disabled = true;
+        resultMsg.className = 'result-msg';
+        resultMsg.textContent = 'Writing & validating EDL (transaction-safe)…';
+        try {
+            const r = await fetch('/api/master-control/daily-programming/import-edl', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filmati: selected.id, csv: csv, coduser: coduser })
+            });
+            const data = await r.json();
+            if (!data.ok) {
+                resultMsg.className = 'result-msg err';
+                resultMsg.textContent = '✗ ' + (data.error || data.message || 'Import failed');
+                return;
+            }
+            resultMsg.className = 'result-msg ok';
+            resultMsg.textContent = '✓ ' + (data.message || 'EDL written') +
+                ' — ' + (data.count || (data.splits ? data.splits.length + 1 : '?')) + ' parts.';
+            // Refresh the banner so a re-import reflects the new EDL state
+            // (without clearing the success message just set).
+            refreshEdlStatus();
+        } catch (e) {
+            resultMsg.className = 'result-msg err';
+            resultMsg.textContent = '✗ Error: ' + e.message;
+        } finally {
+            importBtn.disabled = false;
+        }
+    });
+</script>
+
+</body>
+</html>

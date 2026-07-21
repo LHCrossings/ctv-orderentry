@@ -988,6 +988,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def block_refresh(request: Request):
         return templates.TemplateResponse(request, "scripts/block_refresh.html")
 
+    @router.get("/scripts/import-edl", response_class=HTMLResponse)
+    async def scripts_import_edl(request: Request):
+        # Standalone EDL attach — reuses the daily-programming search-files,
+        # edl-status, and import-edl APIs to mark up any media-library asset
+        # ahead of scheduling.
+        return templates.TemplateResponse(request, "scripts/import_edl.html")
+
     @router.get("/scripts/separation", response_class=HTMLResponse)
     async def separation(request: Request):
         return templates.TemplateResponse(request, "scripts/separation.html")
