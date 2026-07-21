@@ -2300,6 +2300,12 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         estimates = m.get("estimates") or []
         estimate = str(gorder.get("estimate_number") or (estimates[0] if estimates else "") or "")
         estimate_run = ""
+        # Fall back to the Etere customer order ref (CUSTOMERREF) when the
+        # manifest carries no estimate — iGraphix (and similar) store the
+        # purchase/estimate number there at entry, not in the gathered inputs.
+        # Authoritative: it's exactly what the parser pulled off the IO.
+        if not estimate:
+            estimate = (header_info or {}).get("customer_ref", "") or ""
         # Admerasia convention (Lee 7/17): front estimate = the Etere header's
         # customer order ref (e.g. '19-MD10-2607VT'); run-sheet estimate = the
         # short token from the contract code (e.g. 'Admerasia McD 19SE 2607'
@@ -2482,7 +2488,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     round(float(ln.get("rate") or 0), 4)
                     for ln in io_detail.get("lines", []) if ln.get("rate")
                 }
-                gross_up = {r: r for r in nets}
+                # Map {Etere-rounded-gross: IO net} so BOTH the SC tab (reads IO
+                # net) and the run sheet (reads Etere's rounded gross) gross up
+                # to full precision → net lands penny-exact on the IO. {net: net}
+                # only grossed the SC tab. Mirrors backwrite.py's fallback.
+                if nets and (1 - agency_fee) > 0:
+                    gross_up = {round(r / (1 - agency_fee), 2): r for r in nets}
+                else:
+                    gross_up = {r: r for r in nets}
 
             estimates = m.get("estimates") or []
             estimate = str(gorder.get("estimate_number") or (estimates[0] if estimates else "") or "")
