@@ -51,38 +51,41 @@
 
 <main class="mv-main">
     <div class="mv-toolbar">
-        <button id="mvThumbs" class="mv-btn active">🖼 Thumbnails</button>
-        <button id="mvRealtime" class="mv-btn">▶ View / Hear Realtime Streams</button>
-        <span class="mv-hint" id="mvHint">Cached thumbnail grid (low bandwidth). If prompted, log into the multiviewer once inside the frame.</span>
-        <a class="mv-open" id="mvOpen" href="http://34.208.18.64/files/index.html" target="_blank" rel="noopener">Open in new tab ↗</a>
+        <button id="mvRealtime" class="mv-btn active">▶ Realtime — video &amp; audio</button>
+        <button id="mvFull" class="mv-btn">⚙ Full viewer (Config / Monitor)</button>
+        <span class="mv-hint" id="mvHint">Live realtime grid — click a network to hear its audio.</span>
+        <a class="mv-open" id="mvOpen" href="http://34.208.18.64/files/watch.html#stream=REALTIME" target="_blank" rel="noopener">Open in new tab ↗</a>
     </div>
     <iframe id="mvFrame" class="mv-frame"
-            src="http://34.208.18.64/files/index.html"
+            src="http://34.208.18.64/files/watch.html#stream=REALTIME"
             allow="autoplay; fullscreen"></iframe>
 </main>
 
 <script>
-    var THUMBS   = "http://34.208.18.64/files/index.html";
+    // The live realtime stream authenticates properly (MSE fetch) and works in
+    // all browsers. The vendor's thumbnail *previews* only authenticate on
+    // Firefox (plain <img> elsewhere → 401), so realtime is the default view.
     var REALTIME = "http://34.208.18.64/files/watch.html#stream=REALTIME";
+    var FULL     = "http://34.208.18.64/files/index.html";
     var frame  = document.getElementById("mvFrame");
-    var btnT   = document.getElementById("mvThumbs");
     var btnR   = document.getElementById("mvRealtime");
+    var btnF   = document.getElementById("mvFull");
     var hint   = document.getElementById("mvHint");
     var open   = document.getElementById("mvOpen");
 
     function show(mode) {
-        var realtime = mode === "realtime";
-        frame.src = realtime ? REALTIME : THUMBS;   // reload the frame at the chosen view
+        var full = mode === "full";
+        frame.src = full ? FULL : REALTIME;   // reload the frame at the chosen view
         open.href = frame.src;
-        btnR.classList.toggle("active", realtime);
-        btnT.classList.toggle("active", !realtime);
-        hint.textContent = realtime
-            ? "Live video + audio — click a network in the grid to hear it."
-            : "Cached thumbnail grid (low bandwidth). If prompted, log into the multiviewer once inside the frame.";
+        btnF.classList.toggle("active", full);
+        btnR.classList.toggle("active", !full);
+        hint.textContent = full
+            ? "Full vendor viewer — Config, Monitor, and previews. Thumbnail previews render only in Firefox."
+            : "Live realtime grid — click a network to hear its audio.";
     }
 
-    btnT.addEventListener("click", function () { show("thumbnails"); });
     btnR.addEventListener("click", function () { show("realtime"); });
+    btnF.addEventListener("click", function () { show("full"); });
 </script>
 
 </body>
