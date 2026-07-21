@@ -81,13 +81,16 @@ def expected_parts(splits, eom):
     return out
 
 
-def apply_edl_from_csv(conn, filmati: int, splits, eom: int, cod_user: int):
+def apply_edl_from_csv(conn, filmati: int, splits, eom: int, cod_user: int | None = None):
     """Write the EDL (FINTERRUZIONI splits + FEDLDESCRIPTION EOM) across all of the
-    file's video-standard VERSIONs, then self-validate with dbo.ExplodeEdl.
+    file's video-standard VERSIONs.
 
-    Transaction-safe: COMMITs only if the explode plan exactly matches the
-    expected parts; otherwise ROLLBACKs and returns ok=False with the mismatch.
-    Returns {ok, parts, expected, message}.
+    If ``cod_user`` is given, self-validate with dbo.ExplodeEdl and COMMIT only if
+    the explode plan matches the expected parts (else ROLLBACK) — used by Daily
+    Programming, which needs the marks to explode for that channel. If ``cod_user``
+    is None, just write the marks to the asset and COMMIT — market-irrelevant EDL
+    markup (the marks are stored on the asset; explode happens later at
+    scheduling). Returns {ok, parts, expected, message}.
     """
     cur = conn.cursor()
     # Per-version frame ratio = that version's DURATION / VERSION-0 DURATION.
@@ -128,13 +131,20 @@ def apply_edl_from_csv(conn, filmati: int, splits, eom: int, cod_user: int):
                     (filmati, f, f, v, f),
                 )
 
+        exp = expected_parts(splits, eom)
+
+        # Market-irrelevant markup: just persist the marks on the asset.
+        if cod_user is None:
+            conn.commit()
+            return {"ok": True, "parts": exp,
+                    "message": f"EDL written to asset: {len(splits)} split(s) → {len(exp)} parts"}
+
         # Self-check: explode against VERSION 0 (what CTV airs) inside the txn.
         cur.execute(
             "SELECT MARKIN, MARKOUT FROM dbo.ExplodeEdl(%s,0,N'eeAutomatic',%s,dbo.sch_GetInfDigit(%s,%s))",
             (filmati, cod_user, filmati, cod_user),
         )
         plan = [(int(a), int(b)) for a, b in cur.fetchall()]
-        exp = expected_parts(splits, eom)
         if plan != exp:
             conn.rollback()
             return {"ok": False, "parts": plan, "expected": exp,

@@ -27,15 +27,6 @@
         }
         .step-label:first-of-type { margin-top: 0; }
 
-        .net-toggle { display: flex; gap: 8px; margin-bottom: 4px; }
-        .net-btn {
-            padding: 8px 16px; border: 1px solid var(--border-color); border-radius: 8px;
-            background: var(--bg-secondary); color: var(--text-primary);
-            font-size: 0.84rem; font-weight: 600; font-family: 'Inter', sans-serif; cursor: pointer;
-            transition: all 0.15s;
-        }
-        .net-btn.active { background: var(--nord10); color: #fff; border-color: var(--nord10); }
-
         .field-input {
             width: 100%; box-sizing: border-box; background: var(--bg-secondary);
             border: 1px solid var(--border-color); border-radius: 8px; padding: 11px 14px;
@@ -117,25 +108,19 @@
 <main>
     <div class="tool-card">
         <h2>Attach EDL Markers to a Media Library Asset</h2>
-        <p>Mark up a single-file program with split points ahead of scheduling. Drop an EDIUS marker
+        <p>Mark up an asset with split points ahead of scheduling. Drop an EDIUS marker
            <code>.csv</code> — the last marker is the EOM (out-point), every earlier marker is a split.
-           The write is transaction-safe: it only commits if the marks explode into exactly the expected
-           number of parts, otherwise the file is left untouched.</p>
+           The marks are written straight to the asset (market-irrelevant — no explode); Etere applies
+           them when the show is scheduled.</p>
 
-        <div class="step-label">Step 1 · Channel</div>
-        <div class="net-toggle">
-            <button type="button" class="net-btn active" data-coduser="1" id="netCTV">Crossings TV</button>
-            <button type="button" class="net-btn" data-coduser="10" id="netTAC">The Asian Channel</button>
-        </div>
-
-        <div class="step-label">Step 2 · Find the asset</div>
+        <div class="step-label">Step 1 · Find the asset</div>
         <input type="text" id="search" class="field-input" placeholder="Search media library (e.g. NEWSTODAY)…" autocomplete="off" />
         <div id="results" class="fm-results"></div>
 
         <div id="selBanner" class="sel-banner"></div>
 
         <div id="edlBlock" class="edl-block">
-            <div class="step-label">Step 3 · Attach the EDIUS marker CSV</div>
+            <div class="step-label">Step 2 · Attach the EDIUS marker CSV</div>
             <div id="drop" class="edl-drop">⬇ Drop an EDIUS marker <b>.csv</b> here — or click to browse</div>
             <input type="file" id="fileInput" accept=".csv,text/csv,text/plain" style="display:none;" />
             <textarea id="csvText" class="csv-area" placeholder="…or paste the CSV contents here"></textarea>
@@ -146,7 +131,6 @@
 </main>
 
 <script>
-    let coduser = 1;
     let selected = null;      // { id, code, durata }
     let searchTimer = null;
     let lastResults = [];
@@ -170,15 +154,6 @@
         const m = Math.floor(s / 60), r = s % 60;
         return m + ':' + String(r).padStart(2, '0');
     }
-
-    // ── Channel toggle ──
-    document.querySelectorAll('.net-btn').forEach(function (b) {
-        b.addEventListener('click', function () {
-            document.querySelectorAll('.net-btn').forEach(x => x.classList.remove('active'));
-            b.classList.add('active');
-            coduser = parseInt(b.dataset.coduser, 10);
-        });
-    });
 
     // ── Search ──
     searchEl.addEventListener('input', function () {
@@ -271,11 +246,11 @@
         if (!csv) { resultMsg.className = 'result-msg err'; resultMsg.textContent = 'Drop or paste a CSV first.'; return; }
         importBtn.disabled = true;
         resultMsg.className = 'result-msg';
-        resultMsg.textContent = 'Writing & validating EDL (transaction-safe)…';
+        resultMsg.textContent = 'Writing EDL to asset…';
         try {
-            const r = await fetch('/api/master-control/daily-programming/import-edl', {
+            const r = await fetch('/api/scripts/import-edl', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ filmati: selected.id, csv: csv, coduser: coduser })
+                body: JSON.stringify({ filmati: selected.id, csv: csv })
             });
             const data = await r.json();
             if (!data.ok) {

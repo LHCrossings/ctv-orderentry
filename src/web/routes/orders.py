@@ -990,10 +990,36 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     @router.get("/scripts/import-edl", response_class=HTMLResponse)
     async def scripts_import_edl(request: Request):
-        # Standalone EDL attach — reuses the daily-programming search-files,
-        # edl-status, and import-edl APIs to mark up any media-library asset
-        # ahead of scheduling.
+        # Standalone EDL attach — reuses the daily-programming search-files and
+        # edl-status APIs to find an asset and show its current EDL, then writes
+        # the marks market-free via /api/scripts/import-edl below.
         return templates.TemplateResponse(request, "scripts/import_edl.html")
+
+    @router.post("/api/scripts/import-edl")
+    async def scripts_import_edl_apply(body: dict = Body(...)):
+        """Write an EDIUS marker CSV to an asset's EDL, market-free. Unlike the
+        Daily Programming importer, this does NOT explode against a channel — it
+        just stores the marks on the asset (splits + EOM), committing on success.
+        """
+        from browser_automation.etere_direct_client import connect as _db_connect
+        from src.business_logic.services.edl_import import apply_edl_from_csv, parse_edius_csv
+        try:
+            filmati = int(body.get("filmati"))
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "Missing/invalid filmati"}
+        try:
+            splits, eom = parse_edius_csv(body.get("csv") or "")
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+        try:
+            with _db_connect() as conn:
+                res = apply_edl_from_csv(conn, filmati, splits, eom)  # cod_user=None → no explode
+        except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
+            return {"ok": False, "error": f"EDL import failed: {exc}"}
+        res["splits"] = splits
+        res["eom"] = eom
+        res["count"] = len(splits) + 1
+        return res
 
     @router.get("/scripts/separation", response_class=HTMLResponse)
     async def separation(request: Request):
