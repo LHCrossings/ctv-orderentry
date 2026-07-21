@@ -67,6 +67,15 @@ compare its color tokens against what its new siblings use (here: `.prg-stat`
 and `.prg-chevron` both use `--nord4`) and add a small per-context override
 (`.prg-refresh { color: var(--nord4); }`) rather than a new button class.
 
+**Same trap with the semantic TEXT tokens (2026-07-21, multiviewer toolbar):**
+`--text-primary` (=`--nord0`), `--text-secondary`/`--text-muted` (=`--nord3`) are
+all dark Polar-Night colors tuned for the app's LIGHT card backgrounds
+(`--bg-primary`=`--nord6`). On any DARK surface — the header, or a `--nord0/1/2`
+toolbar — they're dark-on-dark and vanish. On dark surfaces use **`--nord4`**
+(what the header/`.agent-status` use), optionally at reduced opacity for a muted
+look. Rule of thumb: `--text-*` tokens ⇒ light backgrounds only; `--nord4` ⇒ text
+on dark.
+
 ---
 
 ## Never Build an Inline `onclick` From Interpolated Data — HTML-Escaping It Still Breaks the JS
