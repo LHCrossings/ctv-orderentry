@@ -83,11 +83,15 @@ path), `NO_PERMISSIONS` (role). Success = 200.
 **⚠ Thumbnail previews are Firefox-only.** The vendor viewer loads screen previews via an
 authenticated fetch (`ffFetchImage`) **only on Firefox**; on Chrome/Edge it falls back to a
 plain `<img src=".../preview">` which cannot send the `session` header → 401 "error loading
-image". The **live realtime video (`watch.html`) authenticates via MSE fetch and works
-everywhere.** So the inline `/multiviewer` defaults to the realtime stream, not thumbnails.
-To offer working low-bandwidth thumbnails on Chrome we'd need a **server-side proxy**
-(server holds a session, fetches `/live/screens/{s}/preview`, re-serves the JPEG) — which
-needs a multiviewer **username+password** (the monitor accessKey does NOT work for preview).
+image". The live realtime video (`watch.html`) authenticates via MSE fetch and works in most
+browsers — BUT it **hangs at "synchronizing" on our cloud desktops** (likely can't reach the
+stream ports from that network). **Net result: we do NOT embed the vendor viewer** — the
+Control Room card links out to `http://34.208.18.64/files/index.html`, which works in every
+environment. (A prior inline `/multiviewer` embed was built and reverted — see
+tasks/broadcast-health.md Phase 4.) If working low-bandwidth thumbnails on Chrome are ever
+wanted, they'd need a **server-side proxy** (server holds a session, fetches
+`/live/screens/{s}/preview`, re-serves the JPEG) using a multiviewer **username+password**
+(the monitor accessKey does NOT work for preview).
 
 ---
 

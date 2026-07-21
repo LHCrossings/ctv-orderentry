@@ -138,12 +138,13 @@ orders.py), returns cached JSON:
     most; "the Bee" pending Jenna).
 - **Phase 3:** Deliverable 2 (dashboard `/broadcast-health` + portal card). Lower priority —
   the header indicator + toast already surface outages; dashboard is the detailed view.
-- **Phase 4 — DONE (commit 6b09981):** inline `/multiviewer` iframes the vendor viewer.
-  Default = thumbnail grid; **"View / Hear Realtime Streams" button** swaps to
-  `/files/watch.html#stream=REALTIME` (live video + audio; click = audio gesture) with a
-  Thumbnails toggle. Device sends no X-Frame-Options/CSP (verified) so framing works.
-  Portal card + health indicator/toast now deep-link to `/multiviewer`. Verified via TestClient.
-  (Remaining: vendor viewer defaults to two grids side-by-side — layout quirk to tackle later.)
+- **Phase 4 — REVERTED (built 6b09981, reverted 39bbde4).** Built the inline `/multiviewer`
+  embed, but it added nothing over the external viewer and broke per-environment:
+  the realtime stream hangs at **"synchronizing" on the cloud desktops** where most staff
+  work, and the thumbnail grid **can't authenticate on Chrome** (preview `<img>` can't send
+  the session header — Firefox-only in the vendor code). Restored the portal card + the
+  health indicator/toast to the **external link** (`/files/index.html`), which works in every
+  environment. Lesson: don't re-embed the vendor viewer; link out to it.
 - **Future:** instant push (shared SSE/WebSocket broadcast) instead of 10s polling, if the
   poll latency isn't good enough.
 
