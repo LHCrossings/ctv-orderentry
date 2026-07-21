@@ -531,7 +531,9 @@ def build_placement_csv_from_db(
                    RTRIM(comm.RAG_SOCIAL)   AS client_name,
                    ISNULL(ag.VIA,   '')     AS agency_address,
                    ISNULL(ag.CITTA, '')     AS agency_city,
-                   RTRIM(ISNULL(ae.RAG_SOCIAL, '')) AS ae_name,
+                   LTRIM(RTRIM(CASE WHEN ae.Nome IS NOT NULL AND ae.Nome != ''
+                        THEN ae.Nome + ' ' + ISNULL(ae.RAG_SOCIAL, '')
+                        ELSE ISNULL(ae.RAG_SOCIAL, '') END)) AS ae_name,
                    ISNULL(ct.NOTE,  '')     AS notes
             FROM CONTRATTITESTATA ct
             LEFT JOIN ANAGRAF ag   ON ag.ID_ANAGRAF   = ct.AGENZIA
