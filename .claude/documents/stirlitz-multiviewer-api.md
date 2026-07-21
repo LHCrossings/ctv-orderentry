@@ -1,82 +1,122 @@
-# Stirlitz Media IP Multiviewer / Logger — Integration Reference
+# Stirlitz Media IP Multiviewer (Enterprise) — Integration Reference
 
-Discovery notes for the Stirlitz Media IP Multiviewer (built on the SML — Stirlitz
-Media Logger — Server 6 platform). Self-contained; read this instead of re-doing
-discovery. **Caveat:** Stirlitz does not publish a full REST endpoint spec; the
-detailed "Web API" is gated to licensed IP Multiviewer *Enterprise* customers.
-What's below is confirmed from the public product pages + the Server 6 / Player 6
-manuals; items marked ⚠ still need the vendor API doc or a look at our own device.
-**We subscribe to IP Multiviewer *Enterprise* (confirmed 2026-07-21)**, so the JSON
-Web API for current/recent alarms IS available to us — we just need its endpoint spec.
+Live-verified integration reference for our Stirlitz IP Multiviewer Enterprise.
+Everything Stirlitz we own runs on **one box** (per Lee). Self-contained; read this
+instead of re-doing discovery.
 
-- **Vendor:** https://www.stirlitzmedia.com/products/ip-multiviewer/
-- **Manuals:** https://manuals.stirlitzmedia.com/ (Server6 = logger/MV, Player6 = webPlayer)
-- **Our device:** http://34.208.18.64/files/index.html (Control Room "IP Multiviewer" card)
-  - Serves **plain HTTP on port 80** — `:443` refuses connections (HTTPS not enabled).
-    WebFetch force-upgrades http→https, so it can't reach the device; a plain-HTTP
-    client from a host that can route to it (+ login) is needed to inspect it live.
+- **Vendor:** https://www.stirlitzmedia.com/products/ip-multiviewer-enterprise/
+- **Manuals:** https://manuals.stirlitzmedia.com/ (Server6, Player6)
+- **Device:** `http://34.208.18.64` (Control Room "IP Multiviewer" card → `/files/index.html`)
+  - **Plain HTTP on port 80** (`:443` refused — HTTPS not enabled). WebFetch force-upgrades
+    to HTTPS so it can't reach it; use a plain-HTTP client (Bash `urllib` from the session
+    sandbox works).
 
 ---
 
-## Platform facts (confirmed from the manuals)
+## Authentication (verified live 2026-07-21)
 
-**Embedded web server (webPlayer)** — `Server6/access.html`
-- Off by default; **HTTP port 80** (configurable). **HTTPS/TLS 1.2** optional — certs
-  go in `smlserver\sslcerts\` (`cert`, `key`, `rootcert`, `ciphers.txt`).
-- **SML Player (Windows) port 12540** (fixed).
-- **Auth:** user/group management, or **Active Directory** (HTTPS required for AD web auth).
-- **Multi-server federation:** "Secondary webPlayer URLs" merge several SML servers into
-  one station list under a master.
-- **Export profiles:** codec, bitrate, resolution, burn-in timecode, DVB subtitles;
-  export **to the browser or to a network path**.
-- Outputs per channel: low-latency browser playback, MPEG-TS, **SRT**, NDI.
+Reverse-engineered from `/files/communication.js` and confirmed by logging in.
 
-**Alarms module** — `Server6/module-alarms.html`
-- **Email (SMTP):** server/port (default 587), auth, separate recipient lists for
-  error / warning / info; test button. Per-station audio/video error recipients set
-  in each station's config (e.g. "audio below X dB for >60s").
-- **SNMP traps:** community `public` only; enterprise ID; trap types for
-  **error / warning / info / low-signal-level**.
+**Two ways to authenticate:**
+1. **Session login** (for interactive/UI-style use):
+   - `POST /sessions`, body = JSON `{ "user":"<name>", "passhash":"<md5(password)>" }`
+     sent as **`text/plain`** (the XHR core sets no Content-Type; sending
+     `application/json` makes the server parser fail: `Unexpected type COLON`).
+   - Response `{ "session":"<28-char token>" }`. Send it on every call as HTTP header
+     **`session: <token>`** (NOT a cookie). Logout: `DELETE /sessions/{token}`.
+2. **Access key** (the clean **server-to-server** path — no login):
+   - `GET /accesskeysmonitor` (session-auth'd) returns the monitor **accessKey**.
+   - Then call the monitor API with **`?accessKey=<key>`** — no session header needed.
+   - Keys are validated: a wrong/absent key → HTTP 400 `{ "error":"NO_SESSION" }`.
+   - **Two keys already exist: one scoped `monitor`, one `Full control`.** Use the
+     **`monitor`** key for our read-only health poller (least privilege — it's the scope
+     `/alarmsState/monitor` expects). Do NOT use the Full-control key for polling.
 
-**webPlayer / exports** — `Player6/`
-- webPlayer = browser client to browse, select, and **export archived programmes**;
-  embeddable into a third-party browser UI (the "webPlayer API").
-- HTTP/HTTPS clip/log export is a documented capability.
+Error conventions: 400 `NO_SESSION` (missing/invalid auth), 404 `NO_RESOURCE` (unknown
+path), `NO_PERMISSIONS` (role). Success = 200.
 
 ---
 
-## Integration surfaces (ranked value-for-risk)
+## Endpoints (verified live)
 
-1. **SNMP trap receiver → Control Room outage badge.** The cleanest *documented*,
-   standards-based hook. Point the MV's traps at our server; catch error/warning/
-   low-signal traps and light a red badge like Traffic's "missing materials" pill.
-   Feeds the MC outage-escalation manuals. No vendor API doc needed.
-2. **HTTP clip export → Airchecks tie-in.** The logger already archives every channel;
-   its HTTP export can pull clips programmatically. Strong fit with our Airchecks
-   feature (which records network streams to MP4) — potentially pull from the archive
-   instead of/along with live capture. ⚠ Need the exact export URL + params (vendor doc
-   or device inspection).
-3. **Embed the webPlayer** in a Control Room page (iframe/script) for live channel
-   views + clip review, instead of linking out to the separate UI. Needs webPlayer
-   login (or AD + HTTPS). ⚠ Need the embed URL/param pattern.
-4. **Web API for current/recent alarms (JSON)** — **available to us (Enterprise).**
-   Enables a native alarm dashboard pulled straight into Control Room (JSON, like the
-   Haivision health card). Now a first-class option alongside SNMP. ⚠ Still need the
-   exact endpoint spec (Enterprise Web API doc).
+### Alarms — the health feed we want (star)
+| Method | Path | Returns |
+|---|---|---|
+| GET | `/accesskeysmonitor` | `{ "accessKeys":"<key>" }` — the monitor access key |
+| GET | `/alarmsState/monitor?accessKey=<key>` | live alarm state — **key-only auth, no login** |
 
-## Open items before building
-- [x] Edition confirmed: **IP Multiviewer Enterprise** → JSON alarm Web API available.
-- [ ] Get the **Enterprise Web API doc** (endpoints/auth/JSON shape) from Stirlitz
-      support, or inspect our device for the export/embed/alarm URL patterns.
-- [ ] Plain-HTTP reachability to `34.208.18.64:80` from the app server + a webPlayer
-      login (read-only if possible).
-- [ ] Decide first build: an **SNMP trap listener → badge** is the lowest-risk start and
-      needs no gated docs.
+`/alarmsState/monitor` response shape:
+```json
+{
+  "currentDate": "2026-07-21T00:24:40.740-07:00",
+  "alarmLines": {
+    "CVC KBTV 8.2 type:srt source:srt://10.0.0.32:6018 ei:0.1.level": {
+      "title": "Video freeze alarm",
+      "alarm": "0",
+      "alarmSince": "2026-07-20T03:27:44.633-07:00",
+      "stationId": "CVC KBTV 8.2 type:srt source:srt://10.0.0.32:6018 ei:0",
+      "stationName": "CVC KBTV 8.2"
+    }
+  }
+}
+```
+- `alarm` = `"0"` means OK; non-zero/non-empty = **ACTIVE**.
+- **4 monitored conditions per station:** `Video freeze alarm`, `Video freeze alarm - no
+  data`, `Audio track level below threshold`, `Audio level - no data`.
+- ~44 alarm lines on our box (~12 video stations + 10 audio, all markets). `alarmSince` =
+  how long the current state has held. Poll this one URL → full station health in one call.
+
+### Live monitor / inventory
+| Method | Path | Returns |
+|---|---|---|
+| GET | `/live/screens` | wall layout: per-station `shortName,left,top,width,height`; key encodes `type:srt source:srt://10.0.0.x:port` (SRT-source inventory) |
+| GET | `/live/streams` , `/live/streams/{s}/video/playlist` (+segments) | live video via MSE (fragmented mp4, H.264/H.265) |
+| GET | `/netstreamsWatch` | `{"netstreamsWatch":["REALTIME"]}` |
+| GET | `/navigationBar` | modules+role (crossingstv → `["monitor"]`) |
+| POST | `/screenclick/` | tile interaction |
+| GET/PUT | `/users/` | user admin (returns staff accounts + roles — treat as sensitive; do NOT dump) |
+| — | `/files/watch.html#stream=<name>` | per-stream live view page (embeddable) |
+| — | `/files/activeAlarms/index.html` | the alarms UI (where the alarm API is used) |
+
+---
+
+## Integration surfaces
+### Buildable NOW (no new licensing; needs only an accessKey)
+1. **SRT / signal health dashboard + outage badge** (star) — poll
+   `/alarmsState/monitor?accessKey=<key>`, count active alarms (`alarm != "0"`), and per
+   station show video-freeze / audio-loss with `alarmSince` duration. Light a red badge on
+   the Control Room card like Traffic's "missing materials" pill; feeds the MC
+   outage-escalation manuals. Key-only auth → a simple server-side poller, Nord + Chart.js.
+2. **Channel / SRT-source inventory card** — from `/live/screens`: which markets are on
+   the wall and their `srt://...` sources.
+3. **Embed the live wall / a tile** — iframe `/files/index.html` or
+   `/files/watch.html#stream=<name>` behind a session, instead of the external link.
+
+### Pending investigation
+4. **Recent/historical alarms view.** The Enterprise blurb says the Web API exposes
+   "current **and recent** alarms" and there's a "SQL database archive of all events + web
+   interface to browse and export events history." `/alarmsState/monitor` is the *current*
+   state; there is likely a companion history/events endpoint (browse the activeAlarms app
+   + an events page to find it). Good for an alarm-history panel.
+5. **Clip export (Airchecks tie-in) needs the separate LOGGER product — future/low
+   priority.** Per the Enterprise page, continuous channel recording / DVR / clip export is
+   **not** in IP Multiviewer Enterprise — it's the distinct **Stirlitz Media Logger**
+   product (would be a paid add-on). Our own Airchecks utility already works ~99% of the
+   time and we have a workaround; the only gap is the occasional request for something that
+   wasn't recorded. **Lee may price Stirlitz Logger later** as a nice-to-have — not a
+   current build item. (Enterprise's "export" = *event/alarm history*, not video clips.)
+
+## Open items
+- [x] Auth mapped + login verified; **access-key (key-only) auth confirmed** on the alarm API.
+- [x] **Alarm Web API found & verified:** `/alarmsState/monitor?accessKey=` (the health feed).
+- [ ] Lee to mint a **dedicated accessKey** (and ideally a scoped/read-only account) for us.
+- [ ] Confirm whether the box **records/logs** an archive → decides the Airchecks export path.
+- [ ] Review the Enterprise product page for any other module we haven't probed.
 
 ## Contrast with Haivision (see haivision-srt-gateway-api.md)
-- Haivision = a clean, self-documented **REST API** (cookie auth, JSON) → good for a
-  pull-based health dashboard.
-- Stirlitz = monitoring/logging platform; the reliable programmatic hooks are
-  **push-based (SNMP/email)** + **webPlayer embed/export**; its richer Web API is gated.
+- Haivision = pull REST (cookie login) for SRT route/stream **stats**.
+- Stirlitz = pull JSON **alarm/health feed** (`/alarmsState/monitor`, key-only) + live video.
+- Both speak SRT and both can feed one Control Room "Broadcast Health" view.
 
-_Discovery session: 2026-07-21._
+_Discovery + live verification: 2026-07-21. (Access-key value kept out of this doc — fetch
+it from `/accesskeysmonitor` or use the dedicated key Lee provisions.)_
