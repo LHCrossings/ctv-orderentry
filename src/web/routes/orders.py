@@ -398,6 +398,38 @@ def _build_spot_filter(filters: dict) -> str:
     return (" AND " + " AND ".join(clauses)) if clauses else ""
 
 
+def _pi_filler_supporto(cur, filmati_id, fallback_desc: str = "") -> str:
+    """Playout binding (TPALINSE.SUPPORTO) for a PI/PSA filler row.
+
+    MUST be the channel prefix + the media FILE_ID (e.g. ``0ETX      PI-493-030``),
+    never the human DESCRIZIO. Building it from the description (``0ETX      PI-493-030:
+    Ship of ``) overruns the field, so the playout server can't resolve it to a file:
+    the event errors (STATUS='E'), shows the red-X in EE, and never airs — while the
+    same PI airs fine wherever its binding was built correctly. Mirrors the auto-assign
+    convention (LEGACY_BASESUPP + FS_FILMATI.FILE_ID); FILE_ID for a PI equals the
+    ``PI-nnn-nnn`` code, i.e. the DESCRIZIO up to the first colon.
+    """
+    supporto = ""
+    if filmati_id:
+        cur.execute(
+            "SELECT TOP 1 ISNULL(d.LEGACY_BASESUPP,"
+            " CAST(d.LEGACY_MEDIAID AS VARCHAR) + 'ETX      ') AS prefix, ff.FILE_ID"
+            " FROM FS_FILMATI ff JOIN FS_METADEVICE d ON d.ID_METADEVICE = ff.ID_METADEVICE"
+            " WHERE ff.ID_FILMATI = %d AND d.LEGACY_MEDIAID IS NOT NULL"
+            " ORDER BY d.LEGACY_MEDIAID",
+            (int(filmati_id),),
+        )
+        row = cur.fetchone()
+        if row and row.get("FILE_ID"):
+            supporto = (row.get("prefix") or "") + row["FILE_ID"]
+    if not supporto:
+        # Last resort only (FS_FILMATI row missing): use the FILE_ID-equivalent code
+        # — the DESCRIZIO before the colon — never the full description.
+        code = (fallback_desc or "").split(":", 1)[0].strip()
+        supporto = "0ETX      " + code
+    return supporto[:30]
+
+
 def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRouter:
     router = APIRouter()
 
@@ -3380,7 +3412,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
                 new_filler_id = None
                 if filler:
-                    supporto = ("0ETX      " + filler["DESCRIZIO"])[:30]
+                    supporto = _pi_filler_supporto(cur, filler["ID_FILMATI"], filler["DESCRIZIO"])
                     newtype  = filler["NEWTYPE"] or "PER"
                     cur.execute("""
                         INSERT INTO TPALINSE (
@@ -4858,7 +4890,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         if not fid:
             return
         title    = (u.get("replace_title") or "").strip()
-        supporto = ("0ETX      " + title)[:30]
+        supporto = _pi_filler_supporto(cur, fid, title)
         cur.execute(
             "UPDATE TPALINSE SET ID_FILMATI = %d, COD_PROGRA = %s, NEWTYPE = %s,"
             " TITLE = %s, SUPPORTO = %s WHERE ID_TPALINSE = %d",
