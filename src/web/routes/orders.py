@@ -2776,6 +2776,19 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         "CMP": "FF92D050",  # green
     }
 
+    # Excel's EXACT dxf for the "Time out → Font Color (Automatic on top)" sort
+    # level, captured from the team's Excel-authored log. Note it's a FULL font
+    # spec — the bare "<font><color auto=1/></font>" that openpyxl produces is
+    # rejected by Excel. openpyxl only models the <autoFilter> sortState, so the
+    # font-color level (which Excel keeps in a worksheet-level <sortState>) is
+    # dropped on every save and must be re-injected. See _log_sync_finalize_xlsx.
+    _LOG_SYNC_FONTCOLOR_DXF = (
+        '<dxf><font><b/><i val="0"/><strike val="0"/><condense val="0"/>'
+        '<extend val="0"/><outline val="0"/><shadow val="0"/><u val="none"/>'
+        '<vertAlign val="baseline"/><sz val="12"/><color auto="1"/>'
+        '<name val="Arial"/><family val="2"/><scheme val="none"/></font></dxf>'
+    )
+
     def _log_sync_apply_standard_sort(ws) -> None:
         from openpyxl.styles import Color, Font
         from openpyxl.styles.differential import DifferentialStyle
@@ -2843,71 +2856,127 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                        fill=PatternFill(start_color="FFFF0000", end_color="FFFF0000",
                                         fill_type="solid")))
 
-    def _log_sync_inject_mru_colors(xlsx_bytes: bytes) -> bytes:
-        """Re-inject the custom-color picker swatches (styles.xml <mruColors>)
-        that openpyxl silently DROPS on every save — the per-market network
-        palette + bookend pink — so operators can always pick the right color
-        from the color dropdown. Passed as the _wb_save_fast transform hook.
+    def _log_sync_finalize_xlsx(xlsx_bytes: bytes, fontcolor_col: str = "F") -> bytes:
+        """Post-process the openpyxl-saved log to re-add two things openpyxl drops,
+        each injected independently and SELF-VALIDATED (well-formed XML) so a
+        problem in one skips only that piece and can never corrupt the file:
+
+        1. Custom-color picker swatches — styles.xml <mruColors> (the 10 market
+           colors; Excel caps recent colors at 10, so never more). openpyxl drops
+           these on every save.
+        2. The "Time out → Font Color (Automatic on top)" sort level. Excel keeps
+           this in a worksheet-level <sortState> (sibling of <autoFilter>) that
+           openpyxl doesn't model, so it's lost on save. We append Excel's exact
+           full-font auto-color dxf to <dxfs> and inject a worksheet <sortState>
+           mirroring the autoFilter one plus the font-color condition after </autoFilter>.
+
+        Passed (via a lambda binding fontcolor_col) as the _wb_save_fast transform.
         """
         import io as _io
         import re as _re
+        import xml.etree.ElementTree as _ET
         import zipfile as _zip
-        # Excel's Recent/Custom-colors list is capped at 10 — an 11th entry makes
-        # Excel reject the whole <colors> style and "repair" the file. Use the 10
-        # market colors exactly (bookend pink is applied by the tool, not picked).
-        palette = list(dict.fromkeys(_LOG_SYNC_MARKET_COLORS.values()))[:10]
+        _NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
         try:
             with _zip.ZipFile(_io.BytesIO(xlsx_bytes)) as z:
                 names = z.namelist()
                 data = {n: z.read(n) for n in names}
-            styles = data.get("xl/styles.xml", b"").decode("utf-8")
-            if not styles:
-                return xlsx_bytes
-            mru = "<mruColors>" + "".join(f'<color rgb="{c}"/>' for c in palette) + "</mruColors>"
-            # Remove any existing <colors> — BOTH the paired form and openpyxl's
-            # empty self-closing "<colors />" (two <colors> elements is invalid and
-            # triggers an Excel repair that discards the whole stylesheet).
-            styles = _re.sub(r"<colors\b[^>]*/>|<colors\b[^>]*>.*?</colors>", "",
-                             styles, flags=_re.S)
-            block = f"<colors>{mru}</colors>"
-            # CT_Stylesheet schema order is strict: numFmts, fonts, fills, borders,
-            # cellStyleXfs, cellXfs, cellStyles, dxfs, tableStyles, COLORS, extLst.
-            # <colors> MUST sit AFTER <tableStyles> and BEFORE <extLst> — putting it
-            # earlier makes Excel discard the whole stylesheet ("repair" → basic text).
-            m = _re.search(r"<tableStyles\b[^>]*/>|<tableStyles\b.*?</tableStyles>",
-                           styles, _re.S)
-            if m:
-                styles = styles[:m.end()] + block + styles[m.end():]
-            elif "<extLst" in styles:
-                i = styles.find("<extLst")
-                styles = styles[:i] + block + styles[i:]
-            elif "</styleSheet>" in styles:
-                i = styles.find("</styleSheet>")
-                styles = styles[:i] + block + styles[i:]
+        except Exception:
+            return xlsx_bytes
+        changed = False
+        did = None  # index of the appended font-color dxf
+
+        # ── (1) styles.xml: mruColors + append the font-color dxf ──────────────
+        styles = data.get("xl/styles.xml", b"").decode("utf-8", "replace")
+        if styles:
+            palette = list(dict.fromkeys(_LOG_SYNC_MARKET_COLORS.values()))[:10]
+            s2 = _re.sub(r"<colors\b[^>]*/>|<colors\b[^>]*>.*?</colors>", "",
+                         styles, flags=_re.S)
+            block = ("<colors><mruColors>"
+                     + "".join(f'<color rgb="{c}"/>' for c in palette)
+                     + "</mruColors></colors>")
+            # CT_Stylesheet order: ... dxfs, tableStyles, COLORS, extLst.
+            mt = _re.search(r"<tableStyles\b[^>]*/>|<tableStyles\b.*?</tableStyles>",
+                            s2, _re.S)
+            if mt:
+                s2 = s2[:mt.end()] + block + s2[mt.end():]
+            elif "<extLst" in s2:
+                i = s2.find("<extLst"); s2 = s2[:i] + block + s2[i:]
+            elif "</styleSheet>" in s2:
+                i = s2.find("</styleSheet>"); s2 = s2[:i] + block + s2[i:]
             else:
-                return xlsx_bytes
-            # Self-validate before committing: styles.xml must stay well-formed
-            # with EXACTLY ONE <colors> in the correct schema slot (after
-            # tableStyles, before extLst). If not, skip injection and return the
-            # untouched bytes — a missing picker palette is cosmetic; a stylesheet
-            # Excel rejects (and "repairs" into basic text) is not.
-            import xml.etree.ElementTree as _ET
-            _ns = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
-            _kids = [c.tag.replace(_ns, "") for c in _ET.fromstring(styles)]
-            if _kids.count("colors") != 1:
-                return xlsx_bytes
-            _ci = _kids.index("colors")
-            if ("tableStyles" in _kids and _kids.index("tableStyles") > _ci) or \
-               ("extLst" in _kids and _kids.index("extLst") < _ci):
-                return xlsx_bytes
-            data["xl/styles.xml"] = styles.encode("utf-8")
+                s2 = None
+            if s2 is not None:
+                # Append Excel's font-color dxf and remember its index.
+                dm = _re.search(r'(<dxfs\b[^>]*\bcount=")(\d+)("[^>]*>)', s2)
+                _try_did = None
+                if dm:
+                    cnt = int(dm.group(2)); _try_did = cnt
+                    s2 = s2[:dm.start()] + dm.group(1) + str(cnt + 1) + dm.group(3) + s2[dm.end():]
+                    ci = s2.find("</dxfs>")
+                    if ci != -1:
+                        s2 = s2[:ci] + _LOG_SYNC_FONTCOLOR_DXF + s2[ci:]
+                    else:
+                        _try_did = None
+                # Validate: well-formed, exactly one <colors> in the right slot.
+                try:
+                    kids = [c.tag.replace(_NS, "") for c in _ET.fromstring(s2)]
+                    ok = (kids.count("colors") == 1
+                          and not ("tableStyles" in kids and kids.index("tableStyles") > kids.index("colors"))
+                          and not ("extLst" in kids and kids.index("extLst") < kids.index("colors")))
+                    if ok:
+                        data["xl/styles.xml"] = s2.encode("utf-8")
+                        did = _try_did
+                        changed = True
+                except Exception:
+                    pass
+
+        # ── (2) sheet: worksheet-level <sortState> with the font-color level ──
+        if did is not None:
+            for n in names:
+                if not (n.startswith("xl/worksheets/sheet") and n.endswith(".xml")):
+                    continue
+                sx = data[n].decode("utf-8", "replace")
+                af = _re.search(r"<autoFilter\b.*?</autoFilter>", sx, _re.S)
+                if not af or "<sortState" not in af.group(0):
+                    continue
+                ss = _re.search(r"<sortState\b.*?</sortState>", af.group(0), _re.S).group(0)
+                rm = _re.search(r'ref="A2:([A-Z]+)(\d+)"', ss)
+                cs = _re.findall(r"<sortCondition\b[^>]*/>", ss)
+                if not rm or not cs:
+                    break
+                lastc, lrr = rm.group(1), rm.group(2)
+                fc = (f'<sortCondition sortBy="fontColor" '
+                      f'ref="{fontcolor_col}2:{fontcolor_col}{lrr}" dxfId="{did}"/>')
+                new, ins = [], False
+                for c in cs:
+                    new.append(c)
+                    if "customList=" in c and not ins:
+                        new.append(fc); ins = True
+                if not ins:
+                    new = cs[:4] + [fc] + cs[4:]
+                wss = ('<sortState ref="A2:%s%s" xmlns:xlrd2="http://schemas.microsoft.com/'
+                       'office/spreadsheetml/2017/richdata2">%s</sortState>'
+                       % (lastc, lrr, "".join(new)))
+                aidx = sx.find("</autoFilter>") + len("</autoFilter>")
+                cand = sx[:aidx] + wss + sx[aidx:]
+                try:
+                    _ET.fromstring(cand)  # well-formed?
+                    data[n] = cand.encode("utf-8"); changed = True
+                except Exception:
+                    pass
+                break
+
+        if not changed:
+            return xlsx_bytes
+        try:
             out = _io.BytesIO()
             with _zip.ZipFile(out, "w", _zip.ZIP_DEFLATED) as z:
                 for n in names:
                     z.writestr(n, data[n])
             return out.getvalue()
         except Exception:
-            return xlsx_bytes  # never fail a save over a cosmetic palette
+            return xlsx_bytes
 
     def _log_sync_path(raw: str) -> Path:
         import re as _re
@@ -3211,10 +3280,18 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 ws.cell(row=ch["xlrow"], column=7).fill = _pink_fill
                                 ws.cell(row=ch["xlrow"], column=8).fill = _style_copy(_pink_fill)
                 if result["changes"]:
-                    _log_sync_apply_standard_sort(ws)   # re-assert the team's 7-level Custom Sort
-                    _log_sync_apply_conditional_formatting(ws)  # re-assert CF rules
-                    # transform re-injects the custom-color picker swatches openpyxl drops
-                    _wb_save_fast(wb, log_path, transform=_log_sync_inject_mru_colors)
+                    # openpyxl handles the 6 value/custom-list sort levels + the CF
+                    # rules; the transform re-injects what openpyxl drops — the 10
+                    # picker colors and the font-color sort level (as a worksheet
+                    # sortState) — completing the team's 7-level custom sort.
+                    from openpyxl.utils import get_column_letter as _gcl
+                    _log_sync_apply_standard_sort(ws)
+                    _log_sync_apply_conditional_formatting(ws)
+                    _hdr = {str(c.value).strip(): c.column
+                            for c in next(ws.iter_rows(min_row=1, max_row=1)) if c.value}
+                    _tout = _gcl(_hdr["Time out"]) if "Time out" in _hdr else "F"
+                    _wb_save_fast(wb, log_path,
+                                  transform=lambda b: _log_sync_finalize_xlsx(b, _tout))
             finally:
                 wb.close()
             return {"written": len(result["changes"]),
