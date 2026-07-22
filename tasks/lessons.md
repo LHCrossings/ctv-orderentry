@@ -39,9 +39,13 @@ language↔airtime check can. `browser_automation/language_windows.py`
 (`check_language_window(language, from, to)`) validates a PAID line's daypart
 against the language's actual Crossings airing window (Vietnamese 10a-1p, Filipino
 4p-7p, Chinese 6-8a + 7p-12a, South Asian 1p-4p, Korean 8-10a, Hmong 6-8p WE).
-SAGENT's gather now runs it over paid lines, lists mismatches, and asks to
-continue / abort. **ROS/bonus lines are exempt** (they run across the whole
-window). Wire the same check into other parsers' gather as they surface this.
+**This is UNIVERSAL, not per-parser:** the orchestrator runs it for EVERY order
+before gather (`Orchestrator._confirm_language_windows` →
+`parser_bridge.find_language_window_issues`), which parses via the shared
+normalizer, derives language from the normalized line (description keyword scan),
+normalizes the daypart to HH:MM, and lists any mismatches with a continue/abort
+prompt. **ROS/bonus lines are exempt** (they run across the whole window). It's
+best-effort — never blocks entry on a validation/parse error.
 
 **Keep in sync:** `language_windows.py` MIRRORS `_CTV_LANG_WINDOWS` in
 `src/web/routes/orders.py` (the traffic-assignment source of truth) — update both

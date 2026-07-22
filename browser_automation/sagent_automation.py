@@ -241,32 +241,9 @@ def gather_upfront_inputs(order: SagentOrder) -> Optional[dict]:
     print(f"Lines: {len(order.lines)}")
     print()
 
-    # ── Language / daypart validation (paid lines only) ──────────────────────
-    # Catch messy IOs where a PAID line's language doesn't match its ordered
-    # time period (e.g. a Filipino spot booked in the 7p-12a Chinese slot).
-    # ROS/bonus lines are exempt — they run across the language's whole window.
-    from browser_automation.language_windows import check_language_window
-    mismatches = []
-    for ln in sorted(order.lines, key=lambda x: x.line_number):
-        if ln.is_bonus():
-            continue
-        tf, tt = EtereClient.parse_time_range(ln.get_etere_time())
-        msg = check_language_window(ln.get_language(), tf, tt)
-        if msg:
-            mismatches.append((ln, msg))
-    if mismatches:
-        print("⚠ LANGUAGE / TIME-PERIOD MISMATCHES (paid lines):")
-        print("-" * 70)
-        for ln, msg in mismatches:
-            print(f"  Line {ln.line_number} ({ln.market} {ln.get_language()}): {msg}")
-        print("-" * 70)
-        print("  These paid lines are booked outside their language's airtime — often a")
-        print("  messy IO that should be revised before entry.")
-        cont = input(f"  Continue entering all {len(order.lines)} lines anyway? (y/n): ").strip().lower()
-        if cont not in ("y", "yes"):
-            print("  ✗ Aborted — send the order back for revision.")
-            return None
-        print()
+    # NOTE: language↔daypart validation is now UNIVERSAL — the orchestrator runs
+    # it for every order before gather (see Orchestrator._confirm_language_windows
+    # + parser_bridge.find_language_window_issues). No per-parser check needed.
 
     # 0. Customer
     print("[0/3] Customer")

@@ -256,6 +256,12 @@ class ApplicationOrchestrator:
             print(f"Customer: {order.customer_name}")
             print()
 
+            # UNIVERSAL pre-entry check: paid lines whose language doesn't match
+            # their ordered daypart (messy IO). Applies to every parser.
+            if not self._confirm_language_windows(order):
+                print(f"\n[CANCELLED] {display_name} — language/daypart mismatch not accepted")
+                continue
+
             # CHARMAINE: handles all input internally — no pre-gathering needed
             if order.order_type == OrderType.CHARMAINE:
                 orders_with_input.append(order)
@@ -319,6 +325,28 @@ class ApplicationOrchestrator:
             ]
 
         return results
+
+    def _confirm_language_windows(self, order) -> bool:
+        """UNIVERSAL pre-entry validation. Warn if any PAID line's language is
+        booked outside its Crossings airing window (a messy IO). Returns True to
+        proceed, False to skip the order. Best-effort: never blocks on errors.
+        """
+        try:
+            from web.parser_bridge import find_language_window_issues
+            issues = find_language_window_issues(str(order.pdf_path), order.order_type.value)
+        except Exception:
+            return True  # never block entry on a validation failure
+        if not issues:
+            return True
+        print("\n⚠ LANGUAGE / TIME-PERIOD MISMATCHES (paid lines):")
+        print("-" * 70)
+        for msg in issues:
+            print(f"  {msg}")
+        print("-" * 70)
+        print("  These paid lines are booked outside their language's airtime —")
+        print("  often a messy IO that should be revised before entry.")
+        resp = input("  Continue entering this order anyway? (y/n): ").strip().lower()
+        return resp in ("y", "yes")
 
     def _confirm_separation(self, inputs: dict) -> dict:
         """

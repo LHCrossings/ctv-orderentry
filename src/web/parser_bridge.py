@@ -7,6 +7,7 @@ custom normalizer for every one of the 21 parsers.
 """
 
 import importlib
+import re
 import sys
 from pathlib import Path
 
@@ -128,6 +129,78 @@ def _apply_ros_overrides(lines: list[dict]) -> list[dict]:
                 ln = dict(ln, days=ros["days"], time=ros["time"])
         result.append(ln)
     return result
+
+
+# Language keywords → canonical name used by language_windows.check_language_window.
+# Order matters: match the most specific (Cantonese/Mandarin) before "Chinese".
+_LANG_KEYWORDS = [
+    ("cantonese", "Cantonese"), ("mandarin", "Mandarin"), ("chinese", "Chinese"),
+    ("filipino", "Filipino"), ("tagalog", "Filipino"), ("vietnamese", "Vietnamese"),
+    ("korean", "Korean"), ("hmong", "Hmong"), ("south asian", "South Asian"),
+    ("punjabi", "Punjabi"), ("hindi", "Hindi"), ("japanese", "Japanese"),
+]
+
+
+def _line_language(ln: dict) -> str:
+    """Best-effort canonical language for a normalized line (its language field,
+    else scanned from the description). '' if none recognized."""
+    hay = f"{ln.get('language') or ''} {ln.get('description') or ''}".lower()
+    for kw, canon in _LANG_KEYWORDS:
+        if kw in hay:
+            return canon
+    return ""
+
+
+def _line_hhmm_range(time_str: str):
+    """Normalize a line's time to (from,to) 24h 'HH:MM'. Accepts already-24h
+    'HH:MM-HH:MM', am/pm ranges '7p-8p', and 'X to Y' forms. None if unparseable."""
+    t = (time_str or "").strip()
+    if not t:
+        return None
+    m = re.match(r'^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$', t)
+    if m:
+        return f"{int(m.group(1)):02d}:{m.group(2)}", f"{int(m.group(3)):02d}:{m.group(4)}"
+    et = t.lower().replace(" to ", "-").replace(" ", "")
+    try:
+        from browser_automation.etere_client import EtereClient
+        return EtereClient.parse_time_range(et)
+    except Exception:
+        return None
+
+
+def find_language_window_issues(file_path, order_type: str) -> list[str]:
+    """UNIVERSAL pre-entry validation: return a message for every PAID line whose
+    ordered daypart falls outside its language's Crossings airing window (a messy
+    IO, e.g. a Filipino spot booked in the 7p-12a Chinese slot). Bonus/ROS lines
+    are exempt. Best-effort — returns [] on any parse/validation error so it can
+    never block entry. Works for any registered parser via the shared normalizer.
+    """
+    try:
+        from browser_automation.language_windows import check_language_window
+        detail = get_order_detail(Path(file_path), order_type)
+    except Exception:
+        return []
+    if not detail or detail.get("error"):
+        return []
+    lines: list = list(detail.get("lines") or [])
+    for so in (detail.get("sub_orders") or []):
+        lines.extend(so.get("lines") or [])
+    issues: list[str] = []
+    for ln in lines:
+        if ln.get("is_bonus"):
+            continue
+        lang = _line_language(ln)
+        if not lang:
+            continue
+        rng = _line_hhmm_range(_str(ln.get("time")))
+        if not rng:
+            continue
+        msg = check_language_window(lang, rng[0], rng[1])
+        if msg:
+            ln_no = ln.get("line_number") or "?"
+            mkt = _str(ln.get("market"))
+            issues.append(f"Line {ln_no} ({mkt} {lang}): {msg}")
+    return issues
 
 
 def _get(obj, *attrs, default=None):
