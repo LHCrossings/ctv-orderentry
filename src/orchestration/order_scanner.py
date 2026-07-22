@@ -89,6 +89,12 @@ def _detect_xlsx_content(file_path: Path) -> OrderType:
                 if "BRENTAN" in v or "T&T" in v:
                     wb.close()
                     return OrderType.TT
+                # Crispin LLC media proposal (Bay Area AQMD) — the agency cell
+                # carries "Crispin"; distinguishes it from the Allison & Partners
+                # BAAQMD order which is a different Etere customer.
+                if "CRISPIN" in v:
+                    wb.close()
+                    return OrderType.CRISPIN
         wb.close()
     except Exception as e:
         print(f"[WARN] Could not read {file_path.name}: {e}")

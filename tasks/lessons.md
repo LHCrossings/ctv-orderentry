@@ -28,6 +28,32 @@ against Etere. The grouping lives only in `daily_programming.html`
 
 ---
 
+## Agency Commission Comes From the ANAGRAF Link — Never Clobber a Legitimate 0% With a 15% Default
+
+**Session:** Crispin / Bay Area AQMD parser (2026-07-22)
+
+**Rule:** `create_contract_header(lookup_customer_defaults=True)` pulls the agency
+commission from ANAGRAF via `get_client_defaults` = `ISNULL(agency.Commissione, 0)`
+— exactly what Etere's client-select auto-populate does. The header must use that
+linked value verbatim. The old code did `agency_pct = (defaults.get("agency_pct")
+or 15.0) if agency_id else 0.0`, and `0.0 or 15.0` = 15.0 — so a client whose
+agency genuinely has **0% commission** (Crispin LLC / BAAQMD, agency 446) got a
+**15% commission forced onto the contract**. Lee: "just use the commission that
+is linked to the client/agency. I don't want to automatically override that part."
+
+**Fix:** `agency_pct = float(defaults.get("agency_pct") or 0.0) if agency_id else
+0.0` — trust the ANAGRAF value (already ISNULL→0). Blast radius is nil for the
+other agency parsers: every agency in `AGENCY_IDS` except Crispin has
+Commissione=15 in ANAGRAF, so only a true-0 agency changes (which is the point).
+
+**How to apply:** never `x or DEFAULT` on a numeric that has a meaningful 0 (same
+family as the iGraphix net-rate and the day-bits "0 or default" traps). For
+commission specifically, ANAGRAF is the source of truth; if a value looks wrong,
+fix it in ANAGRAF/Etere, don't special-case it in a parser. See [[pi-supporto-binding]]-style
+"identity/value, not a default" discipline.
+
+---
+
 ## A PI/PSA Filler's Playout Binding (TPALINSE.SUPPORTO) Is the FILE_ID — Never the DESCRIZIO
 
 **Session:** WDC PIs airing in some blocks but not others — Maija (2026-07-22)

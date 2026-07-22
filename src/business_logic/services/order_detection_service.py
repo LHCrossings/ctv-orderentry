@@ -967,6 +967,8 @@ def detect_from_filename(filename: str) -> OrderType:
     # template branding in the filename, so match either token.
     if "BRENTAN" in name_upper or "T&T" in name_upper:
         return OrderType.TT
+    if "CRISPIN" in name_upper:
+        return OrderType.CRISPIN
     # Emerald Queen Casino via TH Media — filename always carries "EQC".
     if "EQC" in name_upper or "EMERALD QUEEN" in name_upper or "TH MEDIA" in name_upper:
         return OrderType.EQC

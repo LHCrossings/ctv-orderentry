@@ -53,6 +53,7 @@ class OrderType(Enum):
     EQC = "eqc"
     LRCCD = "lrccd"
     SACRT = "sacrt"
+    CRISPIN = "crispin"
     AI_FALLBACK = "ai_fallback"
     UNKNOWN = "unknown"
 

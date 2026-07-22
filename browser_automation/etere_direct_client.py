@@ -226,6 +226,7 @@ AGENCY_IDS: dict[str, int] = {
     "IMPACT":  251,
     "SAGENT":   69,
     "TT": 439,   # T&T Public Relations
+    "CRISPIN": 446,  # Crispin LLC (Bay Area AQMD; distinct from Allison & Partners=187)
     "3FOLD": 203,  # 3Fold Communications (LRCCD)
     "THMEDIA": 19,  # TH Media (Emerald Queen Casino)
 }
@@ -664,9 +665,12 @@ class EtereDirectClient:
                 agency_id = 0
             # else: no agency in ANAGRAF — keep the caller-supplied fallback agency_id
             if agency_pct is None:
-                # No agency on the contract → no commission. Only fall back to
-                # 15% when an agency IS attached but ANAGRAF has no Commissione.
-                agency_pct = (defaults.get("agency_pct") or 15.0) if agency_id else 0.0
+                # Use the commission linked to the agency in ANAGRAF (already
+                # ISNULL(Commissione,0)), matching Etere's client-select
+                # auto-populate. Never override a legitimate 0% (e.g. Crispin /
+                # Bay Area AQMD, agency 446) with a 15% default. No agency on the
+                # contract → no commission.
+                agency_pct = float(defaults.get("agency_pct") or 0.0) if agency_id else 0.0
             agent_id        = agent_id         if agent_id         is not None else defaults.get("agent_id", 11)
             media_center_id = media_center_id  if media_center_id  is not None else defaults.get("media_center_id", 316)
             payment_id      = payment_id       if payment_id       is not None else defaults.get("payment_id", 1)
