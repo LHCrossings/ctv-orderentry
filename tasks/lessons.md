@@ -28,6 +28,28 @@ against Etere. The grouping lives only in `daily_programming.html`
 
 ---
 
+## Validate Paid-Line Language vs Daypart Before Entry — Catch Messy IOs
+
+**Session:** SAGENT Stormwater Fall 2026 — language/time mismatch (2026-07-22)
+
+**Rule:** A client can order a line in a language that doesn't match its daypart
+(this IO booked Filipino & Vietnamese lines at 7p-12a — the Chinese evening slot).
+The totals still foot, so a reconciliation check can't catch it; only a
+language↔airtime check can. `browser_automation/language_windows.py`
+(`check_language_window(language, from, to)`) validates a PAID line's daypart
+against the language's actual Crossings airing window (Vietnamese 10a-1p, Filipino
+4p-7p, Chinese 6-8a + 7p-12a, South Asian 1p-4p, Korean 8-10a, Hmong 6-8p WE).
+SAGENT's gather now runs it over paid lines, lists mismatches, and asks to
+continue / abort. **ROS/bonus lines are exempt** (they run across the whole
+window). Wire the same check into other parsers' gather as they surface this.
+
+**Keep in sync:** `language_windows.py` MIRRORS `_CTV_LANG_WINDOWS` in
+`src/web/routes/orders.py` (the traffic-assignment source of truth) — update both
+if programming windows change. (Japanese has no CTV window there, so it's not
+validated.)
+
+---
+
 ## Multi-Page PDFs: Read EVERY Page, and Parse Columnar Tables by Word Coordinates — Not Text-Flow
 
 **Session:** SAGENT Stormwater Fall 2026 — only page 1 entered (2026-07-22)
