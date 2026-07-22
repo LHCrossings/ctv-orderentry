@@ -2722,7 +2722,21 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     # "last sort" memory kept drifting; log-sync now re-asserts this recipe on
     # every write so the Sort dialog always shows it. Columns are matched by
     # header text so a column move can't silently misalign the sort.
-    _LOG_SYNC_SORT_HEADERS = ("Start Date", "Market", "Comments")
+    # The team's full custom sort (Data ▸ Sort), matched by HEADER TEXT so a
+    # column move can't misalign it. Recipe-only (writes sortState; never
+    # physically reorders rows) — re-asserted on every write so the Sort dialog
+    # always shows the real order. Captured from the reference log 2026-07-22.
+    # kind: "value" = ascending cell values; ("list", "...") = custom-list order;
+    # "fontColor" = sort by font color, Automatic on top.
+    _LOG_SYNC_SORT_SPEC = (
+        ("Start Date", "value"),
+        ("Market",     "value"),
+        ("Time In",    "value"),
+        ("Type",       ("list", "PRD,COM,BNS,AV,CRD")),
+        ("Time out",   "fontColor"),
+        ("Priority",   "value"),
+        ("Comments",   "value"),
+    )
 
     # Authoritative network row color per market (col AC), captured from the
     # team's reference log 2026-07-22. Used to restore a row's base network color
@@ -2744,23 +2758,71 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     }
 
     def _log_sync_apply_standard_sort(ws) -> None:
+        from openpyxl.styles import Color, Font
+        from openpyxl.styles.differential import DifferentialStyle
         from openpyxl.utils import get_column_letter
         from openpyxl.worksheet.filters import SortCondition, SortState
         last_row = ws.max_row
         last_col = get_column_letter(ws.max_column)
         header = {str(c.value).strip(): c.column
                   for c in next(ws.iter_rows(min_row=1, max_row=1)) if c.value}
+        wb = ws.parent
         conds = []
-        for name in _LOG_SYNC_SORT_HEADERS:
+        for name, kind in _LOG_SYNC_SORT_SPEC:
             col = header.get(name)
-            if col:
-                cl = get_column_letter(col)
-                conds.append(SortCondition(ref=f"{cl}2:{cl}{last_row}"))
+            if not col:
+                continue
+            cl = get_column_letter(col)
+            ref = f"{cl}2:{cl}{last_row}"
+            if isinstance(kind, tuple) and kind[0] == "list":
+                conds.append(SortCondition(ref=ref, customList=kind[1]))
+            elif kind == "fontColor":
+                # Sort by font color, Automatic on top (dxf carries the auto color).
+                dxf_id = wb._differential_styles.add(
+                    DifferentialStyle(font=Font(color=Color(auto=True))))
+                conds.append(SortCondition(ref=ref, sortBy="fontColor", dxfId=dxf_id))
+            else:
+                conds.append(SortCondition(ref=ref))
         if not conds:
             return
         ws.auto_filter.ref = f"A1:{last_col}{last_row}"
         ws.auto_filter.sortState = SortState(ref=f"A2:{last_col}{last_row}")
         ws.auto_filter.sortState.sortCondition = conds
+
+    def _log_sync_apply_conditional_formatting(ws) -> None:
+        """Re-assert the log's two conditional-formatting rules so they can never
+        disappear, collapsing Excel's range fragmentation to one clean rule each:
+          1. current-broadcast-week highlight on Time In/out (light-red fill +
+             dark-red font);
+          2. affidavit 'NO' → solid red on the affidavit-status column (AD).
+        Captured from the reference log 2026-07-22. The log's ONLY CF rules are
+        these two families, so replacing the whole list is safe and de-fragments.
+        """
+        from openpyxl.formatting.formatting import ConditionalFormattingList
+        from openpyxl.formatting.rule import CellIsRule, FormulaRule
+        from openpyxl.styles import Font, PatternFill
+        from openpyxl.utils import get_column_letter
+        last_row = ws.max_row
+        header = {str(c.value).strip(): c.column
+                  for c in next(ws.iter_rows(min_row=1, max_row=1)) if c.value}
+        ws.conditional_formatting = ConditionalFormattingList()
+        tin, tout = header.get("Time In"), header.get("Time out")
+        if tin and tout:
+            a, b = get_column_letter(tin), get_column_letter(tout)
+            ws.conditional_formatting.add(
+                f"{a}2:{b}{last_row}",
+                FormulaRule(
+                    formula=[f"AND(TODAY()-ROUNDDOWN({a}2,0)>=(WEEKDAY(TODAY())),"
+                             f"TODAY()-ROUNDDOWN({a}2,0)<(WEEKDAY(TODAY())+7))"],
+                    fill=PatternFill(start_color="FFFFC7CE", end_color="FFFFC7CE",
+                                     fill_type="solid"),
+                    font=Font(color="FF9C0006")))
+        # Affidavit-status column is unlabeled in the log; the reference uses AD.
+        ws.conditional_formatting.add(
+            f"AD2:AD{last_row}",
+            CellIsRule(operator="equal", formula=['"NO"'],
+                       fill=PatternFill(start_color="FFFF0000", end_color="FFFF0000",
+                                        fill_type="solid")))
 
     def _log_sync_path(raw: str) -> Path:
         import re as _re
@@ -3064,7 +3126,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 ws.cell(row=ch["xlrow"], column=7).fill = _pink_fill
                                 ws.cell(row=ch["xlrow"], column=8).fill = _style_copy(_pink_fill)
                 if result["changes"]:
-                    _log_sync_apply_standard_sort(ws)   # re-assert the team's Custom Sort
+                    _log_sync_apply_standard_sort(ws)   # re-assert the team's 7-level Custom Sort
+                    _log_sync_apply_conditional_formatting(ws)  # re-assert CF rules
                     _wb_save_fast(wb, log_path)
             finally:
                 wb.close()
