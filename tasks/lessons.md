@@ -28,6 +28,37 @@ against Etere. The grouping lives only in `daily_programming.html`
 
 ---
 
+## A PI/PSA Filler's Playout Binding (TPALINSE.SUPPORTO) Is the FILE_ID — Never the DESCRIZIO
+
+**Session:** WDC PIs airing in some blocks but not others — Maija (2026-07-22)
+
+**Rule:** `TPALINSE.SUPPORTO` is the playout clip binding: `<prefix> + FILE_ID`
+(e.g. `0ETX      PI-493-030`), where `prefix` = `FS_METADEVICE.LEGACY_BASESUPP`
+and `FILE_ID` = `FS_FILMATI.FILE_ID`. It is what the CIB uses to find the media
+file. Two break-optimization sites in `orders.py` built it as
+`("0ETX      " + DESCRIZIO)[:30]` instead — the filler INSERT (missing-materials
+blacklist+replace) and `_bo_apply_pi_replacement` (PI/PSA creative swap). For a
+PI the description overruns the field (`0ETX      PI-493-030: Ship of `), the
+playout server can't resolve it, and the event goes **STATUS='E'** (red-X in Exec
+Editor, yellow triangle) and **never airs** — while the identical PI airs fine in
+every block whose binding was built correctly. It looks market-specific (WDC had
+the most) but it's really per-placement and spans all markets (~1-4 filler
+rows/day). The checksum is a **red herring** here: stored==live on all these
+rows; the failure is the binding string, not the checksum.
+
+**How to apply:**
+1. Any code inserting/updating a filler TPALINSE row must build SUPPORTO from
+   `FS_FILMATI.FILE_ID` (helper `_pi_filler_supporto(cur, filmati_id, desc)` in
+   `orders.py`), mirroring the auto-assign convention — never from DESCRIZIO/TITLE.
+   FILE_ID for a PI equals the `PI-nnn-nnn` code = DESCRIZIO before the first `:`.
+2. Diagnostic signature for "spot won't air but file is fine": query
+   `SUPPORTO LIKE '%[:]%'` (a colon should never appear in a valid binding) — every
+   such row is STATUS='E' or not-yet-aired, none ever air.
+3. Remediate live corrupted rows by recomputing `prefix + FILE_ID` for
+   `LIVELLO=0 AND DATA >= today`; ORA/XORDER/checksum untouched.
+
+---
+
 ## "Penny-Accurate" Means EXACT — Never Round the Gross Rate; Feed the Backwrite the NET Rate + `rates_are_net`
 
 **Session:** iGraphix (Sky River) backwrite gross-up (2026-07-21)
