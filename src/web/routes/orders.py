@@ -420,8 +420,15 @@ def _pi_filler_supporto(cur, filmati_id, fallback_desc: str = "") -> str:
             (int(filmati_id),),
         )
         row = cur.fetchone()
-        if row and row.get("FILE_ID"):
-            supporto = (row.get("prefix") or "") + row["FILE_ID"]
+        if row:
+            # Callers pass either a dict cursor (filler insert) or a plain tuple
+            # cursor (break-opt apply / bulk-apply) — handle both.
+            if isinstance(row, dict):
+                prefix, file_id = row.get("prefix"), row.get("FILE_ID")
+            else:
+                prefix, file_id = row[0], row[1]
+            if file_id:
+                supporto = (prefix or "") + file_id
     if not supporto:
         # Last resort only (FS_FILMATI row missing): use the FILE_ID-equivalent code
         # — the DESCRIZIO before the colon — never the full description.
