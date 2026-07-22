@@ -345,7 +345,7 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             "city":             header.city,
             "ae":               header.ae,
             "notes":            header.notes,
-            "agency_flag":      "Agency" if header.agency else "Direct",
+            "agency_flag":      "Agency" if header.agency else "Non-Agency",
             "markets":          markets,
             "spot_count":       len(spots),
             "line_count":       len(set(s.line_id for s in spots)),

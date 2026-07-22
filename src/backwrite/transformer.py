@@ -977,7 +977,7 @@ def read_existing_order_fields(data: bytes) -> dict:
 
     # Content-search rows for fields that shift position after line insertion
     from openpyxl.cell.cell import MergedCell as _MC
-    fields["agency_flag"] = "Direct"
+    fields["agency_flag"] = "Non-Agency"
     fields["agency_fee"]  = ""
     for row in ws.iter_rows():
         for cell in row:
@@ -1003,6 +1003,15 @@ def read_existing_order_fields(data: bytes) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 # ETEREBRIDGE INTEGRATION
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _canon_agency(flag) -> str:
+    """Commercial-log column Z ('Agency') only ever holds 'Agency' or
+    'Non-Agency'. Map any input — including the legacy/invalid 'Direct',
+    'client', or a blank — onto one of those two. Agency-vs-not is about whether
+    an agency is ATTACHED, not whether a commission exists (a 0%-commission
+    agency is still 'Agency')."""
+    return "Agency" if str(flag or "").strip().lower() in ("agency", "a") else "Non-Agency"
+
 
 def _eb_df_to_run_rows(df, agency_fee: float, is_agency: bool) -> List[dict]:
     """Convert an EtereBridge output DataFrame into the run_rows format
@@ -1076,7 +1085,7 @@ def _eb_df_to_run_rows(df, agency_fee: float, is_agency: bool) -> List[dict]:
             "sales_person": _clean(row.get("Sales Person")),
             "revenue_type": _clean(row.get("Revenue Type")),
             "billing_type": _clean(row.get("Billing Type")),
-            "agency_flag":  _clean(row.get("Agency?")),
+            "agency_flag":  _canon_agency(_clean(row.get("Agency?"))),
             "affidavit":    _clean(row.get("Affidavit?")),
             "contract":     _clean(row.get("Contract")),
             "market":       _normalise_market(str(_clean(row.get("Market")) or "")),
@@ -1287,7 +1296,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
     with human-readable ``messages`` describing each mismatch and by how much.
     """
     billing_type = user_inputs.get("billing_type", "Broadcast")
-    agency_flag  = user_inputs.get("agency_flag",  "Agency")
+    agency_flag  = _canon_agency(user_inputs.get("agency_flag", "Agency"))
     agency_fee   = float(user_inputs.get("agency_fee", 0.15) or 0)
     sales_person = user_inputs.get("sales_person", "")
     revenue_type = user_inputs.get("revenue_type", "Internal Ad Sales")

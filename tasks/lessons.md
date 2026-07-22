@@ -28,6 +28,30 @@ against Etere. The grouping lives only in `daily_programming.html`
 
 ---
 
+## Commercial-Log "Agency" Column (Z) Is Agency-ATTACHED, Not Commission — and Only Ever "Agency"/"Non-Agency"
+
+**Session:** Crispin backwrote as "direct" in col Z (2026-07-22)
+
+**Rule:** Commercial-log **col Z ("Agency")** holds ONLY `Agency` or `Non-Agency`
+(distinct from col Y "Billing Type" = Broadcast/Calendar). Backwrite emitted the
+invalid `Direct`, derived from **commission** (`P_AGENZIA > 0`) — so a 0%-commission
+**agency** order (Crispin / Bay Area AQMD) was mislabeled. Agency-vs-not is whether
+an **agency is ATTACHED** (`CONTRATTITESTATA.AGENZIA > 0` / `header.agency` present),
+NOT whether a commission exists. A 0-commission agency is still `Agency`.
+
+**How to apply (backwrite):**
+1. From-DB path (`orders.py::awaiting_backwrite_generate`): derive `agency_flag`
+   from `ct.AGENZIA` (agency id), not `ct.P_AGENZIA`. Values `Agency`/`Non-Agency`.
+2. All emission sites use `Non-Agency` (never `Direct`): `backwrite.py` prefill,
+   `transformer.py` parse-SC default.
+3. `transformer._canon_agency()` is the single canonicalizer — maps any input
+   (incl. legacy `Direct`, blank, `client`) to `Agency`/`Non-Agency`; applied to
+   `user_inputs["agency_flag"]` and the EB `Agency?` passthrough so old manifests
+   with `Direct` self-correct. Gross-up/broker still key on the real `agency_fee`
+   (0 for a no-commission agency → no gross-up, broker fees 0).
+
+---
+
 ## Validate Paid-Line Language vs Daypart Before Entry — Catch Messy IOs
 
 **Session:** SAGENT Stormwater Fall 2026 — language/time mismatch (2026-07-22)

@@ -2462,7 +2462,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 cur.execute(
                     """SELECT ct.CENTROMEDIA, ct.P_AGENZIA,
                               LTRIM(RTRIM(CASE WHEN ae.Nome IS NOT NULL AND ae.Nome != ''
-                                   THEN ae.Nome + ' ' + ae.RAG_SOCIAL ELSE ae.RAG_SOCIAL END))
+                                   THEN ae.Nome + ' ' + ae.RAG_SOCIAL ELSE ae.RAG_SOCIAL END)),
+                              ct.AGENZIA
                        FROM CONTRATTITESTATA ct
                        LEFT JOIN ANAGRAF ae ON ae.ID_ANAGRAF = ct.AGENTE1
                        WHERE ct.ID_CONTRATTITESTATA = %s""",
@@ -2482,6 +2483,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             centromedia = int(row[0] or 0)
             p_agenzia = float(row[1] or 0)
             ae_name = (row[2] or "").strip()
+            id_agenzia = int(row[3] or 0)
             if centromedia == 316:
                 billing_type = "Broadcast"
             elif centromedia == 317:
@@ -2519,7 +2521,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             if io_detail and io_detail.get("error"):
                 io_detail = None
 
-            agency_flag = "Agency" if p_agenzia > 0 else "Direct"
+            # Column Z ('Agency') is Agency vs Non-Agency = whether an AGENCY is
+            # ATTACHED (ct.AGENZIA), NOT whether there's a commission. A 0%-
+            # commission agency (e.g. Crispin / Bay Area AQMD) is still Agency.
+            # Valid values are only "Agency" / "Non-Agency" — never "Direct".
+            agency_flag = "Agency" if id_agenzia > 0 else "Non-Agency"
             agency_fee = p_agenzia / 100 if p_agenzia > 1 else p_agenzia
             gross_up = {}
             if m.get("rates_are_net") and agency_flag == "Agency" and io_detail:
