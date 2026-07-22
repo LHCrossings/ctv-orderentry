@@ -28,6 +28,40 @@ against Etere. The grouping lives only in `daily_programming.html`
 
 ---
 
+## Multi-Page PDFs: Read EVERY Page, and Parse Columnar Tables by Word Coordinates — Not Text-Flow
+
+**Session:** SAGENT Stormwater Fall 2026 — only page 1 entered (2026-07-22)
+
+**Rule:** `parse_sagent_pdf` did `pdf.pages[0].extract_text()` — it read ONLY page 1,
+silently dropping lines 11–24 (a 4-page order → 10 of 24 lines, 405 of 945 spots).
+Worse, its text-flow line-regex mis-read the GaleForce columns: the layout puts the
+**language under the "Network" column and the market under "Program"**, and the
+language often **wraps onto the time-period line above** the data row. Text
+extraction interleaves those, so markets came out as "CHINESE"/"FILIPINO" (→ NYC at
+entry), languages defaulted to Chinese, and every daypart collapsed to 6a-11:59p.
+
+**How to apply:**
+1. **Always iterate `pdf.pages`**, never `pages[0]`. Header/column headers repeat
+   per page, so header fields still resolve from the concatenated text.
+2. **Parse columnar order grids by word x-coordinates** (`page.extract_words()`),
+   not by splitting `extract_text()` on spaces. Group words into visual rows by
+   rounded `top`, then read each field by its x-band (line# <90, len 130–185, rate
+   180–220, language 220–315, market 315–405, weekly spots x≥405). Time period is
+   the row directly above; days are the row below. This survives per-page x-shifts
+   (page 3 was shifted ~14px yet parsed clean). See `_extract_sagent_lines`.
+3. For weekly spots, take the **first n_weeks integers** in the spot region
+   (n_weeks from the reliably-parsed week headers) — do NOT match flaky per-page
+   header day-number centers (page 3's header dropped its first day number).
+4. **Reconcile against the order's own grand total** ("Total $59,675.00 945") and
+   **raise** on mismatch — a dropped page/line must refuse to enter, never enter
+   partially (same family as the SCWA/Brentan totals lesson). This is the guard
+   that would have caught the original bug at parse time.
+
+**Note:** the already-entered contract from the buggy run (SAGENT 2971) has only 10
+wrong lines — it must be deleted and re-entered, not patched.
+
+---
+
 ## Agency Commission Comes From the ANAGRAF Link — Never Clobber a Legitimate 0% With a 15% Default
 
 **Session:** Crispin / Bay Area AQMD parser (2026-07-22)

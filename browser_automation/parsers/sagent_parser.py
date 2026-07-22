@@ -52,23 +52,23 @@ class SagentLine:
     program: str
     weekly_spots: List[int]
     total_spots: int
-    
+
     def is_bonus(self) -> bool:
         """Check if this is a bonus line ($0.00 rate)."""
         return self.net_rate == Decimal("0.00")
-    
+
     def get_duration_seconds(self) -> int:
         """Convert length to seconds (e.g., ':15' -> 15, ':30' -> 30)."""
         match = re.search(r':(\d+)', self.length)
         if match:
             return int(match.group(1))
         return 15  # Default
-    
+
     def get_etere_days(self) -> str:
         """Convert day pattern to Etere format via universal day_utils."""
         from browser_automation.day_utils import to_etere
         return to_etere(self.days)
-    
+
     def get_etere_time(self) -> str:
         """
         Convert time period to Etere format.
@@ -81,23 +81,23 @@ class SagentLine:
         match = re.search(r'(\d+):?(\d+)?([AP]).*?to.*?(\d+):?(\d+)?([AP])', self.time_period, re.IGNORECASE)
         if not match:
             return self.time_period
-        
+
         start_hour, start_min, start_ampm, end_hour, end_min, end_ampm = match.groups()
-        
+
         # Format start time (drop :00 minutes)
         start_time = f"{start_hour}"
         if start_min and start_min != "00":
             start_time += f":{start_min}"
         start_time += start_ampm.lower()
-        
+
         # Format end time (drop :00 minutes)
         end_time = f"{end_hour}"
         if end_min and end_min != "00":
             end_time += f":{end_min}"
         end_time += end_ampm.lower()
-        
+
         return f"{start_time}-{end_time}"
-    
+
     def get_language(self) -> str:
         """
         Extract language from program field.
@@ -107,7 +107,7 @@ class SagentLine:
             "CVC CHINESE" -> "Chinese"
         """
         program_upper = self.program.upper()
-        
+
         # Map program to language
         if 'CHINESE' in program_upper or 'MANDARIN' in program_upper or 'CANTONESE' in program_upper:
             return "Chinese"
@@ -125,7 +125,7 @@ class SagentLine:
             return "Japanese"
         else:
             return "Chinese"  # Default
-    
+
     def get_description(self) -> str:
         """
         Generate line description for Etere.
@@ -139,7 +139,7 @@ class SagentLine:
             Bonus: "(Line 2) BNS CVC Chinese", "(Line 4) BNS LAX Chinese"
         """
         language = self.get_language()
-        
+
         if self.is_bonus():
             return f"(Line {self.line_number}) BNS {self.market} {language}"
         else:
@@ -177,7 +177,7 @@ class SagentOrder:
     week_start_dates: List[str]
     lines: List[SagentLine]
     markets: List[str]
-    
+
     def get_default_contract_code(self) -> str:
         """
         Generate default contract code.
@@ -185,7 +185,7 @@ class SagentOrder:
         Example: "Sagent Cal Fire 202"
         """
         return f"Sagent {self.advertiser} {self.estimate_number_stripped}"
-    
+
     def get_default_description(self) -> str:
         """
         Generate default contract description.
@@ -193,7 +193,7 @@ class SagentOrder:
         Example: "Cal Fire 2026 CAL FIRE Fourth of July Est 202"
         """
         return f"{self.advertiser} {self.campaign} Est {self.estimate_number_stripped}"
-    
+
     def get_default_notes(self) -> str:
         """
         Generate default notes.
@@ -201,7 +201,7 @@ class SagentOrder:
         Example: "Est 202"
         """
         return f"Est {self.estimate_number_stripped}"
-    
+
     def get_lines_by_market(self, market: str) -> List[SagentLine]:
         """Get all lines for a specific market."""
         return [line for line in self.lines if line.market.upper() == market.upper()]
@@ -226,10 +226,10 @@ def gross_up_rate(net_rate: float) -> Decimal:
     """
     if net_rate == 0:
         return Decimal("0.00")
-    
+
     net_decimal = Decimal(str(net_rate))
     gross_rate = net_decimal / Decimal("0.85")
-    
+
     # Round to 2 decimal places
     return gross_rate.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
@@ -245,7 +245,7 @@ def normalize_market_code(market: str) -> str:
         Standardized market code (e.g., "LAX", "CVC", "SFO")
     """
     market_upper = market.upper().strip()
-    
+
     mapping = {
         "LA": "LAX",
         "LAX": "LAX",
@@ -272,8 +272,102 @@ def normalize_market_code(market: str) -> str:
         "MMT": "MMT",
         "MULTIMARKET": "MMT",
     }
-    
+
     return mapping.get(market_upper, market_upper)
+
+
+def _extract_sagent_lines(pdf, n_weeks: int) -> List[SagentLine]:
+    """Extract order lines from a GaleForce/SAGENT PDF by WORD COORDINATES.
+
+    The PDF is columnar, but its text-flow extraction interleaves the
+    Network(=language) and Program(=market) columns and wraps the language up
+    onto the time-period line above the data row. Reading by x-position parses
+    each column reliably and — critically — across ALL pages (the old text-line
+    parser only read page 1 and mis-assigned market/language/time).
+
+    Column x-bands (PDF points), stable across this GaleForce template even when
+    a page is shifted a few px:
+        line#  x<90 · len 130–185 · rate 180–220 ·
+        language/daypart 220–315 · market 315–405 ·
+        weekly spots + total  x>=405  (first n_weeks integers = the weeks)
+    Time period is the row directly above (x<135); days are the row below.
+    """
+    from collections import defaultdict
+
+    _VALID_DAY = {'M', 'T', 'W', 'R', 'F', 'Sa', 'Su'}
+    lines: List[SagentLine] = []
+
+    for page in pdf.pages:
+        buckets = defaultdict(list)
+        for w in page.extract_words(use_text_flow=False):
+            buckets[round(w['top'])].append(w)
+        rows = [(t, sorted(buckets[t], key=lambda w: w['x0'])) for t in sorted(buckets)]
+
+        for i, (_top, ws) in enumerate(rows):
+            if not ws:
+                continue
+            first = ws[0]
+            # A data row starts with the line number (x<90) and has a ':NN' length.
+            if not (first['x0'] < 90 and re.fullmatch(r'\d{1,2}', first['text'])):
+                continue
+            if not any(130 <= w['x0'] < 185 and re.fullmatch(r':\d+', w['text']) for w in ws):
+                continue
+
+            line_number = int(first['text'])
+            length = next((w['text'] for w in ws
+                           if 130 <= w['x0'] < 185 and w['text'].startswith(':')), ':30')
+            rate_txt = next((w['text'] for w in ws
+                             if 180 <= w['x0'] < 220 and w['text'].startswith('$')), '$0.00')
+            net_rate = float(rate_txt.replace('$', '').replace(',', '') or 0)
+
+            above = rows[i - 1][1] if i - 1 >= 0 else []
+            below = rows[i + 1][1] if i + 1 < len(rows) else []
+
+            # Market: the code in the Program column (315–405).
+            market_raw = next((w['text'] for w in ws
+                               if 315 <= w['x0'] < 405 and w['text'].strip().isalpha()), '')
+            market = normalize_market_code(market_raw) if market_raw else ''
+
+            # Language/program: tokens in 220–315 on the data row AND on the row
+            # above (the language often wraps onto the time-period line).
+            program = ' '.join(
+                [w['text'] for w in above if 220 <= w['x0'] < 315]
+                + [w['text'] for w in ws if 220 <= w['x0'] < 315]
+            ).strip()
+
+            # Time period: leading words (x<135) on the row above.
+            time_period = ' '.join(w['text'] for w in above if w['x0'] < 135).strip()
+            if ' to ' not in time_period:
+                time_period = "6:00A to 11:59P"
+
+            # Days: valid day tokens (x<135) on the row below.
+            day_toks = [w['text'] for w in below if w['x0'] < 135 and w['text'] in _VALID_DAY]
+            days = ' '.join(day_toks) if day_toks else "M T W R F Sa Su"
+
+            # Weekly spots: first n_weeks integers in the spot region (x>=405).
+            nums = [int(w['text']) for w in ws
+                    if w['x0'] >= 405 and re.fullmatch(r'\d+', w['text'])]
+            weekly_spots = nums[:n_weeks] if nums else [0] * n_weeks
+
+            gross_rate = gross_up_rate(net_rate)
+            lines.append(SagentLine(
+                line_number=line_number,
+                time_period=time_period,
+                days=days,
+                length=length,
+                net_rate=Decimal(str(net_rate)),
+                gross_rate=gross_rate,
+                market=market,
+                program=program or "UNKNOWN",
+                weekly_spots=weekly_spots,
+                total_spots=sum(weekly_spots),
+            ))
+            print(f"[PARSER] Line {line_number}: {market} {program} - "
+                  f"${net_rate} net → ${gross_rate} gross - {sum(weekly_spots)} spots "
+                  f"[{time_period}]")
+
+    lines.sort(key=lambda ln: ln.line_number)
+    return lines
 
 
 def parse_sagent_pdf(pdf_path: str) -> SagentOrder:
@@ -296,244 +390,127 @@ def parse_sagent_pdf(pdf_path: str) -> SagentOrder:
         ValueError: If PDF cannot be parsed
     """
     print(f"\n[PARSER] Reading SAGENT PDF: {pdf_path}")
-    
+
     with pdfplumber.open(pdf_path) as pdf:
-        # Extract text from first page
-        first_page = pdf.pages[0]
-        full_text = first_page.extract_text()
-        
+        # Read EVERY page — SAGENT/GaleForce orders routinely span multiple pages:
+        # line items continue across pages and the final page is a Monthly Totals
+        # summary. Reading only page 1 silently dropped every line after the first
+        # page. Header fields and the week-column header repeat on each page, so
+        # parsing them from the concatenated text still resolves to page 1's copy.
+        full_text = "\n".join((p.extract_text() or "") for p in pdf.pages)
+
         # Parse header information
         advertiser = _extract_field(full_text, r'ADVERTISER:\s*([^\n]+)')
         # Remove "REV: 0" suffix if present
         advertiser = re.sub(r'\s+REV:\s*\d+', '', advertiser).strip()
-        
+
         campaign = _extract_field(full_text, r'CAMPAIGN:\s*([^\n]+)')
         # Remove "ORDER #:" suffix if present
         campaign = re.sub(r'\s+ORDER #:.*', '', campaign).strip()
-        
+
         flight_dates = _extract_field(full_text, r'FLIGHT DATES:\s*([^\n]+)')
         # Remove "VENDOR:" suffix if present
         flight_dates = re.sub(r'\s+VENDOR:.*', '', flight_dates).strip()
-        
+
         order_number = _extract_field(full_text, r'ORDER #:\s*([^\n]+)')
         estimate_number = _extract_field(full_text, r'Estimate #:\s*([^\n]+)')
         buyer = _extract_field(full_text, r'Buyer:\s*([^\n]+)')
         brand = _extract_field(full_text, r'Brand:\s*([^\n]+)')
-        
+
         # Parse flight dates
         flight_start, flight_end = _parse_flight_dates(flight_dates)
-        
+
         # Strip leading zeros from estimate
         estimate_stripped = estimate_number.lstrip('0')
-        
+
         print(f"[PARSER] Advertiser: {advertiser}")
         print(f"[PARSER] Campaign: {campaign}")
         print(f"[PARSER] Flight: {flight_start} - {flight_end}")
         print(f"[PARSER] Order #: {order_number}")
         print(f"[PARSER] Estimate: {estimate_number} (stripped: {estimate_stripped})")
-        
+
         # Extract week header dates
         # Header looks like: "Jun   Jun   Jun   Tot"
         # But there might be another header line in between
         # So we need to search the next few lines for one containing "Spots"
-        
+
         week_start_dates = []
         lines_list = full_text.split('\n')
-        
+
         for idx, line in enumerate(lines_list):
             # Look for the specific week header line
             # Must have: 3+ months AND "Tot" (for Total column)
             months = re.findall(r'\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b', line)
-            
+
             if len(months) >= 3 and 'Tot' in line:
                 print(f"[PARSER] Found month header: {line}")
                 print(f"[PARSER] Months found: {months}")
-                
+
                 # Search next few lines for one containing "Spots"
                 for offset in range(1, 5):  # Check next 4 lines
                     if idx + offset < len(lines_list):
                         day_line = lines_list[idx + offset]
                         print(f"[PARSER] Checking line +{offset}: {day_line}")
-                        
+
                         # Check if this line has "Spots" to confirm it's the day line
                         if 'Spots' in day_line or 'spots' in day_line.lower():
                             print(f"[PARSER] Found day line with 'Spots': {day_line}")
-                            
+
                             # Extract all numbers from the day line
                             # They should be 1-2 digits
                             day_numbers = re.findall(r'\b(\d{1,2})\b', day_line)
                             print(f"[PARSER] Days found: {day_numbers}")
-                            
+
                             # Match all months with day numbers
                             if len(day_numbers) >= len(months):
                                 for month, day in zip(months, day_numbers[:len(months)]):
                                     week_start_dates.append(f"{month} {day}")
-                                
+
                                 print(f"[PARSER] Week start dates: {week_start_dates}")
                                 break
-                
+
                 if week_start_dates:
                     break
-        
+
         if not week_start_dates:
             print("[PARSER] WARNING: Could not parse week columns - will use contract dates")
-        
+
         print(f"[PARSER] Week columns: {week_start_dates}")
-        
-        # Parse line items using text patterns
-        lines = []
-        markets_set = set()
-        
-        # Split text into lines
-        text_lines = full_text.split('\n')
-        
-        # Find where the data lines start (after header)
-        data_start_idx = 0
-        for idx, line in enumerate(text_lines):
-            if re.match(r'^\d+\s+:', line):  # Line starting with number and colon (e.g., "1   :15")
-                data_start_idx = idx
-                break
-        
-        # Parse each order line
-        # Structure is:
-        # Line N:   Time Period (e.g., "6:00A to 11:59P")
-        # Line N+1: Line# :Length $Rate Market Program Spots...
-        # Line N+2: Days (e.g., "M T W R F Sa Su")
-        
-        idx = data_start_idx
-        while idx < len(text_lines):
-            line_text = text_lines[idx].strip()
-            
-            # Check if this is a line number.
-            # Handles two layouts:
-            #   "1   :15   $60.00 ..."          (time period on previous line)
-            #   "3   11:59P   :15   $90.00 ..."  (end-time bleeds onto data line)
-            line_match = re.match(
-                r'^(\d+)\s+(?:\d+:\d+[APap][Mm]?\s+)?(:?\d+)\s+\$([0-9.]+)\s+(.+)',
-                line_text,
-            )
 
-            if line_match:
-                line_number = int(line_match.group(1))
-                length = line_match.group(2)
-                net_rate_str = line_match.group(3)
-                rest_of_line = line_match.group(4)
+        # Parse line items by WORD COORDINATES across ALL pages. The old
+        # text-flow parser read only page 1 and mis-assigned market/language/time
+        # because this GaleForce layout interleaves the Network(language) and
+        # Program(market) columns and wraps the language onto the time line.
+        n_weeks = len(week_start_dates) if week_start_dates else 3
+        lines = _extract_sagent_lines(pdf, n_weeks)
 
-                # Extract all weekly spot counts (first N numbers = one per week column).
-                # Trailing numbers are Total, DP, and net-cost fragments — skip them.
-                n_weeks = len(week_start_dates) if week_start_dates else 3
-                spot_match = re.findall(r'\b(\d+)\b', rest_of_line)
-                if len(spot_match) >= n_weeks:
-                    weekly_spots = [int(spot_match[i]) for i in range(n_weeks)]
-                elif spot_match:
-                    weekly_spots = [int(x) for x in spot_match[:n_weeks]]
-                else:
-                    weekly_spots = [0] * n_weeks
-
-                program_match = re.match(r'^(\w+(?:\s+\w+)*?)\s+(\d+)', rest_of_line)
-                program = program_match.group(1).strip() if program_match else (
-                    rest_of_line.split()[0] if rest_of_line else "UNKNOWN"
-                )
-
-                # TIME PERIOD: reconstruct from surrounding lines.
-                # Layout: idx-2 has "START to", idx-1 has "END ..." OR
-                # end time is on the data line itself (e.g. "3 11:59P :15 $90.00").
-                _t_start, _t_end = "", ""
-                if idx - 2 >= 0:
-                    _m = re.search(r'(\d+:\d+[APap])\s+to\b', text_lines[idx - 2])
-                    if _m:
-                        _t_start = _m.group(1)
-                if idx - 1 >= 0:
-                    _m = re.match(r'(\d+:\d+[APap])', text_lines[idx - 1].strip())
-                    if _m:
-                        _t_end = _m.group(1)
-                if not _t_end:
-                    _m = re.match(r'^\d+\s+(\d+:\d+[APap])\s+:', line_text)
-                    if _m:
-                        _t_end = _m.group(1)
-                if _t_start and _t_end:
-                    time_period = f"{_t_start} to {_t_end}"
-                elif _t_start:
-                    time_period = f"{_t_start} to 11:59P"
-                else:
-                    time_period = "6:00A to 11:59P"
-
-                # DAYS: collect only valid day tokens from following lines.
-                # Reject lines like "FRANCISCO LANGUAGE" that start with F but
-                # aren't day patterns.
-                _VALID_DAY = {'M', 'T', 'W', 'R', 'F', 'Sa', 'Su'}
-                _day_tokens: list = []
-                for _off in (1, 2, 3):
-                    _dl = text_lines[idx + _off].strip() if idx + _off < len(text_lines) else ""
-                    if not _dl or re.match(r'^\d+\s+', _dl):
-                        break
-                    for _tok in _dl.split():
-                        if _tok in _VALID_DAY:
-                            _day_tokens.append(_tok)
-                days = ' '.join(_day_tokens) if _day_tokens else "M T W R F Sa Su"
-
-                # Market: scan surrounding lines for known market keywords.
-                # The market column often wraps onto adjacent lines in this PDF format.
-                ctx = " ".join(
-                    text_lines[j] for j in range(max(0, idx - 2), min(len(text_lines), idx + 3))
-                ).upper()
-                if "FRANCISCO" in ctx:
-                    market_normalized = "SFO"
-                elif "ANGELES" in ctx:
-                    market_normalized = "LAX"
-                elif "VALLEY" in ctx:
-                    market_normalized = "CVC"
-                elif "SEATTLE" in ctx:
-                    market_normalized = "SEA"
-                elif "HOUSTON" in ctx:
-                    market_normalized = "HOU"
-                elif "CHICAGO" in ctx or "MINNEAPOLIS" in ctx:
-                    market_normalized = "CMP"
-                elif "WASHINGTON" in ctx:
-                    market_normalized = "WDC"
-                else:
-                    # Fallback: try to parse a market token from rest_of_line
-                    first_word = rest_of_line.split()[0] if rest_of_line else ""
-                    market_normalized = normalize_market_code(first_word)
-
-                markets_set.add(market_normalized)
-
-                # Parse net rate and gross up
-                net_rate = float(net_rate_str)
-                gross_rate = gross_up_rate(net_rate)
-
-                # Calculate total spots
-                total_spots = sum(weekly_spots)
-                
-                # Create line
-                line = SagentLine(
-                    line_number=line_number,
-                    time_period=time_period,
-                    days=days,
-                    length=length,
-                    net_rate=Decimal(str(net_rate)),
-                    gross_rate=gross_rate,
-                    market=market_normalized,
-                    program=program,
-                    weekly_spots=weekly_spots,
-                    total_spots=total_spots
-                )
-                
-                lines.append(line)
-                
-                print(f"[PARSER] Line {line_number}: {market_normalized} {program} - "
-                      f"${net_rate} net → ${gross_rate} gross - {total_spots} spots")
-                
-                # Move to next line (we already processed current and next)
-                idx += 1
-            else:
-                idx += 1
-        
         if not lines:
             raise ValueError("No lines parsed from PDF")
-        
-        markets = sorted(list(markets_set))
-        
+
+        # Reconcile against the order's own Monthly Totals — guards against a
+        # dropped page or line (the very bug this rewrite fixes: silent partial
+        # entry). The summary page prints "Total $59,675.00 945".
+        _gt = re.search(r'Total\s+\$([\d,]+\.\d{2})\s+(\d+)\b', full_text)
+        if _gt:
+            grand_net = float(_gt.group(1).replace(',', ''))
+            grand_spots = int(_gt.group(2))
+            got_spots = sum(ln.total_spots for ln in lines)
+            got_net = sum(float(ln.net_rate) * ln.total_spots for ln in lines)
+            if got_spots != grand_spots:
+                raise ValueError(
+                    f"SAGENT parse incomplete: parsed {got_spots} spots but the order total is "
+                    f"{grand_spots} — a page or line was dropped. Refusing to enter a partial order."
+                )
+            if abs(got_net - grand_net) > 1.0:
+                raise ValueError(
+                    f"SAGENT net mismatch: parsed ${got_net:,.2f} vs order total ${grand_net:,.2f}."
+                )
+            print(f"[PARSER] ✓ Reconciled {got_spots} spots / ${got_net:,.2f} net against order total")
+        else:
+            print("[PARSER] WARNING: no Monthly Totals found — could not reconcile spot count")
+
+        markets = sorted({ln.market for ln in lines if ln.market})
+
         return SagentOrder(
             advertiser=advertiser,
             campaign=campaign,
@@ -575,11 +552,11 @@ def _parse_flight_dates(flight_dates: str) -> Tuple[str, str]:
 
     start = dates[0]
     end = dates[1]
-    
+
     # Convert MM/DD/YY to MM/DD/YYYY
     start_formatted = _format_date(start)
     end_formatted = _format_date(end)
-    
+
     return start_formatted, end_formatted
 
 
@@ -596,9 +573,9 @@ def _format_date(date_str: str) -> str:
     parts = date_str.split('/')
     if len(parts) != 3:
         return date_str
-    
+
     month, day, year = parts
-    
+
     # Convert 2-digit year to 4-digit
     if len(year) == 2:
         year_int = int(year)
@@ -606,7 +583,7 @@ def _format_date(date_str: str) -> str:
             year = f"20{year}"
         else:
             year = f"19{year}"
-    
+
     return f"{month}/{day}/{year}"
 
 
@@ -629,34 +606,34 @@ def analyze_weekly_distribution(
         List of dictionaries with combined date ranges
     """
     ranges = []
-    
+
     # If we have proper week dates, create ranges with consecutive week combining
     if week_start_dates and len(week_start_dates) >= len(weekly_spots):
         i = 0
         while i < len(weekly_spots):
             spots = weekly_spots[i]
-            
+
             if spots == 0:
                 i += 1
                 continue  # Skip weeks with no spots
-            
+
             # Start a new range
             range_start_idx = i
             range_spots = spots
-            
+
             # Look ahead to combine consecutive weeks with same spot count
             j = i + 1
             while j < len(weekly_spots) and weekly_spots[j] == range_spots:
                 j += 1
-            
+
             range_end_idx = j - 1  # Last week with same spot count
-            
+
             # Convert dates
             start_date = _convert_week_date_to_full(
-                week_start_dates[range_start_idx], 
+                week_start_dates[range_start_idx],
                 contract_end_date
             )
-            
+
             # End date is either:
             # - Day before next different week starts, or
             # - Contract end date if this is the last range
@@ -670,33 +647,33 @@ def analyze_weekly_distribution(
             else:
                 # Last range - use contract end
                 end_date = contract_end_date
-            
+
             num_weeks = range_end_idx - range_start_idx + 1
-            
+
             ranges.append({
                 'start_date': start_date,
                 'end_date': end_date,
                 'spots_per_week': range_spots,
                 'weeks': num_weeks
             })
-            
+
             # Move to next different week
             i = j
     else:
         # Fallback: combine all weeks into single range
         total_spots = sum(weekly_spots)
         num_active_weeks = sum(1 for spots in weekly_spots if spots > 0)
-        
+
         if total_spots > 0 and num_active_weeks > 0:
             spots_per_week = total_spots // num_active_weeks
-            
+
             ranges.append({
                 'start_date': contract_end_date,  # Placeholder - automation uses contract dates
                 'end_date': contract_end_date,
                 'spots_per_week': spots_per_week,
                 'weeks': 1
             })
-    
+
     return ranges
 
 
@@ -713,18 +690,18 @@ def _convert_week_date_to_full(week_date: str, reference_date: str) -> str:
     """
     # Extract year from reference
     year = reference_date.split('/')[-1]
-    
+
     # Parse month and day
     month_name, day = week_date.split()
-    
+
     month_map = {
         'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
         'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
         'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
     }
-    
+
     month_num = month_map.get(month_name, '01')
-    
+
     return f"{month_num}/{day.zfill(2)}/{year}"
 
 
@@ -742,18 +719,18 @@ def _add_days_to_week_date(week_date: str, days: int) -> str:
     # Parse month and day
     month_name, day = week_date.split()
     day_num = int(day)
-    
+
     # Simple addition (assumes month doesn't overflow)
     new_day = day_num + days
-    
+
     month_map = {
         'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
         'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
         'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
     }
-    
+
     month_num = month_map.get(month_name, '01')
-    
+
     # Use current year (2026 for SAGENT orders)
     return f"{month_num}/{new_day:02d}/2026"
 
@@ -769,29 +746,29 @@ def _subtract_one_day(date_str: str) -> str:
         New date in MM/DD/YYYY format
     """
     from datetime import datetime, timedelta
-    
+
     # Parse the date
     date_obj = datetime.strptime(date_str, '%m/%d/%Y')
-    
+
     # Subtract one day
     new_date = date_obj - timedelta(days=1)
-    
+
     # Format back to MM/DD/YYYY
     return new_date.strftime('%m/%d/%Y')
 
 
 if __name__ == "__main__":
     import sys
-    
+
     if len(sys.argv) < 2:
         print("Usage: python sagent_parser.py <pdf_path>")
         sys.exit(1)
-    
+
     pdf_path = sys.argv[1]
-    
+
     try:
         order = parse_sagent_pdf(pdf_path)
-        
+
         print("\n" + "="*70)
         print("SAGENT ORDER SUMMARY")
         print("="*70)
@@ -806,7 +783,7 @@ if __name__ == "__main__":
         print(f"Default Notes: {order.get_default_notes()}")
         print(f"\nTotal Lines: {len(order.lines)}")
         print(f"Total Spots: {sum(line.total_spots for line in order.lines)}")
-        
+
         print("\n" + "="*70)
         print("LINES")
         print("="*70)
@@ -817,7 +794,7 @@ if __name__ == "__main__":
             print(f"  Rate: ${line.net_rate} net → ${line.gross_rate} gross")
             print(f"  Spots: {line.weekly_spots} = {line.total_spots} total")
             print(f"  Description: {line.get_description()}")
-        
+
     except Exception as e:
         print(f"\n✗ Error: {e}")
         import traceback
