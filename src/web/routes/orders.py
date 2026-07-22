@@ -2856,15 +2856,41 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             if not styles:
                 return xlsx_bytes
             mru = "<mruColors>" + "".join(f'<color rgb="{c}"/>' for c in palette) + "</mruColors>"
-            styles = _re.sub(r"<colors>.*?</colors>", "", styles, flags=_re.S)
+            # Remove any existing <colors> — BOTH the paired form and openpyxl's
+            # empty self-closing "<colors />" (two <colors> elements is invalid and
+            # triggers an Excel repair that discards the whole stylesheet).
+            styles = _re.sub(r"<colors\b[^>]*/>|<colors\b[^>]*>.*?</colors>", "",
+                             styles, flags=_re.S)
             block = f"<colors>{mru}</colors>"
-            # <colors> must sit after <dxfs> and before <tableStyles>/<extLst>.
-            for anchor in ("<tableStyles", "<extLst", "</styleSheet>"):
-                i = styles.find(anchor)
-                if i != -1:
-                    styles = styles[:i] + block + styles[i:]
-                    break
+            # CT_Stylesheet schema order is strict: numFmts, fonts, fills, borders,
+            # cellStyleXfs, cellXfs, cellStyles, dxfs, tableStyles, COLORS, extLst.
+            # <colors> MUST sit AFTER <tableStyles> and BEFORE <extLst> — putting it
+            # earlier makes Excel discard the whole stylesheet ("repair" → basic text).
+            m = _re.search(r"<tableStyles\b[^>]*/>|<tableStyles\b.*?</tableStyles>",
+                           styles, _re.S)
+            if m:
+                styles = styles[:m.end()] + block + styles[m.end():]
+            elif "<extLst" in styles:
+                i = styles.find("<extLst")
+                styles = styles[:i] + block + styles[i:]
+            elif "</styleSheet>" in styles:
+                i = styles.find("</styleSheet>")
+                styles = styles[:i] + block + styles[i:]
             else:
+                return xlsx_bytes
+            # Self-validate before committing: styles.xml must stay well-formed
+            # with EXACTLY ONE <colors> in the correct schema slot (after
+            # tableStyles, before extLst). If not, skip injection and return the
+            # untouched bytes — a missing picker palette is cosmetic; a stylesheet
+            # Excel rejects (and "repairs" into basic text) is not.
+            import xml.etree.ElementTree as _ET
+            _ns = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+            _kids = [c.tag.replace(_ns, "") for c in _ET.fromstring(styles)]
+            if _kids.count("colors") != 1:
+                return xlsx_bytes
+            _ci = _kids.index("colors")
+            if ("tableStyles" in _kids and _kids.index("tableStyles") > _ci) or \
+               ("extLst" in _kids and _kids.index("extLst") < _ci):
                 return xlsx_bytes
             data["xl/styles.xml"] = styles.encode("utf-8")
             out = _io.BytesIO()
