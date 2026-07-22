@@ -216,17 +216,24 @@ def _wb_load_fast(path: Path, **kw):
     return openpyxl.load_workbook(_io.BytesIO(path.read_bytes()), **kw)
 
 
-def _wb_save_fast(wb, path: Path) -> None:
+def _wb_save_fast(wb, path: Path, transform=None) -> None:
     """Serialize the workbook in memory, then write it as ONE network
     transfer via a temp file + atomic replace (also avoids a torn file if
     the write is interrupted). Raises PermissionError if the target is
-    locked open in Excel."""
+    locked open in Excel.
+
+    `transform`, if given, is a `bytes -> bytes` hook applied to the serialized
+    xlsx before writing — used to re-inject things openpyxl drops (e.g. the
+    commercial log's custom-color picker swatches)."""
     import io as _io
     buf = _io.BytesIO()
     wb.save(buf)
+    data = buf.getvalue()
+    if transform is not None:
+        data = transform(data)
     tmp = path.with_name(path.name + ".tmp~")
     try:
-        tmp.write_bytes(buf.getvalue())
+        tmp.write_bytes(data)
         os.replace(tmp, path)
     except BaseException:
         try:
@@ -2830,6 +2837,44 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                        fill=PatternFill(start_color="FFFF0000", end_color="FFFF0000",
                                         fill_type="solid")))
 
+    def _log_sync_inject_mru_colors(xlsx_bytes: bytes) -> bytes:
+        """Re-inject the custom-color picker swatches (styles.xml <mruColors>)
+        that openpyxl silently DROPS on every save — the per-market network
+        palette + bookend pink — so operators can always pick the right color
+        from the color dropdown. Passed as the _wb_save_fast transform hook.
+        """
+        import io as _io
+        import re as _re
+        import zipfile as _zip
+        palette = list(dict.fromkeys(
+            list(_LOG_SYNC_MARKET_COLORS.values()) + ["FFFF66FF"]))  # +bookend pink
+        try:
+            with _zip.ZipFile(_io.BytesIO(xlsx_bytes)) as z:
+                names = z.namelist()
+                data = {n: z.read(n) for n in names}
+            styles = data.get("xl/styles.xml", b"").decode("utf-8")
+            if not styles:
+                return xlsx_bytes
+            mru = "<mruColors>" + "".join(f'<color rgb="{c}"/>' for c in palette) + "</mruColors>"
+            styles = _re.sub(r"<colors>.*?</colors>", "", styles, flags=_re.S)
+            block = f"<colors>{mru}</colors>"
+            # <colors> must sit after <dxfs> and before <tableStyles>/<extLst>.
+            for anchor in ("<tableStyles", "<extLst", "</styleSheet>"):
+                i = styles.find(anchor)
+                if i != -1:
+                    styles = styles[:i] + block + styles[i:]
+                    break
+            else:
+                return xlsx_bytes
+            data["xl/styles.xml"] = styles.encode("utf-8")
+            out = _io.BytesIO()
+            with _zip.ZipFile(out, "w", _zip.ZIP_DEFLATED) as z:
+                for n in names:
+                    z.writestr(n, data[n])
+            return out.getvalue()
+        except Exception:
+            return xlsx_bytes  # never fail a save over a cosmetic palette
+
     def _log_sync_path(raw: str) -> Path:
         import re as _re
         p = (raw or "").strip() or _LOG_SYNC_DEFAULT_PATH
@@ -3134,7 +3179,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 if result["changes"]:
                     _log_sync_apply_standard_sort(ws)   # re-assert the team's 7-level Custom Sort
                     _log_sync_apply_conditional_formatting(ws)  # re-assert CF rules
-                    _wb_save_fast(wb, log_path)
+                    # transform re-injects the custom-color picker swatches openpyxl drops
+                    _wb_save_fast(wb, log_path, transform=_log_sync_inject_mru_colors)
             finally:
                 wb.close()
             return {"written": len(result["changes"]),
