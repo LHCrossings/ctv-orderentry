@@ -2901,9 +2901,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             if mt:
                 s2 = s2[:mt.end()] + block + s2[mt.end():]
             elif "<extLst" in s2:
-                i = s2.find("<extLst"); s2 = s2[:i] + block + s2[i:]
+                i = s2.find("<extLst")
+                s2 = s2[:i] + block + s2[i:]
             elif "</styleSheet>" in s2:
-                i = s2.find("</styleSheet>"); s2 = s2[:i] + block + s2[i:]
+                i = s2.find("</styleSheet>")
+                s2 = s2[:i] + block + s2[i:]
             else:
                 s2 = None
             if s2 is not None:
@@ -2911,7 +2913,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 dm = _re.search(r'(<dxfs\b[^>]*\bcount=")(\d+)("[^>]*>)', s2)
                 _try_did = None
                 if dm:
-                    cnt = int(dm.group(2)); _try_did = cnt
+                    cnt = int(dm.group(2))
+                    _try_did = cnt
                     s2 = s2[:dm.start()] + dm.group(1) + str(cnt + 1) + dm.group(3) + s2[dm.end():]
                     ci = s2.find("</dxfs>")
                     if ci != -1:
@@ -2952,7 +2955,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 for c in cs:
                     new.append(c)
                     if "customList=" in c and not ins:
-                        new.append(fc); ins = True
+                        new.append(fc)
+                        ins = True
                 if not ins:
                     new = cs[:4] + [fc] + cs[4:]
                 wss = ('<sortState ref="A2:%s%s" xmlns:xlrd2="http://schemas.microsoft.com/'
@@ -2962,7 +2966,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 cand = sx[:aidx] + wss + sx[aidx:]
                 try:
                     _ET.fromstring(cand)  # well-formed?
-                    data[n] = cand.encode("utf-8"); changed = True
+                    data[n] = cand.encode("utf-8")
+                    changed = True
                 except Exception:
                     pass
                 break
