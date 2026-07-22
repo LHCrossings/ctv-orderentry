@@ -2852,8 +2852,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         import io as _io
         import re as _re
         import zipfile as _zip
-        palette = list(dict.fromkeys(
-            list(_LOG_SYNC_MARKET_COLORS.values()) + ["FFFF66FF"]))  # +bookend pink
+        # Excel's Recent/Custom-colors list is capped at 10 — an 11th entry makes
+        # Excel reject the whole <colors> style and "repair" the file. Use the 10
+        # market colors exactly (bookend pink is applied by the tool, not picked).
+        palette = list(dict.fromkeys(_LOG_SYNC_MARKET_COLORS.values()))[:10]
         try:
             with _zip.ZipFile(_io.BytesIO(xlsx_bytes)) as z:
                 names = z.namelist()
