@@ -2741,12 +2741,18 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     # always shows the real order. Captured from the reference log 2026-07-22.
     # kind: "value" = ascending cell values; ("list", "...") = custom-list order;
     # "fontColor" = sort by font color, Automatic on top.
+    # NOTE: the team's real sort has a 7th-position "Time out → Font Color
+    # (Automatic on top)" level. It is OMITTED here: a font-color sortCondition
+    # needs a dxf with an auto/automatic color (`<dxf><font><color auto="1"/>`),
+    # which Excel rejects as an invalid style and "repairs" — taking the whole
+    # sortState (and mruColors) with it. Writing the other 6 levels is clean.
+    # If that level is needed, it must be added manually in Excel (Data ▸ Sort);
+    # a proper OOXML encoding is a TODO before re-adding it here.
     _LOG_SYNC_SORT_SPEC = (
         ("Start Date", "value"),
         ("Market",     "value"),
         ("Time In",    "value"),
         ("Type",       ("list", "PRG,COM,BNS,AV,PRD,CRD")),
-        ("Time out",   "fontColor"),
         ("Priority",   "value"),
         ("Comments",   "value"),
     )
