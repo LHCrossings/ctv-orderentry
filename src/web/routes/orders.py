@@ -2752,7 +2752,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         ("Start Date", "value"),
         ("Market",     "value"),
         ("Time In",    "value"),
-        ("Type",       ("list", "PRG,COM,BNS,AV,PRD,CRD")),
+        ("Type",       ("list", "PRG")),   # single-entry custom list: PRG on top, rest default
         ("Priority",   "value"),
         ("Comments",   "value"),
     )
