@@ -2724,6 +2724,25 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     # header text so a column move can't silently misalign the sort.
     _LOG_SYNC_SORT_HEADERS = ("Start Date", "Market", "Comments")
 
+    # Authoritative network row color per market (col AC), captured from the
+    # team's reference log 2026-07-22. Used to restore a row's base network color
+    # WITHOUT depending on col K having survived — makes color restore foolproof
+    # even on a doc that arrived stripped. Aired rows (theme-5 orange), gray
+    # non-airtime charges, bookend G/H pink, and NEED COPY red A-H are overrides
+    # layered on top of this base color, not stored here.
+    _LOG_SYNC_MARKET_COLORS = {
+        "CVC": "FFFFFF00",  # yellow
+        "SEA": "FFFFC000",  # gold/amber
+        "LAX": "FFBDD7EE",  # light blue
+        "SFO": "FFB2A1C7",  # lavender
+        "WDC": "FFC4D331",  # lime
+        "NYC": "FF00B0F0",  # sky blue
+        "HOU": "FFA46A6A",  # dusty rose
+        "DAL": "FF963634",  # maroon
+        "MMT": "FFFFCCFF",  # light pink
+        "CMP": "FF92D050",  # green
+    }
+
     def _log_sync_apply_standard_sort(ws) -> None:
         from openpyxl.utils import get_column_letter
         from openpyxl.worksheet.filters import SortCondition, SortState
@@ -3019,15 +3038,27 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         for col in range(1, 9):   # A-H
                             ws.cell(row=ch["xlrow"], column=col).fill = _red_fill
                     elif ch["color"] == "native":
-                        # column K carries the row's network color (col J can
-                        # be pink for added value, col I is no-fill); if K is
-                        # unexpectedly red/empty, leave the fill alone rather
-                        # than guess.
-                        native = ws.cell(row=ch["xlrow"], column=11).fill
-                        _rgb = getattr(getattr(native, "start_color", None), "rgb", None)
-                        if native is not None and native.patternType and _rgb != "FFFF0000":
+                        # Restore the row's base network color to A-H. Prefer the
+                        # AUTHORITATIVE market→color table (keyed on col AC) so the
+                        # restore works even if col K was stripped/blank. Fall back
+                        # to col K's live fill only when the market is unknown.
+                        _mkt = str(ws.cell(row=ch["xlrow"], column=29).value or "").strip().upper()
+                        _argb = _LOG_SYNC_MARKET_COLORS.get(_mkt)
+                        native_fill = None
+                        if _argb:
+                            native_fill = PatternFill(fill_type="solid",
+                                                      start_color=_argb, end_color=_argb)
+                        else:
+                            # col K carries the row's network color (col J can be
+                            # pink for added value, col I is no-fill); skip if K is
+                            # red/empty rather than guess.
+                            k = ws.cell(row=ch["xlrow"], column=11).fill
+                            _rgb = getattr(getattr(k, "start_color", None), "rgb", None)
+                            if k is not None and k.patternType and _rgb != "FFFF0000":
+                                native_fill = _style_copy(k)
+                        if native_fill is not None:
                             for col in range(1, 9):
-                                ws.cell(row=ch["xlrow"], column=col).fill = _style_copy(native)
+                                ws.cell(row=ch["xlrow"], column=col).fill = _style_copy(native_fill)
                             if ch.get("bookend"):
                                 # bookend pair convention: G + H in pink
                                 ws.cell(row=ch["xlrow"], column=7).fill = _pink_fill
