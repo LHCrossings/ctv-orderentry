@@ -37,6 +37,7 @@ from parsers.sagent_parser import (
 )
 
 from browser_automation.etere_client import EtereClient
+from browser_automation.ros_definitions import ROS_SCHEDULES
 
 # ============================================================================
 # SAGENT CONSTANTS
@@ -111,9 +112,25 @@ def _create_sagent_contract_direct(order: SagentOrder, inputs: dict) -> Optional
             is_bonus     = line.is_bonus()
             booking_code = 10 if is_bonus else 2
             duration_str = _secs_to_duration(line.get_duration_seconds())
-            days         = line.get_etere_days()
-            time_str     = line.get_etere_time()
             desc         = line.get_description()
+
+            # Bonus lines are run-of-schedule: use the language's standard ROS
+            # window (days + time) from the shared ROS table, exactly like every
+            # other agency parser. The PDF prints these as all-day "12:00A to
+            # 12:00A", which would otherwise enter as 06:00-23:59 for every
+            # language instead of e.g. Filipino 4p-7p / Vietnamese 10a-1p / South
+            # Asian 1p-4p. Paid lines keep their explicit daypart from the PDF.
+            if is_bonus:
+                ros = ROS_SCHEDULES.get(line.get_language())
+                if ros:
+                    days     = ros['days']
+                    time_str = ros['time']
+                else:
+                    days     = line.get_etere_days()
+                    time_str = line.get_etere_time()
+            else:
+                days     = line.get_etere_days()
+                time_str = line.get_etere_time()
 
             time_from, time_to   = EtereClient.parse_time_range(time_str)
             time_range           = f"{time_from}-{time_to}"
