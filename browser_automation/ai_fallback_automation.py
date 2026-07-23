@@ -314,8 +314,8 @@ def run_ai_order(order: AIOrder, inputs: dict) -> list[tuple[str, bool]]:
                     market=ln.market, days=days, time_range=time_range, description=desc,
                     rate=ln.rate, total_spots=total, spots_per_week=per_week,
                     date_from=df, date_to=dt, duration=dur,
-                    is_bonus=ln.is_bonus, booking_code=booking_code,
-                    separation_intervals=separation,
+                    is_bonus=ln.is_bonus, is_billboard=getattr(ln, "is_billboard", False),
+                    booking_code=booking_code, separation_intervals=separation,
                 )
 
         conn.commit()
