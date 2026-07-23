@@ -3972,6 +3972,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     @router.get("/api/orders/customers")
     async def list_order_customers(q: str = ""):
+        from fastapi.encoders import jsonable_encoder
+
         from browser_automation.etere_direct_client import connect as _db_connect
         with _db_connect() as conn:
             cur = conn.cursor(as_dict=True)
@@ -3983,7 +3985,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             else:
                 cur.execute("SELECT * FROM dbo.CTV_Customers ORDER BY customer_name")
             rows = cur.fetchall()
-        return JSONResponse([dict(r) for r in rows])
+        # jsonable_encoder converts the created_at/updated_at datetimes to strings
+        # (plain JSONResponse/json.dumps can't serialize datetime → 500 → empty page).
+        return JSONResponse(jsonable_encoder([dict(r) for r in rows]))
 
     @router.post("/api/orders/customers")
     async def create_order_customer(body: dict = Body(...)):
