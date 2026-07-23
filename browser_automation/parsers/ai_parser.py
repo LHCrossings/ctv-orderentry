@@ -42,6 +42,7 @@ class AILine(BaseModel):
     week_spots: list[int] = Field(default_factory=list, description="Spot count under each week column, same order and length as week_dates. Empty when there is no weekly grid. Do NOT merge non-contiguous weeks — list each week exactly as shown.")
     rate: float = Field(description="Per-spot GROSS rate in dollars. 0 for bonus/BNS/promo/added-value lines.")
     is_bonus: bool = Field(description="True if this is a bonus/BNS/promo/added-value line (rate is 0). A line is paid only if it has a rate > 0.")
+    kind: str = Field(default="airtime", description="Line kind: 'airtime' for any TV spot line (paid OR bonus, has a spot count); 'web' for a web/banner/digital/online placement (e.g. 'Top Banner 880x120'); 'production' for a production / creative-service line item. Default 'airtime'. Web and production lines have no TV spot count — set total_spots=0 for them.")
     start_date: str = Field(description="Flight start date for this line as MM/DD/YYYY.")
     end_date: str = Field(description="Flight end date for this line as MM/DD/YYYY.")
 
@@ -53,7 +54,8 @@ class AIOrder(BaseModel):
     flight_start: str = Field(description="Earliest flight start across all lines, MM/DD/YYYY.")
     flight_end: str = Field(description="Latest flight end across all lines, MM/DD/YYYY.")
     rates_are_net: bool = Field(description="True if the rate column is labeled Net; False if Gross (the default).")
-    lines: list[AILine] = Field(description="Every airtime line in the order, paid and bonus.")
+    lines: list[AILine] = Field(description="Every line item in the order grid — paid airtime, bonus airtime, AND any web/banner or production/service rows (tag each with `kind`). Do not omit web or production rows; tag them so the app can decide how to handle them.")
+    stated_total_spots: int = Field(default=0, description="The order's OWN stated grand-total spot count — the 'Total Spot #' subtotal / airtime-summary total exactly as printed (e.g. 195). This counts airtime spots only (web/banner rows show n/a and are NOT included in it). 0 if the order states no such total.")
     warnings: list[str] = Field(default_factory=list, description="Anything you were unsure about, ambiguous, or could not read cleanly. Be specific (cite the line).")
 
 
@@ -71,8 +73,10 @@ Rules:
 - DURATION: spot length in seconds (a ":30" or "30 seconds" spot is 30).
 - DATES: MM/DD/YYYY. Use the start/end dates shown for each line; if a single flight range applies to all lines, use it for every line.
 - Distinguish the ADVERTISER (who the campaign is for) from the AGENCY (the buyer placing it). They are often different.
-- Do NOT invent lines. Do NOT include summary/total rows as lines. If a value is unclear, extract your best reading AND add a specific note to warnings.
-- Reconcile: the paid line costs (rate × total_spots) should sum to the order's stated paid total. If they don't, say so in warnings."""
+- LINE KINDS: tag every grid line-item with `kind`. A TV spot line (paid or bonus) = 'airtime'. A web/banner/digital/online placement (e.g. "Top Banner 880x120") = 'web'. A production or creative-service line = 'production'. Include web/production rows in `lines` (tagged) — do NOT drop them — but set their total_spots to 0 since they carry no TV spot count.
+- STATED TOTAL: read the order's own printed grand-total spot count (the "Total Spot #" subtotal or airtime-summary total, e.g. 195) into stated_total_spots. This is airtime spots only (web shows n/a). 0 if not stated.
+- Do NOT invent lines. Do NOT include pure summary/subtotal/total ROWS (e.g. the "Subtotal" or "Airtime Summary" band) as lines — those are totals, not line items. If a value is unclear, extract your best reading AND add a specific note to warnings.
+- Reconcile: the airtime line spot counts (paid + bonus) should sum to stated_total_spots, and paid line costs (rate × total_spots) should sum to the order's stated paid total. If they don't, say so in warnings."""
 
 _INSTRUCTION = "Extract this advertising order into the required structured schema. Include every paid and bonus airtime line. Flag anything ambiguous in warnings."
 

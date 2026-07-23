@@ -27,6 +27,13 @@ from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_
 from browser_automation.etere_client import EtereClient
 from browser_automation.parsers.ai_parser import AIOrder, parse_ai_order
 
+# Web/banner and production/service lines are NOT entered into Etere yet — there's
+# no defined accounting rule for them. They're still extracted (tagged by `kind`)
+# and reconciled, just filtered out at entry. Flip this to True once the rule is
+# defined and add the per-kind entry logic.
+_ENTER_WEB_PRODUCTION = False
+_AIRTIME = "airtime"
+
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def _fmt(d: date) -> str:
@@ -228,6 +235,31 @@ def run_ai_order(order: AIOrder, inputs: dict) -> list[tuple[str, bool]]:
         print("[AI] ✗ Could not determine flight range")
         return [(contract_code, False)]
 
+    # Filter out web/production lines (not entered yet) and reconcile BEFORE any
+    # DB write. Enterable = a real airtime line = kind 'airtime' AND a positive
+    # spot count. This deterministically drops web (n/a → 0 spots), production, and
+    # any empty row regardless of the model's `kind` guess — the vision model
+    # sometimes mislabels the web banner as 'airtime', but it always has 0 spots.
+    def _is_airtime(ln) -> bool:
+        return (ln.kind or _AIRTIME) == _AIRTIME and (ln.total_spots or 0) > 0
+
+    enterable = [ln for ln in order.lines if _ENTER_WEB_PRODUCTION or _is_airtime(ln)]
+    excluded = [ln for ln in order.lines if not (_ENTER_WEB_PRODUCTION or _is_airtime(ln))]
+    for ex in excluded:
+        print(f"[AI] ⓘ Excluding non-airtime line (kind={ex.kind}, spots={ex.total_spots}, "
+              f"${ex.rate}): {ex.description or ex.language or '?'} — no Etere rule yet.")
+
+    # Spot guard: the airtime spots we're about to enter must equal the order's OWN
+    # stated grand total. Excluding web/production can't skew it (they carry 0
+    # spots). A misread spot count must refuse to enter, never enter silently
+    # (same totals-guard the deterministic parsers use).
+    stated = getattr(order, "stated_total_spots", 0) or 0
+    entered_spots = sum((ln.total_spots or 0) for ln in enterable)
+    if stated and entered_spots != stated:
+        print(f"[AI] ✗ Spot reconciliation failed: about to enter {entered_spots} airtime spot(s) "
+              f"but the order states {stated}. Refusing to enter — re-check the extraction.")
+        return [(contract_code, False)]
+
     conn = None
     try:
         conn = connect()
@@ -244,7 +276,7 @@ def run_ai_order(order: AIOrder, inputs: dict) -> list[tuple[str, bool]]:
         print(f"[AI] ✓ Contract header: ID={contract_id} code='{contract_code}'")
 
         n = 0
-        for ln in order.lines:
+        for ln in enterable:
             if ln.total_spots == 0:
                 continue
             booking_code = 10 if ln.is_bonus else 2
