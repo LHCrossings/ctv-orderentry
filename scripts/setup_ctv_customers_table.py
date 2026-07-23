@@ -31,10 +31,17 @@ _DDL = [
            include_market_in_code INT           NOT NULL CONSTRAINT DF_CTVCust_incmkt  DEFAULT 0,
            auto_aircheck          INT           NOT NULL CONSTRAINT DF_CTVCust_airchk  DEFAULT 0,
            owner                  NVARCHAR(100) NOT NULL CONSTRAINT DF_CTVCust_owner   DEFAULT '',
+           default_code_template  NVARCHAR(200) NULL,
+           default_desc_template  NVARCHAR(200) NULL,
            created_at             DATETIME      NOT NULL CONSTRAINT DF_CTVCust_created DEFAULT GETDATE(),
            updated_at             DATETIME      NOT NULL CONSTRAINT DF_CTVCust_updated DEFAULT GETDATE(),
            CONSTRAINT PK_CTV_Customers PRIMARY KEY (customer_name, order_type)
        )""",
+    # Idempotent migrations for tables created before these columns existed.
+    "IF COL_LENGTH('dbo.CTV_Customers','default_code_template') IS NULL "
+    "ALTER TABLE dbo.CTV_Customers ADD default_code_template NVARCHAR(200) NULL",
+    "IF COL_LENGTH('dbo.CTV_Customers','default_desc_template') IS NULL "
+    "ALTER TABLE dbo.CTV_Customers ADD default_desc_template NVARCHAR(200) NULL",
     "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_CTVCust_name') "
     "CREATE INDEX IX_CTVCust_name ON dbo.CTV_Customers(customer_name)",
     "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_CTVCust_type') "

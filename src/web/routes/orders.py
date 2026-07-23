@@ -6338,22 +6338,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             # Check if this contract's customer requires airchecks
             needs_airchecks = False
             try:
-                import sqlite3 as _sqlite3
                 with _db_connect() as _conn:
-                    _cur = _conn.cursor(as_dict=True)
+                    _cur = _conn.cursor()
                     _cur.execute(
-                        "SELECT COMMITTENTE FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = %d" % contract_id
+                        "SELECT MAX(c.auto_aircheck) FROM CONTRATTITESTATA t "
+                        "JOIN dbo.CTV_Customers c ON c.customer_id = CONVERT(varchar, t.COMMITTENTE) "
+                        "WHERE t.ID_CONTRATTITESTATA = %d" % contract_id
                     )
-                    _hdr = _cur.fetchone()
-                if _hdr and _hdr.get("COMMITTENTE"):
-                    _cid = str(int(_hdr["COMMITTENTE"]))
-                    _db_path = config.customer_db_path
-                    if _db_path.exists():
-                        with _sqlite3.connect(str(_db_path)) as _sdb:
-                            _row = _sdb.execute(
-                                "SELECT auto_aircheck FROM customers WHERE customer_id = ?", (_cid,)
-                            ).fetchone()
-                            needs_airchecks = bool(_row and _row[0])
+                    _row = _cur.fetchone()
+                    needs_airchecks = bool(_row and _row[0])
             except Exception:
                 pass
 
@@ -6756,22 +6749,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
             needs_airchecks = False
             try:
-                import sqlite3 as _sqlite3
                 with _db_connect() as _conn:
-                    _cur = _conn.cursor(as_dict=True)
+                    _cur = _conn.cursor()
                     _cur.execute(
-                        "SELECT COMMITTENTE FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = %d" % contract_id
+                        "SELECT MAX(c.auto_aircheck) FROM CONTRATTITESTATA t "
+                        "JOIN dbo.CTV_Customers c ON c.customer_id = CONVERT(varchar, t.COMMITTENTE) "
+                        "WHERE t.ID_CONTRATTITESTATA = %d" % contract_id
                     )
-                    _hdr = _cur.fetchone()
-                if _hdr and _hdr.get("COMMITTENTE"):
-                    _cid = str(int(_hdr["COMMITTENTE"]))
-                    _db_path = config.customer_db_path
-                    if _db_path.exists():
-                        with _sqlite3.connect(str(_db_path)) as _sdb:
-                            _row = _sdb.execute(
-                                "SELECT auto_aircheck FROM customers WHERE customer_id = ?", (_cid,)
-                            ).fetchone()
-                            needs_airchecks = bool(_row and _row[0])
+                    _row = _cur.fetchone()
+                    needs_airchecks = bool(_row and _row[0])
             except Exception:
                 pass
 
@@ -7068,22 +7054,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
             needs_airchecks = False
             try:
-                import sqlite3 as _sqlite3
                 with _db_connect() as _conn:
-                    _cur = _conn.cursor(as_dict=True)
+                    _cur = _conn.cursor()
                     _cur.execute(
-                        "SELECT COMMITTENTE FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = %d" % contract_id
+                        "SELECT MAX(c.auto_aircheck) FROM CONTRATTITESTATA t "
+                        "JOIN dbo.CTV_Customers c ON c.customer_id = CONVERT(varchar, t.COMMITTENTE) "
+                        "WHERE t.ID_CONTRATTITESTATA = %d" % contract_id
                     )
-                    _hdr = _cur.fetchone()
-                if _hdr and _hdr.get("COMMITTENTE"):
-                    _cid = str(int(_hdr["COMMITTENTE"]))
-                    _db_path = config.customer_db_path
-                    if _db_path.exists():
-                        with _sqlite3.connect(str(_db_path)) as _sdb:
-                            _row = _sdb.execute(
-                                "SELECT auto_aircheck FROM customers WHERE customer_id = ?", (_cid,)
-                            ).fetchone()
-                            needs_airchecks = bool(_row and _row[0])
+                    _row = _cur.fetchone()
+                    needs_airchecks = bool(_row and _row[0])
             except Exception:
                 pass
 
@@ -8842,22 +8821,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
             needs_airchecks = False
             try:
-                import sqlite3 as _sqlite3
                 with _db_connect() as _conn:
-                    _cur = _conn.cursor(as_dict=True)
+                    _cur = _conn.cursor()
                     _cur.execute(
-                        "SELECT COMMITTENTE FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = %d" % contract_id
+                        "SELECT MAX(c.auto_aircheck) FROM CONTRATTITESTATA t "
+                        "JOIN dbo.CTV_Customers c ON c.customer_id = CONVERT(varchar, t.COMMITTENTE) "
+                        "WHERE t.ID_CONTRATTITESTATA = %d" % contract_id
                     )
-                    _hdr = _cur.fetchone()
-                if _hdr and _hdr.get("COMMITTENTE"):
-                    _cid = str(int(_hdr["COMMITTENTE"]))
-                    _db_path = config.customer_db_path
-                    if _db_path.exists():
-                        with _sqlite3.connect(str(_db_path)) as _sdb:
-                            _row = _sdb.execute(
-                                "SELECT auto_aircheck FROM customers WHERE customer_id = ?", (_cid,)
-                            ).fetchone()
-                            needs_airchecks = bool(_row and _row[0])
+                    _row = _cur.fetchone()
+                    needs_airchecks = bool(_row and _row[0])
             except Exception:
                 pass
 

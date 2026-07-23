@@ -22,7 +22,6 @@ Schema additions to customers table:
     default_desc_template TEXT
 """
 
-import sqlite3
 from pathlib import Path
 from typing import Optional
 
@@ -51,32 +50,9 @@ DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "customers.d
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def ensure_template_columns(db_path: Path = DEFAULT_DB_PATH) -> None:
-    """
-    Add template columns to customers table if they don't exist.
-    Safe to call multiple times (idempotent).
-    """
-    if not db_path.exists():
-        return
-
-    try:
-        with sqlite3.connect(str(db_path)) as conn:
-            # Check if columns exist
-            cursor = conn.execute("PRAGMA table_info(customers)")
-            columns = {row[1] for row in cursor.fetchall()}
-
-            if "default_code_template" not in columns:
-                conn.execute(
-                    "ALTER TABLE customers ADD COLUMN default_code_template TEXT"
-                )
-                print("[CUSTOMER DB] ✓ Added default_code_template column")
-
-            if "default_desc_template" not in columns:
-                conn.execute(
-                    "ALTER TABLE customers ADD COLUMN default_desc_template TEXT"
-                )
-                print("[CUSTOMER DB] ✓ Added default_desc_template column")
-    except Exception as e:
-        print(f"[CUSTOMER DB] ⚠ Migration error (non-fatal): {e}")
+    """No-op: the template columns now live on dbo.CTV_Customers (created/migrated
+    by scripts/setup_ctv_customers_table.py). Kept for call-site compatibility."""
+    return
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -150,34 +126,30 @@ def _get_templates(
     Returns:
         (code_template, desc_template) or None if customer not found
     """
-    if not db_path.exists():
-        return None
-
     try:
-        with sqlite3.connect(str(db_path)) as conn:
+        from browser_automation.etere_direct_client import connect
+        with connect() as conn:
+            cur = conn.cursor()
             # Exact match
-            cursor = conn.execute(
-                """SELECT default_code_template, default_desc_template
-                   FROM customers
-                   WHERE customer_name = ? AND order_type = ?""",
+            cur.execute(
+                "SELECT default_code_template, default_desc_template FROM dbo.CTV_Customers "
+                "WHERE customer_name = %s AND order_type = %s",
                 (customer_name, order_type),
             )
-            row = cursor.fetchone()
+            row = cur.fetchone()
             if row:
                 return (row[0], row[1])
 
             # Fuzzy: containment match
-            cursor = conn.execute(
-                """SELECT customer_name, default_code_template, default_desc_template
-                   FROM customers
-                   WHERE order_type = ?""",
+            cur.execute(
+                "SELECT customer_name, default_code_template, default_desc_template "
+                "FROM dbo.CTV_Customers WHERE order_type = %s",
                 (order_type,),
             )
-            for db_name, code_tmpl, desc_tmpl in cursor.fetchall():
-                if (db_name.lower() in customer_name.lower()
-                        or customer_name.lower() in db_name.lower()):
+            for db_name, code_tmpl, desc_tmpl in cur.fetchall():
+                if db_name and (db_name.lower() in customer_name.lower()
+                                or customer_name.lower() in db_name.lower()):
                     return (code_tmpl, desc_tmpl)
-
     except Exception as e:
         print(f"[CUSTOMER DB] ⚠ Template lookup error: {e}")
 
@@ -208,24 +180,21 @@ def save_templates(
     Returns:
         True if saved successfully
     """
-    if not db_path.exists():
-        print(f"[CUSTOMER DB] ⚠ Database not found at {db_path}")
-        return False
-
     try:
-        with sqlite3.connect(str(db_path)) as conn:
-            conn.execute(
-                """UPDATE customers
-                   SET default_code_template = ?, default_desc_template = ?
-                   WHERE customer_name = ? AND order_type = ?""",
+        from browser_automation.etere_direct_client import connect
+        with connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE dbo.CTV_Customers SET default_code_template = %s, default_desc_template = %s, "
+                "updated_at = GETDATE() WHERE customer_name = %s AND order_type = %s",
                 (code_template, desc_template, customer_name, order_type),
             )
-            if conn.total_changes > 0:
+            if cur.rowcount > 0:
+                conn.commit()
                 print(f"[CUSTOMER DB] ✓ Saved templates for {customer_name}")
                 return True
-            else:
-                print(f"[CUSTOMER DB] ⚠ Customer not found: {customer_name} ({order_type})")
-                return False
+            print(f"[CUSTOMER DB] ⚠ Customer not found: {customer_name} ({order_type})")
+            return False
     except Exception as e:
         print(f"[CUSTOMER DB] ⚠ Could not save templates: {e}")
         return False

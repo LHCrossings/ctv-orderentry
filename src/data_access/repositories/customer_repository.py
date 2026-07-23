@@ -13,7 +13,6 @@ Extended fields support storing client defaults:
 """
 
 import json
-import sqlite3
 import sys
 from pathlib import Path
 
@@ -25,198 +24,78 @@ if str(_src_path) not in sys.path:
 from domain.entities import Customer
 from domain.enums import OrderType
 
+# The 14 columns _row_to_customer expects, in order.
+_COLS = ("customer_id, customer_name, order_type, abbreviation, default_market, "
+         "billing_type, separation_customer, separation_event, separation_order, "
+         "code_name, description_name, include_market_in_code, auto_aircheck, owner")
+_TABLE = "dbo.CTV_Customers"
+
+
+def _connect():
+    """Short-lived connection to the shared Etere SQL Server."""
+    from browser_automation.etere_direct_client import connect
+    return connect()
+
 
 class CustomerRepository:
     """
     Repository for customer data storage and retrieval.
 
-    Uses SQLite for persistent storage of customer mappings.
-    The database is self-learning - new customers are added as they're encountered.
-    Automatically migrates older databases to add new columns.
+    Backed by the shared dbo.CTV_Customers table on the Etere SQL Server (was a
+    per-checkout SQLite `data/customers.db`, which drifted between machines). The
+    public API is unchanged, so callers are unaffected. Self-learning: new
+    customers are upserted via save() as they're encountered. The table itself is
+    created/migrated by scripts/setup_ctv_customers_table.py.
     """
 
-    def __init__(self, db_path: Path | str):
-        """
-        Initialize repository with database path.
-
-        Args:
-            db_path: Path to SQLite database file or ":memory:" for in-memory DB
-        """
-        if str(db_path) == ":memory:":
-            self._db_path = ":memory:"
-        else:
-            self._db_path = Path(db_path)
-        self._ensure_database_exists()
-        self._migrate_schema()
-
-    def _ensure_database_exists(self) -> None:
-        """Create database and tables if they don't exist."""
-        # Only create parent directory for file-based databases
-        if self._db_path != ":memory:":
-            Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
-
-        conn = sqlite3.connect(self._db_path)
-        try:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS customers (
-                    customer_id TEXT NOT NULL,
-                    customer_name TEXT NOT NULL,
-                    order_type TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    abbreviation TEXT DEFAULT '',
-                    default_market TEXT,
-                    billing_type TEXT DEFAULT 'agency',
-                    separation_customer INTEGER DEFAULT 15,
-                    separation_event INTEGER DEFAULT 0,
-                    separation_order INTEGER DEFAULT 0,
-                    code_name TEXT DEFAULT '',
-                    description_name TEXT DEFAULT '',
-                    include_market_in_code INTEGER DEFAULT 0,
-                    owner TEXT DEFAULT '',
-                    PRIMARY KEY (customer_name, order_type)
-                )
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_customer_name
-                ON customers(customer_name)
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_order_type
-                ON customers(order_type)
-            """)
-            conn.commit()
-        finally:
-            conn.close()
-
-    def _migrate_schema(self) -> None:
-        """
-        Add new columns to existing databases that don't have them yet.
-
-        This allows older customers.db files to be upgraded automatically
-        without losing existing data.
-        """
-        new_columns = [
-            ("abbreviation", "TEXT DEFAULT ''"),
-            ("default_market", "TEXT"),
-            ("billing_type", "TEXT DEFAULT 'agency'"),
-            ("separation_customer", "INTEGER DEFAULT 15"),
-            ("separation_event", "INTEGER DEFAULT 0"),
-            ("separation_order", "INTEGER DEFAULT 0"),
-            ("code_name", "TEXT DEFAULT ''"),
-            ("description_name", "TEXT DEFAULT ''"),
-            ("include_market_in_code", "INTEGER DEFAULT 0"),
-            ("auto_aircheck", "INTEGER DEFAULT 0"),
-            ("owner", "TEXT DEFAULT ''"),
-        ]
-
-        conn = sqlite3.connect(self._db_path)
-        try:
-            for col_name, col_type in new_columns:
-                try:
-                    conn.execute(f"ALTER TABLE customers ADD COLUMN {col_name} {col_type}")
-                except sqlite3.OperationalError:
-                    pass  # Column already exists — expected for already-migrated DBs
-            conn.commit()
-        finally:
-            conn.close()
+    def __init__(self, db_path: Path | str = None):
+        """`db_path` is accepted for backward compatibility but ignored — the
+        store is the shared SQL table, not a local file."""
+        self._db_path = db_path  # kept for compat; unused
 
     def find_by_name(
         self,
         customer_name: str,
         order_type: OrderType
     ) -> Customer | None:
-        """
-        Find customer by exact name match for specific order type.
-
-        Args:
-            customer_name: Customer name to search for
-            order_type: Order type context
-
-        Returns:
-            Customer if found, None otherwise
-        """
+        """Find customer by exact name (case-insensitive) for a specific order type."""
         normalized_name = customer_name.strip().lower()
-
-        conn = sqlite3.connect(self._db_path)
-        try:
-            cursor = conn.execute(
-                """
-                SELECT customer_id, customer_name, order_type,
-                       abbreviation, default_market, billing_type,
-                       separation_customer, separation_event, separation_order,
-                       code_name, description_name, include_market_in_code, auto_aircheck, owner
-                FROM customers
-                WHERE LOWER(customer_name) = ? AND order_type = ?
-                """,
-                (normalized_name, order_type.value)
+        with _connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT {_COLS} FROM {_TABLE} WHERE LOWER(customer_name) = %s AND order_type = %s",
+                (normalized_name, order_type.value),
             )
-            row = cursor.fetchone()
-
-            if row:
-                return self._row_to_customer(row)
-
-            return None
-        finally:
-            conn.close()
+            row = cur.fetchone()
+        return self._row_to_customer(row) if row else None
 
     def find_by_name_any_type(
         self,
         customer_name: str
     ) -> Customer | None:
         """
-        Find customer by name across ALL order types.
-
-        Useful for Charmaine-style orders where the same client may
+        Find customer by name across ALL order types (exact first, then partial
+        containment). Used for Charmaine-style orders where the same client may
         have been entered under a different order type previously.
-
-        Args:
-            customer_name: Customer name to search for
-
-        Returns:
-            Customer if found (first match), None otherwise
         """
         normalized_name = customer_name.strip().lower()
-
-        conn = sqlite3.connect(self._db_path)
-        try:
-            # Exact match first
-            cursor = conn.execute(
-                """
-                SELECT customer_id, customer_name, order_type,
-                       abbreviation, default_market, billing_type,
-                       separation_customer, separation_event, separation_order,
-                       code_name, description_name, include_market_in_code, auto_aircheck, owner
-                FROM customers
-                WHERE LOWER(customer_name) = ?
-                LIMIT 1
-                """,
-                (normalized_name,)
+        with _connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT TOP 1 {_COLS} FROM {_TABLE} WHERE LOWER(customer_name) = %s",
+                (normalized_name,),
             )
-            row = cursor.fetchone()
-
+            row = cur.fetchone()
             if row:
                 return self._row_to_customer(row)
 
-            # Partial match: check if search term is contained in any name
-            cursor = conn.execute(
-                """
-                SELECT customer_id, customer_name, order_type,
-                       abbreviation, default_market, billing_type,
-                       separation_customer, separation_event, separation_order,
-                       code_name, description_name, include_market_in_code, auto_aircheck, owner
-                FROM customers
-                """
-            )
-            all_rows = cursor.fetchall()
-
-            for row in all_rows:
-                row_name = (row[1] or "").lower()
-                if normalized_name in row_name or row_name in normalized_name:
-                    return self._row_to_customer(row)
-
-            return None
-        finally:
-            conn.close()
+            cur.execute(f"SELECT {_COLS} FROM {_TABLE}")
+            all_rows = cur.fetchall()
+        for row in all_rows:
+            row_name = (row[1] or "").lower()
+            if normalized_name in row_name or row_name in normalized_name:
+                return self._row_to_customer(row)
+        return None
 
     def find_by_name_fuzzy(
         self,
@@ -274,111 +153,74 @@ class CustomerRepository:
         Returns:
             List of customers for this order type
         """
-        with sqlite3.connect(self._db_path) as conn:
-            cursor = conn.execute(
-                """
-                SELECT customer_id, customer_name, order_type,
-                       abbreviation, default_market, billing_type,
-                       separation_customer, separation_event, separation_order,
-                       code_name, description_name, include_market_in_code, auto_aircheck, owner
-                FROM customers
-                WHERE order_type = ?
-                ORDER BY customer_name
-                """,
-                (order_type.value,)
+        with _connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT {_COLS} FROM {_TABLE} WHERE order_type = %s ORDER BY customer_name",
+                (order_type.value,),
             )
-
-            return [self._row_to_customer(row) for row in cursor.fetchall()]
+            return [self._row_to_customer(row) for row in cur.fetchall()]
 
     def save(self, customer: Customer) -> None:
-        """
-        Save or update customer in database.
-
-        Args:
-            customer: Customer to save
-        """
-        with sqlite3.connect(self._db_path) as conn:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO customers
-                (customer_id, customer_name, order_type,
-                 abbreviation, default_market, billing_type,
-                 separation_customer, separation_event, separation_order,
-                 code_name, description_name, include_market_in_code, auto_aircheck, owner)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    customer.customer_id,
-                    customer.customer_name,
-                    customer.order_type.value,
-                    customer.abbreviation,
-                    customer.default_market,
-                    customer.billing_type,
-                    customer.separation_customer,
-                    customer.separation_event,
-                    customer.separation_order,
-                    customer.code_name,
-                    customer.description_name,
-                    1 if customer.include_market_in_code else 0,
-                    1 if customer.auto_aircheck else 0,
-                    customer.owner,
-                )
+        """Upsert a customer (keyed on customer_name + order_type)."""
+        vals = (
+            customer.customer_id,
+            customer.abbreviation,
+            customer.default_market,
+            customer.billing_type,
+            customer.separation_customer,
+            customer.separation_event,
+            customer.separation_order,
+            customer.code_name,
+            customer.description_name,
+            1 if customer.include_market_in_code else 0,
+            1 if customer.auto_aircheck else 0,
+            customer.owner,
+        )
+        with _connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"UPDATE {_TABLE} SET customer_id=%s, abbreviation=%s, default_market=%s, "
+                "billing_type=%s, separation_customer=%s, separation_event=%s, separation_order=%s, "
+                "code_name=%s, description_name=%s, include_market_in_code=%s, auto_aircheck=%s, "
+                "owner=%s, updated_at=GETDATE() WHERE customer_name=%s AND order_type=%s",
+                (*vals, customer.customer_name, customer.order_type.value),
             )
+            if cur.rowcount == 0:
+                cur.execute(
+                    f"INSERT INTO {_TABLE} (customer_id, abbreviation, default_market, billing_type, "
+                    "separation_customer, separation_event, separation_order, code_name, "
+                    "description_name, include_market_in_code, auto_aircheck, owner, "
+                    "customer_name, order_type) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (*vals, customer.customer_name, customer.order_type.value),
+                )
             conn.commit()
 
     def delete(self, customer_name: str, order_type: OrderType) -> bool:
-        """
-        Delete customer from database.
-
-        Args:
-            customer_name: Name of customer to delete
-            order_type: Order type context
-
-        Returns:
-            True if customer was deleted, False if not found
-        """
-        with sqlite3.connect(self._db_path) as conn:
-            cursor = conn.execute(
-                """
-                DELETE FROM customers
-                WHERE LOWER(customer_name) = ? AND order_type = ?
-                """,
-                (customer_name.strip().lower(), order_type.value)
+        """Delete a customer; True if a row was removed."""
+        with _connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"DELETE FROM {_TABLE} WHERE LOWER(customer_name) = %s AND order_type = %s",
+                (customer_name.strip().lower(), order_type.value),
             )
+            deleted = cur.rowcount > 0
             conn.commit()
-            return cursor.rowcount > 0
+            return deleted
 
     def count(self) -> int:
-        """
-        Get total number of customers in database.
-
-        Returns:
-            Total customer count
-        """
-        with sqlite3.connect(self._db_path) as conn:
-            cursor = conn.execute("SELECT COUNT(*) FROM customers")
-            return cursor.fetchone()[0]
+        """Total number of customers."""
+        with _connect() as conn:
+            cur = conn.cursor()
+            cur.execute(f"SELECT COUNT(*) FROM {_TABLE}")
+            return cur.fetchone()[0]
 
     def list_all(self) -> list[Customer]:
-        """
-        Get all customers from database.
-
-        Returns:
-            List of all customers, ordered by name
-        """
-        with sqlite3.connect(self._db_path) as conn:
-            cursor = conn.execute(
-                """
-                SELECT customer_id, customer_name, order_type,
-                       abbreviation, default_market, billing_type,
-                       separation_customer, separation_event, separation_order,
-                       code_name, description_name, include_market_in_code, auto_aircheck, owner
-                FROM customers
-                ORDER BY customer_name
-                """
-            )
-
-            return [self._row_to_customer(row) for row in cursor.fetchall()]
+        """All customers, ordered by name."""
+        with _connect() as conn:
+            cur = conn.cursor()
+            cur.execute(f"SELECT {_COLS} FROM {_TABLE} ORDER BY customer_name")
+            return [self._row_to_customer(row) for row in cur.fetchall()]
 
     @staticmethod
     def _row_to_customer(row: tuple) -> Customer:
