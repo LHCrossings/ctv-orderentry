@@ -94,11 +94,9 @@ Built + verified against the live DB:
 - Routes + UI modal wired (row-click → assign/replace, random + manual, mirror).
 - ruff + py_compile clean.
 
-NOT exercised in WSL (no K: mount here — runs on the Windows server): the grid
-read in the two routes (`get_day_programs`) and therefore the end-to-end modal.
-The blank-INSERT branch of `fill_marketplace` reuses the proven `_insert_event`
-path (same as pieces/daily-ID placement); only the replace branch was live-tested.
-Recommend one real assign on a blank DAL Marketplace slot on the server behind
-the verify-gate.
+LIVE-VALIDATED on the server 2026-07-23: Lee assigned a PI to a blank DAL
+Marketplace slot end-to-end ("works great") — the grid read + full modal +
+blank-INSERT branch (the only path not testable from WSL). Replace branch was
+verified via the reversible swap. Feature complete.
 
 Setup on the server: `uv run python scripts/setup_pi_lf_rotation_table.py`.
