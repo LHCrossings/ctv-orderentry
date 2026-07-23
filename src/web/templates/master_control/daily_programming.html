@@ -242,6 +242,17 @@
             <div id="fmMarketPool" class="fm-results"></div>
         </div>
 
+        <div id="fmKdPanel" style="display:none;">
+            <div class="fm-filler-status" id="fmKdStatus"></div>
+            <div id="fmKdDramas" class="fm-chosen"></div>
+            <div class="modal-check-hint" id="fmKdEditHint" style="display:none; margin:8px 0;">Search &amp; click the new episode's <b>Piece A</b> (e.g. KD-THEFIRSTMAN096…).</div>
+            <div class="modal-check-hint" style="margin:8px 0 4px;">Fillers (random, sized to fill the programming budget):</div>
+            <div id="fmKdFillers" class="fm-chosen"></div>
+            <button type="button" id="fmKdReroll" class="fm-done" style="background:var(--nord10);">🎲 Reroll fillers</button>
+            <button type="button" id="fmKdRun" class="run-btn">Set up across markets</button>
+            <div id="fmKdResults" class="preview-plan" style="margin-top:10px;"></div>
+        </div>
+
         <input type="text" id="fmSearch" class="field-input" style="width:100%; box-sizing:border-box;"
                placeholder="Search media library (e.g. NEWSTODAY)…" autocomplete="off" />
         <div id="fmResults" class="fm-results"></div>
@@ -352,11 +363,19 @@
     // Korean drama piece (KD-*), the leftover blank PRGS slots are auto-filled
     // with random K-FILLERs from a cycle-through rotation instead of hand-picked.
     function isKoreanDrama(code) { return /^KD-/i.test(code || ''); }
-    function isWeekday(ymd) {
+    function dowOf(ymd) {
         const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd || '');
-        if (!m) return false;
-        const wd = new Date(+m[1], +m[2] - 1, +m[3]).getDay();  // 0=Sun … 6=Sat
-        return wd >= 1 && wd <= 5;
+        return m ? new Date(+m[1], +m[2] - 1, +m[3]).getDay() : -1;  // 0=Sun … 6=Sat
+    }
+    function isWeekday(ymd) { const wd = dowOf(ymd); return wd >= 1 && wd <= 5; }
+    function isWeekend(ymd) { const wd = dowOf(ymd); return wd === 0 || wd === 6; }
+
+    // A weekend Korean-drama grid row (CTV, Sat/Sun): 2-hour block, lang Korean,
+    // kind Drama. Clicking it opens the weekend drama modal (Drama 1/2/3 selectors).
+    function isWeekendKoreanDrama(p) {
+        return state.network === 'CTV' && isWeekend(state.date)
+            && (p && (p.language || '').toLowerCase()) === 'korean'
+            && /drama/i.test((p && p.kind) || '');
     }
 
     async function loadGrid() {
@@ -520,6 +539,14 @@
     const fmMarketStatus = document.getElementById('fmMarketStatus');
     const fmMarketRandom = document.getElementById('fmMarketRandom');
     const fmMarketPool = document.getElementById('fmMarketPool');
+    const fmKdPanel = document.getElementById('fmKdPanel');
+    const fmKdStatus = document.getElementById('fmKdStatus');
+    const fmKdDramas = document.getElementById('fmKdDramas');
+    const fmKdFillers = document.getElementById('fmKdFillers');
+    const fmKdReroll = document.getElementById('fmKdReroll');
+    const fmKdRun = document.getElementById('fmKdRun');
+    const fmKdResults = document.getElementById('fmKdResults');
+    const fmKdEditHint = document.getElementById('fmKdEditHint');
     let modalIdx = null;
     let lastResults = [];
     let searchTimer = null;
@@ -547,6 +574,10 @@
             openMarketplaceModal(idx);
             return;
         }
+        if (isWeekendKoreanDrama(p)) {   // weekend drama: Drama 1/2/3 + auto fillers
+            openWeekendDramaModal(idx);
+            return;
+        }
         // Fully placed in every selected market + nothing assigned → the only
         // sensible action is swapping a revised piece, so the modal opens in
         // replace mode. Partially placed rows keep the normal assign modal
@@ -572,6 +603,7 @@
         fmFillerPanel.style.display = 'none';
         fmEdlPanel.style.display = 'none';
         fmMarketPanel.style.display = 'none';
+        fmKdPanel.style.display = 'none';
         fmSearch.style.display = '';
         fmResults.style.display = '';
         fmHint.style.display = 'block';
@@ -597,6 +629,7 @@
         fmFillerPanel.style.display = 'none';
         fmEdlPanel.style.display = 'none';
         fmMarketPanel.style.display = 'none';
+        fmKdPanel.style.display = 'none';
         fmSearch.style.display = '';
         fmResults.style.display = '';
     }
@@ -863,6 +896,7 @@
         if (!f) return;
         if (modalPhase === 'replace-file') doReplacePiece(f);
         else if (modalPhase === 'fillers') addFiller(f);
+        else if (modalPhase === 'kd-edit') pickKdEpisode(f);
         else pickShowFile(f);
     });
     document.getElementById('fmClose').addEventListener('click', closeModal);
@@ -1190,6 +1224,156 @@
         const el = e.target.closest('.fm-result');
         if (!el || el.dataset.mfid === undefined) return;
         assignMarketplace({ fileId: parseInt(el.dataset.mfid, 10) });
+    });
+
+    // ── Weekend Korean drama (CTV, Sat/Sun) ─────────────────────────────────
+    // Drama 1/2/3 selectors → PRGS blocks 1-3 / 4-6 / 7-9, pre-filled from the
+    // weekday repeat pattern (overridable). Fillers are drawn by duration to fill
+    // the programming budget (Saturday's PRGS total) and stack into the last slot.
+    let kdCtx = null;
+
+    async function openWeekendDramaModal(idx) {
+        const p = state.programs[idx];
+        kdCtx = { p: p, idx: idx, dramas: [], fillers: [], budgetFrames: 0, editing: null };
+        modalPhase = 'kd';
+        fillerDraft = null; edlDraft = null; replaceCtx = null;
+        fmFillerPanel.style.display = 'none'; fmEdlPanel.style.display = 'none';
+        fmMarketPanel.style.display = 'none';
+        fmSearch.style.display = 'none'; fmResults.style.display = 'none'; fmResults.innerHTML = '';
+        fmHint.style.display = 'none';
+        fmKdPanel.style.display = 'block';
+        fmKdEditHint.style.display = 'none';
+        fmKdResults.innerHTML = '';
+        fmTitle.textContent = 'Korean Drama (weekend) — ' + p.title;
+        const mkts = (state.codUsers || []).map(function (cu) { return codeOf[cu] || cu; }).join(', ');
+        fmSub.textContent = (p.start || '') + (p.end ? '–' + p.end : '') + ' · ' + mkts;
+        fmKdStatus.innerHTML = 'Loading episodes…';
+        fmKdDramas.innerHTML = ''; fmKdFillers.innerHTML = '';
+        modal.style.display = 'flex';
+        try {
+            const r = await fetch('/api/master-control/daily-programming/kdrama/weekend?date=' +
+                encodeURIComponent(state.date) + '&start=' + encodeURIComponent(p.start || '') +
+                '&end=' + encodeURIComponent(p.end || ''));
+            const data = await r.json();
+            if (data.error) { fmKdStatus.innerHTML = '<span style="color:var(--nord11)">' + escHtml(data.error) + '</span>'; return; }
+            kdCtx.budgetFrames = data.budgetFrames || 0;
+            kdCtx.dramas = (data.dramas || []).map(function (dm) {
+                return { block: dm.block, weekday: dm.weekday,
+                         code: dm.prefill ? dm.prefill.code : null,
+                         base: dm.prefill ? dm.prefill.base : null };
+            });
+            renderKdDramas();
+            previewKdFillers();
+        } catch (e) {
+            fmKdStatus.innerHTML = '<span style="color:var(--nord11)">Error: ' + escHtml(e.message) + '</span>';
+        }
+    }
+
+    function renderKdDramas() {
+        const n = kdCtx.dramas.length;
+        fmKdStatus.innerHTML = 'Set up <b>' + n + '</b> drama' + (n === 1 ? '' : 's') +
+            ' (' + (n * 3) + ' pieces → PRGS blocks). Episodes pre-filled from the week — click “change” to override.';
+        fmKdDramas.innerHTML = kdCtx.dramas.map(function (dm, i) {
+            const blocks = (i * 3 + 1) + '-' + (i * 3 + 3);
+            const label = dm.code ? escHtml(dm.code)
+                : '<span style="color:var(--nord11)">not found — pick one</span>';
+            return '<div class="fm-chosen-row"><span class="fm-slot-num">Drama ' + (i + 1) + ' · blk ' + blocks + '</span>' +
+                '<span class="fm-code">' + label + '</span>' +
+                '<span class="fm-x" data-kd="' + i + '" style="color:var(--nord10)">change</span></div>';
+        }).join('');
+    }
+
+    fmKdDramas.addEventListener('click', function (e) {
+        const x = e.target.closest('[data-kd]');
+        if (!x) return;
+        kdCtx.editing = parseInt(x.dataset.kd, 10);
+        modalPhase = 'kd-edit';
+        fmKdEditHint.style.display = 'block';
+        fmSearch.style.display = ''; fmResults.style.display = ''; fmResults.innerHTML = '';
+        fmSearch.value = ''; fmSearch.placeholder = 'Search episode Piece A (e.g. KD-THEFIRSTMAN096…)';
+        lastResults = []; fmSearch.focus();
+    });
+
+    function pickKdEpisode(file) {
+        const code = file.code || '';
+        const base = /[A-Za-z]$/.test(code) ? code.slice(0, -1) : code;
+        kdCtx.dramas[kdCtx.editing].code = base + 'A';
+        kdCtx.dramas[kdCtx.editing].base = base;
+        kdCtx.editing = null; modalPhase = 'kd';
+        fmKdEditHint.style.display = 'none';
+        fmSearch.style.display = 'none'; fmResults.style.display = 'none'; fmResults.innerHTML = '';
+        renderKdDramas();
+        previewKdFillers();
+    }
+
+    async function previewKdFillers() {
+        const codes = kdCtx.dramas.map(function (dm) { return dm.code; }).filter(Boolean);
+        if (codes.length !== kdCtx.dramas.length) {
+            fmKdFillers.innerHTML = '<div class="fm-empty">Pick all ' + kdCtx.dramas.length + ' episodes to compute fillers.</div>';
+            return;
+        }
+        fmKdFillers.innerHTML = '<div class="fm-empty">Drawing fillers…</div>';
+        fmKdReroll.disabled = true;
+        try {
+            const r = await fetch('/api/master-control/daily-programming/kdrama/weekend/fillers', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date: state.date, start: kdCtx.p.start, end: kdCtx.p.end, dramas: codes })
+            });
+            const data = await r.json();
+            if (data.error) { fmKdFillers.innerHTML = '<span style="color:var(--nord11)">' + escHtml(data.error) + '</span>'; return; }
+            kdCtx.fillers = data.fillers || [];
+            const fillFr = kdCtx.fillers.reduce(function (s, f) { return s + (f.durata || 0); }, 0);
+            const rows = kdCtx.fillers.map(function (f) {
+                return '<div class="fm-chosen-row"><span class="fm-slot-num">filler</span>' +
+                    '<span class="fm-code">' + escHtml(f.code) + '</span>' +
+                    '<span class="fm-meta">' + durLabel(f.durata) + '</span></div>';
+            }).join('');
+            fmKdFillers.innerHTML = (rows || '<div class="fm-empty">No fillers needed.</div>') +
+                '<div class="modal-check-hint" style="margin-top:6px;">Budget ' + durLabel(data.budgetFrames) +
+                ' · drama ' + durLabel(data.dramaFrames) + ' · fillers ' + durLabel(fillFr) +
+                ' → total ' + durLabel((data.dramaFrames || 0) + fillFr) + '.</div>';
+        } catch (e) {
+            fmKdFillers.innerHTML = '<span style="color:var(--nord11)">Error: ' + escHtml(e.message) + '</span>';
+        } finally {
+            fmKdReroll.disabled = false;
+        }
+    }
+
+    fmKdReroll.addEventListener('click', previewKdFillers);
+
+    fmKdRun.addEventListener('click', async function () {
+        const codes = kdCtx.dramas.map(function (dm) { return dm.code; }).filter(Boolean);
+        if (codes.length !== kdCtx.dramas.length) { alert('Pick all episodes first.'); return; }
+        const universe = state.codUsers || [];
+        if (!universe.length) { alert('Select a network or market first.'); return; }
+        const mkts = universe.map(function (cu) { return codeOf[cu] || cu; }).join(', ');
+        if (!confirm('Set up ' + codes.length + ' Korean drama(s) + ' + kdCtx.fillers.length +
+            ' filler(s) across ' + universe.length + ' market(s): ' + mkts +
+            '?\n\nThis writes the live schedule (MG foundation; COMS commercials stay for EE).')) return;
+        fmKdRun.disabled = true;
+        fmKdResults.innerHTML = '<div class="pp-empty">Running… (do not close)</div>';
+        try {
+            const r = await fetch('/api/master-control/daily-programming/kdrama/weekend/run', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date: state.date, start: kdCtx.p.start, end: kdCtx.p.end,
+                                       dramas: codes, fillerIds: kdCtx.fillers.map(function (f) { return f.id; }),
+                                       codUsers: universe })
+            });
+            const data = await r.json();
+            if (data.error) { fmKdResults.innerHTML = '<div class="pp-empty">Error: ' + escHtml(data.error) + '</div>'; return; }
+            fmKdResults.innerHTML = (data.results || []).map(function (x) {
+                const cls = x.skipped ? '' : (x.ok ? 'ok' : 'fail');
+                const icon = x.skipped ? '−' : (x.ok ? '✓' : '✗');
+                return '<div class="pp-row ' + cls + '"><div class="pp-prog">' + icon + ' ' +
+                    escHtml(String(codeOf[x.cu] || x.cu)) + '</div>' +
+                    '<div class="pp-detail">' + escHtml(x.message) + '</div></div>';
+            }).join('') || '<div class="pp-empty">No results.</div>';
+            loadPlacement();
+        } catch (e) {
+            fmKdResults.innerHTML = '<div class="pp-empty">Error: ' + escHtml(e.message) + '</div>';
+        } finally {
+            fmKdRun.disabled = false;
+        }
     });
 </script>
 

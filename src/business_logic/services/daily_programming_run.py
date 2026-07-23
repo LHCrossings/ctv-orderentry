@@ -1006,6 +1006,107 @@ def _fill_marketplace_once(conn, cod_user, d, windows, fid, pending):
         return {"ok": False, "message": f"error: {exc}", "_deadlock": _is_deadlock(exc)}
 
 
+def _prgs_duration_total(cur, cod_user, d, lo, hi):
+    """Sum of PRGS segment durations (frames) in the window — the block's
+    programming capacity. Mirrors _slots' segment resolution."""
+    cur.execute(
+        """SELECT ISNULL(SUM(seg.Duration),0)
+           FROM traffic_calendar ca WITH(NOLOCK)
+           JOIN traffic_scheduleblock sb WITH(NOLOCK) ON sb.ID_TrafficSchedule=ca.ID_TrafficSchedule
+           JOIN traffic_block bl WITH(NOLOCK) ON bl.ID_TrafficBlock=sb.ID_TrafficBlock
+           OUTER APPLY (
+             SELECT si.Offset,si.Type,si.Duration FROM trf_instancesegment si WITH(NOLOCK)
+               WHERE si.ID_TrafficBlock=bl.ID_TrafficBlock AND si.COD_USER=ca.Cod_User AND si.INSTANCEDATE=ca.Date AND si.visible=1
+             UNION
+             SELECT se.Offset,se.Type,se.Duration FROM traffic_segment se WITH(NOLOCK)
+               WHERE se.ID_TrafficBlock=bl.ID_TrafficBlock AND se.visible=1
+               AND (SELECT COUNT(*) FROM trf_instancesegment WITH(NOLOCK) WHERE ID_TrafficBlock=bl.ID_TrafficBlock AND COD_USER=ca.Cod_User AND INSTANCEDATE=ca.Date)=0
+           ) seg
+           WHERE ca.Cod_User=%s AND ca.Date=%s AND bl.expired=0 AND seg.Type='PRGS'
+             AND (sb.offset+seg.Offset)>=%s AND (sb.offset+seg.Offset)<%s""",
+        (cod_user, d, lo, hi),
+    )
+    return int(cur.fetchone()[0] or 0)
+
+
+def ordered_pieces(cur, base):
+    """Ordered A/B/C… piece fids for a show base code (COD_PROGRA = base+letter)."""
+    cur.execute(
+        "SELECT ID_FILMATI, COD_PROGRA FROM FILMATI WITH(NOLOCK) "
+        "WHERE NEWTYPE='PGM' AND COD_PROGRA LIKE %s ORDER BY COD_PROGRA",
+        (base + "%",),
+    )
+    return [int(r[0]) for r in cur.fetchall()
+            if len(r[1]) == len(base) + 1 and r[1][-1:].isalpha()]
+
+
+def place_weekend_drama(conn, cod_user, d, start, end, piece_fids, filler_fids, pending):
+    """Weekend Korean-drama setup for one market: drama pieces one-per-PRGS-slot
+    in block order (Drama 1 → slots 1-3, …), then the fillers STACKED into the
+    last PRGS slot behind the final piece (floating). First piece = F anchor, rest
+    = T. COMS is left alone (commercials conform in EE afterward). Transaction-safe
+    with the same deadlock retry as run_market. Returns {cu, ok, skipped, message}."""
+    result = None
+    for attempt in range(1, _DEADLOCK_MAX_ATTEMPTS + 1):
+        result = _place_weekend_drama_once(conn, cod_user, d, start, end, piece_fids, filler_fids, pending)
+        if not result.pop("_deadlock", False):
+            return result
+        if attempt < _DEADLOCK_MAX_ATTEMPTS:
+            time.sleep(_DEADLOCK_RETRY_SECONDS * attempt + random.uniform(0.1, 1.5))
+    return result
+
+
+def _place_weekend_drama_once(conn, cod_user, d, start, end, piece_fids, filler_fids, pending):
+    cur = conn.cursor()
+    try:
+        lo, hi = _window(start, end)
+        if lo is None or hi is None:
+            return {"cu": cod_user, "ok": False, "skipped": False, "message": "bad time window"}
+        if _is_placed(cur, cod_user, d, lo, hi):
+            return {"cu": cod_user, "ok": True, "skipped": True, "message": "already placed"}
+        _clear_noop_fillers(cur, cod_user, d, lo, hi)
+        slots = _slots(cur, cod_user, d, lo, hi)
+        if len(slots) != len(piece_fids):
+            conn.rollback()
+            return {"cu": cod_user, "ok": False, "skipped": False,
+                    "message": f"{len(piece_fids)} drama pieces vs {len(slots)} PRGS slots"}
+        ids, keys = [], []
+        for fid, slot in zip(piece_fids, slots):
+            nid = _insert_event(cur, cod_user, d, slot["sched"], slot["block"], slot["seg"],
+                                slot["ora"], fid, _durata(cur, fid))
+            cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
+            ids.append(nid)
+            keys.append(slot["ora"])
+        last = slots[-1]
+        for i, fid in enumerate(filler_fids):
+            nid = _insert_event(cur, cod_user, d, last["sched"], last["block"], last["seg"],
+                                last["ora"], fid, _durata(cur, fid))
+            cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
+            ids.append(nid)
+            keys.append(last["ora"] + i + 1)  # sort after the last piece, in draw order
+        if not ids:
+            conn.rollback()
+            return {"cu": cod_user, "ok": False, "skipped": False, "message": "no pieces to place"}
+        cur.execute("UPDATE TPalinse SET EVENT_TYPE='F' WHERE id_tpalinse=%s", (ids[0],))
+        for nid in ids[1:]:
+            cur.execute("UPDATE TPalinse SET EVENT_TYPE='T' WHERE id_tpalinse=%s", (nid,))
+        # Order the window so pieces play in slot order and fillers trail the last piece.
+        _conform_window_xorder(cur, cod_user, d, lo, hi, ids, keys, None, None)
+        _rebuild(cur, d, cod_user, ids[0])
+        _sync_checksums(cur, ids, pending)
+        ok, msg = _verify_sequence(cur, ids, None, None)
+        if ok:
+            conn.commit()
+            return {"cu": cod_user, "ok": True, "skipped": False,
+                    "message": f"placed {len(piece_fids)} pieces + {len(filler_fids)} filler(s)"}
+        conn.rollback()
+        return {"cu": cod_user, "ok": False, "skipped": False, "message": f"verify failed: {msg}"}
+    except Exception as exc:  # noqa: BLE001 - report per-market failure, leave market untouched
+        conn.rollback()
+        return {"cu": cod_user, "ok": False, "skipped": False, "message": f"error: {exc}",
+                "_deadlock": _is_deadlock(exc)}
+
+
 def sweep_daily_ids(conn, cod_user, dates, pending):
     """Place this market's standing daily elements (see show_profiles
     daily_elements — e.g. the DAL end-of-day FCC children's-records ID) for

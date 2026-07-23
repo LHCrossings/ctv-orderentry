@@ -5036,6 +5036,180 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
             return {"ok": False, "error": f"Commit failed: {exc}"}
 
+    def _kd_prefill_weekdays(d):
+        """Weekday dates a weekend day repeats: Sat→[Mon,Tue,Wed], Sun→[Thu,Fri]."""
+        import datetime as _dt
+        wd = d.weekday()  # Mon=0 … Sat=5, Sun=6
+        if wd == 5:
+            return [d - _dt.timedelta(days=x) for x in (5, 4, 3)]
+        if wd == 6:
+            return [d - _dt.timedelta(days=x) for x in (3, 2)]
+        return []
+
+    def _kd_base_aired(cur, cu, d):
+        """The Korean-drama episode base (COD_PROGRA minus the piece letter) that
+        aired on cod_user `cu` for date `d`, or None."""
+        cur.execute(
+            """SELECT DISTINCT f.COD_PROGRA FROM TPALINSE t WITH(NOLOCK)
+               JOIN FILMATI f WITH(NOLOCK) ON f.ID_FILMATI=t.ID_FILMATI
+               WHERE t.COD_USER=%s AND t.DATA=%s AND t.LIVELLO=0 AND t.NEWTYPE='PGM'
+                 AND t.PART=0 AND f.COD_PROGRA LIKE 'KD-%'""",
+            (cu, d),
+        )
+        bases = sorted({c[:-1] for (c,) in cur.fetchall() if c and c[-1:].isalpha()})
+        return bases[0] if bases else None
+
+    def _kd_resolve_pieces(cur, drama_codes):
+        """Ordered piece fids for a list of Piece-A codes (Drama 1, 2, …)."""
+        from src.business_logic.services.daily_programming_run import ordered_pieces
+        out = []
+        for code in drama_codes:
+            base = code[:-1] if code and code[-1:].isalpha() else code
+            out.append(ordered_pieces(cur, base))
+        return out  # list-of-lists, one per drama
+
+    @router.get("/api/master-control/daily-programming/kdrama/weekend")
+    async def daily_programming_kdrama_weekend(date: str, start: str, end: str):
+        """Weekend Korean-drama modal data: Drama 1/2/3 selectors pre-filled from
+        the weekday repeat pattern (Sat = Mon/Tue/Wed, Sun = Thu/Fri), the PRGS
+        slot count, and the programming budget (Saturday's PRGS total)."""
+        import datetime as _dt
+
+        from browser_automation.etere_direct_client import connect as _db_connect
+        from src.business_logic.services.daily_programming_run import (
+            _prgs_duration_total,
+            _slots,
+            _window,
+        )
+        try:
+            d = _dt.datetime.strptime(date, "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            return {"error": "Invalid date"}
+        if d.weekday() not in (5, 6):
+            return {"error": "Not a weekend date"}
+        lo, hi = _window(start, end)
+        if lo is None or hi is None:
+            return {"error": "Invalid block window"}
+        weekdays = _kd_prefill_weekdays(d)
+
+        def _run():
+            with _db_connect() as conn:
+                cur = conn.cursor()
+                slots = _slots(cur, 1, d, lo, hi, "PRGS")   # NYC reference
+                drama_count = max(0, len(slots) // 3)
+                dramas = []
+                for i in range(drama_count):
+                    wd = weekdays[i] if i < len(weekdays) else None
+                    prefill = None
+                    if wd is not None:
+                        base = _kd_base_aired(cur, 1, wd)
+                        if base:
+                            cur.execute(
+                                "SELECT ID_FILMATI, COD_PROGRA, DURATA FROM FILMATI WITH(NOLOCK) "
+                                "WHERE NEWTYPE='PGM' AND COD_PROGRA=%s", (base + "A",))
+                            r = cur.fetchone()
+                            if r:
+                                prefill = {"id": int(r[0]), "code": r[1], "base": base}
+                    dramas.append({"block": i + 1, "weekday": wd.isoformat() if wd else None,
+                                   "prefill": prefill})
+                sat = d if d.weekday() == 5 else d - _dt.timedelta(days=1)
+                budget = _prgs_duration_total(cur, 1, sat, lo, hi)
+            return {"dramaCount": drama_count, "prgsSlots": len(slots),
+                    "budgetFrames": budget, "dramas": dramas}
+
+        loop = asyncio.get_running_loop()
+        try:
+            return await loop.run_in_executor(None, _run)
+        except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
+            return {"error": f"Lookup failed: {exc}"}
+
+    @router.post("/api/master-control/daily-programming/kdrama/weekend/fillers")
+    async def daily_programming_kdrama_weekend_fillers(body: dict = Body(...)):
+        """Draw random K-FILLERs (by duration, no rotation) to fill the programming
+        budget left after the chosen dramas. Preview for the weekend modal."""
+        import datetime as _dt
+
+        from browser_automation.etere_direct_client import connect as _db_connect
+        from src.business_logic.services import filler_rotation
+        from src.business_logic.services.daily_programming_run import (
+            _durata,
+            _prgs_duration_total,
+            _window,
+        )
+        try:
+            d = _dt.datetime.strptime(body.get("date") or "", "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            return {"error": "Invalid date"}
+        codes = [str(c) for c in (body.get("dramas") or []) if c]
+        lo, hi = _window(body.get("start") or "", body.get("end") or "")
+        if lo is None or hi is None:
+            return {"error": "Invalid block window"}
+
+        def _run():
+            with _db_connect() as conn:
+                cur = conn.cursor()
+                piece_lists = _kd_resolve_pieces(cur, codes)
+                piece_fids = [f for lst in piece_lists for f in lst]
+                drama_fr = sum(_durata(cur, f) for f in piece_fids)
+                sat = d if d.weekday() == 5 else d - _dt.timedelta(days=1)
+                budget = _prgs_duration_total(cur, 1, sat, lo, hi)
+                need = max(0, budget - drama_fr)
+                picks = filler_rotation.draw_until(cur, need)
+            return {"fillers": [{"id": p["fid"], "code": p["code"], "durata": p["durata"]} for p in picks],
+                    "budgetFrames": budget, "dramaFrames": drama_fr, "needFrames": need,
+                    "pieceCount": len(piece_fids)}
+
+        loop = asyncio.get_running_loop()
+        try:
+            return await loop.run_in_executor(None, _run)
+        except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
+            return {"error": f"Filler draw failed: {exc}"}
+
+    @router.post("/api/master-control/daily-programming/kdrama/weekend/run")
+    async def daily_programming_kdrama_weekend_run(body: dict = Body(...)):
+        """Set up the weekend Korean-drama block across the CTV markets: each
+        drama's A/B/C in its block, fillers stacked in the last PRGS slot. Same
+        episodes + fillers everywhere. Markets run sequentially (transaction-safe
+        per market). COMS is left for EE."""
+        import datetime as _dt
+
+        from browser_automation.etere_direct_client import connect as _db_connect
+        from src.business_logic.services.daily_programming_run import (
+            _drain_pending_filmati_syncs,
+            place_weekend_drama,
+        )
+        try:
+            d = _dt.datetime.strptime(body.get("date") or "", "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            return {"results": [], "error": "Invalid date"}
+        start, end = body.get("start") or "", body.get("end") or ""
+        codes = [str(c) for c in (body.get("dramas") or []) if c]
+        filler_ids = [int(x) for x in (body.get("fillerIds") or [])]
+        cus = [int(c) for c in (body.get("codUsers") or _DP_NETWORK_CODUSERS["CTV"])]
+        if not codes:
+            return {"results": [], "error": "No dramas selected"}
+
+        def _run():
+            results = []
+            pending = []
+            with _db_connect() as conn:
+                cur = conn.cursor()
+                piece_lists = _kd_resolve_pieces(cur, codes)
+                piece_fids = [f for lst in piece_lists for f in lst]
+                for cu in cus:
+                    r = place_weekend_drama(conn, cu, d, start, end, piece_fids, filler_ids, pending)
+                    r.pop("_deadlock", None)
+                    results.append(r)
+                if pending:
+                    _drain_pending_filmati_syncs(conn.cursor(), conn, pending)
+            return results
+
+        loop = asyncio.get_running_loop()
+        try:
+            return {"results": await loop.run_in_executor(None, _run)}
+        except Exception as exc:  # noqa: BLE001 - surface connection-level errors
+            return {"results": [], "error": f"Weekend setup failed: {exc}"}
+
     @router.post("/api/master-control/daily-programming/run")
     async def daily_programming_run(body: dict = Body(...)):
         """Set up across markets: place each assignment into each target market

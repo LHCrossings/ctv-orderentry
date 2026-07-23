@@ -82,6 +82,33 @@ def draw_n(conn, n: int) -> list[dict]:
     return picks
 
 
+def draw_until(cur, target_frames: int, exclude_codes=()) -> list[dict]:
+    """Pick random DISTINCT active K-FILLERs whose durations cumulatively reach
+    `target_frames` — for WEEKEND programming-time fill. Pure random from the full
+    active pool: it deliberately does NOT read or update the rotation cycle (weekend
+    fillers get duration-match flexibility and don't consume weekday tokens). The
+    last pick may overshoot (fillers are chunky). Returns [] if target ≤ 0."""
+    target = int(target_frames)
+    if target <= 0:
+        return []
+    ex = {(c or "").strip() for c in exclude_codes}
+    pool = [p for p in active_pool(cur) if p["code"] not in ex and p["durata"] > 0]
+    random.shuffle(pool)
+    picks, total = [], 0
+    while total < target and pool:
+        gap = target - total
+        fits = [p for p in pool if p["durata"] <= gap]
+        # Random among fillers that still fit the gap; when none fit, finish with a
+        # random pick from the 3 shortest remaining — least overshoot ("match it
+        # best") while keeping some variety week to week.
+        choice = random.choice(fits) if fits else \
+            random.choice(sorted(pool, key=lambda p: p["durata"])[:3])
+        pool.remove(choice)
+        picks.append(choice)
+        total += choice["durata"]
+    return picks
+
+
 def mark_used(conn, codes, used_by: str | None = None) -> None:
     """Record filler codes as used in the current cycle (idempotent per code)."""
     cur = conn.cursor()
