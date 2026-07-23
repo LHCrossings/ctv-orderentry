@@ -220,6 +220,7 @@
         <div id="fmFillerPanel" style="display:none;">
             <div class="fm-filler-status" id="fmFillerStatus"></div>
             <div id="fmChosen" class="fm-chosen"></div>
+            <button type="button" id="fmReroll" class="fm-done" style="display:none; background:var(--nord10);">🎲 Reroll fillers</button>
             <button type="button" id="fmDone" class="fm-done" disabled>Use these fillers</button>
         </div>
 
@@ -345,6 +346,17 @@
     // modal (assign random / pick specific) instead of the file super-search.
     function isMarketplaceProgram(p) {
         return state.network === 'TAC' && /^marketplace$/i.test(((p && p.title) || '').trim());
+    }
+
+    // Korean-drama filler auto-fill (weekdays only): when the picked file is a
+    // Korean drama piece (KD-*), the leftover blank PRGS slots are auto-filled
+    // with random K-FILLERs from a cycle-through rotation instead of hand-picked.
+    function isKoreanDrama(code) { return /^KD-/i.test(code || ''); }
+    function isWeekday(ymd) {
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd || '');
+        if (!m) return false;
+        const wd = new Date(+m[1], +m[2] - 1, +m[3]).getDay();  // 0=Sun … 6=Sat
+        return wd >= 1 && wd <= 5;
     }
 
     async function loadGrid() {
@@ -496,6 +508,7 @@
     const fmFillerStatus = document.getElementById('fmFillerStatus');
     const fmChosen = document.getElementById('fmChosen');
     const fmDone = document.getElementById('fmDone');
+    const fmReroll = document.getElementById('fmReroll');
     const fmEdlPanel = document.getElementById('fmEdlPanel');
     const fmEdlStatus = document.getElementById('fmEdlStatus');
     const fmEdlDrop = document.getElementById('fmEdlDrop');
@@ -650,7 +663,9 @@
 
         const fillers = pd.fillers_needed || 0;
         if (pd.status === 'fillers_needed' && fillers > 0) {
-            enterFillerPhase(file, pd);   // stay open to pick fillers
+            // Korean drama on a weekday → auto-fill the blank slots with random
+            // K-FILLERs (rotation); otherwise the operator hand-picks as before.
+            enterFillerPhase(file, pd, isKoreanDrama(file.code) && isWeekday(state.date));
             return;
         }
         // exact match (or too_many) → finalize now
@@ -664,27 +679,63 @@
     }
 
     // ── Filler-pick phase (no-EDL programs with fewer pieces than breaks) ──
-    function enterFillerPhase(showFile, pd) {
+    // `auto` (Korean drama, weekdays) pre-fills the blanks with random K-FILLERs
+    // from the rotation; the operator can reroll or tweak, then accept.
+    function enterFillerPhase(showFile, pd, auto) {
         modalPhase = 'fillers';
-        fillerDraft = { showFile: showFile, pieces: pd.pieces || [], slots: pd.prgs_slots, needed: pd.fillers_needed || 0, chosen: [] };
+        fillerDraft = { showFile: showFile, pieces: pd.pieces || [], slots: pd.prgs_slots,
+                        needed: pd.fillers_needed || 0, chosen: [], auto: !!auto };
         fmHint.style.display = 'none';
         fmFillerPanel.style.display = 'block';
+        fmReroll.style.display = auto ? '' : 'none';
         fmSearch.value = '';
         fmSearch.placeholder = 'Search fillers (e.g. CHINESEFILLER, K-FILLER)…';
         fmResults.innerHTML = '';
         lastResults = [];
         renderChosen();
-        fmSearch.focus();
+        if (auto) autoDrawFillers();
+        else fmSearch.focus();
+    }
+
+    // Draw `needed` random K-FILLERs (rotation) into the chosen list. Reused by reroll.
+    async function autoDrawFillers() {
+        const d = fillerDraft;
+        fmReroll.disabled = true;
+        fmFillerStatus.innerHTML = 'Drawing ' + d.needed + ' random K-FILLER' + (d.needed === 1 ? '' : 's') + '…';
+        try {
+            const r = await fetch('/api/master-control/daily-programming/kfiller/draw', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ n: d.needed })
+            });
+            const data = await r.json();
+            if (data.error) { fmFillerStatus.innerHTML = '<span style="color:var(--nord11)">' + escHtml(data.error) + '</span>'; return; }
+            d.chosen = (data.fillers || []).slice(0, d.needed);
+            d.rotation = data.rotation || {};
+            renderChosen();
+        } catch (e) {
+            fmFillerStatus.innerHTML = '<span style="color:var(--nord11)">Error: ' + escHtml(e.message) + '</span>';
+        } finally {
+            fmReroll.disabled = false;
+        }
     }
 
     function renderChosen() {
         const d = fillerDraft;
         const totalFr = d.chosen.reduce(function (s, f) { return s + (f.durata || 0); }, 0);
-        fmFillerStatus.innerHTML = 'Show <b>' + escHtml(d.showFile.code) + '</b> = ' + d.pieces.length +
-            ' piece' + (d.pieces.length === 1 ? '' : 's') + ' in ' + d.slots + ' breaks. ' +
-            'Pieces fill the first breaks; choose <b>' + d.needed + '</b> filler' + (d.needed === 1 ? '' : 's') +
-            ' for the rest (' + d.chosen.length + '/' + d.needed + ' chosen' +
-            (totalFr ? ' · ' + durLabel(totalFr) + ' total' : '') + ').';
+        if (d.auto) {
+            const rot = d.rotation || {};
+            fmFillerStatus.innerHTML = 'Korean drama <b>' + escHtml(d.showFile.code) + '</b> = ' + d.pieces.length +
+                ' pieces in ' + d.slots + ' breaks → auto-filling <b>' + d.needed + '</b> blank slot' +
+                (d.needed === 1 ? '' : 's') + ' with random K-FILLERs' +
+                (rot.total ? ' (rotation ' + (rot.used || 0) + '/' + rot.total + ' used this cycle)' : '') +
+                '. Reroll or remove/replace a pick, then accept.';
+        } else {
+            fmFillerStatus.innerHTML = 'Show <b>' + escHtml(d.showFile.code) + '</b> = ' + d.pieces.length +
+                ' piece' + (d.pieces.length === 1 ? '' : 's') + ' in ' + d.slots + ' breaks. ' +
+                'Pieces fill the first breaks; choose <b>' + d.needed + '</b> filler' + (d.needed === 1 ? '' : 's') +
+                ' for the rest (' + d.chosen.length + '/' + d.needed + ' chosen' +
+                (totalFr ? ' · ' + durLabel(totalFr) + ' total' : '') + ').';
+        }
         fmChosen.innerHTML = d.chosen.map(function (f, i) {
             return '<div class="fm-chosen-row"><span class="fm-slot-num">break ' + (d.pieces.length + i + 1) + '</span>' +
                 '<span>' + escHtml(f.code) + '</span>' +
@@ -707,9 +758,24 @@
         renderChosen();
     });
 
-    fmDone.addEventListener('click', function () {
+    fmReroll.addEventListener('click', function () { if (fillerDraft && fillerDraft.auto) autoDrawFillers(); });
+
+    fmDone.addEventListener('click', async function () {
         const d = fillerDraft;
         if (d.chosen.length !== d.needed) return;
+        // Auto (Korean-drama) picks: record the drawn K-FILLERs as used in the
+        // rotation now that the operator has accepted them.
+        if (d.auto) {
+            const codes = d.chosen.map(function (f) { return f.code; }).filter(function (c) { return /^K-FILLER/i.test(c || ''); });
+            if (codes.length) {
+                try {
+                    await fetch('/api/master-control/daily-programming/kfiller/commit', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ codes: codes })
+                    });
+                } catch (e) { /* non-fatal: the assignment still places; rotation just isn't marked */ }
+            }
+        }
         state.assignments[modalIdx] = { mode: 'pieces', file: d.showFile, pieces: d.pieces, slots: d.slots, fillers: d.chosen, status: 'filled' };
         setAssignText(modalIdx, '→ ' + d.pieces.length + ' pieces + ' + d.chosen.length + ' fillers / ' + d.slots + ' breaks', false);
         closeModal();

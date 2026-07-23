@@ -4987,6 +4987,55 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
             return {"ok": False, "error": f"Assign failed: {exc}"}
 
+    @router.post("/api/master-control/daily-programming/kfiller/draw")
+    async def daily_programming_kfiller_draw(body: dict = Body(...)):
+        """Draw N random unused K-FILLERs for a Korean-drama's blank PRGS slots
+        (weekday auto-fill). Does NOT record them used — that happens on commit —
+        so a reroll is free. Returns the picks + rotation status."""
+        from browser_automation.etere_direct_client import connect as _db_connect
+        from src.business_logic.services import filler_rotation
+        try:
+            n = int(body.get("n") or 0)
+        except (TypeError, ValueError):
+            return {"fillers": [], "error": "Invalid count"}
+        if n <= 0:
+            return {"fillers": [], "rotation": {}}
+
+        def _run():
+            with _db_connect() as conn:
+                picks = filler_rotation.draw_n(conn, n)
+                st = filler_rotation.status(conn.cursor())
+            return {"fillers": [{"id": p["fid"], "code": p["code"], "durata": p["durata"]} for p in picks],
+                    "rotation": st}
+
+        loop = asyncio.get_running_loop()
+        try:
+            return await loop.run_in_executor(None, _run)
+        except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
+            return {"fillers": [], "error": f"Draw failed: {exc}"}
+
+    @router.post("/api/master-control/daily-programming/kfiller/commit")
+    async def daily_programming_kfiller_commit(body: dict = Body(...)):
+        """Record chosen K-FILLER codes as used in the current rotation cycle
+        (called when the operator accepts the auto-filled selection)."""
+        from browser_automation.etere_direct_client import connect as _db_connect
+        from src.business_logic.services import filler_rotation
+        codes = [str(c).strip() for c in (body.get("codes") or []) if str(c).strip()]
+        if not codes:
+            return {"ok": True, "rotation": {}}
+
+        def _run():
+            with _db_connect() as conn:
+                filler_rotation.mark_used(conn, codes, used_by="daily-programming")
+                st = filler_rotation.status(conn.cursor())
+            return {"ok": True, "rotation": st}
+
+        loop = asyncio.get_running_loop()
+        try:
+            return await loop.run_in_executor(None, _run)
+        except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
+            return {"ok": False, "error": f"Commit failed: {exc}"}
+
     @router.post("/api/master-control/daily-programming/run")
     async def daily_programming_run(body: dict = Body(...)):
         """Set up across markets: place each assignment into each target market
