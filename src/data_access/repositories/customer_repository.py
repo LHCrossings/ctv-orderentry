@@ -48,10 +48,12 @@ class CustomerRepository:
     created/migrated by scripts/setup_ctv_customers_table.py.
     """
 
-    def __init__(self, db_path: Path | str = None):
+    def __init__(self, db_path: Path | str = None, table: str = None):
         """`db_path` is accepted for backward compatibility but ignored — the
-        store is the shared SQL table, not a local file."""
+        store is the shared SQL table, not a local file. `table` overrides the
+        target table (used by tests to point at an isolated table, never prod)."""
         self._db_path = db_path  # kept for compat; unused
+        self._table = table or _TABLE
 
     def find_by_name(
         self,
@@ -63,7 +65,7 @@ class CustomerRepository:
         with _connect() as conn:
             cur = conn.cursor()
             cur.execute(
-                f"SELECT {_COLS} FROM {_TABLE} WHERE LOWER(customer_name) = %s AND order_type = %s",
+                f"SELECT {_COLS} FROM {self._table} WHERE LOWER(customer_name) = %s AND order_type = %s",
                 (normalized_name, order_type.value),
             )
             row = cur.fetchone()
@@ -82,14 +84,14 @@ class CustomerRepository:
         with _connect() as conn:
             cur = conn.cursor()
             cur.execute(
-                f"SELECT TOP 1 {_COLS} FROM {_TABLE} WHERE LOWER(customer_name) = %s",
+                f"SELECT TOP 1 {_COLS} FROM {self._table} WHERE LOWER(customer_name) = %s",
                 (normalized_name,),
             )
             row = cur.fetchone()
             if row:
                 return self._row_to_customer(row)
 
-            cur.execute(f"SELECT {_COLS} FROM {_TABLE}")
+            cur.execute(f"SELECT {_COLS} FROM {self._table}")
             all_rows = cur.fetchall()
         for row in all_rows:
             row_name = (row[1] or "").lower()
@@ -156,7 +158,7 @@ class CustomerRepository:
         with _connect() as conn:
             cur = conn.cursor()
             cur.execute(
-                f"SELECT {_COLS} FROM {_TABLE} WHERE order_type = %s ORDER BY customer_name",
+                f"SELECT {_COLS} FROM {self._table} WHERE order_type = %s ORDER BY customer_name",
                 (order_type.value,),
             )
             return [self._row_to_customer(row) for row in cur.fetchall()]
@@ -180,7 +182,7 @@ class CustomerRepository:
         with _connect() as conn:
             cur = conn.cursor()
             cur.execute(
-                f"UPDATE {_TABLE} SET customer_id=%s, abbreviation=%s, default_market=%s, "
+                f"UPDATE {self._table} SET customer_id=%s, abbreviation=%s, default_market=%s, "
                 "billing_type=%s, separation_customer=%s, separation_event=%s, separation_order=%s, "
                 "code_name=%s, description_name=%s, include_market_in_code=%s, auto_aircheck=%s, "
                 "owner=%s, updated_at=GETDATE() WHERE customer_name=%s AND order_type=%s",
@@ -188,7 +190,7 @@ class CustomerRepository:
             )
             if cur.rowcount == 0:
                 cur.execute(
-                    f"INSERT INTO {_TABLE} (customer_id, abbreviation, default_market, billing_type, "
+                    f"INSERT INTO {self._table} (customer_id, abbreviation, default_market, billing_type, "
                     "separation_customer, separation_event, separation_order, code_name, "
                     "description_name, include_market_in_code, auto_aircheck, owner, "
                     "customer_name, order_type) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
@@ -201,7 +203,7 @@ class CustomerRepository:
         with _connect() as conn:
             cur = conn.cursor()
             cur.execute(
-                f"DELETE FROM {_TABLE} WHERE LOWER(customer_name) = %s AND order_type = %s",
+                f"DELETE FROM {self._table} WHERE LOWER(customer_name) = %s AND order_type = %s",
                 (customer_name.strip().lower(), order_type.value),
             )
             deleted = cur.rowcount > 0
@@ -212,14 +214,14 @@ class CustomerRepository:
         """Total number of customers."""
         with _connect() as conn:
             cur = conn.cursor()
-            cur.execute(f"SELECT COUNT(*) FROM {_TABLE}")
+            cur.execute(f"SELECT COUNT(*) FROM {self._table}")
             return cur.fetchone()[0]
 
     def list_all(self) -> list[Customer]:
         """All customers, ordered by name."""
         with _connect() as conn:
             cur = conn.cursor()
-            cur.execute(f"SELECT {_COLS} FROM {_TABLE} ORDER BY customer_name")
+            cur.execute(f"SELECT {_COLS} FROM {self._table} ORDER BY customer_name")
             return [self._row_to_customer(row) for row in cur.fetchall()]
 
     @staticmethod
@@ -313,18 +315,20 @@ class LegacyJSONCustomerRepository(CustomerRepository):
     to the new SQLite-based one. It can import JSON data into SQLite.
     """
 
-    def __init__(self, db_path: Path | str, json_path: Path | str | None = None):
+    def __init__(self, db_path: Path | str = None, json_path: Path | str | None = None,
+                 table: str = None):
         """
         Initialize with optional JSON file for migration.
 
         Args:
-            db_path: Path to SQLite database
+            db_path: accepted for compatibility, ignored (store is the SQL table)
             json_path: Optional path to legacy JSON file
+            table: override target table (tests use an isolated table)
         """
-        super().__init__(db_path)
+        super().__init__(db_path, table)
         self._json_path = Path(json_path) if json_path else None
 
-        # Auto-migrate if JSON exists and SQLite is empty
+        # Auto-migrate if JSON exists and the (target) table is empty
         if self._json_path and self._json_path.exists() and self.count() == 0:
             self._migrate_from_json()
 

@@ -4106,67 +4106,62 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     @router.get("/api/orders/customers")
     async def list_order_customers(q: str = ""):
-        conn = _cdb()
-        try:
+        from browser_automation.etere_direct_client import connect as _db_connect
+        with _db_connect() as conn:
+            cur = conn.cursor(as_dict=True)
             if q:
-                rows = conn.execute(
-                    "SELECT * FROM customers WHERE LOWER(customer_name) LIKE ? OR LOWER(order_type) LIKE ? ORDER BY customer_name",
-                    (f"%{q.lower()}%", f"%{q.lower()}%"),
-                ).fetchall()
+                like = f"%{q.lower()}%"
+                cur.execute(
+                    "SELECT * FROM dbo.CTV_Customers WHERE LOWER(customer_name) LIKE %s "
+                    "OR LOWER(order_type) LIKE %s ORDER BY customer_name", (like, like))
             else:
-                rows = conn.execute(
-                    "SELECT * FROM customers ORDER BY customer_name"
-                ).fetchall()
-            cols = [d[0] for d in conn.execute("SELECT * FROM customers LIMIT 0").description]
-            return JSONResponse([dict(zip(cols, r)) for r in rows])
-        finally:
-            conn.close()
+                cur.execute("SELECT * FROM dbo.CTV_Customers ORDER BY customer_name")
+            rows = cur.fetchall()
+        return JSONResponse([dict(r) for r in rows])
 
     @router.post("/api/orders/customers")
     async def create_order_customer(body: dict = Body(...)):
-        import sqlite3 as _sq
-        conn = _cdb()
+        from browser_automation.etere_direct_client import connect as _db_connect
+        vals = (
+            body.get("customer_id", ""),
+            body.get("customer_name", ""),
+            body.get("order_type", ""),
+            body.get("code_name", ""),
+            body.get("description_name", ""),
+            body.get("billing_type", "agency"),
+            body.get("default_market") or None,
+            int(body.get("separation_customer", 15)),
+            int(body.get("separation_event", 0)),
+            int(body.get("separation_order", 0)),
+            int(bool(body.get("include_market_in_code", False))),
+            int(bool(body.get("auto_aircheck", False))),
+            body.get("abbreviation", ""),
+        )
         try:
-            conn.execute(
-                """INSERT INTO customers
-                   (customer_id, customer_name, order_type, code_name, description_name,
-                    billing_type, default_market, separation_customer, separation_event,
-                    separation_order, include_market_in_code, auto_aircheck, abbreviation)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (
-                    body.get("customer_id", ""),
-                    body.get("customer_name", ""),
-                    body.get("order_type", ""),
-                    body.get("code_name", ""),
-                    body.get("description_name", ""),
-                    body.get("billing_type", "agency"),
-                    body.get("default_market") or None,
-                    int(body.get("separation_customer", 15)),
-                    int(body.get("separation_event", 0)),
-                    int(body.get("separation_order", 0)),
-                    int(bool(body.get("include_market_in_code", False))),
-                    int(bool(body.get("auto_aircheck", False))),
-                    body.get("abbreviation", ""),
-                ),
-            )
-            conn.commit()
-        except _sq.IntegrityError as exc:
-            raise HTTPException(status_code=409, detail=str(exc))
-        finally:
-            conn.close()
+            with _db_connect() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    "INSERT INTO dbo.CTV_Customers (customer_id, customer_name, order_type, code_name, "
+                    "description_name, billing_type, default_market, separation_customer, separation_event, "
+                    "separation_order, include_market_in_code, auto_aircheck, abbreviation) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", vals)
+                conn.commit()
+        except Exception as exc:  # noqa: BLE001 - map duplicate PK → 409
+            if "PRIMARY KEY" in str(exc) or "duplicate" in str(exc).lower():
+                raise HTTPException(status_code=409, detail="Customer already exists for this order type")
+            raise HTTPException(status_code=500, detail=str(exc))
         return JSONResponse({"ok": True})
 
     @router.put("/api/orders/customers")
     async def update_order_customer(customer_name: str, order_type: str, body: dict = Body(...)):
-        conn = _cdb()
-        try:
-            conn.execute(
-                """UPDATE customers SET
-                   customer_name=?, customer_id=?, code_name=?, description_name=?,
-                   billing_type=?, default_market=?, separation_customer=?,
-                   separation_event=?, separation_order=?, include_market_in_code=?,
-                   auto_aircheck=?, abbreviation=?
-                   WHERE customer_name=? AND order_type=?""",
+        from browser_automation.etere_direct_client import connect as _db_connect
+        with _db_connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE dbo.CTV_Customers SET customer_name=%s, customer_id=%s, code_name=%s, "
+                "description_name=%s, billing_type=%s, default_market=%s, separation_customer=%s, "
+                "separation_event=%s, separation_order=%s, include_market_in_code=%s, auto_aircheck=%s, "
+                "abbreviation=%s, updated_at=GETDATE() WHERE customer_name=%s AND order_type=%s",
                 (
                     body.get("customer_name", customer_name),
                     body.get("customer_id", ""),
@@ -4185,23 +4180,19 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 ),
             )
             conn.commit()
-        finally:
-            conn.close()
         return JSONResponse({"ok": True})
 
     @router.post("/api/orders/customers/delete")
     async def delete_order_customer(body: dict = Body(...)):
+        from browser_automation.etere_direct_client import connect as _db_connect
         customer_name = body.get("customer_name", "")
         order_type    = body.get("order_type", "")
-        conn = _cdb()
-        try:
-            conn.execute(
-                "DELETE FROM customers WHERE LOWER(customer_name)=LOWER(?) AND LOWER(order_type)=LOWER(?)",
-                (customer_name, order_type),
-            )
+        with _db_connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "DELETE FROM dbo.CTV_Customers WHERE LOWER(customer_name)=LOWER(%s) AND LOWER(order_type)=LOWER(%s)",
+                (customer_name, order_type))
             conn.commit()
-        finally:
-            conn.close()
         return JSONResponse({"ok": True})
 
     # ── Master Control ───────────────────────────────────────────────────────────

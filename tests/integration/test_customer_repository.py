@@ -11,47 +11,73 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))  # repo root → browser_automation
 
 from data_access.repositories.customer_repository import CustomerRepository
 from domain.entities import Customer
 from domain.enums import OrderType
+
+# CustomerRepository is now backed by SQL Server (dbo.CTV_Customers), not SQLite.
+# These integration tests run against an ISOLATED test table so they never touch
+# production, and skip cleanly when no SQL Server is reachable (e.g. CI).
+_TEST_TABLE = "dbo.CTV_Customers__pytest"
+_TEST_TABLE_DDL = f"""CREATE TABLE {_TEST_TABLE} (
+    customer_name NVARCHAR(200) NOT NULL, order_type NVARCHAR(50) NOT NULL,
+    customer_id NVARCHAR(50) NOT NULL, abbreviation NVARCHAR(50) NOT NULL DEFAULT '',
+    default_market NVARCHAR(10) NULL, billing_type NVARCHAR(20) NOT NULL DEFAULT 'agency',
+    separation_customer INT NOT NULL DEFAULT 15, separation_event INT NOT NULL DEFAULT 0,
+    separation_order INT NOT NULL DEFAULT 0, code_name NVARCHAR(100) NOT NULL DEFAULT '',
+    description_name NVARCHAR(200) NOT NULL DEFAULT '', include_market_in_code INT NOT NULL DEFAULT 0,
+    auto_aircheck INT NOT NULL DEFAULT 0, owner NVARCHAR(100) NOT NULL DEFAULT '',
+    default_code_template NVARCHAR(200) NULL, default_desc_template NVARCHAR(200) NULL,
+    created_at DATETIME NOT NULL DEFAULT GETDATE(), updated_at DATETIME NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT PK_CTV_Customers_pytest PRIMARY KEY (customer_name, order_type))"""
+
+
+def _reset_test_table():
+    """Create a fresh empty isolated test table; skip the test if no SQL Server."""
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+    except Exception:  # noqa: BLE001 - dotenv optional
+        pass
+    try:
+        from browser_automation.etere_direct_client import connect
+        conn = connect()
+    except Exception as exc:  # noqa: BLE001 - no DB (e.g. CI) → skip, don't fail
+        pytest.skip(f"SQL Server not available: {exc}")
+    cur = conn.cursor()
+    cur.execute(f"IF OBJECT_ID('{_TEST_TABLE}','U') IS NOT NULL DROP TABLE {_TEST_TABLE}")
+    cur.execute(_TEST_TABLE_DDL)
+    conn.commit()
+    conn.close()
+
+
+def _drop_test_table():
+    try:
+        from browser_automation.etere_direct_client import connect
+        conn = connect()
+        cur = conn.cursor()
+        cur.execute(f"IF OBJECT_ID('{_TEST_TABLE}','U') IS NOT NULL DROP TABLE {_TEST_TABLE}")
+        conn.commit()
+        conn.close()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 class TestCustomerRepository:
     """Test customer repository with real database."""
 
     @pytest.fixture
-    def temp_db(self):
-        """Create temporary database for testing."""
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = Path(f.name)
+    def repository(self):
+        """Repository against a fresh, isolated SQL test table (skips if no DB)."""
+        _reset_test_table()
+        yield CustomerRepository(table=_TEST_TABLE)
+        _drop_test_table()
 
-        yield db_path
-
-        # Cleanup - be graceful about Windows file locking
-        try:
-            # Force garbage collection to close any lingering connections
-            import gc
-            gc.collect()
-
-            if db_path.exists():
-                db_path.unlink()
-        except (PermissionError, OSError):
-            # On Windows, temp files may still be locked
-            # They'll be cleaned up by the OS eventually
-            pass
-
-    @pytest.fixture
-    def repository(self, temp_db):
-        """Create repository instance with temp database."""
-        return CustomerRepository(temp_db)
-
-    def test_database_creation(self, temp_db):
-        """Repository should create database tables on initialization."""
-        repo = CustomerRepository(temp_db)
-
-        assert temp_db.exists()
-        assert repo.count() == 0  # Empty but initialized
+    def test_database_creation(self, repository):
+        """A fresh repository/table starts empty."""
+        assert repository.count() == 0
 
     def test_save_customer(self, repository):
         """Should save customer to database."""
@@ -243,11 +269,10 @@ class TestLegacyJSONMigration:
     """Test migration from JSON to SQLite."""
 
     @pytest.fixture
-    def temp_files(self):
-        """Create temporary JSON and DB files."""
+    def json_file(self):
+        """A sample legacy JSON file + a fresh isolated test table."""
         with tempfile.NamedTemporaryFile(mode='w', suffix=".json", delete=False) as json_f:
             json_path = Path(json_f.name)
-            # Write sample JSON
             json_f.write("""{
                 "worldlink": {
                     "McDonald's": "MCDS",
@@ -257,37 +282,19 @@ class TestLegacyJSONMigration:
                     "Toyota": "TOYO"
                 }
             }""")
-
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as db_f:
-            db_path = Path(db_f.name)
-
-        yield json_path, db_path
-
-        # Cleanup - Windows needs time for connections to close
-        import gc
-        import time
-        gc.collect()  # Force garbage collection
-        time.sleep(0.1)  # Give Windows a moment
-
+        _reset_test_table()
+        yield json_path
+        _drop_test_table()
         try:
-            if json_path.exists():
-                json_path.unlink()
-        except PermissionError:
+            json_path.unlink()
+        except OSError:
             pass
 
-        try:
-            if db_path.exists():
-                db_path.unlink()
-        except PermissionError:
-            pass
-
-    def test_auto_migration(self, temp_files):
-        """Should automatically migrate JSON to SQLite on first use."""
-        json_path, db_path = temp_files
-
+    def test_auto_migration(self, json_file):
+        """Should automatically migrate JSON into the (empty) table on first use."""
         from data_access.repositories.customer_repository import LegacyJSONCustomerRepository
 
-        repo = LegacyJSONCustomerRepository(db_path, json_path)
+        repo = LegacyJSONCustomerRepository(json_path=json_file, table=_TEST_TABLE)
 
         # Should have migrated 3 customers
         assert repo.count() == 3
