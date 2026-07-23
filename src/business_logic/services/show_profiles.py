@@ -41,6 +41,7 @@ import re
 MARKET_CODE_TO_CU = {"NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4, "SEA": 5,
                      "LAX": 6, "CVC": 7, "WDC": 8, "MMT": 9, "DAL": 10}
 OTA_MARKETS = ["SFO", "CVC", "DAL"]
+CTV_MARKETS = ["NYC", "CMP", "HOU", "SFO", "SEA", "LAX", "CVC", "WDC", "MMT"]  # all CTV (no DAL)
 
 _DEFAULT_PROFILES = [
     {
@@ -54,6 +55,25 @@ _DEFAULT_PROFILES = [
         # UI lands (the engine will normalize both).
         "open_bumper": {"code": "BUMP_MBCNEWSTODAY_OPEN", "event_type": "F"},
         "close_bumper": {"code": "BUMP_MBCNEWSTODAY_CLOSE", "event_type": "T"},
+    },
+    {
+        # Kingdom of God (CTV, Sunday 6-7a religious slot). The religious open/
+        # disclaimer airs at the top of the hour as the F-locked anchor, and the
+        # program (KOG<date>, a single whole file) plays immediately after as T —
+        # exactly the anchor mechanic the retired Children FCC-ID used. Matched by
+        # KOG file code only (per Lee); other 6a religious titles are out of scope.
+        # All 9 CTV markets; the 6-7a hour is a single PRGS slot, so the open and
+        # KOG share it (open first).
+        "name": "Kingdom of God",
+        "code_re": r"^KOG",               # KOG<mmddyy> / KOG-<mmddyy> / KOG0410 …
+        "networks": ["CTV"],
+        "days": "Su",
+        "window": ("06:00", "07:00"),
+        "elements": [
+            {"kind": "id", "id": 3653, "code": "RELIGIOUSOPEN10E01",
+             "markets": "ctv", "segment": "PRGS", "break": 1, "position": "first",
+             "event_type": "F", "anchor": True},
+        ],
     },
     # (The per-show "Children" profile — kids FCC ID 2891 anchored at the top of
     # the first PRGS break on SFO/CVC — was retired 2026-07-15 when all three
@@ -161,6 +181,8 @@ def elements_for(profile, cod_user):
             cus = set(MARKET_CODE_TO_CU.values())
         elif mk == "ota":
             cus = {MARKET_CODE_TO_CU[c] for c in OTA_MARKETS}
+        elif mk == "ctv":
+            cus = {MARKET_CODE_TO_CU[c] for c in CTV_MARKETS}
         else:
             cus = {MARKET_CODE_TO_CU[c] for c in mk if c in MARKET_CODE_TO_CU}
         if cod_user in cus:
