@@ -4845,6 +4845,148 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:  # noqa: BLE001 - surface connection-level errors
             return {"results": [], "error": f"Replace failed: {exc}"}
 
+    def _dp_marketplace_windows(d, start, end):
+        """Mirror-group Marketplace :30 windows for a clicked slot on DAL.
+
+        A "Marketplace" hour is split (in the grid reader) into two :30 blocks,
+        and the noon (12:00) and late-night (23:00) hours mirror each other. The
+        group = every Marketplace block that day sharing the clicked slot's
+        in-hour offset (:00 → the noon+late top halves; :30 → both bottom
+        halves), so one assignment airs in both. Falls back to just the clicked
+        window if the grid can't be read."""
+        import re as _re
+
+        from src.business_logic.services.programming_grid import get_day_programs
+
+        def _off(s):
+            m = _re.match(r"\s*\d{1,2}:(\d{2})", s or "")
+            return int(m.group(1)) if m else -1
+
+        try:
+            grid = get_day_programs("TAC", d)
+        except Exception:  # noqa: BLE001 - fall back to the clicked window
+            grid = {"programs": []}
+        blocks = [p for p in (grid.get("programs") or [])
+                  if (p.get("title") or "").strip().lower() == "marketplace"]
+        target = _off(start)
+        group = [{"start": p["start"], "end": p["end"]} for p in blocks if _off(p["start"]) == target]
+        if not group and start and end:
+            group = [{"start": start, "end": end}]
+        return group
+
+    @router.get("/api/master-control/daily-programming/marketplace/options")
+    async def daily_programming_marketplace_options(date: str, start: str, end: str = ""):
+        """Modal data for a clicked Marketplace slot (DAL only): the mirror-group
+        windows with their current long-form PI occupant, the active PI pool, and
+        the rotation status."""
+        import datetime as _dt
+
+        from browser_automation.etere_direct_client import connect as _db_connect
+        from src.business_logic.services import pi_rotation
+        from src.business_logic.services.daily_programming_run import _window
+        try:
+            d = _dt.datetime.strptime(date, "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            return {"error": "Invalid date"}
+        group = _dp_marketplace_windows(d, start, end)
+        if not group:
+            return {"windows": [], "pool": [], "rotation": {}, "error": "No Marketplace slot for this day"}
+
+        def _run():
+            with _db_connect() as conn:
+                cur = conn.cursor()
+                for w in group:
+                    lo, hi = _window(w["start"], w["end"])
+                    w["occupant"] = None
+                    if lo is None or hi is None:
+                        continue
+                    cur.execute(
+                        """SELECT TOP 1 t.ID_FILMATI, f.COD_PROGRA, f.DESCRIZIO
+                           FROM TPALINSE t WITH(NOLOCK)
+                           LEFT JOIN FILMATI f WITH(NOLOCK) ON f.ID_FILMATI=t.ID_FILMATI
+                           WHERE t.COD_USER=10 AND t.DATA=%s AND t.ORA>=%s AND t.ORA<%s
+                             AND t.NEWTYPE='PGM' AND t.LIVELLO=0 AND t.PART=0 AND t.ID_FILMATI>0
+                             AND t.COD_PROGRA NOT LIKE 'BUMP%%'
+                           ORDER BY t.ORA""",
+                        (d, lo, hi),
+                    )
+                    r = cur.fetchone()
+                    if r:
+                        w["occupant"] = {"fid": int(r[0]), "code": (r[1] or "").strip(),
+                                         "desc": (r[2] or "").strip(), "token": pi_rotation.token_of(r[2])}
+                pool = pi_rotation.active_pool(cur)
+                st = pi_rotation.status(cur)
+            return {"windows": group, "pool": pool, "rotation": st}
+
+        loop = asyncio.get_running_loop()
+        try:
+            return await loop.run_in_executor(None, _run)
+        except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
+            return {"error": f"Lookup failed: {exc}"}
+
+    @router.post("/api/master-control/daily-programming/marketplace/assign")
+    async def daily_programming_marketplace_assign(body: dict = Body(...)):
+        """Assign a long-form PI into a Marketplace slot on DAL (auto-mirrored to
+        the matching noon/late-night half), for that day only. `random: true`
+        draws the next unused spot from the rotation; `fileId` picks a specific
+        one. Either way the chosen spot is recorded as used once it places."""
+        import datetime as _dt
+
+        from browser_automation.etere_direct_client import connect as _db_connect
+        from src.business_logic.services import pi_rotation
+        from src.business_logic.services.daily_programming_run import (
+            _drain_pending_filmati_syncs,
+            fill_marketplace,
+        )
+        try:
+            d = _dt.datetime.strptime(body.get("date") or "", "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            return {"ok": False, "error": "Invalid date"}
+        start, end = body.get("start") or "", body.get("end") or ""
+        want_random = bool(body.get("random"))
+        file_id = body.get("fileId")
+        if not want_random and not file_id:
+            return {"ok": False, "error": "Provide a fileId or set random=true"}
+        group = _dp_marketplace_windows(d, start, end)
+        windows = [(w["start"], w["end"]) for w in group]
+        if not windows:
+            return {"ok": False, "error": "No Marketplace slot found for this day/time"}
+
+        def _run():
+            with _db_connect() as conn:
+                cur = conn.cursor()
+                if want_random:
+                    choice, reset = pi_rotation.pick(conn)
+                    if not choice:
+                        return {"ok": False, "error": "No active long-form PI spots found"}
+                    fid, token = choice["fid"], choice["token"]
+                else:
+                    fid, token, reset = int(file_id), pi_rotation.token_for_fid(cur, int(file_id)), False
+                pending = []
+                res = fill_marketplace(conn, 10, d, windows, fid, pending)
+                res.pop("_deadlock", None)
+                if pending:
+                    _drain_pending_filmati_syncs(conn.cursor(), conn, pending)
+                if res.get("ok") and token:
+                    pi_rotation.mark_used(conn, token, used_by="marketplace")
+                cur.execute("SELECT COD_PROGRA, DESCRIZIO FROM FILMATI WITH(NOLOCK) WHERE ID_FILMATI=%s", (fid,))
+                fr = cur.fetchone()
+                res.update({
+                    "fid": fid, "token": token,
+                    "code": (fr[0].strip() if fr and fr[0] else ""),
+                    "desc": (fr[1].strip() if fr and fr[1] else ""),
+                    "cycle_reset": reset,
+                    "windows": group,
+                    "rotation": pi_rotation.status(cur),
+                })
+                return res
+
+        loop = asyncio.get_running_loop()
+        try:
+            return await loop.run_in_executor(None, _run)
+        except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
+            return {"ok": False, "error": f"Assign failed: {exc}"}
+
     @router.post("/api/master-control/daily-programming/run")
     async def daily_programming_run(body: dict = Body(...)):
         """Set up across markets: place each assignment into each target market

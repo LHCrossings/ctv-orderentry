@@ -234,6 +234,13 @@
             <div id="fmEdlResult" style="margin-top:8px; font-size:0.82rem;"></div>
         </div>
 
+        <div id="fmMarketPanel" style="display:none;">
+            <div class="fm-filler-status" id="fmMarketStatus"></div>
+            <button type="button" id="fmMarketRandom" class="fm-done">🎲 Assign random (unused)</button>
+            <div class="modal-check-hint" style="margin:6px 0;">…or pick a specific spot to place:</div>
+            <div id="fmMarketPool" class="fm-results"></div>
+        </div>
+
         <input type="text" id="fmSearch" class="field-input" style="width:100%; box-sizing:border-box;"
                placeholder="Search media library (e.g. NEWSTODAY)…" autocomplete="off" />
         <div id="fmResults" class="fm-results"></div>
@@ -334,6 +341,12 @@
         return state.network === 'CTV' && /shop\s*lc/i.test(p && p.title || '');
     }
 
+    // ── Marketplace (DAL long-form PI) — clicking a Marketplace row opens the PI
+    // modal (assign random / pick specific) instead of the file super-search.
+    function isMarketplaceProgram(p) {
+        return state.network === 'TAC' && /^marketplace$/i.test(((p && p.title) || '').trim());
+    }
+
     async function loadGrid() {
         state.date = dateEl.value;
         const previewCard = document.getElementById('previewCard');
@@ -356,7 +369,8 @@
                     ? '<span class="prog-lang">' + escHtml(p.language + (p.kind ? ' ' + p.kind : '')) + '</span>'
                     : '';
                 const time = escHtml(p.start || '') + (p.end ? '–' + escHtml(p.end) : '');
-                const hint = isShopLcProgram(p) ? '+ set up Shop LC' : '+ choose file';
+                const hint = isShopLcProgram(p) ? '+ set up Shop LC'
+                    : (isMarketplaceProgram(p) ? '🎲 assign / replace PI' : '+ choose file');
                 return '<div class="prog-row" data-idx="' + i + '">' +
                     '<span class="prog-time">' + time + '</span>' +
                     '<span class="prog-title">' + escHtml(p.title) + '</span>' + tag +
@@ -462,7 +476,7 @@
             // Fully placed + nothing assigned → the row's action is replacing a
             // revised piece, and its hint says so ('+ choose file' is pointless).
             const hintSpan = document.getElementById('assign-' + i);
-            if (hintSpan && hintSpan.classList.contains('empty') && !isShopLcProgram(p)) {
+            if (hintSpan && hintSpan.classList.contains('empty') && !isShopLcProgram(p) && !isMarketplaceProgram(p)) {
                 hintSpan.textContent = (n === M) ? '↻ replace piece' : '+ choose file';
             }
         });
@@ -489,6 +503,10 @@
     const fmEdlText = document.getElementById('fmEdlText');
     const fmEdlImport = document.getElementById('fmEdlImport');
     const fmEdlResult = document.getElementById('fmEdlResult');
+    const fmMarketPanel = document.getElementById('fmMarketPanel');
+    const fmMarketStatus = document.getElementById('fmMarketStatus');
+    const fmMarketRandom = document.getElementById('fmMarketRandom');
+    const fmMarketPool = document.getElementById('fmMarketPool');
     let modalIdx = null;
     let lastResults = [];
     let searchTimer = null;
@@ -510,6 +528,10 @@
                 state.assignments[idx] = { mode: 'shoplc' };
                 setAssignText(idx, '→ CVC/SFO exploded per EDL · others generic live', false);
             }
+            return;
+        }
+        if (isMarketplaceProgram(p)) {   // long-form PI assign/replace modal
+            openMarketplaceModal(idx);
             return;
         }
         // Fully placed in every selected market + nothing assigned → the only
@@ -536,6 +558,7 @@
         fmHint.textContent = FM_HINT_DEFAULT;
         fmFillerPanel.style.display = 'none';
         fmEdlPanel.style.display = 'none';
+        fmMarketPanel.style.display = 'none';
         fmSearch.style.display = '';
         fmResults.style.display = '';
         fmHint.style.display = 'block';
@@ -560,6 +583,7 @@
         fmHint.textContent = FM_HINT_DEFAULT;
         fmFillerPanel.style.display = 'none';
         fmEdlPanel.style.display = 'none';
+        fmMarketPanel.style.display = 'none';
         fmSearch.style.display = '';
         fmResults.style.display = '';
     }
@@ -998,6 +1022,109 @@
             fmResults.innerHTML = '<div class="fm-empty">Error: ' + escHtml(e.message) + '</div>';
         }
     }
+
+    // ── Marketplace long-form PI assign / replace ───────────────────────────
+    // Clicking a Marketplace row opens this modal: it shows what's in the slot
+    // (and its mirror), a random-from-unused button, and the active PI list to
+    // pick a specific one. Applies to that day only, auto-mirrored across the
+    // noon + late-night halves (the server resolves the mirror group).
+    let marketCtx = null;   // {p, idx, windows, filled}
+
+    function stripCode(desc) { return String(desc || '').replace(/^[^:]*:\s*/, ''); }
+
+    async function openMarketplaceModal(idx) {
+        const p = state.programs[idx];
+        marketCtx = { p: p, idx: idx, windows: [], filled: false };
+        modalPhase = 'marketplace';
+        fillerDraft = null; edlDraft = null; replaceCtx = null;
+        fmFillerPanel.style.display = 'none';
+        fmEdlPanel.style.display = 'none';
+        fmSearch.style.display = 'none';
+        fmResults.style.display = 'none';
+        fmResults.innerHTML = '';
+        fmHint.style.display = 'none';
+        fmMarketPanel.style.display = 'block';
+        fmTitle.textContent = 'Marketplace — long-form PI';
+        fmSub.textContent = (p.start || '') + (p.end ? '–' + p.end : '') + ' · DAL';
+        fmMarketStatus.innerHTML = 'Loading…';
+        fmMarketPool.innerHTML = '';
+        fmMarketRandom.disabled = true;
+        modal.style.display = 'flex';
+        try {
+            const r = await fetch('/api/master-control/daily-programming/marketplace/options?date=' +
+                encodeURIComponent(state.date) + '&start=' + encodeURIComponent(p.start || '') +
+                '&end=' + encodeURIComponent(p.end || ''));
+            const data = await r.json();
+            if (data.error) { fmMarketStatus.innerHTML = '<span style="color:var(--nord11)">' + escHtml(data.error) + '</span>'; return; }
+            marketCtx.windows = data.windows || [];
+            marketCtx.filled = (data.windows || []).some(function (w) { return w.occupant; });
+            renderMarketModal(data);
+            fmMarketRandom.disabled = false;
+        } catch (e) {
+            fmMarketStatus.innerHTML = '<span style="color:var(--nord11)">Error: ' + escHtml(e.message) + '</span>';
+        }
+    }
+
+    function renderMarketModal(data) {
+        const rot = data.rotation || {};
+        const wins = (data.windows || []).map(function (w) {
+            const occ = w.occupant;
+            const cur = occ
+                ? escHtml(occ.token || occ.code || ('id ' + occ.fid)) +
+                  (occ.desc ? ' <span style="color:var(--text-muted)">— ' + escHtml(stripCode(occ.desc)) + '</span>' : '')
+                : '<span style="color:var(--text-muted)">blank</span>';
+            return '<div>' + escHtml(w.start + '–' + w.end) + ': <b>' + cur + '</b></div>';
+        }).join('');
+        fmMarketStatus.innerHTML =
+            '<div style="margin-bottom:6px;">Airs in ' + (data.windows || []).length +
+            ' slot(s) this day (noon + late-night mirror):</div>' + wins +
+            '<div style="margin-top:8px;color:var(--text-muted)">Rotation: ' + (rot.used || 0) + '/' + (rot.total || 0) +
+            ' used this cycle · ' + (rot.remaining || 0) + ' unused.</div>';
+        const pool = data.pool || [];
+        fmMarketPool.innerHTML = pool.length ? pool.map(function (f) {
+            return '<div class="fm-result" data-mfid="' + f.fid + '">' +
+                '<span class="fm-code">' + escHtml(f.token) + '</span>' +
+                '<span class="fm-meta">' + escHtml(stripCode(f.desc)) +
+                (durLabel(f.durata) ? ' · ' + durLabel(f.durata) : '') + '</span></div>';
+        }).join('') : '<div class="fm-empty">No active PI spots found.</div>';
+    }
+
+    async function assignMarketplace(payload) {
+        const p = marketCtx.p;
+        if (marketCtx.filled && !confirm('Replace the current Marketplace PI for ' +
+            (p.start || '') + ' (and its mirror) on ' + state.date + '?\n\nThis edits the live schedule.')) return;
+        fmMarketStatus.innerHTML = 'Assigning…';
+        fmMarketRandom.disabled = true;
+        try {
+            const r = await fetch('/api/master-control/daily-programming/marketplace/assign', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(Object.assign({ date: state.date, start: p.start, end: p.end }, payload))
+            });
+            const data = await r.json();
+            if (!data.ok) {
+                fmMarketStatus.innerHTML = '<span style="color:var(--nord11)">✗ ' +
+                    escHtml(data.error || data.message || 'failed') + '</span>';
+                fmMarketRandom.disabled = false;
+                return;
+            }
+            loadPlacement();   // refresh the grid's placed badges
+            const label = escHtml(data.token || data.code || ('id ' + data.fid));
+            fmMarketStatus.innerHTML = '<span style="color:var(--nord14)">✓ ' + label + ' placed (' +
+                escHtml(data.message || '') + ').</span> Refreshing…';
+            // Reload the modal so it shows the new occupant + rotation count.
+            setTimeout(function () { if (modalPhase === 'marketplace' && marketCtx) openMarketplaceModal(marketCtx.idx); }, 500);
+        } catch (e) {
+            fmMarketStatus.innerHTML = '<span style="color:var(--nord11)">Error: ' + escHtml(e.message) + '</span>';
+            fmMarketRandom.disabled = false;
+        }
+    }
+
+    fmMarketRandom.addEventListener('click', function () { assignMarketplace({ random: true }); });
+    fmMarketPool.addEventListener('click', function (e) {
+        const el = e.target.closest('.fm-result');
+        if (!el || el.dataset.mfid === undefined) return;
+        assignMarketplace({ fileId: parseInt(el.dataset.mfid, 10) });
+    });
 </script>
 
 </body>

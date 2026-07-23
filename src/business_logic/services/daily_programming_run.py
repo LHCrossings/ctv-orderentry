@@ -910,6 +910,102 @@ def _replace_piece_once(conn, cod_user, d, lo, hi, old_fid, new_fid, pending):
                 "_deadlock": _is_deadlock(exc)}
 
 
+def _mkt_event_type(start: str) -> str:
+    """Marketplace half-hour lock: the :00 half is the top-of-hour F anchor, the
+    :30 half floats as T (matches the live DAL structure — PRG 28:30 + COM 1:30
+    twice per hour)."""
+    m = re.match(r"\s*\d{1,2}:(\d{2})", start or "")
+    return "F" if (m and int(m.group(1)) % 60 == 0) else "T"
+
+
+def fill_marketplace(conn, cod_user, d, windows, fid, pending):
+    """Assign one long-form PI (whole file) into each Marketplace PRGS slot in
+    `windows` — the mirror group (the noon and late-night :30 blocks that share
+    the same in-hour offset), so one pick airs in both. Fills a blank slot or
+    replaces whatever PI is there. Transaction-safe with the same deadlock retry
+    as run_market. DAL-only in practice. Returns {ok, message, ids}."""
+    result = None
+    for attempt in range(1, _DEADLOCK_MAX_ATTEMPTS + 1):
+        result = _fill_marketplace_once(conn, cod_user, d, windows, fid, pending)
+        if not result.pop("_deadlock", False):
+            return result
+        if attempt < _DEADLOCK_MAX_ATTEMPTS:
+            time.sleep(_DEADLOCK_RETRY_SECONDS * attempt + random.uniform(0.1, 1.5))
+    return result
+
+
+def _fill_marketplace_once(conn, cod_user, d, windows, fid, pending):
+    cur = conn.cursor()
+    try:
+        new_dur = _durata(cur, fid)
+        if not new_dur:
+            return {"ok": False, "message": f"asset {fid} has no duration"}
+        cur.execute("SELECT LIVE_ID FROM FILMATI WHERE ID_FILMATI=%s", (fid,))
+        r = cur.fetchone()
+        if r and r[0] is not None:
+            return {"ok": False, "message": "asset is a live event — Marketplace PIs must be files"}
+
+        ids = []
+        for start, end in windows:
+            lo, hi = _window(start, end)
+            if lo is None or hi is None:
+                conn.rollback()
+                return {"ok": False, "message": f"bad window {start}-{end}"}
+            slots = _slots(cur, cod_user, d, lo, hi, "PRGS")
+            if len(slots) != 1:
+                conn.rollback()
+                return {"ok": False, "message": f"{start}-{end}: expected 1 PRGS slot, found {len(slots)}"}
+            slot = slots[0]
+            ev = _mkt_event_type(start)
+            # Current live whole-file PGM occupant(s) in this :30 window.
+            cur.execute(
+                """SELECT id_tpalinse FROM TPALINSE
+                   WHERE COD_USER=%s AND DATA=%s AND ORA>=%s AND ORA<%s
+                     AND NEWTYPE='PGM' AND LIVELLO=0 AND PART=0 AND ID_FILMATI>0
+                     AND COD_PROGRA NOT LIKE 'BUMP%%'
+                   ORDER BY ORA""",
+                (cod_user, d, lo, hi),
+            )
+            occ = [int(x[0]) for x in cur.fetchall()]
+            if len(occ) > 1:
+                conn.rollback()
+                return {"ok": False,
+                        "message": f"{start}-{end}: {len(occ)} occupants in one slot — resolve manually"}
+            if occ:  # replace in place (keeps identity/XORDER, like _replace_piece_once)
+                rid = occ[0]
+                cur.execute(
+                    "UPDATE TPALINSE SET ID_FILMATI=%s, Duration=%s, TimeCode_I=0, TimeCode_O=%s "
+                    "WHERE id_tpalinse=%s",
+                    (fid, new_dur, new_dur - 1, rid),
+                )
+                cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (rid, fid))
+                cur.execute("UPDATE TPALINSE SET EVENT_TYPE=%s WHERE id_tpalinse=%s", (ev, rid))
+                nid = rid
+            else:  # blank slot → insert the whole file
+                nid = _insert_event(cur, cod_user, d, slot["sched"], slot["block"], slot["seg"],
+                                    slot["ora"], fid, new_dur)
+                cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
+                cur.execute("UPDATE TPALINSE SET EVENT_TYPE=%s WHERE id_tpalinse=%s", (ev, nid))
+            ids.append(nid)
+
+        if not ids:
+            conn.rollback()
+            return {"ok": False, "message": "no Marketplace slots resolved for this day"}
+        _rebuild(cur, d, cod_user, min(ids))
+        _sync_checksums(cur, ids, pending)
+        for nid in ids:
+            cur.execute("SELECT ID_FILMATI FROM TPALINSE WHERE id_tpalinse=%s AND LIVELLO=0", (nid,))
+            chk = cur.fetchone()
+            if not chk or int(chk[0]) != int(fid):
+                conn.rollback()
+                return {"ok": False, "message": "verify failed after placement"}
+        conn.commit()
+        return {"ok": True, "message": f"placed into {len(ids)} slot(s)", "ids": ids}
+    except Exception as exc:  # noqa: BLE001 - report failure, leave the day untouched
+        conn.rollback()
+        return {"ok": False, "message": f"error: {exc}", "_deadlock": _is_deadlock(exc)}
+
+
 def sweep_daily_ids(conn, cod_user, dates, pending):
     """Place this market's standing daily elements (see show_profiles
     daily_elements — e.g. the DAL end-of-day FCC children's-records ID) for
