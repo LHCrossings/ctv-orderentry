@@ -901,7 +901,18 @@ EXEC web_sales_savecontractgeneral
         if max_daily_run is None:
             day_bits = parse_day_bits(days)
             active_days = sum(day_bits.values())
-            max_daily_run = ceil(spots_per_week / active_days) if active_days else spots_per_week
+            # A monthly / rotation line is passed spots_per_week=0, so a plain
+            # ceil(spots_per_week / active_days) yields 0 — a 0 max-per-day means
+            # the scheduler can place nothing and the order never airs. Derive an
+            # effective weekly rate from the total spread over the flight instead.
+            # Weekly-grid lines (spots_per_week > 0) keep their stated cadence.
+            eff_per_week = spots_per_week
+            if not eff_per_week and total_spots and date_from and date_to:
+                weeks = max(1.0, ((date_to - date_from).days + 1) / 7)
+                eff_per_week = total_spots / weeks
+            max_daily_run = ceil(eff_per_week / active_days) if active_days else ceil(eff_per_week)
+            if total_spots and max_daily_run < 1:
+                max_daily_run = 1  # a line with spots must allow at least 1/day
         else:
             day_bits = parse_day_bits(days)
 

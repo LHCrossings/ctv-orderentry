@@ -526,7 +526,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         for f in sorted(directory.iterdir()):
             if (not f.is_file() or f.name in listed
                     or f.name.startswith(('.', '~$'))
-                    or f.name.endswith('.manifest.json')):
+                    or f.name.endswith(('.manifest.json', '.ai.json'))):
                 continue
             stat = f.stat()
             result.append({
@@ -1936,7 +1936,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             return sum(
                 1 for f in d.iterdir()
                 if f.is_file() and not f.name.startswith(('.', '~$'))
-                and not f.name.endswith('.manifest.json')
+                and not f.name.endswith(('.manifest.json', '.ai.json'))
             )
         def _run():
             _sweep_entered_strays()
