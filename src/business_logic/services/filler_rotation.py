@@ -82,12 +82,19 @@ def draw_n(conn, n: int) -> list[dict]:
     return picks
 
 
+_OVERSHOOT_CAP_FRAMES = int(5 * 60 * 29.97)  # allow up to ~5 min of overfill
+
+
 def draw_until(cur, target_frames: int, exclude_codes=()) -> list[dict]:
-    """Pick random DISTINCT active K-FILLERs whose durations cumulatively reach
-    `target_frames` — for WEEKEND programming-time fill. Pure random from the full
-    active pool: it deliberately does NOT read or update the rotation cycle (weekend
-    fillers get duration-match flexibility and don't consume weekday tokens). The
-    last pick may overshoot (fillers are chunky). Returns [] if target ≤ 0."""
+    """Pick random DISTINCT active K-FILLERs whose durations fill `target_frames`
+    — for WEEKEND programming-time fill. Pure random from the full active pool: it
+    deliberately does NOT read or update the rotation cycle (weekend fillers get
+    duration-match flexibility and don't consume weekday tokens).
+
+    Biased to OVERFILL, not underfill: it always reaches the target and overshoots
+    by up to ~5 minutes (only exceeding that if the pool leaves no smaller option).
+    A spare filler is a one-click delete for master control, whereas underfilling
+    means hand-inserting a filler across every market. Returns [] if target ≤ 0."""
     target = int(target_frames)
     if target <= 0:
         return []
@@ -97,12 +104,15 @@ def draw_until(cur, target_frames: int, exclude_codes=()) -> list[dict]:
     picks, total = [], 0
     while total < target and pool:
         gap = target - total
-        fits = [p for p in pool if p["durata"] <= gap]
-        # Random among fillers that still fit the gap; when none fit, finish with a
-        # random pick from the 3 shortest remaining — least overshoot ("match it
-        # best") while keeping some variety week to week.
-        choice = random.choice(fits) if fits else \
-            random.choice(sorted(pool, key=lambda p: p["durata"])[:3])
+        # A filler that completes the fill landing in [target, target+5min].
+        finishers = [p for p in pool if gap <= p["durata"] <= gap + _OVERSHOOT_CAP_FRAMES]
+        unders = [p for p in pool if p["durata"] < gap]
+        if finishers:
+            choice = random.choice(finishers)          # done, overshoot ≤ 5 min
+        elif unders:
+            choice = random.choice(unders)             # still short → add and continue
+        else:
+            choice = min(pool, key=lambda p: p["durata"])  # unavoidable → least overshoot
         pool.remove(choice)
         picks.append(choice)
         total += choice["durata"]
