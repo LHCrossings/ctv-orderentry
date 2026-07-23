@@ -65,7 +65,10 @@ def _load_existing(cur):
     out = {}
     for row in cur.fetchall():
         name, otype = _norm("customer_name", row[0]), _norm("order_type", row[1])
-        out[(name, otype)] = {f: _norm(f, row[2 + i]) for i, f in enumerate(_FIELDS)}
+        # Key case-insensitively — SQL Server's PK collation is case-insensitive,
+        # so "CAL FIRE" and "Cal Fire" are the SAME row (a case-sensitive key here
+        # reports a false gap and then crashes on the duplicate-key INSERT).
+        out[(name.lower(), otype.lower())] = {f: _norm(f, row[2 + i]) for i, f in enumerate(_FIELDS)}
     return out
 
 
@@ -84,13 +87,13 @@ def main():
         existing = _load_existing(cur)
         gaps, identical, conflicts = [], 0, []
         for r in rows:
-            key = (r["customer_name"], r["order_type"])
+            key = (r["customer_name"].lower(), r["order_type"].lower())  # case-insensitive PK
             if key not in existing:
                 gaps.append(r)
             else:
                 diffs = {f: (existing[key][f], r[f]) for f in _FIELDS if existing[key][f] != r[f]}
                 if diffs:
-                    conflicts.append((key, diffs))
+                    conflicts.append(((r["customer_name"], r["order_type"]), diffs))
                 else:
                     identical += 1
 
