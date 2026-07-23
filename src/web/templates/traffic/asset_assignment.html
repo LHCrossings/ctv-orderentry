@@ -1412,6 +1412,22 @@
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    // Air-check outcome for a traffic-assign response. Auto-aircheck customers
+    // now have their spots scheduled on the Datamover agent server-side; show the
+    // result (or the plain warning if scheduling didn't run).
+    function acLabel(d) {
+        const a = d.aircheck;
+        if (a) {
+            if (a.unreachable) return ' · ⚠ airchecks: Datamover unreachable';
+            if (a.error) return ' · ⚠ airchecks: ' + esc(a.error);
+            let s = ' · ✓ ' + (a.scheduled || 0) + ' aircheck' + (a.scheduled === 1 ? '' : 's') + ' scheduled';
+            if (a.skipped) s += ' (' + a.skipped + ' already queued)';
+            if (a.failed) s += ' · ⚠ ' + a.failed + ' failed';
+            return s;
+        }
+        return d.needs_airchecks ? ' · ⚠ air-checks required' : '';
+    }
+
     // ── Admerasia traffic ────────────────────────────────────────────────────
 
     function onAutoClientChange(val) {
@@ -1590,7 +1606,7 @@
             if (!resp.ok) throw new Error(d.detail || 'Assign failed');
             btn.style.display = 'none';
             status.innerHTML = `<span style="color:var(--nord14);font-weight:600;">✓ Assigned ${d.assigned} spot(s) across ${d.lines_updated} line(s)`
-                + (d.needs_airchecks ? ' · ⚠ air-checks required' : '') + '</span>';
+                + acLabel(d) + '</span>';
         } catch (e) {
             btn.disabled = false; btn.textContent = `Apply Traffic → ${r.contract_code || ''}`;
             status.innerHTML = `<span style="color:var(--nord11);">${esc(e.message)}</span>`;
@@ -2000,7 +2016,7 @@
             if (!resp.ok) throw new Error(d.detail || 'Assign failed');
             btn.style.display = 'none';
             status.innerHTML = `<span style="color:var(--nord14);font-weight:600;">✓ Assigned across ${d.lines_updated ?? r.lines.length} line(s)`
-                + (d.needs_airchecks ? ' · ⚠ air-checks required' : '') + '</span>';
+                + acLabel(d) + '</span>';
         } catch (e) {
             btn.disabled = false; btn.textContent = 'Apply Traffic';
             status.innerHTML = `<span style="color:var(--nord11);">${esc(e.message)}</span>`;
@@ -2097,7 +2113,7 @@
             if (!resp.ok) throw new Error(d.detail || 'Assign failed');
             btn.style.display = 'none';
             status.innerHTML = `<span style="color:var(--nord14);font-weight:600;">✓ Assigned across ${d.lines_updated ?? r.lines.length} line(s)`
-                + (d.needs_airchecks ? ' · ⚠ air-checks required' : '') + '</span>';
+                + acLabel(d) + '</span>';
         } catch (e) {
             btn.disabled = false; btn.textContent = `Apply Traffic → ${r.contract.code}`;
             status.innerHTML = `<span style="color:var(--nord11);">${esc(e.message)}</span>`;

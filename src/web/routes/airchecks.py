@@ -133,6 +133,66 @@ def _fetch_agent_status() -> dict:
         return {"complete": 0, "scheduled": 0, "unreachable": True}
 
 
+def schedule_airchecks_for_contract(contract_id: int) -> dict:
+    """Auto-schedule airchecks for a contract's upcoming spots on the Datamover
+    agent — one capture per first airing (ISCI × market), the same set the manual
+    Air Checks page builds. Deduped against captures already on the agent so
+    re-assigning a revision (or re-running an assign) never double-books.
+
+    Called from the traffic-assign routes when the contract's customer has
+    `auto_aircheck` set. Never raises — returns a summary the UI can show:
+    {scheduled, skipped, failed, total, unreachable?, error?}.
+    """
+    import json as _json
+    import urllib.request
+
+    try:
+        spots = _fetch_etere_spots(int(contract_id))
+    except Exception as exc:  # noqa: BLE001 - report, don't break the assign response
+        return {"scheduled": 0, "skipped": 0, "failed": 0, "total": 0, "error": str(exc)}
+    if not spots:
+        return {"scheduled": 0, "skipped": 0, "failed": 0, "total": 0}
+
+    # Existing captures on the agent → dedup key (ISCI, market, start-to-minute).
+    try:
+        with urllib.request.urlopen(f"{AGENT_URL}/captures", timeout=4) as resp:
+            existing = {
+                (str(c.get("isci_code", "")).strip().upper(), str(c.get("network", "")),
+                 str(c.get("start_time", ""))[:16])
+                for c in _json.loads(resp.read())
+            }
+    except Exception:
+        return {"scheduled": 0, "skipped": 0, "failed": 0, "total": len(spots), "unreachable": True}
+
+    scheduled = skipped = failed = 0
+    for s in spots:
+        key = (s["isci_code"].strip().upper(), s["network"], s["capture_start"][:16])
+        if key in existing:
+            skipped += 1
+            continue
+        payload = _json.dumps({
+            "client":           s.get("client_name") or s["isci_code"],
+            "network":          s["network"],
+            "duration_seconds": s["capture_duration_seconds"],
+            "start_time":       s["capture_start"],
+            "notes":            s.get("customer_ref") or "",
+            "isci_code":        s["isci_code"],
+            "original_ora":     s["air_ora"],
+        }).encode()
+        req = urllib.request.Request(f"{AGENT_URL}/captures", data=payload, method="POST")
+        req.add_header("Content-Type", "application/json")
+        try:
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                if 200 <= resp.status < 300:
+                    scheduled += 1
+                    existing.add(key)
+                else:
+                    failed += 1
+        except Exception:
+            failed += 1
+    return {"scheduled": scheduled, "skipped": skipped, "failed": failed, "total": len(spots)}
+
+
 def build_airchecks_router(templates: Jinja2Templates) -> APIRouter:
     router = APIRouter()
 

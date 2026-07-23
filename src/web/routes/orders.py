@@ -6357,7 +6357,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             except Exception:
                 pass
 
-            return {"ok": True, "spots_updated": spots_updated, "lines_updated": lines_updated, "needs_airchecks": needs_airchecks, "contract_id": contract_id}
+            aircheck = None
+            if needs_airchecks:
+                from src.web.routes.airchecks import schedule_airchecks_for_contract
+                aircheck = schedule_airchecks_for_contract(contract_id)
+            return {"ok": True, "spots_updated": spots_updated, "lines_updated": lines_updated, "needs_airchecks": needs_airchecks, "aircheck": aircheck, "contract_id": contract_id}
 
         try:
             result = await asyncio.get_running_loop().run_in_executor(None, _run)
@@ -6771,7 +6775,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             except Exception:
                 pass
 
-            return {"ok": True, "lines_updated": lines_updated, "spots_updated": spots_updated, "needs_airchecks": needs_airchecks, "contract_id": contract_id}
+            aircheck = None
+            if needs_airchecks:
+                from src.web.routes.airchecks import schedule_airchecks_for_contract
+                aircheck = schedule_airchecks_for_contract(contract_id)
+            return {"ok": True, "lines_updated": lines_updated, "spots_updated": spots_updated, "needs_airchecks": needs_airchecks, "aircheck": aircheck, "contract_id": contract_id}
 
         try:
             result = await asyncio.get_running_loop().run_in_executor(None, _run)
@@ -7079,7 +7087,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             except Exception:
                 pass
 
-            return {"ok": True, "breaks_assigned": n_breaks, "spots_updated": spots_updated, "needs_airchecks": needs_airchecks, "contract_id": contract_id}
+            aircheck = None
+            if needs_airchecks:
+                from src.web.routes.airchecks import schedule_airchecks_for_contract
+                aircheck = schedule_airchecks_for_contract(contract_id)
+            return {"ok": True, "breaks_assigned": n_breaks, "spots_updated": spots_updated, "needs_airchecks": needs_airchecks, "aircheck": aircheck, "contract_id": contract_id}
 
         try:
             result = await asyncio.get_running_loop().run_in_executor(None, _run)
@@ -8849,7 +8861,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             except Exception:
                 pass
 
-            return {"ok": True, "assigned": spots_updated, "lines_updated": lines_updated, "needs_airchecks": needs_airchecks, "contract_id": contract_id}
+            aircheck = None
+            if needs_airchecks:
+                from src.web.routes.airchecks import schedule_airchecks_for_contract
+                aircheck = schedule_airchecks_for_contract(contract_id)
+            return {"ok": True, "assigned": spots_updated, "lines_updated": lines_updated, "needs_airchecks": needs_airchecks, "aircheck": aircheck, "contract_id": contract_id}
 
         try:
             result = await asyncio.get_running_loop().run_in_executor(None, _run)
