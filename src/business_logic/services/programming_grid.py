@@ -249,6 +249,40 @@ def _coalesce_hmong_weekend(programs: list[dict], d: datetime.date) -> list[dict
     return out
 
 
+def _split_marketplace(programs: list[dict], network: str) -> list[dict]:
+    """Override: a TAC "Marketplace" listing is a long-form paid-programming hour
+    built as PRG 28:30 + COM 1:30 + PRG 28:30 + COM 1:30 — i.e. TWO independent
+    long-form spots, one per half hour, each in its own PRGS segment in Etere.
+
+    The Dallas grid lists the whole hour as one merged "Marketplace" cell, so the
+    parser emits a single 60-min block and the placement tool offers one fillable
+    slot expecting one program across both segments. Split each Marketplace block
+    into consecutive 30-min slots so each half-hour PRGS segment can be filled
+    with its own long-form piece. TAC-only (Crossings TV has no Marketplace hour).
+    Idempotent: a Marketplace block already ≤30 min passes through unchanged."""
+    if network != "TAC":
+        return programs
+    out: list[dict] = []
+    for p in programs:
+        s, e = _hhmm_to_min(p.get("start")), _hhmm_to_min(p.get("end"))
+        if (p.get("title") or "").strip().lower() != "marketplace" or s is None or e is None:
+            out.append(p)
+            continue
+        if e <= s:  # crosses midnight (e.g. 23:00–00:00)
+            e += 24 * 60
+        n = max(1, round((e - s) / 30))
+        if n == 1:
+            out.append(p)
+            continue
+        step = (e - s) / n
+        for i in range(n):
+            seg = dict(p)
+            seg["start"] = _min_to_hhmm(int(round(s + i * step)))
+            seg["end"] = _min_to_hhmm(int(round(s + (i + 1) * step)))
+            out.append(seg)
+    return out
+
+
 def get_day_programs(network: str, d: datetime.date) -> dict:
     """Return the program lineup for one network/day from the K: grid.
 
@@ -319,5 +353,6 @@ def get_day_programs(network: str, d: datetime.date) -> dict:
         prog["start"], prog["end"] = start, end
         programs.extend(_split_shared_block(prog))
 
+    programs = _split_marketplace(programs, network)
     programs = _coalesce_hmong_weekend(programs, d)
     return {"found": True, "file": str(path), "date": d.isoformat(), "programs": programs}
