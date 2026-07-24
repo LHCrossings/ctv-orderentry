@@ -13,19 +13,25 @@ intended flow is extract → human review/edit in the web preview → enter. Out
 field names match parser_bridge._normalize_line so the existing preview UI can
 render an AIOrder with no special-casing.
 
-Model: claude-opus-4-8 (built-in high-res vision → reads both text and scanned
-PDFs natively, no OCR path needed). Structured output via messages.parse() forces
-the response to match the Pydantic schema below.
+Model: Sonnet 5 (built-in high-res vision → reads both text and scanned PDFs
+natively, no OCR path needed). Structured output via messages.parse() forces the
+response to match the Pydantic schema below. Sonnet 5 matches Opus 4.8's
+extraction on these orders (verified byte-identical on a WorldLink scan) at a
+fraction of the latency and cost, and — with a hard timeout — never hangs the way
+a synchronous no-timeout Opus call could under a loaded API. Override with
+AI_PARSER_MODEL if a specific order needs Opus.
 """
 
 from __future__ import annotations
 
 import base64
+import os
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-MODEL = "claude-opus-4-8"
+MODEL = os.getenv("AI_PARSER_MODEL", "claude-sonnet-5")
+TIMEOUT_S = 180  # hard ceiling so a slow/loaded API fails fast instead of hanging
 
 # ─── Output schema (field names mirror parser_bridge._normalize_line) ─────────
 
@@ -96,10 +102,13 @@ def parse_ai_pdf(path: str, model: str = MODEL, max_tokens: int = 16000):
 
     pdf_b64 = base64.standard_b64encode(Path(path).read_bytes()).decode("utf-8")
 
-    client = anthropic.Anthropic()  # resolves ANTHROPIC_API_KEY from env
+    # resolves ANTHROPIC_API_KEY from env; timeout is a hard ceiling so a
+    # slow/loaded API surfaces an error instead of hanging silently.
+    client = anthropic.Anthropic(timeout=TIMEOUT_S)
     resp = client.messages.parse(
         model=model,
         max_tokens=max_tokens,
+        thinking={"type": "disabled"},  # PDF-to-structured-data — no reasoning needed
         system=_SYSTEM,
         messages=[{
             "role": "user",
@@ -115,8 +124,8 @@ def parse_ai_pdf(path: str, model: str = MODEL, max_tokens: int = 16000):
     usage = {
         "input_tokens": resp.usage.input_tokens,
         "output_tokens": resp.usage.output_tokens,
-        # rough Opus 4.8 cost: $5/1M in, $25/1M out
-        "est_cost_usd": round(resp.usage.input_tokens * 5e-6 + resp.usage.output_tokens * 25e-6, 4),
+        # rough Sonnet 5 cost: $3/1M in, $15/1M out (the default model)
+        "est_cost_usd": round(resp.usage.input_tokens * 3e-6 + resp.usage.output_tokens * 15e-6, 4),
     }
     return resp.parsed_output, usage
 

@@ -7,6 +7,7 @@ Detects new contracts vs revisions based on ACTION and LINE NO columns
 FIXED: Now handles days column with '0' and 'X' characters (not just 'X' and spaces)
 """
 
+import os
 import re
 from datetime import datetime
 
@@ -44,13 +45,22 @@ def _ocr_first_page(pdf_path, dpi=200):
 #
 # Scanned "uwOrderPrintVersion" PDFs have no extractable text. OCR+regex on them
 # is slow (page-1 only) and error-prone (misreads, dropped line tables). Instead
-# we hand the whole PDF to Claude Opus 4.8, whose native vision reads scanned
-# pages directly, and force a structured result that mirrors the regex output —
-# so the downstream automator consumes the same dict either way.
+# we hand the whole PDF to a Claude vision model, which reads scanned pages
+# directly, and force a structured result that mirrors the regex output — so the
+# downstream automator consumes the same dict either way.
 #
 # Model + structured-output pattern mirror browser_automation/parsers/ai_parser.py.
-
-_VISION_MODEL = "claude-opus-4-8"
+#
+# Model choice: Opus 4.8 is the slowest model in the family and, on these
+# single-page insertion orders, a synchronous non-streaming Opus vision call
+# could run 5-10 minutes with zero feedback (see the AATV Aug-3Q26 batch, which
+# hung for 10 min/order). Sonnet 5 reads a clean scanned form just as accurately
+# at a fraction of the latency, so it's the default; override with WL_VISION_MODEL
+# if a specific order needs Opus. Thinking is disabled and max_tokens capped —
+# this is straight OCR-to-JSON, not a reasoning task.
+_VISION_MODEL = os.getenv("WL_VISION_MODEL", "claude-sonnet-5")
+_VISION_MAX_TOKENS = 8000
+_VISION_TIMEOUT_S = 180  # hard ceiling so a slow API fails fast instead of hanging
 
 _VISION_SYSTEM = """You read a WorldLink / Unwired television advertising insertion order (a "uwOrderPrintVersion") and extract it into structured data. The page is scanned — read it carefully.
 
@@ -178,10 +188,15 @@ def _vision_extract_worldlink(pdf_path, refresh=False):
 
     try:
         pdf_b64 = base64.standard_b64encode(open(pdf_path, "rb").read()).decode("utf-8")
-        client = anthropic.Anthropic()  # ANTHROPIC_API_KEY from env (.env loaded by app)
+        # ANTHROPIC_API_KEY from env (.env loaded by app). timeout is a hard ceiling
+        # so a slow/loaded API surfaces an error instead of hanging silently.
+        client = anthropic.Anthropic(timeout=_VISION_TIMEOUT_S)
+        print(f"[PARSER] Reading scanned PDF with {_VISION_MODEL} vision "
+              f"(~10-30s)...", flush=True)
         resp = client.messages.parse(
             model=_VISION_MODEL,
-            max_tokens=16000,
+            max_tokens=_VISION_MAX_TOKENS,
+            thinking={"type": "disabled"},  # OCR-to-JSON — no reasoning needed
             system=_VISION_SYSTEM,
             messages=[{
                 "role": "user",
