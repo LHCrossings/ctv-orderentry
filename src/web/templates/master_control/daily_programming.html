@@ -246,9 +246,10 @@
             <div class="fm-filler-status" id="fmKdStatus"></div>
             <div id="fmKdDramas" class="fm-chosen"></div>
             <div class="modal-check-hint" id="fmKdEditHint" style="display:none; margin:8px 0;">Search &amp; click the new episode's <b>Piece A</b> (e.g. KD-THEFIRSTMAN096…).</div>
-            <div class="modal-check-hint" style="margin:8px 0 4px;">Fillers (random, sized to fill the programming budget):</div>
+            <div class="modal-check-hint" id="fmKdFillerHint" style="margin:8px 0 4px;">Fillers:</div>
             <div id="fmKdFillers" class="fm-chosen"></div>
-            <button type="button" id="fmKdReroll" class="fm-done" style="background:var(--nord10);">🎲 Reroll fillers</button>
+            <button type="button" id="fmKdReroll" class="fm-done" style="display:none; background:var(--nord10);">🎲 Reroll fillers</button>
+            <button type="button" id="fmKdAddFiller" class="fm-done" style="display:none; background:var(--nord10);">➕ Add filler</button>
             <button type="button" id="fmKdRun" class="run-btn">Set up across markets</button>
             <div id="fmKdResults" class="preview-plan" style="margin-top:10px;"></div>
         </div>
@@ -544,6 +545,8 @@
     const fmKdDramas = document.getElementById('fmKdDramas');
     const fmKdFillers = document.getElementById('fmKdFillers');
     const fmKdReroll = document.getElementById('fmKdReroll');
+    const fmKdAddFiller = document.getElementById('fmKdAddFiller');
+    const fmKdFillerHint = document.getElementById('fmKdFillerHint');
     const fmKdRun = document.getElementById('fmKdRun');
     const fmKdResults = document.getElementById('fmKdResults');
     const fmKdEditHint = document.getElementById('fmKdEditHint');
@@ -1234,7 +1237,7 @@
 
     async function openWeekendDramaModal(idx) {
         const p = state.programs[idx];
-        kdCtx = { p: p, idx: idx, dramas: [], fillers: [], budgetFrames: 0, editing: null };
+        kdCtx = { p: p, idx: idx, dramas: [], fillers: [], budgetFrames: 0, openSlots: 0, editing: null };
         modalPhase = 'kd';
         fillerDraft = null; edlDraft = null; replaceCtx = null;
         fmFillerPanel.style.display = 'none'; fmEdlPanel.style.display = 'none';
@@ -1257,6 +1260,7 @@
             const data = await r.json();
             if (data.error) { fmKdStatus.innerHTML = '<span style="color:var(--nord11)">' + escHtml(data.error) + '</span>'; return; }
             kdCtx.budgetFrames = data.budgetFrames || 0;
+            kdCtx.openSlots = data.openSlots || 0;
             kdCtx.dramas = (data.dramas || []).map(function (dm) {
                 return { block: dm.block, weekday: dm.weekday,
                          code: dm.prefill ? dm.prefill.code : null,
@@ -1306,12 +1310,39 @@
         previewKdFillers();
     }
 
+    function renderKdFillers(summaryHtml, removable) {
+        const rows = kdCtx.fillers.map(function (f, i) {
+            const rm = removable ? '<span class="fm-x" data-kdf="' + i + '" style="color:var(--nord11)">remove</span>' : '';
+            return '<div class="fm-chosen-row"><span class="fm-slot-num">filler</span>' +
+                '<span class="fm-code">' + escHtml(f.code) + '</span>' +
+                '<span class="fm-meta">' + durLabel(f.durata) + '</span>' + rm + '</div>';
+        }).join('');
+        fmKdFillers.innerHTML = (rows ||
+            '<div class="fm-empty">' + (removable ? 'No fillers — drama pieces only.' : 'No fillers needed.') + '</div>') +
+            (summaryHtml || '');
+    }
+
     async function previewKdFillers() {
         const codes = kdCtx.dramas.map(function (dm) { return dm.code; }).filter(Boolean);
         if (codes.length !== kdCtx.dramas.length) {
-            fmKdFillers.innerHTML = '<div class="fm-empty">Pick all ' + kdCtx.dramas.length + ' episodes to compute fillers.</div>';
+            fmKdReroll.style.display = 'none'; fmKdAddFiller.style.display = 'none';
+            fmKdFillers.innerHTML = '<div class="fm-empty">Pick all ' + kdCtx.dramas.length + ' episodes first.</div>';
             return;
         }
+        // Saturday (no open slots): drama pieces only by default. The operator may
+        // add fillers manually; they stack after piece C of the last drama at run.
+        if (!(kdCtx.openSlots > 0)) {
+            fmKdFillerHint.innerHTML = 'Saturday: drama pieces only. Optional — add fillers after the last piece:';
+            fmKdReroll.style.display = 'none';
+            fmKdAddFiller.style.display = '';
+            renderKdFillers('', true);
+            return;
+        }
+        // Sunday (open slots): auto-draw one filler per open slot, chosen so
+        // drama + fillers lands near the programming budget.
+        fmKdFillerHint.innerHTML = 'Fillers — one per open slot (' + kdCtx.openSlots +
+            '), chosen near the programming budget:';
+        fmKdReroll.style.display = ''; fmKdAddFiller.style.display = 'none';
         fmKdFillers.innerHTML = '<div class="fm-empty">Drawing fillers…</div>';
         fmKdReroll.disabled = true;
         try {
@@ -1323,15 +1354,10 @@
             if (data.error) { fmKdFillers.innerHTML = '<span style="color:var(--nord11)">' + escHtml(data.error) + '</span>'; return; }
             kdCtx.fillers = data.fillers || [];
             const fillFr = kdCtx.fillers.reduce(function (s, f) { return s + (f.durata || 0); }, 0);
-            const rows = kdCtx.fillers.map(function (f) {
-                return '<div class="fm-chosen-row"><span class="fm-slot-num">filler</span>' +
-                    '<span class="fm-code">' + escHtml(f.code) + '</span>' +
-                    '<span class="fm-meta">' + durLabel(f.durata) + '</span></div>';
-            }).join('');
-            fmKdFillers.innerHTML = (rows || '<div class="fm-empty">No fillers needed.</div>') +
-                '<div class="modal-check-hint" style="margin-top:6px;">Budget ' + durLabel(data.budgetFrames) +
+            const summary = '<div class="modal-check-hint" style="margin-top:6px;">Budget ' + durLabel(data.budgetFrames) +
                 ' · drama ' + durLabel(data.dramaFrames) + ' · fillers ' + durLabel(fillFr) +
                 ' → total ' + durLabel((data.dramaFrames || 0) + fillFr) + '.</div>';
+            renderKdFillers(summary, false);
         } catch (e) {
             fmKdFillers.innerHTML = '<span style="color:var(--nord11)">Error: ' + escHtml(e.message) + '</span>';
         } finally {
@@ -1340,6 +1366,36 @@
     }
 
     fmKdReroll.addEventListener('click', previewKdFillers);
+
+    // Saturday manual add: draw one random K-FILLER (no token consumed — weekend
+    // fillers never commit to the rotation) and append. Removable before run.
+    fmKdAddFiller.addEventListener('click', async function () {
+        fmKdAddFiller.disabled = true;
+        try {
+            const r = await fetch('/api/master-control/daily-programming/kfiller/draw', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ n: 1 })
+            });
+            const data = await r.json();
+            if (data.error) { alert(data.error); return; }
+            const pick = (data.fillers || [])[0];
+            if (pick && !kdCtx.fillers.some(function (f) { return f.id === pick.id; })) {
+                kdCtx.fillers.push(pick);
+            }
+            renderKdFillers('', true);
+        } catch (e) {
+            alert('Add filler failed: ' + e.message);
+        } finally {
+            fmKdAddFiller.disabled = false;
+        }
+    });
+
+    fmKdFillers.addEventListener('click', function (e) {
+        const x = e.target.closest('[data-kdf]');
+        if (!x) return;
+        kdCtx.fillers.splice(parseInt(x.dataset.kdf, 10), 1);
+        renderKdFillers('', true);
+    });
 
     fmKdRun.addEventListener('click', async function () {
         const codes = kdCtx.dramas.map(function (dm) { return dm.code; }).filter(Boolean);

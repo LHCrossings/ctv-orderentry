@@ -4957,7 +4957,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             with _db_connect() as conn:
                 cur = conn.cursor()
                 slots = _slots(cur, 1, d, lo, hi, "PRGS")   # NYC reference
-                drama_count = max(0, len(slots) // 3)
+                # Drama count comes from the weekday-repeat pattern (Sat=3
+                # Mon/Tue/Wed, Sun=2 Thu/Fri), NOT slots÷3 — the new Sunday has 9
+                # slots but still only 2 dramas, leaving 3 open slots for fillers.
+                drama_count = len(weekdays)
                 dramas = []
                 for i in range(drama_count):
                     wd = weekdays[i] if i < len(weekdays) else None
@@ -4975,8 +4978,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                    "prefill": prefill})
                 sat = d if d.weekday() == 5 else d - _dt.timedelta(days=1)
                 budget = _prgs_duration_total(cur, 1, sat, lo, hi)
+                open_slots = max(0, len(slots) - drama_count * 3)
             return {"dramaCount": drama_count, "prgsSlots": len(slots),
-                    "budgetFrames": budget, "dramas": dramas}
+                    "openSlots": open_slots, "budgetFrames": budget, "dramas": dramas}
 
         loop = asyncio.get_running_loop()
         try:
@@ -4995,6 +4999,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         from src.business_logic.services.daily_programming_run import (
             _durata,
             _prgs_duration_total,
+            _slots,
             _window,
         )
         try:
@@ -5015,10 +5020,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 sat = d if d.weekday() == 5 else d - _dt.timedelta(days=1)
                 budget = _prgs_duration_total(cur, 1, sat, lo, hi)
                 need = max(0, budget - drama_fr)
-                picks = filler_rotation.draw_until(cur, need)
+                # One filler per OPEN slot (slots left after the drama pieces),
+                # chosen so drama+fillers lands as near the budget as possible.
+                # 0 open slots (Saturday) → no auto fillers by default.
+                slots = _slots(cur, 1, d, lo, hi, "PRGS")   # NYC reference
+                open_slots = max(0, len(slots) - len(piece_fids))
+                picks = (filler_rotation.draw_k_near_target(cur, open_slots, need)
+                         if open_slots > 0 else [])
             return {"fillers": [{"id": p["fid"], "code": p["code"], "durata": p["durata"]} for p in picks],
                     "budgetFrames": budget, "dramaFrames": drama_fr, "needFrames": need,
-                    "pieceCount": len(piece_fids)}
+                    "pieceCount": len(piece_fids), "openSlots": open_slots}
 
         loop = asyncio.get_running_loop()
         try:

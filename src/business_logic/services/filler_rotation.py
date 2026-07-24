@@ -119,6 +119,46 @@ def draw_until(cur, target_frames: int, exclude_codes=()) -> list[dict]:
     return picks
 
 
+def draw_k_near_target(cur, k, target_frames, exclude_codes=(), _samples=4000) -> list[dict]:
+    """Pick EXACTLY k distinct active K-FILLERs (random, no rotation token) whose
+    combined duration makes the running programme total land as close to
+    `target_frames` as possible — for the weekend open-slot fill, where the slot
+    COUNT is fixed (one filler per open PRGS slot) but we still want drama+fillers
+    to sit near the programming budget.
+
+    Best-effort and randomised: each sample fixes k-1 fillers at random, then
+    greedily completes with the pool filler whose duration best closes the gap;
+    the closest sample across `_samples` tries wins. A reroll yields a different
+    near-optimal set. Returns fewer than k only if the active pool is smaller
+    than k. Like draw_until(), it does NOT read or update the rotation cycle."""
+    k = max(0, int(k))
+    if not k:
+        return []
+    ex = {(c or "").strip() for c in exclude_codes}
+    pool = [p for p in active_pool(cur) if p["durata"] > 0 and p["code"] not in ex]
+    if len(pool) <= k:
+        return pool  # not enough to choose from — take whatever exists
+    target = int(target_frames)
+    if target <= 0:
+        random.shuffle(pool)
+        return pool[:k]
+    best, best_err = None, None
+    for _ in range(int(_samples)):
+        base = random.sample(pool, k - 1) if k > 1 else []
+        gap = target - sum(p["durata"] for p in base)
+        base_codes = {p["code"] for p in base}
+        rest = [p for p in pool if p["code"] not in base_codes]
+        last = min(rest, key=lambda p: abs(gap - p["durata"]))
+        cand = base + [last]
+        err = abs(target - sum(p["durata"] for p in cand))
+        if best_err is None or err < best_err:
+            best, best_err = cand, err
+            if err == 0:
+                break
+    random.shuffle(best)  # slot order shouldn't track duration
+    return best
+
+
 def mark_used(conn, codes, used_by: str | None = None) -> None:
     """Record filler codes as used in the current cycle (idempotent per code)."""
     cur = conn.cursor()

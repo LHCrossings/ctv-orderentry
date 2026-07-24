@@ -1041,11 +1041,17 @@ def ordered_pieces(cur, base):
 
 
 def place_weekend_drama(conn, cod_user, d, start, end, piece_fids, filler_fids, pending):
-    """Weekend Korean-drama setup for one market: drama pieces one-per-PRGS-slot
-    in block order (Drama 1 → slots 1-3, …), then the fillers STACKED into the
-    last PRGS slot behind the final piece (floating). First piece = F anchor, rest
-    = T. COMS is left alone (commercials conform in EE afterward). Transaction-safe
-    with the same deadlock retry as run_market. Returns {cu, ok, skipped, message}."""
+    """Weekend Korean-drama setup for one market. Content = drama pieces then
+    fillers, placed ONE PER PRGS SLOT in order: pieces fill the leading slots
+    (Drama 1 → slots 1-3, …), then fillers fill the remaining open slots one
+    each (the new Sunday: 2 dramas in slots 1-6, a K-FILLER in slots 7-9). If
+    there are MORE items than slots (e.g. Saturday's 9 pieces exactly fill 9
+    slots and the operator adds manual fillers), the overflow STACKS behind the
+    last slot's final item (floating) — so Saturday manual adds land after piece
+    C of the last drama, and any legacy 0-open-slot day still stacks as before.
+    First item = F anchor, rest = T. COMS is left alone (commercials conform in
+    EE afterward). Transaction-safe with the same deadlock retry as run_market.
+    Returns {cu, ok, skipped, message}."""
     result = None
     for attempt in range(1, _DEADLOCK_MAX_ATTEMPTS + 1):
         result = _place_weekend_drama_once(conn, cod_user, d, start, end, piece_fids, filler_fids, pending)
@@ -1066,27 +1072,34 @@ def _place_weekend_drama_once(conn, cod_user, d, start, end, piece_fids, filler_
             return {"cu": cod_user, "ok": True, "skipped": True, "message": "already placed"}
         _clear_noop_fillers(cur, cod_user, d, lo, hi)
         slots = _slots(cur, cod_user, d, lo, hi)
-        if len(slots) != len(piece_fids):
+        if not slots:
             conn.rollback()
             return {"cu": cod_user, "ok": False, "skipped": False,
-                    "message": f"{len(piece_fids)} drama pieces vs {len(slots)} PRGS slots"}
+                    "message": "no PRGS slots in window"}
+        if len(piece_fids) > len(slots):
+            conn.rollback()
+            return {"cu": cod_user, "ok": False, "skipped": False,
+                    "message": f"{len(piece_fids)} drama pieces exceed {len(slots)} PRGS slots"}
+        # Pieces then fillers, one per slot in order; overflow past the last slot
+        # stacks behind its final item (Saturday manual adds / legacy 0-open days).
+        content = list(piece_fids) + list(filler_fids)
+        if not content:
+            conn.rollback()
+            return {"cu": cod_user, "ok": False, "skipped": False, "message": "nothing to place"}
+        n_slots = len(slots)
         ids, keys = [], []
-        for fid, slot in zip(piece_fids, slots):
+        for i, fid in enumerate(content):
+            if i < n_slots:
+                slot = slots[i]
+                key = slot["ora"]                       # own slot → distinct break
+            else:
+                slot = slots[-1]                        # overflow → stack behind last slot
+                key = slots[-1]["ora"] + (i - n_slots + 1)
             nid = _insert_event(cur, cod_user, d, slot["sched"], slot["block"], slot["seg"],
                                 slot["ora"], fid, _durata(cur, fid))
             cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
             ids.append(nid)
-            keys.append(slot["ora"])
-        last = slots[-1]
-        for i, fid in enumerate(filler_fids):
-            nid = _insert_event(cur, cod_user, d, last["sched"], last["block"], last["seg"],
-                                last["ora"], fid, _durata(cur, fid))
-            cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
-            ids.append(nid)
-            keys.append(last["ora"] + i + 1)  # sort after the last piece, in draw order
-        if not ids:
-            conn.rollback()
-            return {"cu": cod_user, "ok": False, "skipped": False, "message": "no pieces to place"}
+            keys.append(key)
         cur.execute("UPDATE TPalinse SET EVENT_TYPE='F' WHERE id_tpalinse=%s", (ids[0],))
         for nid in ids[1:]:
             cur.execute("UPDATE TPalinse SET EVENT_TYPE='T' WHERE id_tpalinse=%s", (nid,))
