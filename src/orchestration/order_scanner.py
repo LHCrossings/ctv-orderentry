@@ -7,6 +7,7 @@ Responsible for discovering and organizing order files from the filesystem.
 import json
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 # Add src to path
@@ -180,22 +181,25 @@ class OrderScanner:
         _ai = _ai_fallback_enabled()
         _charm = _charmaine_ai_enabled()
 
-        for pdf_path in pdf_files:
+        # Classify one PDF → (Order|None, fresh-cache-entry|None). No shared
+        # mutable state is touched here (each detection call opens its own
+        # file/vision handles and each WorldLink scan writes its own sidecar),
+        # so this is safe to run concurrently across files below.
+        def _classify_pdf(pdf_path: Path):
             try:
                 # Fast path: unchanged file already classified → skip all OCR/vision.
                 _sig = _file_sig(pdf_path)
                 _hit = _scan_cache.get(pdf_path.name)
                 if (_hit and _hit.get("sig") == _sig
                         and _hit.get("ai") == _ai and _hit.get("charm") == _charm):
-                    orders.append(Order(
+                    order = Order(
                         pdf_path=pdf_path,
                         order_type=OrderType[_hit["order_type"]],
                         customer_name=_hit["customer_name"],
                         status=OrderStatus.PENDING,
                         estimate_number=_hit["estimate_number"],
-                    ))
-                    _fresh_cache[pdf_path.name] = _hit
-                    continue
+                    )
+                    return order, _hit
 
                 # Check if this PDF contains multiple orders
                 order_type, count = self._detection_service.detect_multi_order_pdf(pdf_path)
@@ -233,7 +237,6 @@ class OrderScanner:
                         status=OrderStatus.PENDING,
                         estimate_number=None,
                     )
-                    orders.append(order)
                 else:
                     # Single order PDF
                     # FIXED: Also extract estimate number for single-order TCAA PDFs
@@ -267,24 +270,38 @@ class OrderScanner:
                         estimate_number=estimate_number
                     )
 
-                    orders.append(order)
-
                 # Record the freshly-computed classification for next scan.
-                _new = orders[-1]
-                _ot = _new.order_type
-                _fresh_cache[pdf_path.name] = {
+                _ot = order.order_type
+                fresh = {
                     "sig": _sig,
                     "ai": _ai,
                     "charm": _charm,
                     "order_type": _ot.name if hasattr(_ot, "name") else str(_ot),
-                    "customer_name": _new.customer_name,
-                    "estimate_number": _new.estimate_number,
+                    "customer_name": order.customer_name,
+                    "estimate_number": order.estimate_number,
                 }
+                return order, fresh
 
             except Exception as e:
                 # Log error but continue scanning
                 print(f"Warning: Failed to process {pdf_path.name}: {e}")
-                continue
+                return None, None
+
+        # Fan out across files. Classification is I/O-bound (vision API for
+        # scanned WorldLink, OCR subprocess for other scans), so a small thread
+        # pool turns a sequential first-drop scan (~N × per-file latency) into
+        # roughly the slowest single file. Cache hits return instantly and cost
+        # a pool slot only briefly. Results are reassembled in original file
+        # order so the listing and scan cache are identical to the serial path.
+        if pdf_files:
+            _max_workers = min(8, len(pdf_files))
+            with ThreadPoolExecutor(max_workers=_max_workers) as _ex:
+                _results = list(_ex.map(_classify_pdf, pdf_files))
+            for pdf_path, (order, fresh) in zip(pdf_files, _results):
+                if order is not None:
+                    orders.append(order)
+                if fresh is not None:
+                    _fresh_cache[pdf_path.name] = fresh
 
         # Find all AAAA SpotTV XML files
         for xml_path in xml_files:
