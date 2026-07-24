@@ -38,6 +38,28 @@
         .dd-code { font-weight: 700; font-family: monospace; color: var(--nord10); font-size: 0.88rem; }
         .dd-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
 
+        .cart-empty { font-size: 0.84rem; color: var(--text-muted); font-style: italic; padding: 6px 2px; }
+        .cart-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+            background: var(--bg-secondary); border: 1px solid var(--border-color);
+            border-radius: 8px; padding: 8px 12px; margin-top: 8px; }
+        .cart-row .cart-code { font-family: monospace; font-weight: 700; color: var(--nord10); font-size: 0.86rem; }
+        .cart-row .cart-client { flex: 1; min-width: 120px; font-size: 0.84rem; color: var(--text-primary); }
+        .cart-row .cart-date { display: flex; flex-direction: column; gap: 2px; }
+        .cart-row .cart-date label { font-size: 0.64rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+        .cart-row .cart-date input { width: 110px; }
+        .cart-row .cart-x { background: none; border: none; color: var(--nord11); cursor: pointer; font-size: 1rem; padding: 2px 6px; font-family: inherit; }
+        .preview-all-btn {
+            background: var(--nord10); color: var(--nord6); border: none; border-radius: 8px;
+            padding: 9px 22px; font-size: 0.9rem; font-weight: 700; cursor: pointer; font-family: inherit; margin-top: 12px;
+        }
+        .preview-all-btn:hover { background: #4c6a8f; }
+        .preview-all-btn:disabled { opacity: 0.45; cursor: default; }
+        .contract-section { margin-bottom: 20px; }
+        .contract-head { font-size: 0.9rem; font-weight: 700; color: var(--text-primary); margin: 4px 2px 8px;
+            border-bottom: 2px solid var(--border-color); padding-bottom: 4px; }
+        .contract-head .ch-code { font-family: monospace; color: var(--nord10); }
+        .contract-err { color: var(--nord11); font-size: 0.84rem; padding: 4px 2px; }
+
         .summary-bar { display: flex; align-items: center; gap: 18px; padding: 4px 2px 12px; font-size: 0.85rem; color: var(--text-muted); flex-wrap: wrap; }
         .summary-bar strong { color: var(--text-primary); }
         .summary-bar .changes-n { color: var(--nord13); font-weight: 700; }
@@ -152,36 +174,24 @@
     <div class="tool-card">
         <div class="controls-row">
             <div class="field-group search-wrap">
-                <label class="field-label">Contract (code, description, or Etere ID)</label>
-                <input type="text" id="searchBox" class="field-input" placeholder="Search contracts…" autocomplete="off" />
+                <label class="field-label">Add contract (code, description, or Etere ID)</label>
+                <input type="text" id="searchBox" class="field-input" placeholder="Search contracts to add…" autocomplete="off" />
                 <div id="searchDropdown" class="search-dropdown"></div>
-            </div>
-            <div class="field-group" style="flex:0; min-width:130px;">
-                <label class="field-label">From</label>
-                <input type="text" id="dateFrom" class="field-input" placeholder="07/01/2026" maxlength="10"
-                       onblur="formatDateInput(this); if(selectedContract) preview();"
-                       onkeydown="if(event.key==='Enter'){this.blur();}" />
-            </div>
-            <div class="field-group" style="flex:0; min-width:130px;">
-                <label class="field-label">To</label>
-                <input type="text" id="dateTo" class="field-input" placeholder="09/30/2026" maxlength="10"
-                       onblur="formatDateInput(this); if(selectedContract) preview();"
-                       onkeydown="if(event.key==='Enter'){this.blur();}" />
             </div>
             <div class="field-group">
                 <label class="field-label">Commercial Log path (on the server)</label>
                 <div style="display:flex; gap:8px;">
                     <input type="text" id="pathBox" class="field-input" style="flex:1;"
-                           value="K:\Traffic\Media library\Commercial Log.xlsx"
-                           onkeydown="if(event.key==='Enter'&&selectedContract){preview();}" />
+                           value="K:\Traffic\Media library\Commercial Log.xlsx" />
                     <button class="browse-btn" onclick="openBrowse()">Browse…</button>
                 </div>
             </div>
         </div>
+        <div id="cartArea"></div>
     </div>
 
     <div id="msg"></div>
-    <div id="previewArea"><div class="empty-state">Search for a contract to begin.</div></div>
+    <div id="previewArea"><div class="empty-state">Add one or more contracts above, then Preview all — the log is read once for the whole batch.</div></div>
 
     <div class="browse-overlay" id="browseOverlay" onclick="if(event.target===this)closeBrowse()">
         <div class="browse-modal">
@@ -196,8 +206,8 @@
 </main>
 
 <script>
-let selectedContract = null;
-let previewData = null;
+let contracts = [];     // batch cart: [{id, code, client, dateFrom, dateTo}]
+let batchData = null;   // last preview-batch response
 
 function esc(s) {
     return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -232,13 +242,7 @@ function formatDateInput(el) {
     }
 }
 
-function dateParams() {
-    const f = parseDateInput(document.getElementById('dateFrom').value);
-    const t = parseDateInput(document.getElementById('dateTo').value);
-    return `&date_from=${encodeURIComponent(f || '')}&date_to=${encodeURIComponent(t || '')}`;
-}
-
-// ── Contract super-search (same wiring as Move Lines / Assign Traffic) ──────
+// ── Contract super-search → ADD to the batch cart ──────────────────────────
 (function wireSearch() {
     const inp  = document.getElementById('searchBox');
     const drop = document.getElementById('searchDropdown');
@@ -274,67 +278,130 @@ function dateParams() {
     drop.addEventListener('click', e => {
         const item = e.target.closest('.dd-item[data-id]');
         if (!item) return;
-        inp.value = item.dataset.code || item.dataset.id;
         drop.classList.remove('open');
-        selectedContract = { id: parseInt(item.dataset.id), code: item.dataset.code, client: item.dataset.desc };
-        // default the range to the contract's flight dates (edit to sync a sub-range)
-        document.getElementById('dateFrom').value = item.dataset.start || '';
-        document.getElementById('dateTo').value   = item.dataset.end || '';
-        preview();
+        inp.value = '';
+        addContract({
+            id: parseInt(item.dataset.id),
+            code: item.dataset.code,
+            client: item.dataset.desc,
+            // default each contract's range to its own flight dates (editable per row)
+            dateFrom: item.dataset.start || '',
+            dateTo: item.dataset.end || '',
+        });
+        inp.focus();
     });
 })();
 
-async function preview() {
-    if (!selectedContract) return;
+// ── Batch cart ─────────────────────────────────────────────────────────────
+function addContract(c) {
+    if (contracts.some(x => x.id === c.id)) {
+        setMsg(`<div class="msg-err">${esc(c.code)} is already in the batch.</div>`);
+        return;
+    }
     setMsg('');
-    previewData = null;
+    contracts.push(c);
+    renderCart();
+}
+
+function removeContract(id) {
+    contracts = contracts.filter(x => x.id !== id);
+    renderCart();
+}
+
+function renderCart() {
+    const area = document.getElementById('cartArea');
+    if (!contracts.length) {
+        area.innerHTML = '<div class="cart-empty">No contracts added yet — search above to add one.</div>';
+        return;
+    }
+    area.innerHTML = contracts.map(c => `
+        <div class="cart-row" data-id="${c.id}">
+            <span class="cart-code">${esc(c.code)}</span>
+            <span class="cart-client">${esc(c.client || '')}</span>
+            <div class="cart-date"><label>From</label>
+                <input type="text" class="field-input cart-from" value="${esc(c.dateFrom)}" maxlength="10" placeholder="mm/dd/yyyy" /></div>
+            <div class="cart-date"><label>To</label>
+                <input type="text" class="field-input cart-to" value="${esc(c.dateTo)}" maxlength="10" placeholder="mm/dd/yyyy" /></div>
+            <button class="cart-x" title="Remove" onclick="removeContract(${c.id})">✕</button>
+        </div>`).join('') +
+        `<button class="preview-all-btn" onclick="previewAll()">Preview all ${contracts.length} contract${contracts.length !== 1 ? 's' : ''}</button>`;
+    // wire per-row date edits back into the cart model
+    area.querySelectorAll('.cart-row').forEach(row => {
+        const c = contracts.find(x => x.id === parseInt(row.dataset.id));
+        const from = row.querySelector('.cart-from'), to = row.querySelector('.cart-to');
+        from.addEventListener('blur', () => { formatDateInput(from); c.dateFrom = from.value; });
+        to.addEventListener('blur',   () => { formatDateInput(to);   c.dateTo   = to.value; });
+        from.addEventListener('keydown', e => { if (e.key === 'Enter') from.blur(); });
+        to.addEventListener('keydown',   e => { if (e.key === 'Enter') to.blur(); });
+    });
+}
+
+function batchBody() {
+    return {
+        path: document.getElementById('pathBox').value.trim(),
+        contracts: contracts.map(c => ({
+            contract_id: c.id,
+            date_from: parseDateInput(c.dateFrom) || '',
+            date_to: parseDateInput(c.dateTo) || '',
+        })),
+    };
+}
+
+// ── Preview all (one log read for the whole batch) ─────────────────────────
+async function previewAll() {
+    if (!contracts.length) return;
+    setMsg('');
+    batchData = null;
     document.getElementById('previewArea').innerHTML =
-        '<div class="empty-state">Loading preview — reading the log and Etere…</div>';
-    const path = document.getElementById('pathBox').value.trim();
+        `<div class="empty-state">Reading the log once and computing ${contracts.length} contract${contracts.length !== 1 ? 's' : ''}…</div>`;
     try {
-        const resp = await fetch(`/api/traffic/log-sync/preview?contract_id=${selectedContract.id}&path=${encodeURIComponent(path)}${dateParams()}`);
+        const resp = await fetch('/api/traffic/log-sync/preview-batch', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(batchBody()),
+        });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
-        previewData = data;
-        renderPreview(data);
+        batchData = data;
+        renderBatchPreview(data);
     } catch (e) {
         document.getElementById('previewArea').innerHTML = '';
         setMsg(`<div class="msg-err">Preview failed: ${esc(e.message)}</div>`);
     }
 }
 
-function renderPreview(data) {
-    const c = selectedContract;
-    let html = `<div class="summary-bar">
-        <span>▶ <strong>${esc(c.code)}</strong> — ${esc(c.client)}</span>
-        <span><strong>${data.log_rows}</strong> log rows</span>
-        <span><strong>${data.etere_spots}</strong> Etere spots</span>
-        <span><strong>${data.groups}</strong> line/day groups</span>
-        <span class="changes-n">${data.changes.length} rows to update</span>
-    </div>`;
-
-    if (data.mismatches.length) {
-        html += `<div class="mismatch-panel">
-            <div class="mismatch-title">⚠ ${data.mismatches.length} line/day group${data.mismatches.length !== 1 ? 's' : ''} skipped — spot count differs (schedule revision → needs a real re-backwrite)</div>
-            ${data.mismatches.slice(0, 20).map(m =>
-                `<div>Line ${m.line} · ${esc(m.date)}: ${m.log_rows} log rows vs ${m.etere_spots} Etere spots</div>`).join('')}
-            ${data.mismatches.length > 20 ? `<div>…and ${data.mismatches.length - 20} more</div>` : ''}
-        </div>`;
-    }
-
-    if (!data.changes.length) {
-        html += `<div class="empty-state">✅ The commercial log already matches Etere for this contract — nothing to update.</div>`;
-        document.getElementById('previewArea').innerHTML = html;
-        return;
-    }
-
-    const colorBadge = ch =>
-        ch.color === 'red'    ? '<span style="background:#FF0000;color:#fff;border-radius:4px;padding:1px 7px;font-size:0.7rem;font-weight:700;">A–H → red</span>'
-      : ch.color === 'native' ? (ch.bookend
+function colorBadge(ch) {
+    if (ch.color === 'red')
+        return '<span style="background:#FF0000;color:#fff;border-radius:4px;padding:1px 7px;font-size:0.7rem;font-weight:700;">A–H → red</span>';
+    if (ch.color === 'native')
+        return ch.bookend
             ? '<span style="background:rgba(163,190,140,0.25);color:var(--nord14);border-radius:4px;padding:1px 7px;font-size:0.7rem;font-weight:700;">A–F → network</span> <span style="background:#FF66FF;color:#2e3440;border-radius:4px;padding:1px 7px;font-size:0.7rem;font-weight:700;">G/H → bookend pink</span>'
-            : '<span style="background:rgba(163,190,140,0.25);color:var(--nord14);border-radius:4px;padding:1px 7px;font-size:0.7rem;font-weight:700;">A–H → network color</span>')
-      : '';
-    const shown = data.changes.slice(0, 500);
+            : '<span style="background:rgba(163,190,140,0.25);color:var(--nord14);border-radius:4px;padding:1px 7px;font-size:0.7rem;font-weight:700;">A–H → network color</span>';
+    return '';
+}
+
+function renderContractSection(pc) {
+    const meta = contracts.find(x => x.id === pc.contract_id) || {};
+    let html = `<div class="contract-section"><div class="contract-head">
+        <span class="ch-code">${esc(meta.code || pc.contract_id)}</span> — ${esc(meta.client || '')}</div>`;
+    if (pc.error) {
+        return html + `<div class="contract-err">⚠ ${esc(pc.error)}</div></div>`;
+    }
+    html += `<div class="summary-bar">
+        <span><strong>${pc.log_rows}</strong> log rows</span>
+        <span><strong>${pc.etere_spots}</strong> Etere spots</span>
+        <span><strong>${pc.groups}</strong> line/day groups</span>
+        <span class="changes-n">${pc.changes.length} rows to update</span></div>`;
+    if (pc.mismatches.length) {
+        html += `<div class="mismatch-panel">
+            <div class="mismatch-title">⚠ ${pc.mismatches.length} line/day group${pc.mismatches.length !== 1 ? 's' : ''} skipped — spot count differs (schedule revision → needs a real re-backwrite)</div>
+            ${pc.mismatches.slice(0, 20).map(m =>
+                `<div>Line ${m.line} · ${esc(m.date)}: ${m.log_rows} log rows vs ${m.etere_spots} Etere spots</div>`).join('')}
+            ${pc.mismatches.length > 20 ? `<div>…and ${pc.mismatches.length - 20} more</div>` : ''}</div>`;
+    }
+    if (!pc.changes.length) {
+        return html + `<div class="empty-state" style="padding:16px 0;">✅ Already matches Etere — nothing to update.</div></div>`;
+    }
+    const shown = pc.changes.slice(0, 200);
     html += `<table class="diff-table">
         <thead><tr><th>Excel Row</th><th>Line</th><th>Air Date</th><th>Current (stale)</th><th>New Spot Name</th><th>Fill</th></tr></thead>
         <tbody>${shown.map(ch => `
@@ -347,15 +414,22 @@ function renderPreview(data) {
                 <td>${colorBadge(ch)}</td>
             </tr>`).join('')}
         </tbody></table>`;
-    if (data.changes.length > shown.length) {
-        html += `<div style="font-size:0.8rem;color:var(--text-muted);padding:8px 2px;">Showing first ${shown.length} of ${data.changes.length} changes — Apply updates all of them.</div>`;
+    if (pc.changes.length > shown.length) {
+        html += `<div style="font-size:0.8rem;color:var(--text-muted);padding:8px 2px;">Showing first ${shown.length} of ${pc.changes.length} changes — Apply updates all of them.</div>`;
     }
+    return html + `</div>`;
+}
 
-    html += `<div class="apply-bar">
-        <span><strong>${data.changes.length}</strong> spot name${data.changes.length !== 1 ? 's' : ''} will be rewritten in <span class="mono">${esc(data.path)}</span></span>
-        <button class="apply-btn" id="applyBtn" onclick="applyChanges()">Apply ${data.changes.length} Update${data.changes.length !== 1 ? 's' : ''}</button>
-    </div>`;
-
+function renderBatchPreview(data) {
+    let html = (data.contracts || []).map(renderContractSection).join('');
+    if (data.total_changes > 0) {
+        html += `<div class="apply-bar">
+            <span><strong>${data.total_changes}</strong> spot name${data.total_changes !== 1 ? 's' : ''} across ${data.contracts.length} contract${data.contracts.length !== 1 ? 's' : ''} → <span class="mono">${esc(data.path)}</span></span>
+            <button class="apply-btn" id="applyBtn" onclick="applyAll()">Apply all ${data.total_changes} Update${data.total_changes !== 1 ? 's' : ''}</button>
+        </div>`;
+    } else {
+        html += `<div class="empty-state">✅ Nothing to update — the log already matches Etere for every contract in the batch.</div>`;
+    }
     document.getElementById('previewArea').innerHTML = html;
 }
 
@@ -396,35 +470,34 @@ function closeBrowse() { document.getElementById('browseOverlay').classList.remo
 function chooseFile(path) {
     document.getElementById('pathBox').value = path;
     closeBrowse();
-    if (selectedContract) preview();
 }
 
-async function applyChanges() {
-    if (!previewData || !selectedContract) return;
-    if (!confirm(`Rewrite ${previewData.changes.length} spot names in the commercial log for ${selectedContract.code}?\n\nMake sure the workbook is closed in Excel.`)) return;
+async function applyAll() {
+    if (!batchData || !contracts.length) return;
+    if (!confirm(`Rewrite ${batchData.total_changes} spot names across ${contracts.length} contract${contracts.length !== 1 ? 's' : ''} in the commercial log?\n\nMake sure the workbook is closed in Excel.`)) return;
 
     const btn = document.getElementById('applyBtn');
     btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Writing…';
     try {
-        const resp = await fetch('/api/traffic/log-sync/apply', {
+        const resp = await fetch('/api/traffic/log-sync/apply-batch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contract_id: selectedContract.id,
-                path: document.getElementById('pathBox').value.trim(),
-                date_from: parseDateInput(document.getElementById('dateFrom').value) || '',
-                date_to: parseDateInput(document.getElementById('dateTo').value) || '',
-            }),
+            body: JSON.stringify(batchBody()),
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
-        setMsg(`<div class="msg-ok">✔ ${data.written} spot name${data.written !== 1 ? 's' : ''} updated in ${esc(data.path)}</div>`);
-        await preview();   // re-load — should now show 0 to update
+        const errs = (data.contracts || []).filter(c => c.error);
+        let m = `<div class="msg-ok">✔ ${data.total_written} spot name${data.total_written !== 1 ? 's' : ''} updated across ${data.contracts.length} contract${data.contracts.length !== 1 ? 's' : ''} in ${esc(data.path)}</div>`;
+        if (errs.length) m += `<div class="msg-err">${errs.length} contract(s) had errors: ${errs.map(e => esc(e.contract_id + ': ' + e.error)).join('; ')}</div>`;
+        setMsg(m);
+        await previewAll();   // re-read — should now show 0 to update
     } catch (e) {
         setMsg(`<div class="msg-err">Apply failed: ${esc(e.message)}</div>`);
         btn.disabled = false; btn.textContent = 'Retry Apply';
     }
 }
+
+renderCart();   // initial empty state
 </script>
 
 </body>

@@ -3002,7 +3002,24 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             return title
         return f"{title} ({code})"
 
-    def _log_sync_compute(cur, contract_id: int, ws,
+    def _log_sync_scan_log(ws) -> dict:
+        """Scan the commercial-log sheet ONCE into {(line, date): [{xlrow, old}]}
+        for every row carrying a valid integer line number (col M). In read_only
+        mode iterating the sheet re-streams the ~40s parse, so batch-apply builds
+        this index once and every contract's compute filters it in memory —
+        turning N log reads into one."""
+        from collections import defaultdict
+        idx = defaultdict(list)
+        for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            try:
+                line = int(row[12])
+            except (TypeError, ValueError):
+                continue
+            d = row[1].date() if hasattr(row[1], "date") else row[1]
+            idx[(line, d)].append({"xlrow": i, "old": (row[7] or "").strip()})
+        return idx
+
+    def _log_sync_compute(cur, contract_id: int, log_index,
                           date_from=None, date_to=None) -> dict:
         from collections import defaultdict
 
@@ -3048,18 +3065,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
         by_group = defaultdict(list)
         log_rows = 0
-        for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
-            try:
-                line = int(row[12])
-            except (TypeError, ValueError):
-                continue
+        for (line, d), rows in log_index.items():
             if line not in line_ids:
                 continue
-            d = row[1].date() if hasattr(row[1], "date") else row[1]
             if d is not None and ((date_from and d < date_from) or (date_to and d > date_to)):
                 continue
-            by_group[(line, d)].append({"xlrow": i, "old": (row[7] or "").strip()})
-            log_rows += 1
+            by_group[(line, d)].extend(rows)
+            log_rows += len(rows)
 
         changes, mismatches = [], []
         for key in sorted(by_group.keys() | etere.keys(),
@@ -3100,6 +3112,60 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             "changes": changes,
             "mismatches": mismatches,
         }
+
+    def _log_sync_write_changes(ws, changes) -> None:
+        """Write computed Spot-Name changes into the worksheet with the log's
+        color rules: a line going to NEED COPY turns A-H red; a NEED COPY line
+        receiving traffic gets A-H restored to its network color (authoritative
+        market→color table on col AC, else col K's live fill); a bookend pair
+        gets G+H pink. Shared by single- and batch-apply so the two never drift."""
+        from copy import copy as _style_copy
+
+        from openpyxl.styles import PatternFill
+        _red_fill = PatternFill(fill_type="solid",
+                                start_color="FFFF0000", end_color="FFFF0000")
+        _pink_fill = PatternFill(fill_type="solid",
+                                 start_color="FFFF66FF", end_color="FFFF66FF")
+        for ch in changes:
+            ws.cell(row=ch["xlrow"], column=8).value = ch["new"]
+            if ch["color"] == "red":
+                for col in range(1, 9):   # A-H
+                    ws.cell(row=ch["xlrow"], column=col).fill = _red_fill
+            elif ch["color"] == "native":
+                _mkt = str(ws.cell(row=ch["xlrow"], column=29).value or "").strip().upper()
+                _argb = _LOG_SYNC_MARKET_COLORS.get(_mkt)
+                native_fill = None
+                if _argb:
+                    native_fill = PatternFill(fill_type="solid",
+                                              start_color=_argb, end_color=_argb)
+                else:
+                    # col K carries the row's network color (col J can be pink for
+                    # added value, col I is no-fill); skip if K is red/empty.
+                    k = ws.cell(row=ch["xlrow"], column=11).fill
+                    _rgb = getattr(getattr(k, "start_color", None), "rgb", None)
+                    if k is not None and k.patternType and _rgb != "FFFF0000":
+                        native_fill = _style_copy(k)
+                if native_fill is not None:
+                    for col in range(1, 9):
+                        ws.cell(row=ch["xlrow"], column=col).fill = _style_copy(native_fill)
+                    if ch.get("bookend"):
+                        # bookend pair convention: G + H in pink
+                        ws.cell(row=ch["xlrow"], column=7).fill = _pink_fill
+                        ws.cell(row=ch["xlrow"], column=8).fill = _style_copy(_pink_fill)
+
+    def _log_sync_sort_and_save(ws, wb, log_path) -> None:
+        """Re-assert the team's sort + conditional formatting and save. openpyxl
+        handles the 6 value/custom-list sort levels + CF; the transform re-injects
+        what openpyxl drops (the 10 picker colors + the font-color sort level).
+        Call once after ALL contracts' changes are written."""
+        from openpyxl.utils import get_column_letter as _gcl
+        _log_sync_apply_standard_sort(ws)
+        _log_sync_apply_conditional_formatting(ws)
+        _hdr = {str(c.value).strip(): c.column
+                for c in next(ws.iter_rows(min_row=1, max_row=1)) if c.value}
+        _tout = _gcl(_hdr["Time out"]) if "Time out" in _hdr else "F"
+        _wb_save_fast(wb, log_path,
+                      transform=lambda b: _log_sync_finalize_xlsx(b, _tout))
 
     @router.get("/traffic/log-sync", response_class=HTMLResponse)
     async def traffic_log_sync_page(request: Request):
@@ -3172,8 +3238,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 if _LOG_SYNC_SHEET not in wb.sheetnames:
                     raise ValueError(f"No '{_LOG_SYNC_SHEET}' sheet in {log_path.name}")
                 ws = wb[_LOG_SYNC_SHEET]
+                log_index = _log_sync_scan_log(ws)
                 with _connect() as conn:
-                    result = _log_sync_compute(conn.cursor(as_dict=True), contract_id, ws,
+                    result = _log_sync_compute(conn.cursor(as_dict=True), contract_id, log_index,
                                                d_from, d_to)
             finally:
                 wb.close()
@@ -3243,64 +3310,142 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             wb = _log_sync_take_warm(log_path) or _wb_load_fast(log_path)
             try:
                 ws = wb[_LOG_SYNC_SHEET]
+                log_index = _log_sync_scan_log(ws)
                 with _connect() as conn:
-                    result = _log_sync_compute(conn.cursor(as_dict=True), contract_id, ws,
+                    result = _log_sync_compute(conn.cursor(as_dict=True), contract_id, log_index,
                                                d_from, d_to)
-                from copy import copy as _style_copy
-
-                from openpyxl.styles import PatternFill
-                _red_fill = PatternFill(fill_type="solid",
-                                        start_color="FFFF0000", end_color="FFFF0000")
-                _pink_fill = PatternFill(fill_type="solid",
-                                         start_color="FFFF66FF", end_color="FFFF66FF")
-                for ch in result["changes"]:
-                    ws.cell(row=ch["xlrow"], column=8).value = ch["new"]
-                    if ch["color"] == "red":
-                        for col in range(1, 9):   # A-H
-                            ws.cell(row=ch["xlrow"], column=col).fill = _red_fill
-                    elif ch["color"] == "native":
-                        # Restore the row's base network color to A-H. Prefer the
-                        # AUTHORITATIVE market→color table (keyed on col AC) so the
-                        # restore works even if col K was stripped/blank. Fall back
-                        # to col K's live fill only when the market is unknown.
-                        _mkt = str(ws.cell(row=ch["xlrow"], column=29).value or "").strip().upper()
-                        _argb = _LOG_SYNC_MARKET_COLORS.get(_mkt)
-                        native_fill = None
-                        if _argb:
-                            native_fill = PatternFill(fill_type="solid",
-                                                      start_color=_argb, end_color=_argb)
-                        else:
-                            # col K carries the row's network color (col J can be
-                            # pink for added value, col I is no-fill); skip if K is
-                            # red/empty rather than guess.
-                            k = ws.cell(row=ch["xlrow"], column=11).fill
-                            _rgb = getattr(getattr(k, "start_color", None), "rgb", None)
-                            if k is not None and k.patternType and _rgb != "FFFF0000":
-                                native_fill = _style_copy(k)
-                        if native_fill is not None:
-                            for col in range(1, 9):
-                                ws.cell(row=ch["xlrow"], column=col).fill = _style_copy(native_fill)
-                            if ch.get("bookend"):
-                                # bookend pair convention: G + H in pink
-                                ws.cell(row=ch["xlrow"], column=7).fill = _pink_fill
-                                ws.cell(row=ch["xlrow"], column=8).fill = _style_copy(_pink_fill)
+                _log_sync_write_changes(ws, result["changes"])
                 if result["changes"]:
-                    # openpyxl handles the 6 value/custom-list sort levels + the CF
-                    # rules; the transform re-injects what openpyxl drops — the 10
-                    # picker colors and the font-color sort level (as a worksheet
-                    # sortState) — completing the team's 7-level custom sort.
-                    from openpyxl.utils import get_column_letter as _gcl
-                    _log_sync_apply_standard_sort(ws)
-                    _log_sync_apply_conditional_formatting(ws)
-                    _hdr = {str(c.value).strip(): c.column
-                            for c in next(ws.iter_rows(min_row=1, max_row=1)) if c.value}
-                    _tout = _gcl(_hdr["Time out"]) if "Time out" in _hdr else "F"
-                    _wb_save_fast(wb, log_path,
-                                  transform=lambda b: _log_sync_finalize_xlsx(b, _tout))
+                    _log_sync_sort_and_save(ws, wb, log_path)
             finally:
                 wb.close()
             return {"written": len(result["changes"]),
                     "mismatches": result["mismatches"], "path": str(log_path)}
+
+        try:
+            return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+        except FileNotFoundError as e:
+            return JSONResponse({"error": str(e)}, status_code=404)
+        except PermissionError:
+            return JSONResponse(
+                {"error": "Could not save — the commercial log is open in Excel. Close it and try again."},
+                status_code=409)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    def _log_sync_parse_batch(body: dict) -> list[dict]:
+        """Normalize the batch body's contract list → [{contract_id, d_from, d_to}].
+        Each contract carries its OWN date range (mixed-agency batches — e.g. some
+        Daviselen + some Admerasia — have different flights)."""
+        out = []
+        for c in (body.get("contracts") or []):
+            try:
+                cid = int((c or {}).get("contract_id") or 0)
+            except (TypeError, ValueError):
+                cid = 0
+            if not cid:
+                continue
+            out.append({
+                "contract_id": cid,
+                "d_from": _log_sync_parse_date((c or {}).get("date_from") or ""),
+                "d_to": _log_sync_parse_date((c or {}).get("date_to") or ""),
+            })
+        return out
+
+    @router.post("/api/traffic/log-sync/preview-batch")
+    async def traffic_log_sync_preview_batch(body: dict = Body(...)):
+        """Preview N contracts against ONE commercial-log read. The sheet is
+        parsed and scanned once; every contract's changes are computed against
+        that shared index. Per-contract errors are isolated (a bad/empty contract
+        reports an error row without failing the batch)."""
+        contracts = _log_sync_parse_batch(body)
+        if not contracts:
+            return JSONResponse({"error": "No contracts provided"}, status_code=400)
+
+        def _run():
+            from browser_automation.etere_direct_client import connect as _connect
+            log_path = _log_sync_path(body.get("path") or "")
+            if not log_path.exists():
+                raise FileNotFoundError(f"Commercial log not found: {log_path}")
+            wb = _wb_load_fast(log_path, read_only=True, data_only=True)
+            try:
+                if _LOG_SYNC_SHEET not in wb.sheetnames:
+                    raise ValueError(f"No '{_LOG_SYNC_SHEET}' sheet in {log_path.name}")
+                ws = wb[_LOG_SYNC_SHEET]
+                log_index = _log_sync_scan_log(ws)   # one scan, reused by every contract
+                per, total_changes, total_mismatch = [], 0, 0
+                with _connect() as conn:
+                    cur = conn.cursor(as_dict=True)
+                    for c in contracts:
+                        try:
+                            res = _log_sync_compute(cur, c["contract_id"], log_index,
+                                                    c["d_from"], c["d_to"])
+                            per.append({"contract_id": c["contract_id"],
+                                        "log_rows": res["log_rows"], "etere_spots": res["etere_spots"],
+                                        "groups": res["groups"], "changes": res["changes"],
+                                        "mismatches": res["mismatches"]})
+                            total_changes += len(res["changes"])
+                            total_mismatch += len(res["mismatches"])
+                        except Exception as e:  # noqa: BLE001 - isolate one bad contract
+                            per.append({"contract_id": c["contract_id"], "error": str(e),
+                                        "changes": [], "mismatches": []})
+            finally:
+                wb.close()
+            return {"path": str(log_path), "contracts": per,
+                    "total_changes": total_changes, "total_mismatches": total_mismatch}
+
+        try:
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, _run)
+            # warm the writable workbook while the user reads the combined preview
+            loop.run_in_executor(None, _log_sync_warm, _log_sync_path(body.get("path") or ""))
+            return JSONResponse(result)
+        except (FileNotFoundError, ValueError) as e:
+            return JSONResponse({"error": str(e)}, status_code=404)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    @router.post("/api/traffic/log-sync/apply-batch")
+    async def traffic_log_sync_apply_batch(body: dict = Body(...)):
+        """Apply N contracts in ONE writable load + ONE sort/save. Each contract's
+        changes are computed against a single shared scan, collected, written
+        together (disjoint rows — a contract line belongs to one contract), then
+        the standard sort + conditional formatting run once. Per-contract errors
+        are isolated."""
+        contracts = _log_sync_parse_batch(body)
+        if not contracts:
+            return JSONResponse({"error": "No contracts provided"}, status_code=400)
+
+        def _run():
+            from browser_automation.etere_direct_client import connect as _connect
+            log_path = _log_sync_path(body.get("path") or "")
+            if not log_path.exists():
+                raise FileNotFoundError(f"Commercial log not found: {log_path}")
+            wb = _log_sync_take_warm(log_path) or _wb_load_fast(log_path)
+            try:
+                ws = wb[_LOG_SYNC_SHEET]
+                log_index = _log_sync_scan_log(ws)
+                per, all_changes = [], []
+                with _connect() as conn:
+                    cur = conn.cursor(as_dict=True)
+                    for c in contracts:
+                        try:
+                            res = _log_sync_compute(cur, c["contract_id"], log_index,
+                                                    c["d_from"], c["d_to"])
+                            all_changes.extend(res["changes"])
+                            per.append({"contract_id": c["contract_id"],
+                                        "written": len(res["changes"]),
+                                        "mismatches": res["mismatches"]})
+                        except Exception as e:  # noqa: BLE001 - isolate one bad contract
+                            per.append({"contract_id": c["contract_id"], "error": str(e),
+                                        "written": 0, "mismatches": []})
+                _log_sync_write_changes(ws, all_changes)
+                if all_changes:
+                    _log_sync_sort_and_save(ws, wb, log_path)
+            finally:
+                wb.close()
+            return {"path": str(log_path), "contracts": per,
+                    "total_written": len(all_changes)}
 
         try:
             return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))

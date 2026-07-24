@@ -1,58 +1,57 @@
-# Weekend Korean-Drama Programming — Saturday/Sunday rework
+# Batch the Traffic → Commercial Log sync (multiple contracts, one read)
 
-## Request (from master control, via Lee — 2026-07-24)
-- **Saturday:** default = drama pieces only (3 dramas × A/B/C = 9 pieces), **no auto fillers**.
-  Operator MAY add fillers manually; manual fillers land after piece C of drama 3
-  (i.e. stacked behind the last piece — the existing float position).
-- **Sunday (new 9-slot structure, effective 8/2; 7/26 handled manually by MC):**
-  2 dramas (Thu/Fri) fill slots 1-6, then **one K-FILLER per open slot** (slots 7-9).
-  Fillers use the existing random/no-token logic, and the 3 chosen fillers should make
-  **drama + fillers as close to the programming budget as possible** (best-effort).
+## Request (Lee 2026-07-24)
+Each log read is slow (~40s parse of a 13.8k-row workbook). Doing 4 contracts
+means 4 separate reads. Want: add N contracts (each its own search box +
+own date range — mixed agencies, e.g. 4 Daviselen + 2 Admerasia with different
+flights), then ONE read → preview all → apply all in a single save.
 
-## Unified rule (drives Sat, Sun, and adapts to the live Etere slot count)
-- Drama count = weekday-repeat pattern (Sat=3 Mon/Tue/Wed, Sun=2 Thu/Fri) — NOT `slots÷3`.
-- Pieces fill the leading slots; open slots = total_slots − pieces.
-- Sunday auto-draws one filler per open slot (chosen to best-match budget).
-- Saturday has 0 open slots → 0 auto fillers; manual adds overflow-stack behind the last piece.
-- No hardcoded date: 6-slot Sunday → 0 open → 0 auto fillers (7/26, MC-manual); 9-slot → 3.
+## Design (grounded in current code)
+- `_log_sync_compute(cur, contract_id, ws, …)` already takes a shared sheet +
+  one contract. Batch = load once, compute per contract, write all, sort+save once.
+- Contracts have disjoint line ids → disjoint log rows → no write conflict.
+- Perf: scan the sheet into an index ONCE (read_only re-streams per iteration),
+  then compute each contract against the index. N reads → 1 read + 1 save.
 
 ## Changes
-- [ ] `filler_rotation.py`: add `draw_k_near_target(cur, k, target_frames, exclude_codes)`
-      — pick exactly k DISTINCT active K-FILLERs minimizing |target − Σdurata|, random
-      (no rotation token), so rerolls vary. Best-effort; returns <=k if pool too small.
-- [ ] `daily_programming_run.py::_place_weekend_drama_once`: relax `pieces == slots`;
-      place content (pieces then fillers) one-per-slot into `slots`; overflow beyond
-      the last slot stacks behind it (preserves Saturday manual-add + old behavior).
-- [ ] `orders.py` `kdrama/weekend`: drama_count from `_kd_prefill_weekdays` length;
-      return `openSlots` (= slots − pieces). Only build that many drama selectors.
-- [ ] `orders.py` `kdrama/weekend/fillers`: if openSlots>0 -> `draw_k_near_target(openSlots,
-      budget − drama_fr)`; else [] (Saturday). Report budget/drama/filler totals as today.
-- [ ] `daily_programming.html` modal: Saturday (openSlots==0) -> no auto-draw, show a
-      manual "add filler" affordance; Sunday (openSlots>0) -> auto-draw open-slot fillers
-      + reroll. Run posts the chosen fillerIds as today.
+- [ ] `_log_sync_scan_log(ws)` → {(line, date): [{xlrow, old}]} for ALL lines (once).
+- [ ] `_log_sync_compute(cur, contract_id, log_index, date_from, date_to)` — take the
+      pre-built index instead of iterating `ws`; filter by line_ids + date range.
+- [ ] Extract `_log_sync_write_changes(ws, changes)` + `_log_sync_sort_and_save(ws, wb,
+      path)` from the single apply endpoint (DRY; used by single + batch).
+- [ ] Update single `/preview` + `/apply` to scan→compute (behavior identical).
+- [ ] Add `POST /api/traffic/log-sync/preview-batch` — body {path, contracts:[{contract_id,
+      date_from, date_to}]}. One read-only load, scan once, compute each (per-contract
+      error isolation), warm writable copy. Return per-contract results + totals.
+- [ ] Add `POST /api/traffic/log-sync/apply-batch` — one writable (warm) load, scan once,
+      compute+collect all changes, write all, sort+CF+save once. Return per-contract
+      written + mismatches + total.
+- [ ] `log_sync.html`: contract search adds a ROW to a list (code/client + own
+      date-from/date-to + remove ✕) via "+ Add another contract"; "Preview all" /
+      "Apply all" hit the batch endpoints; combined preview grouped per contract.
 
-## Verify (read-only — no live schedule writes)
-- [ ] Query Etere 8/2 (Sun) Korean block: confirm 9 PRGS slots; compute pieces=6, open=3.
-- [ ] Confirm `draw_k_near_target(3, budget−drama)` lands total near budget; reroll varies.
-- [ ] Confirm Saturday (8/1) -> 9 slots, 9 pieces, 0 open, 0 auto fillers.
-- [ ] Do NOT run the live weekend placement as a test (it writes the real schedule).
+## Verify (read-only)
+- [ ] Batch preview of 2+ real contracts loads the log ONCE, returns per-contract changes.
+- [ ] Confirm one scan-index reproduces the single-contract change set exactly.
+- [ ] Do NOT write the live log as a test.
 
 ## Review (2026-07-24)
-Implemented across 4 files (all compile; backend verified read-only against live Etere):
-- `filler_rotation.draw_k_near_target` — k distinct fillers minimizing |budget − Σdur|,
-  randomised (k-1 random + greedy completion, sampled). Verified: hit budget within ±1
-  frame and varied between draws. No rotation token (like draw_until).
-- `_place_weekend_drama_once` — content = pieces + fillers one-per-slot; overflow stacks
-  behind the last slot. Relaxed the old `pieces == slots` hard requirement.
-- `kdrama/weekend` — drama_count = len(weekday-repeats) (fixes the 9-slot Sunday showing
-  3 selectors); returns openSlots.
-- `kdrama/weekend/fillers` — Sunday draws one near-budget filler per open slot; Saturday [].
-- `daily_programming.html` — Saturday: no auto fillers + ➕ Add filler (manual, removable);
-  Sunday: auto-draw open-slot fillers + 🎲 reroll; dynamic hint text.
+Implemented. orders.py parses + imports; log_sync.html JS passes node --check; no
+dangling single-contract refs.
+- `_log_sync_scan_log(ws)` scans the sheet once → shared index.
+- `_log_sync_compute(cur, cid, log_index, …)` filters the index (was: iterated ws).
+  Behavior-preserving: same (line,date)→rows groups as the old inline loop.
+- Extracted `_log_sync_write_changes` + `_log_sync_sort_and_save`; single apply now
+  uses them too (no drift between single/batch).
+- Single `/preview` + `/apply` updated to scan→compute (identical behavior).
+- New `/preview-batch` (one read-only load, scan once, compute per contract, warm
+  writable copy, per-contract error isolation) and `/apply-batch` (one writable/warm
+  load, compute all, write all, ONE sort+CF+save).
+- log_sync.html: search adds to a cart of contract rows (each own From/To, removable);
+  "Preview all" / "Apply all" hit the batch endpoints; per-contract preview sections
+  + one combined apply bar.
 
-Live read-only verify: 8/1 & 8/2 both have 9 PRGS slots (08:00-10:00). picker ±1 frame.
-Could not exercise piece-resolution end-to-end (that week's weekday KDramas not yet in
-Etere) — counts derive from the weekday pattern regardless. Did NOT run live placement.
-
-Effective: Sunday new-structure is 8/2+; 7/26 set up manually by MC (0-open-slot day →
-0 auto fillers, as intended).
+Could NOT e2e-test here: the log is on the Windows K: drive (unreachable from WSL).
+Verify on the jumpbox — one read for the whole batch, correct per-contract diffs,
+MRU colors + custom sort intact after Apply all. Single-contract endpoints remain
+(unused by the new UI, kept as a safety net).
