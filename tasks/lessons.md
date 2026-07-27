@@ -23,8 +23,22 @@ matter how long a break stretches the tail (preserves the drift fix); a repeat r
 at A and splits. `newAiring = !prev || letter <= prev.letter || gap > 3h` (keep the big
 gap only as a backstop for letterless codes). Verify any change to piece→airing grouping
 against a day that has the SAME show airing twice, and reconcile per-window market counts
-against Etere. The grouping lives only in `daily_programming.html`
-(`stampGroupAnchors`/`pieceBase`/`pieceLetter`).
+against Etere. The grouping lives in **TWO** mirrored places that must stay in
+sync — `daily_programming.html` (`stampGroupAnchors`/`pieceBase`/`pieceLetter`,
+the placement badge + replace-modal) **and** `daily_programming_run.py`
+(`_group_anchors`/`_piece_base`/`_piece_letter`, which backs the server's
+`_is_placed` skip decision for BOTH `_place_once` and `_place_weekend_drama_once`).
+
+**Recurrence (Ashe, 2026-07-29):** the 7/21 fix landed ONLY on the client badge;
+the server `_group_anchors` kept the gap-only rule. So the badge showed the second
+airing correctly, but the actual "skip if already placed" check still merged the two
+airings — when Ashe ran all markets over Pacific markets she'd filled the day before,
+`_is_placed` saw the second window as empty and **re-inserted `VD-SCENTOFGRASS21-…`,
+duplicating it in every already-filled Pacific market**. Fixed by porting the
+letter-reset rule to the server. **Lesson within the lesson:** when a placement/dedupe
+rule is fixed on one side (client OR server), grep for the sibling implementation and
+fix both in the same change — a client-only fix to a *display* count silently leaves
+the *write* path broken.
 
 ---
 

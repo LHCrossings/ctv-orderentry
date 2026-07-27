@@ -204,23 +204,43 @@ def _piece_base(code):
     return c[:-1] if c[-1:].isalpha() and c[-1:].isupper() else c
 
 
+def _piece_letter(code):
+    """Trailing piece letter of a code: NAMASTE071826E → 'E' (empty if none)."""
+    c = (code or "").strip()
+    return c[-1] if c[-1:].isalpha() and c[-1:].isupper() else ""
+
+
 def _group_anchors(rows):
     """Anchor ORA of each placed program group. rows = (ORA, COD_PROGRA).
-    Same-base rows minutes apart are one show's pieces/parts; a gap over
-    _PIECE_GROUP_GAP starts a new group (a repeat airing of the same file).
-    The group's first ORA is where the show starts — that anchor, not each
-    row's own ORA, decides which show window the group belongs to. Long
-    breaks can push a show's last piece past the next window's start
-    (SFO/CVC 2026-07-18: Namaste piece E at 15:02 inside the India Waves
-    window made IW look placed while it was empty)."""
-    last = {}   # base -> (ora of the base's previous row)
+    Same-base rows are one show's pieces/parts; the group's first ORA is where
+    the show starts — that anchor, not each row's own ORA, decides which show
+    window the group belongs to. Long breaks can push a show's last piece past
+    the next window's start (SFO/CVC 2026-07-18: Namaste piece E at 15:02 inside
+    the India Waves window made IW look placed while it was empty).
+
+    A new airing (new anchor) is detected by the PIECE LETTER resetting: a
+    single airing ascends A→B→…→F, but a repeat of the SAME show restarts at A
+    (…F → A). Keying on the letter (not a time gap) correctly splits two airings
+    only ~1-2h apart that reuse identical piece codes — e.g. Scent of Grass at
+    two windows the same day (Ashe, 7/29): a 3h-gap-only rule merged them, so the
+    second window looked empty and the piece was re-inserted as a duplicate. The
+    >3h gap stays a backstop for letterless codes. MIRRORS stampGroupAnchors in
+    daily_programming.html — keep the two in sync."""
+    last = {}   # base -> {ora, anchor, letter} of the base's previous row
     anchors = []
     for ora, code in sorted(rows):
         base = _piece_base(code)
+        letter = _piece_letter(code)
         prev = last.get(base)
-        if prev is None or ora - prev > _PIECE_GROUP_GAP:
+        new_airing = (
+            prev is None
+            or letter <= prev["letter"]
+            or ora - prev["ora"] > _PIECE_GROUP_GAP
+        )
+        anchor = ora if new_airing else prev["anchor"]
+        if new_airing:
             anchors.append(ora)
-        last[base] = ora
+        last[base] = {"ora": ora, "anchor": anchor, "letter": letter}
     return anchors
 
 
