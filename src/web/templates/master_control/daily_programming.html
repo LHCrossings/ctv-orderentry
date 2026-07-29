@@ -62,6 +62,12 @@
         .field-input { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 7px 12px; font-size: 0.9rem; color: var(--text-primary); outline: none; font-family: inherit; }
         .field-input:focus { border-color: var(--nord10); }
 
+        /* Neutral secondary action — matches .field-input metrics so it sits level
+           with the date box in .controls-row (align-items: flex-end). */
+        .ghost-btn { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 7px 14px; font-size: 0.86rem; font-weight: 600; color: var(--text-muted); cursor: pointer; font-family: inherit; transition: all 0.15s; }
+        .ghost-btn:hover:not(:disabled) { border-color: var(--nord10); color: var(--nord10); }
+        .ghost-btn:disabled { opacity: 0.45; cursor: default; }
+
         .prog-list { display: flex; flex-direction: column; gap: 6px; }
         .prog-row { display: flex; align-items: center; gap: 14px; padding: 10px 14px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; }
         .prog-time { font-family: monospace; font-size: 0.82rem; color: var(--text-muted); min-width: 96px; }
@@ -189,6 +195,7 @@
                 <label class="field-label" for="dpDate">Air date</label>
                 <input type="date" id="dpDate" class="field-input" />
             </div>
+            <button type="button" id="reloadBtn" class="ghost-btn" title="Re-read the grid and refresh the placed badges">↻ Reload</button>
         </div>
     </div>
 
@@ -201,6 +208,7 @@
         <div class="step-label">Step 4 · Review & set up</div>
         <button type="button" id="previewBtn" class="fm-done" style="margin-bottom: 12px;">Preview setup</button>
         <button type="button" id="runBtn" class="run-btn" style="margin-bottom: 12px; margin-left: 8px;">Set up across markets</button>
+        <button type="button" id="toTopBtn" class="ghost-btn" style="margin-bottom: 12px; margin-left: 8px;">↑ Return to top</button>
         <div id="previewPlan" class="preview-plan"></div>
         <div id="runResults" class="preview-plan" style="margin-top: 12px;"></div>
     </div>
@@ -515,6 +523,15 @@
     }
 
     dateEl.addEventListener('change', loadGrid);
+
+    // Explicit reload — same full refresh a market-pill click does (re-reads the K:
+    // grid + re-queries placement), so placing programming in parts never works off
+    // stale "already placed" badges.
+    document.getElementById('reloadBtn').addEventListener('click', async function () {
+        const b = this, label = b.textContent;
+        b.disabled = true; b.textContent = '↻ Reloading…';
+        try { await loadGrid(); } finally { b.disabled = false; b.textContent = label; }
+    });
 
     // ── Step 3: click a program → super-search a file (+ Explode?) ──
     const modal = document.getElementById('fileModal');
@@ -998,6 +1015,12 @@
     }
 
     document.getElementById('runBtn').addEventListener('click', runSetup);
+
+    // Back to the top of the page — after reviewing a long Step 4 result list,
+    // jumps straight back to the network pills / programs-for-the-day list.
+    document.getElementById('toTopBtn').addEventListener('click', function () {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
 
     // ── Replace a piece (revised file) ──────────────────────────────────────
     // A fully-placed program row's hint reads '↻ replace piece'; clicking the
