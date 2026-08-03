@@ -172,6 +172,24 @@ def _bcast_time_to_frames(t: str, fps: float) -> int:
     return round((h * 3600 + mn * 60 + s) * fps)
 
 
+def _bcast_window_to_frames(t_from: str, t_to: str, fps: float) -> tuple[int, int]:
+    """Convert a [start, end) time-of-day pair to broadcast-day frames.
+
+    The per-time shift in `_bcast_time_to_frames` is not enough on its own for the
+    day's FINAL program, which ends at 06:00 the next morning (= 30:00): its start
+    (e.g. 05:30) shifts to 29:30 while its end (06:00) stays at 6:00, so the window
+    wraps and every ORA query inside it matches nothing — silently, as "0 breaks".
+    After the <6h shift, an end at or below the start therefore gets a further +24h.
+
+    Mirrors `_window()` in daily_programming_run.py. Use this — not two separate
+    `_bcast_time_to_frames` calls — whenever the pair is a program/grid window."""
+    lo = _bcast_time_to_frames(t_from, fps)
+    hi = _bcast_time_to_frames(t_to, fps)
+    if hi <= lo:
+        hi += round(24 * 3600 * fps)
+    return lo, hi
+
+
 def _hhmm_to_frames(hhmm: str) -> int:
     return _bcast_time_to_frames(hhmm, _FPS_GLOBAL)
 
@@ -308,9 +326,14 @@ def _mc_fill_program_spots(
         asset_code = m.group(1).strip() if m else show.strip()
         by_asset[asset_code].append(spot)
 
-    from_frames = _time_to_frames(time_in) if time_in else None
-    # Allow up to 1 minute of show overrun — end time extended by 60 s worth of frames
-    to_frames = (round(_time_to_frames(time_out) + 60 * fps)) if time_out else None
+    if time_in and time_out:
+        # window-aware: the day's final show ends at 06:00 next morning (= 30:00), so a
+        # per-time shift alone would wrap the window and match nothing
+        from_frames, to_frames = _bcast_window_to_frames(time_in, time_out, fps)
+        to_frames = round(to_frames + 60 * fps)   # allow up to 1 min of show overrun
+    else:
+        from_frames = _time_to_frames(time_in) if time_in else None
+        to_frames = (round(_time_to_frames(time_out) + 60 * fps)) if time_out else None
 
     results = []
     for asset_code, asset_spots in by_asset.items():
@@ -5373,8 +5396,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         h, mn = divmod(secs, 3600)
         return f"{h:02d}:{mn // 60:02d}"
 
-    def _bo_time_to_frames(t: str) -> int:
-        return _bcast_time_to_frames(t, _BO_FPS)  # broadcast-day aware (post-midnight = 24:00–29:59)
+    def _bo_window_to_frames(t_from: str, t_to: str) -> tuple[int, int]:
+        # broadcast-day aware (post-midnight = 24:00–29:59) AND window-aware: the
+        # day's final show ends at 06:00 next morning (= 30:00), not at 06:00 today
+        return _bcast_window_to_frames(t_from, t_to, _BO_FPS)
 
     def _bo_classify(newtype: str, capo, fine, is_wl: bool, prev_label: str, prev_contract: str = "", contract: str = ""):
         if capo and fine:
@@ -5792,8 +5817,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         market_id = _BO_MARKET_IDS.get(market.upper())
         if not market_id:
             return JSONResponse({"error": f"Unknown market: {market}"}, status_code=400)
-        from_frames = _bo_time_to_frames(time_from)
-        to_frames   = _bo_time_to_frames(time_to)
+        from_frames, to_frames = _bo_window_to_frames(time_from, time_to)
 
         def _run():
             from browser_automation.etere_direct_client import connect as _connect
@@ -5861,8 +5885,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         if not date or not time_from or not time_to:
             return JSONResponse({"error": "date, time_from, time_to required"}, status_code=400)
 
-        from_frames = _bo_time_to_frames(time_from)
-        to_frames   = _bo_time_to_frames(time_to)
+        from_frames, to_frames = _bo_window_to_frames(time_from, time_to)
         # All Crossings TV markets — DAL excluded (Asian Channel, different break structure)
         bulk_markets = {k: v for k, v in _BO_MARKET_IDS.items() if k != "DAL"}
 

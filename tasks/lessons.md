@@ -402,6 +402,28 @@ no line reference) — see `_apply_reattribution` for the revision rebook flow.
 
 **Note:** the inverse display converters (`_bo_frames_to_hhmm`, `_frames_to_ampm`) render a post-midnight ORA as "27:00"/"3:00 AM" style broadcast time — that's cosmetic, not a matching bug; leave unless a display looks wrong.
 
+**Recurrence (Ashe, 2026-08-02) — rule 1 without rule 2 is HALF a fix.** The 7/06
+sweep routed every converter through `_bcast_time_to_frames` (the per-time <6h shift)
+but converted **window pairs as two independent times**, so rule 2 (the `hi <= lo`
+bump) was never applied outside Daily Programming. Break Optimization (Log Version)
+showed **"0 breaks / No commercial breaks in this show"** for DAL's final program of
+every day — 7/27 `5:30–6:00` Phoenix News Express P2, 8/01 `4:30–6:00` The Music
+Project S2 — because start `05:30`→29:30 while end `06:00` stayed at 6:00, so
+`ORA >= 29:30 AND ORA < 6:03` matched nothing. It looked DAL-only purely because
+CTV's logs have no show ending at 06:00. Only the day's LAST show is affected;
+`4:00–5:30` (both post-midnight, no wrap) worked fine all along, which is why it
+went unnoticed.
+
+**How to apply:** a start/end pair from a program/grid row must go through the
+shared **`_bcast_window_to_frames(t_from, t_to, fps)`** in `orders.py` (mirrors
+`_window()` in `daily_programming_run.py`) — never two `_bcast_time_to_frames`
+calls. Fixed at both consumers of a log program window: the BO endpoints
+(`/break-optimization/load` + `/bulk-apply`, via `_bo_window_to_frames`) and the
+log spot-time fill (`_mc_fill_program_spots`). Ad-hoc user filters
+(`_build_spot_filter`) and the pre-split language-window tables are per-time by
+design and stay on `_bcast_time_to_frames`. **Diagnostic signature:** a time-window
+feature returning exactly zero rows, with no error, only for the day's last show.
+
 ---
 
 ## Multi-Flight Traffic PDFs: Track Dates Per-Spot, Never at the Instruction Level
