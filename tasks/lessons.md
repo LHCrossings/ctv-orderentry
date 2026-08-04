@@ -4,6 +4,70 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Colour-Coded IO Identifies the CREATIVE, Not the ISCI — Language Comes From the Airtime
+
+**Session:** Admerasia Chinese IO (Beverages August Window, contract 2999) — Lee 2026-08-03
+
+**Rule:** An Admerasia **Chinese** IO carries **two ISCI legend blocks** (Mandarin +
+Cantonese) that reuse the **byte-identical swatch colours** — 4 colours ↔ 8 ISCIs, one
+colour per *creative title*, both languages sharing it. `_assign_clusters()` mapped one
+colour → one ISCI via an RGB-distance permutation, so it silently picked whichever
+language sorted first (**all Mandarin**) and every Cantonese spot got the Mandarin cut.
+Nothing in the pipeline modelled language at all.
+
+**How to apply:**
+1. Colour identifies the **creative** (title + length). The **language** comes from the
+   spot's own `(weekday, TPALINSE.ORA)` via the **day-aware** window table —
+   `language_windows.classify_language()`. ISCI = `legend[(colour, language)]`.
+2. **Only the day-aware table can do this.** The day-less `_WINDOWS_HHMM` mirror has
+   Mandarin `20:00-23:59` *containing* Cantonese `23:30-23:59` — ambiguous by
+   construction. Day-aware works because Cantonese is **weekday-only** while Mandarin
+   owns the weekend `20:00-23:59`, so a Saturday 22:30 spot is unambiguously Mandarin.
+   The day-aware `_CTV_LANG_WINDOWS`/`_DAL_LANG_WINDOWS` now live in
+   `browser_automation/language_windows.py`; `orders.py` imports and aliases them, so
+   the long-standing two-mirror drift risk is gone — **do not re-declare them.**
+3. Keep a single-entry colour map **language-agnostic** so single-language IOs and the
+   vision-legend fallback (which cannot report language) behave exactly as before.
+   Verified: all 6 VT/FT fixtures produce identical cluster maps, SFO 06 still 69/69.
+4. Derive a grid row's duration from the **legend's own :15/:30**, never from FILMATI —
+   otherwise a not-yet-ingested creative makes the row duration-less and its spots fail
+   with a useless "matched 0 grid rows" instead of "no FILMATI for ISCI X".
+5. Pass the legend around as **dicts, not tuples** — this shape grew twice (language,
+   then title) and positional unpacking at the consumer breaks silently each time.
+
+**Oracle technique worth reusing:** a partially hand-trafficked contract is a free
+regression oracle. Contract 2999 had 8 of 11 spots already assigned by a human; the new
+logic had to reproduce all 8 exactly (it did, 0 mismatches) and its 3 failures had to be
+exactly the 3 the human also couldn't do (Joy Ride, not yet ingested).
+
+**Also:** Admerasia sometimes prints ISCIs with letter **O for digit 0**
+(`MCIMO46526VH`), and can give two creatives the same code (Beverages Launch: Yap
+Session and Macro Strawberry Watermelon both `…O47526VH`). Normalise the numeric body
+and warn on a duplicate `(language, ISCI)`; never silently traffic it.
+
+---
+
+## A ±Tolerance Built for Interval CONTAINMENT Creates Overlaps When Reused for POINT-IN-TIME Classification
+
+**Session:** same session — caught by an invariant test, not by a failing order
+
+**Rule:** `check_language_window()` compares a whole ordered daypart against a window
+and uses `_TOL_MIN = 1` to absorb 23:59-vs-24:00 rounding. Reusing that same `+ _TOL_MIN`
+for a *single instant* lookup made **20:00 Monday match both** Cantonese (19:00-**20:00**)
+and Mandarin (**20:00**-23:30) — adjacent windows both claiming their shared minute,
+which collapses the entire Chinese disambiguation.
+
+**How to apply:** point-in-time window matching is strictly half-open `[start, end)` with
+**no tolerance**. Handle the two broadcast-day quirks in the bounds instead
+(`language_windows._win_bounds`): an end written `"23:59"` MEANS `24:00` (so 23:59 is
+inside), and an hour `< 06:00` is the post-midnight tail (`+24h`) — with the `hi <= lo`
+wrap bump, i.e. the same rule pair as `_bcast_window_to_frames`. Assert the invariant in
+a test (`for every (day, minute): not {Mandarin, Cantonese} <= classify(...)`) — a
+boundary bug like this shows up on exactly one minute per day and no order will ever
+reveal it.
+
+---
+
 ## Grouping Program Pieces Into Airings: Split on the Piece LETTER Resetting, Not a Time Gap
 
 **Session:** Daily Programming — Vietnamese Drama 10:00 + 12:00 both 0/9 vs 9/9 (Maija, 2026-07-21)

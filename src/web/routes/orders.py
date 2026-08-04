@@ -58,6 +58,7 @@ def _invalidate_etere_session():
         _etere_session_state["session"] = None
         _etere_session_state["born_at"] = 0.0
 
+from browser_automation import language_windows as _lw
 from business_logic.services.pdf_order_detector import PDFOrderDetector
 from orchestration.config import ApplicationConfig
 from orchestration.order_scanner import OrderScanner
@@ -73,39 +74,16 @@ _MARKET_CODES = {
 _VALID_DAYS = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
 _FPS_GLOBAL = 29.97
 
-# Crossings TV language → list of (days_set, time_from HH:MM, time_to HH:MM)
-# DAL (The Asian Channel) has different mappings — add separately when needed.
+# Language airing windows: day-aware tables live in browser_automation/language_windows.py
+# (single source of truth, shared with the parsers — see that module's docstring for why
+# the day dimension is required to tell Mandarin from Cantonese). Imported under the
+# historic private names so existing call sites are unchanged.
 _WD  = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday"}
 _WE  = {"Saturday", "Sunday"}
 _ALL = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
 _MSA = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
 
-_CTV_LANG_WINDOWS: dict = {
-    "Mandarin": [
-        (_MSA, "06:00", "07:00"),
-        (_ALL, "07:00", "08:00"),
-        (_WD,  "20:00", "23:30"),
-        (_WE,  "20:00", "23:59"),
-    ],
-    "Cantonese": [
-        (_WD, "19:00", "20:00"),
-        (_WD, "23:30", "23:59"),
-    ],
-    "Korean":     [(_ALL, "08:00", "10:00")],
-    "Vietnamese": [(_ALL, "10:00", "13:00")],
-    "Hindi": [
-        (_WD, "13:00", "14:00"),
-        (_WE, "13:00", "16:00"),
-    ],
-    "Punjabi":  [(_WD, "14:00", "16:00")],
-    "Filipino": [
-        (_WD, "16:00", "19:00"),
-        (_WE, "16:00", "18:00"),
-    ],
-    "Hmong": [(_WE, "18:00", "20:00")],
-}
-_CTV_LANG_WINDOWS["Chinese"]    = _CTV_LANG_WINDOWS["Mandarin"] + _CTV_LANG_WINDOWS["Cantonese"]
-_CTV_LANG_WINDOWS["SouthAsian"] = _CTV_LANG_WINDOWS["Hindi"]    + _CTV_LANG_WINDOWS["Punjabi"]
+_CTV_LANG_WINDOWS: dict = _lw.CTV_LANG_WINDOWS_BY_DAY
 
 # Canonical list of supported traffic instruction formats — rendered as badges on the assign-assets page.
 # Add one entry here whenever a new format is wired into either _detect_format() or a
@@ -125,31 +103,7 @@ _TRAFFIC_FORMAT_LABELS = [
 
 
 # The Asian Channel (DAL) — broadcast day runs 0600–0559 (wraps past midnight)
-_DAL_LANG_WINDOWS: dict = {
-    "Mandarin": [
-        (_WD,  "06:00", "09:30"),
-        (_WE,  "06:00", "10:00"),
-        (_ALL, "13:00", "17:00"),
-        (_ALL, "18:00", "22:00"),
-        (_ALL, "00:00", "01:00"),
-        (_WD,  "02:00", "05:30"),
-        (_WE,  "02:00", "05:59"),
-    ],
-    "Cantonese": [
-        (_WD,  "09:30", "10:00"),
-        (_ALL, "17:00", "18:00"),
-        (_ALL, "01:00", "02:00"),
-        (_WD,  "05:30", "05:59"),
-    ],
-    "Vietnamese": [(_ALL, "10:00", "11:00")],
-    "Korean": [
-        (_WD,  "11:00", "12:00"),
-        (_WE,  "11:00", "13:00"),
-        (_WD,  "22:00", "23:00"),
-        (_WE,  "22:00", "23:59"),
-    ],
-}
-_DAL_LANG_WINDOWS["Chinese"] = _DAL_LANG_WINDOWS["Mandarin"] + _DAL_LANG_WINDOWS["Cantonese"]
+_DAL_LANG_WINDOWS: dict = _lw.DAL_LANG_WINDOWS_BY_DAY
 
 
 def _bcast_time_to_frames(t: str, fps: float) -> int:
@@ -7501,8 +7455,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
             ok_asg = [a for a in res.assignments if a.ok]
             per = Counter(a.isci for a in ok_asg)
-            legend_map = {isci: {"duration": d, "rgb": list(rgb), "name": name}
-                          for isci, d, rgb, name in res.legend}
+            # An ISCI is unique per (creative, language), so the legend keys cleanly by it.
+            legend_map = {row["isci"]: row for row in res.legend}
             return {
                 "is_admerasia":  True,
                 "filename":      filename,
@@ -7513,13 +7467,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 "warnings":      res.warnings,
                 "total":         len(res.assignments),
                 "assignable":    len(ok_asg),
+                "languages":     sorted({r["language"] for r in res.legend if r["language"]}),
                 "assignments":   [{"tp_id": a.tp_id, "filmati_id": a.filmati_id, "isci": a.isci,
-                                   "duration_ok": a.duration_ok, "ok": a.ok, "reason": a.reason}
+                                   "duration_ok": a.duration_ok, "ok": a.ok, "reason": a.reason,
+                                   "language": a.language}
                                   for a in res.assignments],
                 "summary":       [{"isci": isci, "count": per[isci],
                                    "name": legend_map.get(isci, {}).get("name"),
                                    "rgb":  legend_map.get(isci, {}).get("rgb"),
-                                   "duration": legend_map.get(isci, {}).get("duration")}
+                                   "duration": legend_map.get(isci, {}).get("duration"),
+                                   "language": legend_map.get(isci, {}).get("language")}
                                   for isci in sorted(per, key=lambda k: -per[k])],
             }
 

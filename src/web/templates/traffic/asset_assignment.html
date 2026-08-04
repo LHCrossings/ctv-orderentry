@@ -1551,10 +1551,15 @@
         grid.style.display = 'block';
         grid.innerHTML = results.map((r, i) => {
             const swatch = c => c ? `<span style="display:inline-block;width:13px;height:13px;border-radius:3px;border:1px solid var(--border-color);vertical-align:middle;background:rgb(${c[0]},${c[1]},${c[2]});"></span>` : '';
+            // Multi-language IOs (Chinese = Mandarin + Cantonese) reuse the SAME colour
+            // per creative, so the language column is what distinguishes two rows that
+            // look identical by swatch + creative name.
+            const multiLang = (r.languages || []).length > 1;
             const rows = (r.summary || []).map(s =>
                 `<tr>
                     <td style="padding:4px 8px;">${swatch(s.rgb)}</td>
                     <td style="padding:4px 8px;font-family:monospace;">${esc(s.isci)}</td>
+                    ${multiLang ? `<td style="padding:4px 8px;font-weight:600;">${esc(s.language || '—')}</td>` : ''}
                     <td style="padding:4px 8px;color:var(--text-muted);">${esc(s.name || '')}</td>
                     <td style="padding:4px 8px;text-align:center;">:${s.duration}</td>
                     <td style="padding:4px 8px;text-align:center;font-weight:600;">${s.count}</td>
@@ -1577,6 +1582,7 @@
                 <table style="width:100%;border-collapse:collapse;font-size:0.83rem;margin-top:8px;">
                     <thead><tr style="text-align:left;color:var(--text-muted);border-bottom:1px solid var(--border-color);">
                         <th style="padding:4px 8px;">Color</th><th style="padding:4px 8px;">ISCI</th>
+                        ${multiLang ? '<th style="padding:4px 8px;">Language</th>' : ''}
                         <th style="padding:4px 8px;">Creative</th><th style="padding:4px 8px;text-align:center;">Len</th>
                         <th style="padding:4px 8px;text-align:center;">Spots</th></tr></thead>
                     <tbody>${rows}</tbody>
