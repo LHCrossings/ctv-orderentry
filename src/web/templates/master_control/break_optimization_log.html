@@ -138,6 +138,47 @@
 
         .empty-state { text-align: center; padding: 56px 0; color: var(--text-muted); font-size: 0.9rem; }
 
+        /* Floating return-to-top — fixed to the viewport, so expanding hours can
+           never push it out of reach (the whole point: Ashe leaves hours open
+           while working separation violations and shouldn't have to drag the
+           scrollbar back up). Translucent over the light page background, so
+           --nord3 is the readable arrow colour here. */
+        .to-top-fab {
+            position: fixed;
+            right: 24px;
+            bottom: 24px;
+            z-index: 9000;
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            border: 1px solid var(--border-color);
+            background: rgba(255, 255, 255, 0.55);
+            -webkit-backdrop-filter: blur(6px);
+            backdrop-filter: blur(6px);
+            box-shadow: 0 4px 14px var(--shadow-color);
+            color: var(--nord3);
+            font-size: 1.2rem;
+            line-height: 1;
+            cursor: pointer;
+            font-family: inherit;
+            transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.15s;
+        }
+        .to-top-fab:hover {
+            background: var(--nord10);
+            border-color: var(--nord10);
+            color: var(--nord6);
+            transform: translateY(-2px);
+        }
+        .to-top-fab:focus-visible { outline: 2px solid var(--nord10); outline-offset: 2px; }
+
+        /* Broadcast-health alarms live in this same corner (fixed, bottom:20px,
+           right:20px, z-index 100000). Lift their stack above the button so an
+           off-air toast never covers it — the alarms stay fully visible and win
+           on z-index regardless. Page-scoped: only this page has the button.
+           Must be the #id: broadcast-health.js appends its <style> at runtime,
+           i.e. AFTER this block, so a .bh-toast-wrap rule would lose the tie. */
+        #bh-toast-wrap { bottom: 84px; }
+
         /* Bulk optimize */
         .load-btn { background: var(--nord10); color: var(--nord6); border: none; border-radius: 8px; padding: 8px 20px; font-size: 0.9rem; font-weight: 600; cursor: pointer; font-family: inherit; }
         .load-btn:hover { background: var(--nord9); }
@@ -243,6 +284,8 @@
         </div>
     </div>
 </main>
+
+<button type="button" id="toTopFab" class="to-top-fab" title="Return to top" aria-label="Return to top">&#8593;</button>
 
 <script>
 let selectedMarket = null;
@@ -716,6 +759,16 @@ const _today = new Date().toISOString().slice(0,10);
 document.getElementById('datePicker').value = _today;
 document.getElementById('datePicker').addEventListener('change', () => { if (selectedMarket) loadPrograms(); });
 document.getElementById('bulkDate').value = _today;
+
+// Floating return-to-top. Always present (Ashe: "constant button no matter
+// where we are on the page"), so it never has to be hunted for. Jump instantly
+// when the user prefers reduced motion, or when the page is so long that a
+// smooth scroll would crawl.
+document.getElementById('toTopFab').addEventListener('click', () => {
+    const far    = window.scrollY > 12000;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({ top: 0, behavior: (far || reduce) ? 'auto' : 'smooth' });
+});
 </script>
 </body>
 </html>
