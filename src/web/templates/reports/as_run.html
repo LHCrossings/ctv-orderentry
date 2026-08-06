@@ -186,9 +186,28 @@
             border: 1px solid var(--border-color);
             border-radius: 8px;
             margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
         }
+        .contract-banner .cb-text { flex: 1; min-width: 0; }
         .contract-banner .cb-code { font-weight: 700; font-size: 1rem; color: var(--text-primary); }
         .contract-banner .cb-meta { font-size: 0.82rem; color: var(--text-muted); margin-top: 2px; }
+
+        .xl-btn {
+            padding: 9px 16px;
+            background: var(--nord14);
+            color: var(--nord0);
+            border: none;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            white-space: nowrap;
+            text-decoration: none;
+        }
+        .xl-btn:hover { filter: brightness(1.05); }
 
         .mkt-section { margin-bottom: 20px; }
         .mkt-section-header {
@@ -577,9 +596,17 @@
     };
 
     function buildContractResults(data) {
+        // Export button only when there's something to export.
+        const xl = data.total
+            ? `<a class="xl-btn" href="/api/reports/as-run-by-contract/excel?contract_id=${_selectedContractId}&date_from=${encodeURIComponent(data.date_from)}&date_to=${encodeURIComponent(data.date_to)}">⬇ Export to Excel</a>`
+            : '';
+
         let html = `<div class="contract-banner">
-            <div class="cb-code">${esc(data.contract_code)}</div>
-            <div class="cb-meta">${esc(data.contract_description || '')} &nbsp;·&nbsp; ${esc(data.date_from)} — ${esc(data.date_to)}</div>
+            <div class="cb-text">
+                <div class="cb-code">${esc(data.contract_code)}</div>
+                <div class="cb-meta">${esc(data.contract_description || '')} &nbsp;·&nbsp; ${esc(data.date_from)} — ${esc(data.date_to)}</div>
+            </div>
+            ${xl}
         </div>`;
 
         if (!data.total) {

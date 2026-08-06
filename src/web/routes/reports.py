@@ -232,6 +232,162 @@ def _build_excel(pivot: dict) -> bytes:
 # Router
 # ---------------------------------------------------------------------------
 
+def _build_asrun_excel(payload: dict) -> bytes:
+    """As-run-by-contract → one flat, filterable sheet.
+
+    Deliberately flat rather than a replica of the page's per-market tables:
+    a Market column with an autofilter is what makes the export useful in
+    Excel. Styling follows _build_excel above, including BNS = yellow italic.
+    """
+    import openpyxl
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    NAVY = "1F3864"
+    BLUE = "2E75B6"
+    LTBLUE = "D6E4F0"
+    YELLOW = "FFF2CC"
+    GREY = "F2F2F2"
+    WHITE = "FFFFFF"
+
+    def fill(c):
+        return PatternFill("solid", fgColor=c)
+
+    def bdr():
+        s = Side(style="thin")
+        return Border(left=s, right=s, top=s, bottom=s)
+
+    ctr = Alignment(horizontal="center", vertical="center")
+    lft = Alignment(horizontal="left", vertical="center")
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "As-Run"
+
+    COLS = ["Market", "Date", "Time", "Spot Code", "Title", "Type", "Rate"]
+    last_col = get_column_letter(len(COLS))
+
+    ws.merge_cells(f"A1:{last_col}1")
+    c = ws["A1"]
+    c.value = f"{payload['contract_code']} — {payload['contract_description'] or ''} · As-Run Report"
+    c.font = Font(bold=True, size=13, color="FFFFFF")
+    c.fill = fill(NAVY)
+    c.alignment = ctr
+    ws.row_dimensions[1].height = 22
+
+    ws.merge_cells(f"A2:{last_col}2")
+    c = ws["A2"]
+    n_mkts = len([m for m in payload["markets"] if m["count"]])
+    c.value = (
+        f"{payload['date_from']} — {payload['date_to']}  ·  "
+        f"{payload['total']} airing(s) across {n_mkts} market(s)"
+    )
+    c.font = Font(size=10, color="FFFFFF")
+    c.fill = fill(BLUE)
+    c.alignment = ctr
+    ws.row_dimensions[3].height = 6
+
+    hr = 4
+    for i, label in enumerate(COLS, start=1):
+        c = ws.cell(hr, i, label)
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = fill(BLUE)
+        c.alignment = lft if label in ("Title", "Spot Code") else ctr
+        c.border = bdr()
+
+    r = hr
+    total_rate = 0.0
+    ri = 0
+    for mkt in payload["markets"]:
+        for a in mkt["airings"]:
+            r += 1
+            is_bns = a["type"] == "BNS"
+            bg = YELLOW if is_bns else (GREY if ri % 2 == 0 else WHITE)
+            ri += 1
+            rate = float(a["rate"] or 0)
+            total_rate += rate
+
+            # Real date/number types so Excel can sort and sum them.
+            try:
+                d_val = date.fromisoformat(a["date"])
+            except (ValueError, TypeError):
+                d_val = a["date"]
+
+            values = [mkt["market"], d_val, a["time"], a["spot_code"], a["spot_title"], a["type"], rate]
+            for i, v in enumerate(values, start=1):
+                c = ws.cell(r, i, v)
+                c.fill = fill(bg)
+                c.border = bdr()
+                c.alignment = lft if i in (4, 5) else ctr
+                if is_bns:
+                    c.font = Font(italic=True)
+                if i == 2:
+                    c.number_format = "M/D/YY"
+                if i == 7:
+                    c.number_format = '$#,##0.00'
+
+    if r > hr:
+        ws.auto_filter.ref = f"A{hr}:{last_col}{r}"
+
+    tr = r + 1
+    c = ws.cell(tr, 1, "TOTAL")
+    c.font = Font(bold=True, color="FFFFFF")
+    c.fill = fill(NAVY)
+    c.alignment = lft
+    c.border = bdr()
+    for i in range(2, len(COLS) + 1):
+        c = ws.cell(tr, i)
+        c.fill = fill(NAVY)
+        c.border = bdr()
+    c = ws.cell(tr, 2, payload["total"])
+    c.font = Font(bold=True, color="FFFFFF")
+    c.fill = fill(NAVY)
+    c.alignment = ctr
+    c.border = bdr()
+    c = ws.cell(tr, len(COLS), total_rate)
+    c.font = Font(bold=True, color="FFFFFF")
+    c.fill = fill(NAVY)
+    c.alignment = ctr
+    c.border = bdr()
+    c.number_format = '$#,##0.00'
+
+    for col, width in zip("ABCDEFG", (10, 11, 10, 18, 42, 8, 12)):
+        ws.column_dimensions[col].width = width
+    ws.freeze_panes = f"A{hr + 1}"
+
+    # Per-market summary alongside, so the counts on the page are in the file too.
+    ws2 = wb.create_sheet("Summary")
+    for i, label in enumerate(("Market", "Airings"), start=1):
+        c = ws2.cell(1, i, label)
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = fill(BLUE)
+        c.alignment = ctr
+        c.border = bdr()
+    sr = 1
+    for mkt in payload["markets"]:
+        if not mkt["count"]:
+            continue
+        sr += 1
+        for i, v in enumerate((mkt["market"], mkt["count"]), start=1):
+            c = ws2.cell(sr, i, v)
+            c.alignment = ctr
+            c.border = bdr()
+            c.fill = fill(LTBLUE if i == 2 else WHITE)
+    sr += 1
+    for i, v in enumerate(("TOTAL", payload["total"]), start=1):
+        c = ws2.cell(sr, i, v)
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = fill(NAVY)
+        c.alignment = ctr
+        c.border = bdr()
+    ws2.column_dimensions["A"].width = 12
+    ws2.column_dimensions["B"].width = 10
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
 def build_reports_router(templates: Jinja2Templates) -> APIRouter:
     router = APIRouter()
 
@@ -359,12 +515,8 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
             "total": sum(m["count"] for m in results),
         })
 
-    @router.get("/api/reports/as-run-by-contract")
-    async def as_run_by_contract(
-        contract_id: int = Query(...),
-        date_from: str = Query(...),
-        date_to: str = Query(...),
-    ):
+    async def _asrun_contract_payload(contract_id: int, date_from: str, date_to: str) -> dict:
+        """Shared by the JSON view and the Excel export so they can't drift."""
         try:
             d_from = date.fromisoformat(date_from)
             d_to   = date.fromisoformat(date_to)
@@ -438,14 +590,40 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
             {"market": m, "airings": a, "count": len(a)}
             for m, a in sorted(by_market.items())
         ]
-        return JSONResponse({
+        return {
             "contract_code":        hdr["code"],
             "contract_description": hdr["description"],
             "date_from":            date_from,
             "date_to":              date_to,
             "markets":              markets,
             "total":                len(rows),
-        })
+        }
+
+    @router.get("/api/reports/as-run-by-contract")
+    async def as_run_by_contract(
+        contract_id: int = Query(...),
+        date_from: str = Query(...),
+        date_to: str = Query(...),
+    ):
+        return JSONResponse(await _asrun_contract_payload(contract_id, date_from, date_to))
+
+    @router.get("/api/reports/as-run-by-contract/excel")
+    async def as_run_by_contract_excel(
+        contract_id: int = Query(...),
+        date_from: str = Query(...),
+        date_to: str = Query(...),
+    ):
+        payload = await _asrun_contract_payload(contract_id, date_from, date_to)
+        excel_bytes = await asyncio.get_running_loop().run_in_executor(
+            None, lambda: _build_asrun_excel(payload)
+        )
+        safe_code = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in payload["contract_code"])
+        filename = f"{safe_code}_AsRun_{date_from}_{date_to}.xlsx"
+        return StreamingResponse(
+            io.BytesIO(excel_bytes),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
 
     @router.get("/api/reports/spot-search")
     async def spot_search(q: str = Query("")):
