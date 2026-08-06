@@ -134,6 +134,48 @@
         }
 
         @keyframes blink { 50% { opacity: 0; } }
+
+        .tool-card + .tool-card { margin-top: 20px; }
+
+        .search-wrap { position: relative; }
+        .search-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            z-index: 100;
+            min-width: 340px;
+            max-height: 280px;
+            overflow-y: auto;
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 4px 16px var(--shadow-color);
+            margin-top: 4px;
+        }
+
+        .dropdown-item {
+            padding: 10px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover { background: var(--bg-secondary); }
+        .dropdown-code { font-weight: 700; font-size: 0.88rem; color: var(--text-primary); }
+        .dropdown-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
+
+        .dl-row { margin-top: 14px; display: none; flex-wrap: wrap; gap: 10px; }
+        .dl-row.visible { display: flex; }
+        .dl-link {
+            display: inline-block;
+            padding: 10px 18px;
+            background: var(--nord14);
+            color: var(--nord0);
+            border-radius: 8px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            text-decoration: none;
+        }
+        .dl-link:hover { filter: brightness(1.05); }
     </style>
 </head>
 <body>
@@ -178,6 +220,38 @@
 
         <div id="terminal" class="terminal"></div>
     </div>
+
+    <div class="tool-card">
+        <h2>Single Contract Pre/Post Log</h2>
+        <p>Pulls the Placement Confirmation report for one contract — any agency or advertiser — and formats it with the same CTV or TAC template. The workbook downloads straight to your browser; nothing is written to the Worldlink archive folders.</p>
+
+        <div class="input-row">
+            <div class="field-group search-wrap" style="flex:1 1 240px; min-width:220px;">
+                <label class="field-label" for="contractSearch">Contract</label>
+                <input id="contractSearch" class="field-input" type="text" placeholder="LEXUS, BVFL, 2999…" autocomplete="off" />
+                <div id="contractDropdown" class="search-dropdown" style="display:none;"></div>
+            </div>
+            <div class="field-group log-type">
+                <label class="field-label" for="cLogType">Log Type</label>
+                <select id="cLogType" class="field-select">
+                    <option value="post">Post Log</option>
+                    <option value="pre">Pre Log</option>
+                </select>
+            </div>
+            <div class="field-group date">
+                <label class="field-label" for="cDateFrom">From Date</label>
+                <input id="cDateFrom" class="field-input" type="text" placeholder="MM/DD/YYYY" onblur="formatDate(this)" />
+            </div>
+            <div class="field-group date">
+                <label class="field-label" for="cDateTo">To Date</label>
+                <input id="cDateTo" class="field-input" type="text" placeholder="MM/DD/YYYY" onblur="formatDate(this)" />
+            </div>
+            <button id="cRunBtn" class="run-btn" onclick="runContractSort()">&#9654; Run</button>
+        </div>
+
+        <div id="cTerminal" class="terminal"></div>
+        <div id="cDownloads" class="dl-row"></div>
+    </div>
 </main>
 
 <script>
@@ -195,19 +269,9 @@ function formatDate(el) {
     }
 }
 
-function runReportSort() {
-    const logType  = document.getElementById('logType').value;
-    const dateFrom = document.getElementById('dateFrom').value.trim();
-    const dateTo   = document.getElementById('dateTo').value.trim();
-
-    if (!dateFrom || !dateTo) {
-        document.getElementById(dateFrom ? 'dateTo' : 'dateFrom').focus();
-        return;
-    }
-
-    const terminal = document.getElementById('terminal');
-    const runBtn   = document.getElementById('runBtn');
-
+// Shared SSE runner for both cards. onFile fires for each [DOWNLOAD:token|name]
+// line the server emits after a successful single-contract pull.
+function streamRun(url, terminal, runBtn, onFile) {
     terminal.innerHTML = '';
     terminal.classList.add('visible');
     runBtn.disabled = true;
@@ -216,12 +280,18 @@ function runReportSort() {
     cursor.className = 't-cursor';
     terminal.appendChild(cursor);
 
-    const params = new URLSearchParams({ log_type: logType, date_from: dateFrom, date_to: dateTo });
-    const evtSource = new EventSource(`/api/scripts/reportsort?${params}`);
+    const evtSource = new EventSource(url);
 
     evtSource.onmessage = (e) => {
         const raw = e.data;
         if (terminal.contains(cursor)) terminal.removeChild(cursor);
+
+        const dl = raw.match(/^\[DOWNLOAD:([0-9a-f]{32})\|(.+)\]$/);
+        if (dl) {
+            if (onFile) onFile(dl[1], dl[2]);
+            terminal.appendChild(cursor);
+            return;
+        }
 
         const div = document.createElement('div');
 
@@ -257,6 +327,112 @@ function runReportSort() {
         evtSource.close();
         runBtn.disabled = false;
     };
+}
+
+function runReportSort() {
+    const logType  = document.getElementById('logType').value;
+    const dateFrom = document.getElementById('dateFrom').value.trim();
+    const dateTo   = document.getElementById('dateTo').value.trim();
+
+    if (!dateFrom || !dateTo) {
+        document.getElementById(dateFrom ? 'dateTo' : 'dateFrom').focus();
+        return;
+    }
+
+    const params = new URLSearchParams({ log_type: logType, date_from: dateFrom, date_to: dateTo });
+    streamRun(`/api/scripts/reportsort?${params}`,
+              document.getElementById('terminal'),
+              document.getElementById('runBtn'));
+}
+
+// ── Single-contract card ────────────────────────────────────────────────────
+const esc = s => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+const cInput    = document.getElementById('contractSearch');
+const cDropdown = document.getElementById('contractDropdown');
+let _cTimer = null;
+let _selectedContract = null;
+
+function selectContract(r) {
+    _selectedContract = r;
+    cInput.value = r.code + (r.description ? ' — ' + r.description : '');
+    cDropdown.style.display = 'none';
+    // Prefill the flight dates from the contract header; still editable.
+    if (r.date_start) document.getElementById('cDateFrom').value = r.date_start;
+    if (r.date_end)   document.getElementById('cDateTo').value   = r.date_end;
+}
+
+async function searchContracts() {
+    const q = cInput.value.trim();
+    if (q.length < 2) { cDropdown.style.display = 'none'; return; }
+    const resp = await fetch(`/api/traffic/contract-search?q=${encodeURIComponent(q)}`);
+    if (!resp.ok) return;
+    const rows = await resp.json();
+    if (!rows.length) {
+        cDropdown.innerHTML = '<div class="dropdown-item"><span class="dropdown-desc">No contracts found.</span></div>';
+    } else {
+        // data-idx + delegation, never an inline onclick with the code
+        // interpolated in — a description like "McDonald's …" breaks the handler.
+        cDropdown.innerHTML = rows.map((r, i) =>
+            `<div class="dropdown-item" data-idx="${i}">
+                <div class="dropdown-code">${esc(r.code)}</div>
+                <div class="dropdown-desc">${esc(r.description || '')} &nbsp;·&nbsp; ${esc(r.date_start)} – ${esc(r.date_end)}</div>
+            </div>`
+        ).join('');
+        cDropdown.querySelectorAll('.dropdown-item[data-idx]').forEach(el => {
+            el.addEventListener('click', () => selectContract(rows[+el.dataset.idx]));
+        });
+    }
+    cDropdown.style.display = 'block';
+}
+
+cInput.addEventListener('input', () => {
+    _selectedContract = null;
+    clearTimeout(_cTimer);
+    if (!cInput.value.trim()) { cDropdown.style.display = 'none'; return; }
+    _cTimer = setTimeout(searchContracts, 350);
+});
+cInput.addEventListener('keydown', e => {
+    if (e.key === 'Escape') cDropdown.style.display = 'none';
+});
+document.addEventListener('click', e => {
+    if (!e.target.closest('#contractSearch') && !e.target.closest('#contractDropdown'))
+        cDropdown.style.display = 'none';
+});
+
+function runContractSort() {
+    if (!_selectedContract) { cInput.focus(); return; }
+    const dateFrom = document.getElementById('cDateFrom').value.trim();
+    const dateTo   = document.getElementById('cDateTo').value.trim();
+    if (!dateFrom || !dateTo) {
+        document.getElementById(dateFrom ? 'cDateTo' : 'cDateFrom').focus();
+        return;
+    }
+
+    const dls = document.getElementById('cDownloads');
+    dls.innerHTML = '';
+    dls.classList.remove('visible');
+
+    const params = new URLSearchParams({
+        log_type:      document.getElementById('cLogType').value,
+        date_from:     dateFrom,
+        date_to:       dateTo,
+        contract_id:   _selectedContract.id,
+        contract_code: _selectedContract.code,
+    });
+
+    streamRun(`/api/scripts/reportsort?${params}`,
+              document.getElementById('cTerminal'),
+              document.getElementById('cRunBtn'),
+              (token, name) => {
+                  const a = document.createElement('a');
+                  a.className = 'dl-link';
+                  a.href = `/api/scripts/reportsort/download?token=${token}&name=${encodeURIComponent(name)}`;
+                  a.textContent = '⬇ ' + name;
+                  dls.appendChild(a);
+                  dls.classList.add('visible');
+              });
 }
 </script>
 

@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading as _threading
 import time as _time
 import uuid as _uuid
@@ -25,12 +26,27 @@ from fastapi import (
     Request,
     UploadFile,
 )
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 _src_path = Path(__file__).parent.parent.parent
 if str(_src_path) not in sys.path:
     sys.path.insert(0, str(_src_path))
+
+# Per-run scratch for single-contract reportsort pulls, served back as downloads.
+_REPORTSORT_TMP = Path(tempfile.gettempdir()) / "ctv_reportsort"
+_REPORTSORT_TTL = 24 * 3600  # a download link stays good for a day
+
+
+def _sweep_reportsort_tmp() -> None:
+    """Drop single-contract pull folders older than the TTL. Best-effort."""
+    try:
+        cutoff = _time.time() - _REPORTSORT_TTL
+        for d in _REPORTSORT_TMP.glob("*"):
+            if d.is_dir() and d.stat().st_mtime < cutoff:
+                shutil.rmtree(d, ignore_errors=True)
+    except OSError:
+        pass
 
 # ── Etere web session cache ──────────────────────────────────────────────────
 # One persistent login shared across all traffic-assign calls.
@@ -1236,6 +1252,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         log_type: str = Query(...),
         date_from: str = Query(...),
         date_to: str = Query(...),
+        contract_id: Optional[int] = Query(None),
+        contract_code: str = Query(""),
     ):
         project_root = Path(__file__).parent.parent.parent.parent
         script_path = project_root / "scripts" / "run_reportsort.py"
@@ -1246,10 +1264,29 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         if not python_exe.exists():
             python_exe = Path(sys.executable)
 
+        args = [str(python_exe), "-u", str(script_path), log_type, date_from, date_to]
+
+        # Single-contract pull: sandbox the output in a per-run temp dir and
+        # hand the finished workbook back as a download instead of writing it
+        # into the Worldlink K:\!Archives batch folders.
+        out_dir = None
+        token = ""
+        if contract_id:
+            if not contract_code.strip():
+                raise HTTPException(status_code=400, detail="contract_code is required with contract_id")
+            _sweep_reportsort_tmp()
+            token = _uuid.uuid4().hex
+            out_dir = _REPORTSORT_TMP / token
+            out_dir.mkdir(parents=True, exist_ok=True)
+            args += [
+                "--contract-id", str(contract_id),
+                "--contract-code", contract_code,
+                "--output-folder", str(out_dir),
+            ]
+
         async def event_stream():
             process = await asyncio.create_subprocess_exec(
-                str(python_exe), "-u", str(script_path),
-                log_type, date_from, date_to,
+                *args,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 cwd=str(project_root),
@@ -1258,12 +1295,29 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 text = line.decode(errors="replace").rstrip()
                 yield f"data: {text}\n\n"
             await process.wait()
+            if out_dir is not None and process.returncode == 0:
+                for f in sorted(out_dir.glob("*.xlsx")):
+                    yield f"data: [DOWNLOAD:{token}|{f.name}]\n\n"
             yield f"data: [EXIT:{process.returncode}]\n\n"
 
         return StreamingResponse(
             event_stream(),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    @router.get("/api/scripts/reportsort/download")
+    async def reportsort_download(token: str = Query(...), name: str = Query(...)):
+        """Serve a workbook produced by a single-contract reportsort run."""
+        if len(token) != 32 or not all(c in "0123456789abcdef" for c in token):
+            raise HTTPException(status_code=400, detail="Bad token")
+        path = (_REPORTSORT_TMP / token / Path(name).name).resolve()
+        if not str(path).startswith(str(_REPORTSORT_TMP.resolve())) or not path.is_file():
+            raise HTTPException(status_code=404, detail="File not found")
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
     @router.get("/scripts/delete-spots", response_class=HTMLResponse)
