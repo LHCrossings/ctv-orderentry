@@ -215,33 +215,6 @@ function esc(s) {
 function setMsg(html) { document.getElementById('msg').innerHTML = html; }
 
 // ── Standard date-field helpers (same as Assign Traffic / WorldLink Placement) ──
-function parseDateInput(val) {
-    val = val.trim().replace(/[\/\-]/g, '');
-    if (!val) return null;
-    const year = new Date().getFullYear();
-    let m, d, y;
-    if (/^\d{3}$/.test(val)) {           // MDD  e.g. 501 → May 1
-        m = '0' + val.slice(0, 1); d = val.slice(1); y = year;
-    } else if (/^\d{4}$/.test(val)) {    // MMDD
-        m = val.slice(0, 2); d = val.slice(2); y = year;
-    } else if (/^\d{6}$/.test(val)) {    // MMDDYY
-        m = val.slice(0, 2); d = val.slice(2, 4); y = 2000 + parseInt(val.slice(4));
-    } else if (/^\d{8}$/.test(val)) {    // MMDDYYYY
-        m = val.slice(0, 2); d = val.slice(2, 4); y = val.slice(4);
-    } else {
-        return null;
-    }
-    return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-}
-
-function formatDateInput(el) {
-    const parsed = parseDateInput(el.value);
-    if (parsed) {
-        const [y, m, d] = parsed.split('-');
-        el.value = `${m}/${d}/${y}`;
-    }
-}
-
 // ── Contract super-search → ADD to the batch cart ──────────────────────────
 (function wireSearch() {
     const inp  = document.getElementById('searchBox');

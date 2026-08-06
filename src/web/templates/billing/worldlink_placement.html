@@ -112,33 +112,6 @@ body{background:var(--bg-secondary);font-family:'Inter',-apple-system,BlinkMacSy
 </div>
 
 <script>
-function parseDateInput(val) {
-    val = val.trim().replace(/[\/\-]/g, '');
-    if (!val) return null;
-    const year = new Date().getFullYear();
-    let m, d, y;
-    if (/^\d{3}$/.test(val)) {
-        m = '0' + val.slice(0, 1); d = val.slice(1); y = year;
-    } else if (/^\d{4}$/.test(val)) {
-        m = val.slice(0, 2); d = val.slice(2); y = year;
-    } else if (/^\d{6}$/.test(val)) {
-        m = val.slice(0, 2); d = val.slice(2, 4); y = 2000 + parseInt(val.slice(4));
-    } else if (/^\d{8}$/.test(val)) {
-        m = val.slice(0, 2); d = val.slice(2, 4); y = val.slice(4);
-    } else {
-        return null;
-    }
-    return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-}
-
-function formatDateInput(el) {
-    const parsed = parseDateInput(el.value);
-    if (parsed) {
-        const [y, m, d] = parsed.split('-');
-        el.value = `${m}/${d}/${y}`;
-    }
-}
-
 function setStatus(msg, type, detail, extra) {
     const el = document.getElementById('statusArea');
     el.className = `status-area visible ${type}`;

@@ -58,6 +58,12 @@ def create_app(config: ApplicationConfig | None = None) -> FastAPI:
     # (JSON, static assets, SSE streams) are passed through untouched.
     _BH_TAG = b'<script src="/static/js/broadcast-health.js?v=20260721c"></script>'
 
+    # Shared date/time entry helpers (formatDateInput / parseDateInput /
+    # fmtAirtime), previously copy-pasted into a dozen templates. Injected into
+    # <head> rather than before </body> so they are defined before any page's
+    # own inline script runs, not just before its on* handlers fire.
+    _DATE_TAG = b'<script src="/static/js/date-input.js?v=20260806"></script>'
+
     @app.middleware("http")
     async def inject_broadcast_health(request, call_next):
         response = await call_next(request)
@@ -66,8 +72,22 @@ def create_app(config: ApplicationConfig | None = None) -> FastAPI:
         body = b""
         async for chunk in response.body_iterator:
             body += chunk
-        if b"</body>" in body:
-            body = body.replace(b"</body>", _BH_TAG + b"</body>", 1)
+        # Inject before the LAST </body>, not the first. make_goods.html builds
+        # its PDF export as a JS template literal that contains a whole
+        # "</body></html>" — injecting at the first match put a literal
+        # </script> inside that string, which ends the inline script block at
+        # the HTML-parser level and killed every bit of JS on the page. The
+        # real </body> is always the last one. (</head> is safe as a first
+        # match: the document head precedes any body script content.)
+        def _inject_last(html: bytes, needle: bytes, tag: bytes) -> bytes:
+            i = html.rfind(needle)
+            return html if i == -1 else html[:i] + tag + html[i:]
+
+        if b"</head>" in body:
+            body = body.replace(b"</head>", _DATE_TAG + b"</head>", 1)
+        else:
+            body = _inject_last(body, b"</body>", _DATE_TAG)
+        body = _inject_last(body, b"</body>", _BH_TAG)
         headers = dict(response.headers)
         headers.pop("content-length", None)  # body length changed; let Response recompute
         return Response(content=body, status_code=response.status_code,
