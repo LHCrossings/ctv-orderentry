@@ -156,11 +156,15 @@
     <div class="fetch-bar">
       <div class="field-group">
         <label>Start date (M/D/YYYY)</label>
-        <input id="fetch-start" placeholder="6/1/2026"/>
+        <input id="fetch-start" placeholder="6/1/2026" autocomplete="off"
+               onblur="formatDateInput(this)"
+               onkeydown="if(event.key==='Enter'){formatDateInput(this);}"/>
       </div>
       <div class="field-group">
         <label>End date (M/D/YYYY)</label>
-        <input id="fetch-end" placeholder="6/28/2026"/>
+        <input id="fetch-end" placeholder="6/28/2026" autocomplete="off"
+               onblur="formatDateInput(this)"
+               onkeydown="if(event.key==='Enter'){formatDateInput(this);}"/>
       </div>
       <button class="btn btn-primary" id="btn-fetch">Fetch post logs</button>
       <span class="status" id="fetch-status"></span>
@@ -198,6 +202,53 @@ const $ = id => document.getElementById(id);
 function fmt_dollars(v) {
   if (v === null || v === undefined) return '—';
   return '$' + Number(v).toLocaleString('en-US', {minimumFractionDigits: 2});
+}
+
+// ── Date digit-entry ───────────────────────────────────────────────────────
+// Same behaviour as the date fields elsewhere in the portal: type 0629 and
+// tab out to get 06/29/2026. Unparseable input is left untouched rather than
+// mangled, so a half-typed value survives an accidental blur.
+function parseDateInput(val) {
+  val = (val || '').trim();
+  if (!val) return null;
+  const year = new Date().getFullYear();
+  let m, d, y;
+
+  const parts = val.split(/[\/\-]/);
+  if (parts.length === 2 || parts.length === 3) {
+    // Separator form (6/29/2026, 6-29-26, 6/29). Handled before the digit
+    // branches because stripping the separators first leaves an ambiguous
+    // 7-digit string that matches nothing — which is why this page's own
+    // prefilled "6/1/2026" used to stay unformatted.
+    if (!parts.every(p => /^\d{1,4}$/.test(p))) return null;
+    m = +parts[0];
+    d = +parts[1];
+    y = parts.length === 3 ? +parts[2] : year;
+    if (y < 100) y += 2000;
+  } else if (/^\d{3}$/.test(val)) {    // MDD      e.g. 629 → Jun 29
+    m = +val.slice(0, 1); d = +val.slice(1); y = year;
+  } else if (/^\d{4}$/.test(val)) {    // MMDD     e.g. 0629
+    m = +val.slice(0, 2); d = +val.slice(2); y = year;
+  } else if (/^\d{6}$/.test(val)) {    // MMDDYY
+    m = +val.slice(0, 2); d = +val.slice(2, 4); y = 2000 + +val.slice(4);
+  } else if (/^\d{8}$/.test(val)) {    // MMDDYYYY
+    m = +val.slice(0, 2); d = +val.slice(2, 4); y = +val.slice(4);
+  } else {
+    return null;
+  }
+
+  // Nonsense like 1350 stays as typed rather than becoming "2026-13-50" and
+  // being sent to Etere as a date filter.
+  if (!(m >= 1 && m <= 12) || !(d >= 1 && d <= 31)) return null;
+  return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+function formatDateInput(el) {
+  const parsed = parseDateInput(el.value);
+  if (parsed) {
+    const [y, m, d] = parsed.split('-');
+    el.value = `${m}/${d}/${y}`;
+  }
 }
 
 // ── Load ───────────────────────────────────────────────────────────────────
