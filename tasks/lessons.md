@@ -4,6 +4,41 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## Injecting a `<script>` Tag by String-Replacing `</body>` Must Target the LAST Match
+
+**Session:** date/time helper consolidation — Make Goods found dead (2026-08-06)
+
+**Rule:** `src/web/app.py` injects site-wide `<script>` tags by byte-replacing the
+closing tag (there is no shared base template). It replaced the **first** `</body>`.
+`make_goods.html` builds its PDF export as a **JS template literal containing a whole
+`</body></html>`** — so the tag was injected **inside that string**. The HTML parser
+ends an inline script at the first literal `</script>` regardless of JS context, so
+the block was truncated mid-literal and **every function on the Make Goods page was
+dead** (date fields, `render`, `exportPDF`). Entirely silent — the page rendered, the
+buttons just did nothing. It had been broken since the broadcast-health injection
+shipped, and was only found because a consolidation sweep started checking each page's
+console.
+
+**How to apply:**
+1. Inject at the **last** `</body>` (`html.rfind`), never the first. `</head>` is safe
+   as a first match — the document head always precedes body script content.
+2. Any new site-wide injection must be checked against templates that build HTML
+   strings in JS: `for f in ...; do [ $(grep -c "</body>" $f) -gt 1 ] && echo $f; done`.
+   make_goods.html is currently the only one.
+3. **Diagnostic signature:** a page's entire JS inert with one
+   `Uncaught SyntaxError: Unexpected end of input` pointing inside a template literal,
+   while `node --check` on the extracted `<script>` body **passes**. That contradiction
+   means the served bytes ≠ the template — something was injected into a string. Always
+   compare the *served* page, not the template, when a syntax error makes no sense.
+
+**Related:** a global injected into every page can also collide by name. The shared
+`date-input.js` deliberately omits `formatDate` because `billing/monthly_logs.html`
+defines its own `formatDate(iso)` display helper — and head-injection loads first, so
+the shared one would have won and broken every date on that page. Grep for the name
+before adding anything to a site-wide file.
+
+---
+
 ## A Colour-Coded IO Identifies the CREATIVE, Not the ISCI — Language Comes From the Airtime
 
 **Session:** Admerasia Chinese IO (Beverages August Window, contract 2999) — Lee 2026-08-03
