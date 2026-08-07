@@ -126,8 +126,14 @@ class OrderScanner:
         self._incoming_dir = incoming_dir
 
     def _cache_file(self) -> Path:
-        # Stored in incoming's parent so it never shows up in the scan listing.
-        return self._incoming_dir.parent / _SCAN_CACHE_NAME
+        # Stored INSIDE the scanned directory, dot-prefixed so it is skipped when
+        # building the file list below (and by the web queue's stray-row filter).
+        # It used to live in the parent to stay out of the listing, but the web UI
+        # also scans incoming/Entered and incoming/Used — whose parent IS incoming.
+        # So those scans dropped a .scan_cache.json into the incoming root (showing
+        # up in "[SCAN] Files found") and, sharing one path, clobbered each other's
+        # cache on every load, re-OCR'ing files that were already classified.
+        return self._incoming_dir / _SCAN_CACHE_NAME
 
     def _load_scan_cache(self) -> dict:
         try:
@@ -163,7 +169,11 @@ class OrderScanner:
 
         # Use iterdir() instead of glob() — glob() silently fails on Windows
         # for filenames containing special characters like &.
-        _all = [f for f in self._incoming_dir.iterdir() if f.is_file()]
+        # Dotfiles are never orders (and one of them is our own scan cache).
+        _all = [
+            f for f in self._incoming_dir.iterdir()
+            if f.is_file() and not f.name.startswith('.')
+        ]
         if _all:
             print(f"[SCAN] Files found: {[f.name for f in _all]}")
         else:

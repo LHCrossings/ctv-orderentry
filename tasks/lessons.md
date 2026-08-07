@@ -4,6 +4,76 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Prompt Phrased as a Question Gets Answered "y" — Never `resp if resp else default`
+
+**Session:** DART died on `int('y')` after the whole gather was answered (2026-08-07)
+
+**Rule:** `Use stored customer ID '426'? [Enter=yes / type new ID]:` invites `y`, and
+`customer_id = resp if resp else stored_id` stored the literal string **"y"**. It
+survived the entire gather, the separation confirm, and the Admerasia order ahead of
+it, then died on `int(customer_id)` inside `_create_dart_contract_direct` — after
+Lee had answered every other question. **DART and Polaris both had it**, a
+copy-paste family; lesson #6 (the date-override `y`/`yes` rule) had been applied to
+Polaris's date prompts but never to either customer-ID prompt.
+
+**How to apply:**
+1. Use the shared **`customer_defaults.prompt_customer_id(default)`** — bracket-default
+   phrasing (`Customer ID [426]:`, lesson #9), Enter/`y`/`yes`/`Y` all accept the
+   default, and it **validates numeric and re-prompts**, so a bad ID fails at gather
+   instead of mid-entry. Never re-implement it per parser.
+2. A prompt whose answer feeds `int()`/`Decimal()`/`strptime()` must validate at the
+   prompt. "Fail where the human is standing" — a gather-time re-prompt costs one
+   keystroke; a processing-time crash costs the whole batch's worth of answers.
+3. **Phrase prompts so the default is a value, not a yes/no.** `[426]:` cannot be
+   answered "y" meaningfully; `Use 426?` invites it.
+4. When you fix a prompt like this, `grep -rn "Enter=yes"` for the siblings — that's
+   how both files were found in one pass.
+
+**Also fixed here:** DART's new-customer branch prompted for a description prefix and
+**discarded it** (`desc_name` assigned, never used — ruff had been flagging it). It
+now reaches `description_name` in customers.db, so the next order defaults correctly
+instead of re-asking. An "ask the user then throw it away" bug is invisible until
+someone reads the lint.
+
+---
+
+## A Parser Sidecar Left in `incoming/` Renders as a PENDING Order Forever
+
+**Session:** "the jsons still show up as pending after processing" (2026-08-07)
+
+**Rule:** Entry moves the IO to `Entered/` but `_move_io_to_entered` moved **only the
+IO**, stranding `<io>.adm.json` (Admerasia vision cache) in incoming. The orders
+queue deliberately gives every unclassifiable file a row so the badge can't inflate
+invisibly — and its filter listed only `.manifest.json` and `.ai.json`. So the
+orphaned cache rendered as a pending **"Unrecognized file"** that outlived its order
+and could only be cleared by hand. Worse, once the IO has moved, **nothing else keys
+on its name**, so no sweep would ever reclaim it.
+
+**How to apply:**
+1. **`backwrite_manifest.SIDECAR_SUFFIXES` is the single list** (`.manifest.json`,
+   `.adm.json`, `.adm-legend.json`, `.ai.json`, `.wl.json`, `.overrides.json`). The
+   move and the queue's stray-row filter both read it, so they cannot drift. **Add a
+   new sidecar suffix there, not at the use sites** — the hand-listed subset is
+   exactly what caused this.
+2. `move_sidecars()` travels with the IO on entry, and `_sweep_entered_strays()` runs
+   it **unconditionally** (not only when the IO is still stray) so already-orphaned
+   sidecars self-heal on the next queue load.
+3. **A file-producing feature owes the cleanup path too.** Any new `<file>.x.json`
+   cache must be registered in `SIDECAR_SUFFIXES` in the same change, or it becomes a
+   permanent phantom pending order.
+
+**Same family, found alongside:** `OrderScanner._cache_file()` stored
+`.scan_cache.json` in the scanned directory's **parent** to keep it out of the
+listing — but the web UI also scans `incoming/Entered` and `incoming/Used`, whose
+parent IS `incoming`. So those scans dropped a cache into the incoming root (visible
+in `[SCAN] Files found`) and, sharing one path, **clobbered each other's cache every
+queue load**, re-OCR'ing already-classified files. Verified live: incoming's cache
+held entries for files in `Used/`. Now stored **inside** the scanned directory, with
+dotfiles skipped when building the file list. **A "put it in the parent" trick breaks
+the moment the parent is itself a scanned directory.**
+
+---
+
 ## A Test Reading `os.environ` Inherits the Developer's `.env` — Clear Opt-In Flags in conftest
 
 **Session:** `test_scan_ignores_non_pdf_files` failed in a full run, passed alone (2026-08-07)

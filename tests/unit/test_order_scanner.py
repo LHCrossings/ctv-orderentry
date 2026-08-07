@@ -110,6 +110,36 @@ class TestOrderScanner:
         assert len(orders) == 1
         assert orders[0].pdf_path.suffix == ".pdf"
 
+    def test_scan_cache_stays_inside_its_own_directory(
+        self, mock_detection_service, incoming_dir
+    ):
+        """Each scanned directory owns its cache, and never sees it as a file.
+
+        The cache used to live in the scanned directory's PARENT to keep it out
+        of the listing — but the web UI also scans incoming/Entered and
+        incoming/Used, whose parent IS incoming. So those scans dropped a
+        .scan_cache.json into the incoming root and, sharing one path, clobbered
+        each other's cache on every queue load.
+        """
+        from orchestration.order_scanner import _SCAN_CACHE_NAME
+
+        sub = incoming_dir / "Entered"
+        sub.mkdir()
+        (incoming_dir / "a.pdf").touch()
+        (sub / "b.pdf").touch()
+
+        for directory in (incoming_dir, sub):
+            orders = OrderScanner(mock_detection_service, directory).scan_for_orders()
+            # The cache is a dotfile, so it is never mistaken for an order...
+            assert [o.pdf_path.name for o in orders] == [
+                "a.pdf" if directory is incoming_dir else "b.pdf"
+            ]
+            # ...and it lands in the directory that was scanned.
+            assert (directory / _SCAN_CACHE_NAME).exists()
+
+        # Scanning the subdirectory must not litter its parent.
+        assert not (incoming_dir.parent / _SCAN_CACHE_NAME).exists()
+
     def test_scan_skips_unrecognized_candidate_unless_ai_fallback(
         self, mock_detection_service, incoming_dir, monkeypatch
     ):

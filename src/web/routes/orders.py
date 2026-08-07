@@ -75,6 +75,7 @@ def _invalidate_etere_session():
         _etere_session_state["born_at"] = 0.0
 
 from browser_automation import language_windows as _lw
+from business_logic.services.backwrite_manifest import SIDECAR_SUFFIXES, move_sidecars
 from business_logic.services.pdf_order_detector import PDFOrderDetector
 from orchestration.config import ApplicationConfig
 from orchestration.order_scanner import OrderScanner
@@ -452,21 +453,26 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     def _sweep_entered_strays() -> None:
         """Self-heal: an IO whose manifest is in Entered/ but whose file is
         still in the incoming root was locked (open in a viewer) when entry
-        tried to move it — move it now. Best-effort; retried on every load."""
+        tried to move it — move it now. Best-effort; retried on every load.
+
+        Sidecars are swept unconditionally, not only when the IO itself is still
+        stray: once the IO has moved, nothing else keys on its name, so a
+        `<io>.adm.json` left in incoming would sit there forever."""
         try:
             if not entered_dir.exists():
                 return
             for mf in entered_dir.glob("*.manifest.json"):
-                stray = config.incoming_dir / mf.name[: -len(".manifest.json")]
-                if not stray.is_file():
-                    continue
-                dest = entered_dir / stray.name
-                try:
-                    if dest.exists():
-                        dest.unlink()
-                    shutil.move(str(stray), str(dest))
-                except OSError:
-                    pass  # still locked — next load will retry
+                io_name = mf.name[: -len(".manifest.json")]
+                stray = config.incoming_dir / io_name
+                if stray.is_file():
+                    dest = entered_dir / stray.name
+                    try:
+                        if dest.exists():
+                            dest.unlink()
+                        shutil.move(str(stray), str(dest))
+                    except OSError:
+                        pass  # still locked — next load will retry
+                move_sidecars(stray, entered_dir)
         except Exception:  # noqa: BLE001 - a sweep problem must never break the queue
             pass
 
@@ -517,9 +523,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         # These rows render with an "Unknown" badge and the normal Mark
         # Done button, so strays can be cleared from the UI.
         for f in sorted(directory.iterdir()):
+            # SIDECAR_SUFFIXES (not a hand-listed subset) — it previously named
+            # only .manifest.json/.ai.json, so an Admerasia `.adm.json` cache left
+            # in incoming rendered as a pending "Unrecognized file" row that
+            # outlived its order.
             if (not f.is_file() or f.name in listed
                     or f.name.startswith(('.', '~$'))
-                    or f.name.endswith(('.manifest.json', '.ai.json'))):
+                    or f.name.endswith(SIDECAR_SUFFIXES)):
                 continue
             stat = f.stat()
             result.append({

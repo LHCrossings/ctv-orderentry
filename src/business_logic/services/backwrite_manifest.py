@@ -30,6 +30,20 @@ from pathlib import Path
 MANIFEST_VERSION = 1
 ENTERED_DIRNAME = "Entered"
 
+# Every `<io-filename><suffix>` cache/companion a parser or the entry flow may
+# drop beside an IO. These are NOT orders: they must travel with the IO when it
+# moves to Entered/, and must never be counted or listed as a pending order.
+# Add new sidecar suffixes HERE — both the move and the queue's stray-row filter
+# read this one list, so they cannot drift apart.
+SIDECAR_SUFFIXES = (
+    ".manifest.json",     # this module — backwrite manifest
+    ".adm.json",          # admerasia_vision — vision grid cache
+    ".adm-legend.json",   # admerasia_vision — ISCI legend cache
+    ".ai.json",           # ai_parser — AI extraction cache
+    ".wl.json",           # worldlink scan sidecar
+    ".overrides.json",    # per-order user overrides
+)
+
 
 def manifest_path_for(io_path: Path) -> Path:
     """Where the manifest for this IO file lives."""
@@ -108,9 +122,14 @@ def write_backwrite_manifest(orders: list, result) -> Path | None:
 
 
 def _move_io_to_entered(io_path: Path) -> bool:
-    """Move the entered IO next to its manifest — the 'Awaiting Backwrite'
-    queue state (spec Phase 1). Re-entering the same filename (a corrected
-    run) replaces the earlier copy, matching the manifest overwrite.
+    """Move the entered IO — and its parser sidecars — next to its manifest, the
+    'Awaiting Backwrite' queue state (spec Phase 1). Re-entering the same filename
+    (a corrected run) replaces the earlier copy, matching the manifest overwrite.
+
+    Moving the sidecars is not tidiness: a `<io>.adm.json` (or .ai.json, …) left
+    behind in incoming is a file the queue can't classify, so it renders as a
+    pending "Unrecognized file" row that outlives the order it belonged to and
+    can only be cleared by hand.
 
     Best-effort: on Windows the PDF is often still open in a viewer, so a
     locked file is left in place with a note — the orders API sweeps such
@@ -123,11 +142,31 @@ def _move_io_to_entered(io_path: Path) -> bool:
             dest.unlink()
         shutil.move(str(io_path), str(dest))
         print(f"[manifest] moved entered IO to {dest}")
+        move_sidecars(io_path, dest.parent)
         return True
     except OSError as exc:
         print(f"[manifest] NOTE: IO stays in incoming for now ({exc}) — "
               f"it will be swept into Entered/ on the next queue load")
         return False
+
+
+def move_sidecars(io_path: Path, dest_dir: Path) -> None:
+    """Move any `<io-filename><sidecar-suffix>` companions alongside the IO.
+
+    Per-sidecar best-effort — the manifest itself is already written into
+    dest_dir, so a locked cache file must not undo a successful IO move."""
+    for suffix in SIDECAR_SUFFIXES:
+        src = io_path.with_name(io_path.name + suffix)
+        if not src.exists():
+            continue
+        try:
+            target = dest_dir / src.name
+            if target.exists():
+                target.unlink()
+            shutil.move(str(src), str(target))
+            print(f"[manifest] moved sidecar {src.name}")
+        except OSError as exc:
+            print(f"[manifest] NOTE: sidecar {src.name} stays in incoming ({exc})")
 
 
 def write_backwrite_manifests(order_groups: list[list], results: list) -> None:

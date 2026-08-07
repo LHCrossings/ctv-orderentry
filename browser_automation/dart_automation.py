@@ -14,6 +14,7 @@ import sqlite3
 from typing import Optional
 
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+from browser_automation.customer_defaults import prompt_customer_id
 from browser_automation.etere_client import EtereClient
 from browser_automation.parsers.dart_parser import DartOrder, parse_dart_schedule, parse_dart_xlsx
 
@@ -163,19 +164,25 @@ def _upsert_customer(
     customer_id: str,
     customer_name: str,
     abbreviation: str,
+    description_name: str = "",
     db_path: str = CUSTOMER_DB_PATH,
 ) -> None:
-    """Insert or replace DART customer record."""
+    """Insert or replace DART customer record.
+
+    `description_name` is the description prefix the gather asks a first-time
+    customer for. It used to be prompted and then dropped on the floor, so the
+    next run defaulted the description wrongly and asked again.
+    """
     try:
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
         cur.execute(
             """INSERT OR REPLACE INTO customers
                (customer_id, customer_name, order_type, abbreviation,
-                default_market, billing_type,
+                description_name, default_market, billing_type,
                 separation_customer, separation_event, separation_order)
-               VALUES (?, ?, 'dart', ?, 'DAL', 'client', 15, 0, 0)""",
-            (customer_id, customer_name, abbreviation),
+               VALUES (?, ?, 'dart', ?, ?, 'DAL', 'client', 15, 0, 0)""",
+            (customer_id, customer_name, abbreviation, description_name),
         )
         conn.commit()
         conn.close()
@@ -231,18 +238,14 @@ def gather_dart_inputs(xlsx_path: str) -> Optional[dict]:
         print(f"\n[CUSTOMER DB] Found: {existing['customer_name']}")
         print(f"  Customer ID : {stored_id}")
         print(f"  Code prefix : {stored_abbr}")
-        response = input(
-            f"  Use stored customer ID '{stored_id}'? [Enter=yes / type new ID]: "
-        ).strip()
-        if response == "":
-            customer_id = stored_id
-            abbreviation = stored_abbr
-        else:
-            customer_id = response
-            abbreviation = stored_abbr
+        customer_id = prompt_customer_id(stored_id)
+        if not customer_id:
+            print("[CANCELLED] No customer ID entered.")
+            return None
+        abbreviation = stored_abbr
     else:
         print(f"\n[CUSTOMER DB] '{order.client}' not found in database.")
-        customer_id = input("  Enter Etere customer ID: ").strip()
+        customer_id = prompt_customer_id()
         if not customer_id:
             print("[CANCELLED] No customer ID entered.")
             return None
@@ -252,7 +255,7 @@ def gather_dart_inputs(xlsx_path: str) -> Optional[dict]:
         desc_name = input(
             "  Enter description prefix (e.g. 'DART'): "
         ).strip()
-        _upsert_customer(customer_id, order.client, abbreviation)
+        _upsert_customer(customer_id, order.client, abbreviation, desc_name)
 
     # ── Contract code ─────────────────────────────────────────────────────
     default_code = abbreviation or "DART"

@@ -13,6 +13,7 @@ import sqlite3
 from typing import Optional
 
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+from browser_automation.customer_defaults import prompt_customer_id
 from browser_automation.etere_client import EtereClient
 from browser_automation.parsers.polaris_parser import PolarisOrder
 from browser_automation.parsers.polaris_parser import parse_polaris_file as parse_polaris_xlsx
@@ -264,16 +265,16 @@ def gather_polaris_inputs(xlsx_path: str) -> Optional[dict]:
         print(f"\n[CUSTOMER DB] Found: {existing['customer_name']}")
         print(f"  Customer ID : {stored_id}")
         print(f"  Code prefix : {stored_code}")
-        resp = input(
-            f"  Use stored customer ID '{stored_id}'? [Enter=yes / type new ID]: "
-        ).strip()
-        customer_id      = resp if resp else stored_id
+        customer_id = prompt_customer_id(stored_id)
+        if not customer_id:
+            print("[CANCELLED] No customer ID entered.")
+            return None
         code_name        = stored_code
         description_name = stored_desc
         include_market   = stored_mkt
     else:
         print(f"\n[CUSTOMER DB] '{order.advertiser}' not found in database.")
-        customer_id = input("  Enter Etere customer ID: ").strip()
+        customer_id = prompt_customer_id()
         if not customer_id:
             print("[CANCELLED] No customer ID entered.")
             return None

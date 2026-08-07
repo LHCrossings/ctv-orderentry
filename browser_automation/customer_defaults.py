@@ -46,6 +46,38 @@ DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "customers.d
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# GATHER PROMPTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def prompt_customer_id(default_id: str = "") -> Optional[str]:
+    """Ask for the Etere customer ID, accepting the stored default.
+
+    Two traps this exists to close, both of which have bitten us:
+
+    * **"y" is an accept, not an ID.** A prompt phrased as a question invites
+      `y`, and `resp if resp else stored` then stores the literal string "y" —
+      which survives all the way to `int(customer_id)` deep inside processing and
+      dies there, after the operator has already answered every other question.
+      Enter, "y" and "yes" all mean "keep the default". (Same family as the
+      date-override rule in tasks/lessons.md.)
+    * **A non-numeric ID must fail HERE.** An Etere customer id is an integer;
+      validating at gather time turns a mid-entry crash into a re-prompt.
+
+    Returns the id as a numeric string, or None if there is no default and the
+    user enters nothing (caller should treat that as a cancel).
+    """
+    while True:
+        raw = input(f"  Customer ID [{default_id or '?'}]: ").strip()
+        candidate = default_id if not raw or raw.lower() in ("y", "yes") else raw
+        if not candidate:
+            return None
+        if str(candidate).isdigit():
+            return str(candidate)
+        print(f"    '{candidate}' is not a numeric Etere customer ID — "
+              f"enter digits, or press Enter for {default_id or 'no default'}.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # SCHEMA MIGRATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
