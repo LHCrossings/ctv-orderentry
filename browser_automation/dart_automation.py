@@ -75,7 +75,6 @@ def _create_dart_contract_direct(xlsx_path: str, user_input: dict) -> Optional[s
         print(f"[DART DIRECT] ✓ Contract ID={contract_id}")
 
         separation   = user_input.get('separation', (15, 0, 0))
-        duration_str = _secs_to_duration(order.duration_seconds)
         line_num     = 0
 
         for ln in order.lines:
@@ -83,6 +82,9 @@ def _create_dart_contract_direct(xlsx_path: str, user_input: dict) -> Optional[s
             is_bonus     = ln.is_bonus
             booking_code = 10 if is_bonus else 2
             line_desc    = f"BNS {ln.programming}" if is_bonus else f"{ln.programming} {ln.schedule}"
+            # Length is PER LINE on a DART sheet — paid :15s alongside bonus :30s —
+            # so the order-level duration is only the fallback.
+            duration_str = _secs_to_duration(ln.spot_length or order.duration_seconds)
 
             segments = EtereClient.consolidate_weeks(ln.spot_counts, week_dates_str, flight_end_str)
 

@@ -4,6 +4,45 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## An Agency Inserting ONE Column Silently Zeroed Every Rate — Map by Header Label + Reconcile
+
+**Session:** DART Aug/Sept entered $3,000 as $0 on every line (2026-08-07)
+
+**Rule:** `dart_parser` read the rate from a hardcoded `row[3]` (col D). DART inserted
+a **Length** column between Schedule and Rate, so D became `":15s"`, `Decimal(":15s")`
+raised, and a bare `except: rate = Decimal("0")` turned the whole buy into free
+airtime. Contract 3010 entered with **$0 on all 9 lines**. The same order exposed a
+second positional assumption: only the FIRST week date was read and the rest
+**synthesized** as `first + 7i`, so the sheet's real 8/17, **9/14, 9/21** columns
+became 8/17, 8/24, 8/31 and the flight entered as 8/17–9/6 instead of 8/17–9/27 — spots
+in the wrong weeks. Both silent. The April order (DART 2604, $2,000) had entered fine
+because the sheet had no Length column yet.
+
+**How to apply:**
+1. **Map columns by HEADER LABEL, never by index** (`_COLUMN_LABELS` +
+   `_find_header_row`). An agency adding a column is routine and must be a no-op; a
+   *renamed* column must fail loudly (`_require_columns`) rather than fall back to a
+   positional guess.
+2. **Read every week date from its own header cell.** Week columns are NOT necessarily
+   consecutive — this order skips four weeks. Never synthesize `first + 7i`.
+3. **Never `except: → 0` on money.** `_money()` returns **None** for an unreadable
+   cell and a paid line with `None` raises. A zero rate is a legitimate value (bonus),
+   so it can never double as "couldn't read it" — same family as the ANAGRAF-commission
+   and iGraphix net-rate traps.
+4. **Reconcile against the sheet's own arithmetic and RAISE** (the SCWA/SAGENT/Brentan
+   rule, now applied here): per line `rate × units == Total Cost` and
+   `sum(week columns) == Total Units`, plus the whole order against the **PAID summary
+   row's Total Cost**. Any of those three would have caught this at parse time. Verified:
+   relabel/blank the rate column and the parse now refuses instead of entering $0.
+5. **Spot length is PER LINE** (paid :15s alongside bonus :30s) — `DartLine.spot_length`,
+   with the order-level duration as fallback. Same lesson as the Charmaine/XML per-line
+   length note.
+6. **Diagnostic signature:** the gather summary printed `$0/spot` and `Cost: $0.00`
+   **before** entry. A totals line reading $0 on a real buy is a parse failure, not a
+   display quirk — stop and reconcile before answering the prompts.
+
+---
+
 ## Confirmation Prompts Need a GUESS From Every Source the Parser Already Has
 
 **Session:** Admerasia contract 3009 — six "[?]" language prompts (2026-08-07)
