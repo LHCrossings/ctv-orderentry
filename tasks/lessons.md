@@ -43,6 +43,51 @@ because the sheet had no Length column yet.
 
 ---
 
+## When a Vendor Tool Refuses, Diff It Against a WORKING Peer Before Believing the Message
+
+**Session:** Etere refused the WDC/MMT program-grid copy, ">24 hours" (2026-08-07)
+
+**Rule:** Etere's Weekly Schedule refused to copy WDC and MMT with *"there are some days
+with a duration greater than 24 hours"* listing 12/28/2026–1/3/2027. **The claim was
+false.** Every one of those days measured exactly 24:00:00 three independent ways (raw
+`traffic_block` durations + offsets, Etere's own `trf_getDayStructureList()`, and the
+`Traffic_DayStructure` view), and WDC's week was **block-for-block identical** to CVC's,
+which copied happily. The validation lives in the desktop binary; nothing in the
+database distinguished a station that worked from one that didn't.
+
+**How to apply:**
+1. **Pull a known-good peer as a control immediately.** CVC was the single most valuable
+   query of the session: it turned "is this data corrupt?" into "this data is identical
+   to data that works," which killed four hypotheses at once. Diff broken-vs-working
+   before diffing broken-vs-your-mental-model.
+2. **Trust an error's numbers only after reproducing them.** I found 20 orphan schedules
+   named for exactly those 7 dates whose block totals summed to 30–67 hours — a
+   seductive match to the error. Clearing them changed nothing. A number that matches
+   the symptom is a hypothesis, not a diagnosis.
+3. **The user's observations are the cheapest discriminators.** "It fails for *any*
+   source week" and "it still fails with a different destination" each eliminated a
+   whole theory in one message — faster than any query I ran. Ask what varies.
+4. **Know when to stop root-causing.** After per-date overrides, `hourprev/durprev`,
+   `Users.RolloverFrame`, gaps/overlaps, cross-station blocks and duplicate calendar
+   rows all came back clean, further digging had no path — the code was encrypted/
+   compiled. Reproducing the operation in SQL took ~1s per market and verified clean.
+   Bypass beat root-cause here; say so plainly rather than pretending to a diagnosis.
+
+**Writing to Etere's schedule tables safely** (full detail:
+`tasks/weekly-schedule-control-room.md`, spec for moving this into Control Room):
+grid = `Traffic_Calendar` → `traffic_schedule` → `traffic_scheduleblock` →
+`traffic_block` → `traffic_segment`; blocks/segments are **shared station assets** so a
+copy re-points at the same `ID_TrafficBlock` and never duplicates them;
+`Traffic_DayStructure*` are all **VIEWS** (no cache to rebuild); schedule `Name` is a
+meaningless inherited label (live CVC days read `Schedule of 11/29/2021 usrdvr`) — never
+key on it. Guards that made a 357-day production write safe: targets empty, **zero
+placed spots in range** (`TPALINSE` + `trafficPalinse`), per-day `(block, offset)` diff
+against the source **both directions**, day start 647352 / span 2589408, **assert the
+weekday pattern varies** (this is what catches Etere's own "one day copied to all
+seven"), one transaction verified before commit, and a restore `.sql` written first.
+
+---
+
 ## Confirmation Prompts Need a GUESS From Every Source the Parser Already Has
 
 **Session:** Admerasia contract 3009 — six "[?]" language prompts (2026-08-07)
