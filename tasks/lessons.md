@@ -4,6 +4,39 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Test Reading `os.environ` Inherits the Developer's `.env` — Clear Opt-In Flags in conftest
+
+**Session:** `test_scan_ignores_non_pdf_files` failed in a full run, passed alone (2026-08-07)
+
+**Rule:** `order_scanner._ai_fallback_enabled()` reads `CTV_AI_FALLBACK` from
+`os.environ` **at call time**. Lee's `.env` has it ON, and anything calling
+`load_dotenv()` — importing `etere_direct_client`, or
+`tests/integration/test_customer_repository.py` — leaks it into the whole pytest
+process. `tests/integration` sorts before `tests/unit`, so a full run silently
+turned the AI fallback on underneath the scanner test (an unidentifiable
+`image.jpg` became an AI_FALLBACK order instead of being skipped) while
+`pytest tests/unit` alone passed. **A test that passes alone and fails in the suite
+is almost never about the test — look for global state, usually env or a module
+singleton, set by whatever ran before it.**
+
+**How to apply:**
+1. `tests/conftest.py` has an **autouse** fixture clearing every opt-in routing flag
+   (`CTV_AI_FALLBACK`, `CTV_CHARMAINE_AI`) via `monkeypatch.delenv(..., raising=False)`.
+   Tests must exercise documented DEFAULT behavior, never the developer's `.env`.
+   Because it's monkeypatch, the undo also stops a test that calls `load_dotenv()`
+   mid-run from leaking into its successors. **Add any new env-gated flag here.**
+2. A test wanting the flag ON sets it explicitly (`monkeypatch.setenv`) — and pin
+   the behavior on BOTH sides of the flag, which is what the accidental version was
+   testing all along without saying so.
+3. Beware a stale test NAME masking the real contract: "ignores non-PDF files" was
+   never true — the scanner deliberately accepts `.xml`/`.jpg`/`.png`/`.xlsx`/`.xlsm`.
+   `.txt`/`.csv` are never candidates; a `.jpg` IS a candidate and is skipped only
+   because nothing identifies its order type. Two different rules, one assertion.
+4. Verify an ordering fix by running the failing pair in **both** orders, and the
+   suite with the flags **pre-set in the ambient env** — not just `pytest tests`.
+
+---
+
 ## A Validation Table Keyed to ONE Channel Must Take the Market — DAL Programs Different Dayparts
 
 **Session:** DART Aug/Sept flagged 3 correct lines; Admerasia Seattle unreadable (2026-08-07)

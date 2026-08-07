@@ -92,8 +92,13 @@ class TestOrderScanner:
         assert all(order.status == OrderStatus.PENDING for order in orders)
 
     def test_scan_ignores_non_pdf_files(self, mock_detection_service, incoming_dir):
-        """Should ignore files that aren't PDFs."""
-        # Create various files
+        """Should ignore files it cannot route to a parser.
+
+        The scanner considers .pdf, .xml and .jpg/.png/.xlsx/.xlsm — NOT every
+        extension — so two different rules are at work here and the test pins
+        both: .txt/.csv are never candidates at all, while .jpg IS a candidate but
+        gets skipped because its filename identifies no order type.
+        """
         (incoming_dir / "order.pdf").touch()
         (incoming_dir / "document.txt").touch()
         (incoming_dir / "image.jpg").touch()
@@ -102,9 +107,28 @@ class TestOrderScanner:
         scanner = OrderScanner(mock_detection_service, incoming_dir)
         orders = scanner.scan_for_orders()
 
-        # Should only find the PDF
         assert len(orders) == 1
         assert orders[0].pdf_path.suffix == ".pdf"
+
+    def test_scan_skips_unrecognized_candidate_unless_ai_fallback(
+        self, mock_detection_service, incoming_dir, monkeypatch
+    ):
+        """CTV_AI_FALLBACK routes an unidentifiable candidate to the AI extractor.
+
+        This is the flag whose leakage out of a developer's .env used to make the
+        suite order-dependent, so pin the behavior on BOTH sides of it rather than
+        letting an ambient env var decide.
+        """
+        (incoming_dir / "image.jpg").touch()
+        scanner = OrderScanner(mock_detection_service, incoming_dir)
+
+        # Default (flag cleared by the autouse conftest fixture): skipped.
+        assert scanner.scan_for_orders() == []
+
+        monkeypatch.setenv("CTV_AI_FALLBACK", "1")
+        orders = scanner.scan_for_orders()
+        assert len(orders) == 1
+        assert orders[0].order_type == OrderType.AI_FALLBACK
 
     def test_scan_with_different_order_types(self, mock_detection_service, incoming_dir):
         """Should detect different order types."""
