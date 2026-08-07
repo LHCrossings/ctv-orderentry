@@ -168,12 +168,19 @@ def _line_hhmm_range(time_str: str):
         return None
 
 
+# Order types that book The Asian Channel (DAL), whose programming schedule is
+# entirely different from Crossings TV's. Used only when a line carries no market
+# of its own — validating a DAL order against the CTV windows flags every line.
+_DAL_ORDER_TYPES = {"DART", "WORLDLINK"}
+
+
 def find_language_window_issues(file_path, order_type: str) -> list[str]:
     """UNIVERSAL pre-entry validation: return a message for every PAID line whose
-    ordered daypart falls outside its language's Crossings airing window (a messy
-    IO, e.g. a Filipino spot booked in the 7p-12a Chinese slot). Bonus/ROS lines
-    are exempt. Best-effort — returns [] on any parse/validation error so it can
-    never block entry. Works for any registered parser via the shared normalizer.
+    ordered daypart falls outside its language's airing window on the channel it
+    was booked on (a messy IO, e.g. a Filipino spot booked in the 7p-12a Chinese
+    slot). Bonus/ROS lines are exempt. Best-effort — returns [] on any
+    parse/validation error so it can never block entry. Works for any registered
+    parser via the shared normalizer.
     """
     try:
         from browser_automation.language_windows import check_language_window
@@ -185,6 +192,14 @@ def find_language_window_issues(file_path, order_type: str) -> list[str]:
     lines: list = list(detail.get("lines") or [])
     for so in (detail.get("sub_orders") or []):
         lines.extend(so.get("lines") or [])
+    # Channel fallback for lines with no market of their own: the order's markets
+    # if they are all DAL, else the order type's own channel.
+    order_markets = {_str(m).upper() for m in (detail.get("markets") or []) if _str(m)}
+    order_market = (
+        "DAL" if order_markets == {"DAL"}
+        or (not order_markets and order_type.upper() in _DAL_ORDER_TYPES)
+        else None
+    )
     issues: list[str] = []
     for ln in lines:
         if ln.get("is_bonus"):
@@ -195,10 +210,10 @@ def find_language_window_issues(file_path, order_type: str) -> list[str]:
         rng = _line_hhmm_range(_str(ln.get("time")))
         if not rng:
             continue
-        msg = check_language_window(lang, rng[0], rng[1])
+        mkt = _str(ln.get("market"))
+        msg = check_language_window(lang, rng[0], rng[1], market=mkt or order_market)
         if msg:
             ln_no = ln.get("line_number") or "?"
-            mkt = _str(ln.get("market"))
             issues.append(f"Line {ln_no} ({mkt} {lang}): {msg}")
     return issues
 

@@ -26,6 +26,22 @@ from domain.enums import OrderType
 from domain.value_objects import OrderInput
 
 
+def _gathered_code(order_input: Any, fallback: Any) -> str:
+    """The contract code the user confirmed at gather time.
+
+    Contract.contract_number must be the CODE (what Etere stores in
+    COD_CONTRATTO), never the DB id — `_enrich_results` resolves the id from it,
+    and everything keyed on etere_id afterwards depends on that. Gathers spell
+    the key either 'contract_code' or 'code'.
+    """
+    if isinstance(order_input, dict):
+        for key in ("contract_code", "code", "order_code"):
+            val = order_input.get(key)
+            if val:
+                return str(val)
+    return str(fallback)
+
+
 def _print_pre_close_summary(results: list[ProcessingResult]) -> None:
     """Print contract codes before the browser close prompt appears."""
     contracts = [c for r in results if r.success for c in r.contracts]
@@ -390,6 +406,17 @@ class OrderProcessingService:
                             f"SELECT TOP 1 ID_CONTRATTITESTATA FROM CONTRATTITESTATA "
                             f"WHERE COD_CONTRATTO LIKE {ph} ORDER BY ID_CONTRATTITESTATA DESC",
                             (like,),
+                        )
+                        row = cur.fetchone()
+                    if not row and code.isdigit():
+                        # A handler reported the Etere DB id where the code belongs.
+                        # Resolve it as an id so the etere_id-keyed post-passes (the
+                        # language catalog above all) still run instead of silently
+                        # skipping the contract. Fix the handler too — this is a net.
+                        cur.execute(
+                            f"SELECT TOP 1 ID_CONTRATTITESTATA FROM CONTRATTITESTATA "
+                            f"WHERE ID_CONTRATTITESTATA = {ph}",
+                            (int(code),),
                         )
                         row = cur.fetchone()
                     if row:
@@ -1563,7 +1590,17 @@ class OrderProcessingService:
             )
 
             success = bool(contract_num)
-            contracts = [Contract(contract_number=str(contract_num), order_type=OrderType.ADMERASIA)] if contract_num else []
+            # process_admerasia_order returns the Etere DB *id*, not the code, so it
+            # goes in etere_id — reporting it as contract_number would leave etere_id
+            # unresolvable (no COD_CONTRATTO matches "3008") and every etere_id-keyed
+            # post-pass, notably the language catalog, would silently skip this order.
+            contracts = [
+                Contract(
+                    contract_number=_gathered_code(order.order_input, contract_num),
+                    order_type=OrderType.ADMERASIA,
+                    etere_id=int(contract_num),
+                )
+            ] if contract_num else []
 
             if success:
                 print(f"\n✓ Admerasia order processed successfully — contract {contract_num}")
@@ -2290,7 +2327,16 @@ class OrderProcessingService:
             else:
                 print("\n✗ DART order processing failed")
 
-            contracts = [Contract(contract_number=str(contract_num), order_type=OrderType.DART)] if success else []
+            # As with Admerasia: process_dart_order returns the Etere DB id despite its
+            # docstring, so it belongs in etere_id and the gathered code in
+            # contract_number. See the Admerasia handler for why this matters.
+            contracts = [
+                Contract(
+                    contract_number=_gathered_code(order.order_input, contract_num),
+                    order_type=OrderType.DART,
+                    etere_id=int(contract_num),
+                )
+            ] if success else []
             return ProcessingResult(
                 success=success,
                 contracts=contracts,

@@ -4,6 +4,96 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Validation Table Keyed to ONE Channel Must Take the Market — DAL Programs Different Dayparts
+
+**Session:** DART Aug/Sept flagged 3 correct lines; Admerasia Seattle unreadable (2026-08-07)
+
+**Rule:** `check_language_window()` validated every order against `CTV_LANG_WINDOWS`
+with no market argument. The Asian Channel (DAL) programs **completely different**
+dayparts — DAL Cantonese airs 17:00-18:00 where CTV Cantonese airs 19:00-20:00 — so
+a perfectly correct DART order had **every paid line flagged** and Lee declined it at
+the prompt. The check is universal (runs for all parsers) but the table it consulted
+was not.
+
+**How to apply:**
+1. `check_language_window(lang, from, to, market=...)`. `find_language_window_issues`
+   resolves the market per line (`ln['market']`), falling back to the order's
+   `markets` when they're all DAL, then to `_DAL_ORDER_TYPES = {DART, WORLDLINK}`
+   (DART's normalized lines carry no per-line market). The message names the channel.
+2. **The day-less envelope is now DERIVED, not mirrored.** `_envelope()` unions each
+   language's day-aware windows across all days — verified to reproduce all 10 old
+   hand-written CTV entries exactly, so the mirror was pure drift risk (the very risk
+   the old docstring warned about). Add a language window in ONE place now.
+3. Ordered ranges go through `_win_bounds` too, so a DAL post-midnight daypart and a
+   wrapping range (`20:00-02:00`) no longer silently fail to match anything.
+4. **Sanity check when a validator fires on an order you believe is correct: confirm
+   it is validating against the right channel/market before assuming the IO is messy.**
+   A validator that flags *every* line is almost always looking at the wrong table.
+
+---
+
+## A Grid Digit Can Be GLUED to Overlapping Text by `extract_words` — Tolerance, Not Font
+
+**Session:** Admerasia Vietnamese Seattle refused entry (2026-08-07)
+
+**Rule:** Admerasia's positional reader took `extract_words()` at pdfplumber's default
+`y_tolerance=3`. The program-name column **physically overlaps the first calendar
+columns** in these PDFs, and a grid row's spot digits sit only ~1.1pt above the title
+text on the same visual line — so a spot over the title merged into one word:
+`"Life"` + `"1"` → **`"Life1"`**, which fails `.isdigit()` and **the spot vanishes**.
+Row 4 summed to 1 against a printed total of 2 and the reconciliation guard correctly
+refused the whole order. It looked like a vision/metadata problem; it was neither.
+
+**How to apply:**
+1. `extract_words(y_tolerance=SPOT_Y_TOL)` with `SPOT_Y_TOL = 0.5` — below the ~1.1pt
+   digit/title offset, above the intra-word jitter (which is **zero**: a word is one
+   text-show operator, so all its chars share an exact `top`).
+2. Do **not** discriminate by font, even though the spot digits here are
+   Calibri-Bold 3.84 vs Calibri 4.56 body text — that's the "detect by content, not
+   encoding trait" trap. Geometry is the durable signal.
+3. **Regression-sweep every fixture** before shipping a coordinate/tolerance change
+   (the same discipline as the `round()`-clustering lesson): 8 Admerasia PDFs, exactly
+   one recovered cell in the target file, the other 7 byte-identical cell-for-cell.
+4. **Diagnostic signature:** the guard reports a row short by exactly the number of
+   spots that sit in the leftmost calendar columns. Dump `extract_words` in the grid
+   band and look for a digit fused to a text word — the digit is present in `.chars`
+   but absent from the word list.
+
+**The guard did its job.** It refused a 11-of-12-spot order rather than entering it
+short. Trust it — when it fires, find the missing digit, never relax the threshold.
+
+---
+
+## `Contract.contract_number` Is the CODE — an Etere DB ID There Silently Kills Every etere_id Post-Pass
+
+**Session:** two orders entered, only one language prompt (2026-08-07)
+
+**Rule:** Lee entered an H&L and an Admerasia contract in one batch and was asked to
+verify line languages for **only the H&L**. `_enrich_results()` resolves
+`Contract.etere_id` by looking the `contract_number` up in `COD_CONTRATTO`; the
+Admerasia handler put the **DB id** ("3008") there, no code matched, `etere_id` stayed
+`None`, and `_catalog_line_languages` — which filters `for c in r.contracts if
+c.etere_id` — skipped the contract **without a word**. DART had the identical bug. The
+new-parser checklist already says "use gathered code, not DB ID"; the cost of breaking
+it is not just a cosmetic summary line, it's every etere_id-keyed post-pass.
+
+**How to apply:**
+1. `contract_number` = the code the user confirmed at gather (`_gathered_code()` reads
+   `contract_code`/`code`/`order_code`). If the automation returns the DB id, pass it
+   as `etere_id=` — the enricher skips contracts that already have one.
+2. **Defensive net in `_enrich_results`:** an all-digits `contract_number` that matches
+   no `COD_CONTRATTO` is looked up as an `ID_CONTRATTITESTATA`, so a future handler
+   regressing this degrades to a wrong summary label instead of a silently skipped
+   language catalog. Fix the handler too — the net is not the fix.
+3. **Diagnostic signature:** the batch summary prints one contract with `(ID: NNNN)`
+   and another as a bare number with no ID. That bare number *is* the ID, and that
+   contract has silently skipped every etere_id-keyed pass.
+4. A post-pass that iterates `if c.etere_id` is an **invisible** dependency on the
+   enricher succeeding. When adding one, decide what it should do when the id is
+   missing — printing a warning beats silence.
+
+---
+
 ## Injecting a `<script>` Tag by String-Replacing `</body>` Must Target the LAST Match
 
 **Session:** date/time helper consolidation — Make Goods found dead (2026-08-06)

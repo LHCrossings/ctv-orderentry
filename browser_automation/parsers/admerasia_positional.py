@@ -22,6 +22,9 @@ from dataclasses import dataclass, field
 
 import pdfplumber
 
+# Word-grouping y-tolerance for the grid read — see read_grid_cells().
+SPOT_Y_TOL = 0.5
+
 
 @dataclass
 class PositionalGrid:
@@ -53,7 +56,14 @@ def read_grid_cells(path: str) -> GridGeometry:
     count reader (`read_grid`) and the traffic colour reader build on this, so the two
     can never drift."""
     with pdfplumber.open(path) as pdf:
-        words = pdf.pages[0].extract_words()
+        # y_tolerance must stay BELOW the ~1.1pt offset between a grid row's spot
+        # digits and the program-name text on the same visual line. The program-name
+        # column physically overlaps the first calendar columns in these PDFs, so at
+        # pdfplumber's default y_tolerance=3 a spot digit sitting over the title gets
+        # GLUED to it into one word ("Life" + "1" -> "Life1"), which then fails
+        # .isdigit() and the spot silently disappears. Intra-word baseline jitter is
+        # zero (a word is one text-show op), so a tight tolerance is safe.
+        words = pdf.pages[0].extract_words(y_tolerance=SPOT_Y_TOL)
 
     digits = [w for w in words if w["text"].isdigit()]
     by_y: dict[int, list] = defaultdict(list)

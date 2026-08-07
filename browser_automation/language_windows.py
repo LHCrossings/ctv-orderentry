@@ -15,13 +15,19 @@ source of truth for those windows and serves two distinct jobs:
    line's ordered daypart matches the language it was booked for, catching messy
    IOs where e.g. a Filipino spot is ordered in the 7p-12a Chinese slot. ROS/bonus
    lines are exempt: they run across the whole window, so their daypart is not
-   meaningful here.
+   meaningful here. Always pass the line's `market`: The Asian Channel programs
+   entirely different dayparts from Crossings TV (DAL Cantonese airs 17:00-18:00
+   where CTV Cantonese airs 19:00-20:00), so validating a DAL order against the CTV
+   windows flags every correct line on it.
 
-The two tables are deliberately different shapes. The day-less one is a coarse
-envelope for validating a whole ordered daypart and its language intervals may
-OVERLAP (Mandarin 20:00-23:59 contains Cantonese 23:30-23:59) — it therefore CANNOT
-be used to identify a language. Only the day-aware table is unambiguous, because
-Cantonese is weekday-only while Mandarin's 23:30-23:59 slice is weekend-only.
+The day-less envelopes (``CTV_LANG_WINDOWS`` / ``DAL_LANG_WINDOWS``) are DERIVED
+from the day-aware tables by :func:`_envelope` — they used to be a second
+hand-written table that could drift. Being a per-language union across all days
+they are strictly coarser than their source, and their intervals may OVERLAP
+(CTV Mandarin 20:00-23:59 contains Cantonese 23:30-23:59), so an envelope can
+validate a whole ordered daypart but can NEVER identify a language. Only the
+day-aware table is unambiguous, because Cantonese is weekday-only while Mandarin's
+23:30-23:59 slice is weekend-only.
 
 Times are broadcast-day 24h "HH:MM" (see the 06:00->30:00 broadcast-day rule in
 ``tasks/lessons.md`` — post-midnight is 24:00-29:59 on the same date).
@@ -101,38 +107,31 @@ _AGGREGATE_LANGS = frozenset({"Chinese", "SouthAsian"})
 _DAL_MARKET_ID = 10
 
 
-def _m(hhmm: str) -> int:
-    h, mnt = hhmm.split(":")
-    return int(h) * 60 + int(mnt)
-
-
-# language -> allowed airing interval(s) on Crossings TV (CTV markets).
-# "Chinese" = the union of Mandarin + Cantonese windows.
-_WINDOWS_HHMM: dict[str, List[Tuple[str, str]]] = {
-    "Chinese":     [("06:00", "08:00"), ("19:00", "23:59")],
-    "Mandarin":    [("06:00", "08:00"), ("20:00", "23:59")],
-    "Cantonese":   [("19:00", "20:00"), ("23:30", "23:59")],
-    "Korean":      [("08:00", "10:00")],
-    "Vietnamese":  [("10:00", "13:00")],
-    "South Asian": [("13:00", "16:00")],
-    "Hindi":       [("13:00", "16:00")],
-    "Punjabi":     [("14:00", "16:00")],
-    "Filipino":    [("16:00", "19:00")],
-    "Hmong":       [("18:00", "20:00")],
-}
-
-CTV_LANG_WINDOWS: dict[str, List[Tuple[int, int]]] = {
-    lang: [(_m(a), _m(b)) for a, b in ivs] for lang, ivs in _WINDOWS_HHMM.items()
-}
+# Spellings a parser/IO may use for a language, mapped to the table's own key.
+_LANG_ALIASES = {"South Asian": "SouthAsian", "Tagalog": "Filipino"}
 
 _TOL_MIN = 1  # allow a 1-minute slop (e.g. 23:59 vs 24:00 rounding)
 
 _FPS = 29.97
 
 
-def windows_for_market(market_id: Optional[int]) -> Dict[str, List[Tuple[Set[str], str, str]]]:
-    """Day-aware window table for a COD_USER market id (10 = DAL, else CTV)."""
-    return DAL_LANG_WINDOWS_BY_DAY if market_id == _DAL_MARKET_ID else CTV_LANG_WINDOWS_BY_DAY
+def _m(hhmm: str) -> int:
+    h, mnt = hhmm.split(":")
+    return int(h) * 60 + int(mnt)
+
+
+def is_dal(market: object) -> bool:
+    """True if `market` names The Asian Channel — a COD_USER id (10) or a code."""
+    if market is None:
+        return False
+    if isinstance(market, int):
+        return market == _DAL_MARKET_ID
+    return str(market).strip().upper() in {"DAL", "TAC"}
+
+
+def windows_for_market(market: object) -> Dict[str, List[Tuple[Set[str], str, str]]]:
+    """Day-aware window table for a market (COD_USER id 10 or code "DAL" = DAL)."""
+    return DAL_LANG_WINDOWS_BY_DAY if is_dal(market) else CTV_LANG_WINDOWS_BY_DAY
 
 
 def _win_bounds(a: str, b: str) -> Tuple[int, int]:
@@ -193,22 +192,79 @@ def classify_language_frames(weekday: str, frames: int, market_id: Optional[int]
     return classify_language(weekday, round(frames / fps / 60), market_id)
 
 
-def check_language_window(language: str, time_from: str, time_to: str) -> Optional[str]:
+def _merge(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
+    """Union of [lo, hi) minute intervals — overlapping and abutting ones merged."""
+    out: List[Tuple[int, int]] = []
+    for lo, hi in sorted(intervals):
+        if out and lo <= out[-1][1]:
+            out[-1] = (out[-1][0], max(out[-1][1], hi))
+        else:
+            out.append((lo, hi))
+    return out
+
+
+def _envelope(table: Dict[str, List[Tuple[Set[str], str, str]]]) -> Dict[str, List[Tuple[int, int]]]:
+    """Day-less validation envelope DERIVED from a day-aware table: per language,
+    the union of its windows across every day, in broadcast-day minutes.
+
+    Deriving it is the whole point — the envelope used to be a second hand-written
+    table and the two could drift silently. It is coarser than its source by
+    construction (a weekday-only window becomes all-week) and so can validate a
+    whole ordered daypart but can NEVER identify a language; only
+    :func:`classify_language` may do that.
+    """
+    return {
+        lang: _merge([_win_bounds(a, b) for _, a, b in wins])
+        for lang, wins in table.items()
+    }
+
+
+CTV_LANG_WINDOWS: Dict[str, List[Tuple[int, int]]] = _envelope(CTV_LANG_WINDOWS_BY_DAY)
+DAL_LANG_WINDOWS: Dict[str, List[Tuple[int, int]]] = _envelope(DAL_LANG_WINDOWS_BY_DAY)
+
+
+def envelope_for_market(market: object) -> Dict[str, List[Tuple[int, int]]]:
+    """Day-less validation envelope for a market (id 10 or code "DAL" = DAL)."""
+    return DAL_LANG_WINDOWS if is_dal(market) else CTV_LANG_WINDOWS
+
+
+def _fmt(minute: int, is_end: bool = False) -> str:
+    """Broadcast-day minute back to "HH:MM" for a message. The post-midnight tail
+    unwraps (25:00 -> "01:00"). An END at exactly 24:00 is written "23:59", the way
+    an order writes end-of-broadcast-day — but a START at 24:00 is plain midnight,
+    so the rule must not be applied to both ends of an interval."""
+    if is_end and minute == 24 * 60:
+        return "23:59"
+    m = minute % (24 * 60)
+    return f"{m // 60:02d}:{m % 60:02d}"
+
+
+def check_language_window(language: str, time_from: str, time_to: str,
+                          market: object = None) -> Optional[str]:
     """Validate a paid line's daypart against its language's airing window(s).
 
     Returns None if the ordered [time_from, time_to] window fits inside one of the
     language's allowed intervals (or the language has no window on file and can't
     be validated). Returns a human-readable mismatch message otherwise.
 
+    `market` selects the schedule to validate against: The Asian Channel (COD_USER
+    10 / "DAL") programs completely different dayparts from Crossings TV, so
+    validating a DAL order against the CTV windows flags every correct line — e.g.
+    DAL Cantonese airs 17:00-18:00 where CTV Cantonese airs 19:00-20:00. Default
+    (None) is CTV.
+
     Args & window strings are broadcast-day 24h "HH:MM".
     """
-    intervals = CTV_LANG_WINDOWS.get(language)
+    envelope = envelope_for_market(market)
+    key = _LANG_ALIASES.get(language, language)
+    intervals = envelope.get(key)
     if not intervals:
         return None  # unmapped language (e.g. Japanese) — nothing to check against
-    lo, hi = _m(time_from), _m(time_to)
+    lo, hi = _win_bounds(time_from, time_to)
     for a, b in intervals:
         if lo >= a - _TOL_MIN and hi <= b + _TOL_MIN:
             return None
-    allowed = ", ".join(f"{a}-{b}" for a, b in _WINDOWS_HHMM[language])
-    return (f"{language} airs {allowed}, but this line is ordered "
+    allowed = ", ".join(f"{_fmt(a)}-{_fmt(b, is_end=True)}" for a, b in intervals)
+    channel = "The Asian Channel" if is_dal(market) else "Crossings TV"
+    return (f"{language} airs {allowed} on {channel}, but this line is ordered "
             f"{time_from}-{time_to}")
