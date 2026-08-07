@@ -4,6 +4,35 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## Confirmation Prompts Need a GUESS From Every Source the Parser Already Has
+
+**Session:** Admerasia contract 3009 — six "[?]" language prompts (2026-08-07)
+
+**Rule:** `_catalog_line_languages` guessed each line's language by scanning the line
+DESCRIPTION. Admerasia line descriptions are pure dayparts (`W 11:30a-12:00p`), so all
+six prompts showed `[?]` and Lee typed `V` six times — while the parsed order carried
+`language = "Vietnamese"` the whole time. A confirmation prompt whose guess is empty
+is barely better than no automation: the human does the work AND the review.
+
+**How to apply:**
+1. Layer the guess, most-specific source first: line description → order-level language
+   from the parser (`_order_language_name` reads `order_input['order'].language`, then
+   `order_input['language']`). `guess_language(desc) or order_guess`. The order hint may
+   NEVER override a line that names its own language — a Chinese IO has per-line
+   Mandarin/Cantonese that must not be flattened to the header's "Chinese".
+2. `order_groups[i]` ↔ `results[i]` in lock-step is the existing contract that
+   `_write_backwrite_manifests` already relies on — reuse it to reach the parsed order
+   rather than inventing a new channel.
+3. **Suppress a guess you know is probably wrong.** `guess_language("Chinese")` returns
+   the combined-block code `M/C`, but a Chinese IO's individual dayparts are Mandarin
+   OR Cantonese (the daypart decides — see the language-window lessons). A wrong guess
+   that **Enter accepts** is worse than `[?]`, which at least forces a decision. The
+   pass prints why it is staying quiet.
+4. When a confirmation prompt shows `[?]`, treat it as a bug report about the guess, not
+   as normal. Ask what the parser already knows that the prompt isn't being told.
+
+---
+
 ## A Prompt Phrased as a Question Gets Answered "y" — Never `resp if resp else default`
 
 **Session:** DART died on `int('y')` after the whole gather was answered (2026-08-07)

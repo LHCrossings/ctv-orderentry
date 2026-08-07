@@ -42,6 +42,27 @@ def _gathered_code(order_input: Any, fallback: Any) -> str:
     return str(fallback)
 
 
+def _order_language_name(orders: list) -> str:
+    """The language the PARSER read off the IO, for the whole order ('Vietnamese').
+
+    Several IO formats state the language once in the header rather than per line —
+    an Admerasia Vietnamese IO describes its lines purely as dayparts
+    ("W 11:30a-12:00p"), so the catalog's description scan finds nothing and every
+    prompt shows "[?]". The order object knows, so use it as the fallback guess.
+
+    Best-effort: '' when the parser has no language field.
+    """
+    for order in orders or []:
+        inp = getattr(order, "order_input", None)
+        if not isinstance(inp, dict):
+            continue
+        parsed = inp.get("order")
+        for candidate in (getattr(parsed, "language", None), inp.get("language")):
+            if candidate and isinstance(candidate, str):
+                return candidate.strip()
+    return ""
+
+
 def _print_pre_close_summary(results: list[ProcessingResult]) -> None:
     """Print contract codes before the browser close prompt appears."""
     contracts = [c for r in results if r.success for c in r.contracts]
@@ -338,7 +359,7 @@ class OrderProcessingService:
             order_groups.append([order])
 
         enriched = self._enrich_results(results)
-        self._catalog_line_languages(enriched)
+        self._catalog_line_languages(enriched, order_groups)
         self._write_backwrite_manifests(order_groups, enriched)
         return enriched
 
@@ -492,12 +513,15 @@ class OrderProcessingService:
             order_groups.append([order])
 
         enriched = self._enrich_results(results)
-        self._catalog_line_languages(enriched)
+        self._catalog_line_languages(enriched, order_groups)
         self._write_backwrite_manifests(order_groups, enriched)
         return enriched
 
     @staticmethod
-    def _catalog_line_languages(results: list["ProcessingResult"]) -> None:
+    def _catalog_line_languages(
+        results: list["ProcessingResult"],
+        order_groups: list[list[Order]] | None = None,
+    ) -> None:
         """Universal per-line language catalog pass (CTV_LineLanguage).
 
         Runs after enrichment for EVERY successful contract, whatever the
@@ -505,7 +529,12 @@ class OrderProcessingService:
         automation already cataloged during entry (wired gathers like
         SCWA/Daviselen write source='entry' themselves), group the rest by
         description, and ask the user to verify each group's language —
-        guessed from the description but NEVER silently assumed.
+        guessed from the description, then from the language the parser read off
+        the IO header, but NEVER silently assumed.
+
+        `order_groups[i]` corresponds to `results[i]` (the caller builds them in
+        lock-step, same contract as _write_backwrite_manifests) and supplies that
+        order-level language. Optional so the signature stays back-compatible.
 
         Interactive only (stdin must be a TTY); best-effort — a failure here
         never fails the entry.
@@ -519,6 +548,17 @@ class OrderProcessingService:
         ]
         if not contract_ids:
             return
+        # etere_id -> language name the parser read off this order's IO, used as
+        # the guess when a line's own description names no language.
+        order_langs: dict[int, str] = {}
+        for orders, r in zip(order_groups or [], results):
+            if not (r and r.success):
+                continue
+            name = _order_language_name(orders)
+            if name:
+                for c in r.contracts:
+                    if c.etere_id:
+                        order_langs[c.etere_id] = name
         # WorldLink is ALWAYS English (business rule) — auto-catalog, no prompt.
         # Also mops up a WL contract's pre-catalog lines during revisions.
         worldlink_ids = {
@@ -568,9 +608,28 @@ class OrderProcessingService:
                         groups.setdefault(desc, []).append(lid)
                     print(f"\n[LANGUAGE] Contract ID {cid}: "
                           f"{len(todo)} line(s) not yet in the language catalog")
+                    # A line's own description wins — it is line-specific, so a
+                    # Chinese IO's per-line Mandarin/Cantonese must never be
+                    # flattened to the header's "Chinese". The order-level language
+                    # only fills in where the description names none at all.
+                    order_guess = guess_language(order_langs.get(cid, ""))
+                    # "Chinese" maps to the combined-block code M/C, but a Chinese
+                    # IO's lines are individually Mandarin OR Cantonese — the
+                    # daypart decides (see the language-window rules in
+                    # tasks/lessons.md). Offering M/C there would be a wrong guess
+                    # that Enter accepts, which is worse than no guess at all.
+                    if order_guess == "M/C":
+                        print(f"[LANGUAGE] IO language: {order_langs[cid]} — not "
+                              f"suggesting a code: each line is Mandarin or "
+                              f"Cantonese depending on its daypart")
+                        order_guess = None
+                    elif order_guess:
+                        print(f"[LANGUAGE] IO language: {order_langs[cid]} "
+                              f"→ suggesting {order_guess} where the line "
+                              f"description doesn't say")
                     verified = confirm_line_languages([
                         {"label": f"{desc or '(no description)'}  ({len(lids)} line(s))",
-                         "guess": guess_language(desc)}
+                         "guess": guess_language(desc) or order_guess}
                         for desc, lids in groups.items()
                     ])
                     rows = {
