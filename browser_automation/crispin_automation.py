@@ -70,6 +70,98 @@ def _fmt_mmddyyyy(d: date) -> str:
     return d.strftime('%m/%d/%Y')
 
 
+# Python weekday() 0=Mon … 6=Sun → the Italian keys parse_day_bits returns.
+_WEEKDAY_KEYS = ('lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom')
+
+
+def _active_days(start: date, end: date, day_bits: dict) -> int:
+    """How many of the line's own days fall in [start, end]."""
+    n, d = 0, start
+    while d <= end:
+        if day_bits.get(_WEEKDAY_KEYS[d.weekday()]):
+            n += 1
+        d += timedelta(days=1)
+    return n
+
+
+def _plan_ranges(consolidated: list[dict], days: str,
+                 start_from: date, line_end: date) -> tuple[list[dict], list[str]]:
+    """Apply a late start date to a line's consolidated week ranges.
+
+    A late IO does not reduce the week's spot count — it compresses those spots
+    into fewer days, so the truncated first week needs a HIGHER max-per-day than
+    the full weeks behind it. `add_contract_line`'s auto-calculation cannot see
+    this: it divides by the day PATTERN's width (M-F → 5) with no idea the line
+    actually opens on a Thursday. So compute max-per-day per range here, and when
+    the truncated week and the full weeks disagree, split the range so the short
+    week gets its own Etere line at its own cap.
+
+    Returns (ranges, notes) where each range carries an explicit `max_daily`, and
+    `notes` records any spots the new start date makes undeliverable.
+    """
+    from math import ceil
+
+    from browser_automation.etere_direct_client import parse_day_bits
+
+    day_bits = parse_day_bits(days)
+    full_active = sum(1 for v in day_bits.values() if v) or 7
+
+    out: list[dict] = []
+    notes: list[str] = []
+
+    def add(d_from: date, d_to: date, spw: int, weeks: int, cap: int, tag: str = "") -> None:
+        out.append({'date_from': d_from, 'date_to': d_to, 'spots_per_week': spw,
+                    'weeks': weeks, 'max_daily': cap, 'tag': tag})
+
+    for rng in consolidated:
+        w0 = _parse_date(rng['start_date'])
+        r_end = min(_parse_date(rng['end_date']), line_end)
+        spw, weeks = rng['spots_per_week'], rng['weeks']
+        mdr_full = max(1, ceil(spw / full_active))
+
+        if r_end < start_from:
+            notes.append(f"{spw * weeks} spot(s) dropped: the week(s) of "
+                         f"{w0.month}/{w0.day} end before the new start")
+            continue
+
+        # Whole weeks that now sit before the start date cannot be delivered.
+        d0 = max(w0, start_from)
+        skipped = (d0 - w0).days // 7
+        if skipped:
+            notes.append(f"{spw * skipped} spot(s) dropped: {skipped} whole week(s) "
+                         f"from {w0.month}/{w0.day} now precede the start date")
+            w0 += timedelta(days=7 * skipped)
+            weeks -= skipped
+
+        if d0 <= w0:                                  # full first week — as before
+            add(d0, r_end, spw, weeks, mdr_full)
+            continue
+
+        # Truncated first week.
+        first_end = min(w0 + timedelta(days=6), r_end)
+        p_active = _active_days(d0, first_end, day_bits)
+        if p_active == 0:
+            notes.append(f"{spw} spot(s) dropped: no {days} day left in the week of "
+                         f"{w0.month}/{w0.day} on or after {d0.month}/{d0.day}")
+            if weeks > 1:
+                add(w0 + timedelta(days=7), r_end, spw, weeks - 1, mdr_full)
+            continue
+
+        mdr_partial = max(1, ceil(spw / p_active))
+        if weeks == 1:
+            add(d0, r_end, spw, 1, mdr_partial,
+                f"short week: {p_active} day(s), {mdr_partial}/day")
+        elif mdr_partial == mdr_full:
+            add(d0, r_end, spw, weeks, mdr_full)
+        else:
+            # The short week earns its own line at its own cap.
+            add(d0, first_end, spw, 1, mdr_partial,
+                f"short week: {p_active} of {full_active} day(s) → {mdr_partial}/day")
+            add(w0 + timedelta(days=7), r_end, spw, weeks - 1, mdr_full)
+
+    return out, notes
+
+
 class _WeekCol:
     """Week-column shim for `EtereClient.consolidate_weeks`.
 
@@ -165,23 +257,81 @@ def _tokens(s: str) -> set[str]:
 
 
 def _confirm_start_date(order: CrispinOrder) -> Optional[date]:
+    """Ask what date the order should actually start when the IO is late.
+
+    Re-prompts until the answer parses and lands inside the flight — the value
+    feeds every line's date arithmetic and the max-per-day recalculation, so a
+    bad answer must fail here rather than mid-entry.
+    """
     if not order.flight_start:
         return None
     earliest = _parse_date(order.flight_start)
     if earliest > date.today() + timedelta(days=1):
         return earliest
+    latest = _parse_date(order.flight_end) if order.flight_end else None
 
     def _f(d: date) -> str:
         return f"{d.month}/{d.day}/{d.strftime('%y')}"
 
-    print(f"\n  ⚠ This order starts {_f(earliest)} (today is {_f(date.today())}).")
-    raw = input(f"  Confirm start date [{_f(earliest)}]: ").strip()
-    if raw and raw.lower() not in ('y', 'yes'):
+    print(f"\n  ⚠ This order starts {_f(earliest)} — today is {_f(date.today())}, "
+          f"so the IO is late.")
+    print("    A later start compresses each week's spots into fewer days, so the "
+          "first")
+    print("    partial week may need a higher max-per-day (its own Etere line).")
+    while True:
+        raw = input(f"  What date should this order start? [{_f(earliest)}]: ").strip()
+        if not raw or raw.lower() in ('y', 'yes'):
+            return earliest
         try:
-            return _parse_date(raw)
+            chosen = _parse_date(raw)
         except ValueError:
-            print(f"  ✗ Could not parse '{raw}' — keeping {_f(earliest)}")
-    return earliest
+            print(f"    ✗ Could not read '{raw}' — use M/D/YY or MM/DD/YYYY.")
+            continue
+        if chosen < earliest:
+            print(f"    ✗ {_f(chosen)} is before the IO's start {_f(earliest)}.")
+            continue
+        if latest and chosen > latest:
+            print(f"    ✗ {_f(chosen)} is after the flight ends {_f(latest)}.")
+            continue
+        return chosen
+
+
+def _line_plan(order: CrispinOrder, start_from: date,
+               flight_end_str: str) -> list[tuple]:
+    """(line, days, time_range, description, ranges, notes) for every airtime line.
+
+    The single source of truth for what will be entered — the gather preview and
+    `_create_crispin_contract` both walk this, so what Lee approves is exactly
+    what gets written.
+    """
+    plan: list[tuple] = []
+    for ln in order.lines:
+        if ln.total_spots == 0:
+            continue
+
+        if ln.is_bonus:
+            ros = CRISPIN_ROS_WINDOWS.get(ln.base_language)
+            if ros:
+                days, time_raw = ros['days'], ros['time']
+            else:
+                days, time_raw = 'M-Su', '6a-11:59p'
+                print(f"  [WARN] No ROS window for '{ln.base_language}' — "
+                      f"using {days} {time_raw}")
+            desc = f"BNS {ln.base_language} ROS"
+        else:
+            days, time_raw = split_daypart(ln.daypart)
+            days, _ = EtereClient.check_sunday_6_7a_rule(days, time_raw)
+            desc = f"{ln.language_block.strip()} {ln.daypart.strip()}"[:60]
+
+        time_from, time_to = EtereClient.parse_time_range(time_raw)
+        line_end = ln.date_to or _parse_date(flight_end_str)
+        consolidated = EtereClient.consolidate_weeks(
+            ln.week_spots, [_WeekCol(d) for d in ln.week_dates],
+            flight_end=_fmt_mmddyyyy(line_end),
+        )
+        ranges, notes = _plan_ranges(consolidated, days, start_from, line_end)
+        plan.append((ln, days, f"{time_from}-{time_to}", desc, ranges, notes))
+    return plan
 
 
 # ─── Input Gather ─────────────────────────────────────────────────────────────
@@ -242,6 +392,37 @@ def gather_crispin_inputs(source_path: str) -> Optional[dict]:
     if start_override is None:
         print("  ✗ No flight start date — aborting")
         return None
+
+    # Show the actual Etere lines whenever the start date moved — the dates and
+    # the max-per-day both change, and a truncated first week can split a line
+    # in two. Lee approves the real plan, not the IO's shape.
+    if start_override != _parse_date(order.flight_start):
+        print(f"\n  Etere lines for a {_fmt_mmddyyyy(start_override)} start:")
+        entered = 0
+        all_notes: list[str] = []
+        for _ln, days, time_range, desc, ranges, notes in _line_plan(
+                order, start_override, order.flight_end):
+            for rng in ranges:
+                entered += rng['spots_per_week'] * rng['weeks']
+                tag = f"   ← {rng['tag']}" if rng['tag'] else ""
+                print(f"    {desc[:34]:<34} {days:<5} {time_range}  "
+                      f"{_fmt_mmddyyyy(rng['date_from'])}–{_fmt_mmddyyyy(rng['date_to'])}"
+                      f"  {rng['spots_per_week']}/wk×{rng['weeks']}w"
+                      f"  max {rng['max_daily']}/day{tag}")
+            all_notes.extend(f"{desc[:34]}: {n}" for n in notes)
+        ordered = sum(ln.total_spots for ln in order.lines)
+        if all_notes:
+            print("\n  ⚠ The later start makes some spots undeliverable:")
+            for n in all_notes:
+                print(f"      {n}")
+        print(f"\n  Spots: {entered} entered of {ordered} ordered"
+              f"{'' if entered == ordered else '  ← SHORT'}")
+        if entered != ordered:
+            raw = input("  Enter the order short anyway? [y/N]: ").strip().lower()
+            if raw not in ('y', 'yes'):
+                print("  ✗ Aborted — pick an earlier start date or ask the agency "
+                      "to revise the IO.")
+                return None
 
     # ── Customer (advertiser) resolution: client + agency → customer id ──
     resolved = _resolve_customer(order.advertiser, agency_id)
@@ -324,9 +505,10 @@ def _create_crispin_contract(order: CrispinOrder, inputs: dict) -> Optional[str]
     contract_code = inputs.get('contract_code', 'Crispin BAAQMD')
     description = inputs.get('description', '')
 
-    original_start_d = _parse_date(order.flight_start) if order.flight_start else None
     override = inputs.get('start_date_override')
-    flight_start_d = _parse_date(override) if override else original_start_d
+    flight_start_d = (_parse_date(override) if override
+                      else _parse_date(order.flight_start) if order.flight_start
+                      else None)
     flight_end_d = _parse_date(order.flight_end) if order.flight_end else None
     if not flight_start_d or not flight_end_d:
         print("[CRISPIN] ✗ Could not determine flight range")
@@ -365,53 +547,28 @@ def _create_crispin_contract(order: CrispinOrder, inputs: dict) -> Optional[str]
         production_pending = round(sum(ch.amount for ch in order.charges), 2)
 
         line_count = 0
-        for ln in order.lines:
-            if ln.total_spots == 0:
-                continue
-
+        # Same planner the gather preview printed — the start-date override, the
+        # per-range max-per-day, and any short-week split all come from there, so
+        # what Lee approved is what gets written.
+        for ln, days, time_range, desc, ranges, notes in _line_plan(
+                order, flight_start_d, flight_end_str):
             is_bonus = ln.is_bonus
             booking_code = 10 if is_bonus else 2
-
-            if is_bonus:
-                ros = CRISPIN_ROS_WINDOWS.get(ln.base_language)
-                if ros:
-                    days, time_raw = ros['days'], ros['time']
-                else:
-                    days, time_raw = 'M-Su', '6a-11:59p'
-                    print(f"  [WARN] No ROS window for '{ln.base_language}' — using {days} {time_raw}")
-                desc = f"BNS {ln.base_language} ROS"
-            else:
-                days, time_raw = split_daypart(ln.daypart)
-                days, _ = EtereClient.check_sunday_6_7a_rule(days, time_raw)
-                desc = f"{ln.language_block.strip()} {ln.daypart.strip()}"[:60]
-
-            time_from, time_to = EtereClient.parse_time_range(time_raw)
-            time_range = f"{time_from}-{time_to}"
             duration_str = str(ln.length_sec)
-
-            # Cap on the LINE's own flight end when the IO gives one — the M-F
-            # lines here end 10/30 while the M-Su lines run to 11/01, so an
-            # order-level cap would stretch every line to the latest end date.
-            line_end_str = _fmt_mmddyyyy(ln.date_to) if ln.date_to else flight_end_str
-            ranges = EtereClient.consolidate_weeks(
-                ln.week_spots, [_WeekCol(d) for d in ln.week_dates],
-                flight_end=line_end_str,
-            )
+            for note in notes:
+                print(f"  [NOTE] {desc}: {note}")
 
             for rng in ranges:
                 total_spots = rng['spots_per_week'] * rng['weeks']
-                date_from = _parse_date(rng['start_date'])
-                if (original_start_d and flight_start_d
-                        and flight_start_d != original_start_d
-                        and date_from == original_start_d):
-                    date_from = flight_start_d
-                date_to = _parse_date(rng['end_date'])
+                date_from, date_to = rng['date_from'], rng['date_to']
 
                 line_count += 1
+                tag = f"  ← {rng['tag']}" if rng['tag'] else ""
                 print(f"  [LINE {line_count}] {order.market_code} {desc}: "
                       f"{_fmt_mmddyyyy(date_from)}–{_fmt_mmddyyyy(date_to)} "
                       f"({rng['spots_per_week']}/wk×{rng['weeks']}w={total_spots}) "
-                      f":{ln.length_sec}s rate={ln.rate}")
+                      f":{ln.length_sec}s rate={ln.rate} "
+                      f"max {rng['max_daily']}/day{tag}")
                 # Carried by the first PAID line so the charge sits on billable
                 # airtime, then zeroed so it is written exactly once.
                 production = production_pending if not is_bonus else 0.0
@@ -425,6 +582,7 @@ def _create_crispin_contract(order: CrispinOrder, inputs: dict) -> Optional[str]
                     rate=ln.rate,
                     total_spots=total_spots,
                     spots_per_week=rng['spots_per_week'],
+                    max_daily_run=rng['max_daily'],
                     date_from=date_from,
                     date_to=date_to,
                     duration=duration_str,

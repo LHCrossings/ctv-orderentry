@@ -72,6 +72,25 @@ charge" is an observation about historical rows, not a contract: re-read
 CONTRATTISPESE **inside the transaction** and roll back on a mismatch, or the money
 silently vanishes.
 
+**A LATE order's start-date answer must drive max-per-day, not just the dates.** A
+later start does not reduce the week's spots — it compresses them into fewer days, so
+the truncated first week needs a **higher** cap than the full weeks behind it.
+`add_contract_line`'s auto-calc divides by the day PATTERN's width (M-F → 5) and has
+no idea the line opens on a Wednesday, so compute the cap **per range** and **split
+the range** when the short week and the full weeks disagree — one IO line becomes two
+Etere lines. Order 212735 started Wed 8/12 instead of Mon 8/10: 16 lines → **19**,
+zero spots lost, each M-F daypart gaining an 8/12–8/16 line at **2/day** (Wed–Fri = 3
+of 5 days) while M-Su lines didn't split (Wed–Sun still holds 4 spots at 1/day).
+Rules: (1) the gather preview and the entry loop must walk **one planner object**
+(`_line_plan`) so what the user approves is what gets written; (2) when a start date
+makes spots undeliverable — a Saturday start on an M-F line, or skipping whole weeks —
+list them, print `entered of ordered`, and require an explicit `y`, never enter short
+silently; (3) assert the invariant `cap × available days >= spots_per_week` across
+every weekday × day-pattern, or you hand Etere a line it can never fill; (4) the
+prompt asks "**What date should this order start?**" and re-prompts until it parses
+and lands inside the flight — it feeds every date calculation, so it fails where the
+human is standing.
+
 **Testing a PDF parser without authoring a PDF:** commit the real IO as a fixture
 (9.5 KB, and it carries its own totals) and drive the negative tests by mutating
 `extract_words()` through a `sys.modules['pdfplumber']` shim — it targets exactly

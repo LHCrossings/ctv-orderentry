@@ -16,7 +16,6 @@ The fixture is the real revision-2 IO for BAAQMD 2026 (order 212735): 324 units
 and $23,529.94, both printed on the document, so it is its own oracle.
 """
 
-import importlib
 import sys
 import types
 from datetime import date
@@ -44,27 +43,15 @@ IO_TOTAL_DOLLARS = Decimal("23529.94")
 
 
 @pytest.fixture(scope="module", autouse=True)
-def real_pdfplumber():
-    """Swap the suite-wide `pdfplumber` MagicMock (tests/conftest.py) for the real
-    library, for this module only.
-
-    The parser imports pdfplumber inside the function, so sys.modules is consulted
-    at call time and a scoped swap is enough. It is restored on teardown — a mock
-    left replaced would leak into every module that runs after this one, which is
-    exactly the order-dependence trap the conftest comment warns about.
-    """
-    mock = sys.modules.pop("pdfplumber", None)
-    real = importlib.import_module("pdfplumber")
-    sys.modules["pdfplumber"] = real
-    yield real
-    if mock is not None:
-        sys.modules["pdfplumber"] = mock
-    else:
-        sys.modules.pop("pdfplumber", None)
+def _use_real_pdfplumber(real_pdfplumber):
+    """Every test here parses the real fixture, so take the shared escape hatch
+    from the suite-wide pdfplumber MagicMock (see tests/conftest.py). The parser
+    imports pdfplumber inside the function, so a sys.modules swap is enough."""
+    return real_pdfplumber
 
 
 @pytest.fixture(scope="module")
-def order(real_pdfplumber):
+def order():
     return parse_crispin_pdf(FIXTURE)
 
 

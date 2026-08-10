@@ -41,3 +41,22 @@ for _mod in (
 def _clear_optin_routing_flags(monkeypatch):
     for _var in ("CTV_AI_FALLBACK", "CTV_CHARMAINE_AI"):
         monkeypatch.delenv(_var, raising=False)
+
+
+# Opt-in escape hatch from the pdfplumber MagicMock above, for tests that parse a
+# real PDF fixture. Module-scoped and restored on teardown: leaving the real
+# library in sys.modules would make the suite order-dependent in exactly the way
+# the comment above warns about. Request it by name (`def test_x(real_pdfplumber)`)
+# or via a module-level autouse shim.
+@pytest.fixture(scope="module")
+def real_pdfplumber():
+    import importlib
+
+    mock = sys.modules.pop("pdfplumber", None)
+    real = importlib.import_module("pdfplumber")
+    sys.modules["pdfplumber"] = real
+    yield real
+    if mock is not None:
+        sys.modules["pdfplumber"] = mock
+    else:
+        sys.modules.pop("pdfplumber", None)

@@ -76,6 +76,35 @@ week cell, a cell slid one column, a renamed `DATES` header, a blanked rate, and
 an unclassifiable grid row each **refuse** with a specific message. A no-op
 mutation still parses, so the negative tests can't pass for the wrong reason.
 
+### Late start: the answer drives the dates AND the max-per-day
+
+The IO arrived 8/10 for a flight starting 8/10, so entry asks **"What date should
+this order start?"** (re-prompts until it parses and lands inside the flight;
+Enter/`y`/`yes` keep the IO's date). **Lee's answer: Wednesday 8/12.**
+
+A later start does not reduce a week's spot count — it compresses those spots
+into fewer days, so the truncated first week needs a **higher max-per-day** than
+the full weeks behind it. `add_contract_line`'s auto-calc can't see this: it
+divides by the day PATTERN's width (M-F → 5) with no idea the line opens on a
+Wednesday. `_plan_ranges` now computes the cap per range and **splits the range**
+when the short week and the full weeks disagree.
+
+At 8/12 that turns **16 Etere lines into 19, losing no spots** (323/323,
+$23,529.94): each of the three M-F dayparts gains a short-week line
+8/12–8/16 at 4/wk **max 2/day** (Wed–Fri = 3 of 5 days), while the M-Su lines
+don't split because Wed–Sun still holds 4 spots at 1/day.
+
+`_line_plan` is the single source of truth — the gather preview prints it and the
+entry loop walks the same object, so what Lee approves is what gets written. When
+a start date makes spots undeliverable (e.g. a Saturday start on an M-F line, or
+skipping whole weeks) the preview lists them, shows `entered of ordered`, and
+requires an explicit y before entering short.
+
+78 tests in `tests/unit/test_crispin_late_start.py`, including two invariants over
+every weekday × day-pattern combination: the cap is never < 1, and
+`cap × available days >= spots_per_week` so Etere is never handed a line it
+cannot fill.
+
 ### Known, not fixed (pre-existing, out of scope)
 - The **web preview** leaves the Mandarin bonus line's days/time blank:
   `parser_bridge._apply_ros_overrides` reads the shared `ROS_SCHEDULES`, which
