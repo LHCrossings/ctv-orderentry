@@ -2878,9 +2878,12 @@ class OrderProcessingService:
         inp = order.order_input if isinstance(order.order_input, dict) else {}
         try:
             from browser_automation.crispin_automation import run_crispin_order
-            from browser_automation.parsers.crispin_parser import parse_crispin_xlsx
+            from browser_automation.parsers.crispin_parser import parse_crispin
 
-            parsed  = parse_crispin_xlsx(str(order.pdf_path))
+            # The dispatcher, NOT parse_crispin_xlsx — Crispin has two source
+            # formats (the official Brand Time Schedule IO .pdf and the proposal
+            # .xlsm) and the gather parses through this same entry point.
+            parsed  = parse_crispin(str(order.pdf_path))
             results = run_crispin_order(parsed, inp)  # list of (label, success)
 
             contracts = [

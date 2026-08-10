@@ -352,5 +352,64 @@ class TestOrderGroupingLogic:
         assert len(results) == 3   # 1 batch result + 2 single results
 
 
+class TestHandlerParserAgreement:
+    """A `_process_*_order` handler must parse with the SAME entry point the bridge
+    registers for that order type.
+
+    Crispin drifted exactly here: the gather and the web bridge were moved to the
+    `parse_crispin` dispatcher (the IO is a PDF, the proposal an .xlsm) but the
+    handler kept calling `parse_crispin_xlsx`, so the whole interactive gather
+    succeeded and then entry died on `openpyxl does not support .pdf`. The gather
+    proving out is NOT evidence the handler agrees — they are separate call sites.
+    """
+
+    @staticmethod
+    def _handler_parsers() -> dict[str, list[str]]:
+        """{ORDERTYPE: [parser functions the handler imports]} via AST, no imports."""
+        import ast
+        import re
+
+        path = (Path(__file__).parent.parent.parent / "src" / "business_logic" /
+                "services" / "order_processing_service.py")
+        out: dict[str, list[str]] = {}
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            m = re.fullmatch(r"_process_(\w+)_order", node.name)
+            if not m:
+                continue
+            names = [a.name for n in ast.walk(node)
+                     if isinstance(n, ast.ImportFrom) and n.module
+                     and ".parsers." in n.module
+                     for a in n.names]
+            if names:
+                out[m.group(1).upper()] = sorted(set(names))
+        return out
+
+    def test_handlers_parse_through_the_bridges_registered_entry_point(self):
+        from web.parser_bridge import _REGISTRY
+
+        handlers = self._handler_parsers()
+        assert handlers, "AST walk found no handler parser imports — check the regex"
+
+        drift = {
+            key: {"bridge": fn, "handler": handlers[key]}
+            for key, (_mod, fn) in _REGISTRY.items()
+            if key in handlers and fn not in handlers[key]
+        }
+        assert not drift, (
+            "These handlers parse with a different function than the bridge "
+            f"registers, so the web preview and entry can disagree: {drift}"
+        )
+
+    def test_every_handler_has_a_bridge_entry(self):
+        from web.parser_bridge import _REGISTRY
+
+        orphans = sorted(set(self._handler_parsers()) - set(_REGISTRY))
+        assert not orphans, (
+            f"handlers with no bridge entry (hidden from the web UI): {orphans}"
+        )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
