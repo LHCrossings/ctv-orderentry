@@ -271,11 +271,19 @@ def _mc_fill_program_spots(
 
     # Language mismatch helpers
     _LANG_COMPAT = [frozenset({'M', 'C'}), frozenset({'SA', 'P'})]
+    # An asset code ends "<duration><language><sequence>", but the language code can
+    # carry a modifier prefix — a billboard is BB + language (VISION10BBE01 = :10
+    # billboard, English) — so read the language as the longest known code the letter
+    # run ENDS with, never the whole run. Longest first so SA/HM beat A/M.
+    _ASSET_LANG_CODES = ('SA', 'HM', 'C', 'E', 'H', 'J', 'K', 'M', 'P', 'T', 'V')
 
     def _extract_asset_lang(code: str) -> str:
-        """TVC30V12 → 'V', LEXUS15SA107 → 'SA', unrecognised → ''"""
+        """TVC30V12 → 'V', LEXUS15SA107 → 'SA', VISION10BBE01 → 'E', unrecognised → ''"""
         m = re.search(r'\d+([A-Za-z]+)\d+$', code)
-        return m.group(1).upper() if m else ''
+        if not m:
+            return ''
+        run = m.group(1).upper()
+        return next((lg for lg in _ASSET_LANG_CODES if run.endswith(lg)), run)
 
     def _lang_ok(asset_lang: str, prog_lang: str) -> bool:
         if not asset_lang or not prog_lang:
