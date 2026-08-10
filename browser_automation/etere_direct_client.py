@@ -867,6 +867,13 @@ EXEC web_sales_savecontractgeneral
         whitelist_priority: Optional[int] = None,  # None → derive as priority // 10
         booking_code: int = 2,
         scheduling_type: Optional[int] = None,
+        # Non-airtime money on the line form's Production / Dubbing boxes. The SP
+        # turns a non-zero value into a CONTRATTISPESE charge whose DESCRIZIONE is
+        # the label below and whose DATA is the line's flight start — the same
+        # rows the proposals-app Production box reads, which matches charges by
+        # that EXACT description. Left at 0/"" the behaviour is unchanged.
+        production_cost: float = 0.0,
+        dubbing_cost: float = 0.0,
         row_status: int = 0,   # 0=Ready, 2=Change Data (use 2 for revision lines on approved contracts)
         language: Optional[str] = None,  # user-VERIFIED language code → CTV_LineLanguage
         # Unused kwargs kept for interface compatibility with EtereClient
@@ -1074,10 +1081,12 @@ EXEC web_sales_InsertContractLine
             intevent,           # @intevent
             self._nielsen_id,   # @idnielsen
             0,                  # @idfatturadesc
-            0,                  # @production
-            0,                  # @dubbing
-            "",                 # @productionLabel
-            "",                 # @dubbingLabel
+            round(float(production_cost or 0), 2),   # @production
+            round(float(dubbing_cost or 0), 2),      # @dubbing
+            # The label IS the charge's DESCRIZIONE. 'Production'/'Dubbing' are the
+            # only two strings the proposals app can see; empty when unused.
+            "Production" if production_cost else "",  # @productionLabel
+            "Dubbing" if dubbing_cost else "",        # @dubbingLabel
             False,              # @uniquetb
             False,              # @filler
             False,              # @controlloNielsen

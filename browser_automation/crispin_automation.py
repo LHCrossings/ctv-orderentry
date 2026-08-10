@@ -9,14 +9,29 @@ Bay Area AQMD exists twice —
 so the record whose AGENZIA equals the order's agency (446) is the right one.
 
 The agency commission is taken from the ANAGRAF link (Etere's client-select
-behaviour) and never overridden here — Crispin/BAAQMD has Commissione 0, so the
-header lands at 0% automatically; adjust in Etere if that ever changes. Rates
-are the discounted rate as-is (no gross-up). Production / translation costs are
-ignored for now (pending the Etere production-cost workflow).
+behaviour) and **never overridden here** — whatever Commissione the ANAGRAF
+client/agency carries is what the header gets. That single rule is what makes
+the two source formats safe to mix, because they quote money differently:
+
+  - the proposal workbook quotes **net** (the Discounted Rate we sold at);
+  - the official Brand Time Schedule IO quotes **gross** (net ÷ 0.85).
+
+Rates enter verbatim from whichever document we read, and the ANAGRAF commission
+nets them back down. So if an IO's rates look grossed-up, the fix is the ANAGRAF
+commission, never a multiplier in this file. (Lee set Crispin to 15% on
+2026-08-10 for exactly this reason; it had been 0% while we only had the net-rate
+proposal.)
 
 One Etere contract for the whole order (single market, SFO). Paid :30s News
 lines keep their explicit dayparts; :15s bonus lines are ROS (booking code 10)
 scheduled via CRISPIN_ROS_WINDOWS.
+
+**Production / translation money never becomes a contract line** (Lee
+2026-08-10). It goes in the line form's **Production box** on the first paid
+line, which Etere turns into a CONTRATTISPESE charge named 'Production' dated
+that line's flight start. Backwrite has not been tuned to accept a production
+line, and a zero-spot carrier line would read as airtime there. The carrier-line
+pattern is reserved for orders that are production-ONLY.
 """
 
 from __future__ import annotations
@@ -28,7 +43,7 @@ from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_
 from browser_automation.etere_client import EtereClient
 from browser_automation.parsers.crispin_parser import (
     CrispinOrder,
-    parse_crispin_xlsx,
+    parse_crispin,
     split_daypart,
 )
 
@@ -53,6 +68,19 @@ def _fmt_mon_dd(d: date) -> str:
 
 def _fmt_mmddyyyy(d: date) -> str:
     return d.strftime('%m/%d/%Y')
+
+
+class _WeekCol:
+    """Week-column shim for `EtereClient.consolidate_weeks`.
+
+    The helper's plain-string branch ("Aug 10") takes the year from flight_end,
+    which silently misdates a flight that crosses New Year. Both Crispin formats
+    hand us real `date` objects, so always feed the `.start_date` branch instead.
+    """
+    __slots__ = ('start_date',)
+
+    def __init__(self, d: date) -> None:
+        self.start_date = _fmt_mmddyyyy(d)
 
 
 def _parse_date(s) -> date:
@@ -158,17 +186,27 @@ def _confirm_start_date(order: CrispinOrder) -> Optional[date]:
 
 # ─── Input Gather ─────────────────────────────────────────────────────────────
 
-def gather_crispin_inputs(xlsx_path: str) -> Optional[dict]:
-    """Gather inputs for a Crispin order. Returns dict or None to abort."""
+def gather_crispin_inputs(source_path: str) -> Optional[dict]:
+    """Gather inputs for a Crispin order (IO PDF or proposal workbook).
+
+    Returns dict or None to abort.
+    """
     from browser_automation.etere_direct_client import AGENCY_IDS
 
-    order = parse_crispin_xlsx(xlsx_path)
+    order = parse_crispin(source_path)
     agency_id = AGENCY_IDS["CRISPIN"]
 
     print(f"\n{'='*64}")
+    src = "official IO (Brand Time Schedule)" if order.source_format == 'pdf' \
+        else "proposal workbook"
+    print(f"Source:     {src}")
     print(f"Agency:     {order.agency}  (fixed — Etere agency ID {agency_id})")
     print(f"Advertiser: {order.advertiser}")
     print(f"Market:     {order.market_code}   ({order.market_label})")
+    if order.order_number:
+        est = f", Est {order.estimate}" if order.estimate else ""
+        rev = f", rev {order.revision}" if order.revision else ""
+        print(f"Order:      #{order.order_number}{est}{rev}")
     if order.order_date:
         print(f"Revision:   {order.order_date:%B %d, %Y}")
     print(f"Flight:     {order.flight_start} → {order.flight_end}  ({len(order.week_dates)} weeks)")
@@ -180,8 +218,24 @@ def gather_crispin_inputs(xlsx_path: str) -> Optional[dict]:
             ros = CRISPIN_ROS_WINDOWS.get(ln.base_language, {})
             days, time = ros.get('days', 'M-Su'), ros.get('time', 'ROS')
         rate = f"${ln.rate:.2f}" if ln.rate else "  bonus"
+        flight = (f"  {_fmt_mmddyyyy(ln.date_from)}–{_fmt_mmddyyyy(ln.date_to)}"
+                  if ln.date_from and ln.date_to else "")
         print(f"    {tag} :{ln.length_sec}s {ln.language_block:<26} {days} {time:<11} "
-              f"{rate:>8}  {ln.total_spots} spots")
+              f"{rate:>8}  {ln.total_spots} spots{flight}")
+
+    paid_total = sum(ln.rate * ln.total_spots for ln in order.paid_lines)
+    print(f"\n  Airtime: {sum(ln.total_spots for ln in order.paid_lines)} paid + "
+          f"{sum(ln.total_spots for ln in order.bonus_lines)} bonus spots"
+          f"   ${paid_total:,.2f}")
+
+    # ── Production / non-airtime money ──
+    # Goes in the line form's Production box, NOT a line of its own — backwrite
+    # is not tuned to accept a production line. Etere stamps the charge with the
+    # carrier line's flight start, so there is no date to ask about.
+    if order.charges:
+        print("\n  Production (→ Production box on the first paid line, not airtime):")
+        for ch in order.charges:
+            print(f"    {ch.description:<30} ${ch.amount:>10,.2f}")
 
     # ── Start-date sanity check (lesson #15) ──
     start_override = _confirm_start_date(order)
@@ -225,7 +279,7 @@ def gather_crispin_inputs(xlsx_path: str) -> Optional[dict]:
     raw = input(f"  Description [{default_desc}]: ").strip()
     description = raw or default_desc
 
-    return {
+    inputs = {
         'customer_id':         customer_id,
         'billing_type':        billing_type,
         'separation':          separation,
@@ -233,6 +287,10 @@ def gather_crispin_inputs(xlsx_path: str) -> Optional[dict]:
         'description':         description,
         'start_date_override': _fmt_mmddyyyy(start_override),
     }
+    if order.order_number:
+        est = f", Est {order.estimate}" if order.estimate else ""
+        inputs['customer_ref'] = f"Order {order.order_number}{est}"
+    return inputs
 
 
 def _lookup_customer_db(name: str):
@@ -294,9 +352,17 @@ def _create_crispin_contract(order: CrispinOrder, inputs: dict) -> Optional[str]
             contract_end_date=flight_end_d,
             contract_type=1,
             billing_type=billing_type,
+            customer_order_ref=inputs.get('customer_ref', ''),
             allow_rename=True,
         )
         print(f"[CRISPIN] ✓ Contract header: ID={contract_id}  code='{contract_code}'")
+
+        # Production / translation dollars go in the line form's **Production
+        # box**, not a line of their own (Lee 2026-08-10): backwrite is not tuned
+        # to accept a production line yet, and a zero-spot carrier line would
+        # show up there as airtime. Etere turns the box into a CONTRATTISPESE
+        # charge named 'Production', dated that line's flight start.
+        production_pending = round(sum(ch.amount for ch in order.charges), 2)
 
         line_count = 0
         for ln in order.lines:
@@ -323,9 +389,13 @@ def _create_crispin_contract(order: CrispinOrder, inputs: dict) -> Optional[str]
             time_range = f"{time_from}-{time_to}"
             duration_str = str(ln.length_sec)
 
-            week_start_strs = [_fmt_mon_dd(d) for d in ln.week_dates]
+            # Cap on the LINE's own flight end when the IO gives one — the M-F
+            # lines here end 10/30 while the M-Su lines run to 11/01, so an
+            # order-level cap would stretch every line to the latest end date.
+            line_end_str = _fmt_mmddyyyy(ln.date_to) if ln.date_to else flight_end_str
             ranges = EtereClient.consolidate_weeks(
-                ln.week_spots, week_start_strs, flight_end=flight_end_str,
+                ln.week_spots, [_WeekCol(d) for d in ln.week_dates],
+                flight_end=line_end_str,
             )
 
             for rng in ranges:
@@ -342,7 +412,12 @@ def _create_crispin_contract(order: CrispinOrder, inputs: dict) -> Optional[str]
                       f"{_fmt_mmddyyyy(date_from)}–{_fmt_mmddyyyy(date_to)} "
                       f"({rng['spots_per_week']}/wk×{rng['weeks']}w={total_spots}) "
                       f":{ln.length_sec}s rate={ln.rate}")
-                client.add_contract_line(
+                # Carried by the first PAID line so the charge sits on billable
+                # airtime, then zeroed so it is written exactly once.
+                production = production_pending if not is_bonus else 0.0
+                production_pending = production_pending - production
+
+                line_id = client.add_contract_line(
                     market=order.market_code,
                     days=days,
                     time_range=time_range,
@@ -356,7 +431,19 @@ def _create_crispin_contract(order: CrispinOrder, inputs: dict) -> Optional[str]
                     is_bonus=is_bonus,
                     booking_code=booking_code,
                     separation_intervals=separation,
+                    production_cost=production,
                 )
+                if production:
+                    _verify_production_charge(conn.cursor(), line_id, production)
+                    print(f"           ↳ Production ${production:,.2f} "
+                          f"(→ CONTRATTISPESE 'Production', dated "
+                          f"{_fmt_mmddyyyy(date_from)})")
+
+        if production_pending:
+            raise RuntimeError(
+                f"Crispin: ${production_pending:,.2f} of production cost was never "
+                f"attached — no paid airtime line was created. Rolling back."
+            )
 
         conn.commit()
         conn.close()
@@ -374,6 +461,33 @@ def _create_crispin_contract(order: CrispinOrder, inputs: dict) -> Optional[str]
             except Exception:
                 pass
         return None
+
+
+def _verify_production_charge(cursor, line_id: int, expected: float) -> None:
+    """Confirm the SP really turned @production into a CONTRATTISPESE row.
+
+    `web_sales_InsertContractLine` is encrypted, so "the Production box writes a
+    charge" is an observation about historical rows, not a contract we control. If
+    a future Etere build stops honouring the parameter, the money would silently
+    vanish and the contract would enter as airtime-only. Checking inside the
+    transaction turns that into a rollback instead.
+    """
+    cursor.execute(
+        """
+        SELECT ISNULL(SUM(IMPORTO), 0)
+        FROM CONTRATTISPESE
+        WHERE ID_CONTRATTIRIGHE = %s AND DESCRIZIONE = 'Production'
+        """,
+        (int(line_id),),
+    )
+    row = cursor.fetchone()
+    got = float(row[0]) if row else 0.0
+    if abs(got - expected) > 0.01:
+        raise RuntimeError(
+            f"Crispin: line {line_id} Production box was ${expected:,.2f} but "
+            f"CONTRATTISPESE holds ${got:,.2f}. Etere did not record the production "
+            f"charge — rolling back rather than entering the order without it."
+        )
 
 
 def run_crispin_order(order: CrispinOrder, inputs: dict) -> list[tuple[str, bool]]:

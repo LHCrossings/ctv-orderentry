@@ -101,7 +101,8 @@ _REGISTRY = {
     "FIGHTTHEBITE":     ("browser_automation.parsers.fightthebite_parser",     "parse_fightthebite_file"),
     "ACM":              ("browser_automation.parsers.acm_parser",               "parse_acm_xlsx"),
     "TT":               ("browser_automation.parsers.tt_parser",                "parse_tt_xlsx"),
-    "CRISPIN":          ("browser_automation.parsers.crispin_parser",           "parse_crispin_xlsx"),
+    # Dispatcher: official Brand Time Schedule IO (.pdf) or proposal (.xlsx/.xlsm)
+    "CRISPIN":          ("browser_automation.parsers.crispin_parser",           "parse_crispin"),
     "EQC":              ("browser_automation.parsers.eqc_parser",               "parse_eqc_xlsx"),
     "LRCCD":            ("browser_automation.parsers.lrccd_parser",             "parse_lrccd_pdf"),
     "SACRT":            ("browser_automation.parsers.sacrt_parser",             "parse_sacrt_pdf"),

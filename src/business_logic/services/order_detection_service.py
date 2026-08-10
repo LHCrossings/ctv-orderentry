@@ -83,6 +83,11 @@ class OrderDetectionService:
         if self._is_sagent(first_page_text):
             return OrderType.SAGENT
 
+        # Crispin official IO (check before Intertrend/Daviselen — all three are
+        # Brand Time Schedules, so the agency name is the only discriminator)
+        if self._is_crispin_io(first_page_text, second_page_text):
+            return OrderType.CRISPIN
+
         # Intertrend (check before Daviselen — both use Brand Time Schedule format)
         if self._is_intertrend(first_page_text):
             return OrderType.INTERTREND
@@ -292,6 +297,27 @@ class OrderDetectionService:
         - "InterTrend Communications" as agency name
         """
         return "INTERTREND" in text.upper()
+
+    def _is_crispin_io(
+        self,
+        first_page: str,
+        second_page: str | None
+    ) -> bool:
+        """Check if text matches the Crispin official insertion order.
+
+        Crispin sends a "Brand Time Schedule" — the same agency-system layout as
+        Intertrend and Daviselen — so the agency name is the discriminator and
+        this must be tested first. Page 1 is a bare cover (Order#/Client/Product/
+        Estimate, no agency name at all), so the marker lives on page 2:
+        "Brand Time Schedule" + "CRISPIN AGENCY".
+        """
+        for page in (first_page, second_page):
+            if not page:
+                continue
+            upper = page.upper()
+            if "BRAND TIME SCHEDULE" in upper and "CRISPIN" in upper:
+                return True
+        return False
 
     def _is_daviselen(
         self,

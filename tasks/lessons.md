@@ -4,6 +4,84 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## The PROPOSAL and the OFFICIAL IO Are Different Documents — Same Order Type, Two Readers, and the Money Basis Flips
+
+**Session:** Crispin official IO for BAAQMD, order 212735 rev 2 (2026-08-10)
+
+**Rule:** We trained Crispin on Charmaine's Excel **proposal**; the agency then sent
+the official **IO**, a "Brand Time Schedule" PDF (the same agency-system layout
+Daviselen and Intertrend send) that nothing in the repo could read. Critically the
+proposal quoted **net** ($120/$100 discounted) while the IO quotes **gross**
+(141.18/117.65 = net ÷ 0.85). Entering the IO's numbers under the proposal's 0%
+commission would have booked **17.6% more revenue than the deal**.
+
+**How to apply:**
+1. **One order type, one dispatcher, two readers.** `parse_crispin(path)` routes on
+   extension into `parse_crispin_pdf` / `parse_crispin_xlsx`, both returning the same
+   `CrispinOrder`. The automation and bridge never learn there are two formats. Do
+   NOT fork a second OrderType — that duplicates the automation and drifts.
+2. **Never fix a gross/net mismatch with a multiplier in the parser.** Rates enter
+   verbatim from whichever document we read and the **ANAGRAF commission** nets them
+   down (`lookup_customer_defaults=True`). Lee set Crispin 0% → 15% in ANAGRAF for
+   exactly this; the "use the commission linked to the client/agency" rule is what
+   makes mixing a net-quoting proposal and a gross-quoting IO safe at all.
+   Diagnostic: rate ÷ 0.85 landing on a round number means the doc is gross.
+3. **Detection order:** a Brand Time Schedule carries no agency name on page 1 (a
+   14-word cover), so match `"Brand Time Schedule" + "<AGENCY>"` on **page 2**, and
+   test it **before** Intertrend/Daviselen, which share the marker. Bump
+   `_SCAN_CACHE_VERSION` — the scan cache keys on file signature, so stale
+   classifications outlive the code fix.
+
+**Four traps in the Brand Time Schedule layout itself:**
+1. **Column regimes.** A long flight is split into ~13-week column blocks and every
+   line prints **once per regime** — merge by LINE#. A page can carry **two
+   regimes** (regime-1's summary, a `-----` divider, then regime-2's header
+   mid-page), so bind each data row to the nearest **preceding** day-number header:
+   per-REGION, never per-page.
+2. **Zero cells are not printed.** A "3" only means SEP14 by its x-position. Match a
+   cell to a column by **centre distance** (tol 8 against a ~19pt pitch), and map
+   the FIELD columns by **header label** (`LINE#`/`DAY(S)`/…/`TOT`) so an added
+   column is a no-op and a renamed one raises. Cluster rows on **raw** `top` floats.
+3. **Flight dates are PER LINE** (the DATES column): M-F lines ended 10/30 while
+   M-Su lines ran to 11/01, so an order-level `flight_end` stretches the M-F lines
+   two days. Also **trim each line to its own flight** — a line is zero-padded
+   across the other regime's 13 columns, so without trimming every line reports a
+   26-week grid; spots outside the stated flight are a contradiction, so raise.
+4. **A non-airtime row rides in the grid as an ordinary line** (`TRANSLATION COST`,
+   1 unit @ $2,447.06, complete with a `:15` length and a `RO` daypart code). Rule:
+   a row naming **no language** is not airtime; accept it as a charge only if it
+   also names a recognisable cost, else **raise** — guessing either way is wrong.
+
+**Reconcile three ways and RAISE** (the doc is its own oracle): per line
+`sum(week cells) == the line's TOT`; per regime against the `PTS/WEEK` summary row's
+cells, spots AND dollars; and the whole order against `<station> TOT`
+(324 units / $23,529.94, hit exactly). **Verify guards by tampering the word
+stream**, not by asserting they exist — a dropped cell, a cell slid one column, a
+renamed header, a blanked rate and an unclassifiable row must each refuse, and a
+no-op mutation must still parse or the negative tests pass for the wrong reason.
+
+**Production money does NOT become a contract line** (Lee): it goes in the line
+form's **Production box** — `add_contract_line(production_cost=…)`, SP params
+`@production`/`@productionLabel` (label IS the charge DESCRIZIONE, and only
+'Production'/'Dubbing' are visible to the proposals app). Etere writes the
+CONTRATTISPESE row itself, dated the carrier line's flight start; ride the **first
+paid** line so it sits on billable airtime. Backwrite is not tuned for a production
+line, and a zero-spot carrier line reads as airtime there — that pattern is
+reserved for **production-ONLY** orders. The SP is encrypted, so "the box writes a
+charge" is an observation about historical rows, not a contract: re-read
+CONTRATTISPESE **inside the transaction** and roll back on a mismatch, or the money
+silently vanishes.
+
+**Testing a PDF parser without authoring a PDF:** commit the real IO as a fixture
+(9.5 KB, and it carries its own totals) and drive the negative tests by mutating
+`extract_words()` through a `sys.modules['pdfplumber']` shim — it targets exactly
+the layer that fails in the wild. `tests/conftest.py` MagicMocks pdfplumber suite-
+wide, so swap the real library in with a **module-scoped fixture that restores the
+mock on teardown** (verified by running the modules in both orders) — a permanent
+replacement is the order-dependence trap that same conftest warns about.
+
+---
+
 ## An Agency Inserting ONE Column Silently Zeroed Every Rate — Map by Header Label + Reconcile
 
 **Session:** DART Aug/Sept entered $3,000 as $0 on every line (2026-08-07)
