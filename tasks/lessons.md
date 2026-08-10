@@ -31,6 +31,16 @@ commission would have booked **17.6% more revenue than the deal**.
    test it **before** Intertrend/Daviselen, which share the marker. Bump
    `_SCAN_CACHE_VERSION` — the scan cache keys on file signature, so stale
    classifications outlive the code fix.
+4. **The file is parsed at TWO call sites — fix both.** Pointing the gather and
+   `parser_bridge._REGISTRY` at the dispatcher was not enough:
+   `OrderProcessingService._process_crispin_order` re-parses the source itself and
+   still imported `parse_crispin_xlsx`. So the entire interactive gather ran clean
+   (IO read, late start replanned, customer resolved, separation confirmed) and
+   entry then died on `openpyxl does not support .pdf`. **A gather that succeeds is
+   not evidence the handler agrees.** `tests/unit/test_order_processing_service.py`
+   now AST-walks every `_process_*_order` for its parser imports and asserts they
+   match the bridge's registered entry point — verify a structural test like this
+   FAILS on the drift it was written for before trusting it.
 
 **Four traps in the Brand Time Schedule layout itself:**
 1. **Column regimes.** A long flight is split into ~13-week column blocks and every
