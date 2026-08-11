@@ -111,6 +111,55 @@ replacement is the order-dependence trap that same conftest warns about.
 
 ---
 
+## A Wrapped Table Row Puts Its Metadata ABOVE the Key — and "Last Match in Block" Steals the Neighbour's Language
+
+**Session:** Maija's HL traffic parse, Toyota August ACM #13935 R1 (2026-08-10)
+
+**Rule:** HL prints traffic rows ISCI-first (`TYRN41271H <title> :30 ACM TV (Cantonese)
+:30 100% 8/4/26 8/11/26`), but when the title fills the line the row **wraps**: the dates
+print on the line **ABOVE** the ISCI, and the ISCI line keeps only `(Dialect)` — or the
+ISCI sits **alone** with the dialect on the line below. Maija saw "Hindi doesn't show the
+date, Cantonese 8/12–8/31 missing." Both were one layout, and it hid a third, worse bug.
+
+**The three defects, all from the same cause:**
+1. `_ISCI_RE` required `\s+(.*)` after the code, so a **bare ISCI line never started a
+   block** — `TYRN43031H` (Mandarin) was swallowed as body text of the ISCI above it and
+   **vanished from the parse**.
+2. Because that block never closed, it absorbed the next row's `(Mandarin)`, and dialect
+   was "the **last** `(Word)` in the block" → `TYRN43021H`, the **Cantonese** cut, was
+   tagged **Mandarin**. 34 Mandarin spots would have aired the wrong-language commercial.
+   **Nothing on screen looked wrong** — the dialect column just read Mandarin. Same family
+   as the Admerasia colour→ISCI collapse: the language must stay tied to its own creative.
+3. The last row's block ran past the table into `Link to spots:` (the end marker only knew
+   `Link to new spots`), so `TYRN43051H` got **no dates** — and the route falls back to the
+   instruction-level window when a spot has none, so the 8/12 Hindi creative would have
+   been assigned across the entire 8/4–8/31 flight, colliding with the 8/4 creative.
+
+**How to apply:**
+1. A key that can appear **alone on its line** must still anchor a record: `\s*(.*)`, never
+   `\s+(.*)`. One missing character deleted a whole creative.
+2. When a row can wrap, resolve each field by **adjacency, in priority order** — own line,
+   then the line ABOVE, then the lines below — and mark each metadata line **claimed by
+   exactly one key**. Claiming is what makes it correct rather than lucky: every ISCI
+   resolves from the line above it, leaving the line below free for the next one. Without
+   it, this PDF only "worked" because all four dialects shared one window; a per-dialect
+   flight would have silently given every spot its neighbour's dates.
+3. **Search a record's attributes FORWARD from its key, never backward, and never past the
+   next key.** "Last match in the block" is only safe if block boundaries are perfect —
+   and they were not.
+4. **Validate a parsed enum against a known vocabulary.** A parenthesised word only counts
+   as the dialect if it IS a dialect, so a title like `(Non Offer)` can never become a
+   language. Detect by content, not by position.
+5. **Sweep every traffic PDF on hand old-vs-new and require the diff to be exactly the
+   file you meant to fix** — 10 files swept, only #13935 changed, the June #13933
+   ISCI-first instruction byte-identical.
+6. **Diagnostic signature:** one row missing its date while its siblings have theirs, plus
+   a dialect that appears twice across flights while another is absent. A missing date is
+   the *cheap* symptom; the duplicated dialect is the one that misairs copy — when a
+   dialect count looks wrong, check the ISCI against the PDF before assigning.
+
+---
+
 ## An Agency Inserting ONE Column Silently Zeroed Every Rate — Map by Header Label + Reconcile
 
 **Session:** DART Aug/Sept entered $3,000 as $0 on every line (2026-08-07)
