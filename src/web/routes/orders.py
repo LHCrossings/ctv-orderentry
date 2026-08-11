@@ -446,6 +446,95 @@ def _pi_filler_supporto(cur, filmati_id, fallback_desc: str = "") -> str:
     return supporto[:30]
 
 
+# ─── Break optimization ordering (pure helpers, module level so they are
+# directly testable — the router factory below is 5k lines of closure) ───
+
+def _bo_classify(newtype: str, capo, fine, is_wl: bool, prev_label: str, prev_contract: str = "", contract: str = ""):
+    if capo and fine:
+        return 1, "BOOKEND"
+    if capo and not fine:
+        return 2, "BILLBOARD"
+    if prev_label == "BILLBOARD" and newtype in ("COM", "BNS") and contract and contract == prev_contract:
+        return 3, "COMPANION"
+    if newtype in ("COM", "BNS") and not is_wl:
+        return 4, "PAYING"
+    if newtype in ("COM", "BNS") and is_wl:
+        return 5, "WORLDLINK"
+    if newtype == "PER":
+        return 6, "PI"
+    if newtype == "PSA":
+        return 7, "PSA"
+    if newtype == "ID":
+        return 8, "STATION ID"
+    return 0, newtype or "OTHER"
+
+def _pi_product_key(title: str) -> str:
+    """'PI-504-030: ...' → 'PI-504'; unrecognised titles return the full title."""
+    import re as _re
+    m = _re.match(r'^(PI-\d+)-\d+', (title or "").strip(), _re.IGNORECASE)
+    return m.group(1).upper() if m else (title or "").strip().upper()
+
+# Sort keys that override the per-type priority from _bo_classify. They must
+# stay ordered relative to each other: a bookend pair brackets the break's
+# COMMERCIALS, and the station ID closes the break after them.
+_BO_TOP_BOOKEND    = 1
+_BO_BOTTOM_BOOKEND = 999
+# The legal ID is ALWAYS the last element in the break — after a bookend pair
+# too (Lee 2026-08-10). _bo_classify ranks STATION ID 8, which is last among
+# the ordinary spot types but sorts ahead of the bottom bookend's 999, so the
+# optimizer kept pulling the ID in front of the closing bookend and flagging a
+# correct break as "Out of Order".
+_BO_STATION_ID     = 1000
+
+def _bo_optimize(spots: list) -> list:
+    skip = set()
+    pairs = []
+    bookend_count = 0
+    for j, s in enumerate(spots):
+        if j in skip:
+            continue
+        if s["label"] == "BILLBOARD":
+            pair = [s]
+            if j + 1 < len(spots) and spots[j + 1]["label"] == "COMPANION":
+                pair.append(spots[j + 1])
+                skip.add(j + 1)
+            pairs.append((2, pair))
+        elif s["label"] == "BOOKEND":
+            bookend_count += 1
+            # First bookend → top of break; second bookend → bottom (after
+            # every commercial, but still before the station ID)
+            prio = _BO_TOP_BOOKEND if bookend_count == 1 else _BO_BOTTOM_BOOKEND
+            pairs.append((prio, [s]))
+        elif s["label"] == "STATION ID":
+            pairs.append((_BO_STATION_ID, [s]))
+        else:
+            pairs.append((s["priority"], [s]))
+    pairs.sort(key=lambda x: x[0])
+    result = [s for _, grp in pairs for s in grp]
+
+    # Reorder PI spots to avoid same-product adjacency (e.g. PI-504-030 and PI-504-060)
+    pi_indices = [i for i, s in enumerate(result) if s["label"] == "PI"]
+    if len(pi_indices) > 1:
+        from collections import Counter
+        pi_spots = [result[i] for i in pi_indices]
+        counts = Counter(_pi_product_key(s["title"]) for s in pi_spots)
+        reordered, last_key, remaining = [], None, list(pi_spots)
+        while remaining:
+            best = max(
+                (s for s in remaining if _pi_product_key(s["title"]) != last_key),
+                key=lambda s: counts[_pi_product_key(s["title"])],
+                default=remaining[0],
+            )
+            reordered.append(best)
+            last_key = _pi_product_key(best["title"])
+            counts[last_key] -= 1
+            remaining.remove(best)
+        for idx, pi_idx in enumerate(pi_indices):
+            result[pi_idx] = reordered[idx]
+
+    return result
+
+
 def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRouter:
     router = APIRouter()
 
@@ -5427,75 +5516,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         # day's final show ends at 06:00 next morning (= 30:00), not at 06:00 today
         return _bcast_window_to_frames(t_from, t_to, _BO_FPS)
 
-    def _bo_classify(newtype: str, capo, fine, is_wl: bool, prev_label: str, prev_contract: str = "", contract: str = ""):
-        if capo and fine:
-            return 1, "BOOKEND"
-        if capo and not fine:
-            return 2, "BILLBOARD"
-        if prev_label == "BILLBOARD" and newtype in ("COM", "BNS") and contract and contract == prev_contract:
-            return 3, "COMPANION"
-        if newtype in ("COM", "BNS") and not is_wl:
-            return 4, "PAYING"
-        if newtype in ("COM", "BNS") and is_wl:
-            return 5, "WORLDLINK"
-        if newtype == "PER":
-            return 6, "PI"
-        if newtype == "PSA":
-            return 7, "PSA"
-        if newtype == "ID":
-            return 8, "STATION ID"
-        return 0, newtype or "OTHER"
-
-    def _pi_product_key(title: str) -> str:
-        """'PI-504-030: ...' → 'PI-504'; unrecognised titles return the full title."""
-        import re as _re
-        m = _re.match(r'^(PI-\d+)-\d+', (title or "").strip(), _re.IGNORECASE)
-        return m.group(1).upper() if m else (title or "").strip().upper()
-
-    def _bo_optimize(spots: list) -> list:
-        skip = set()
-        pairs = []
-        bookend_count = 0
-        for j, s in enumerate(spots):
-            if j in skip:
-                continue
-            if s["label"] == "BILLBOARD":
-                pair = [s]
-                if j + 1 < len(spots) and spots[j + 1]["label"] == "COMPANION":
-                    pair.append(spots[j + 1])
-                    skip.add(j + 1)
-                pairs.append((2, pair))
-            elif s["label"] == "BOOKEND":
-                bookend_count += 1
-                # First bookend → top of break; second bookend → bottom (after everything else)
-                prio = 1 if bookend_count == 1 else 999
-                pairs.append((prio, [s]))
-            else:
-                pairs.append((s["priority"], [s]))
-        pairs.sort(key=lambda x: x[0])
-        result = [s for _, grp in pairs for s in grp]
-
-        # Reorder PI spots to avoid same-product adjacency (e.g. PI-504-030 and PI-504-060)
-        pi_indices = [i for i, s in enumerate(result) if s["label"] == "PI"]
-        if len(pi_indices) > 1:
-            from collections import Counter
-            pi_spots = [result[i] for i in pi_indices]
-            counts = Counter(_pi_product_key(s["title"]) for s in pi_spots)
-            reordered, last_key, remaining = [], None, list(pi_spots)
-            while remaining:
-                best = max(
-                    (s for s in remaining if _pi_product_key(s["title"]) != last_key),
-                    key=lambda s: counts[_pi_product_key(s["title"])],
-                    default=remaining[0],
-                )
-                reordered.append(best)
-                last_key = _pi_product_key(best["title"])
-                counts[last_key] -= 1
-                remaining.remove(best)
-            for idx, pi_idx in enumerate(pi_indices):
-                result[pi_idx] = reordered[idx]
-
-        return result
 
     def _bo_pi_library_pick(cur, duration: int, exclude_keys: set):
         """Pick a valid replacement filler of the same length (±5 frames) from the
