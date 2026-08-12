@@ -527,6 +527,12 @@ async function doCopy(commit) {
     }
 }
 
+// Picking a target start auto-fills the end 6 days later (a 7-day range);
+// the user can still adjust it afterwards.
+document.getElementById('tgtFrom').addEventListener('change', e => {
+    if (e.target.value) document.getElementById('tgtTo').value = addDays(e.target.value, 6);
+});
+
 // Any change to the copy form invalidates a prior clean dry run.
 ['copyStations', 'srcWeek', 'tgtFrom', 'tgtTo'].forEach(id => {
     document.getElementById(id).addEventListener('change', () => {
