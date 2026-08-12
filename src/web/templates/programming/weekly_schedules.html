@@ -91,6 +91,28 @@
         .plan-committed { color: #4c6b3c; font-weight: 700; }
 
         .spin { color: var(--text-muted); font-size: 0.82rem; padding: 8px 0; }
+
+        /* Block detail modal */
+        .pblk { cursor: pointer; }
+        .ws-overlay { position: fixed; inset: 0; background: rgba(46,52,64,0.45); display: none; align-items: flex-start; justify-content: center; padding: 8vh 16px 16px; z-index: 100; }
+        .ws-overlay.open { display: flex; }
+        .ws-modal { background: var(--nord6); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.25); width: 520px; max-width: 95vw; max-height: 82vh; overflow-y: auto; }
+        .ws-modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 16px 20px 10px; border-bottom: 1px solid var(--border-color); }
+        .ws-modal-title { font-size: 1rem; font-weight: 700; color: var(--text-primary); }
+        .ws-modal-sub { font-size: 0.76rem; color: var(--text-muted); margin-top: 3px; }
+        .ws-modal-sub .exp { color: var(--nord11); font-weight: 700; }
+        .ws-close { background: transparent; border: none; font-size: 1.2rem; color: var(--text-muted); cursor: pointer; padding: 0 2px; line-height: 1; }
+        .ws-close:hover { color: var(--text-primary); }
+        .ws-modal-body { padding: 12px 20px 18px; }
+        .seg-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        .seg-table th { text-align: left; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); padding: 4px 8px; border-bottom: 1px solid var(--border-color); }
+        .seg-table td { padding: 4px 8px; border-bottom: 1px solid var(--border-color); color: var(--text-primary); font-variant-numeric: tabular-nums; }
+        .seg-table tr.brk td { background: rgba(94,129,172,0.10); font-weight: 600; }
+        .seg-tag { font-size: 0.68rem; font-weight: 700; padding: 1px 8px; border-radius: 10px; }
+        .seg-tag.program { background: var(--nord5); color: var(--nord3); }
+        .seg-tag.break { background: rgba(94,129,172,0.25); color: var(--nord10); }
+        .ws-summary { font-size: 0.78rem; color: var(--text-muted); margin: 10px 0 0; line-height: 1.6; }
+        .ws-summary b { color: var(--text-primary); }
     </style>
 </head>
 <body>
@@ -125,6 +147,14 @@
                     <input type="date" id="weekInput" class="field-input" style="width:150px" />
                     <button class="nav-btn" id="nextWeek" title="Next week">›</button>
                     <button class="nav-btn" id="thisWeek">This Week</button>
+                </div>
+            </div>
+            <div class="field-group">
+                <span class="field-label">Row height</span>
+                <div class="pill-group" id="zoomPills">
+                    <button class="mkt-pill" data-hpx="44">S</button>
+                    <button class="mkt-pill" data-hpx="80">M</button>
+                    <button class="mkt-pill" data-hpx="120">L</button>
                 </div>
             </div>
             <div class="horizon-chip" id="horizonChip"></div>
@@ -188,11 +218,25 @@
 
 </main>
 
+<div class="ws-overlay" id="blockOverlay">
+    <div class="ws-modal">
+        <div class="ws-modal-head">
+            <div>
+                <div class="ws-modal-title" id="bmTitle"></div>
+                <div class="ws-modal-sub" id="bmSub"></div>
+            </div>
+            <button class="ws-close" id="bmClose" title="Close">✕</button>
+        </div>
+        <div class="ws-modal-body" id="bmBody"></div>
+    </div>
+</div>
+
 <script>
 let STATIONS = [];
 let currentStation = 1;
 let currentMonday = null;   // ISO yyyy-mm-dd
 let lastDryRun = null;      // remembers a clean dry-run's params for commit
+let HPX = parseInt(localStorage.getItem('ws_hpx') || '80', 10); // px per hour
 
 function iso(d) { return d.toISOString().slice(0, 10); }
 function mondayOf(dateStr) {
@@ -263,9 +307,9 @@ async function loadWeek() {
     document.getElementById('gridTitle').textContent =
         `${s ? s.name : ''} — week of ${disp(data.week)}`;
 
-    const HPX = 44; // px per hour — keep in sync with --hpx in the CSS
     const grid = document.createElement('div');
     grid.className = 'week-grid';
+    grid.style.setProperty('--hpx', HPX + 'px'); // drives gridlines + column height
 
     // hour gutter: labels aligned to the shared time axis (06:00 -> 05:00)
     const gutter = document.createElement('div');
@@ -303,7 +347,8 @@ async function loadWeek() {
             div.style.top = top + 'px';
             div.style.height = h + 'px';
             div.title = `${b.from}–${b.to}  ${b.name}\n#${b.id} · ${b.dur} · ${b.prgs} prg / ${b.coms} com` +
-                        (b.expired ? '\nEXPIRED BLOCK' : '');
+                        (b.expired ? '\nEXPIRED BLOCK' : '') + '\nClick for break structure';
+            div.addEventListener('click', () => openBlockModal(b, day));
             if (h < 34) {
                 div.innerHTML = `<span class="pblk-time">${esc(b.from)}</span><span class="pblk-name">${esc(b.name)}</span>`;
             } else {
@@ -367,6 +412,44 @@ async function runIdentity() {
         wrap.appendChild(div);
     });
 }
+
+// ---- block detail modal ----
+async function openBlockModal(b, day) {
+    const overlay = document.getElementById('blockOverlay');
+    document.getElementById('bmTitle').textContent = b.name;
+    document.getElementById('bmSub').textContent = `${day.weekday} ${disp(day.date)} · ${b.from}–${b.to}`;
+    document.getElementById('bmBody').innerHTML = '<div class="spin">Loading…</div>';
+    overlay.classList.add('open');
+    const r = await fetch(`/programming/weekly-schedules/block?block_id=${b.id}&at=${b.offset}`);
+    const d = await r.json();
+    if (d.error) { document.getElementById('bmBody').innerHTML = `<div class="plan-issue">${esc(d.error)}</div>`; return; }
+    document.getElementById('bmSub').innerHTML =
+        `${esc(day.weekday)} ${disp(day.date)} · ${esc(b.from)}–${esc(b.to)} · ${esc(d.duration)} · ` +
+        `#${d.id} · ${esc(d.station)}` + (d.expired ? ' · <span class="exp">EXPIRED BLOCK</span>' : '');
+    let rows = d.segments.map(s =>
+        `<tr class="${s.type === 'break' ? 'brk' : ''}">` +
+        `<td><span class="seg-tag ${s.type}">${s.type === 'break' ? 'Break' : 'Program'}</span></td>` +
+        `<td>${esc(s.from)}</td><td>${esc(s.to)}</td><td>${esc(s.length)}</td></tr>`
+    ).join('');
+    let html =
+        `<table class="seg-table"><thead><tr><th></th><th>Starts</th><th>Ends</th><th>Length</th></tr></thead>` +
+        `<tbody>${rows}</tbody></table>` +
+        `<div class="ws-summary">` +
+        `<b>${d.breaks}</b> break${d.breaks === 1 ? '' : 's'} · <b>${esc(d.break_time)}</b> commercial time · ` +
+        `<b>${esc(d.program_time)}</b> program time<br>` +
+        (d.used_first ? `In schedules <b>${disp(d.used_first)}</b> → <b>${disp(d.used_last)}</b> (${d.used_days.toLocaleString()} days)` : 'Not used in any schedule') +
+        (d.copied_from ? `<br>Copied from #${d.copied_from.id} ${esc(d.copied_from.name)} (${esc(d.copied_from.station)})` : '') +
+        `</div>`;
+    document.getElementById('bmBody').innerHTML = html;
+}
+document.getElementById('bmClose').addEventListener('click', () =>
+    document.getElementById('blockOverlay').classList.remove('open'));
+document.getElementById('blockOverlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
+});
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.getElementById('blockOverlay').classList.remove('open');
+});
 
 // ---- copy ----
 function copyParams(commit) {
@@ -462,6 +545,19 @@ document.getElementById('commitBtn').addEventListener('click', () => {
     doCopy(true);
 });
 document.getElementById('runIdentity').addEventListener('click', runIdentity);
+document.querySelectorAll('#zoomPills .mkt-pill').forEach(p => {
+    p.addEventListener('click', () => {
+        HPX = parseInt(p.dataset.hpx, 10);
+        localStorage.setItem('ws_hpx', String(HPX));
+        syncZoomPills();
+        loadWeek();
+    });
+});
+function syncZoomPills() {
+    document.querySelectorAll('#zoomPills .mkt-pill').forEach(p =>
+        p.classList.toggle('active', parseInt(p.dataset.hpx, 10) === HPX));
+}
+syncZoomPills();
 document.getElementById('prevWeek').addEventListener('click', () => { currentMonday = addDays(currentMonday, -7); loadWeek(); });
 document.getElementById('nextWeek').addEventListener('click', () => { currentMonday = addDays(currentMonday, 7); loadWeek(); });
 document.getElementById('thisWeek').addEventListener('click', () => { currentMonday = mondayOf(iso(new Date())); loadWeek(); });

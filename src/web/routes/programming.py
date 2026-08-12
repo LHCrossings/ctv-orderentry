@@ -79,6 +79,22 @@ def _frames_to_bcast(frames: int) -> str:
     return f"{total_min // 60:02d}:{total_min % 60:02d}"
 
 
+def _frames_to_hms(frames: int) -> str:
+    """Frame-of-day -> clock HH:MM:SS (same midnight wrap as _frames_to_bcast)."""
+    total_sec = round(frames * 3600 / FRAMES_PER_HOUR) % 86400
+    h, rem = divmod(total_sec, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
+
+def _sec_disp(frames: int) -> str:
+    """Duration frames -> M:SS (or H:MM:SS for hour-plus)."""
+    total_sec = round(frames * 3600 / FRAMES_PER_HOUR)
+    h, rem = divmod(total_sec, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+
 def _dur_disp(frames: int) -> str:
     total_min = round(frames * 60 / FRAMES_PER_HOUR)
     h, m = divmod(total_min, 60)
@@ -502,6 +518,8 @@ def build_programming_router(templates: Jinja2Templates) -> APIRouter:
                             # minutes from 06:00, for proportional rendering
                             "start_min": round((b["offset"] - DAY_START) * 60 / FRAMES_PER_HOUR),
                             "dur_min": round(b["duration"] * 60 / FRAMES_PER_HOUR),
+                            # raw frame offset, passed back by the detail modal
+                            "offset": b["offset"],
                             "prgs": segs.get(b["id"], {}).get("PRGS", 0),
                             "coms": segs.get(b["id"], {}).get("COMS", 0),
                             "expired": b["expired"],
@@ -567,6 +585,91 @@ def build_programming_router(templates: Jinja2Templates) -> APIRouter:
         # same-show churn (the real picker hazard) sorts first
         churn.sort(key=lambda c: (not c["same_show"], c["weekday"], c["time"]))
         return JSONResponse({"station": station, "churn": churn})
+
+    @router.get("/programming/weekly-schedules/block")
+    def block_detail(block_id: int, at: int = DAY_START):
+        """One program block's full detail: segment (break) structure, usage
+        span, and copy provenance. `at` = the clicked instance's frame-of-day
+        offset, so segment times render as clock times for that airing."""
+        with _connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT b.Name, b.Duration, b.Cod_User, b.Expired, b.dipendenceid,
+                       o.Name, o.Cod_User
+                FROM Traffic_Block b
+                LEFT JOIN Traffic_Block o ON o.ID_TrafficBlock = b.dipendenceid AND b.dipendenceid <> 0
+                WHERE b.ID_TrafficBlock = %s
+                """,
+                (block_id,),
+            )
+            row = cur.fetchone()
+            if row is None:
+                return JSONResponse({"error": "unknown block"}, status_code=404)
+            name, duration, cod_user, expired, dep_id, dep_name, dep_station = row
+
+            cur.execute(
+                """
+                SELECT Offset, Duration, Type, visible FROM traffic_segment
+                WHERE ID_TrafficBlock = %s ORDER BY Offset
+                """,
+                (block_id,),
+            )
+            segments = []
+            prg_frames = com_frames = n_breaks = 0
+            for off, dur, typ, visible in cur.fetchall():
+                typ = (typ or "").strip()
+                if typ == "COMS":
+                    n_breaks += 1
+                    com_frames += dur
+                else:
+                    prg_frames += dur
+                segments.append(
+                    {
+                        "type": "break" if typ == "COMS" else "program",
+                        "from": _frames_to_hms(at + off),
+                        "to": _frames_to_hms(at + off + dur),
+                        "length": _sec_disp(dur),
+                        "visible": bool(visible),
+                    }
+                )
+
+            cur.execute(
+                """
+                SELECT MIN(tc.Date), MAX(tc.Date), COUNT(*)
+                FROM Traffic_Calendar tc
+                JOIN Traffic_ScheduleBlock sb ON sb.ID_TrafficSchedule = tc.ID_TrafficSchedule
+                WHERE sb.ID_TrafficBlock = %s AND tc.Level = 0
+                """,
+                (block_id,),
+            )
+            first, last, n_days = cur.fetchone()
+
+        codes = {s[0]: s[1] for s in STATIONS}
+        return JSONResponse(
+            {
+                "id": block_id,
+                "name": (name or "").strip(),
+                "station": codes.get(cod_user, str(cod_user)),
+                "duration": _dur_disp(duration),
+                "expired": bool(expired),
+                "segments": segments,
+                "breaks": n_breaks,
+                "break_time": _sec_disp(com_frames),
+                "program_time": _sec_disp(prg_frames),
+                "used_first": str(first)[:10] if first else None,
+                "used_last": str(last)[:10] if last else None,
+                "used_days": n_days,
+                "copied_from": (
+                    {
+                        "id": dep_id,
+                        "name": (dep_name or "").strip(),
+                        "station": codes.get(dep_station, str(dep_station)),
+                    }
+                    if dep_id else None
+                ),
+            }
+        )
 
     # -- copy (Phase 2) --------------------------------------------------------
 
