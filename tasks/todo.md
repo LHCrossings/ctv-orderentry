@@ -51,6 +51,30 @@ Scope confirmed by Lee: Phases 1+2 together, one page.
   intentional — ask Lee first)
 - Any grid editing (drag/drop, structure changes)
 
-## Review
+## Review (2026-08-12, commit 95eb1a1)
 
-(to fill in as work completes)
+**Shipped.** Portal card "Programming" → `/programming` hub → "Etere Weekly
+Schedules" (`/programming/weekly-schedules`). All checkboxes above done except
+noted:
+
+- Router `src/web/routes/programming.py`: stations/coverage, load (week grid +
+  per-day validation), identity (ID-churn), copy (dry-run default / commit).
+- Viewer shows only scheduled blocks — the ~1,500-per-station expired
+  graveyard never appears (Lee's "no expired fluff" ask).
+- Identity check reframed per Lee: flags ID CHURN per (weekday, offset) slot,
+  never stable multi-ID sets (once-per-day rule). Live findings: NYC Sat 24:00
+  runs Shop LC #5289 some weeks / #5341 others (real hazard); DAL shows only
+  legit programming changes (The Founders replacing Oriental Wisdom).
+- Copy: per-market own-week source, weekday→weekday, same block IDs; guards
+  all verified (empty targets refuse tested against live data, >400-day cap,
+  placed-spot check, weekday-variance, verify-inside-txn + rollback proven in
+  a rolled-back production transaction; SCOPE_IDENTITY batch works under
+  pymssql). Undo .sql + audit .json to `logs/program_grid/` before commit.
+- Extend mode: blank target-from = each market's horizon + 1 day.
+- traffic_schedlog answered: Etere only logs "Put in trash" — copies unlogged.
+- Validator tamper-tested: gap/overlap/late-start/short-day/dup-block all
+  flagged; 2-frame overlap tolerated. 512 unit tests pass.
+- NOT built (deliberate): replace mode (targets must be empty), cross-market
+  seeding, duplicate cleanup, editing (Phase 4).
+- First real commit click is Lee's (per the offair-utility precedent). Windows
+  repo must pull + restart to see the page.
