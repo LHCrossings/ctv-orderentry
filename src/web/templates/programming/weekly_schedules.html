@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Etere Weekly Schedules — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 1500px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px 24px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+            margin-bottom: 16px;
+        }
+        .card-title { font-size: 0.95rem; font-weight: 700; color: var(--text-primary); margin-bottom: 12px; }
+
+        .controls-row { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+        .field-group { display: flex; flex-direction: column; gap: 4px; }
+        .field-label { font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .field-input { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 7px 12px; font-size: 0.9rem; color: var(--text-primary); outline: none; font-family: inherit; }
+        .field-input:focus { border-color: var(--nord10); }
+
+        .pill-group { display: flex; gap: 6px; flex-wrap: wrap; }
+        .mkt-pill { background: transparent; border: 1px solid var(--border-color); border-radius: 20px; padding: 5px 12px; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); cursor: pointer; transition: all 0.15s; font-family: inherit; }
+        .mkt-pill:hover:not(.active) { border-color: var(--nord10); color: var(--nord10); }
+        .mkt-pill.active { background: var(--nord10); border-color: var(--nord10); color: var(--nord6); }
+
+        .nav-btn { background: transparent; border: 1px solid var(--border-color); border-radius: 8px; padding: 7px 12px; font-size: 0.9rem; color: var(--text-primary); cursor: pointer; font-family: inherit; }
+        .nav-btn:hover { border-color: var(--nord10); color: var(--nord10); }
+
+        .horizon-chip { font-size: 0.78rem; color: var(--text-muted); padding: 6px 0 7px; }
+        .horizon-chip b { color: var(--text-primary); }
+
+        /* Week grid */
+        .week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+        .day-col { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; min-width: 0; }
+        .day-head { padding: 8px 10px; font-size: 0.78rem; font-weight: 700; color: var(--text-primary); background: var(--nord5); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+        .day-ok   { font-size: 0.68rem; font-weight: 700; padding: 1px 7px; border-radius: 10px; background: rgba(163,190,140,0.25); color: #4c6b3c; }
+        .day-bad  { font-size: 0.68rem; font-weight: 700; padding: 1px 7px; border-radius: 10px; background: rgba(191,97,106,0.2); color: var(--nord11); cursor: help; }
+        .day-none { font-size: 0.68rem; font-weight: 700; padding: 1px 7px; border-radius: 10px; background: var(--nord4); color: var(--nord2); }
+        .day-issues { padding: 6px 10px; font-size: 0.7rem; color: var(--nord11); border-bottom: 1px solid var(--border-color); }
+
+        .blk { padding: 5px 10px 6px; border-bottom: 1px solid var(--border-color); font-size: 0.74rem; }
+        .blk:last-child { border-bottom: none; }
+        .blk-time { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+        .blk-name { color: var(--text-primary); font-weight: 600; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .blk-meta { color: var(--text-muted); font-size: 0.68rem; margin-top: 1px; }
+        .blk-meta .exp { color: var(--nord11); font-weight: 700; }
+        .blk-id { color: var(--nord3); opacity: 0.7; }
+
+        /* Identity panel */
+        .churn-entry { border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; font-size: 0.82rem; }
+        .churn-entry.hazard { border-color: var(--nord11); background: rgba(191,97,106,0.06); }
+        .churn-slot { font-weight: 700; color: var(--text-primary); }
+        .churn-tag { font-size: 0.68rem; font-weight: 700; padding: 1px 8px; border-radius: 10px; margin-left: 8px; vertical-align: 1px; }
+        .churn-tag.hazard { background: rgba(191,97,106,0.2); color: var(--nord11); }
+        .churn-tag.info { background: var(--nord5); color: var(--nord3); }
+        .churn-ids { margin-top: 4px; color: var(--text-muted); font-size: 0.76rem; }
+        .churn-ids div { padding: 1px 0; }
+
+        /* Copy panel */
+        .stn-check { display: inline-flex; align-items: center; gap: 5px; font-size: 0.8rem; color: var(--text-primary); margin: 0 10px 6px 0; cursor: pointer; }
+        .copy-actions { display: flex; gap: 10px; align-items: center; margin-top: 14px; }
+        .btn { border: none; border-radius: 8px; padding: 9px 18px; font-size: 0.88rem; font-weight: 600; cursor: pointer; font-family: inherit; }
+        .btn-dry { background: var(--nord10); color: var(--nord6); }
+        .btn-dry:hover { background: var(--nord9); }
+        .btn-commit { background: var(--nord11); color: var(--nord6); display: none; }
+        .btn-commit.ready { display: inline-block; }
+        .copy-note { font-size: 0.76rem; color: var(--text-muted); }
+
+        .plan-station { border: 1px solid var(--border-color); border-radius: 8px; padding: 12px 16px; margin-top: 10px; font-size: 0.82rem; }
+        .plan-station.bad { border-color: var(--nord11); }
+        .plan-head { font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+        .plan-issue { color: var(--nord11); font-size: 0.78rem; padding: 1px 0; }
+        .plan-sum { color: var(--text-muted); font-size: 0.78rem; }
+        .plan-committed { color: #4c6b3c; font-weight: 700; }
+
+        .spin { color: var(--text-muted); font-size: 0.82rem; padding: 8px 0; }
+        @media (max-width: 1100px) { .week-grid { grid-template-columns: repeat(2, 1fr); } }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/programming" class="home-btn">🏠</a>
+            <div class="logo-icon">🗓️</div>
+            <div>
+                <h1>Etere Weekly <span>Schedules</span></h1>
+                <div class="logo-sub">Programming · Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+
+    <!-- Controls -->
+    <div class="tool-card">
+        <div class="controls-row">
+            <div class="field-group">
+                <span class="field-label">Market</span>
+                <div class="pill-group" id="stationPills"></div>
+            </div>
+            <div class="field-group">
+                <span class="field-label">Week of</span>
+                <div style="display:flex; gap:6px; align-items:center;">
+                    <button class="nav-btn" id="prevWeek" title="Previous week">‹</button>
+                    <input type="date" id="weekInput" class="field-input" style="width:150px" />
+                    <button class="nav-btn" id="nextWeek" title="Next week">›</button>
+                    <button class="nav-btn" id="thisWeek">This Week</button>
+                </div>
+            </div>
+            <div class="horizon-chip" id="horizonChip"></div>
+        </div>
+    </div>
+
+    <!-- Week grid -->
+    <div class="tool-card">
+        <div class="card-title" id="gridTitle">Week</div>
+        <div id="gridWrap"><div class="spin">Loading…</div></div>
+    </div>
+
+    <!-- Identity check -->
+    <div class="tool-card">
+        <div class="card-title">Program ID Check
+            <button class="nav-btn" id="runIdentity" style="margin-left:10px; font-size:0.78rem;">Run check</button>
+        </div>
+        <div class="copy-note" style="margin-bottom:8px;">
+            Flags future slots where the same show is backed by <b>different</b> program IDs in different
+            weeks — that's what makes one show appear twice in the block picker on an order.
+            A show that airs several times a day correctly has several IDs (one per airing); those are not flagged.
+        </div>
+        <div id="identityWrap"></div>
+    </div>
+
+    <!-- Copy / extend -->
+    <div class="tool-card">
+        <div class="card-title">Copy Week Forward</div>
+        <div class="copy-note" style="margin-bottom:10px;">
+            Copies each selected market's <b>own</b> schedule of the source week onto the target range,
+            weekday to weekday, reusing the same program IDs (never duplicating programs).
+            Target days must be empty. Dry run first — commit only appears after a clean dry run.
+        </div>
+        <div class="controls-row">
+            <div class="field-group">
+                <span class="field-label">Markets</span>
+                <div id="copyStations"></div>
+            </div>
+        </div>
+        <div class="controls-row" style="margin-top:10px;">
+            <div class="field-group">
+                <span class="field-label">Source week (Monday)</span>
+                <input type="date" id="srcWeek" class="field-input" style="width:150px" />
+            </div>
+            <div class="field-group">
+                <span class="field-label">Target from (blank = day after each market's last programmed day)</span>
+                <input type="date" id="tgtFrom" class="field-input" style="width:150px" />
+            </div>
+            <div class="field-group">
+                <span class="field-label">Target through</span>
+                <input type="date" id="tgtTo" class="field-input" style="width:150px" />
+            </div>
+        </div>
+        <div class="copy-actions">
+            <button class="btn btn-dry" id="dryRun">Dry Run</button>
+            <button class="btn btn-commit" id="commitBtn">Commit Copy</button>
+            <span class="copy-note" id="copyStatus"></span>
+        </div>
+        <div id="planWrap"></div>
+    </div>
+
+</main>
+
+<script>
+let STATIONS = [];
+let currentStation = 1;
+let currentMonday = null;   // ISO yyyy-mm-dd
+let lastDryRun = null;      // remembers a clean dry-run's params for commit
+
+function iso(d) { return d.toISOString().slice(0, 10); }
+function mondayOf(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return iso(d);
+}
+function addDays(dateStr, n) {
+    const d = new Date(dateStr + 'T00:00:00');
+    d.setDate(d.getDate() + n);
+    return iso(d);
+}
+function disp(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    return (d.getMonth() + 1) + '/' + d.getDate() + '/' + String(d.getFullYear()).slice(2);
+}
+function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ---- stations + coverage ----
+async function loadStations() {
+    const r = await fetch('/programming/weekly-schedules/stations');
+    const data = await r.json();
+    STATIONS = data.stations;
+    const pills = document.getElementById('stationPills');
+    pills.innerHTML = '';
+    STATIONS.forEach(s => {
+        const b = document.createElement('button');
+        b.className = 'mkt-pill' + (s.id === currentStation ? ' active' : '');
+        b.textContent = s.code;
+        b.title = s.name + (s.last_programmed ? ' — programmed thru ' + disp(s.last_programmed) : '');
+        b.addEventListener('click', () => { currentStation = s.id; render(); });
+        pills.appendChild(b);
+    });
+    const copyBox = document.getElementById('copyStations');
+    copyBox.innerHTML = '';
+    STATIONS.forEach(s => {
+        const lab = document.createElement('label');
+        lab.className = 'stn-check';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.value = s.id;
+        cb.checked = (s.id === currentStation);
+        lab.appendChild(cb);
+        lab.appendChild(document.createTextNode(s.code));
+        copyBox.appendChild(lab);
+    });
+    updateHorizon();
+}
+
+function updateHorizon() {
+    const s = STATIONS.find(x => x.id === currentStation);
+    document.getElementById('horizonChip').innerHTML = s && s.last_programmed
+        ? `<b>${esc(s.code)}</b> programmed through <b>${disp(s.last_programmed)}</b>`
+        : '';
+}
+
+// ---- week grid ----
+async function loadWeek() {
+    const wrap = document.getElementById('gridWrap');
+    wrap.innerHTML = '<div class="spin">Loading…</div>';
+    const r = await fetch(`/programming/weekly-schedules/load?station=${currentStation}&week=${currentMonday}`);
+    const data = await r.json();
+    if (data.error) { wrap.innerHTML = `<div class="plan-issue">${esc(data.error)}</div>`; return; }
+    currentMonday = data.week;
+    document.getElementById('weekInput').value = currentMonday;
+    const s = STATIONS.find(x => x.id === currentStation);
+    document.getElementById('gridTitle').textContent =
+        `${s ? s.name : ''} — week of ${disp(data.week)}`;
+
+    const grid = document.createElement('div');
+    grid.className = 'week-grid';
+    data.days.forEach(day => {
+        const col = document.createElement('div');
+        col.className = 'day-col';
+        let badge;
+        if (!day.programmed) badge = '<span class="day-none">not set</span>';
+        else if (day.issues.length) badge = `<span class="day-bad" title="${esc(day.issues.join('\n'))}">${day.issues.length} issue${day.issues.length > 1 ? 's' : ''}</span>`;
+        else badge = '<span class="day-ok">24:00</span>';
+        col.innerHTML = `<div class="day-head"><span>${esc(day.weekday)} ${disp(day.date)}</span>${badge}</div>`;
+        if (day.issues.length) {
+            const iss = document.createElement('div');
+            iss.className = 'day-issues';
+            iss.innerHTML = day.issues.map(esc).join('<br>');
+            col.appendChild(iss);
+        }
+        day.blocks.forEach(b => {
+            const div = document.createElement('div');
+            div.className = 'blk';
+            div.innerHTML =
+                `<div class="blk-time">${esc(b.from)}–${esc(b.to)}</div>` +
+                `<div class="blk-name" title="${esc(b.name)} (ID ${b.id})">${esc(b.name)}</div>` +
+                `<div class="blk-meta">${b.prgs} prg · ${b.coms} com · <span class="blk-id">#${b.id}</span>` +
+                (b.expired ? ' · <span class="exp">EXPIRED BLOCK</span>' : '') + `</div>`;
+            col.appendChild(div);
+        });
+        grid.appendChild(col);
+    });
+    wrap.innerHTML = '';
+    wrap.appendChild(grid);
+}
+
+function render() {
+    document.querySelectorAll('#stationPills .mkt-pill').forEach((p, i) => {
+        p.classList.toggle('active', STATIONS[i] && STATIONS[i].id === currentStation);
+    });
+    updateHorizon();
+    document.getElementById('identityWrap').innerHTML = '';
+    loadWeek();
+}
+
+// ---- identity ----
+async function runIdentity() {
+    const wrap = document.getElementById('identityWrap');
+    wrap.innerHTML = '<div class="spin">Scanning all future weeks…</div>';
+    const r = await fetch(`/programming/weekly-schedules/identity?station=${currentStation}`);
+    const data = await r.json();
+    if (data.error) { wrap.innerHTML = `<div class="plan-issue">${esc(data.error)}</div>`; return; }
+    if (!data.churn.length) {
+        wrap.innerHTML = '<div class="copy-note">✅ Clean — every future slot keeps one program ID throughout.</div>';
+        return;
+    }
+    wrap.innerHTML = '';
+    data.churn.forEach(c => {
+        const div = document.createElement('div');
+        div.className = 'churn-entry' + (c.same_show ? ' hazard' : '');
+        const tag = c.same_show
+            ? '<span class="churn-tag hazard">same show, different IDs</span>'
+            : '<span class="churn-tag info">programming change</span>';
+        let ids = c.ids.map(e =>
+            `<div>#${e.id} ${esc(e.name)} — ${disp(e.first)} to ${disp(e.last)} (${e.days} days)</div>`
+        ).join('');
+        div.innerHTML = `<span class="churn-slot">${esc(c.weekday)} ${esc(c.time)}</span>${tag}` +
+                        `<div class="churn-ids">${ids}</div>`;
+        wrap.appendChild(div);
+    });
+}
+
+// ---- copy ----
+function copyParams(commit) {
+    const stations = Array.from(document.querySelectorAll('#copyStations input:checked'))
+        .map(cb => parseInt(cb.value, 10));
+    return {
+        stations,
+        source_week: document.getElementById('srcWeek').value,
+        target_from: document.getElementById('tgtFrom').value || null,
+        target_to: document.getElementById('tgtTo').value,
+        commit,
+    };
+}
+
+function renderPlan(results, committed) {
+    const wrap = document.getElementById('planWrap');
+    wrap.innerHTML = '';
+    results.forEach(res => {
+        const div = document.createElement('div');
+        div.className = 'plan-station' + (res.ok ? '' : ' bad');
+        let body = `<div class="plan-head">${esc(res.label || res.station)}</div>`;
+        if (res.issues && res.issues.length) {
+            body += res.issues.map(i => `<div class="plan-issue">✗ ${esc(i)}</div>`).join('');
+        }
+        if (res.ok && res.days.length) {
+            const first = res.days[0], last = res.days[res.days.length - 1];
+            const blocks = res.days.reduce((a, d) => a + d.blocks, 0);
+            body += `<div class="plan-sum">${res.days.length} day(s): ${disp(first.target)} → ${disp(last.target)}, ` +
+                    `${blocks} block placements, weekday↔weekday from week of ${disp(first.source)}</div>`;
+            if (res.committed) {
+                body += `<div class="plan-committed">✓ committed — verified against source inside the transaction</div>`;
+            }
+        }
+        div.innerHTML = body;
+        wrap.appendChild(div);
+    });
+}
+
+async function doCopy(commit) {
+    const params = copyParams(commit);
+    const status = document.getElementById('copyStatus');
+    const commitBtn = document.getElementById('commitBtn');
+    if (!params.stations.length) { status.textContent = 'Pick at least one market.'; return; }
+    if (!params.source_week) { status.textContent = 'Pick a source week.'; return; }
+    if (!params.target_to) { status.textContent = 'Pick a target end date.'; return; }
+    if (commit) {
+        const n = params.stations.length;
+        if (!confirm(`Write schedule days for ${n} market(s) through ${disp(params.target_to)}?\n\nA verified dry run just passed; this commits the same plan.`)) return;
+    }
+    status.textContent = commit ? 'Writing…' : 'Checking…';
+    commitBtn.classList.remove('ready');
+    const r = await fetch('/programming/weekly-schedules/copy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+    });
+    if (!r.ok) { status.textContent = 'Request failed (' + r.status + ').'; return; }
+    const data = await r.json();
+    renderPlan(data.results, commit);
+    const allOk = data.results.length && data.results.every(x => x.ok);
+    if (!commit) {
+        if (allOk) {
+            lastDryRun = JSON.stringify(copyParams(false));
+            status.textContent = 'Dry run clean — Commit is now enabled.';
+            commitBtn.classList.add('ready');
+        } else {
+            lastDryRun = null;
+            status.textContent = 'Dry run found problems — nothing writable.';
+        }
+    } else {
+        const done = data.results.filter(x => x.committed).length;
+        status.textContent = `Done — ${done}/${data.results.length} market(s) committed.`;
+        lastDryRun = null;
+        loadStations().then(loadWeek);
+    }
+}
+
+// Any change to the copy form invalidates a prior clean dry run.
+['copyStations', 'srcWeek', 'tgtFrom', 'tgtTo'].forEach(id => {
+    document.getElementById(id).addEventListener('change', () => {
+        document.getElementById('commitBtn').classList.remove('ready');
+        lastDryRun = null;
+    });
+});
+
+document.getElementById('dryRun').addEventListener('click', () => doCopy(false));
+document.getElementById('commitBtn').addEventListener('click', () => {
+    if (lastDryRun !== JSON.stringify(copyParams(false))) {
+        document.getElementById('copyStatus').textContent = 'Form changed since the dry run — dry run again first.';
+        document.getElementById('commitBtn').classList.remove('ready');
+        return;
+    }
+    doCopy(true);
+});
+document.getElementById('runIdentity').addEventListener('click', runIdentity);
+document.getElementById('prevWeek').addEventListener('click', () => { currentMonday = addDays(currentMonday, -7); loadWeek(); });
+document.getElementById('nextWeek').addEventListener('click', () => { currentMonday = addDays(currentMonday, 7); loadWeek(); });
+document.getElementById('thisWeek').addEventListener('click', () => { currentMonday = mondayOf(iso(new Date())); loadWeek(); });
+document.getElementById('weekInput').addEventListener('change', e => {
+    if (e.target.value) { currentMonday = mondayOf(e.target.value); loadWeek(); }
+});
+
+// ---- init ----
+(async function init() {
+    currentMonday = mondayOf(iso(new Date()));
+    document.getElementById('srcWeek').value = currentMonday;
+    await loadStations();
+    await loadWeek();
+})();
+</script>
+
+</body>
+</html>

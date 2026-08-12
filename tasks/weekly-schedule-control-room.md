@@ -83,6 +83,69 @@ Frame-of-day at 29.97fps, broadcast day **06:00 → 30:00**:
 
 ---
 
+## Block identity — the design constraint everything must respect (Lee, 2026-08-12)
+
+A "program" in the grid IS a `Traffic_Block` row, and the order-entry block picker
+groups by its ID. If the same show rides the same `ID_TrafficBlock` all year, an order
+for "M-Su 8-9p thru December" offers **one** "Mandarin News" choice. Two IDs for the
+same show = two identical-looking picker entries, and a mis-pick books airtime into
+what the scheduler treats as a different program. Hence the manual discipline:
+
+* **NYC is the reference grid for CTV.** Build NYC first, copy week→week out to a
+  horizon date so the same block IDs propagate all year.
+* **Other CTV markets are seeded by dragging from NYC's list** (which creates ONE new
+  per-market block), then that market copies its own week out — one ID per show per
+  market, forever.
+* **DAL is its own world** (The Asian Channel / TAC) — set up completely independently.
+
+Verified against production 2026-08-12:
+
+* **Blocks are strictly station-scoped** — 0 scheduleblock rows reference another
+  station's block. A cross-market seed MUST create a new per-market block row.
+* **Etere tracks copy provenance**: `Traffic_Block.dipendenceid` on the copy holds the
+  origin block's ID (e.g. CVC "M - Golden Record" 11326 → NYC 11070; ~700 rows carry
+  it). `Duplicate` is a companion flag (~696 rows). Our seeding op should write both
+  the same way Etere does.
+* **The once-per-day rule (Lee, 2026-08-12, verified):** one block ID may appear only
+  ONCE per day's schedule. Placing the same program a second time in one day forces a
+  new block ID. Verified: across 1.07M scheduleblock rows exactly ONE
+  (schedule, block) pair repeats within a day — a lone anomaly, not a pattern.
+  So N same-name IDs = the show airs up to N times per day, and that N-ID set is
+  *intentional and stable*. NYC's six "Shop LC 60" IDs are one per overnight hour
+  (24:00–29:00). DAL's four "Cantonese Primetime News" IDs all ride every week out to
+  6/25/27 — DAL's heavy duplication is this rule at work, not cruft.
+* **The discipline is holding on CTV**: ~67 blocks in future use per station;
+  everything except the structural multi-airing shows (Shop LC 60, TV Patrol World
+  REV) is exactly one ID per market out to 6/27/27.
+* **WDC may carry residue**: 141 active blocks vs ~100 elsewhere, 11 future
+  "Shop LC 60" IDs vs 6 elsewhere — check whether the extras are 8/07 failed-copy
+  leftovers or genuine extra airings before calling them cruft.
+* Historical duplicates can't be deleted (past schedules reference them) — they're
+  `Expired=1`. ~15K total blocks, only ~100/station active.
+* **`Locked` = 0 on all 1.07M scheduleblock rows** (closes the open question below —
+  always write 0).
+
+Rules this imposes on the tool:
+
+1. **Week-to-week copy never creates blocks** — `traffic_scheduleblock` inserts
+   re-point at existing IDs only (the SQL copy shape already does this; Etere's UI
+   drag is what manufactures duplicates).
+2. **Cross-market seeding creates at most ONE block per show**, stamped with
+   `dipendenceid` = origin ID, and reuses it thereafter.
+3. **The viewer must flag ID CHURN, not duplicate names.** A stable N-ID set for a
+   multi-airing show is correct. The real picker hazard is the same
+   (station, name, weekday, offset) slot using DIFFERENT block IDs in different
+   weeks — that's what makes two "Mandarin News" entries appear on an order. Flag
+   per-slot ID changes across the horizon, plus the one known same-day repeat
+   anomaly.
+4. Duplicate cleanup = set `Expired=1` on extras with no current/future use (never
+   DELETE — past schedules reference them).
+5. **A copy must never place the same block ID twice in one target day** — enforce
+   the once-per-day rule as a guard (weekday→weekday copy preserves it naturally,
+   but assert it anyway).
+
+---
+
 ## What "copy a week" actually does
 
 Derived by diffing CVC 12/28/26 against CVC 1/4/27 (0 differing rows), then used to
