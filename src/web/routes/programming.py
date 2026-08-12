@@ -300,9 +300,22 @@ def _copy_station(
         )
         n_trp = cur.fetchone()[0]
         if n_tp or n_trp:
+            # per-day breakdown so the operator can see exactly what a copy
+            # would have sent to blacklist (Etere's own copy-over behavior)
+            cur.execute(
+                """
+                SELECT Date, COUNT(*) FROM trafficPalinse
+                WHERE Cod_User = %s AND Date >= %s AND Date <= %s
+                GROUP BY Date ORDER BY Date
+                """,
+                (station, t_from.isoformat(), t_to.isoformat()),
+            )
+            per_day = [f"{str(r[0])[:10]}: {r[1]}" for r in cur.fetchall()]
+            head = "; ".join(per_day[:7]) + ("; …" if len(per_day) > 7 else "")
             issues.append(
                 f"placed spots exist in target range (TPALINSE={n_tp}, "
-                f"trafficPalinse={n_trp}) — aborting"
+                f"trafficPalinse={n_trp}) — aborting. In Etere a copy over these "
+                f"days would blacklist them. Spots per day: {head}"
             )
 
     # --- plan ---------------------------------------------------------------
@@ -497,6 +510,20 @@ def build_programming_router(templates: Jinja2Templates) -> APIRouter:
             days = _load_days(cur, station, monday, monday + timedelta(days=6))
             all_ids = [b["id"] for d in days.values() for b in d["blocks"]]
             segs = _segment_counts(cur, all_ids)
+            # contract spots placed per day — these are what Etere's own
+            # copy-over would send to blacklist
+            cur.execute(
+                """
+                SELECT Date, COUNT(*) FROM trafficPalinse
+                WHERE Cod_User = %s AND Date >= %s AND Date <= %s
+                GROUP BY Date
+                """,
+                (station, monday.isoformat(), (monday + timedelta(days=6)).isoformat()),
+            )
+            spot_counts = {
+                (r[0].date() if hasattr(r[0], "date") else r[0]): r[1]
+                for r in cur.fetchall()
+            }
         out_days = []
         for i in range(7):
             d = monday + timedelta(days=i)
@@ -507,6 +534,7 @@ def build_programming_router(templates: Jinja2Templates) -> APIRouter:
                     "date": d.isoformat(),
                     "weekday": d.strftime("%a"),
                     "programmed": day is not None,
+                    "spots": spot_counts.get(d, 0),
                     "issues": _day_issues(blocks) if day else [],
                     "blocks": [
                         {

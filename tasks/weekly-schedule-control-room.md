@@ -215,6 +215,24 @@ validator is trusted.
 
 ---
 
+## Etere-side safeguards (surveyed 2026-08-12)
+
+* The copy validation (incl. the buggy ">24h" check) lives in the **desktop
+  binary** — the copy is not an SP, it's direct table writes. All schedule SPs
+  are encrypted (`sch_Rebuild*`, `Archive_Palinse`, `Cleanup_Palinse`, …).
+* **Etere's copy over an occupied week blacklists the destination's placed
+  spots** (Lee). Our tool refuses non-empty days instead — no replace mode, so
+  it can never blacklist anything.
+* **`rpt_trf_schedvalidate(@fday, @tday, @coduser)`** — Etere's own schedule
+  validation report, verified read-only: returns every scheduled spot in the
+  window with airability flags (`assetpermit`, `status`, `available_rights`,
+  `desc_parentalrate`, `NONTRASMISSIBILE`, supporto binding). Candidate oracle
+  for a future "week airability check" panel.
+* `traffic_schedlog` records only "Put in trash" (block removals) — copies and
+  inserts are not logged by Etere, so ours owes nothing there.
+* The grid viewer now shows per-day placed-spot counts (`trafficPalinse` per
+  Date/Cod_User), and the copy guard's refusal lists spots per day.
+
 ## Also worth doing
 
 Report the false ">24 hours" error to Etere with the evidence table above. It is

@@ -46,6 +46,7 @@
         .day-ok   { font-size: 0.68rem; font-weight: 700; padding: 1px 7px; border-radius: 10px; background: rgba(163,190,140,0.25); color: #4c6b3c; }
         .day-bad  { font-size: 0.68rem; font-weight: 700; padding: 1px 7px; border-radius: 10px; background: rgba(191,97,106,0.2); color: var(--nord11); cursor: help; }
         .day-none { font-size: 0.68rem; font-weight: 700; padding: 1px 7px; border-radius: 10px; background: var(--nord4); color: var(--nord2); }
+        .day-spots { font-size: 0.66rem; font-weight: 700; padding: 1px 7px; border-radius: 10px; background: rgba(235,203,139,0.35); color: #7a5c14; cursor: help; white-space: nowrap; }
 
         .day-body { position: relative; height: calc(var(--hpx) * 24); box-sizing: content-box; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0 0 8px 8px; overflow: hidden;
                     background-image: repeating-linear-gradient(to bottom, var(--nord4) 0, var(--nord4) 1px, transparent 1px, transparent var(--hpx)); }
@@ -333,7 +334,10 @@ async function loadWeek() {
         if (!day.programmed) badge = '<span class="day-none">not set</span>';
         else if (day.issues.length) badge = `<span class="day-bad" title="${esc(day.issues.join('\n'))}">${day.issues.length} issue${day.issues.length > 1 ? 's' : ''}</span>`;
         else badge = '<span class="day-ok" title="Day tiles to exactly 24 hours">24h ✓</span>';
-        col.innerHTML = `<div class="day-head"><span>${esc(day.weekday)} ${disp(day.date)}</span>${badge}</div>`;
+        const spots = day.spots
+            ? `<span class="day-spots" title="${day.spots} contract spots scheduled this day — in Etere, copying over this day would blacklist them">${day.spots} sp</span>`
+            : '';
+        col.innerHTML = `<div class="day-head"><span>${esc(day.weekday)} ${disp(day.date)}</span><span style="display:flex;gap:4px;">${spots}${badge}</span></div>`;
         if (day.issues.length) issueLines.push(`${day.weekday} ${disp(day.date)}: ${day.issues.join('; ')}`);
 
         const body = document.createElement('div');
