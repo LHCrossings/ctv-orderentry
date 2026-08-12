@@ -499,6 +499,9 @@ def build_programming_router(templates: Jinja2Templates) -> APIRouter:
                             "from": _frames_to_bcast(b["offset"]),
                             "to": _frames_to_bcast(b["offset"] + b["duration"]),
                             "dur": _dur_disp(b["duration"]),
+                            # minutes from 06:00, for proportional rendering
+                            "start_min": round((b["offset"] - DAY_START) * 60 / FRAMES_PER_HOUR),
+                            "dur_min": round(b["duration"] * 60 / FRAMES_PER_HOUR),
                             "prgs": segs.get(b["id"], {}).get("PRGS", 0),
                             "coms": segs.get(b["id"], {}).get("COMS", 0),
                             "expired": b["expired"],
