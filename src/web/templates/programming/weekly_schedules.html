@@ -263,7 +263,7 @@ async function loadWeek() {
         let badge;
         if (!day.programmed) badge = '<span class="day-none">not set</span>';
         else if (day.issues.length) badge = `<span class="day-bad" title="${esc(day.issues.join('\n'))}">${day.issues.length} issue${day.issues.length > 1 ? 's' : ''}</span>`;
-        else badge = '<span class="day-ok">24:00</span>';
+        else badge = '<span class="day-ok" title="Day tiles to exactly 24 hours">24h ✓</span>';
         col.innerHTML = `<div class="day-head"><span>${esc(day.weekday)} ${disp(day.date)}</span>${badge}</div>`;
         if (day.issues.length) {
             const iss = document.createElement('div');

@@ -69,8 +69,13 @@ def _connect():
 # ---------------------------------------------------------------------------
 
 def _frames_to_bcast(frames: int) -> str:
-    """Frame-of-day -> broadcast HH:MM (post-midnight renders 24:00-29:59)."""
-    total_min = round(frames * 60 / FRAMES_PER_HOUR)
+    """Frame-of-day -> clock HH:MM for display.
+
+    Internally the broadcast day runs 06:00-30:00 (post-midnight stored as
+    24:00-29:59), but Master Control reads clock time — so viewing wraps
+    hours >= 24 back to 00:00-05:59. Display only; all math stays in frames.
+    """
+    total_min = round(frames * 60 / FRAMES_PER_HOUR) % 1440
     return f"{total_min // 60:02d}:{total_min % 60:02d}"
 
 
@@ -120,7 +125,7 @@ def _day_issues(blocks: list[dict]) -> list[str]:
     last = blocks[-1]
     day_end = last["offset"] + last["duration"]
     if abs(day_end - DAY_END) > OVERLAP_TOL:
-        issues.append(f"day ends at {_frames_to_bcast(day_end)} (expected 30:00)")
+        issues.append(f"day ends at {_frames_to_bcast(day_end)} (expected 06:00)")
     return issues
 
 
