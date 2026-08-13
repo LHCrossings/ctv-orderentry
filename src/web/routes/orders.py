@@ -535,6 +535,104 @@ def _bo_optimize(spots: list) -> list:
     return result
 
 
+_BO_FPS = 29.97
+
+def _bo_frames_to_time(frames: int) -> str:
+    secs = round(frames / _BO_FPS)
+    h, rem = divmod(secs, 3600)
+    mn, s = divmod(rem, 60)
+    return f"{h}:{mn:02d}:{s:02d}"
+
+def _bo_build_breaks(annotated: list, to_frames: int) -> tuple[list, bool]:
+    """Segment XORDER-ordered annotated rows into breaks (a break = a contiguous
+    run of ad rows delimited by fixed program rows; NOOPs are transparent).
+
+    Guards against the day-of Executive Editor compaction: when a window's
+    programming has not been inserted yet, EE removes the gap and pulls LATER
+    shows' spots up into this window, so the phantom mega-break must not be
+    optimized ("we just don't want to optimize other programmings' commercials
+    as part of an existing show" — Lee 2026-08-12). Two positive signals flag a
+    break as programming_missing:
+      - the window has no live programming row at all (a NOOP is Etere's marker
+        for an UNFILLED hole, so it does not count), or
+      - the break contains spots whose intended break position
+        (trafficPalinse.offset, which survives both BO packing and the EE
+        scrunch) lies at/after the window end — spots absorbed from later
+        programming.
+    Flagged breaks come back with optimized == current (identity: new_ora is
+    the spot's live ORA), changed=False and no violations, so neither /apply
+    nor /bulk-apply can ever move them, and with the absorbed spots itemized
+    in foreign_spots for display.
+
+    Returns (breaks, window_has_pgm).
+    """
+    window_has_pgm = any(
+        a["is_fixed"] and a["newtype"] != "NOOP" and a["ora"] < to_frames
+        for a in annotated
+    )
+    breaks, i = [], 0
+    while i < len(annotated):
+        if annotated[i]["is_fixed"]:
+            i += 1
+            continue
+        block = []
+        while i < len(annotated):
+            row = annotated[i]
+            if row["newtype"] == "NOOP":
+                i += 1
+            elif row["is_fixed"]:
+                break
+            else:
+                block.append(row)
+                i += 1
+        # Buffer rows past the window may extend a break, never start one
+        if not block or block[0]["ora"] >= to_frames:
+            continue
+
+        foreign = [s for s in block
+                   if s.get("intended_ora") is not None and s["intended_ora"] >= to_frames]
+        if not window_has_pgm or foreign:
+            breaks.append({
+                "current":             block,
+                "optimized":           [{**s, "new_ora": s["ora"], "new_time": s["time"]}
+                                        for s in block],
+                "violation":           False,
+                "ordering_violation":  False,
+                "bookend_warning":     False,
+                "changed":             False,
+                "pi_unresolvable":     False,
+                "programming_missing": True,
+                "pm_reason":           "window" if not window_has_pgm else "absorbed",
+                "foreign_spots":       [{"id": s["id"], "title": s["title"],
+                                         "label": s["label"], "time": s["time"],
+                                         "intended_time": s.get("intended_time")}
+                                        for s in foreign],
+            })
+            continue
+
+        optimized = _bo_optimize(block)
+        cur_pos = block[0]["ora"]
+        opt_timed = []
+        for s in optimized:
+            opt_timed.append({**s, "new_ora": cur_pos, "new_time": _bo_frames_to_time(cur_pos)})
+            cur_pos += s["duration"]
+        orig_ids = [s["id"] for s in block]
+        pri_viol = orig_ids != [s["id"] for s in optimized]
+        pi_keys  = [_pi_product_key(s["title"]) for s in block if s["label"] == "PI"]
+        breaks.append({
+            "current":             block,
+            "optimized":           opt_timed,
+            "violation":           pri_viol or len(pi_keys) != len(set(pi_keys)),
+            "ordering_violation":  pri_viol or len(pi_keys) != len(set(pi_keys)),
+            "bookend_warning":     sum(1 for s in block if s["label"] == "BOOKEND") % 2 != 0,
+            "changed":             orig_ids != [s["id"] for s in opt_timed],
+            "pi_unresolvable":     False,
+            "programming_missing": False,
+            "foreign_spots":       [],
+        })
+    return breaks, window_has_pgm
+
+
 def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRouter:
     router = APIRouter()
 
@@ -5498,13 +5596,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         return {"results": results}
 
     _BO_MARKET_IDS = {"NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4, "SEA": 5, "LAX": 6, "CVC": 7, "WDC": 8, "MMT": 9, "DAL": 10}
-    _BO_FPS = 29.97
-
-    def _bo_frames_to_time(frames: int) -> str:
-        secs = round(frames / _BO_FPS)
-        h, rem = divmod(secs, 3600)
-        mn, s = divmod(rem, 60)
-        return f"{h}:{mn:02d}:{s:02d}"
+    # _BO_FPS and _bo_frames_to_time are module-level (shared with _bo_build_breaks)
 
     def _bo_frames_to_hhmm(frames: int) -> str:
         secs = round(frames / _BO_FPS)
@@ -5550,6 +5642,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             return [_pi_product_key(s["title"]) for s in brk["optimized"] if s["label"] == "PI"]
 
         for brk in breaks:
+            # A break waiting on programming holds spots scrunched in from other
+            # shows — duplicate PIs across it are an artifact, and a creative
+            # swap would be a real write into a phantom break. Leave it alone.
+            if brk.get("programming_missing"):
+                continue
             keys = _pi_keys(brk)
             if len(keys) == len(set(keys)):
                 brk["pi_unresolvable"] = False
@@ -5750,6 +5847,12 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     })
 
         for brk in breaks:
+            # Gaps between these spots are an artifact of the day-of EE
+            # compaction (programming not placed yet) — the real gaps return
+            # when programming is inserted, so separation math is meaningless.
+            if brk.get("programming_missing"):
+                brk["sep_violations"] = []
+                continue
             violations = []
             seen_pairs: set = set()
             for spot in brk["current"]:
@@ -5770,12 +5873,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             if violations:
                 brk["violation"] = True
 
-    def _bo_process_market(cur, market_id: int, date: str, from_frames: int, to_frames: int) -> list:
-        """Fetch, annotate, segment, and optimise all breaks for one market. Returns break list."""
+    def _bo_process_market(cur, market_id: int, date: str, from_frames: int, to_frames: int) -> tuple[list, bool]:
+        """Fetch, annotate, segment, and optimise all breaks for one market.
+        Returns (break list, window_has_programming)."""
         _BO_BUFFER = round(3 * 60 * _BO_FPS)
+        # tp.Offset = trafficPalinse.offset, the spot's intended nominal break
+        # position. Neither a BO pack nor the day-of EE compaction rewrites it,
+        # so it identifies spots pulled up from later shows' breaks.
         cur.execute(
             "SELECT t.ID_TPALINSE, t.ORA, t.XORDER, t.TITLE, t.COD_PROGRA, t.NEWTYPE, t.DURATION,"
-            " cr.CONTROLLACAPOFILA, cr.CONTROLLAFINEFILA, ct.COD_CONTRATTO"
+            " cr.CONTROLLACAPOFILA, cr.CONTROLLAFINEFILA, ct.COD_CONTRATTO, tp.Offset AS TP_OFFSET"
             " FROM TPALINSE t"
             " LEFT JOIN trafficTPalinse tp ON tp.ID_TPalinse = t.ID_TPALINSE"
             " LEFT JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe"
@@ -5797,6 +5904,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             pri, label = _bo_classify(nt, r["CONTROLLACAPOFILA"], r["CONTROLLAFINEFILA"],
                                       is_wl, prev_label, prev_contract, contract)
             prev_label, prev_contract = label, contract
+            toff = r.get("TP_OFFSET")
             annotated.append({
                 "id":        r["ID_TPALINSE"],
                 "ora":       r["ORA"],
@@ -5809,49 +5917,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 "duration":  r["DURATION"] or 0,
                 "contract":  contract,
                 "is_fixed":  pri == 0,
+                "intended_ora":  int(toff) if toff is not None else None,
+                "intended_time": _bo_frames_to_time(int(toff)) if toff is not None else None,
             })
 
-        breaks, i = [], 0
-        while i < len(annotated):
-            if annotated[i]["is_fixed"]:
-                i += 1
-            else:
-                block = []
-                while i < len(annotated):
-                    row = annotated[i]
-                    if row["newtype"] == "NOOP":
-                        i += 1
-                    elif row["is_fixed"]:
-                        break
-                    else:
-                        block.append(row)
-                        i += 1
-                if not block:
-                    continue
-                optimized = _bo_optimize(block)
-                cur_pos = block[0]["ora"]
-                opt_timed = []
-                for s in optimized:
-                    opt_timed.append({**s, "new_ora": cur_pos, "new_time": _bo_frames_to_time(cur_pos)})
-                    cur_pos += s["duration"]
-                orig_ids = [s["id"] for s in block]
-                pri_viol = orig_ids != [s["id"] for s in optimized]
-                pi_keys  = [_pi_product_key(s["title"]) for s in block if s["label"] == "PI"]
-                violation = pri_viol or len(pi_keys) != len(set(pi_keys))
-                if block[0]["ora"] < to_frames:
-                    breaks.append({
-                        "current":            block,
-                        "optimized":          opt_timed,
-                        "violation":          violation,
-                        "ordering_violation": violation,
-                        "bookend_warning":    sum(1 for s in block if s["label"] == "BOOKEND") % 2 != 0,
-                        "changed":            orig_ids != [s["id"] for s in opt_timed],
-                        "pi_unresolvable":    False,
-                    })
+        breaks, window_has_pgm = _bo_build_breaks(annotated, to_frames)
 
         _bo_resolve_pi_duplicates(cur, breaks)
         _bo_check_separation(breaks, _bo_fetch_sep_context(cur, market_id, date, from_frames, to_frames))
-        return breaks
+        return breaks, window_has_pgm
 
     @router.get("/api/master-control/break-optimization/load")
     async def load_break_optimization(
@@ -5871,7 +5945,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 return _bo_process_market(conn.cursor(as_dict=True), market_id, date, from_frames, to_frames)
 
         try:
-            breaks = await asyncio.get_running_loop().run_in_executor(None, _run)
+            breaks, programming_placed = await asyncio.get_running_loop().run_in_executor(None, _run)
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -5879,6 +5953,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             "market": market, "date": date,
             "time_from": time_from, "time_to": time_to,
             "breaks": breaks,
+            "programming_placed": programming_placed,
         })
 
     @router.post("/api/master-control/break-optimization/apply")
@@ -5941,8 +6016,12 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             with _connect() as conn:
                 for market_name, market_id in bulk_markets.items():
                     cur = conn.cursor(as_dict=True)
-                    breaks = _bo_process_market(cur, market_id, date, from_frames, to_frames)
-                    changed_breaks = [b for b in breaks if b["changed"]]
+                    breaks, _prog_placed = _bo_process_market(cur, market_id, date, from_frames, to_frames)
+                    # Flagged breaks already come back changed=False with an
+                    # identity optimization; the explicit filter is insurance
+                    # that a waiting-on-programming break is never written.
+                    changed_breaks = [b for b in breaks
+                                      if b["changed"] and not b.get("programming_missing")]
                     all_updates = []
                     for brk in changed_breaks:
                         all_updates.extend(brk["optimized"])
@@ -5950,6 +6029,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         results.append({
                             "market": market_name, "breaks_total": len(breaks),
                             "breaks_changed": 0, "spots_updated": 0,
+                            "breaks_waiting": sum(1 for b in breaks if b.get("programming_missing")),
                         })
                         continue
                     ids = [int(u["id"]) for u in all_updates]
@@ -5982,6 +6062,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         "breaks_total":   len(breaks),
                         "breaks_changed": len(changed_breaks),
                         "spots_updated":  len(all_updates),
+                        "breaks_waiting": sum(1 for b in breaks if b.get("programming_missing")),
                     })
             return results
 

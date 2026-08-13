@@ -65,6 +65,18 @@
         .badge-sep { background: rgba(208,135,112,0.2); color: var(--nord12); border: 1px solid rgba(208,135,112,0.4); }
         .badge-ok { background: rgba(163,190,140,0.2); color: var(--nord14); border: 1px solid rgba(163,190,140,0.4); }
         .badge-pi-swap { background: rgba(180,142,173,0.2); color: var(--nord15,#b48ead); border: 1px solid rgba(180,142,173,0.4); }
+        /* "Waiting on programming" — informational (nord9 blue), never a warning */
+        .break-card.has-pm { border-color: var(--nord9); border-style: dashed; }
+        .badge-pm { background: rgba(129,161,193,0.18); color: var(--nord9); border: 1px solid rgba(129,161,193,0.4); }
+        .pm-panel { margin-top: 10px; padding: 8px 10px; background: rgba(129,161,193,0.08); border: 1px solid rgba(129,161,193,0.3); border-radius: 4px; font-size: 0.78rem; }
+        .pm-panel-title { font-weight: 700; color: var(--nord9); margin-bottom: 5px; }
+        .pm-note { color: var(--text-muted); margin-bottom: 5px; }
+        .pm-row { display: flex; gap: 6px; align-items: baseline; padding: 2px 0; flex-wrap: wrap; }
+        .pm-spot { color: var(--text-primary); font-weight: 500; }
+        .pm-at { color: var(--text-muted); font-size: 0.72rem; }
+        .pm-dest { margin-left: auto; color: var(--nord9); font-size: 0.72rem; white-space: nowrap; font-family: monospace; }
+        .spot-row.foreign { opacity: 0.75; }
+        .foreign-chip { font-size: 0.65rem; color: var(--nord9); background: rgba(129,161,193,0.12); border: 1px solid rgba(129,161,193,0.3); border-radius: 8px; padding: 0 6px; white-space: nowrap; font-family: monospace; }
         .pi-debug-panel { margin-top: 10px; padding: 6px 10px; background: rgba(180,142,173,0.08); border: 1px solid rgba(180,142,173,0.3); border-radius: 4px; font-size: 0.76rem; color: var(--text-muted); }
         .pi-debug-title { font-weight: 700; color: var(--nord15,#b48ead); margin-bottom: 2px; }
         .sep-violation-panel { margin-top: 10px; padding: 8px 10px; background: rgba(208,135,112,0.08); border: 1px solid rgba(208,135,112,0.3); border-radius: 4px; font-size: 0.78rem; }
@@ -357,6 +369,7 @@ async function loadBreaks() {
 function renderBreaks(data) {
     const violations = data.breaks.filter(b => b.violation || b.bookend_warning);
     const changed    = data.breaks.filter(b => b.changed);
+    const waiting    = data.breaks.filter(b => b.programming_missing);
 
     // Summary bar (leads with the picked show so it's clear what's open)
     let sb = `<div class="summary-bar">
@@ -364,6 +377,7 @@ function renderBreaks(data) {
         <span><strong>${data.breaks.length}</strong> breaks</span>
         <span><strong style="color:var(--nord13)">${violations.length}</strong> with violations</span>
         <span><strong>${changed.length}</strong> need reordering</span>
+        ${waiting.length ? `<span><strong style="color:var(--nord9)">${waiting.length}</strong> waiting on programming</span>` : ''}
     </div>`;
     document.getElementById('summaryBar').innerHTML = sb;
 
@@ -372,7 +386,9 @@ function renderBreaks(data) {
     }
 
     if (data.breaks.length === 0) {
-        document.getElementById('breakArea').innerHTML = '<div class="empty-state">No commercial breaks found in this window.</div>';
+        document.getElementById('breakArea').innerHTML = data.programming_placed === false
+            ? '<div class="empty-state">⏳ Programming not placed for this window yet — no spots found.</div>'
+            : '<div class="empty-state">No commercial breaks found in this window.</div>';
         return;
     }
 
@@ -381,6 +397,7 @@ function renderBreaks(data) {
 
 function renderBreak(brk, bi) {
     const badges = [];
+    if (brk.programming_missing)                                       badges.push('<span class="badge badge-pm">⏳ Programming Not Placed</span>');
     if (brk.bookend_warning)                                           badges.push('<span class="badge badge-bookend">⚠ Multiple Bookends</span>');
     if (brk.pi_unresolvable)                                           badges.push('<span class="badge badge-danger">⚠ PI Duplicate — No Same-Length Filler</span>');
     if (brk.pi_replacements?.length)                                   badges.push(`<span class="badge badge-pi-swap">↻ PI Replaced (${brk.pi_replacements.length})</span>`);
@@ -396,20 +413,23 @@ function renderBreak(brk, bi) {
     // Build optimized ID order for moved detection
     const origIds = brk.current.map(s => s.id);
     const optIds  = brk.optimized.map(s => s.id);
+    const foreignIds = new Set((brk.foreign_spots || []).map(f => f.id));
 
     const renderSpot = (s, newTime, isMoved, isRight) => {
         const replaced = isRight && s.pi_replacement;
         const movedClass = (isMoved || replaced) ? ' moved' : '';
         const rightClass = isRight ? ' right-col' : '';
+        const foreign = foreignIds.has(s.id);
+        const chip = foreign ? `<span class="foreign-chip" title="Belongs to later programming that isn't placed yet — EE's day-of compaction pulled it up here">→ ${esc(s.intended_time || 'later')}</span>` : '';
         const arrow = isMoved   ? '<span class="moved-arrow">↕</span>'
                     : replaced  ? `<span class="moved-arrow" title="${esc(s.pi_replacement)}">↻</span>`
                     :             '';
         const time = isRight ? (newTime || s.time) : s.time;
-        return `<div class="spot-row${movedClass}${rightClass}">
+        return `<div class="spot-row${movedClass}${rightClass}${foreign ? ' foreign' : ''}">
             <span class="spot-time">${esc(time)}</span>
             <span class="lbl ${esc(labelClass(s.label))}">${esc(s.label)}</span>
             <span class="spot-title" title="${esc(s.title)}">${esc(s.title)}</span>
-            ${arrow}
+            ${chip}${arrow}
         </div>`;
     };
 
@@ -428,9 +448,22 @@ function renderBreak(brk, bi) {
         }
     }
 
-    const cardClass = brk.bookend_warning ? 'has-bookend-warning'
+    const cardClass = brk.programming_missing ? 'has-pm'
+                    : brk.bookend_warning ? 'has-bookend-warning'
                     : brk.sep_violations?.length ? 'has-sep-violation'
                     : brk.violation ? 'has-violation' : '';
+    const pmHtml = brk.programming_missing ? `
+        <div class="pm-panel">
+            <div class="pm-panel-title">⏳ Waiting on programming — separation &amp; order checks suspended</div>
+            <div class="pm-note">${brk.pm_reason === 'window'
+                ? "No programming is placed in this show's window yet, so Executive Editor's day-of compaction has parked these spots here without real break positions. Checks and Apply Fix come back once the programming is inserted."
+                : "Programming after this show isn't placed yet, so Executive Editor's day-of compaction pulled later spots up into this break. Applying a fix would optimize other programming's commercials into this show — Apply Fix is disabled until the programming is inserted."}</div>
+            ${(brk.foreign_spots || []).map(f => `<div class="pm-row">
+                <span class="pm-spot">${esc(f.title)}</span>
+                <span class="pm-at">now @${esc(f.time)}</span>
+                <span class="pm-dest">belongs in the ${esc(f.intended_time || '?')} break</span>
+            </div>`).join('')}
+        </div>` : '';
     const sepHtml = brk.sep_violations?.length ? `
         <div class="sep-violation-panel">
             <div class="sep-panel-title">⏱ Separation Violations</div>
@@ -462,7 +495,7 @@ function renderBreak(brk, bi) {
             ${badgeHtml}
             <span class="break-spacer"></span>
             <span class="apply-done" id="done-${bi}" style="display:none">✓ Applied</span>
-            <button class="apply-btn" id="apply-${bi}" ${applyDisabled} onclick="applyBreak(${bi})">Apply Fix</button>
+            ${brk.programming_missing ? '' : `<button class="apply-btn" id="apply-${bi}" ${applyDisabled} onclick="applyBreak(${bi})">Apply Fix</button>`}
         </div>
         <div class="break-body">
             <div>
@@ -474,6 +507,7 @@ function renderBreak(brk, bi) {
                 <div class="spot-list">${rightRows}</div>
             </div>
         </div>
+        ${pmHtml}
         ${sepHtml}
         ${brk.pi_replacements?.length ? `<div class="pi-debug-panel"><div class="pi-debug-title">↻ PI duplicate resolved in place (same slot, within program)</div>${brk.pi_replacements.map(esc).join('<br>')}</div>` : ''}
         ${brk.pi_unresolvable ? `<div class="pi-debug-panel"><div class="pi-debug-title">⚠ PI duplicate — no same-length filler in library</div>Left unchanged for manual fix.</div>` : ''}
@@ -515,7 +549,7 @@ async function applyBreak(bi) {
 
 async function applyAll() {
     const allUpdates = breakData
-        .filter(b => b.changed)
+        .filter(b => b.changed && !b.programming_missing)
         .flatMap(b => b.optimized.map(s => ({
             id_tpalinse: s.id, new_ora: s.new_ora,
             replace_filmati_id: s.replace_filmati_id,
