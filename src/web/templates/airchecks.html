@@ -235,7 +235,7 @@
         <h3>Edit Scheduled Capture</h3>
         <input type="hidden" id="editId">
         <div class="modal-row">
-            <label>Start Time</label>
+            <label>Start Time <span id="editTzHint" style="font-weight:400;"></span></label>
             <input type="datetime-local" id="editStartTime" step="1">
         </div>
         <div class="modal-row">
@@ -307,7 +307,7 @@
                     </div>
                 </div>
                 <div class="field-group" id="schedField" style="display:none;">
-                    <label class="field-label">Start Date &amp; Time</label>
+                    <label class="field-label">Start Date &amp; Time <span id="startTzHint" style="text-transform:none;font-weight:400;"></span></label>
                     <input class="field-input" type="datetime-local" id="startTime" step="1" />
                 </div>
             </div>
@@ -400,6 +400,64 @@ let selectedNetwork = null;
 let whenMode = 'now';
 let pollTimer = null;
 
+// ── Market timezones (manual scheduling) ─────────────────────────────────────
+// A manually entered time means the selected market's LOCAL time. We convert it
+// to a real instant (ISO with Z); the Datamover agent converts that to its own
+// machine-local clock. Agent-stored start_time strings are naive Datamover-local
+// (Pacific — the agent itself assumes this in _filename_ts).
+const MARKET_TZS = {
+    NYC: 'America/New_York',    WDC: 'America/New_York', MMT: 'America/New_York',
+    CMP: 'America/Chicago',     HOU: 'America/Chicago',  DAL: 'America/Chicago',
+    SFO: 'America/Los_Angeles', SEA: 'America/Los_Angeles',
+    LAX: 'America/Los_Angeles', CVC: 'America/Los_Angeles',
+};
+const DATAMOVER_TZ = 'America/Los_Angeles';
+
+function marketTz(network) {
+    // "SFO OTA" → "SFO"
+    return MARKET_TZS[(network || '').slice(0, 3)] || DATAMOVER_TZ;
+}
+
+function _wallParts(date, tz) {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+        timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    }).formatToParts(date).map(x => [x.type, x.value]));
+    if (p.hour === '24') p.hour = '00';
+    return p;
+}
+
+function _wallStr(date, tz) {
+    const p = _wallParts(date, tz);
+    return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}`;
+}
+
+// "YYYY-MM-DDTHH:MM[:SS]" wall-clock in tz → Date (real instant).
+function zonedToDate(v, tz) {
+    const wall = Date.parse((v.length === 16 ? v + ':00' : v.slice(0, 19)) + 'Z');
+    let d = new Date(wall);
+    for (let i = 0; i < 2; i++) d = new Date(d.getTime() + (wall - Date.parse(_wallStr(d, tz) + 'Z')));
+    return d;
+}
+
+// Naive agent start_time string → Date (real instant).
+function agentLocalToDate(naive) {
+    return zonedToDate(naive, DATAMOVER_TZ);
+}
+
+function tzAbbr(tz, when) {
+    return new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'short' })
+        .formatToParts(when || new Date()).find(p => p.type === 'timeZoneName').value;
+}
+
+function updateTzHint() {
+    const el = document.getElementById('startTzHint');
+    if (!el) return;
+    el.textContent = selectedNetwork
+        ? `— ${selectedNetwork} local time (${tzAbbr(marketTz(selectedNetwork))})`
+        : '— in the selected network’s local time';
+}
+
 // ── Build network pills ───────────────────────────────────────────────────────
 const pillRow = document.getElementById('netPills');
 NETWORKS.forEach(net => {
@@ -410,6 +468,7 @@ NETWORKS.forEach(net => {
         document.querySelectorAll('.net-pill').forEach(p => p.classList.remove('active'));
         btn.classList.add('active');
         selectedNetwork = net;
+        updateTzHint();
     });
     pillRow.appendChild(btn);
 });
@@ -420,6 +479,7 @@ function setWhen(mode) {
     document.getElementById('btnNow').classList.toggle('active', mode === 'now');
     document.getElementById('btnSched').classList.toggle('active', mode === 'scheduled');
     document.getElementById('schedField').style.display = mode === 'scheduled' ? 'flex' : 'none';
+    updateTzHint();
 }
 
 // ── Duration presets ──────────────────────────────────────────────────────────
@@ -519,7 +579,8 @@ async function scheduleCapture() {
     if (whenMode === 'scheduled') {
         const v = document.getElementById('startTime').value;
         if (!v) { flash(msg, 'Enter a scheduled start time.', false); return; }
-        startTime = new Date(v).toISOString();
+        // The entered time is the selected market's local time
+        startTime = zonedToDate(v, marketTz(selectedNetwork)).toISOString();
     }
 
     btn.disabled = true;
@@ -578,11 +639,14 @@ function fmtSize(bytes) {
     return (bytes / 1024 / 1024).toFixed(1) + ' MB';
 }
 
-function fmtDt(iso) {
+function fmtDt(iso, network) {
     if (!iso) return '—';
-    const d = new Date(iso);
-    return d.toLocaleDateString('en-US', { month:'short', day:'numeric' }) +
-           ' ' + d.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
+    // Agent times are naive Datamover-local; show them in the market's local time
+    const d = /Z$|[+-]\d\d:?\d\d$/.test(iso) ? new Date(iso) : agentLocalToDate(iso);
+    return d.toLocaleString('en-US', {
+        timeZone: marketTz(network), month: 'short', day: 'numeric',
+        hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+    }).replace(',', '');
 }
 
 function fmtDur(secs) {
@@ -684,7 +748,7 @@ function renderCaptures(list) {
             ${cbCell}
             <td><strong>${escHtml(cap.client)}</strong></td>
             <td>${escHtml(cap.network)}</td>
-            <td>${fmtDt(cap.start_time)}</td>
+            <td>${fmtDt(cap.start_time, cap.network)}</td>
             <td>${fmtDur(cap.duration_seconds)}</td>
             <td>${statusBadge(cap.status)}</td>
             <td class="file-size">${fmtSize(cap.size_bytes)}</td>
@@ -747,11 +811,11 @@ function openEditModal(id) {
     const cap = captureIndex[id];
     if (!cap) return;
     document.getElementById('editId').value = id;
-    // datetime-local expects "YYYY-MM-DDTHH:MM"
-    const dt = new Date(cap.start_time);
-    const pad = n => String(n).padStart(2, '0');
-    const local = `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
-    document.getElementById('editStartTime').value = local;
+    // Stored start_time is Datamover-local — show it as the market's wall time
+    const inst = agentLocalToDate(cap.start_time);
+    document.getElementById('editStartTime').value = _wallStr(inst, marketTz(cap.network));
+    document.getElementById('editTzHint').textContent =
+        `${cap.network} local time (${tzAbbr(marketTz(cap.network), inst)})`;
     document.getElementById('editDuration').value  = cap.duration_seconds;
     document.getElementById('editNotes').value     = cap.notes || '';
     document.getElementById('editError').style.display = 'none';
@@ -770,8 +834,11 @@ async function saveEdit() {
     const errEl = document.getElementById('editError');
     errEl.style.display = 'none';
 
+    const cap  = captureIndex[id];
     const body = {};
-    if (st)        body.start_time        = new Date(st).toISOString().slice(0, 19);
+    // The edited time is the capture's market local time; send a full ISO
+    // instant (with Z) so the agent converts it to its own clock.
+    if (st)        body.start_time        = zonedToDate(st, marketTz(cap && cap.network)).toISOString();
     if (!isNaN(dur)) body.duration_seconds = dur;
     body.notes = notes;
 
