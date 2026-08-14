@@ -167,6 +167,11 @@ class OrderDetectionService:
         if self._is_saccountyvoters(first_page_text, second_page_text):
             return OrderType.SACCOUNTYVOTERS
 
+        # Ntooitive / L.A. Care (Crossings TV Media Proposal sent by the agency
+        # — must be caught here, or the Charmaine-template fallback claims it)
+        if self._is_ntooitive(first_page_text):
+            return OrderType.NTOOITIVE
+
         # Resorts World New York (check before SCWA — both use "Crossings TV Media Proposal")
         if self._is_rwny(first_page_text):
             return OrderType.RWNY
@@ -233,6 +238,16 @@ class OrderDetectionService:
         if "3fold" in lower and "media plan" in lower:
             return True
         return "los rios community college" in lower and "media plan" in lower
+
+    def _is_ntooitive(self, text: str) -> bool:
+        """
+        Check if text matches an Ntooitive order (Crossings TV house proposal
+        sent by the Ntooitive agency, advertiser L.A. Care).
+
+        Markers: "Crossings TV Media Proposal" (house template title) +
+        "Ntooitive" (the Media Buying Agency field).
+        """
+        return "Crossings TV Media Proposal" in text and "Ntooitive" in text
 
     def _is_rwny(self, text: str) -> bool:
         """
@@ -995,6 +1010,8 @@ def detect_from_filename(filename: str) -> OrderType:
         return OrderType.TT
     if "CRISPIN" in name_upper:
         return OrderType.CRISPIN
+    if "NTOOITIVE" in name_upper:
+        return OrderType.NTOOITIVE
     # Emerald Queen Casino via TH Media — filename always carries "EQC".
     if "EQC" in name_upper or "EMERALD QUEEN" in name_upper or "TH MEDIA" in name_upper:
         return OrderType.EQC

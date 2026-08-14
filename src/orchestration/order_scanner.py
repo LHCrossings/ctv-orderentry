@@ -26,7 +26,7 @@ from domain.enums import OrderStatus, OrderType
 # size+mtime so repeat scans are instant; a changed/new file misses and is
 # re-detected. Bump the version to invalidate every entry after detection logic
 # changes.
-_SCAN_CACHE_VERSION = 3   # v3: Crispin official IO (Brand Time Schedule PDF) detected
+_SCAN_CACHE_VERSION = 4   # v4: Ntooitive detected before the Charmaine fallback
 _SCAN_CACHE_NAME = ".scan_cache.json"
 
 
@@ -96,6 +96,10 @@ def _detect_xlsx_content(file_path: Path) -> OrderType:
                 if "CRISPIN" in v:
                     wb.close()
                     return OrderType.CRISPIN
+                # Ntooitive (L.A. Care) — the Media Buying Agency cell.
+                if "NTOOITIVE" in v:
+                    wb.close()
+                    return OrderType.NTOOITIVE
         wb.close()
     except Exception as e:
         print(f"[WARN] Could not read {file_path.name}: {e}")

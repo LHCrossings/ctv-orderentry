@@ -227,6 +227,7 @@ AGENCY_IDS: dict[str, int] = {
     "SAGENT":   69,
     "TT": 439,   # T&T Public Relations
     "CRISPIN": 446,  # Crispin LLC (Bay Area AQMD; distinct from Allison & Partners=187)
+    "NTOOITIVE": 299,  # Ntooitive (L.A. Care; Commissione 15%)
     "3FOLD": 203,  # 3Fold Communications (LRCCD)
     "THMEDIA": 19,  # TH Media (Emerald Queen Casino)
 }

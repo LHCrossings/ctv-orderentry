@@ -36,19 +36,45 @@ pattern is reserved for orders that are production-ONLY.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date
 from typing import Optional
 
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 from browser_automation.etere_client import EtereClient
+
+# The late-start planner is shared with other proposal-grid automations
+# (ntooitive_automation) — the implementations live in line_planner. The
+# underscore aliases keep this module's public-ish surface (tests import
+# `_plan_ranges`/`_active_days`/`_line_plan` from here) unchanged.
+from browser_automation.line_planner import (  # noqa: F401
+    WeekCol as _WeekCol,
+)
+from browser_automation.line_planner import (  # noqa: F401
+    active_days as _active_days,  # re-export: tests import it from here
+)
+from browser_automation.line_planner import (
+    broadcast_yymm as _broadcast_yymm,
+)
+from browser_automation.line_planner import (
+    confirm_start_date as _confirm_start_date_impl,
+)
+from browser_automation.line_planner import (
+    fmt_mmddyyyy as _fmt_mmddyyyy,
+)
+from browser_automation.line_planner import (
+    parse_date as _parse_date,
+)
+from browser_automation.line_planner import (
+    plan_ranges as _plan_ranges,
+)
+from browser_automation.line_planner import (
+    verify_production_charge as _verify_production_charge_impl,
+)
 from browser_automation.parsers.crispin_parser import (
     CrispinOrder,
     parse_crispin,
     split_daypart,
 )
-
-_MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 # Bonus :15s ROS windows (Lee-confirmed 2026-07-22). Matches the shared
 # ROS_SCHEDULES for Cantonese/Filipino/Vietnamese; Mandarin is Crispin-specific
@@ -61,158 +87,6 @@ CRISPIN_ROS_WINDOWS = {
 }
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
-
-def _fmt_mon_dd(d: date) -> str:
-    return f"{_MONTH_ABBR[d.month - 1]} {d.day}"
-
-
-def _fmt_mmddyyyy(d: date) -> str:
-    return d.strftime('%m/%d/%Y')
-
-
-# Python weekday() 0=Mon … 6=Sun → the Italian keys parse_day_bits returns.
-_WEEKDAY_KEYS = ('lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom')
-
-
-def _active_days(start: date, end: date, day_bits: dict) -> int:
-    """How many of the line's own days fall in [start, end]."""
-    n, d = 0, start
-    while d <= end:
-        if day_bits.get(_WEEKDAY_KEYS[d.weekday()]):
-            n += 1
-        d += timedelta(days=1)
-    return n
-
-
-def _plan_ranges(consolidated: list[dict], days: str,
-                 start_from: date, line_end: date) -> tuple[list[dict], list[str]]:
-    """Apply a late start date to a line's consolidated week ranges.
-
-    A late IO does not reduce the week's spot count — it compresses those spots
-    into fewer days, so the truncated first week needs a HIGHER max-per-day than
-    the full weeks behind it. `add_contract_line`'s auto-calculation cannot see
-    this: it divides by the day PATTERN's width (M-F → 5) with no idea the line
-    actually opens on a Thursday. So compute max-per-day per range here, and when
-    the truncated week and the full weeks disagree, split the range so the short
-    week gets its own Etere line at its own cap.
-
-    Returns (ranges, notes) where each range carries an explicit `max_daily`, and
-    `notes` records any spots the new start date makes undeliverable.
-    """
-    from math import ceil
-
-    from browser_automation.etere_direct_client import parse_day_bits
-
-    day_bits = parse_day_bits(days)
-    full_active = sum(1 for v in day_bits.values() if v) or 7
-
-    out: list[dict] = []
-    notes: list[str] = []
-
-    def add(d_from: date, d_to: date, spw: int, weeks: int, cap: int, tag: str = "") -> None:
-        out.append({'date_from': d_from, 'date_to': d_to, 'spots_per_week': spw,
-                    'weeks': weeks, 'max_daily': cap, 'tag': tag})
-
-    for rng in consolidated:
-        w0 = _parse_date(rng['start_date'])
-        r_end = min(_parse_date(rng['end_date']), line_end)
-        spw, weeks = rng['spots_per_week'], rng['weeks']
-        mdr_full = max(1, ceil(spw / full_active))
-
-        if r_end < start_from:
-            notes.append(f"{spw * weeks} spot(s) dropped: the week(s) of "
-                         f"{w0.month}/{w0.day} end before the new start")
-            continue
-
-        # Whole weeks that now sit before the start date cannot be delivered.
-        d0 = max(w0, start_from)
-        skipped = (d0 - w0).days // 7
-        if skipped:
-            notes.append(f"{spw * skipped} spot(s) dropped: {skipped} whole week(s) "
-                         f"from {w0.month}/{w0.day} now precede the start date")
-            w0 += timedelta(days=7 * skipped)
-            weeks -= skipped
-
-        if d0 <= w0:                                  # full first week — as before
-            add(d0, r_end, spw, weeks, mdr_full)
-            continue
-
-        # Truncated first week.
-        first_end = min(w0 + timedelta(days=6), r_end)
-        p_active = _active_days(d0, first_end, day_bits)
-        if p_active == 0:
-            notes.append(f"{spw} spot(s) dropped: no {days} day left in the week of "
-                         f"{w0.month}/{w0.day} on or after {d0.month}/{d0.day}")
-            if weeks > 1:
-                add(w0 + timedelta(days=7), r_end, spw, weeks - 1, mdr_full)
-            continue
-
-        mdr_partial = max(1, ceil(spw / p_active))
-        if weeks == 1:
-            add(d0, r_end, spw, 1, mdr_partial,
-                f"short week: {p_active} day(s), {mdr_partial}/day")
-        elif mdr_partial == mdr_full:
-            add(d0, r_end, spw, weeks, mdr_full)
-        else:
-            # The short week earns its own line at its own cap.
-            add(d0, first_end, spw, 1, mdr_partial,
-                f"short week: {p_active} of {full_active} day(s) → {mdr_partial}/day")
-            add(w0 + timedelta(days=7), r_end, spw, weeks - 1, mdr_full)
-
-    return out, notes
-
-
-class _WeekCol:
-    """Week-column shim for `EtereClient.consolidate_weeks`.
-
-    The helper's plain-string branch ("Aug 10") takes the year from flight_end,
-    which silently misdates a flight that crosses New Year. Both Crispin formats
-    hand us real `date` objects, so always feed the `.start_date` branch instead.
-    """
-    __slots__ = ('start_date',)
-
-    def __init__(self, d: date) -> None:
-        self.start_date = _fmt_mmddyyyy(d)
-
-
-def _parse_date(s) -> date:
-    if isinstance(s, datetime):
-        return s.date()
-    if isinstance(s, date):
-        return s
-    for fmt in ('%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d', '%m/%d', '%b %d'):
-        try:
-            return datetime.strptime(str(s).strip(), fmt).date()
-        except ValueError:
-            continue
-    raise ValueError(f"Cannot parse date: {s!r}")
-
-
-def _mon_of_week_with_first(year: int, month: int) -> date:
-    """Monday of the broadcast week that contains the 1st of (year, month)."""
-    first = date(year, month, 1)
-    return first - timedelta(days=first.weekday())
-
-
-def _broadcast_yymm(d: date) -> str:
-    """Broadcast-month code 'YYMM' for a date (weeks Mon–Sun; month begins on the
-    Monday of the week containing the 1st). E.g. 7/27/2026 → '2608'."""
-    for delta in (-1, 0, 1):
-        m = d.month + delta
-        y = d.year
-        if m > 12:
-            m -= 12
-            y += 1
-        elif m < 1:
-            m += 12
-            y -= 1
-        start = _mon_of_week_with_first(y, m)
-        nm, ny = (m + 1, y) if m < 12 else (1, y + 1)
-        nstart = _mon_of_week_with_first(ny, nm)
-        if start <= d < nstart:
-            return f"{y % 100:02d}{m:02d}"
-    return f"{d.year % 100:02d}{d.month:02d}"
-
 
 def _resolve_customer(advertiser: str, agency_id: int) -> Optional[dict]:
     """Resolve the advertiser's ANAGRAF customer id, disambiguated by agency link.
@@ -257,43 +131,8 @@ def _tokens(s: str) -> set[str]:
 
 
 def _confirm_start_date(order: CrispinOrder) -> Optional[date]:
-    """Ask what date the order should actually start when the IO is late.
-
-    Re-prompts until the answer parses and lands inside the flight — the value
-    feeds every line's date arithmetic and the max-per-day recalculation, so a
-    bad answer must fail here rather than mid-entry.
-    """
-    if not order.flight_start:
-        return None
-    earliest = _parse_date(order.flight_start)
-    if earliest > date.today() + timedelta(days=1):
-        return earliest
-    latest = _parse_date(order.flight_end) if order.flight_end else None
-
-    def _f(d: date) -> str:
-        return f"{d.month}/{d.day}/{d.strftime('%y')}"
-
-    print(f"\n  ⚠ This order starts {_f(earliest)} — today is {_f(date.today())}, "
-          f"so the IO is late.")
-    print("    A later start compresses each week's spots into fewer days, so the "
-          "first")
-    print("    partial week may need a higher max-per-day (its own Etere line).")
-    while True:
-        raw = input(f"  What date should this order start? [{_f(earliest)}]: ").strip()
-        if not raw or raw.lower() in ('y', 'yes'):
-            return earliest
-        try:
-            chosen = _parse_date(raw)
-        except ValueError:
-            print(f"    ✗ Could not read '{raw}' — use M/D/YY or MM/DD/YYYY.")
-            continue
-        if chosen < earliest:
-            print(f"    ✗ {_f(chosen)} is before the IO's start {_f(earliest)}.")
-            continue
-        if latest and chosen > latest:
-            print(f"    ✗ {_f(chosen)} is after the flight ends {_f(latest)}.")
-            continue
-        return chosen
+    """Ask what date the order should actually start when the IO is late."""
+    return _confirm_start_date_impl(order.flight_start, order.flight_end)
 
 
 def _line_plan(order: CrispinOrder, start_from: date,
@@ -622,30 +461,8 @@ def _create_crispin_contract(order: CrispinOrder, inputs: dict) -> Optional[str]
 
 
 def _verify_production_charge(cursor, line_id: int, expected: float) -> None:
-    """Confirm the SP really turned @production into a CONTRATTISPESE row.
-
-    `web_sales_InsertContractLine` is encrypted, so "the Production box writes a
-    charge" is an observation about historical rows, not a contract we control. If
-    a future Etere build stops honouring the parameter, the money would silently
-    vanish and the contract would enter as airtime-only. Checking inside the
-    transaction turns that into a rollback instead.
-    """
-    cursor.execute(
-        """
-        SELECT ISNULL(SUM(IMPORTO), 0)
-        FROM CONTRATTISPESE
-        WHERE ID_CONTRATTIRIGHE = %s AND DESCRIZIONE = 'Production'
-        """,
-        (int(line_id),),
-    )
-    row = cursor.fetchone()
-    got = float(row[0]) if row else 0.0
-    if abs(got - expected) > 0.01:
-        raise RuntimeError(
-            f"Crispin: line {line_id} Production box was ${expected:,.2f} but "
-            f"CONTRATTISPESE holds ${got:,.2f}. Etere did not record the production "
-            f"charge — rolling back rather than entering the order without it."
-        )
+    """Confirm the SP really turned @production into a CONTRATTISPESE row."""
+    _verify_production_charge_impl(cursor, line_id, expected, label="Crispin")
 
 
 def run_crispin_order(order: CrispinOrder, inputs: dict) -> list[tuple[str, bool]]:

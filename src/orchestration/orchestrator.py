@@ -66,6 +66,7 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
     OrderType.ACM:               ("browser_automation.acm_automation",                  "gather_acm_inputs",                 "ACM"),
     OrderType.TT:                ("browser_automation.tt_automation",                   "gather_tt_inputs",                  "T&T Public Relations"),
     OrderType.CRISPIN:           ("browser_automation.crispin_automation",              "gather_crispin_inputs",             "Crispin / Bay Area AQMD"),
+    OrderType.NTOOITIVE:         ("browser_automation.ntooitive_automation",            "gather_ntooitive_inputs",           "Ntooitive / L.A. Care"),
     OrderType.EQC:               ("browser_automation.eqc_automation",                  "gather_eqc_inputs",                 "Emerald Queen Casino / TH Media"),
     OrderType.LRCCD:             ("browser_automation.lrccd_automation",                "gather_lrccd_inputs",               "LRCCD / 3Fold Communications"),
     OrderType.SACRT:             ("browser_automation.sacrt_automation",                "gather_sacrt_inputs",               "SacRT / Sacramento Regional Transit"),
