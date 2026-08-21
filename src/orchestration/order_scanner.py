@@ -26,7 +26,7 @@ from domain.enums import OrderStatus, OrderType
 # size+mtime so repeat scans are instant; a changed/new file misses and is
 # re-detected. Bump the version to invalidate every entry after detection logic
 # changes.
-_SCAN_CACHE_VERSION = 4   # v4: Ntooitive detected before the Charmaine fallback
+_SCAN_CACHE_VERSION = 5   # v5: Wallrich xlsx (KBTV Strata export) content detection
 _SCAN_CACHE_NAME = ".scan_cache.json"
 
 
@@ -100,6 +100,12 @@ def _detect_xlsx_content(file_path: Path) -> OrderType:
                 if "NTOOITIVE" in v:
                     wb.close()
                     return OrderType.NTOOITIVE
+                # Wallrich (Strata Spot Schedule export) — the Station cell is
+                # "KBTV (CROSSINGS)-…"; KBTV = Wallrich, same rule as the PDF
+                # detector. Nothing in the workbook says "Wallrich" or "SMUD".
+                if "KBTV" in v:
+                    wb.close()
+                    return OrderType.WALLRICH
         wb.close()
     except Exception as e:
         print(f"[WARN] Could not read {file_path.name}: {e}")

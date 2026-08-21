@@ -18,7 +18,7 @@ from parsers.wallrich_parser import (
     WallrichEstimate,
     WallrichLine,
     consolidate_wallrich_weeks,
-    parse_wallrich_pdf,
+    parse_wallrich,
 )
 
 from browser_automation.etere_client import EtereClient
@@ -71,7 +71,7 @@ def _create_wallrich_contract_direct(pdf_path: str, user_input: dict) -> bool:
     market_code = user_input.get('market_code', 'CVC')
     separation  = user_input.get('separation', (25, 0, 0))
 
-    estimates = parse_wallrich_pdf(pdf_path)
+    estimates = parse_wallrich(pdf_path)
     if not estimates:
         print("[WALLRICH DIRECT] ✗ No estimates found")
         return False
@@ -298,7 +298,7 @@ def gather_wallrich_inputs(pdf_path: str) -> Optional[dict]:
 
     print("\n[PARSE] Reading PDF...")
     try:
-        estimates = parse_wallrich_pdf(pdf_path)
+        estimates = parse_wallrich(pdf_path)
     except Exception as e:
         print(f"[PARSE] ✗ Failed: {e}")
         return None

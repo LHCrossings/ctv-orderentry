@@ -1,8 +1,13 @@
 """
 Wallrich Order Parser
-Parses Wallrich agency insertion order PDFs using Strata IO system.
-Format: Client/Estimate/Description/Market header + "# of SPOTS PER WEEK" table.
-Station is KBTV (Crossings TV Sacramento). One estimate per PDF.
+Parses Wallrich agency insertion orders from the Strata IO system.
+Station is KBTV (Crossings TV Sacramento). One estimate per file.
+
+Two formats, one order type (`parse_wallrich` routes on extension):
+- PDF: Client/Estimate/Description/Market header + "# of SPOTS PER WEEK" table.
+- XLSX: Strata "Spot Schedule" export — Label:/value header block +
+  Ln/Days/Time/Program grid with [M/D] week columns (first seen SMUD Est 769,
+  Aug 2026). Both readers return the same WallrichEstimate.
 """
 
 import re
@@ -57,6 +62,18 @@ class WallrichEstimate:
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
+
+def parse_wallrich(path: str) -> List[WallrichEstimate]:
+    """
+    Parse a Wallrich order file, routing on extension.
+
+    The automation and bridge call only this — they never learn there are
+    two formats (same pattern as parse_crispin).
+    """
+    if str(path).lower().endswith((".xlsx", ".xlsm")):
+        return parse_wallrich_xlsx(path)
+    return parse_wallrich_pdf(path)
+
 
 def parse_wallrich_pdf(pdf_path: str) -> List[WallrichEstimate]:
     """
@@ -339,6 +356,160 @@ def _parse_data_line(line: str, n_weeks: int) -> Optional[WallrichLine]:
 
 
 # ---------------------------------------------------------------------------
+# XLSX reader (Strata "Spot Schedule" export)
+# ---------------------------------------------------------------------------
+
+_WEEK_HDR_RE = re.compile(r'^\[(\d{1,2}/\d{1,2})\]$')
+_XLSX_REQUIRED_COLS = ("Ln", "Days", "Time", "Program", "Len", "Rate", "C/T", "Spots")
+
+
+def _xlsx_date(value, label: str) -> str:
+    if not isinstance(value, datetime):
+        raise ValueError(f"Wallrich xlsx: {label} is not a date: {value!r}")
+    return f"{value.month}/{value.day}/{value.year}"
+
+
+def _xlsx_time(time_str: str) -> str:
+    """'07:00p-08:00p' → '7:00p-8:00p' (strip leading zero on hours only)."""
+    return re.sub(r'(?<!\d)0(\d:)', r'\1', time_str.strip())
+
+
+def parse_wallrich_xlsx(xlsx_path: str) -> List[WallrichEstimate]:
+    """
+    Parse a Strata Spot Schedule xlsx export into [WallrichEstimate].
+
+    Columns are mapped by header label (an added column is a no-op, a renamed
+    one raises), and the sheet is reconciled against its own arithmetic:
+    per line sum(week cells) == Spots, and the whole order against the
+    Total Spots / Total Dollars header fields. Any mismatch raises — a
+    misread sheet must refuse to enter, never enter partially.
+    """
+    import openpyxl
+
+    wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
+    try:
+        ws = wb.active
+        rows = [list(r) for r in ws.iter_rows(values_only=True)]
+    finally:
+        wb.close()
+
+    # --- header block: "Label:" cell → value in the cell to its right ---
+    fields = {}
+    grid_hdr_ri = None
+    for ri, row in enumerate(rows):
+        if row and str(row[0] or "").strip() == "Ln":
+            grid_hdr_ri = ri
+            break
+        for ci, cell in enumerate(row):
+            if isinstance(cell, str) and cell.strip().endswith(":"):
+                fields[cell.strip().rstrip(":")] = (
+                    row[ci + 1] if ci + 1 < len(row) else None
+                )
+    if grid_hdr_ri is None:
+        raise ValueError("Wallrich xlsx: grid header row ('Ln' …) not found")
+
+    # --- grid columns by header label; [M/D] headers are the week columns ---
+    col: dict = {}
+    weeks: List[tuple] = []   # (column_index, "M/D")
+    for ci, cell in enumerate(rows[grid_hdr_ri]):
+        if cell is None:
+            continue
+        label = str(cell).strip()
+        m = _WEEK_HDR_RE.match(label)
+        if m:
+            weeks.append((ci, m.group(1)))
+        else:
+            col[label] = ci
+    missing = [c for c in _XLSX_REQUIRED_COLS if c not in col]
+    if missing:
+        raise ValueError(f"Wallrich xlsx: missing grid column(s) {missing}")
+    if not weeks:
+        raise ValueError("Wallrich xlsx: no [M/D] week columns found")
+
+    # --- data lines: numbered rows until the grid ends ---
+    def _cell(row, name):
+        ci = col[name]
+        return row[ci] if ci < len(row) else None
+
+    lines: List[WallrichLine] = []
+    for row in rows[grid_hdr_ri + 1:]:
+        try:
+            # numeric cells may arrive as int, float, or str
+            ln_no = int(float(str(_cell(row, "Ln")).strip()))
+        except (ValueError, TypeError):
+            break   # blank row / "Month" summary — grid is over
+
+        rate_cell = _cell(row, "Rate")
+        if rate_cell is None or str(rate_cell).strip() == "":
+            # 0 is a legitimate rate (bonus); unreadable is not — never →0 on money
+            raise ValueError(f"Wallrich xlsx: line {ln_no} has no rate")
+        cash_trade = str(_cell(row, "C/T") or "").strip().lower()
+        if cash_trade != "c":
+            raise ValueError(
+                f"Wallrich xlsx: line {ln_no} is C/T={cash_trade!r} — only cash supported"
+            )
+
+        weekly = [int(row[ci] or 0) if ci < len(row) else 0 for ci, _ in weeks]
+        total = int(_cell(row, "Spots") or 0)
+        if sum(weekly) != total:
+            raise ValueError(
+                f"Wallrich xlsx: line {ln_no} week cells sum to {sum(weekly)} "
+                f"but Spots says {total}"
+            )
+
+        lines.append(WallrichLine(
+            days=str(_cell(row, "Days") or "").strip(),
+            time=_xlsx_time(str(_cell(row, "Time") or "")),
+            program=str(_cell(row, "Program") or "").strip(),
+            duration=int(float(str(_cell(row, "Len")))),
+            weekly_spots=weekly,
+            total_spots=total,
+            rate=float(rate_cell),
+        ))
+    if not lines:
+        raise ValueError("Wallrich xlsx: no data lines found under the grid header")
+
+    # --- reconcile the whole order against the sheet's own totals ---
+    trade_spots = fields.get("Trade Spots")
+    if trade_spots not in (None, 0, "0"):
+        raise ValueError(f"Wallrich xlsx: Trade Spots = {trade_spots!r} — not supported")
+
+    total_spots_hdr = fields.get("Total Spots")
+    total_dollars_hdr = fields.get("Total Dollars")
+    if total_spots_hdr is None or total_dollars_hdr is None:
+        raise ValueError("Wallrich xlsx: Total Spots / Total Dollars header fields missing")
+    got_spots = sum(ln.total_spots for ln in lines)
+    if got_spots != int(total_spots_hdr):
+        raise ValueError(
+            f"Wallrich xlsx: lines total {got_spots} spots, header says {total_spots_hdr}"
+        )
+    got_dollars = round(sum(ln.rate * ln.total_spots for ln in lines), 2)
+    if got_dollars != round(float(total_dollars_hdr), 2):
+        raise ValueError(
+            f"Wallrich xlsx: lines total ${got_dollars}, header says ${total_dollars_hdr}"
+        )
+
+    estimate_raw = str(fields.get("Estimate") or "")
+    m = re.match(r'(\d+)', estimate_raw)
+    if not m:
+        raise ValueError(f"Wallrich xlsx: no estimate number in {estimate_raw!r}")
+
+    return [WallrichEstimate(
+        estimate_number=m.group(1),
+        description=str(fields.get("Product") or "").strip(),
+        client=str(fields.get("Client") or "Unknown").strip(),
+        market=str(fields.get("Market") or "Unknown").strip(),
+        flight_start=_xlsx_date(fields.get("Flight Start"), "Flight Start"),
+        flight_end=_xlsx_date(fields.get("Flight End"), "Flight End"),
+        buyer="Unknown",   # the xlsx export carries no buyer field
+        separation=int(fields.get("Separation") or 15),
+        week_starts=[md for _, md in weeks],
+        lines=lines,
+        pdf_path=xlsx_path,
+    )]
+
+
+# ---------------------------------------------------------------------------
 # Week consolidation (used by automation)
 # ---------------------------------------------------------------------------
 
@@ -435,10 +606,10 @@ if __name__ == "__main__":
 
     pdf = sys.argv[1] if len(sys.argv) > 1 else None
     if not pdf:
-        print("Usage: python wallrich_parser.py <path-to-pdf>")
+        print("Usage: python wallrich_parser.py <path-to-pdf-or-xlsx>")
         sys.exit(1)
 
-    estimates = parse_wallrich_pdf(pdf)
+    estimates = parse_wallrich(pdf)
     if not estimates:
         print("No estimates parsed.")
         sys.exit(1)
