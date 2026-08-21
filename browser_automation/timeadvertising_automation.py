@@ -171,9 +171,14 @@ def _gather_inputs(order: TimeAdvertisingOrder) -> Optional[dict]:
     print("ETERE LINES PREVIEW")
     print(f"{'─'*70}")
     total_etere = 0
+    ros_paid_warnings = []
     for ln in order.lines:
         kind = "BONUS" if ln.rate == 0 else "PAID"
-        print(f"\n  [{kind}] {ln.program}")
+        time_from, time_to = _line_times(ln.program)
+        print(f"\n  [{kind}] {ln.program}  ({time_from}–{time_to})")
+        if ln.rate > 0 and (time_from, time_to) == ("06:00", "23:59") \
+                and "ROS" not in ln.program.upper():
+            ros_paid_warnings.append(ln.program)
         for k, spec in enumerate(ln.get_etere_lines(), 1):
             rate_str = f"${spec['rate']:.2f}" if spec['rate'] > 0 else "$0.00 (free)"
             print(f"    Line {k}: days={spec['days']:6s}  "
@@ -181,6 +186,14 @@ def _gather_inputs(order: TimeAdvertisingOrder) -> Optional[dict]:
                   f"{spec['total_spots']} spots  {rate_str}")
             total_etere += 1
     print(f"\n  Total Etere lines: {total_etere}")
+    if ros_paid_warnings:
+        print(f"\n  {'!'*70}")
+        print("  ⚠ PAID line(s) with NO readable daypart — would enter as ROS 06:00–23:59:")
+        for p in ros_paid_warnings:
+            print(f"      {p}")
+        print("    Check the IO — a paid line is almost never ROS. Answer 'n' and")
+        print("    report the file if the IO names a time for these.")
+        print(f"  {'!'*70}")
     print(f"{'─'*70}")
     confirm = input("\n  Proceed with automation? (y/n): ").strip().lower()
     if confirm != 'y':
@@ -249,19 +262,32 @@ def _days_for_etere(days_str: str) -> str:
     return ",".join(_TA_TO_DC.get(d, d) for d in days_str)
 
 
+# The daypart range inside a program name, e.g. '8pm-10pm'. Matched ANYWHERE,
+# not just at end-of-string: pdfplumber can glue a neighbor row's rate cells
+# onto the program line ('M-F: Mand. News/Drama 8pm-10pm $180.00 0 $ -',
+# Graton SF 2026-08-21), and an end anchor made that PAID line silently fall
+# to the ROS default and enter as 06:00-23:59 (contract 3022).
+_PROGRAM_TIME_RE = re.compile(r'\d+(?::\d+)?[ap]m-\d+(?::\d+)?[ap]m', re.IGNORECASE)
+
+
 def _line_description(program: str) -> str:
-    """Strip the 'M-F: ' schedule prefix: 'M-F: Cant. News/Talk 7pm-8pm' → 'Cant. News/Talk 7pm-8pm'"""
-    return re.sub(r'^[A-Za-z\-]+:\s*', '', program)
+    """Strip the 'M-F: ' schedule prefix: 'M-F: Cant. News/Talk 7pm-8pm' → 'Cant. News/Talk 7pm-8pm'.
+    If the program names a daypart, drop anything glued after it (rate junk)."""
+    desc = re.sub(r'^[A-Za-z\-]+:\s*', '', program)
+    m = _PROGRAM_TIME_RE.search(desc)
+    if m:
+        desc = desc[:m.end()]
+    return desc.strip()
 
 
 def _line_times(program: str) -> tuple:
     """Return (time_from, time_to) in HH:MM 24h.
-    Extracts trailing 'Xpm-Ypm' range from the program name.
+    Extracts the 'Xpm-Ypm' range from the program name (anywhere in it).
     Falls back to 06:00–23:59 for ROS/untimed lines.
     """
-    m = re.search(r'(\d+(?::\d+)?[ap]m-\d+(?::\d+)?[ap]m)\s*$', program, re.IGNORECASE)
+    m = _PROGRAM_TIME_RE.search(program)
     if m:
-        return EtereClient.parse_time_range(m.group(1))
+        return EtereClient.parse_time_range(m.group(0))
     return ("06:00", "23:59")
 
 
