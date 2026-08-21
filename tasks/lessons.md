@@ -1043,6 +1043,14 @@ feature returning exactly zero rows, with no error, only for the day's last show
 1. **Detect by content with a self-validating signature.** Add a text-based check (`is_bdr_text`) that matches the actual *row layout* (BDR rows are day-pattern-first, no line number, no daypart code). A layout guard means it won't steal sibling formats (`hl_parser` rows are line-numbered) even when header markers ("Buy Detail Report", "H/L Agency") overlap. The font-fingerprint check may be kept as a cheap pre-check **only if it self-validates too** — 2026-07-17: a DocuSign-signed RWNY proposal was misrouted to HL_BDR because DocuSign stamps embed Type3 ArialMT fonts and `is_bdr_pdf()` treated any page-1 Type3 as proof. The guard: a genuine Type3 BDR extracts as control-character garbage, so readable page text → NOT a BDR. Also bump `_SCAN_CACHE_VERSION` whenever detection logic changes — the scan cache keys on file signature only, so stale classifications survive code fixes.
 2. **Text-source must degrade gracefully.** Parsers that OCR should try `pdfplumber.extract_text()` first and fall back to OCR only when the text is `(cid:`-garbled or < ~50 chars. Never assume a format always needs OCR.
 3. **Order matters:** check the more-specific format before the format it shares markers with (`_is_bdr` before `_is_hl_partners` in `detect_from_text`).
+4. **A station/market name is never an agency signature** (Wallrich xlsx,
+   2026-08-21 — Lee questioned KBTV-alone detection). The first Wallrich xlsx
+   detector matched any `KBTV` cell, but KBTV is the *station* — any agency's
+   Sacramento buy could carry it. The PDF rule was already right: layout
+   signature (`Estimate:` = Strata) AND station. When porting a detector to a
+   new file format, port the WHOLE signature, not the one token that happens to
+   discriminate today's siblings — and pin the negative (station-only workbook
+   stays UNKNOWN) in a test (34716f8).
 
 **Why:** Two parsers (`hl_parser`, `hl_bdr_parser`) share the same agency markers and differ only in table layout. The discriminator must be the layout, available in the extractable text — never a transient encoding trait.
 
