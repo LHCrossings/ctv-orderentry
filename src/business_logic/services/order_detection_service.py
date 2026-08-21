@@ -118,7 +118,7 @@ class OrderDetectionService:
         if self._is_tcaa(first_page_text):
             return OrderType.TCAA
 
-        # Wallrich (Strata IO for Sacramento/CVC, KBTV station — check before opAD)
+        # Wallrich (client-keyed: SMUD / SD15 — check before opAD)
         if self._is_wallrich(first_page_text):
             return OrderType.WALLRICH
 
@@ -540,16 +540,14 @@ class OrderDetectionService:
 
     def _is_wallrich(self, text: str) -> bool:
         """
-        Check if text matches Wallrich agency order (Strata IO, KBTV station).
+        Check if text matches a Wallrich agency order.
 
-        Wallrich uses the same "# of SPOTS PER WEEK" Strata format as opAD,
-        but the station is KBTV (Sacramento CTV) rather than CROSSINGS TV-TV.
+        Keyed on the CLIENT (Lee, 2026-08-21): "SMUD" or the client code
+        "SD15". The old station/layout rule (Strata "# of SPOTS PER WEEK" +
+        KBTV) was rejected as too loose — anyone can use Strata layouts.
+        Matches the filename and xlsx-content rules.
         """
-        return (
-            "# of SPOTS PER WEEK" in text and
-            "Estimate:" in text and
-            "KBTV" in text
-        )
+        return "SMUD" in text or re.search(r'\bSD15\b', text) is not None
 
     def _is_opad(self, text: str) -> bool:
         """
@@ -557,8 +555,15 @@ class OrderDetectionService:
 
         opAD patterns:
         - "Estimate:" + "# of SPOTS PER WEEK"
+        - NOT station KBTV — opAD buys run on CROSSINGS TV-TV. A KBTV Strata
+          PDF whose client isn't SMUD/SD15 (so not Wallrich either) must fall
+          through to the AI fallback, never silently enter under opAD.
         """
-        return "Estimate:" in text and "# of SPOTS PER WEEK" in text
+        return (
+            "Estimate:" in text and
+            "# of SPOTS PER WEEK" in text and
+            "KBTV" not in text
+        )
 
     def _is_misfit(self, text: str) -> bool:
         """

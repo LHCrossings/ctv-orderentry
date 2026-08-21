@@ -26,7 +26,7 @@ from domain.enums import OrderStatus, OrderType
 # size+mtime so repeat scans are instant; a changed/new file misses and is
 # re-detected. Bump the version to invalidate every entry after detection logic
 # changes.
-_SCAN_CACHE_VERSION = 6   # v6: Wallrich xlsx detected by client (SMUD / SD15), not KBTV
+_SCAN_CACHE_VERSION = 7   # v7: Wallrich PDF rule client-keyed too; opAD excludes KBTV
 _SCAN_CACHE_NAME = ".scan_cache.json"
 
 

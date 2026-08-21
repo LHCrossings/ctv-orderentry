@@ -153,6 +153,41 @@ class TestOrderDetectionService:
         assert service.detect_from_text(text) == OrderType.OPAD
 
     # ========================================================================
+    # WALLRICH DETECTION — client-keyed (SMUD / SD15), Lee 2026-08-21
+    # ========================================================================
+
+    def test_detect_wallrich_by_smud(self, service):
+        text = """
+        Client: SD15
+        Estimate: 769-T26_SMUD 3Q26 POM SD15 TV
+        # of SPOTS PER WEEK
+        """
+        assert service.detect_from_text(text) == OrderType.WALLRICH
+
+    def test_detect_wallrich_by_sd15_client_code(self, service):
+        """SD15 alone (no 'SMUD' anywhere) still detects — exact word only."""
+        text = """
+        Client: SD15
+        Estimate: 800
+        # of SPOTS PER WEEK
+        KBTV M-F 7:00p- 8:00p Cantonese 30 3 3 27 $50.00
+        """
+        assert service.detect_from_text(text) == OrderType.WALLRICH
+
+    def test_kbtv_strata_without_client_is_neither_wallrich_nor_opad(self, service):
+        """A KBTV Strata PDF whose client isn't SMUD/SD15 must fall through
+        (→ AI fallback), never silently enter under Wallrich or opAD."""
+        text = """
+        Client: SomeOtherClient
+        Estimate: 900
+        # of SPOTS PER WEEK
+        KBTV M-F 7:00p- 8:00p Cantonese 30 3 3 27 $50.00
+        """
+        assert service.detect_from_text(text) not in (
+            OrderType.WALLRICH, OrderType.OPAD
+        )
+
+    # ========================================================================
     # DAVISELEN DETECTION
     # ========================================================================
 
