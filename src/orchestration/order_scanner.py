@@ -64,6 +64,7 @@ def _detect_xlsx_content(file_path: Path) -> OrderType:
             return OrderType.UNKNOWN
         wb = openpyxl.load_workbook(str(file_path), read_only=True, data_only=True)
         ws = wb.active
+        saw_kbtv = saw_strata_estimate = False
         for row in ws.iter_rows(max_row=10):
             for cell in row:
                 v = str(cell.value or "").upper()
@@ -100,13 +101,19 @@ def _detect_xlsx_content(file_path: Path) -> OrderType:
                 if "NTOOITIVE" in v:
                     wb.close()
                     return OrderType.NTOOITIVE
-                # Wallrich (Strata Spot Schedule export) — the Station cell is
-                # "KBTV (CROSSINGS)-…"; KBTV = Wallrich, same rule as the PDF
-                # detector. Nothing in the workbook says "Wallrich" or "SMUD".
+                # Wallrich (Strata Spot Schedule export) — nothing in the
+                # workbook says "Wallrich" or "SMUD", so match the same pair
+                # the PDF detector uses: the Strata layout ("Estimate:" label)
+                # AND station KBTV. KBTV alone is just the Sacramento station —
+                # another agency's KBTV buy must NOT misroute here, and a
+                # Strata export without KBTV would be opAD, not Wallrich.
                 if "KBTV" in v:
-                    wb.close()
-                    return OrderType.WALLRICH
+                    saw_kbtv = True
+                if v == "ESTIMATE:":
+                    saw_strata_estimate = True
         wb.close()
+        if saw_kbtv and saw_strata_estimate:
+            return OrderType.WALLRICH
     except Exception as e:
         print(f"[WARN] Could not read {file_path.name}: {e}")
     return OrderType.UNKNOWN

@@ -120,6 +120,21 @@ def test_scanner_content_detection_routes_to_wallrich():
     assert _detect_xlsx_content(Path(FIXTURE)) == OrderType.WALLRICH
 
 
+def test_kbtv_alone_is_not_wallrich(tmp_path):
+    # KBTV is the STATION, not the agency — another agency's KBTV buy must not
+    # misroute. Wallrich needs the Strata layout ("Estimate:" label) too.
+    import openpyxl
+
+    from domain.enums import OrderType
+    from orchestration.order_scanner import _detect_xlsx_content
+
+    wb = openpyxl.Workbook()
+    wb.active["A1"] = "Station: KBTV Sacramento buy from some other agency"
+    out = tmp_path / "kbtv_only.xlsx"
+    wb.save(str(out))
+    assert _detect_xlsx_content(out) == OrderType.UNKNOWN
+
+
 def test_filename_alone_is_not_enough():
     # Documents WHY content detection is needed: nothing in the filename says
     # Wallrich, so filename detection must return UNKNOWN (not misroute).
