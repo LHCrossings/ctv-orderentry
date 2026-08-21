@@ -26,7 +26,7 @@ from domain.enums import OrderStatus, OrderType
 # size+mtime so repeat scans are instant; a changed/new file misses and is
 # re-detected. Bump the version to invalidate every entry after detection logic
 # changes.
-_SCAN_CACHE_VERSION = 5   # v5: Wallrich xlsx (KBTV Strata export) content detection
+_SCAN_CACHE_VERSION = 6   # v6: Wallrich xlsx detected by client (SMUD / SD15), not KBTV
 _SCAN_CACHE_NAME = ".scan_cache.json"
 
 
@@ -64,7 +64,6 @@ def _detect_xlsx_content(file_path: Path) -> OrderType:
             return OrderType.UNKNOWN
         wb = openpyxl.load_workbook(str(file_path), read_only=True, data_only=True)
         ws = wb.active
-        saw_kbtv = saw_strata_estimate = False
         for row in ws.iter_rows(max_row=10):
             for cell in row:
                 v = str(cell.value or "").upper()
@@ -101,19 +100,15 @@ def _detect_xlsx_content(file_path: Path) -> OrderType:
                 if "NTOOITIVE" in v:
                     wb.close()
                     return OrderType.NTOOITIVE
-                # Wallrich (Strata Spot Schedule export) — nothing in the
-                # workbook says "Wallrich" or "SMUD", so match the same pair
-                # the PDF detector uses: the Strata layout ("Estimate:" label)
-                # AND station KBTV. KBTV alone is just the Sacramento station —
-                # another agency's KBTV buy must NOT misroute here, and a
-                # Strata export without KBTV would be opAD, not Wallrich.
-                if "KBTV" in v:
-                    saw_kbtv = True
-                if v == "ESTIMATE:":
-                    saw_strata_estimate = True
+                # Wallrich — Lee (2026-08-21): the CLEAR definer is the
+                # CLIENT, not the station or the Strata layout ("anyone can
+                # use Strata layouts"). SMUD anywhere (the Estimate cell
+                # carries it, e.g. "769-T26_SMUD 3Q26 …") or the exact
+                # client code SD15 (the Client cell).
+                if "SMUD" in v or v == "SD15":
+                    wb.close()
+                    return OrderType.WALLRICH
         wb.close()
-        if saw_kbtv and saw_strata_estimate:
-            return OrderType.WALLRICH
     except Exception as e:
         print(f"[WARN] Could not read {file_path.name}: {e}")
     return OrderType.UNKNOWN

@@ -120,28 +120,52 @@ def test_scanner_content_detection_routes_to_wallrich():
     assert _detect_xlsx_content(Path(FIXTURE)) == OrderType.WALLRICH
 
 
-def test_kbtv_alone_is_not_wallrich(tmp_path):
-    # KBTV is the STATION, not the agency — another agency's KBTV buy must not
-    # misroute. Wallrich needs the Strata layout ("Estimate:" label) too.
+def test_station_and_layout_are_not_the_definer(tmp_path):
+    # Lee (2026-08-21): "anyone can use Strata layouts" — a Strata-looking
+    # KBTV workbook that is not for SMUD/SD15 must NOT misroute to Wallrich.
+    # The client is the definer.
     import openpyxl
 
     from domain.enums import OrderType
     from orchestration.order_scanner import _detect_xlsx_content
 
     wb = openpyxl.Workbook()
-    wb.active["A1"] = "Station: KBTV Sacramento buy from some other agency"
-    out = tmp_path / "kbtv_only.xlsx"
+    ws = wb.active
+    ws["A1"] = "Client:"
+    ws["B1"] = "SomeOtherClient"
+    ws["A2"] = "Estimate:"
+    ws["B2"] = "123-T26_Other Campaign"
+    ws["A3"] = "Station:"
+    ws["B3"] = "KBTV (CROSSINGS)-TV-Cash"
+    out = tmp_path / "kbtv_other_client.xlsx"
     wb.save(str(out))
     assert _detect_xlsx_content(out) == OrderType.UNKNOWN
 
 
-def test_filename_alone_is_not_enough():
-    # Documents WHY content detection is needed: nothing in the filename says
-    # Wallrich, so filename detection must return UNKNOWN (not misroute).
+def test_smud_filename_detects_wallrich():
+    # SMUD in the filename is enough — the workbook never needs opening.
     from business_logic.services.order_detection_service import detect_from_filename
     from domain.enums import OrderType
 
-    assert detect_from_filename(REAL_FILENAME) == OrderType.UNKNOWN
+    assert detect_from_filename(REAL_FILENAME) == OrderType.WALLRICH
+
+
+def test_sd15_client_cell_detects_wallrich(tmp_path):
+    # A future export whose filename/estimate drops "SMUD" still detects via
+    # the exact client code SD15 (exact cell match — "SD15" inside a longer
+    # string does not count, SMUD covers those).
+    import openpyxl
+
+    from domain.enums import OrderType
+    from orchestration.order_scanner import _detect_xlsx_content
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws["A1"] = "Client:"
+    ws["B1"] = "SD15"
+    out = tmp_path / "sd15_client.xlsx"
+    wb.save(str(out))
+    assert _detect_xlsx_content(out) == OrderType.WALLRICH
 
 
 # ── Tamper tests ─────────────────────────────────────────────────────────────

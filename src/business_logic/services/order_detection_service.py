@@ -1012,6 +1012,10 @@ def detect_from_filename(filename: str) -> OrderType:
         return OrderType.CRISPIN
     if "NTOOITIVE" in name_upper:
         return OrderType.NTOOITIVE
+    # Wallrich — SMUD is the client and the clear definer (Lee, 2026-08-21);
+    # the xlsx content check in order_scanner matches SMUD/SD15 cells too.
+    if "SMUD" in name_upper:
+        return OrderType.WALLRICH
     # Emerald Queen Casino via TH Media — filename always carries "EQC".
     if "EQC" in name_upper or "EMERALD QUEEN" in name_upper or "TH MEDIA" in name_upper:
         return OrderType.EQC
