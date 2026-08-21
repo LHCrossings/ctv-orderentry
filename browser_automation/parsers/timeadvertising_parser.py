@@ -606,6 +606,25 @@ def _parse_schedule(schedule_lines: list, word_rows: dict, day_col_x: dict) -> l
     return parsed_lines
 
 
+def _reconcile_gross_total(lines: list, text: str, pdf_path: str) -> None:
+    """
+    Reconcile sum(rate × spots) across parsed lines against the IO's own
+    'GROSS TOTAL: $N' and RAISE on mismatch — a dropped week/line must refuse
+    to enter, never enter partially. (Same family as the SCWA/SAGENT/DART
+    totals rule.) No GROSS TOTAL in the text → nothing to check.
+    """
+    m = re.search(r'GROSS TOTAL:\s*\$\s*([\d,]+\.?\d*)', text)
+    if not m:
+        return
+    stated = float(m.group(1).replace(',', ''))
+    parsed = sum(ln.rate * ln.total_spots for ln in lines)
+    if round(parsed, 2) != round(stated, 2):
+        raise ValueError(
+            f"[TIMEADVERTISING] parsed lines total ${parsed:,.2f} but the IO's "
+            f"GROSS TOTAL says ${stated:,.2f} — refusing to enter ({pdf_path})"
+        )
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # MAIN PARSER
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -659,6 +678,8 @@ def parse_timeadvertising_pdf(pdf_path: str) -> Optional[TimeAdvertisingOrder]:
     # Parse schedule
     schedule_lines = raw_lines[schedule_start_idx:]
     lines = _parse_schedule(schedule_lines, word_rows, day_col_x)
+
+    _reconcile_gross_total(lines, text, pdf_path)
 
     return TimeAdvertisingOrder(
         advertiser=advertiser,
