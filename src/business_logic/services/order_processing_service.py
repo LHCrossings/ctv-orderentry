@@ -2478,9 +2478,13 @@ class OrderProcessingService:
     def _run_saccountyvoters_with_driver(
         self, order: Any, driver: Any, session: Any, pre_gathered_inputs: Any, process_fn: Any
     ) -> "ProcessingResult":
-        """Call SacCountyVoters processor with an already-open driver."""
+        """Call the SacCountyVoters processor (direct DB — no driver).
+
+        process_saccountyvoters_order(pdf_path, shared_session=, pre_gathered_inputs=)
+        takes no driver; passing one positionally slid pdf_path into
+        shared_session and crashed with "multiple values for 'shared_session'".
+        """
         success = process_fn(
-            driver,
             str(order.pdf_path),
             shared_session=session,
             pre_gathered_inputs=pre_gathered_inputs,

@@ -411,5 +411,35 @@ class TestHandlerParserAgreement:
         )
 
 
+class TestSacCountyVotersCallShape:
+    """The wrapper must call process_saccountyvoters_order with the automation's
+    REAL signature. It drifted when the automation went direct-DB (dropped the
+    driver param) but the wrapper kept passing one positionally — pdf_path slid
+    into shared_session and every run died with "multiple values for
+    'shared_session'" AFTER the whole gather was answered (2026-08-21 batch).
+    create_autospec enforces the real signature at call time."""
+
+    def test_wrapper_call_binds_to_real_signature(self, tmp_path):
+        from unittest.mock import create_autospec
+
+        _root = str(Path(__file__).parent.parent.parent)
+        if _root not in sys.path:
+            sys.path.insert(0, _root)
+        from browser_automation.saccountyvoters_automation import (
+            process_saccountyvoters_order,
+        )
+
+        service = OrderProcessingService({}, tmp_path)
+        order = Mock()
+        order.pdf_path = tmp_path / "sac.pdf"
+        order.order_input = {}
+
+        spec_fn = create_autospec(process_saccountyvoters_order, return_value=False)
+        result = service._run_saccountyvoters_with_driver(order, None, None, {}, spec_fn)
+
+        spec_fn.assert_called_once()   # a signature mismatch raises TypeError above
+        assert result.success is False
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
