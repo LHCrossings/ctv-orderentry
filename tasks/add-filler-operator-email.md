@@ -1,6 +1,6 @@
 # Draft — email to MC operators re: Add filler feature
 
-Subject: New "Add filler" option in Set up Daily Programming
+Subject: New "Add filler" option in Set up Daily Programming — please live-test
 
 Hi team,
 
@@ -26,6 +26,23 @@ How it works:
 - Languages without a filler library (e.g. Vietnamese, Hmong) don't get the auto
   button, but manual search still works for them.
 
+**One favor before you use it everywhere: please live-test it on a single market
+first.** You know these shows and hours better than we do, so you're the right
+people to judge it:
+
+1. Pick ONE market (use the market pill, not the whole network) and one show
+   that you know underfills its hour — The Point is a good candidate.
+2. Assign it, check the leftover time it reports against what you'd expect from
+   Multi Grid, use Auto-fill (or pick manually), and Run.
+3. Then look at that hour in Executive Editor: open bumper → show pieces →
+   fillers after the last piece → close bumper last, times looking normal, no
+   yellow triangles.
+4. Also glance at the NEXT hour's show on the page — its "placed" badge should
+   NOT light up just because fillers ran near the end of the previous hour.
+
+If that one market looks right, it's good to use across the network. If anything
+looks off, stop there and tell me what you saw — one market is easy to clean up.
+
 This first version is built on my best guesses about your workflow, and all of it
 is adjustable — tell me what would make it better. Some options already on the
 table:
@@ -41,6 +58,6 @@ table:
 4. **Adjust which fillers each language uses**, or add pools for more languages.
 5. **Change how picks are made** — e.g. exact-fit instead of slight overfill.
 
-Give it a try this week and let me know.
+Thanks — let me know how the test goes.
 
 Lee
