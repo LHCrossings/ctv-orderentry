@@ -705,6 +705,9 @@ def get_order_detail(file_path: Path, order_type: str) -> dict:
             "total_cost": round(sum(s.get("total_cost", 0.0) for s in sub_orders), 2),
             "lines": [],
             "warnings": list(dict.fromkeys(all_warnings)),
+            # Roll up so the backwrite manifest's top-level flag is right for
+            # multi-order PDFs too (net-rate HL: gross-up must not silently skip).
+            "rates_are_net": any(s.get("rates_are_net") for s in sub_orders),
             "sub_orders": sub_orders,
         }
 

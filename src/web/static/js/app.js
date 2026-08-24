@@ -146,7 +146,7 @@ async function loadQueue() {
                     : isAwaiting
                     ? (o.order_type === 'worldlink'
                         ? `<button class="restore-btn" onclick="event.stopPropagation();window.open('/backwrite','_blank')" title="WorldLink uses its dedicated backwrite flow (revision merge, MLBF tab)">Backwrite ↗</button>`
-                        : `<button class="restore-btn backwrite-btn" data-filename="${esc(o.filename)}" title="Generate the backwrite Excel from Etere + this order's manifest">Backwrite</button>`)
+                        : awaitingBackwriteButtons(o))
                       + ` <button class="delete-btn awaiting-done-btn" data-filename="${esc(o.filename)}">Done</button>`
                     : `<button class="delete-btn"  data-filename="${esc(o.filename)}">Mark Done</button>`
                 }</td>
@@ -337,10 +337,24 @@ function closeTerminal() {
 
 function awaitingMeta(o) {
     const contracts = (o.contracts || [])
-        .map(c => esc(c.code) + (c.etere_id ? ` <span title="Etere contract ID">(${c.etere_id})</span>` : ''))
+        .map(c => (c.backwritten_at ? '<span title="Already backwritten">✓</span> ' : '')
+                  + esc(c.code) + (c.etere_id ? ` <span title="Etere contract ID">(${c.etere_id})</span>` : ''))
         .join(', ') || '—';
     const entered = o.entered_at ? esc(o.entered_at.replace('T', ' ')) : '';
     return `${contracts}${entered ? ' &nbsp;·&nbsp; ' + entered : ''}`;
+}
+
+// A multi-estimate PDF is ONE manifest with N contracts — each needs its own
+// backwrite (its own Excel). One button per contract; the row archives to
+// Used/ only after the server has seen every contract backwritten.
+function awaitingBackwriteButtons(o) {
+    const cs = o.contracts || [];
+    if (cs.length <= 1) {
+        return `<button class="restore-btn backwrite-btn" data-filename="${esc(o.filename)}" data-contract-index="0" title="Generate the backwrite Excel from Etere + this order's manifest">Backwrite</button>`;
+    }
+    return cs.map((c, i) =>
+        `<button class="restore-btn backwrite-btn" data-filename="${esc(o.filename)}" data-contract-index="${i}" title="Generate the backwrite Excel for ${esc(c.code)}">${c.backwritten_at ? '✓ ' : ''}Backwrite ${esc(c.code)}</button>`
+    ).join(' ');
 }
 
 // ── Backwrite contact review (Phase 4) ──────────────────────────────────────
@@ -362,7 +376,9 @@ async function openBwContact(btn) {
     overlay.classList.remove('hidden');
 
     try {
-        const res = await fetch('/api/orders/awaiting-backwrite/' + encodeURIComponent(filename) + '/contact');
+        const contractIndex = btn.dataset.contractIndex || '0';
+        const res = await fetch('/api/orders/awaiting-backwrite/' + encodeURIComponent(filename)
+                                + '/contact?contract_index=' + encodeURIComponent(contractIndex));
         const data = await res.json();
         loading.classList.add('hidden');
         if (!res.ok) {
@@ -528,7 +544,7 @@ async function doBackwrite(btn, contact, langCorrections, estimates) {
     const oldLabel = btn.textContent;
     btn.textContent = 'Generating…';
     try {
-        const payload = {};
+        const payload = { contract_index: parseInt(btn.dataset.contractIndex || '0', 10) };
         if (contact) payload.contact = contact;
         if (estimates) payload.estimates = estimates;
         if (langCorrections && Object.keys(langCorrections).length) payload.language_corrections = langCorrections;

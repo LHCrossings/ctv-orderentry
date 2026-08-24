@@ -56,6 +56,41 @@ _etere_session_state: dict = {"session": None, "born_at": 0.0}
 _ETERE_SESSION_TTL = 20 * 60  # seconds
 
 
+def _io_detail_for_contract(manifest: dict, idx: int):
+    """The manifest's IO-detail slice for ONE of its contracts.
+
+    A multi-estimate PDF (HL, TCAA, Charmaine — one contract per estimate)
+    normalizes to {'sub_orders': [...], 'lines': []}: reconciliation and
+    gross-up against the whole-PDF detail silently no-op on the empty top-level
+    'lines', which is how a 3-contract manifest backwrote once, reconciled
+    "green", and archived with two contracts never backwritten.
+
+    Match a contract to its sub_order by the estimate number embedded in the
+    contract code — but only when exactly ONE estimate number matches (codes
+    from before the per-estimate-code fix, 'HL Toyota 13937 CV Est 13938',
+    contain TWO estimate numbers). Ambiguity falls through to index matching,
+    which is honest anyway: entry walks the same parsed list that produced the
+    sub_orders. Returns None when nothing can be matched safely.
+    """
+    detail = manifest.get("io_detail") or None
+    if not detail or detail.get("error"):
+        return None
+    subs = detail.get("sub_orders") or []
+    if not subs:
+        return detail
+    contracts = manifest.get("contracts") or []
+    if len(subs) == 1 and len(contracts) <= 1:
+        return subs[0]
+    code = str((contracts[idx] if idx < len(contracts) else {}).get("code") or "")
+    hits = [s for s in subs
+            if str(s.get("estimate_number") or "") and str(s["estimate_number"]) in code]
+    if len(hits) == 1:
+        return hits[0]
+    if len(subs) == len(contracts):
+        return subs[idx]
+    return None
+
+
 def _get_etere_session():
     from browser_automation.etere_direct_client import etere_web_login
     now = _time.monotonic()
@@ -2581,6 +2616,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         gorder = gorder if isinstance(gorder, dict) else {}
         estimates = m.get("estimates") or []
         estimate = str(gorder.get("estimate_number") or (estimates[0] if estimates else "") or "")
+        # Multi-contract manifest: THIS contract's estimate (its IO sub_order,
+        # then Etere's CUSTOMERREF — set to the estimate at entry), never the
+        # PDF's first estimate.
+        if len(contracts) > 1:
+            detail_c = _io_detail_for_contract(m, min(contract_index, len(contracts) - 1))
+            estimate = (str((detail_c or {}).get("estimate_number") or "")
+                        or (header_info or {}).get("customer_ref", "")
+                        or estimate)
         estimate_run = ""
         # Fall back to the Etere customer order ref (CUSTOMERREF) when the
         # manifest carries no estimate — iGraphix (and similar) store the
@@ -2689,7 +2732,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             contracts = m.get("contracts") or []
             if not contracts:
                 raise HTTPException(status_code=409, detail="Manifest has no contracts.")
-            c = contracts[min(contract_idx, len(contracts) - 1)]
+            idx = min(contract_idx, len(contracts) - 1)
+            c = contracts[idx]
             etere_id = _resolve_etere_id(c)
             if not etere_id:
                 raise HTTPException(status_code=409, detail=(
@@ -2760,9 +2804,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             gi = (m.get("user_inputs") or [{}])[0] or {}
             gorder = gi.get("order") if isinstance(gi, dict) else {}
             gorder = gorder if isinstance(gorder, dict) else {}
-            io_detail = m.get("io_detail") or None
-            if io_detail and io_detail.get("error"):
-                io_detail = None
+            # Per-contract slice for multi-estimate manifests — the whole-PDF
+            # detail has empty top-level lines, so reconcile/gross-up would
+            # silently no-op against it (the Sac County Voters failure).
+            io_detail = _io_detail_for_contract(m, idx)
+            # Old multi-order manifests predate the roll-up fix and stored
+            # rates_are_net=False at the top level — trust the sub_order too.
+            rates_net = bool(m.get("rates_are_net")) or bool((io_detail or {}).get("rates_are_net"))
 
             # Column Z ('Agency') is Agency vs Non-Agency = whether an AGENCY is
             # ATTACHED (ct.AGENZIA), NOT whether there's a commission. A 0%-
@@ -2771,7 +2819,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             agency_flag = "Agency" if id_agenzia > 0 else "Non-Agency"
             agency_fee = p_agenzia / 100 if p_agenzia > 1 else p_agenzia
             gross_up = {}
-            if m.get("rates_are_net") and agency_flag == "Agency" and io_detail:
+            if rates_net and agency_flag == "Agency" and io_detail:
                 nets = {
                     round(float(ln.get("rate") or 0), 4)
                     for ln in io_detail.get("lines", []) if ln.get("rate")
@@ -2787,6 +2835,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
             estimates = m.get("estimates") or []
             estimate = str(gorder.get("estimate_number") or (estimates[0] if estimates else "") or "")
+            # Multi-contract manifest: THIS contract's estimate, not the PDF's first.
+            if len(contracts) > 1:
+                est_c = str((io_detail or {}).get("estimate_number") or "")
+                if est_c:
+                    estimate = est_c
             estimate_run = ""
             # The review modal shows both estimate fields (front page / run
             # sheet) — values confirmed there override the derived defaults.
@@ -2837,12 +2890,18 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             from backwrite.transformer import reconcile_io_vs_etere
             io_check = reconcile_io_vs_etere(
                 io_detail, spots, agency_fee,
-                bool(m.get("rates_are_net")), agency_flag == "Agency",
+                rates_net, agency_flag == "Agency",
             )
             if io_check.get("messages"):
                 reconcile["messages"] = list(reconcile.get("messages") or []) + io_check["messages"]
                 reconcile["ok"] = bool(reconcile.get("ok", True)) and io_check["ok"]
                 reconcile["io_check"] = io_check.get("detail", {})
+            if io_detail is None and len(contracts) > 1:
+                # Soft note, not a block: the internal-totals check still ran.
+                reconcile["messages"] = list(reconcile.get("messages") or []) + [
+                    f"IO reconciliation skipped: could not match contract "
+                    f"{c.get('code')} to one of the PDF's estimates."
+                ]
 
             # The modal's language table was on screen when the user clicked
             # Generate — every value is user-verified. Persist to the
@@ -2853,17 +2912,32 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
             import re as _re
             base = Path(m.get("io_filename") or filename).stem
+            if len(contracts) > 1:
+                # Three contracts, three downloads — the filenames must differ.
+                base += " - " + str(c.get("code") or f"contract {idx + 1}")
             out_name = _re.sub(r'[\\/:*?"<>|]', "", base).strip() + ".xlsx"
 
-            # Archive to Used/ only when everything reconciles. A flagged order
-            # stays in the Awaiting queue (visible, logged) so the human can fix
-            # Etere and retry — the same "never file something wrong silently"
-            # philosophy as the CENTROMEDIA hard-stop above.
+            # Archive to Used/ only when everything reconciles AND every
+            # contract in the manifest has been backwritten. A multi-estimate
+            # PDF (HL, TCAA) is one manifest with N contracts — archiving on
+            # the first one silently orphaned the rest (Sac County Voters).
+            # A flagged order stays in the Awaiting queue (visible, logged) so
+            # the human can fix Etere and retry — the same "never file
+            # something wrong silently" philosophy as the CENTROMEDIA hard-stop.
             archived = False
             archive_err = None
             if reconcile.get("ok", True):
-                moved, archive_err = _archive_entered(filename)
-                archived = bool(moved) and not archive_err
+                c["backwritten_at"] = datetime.now().isoformat(timespec="seconds")
+                m["contracts"] = contracts
+                mf.write_text(json.dumps(m, indent=2, default=str), encoding="utf-8")
+                remaining = [str(x.get("code") or "?") for x in contracts
+                             if not x.get("backwritten_at")]
+                if remaining:
+                    print(f"[backwrite] {filename}: {c.get('code')} backwritten — "
+                          f"still awaiting: {', '.join(remaining)}")
+                else:
+                    moved, archive_err = _archive_entered(filename)
+                    archived = bool(moved) and not archive_err
             else:
                 print(f"[backwrite] {filename} NOT archived — reconciliation flagged: "
                       f"{'; '.join(reconcile.get('messages') or [])}")
