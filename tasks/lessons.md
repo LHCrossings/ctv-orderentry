@@ -1080,6 +1080,18 @@ contracts = [Contract(contract_number=label, order_type=OrderType.X)] if success
 
 **Do NOT set `etere_id` yourself** (2026-06-25). `OrderProcessingService._enrich_results()` runs once per batch and auto-resolves the Etere DB contract ID from each contract's code (`CONTRATTITESTATA.COD_CONTRATTO`), so every parser's pre-close and final summaries print `Contract <code> (ID: NNNN)` like WorldLink — for free. Just keep returning the gathered code as `contract_number`; the ID appears automatically. (WorldLink still sets `etere_id` itself; it's skipped by the enricher, which only fills `etere_id is None`.)
 
+**Multi-contract parsers: each contract's code/description must carry its OWN
+identifier, by SUBSTITUTION not suffix** (2026-08-24, HL ACM Q4 Toyota 3026-3028).
+The gather suggests a code built from the FIRST estimate (`HL Toyota 13937 CV` —
+number embedded by `resolve_defaults`); gluing ` Est N` onto that gave estimates
+2-3 the wrong number plus a redundant suffix (`HL Toyota 13937 CV Est 13938`).
+Use the shared `customer_defaults.per_estimate_text(text, first_est, est)` —
+it swaps the first identifier for each contract's own and falls back to a
+suffix only when the typed code lacks the number (keeps codes unique). Apply it
+to code AND description, and print a gather-time preview of every contract's
+code so the user confirms what will actually be written (the BDR automation's
+pattern — it had this right first; HL drifted).
+
 **Multi-contract parsers (one PDF → many contracts): the automation must RETURN the codes** (2026-06-26). A `bool` return throws away which contracts were created, so the handler can only report `contracts=[]` → "0 contract(s)" even on success. For any parser that loops creating >1 contract (Impact = per-quarter, H&L = per-estimate, Charmaine = per-order), change `process_X_order()` to return `list[str]` of created codes (append the code right after each header is created). Empty list = failure — **truthiness is preserved**, so existing `success = process_X_order(...)` callers keep working. Handler then does `contracts = [Contract(contract_number=c, order_type=OrderType.X) for c in codes]`. For autocommit parsers (Charmaine, H&L) return the codes actually created (reflects DB reality even on partial failure); for single-transaction parsers (Impact) the list is all-or-nothing. If the automation already returns the code (e.g. DART returns the contract number), just **use it** instead of discarding it.
 
 **Audit technique** (2026-06-26): to find this bug across all handlers, AST-walk `_process_*_order` methods and flag any `ProcessingResult(...)` return where `success` is not literal `False` but `contracts` is `[]` / never appended-to. This sweep found 5 affected parsers (HL, Impact, RPM, DART, Charmaine) after the iGraphix report. (It also surfaced that the Impact handler was passing a non-existent `user_input=` kwarg to `process_impact_order` — a latent `TypeError` — now `pre_gathered_inputs=`.)
