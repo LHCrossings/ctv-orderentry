@@ -53,6 +53,7 @@ SPOT_CODE_BONUS = 10     # BNS / Bonus Spot
 
 from browser_automation.added_value import add_av_line, prompt_add_av, widest_window
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMERS_DB_PATH
+from browser_automation.customer_defaults import per_estimate_text as _per_estimate_text
 
 # Market mapping for H&L (SFO and CVC only)
 HL_MARKET_MAPPING = {
@@ -159,11 +160,14 @@ def _execute_order(pdf_path: str, user_input: dict) -> list[str]:
             print(f"  Market:      {estimate.market}")
             print(f"  Lines:       {len(estimate.lines)}")
 
-            est_order_code = (
-                f"{order_code} Est {estimate.estimate_number}"
-                if len(estimates) > 1 else order_code
-            )
-            est_notes = estimate.description if estimate.description else description
+            if len(estimates) > 1:
+                first_est = estimates[0].estimate_number
+                est_order_code = _per_estimate_text(order_code, first_est, estimate.estimate_number)
+                est_description = _per_estimate_text(description, first_est, estimate.estimate_number)
+            else:
+                est_order_code = order_code
+                est_description = description
+            est_notes = estimate.description if estimate.description else est_description
             market_code = _normalize_hl_market(estimate.market)
 
             flight_start = datetime.strptime(estimate.flight_start, "%m/%d/%Y").date()
@@ -182,7 +186,7 @@ def _execute_order(pdf_path: str, user_input: dict) -> list[str]:
                 contract_id = client.create_contract_header(
                     customer_id=int(customer_id),
                     code=est_order_code,
-                    description=description,
+                    description=est_description,
                     contract_date=flight_start,
                     contract_end_date=flight_end,
                     customer_order_ref=estimate.estimate_number,
@@ -561,6 +565,13 @@ def gather_hl_inputs(pdf_path: str) -> dict | None:
     print("\n[CONTRACT]")
     contract_code = input(f"  Code [{suggested_code}]: ").strip() or suggested_code
     description = input(f"  Description [{suggested_desc}]: ").strip() or suggested_desc
+
+    if len(estimates) > 1:
+        print(f"\n[CONTRACTS] Will create {len(estimates)} contracts:")
+        for e in estimates:
+            est_code = _per_estimate_text(contract_code, est.estimate_number, e.estimate_number)
+            est_desc = _per_estimate_text(description, est.estimate_number, e.estimate_number)
+            print(f"  Est {e.estimate_number} → {est_code}  |  {est_desc}")
 
     # ── Revision detection ──
     is_revision = any(

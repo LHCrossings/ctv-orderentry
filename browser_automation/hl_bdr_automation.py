@@ -25,6 +25,7 @@ from browser_automation.etere_direct_client import (
     EtereDirectClient,
     connect,
 )
+from browser_automation.customer_defaults import per_estimate_text as _per_estimate_text
 from browser_automation.parsers.hl_bdr_parser import BDRLine, BDROrder, parse_bdr_pdf
 
 # ── Same constants as HL — BDR is the same agency ────────────────────────────
@@ -183,8 +184,8 @@ def gather_hl_bdr_inputs(pdf_path: str) -> dict | None:
     if len(orders) > 1:
         print(f"\n[CONTRACTS] Will create {len(orders)} contracts:")
         for o in orders:
-            est_code = contract_code.replace(orders[0].estimate_number, o.estimate_number)
-            est_desc = description.replace(orders[0].estimate_number, o.estimate_number)
+            est_code = _per_estimate_text(contract_code, orders[0].estimate_number, o.estimate_number)
+            est_desc = _per_estimate_text(description, orders[0].estimate_number, o.estimate_number)
             print(f"  Est {o.estimate_number} → {est_code}  |  {est_desc}")
 
     separation = SEPARATION_INTERVALS
@@ -256,12 +257,13 @@ def _execute_order(pdf_path: str, user_input: dict) -> list[str]:
         for order in orders:
             print(f"\n[BDR] Processing Est {order.estimate_number}: {order.description}")
 
-            est_order_code = (
-                order_code.replace(orders[0].estimate_number, order.estimate_number)
-                if len(orders) > 1 else order_code
-            )
+            if len(orders) > 1:
+                est_order_code = _per_estimate_text(order_code, orders[0].estimate_number, order.estimate_number)
+                est_description = _per_estimate_text(description, orders[0].estimate_number, order.estimate_number)
+            else:
+                est_order_code = order_code
+                est_description = description
             est_notes = order.description if order.description else description
-            est_description = description.replace(orders[0].estimate_number, order.estimate_number)
 
             flight_start = datetime.strptime(order.flight_start, "%m/%d/%Y").date()
             flight_end   = datetime.strptime(order.flight_end,   "%m/%d/%Y").date()

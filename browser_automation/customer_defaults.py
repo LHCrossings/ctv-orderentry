@@ -87,6 +87,16 @@ def ensure_template_columns(db_path: Path = DEFAULT_DB_PATH) -> None:
     return
 
 
+def per_estimate_text(text: str, first_est: str, est: str) -> str:
+    """Rewrite a gathered contract code/description for one estimate of a
+    multi-estimate PDF: swap the first estimate's number (embedded by
+    resolve_defaults) for this estimate's own, falling back to an ' Est N'
+    suffix when the number isn't in the text at all (so codes stay unique)."""
+    if first_est and first_est in text:
+        return text.replace(first_est, est)
+    return f"{text} Est {est}"
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # TEMPLATE RESOLUTION
 # ═══════════════════════════════════════════════════════════════════════════════
