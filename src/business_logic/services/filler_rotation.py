@@ -1,15 +1,19 @@
-"""Korean-filler (K-FILLER) rotation for the Daily Programming filler auto-fill.
+"""Program-filler pools for the Daily Programming filler auto-fill.
 
-Korean dramas are 3 physical pieces (A/B/C); their program hour has more PRGS
-slots than that (typically 5), so the leftover blank slots are padded with
-K-FILLER spots. This module draws those fillers randomly WITHOUT replacement so
-every active filler airs once before any repeats, then the cycle resets. State
-lives in `chat.kfiller_rotation` (one row per filler code used this cycle); see
-scripts/setup_kfiller_rotation_table.py.
+Some shows don't fill their guide window — leftover PRGS slots (or leftover
+time) are padded with language-appropriate FILLER assets. The pools, all
+NEWTYPE='PGM' assets matched on COD_PROGRA:
 
-The active pool = numbered K-FILLERs (`K-FILLER<yy>-NNN`, e.g. K-FILLER25-027),
-excluding DO NOT USE / HIATUS name markers and expired spots. A single filler may
-air across multiple markets, so a draw is shared network-wide (not per market).
+  korean   → K-FILLER<yy>-NNN (e.g. K-FILLER25-027)
+  chinese  → CHINESEFILLER… / UNIAM…
+  filipino → UNIAE… (Filipino AND Jus Punjabi programming)
+
+The Korean weekday auto-fill additionally rotates WITHOUT replacement so every
+active K-FILLER airs once before any repeats, then the cycle resets. Rotation
+state lives in `chat.kfiller_rotation` (one row per filler code used this
+cycle; see scripts/setup_kfiller_rotation_table.py) and applies to the K pool
+ONLY — duration-targeted draws (`draw_until`, `draw_k_near_target`) never read
+or consume it, whatever the pool.
 
 Draw and mark are separate: `draw_n()` returns picks without recording them (so a
 reroll is free); the caller records them with `mark_used()` only when the operator
@@ -19,11 +23,39 @@ from __future__ import annotations
 
 import random
 
+K_POOL = ("K-FILLER[0-9][0-9]-%",)
+
+# Auto-fill pool per language key. Values are COD_PROGRA LIKE patterns.
+POOL_PATTERNS = {
+    "korean": K_POOL,
+    "chinese": ("CHINESEFILLER%", "UNIAM%"),
+    "filipino": ("UNIAE%",),
+}
+
+# Grid-language word (programming_grid._parse_title, free text) → pool key.
+_LANGUAGE_POOL = {
+    "korean": "korean",
+    "chinese": "chinese", "mandarin": "chinese", "cantonese": "chinese",
+    "filipino": "filipino", "tagalog": "filipino", "punjabi": "filipino",
+}
+
+# Codes that are fillers, not show pieces — excluded from placed-group anchor
+# computation (_is_placed in daily_programming_run.py): letterless filler codes
+# self-anchor, and one stacked near a window's end would mark the NEXT window
+# "already placed". MIRRORS isFillerCode() in daily_programming.html — keep in sync.
+FILLER_CODE_PREFIXES = ("K-FILLER", "CHINESEFILLER", "UNIAE", "UNIAM")
+
+
+def pool_for_language(language) -> str | None:
+    """POOL_PATTERNS key for a grid language word, or None (manual search only)."""
+    return _LANGUAGE_POOL.get((language or "").strip().lower())
+
+
 _ACTIVE_SQL = """
     SELECT ID_FILMATI, COD_PROGRA, DURATA
     FROM FILMATI WITH(NOLOCK)
     WHERE NEWTYPE = 'PGM'
-      AND COD_PROGRA LIKE 'K-FILLER[0-9][0-9]-%'
+      AND ({patterns})
       AND COD_PROGRA NOT LIKE '%DO NOT USE%' AND DESCRIZIO NOT LIKE '%DO NOT USE%'
       AND COD_PROGRA NOT LIKE '%HIATUS%'     AND DESCRIZIO NOT LIKE '%HIATUS%'
       AND (DATA_SCAD IS NULL OR DATA_SCAD >= CAST(GETDATE() AS DATE))
@@ -31,9 +63,10 @@ _ACTIVE_SQL = """
 """
 
 
-def active_pool(cur) -> list[dict]:
-    """All currently-usable numbered K-FILLERs: [{fid, code, durata}]."""
-    cur.execute(_ACTIVE_SQL)
+def active_pool(cur, patterns=K_POOL) -> list[dict]:
+    """All currently-usable fillers matching `patterns`: [{fid, code, durata}]."""
+    sql = _ACTIVE_SQL.format(patterns=" OR ".join("COD_PROGRA LIKE %s" for _ in patterns))
+    cur.execute(sql, tuple(patterns))
     return [{"fid": int(r[0]), "code": (r[1] or "").strip(), "durata": int(r[2] or 0)}
             for r in cur.fetchall()]
 
@@ -85,11 +118,12 @@ def draw_n(conn, n: int) -> list[dict]:
 _OVERSHOOT_CAP_FRAMES = int(5 * 60 * 29.97)  # allow up to ~5 min of overfill
 
 
-def draw_until(cur, target_frames: int, exclude_codes=()) -> list[dict]:
-    """Pick random DISTINCT active K-FILLERs whose durations fill `target_frames`
-    — for WEEKEND programming-time fill. Pure random from the full active pool: it
-    deliberately does NOT read or update the rotation cycle (weekend fillers get
-    duration-match flexibility and don't consume weekday tokens).
+def draw_until(cur, target_frames: int, exclude_codes=(), patterns=K_POOL) -> list[dict]:
+    """Pick random DISTINCT active fillers from `patterns` whose durations fill
+    `target_frames` — for programming-time fill (weekend K-drama, and the setup
+    flow's "Auto-fill leftover"). Pure random from the full active pool: it
+    deliberately does NOT read or update the rotation cycle (duration-targeted
+    draws get duration-match flexibility and never consume weekday tokens).
 
     Biased to OVERFILL, not underfill: it always reaches the target and overshoots
     by up to ~5 minutes (only exceeding that if the pool leaves no smaller option).
@@ -99,7 +133,7 @@ def draw_until(cur, target_frames: int, exclude_codes=()) -> list[dict]:
     if target <= 0:
         return []
     ex = {(c or "").strip() for c in exclude_codes}
-    pool = [p for p in active_pool(cur) if p["code"] not in ex and p["durata"] > 0]
+    pool = [p for p in active_pool(cur, patterns) if p["code"] not in ex and p["durata"] > 0]
     random.shuffle(pool)
     picks, total = [], 0
     while total < target and pool:

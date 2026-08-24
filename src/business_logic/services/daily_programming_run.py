@@ -7,7 +7,9 @@ transaction-safe. Two paths:
   * explode  – one EDL-marked file split into N segments (dbo.ExplodeEdl plan),
                grouped under Part-1's Event_P, timecodes carved per segment.
   * pieces   – N standalone whole-file pieces (a/b/c…) + fillers, each its own
-               event, placed one per PRGS slot in order (shows first, fillers next).
+               event, placed one per PRGS slot in order (shows first, fillers
+               next); surplus fillers stack behind the last slot (the weekend-
+               drama overflow pattern) to pad a window the pieces underfill.
   * shoplc   – fixed overnight Shop LC setup (SHOP_LC map): CVC/SFO get their
                ID-overlay live asset exploded per EDL, every other CTV market gets
                the generic live asset as one unexploded 6-hour event. First piece
@@ -26,6 +28,7 @@ import re
 import threading
 import time
 
+from src.business_logic.services.filler_rotation import FILLER_CODE_PREFIXES
 from src.business_logic.services.show_profiles import daily_elements, elements_for, profile_for
 
 FPS = 29.97
@@ -246,6 +249,8 @@ def _group_anchors(rows):
 
 _ANCHOR_TOL = int(2 * 60 * FPS)  # a show's piece A chains in ~1s BEFORE its nominal window
 
+_FILLER_RE = re.compile("^(" + "|".join(re.escape(p) for p in FILLER_CODE_PREFIXES) + ")", re.I)
+
 
 def _is_placed(cur, cod_user, d, lo, hi):
     """True if a program GROUP is anchored inside [lo-tol, hi-tol) — the
@@ -259,7 +264,13 @@ def _is_placed(cur, cod_user, d, lo, hi):
            AND NEWTYPE='PGM' AND LIVELLO=0 AND ID_FILMATI>0 AND COD_PROGRA NOT LIKE 'BUMP%%'""",
         (cod_user, d),
     )
-    rows = [(int(r[0]), r[1] or "") for r in cur.fetchall()]
+    # Filler rows never anchor a window: their letterless codes each self-anchor,
+    # and a surplus filler stacked behind a show's last slot (plus draw_until's
+    # ≤5-min overshoot) can START inside [hi-TOL, hi+overshoot) — which would mark
+    # the NEXT window "already placed" and silently skip its show. The window's
+    # own pieces always anchor it, so dropping fillers never un-detects a placement.
+    rows = [(int(r[0]), r[1] or "") for r in cur.fetchall()
+            if not _FILLER_RE.match((r[1] or "").strip())]
     return any(lo - _ANCHOR_TOL <= a < hi - _ANCHOR_TOL for a in _group_anchors(rows))
 
 
@@ -721,6 +732,7 @@ def _place_once(conn, cod_user, d, assignment, pending):
                         (plan[-1][1], nid))
                 ids.append(nid)
             first_id = ids[0]
+            keys = [s["ora"] for s in slots[: len(ids)]]
         elif mode == "single":  # shoplc generic — one unexploded 6-hour live event
             # The overnight window has 6 hourly PRGS slots in every market; the
             # unexploded event goes into the first and spans the rest (exactly
@@ -734,19 +746,36 @@ def _place_once(conn, cod_user, d, assignment, pending):
             cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
             ids = [nid]
             first_id = nid
+            keys = [slots[0]["ora"]]
         else:  # pieces
-            content = [int(x) for x in (assignment.get("pieces") or [])] + \
-                      [int(x) for x in (assignment.get("fillers") or [])]
-            if len(content) != len(slots):
+            piece_fids = [int(x) for x in (assignment.get("pieces") or [])]
+            filler_fids = [int(x) for x in (assignment.get("fillers") or [])]
+            content = piece_fids + filler_fids
+            if len(piece_fids) > len(slots):
+                conn.rollback()
+                return {"cu": cod_user, "ok": False, "skipped": False,
+                        "message": f"{len(piece_fids)} pieces exceed {len(slots)} PRGS slots"}
+            if len(content) < len(slots):
                 conn.rollback()
                 return {"cu": cod_user, "ok": False, "skipped": False,
                         "message": f"{len(content)} pieces+fillers vs {len(slots)} PRGS slots"}
-            ids = []
-            for cfid, slot in zip(content, slots):
+            # One item per PRGS slot in order; surplus fillers STACK behind the
+            # last slot with synthetic sort keys (the _place_weekend_drama_once
+            # overflow pattern) — that's how a window the pieces underfill gets
+            # padded. COMS-spot keys come from trafficPalinse.offset (thousands
+            # of frames), so ora+small_int can't collide with a break's spots.
+            n_slots = len(slots)
+            ids, keys = [], []
+            for i, cfid in enumerate(content):
+                if i < n_slots:
+                    slot, key = slots[i], slots[i]["ora"]
+                else:
+                    slot, key = slots[-1], slots[-1]["ora"] + (i - n_slots + 1)
                 nid = _insert_event(cur, cod_user, d, slot["sched"], slot["block"], slot["seg"],
                                     slot["ora"], cfid, _durata(cur, cfid))
                 cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, cfid))
                 ids.append(nid)
+                keys.append(key)
             first_id = ids[0]
 
         # Per-show profile: ensure required bumpers exist (insert if master control
@@ -783,8 +812,7 @@ def _place_once(conn, cod_user, d, assignment, pending):
         # Traffic_InsertEvent's neighbor-derived xorders are unreliable when the
         # window holds stale soft-deleted rows or BO-packed spots (see docstring).
         if not shoplc:
-            _conform_window_xorder(cur, cod_user, d, lo, hi, ids,
-                                   [s["ora"] for s in slots[:len(ids)]], open_b, close_b)
+            _conform_window_xorder(cur, cod_user, d, lo, hi, ids, keys, open_b, close_b)
 
         # Profile elements (e.g. FCC IDs) that apply to this market, placed on top
         # of the program. SFO/CVC anchor flips piece A to T; DAL drops the ID into

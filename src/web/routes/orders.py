@@ -4897,15 +4897,21 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
     @router.get("/api/master-control/daily-programming/program-pieces")
     async def daily_programming_program_pieces(code: str, date: str, coduser: int,
-                                               start: str = "", end: str = ""):
+                                               start: str = "", end: str = "",
+                                               language: str = ""):
         """No-EDL path: find the show's a/b/c/d pieces and compare the count to the
-        PRGS program-break count in that market/time-window (fewer pieces ⇒ fillers)."""
+        PRGS program-break count in that market/time-window (fewer pieces ⇒ fillers).
+        Also reports the window's programming budget + the pieces' total duration
+        (so the modal can show leftover time) and the show language's auto-fill
+        filler pool, if one exists."""
         import datetime as _dt
 
         from browser_automation.etere_direct_client import connect as _db_connect
+        from src.business_logic.services.daily_programming_run import _prgs_duration_total
 
         # Broadcast-day-aware frame window (06:00→30:00; post-midnight = 24:00–29:59).
         from src.business_logic.services.daily_programming_run import _window as _bcast_window
+        from src.business_logic.services.filler_rotation import pool_for_language
 
         try:
             d = _dt.datetime.strptime(date, "%Y-%m-%d").date()
@@ -4932,11 +4938,17 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     cur.execute("SELECT ID_FILMATI, COD_PROGRA, DURATA FROM FILMATI WHERE COD_PROGRA=%s", (code,))
                     pieces = cur.fetchall()
                 slots = None
+                budget = None
                 if lo is not None and hi is not None:
                     cur.execute(_DP_PRGS_COUNT_SQL, (coduser, d, lo, hi))
                     slots = int(cur.fetchone()["n"])
+                    # Separate plain cursor: _prgs_duration_total does fetchone()[0].
+                    budget = _prgs_duration_total(conn.cursor(), coduser, d, lo, hi)
             n = len(pieces)
             out = {"base": base, "count": n, "has_pieces": has_pieces, "prgs_slots": slots,
+                   "budgetFrames": budget,
+                   "pieceFrames": sum(int(r["DURATA"] or 0) for r in pieces),
+                   "fillerPool": pool_for_language(language),
                    "pieces": [{"id": r["ID_FILMATI"], "code": r["COD_PROGRA"], "durata": r["DURATA"]} for r in pieces]}
             if slots is not None:
                 out["fillers_needed"] = max(0, slots - n)
@@ -5277,6 +5289,36 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             return await loop.run_in_executor(None, _run)
         except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
             return {"ok": False, "error": f"Commit failed: {exc}"}
+
+    @router.post("/api/master-control/daily-programming/filler/draw-until")
+    async def daily_programming_filler_draw_until(body: dict = Body(...)):
+        """Duration-targeted filler draw for the setup flow's "Auto-fill leftover":
+        random picks from a language pool until `targetFrames` is covered (biased
+        to overfill by ≤5 min — a spare is a one-click delete). Never reads or
+        consumes the K-FILLER rotation, whatever the pool."""
+        from browser_automation.etere_direct_client import connect as _db_connect
+        from src.business_logic.services import filler_rotation
+        pool = str(body.get("pool") or "")
+        patterns = filler_rotation.POOL_PATTERNS.get(pool)
+        if not patterns:
+            return {"fillers": [], "error": f"No auto-fill pool '{pool}'"}
+        try:
+            target = int(body.get("targetFrames") or 0)
+        except (TypeError, ValueError):
+            return {"fillers": [], "error": "Invalid targetFrames"}
+        exclude = [str(c) for c in (body.get("exclude") or []) if c]
+
+        def _run():
+            with _db_connect() as conn:
+                picks = filler_rotation.draw_until(conn.cursor(), target, exclude, patterns)
+            return {"fillers": [{"id": p["fid"], "code": p["code"], "durata": p["durata"]} for p in picks],
+                    "targetFrames": target}
+
+        loop = asyncio.get_running_loop()
+        try:
+            return await loop.run_in_executor(None, _run)
+        except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
+            return {"fillers": [], "error": f"Draw failed: {exc}"}
 
     def _kd_prefill_weekdays(d):
         """Weekday dates a weekend day repeats: Sat→[Mon,Tue,Wed], Sun→[Thu,Fri]."""

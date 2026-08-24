@@ -228,6 +228,7 @@
             <div class="fm-filler-status" id="fmFillerStatus"></div>
             <div id="fmChosen" class="fm-chosen"></div>
             <button type="button" id="fmReroll" class="fm-done" style="display:none; background:var(--nord10);">🎲 Reroll fillers</button>
+            <button type="button" id="fmAutoFill" class="fm-done" style="display:none; background:var(--nord10);">➕ Auto-fill leftover</button>
             <button type="button" id="fmDone" class="fm-done" disabled>Use these fillers</button>
         </div>
 
@@ -463,6 +464,10 @@
     const ANCHOR_TOL = Math.round(2 * 60 * 29.97);
     function pieceBase(code) { return (code || '').replace(/([A-Z])$/, ''); }
     function pieceLetter(code) { const m = /([A-Z])$/.exec(code || ''); return m ? m[1] : ''; }
+    // Filler rows never anchor a window (letterless codes self-anchor, and one
+    // stacked near a window's end would count the NEXT window as placed).
+    // MIRRORS FILLER_CODE_PREFIXES in filler_rotation.py — keep in sync.
+    function isFillerCode(code) { return /^(K-FILLER|CHINESEFILLER|UNIAE|UNIAM)/i.test(code || ''); }
     function stampGroupAnchors(rows) {
         const last = {};   // cu|base -> {ora, anchor, letter}
         rows.slice().sort(function (a, b) { return a.ora - b.ora; }).forEach(function (x) {
@@ -499,7 +504,7 @@
             data = await r.json();
         } catch (e) { return; }
         const markets = data.markets || [];
-        const placed = stampGroupAnchors(data.placed || []);
+        const placed = stampGroupAnchors((data.placed || []).filter(function (x) { return !isFillerCode(x.code); }));
         state.placementData = { markets: markets, placed: placed };
         const M = markets.length;
         (state.programs || []).forEach(function (p, i) {
@@ -545,6 +550,7 @@
     const fmChosen = document.getElementById('fmChosen');
     const fmDone = document.getElementById('fmDone');
     const fmReroll = document.getElementById('fmReroll');
+    const fmAutoFill = document.getElementById('fmAutoFill');
     const fmEdlPanel = document.getElementById('fmEdlPanel');
     const fmEdlStatus = document.getElementById('fmEdlStatus');
     const fmEdlDrop = document.getElementById('fmEdlDrop');
@@ -700,7 +706,8 @@
         try {
             const u = '/api/master-control/daily-programming/program-pieces?code=' + encodeURIComponent(file.code) +
                 '&date=' + encodeURIComponent(state.date) + '&coduser=' + cu +
-                '&start=' + encodeURIComponent(p.start || '') + '&end=' + encodeURIComponent(p.end || '');
+                '&start=' + encodeURIComponent(p.start || '') + '&end=' + encodeURIComponent(p.end || '') +
+                '&language=' + encodeURIComponent(p.language || '');
             pd = await (await fetch(u)).json();
         } catch (e) { /* leave pd empty */ }
 
@@ -713,14 +720,16 @@
             return;
         }
 
-        const fillers = pd.fillers_needed || 0;
-        if (pd.status === 'fillers_needed' && fillers > 0) {
-            // Korean drama on a weekday → auto-fill the blank slots with random
-            // K-FILLERs (rotation); otherwise the operator hand-picks as before.
+        if (pd.status === 'fillers_needed' || pd.status === 'match') {
+            // fillers_needed → the operator MUST fill the blank slots; match →
+            // the filler step is OPTIONAL (pad leftover window time, or just
+            // click through). Korean drama on a weekday → auto-fill the blank
+            // slots with random K-FILLERs (rotation); otherwise hand-pick /
+            // auto-fill by duration.
             enterFillerPhase(file, pd, isKoreanDrama(file.code) && isWeekday(state.date));
             return;
         }
-        // exact match (or too_many) → finalize now
+        // too_many (or no window info) → finalize now
         state.assignments[modalIdx] = { mode: 'pieces', file: file, pieces: pd.pieces || [], slots: pd.prgs_slots, fillers: [], status: pd.status };
         let txt = '→ ' + (pd.count || 0) + ' piece' + (pd.count === 1 ? '' : 's');
         if (pd.prgs_slots != null) txt += ' / ' + pd.prgs_slots + ' break' + (pd.prgs_slots === 1 ? '' : 's');
@@ -730,18 +739,24 @@
         closeModal();
     }
 
-    // ── Filler-pick phase (no-EDL programs with fewer pieces than breaks) ──
-    // `auto` (Korean drama, weekdays) pre-fills the blanks with random K-FILLERs
-    // from the rotation; the operator can reroll or tweak, then accept.
+    // ── Filler-pick phase (no-EDL pieces path) ──
+    // Blank PRGS slots (`needed`) MUST be filled; beyond that, fillers are
+    // OPTIONAL — extras stack behind the last break to pad leftover window time
+    // (the leftover label shows how much). `auto` (Korean drama, weekdays)
+    // pre-fills the blanks with random K-FILLERs from the rotation; languages
+    // with a pool get "Auto-fill leftover" (duration draw, never the rotation).
     function enterFillerPhase(showFile, pd, auto) {
         modalPhase = 'fillers';
         fillerDraft = { showFile: showFile, pieces: pd.pieces || [], slots: pd.prgs_slots,
-                        needed: pd.fillers_needed || 0, chosen: [], auto: !!auto };
+                        needed: pd.fillers_needed || 0, chosen: [], auto: !!auto,
+                        budget: pd.budgetFrames || 0, pieceFr: pd.pieceFrames || 0,
+                        pool: pd.fillerPool || null };
         fmHint.style.display = 'none';
         fmFillerPanel.style.display = 'block';
         fmReroll.style.display = auto ? '' : 'none';
+        fmAutoFill.style.display = fillerDraft.pool ? '' : 'none';
         fmSearch.value = '';
-        fmSearch.placeholder = 'Search fillers (e.g. CHINESEFILLER, K-FILLER)…';
+        fmSearch.placeholder = 'Search fillers (e.g. CHINESEFILLER, UNIAE, K-FILLER)…';
         fmResults.innerHTML = '';
         lastResults = [];
         renderChosen();
@@ -771,37 +786,89 @@
         }
     }
 
+    function fillerLeftover() {
+        const d = fillerDraft;
+        const chosenFr = d.chosen.reduce(function (s, f) { return s + (f.durata || 0); }, 0);
+        return (d.budget || 0) - (d.pieceFr || 0) - chosenFr;
+    }
+
     function renderChosen() {
         const d = fillerDraft;
         const totalFr = d.chosen.reduce(function (s, f) { return s + (f.durata || 0); }, 0);
+        const left = fillerLeftover();
+        const leftTxt = d.budget
+            ? ' Window: ' + (left > 0 ? '<b>' + durLabel(left) + ' leftover</b>'
+                : (left === 0 ? '<b>0:00 leftover</b>' : 'overfilled by ' + durLabel(-left))) + '.'
+            : '';
         if (d.auto) {
             const rot = d.rotation || {};
             fmFillerStatus.innerHTML = 'Korean drama <b>' + escHtml(d.showFile.code) + '</b> = ' + d.pieces.length +
                 ' pieces in ' + d.slots + ' breaks → auto-filling <b>' + d.needed + '</b> blank slot' +
                 (d.needed === 1 ? '' : 's') + ' with random K-FILLERs' +
                 (rot.total ? ' (rotation ' + (rot.used || 0) + '/' + rot.total + ' used this cycle)' : '') +
-                '. Reroll or remove/replace a pick, then accept.';
-        } else {
+                '. Reroll or remove/replace a pick, then accept.' + leftTxt;
+        } else if (d.needed > 0) {
             fmFillerStatus.innerHTML = 'Show <b>' + escHtml(d.showFile.code) + '</b> = ' + d.pieces.length +
                 ' piece' + (d.pieces.length === 1 ? '' : 's') + ' in ' + d.slots + ' breaks. ' +
-                'Pieces fill the first breaks; choose <b>' + d.needed + '</b> filler' + (d.needed === 1 ? '' : 's') +
+                'Pieces fill the first breaks; choose at least <b>' + d.needed + '</b> filler' + (d.needed === 1 ? '' : 's') +
                 ' for the rest (' + d.chosen.length + '/' + d.needed + ' chosen' +
-                (totalFr ? ' · ' + durLabel(totalFr) + ' total' : '') + ').';
+                (totalFr ? ' · ' + durLabel(totalFr) + ' total' : '') + ').' + leftTxt;
+        } else {
+            fmFillerStatus.innerHTML = 'Show <b>' + escHtml(d.showFile.code) + '</b> = ' + d.pieces.length +
+                ' piece' + (d.pieces.length === 1 ? '' : 's') + ' in ' + d.slots + ' break' + (d.slots === 1 ? '' : 's') +
+                ' — every break has a piece. Fillers are optional: extras stack after the last piece' +
+                (totalFr ? ' (' + d.chosen.length + ' chosen · ' + durLabel(totalFr) + ')' : '') + '.' + leftTxt;
         }
         fmChosen.innerHTML = d.chosen.map(function (f, i) {
-            return '<div class="fm-chosen-row"><span class="fm-slot-num">break ' + (d.pieces.length + i + 1) + '</span>' +
+            const slotN = d.pieces.length + i + 1;
+            const tag = slotN <= d.slots ? 'break ' + slotN : 'stacked';
+            return '<div class="fm-chosen-row"><span class="fm-slot-num">' + tag + '</span>' +
                 '<span>' + escHtml(f.code) + '</span>' +
                 '<span class="fm-meta">' + durLabel(f.durata) + '</span>' +
                 '<span class="fm-x" data-i="' + i + '">remove</span></div>';
         }).join('');
-        fmDone.disabled = d.chosen.length !== d.needed;
+        fmDone.disabled = d.chosen.length < d.needed;
+        fmDone.textContent = d.chosen.length ? 'Use these fillers' : (d.needed ? 'Use these fillers' : 'Done — no fillers');
     }
 
     function addFiller(file) {
-        if (fillerDraft.chosen.length >= fillerDraft.needed) return;
+        if (fillerDraft.chosen.some(function (f) { return f.id === file.id; })) return;
         fillerDraft.chosen.push(file);
         renderChosen();
     }
+
+    // Duration-targeted draw from the show language's pool to cover the leftover
+    // window time. Never touches the K-FILLER rotation (unlike the KD weekday
+    // auto-draw) — see /filler/draw-until.
+    fmAutoFill.addEventListener('click', async function () {
+        const d = fillerDraft;
+        if (!d || !d.pool) return;
+        const left = fillerLeftover();
+        if (left <= 0) {
+            fmFillerStatus.innerHTML = 'Window already full — nothing to draw.';
+            return;
+        }
+        fmAutoFill.disabled = true;
+        try {
+            const r = await fetch('/api/master-control/daily-programming/filler/draw-until', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pool: d.pool, targetFrames: left,
+                                       exclude: d.chosen.map(function (f) { return f.code; }) })
+            });
+            const data = await r.json();
+            if (data.error) { fmFillerStatus.innerHTML = '<span style="color:var(--nord11)">' + escHtml(data.error) + '</span>'; return; }
+            const picks = data.fillers || [];
+            if (!picks.length) { fmFillerStatus.innerHTML = 'Window already full — nothing to draw.'; return; }
+            picks.forEach(function (f) {
+                if (!d.chosen.some(function (c) { return c.id === f.id; })) { f.src = 'until'; d.chosen.push(f); }
+            });
+            renderChosen();
+        } catch (e) {
+            fmFillerStatus.innerHTML = '<span style="color:var(--nord11)">Error: ' + escHtml(e.message) + '</span>';
+        } finally {
+            fmAutoFill.disabled = false;
+        }
+    });
 
     fmChosen.addEventListener('click', function (e) {
         const x = e.target.closest('.fm-x');
@@ -814,11 +881,13 @@
 
     fmDone.addEventListener('click', async function () {
         const d = fillerDraft;
-        if (d.chosen.length !== d.needed) return;
+        if (d.chosen.length < d.needed) return;
         // Auto (Korean-drama) picks: record the drawn K-FILLERs as used in the
-        // rotation now that the operator has accepted them.
+        // rotation now that the operator has accepted them. Duration draws
+        // (src 'until') never consume rotation tokens.
         if (d.auto) {
-            const codes = d.chosen.map(function (f) { return f.code; }).filter(function (c) { return /^K-FILLER/i.test(c || ''); });
+            const codes = d.chosen.filter(function (f) { return f.src !== 'until'; })
+                .map(function (f) { return f.code; }).filter(function (c) { return /^K-FILLER/i.test(c || ''); });
             if (codes.length) {
                 try {
                     await fetch('/api/master-control/daily-programming/kfiller/commit', {
