@@ -25,10 +25,10 @@ top-level rates_are_net roll-up is missing for multi-order PDFs.
 - [x] verify: full suite
 
 ## Review
-- Fix shipped in commit da2229e; tests in tests/unit/test_backwrite_multi_contract.py
+- Fix shipped in commit 0532db7; tests in tests/unit/test_backwrite_multi_contract.py
   (8 tests: matching by unique estimate-in-code incl. the ambiguous old
   ' Est N' codes, index fallback, single-contract passthrough, count-mismatch
-  None, rates_are_net roll-up). Full suite 615 passed.
+  None, rates_are_net roll-up). Full suite 646 passed.
 - Recovery for already-archived multi-contract manifests (Sac County Voters):
   restore from Used/ back to Entered/ — the row reappears with per-contract
   buttons; already-backwritten contracts just get regenerated or skipped.

@@ -249,23 +249,23 @@ not worth a store given the sync problem.
   populated, contact-person blank); TestClient GET (200 + correct block, 404 on missing);
   TestClient POST with an override string confirmed present in the generated Excel, green
   reconcile, auto-archived. app.js cache-buster bumped to v=20260713a.
-- **⚠ KNOWN GAP (found 2026-07-13, NOT yet fixed) — multi-contract PDFs backwrite only
-  ONE contract.** A Toyota HL PDF made 3 contracts (2949/2950/2951, one manifest); the
-  awaiting flow backwrote contract[0] then archived the whole manifest, dropping the other
-  two. This contradicts the design (§2.6/Phase 1/2 all say "one card per contract, backwrite
-  per contract"). Three coupled causes, all in the awaiting flow:
-    1. `list_awaiting_backwrite` (orders.py ~1866) returns **one row per manifest file**,
-       not per contract — the row carries the full `contracts` list but renders one button.
-    2. `doBackwrite` (app.js) + the contact modal always POST with **no `contract_index`**
-       → the endpoint defaults to 0 → only `contracts[0]` is ever generated.
-    3. The POST endpoint calls `_archive_entered(filename)` on first success → the whole
-       manifest (all contracts) moves to Used/, so the rest disappear from the queue.
-  **Fix approach (next session):** expand the awaiting list to one row per (manifest,
-  contract_index) — label each with its contract code — and each row's Backwrite/contact
-  flow carries its own `contract_index`. Archive the manifest to Used/ ONLY when every
-  contract has been backwritten (track completed indexes, e.g. a `backwritten: [...]` list
-  written into the manifest; archive when the set is complete). Until then Phase 4 is NOT
-  done for multi-contract orders (single-contract orders work end-to-end).
+- **✓ FIXED 2026-08-24 (commit 0532db7) — multi-contract PDFs backwrite only ONE
+  contract.** Found 2026-07-13: a Toyota HL PDF made 3 contracts (2949/2950/2951, one
+  manifest); the awaiting flow backwrote contract[0] then archived the whole manifest,
+  dropping the other two (recurred live: Sac County Voters). Three coupled causes —
+  UI never sent `contract_index`, the POST archived the whole manifest on first
+  success, and (found at fix time) the IO reconcile silently no-oped because a
+  multi-estimate io_detail stores `sub_orders` with empty top-level `lines`, plus the
+  parser_bridge multi-order roll-up dropped `rates_are_net`.
+  **The fix (one row per manifest kept, one BUTTON per contract):** app.js renders a
+  Backwrite button per contract (`data-contract-index`, threaded to /contact and the
+  generate POST); `_io_detail_for_contract()` (orders.py, module-level) slices the
+  manifest io_detail to the contract's sub_order — unique estimate-in-code match, then
+  index (entry order == parse order) — feeding reconcile, gross-up nets, and the
+  per-contract estimate default; the xlsx filename carries the contract code. Each
+  green backwrite stamps `contracts[idx].backwritten_at` into the manifest (✓ shown in
+  the row); `_archive_entered` fires only when every contract is stamped. Tests:
+  `tests/unit/test_backwrite_multi_contract.py`.
 - **Phase 5 — legacy cutover.** Mark the `/backwrite` card "(legacy)" + Legacy badge.
   After a full billing cycle of parallel use with no divergence: delete the legacy cards
   (keep routes one release longer, then remove).
