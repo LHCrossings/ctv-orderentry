@@ -226,6 +226,17 @@ def parse_igraphix_pdf(pdf_path: str) -> IGraphixOrder:
         
         # Parse channel description to get market and language
         channel_desc = _extract_channel_description(page_text)
+        if channel_desc == "Unknown Channel":
+            # Market and language BOTH come from this line; without it the old
+            # code silently defaulted to LAX/Filipino and booked the buy in the
+            # wrong market (SRC 31348/31360/31363, 2026-08: "Crossings" vs the
+            # agency's old "Crossing" spelling). Identity fields never default —
+            # refuse so the operator sees a parse error instead of a wrong entry.
+            raise ValueError(
+                "iGraphix channel line not found (expected 'Crossing(s) TV "
+                "<Spectrum|Comcast|XfinityTV> Ch. NNN …') — cannot determine "
+                "market/language; check the IO layout"
+            )
         market, market_abbrev = _parse_market_from_channel(channel_desc, client)
         language, language_abbrev = _parse_language_from_channel(channel_desc)
         
@@ -334,11 +345,15 @@ def _extract_channel_description(text: str) -> str:
     # "Crossing TV Spectrum channel 1519"
     # "Crossing TV Comcast Ch. 398 Central Valley"
     # "Crossing TV - XfinityTV CH. 3131 SF Vietnamese"
-    # "Crossing TV - XfinityTV Ch. 3131 SF Filipino"
-    
+    # "Crossings TV Comcast Ch. 398 Central Valley (Hmong)"
+    # "Crossings TV - XfinityTV Ch. 3131 SF Filipino"
+    # iGraphix historically misspelled the station "Crossing TV" and fixed it to
+    # "Crossings TV" in Aug 2026 (SRC 31348/31360/31363) — accept BOTH spellings,
+    # or every field this line feeds (market, language) silently defaults.
+
     patterns = [
-        r'(Crossing\s+TV.*?(?:channel|Ch\.)\s+\d+.*?)(?:\n|$)',
-        r'(Crossing\s+TV.*?(?:Spectrum|Comcast|XfinityTV).*?)(?:\n|$)',
+        r'(Crossings?\s+TV.*?(?:channel|Ch\.)\s+\d+.*?)(?:\n|$)',
+        r'(Crossings?\s+TV.*?(?:Spectrum|Comcast|XfinityTV).*?)(?:\n|$)',
     ]
     
     for pattern in patterns:
