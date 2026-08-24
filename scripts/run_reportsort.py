@@ -25,6 +25,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import requests
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from browser_automation.etere_direct_client import ETERE_WEB_URL, etere_web_login, etere_web_logout
@@ -123,7 +125,15 @@ def download_report(
         f"&filters[5]={date_to}"
     )
     print(f"[INFO] Downloading report for {scope} ({date_from} to {date_to}) ...")
-    resp = session.get(url, timeout=120)
+    # Etere generates this report on demand with a ~70s FIXED cost before data
+    # size even matters (measured 2026-08-24: 1 day = 72s, a full week = 82s),
+    # so the old 120s timeout died on any Etere load spike. Allow 10 minutes,
+    # and retry once — the GET is read-only, so a retry is always safe.
+    try:
+        resp = session.get(url, timeout=600)
+    except requests.exceptions.Timeout:
+        print("[WARN] Report request timed out after 600s — retrying once ...")
+        resp = session.get(url, timeout=600)
     resp.raise_for_status()
 
     content_type = resp.headers.get("Content-Type", "")
