@@ -24,13 +24,16 @@ from browser_automation.added_value import (
 
 
 class TestAvTotalSpots:
-    @pytest.mark.parametrize("start,end,expected", [
-        (date(2026, 7, 7), date(2026, 8, 2), 27),   # 7/7-8/2
-        (date(2026, 7, 7), date(2026, 7, 10), 4),    # 7/7-7/10
-        (date(2026, 7, 7), date(2026, 7, 27), 21),   # 7/7-7/27
-        (date(2026, 9, 1), date(2026, 9, 30), 30),   # full Sep
-        (date(2026, 7, 7), date(2026, 7, 7), 1),     # single day
-    ])
+    @pytest.mark.parametrize(
+        "start,end,expected",
+        [
+            (date(2026, 7, 7), date(2026, 8, 2), 27),  # 7/7-8/2
+            (date(2026, 7, 7), date(2026, 7, 10), 4),  # 7/7-7/10
+            (date(2026, 7, 7), date(2026, 7, 27), 21),  # 7/7-7/27
+            (date(2026, 9, 1), date(2026, 9, 30), 30),  # full Sep
+            (date(2026, 7, 7), date(2026, 7, 7), 1),  # single day
+        ],
+    )
     def test_one_spot_per_calendar_day_inclusive(self, start, end, expected):
         assert av_total_spots(start, end) == expected
 

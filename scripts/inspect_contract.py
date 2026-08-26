@@ -2,6 +2,7 @@
 Inspect a real Etere contract to resolve unknown field formats.
 Run from Windows: py scripts/inspect_contract.py
 """
+
 import pyodbc
 
 CONTRACT_ID = 2381
@@ -23,7 +24,7 @@ cols = [d[0] for d in cursor.description]
 row = cursor.fetchone()
 if row:
     for col, val in zip(cols, row):
-        if val is not None and val != '' and val != 0:
+        if val is not None and val != "" and val != 0:
             print(f"  {col}: {val!r}")
 else:
     print("  NOT FOUND")
@@ -32,18 +33,21 @@ else:
 print("\n" + "=" * 60)
 print("CONTRACT LINES (CONTRATTIRIGHE)")
 print("=" * 60)
-cursor.execute("""
+cursor.execute(
+    """
     SELECT * FROM CONTRATTIRIGHE
     WHERE ID_CONTRATTITESTATA = ?
     ORDER BY ID_CONTRATTIRIGHE
-""", CONTRACT_ID)
+""",
+    CONTRACT_ID,
+)
 cols = [d[0] for d in cursor.description]
 rows = cursor.fetchall()
 print(f"  ({len(rows)} lines)")
-for row in rows[:3]:   # first 3 lines — enough to see patterns
+for row in rows[:3]:  # first 3 lines — enough to see patterns
     print()
     for col, val in zip(cols, row):
-        if val is not None and val != '' and val != 0:
+        if val is not None and val != "" and val != 0:
             print(f"  {col}: {val!r}")
 
 # ── 3. Look up COD_USER values in use ─────────────────────────────────────────

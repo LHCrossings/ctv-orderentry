@@ -42,7 +42,8 @@ def _enrich_bookingcode(csv_bytes: bytes, contract_number) -> bytes:
 
         with _db_connect() as conn:
             cur = conn.cursor(as_dict=True)
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT
                     tpa.id_contrattirighe                                        AS line_id,
                     CONVERT(VARCHAR(10), tp.DATA, 101)                           AS air_date,
@@ -56,7 +57,9 @@ def _enrich_bookingcode(csv_bytes: bytes, contract_number) -> bytes:
                   AND f.COD_PROGRA IS NOT NULL
                   AND f.COD_PROGRA != ''
                 ORDER BY tpa.id_contrattirighe, tp.DATA, tp.ORA
-            """ % contract_id)
+            """
+                % contract_id
+            )
             rows = cur.fetchall()
 
         # Build lookup: (str(line_id), air_date) → [spot_code, ...] ordered by ORA
@@ -88,33 +91,34 @@ def _enrich_bookingcode(csv_bytes: bytes, contract_number) -> bytes:
     if header_idx is None:
         return csv_bytes
 
-    preamble = lines[: header_idx]
+    preamble = lines[:header_idx]
     data_block = "".join(lines[header_idx:])
 
     reader = csv.DictReader(io.StringIO(data_block))
 
     # Build a stripped→original field name map to handle whitespace in headers
     field_map = {(f.strip().lower() if f else ""): f for f in (reader.fieldnames or [])}
-    bc2_key = field_map.get("bookingcode2")      # original key in the row dict
-    id_key  = field_map.get("id_contrattirighe")
-    dt_key  = field_map.get("dateschedule")
+    bc2_key = field_map.get("bookingcode2")  # original key in the row dict
+    id_key = field_map.get("id_contrattirighe")
+    dt_key = field_map.get("dateschedule")
 
     if bc2_key is None:
         return csv_bytes
 
     from collections import defaultdict as _dd2
+
     consumed: dict[tuple, int] = _dd2(int)
 
     enriched_rows = []
     for row in reader:
-        line_id  = str(row.get(id_key, "")).strip()  if id_key  else ""
-        air_date = str(row.get(dt_key, "")).strip()  if dt_key  else ""
-        current  = str(row.get(bc2_key, "")).strip()
+        line_id = str(row.get(id_key, "")).strip() if id_key else ""
+        air_date = str(row.get(dt_key, "")).strip() if dt_key else ""
+        current = str(row.get(bc2_key, "")).strip()
 
         if current in ("", "NEED COPY"):
             key = (line_id, air_date)
             codes = lookup.get(key, [])
-            idx   = consumed[key]
+            idx = consumed[key]
             if idx < len(codes):
                 row[bc2_key] = codes[idx]
             consumed[key] = idx + 1
@@ -147,12 +151,12 @@ def fetch_media_library(code_prefix: str) -> list[dict]:
 
     params = {
         "reportCode": "R100177_C0000_MediaData",
-        "isSystem":   "True",
+        "isSystem": "True",
         "reportType": "DOWNLOADCSV",
         "customerid": 0,
-        "agencyid":   0,
+        "agencyid": 0,
         "filters[0]": code_prefix,
-        "filters[1]": "1",   # starts with
+        "filters[1]": "1",  # starts with
         "filters[2]": "",
         "filters[3]": "",
         "filters[4]": "",
@@ -174,8 +178,7 @@ def fetch_media_library(code_prefix: str) -> list[dict]:
     stripped = text.lstrip()
     if stripped.startswith("<") or "<!DOCTYPE" in text[:200]:
         raise RuntimeError(
-            f"Etere report returned HTML instead of CSV. "
-            f"First 300 chars: {text[:300]!r}"
+            f"Etere report returned HTML instead of CSV. First 300 chars: {text[:300]!r}"
         )
 
     lines = text.splitlines(keepends=True)
@@ -256,17 +259,17 @@ def fetch_etere_report(
     _d = date.today()
     today = f"{_d.month}/{_d.day}/{_d.year}"
     params = {
-        "reportCode":  report_code,
-        "isSystem":    is_system,
-        "reportType":  "DOWNLOADCSV",
-        "customerid":  customer_id,
-        "agencyid":    agency_id,
-        "filters[0]":  str(contract_number),
-        "filters[1]":  "",
-        "filters[2]":  "true" if print_times else "false",
-        "filters[3]":  "true" if use_date_range else "false",
-        "filters[4]":  start_date or today,
-        "filters[5]":  end_date or today,
+        "reportCode": report_code,
+        "isSystem": is_system,
+        "reportType": "DOWNLOADCSV",
+        "customerid": customer_id,
+        "agencyid": agency_id,
+        "filters[0]": str(contract_number),
+        "filters[1]": "",
+        "filters[2]": "true" if print_times else "false",
+        "filters[3]": "true" if use_date_range else "false",
+        "filters[4]": start_date or today,
+        "filters[5]": end_date or today,
     }
 
     session = etere_web_login()

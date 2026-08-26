@@ -15,6 +15,7 @@ class ApplicationConfig:
 
     All paths and settings are configurable through this object.
     """
+
     # Directory paths
     incoming_dir: Path
     processed_dir: Path
@@ -60,7 +61,7 @@ class ApplicationConfig:
             auto_process=False,
             require_confirmation=True,
             headless=False,
-            browser_timeout=30
+            browser_timeout=30,
         )
 
     @classmethod
@@ -82,7 +83,7 @@ class ApplicationConfig:
             auto_process=True,
             require_confirmation=False,
             headless=True,
-            browser_timeout=10
+            browser_timeout=10,
         )
 
     def ensure_directories(self) -> None:

@@ -2,6 +2,7 @@
 Understand trafficPalinse structure to build block-refresh INSERT logic.
 Run from Windows: py scripts/discover_block_refresh6.py
 """
+
 import sys
 from pathlib import Path
 
@@ -40,7 +41,7 @@ cols = [d[0] for d in cursor.description]
 print(f"  Cols: {cols}")
 for row in cursor.fetchall():
     d = dict(zip(cols, row))
-    print(" ", {k: v for k, v in d.items() if v is not None and v != 0 and v != ''})
+    print(" ", {k: v for k, v in d.items() if v is not None and v != 0 and v != ""})
 
 # ── 3. Join CONTRATTIFASCE + trafficPalinse for contract 2381 ─────────────────
 print("\n" + "=" * 60)
@@ -85,8 +86,9 @@ print("Distinct id_fascia for Cod_User=1 (NYC), offset≈14:00-15:00, future dat
 print("=" * 60)
 FRAMES = 29.97
 start_f = round(14 * 3600 * FRAMES)
-end_f   = round(15 * 3600 * FRAMES)
-cursor.execute("""
+end_f = round(15 * 3600 * FRAMES)
+cursor.execute(
+    """
     SELECT DISTINCT TOP 20 id_fascia, id_palinsesto, Cod_User, MIN(Date) as first_date, MAX(Date) as last_date
     FROM trafficPalinse
     WHERE Cod_User = 1
@@ -94,7 +96,10 @@ cursor.execute("""
       AND Date >= '2026-03-01'
     GROUP BY id_fascia, id_palinsesto, Cod_User
     ORDER BY first_date
-""", start_f, end_f)
+""",
+    start_f,
+    end_f,
+)
 cols = [d[0] for d in cursor.description]
 for row in cursor.fetchall():
     print(" ", dict(zip(cols, row)))

@@ -8,6 +8,7 @@ so they safely become no-ops after this conftest runs.
 
 Also neutralizes the opt-in routing flags — see `_clear_optin_routing_flags`.
 """
+
 import sys
 from unittest.mock import MagicMock
 
@@ -15,12 +16,16 @@ import pytest
 
 for _mod in (
     "pdfplumber",
-    "selenium", "selenium.webdriver",
-    "selenium.webdriver.common", "selenium.webdriver.common.by",
-    "selenium.webdriver.support", "selenium.webdriver.support.ui",
+    "selenium",
+    "selenium.webdriver",
+    "selenium.webdriver.common",
+    "selenium.webdriver.common.by",
+    "selenium.webdriver.support",
+    "selenium.webdriver.support.ui",
     "selenium.webdriver.support.expected_conditions",
     "selenium.webdriver.common.keys",
-    "selenium.common", "selenium.common.exceptions",
+    "selenium.common",
+    "selenium.common.exceptions",
 ):
     if _mod not in sys.modules:
         sys.modules[_mod] = MagicMock()

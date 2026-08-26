@@ -6,6 +6,7 @@ This reads a single day's program lineup out of the "Local Channels" sheet.
 
 See tasks/daily_programming_discovery.md for the grid layout details.
 """
+
 from __future__ import annotations
 
 import datetime
@@ -29,7 +30,9 @@ NETWORK_FILE = {"CTV": "Crossings TV", "TAC": "The Asian Channel"}
 _FOOTER_RE = re.compile(
     r"local channels|xfinity|spectrum|\bch\.|thick borders denote|"
     r"^\s*legend\s*$|"  # 'LEGEND' key header — anchored so drama titles ("The Legend of…") aren't caught
-    r"^\s*\d{1,2}/\d{1,2}/\d{2,4}\s*$", re.I)
+    r"^\s*\d{1,2}/\d{1,2}/\d{2,4}\s*$",
+    re.I,
+)
 
 
 def _week_monday(d: datetime.date) -> datetime.date:
@@ -52,7 +55,9 @@ def find_grid_file(network: str, d: datetime.date) -> Path | None:
     seen: set = set()
     for dd in (mon, mon + datetime.timedelta(days=6)):  # broadcast month may follow the week's end
         for prefix in ("", "!!!"):
-            month_dir = Path(GRID_ROOT) / netdir / dd.strftime("%Y") / f"{prefix}{dd.month:02d} {dd.year}"
+            month_dir = (
+                Path(GRID_ROOT) / netdir / dd.strftime("%Y") / f"{prefix}{dd.month:02d} {dd.year}"
+            )
             if month_dir in seen:
                 continue
             seen.add(month_dir)
@@ -131,12 +136,12 @@ def _norm_time(tok: str):
     h = int(m.group(1))
     mn = int(m.group(2) or 0)
     suf = m.group(3)
-    if suf == "n":          # 12n = noon
+    if suf == "n":  # 12n = noon
         h = 12
-    elif suf == "a":        # am; 12a = midnight
+    elif suf == "a":  # am; 12a = midnight
         if h == 12:
             h = 0
-    elif suf == "p":        # pm; 12p = noon
+    elif suf == "p":  # pm; 12p = noon
         if h != 12:
             h += 12
     if h > 23 or mn > 59:
@@ -219,8 +224,9 @@ def _coalesce_hmong_weekend(programs: list[dict], d: datetime.date) -> list[dict
     win_s, win_e = 18 * 60, 20 * 60
 
     def _is_hmong(p: dict) -> bool:
-        return (p.get("language") or "").strip().lower().startswith("hm") \
-            or "hmong" in (p.get("raw") or "").lower()
+        return (p.get("language") or "").strip().lower().startswith("hm") or "hmong" in (
+            p.get("raw") or ""
+        ).lower()
 
     def _inside(p: dict, s: int, e: int) -> bool:
         ps, pe = _hhmm_to_min(p.get("start")), _hhmm_to_min(p.get("end"))
@@ -234,18 +240,24 @@ def _coalesce_hmong_weekend(programs: list[dict], d: datetime.date) -> list[dict
     kept = [p for p in programs if id(p) not in hmong_ids]
 
     new_blocks: list[dict] = []
-    for hs in (win_s, win_s + 60):          # 18:00–19:00, then 19:00–20:00
+    for hs in (win_s, win_s + 60):  # 18:00–19:00, then 19:00–20:00
         he = hs + 60
-        covering = [p for p in hmong if _hhmm_to_min(p["start"]) < he and _hhmm_to_min(p["end"]) > hs]
+        covering = [
+            p for p in hmong if _hhmm_to_min(p["start"]) < he and _hhmm_to_min(p["end"]) > hs
+        ]
         if not covering:
             continue
         covering.sort(key=lambda p: _hhmm_to_min(p["start"]))
-        block = dict(covering[0])            # keep title/language/kind of the hour's first show
+        block = dict(covering[0])  # keep title/language/kind of the hour's first show
         block["start"], block["end"] = _min_to_hhmm(hs), _min_to_hhmm(he)
         new_blocks.append(block)
 
     out = kept + new_blocks
-    out.sort(key=lambda p: (_hhmm_to_min(p.get("start")) if _hhmm_to_min(p.get("start")) is not None else 9999))
+    out.sort(
+        key=lambda p: (
+            _hhmm_to_min(p.get("start")) if _hhmm_to_min(p.get("start")) is not None else 9999
+        )
+    )
     return out
 
 
@@ -291,14 +303,24 @@ def get_day_programs(network: str, d: datetime.date) -> dict:
     """
     path = find_grid_file(network, d)
     if not path:
-        return {"found": False, "file": None, "date": d.isoformat(), "programs": [],
-                "error": f"No grid file found for {network} week of {_week_monday(d):%Y-%m-%d}"}
+        return {
+            "found": False,
+            "file": None,
+            "date": d.isoformat(),
+            "programs": [],
+            "error": f"No grid file found for {network} week of {_week_monday(d):%Y-%m-%d}",
+        }
 
     wb = openpyxl.load_workbook(path, data_only=True)
     ws = _pick_grid_sheet(wb)
     if ws is None:
-        return {"found": False, "file": str(path), "date": d.isoformat(), "programs": [],
-                "error": f"No day-grid sheet found in {path.name} (sheets: {wb.sheetnames})"}
+        return {
+            "found": False,
+            "file": str(path),
+            "date": d.isoformat(),
+            "programs": [],
+            "error": f"No day-grid sheet found in {path.name} (sheets: {wb.sheetnames})",
+        }
 
     # Day column: row 3 holds the per-column dates (Mon..Sun in cols 2..8).
     daycol = None
@@ -308,8 +330,13 @@ def get_day_programs(network: str, d: datetime.date) -> dict:
             daycol = c
             break
     if daycol is None:
-        return {"found": False, "file": str(path), "date": d.isoformat(), "programs": [],
-                "error": f"{d:%Y-%m-%d} not found as a day column in {path.name}"}
+        return {
+            "found": False,
+            "file": str(path),
+            "date": d.isoformat(),
+            "programs": [],
+            "error": f"{d:%Y-%m-%d} not found as a day column in {path.name}",
+        }
 
     # Pre-index the merged ranges covering the day column (one pass) so we don't
     # rescan every range per row. Some sheets report a hugely inflated max_row

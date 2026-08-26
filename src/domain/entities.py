@@ -28,6 +28,7 @@ class Order:
     For multi-order PDFs (e.g., TCAA), estimate_number identifies
     which specific order within the PDF this represents.
     """
+
     pdf_path: Path
     order_type: OrderType
     customer_name: str
@@ -88,6 +89,7 @@ class Contract:
     A single order may result in multiple contracts depending on
     market configuration and agency requirements.
     """
+
     contract_number: str
     order_type: OrderType
     highest_line: int | None = None
@@ -131,6 +133,7 @@ class ProcessingResult:
 
     Encapsulates success/failure status and any contracts created.
     """
+
     success: bool
     contracts: list[Contract]
     order_type: OrderType
@@ -159,20 +162,21 @@ class Customer:
     the self-learning customer database — once a customer is entered,
     their defaults are stored for future orders.
     """
+
     customer_id: str
     customer_name: str
     order_type: OrderType
-    abbreviation: str = ""              # Short code for contract codes (e.g., "SRCF")
-    default_market: str | None = None   # Default market code (e.g., "CVC"), None for any
-    billing_type: str = "agency"        # "agency" or "client"
-    separation_customer: int = 15       # Customer separation minutes
-    separation_event: int = 0           # Event separation minutes
-    separation_order: int = 0           # Order separation minutes
-    owner: str = ""                       # Etere contract owner (ANAGRAF.COD_CONTO, e.g. "Charmaine Lane")
-    code_name: str = ""                 # Name token in contract code (e.g., "Muckleshoot", "TVC")
-    description_name: str = ""         # Name prefix in description (e.g., "Muckleshoot Casino")
+    abbreviation: str = ""  # Short code for contract codes (e.g., "SRCF")
+    default_market: str | None = None  # Default market code (e.g., "CVC"), None for any
+    billing_type: str = "agency"  # "agency" or "client"
+    separation_customer: int = 15  # Customer separation minutes
+    separation_event: int = 0  # Event separation minutes
+    separation_order: int = 0  # Order separation minutes
+    owner: str = ""  # Etere contract owner (ANAGRAF.COD_CONTO, e.g. "Charmaine Lane")
+    code_name: str = ""  # Name token in contract code (e.g., "Muckleshoot", "TVC")
+    description_name: str = ""  # Name prefix in description (e.g., "Muckleshoot Casino")
     include_market_in_code: bool = False  # Append market to code and description
-    auto_aircheck: bool = False           # Auto-prompt aircheck scheduling after traffic assignment
+    auto_aircheck: bool = False  # Auto-prompt aircheck scheduling after traffic assignment
 
     def matches_name(self, name: str, threshold: float = 0.8) -> bool:
         """

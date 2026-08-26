@@ -26,7 +26,7 @@ from domain.enums import OrderStatus, OrderType
 # size+mtime so repeat scans are instant; a changed/new file misses and is
 # re-detected. Bump the version to invalidate every entry after detection logic
 # changes.
-_SCAN_CACHE_VERSION = 7   # v7: Wallrich PDF rule client-keyed too; opAD excludes KBTV
+_SCAN_CACHE_VERSION = 7  # v7: Wallrich PDF rule client-keyed too; opAD excludes KBTV
 _SCAN_CACHE_NAME = ".scan_cache.json"
 
 
@@ -60,7 +60,9 @@ def _detect_xlsx_content(file_path: Path) -> OrderType:
         try:
             import openpyxl
         except ImportError:
-            print(f"[WARN] openpyxl not installed — cannot detect XLSX order type for {file_path.name}. Run: pip install openpyxl")
+            print(
+                f"[WARN] openpyxl not installed — cannot detect XLSX order type for {file_path.name}. Run: pip install openpyxl"
+            )
             return OrderType.UNKNOWN
         wb = openpyxl.load_workbook(str(file_path), read_only=True, data_only=True)
         ws = wb.active
@@ -122,11 +124,7 @@ class OrderScanner:
     Order entities with detected types and customer information.
     """
 
-    def __init__(
-        self,
-        detection_service: PDFOrderDetector,
-        incoming_dir: Path
-    ):
+    def __init__(self, detection_service: PDFOrderDetector, incoming_dir: Path):
         """
         Initialize the order scanner.
 
@@ -183,8 +181,7 @@ class OrderScanner:
         # for filenames containing special characters like &.
         # Dotfiles are never orders (and one of them is our own scan cache).
         _all = [
-            f for f in self._incoming_dir.iterdir()
-            if f.is_file() and not f.name.startswith('.')
+            f for f in self._incoming_dir.iterdir() if f.is_file() and not f.name.startswith(".")
         ]
         if _all:
             print(f"[SCAN] Files found: {[f.name for f in _all]}")
@@ -212,8 +209,12 @@ class OrderScanner:
                 # Fast path: unchanged file already classified → skip all OCR/vision.
                 _sig = _file_sig(pdf_path)
                 _hit = _scan_cache.get(pdf_path.name)
-                if (_hit and _hit.get("sig") == _sig
-                        and _hit.get("ai") == _ai and _hit.get("charm") == _charm):
+                if (
+                    _hit
+                    and _hit.get("sig") == _sig
+                    and _hit.get("ai") == _ai
+                    and _hit.get("charm") == _charm
+                ):
                     order = Order(
                         pdf_path=pdf_path,
                         order_type=OrderType[_hit["order_type"]],
@@ -241,14 +242,19 @@ class OrderScanner:
                     # Multi-order PDF — create ONE order; gather step handles estimate selection
                     print(f"\n[SCAN] {pdf_path.name}: Detected {count} estimates")
 
-                    split_orders = self._detection_service.split_multi_order_pdf(pdf_path, order_type)
+                    split_orders = self._detection_service.split_multi_order_pdf(
+                        pdf_path, order_type
+                    )
 
                     customer_name = "Unknown"
                     try:
-                        first_text = split_orders[0].get('text', '') if split_orders else ''
-                        customer_name = self._detection_service.extract_customer_name_from_text(
-                            first_text, order_type
-                        ) or "Unknown"
+                        first_text = split_orders[0].get("text", "") if split_orders else ""
+                        customer_name = (
+                            self._detection_service.extract_customer_name_from_text(
+                                first_text, order_type
+                            )
+                            or "Unknown"
+                        )
                     except Exception:
                         pass
 
@@ -266,7 +272,9 @@ class OrderScanner:
                     # Extract customer name
                     customer_name = "Unknown"
                     try:
-                        customer_name = self._detection_service.extract_customer_name(pdf_path, order_type)
+                        customer_name = self._detection_service.extract_customer_name(
+                            pdf_path, order_type
+                        )
                         if not customer_name:
                             customer_name = "Unknown"
                     except Exception:
@@ -277,9 +285,11 @@ class OrderScanner:
                     if order_type == OrderType.TCAA:
                         try:
                             # Use split_multi_order_pdf to get estimate even for single orders
-                            split_data = self._detection_service.split_multi_order_pdf(pdf_path, order_type)
+                            split_data = self._detection_service.split_multi_order_pdf(
+                                pdf_path, order_type
+                            )
                             if split_data and len(split_data) > 0:
-                                estimate_number = split_data[0].get('estimate', 'Unknown')
+                                estimate_number = split_data[0].get("estimate", "Unknown")
                         except Exception:
                             pass
 
@@ -289,7 +299,7 @@ class OrderScanner:
                         order_type=order_type,
                         customer_name=customer_name,
                         status=OrderStatus.PENDING,
-                        estimate_number=estimate_number
+                        estimate_number=estimate_number,
                     )
 
                 # Record the freshly-computed classification for next scan.
@@ -329,12 +339,15 @@ class OrderScanner:
         for xml_path in xml_files:
             try:
                 import xml.etree.ElementTree as ET
+
                 tree = ET.parse(xml_path)
                 root = ET.ElementTree(tree.getroot()).getroot()
                 # Extract advertiser name from XML for display
                 ns = "http://www.AAAA.org/schemas/spotTVCableProposal"
                 advertiser = root.find(f".//{{{ns}}}Advertiser")
-                customer_name = advertiser.get("name", "Unknown") if advertiser is not None else "Unknown"
+                customer_name = (
+                    advertiser.get("name", "Unknown") if advertiser is not None else "Unknown"
+                )
 
                 order = Order(
                     pdf_path=xml_path,
@@ -355,8 +368,7 @@ class OrderScanner:
         # Skip ~$ Excel temp/lock files.
         _img_exts = {".jpg", ".jpeg", ".png", ".xlsx", ".xlsm"}
         image_xlsx_files = sorted(
-            f for f in _all
-            if f.suffix.lower() in _img_exts and not f.name.startswith("~$")
+            f for f in _all if f.suffix.lower() in _img_exts and not f.name.startswith("~$")
         )
 
         for file_path in image_xlsx_files:
@@ -364,7 +376,10 @@ class OrderScanner:
                 order_type = detect_from_filename(file_path.name)
 
                 # For XLSX/XLSM files not identified by filename, peek inside for agency markers
-                if order_type == OrderType.UNKNOWN and file_path.suffix.lower() in {".xlsx", ".xlsm"}:
+                if order_type == OrderType.UNKNOWN and file_path.suffix.lower() in {
+                    ".xlsx",
+                    ".xlsm",
+                }:
                     order_type = _detect_xlsx_content(file_path)
 
                 if order_type == OrderType.UNKNOWN and _ai_fallback_enabled():
@@ -379,14 +394,15 @@ class OrderScanner:
                 elif order_type == OrderType.IMPRENTA:
                     # Extract client from filename: "Imprenta_<Client>_2026" → <Client>
                     _parts = [
-                        p for p in file_path.stem.replace('_', ' ').split()
-                        if p.lower() != 'imprenta' and not (len(p) == 4 and p.isdigit())
+                        p
+                        for p in file_path.stem.replace("_", " ").split()
+                        if p.lower() != "imprenta" and not (len(p) == 4 and p.isdigit())
                     ]
-                    customer_name = ' '.join(_parts) if _parts else "Unknown"
+                    customer_name = " ".join(_parts) if _parts else "Unknown"
                 elif order_type == OrderType.PROSIO:
                     customer_name = "AQMD"
                 elif order_type == OrderType.EQC:
-                    customer_name = "EQC"   # Emerald Queen Casino (agency TH Media)
+                    customer_name = "EQC"  # Emerald Queen Casino (agency TH Media)
                 else:
                     customer_name = "Unknown"
 
@@ -430,6 +446,7 @@ class OrderScanner:
 
         _count_exts = {".pdf", ".xml", ".jpg", ".jpeg", ".png", ".xlsx", ".xlsm"}
         return sum(
-            1 for f in self._incoming_dir.iterdir()
+            1
+            for f in self._incoming_dir.iterdir()
             if f.is_file() and f.suffix.lower() in _count_exts
         )

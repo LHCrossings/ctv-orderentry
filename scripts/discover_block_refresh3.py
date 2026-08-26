@@ -2,6 +2,7 @@
 Find the real blocks table that CONTRATTIFASCE.ID_FASCE references.
 Run from Windows: py scripts/discover_block_refresh3.py
 """
+
 import sys
 from pathlib import Path
 
@@ -21,7 +22,7 @@ print("=" * 60)
 print(f"Tables containing ID_FASCE values {KNOWN_IDS[:3]}...")
 print("=" * 60)
 
-candidate_tables = ['tlfasceorarie', 'tlfasceorarieh', 'ffasce', 'FASCE', 'SLOTS', 'PROPSLOTS']
+candidate_tables = ["tlfasceorarie", "tlfasceorarieh", "ffasce", "FASCE", "SLOTS", "PROPSLOTS"]
 for tbl in candidate_tables:
     try:
         cursor.execute(f"SELECT COUNT(*) FROM {tbl}")
@@ -29,7 +30,14 @@ for tbl in candidate_tables:
         # Try to find our known IDs
         cursor.execute(f"SELECT TOP 1 * FROM {tbl}")
         cols = [d[0] for d in cursor.description]
-        id_col = next((c for c in cols if 'fasc' in c.lower() or c.upper() in ('ID', 'ID_FASCE', 'ID_FASCIA')), cols[0])
+        id_col = next(
+            (
+                c
+                for c in cols
+                if "fasc" in c.lower() or c.upper() in ("ID", "ID_FASCE", "ID_FASCIA")
+            ),
+            cols[0],
+        )
         cursor.execute(f"SELECT COUNT(*) FROM {tbl} WHERE {id_col} IN ({KNOWN_IDS_STR})")
         matches = cursor.fetchone()[0]
         print(f"  {tbl:25} rows={total:6}  cols={cols[:4]}  matches_on_{id_col}={matches}")
@@ -58,16 +66,23 @@ try:
 
     # blocks overlapping 14:00-15:00
     start_f = round(14 * 3600 * FRAMES)
-    end_f   = round(15 * 3600 * FRAMES)
-    ora_ini_col = next((c for c in cols if 'ini' in c.lower() or 'start' in c.lower() or 'begin' in c.lower()), None)
-    ora_fin_col = next((c for c in cols if 'fin' in c.lower() or 'end' in c.lower()), None)
+    end_f = round(15 * 3600 * FRAMES)
+    ora_ini_col = next(
+        (c for c in cols if "ini" in c.lower() or "start" in c.lower() or "begin" in c.lower()),
+        None,
+    )
+    ora_fin_col = next((c for c in cols if "fin" in c.lower() or "end" in c.lower()), None)
     if ora_ini_col and ora_fin_col:
         print(f"\n  Blocks overlapping 14:00-15:00 (frames {start_f}-{end_f}):")
-        cursor.execute(f"""
+        cursor.execute(
+            f"""
             SELECT TOP 10 * FROM tlfasceorarie
             WHERE {ora_ini_col} < ? AND {ora_fin_col} > ?
             ORDER BY {ora_ini_col}
-        """, end_f, start_f)
+        """,
+            end_f,
+            start_f,
+        )
         for row in cursor.fetchall():
             print(" ", dict(zip(cols, row)))
 except Exception as e:

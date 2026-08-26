@@ -14,6 +14,7 @@ Behavior (keyed on the composite PK: customer_name + order_type):
 Default (no flags) is a DRY RUN: it only reports what it would do. Add --apply to
 insert gaps; add --overwrite to also update conflicting rows from this source.
 """
+
 import argparse
 import sqlite3
 import sys
@@ -25,13 +26,26 @@ from browser_automation.etere_direct_client import connect
 
 # Fields compared/migrated (created_at/updated_at are table-managed).
 _FIELDS = [
-    "customer_id", "abbreviation", "default_market", "billing_type",
-    "separation_customer", "separation_event", "separation_order",
-    "code_name", "description_name", "include_market_in_code",
-    "auto_aircheck", "owner",
+    "customer_id",
+    "abbreviation",
+    "default_market",
+    "billing_type",
+    "separation_customer",
+    "separation_event",
+    "separation_order",
+    "code_name",
+    "description_name",
+    "include_market_in_code",
+    "auto_aircheck",
+    "owner",
 ]
-_INT_FIELDS = {"separation_customer", "separation_event", "separation_order",
-               "include_market_in_code", "auto_aircheck"}
+_INT_FIELDS = {
+    "separation_customer",
+    "separation_event",
+    "separation_order",
+    "include_market_in_code",
+    "auto_aircheck",
+}
 
 
 def _norm(field, val):
@@ -41,7 +55,7 @@ def _norm(field, val):
             return int(val or 0)
         except (TypeError, ValueError):
             return 0
-    return (str(val).strip() if val is not None else "")
+    return str(val).strip() if val is not None else ""
 
 
 def _read_sqlite(path):
@@ -51,24 +65,30 @@ def _read_sqlite(path):
     rows = []
     for r in con.execute("SELECT * FROM customers"):
         d = dict(r)
-        rows.append({
-            "customer_name": _norm("customer_name", d.get("customer_name")),
-            "order_type": _norm("order_type", d.get("order_type")),
-            **{f: _norm(f, d.get(f)) for f in _FIELDS},
-        })
+        rows.append(
+            {
+                "customer_name": _norm("customer_name", d.get("customer_name")),
+                "order_type": _norm("order_type", d.get("order_type")),
+                **{f: _norm(f, d.get(f)) for f in _FIELDS},
+            }
+        )
     con.close()
     return rows, cols
 
 
 def _load_existing(cur):
-    cur.execute("SELECT customer_name, order_type, " + ", ".join(_FIELDS) + " FROM dbo.CTV_Customers")
+    cur.execute(
+        "SELECT customer_name, order_type, " + ", ".join(_FIELDS) + " FROM dbo.CTV_Customers"
+    )
     out = {}
     for row in cur.fetchall():
         name, otype = _norm("customer_name", row[0]), _norm("order_type", row[1])
         # Key case-insensitively — SQL Server's PK collation is case-insensitive,
         # so "CAL FIRE" and "Cal Fire" are the SAME row (a case-sensitive key here
         # reports a false gap and then crashes on the duplicate-key INSERT).
-        out[(name.lower(), otype.lower())] = {f: _norm(f, row[2 + i]) for i, f in enumerate(_FIELDS)}
+        out[(name.lower(), otype.lower())] = {
+            f: _norm(f, row[2 + i]) for i, f in enumerate(_FIELDS)
+        }
     return out
 
 
@@ -76,7 +96,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("sqlite_path")
     ap.add_argument("--apply", action="store_true", help="insert missing rows")
-    ap.add_argument("--overwrite", action="store_true", help="also update conflicting rows from this source")
+    ap.add_argument(
+        "--overwrite", action="store_true", help="also update conflicting rows from this source"
+    )
     args = ap.parse_args()
 
     rows, cols = _read_sqlite(args.sqlite_path)
@@ -99,7 +121,9 @@ def main():
 
         print(f"  → {len(gaps)} to insert · {identical} identical · {len(conflicts)} conflict(s)")
         if conflicts:
-            print("\nCONFLICTS (table value → source value) — resolve by choosing, or re-run with --overwrite:")
+            print(
+                "\nCONFLICTS (table value → source value) — resolve by choosing, or re-run with --overwrite:"
+            )
             for (name, otype), diffs in conflicts:
                 print(f"  • {name} [{otype}]")
                 for f, (tv, sv) in diffs.items():
@@ -125,12 +149,19 @@ def main():
                     )
                     n_over += 1
             conn.commit()
-            print(f"\nAPPLIED: inserted {len(gaps)}"
-                  + (f", overwrote {n_over} conflict(s)" if args.overwrite else
-                     (f", left {len(conflicts)} conflict(s) untouched" if conflicts else "")))
+            print(
+                f"\nAPPLIED: inserted {len(gaps)}"
+                + (
+                    f", overwrote {n_over} conflict(s)"
+                    if args.overwrite
+                    else (f", left {len(conflicts)} conflict(s) untouched" if conflicts else "")
+                )
+            )
         else:
-            print("\n(dry run — add --apply to insert the gaps"
-                  + (", --overwrite to also update conflicts)" if conflicts else ")"))
+            print(
+                "\n(dry run — add --apply to insert the gaps"
+                + (", --overwrite to also update conflicts)" if conflicts else ")")
+            )
 
 
 if __name__ == "__main__":

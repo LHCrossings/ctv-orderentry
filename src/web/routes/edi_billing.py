@@ -46,12 +46,12 @@ from business_logic.services.edi_billing import (
 
 logger = logging.getLogger(__name__)
 
-_INVOICE_RE = re.compile(r'^(\d{4}-\d{3})')
+_INVOICE_RE = re.compile(r"^(\d{4}-\d{3})")
 
 
 def _safe_name(filename: str) -> str:
     name = Path(filename).name
-    return re.sub(r'[^\w .&()+\'-]', '_', name)
+    return re.sub(r"[^\w .&()+\'-]", "_", name)
 
 
 def _pairs() -> dict[str, dict]:
@@ -90,7 +90,7 @@ def _assemble_rows() -> list[dict]:
             parsed_pdfs[key] = a
             if a.contract_no:
                 contract_nos.append(a.contract_no)
-        if p["csv"] and (m := re.search(r'_(\d+)_postlog', p["csv"])):
+        if p["csv"] and (m := re.search(r"_(\d+)_postlog", p["csv"])):
             contract_nos.append(m.group(1))
     customer_by_contract, lookup_err = lookup_contract_customers(contract_nos)
 
@@ -114,7 +114,8 @@ def _assemble_rows() -> list[dict]:
             row["warnings"].append(lookup_err)
         if batch_month and key[:4] != batch_month:
             row["warnings"].append(
-                f"invoice month {key[:4]} differs from the batch ({batch_month})")
+                f"invoice month {key[:4]} differs from the batch ({batch_month})"
+            )
 
         # --- affidavit side ---
         contract_no = ""
@@ -137,18 +138,32 @@ def _assemble_rows() -> list[dict]:
             csv_market = d.market
             advertiser = advertiser or d.advertiser
             contract_no = contract_no or d.contract_no or ""
-            row["csv_spots"] = d.totals_row_spots if d.totals_row_spots is not None else d.spot_count
-            row["csv_gross"] = d.totals_row_gross if d.totals_row_gross is not None else round(d.gross_cents / 100, 2)
+            row["csv_spots"] = (
+                d.totals_row_spots if d.totals_row_spots is not None else d.spot_count
+            )
+            row["csv_gross"] = (
+                d.totals_row_gross
+                if d.totals_row_gross is not None
+                else round(d.gross_cents / 100, 2)
+            )
 
         row["contract_no"] = contract_no
         market = resolve_market(csv_market, pdf_market)
 
         # --- reconcile ---
-        row["reconcile"] = reconcile_status(
-            row.get("pdf_spots"), row.get("pdf_gross"),
-            row.get("csv_spots"), row.get("csv_gross"),
-        ) if (a and d) else {"status": "missing",
-                             "detail": "post-log not fetched yet" if a else "no affidavit"}
+        row["reconcile"] = (
+            reconcile_status(
+                row.get("pdf_spots"),
+                row.get("pdf_gross"),
+                row.get("csv_spots"),
+                row.get("csv_gross"),
+            )
+            if (a and d)
+            else {
+                "status": "missing",
+                "detail": "post-log not fetched yet" if a else "no affidavit",
+            }
+        )
 
         # --- customer + template match ---
         cust = customer_by_contract.get(int(contract_no)) if contract_no.isdigit() else None
@@ -161,26 +176,34 @@ def _assemble_rows() -> list[dict]:
             advertiser=advertiser,
         )
         row["suggested_template"] = m.name
-        row["match_confidence"]   = m.confidence
-        row["match_candidates"]   = m.candidates
-        row["match_detail"]       = m.detail
-        row["etere_customer_id"]   = cust["customer_id"] if cust else None
+        row["match_confidence"] = m.confidence
+        row["match_candidates"] = m.candidates
+        row["match_detail"] = m.detail
+        row["etere_customer_id"] = cust["customer_id"] if cust else None
         row["etere_customer_name"] = cust["customer_name"] if cust else ""
 
         # --- prefilled invoice fields (same shape /generate expects) ---
         inv = invoice_info(p["csv"] or f"{key}.csv")
         inv["order_number"] = inv["order_number"] or contract_no
         if d:
-            inv.update({
-                "spot_count":    d.spot_count,
-                "gross_cents":   d.gross_cents,
-                "bcast_start":   d.bcast_start,
-                "bcast_end":     d.bcast_end,
-                "estimate_code": d.estimate_code,
-            })
+            inv.update(
+                {
+                    "spot_count": d.spot_count,
+                    "gross_cents": d.gross_cents,
+                    "bcast_start": d.bcast_start,
+                    "bcast_end": d.bcast_end,
+                    "estimate_code": d.estimate_code,
+                }
+            )
         if a:
-            for f_ in ("rep_order_number", "agency_ad_code", "agency_prod_code",
-                       "product_name", "comment_top", "comment_bottom"):
+            for f_ in (
+                "rep_order_number",
+                "agency_ad_code",
+                "agency_prod_code",
+                "product_name",
+                "comment_top",
+                "comment_bottom",
+            ):
                 v = getattr(a, f_)
                 if v:
                     inv[f_] = v
@@ -189,8 +212,9 @@ def _assemble_rows() -> list[dict]:
         if not inv.get("comment_top") and m.name:
             tmpl = next((t for t in tmpl_list if t["name"] == m.name), {})
             by_mkt = tmpl.get("comment_top_by_market", {})
-            inv["comment_top"] = (by_mkt.get(market) if market else "") \
-                or tmpl.get("comment_top", "")
+            inv["comment_top"] = (by_mkt.get(market) if market else "") or tmpl.get(
+                "comment_top", ""
+            )
         row["invoice_fields"] = inv
 
         # --- validation (with the suggested template if any) ---
@@ -212,8 +236,10 @@ def _default_fetch_range(rows: list[dict]) -> dict:
         start, end = broadcast_month_range(yy, mm)
     except ValueError:
         return {"start_date": "", "end_date": ""}
-    return {"start_date": f"{start.month}/{start.day}/{start.year}",
-            "end_date":   f"{end.month}/{end.day}/{end.year}"}
+    return {
+        "start_date": f"{start.month}/{start.day}/{start.year}",
+        "end_date": f"{end.month}/{end.day}/{end.year}",
+    }
 
 
 def build_edi_billing_router(jinja: Jinja2Templates) -> APIRouter:
@@ -247,31 +273,29 @@ def build_edi_billing_router(jinja: Jinja2Templates) -> APIRouter:
                 continue
             inv_id = a.invoice_id or ""
             if not _INVOICE_RE.match(inv_id):
-                errors.append({"filename": name,
-                               "error": f"no MMYY-NNN invoice id found (got {inv_id!r})"})
+                errors.append(
+                    {"filename": name, "error": f"no MMYY-NNN invoice id found (got {inv_id!r})"}
+                )
                 continue
             if not _INVOICE_RE.match(name):
                 name = f"{inv_id} {Path(name).stem}.pdf"
             (INCOMING / name).write_bytes(raw)
-            saved.append({"filename": name, "invoice_id": inv_id,
-                          "contract_no": a.contract_no})
+            saved.append({"filename": name, "invoice_id": inv_id, "contract_no": a.contract_no})
         return {"saved": saved, "errors": errors}
 
     # ── Fetch post logs (deliberate button; ONE Etere session) ────────────
     @router.post("/fetch")
     async def fetch(request: Request):
         body = await request.json()
-        contracts  = body.get("contracts", [])
+        contracts = body.get("contracts", [])
         start_date = body.get("start_date", "")
-        end_date   = body.get("end_date", "")
+        end_date = body.get("end_date", "")
         if not contracts:
             raise HTTPException(400, "No contracts to fetch")
         if not start_date or not end_date:
             raise HTTPException(400, "Date range required")
 
-        results = await asyncio.to_thread(
-            fetch_postlog_reports, contracts, start_date, end_date
-        )
+        results = await asyncio.to_thread(fetch_postlog_reports, contracts, start_date, end_date)
         out = []
         for r in results:
             if r["error"]:
@@ -286,14 +310,13 @@ def build_edi_billing_router(jinja: Jinja2Templates) -> APIRouter:
     async def validate(request: Request):
         body = await request.json()
         tmpl = get_template(body.get("template_name", "")) or {}
-        inv  = body.get("invoice_fields", {})
+        inv = body.get("invoice_fields", {})
         csv_fn = body.get("csv_filename", "")
         spots = []
         if csv_fn and Path(csv_fn).name == csv_fn and (INCOMING / csv_fn).exists():
             spots = parse_postlog_csv((INCOMING / csv_fn).read_bytes(), csv_fn).spots
         issues = validate_invoice(tmpl, inv, spots)
-        return {"issues": issues,
-                "has_errors": any(i["level"] == "error" for i in issues)}
+        return {"issues": issues, "has_errors": any(i["level"] == "error" for i in issues)}
 
     # ── Spot-level diff (red-badge drill-down) ────────────────────────────
     @router.post("/diff")
@@ -319,11 +342,11 @@ def build_edi_billing_router(jinja: Jinja2Templates) -> APIRouter:
         refused = []
         prepared = []
         for item in items:
-            csv_fn  = item.get("csv_filename", "")
+            csv_fn = item.get("csv_filename", "")
             tmpl_nm = item.get("template_name", "")
-            inv     = item.get("invoice_fields", {})
-            force   = bool(item.get("force"))
-            label   = inv.get("invoice_number") or csv_fn
+            inv = item.get("invoice_fields", {})
+            force = bool(item.get("force"))
+            label = inv.get("invoice_number") or csv_fn
 
             if not csv_fn or Path(csv_fn).name != csv_fn or not (INCOMING / csv_fn).exists():
                 refused.append({"row": label, "reason": f"post-log CSV not found: {csv_fn}"})
@@ -334,16 +357,20 @@ def build_edi_billing_router(jinja: Jinja2Templates) -> APIRouter:
                 continue
 
             d = parse_postlog_csv((INCOMING / csv_fn).read_bytes(), csv_fn)
-            inv.setdefault("spot_count",  d.spot_count)
+            inv.setdefault("spot_count", d.spot_count)
             inv.setdefault("gross_cents", d.gross_cents)
             inv.setdefault("bcast_start", d.bcast_start)
-            inv.setdefault("bcast_end",   d.bcast_end)
+            inv.setdefault("bcast_end", d.bcast_end)
 
             problems = []
             issues = validate_invoice(template, inv, d.spots)
             if any(i["level"] == "error" for i in issues):
-                problems.append("validation errors: " + "; ".join(
-                    f"{i['field']}: {i['message']}" for i in issues if i["level"] == "error"))
+                problems.append(
+                    "validation errors: "
+                    + "; ".join(
+                        f"{i['field']}: {i['message']}" for i in issues if i["level"] == "error"
+                    )
+                )
 
             # Server-side reconcile gate — recomputed, not trusted from the client
             m = _INVOICE_RE.match(csv_fn)
@@ -351,9 +378,12 @@ def build_edi_billing_router(jinja: Jinja2Templates) -> APIRouter:
             if pair and pair["pdf"]:
                 a = parse_affidavit((INCOMING / pair["pdf"]).read_bytes(), source=pair["pdf"])
                 rec = reconcile_status(
-                    a.total_spots, a.gross_amount,
+                    a.total_spots,
+                    a.gross_amount,
                     d.totals_row_spots if d.totals_row_spots is not None else d.spot_count,
-                    d.totals_row_gross if d.totals_row_gross is not None else round(d.gross_cents / 100, 2),
+                    d.totals_row_gross
+                    if d.totals_row_gross is not None
+                    else round(d.gross_cents / 100, 2),
                 )
                 if rec["status"] == "mismatch":
                     problems.append(f"reconcile mismatch: {rec['detail']}")
@@ -369,8 +399,7 @@ def build_edi_billing_router(jinja: Jinja2Templates) -> APIRouter:
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for label, tmpl_nm, template, inv, spots in prepared:
-                zf.writestr(f"{label}_{slug(tmpl_nm)}.txt",
-                            generate_edi(template, inv, spots))
+                zf.writestr(f"{label}_{slug(tmpl_nm)}.txt", generate_edi(template, inv, spots))
         buf.seek(0)
         return Response(
             content=buf.read(),

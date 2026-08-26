@@ -24,6 +24,7 @@ The whole write is one transaction that runs dbo.ExplodeEdl as a self-check and
 COMMITS only if the marks explode into exactly the expected parts — otherwise it
 ROLLS BACK, leaving the file untouched.
 """
+
 from __future__ import annotations
 
 import csv
@@ -37,7 +38,13 @@ def _tc_to_frames(pos: str):
     m = _TC.match(pos.strip())
     if not m:
         return None
-    hh, mm, ss, sep, ff = int(m.group(1)), int(m.group(2)), int(m.group(3)), m.group(4), int(m.group(5))
+    hh, mm, ss, sep, ff = (
+        int(m.group(1)),
+        int(m.group(2)),
+        int(m.group(3)),
+        m.group(4),
+        int(m.group(5)),
+    )
     base = ((hh * 3600 + mm * 60 + ss) * 30) + ff
     if sep == ";":  # drop-frame: 2 dropped per minute except every 10th
         total_min = hh * 60 + mm
@@ -99,7 +106,11 @@ def apply_edl_from_csv(conn, filmati: int, splits, eom: int, cod_user: int | Non
     cur.execute("SELECT VERSION, DURATION FROM FEDLDESCRIPTION WHERE ID_FILMATI=%s", (filmati,))
     durs = {int(v): int(dn) for v, dn in cur.fetchall()}
     if not durs:
-        return {"ok": False, "parts": [], "message": f"filmati {filmati} has no FEDLDESCRIPTION (not ingested)"}
+        return {
+            "ok": False,
+            "parts": [],
+            "message": f"filmati {filmati} has no FEDLDESCRIPTION (not ingested)",
+        }
     if 0 not in durs or not durs[0]:
         return {"ok": False, "parts": [], "message": "filmati has no VERSION-0 EDL header"}
     d0 = durs[0]
@@ -109,7 +120,9 @@ def apply_edl_from_csv(conn, filmati: int, splits, eom: int, cod_user: int | Non
         # FILMATI.POS_FIN — NOT FEDLDESCRIPTION.EOM. DURATA = usable length =
         # POS_FIN - POS_INI + 1 (POS_INI stays 0; no head trim yet). The physical
         # file length (DUR_FISICA / DURATA_PUB) is left untouched.
-        cur.execute("UPDATE FILMATI SET POS_FIN=%s, DURATA=%s WHERE ID_FILMATI=%s", (eom, eom + 1, filmati))
+        cur.execute(
+            "UPDATE FILMATI SET POS_FIN=%s, DURATA=%s WHERE ID_FILMATI=%s", (eom, eom + 1, filmati)
+        )
         for v, dn in durs.items():
             r = dn / d0
             new_eom = round(eom * r)
@@ -136,8 +149,11 @@ def apply_edl_from_csv(conn, filmati: int, splits, eom: int, cod_user: int | Non
         # Market-irrelevant markup: just persist the marks on the asset.
         if cod_user is None:
             conn.commit()
-            return {"ok": True, "parts": exp,
-                    "message": f"EDL written to asset: {len(splits)} split(s) → {len(exp)} parts"}
+            return {
+                "ok": True,
+                "parts": exp,
+                "message": f"EDL written to asset: {len(splits)} split(s) → {len(exp)} parts",
+            }
 
         # Self-check: explode against VERSION 0 (what CTV airs) inside the txn.
         cur.execute(
@@ -147,11 +163,18 @@ def apply_edl_from_csv(conn, filmati: int, splits, eom: int, cod_user: int | Non
         plan = [(int(a), int(b)) for a, b in cur.fetchall()]
         if plan != exp:
             conn.rollback()
-            return {"ok": False, "parts": plan, "expected": exp,
-                    "message": f"explode produced {len(plan)} part(s); expected {len(exp)} — not committed"}
+            return {
+                "ok": False,
+                "parts": plan,
+                "expected": exp,
+                "message": f"explode produced {len(plan)} part(s); expected {len(exp)} — not committed",
+            }
         conn.commit()
-        return {"ok": True, "parts": plan,
-                "message": f"EDL written and validated: {len(splits)} split(s) → {len(plan)} parts"}
+        return {
+            "ok": True,
+            "parts": plan,
+            "message": f"EDL written and validated: {len(splits)} split(s) → {len(plan)} parts",
+        }
     except Exception as exc:  # noqa: BLE001 - leave the file untouched on any failure
         conn.rollback()
         return {"ok": False, "parts": [], "message": f"error: {exc}"}

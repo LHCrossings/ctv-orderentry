@@ -29,22 +29,30 @@ from browser_automation.parsers.dart_parser import parse_dart_xlsx  # noqa: E402
 
 # Real header layout: Length sits between Schedule and Rate, and the week columns
 # are NOT consecutive (8/17 then a jump to 9/14).
-_HEADER = ["Programming", "Schedule", "Length", "Rate  ",
-           date(2026, 8, 17), date(2026, 9, 14), date(2026, 9, 21),
-           "Total Units", "Value", "Total Cost"]
+_HEADER = [
+    "Programming",
+    "Schedule",
+    "Length",
+    "Rate  ",
+    date(2026, 8, 17),
+    date(2026, 9, 14),
+    date(2026, 9, 21),
+    "Total Units",
+    "Value",
+    "Total Cost",
+]
 _ROWS = [
-    ["Cantonese News/ Talk", "M-F 5p-6p",      ":15s", 34, 8, 8, 7, 23, 782, 782],
-    ["Mandarin News",        "M-Sun 6p-7p",    ":15s", 34, 10, 10, 9, 29, 986, 986],
-    ["Mandarin Drama",       "M-F 7p-8p",      ":15s", 34, 5, 5, 4, 14, 476, 476],
-    ["Vietnamese Drama",     "M-Sun  10a-11a", ":15s", 21, 12, 12, 12, 36, 756, 756],
-    ["Chinese",              "ROS  Bonus schedule", ":30s", 68, 6, 6, 6, 18, 1224, 0],
-    ["Vietnamese",           "ROS  Bonus schedule", ":30s", 42, 5, 5, 5, 15, 630, 0],
+    ["Cantonese News/ Talk", "M-F 5p-6p", ":15s", 34, 8, 8, 7, 23, 782, 782],
+    ["Mandarin News", "M-Sun 6p-7p", ":15s", 34, 10, 10, 9, 29, 986, 986],
+    ["Mandarin Drama", "M-F 7p-8p", ":15s", 34, 5, 5, 4, 14, 476, 476],
+    ["Vietnamese Drama", "M-Sun  10a-11a", ":15s", 21, 12, 12, 12, 36, 756, 756],
+    ["Chinese", "ROS  Bonus schedule", ":30s", 68, 6, 6, 6, 18, 1224, 0],
+    ["Vietnamese", "ROS  Bonus schedule", ":30s", 42, 5, 5, 5, 15, 630, 0],
 ]
 _PAID_SUMMARY = ["PAID ", None, None, None, 35, 35, 32, 135, 4854, 3000]
 
 
-def _write_sheet(tmp_path, header=None, rows=None, paid_summary=None,
-                 header_at_row=14) -> str:
+def _write_sheet(tmp_path, header=None, rows=None, paid_summary=None, header_at_row=14) -> str:
     """Build a DART-shaped workbook. Grid starts in col B, as the real sheet does."""
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -75,7 +83,10 @@ def test_rate_comes_from_the_labeled_column_not_a_fixed_index(tmp_path):
     """The bug: col D is Length (':15s'), the rate lives in col E."""
     order = parse_dart_xlsx(_write_sheet(tmp_path))
     assert [ln.rate for ln in order.paid_lines] == [
-        Decimal("34"), Decimal("34"), Decimal("34"), Decimal("21")
+        Decimal("34"),
+        Decimal("34"),
+        Decimal("34"),
+        Decimal("21"),
     ]
     assert order.total_cost == Decimal("3000")
 
@@ -83,9 +94,7 @@ def test_rate_comes_from_the_labeled_column_not_a_fixed_index(tmp_path):
 def test_every_week_date_is_read_including_a_gap(tmp_path):
     """8/17 -> 9/14 is a 4-week jump; synthesizing first+7i gave 8/24 and 8/31."""
     order = parse_dart_xlsx(_write_sheet(tmp_path))
-    assert order.week_start_dates == [
-        date(2026, 8, 17), date(2026, 9, 14), date(2026, 9, 21)
-    ]
+    assert order.week_start_dates == [date(2026, 8, 17), date(2026, 9, 14), date(2026, 9, 21)]
     assert order.flight_start == date(2026, 8, 17)
     assert order.flight_end == date(2026, 9, 27)
 
@@ -106,23 +115,28 @@ def test_older_layout_without_a_length_column_still_parses(tmp_path):
     """DART 2604 (April 2026) had Rate in col D and no Length column, and entered
     correctly at the same $34/$21 rates. Label-based mapping must keep that working,
     with spot_length falling back to the order-level duration."""
-    header = ["Programming", "Schedule", "Rate",
-              date(2026, 8, 17), date(2026, 8, 24), date(2026, 8, 31),
-              "Total Units", "Value", "Total Cost"]
+    header = [
+        "Programming",
+        "Schedule",
+        "Rate",
+        date(2026, 8, 17),
+        date(2026, 8, 24),
+        date(2026, 8, 31),
+        "Total Units",
+        "Value",
+        "Total Cost",
+    ]
     rows = [
-        ["Cantonese News/ Talk", "M-F 5p-6p",           34, 8, 8, 7, 23, 782, 782],
-        ["Chinese", "ROS  Bonus schedule",              68, 6, 6, 6, 18, 1224, 0],
+        ["Cantonese News/ Talk", "M-F 5p-6p", 34, 8, 8, 7, 23, 782, 782],
+        ["Chinese", "ROS  Bonus schedule", 68, 6, 6, 6, 18, 1224, 0],
     ]
     summary = ["PAID ", None, None, 14, 14, 13, 41, 2006, 782]
 
-    order = parse_dart_xlsx(
-        _write_sheet(tmp_path, header=header, rows=rows, paid_summary=summary))
+    order = parse_dart_xlsx(_write_sheet(tmp_path, header=header, rows=rows, paid_summary=summary))
 
     assert order.paid_lines[0].rate == Decimal("34")
     assert order.total_cost == Decimal("782")
-    assert order.week_start_dates == [
-        date(2026, 8, 17), date(2026, 8, 24), date(2026, 8, 31)
-    ]
+    assert order.week_start_dates == [date(2026, 8, 17), date(2026, 8, 24), date(2026, 8, 31)]
     # No Length column -> None, so the automation uses order.duration_seconds.
     assert all(ln.spot_length is None for ln in order.lines)
     assert order.duration_seconds == 15
@@ -142,28 +156,28 @@ def test_shifted_rate_column_now_raises_instead_of_entering_zero(tmp_path):
     rather than fall back to a positional guess.
     """
     header = list(_HEADER)
-    header[3] = "Unit Cost"          # a rename the map doesn't know
+    header[3] = "Unit Cost"  # a rename the map doesn't know
     with pytest.raises(ValueError, match="missing required column"):
         parse_dart_xlsx(_write_sheet(tmp_path, header=header))
 
 
 def test_a_non_numeric_paid_rate_raises(tmp_path):
     rows = [list(r) for r in _ROWS]
-    rows[0][3] = ":15s"              # rate cell holding a length
+    rows[0][3] = ":15s"  # rate cell holding a length
     with pytest.raises(ValueError, match="not a number"):
         parse_dart_xlsx(_write_sheet(tmp_path, rows=rows))
 
 
 def test_line_total_cost_mismatch_raises(tmp_path):
     rows = [list(r) for r in _ROWS]
-    rows[0][9] = 999                 # Total Cost no longer equals rate x units
+    rows[0][9] = 999  # Total Cost no longer equals rate x units
     with pytest.raises(ValueError, match="Total Cost"):
         parse_dart_xlsx(_write_sheet(tmp_path, rows=rows))
 
 
 def test_total_units_mismatch_raises(tmp_path):
     rows = [list(r) for r in _ROWS]
-    rows[1][7] = 99                  # Total Units no longer equals the week columns
+    rows[1][7] = 99  # Total Units no longer equals the week columns
     with pytest.raises(ValueError, match="Total Units"):
         parse_dart_xlsx(_write_sheet(tmp_path, rows=rows))
 
@@ -185,7 +199,10 @@ def test_missing_paid_summary_still_parses(tmp_path):
 def test_spot_counts_and_totals_match_the_sheet(tmp_path):
     order = parse_dart_xlsx(_write_sheet(tmp_path))
     assert [ln.spot_counts for ln in order.paid_lines] == [
-        [8, 8, 7], [10, 10, 9], [5, 5, 4], [12, 12, 12]
+        [8, 8, 7],
+        [10, 10, 9],
+        [5, 5, 4],
+        [12, 12, 12],
     ]
     assert sum(ln.total_spots for ln in order.paid_lines) == 102
     assert sum(ln.total_spots for ln in order.bonus_lines) == 33

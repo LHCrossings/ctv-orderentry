@@ -12,6 +12,7 @@ If LEGACY_BASESUPP is NULL (AWS S3, LEGACY_MEDIAID=0), derives it as
 Run with:
     uv run python scripts/fix_missing_supporto.py
 """
+
 import sys
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))

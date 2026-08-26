@@ -8,6 +8,7 @@ Safe to run multiple times.
 Run with:
     uv run python scripts/fix_wrong_newtypes.py
 """
+
 import sys
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
@@ -43,9 +44,11 @@ def main():
         print("Contracts with wrong NEWTYPE (portal-assigned spots only):")
         total = 0
         for r in rows:
-            print(f"  [{r['ID_CONTRATTITESTATA']}] {r['COD_CONTRATTO']}"
-                  f"  {r['current_type']} → {r['correct_type']}"
-                  f"  ({r['spots']} spots)")
+            print(
+                f"  [{r['ID_CONTRATTITESTATA']}] {r['COD_CONTRATTO']}"
+                f"  {r['current_type']} → {r['correct_type']}"
+                f"  ({r['spots']} spots)"
+            )
             total += r["spots"]
         print(f"\nTotal: {total} spots to correct")
 

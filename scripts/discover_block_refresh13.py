@@ -3,6 +3,7 @@ Compare ALL fields of TPALINSE and trafficPalinse for CORRECT vs EXTRA id_fascia
 Focus on id_palinsesto and any other distinguishing columns.
 Run from Windows: py scripts/discover_block_refresh13.py
 """
+
 import sys
 from pathlib import Path
 
@@ -26,7 +27,8 @@ print("\n" + "=" * 60)
 print("TPALINSE detail: 9923 (CORRECT) vs 9940 (EXTRA) — Jan 5-11")
 print("=" * 60)
 for fid, label in [(9923, "CORRECT"), (9940, "EXTRA"), (11229, "EXTRA/CORRECT")]:
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT DISTINCT t.ID_TPALINSE, t.ORA, t.NEWTYPE, t.EVENT_TYPE, t.COD_PROGRA,
                t.LIVELLO, t.SPLIT, t.DURATION, t.TYPE, t.TITLE
         FROM trafficPalinse tp
@@ -35,31 +37,40 @@ for fid, label in [(9923, "CORRECT"), (9940, "EXTRA"), (11229, "EXTRA/CORRECT")]
           AND tp.Cod_User = 5
           AND tp.Date >= '2026-01-05' AND tp.Date <= '2026-01-11'
         ORDER BY t.ORA
-    """, fid)
+    """,
+        fid,
+    )
     rows = cursor.fetchall()
     print(f"\n  id_fascia={fid} [{label}]: {len(rows)} distinct TPALINSE rows")
     for r in rows[:5]:
         ora_h = (r[1] or 0) / FRAMES / 3600
-        print(f"    ORA={ora_h:.3f}h  NEWTYPE={r[2]}  EVENT_TYPE={r[3]}  COD_PROGRA={r[4]}  LIVELLO={r[5]}  SPLIT={r[6]}  DURATION={r[7]}  TYPE={r[8]}  TITLE={r[9]}")
+        print(
+            f"    ORA={ora_h:.3f}h  NEWTYPE={r[2]}  EVENT_TYPE={r[3]}  COD_PROGRA={r[4]}  LIVELLO={r[5]}  SPLIT={r[6]}  DURATION={r[7]}  TYPE={r[8]}  TITLE={r[9]}"
+        )
 
 # ── 2. trafficPalinse fields for 9923 vs 9940 in Jan ─────────────────────────
 print("\n" + "=" * 60)
 print("trafficPalinse detail: id_palinsesto for 9923 vs 9940 — Jan 5-11")
 print("=" * 60)
 for fid, label in [(9923, "CORRECT"), (9940, "EXTRA")]:
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT DISTINCT id_palinsesto, id_tpalinse, offset, EVENTTYPE
         FROM trafficPalinse
         WHERE id_fascia = ?
           AND Cod_User = 5
           AND Date >= '2026-01-05' AND Date <= '2026-01-11'
         ORDER BY offset
-    """, fid)
+    """,
+        fid,
+    )
     rows = cursor.fetchall()
     print(f"  id_fascia={fid} [{label}]: distinct (palinsesto, tpalinse, offset, eventtype)")
     for r in rows[:5]:
         off_h = r[2] / FRAMES / 3600
-        print(f"    id_palinsesto={r[0]}  id_tpalinse={r[1]}  offset={off_h:.3f}h  EVENTTYPE={r[3]}")
+        print(
+            f"    id_palinsesto={r[0]}  id_tpalinse={r[1]}  offset={off_h:.3f}h  EVENTTYPE={r[3]}"
+        )
 
 # ── 3. What table does id_palinsesto reference? ───────────────────────────────
 print("\n" + "=" * 60)
@@ -78,12 +89,15 @@ print("\n" + "=" * 60)
 print("Distinct id_palinsesto for key id_fascia in Jan (Cod_User=5)")
 print("=" * 60)
 for fid, label in [(9923, "CORRECT-73173"), (9940, "EXTRA-73173/73175"), (11229, "CORRECT-73175")]:
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT DISTINCT id_palinsesto
         FROM trafficPalinse
         WHERE id_fascia = ? AND Cod_User = 5
           AND Date >= '2026-01-05' AND Date <= '2026-01-11'
-    """, fid)
+    """,
+        fid,
+    )
     pals = [r[0] for r in cursor.fetchall()]
     print(f"  id_fascia={fid} [{label}]: id_palinsesto = {pals}")
 
@@ -96,12 +110,17 @@ for lid, d_from, d_to in [(73173, "2026-01-05", "2026-01-11"), (73175, "2026-01-
     assigned = [r[0] for r in cursor.fetchall()]
     print(f"\n  Line {lid} assigned: {assigned}")
     for fid in assigned:
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT DISTINCT id_palinsesto
             FROM trafficPalinse
             WHERE id_fascia = ? AND Cod_User = 5
               AND Date >= ? AND Date <= ?
-        """, fid, d_from, d_to)
+        """,
+            fid,
+            d_from,
+            d_to,
+        )
         pals = [r[0] for r in cursor.fetchall()]
         print(f"    id_fascia={fid}: id_palinsesto = {pals}")
 
@@ -113,15 +132,19 @@ for d_from, d_to, label in [
     ("2026-01-05", "2026-01-11", "Jan (73173/73175 range)"),
     ("2026-03-16", "2026-03-22", "Mar (73177 range)"),
 ]:
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT DISTINCT t.ORA
         FROM trafficPalinse tp
         JOIN TPALINSE t ON t.ID_TPALINSE = tp.id_tpalinse
         WHERE tp.id_fascia = 9940 AND tp.Cod_User = 5
           AND tp.Date >= ? AND tp.Date <= ?
         ORDER BY t.ORA
-    """, d_from, d_to)
-    oras = [f"{r[0]/FRAMES/3600:.3f}h" for r in cursor.fetchall()]
+    """,
+        d_from,
+        d_to,
+    )
+    oras = [f"{r[0] / FRAMES / 3600:.3f}h" for r in cursor.fetchall()]
     print(f"  {label}: ORA = {oras}")
 
 cursor.close()

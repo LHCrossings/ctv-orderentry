@@ -13,7 +13,10 @@ from pathlib import Path
 
 _TEMPLATE = (
     Path(__file__).parent.parent.parent
-    / "src" / "backwrite" / "templates" / "worldlink_template.xlsx"
+    / "src"
+    / "backwrite"
+    / "templates"
+    / "worldlink_template.xlsx"
 )
 
 
@@ -33,6 +36,8 @@ def test_template_is_slim():
 def test_template_keeps_only_the_filled_sheets():
     """Output keeps exactly the two sheets the transformer fills."""
     from openpyxl import load_workbook
+
     wb = load_workbook(_TEMPLATE, read_only=True)
-    assert set(wb.sheetnames) == {"Sales Confirmation", "MONTHLY LINES AND BROKER FEES"}, \
+    assert set(wb.sheetnames) == {"Sales Confirmation", "MONTHLY LINES AND BROKER FEES"}, (
         f"unexpected sheets: {wb.sheetnames}"
+    )

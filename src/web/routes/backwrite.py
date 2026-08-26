@@ -47,6 +47,7 @@ def _lookup_wl_contract_by_tracking(tracking: str) -> Optional[dict]:
         return None
     try:
         from browser_automation.etere_direct_client import connect
+
         conn = connect()
         try:
             ph = "%s" if type(conn).__module__.startswith("pymssql") else "?"
@@ -66,6 +67,7 @@ def _lookup_wl_contract_by_tracking(tracking: str) -> Optional[dict]:
             return {"id": int(row[0]), "code": str(row[1])}
     except Exception:
         import traceback
+
         traceback.print_exc()
     return None
 
@@ -75,10 +77,14 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
 
     @router.get("", response_class=HTMLResponse)
     async def backwrite_page(request: Request):
-        return templates.TemplateResponse(request, "backwrite.html", {
-            "revenue_types": REVENUE_TYPES,
-            "sales_people":  SALES_PEOPLE,
-        })
+        return templates.TemplateResponse(
+            request,
+            "backwrite.html",
+            {
+                "revenue_types": REVENUE_TYPES,
+                "sales_people": SALES_PEOPLE,
+            },
+        )
 
     @router.post("/parse-existing")
     async def backwrite_parse_existing(existing_file: UploadFile):
@@ -103,6 +109,7 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
                 f.write(data)
             from business_logic.services.pdf_order_detector import PDFOrderDetector
             from web.parser_bridge import get_order_detail
+
             detected = PDFOrderDetector().detect_order_type(tmp_path, silent=True)
             if not detected:
                 return JSONResponse({"rates_are_net": False, "io_net_rates": []})
@@ -110,11 +117,13 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             if detail.get("error"):
                 return JSONResponse({"rates_are_net": False, "io_net_rates": []})
             rates_are_net = bool(detail.get("rates_are_net", False))
-            io_net_rates = sorted(set(
-                round(float(ln.get("rate") or 0), 2)
-                for ln in detail.get("lines", [])
-                if ln.get("rate")
-            ))
+            io_net_rates = sorted(
+                set(
+                    round(float(ln.get("rate") or 0), 2)
+                    for ln in detail.get("lines", [])
+                    if ln.get("rate")
+                )
+            )
             return JSONResponse({"rates_are_net": rates_are_net, "io_net_rates": io_net_rates})
         except Exception as exc:
             return JSONResponse({"rates_are_net": False, "io_net_rates": [], "warning": str(exc)})
@@ -136,12 +145,14 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             with os.fdopen(fd, "wb") as f:
                 f.write(data)
             import sys as _sys
+
             _proj = Path(__file__).parent.parent.parent.parent
             for _p in [str(_proj), str(_proj / "browser_automation")]:
                 if _p not in _sys.path:
                     _sys.path.insert(0, _p)
             from browser_automation.parsers.worldlink_parser import parse_worldlink_pdf  # noqa: I001
             from backwrite.worldlink_transformer import _compute_monthly_revenue, _MONTH_NAMES
+
             io_data = parse_worldlink_pdf(tmp_path)
             if not io_data:
                 raise HTTPException(status_code=400, detail="Could not parse WorldLink PDF")
@@ -149,9 +160,9 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             monthly_rev = _compute_monthly_revenue(lines)
             monthly_breakdown = [
                 {
-                    "month":      _MONTH_NAMES[bm.month],
-                    "gross":      gross,
-                    "net":        round(gross * 0.85, 2),
+                    "month": _MONTH_NAMES[bm.month],
+                    "gross": gross,
+                    "net": round(gross * 0.85, 2),
                     "broker_fee": round(-gross * 0.85 * 0.10, 2),
                 }
                 for bm, gross in sorted(monthly_rev.items())
@@ -160,24 +171,27 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             # Look up the Etere contract by tracking number so the form can
             # pre-fill the contract-number field instead of asking for it.
             wl_contract = _lookup_wl_contract_by_tracking(io_data.get("tracking_number", ""))
-            return JSONResponse({
-                "agency":           io_data.get("agency", ""),
-                "advertiser":       io_data.get("advertiser", ""),
-                "tracking_number":  io_data.get("tracking_number", ""),
-                "buyer":            io_data.get("buyer", ""),
-                "order_comment":    io_data.get("order_comment", ""),
-                "order_type":       io_data.get("order_type", "new"),
-                "revision_hint":    0 if io_data.get("order_type") == "new" else 1,
-                "line_count":       len(lines),
-                "total_gross":      round(total_gross, 2),
-                "monthly_breakdown": monthly_breakdown,
-                "contract_number":  wl_contract["id"] if wl_contract else "",
-                "contract_code":    wl_contract["code"] if wl_contract else "",
-            })
+            return JSONResponse(
+                {
+                    "agency": io_data.get("agency", ""),
+                    "advertiser": io_data.get("advertiser", ""),
+                    "tracking_number": io_data.get("tracking_number", ""),
+                    "buyer": io_data.get("buyer", ""),
+                    "order_comment": io_data.get("order_comment", ""),
+                    "order_type": io_data.get("order_type", "new"),
+                    "revision_hint": 0 if io_data.get("order_type") == "new" else 1,
+                    "line_count": len(lines),
+                    "total_gross": round(total_gross, 2),
+                    "monthly_breakdown": monthly_breakdown,
+                    "contract_number": wl_contract["id"] if wl_contract else "",
+                    "contract_code": wl_contract["code"] if wl_contract else "",
+                }
+            )
         except HTTPException:
             raise
         except Exception as exc:
             import traceback
+
             traceback.print_exc()
             raise HTTPException(status_code=400, detail=f"Parse error: {exc}")
         finally:
@@ -194,6 +208,7 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             import io as _io  # noqa: I001
             from openpyxl import load_workbook
             from backwrite.worldlink_transformer import read_sc_lines_from_excel
+
             _, prev_rev = read_sc_lines_from_excel(data)
             wb = load_workbook(_io.BytesIO(data), data_only=True)
             ws = wb["Sales Confirmation"]
@@ -205,10 +220,10 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
 
     @router.post("/worldlink/generate")
     async def worldlink_generate(
-        io_file:         UploadFile = File(...),
-        prev_excel:      Optional[UploadFile] = File(None),
+        io_file: UploadFile = File(...),
+        prev_excel: Optional[UploadFile] = File(None),
         contract_number: str = Form(""),
-        revision:        str = Form("0"),
+        revision: str = Form("0"),
     ):
         """Generate WorldLink backwrite Excel from IO PDF + user inputs."""
         suffix = Path(io_file.filename).suffix.lower() or ".pdf"
@@ -218,6 +233,7 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             with os.fdopen(fd, "wb") as f:
                 f.write(data)
             import sys as _sys
+
             _proj = Path(__file__).parent.parent.parent.parent
             for _p in [str(_proj), str(_proj / "browser_automation")]:
                 if _p not in _sys.path:
@@ -228,6 +244,7 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
                 merge_revision_lines,
                 read_sc_lines_from_excel,
             )
+
             io_data = parse_worldlink_pdf(tmp_path)
             if not io_data:
                 raise HTTPException(status_code=400, detail="Could not parse WorldLink PDF")
@@ -242,13 +259,14 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
 
             user_inputs = {
                 "contract_number": contract_number,
-                "revision":        int(revision) if str(revision).isdigit() else 0,
+                "revision": int(revision) if str(revision).isdigit() else 0,
             }
             xlsx_bytes = generate_worldlink_excel(io_data, user_inputs)
         except HTTPException:
             raise
         except Exception as exc:
             import traceback
+
             traceback.print_exc()
             raise HTTPException(status_code=500, detail=f"Generation error: {exc}")
         finally:
@@ -257,16 +275,22 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             except Exception:
                 pass
 
-        tracking    = io_data.get("tracking_number", "")
-        agency      = io_data.get("agency", "")
-        advertiser  = io_data.get("advertiser", "")
-        agency_w1   = re.sub(r'[\\/:*?"<>|,]', "", (agency.split()[0]   if agency    else "")).strip()
-        adv_w1      = re.sub(r'[\\/:*?"<>|,]', "", (advertiser.split()[0] if advertiser else "")).strip()
-        lines       = io_data.get("lines", [])
+        tracking = io_data.get("tracking_number", "")
+        agency = io_data.get("agency", "")
+        advertiser = io_data.get("advertiser", "")
+        agency_w1 = re.sub(r'[\\/:*?"<>|,]', "", (agency.split()[0] if agency else "")).strip()
+        adv_w1 = re.sub(r'[\\/:*?"<>|,]', "", (advertiser.split()[0] if advertiser else "")).strip()
+        lines = io_data.get("lines", [])
         spot_length = lines[0].get("duration", "") if lines else ""
-        revision    = user_inputs.get("revision", 0)
-        is_tac      = io_data.get("network", "") == "ASIAN"
-        parts       = ["TAC WorldLink -" if is_tac else "WorldLink -", agency_w1, adv_w1, spot_length, tracking]
+        revision = user_inputs.get("revision", 0)
+        is_tac = io_data.get("network", "") == "ASIAN"
+        parts = [
+            "TAC WorldLink -" if is_tac else "WorldLink -",
+            agency_w1,
+            adv_w1,
+            spot_length,
+            tracking,
+        ]
         if revision:
             parts.append(f"(Rev{revision})")
         filename = re.sub(r'[\\/:*?"<>|]', "", " ".join(p for p in parts if p)) + ".xlsx"
@@ -281,6 +305,7 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
     async def backwrite_preview_from_db(contract_id: str = Form(...)):
         """Build placement CSV from DB and return preview JSON + base64 CSV bytes."""
         import base64
+
         try:
             cid = int(contract_id.strip())
         except ValueError:
@@ -288,11 +313,13 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
 
         try:
             from backwrite.eterebridge_runner import build_placement_csv_from_db
+
             csv_bytes = build_placement_csv_from_db(cid)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc))
         except Exception as exc:
             import traceback
+
             traceback.print_exc()
             raise HTTPException(status_code=500, detail=f"DB error: {exc}")
 
@@ -304,7 +331,7 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
         if not spots:
             raise HTTPException(status_code=400, detail="No spot data found")
 
-        markets       = sorted(set(s.market for s in spots))
+        markets = sorted(set(s.market for s in spots))
         # Prefer the customer order ref captured at entry (Etere CUSTOMERREF) —
         # the exact estimate/purchase number the parser pulled off the IO — so
         # the modal's Estimate field pre-fills authoritatively. Fall back to a
@@ -312,13 +339,14 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
         estimate_hint = ""
         try:
             from backwrite.eterebridge_runner import get_customer_order_ref
+
             estimate_hint = get_customer_order_ref(cid)
         except Exception:
             estimate_hint = ""
         if not estimate_hint:
-            est_match     = re.search(r'(\d{4,})', header.description)
+            est_match = re.search(r"(\d{4,})", header.description)
             estimate_hint = est_match.group(1) if est_match else ""
-        unique_rates  = sorted(set(s.gross_rate for s in spots if s.gross_rate > 0))
+        unique_rates = sorted(set(s.gross_rate for s in spots if s.gross_rate > 0))
 
         language_counts: dict = {}
         language_details: list = []
@@ -329,38 +357,41 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
                 get_language_details,
                 get_language_options,
             )
-            language_counts  = get_language_counts(csv_bytes)
+
+            language_counts = get_language_counts(csv_bytes)
             language_details = get_language_details(csv_bytes)
             language_options = get_language_options()
         except Exception:
             pass
 
-        return JSONResponse({
-            "agency":           header.agency,
-            "client":           header.client,
-            "contract_code":    header.contract_code,
-            "description":      header.description,
-            "order_date":       header.order_date,
-            "address":          header.address,
-            "city":             header.city,
-            "ae":               header.ae,
-            "notes":            header.notes,
-            "agency_flag":      "Agency" if header.agency else "Non-Agency",
-            "markets":          markets,
-            "spot_count":       len(spots),
-            "line_count":       len(set(s.line_id for s in spots)),
-            "date_range": {
-                "start": min(s.air_date for s in spots).strftime("%m/%d/%Y"),
-                "end":   max(s.air_date for s in spots).strftime("%m/%d/%Y"),
-            },
-            "estimate_hint":    estimate_hint,
-            "unique_rates":     unique_rates,
-            "language_counts":  language_counts,
-            "language_details": language_details,
-            "language_options": language_options,
-            "csv_b64":          base64.b64encode(csv_bytes).decode("ascii"),
-            "contract_id":      cid,
-        })
+        return JSONResponse(
+            {
+                "agency": header.agency,
+                "client": header.client,
+                "contract_code": header.contract_code,
+                "description": header.description,
+                "order_date": header.order_date,
+                "address": header.address,
+                "city": header.city,
+                "ae": header.ae,
+                "notes": header.notes,
+                "agency_flag": "Agency" if header.agency else "Non-Agency",
+                "markets": markets,
+                "spot_count": len(spots),
+                "line_count": len(set(s.line_id for s in spots)),
+                "date_range": {
+                    "start": min(s.air_date for s in spots).strftime("%m/%d/%Y"),
+                    "end": max(s.air_date for s in spots).strftime("%m/%d/%Y"),
+                },
+                "estimate_hint": estimate_hint,
+                "unique_rates": unique_rates,
+                "language_counts": language_counts,
+                "language_details": language_details,
+                "language_options": language_options,
+                "csv_b64": base64.b64encode(csv_bytes).decode("ascii"),
+                "contract_id": cid,
+            }
+        )
 
     @router.post("/preview")
     async def backwrite_preview(csv_file: UploadFile):
@@ -377,13 +408,11 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
         markets = sorted(set(s.market for s in spots))
 
         # Try to extract a numeric estimate from the description
-        est_match = re.search(r'(\d{4,})', header.description)
+        est_match = re.search(r"(\d{4,})", header.description)
         estimate_hint = est_match.group(1) if est_match else ""
 
         # Unique non-zero gross rates for gross-up UI
-        unique_rates = sorted(set(
-            s.gross_rate for s in spots if s.gross_rate > 0
-        ))
+        unique_rates = sorted(set(s.gross_rate for s in spots if s.gross_rate > 0))
 
         # Language info via EtereBridge (best-effort)
         language_counts: dict = {}
@@ -395,66 +424,70 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
                 get_language_details,
                 get_language_options,
             )
-            language_counts  = get_language_counts(data)
+
+            language_counts = get_language_counts(data)
             language_details = get_language_details(data)
             language_options = get_language_options()
         except Exception as _eb_err:
             import traceback
+
             traceback.print_exc()
             print(f"[backwrite/preview] EtereBridge language info failed: {_eb_err}")
 
-        return JSONResponse({
-            "agency":            header.agency,
-            "client":            header.client,
-            "contract_code":     header.contract_code,
-            "description":       header.description,
-            "order_date":        header.order_date,
-            "address":           header.address,
-            "city":              header.city,
-            "markets":           markets,
-            "spot_count":        len(spots),
-            "line_count":        len(set(s.line_id for s in spots)),
-            "date_range": {
-                "start": min(s.air_date for s in spots).strftime("%m/%d/%Y"),
-                "end":   max(s.air_date for s in spots).strftime("%m/%d/%Y"),
-            },
-            "estimate_hint":     estimate_hint,
-            "unique_rates":      unique_rates,
-            "language_counts":   language_counts,
-            "language_details":  language_details,
-            "language_options":  language_options,
-        })
+        return JSONResponse(
+            {
+                "agency": header.agency,
+                "client": header.client,
+                "contract_code": header.contract_code,
+                "description": header.description,
+                "order_date": header.order_date,
+                "address": header.address,
+                "city": header.city,
+                "markets": markets,
+                "spot_count": len(spots),
+                "line_count": len(set(s.line_id for s in spots)),
+                "date_range": {
+                    "start": min(s.air_date for s in spots).strftime("%m/%d/%Y"),
+                    "end": max(s.air_date for s in spots).strftime("%m/%d/%Y"),
+                },
+                "estimate_hint": estimate_hint,
+                "unique_rates": unique_rates,
+                "language_counts": language_counts,
+                "language_details": language_details,
+                "language_options": language_options,
+            }
+        )
 
     @router.post("/generate")
     async def backwrite_generate(
-        csv_file:       UploadFile,
-        io_file:        Optional[UploadFile] = File(None),
-        sales_person:   str = Form(...),
-        billing_type:   str = Form(...),
-        revenue_type:   str = Form(...),
-        agency_flag:    str = Form(...),
-        agency_fee:     str = Form("15"),
-        estimate:       str = Form(""),
-        estimate_run:   str = Form(""),
-        contract:       str = Form(""),
-        affidavit:      str = Form("Y"),
-        order_date:     str = Form(""),
+        csv_file: UploadFile,
+        io_file: Optional[UploadFile] = File(None),
+        sales_person: str = Form(...),
+        billing_type: str = Form(...),
+        revenue_type: str = Form(...),
+        agency_flag: str = Form(...),
+        agency_fee: str = Form("15"),
+        estimate: str = Form(""),
+        estimate_run: str = Form(""),
+        contract: str = Form(""),
+        affidavit: str = Form("Y"),
+        order_date: str = Form(""),
         contact_person: str = Form(""),
-        phone:          str = Form(""),
-        fax:            str = Form(""),
-        email_1:        str = Form(""),
-        email_2:        str = Form(""),
-        email_3:        str = Form(""),
-        email_4:        str = Form(""),
-        address:        str = Form(""),
-        city:           str = Form(""),
-        state:          str = Form(""),
-        zip_code:       str = Form(""),
-        notes:                str = Form(""),
-        gross_up_rates:       str = Form("{}"),
+        phone: str = Form(""),
+        fax: str = Form(""),
+        email_1: str = Form(""),
+        email_2: str = Form(""),
+        email_3: str = Form(""),
+        email_4: str = Form(""),
+        address: str = Form(""),
+        city: str = Form(""),
+        state: str = Form(""),
+        zip_code: str = Form(""),
+        notes: str = Form(""),
+        gross_up_rates: str = Form("{}"),
         language_corrections: str = Form("{}"),
-        revision:             str = Form(""),
-        base_filename:        str = Form(""),
+        revision: str = Form(""),
+        base_filename: str = Form(""),
     ):
         """Generate backwrite Excel from CSV + user inputs, return as download."""
         try:
@@ -487,31 +520,31 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             print(f"[backwrite/generate] Language corrections: {lang_corrections_dict}")
 
         user_inputs = {
-            "sales_person":   sales_person,
-            "billing_type":   billing_type,
-            "revenue_type":   revenue_type,
-            "agency_flag":    agency_flag,
-            "agency_fee":     fee,
-            "estimate":       estimate,
-            "estimate_run":   estimate_run,
-            "contract":       contract,
-            "affidavit":      affidavit,
-            "order_date":     order_date,
+            "sales_person": sales_person,
+            "billing_type": billing_type,
+            "revenue_type": revenue_type,
+            "agency_flag": agency_flag,
+            "agency_fee": fee,
+            "estimate": estimate,
+            "estimate_run": estimate_run,
+            "contract": contract,
+            "affidavit": affidavit,
+            "order_date": order_date,
             "contact_person": contact_person,
-            "phone":          phone,
-            "fax":            fax,
-            "email_1":        email_1,
-            "email_2":        email_2,
-            "email_3":        email_3,
-            "email_4":        email_4,
-            "address":        address,
-            "city":           city,
-            "state":          state,
-            "zip":            zip_code,
-            "notes":                notes,
-            "gross_up_rates":       gross_up_dict,
+            "phone": phone,
+            "fax": fax,
+            "email_1": email_1,
+            "email_2": email_2,
+            "email_3": email_3,
+            "email_4": email_4,
+            "address": address,
+            "city": city,
+            "state": state,
+            "zip": zip_code,
+            "notes": notes,
+            "gross_up_rates": gross_up_dict,
             "language_corrections": lang_corrections_dict,
-            "revision":             revision,
+            "revision": revision,
         }
 
         # ── Parse optional IO file for IO-sourced SC lines ────────────────────
@@ -526,6 +559,7 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
                         f.write(io_bytes)
                     from business_logic.services.pdf_order_detector import PDFOrderDetector
                     from web.parser_bridge import get_order_detail
+
                     detected = PDFOrderDetector().detect_order_type(tmp_path, silent=True)
                     if detected:
                         io_detail = get_order_detail(Path(tmp_path), detected.value)
@@ -533,7 +567,9 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
                             print(f"[IO] Parse error: {io_detail['error']}")
                             io_detail = None
                         else:
-                            print(f"[IO] Parsed {detected.value}: {len(io_detail.get('lines', []))} lines")
+                            print(
+                                f"[IO] Parsed {detected.value}: {len(io_detail.get('lines', []))} lines"
+                            )
                 except Exception as _io_exc:
                     print(f"[IO] Failed to parse IO file: {_io_exc}")
                     io_detail = None
@@ -545,9 +581,12 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
 
         # Server-side fallback: auto-inject gross_up_rates when IO indicates net rates
         # and the user didn't manually provide them via the UI.
-        if (io_detail and io_detail.get("rates_are_net")
-                and user_inputs.get("agency_flag") == "Agency"
-                and not gross_up_dict):
+        if (
+            io_detail
+            and io_detail.get("rates_are_net")
+            and user_inputs.get("agency_flag") == "Agency"
+            and not gross_up_dict
+        ):
             io_nets = {
                 round(float(ln.get("rate") or 0), 4)
                 for ln in io_detail.get("lines", [])
@@ -571,10 +610,17 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
 
         reconcile: dict = {}
         try:
-            xlsx_bytes = generate_excel(header, spots, user_inputs, raw_csv=data,
-                                        io_detail=io_detail, validation_out=reconcile)
+            xlsx_bytes = generate_excel(
+                header,
+                spots,
+                user_inputs,
+                raw_csv=data,
+                io_detail=io_detail,
+                validation_out=reconcile,
+            )
         except Exception as exc:
             import traceback
+
             traceback.print_exc()
             raise HTTPException(status_code=500, detail=f"Excel generation error: {exc}")
 
@@ -585,9 +631,13 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
         # legacy path where the July 2026 gross-up/billing errors originated.
         if io_detail:
             from backwrite.transformer import reconcile_io_vs_etere
+
             io_check = reconcile_io_vs_etere(
-                io_detail, spots, fee,
-                bool(io_detail.get("rates_are_net")), agency_flag == "Agency",
+                io_detail,
+                spots,
+                fee,
+                bool(io_detail.get("rates_are_net")),
+                agency_flag == "Agency",
             )
             if io_check.get("messages"):
                 reconcile["messages"] = list(reconcile.get("messages") or []) + io_check["messages"]
@@ -630,8 +680,11 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
         """Fetch a report from Etere web by contract number and return as CSV download."""
         try:
             from web.etere_report_fetcher import fetch_etere_report
+
             is_system = "True" if "C0000" in report_code else "False"
-            csv_bytes = fetch_etere_report(contract_number.strip(), report_code, is_system=is_system)
+            csv_bytes = fetch_etere_report(
+                contract_number.strip(), report_code, is_system=is_system
+            )
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Report fetch error: {exc}")
 

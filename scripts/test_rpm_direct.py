@@ -6,6 +6,7 @@ Parses AEInboxOrder (8).pdf, enters via direct DB with contract code
 
 Run:  uv run python scripts/test_rpm_direct.py
 """
+
 import sys
 from pathlib import Path
 
@@ -60,15 +61,16 @@ def _consolidate_weeks(weekly_spots, week_dates, flight_end):
         i = j
     return blocks
 
-PDF_PATH   = project_root / "incoming" / "AEInboxOrder (8).pdf"
-MARKET     = "CVC"
+
+PDF_PATH = project_root / "incoming" / "AEInboxOrder (8).pdf"
+MARKET = "CVC"
 CUSTOMER_ID = 68
-AGENCY_ID   = 67
+AGENCY_ID = 67
 MEDIA_CENTER_ID = 316
-AGENCY_PCT  = 15.0
-SEPARATION  = (25, 0, 0)
-TEST_CODE   = "RPM TEST ONLY"
-TEST_DESC   = "TEST — Thunder Valley RPM 10965 CVC (delete me)"
+AGENCY_PCT = 15.0
+SEPARATION = (25, 0, 0)
+TEST_CODE = "RPM TEST ONLY"
+TEST_DESC = "TEST — Thunder Valley RPM 10965 CVC (delete me)"
 
 print("=" * 60)
 print("RPM DIRECT DB TEST")
@@ -112,15 +114,17 @@ try:
         spot_code = 10 if line.is_bonus else 2
 
         week_dates = order.week_dates or tuple(
-            order.flight_start + __import__('datetime').timedelta(weeks=k)
+            order.flight_start + __import__("datetime").timedelta(weeks=k)
             for k in range(len(line.weekly_spots))
         )
         blocks = _consolidate_weeks(line.weekly_spots, week_dates, order.flight_end)
 
         for block_start, block_end, spots_per_week, total_spots in blocks:
-            print(f"  {i:2}. {'BNS' if line.is_bonus else 'PAID'} {language} | "
-                  f"{days} {time_range} | {block_start}–{block_end} "
-                  f"{spots_per_week}/wk {total_spots} total @ ${line.rate}")
+            print(
+                f"  {i:2}. {'BNS' if line.is_bonus else 'PAID'} {language} | "
+                f"{days} {time_range} | {block_start}–{block_end} "
+                f"{spots_per_week}/wk {total_spots} total @ ${line.rate}"
+            )
             line_id = client.add_contract_line(
                 market=MARKET,
                 days=days,
@@ -143,6 +147,7 @@ try:
 except Exception as e:
     print(f"\n✗ Error: {e}")
     import traceback
+
     traceback.print_exc()
 finally:
     conn.close()

@@ -125,8 +125,10 @@ def main() -> None:
         cur.execute("CREATE TABLE #langstage (ID_CONTRATTIRIGHE int PRIMARY KEY, LANG nvarchar(8))")
         items = list(catalog.items())
         for i in range(0, len(items), 500):
-            chunk = items[i:i + 500]
-            values = ",".join(f"({int(lid)}, N'{lang}')" for lid, lang in chunk)  # lang is validated against LANGUAGE_CODES
+            chunk = items[i : i + 500]
+            values = ",".join(
+                f"({int(lid)}, N'{lang}')" for lid, lang in chunk
+            )  # lang is validated against LANGUAGE_CODES
             cur.execute(f"INSERT INTO #langstage (ID_CONTRATTIRIGHE, LANG) VALUES {values}")
             if (i // 500) % 20 == 19:
                 print(f"  staged {i + len(chunk)}/{len(items)}…", flush=True)
@@ -147,8 +149,9 @@ def main() -> None:
         inserted = cur.rowcount
         conn.commit()
         cur.execute("SELECT SOURCE, COUNT(*) FROM CTV_LineLanguage GROUP BY SOURCE")
-        print(f"\n✓ {inserted} inserted, {updated} updated. "
-              f"Catalog by source: {dict(cur.fetchall())}")
+        print(
+            f"\n✓ {inserted} inserted, {updated} updated. Catalog by source: {dict(cur.fetchall())}"
+        )
 
 
 if __name__ == "__main__":

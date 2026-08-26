@@ -13,6 +13,7 @@ Usage:
 The file is updated in-place.  Market is inferred from the filename
 (e.g. "LAX" -> station 6).
 """
+
 import datetime
 import re
 import sys
@@ -27,15 +28,22 @@ from browser_automation.etere_direct_client import connect
 
 # Market code → TPALINSE.COD_USER
 MARKET_IDS = {
-    "NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4,
-    "SEA": 5, "LAX": 6, "CVC": 7, "WDC": 8, "DAL": 10,
+    "NYC": 1,
+    "CMP": 2,
+    "HOU": 3,
+    "SFO": 4,
+    "SEA": 5,
+    "LAX": 6,
+    "CVC": 7,
+    "WDC": 8,
+    "DAL": 10,
 }
 
 # Column indices (1-based for openpyxl)
-COL_DATE     = 2   # B: Start Date
-COL_SHOW     = 8   # H: Show Name  ("ASSETCODE: Description")
-COL_COMMENTS = 9   # I: Comments / spot time
-COL_TYPE     = 14  # N: Type (PRG, COM, BNS, AV, ...)
+COL_DATE = 2  # B: Start Date
+COL_SHOW = 8  # H: Show Name  ("ASSETCODE: Description")
+COL_COMMENTS = 9  # I: Comments / spot time
+COL_TYPE = 14  # N: Type (PRG, COM, BNS, AV, ...)
 
 FPS = 29.97
 
@@ -65,9 +73,7 @@ def fetch_ora_map(conn, date: datetime.date, asset_code: str, market_id: int) ->
     """Return sorted list of ORA values for matching spots on this date/market."""
     cur = conn.cursor(as_dict=True)
     cur.execute(
-        "SELECT ORA FROM TPALINSE"
-        " WHERE DATA = %s AND TITLE LIKE %s AND COD_USER = %d"
-        " ORDER BY ORA",
+        "SELECT ORA FROM TPALINSE WHERE DATA = %s AND TITLE LIKE %s AND COD_USER = %d ORDER BY ORA",
         (date, f"%{asset_code}%", market_id),
     )
     return [r["ORA"] for r in cur.fetchall()]
@@ -127,7 +133,7 @@ def main():
 
             # Fetch ORA lists once per (date, asset_code) pair
             ora_lists: dict[tuple, list[int]] = {}
-            for (date, asset_code) in pending:
+            for date, asset_code in pending:
                 ora_lists[(date, asset_code)] = fetch_ora_map(conn, date, asset_code, market_id)
 
             # Write times back row by row in the order they appear in the sheet
@@ -139,8 +145,10 @@ def main():
                     print(f"  [{sheet_name}] No TPALINSE match: {asset_code} on {date}")
                     continue
                 if len(oras) < len(row_nums):
-                    print(f"  [{sheet_name}] WARNING: {asset_code} on {date} — "
-                          f"{len(row_nums)} log rows but only {len(oras)} TPALINSE entries")
+                    print(
+                        f"  [{sheet_name}] WARNING: {asset_code} on {date} — "
+                        f"{len(row_nums)} log rows but only {len(oras)} TPALINSE entries"
+                    )
 
                 for i, row_num in enumerate(row_nums):
                     if i >= len(oras):

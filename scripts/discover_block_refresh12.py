@@ -2,6 +2,7 @@
 Check trafficPalinse.EVENTTYPE for assigned vs extra id_fascia values.
 Run from Windows: py scripts/discover_block_refresh12.py
 """
+
 import sys
 from pathlib import Path
 
@@ -18,14 +19,17 @@ print("=" * 60)
 print("EVENTTYPE for line 73173 (20h-21h, Jan 5-11, Cod_User=5)")
 print("=" * 60)
 for fid, label in [(9923, "CORRECT"), (9940, "EXTRA"), (11229, "EXTRA"), (14274, "EXTRA")]:
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT EVENTTYPE, COUNT(*) as cnt
         FROM trafficPalinse
         WHERE id_fascia = ? AND Cod_User = 5
           AND Date >= '2026-01-05' AND Date <= '2026-01-11'
         GROUP BY EVENTTYPE
         ORDER BY EVENTTYPE
-    """, fid)
+    """,
+        fid,
+    )
     rows = cursor.fetchall()
     print(f"  id_fascia={fid} [{label}]: EVENTTYPE = {[(r[0], r[1]) for r in rows]}")
 
@@ -34,14 +38,17 @@ print("\n" + "=" * 60)
 print("EVENTTYPE for line 73175 (21h-22h, Jan 5-11, Cod_User=5)")
 print("=" * 60)
 for fid, label in [(11229, "CORRECT"), (9940, "EXTRA"), (13432, "EXTRA"), (14274, "EXTRA")]:
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT EVENTTYPE, COUNT(*) as cnt
         FROM trafficPalinse
         WHERE id_fascia = ? AND Cod_User = 5
           AND Date >= '2026-01-05' AND Date <= '2026-01-11'
         GROUP BY EVENTTYPE
         ORDER BY EVENTTYPE
-    """, fid)
+    """,
+        fid,
+    )
     rows = cursor.fetchall()
     print(f"  id_fascia={fid} [{label}]: EVENTTYPE = {[(r[0], r[1]) for r in rows]}")
 
@@ -49,15 +56,24 @@ for fid, label in [(11229, "CORRECT"), (9940, "EXTRA"), (13432, "EXTRA"), (14274
 print("\n" + "=" * 60)
 print("EVENTTYPE for line 73177 (22h pt, Mar 16-22, Cod_User=5)")
 print("=" * 60)
-for fid, label in [(9940,"CORRECT"),(13432,"CORRECT"),(15349,"CORRECT"),(9942,"EXTRA"),(11230,"EXTRA")]:
-    cursor.execute("""
+for fid, label in [
+    (9940, "CORRECT"),
+    (13432, "CORRECT"),
+    (15349, "CORRECT"),
+    (9942, "EXTRA"),
+    (11230, "EXTRA"),
+]:
+    cursor.execute(
+        """
         SELECT EVENTTYPE, COUNT(*) as cnt
         FROM trafficPalinse
         WHERE id_fascia = ? AND Cod_User = 5
           AND Date >= '2026-03-16' AND Date <= '2026-03-22'
         GROUP BY EVENTTYPE
         ORDER BY EVENTTYPE
-    """, fid)
+    """,
+        fid,
+    )
     rows = cursor.fetchall()
     print(f"  id_fascia={fid} [{label}]: EVENTTYPE = {[(r[0], r[1]) for r in rows]}")
 
@@ -65,7 +81,9 @@ for fid, label in [(9940,"CORRECT"),(13432,"CORRECT"),(15349,"CORRECT"),(9942,"E
 print("\n" + "=" * 60)
 print("All distinct EVENTTYPE values in trafficPalinse")
 print("=" * 60)
-cursor.execute("SELECT DISTINCT EVENTTYPE, COUNT(*) as cnt FROM trafficPalinse GROUP BY EVENTTYPE ORDER BY EVENTTYPE")
+cursor.execute(
+    "SELECT DISTINCT EVENTTYPE, COUNT(*) as cnt FROM trafficPalinse GROUP BY EVENTTYPE ORDER BY EVENTTYPE"
+)
 for r in cursor.fetchall():
     print(f"  EVENTTYPE={r[0]}  count={r[1]}")
 

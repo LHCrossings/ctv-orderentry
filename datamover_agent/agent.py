@@ -6,6 +6,7 @@ Accepts capture requests from Control Room, runs FFmpeg, serves downloads.
 Run: python agent.py
      (or: uvicorn agent:app --host 0.0.0.0 --port 8765)
 """
+
 import asyncio
 import json
 import logging
@@ -38,9 +39,12 @@ try:
         "CVC": ZoneInfo("America/Los_Angeles"),
     }
 except Exception:
-    logging.warning("tzdata not available — filename timestamps will use server local time. Run: pip install tzdata")
+    logging.warning(
+        "tzdata not available — filename timestamps will use server local time. Run: pip install tzdata"
+    )
     _PT = None
     _MARKET_TZ = {}
+
 
 def _filename_ts(start_dt_pt: datetime, network: str) -> str:
     """Return YYYYMMDD_HHMM in the market's local timezone (filename only)."""
@@ -49,58 +53,76 @@ def _filename_ts(start_dt_pt: datetime, network: str) -> str:
     tz = _MARKET_TZ.get(network, _PT)
     return start_dt_pt.replace(tzinfo=_PT).astimezone(tz).strftime("%Y%m%d_%H%M")
 
-# ── CONFIG ───────────────────────────────────────────────────────────────────
-FFMPEG     = "ffmpeg"                    # update if not in PATH: r"C:\ffmpeg\bin\ffmpeg.exe"
-OUTPUT_DIR = Path(r"C:\Airchecks")
-DB_FILE    = OUTPUT_DIR / "captures.json"
-SRT_HOST   = "44.235.103.12"
-PORT       = 8765
 
-ETERE_DB_SERVER   = "100.85.38.72"      # Etere SQL Server (internal 10.0.0 or Tailscale)
-ETERE_DB_NAME     = "Etere_crossing"
-POLL_INTERVAL_SEC = 600                 # 10 minutes
-RESCHEDULE_MIN_SHIFT_SEC = 30           # ignore sub-30-second drift
+# ── CONFIG ───────────────────────────────────────────────────────────────────
+FFMPEG = "ffmpeg"  # update if not in PATH: r"C:\ffmpeg\bin\ffmpeg.exe"
+OUTPUT_DIR = Path(r"C:\Airchecks")
+DB_FILE = OUTPUT_DIR / "captures.json"
+SRT_HOST = "44.235.103.12"
+PORT = 8765
+
+ETERE_DB_SERVER = "100.85.38.72"  # Etere SQL Server (internal 10.0.0 or Tailscale)
+ETERE_DB_NAME = "Etere_crossing"
+POLL_INTERVAL_SEC = 600  # 10 minutes
+RESCHEDULE_MIN_SHIFT_SEC = 30  # ignore sub-30-second drift
 
 # ── OneDrive auto-upload ──────────────────────────────────────────────────────
-ONEDRIVE_ROOT           = Path(r"C:\Users\usrdm1\OneDrive - crossingstv.com\Airchecks")
-ONEDRIVE_RETENTION_DAYS = 90        # overridden at runtime by /settings PATCH
-SETTINGS_FILE           = OUTPUT_DIR / "settings.json"
+ONEDRIVE_ROOT = Path(r"C:\Users\usrdm1\OneDrive - crossingstv.com\Airchecks")
+ONEDRIVE_RETENTION_DAYS = 90  # overridden at runtime by /settings PATCH
+SETTINGS_FILE = OUTPUT_DIR / "settings.json"
 
 # Client name → agency subfolder inside ONEDRIVE_ROOT
 CLIENT_AGENCY: dict[str, str] = {
-    "McDonald's":           "Admerasia",
+    "McDonald's": "Admerasia",
     "Lexus Dealer Association": "Lexus",
 }
 
 NETWORK_PORTS: dict[str, int] = {
-    "NYC":     6014,
-    "WDC":     6017,
-    "CMP":     6010,
-    "HOU":     6012,
-    "SEA":     6002,
-    "SFO":     6004,
-    "CVC":     6006,
-    "LAX":     6008,
-    "DAL":     6015,
-    "MMT":     6019,
+    "NYC": 6014,
+    "WDC": 6017,
+    "CMP": 6010,
+    "HOU": 6012,
+    "SEA": 6002,
+    "SFO": 6004,
+    "CVC": 6006,
+    "LAX": 6008,
+    "DAL": 6015,
+    "MMT": 6019,
     "SFO OTA": 6016,
     "CVC OTA": 6018,
 }
 
 # Etere COD_USER integer for each network — used for tcFrames2Msec conversion
 NETWORK_COD_USER: dict[str, int] = {
-    "NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4,
-    "SEA": 5, "LAX": 6, "CVC": 7, "WDC": 8,
-    "MMT": 9, "DAL": 10, "SFO OTA": 4, "CVC OTA": 7,
+    "NYC": 1,
+    "CMP": 2,
+    "HOU": 3,
+    "SFO": 4,
+    "SEA": 5,
+    "LAX": 6,
+    "CVC": 7,
+    "WDC": 8,
+    "MMT": 9,
+    "DAL": 10,
+    "SFO OTA": 4,
+    "CVC OTA": 7,
 }
 
 # Hours to ADD to market-local time to arrive at PT (agent runs in PT).
 # ET is always 3h ahead of PT; CT always 2h ahead; PT markets are 0.
 NETWORK_TO_PT_HOURS: dict[str, int] = {
-    "NYC": -3, "WDC": -3, "MMT": -3,
-    "CMP": -2, "HOU": -2, "DAL": -2,
-    "SFO": 0, "SEA": 0, "LAX": 0, "CVC": 0,
-    "SFO OTA": 0, "CVC OTA": 0,
+    "NYC": -3,
+    "WDC": -3,
+    "MMT": -3,
+    "CMP": -2,
+    "HOU": -2,
+    "DAL": -2,
+    "SFO": 0,
+    "SEA": 0,
+    "LAX": 0,
+    "CVC": 0,
+    "SFO OTA": 0,
+    "CVC OTA": 0,
 }
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -113,11 +135,11 @@ app.add_middleware(
 )
 
 captures: dict[str, dict] = {}
-_tasks:   dict[str, asyncio.Task] = {}
+_tasks: dict[str, asyncio.Task] = {}
 _poll_state: dict = {
     "last_attempted": None,
     "last_succeeded": None,
-    "last_error":     None,
+    "last_error": None,
     "candidate_count": 0,
 }
 
@@ -127,14 +149,18 @@ def _load_settings() -> None:
     if SETTINGS_FILE.exists():
         try:
             data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
-            ONEDRIVE_RETENTION_DAYS = int(data.get("onedrive_retention_days", ONEDRIVE_RETENTION_DAYS))
+            ONEDRIVE_RETENTION_DAYS = int(
+                data.get("onedrive_retention_days", ONEDRIVE_RETENTION_DAYS)
+            )
         except Exception:
             pass
 
 
 def _save_settings() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    SETTINGS_FILE.write_text(json.dumps({"onedrive_retention_days": ONEDRIVE_RETENTION_DAYS}, indent=2), encoding="utf-8")
+    SETTINGS_FILE.write_text(
+        json.dumps({"onedrive_retention_days": ONEDRIVE_RETENTION_DAYS}, indent=2), encoding="utf-8"
+    )
 
 
 def _load_db() -> None:
@@ -203,7 +229,11 @@ async def _onedrive_cleanup_loop() -> None:
                 except Exception as exc:
                     logging.warning("OneDrive cleanup: could not remove %s: %s", f, exc)
             if deleted:
-                logging.info("OneDrive cleanup: removed %d file(s) older than %d days", deleted, ONEDRIVE_RETENTION_DAYS)
+                logging.info(
+                    "OneDrive cleanup: removed %d file(s) older than %d days",
+                    deleted,
+                    ONEDRIVE_RETENTION_DAYS,
+                )
         except Exception as exc:
             logging.warning("OneDrive cleanup: scan failed: %s", exc)
         await asyncio.sleep(86400)  # run daily
@@ -217,12 +247,16 @@ def _save_db() -> None:
 def _safe(s: str) -> str:
     return "".join(c for c in s if c.isalnum() or c in "-_").strip() or "capture"
 
+
 def _cap_path(cap: dict) -> Path:
     subfolder = cap.get("subfolder", "")
-    return (OUTPUT_DIR / subfolder / cap["filename"]) if subfolder else (OUTPUT_DIR / cap["filename"])
+    return (
+        (OUTPUT_DIR / subfolder / cap["filename"]) if subfolder else (OUTPUT_DIR / cap["filename"])
+    )
 
 
 # ── Schema ────────────────────────────────────────────────────────────────────
+
 
 class CaptureRequest(BaseModel):
     client: str
@@ -230,8 +264,9 @@ class CaptureRequest(BaseModel):
     duration_seconds: int
     start_time: Optional[str] = None  # ISO local datetime string; None = start immediately
     notes: str = ""
-    isci_code: Optional[str] = None   # spot code; enables Etere polling to track schedule moves
+    isci_code: Optional[str] = None  # spot code; enables Etere polling to track schedule moves
     original_ora: Optional[int] = None  # TPALINSE ORA value (frames) at time of scheduling
+
 
 class CaptureUpdate(BaseModel):
     start_time: Optional[str] = None
@@ -241,12 +276,14 @@ class CaptureUpdate(BaseModel):
 
 # ── OneDrive upload ───────────────────────────────────────────────────────────
 
+
 def _onedrive_upload(cap: dict) -> None:
     import shutil
-    agency    = CLIENT_AGENCY.get(cap.get("client", ""), "")
+
+    agency = CLIENT_AGENCY.get(cap.get("client", ""), "")
     subfolder = cap.get("subfolder", "")
-    parts     = [p for p in (agency, subfolder) if p]
-    dest_dir  = ONEDRIVE_ROOT.joinpath(*parts) if parts else ONEDRIVE_ROOT
+    parts = [p for p in (agency, subfolder) if p]
+    dest_dir = ONEDRIVE_ROOT.joinpath(*parts) if parts else ONEDRIVE_ROOT
     try:
         dest_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(str(_cap_path(cap)), str(dest_dir / cap["filename"]))
@@ -257,23 +294,28 @@ def _onedrive_upload(cap: dict) -> None:
 
 # ── FFmpeg runner ─────────────────────────────────────────────────────────────
 
+
 async def _run(cap_id: str) -> None:
     cap = captures[cap_id]
     cap["status"] = "recording"
     _save_db()
 
-    port   = NETWORK_PORTS[cap["network"]]
+    port = NETWORK_PORTS[cap["network"]]
     output = _cap_path(cap)
-    dur    = cap["duration_seconds"]
+    dur = cap["duration_seconds"]
 
     # Match the exact pattern the user tested:
     # ffmpeg -i "srt://host:port?mode=caller" -c copy -t DURATION output.mp4
     cmd = [
         FFMPEG,
-        "-i", f"srt://{SRT_HOST}:{port}?mode=caller",
-        "-c", "copy",
-        "-t", str(dur),
-        "-y", str(output),
+        "-i",
+        f"srt://{SRT_HOST}:{port}?mode=caller",
+        "-c",
+        "copy",
+        "-t",
+        str(dur),
+        "-y",
+        str(output),
     ]
 
     try:
@@ -285,16 +327,16 @@ async def _run(cap_id: str) -> None:
         _, stderr = await proc.communicate()
 
         if proc.returncode == 0 and output.exists():
-            cap["status"]     = "complete"
+            cap["status"] = "complete"
             cap["size_bytes"] = output.stat().st_size
-            cap["ended_at"]   = datetime.now().isoformat()
+            cap["ended_at"] = datetime.now().isoformat()
             _onedrive_upload(cap)
         else:
             cap["status"] = "error"
-            cap["error"]  = stderr.decode(errors="replace")[-600:]
+            cap["error"] = stderr.decode(errors="replace")[-600:]
     except Exception as exc:
         cap["status"] = "error"
-        cap["error"]  = str(exc)
+        cap["error"] = str(exc)
 
     _save_db()
 
@@ -312,8 +354,10 @@ async def _schedule(cap_id: str, delay: float) -> None:
 
 # ── Etere polling ─────────────────────────────────────────────────────────────
 
+
 def _etere_connect():
     import pymssql
+
     db_server = ETERE_DB_SERVER
     db_user = db_pass = None
     try:
@@ -341,7 +385,8 @@ async def _do_poll() -> dict:
     """Run one poll cycle. Returns a summary dict. Called by the loop and the /poll endpoint."""
     now = datetime.now()
     candidates = [
-        cap for cap in list(captures.values())
+        cap
+        for cap in list(captures.values())
         if cap.get("isci_code")
         and cap.get("original_ora") is not None
         and cap.get("status") in ("pending", "scheduled")
@@ -369,8 +414,8 @@ async def _do_poll() -> dict:
     try:
         cur = conn.cursor()
         for cap in candidates:
-            isci      = cap["isci_code"]
-            start_dt  = datetime.fromisoformat(cap["start_time"])
+            isci = cap["isci_code"]
+            start_dt = datetime.fromisoformat(cap["start_time"])
             query_date = (start_dt + timedelta(seconds=20)).date()
             try:
                 cod_user = NETWORK_COD_USER.get(cap.get("network", ""), 0)
@@ -392,33 +437,53 @@ async def _do_poll() -> dict:
             polled += 1
 
             if row is None:
-                logging.warning("Poll: %s not found in TPALINSE on %s — spot may have been pulled", isci, query_date)
+                logging.warning(
+                    "Poll: %s not found in TPALINSE on %s — spot may have been pulled",
+                    isci,
+                    query_date,
+                )
                 continue
 
-            new_ora  = row[0]
+            new_ora = row[0]
             air_date = row[1]
-            air_ms   = row[2]
+            air_ms = row[2]
             orig_ora = cap["original_ora"]
             shift_sec = (new_ora - orig_ora) / 30  # approximate delta for threshold check
 
             if abs(shift_sec) < RESCHEDULE_MIN_SHIFT_SEC:
-                logging.debug("Poll: %s unchanged (shift %.1fs < threshold) — %s still at %s", isci, shift_sec, cap["id"], start_dt)
+                logging.debug(
+                    "Poll: %s unchanged (shift %.1fs < threshold) — %s still at %s",
+                    isci,
+                    shift_sec,
+                    cap["id"],
+                    start_dt,
+                )
                 continue
 
             cap_id = cap["id"]
             air_date_only = air_date.date() if hasattr(air_date, "date") else air_date
-            naive_local = datetime.combine(air_date_only, datetime.min.time()) + timedelta(milliseconds=air_ms)
-            new_air_pt  = naive_local + timedelta(hours=NETWORK_TO_PT_HOURS.get(cap["network"], 0))
-            new_start   = new_air_pt - timedelta(seconds=20)
-            cap.setdefault("reschedule_history", []).append({
-                "detected_at": datetime.now().isoformat(),
-                "old_ora":     orig_ora,
-                "new_ora":     new_ora,
-                "shift_sec":   round(shift_sec, 1),
-                "old_start":   start_dt.isoformat(),
-                "new_start":   new_start.isoformat(),
-            })
-            logging.info("Poll: %s shifted %+.0fs — rescheduling %s to %s", isci, shift_sec, cap_id, new_start)
+            naive_local = datetime.combine(air_date_only, datetime.min.time()) + timedelta(
+                milliseconds=air_ms
+            )
+            new_air_pt = naive_local + timedelta(hours=NETWORK_TO_PT_HOURS.get(cap["network"], 0))
+            new_start = new_air_pt - timedelta(seconds=20)
+            cap.setdefault("reschedule_history", []).append(
+                {
+                    "detected_at": datetime.now().isoformat(),
+                    "old_ora": orig_ora,
+                    "new_ora": new_ora,
+                    "shift_sec": round(shift_sec, 1),
+                    "old_start": start_dt.isoformat(),
+                    "new_start": new_start.isoformat(),
+                }
+            )
+            logging.info(
+                "Poll: %s shifted %+.0fs — rescheduling %s to %s",
+                isci,
+                shift_sec,
+                cap_id,
+                new_start,
+            )
 
             task = _tasks.pop(cap_id, None)
             if task:
@@ -428,9 +493,9 @@ async def _do_poll() -> dict:
                 except (asyncio.CancelledError, Exception):
                     pass
 
-            cap["start_time"]  = new_start.isoformat()
+            cap["start_time"] = new_start.isoformat()
             cap["original_ora"] = new_ora
-            net_s    = _safe(cap["network"].replace(" ", "_"))
+            net_s = _safe(cap["network"].replace(" ", "_"))
             client_s = _safe(cap["client"].replace(" ", "_"))
             cap["filename"] = f"{net_s}_{client_s}_{_filename_ts(new_start, cap['network'])}.mp4"
             delay = max(0.0, (new_start - datetime.now()).total_seconds())
@@ -455,6 +520,7 @@ async def _poll_spots() -> None:
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+
 @app.post("/captures", status_code=201)
 async def create_capture(req: CaptureRequest):
     if req.network not in NETWORK_PORTS:
@@ -462,10 +528,10 @@ async def create_capture(req: CaptureRequest):
     if req.duration_seconds < 5 or req.duration_seconds > 7200:
         raise HTTPException(400, "Duration must be 5–7200 seconds")
 
-    now    = datetime.now()
+    now = datetime.now()
     cap_id = uuid.uuid4().hex[:8]
     subfolder = _safe(req.notes) if req.notes.strip() else ""
-    cap_dir   = OUTPUT_DIR / subfolder if subfolder else OUTPUT_DIR
+    cap_dir = OUTPUT_DIR / subfolder if subfolder else OUTPUT_DIR
     cap_dir.mkdir(parents=True, exist_ok=True)
 
     if req.start_time:
@@ -475,31 +541,31 @@ async def create_capture(req: CaptureRequest):
         delay = max(0.0, (start_dt - now).total_seconds())
     else:
         start_dt = now
-        delay    = 0.0
+        delay = 0.0
 
-    net_s    = _safe(req.network.replace(" ", "_"))
+    net_s = _safe(req.network.replace(" ", "_"))
     client_s = _safe(req.client.replace(" ", "_"))
-    ts       = _filename_ts(start_dt, req.network)
+    ts = _filename_ts(start_dt, req.network)
     filename = f"{net_s}_{client_s}_{ts}.mp4"
 
     captures[cap_id] = {
-        "id":                  cap_id,
-        "client":              req.client,
-        "network":             req.network,
-        "duration_seconds":    req.duration_seconds,
-        "start_time":          start_dt.isoformat(),
-        "subfolder":           subfolder,
-        "filename":            filename,
-        "notes":               req.notes,
-        "isci_code":           req.isci_code or None,
-        "original_ora":        req.original_ora,
-        "status":              "pending",
-        "created_at":          now.isoformat(),
-        "ended_at":            None,
-        "size_bytes":          None,
-        "error":               None,
-        "last_polled_at":      None,
-        "reschedule_history":  [],
+        "id": cap_id,
+        "client": req.client,
+        "network": req.network,
+        "duration_seconds": req.duration_seconds,
+        "start_time": start_dt.isoformat(),
+        "subfolder": subfolder,
+        "filename": filename,
+        "notes": req.notes,
+        "isci_code": req.isci_code or None,
+        "original_ora": req.original_ora,
+        "status": "pending",
+        "created_at": now.isoformat(),
+        "ended_at": None,
+        "size_bytes": None,
+        "error": None,
+        "last_polled_at": None,
+        "reschedule_history": [],
     }
     _save_db()
 
@@ -554,7 +620,7 @@ async def update_capture(cap_id: str, req: CaptureUpdate):
         if start_dt.tzinfo is not None:
             start_dt = start_dt.astimezone().replace(tzinfo=None)
         cap["start_time"] = start_dt.isoformat()
-        net_s    = _safe(cap["network"].replace(" ", "_"))
+        net_s = _safe(cap["network"].replace(" ", "_"))
         client_s = _safe(cap["client"].replace(" ", "_"))
         cap["filename"] = f"{net_s}_{client_s}_{_filename_ts(start_dt, cap['network'])}.mp4"
     else:
@@ -599,9 +665,11 @@ async def delete_capture(cap_id: str):
 class SettingsUpdate(BaseModel):
     onedrive_retention_days: Optional[int] = None
 
+
 @app.get("/settings")
 async def get_settings():
     return {"onedrive_retention_days": ONEDRIVE_RETENTION_DAYS}
+
 
 @app.patch("/settings")
 async def update_settings(req: SettingsUpdate):
@@ -618,10 +686,11 @@ async def update_settings(req: SettingsUpdate):
 async def deploy():
     import shutil as _sh
     import subprocess as _sp
+
     repo_dir = Path(r"C:\windev\ctv-orderentry")
-    src      = repo_dir / "datamover_agent" / "agent.py"
-    dst      = Path(r"C:\datamover_agent\agent.py")
-    nssm     = Path(r"C:\datamover_agent\nssm.exe")
+    src = repo_dir / "datamover_agent" / "agent.py"
+    dst = Path(r"C:\datamover_agent\agent.py")
+    nssm = Path(r"C:\datamover_agent\nssm.exe")
     svc_name = "AirchecksAgentSvc"
 
     loop = asyncio.get_event_loop()

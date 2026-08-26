@@ -7,6 +7,7 @@ Safe to re-run — only creates the table if missing; never touches existing row
 
     uv run python scripts/setup_ctv_customers_table.py
 """
+
 import sys
 from pathlib import Path
 

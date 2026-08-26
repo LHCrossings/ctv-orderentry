@@ -24,9 +24,11 @@ from browser_automation.customer_defaults import prompt_customer_id  # noqa: E40
 @pytest.fixture
 def answers(monkeypatch):
     """Feed a scripted list of keystrokes to input()."""
+
     def _install(values):
         it = iter(values)
         monkeypatch.setattr(builtins, "input", lambda _p="": next(it))
+
     return _install
 
 

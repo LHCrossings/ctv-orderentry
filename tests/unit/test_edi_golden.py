@@ -12,6 +12,7 @@ phase. If this test fails, the output format changed — that is a bug unless
 the format change was explicitly requested; re-capturing fixtures to make it
 pass is not allowed without sign-off.
 """
+
 import json
 from pathlib import Path
 

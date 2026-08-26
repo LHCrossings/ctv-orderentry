@@ -185,7 +185,7 @@ class TestOrder:
             pdf_path=Path("test.pdf"),
             order_type=OrderType.WORLDLINK,
             customer_name="Test Customer",
-            status=OrderStatus.PENDING
+            status=OrderStatus.PENDING,
         )
         assert order.is_processable() is True
 
@@ -195,7 +195,7 @@ class TestOrder:
             pdf_path=Path("test.pdf"),
             order_type=OrderType.UNKNOWN,
             customer_name="Test Customer",
-            status=OrderStatus.PENDING
+            status=OrderStatus.PENDING,
         )
         assert order.is_processable() is False
 
@@ -205,25 +205,21 @@ class TestOrder:
             pdf_path=Path("test.pdf"),
             order_type=OrderType.WORLDLINK,
             customer_name="Test Customer",
-            status=OrderStatus.COMPLETED
+            status=OrderStatus.COMPLETED,
         )
         assert order.is_processable() is False
 
     def test_daviselen_requires_upfront_input(self):
         """Daviselen orders should require upfront input."""
         order = Order(
-            pdf_path=Path("test.pdf"),
-            order_type=OrderType.DAVISELEN,
-            customer_name="Test Customer"
+            pdf_path=Path("test.pdf"), order_type=OrderType.DAVISELEN, customer_name="Test Customer"
         )
         assert order.requires_upfront_input() is True
 
     def test_worldlink_does_not_require_upfront_input(self):
         """WorldLink orders should not require upfront input."""
         order = Order(
-            pdf_path=Path("test.pdf"),
-            order_type=OrderType.WORLDLINK,
-            customer_name="Test Customer"
+            pdf_path=Path("test.pdf"), order_type=OrderType.WORLDLINK, customer_name="Test Customer"
         )
         assert order.requires_upfront_input() is False
 
@@ -233,7 +229,7 @@ class TestOrder:
             pdf_path=Path("test.pdf"),
             order_type=OrderType.WORLDLINK,
             customer_name="Test Customer",
-            status=OrderStatus.PENDING
+            status=OrderStatus.PENDING,
         )
         updated = order.with_status(OrderStatus.PROCESSING)
 
@@ -251,43 +247,30 @@ class TestContract:
 
     def test_worldlink_contract_requires_refresh(self):
         """WorldLink block refresh is automated — contract reports no manual refresh needed."""
-        contract = Contract(
-            contract_number="12345",
-            order_type=OrderType.WORLDLINK
-        )
+        contract = Contract(contract_number="12345", order_type=OrderType.WORLDLINK)
         assert contract.requires_block_refresh() is False
 
     def test_tcaa_contract_does_not_require_refresh(self):
         """TCAA contracts should not require block refresh."""
-        contract = Contract(
-            contract_number="12345",
-            order_type=OrderType.TCAA
-        )
+        contract = Contract(contract_number="12345", order_type=OrderType.TCAA)
         assert contract.requires_block_refresh() is False
 
     def test_contract_with_highest_line_has_partial_lines(self):
         """Contract with highest_line should have partial lines."""
         contract = Contract(
-            contract_number="12345",
-            order_type=OrderType.WORLDLINK,
-            highest_line=10
+            contract_number="12345", order_type=OrderType.WORLDLINK, highest_line=10
         )
         assert contract.has_partial_lines() is True
 
     def test_contract_without_highest_line_has_no_partial_lines(self):
         """Contract without highest_line should not have partial lines."""
-        contract = Contract(
-            contract_number="12345",
-            order_type=OrderType.WORLDLINK
-        )
+        contract = Contract(contract_number="12345", order_type=OrderType.WORLDLINK)
         assert contract.has_partial_lines() is False
 
     def test_get_refresh_range_for_partial(self):
         """Should return correct range for partial refresh."""
         contract = Contract(
-            contract_number="12345",
-            order_type=OrderType.WORLDLINK,
-            highest_line=10
+            contract_number="12345", order_type=OrderType.WORLDLINK, highest_line=10
         )
         start, end = contract.get_refresh_range()
         assert start == 10
@@ -306,7 +289,7 @@ class TestScheduleLine:
             day_pattern=DayPattern("M-F"),
             weekly_spots=10,
             rate=Decimal("100.00"),
-            market=Market.NYC
+            market=Market.NYC,
         )
         assert line.duration_weeks() == 2
 
@@ -319,7 +302,7 @@ class TestScheduleLine:
             day_pattern=DayPattern("M-F"),
             weekly_spots=10,
             rate=Decimal("100.00"),
-            market=Market.NYC
+            market=Market.NYC,
         )
         assert line.total_spots() == 20  # 10 spots/week * 2 weeks
 
@@ -332,7 +315,7 @@ class TestScheduleLine:
             day_pattern=DayPattern("M-F"),
             weekly_spots=10,
             rate=Decimal("50.00"),
-            market=Market.NYC
+            market=Market.NYC,
         )
         assert line.total_cost() == Decimal("1000.00")  # 20 spots * $50
 
@@ -345,7 +328,7 @@ class TestScheduleLine:
             day_pattern=DayPattern("M-F"),
             weekly_spots=10,
             rate=Decimal("100.00"),
-            market=Market.NYC
+            market=Market.NYC,
         )
         line2 = ScheduleLine(
             start_date=date(2025, 1, 8),
@@ -354,7 +337,7 @@ class TestScheduleLine:
             day_pattern=DayPattern("M-F"),
             weekly_spots=15,  # Different!
             rate=Decimal("100.00"),
-            market=Market.NYC
+            market=Market.NYC,
         )
         assert line1.needs_splitting(line2) is True
 
@@ -367,7 +350,7 @@ class TestScheduleLine:
             day_pattern=DayPattern("M-F"),
             weekly_spots=10,
             rate=Decimal("100.00"),
-            market=Market.NYC
+            market=Market.NYC,
         )
         line2 = ScheduleLine(
             start_date=date(2025, 1, 8),
@@ -376,7 +359,7 @@ class TestScheduleLine:
             day_pattern=DayPattern("M-F"),
             weekly_spots=10,  # Same!
             rate=Decimal("100.00"),
-            market=Market.NYC
+            market=Market.NYC,
         )
         assert line1.needs_splitting(line2) is False
 

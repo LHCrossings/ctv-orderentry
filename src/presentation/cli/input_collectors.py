@@ -58,16 +58,16 @@ class RangeSelectionParser:
         user_input = user_input.strip().lower()
 
         # Handle 'all'
-        if user_input == 'all':
+        if user_input == "all":
             return list(range(1, max_value + 1))
 
         selected = set()
 
         # Replace spaces with commas for uniform processing
-        user_input = user_input.replace(' ', ',')
+        user_input = user_input.replace(" ", ",")
 
         # Split by commas
-        parts = user_input.split(',')
+        parts = user_input.split(",")
 
         for part in parts:
             part = part.strip()
@@ -75,15 +75,17 @@ class RangeSelectionParser:
                 continue
 
             # Check if it's a range (e.g., "1-4")
-            if '-' in part:
+            if "-" in part:
                 try:
-                    start, end = part.split('-', 1)
+                    start, end = part.split("-", 1)
                     start_num = int(start.strip())
                     end_num = int(end.strip())
 
                     # Validate range
                     if start_num < 1 or end_num > max_value:
-                        print(f"[WARNING] Range {part} contains invalid numbers (valid: 1-{max_value})")
+                        print(
+                            f"[WARNING] Range {part} contains invalid numbers (valid: 1-{max_value})"
+                        )
                         continue
 
                     if start_num > end_num:
@@ -138,19 +140,14 @@ class InputCollector:
         """
         while True:
             response = input(prompt).strip().lower()
-            if response in ['y', 'yes']:
+            if response in ["y", "yes"]:
                 return True
-            elif response in ['n', 'no']:
+            elif response in ["n", "no"]:
                 return False
             else:
                 print("Please enter 'y' or 'n'")
 
-    def get_string(
-        self,
-        prompt: str,
-        default: str | None = None,
-        required: bool = True
-    ) -> str:
+    def get_string(self, prompt: str, default: str | None = None, required: bool = True) -> str:
         """
         Get string input from user.
 
@@ -182,7 +179,7 @@ class InputCollector:
         prompt: str,
         default: int | None = None,
         min_value: int | None = None,
-        max_value: int | None = None
+        max_value: int | None = None,
     ) -> int:
         """
         Get integer input from user.
@@ -221,12 +218,7 @@ class InputCollector:
             except ValueError:
                 print("Please enter a valid integer")
 
-    def get_choice(
-        self,
-        prompt: str,
-        choices: list[str],
-        display_list: bool = True
-    ) -> str:
+    def get_choice(self, prompt: str, choices: list[str], display_list: bool = True) -> str:
         """
         Get choice from list of options.
 
@@ -268,10 +260,7 @@ class InputCollector:
             print(f"Invalid choice. Please select from: {', '.join(choices)}")
 
     def collect_order_input(
-        self,
-        order: Order,
-        default_code: str | None = None,
-        default_description: str | None = None
+        self, order: Order, default_code: str | None = None, default_description: str | None = None
     ) -> OrderInput:
         """
         Collect input for processing an order.
@@ -299,17 +288,11 @@ class InputCollector:
                 default_description = auto_desc
 
         # Get order code
-        order_code = self.get_string(
-            "Enter order code",
-            default=default_code,
-            required=True
-        )
+        order_code = self.get_string("Enter order code", default=default_code, required=True)
 
         # Get description
         description = self.get_string(
-            "Enter description",
-            default=default_description,
-            required=True
+            "Enter description", default=default_description, required=True
         )
 
         # Get separation intervals (from DB or default)
@@ -411,8 +394,10 @@ class InputCollector:
                     (order_type,),
                 )
                 for db_name, sep_c, sep_o, sep_e in cursor.fetchall():
-                    if (db_name.lower() in customer_name.lower()
-                            or customer_name.lower() in db_name.lower()):
+                    if (
+                        db_name.lower() in customer_name.lower()
+                        or customer_name.lower() in db_name.lower()
+                    ):
                         return (sep_c, sep_o, sep_e)
 
                 return None
@@ -472,8 +457,10 @@ class InputCollector:
                     if not abbrev:
                         continue
                     # Case-insensitive containment check
-                    if (db_name.lower() in client_name.lower()
-                            or client_name.lower() in db_name.lower()):
+                    if (
+                        db_name.lower() in client_name.lower()
+                        or client_name.lower() in db_name.lower()
+                    ):
                         return abbrev
 
                 return None
@@ -508,12 +495,11 @@ class InputCollector:
             # opAD orders - look up abbreviation from customer DB, fall back to PDF parsing
             try:
                 from parsers.opad_parser import parse_opad_pdf
+
                 parsed = parse_opad_pdf(str(order.pdf_path))
 
                 # Try to get abbreviation from customer database
-                abbrev = self._get_customer_abbreviation(
-                    parsed.client, "opad"
-                )
+                abbrev = self._get_customer_abbreviation(parsed.client, "opad")
 
                 if not abbrev:
                     # Fallback: first word of client name
@@ -610,9 +596,7 @@ class BatchInputCollector(InputCollector):
     """
 
     def collect_all_order_inputs(
-        self,
-        orders: list[Order],
-        defaults_provider: Callable | None = None
+        self, orders: list[Order], defaults_provider: Callable | None = None
     ) -> dict[str, OrderInput]:
         """
         Collect inputs for all orders upfront.
@@ -650,9 +634,7 @@ class BatchInputCollector(InputCollector):
 
             # Collect input
             order_input = self.collect_order_input(
-                order,
-                default_code=default_code,
-                default_description=default_description
+                order, default_code=default_code, default_description=default_description
             )
 
             inputs[order.get_display_name()] = order_input

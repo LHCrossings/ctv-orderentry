@@ -23,93 +23,99 @@ for p in [str(_src_path), str(_project_root)]:
 # ---------------------------------------------------------------------------
 
 _DISPLAY_NAMES = {
-    "ADMERASIA":       "Admerasia",
-    "CHARMAINE":       "Charmaine",
-    "DART":            "DART",
-    "DAVISELEN":       "Davis Elen",
-    "INTERTREND":      "Intertrend",
-    "GALEFORCE":       "PACO Collective",
-    "HL":              "H&L Partners",
-    "HL_BDR":          "H&L BDR",
-    "HYPHEN":          "Hyphen (DPR)",
-    "IGRAPHIX":        "iGraphix",
-    "IMPACT":          "Impact Marketing",
-    "IMPRENTA":        "Imprenta",
-    "LEXUS":           "Lexus",
-    "MISFIT":          "Misfit",
-    "OPAD":            "OPAD",
-    "POLARIS":         "Polaris",
-    "PROSIO":          "Prosio",
-    "RPM":             "RPM",
+    "ADMERASIA": "Admerasia",
+    "CHARMAINE": "Charmaine",
+    "DART": "DART",
+    "DAVISELEN": "Davis Elen",
+    "INTERTREND": "Intertrend",
+    "GALEFORCE": "PACO Collective",
+    "HL": "H&L Partners",
+    "HL_BDR": "H&L BDR",
+    "HYPHEN": "Hyphen (DPR)",
+    "IGRAPHIX": "iGraphix",
+    "IMPACT": "Impact Marketing",
+    "IMPRENTA": "Imprenta",
+    "LEXUS": "Lexus",
+    "MISFIT": "Misfit",
+    "OPAD": "OPAD",
+    "POLARIS": "Polaris",
+    "PROSIO": "Prosio",
+    "RPM": "RPM",
     "SACCOUNTYVOTERS": "Sac County Voters",
-    "SAGENT":          "Sagent Marketing",
-    "SCWA":            "SCWA",
-    "TCAA":            "TCAA",
-    "TCAA_AV":         "TCAA Added Value",
+    "SAGENT": "Sagent Marketing",
+    "SCWA": "SCWA",
+    "TCAA": "TCAA",
+    "TCAA_AV": "TCAA Added Value",
     "TIMEADVERTISING": "Time Advertising",
-    "WALLRICH":        "Wallrich",
-    "WORLDLINK":       "WorldLink",
-    "THREEOLIVES":     "3 Olives Media",
-    "XML":             "AAAA XML",
-    "BVK":             "BVK",
-    "MEDIASOL":        "Media Solutions",
-    "RWNY":            "Resorts World NY",
-    "SIERRADONOR":     "Sierra Donor Services",
-    "FIGHTTHEBITE":    "Fight the Bite",
-    "ACM":             "American Community Media",
-    "TT":              "T&T Public Relations",
-    "CRISPIN":         "Crispin / Bay Area AQMD",
-    "NTOOITIVE":       "Ntooitive / L.A. Care",
-    "EQC":             "EQC / TH Media",
-    "LRCCD":           "LRCCD / 3Fold Communications",
-    "SACRT":           "SacRT / Sacramento Regional Transit",
-    "AI_FALLBACK":     "AI Fallback (Claude-extracted)",
+    "WALLRICH": "Wallrich",
+    "WORLDLINK": "WorldLink",
+    "THREEOLIVES": "3 Olives Media",
+    "XML": "AAAA XML",
+    "BVK": "BVK",
+    "MEDIASOL": "Media Solutions",
+    "RWNY": "Resorts World NY",
+    "SIERRADONOR": "Sierra Donor Services",
+    "FIGHTTHEBITE": "Fight the Bite",
+    "ACM": "American Community Media",
+    "TT": "T&T Public Relations",
+    "CRISPIN": "Crispin / Bay Area AQMD",
+    "NTOOITIVE": "Ntooitive / L.A. Care",
+    "EQC": "EQC / TH Media",
+    "LRCCD": "LRCCD / 3Fold Communications",
+    "SACRT": "SacRT / Sacramento Regional Transit",
+    "AI_FALLBACK": "AI Fallback (Claude-extracted)",
 }
 
 _REGISTRY = {
-    "HYPHEN":           ("browser_automation.parsers.hyphen_parser",          "parse_hyphen_pdf"),
-    "HL":               ("browser_automation.parsers.hl_parser",               "parse_hl_pdf"),
-    "HL_BDR":           ("browser_automation.parsers.hl_bdr_parser",           "parse_bdr_pdf"),
-    "RPM":              ("browser_automation.parsers.rpm_parser",              "parse_rpm_pdf"),
-    "GALEFORCE":        ("browser_automation.parsers.galeforce_parser",        "parse_galeforce_pdf"),
-    "TCAA":             ("browser_automation.parsers.tcaa_parser",             "parse_tcaa_pdf"),
-    "TCAA_AV":          ("browser_automation.parsers.tcaa_av_parser",          "parse_toyota_av_pdf"),
-    "SAGENT":           ("browser_automation.parsers.sagent_parser",           "parse_sagent_pdf"),
-    "MISFIT":           ("browser_automation.parsers.misfit_parser",           "parse_misfit_pdf"),
-    "ADMERASIA":        ("browser_automation.parsers.admerasia_parser",        "parse_admerasia_pdf"),
-    "CHARMAINE":        ("browser_automation.parsers.charmaine_parser",        "parse_charmaine_pdf"),
-    "DAVISELEN":        ("browser_automation.parsers.daviselen_parser",        "parse_daviselen_pdf"),
-    "INTERTREND":       ("browser_automation.parsers.intertrend_parser",       "parse_intertrend_pdf"),
-    "IMPACT":           ("browser_automation.parsers.impact_parser",           "parse_impact_pdf"),
-    "IGRAPHIX":         ("browser_automation.parsers.igraphix_parser",         "parse_igraphix_pdf"),
-    "IMPRENTA":         ("browser_automation.parsers.imprenta_parser",         "parse_imprenta_file"),
-    "LEXUS":            ("browser_automation.parsers.lexus_parser",            "parse_lexus_file"),
-    "OPAD":             ("browser_automation.parsers.opad_parser",             "parse_opad_pdf"),
-    "SACCOUNTYVOTERS":  ("browser_automation.parsers.saccountyvoters_parser",  "parse_saccountyvoters_pdf"),
-    "SCWA":             ("browser_automation.parsers.scwa_parser",             "parse_scwa_pdf"),
-    "TIMEADVERTISING":  ("browser_automation.parsers.timeadvertising_parser",  "parse_timeadvertising_pdf"),
-    "WALLRICH":         ("browser_automation.parsers.wallrich_parser",          "parse_wallrich"),
-    "WORLDLINK":        ("browser_automation.parsers.worldlink_parser",        "parse_worldlink_pdf"),
-    "XML":              ("browser_automation.parsers.aaaa_xml_parser",         "parse_aaaa_xml"),
-    "PROSIO":           ("browser_automation.parsers.prosio_parser",           "parse_prosio_excel"),
-    "DART":             ("browser_automation.parsers.dart_parser",             "parse_dart_xlsx"),
-    "POLARIS":          ("browser_automation.parsers.polaris_parser",          "parse_polaris_file"),
-    "THREEOLIVES":      ("browser_automation.parsers.threeolives_parser",      "parse_threeolives"),
-    "BVK":              ("browser_automation.parsers.bvk_parser",              "parse_bvk_pdf"),
-    "MEDIASOL":         ("browser_automation.parsers.mediasol_parser",         "parse_mediasol_pdf"),
-    "RWNY":             ("browser_automation.parsers.rwny_parser",             "parse_rwny_pdf"),
-    "SIERRADONOR":      ("browser_automation.parsers.sierra_parser",           "parse_sierra"),
-    "FIGHTTHEBITE":     ("browser_automation.parsers.fightthebite_parser",     "parse_fightthebite_file"),
-    "ACM":              ("browser_automation.parsers.acm_parser",               "parse_acm_xlsx"),
-    "TT":               ("browser_automation.parsers.tt_parser",                "parse_tt_xlsx"),
+    "HYPHEN": ("browser_automation.parsers.hyphen_parser", "parse_hyphen_pdf"),
+    "HL": ("browser_automation.parsers.hl_parser", "parse_hl_pdf"),
+    "HL_BDR": ("browser_automation.parsers.hl_bdr_parser", "parse_bdr_pdf"),
+    "RPM": ("browser_automation.parsers.rpm_parser", "parse_rpm_pdf"),
+    "GALEFORCE": ("browser_automation.parsers.galeforce_parser", "parse_galeforce_pdf"),
+    "TCAA": ("browser_automation.parsers.tcaa_parser", "parse_tcaa_pdf"),
+    "TCAA_AV": ("browser_automation.parsers.tcaa_av_parser", "parse_toyota_av_pdf"),
+    "SAGENT": ("browser_automation.parsers.sagent_parser", "parse_sagent_pdf"),
+    "MISFIT": ("browser_automation.parsers.misfit_parser", "parse_misfit_pdf"),
+    "ADMERASIA": ("browser_automation.parsers.admerasia_parser", "parse_admerasia_pdf"),
+    "CHARMAINE": ("browser_automation.parsers.charmaine_parser", "parse_charmaine_pdf"),
+    "DAVISELEN": ("browser_automation.parsers.daviselen_parser", "parse_daviselen_pdf"),
+    "INTERTREND": ("browser_automation.parsers.intertrend_parser", "parse_intertrend_pdf"),
+    "IMPACT": ("browser_automation.parsers.impact_parser", "parse_impact_pdf"),
+    "IGRAPHIX": ("browser_automation.parsers.igraphix_parser", "parse_igraphix_pdf"),
+    "IMPRENTA": ("browser_automation.parsers.imprenta_parser", "parse_imprenta_file"),
+    "LEXUS": ("browser_automation.parsers.lexus_parser", "parse_lexus_file"),
+    "OPAD": ("browser_automation.parsers.opad_parser", "parse_opad_pdf"),
+    "SACCOUNTYVOTERS": (
+        "browser_automation.parsers.saccountyvoters_parser",
+        "parse_saccountyvoters_pdf",
+    ),
+    "SCWA": ("browser_automation.parsers.scwa_parser", "parse_scwa_pdf"),
+    "TIMEADVERTISING": (
+        "browser_automation.parsers.timeadvertising_parser",
+        "parse_timeadvertising_pdf",
+    ),
+    "WALLRICH": ("browser_automation.parsers.wallrich_parser", "parse_wallrich"),
+    "WORLDLINK": ("browser_automation.parsers.worldlink_parser", "parse_worldlink_pdf"),
+    "XML": ("browser_automation.parsers.aaaa_xml_parser", "parse_aaaa_xml"),
+    "PROSIO": ("browser_automation.parsers.prosio_parser", "parse_prosio_excel"),
+    "DART": ("browser_automation.parsers.dart_parser", "parse_dart_xlsx"),
+    "POLARIS": ("browser_automation.parsers.polaris_parser", "parse_polaris_file"),
+    "THREEOLIVES": ("browser_automation.parsers.threeolives_parser", "parse_threeolives"),
+    "BVK": ("browser_automation.parsers.bvk_parser", "parse_bvk_pdf"),
+    "MEDIASOL": ("browser_automation.parsers.mediasol_parser", "parse_mediasol_pdf"),
+    "RWNY": ("browser_automation.parsers.rwny_parser", "parse_rwny_pdf"),
+    "SIERRADONOR": ("browser_automation.parsers.sierra_parser", "parse_sierra"),
+    "FIGHTTHEBITE": ("browser_automation.parsers.fightthebite_parser", "parse_fightthebite_file"),
+    "ACM": ("browser_automation.parsers.acm_parser", "parse_acm_xlsx"),
+    "TT": ("browser_automation.parsers.tt_parser", "parse_tt_xlsx"),
     # Dispatcher: official Brand Time Schedule IO (.pdf) or proposal (.xlsx/.xlsm)
-    "CRISPIN":          ("browser_automation.parsers.crispin_parser",           "parse_crispin"),
+    "CRISPIN": ("browser_automation.parsers.crispin_parser", "parse_crispin"),
     # Dispatcher: proposal workbook (.xlsx/.xlsm) or its PDF print
-    "NTOOITIVE":        ("browser_automation.parsers.ntooitive_parser",         "parse_ntooitive"),
-    "EQC":              ("browser_automation.parsers.eqc_parser",               "parse_eqc_xlsx"),
-    "LRCCD":            ("browser_automation.parsers.lrccd_parser",             "parse_lrccd_pdf"),
-    "SACRT":            ("browser_automation.parsers.sacrt_parser",             "parse_sacrt_pdf"),
-    "AI_FALLBACK":      ("browser_automation.parsers.ai_parser",                "parse_ai_order"),
+    "NTOOITIVE": ("browser_automation.parsers.ntooitive_parser", "parse_ntooitive"),
+    "EQC": ("browser_automation.parsers.eqc_parser", "parse_eqc_xlsx"),
+    "LRCCD": ("browser_automation.parsers.lrccd_parser", "parse_lrccd_pdf"),
+    "SACRT": ("browser_automation.parsers.sacrt_parser", "parse_sacrt_pdf"),
+    "AI_FALLBACK": ("browser_automation.parsers.ai_parser", "parse_ai_order"),
 }
 
 _MISSING = object()
@@ -138,10 +144,18 @@ def _apply_ros_overrides(lines: list[dict]) -> list[dict]:
 # Language keywords → canonical name used by language_windows.check_language_window.
 # Order matters: match the most specific (Cantonese/Mandarin) before "Chinese".
 _LANG_KEYWORDS = [
-    ("cantonese", "Cantonese"), ("mandarin", "Mandarin"), ("chinese", "Chinese"),
-    ("filipino", "Filipino"), ("tagalog", "Filipino"), ("vietnamese", "Vietnamese"),
-    ("korean", "Korean"), ("hmong", "Hmong"), ("south asian", "South Asian"),
-    ("punjabi", "Punjabi"), ("hindi", "Hindi"), ("japanese", "Japanese"),
+    ("cantonese", "Cantonese"),
+    ("mandarin", "Mandarin"),
+    ("chinese", "Chinese"),
+    ("filipino", "Filipino"),
+    ("tagalog", "Filipino"),
+    ("vietnamese", "Vietnamese"),
+    ("korean", "Korean"),
+    ("hmong", "Hmong"),
+    ("south asian", "South Asian"),
+    ("punjabi", "Punjabi"),
+    ("hindi", "Hindi"),
+    ("japanese", "Japanese"),
 ]
 
 
@@ -161,12 +175,13 @@ def _line_hhmm_range(time_str: str):
     t = (time_str or "").strip()
     if not t:
         return None
-    m = re.match(r'^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$', t)
+    m = re.match(r"^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$", t)
     if m:
         return f"{int(m.group(1)):02d}:{m.group(2)}", f"{int(m.group(3)):02d}:{m.group(4)}"
     et = t.lower().replace(" to ", "-").replace(" ", "")
     try:
         from browser_automation.etere_client import EtereClient
+
         return EtereClient.parse_time_range(et)
     except Exception:
         return None
@@ -188,19 +203,21 @@ def find_language_window_issues(file_path, order_type: str) -> list[str]:
     """
     try:
         from browser_automation.language_windows import check_language_window
+
         detail = get_order_detail(Path(file_path), order_type)
     except Exception:
         return []
     if not detail or detail.get("error"):
         return []
     lines: list = list(detail.get("lines") or [])
-    for so in (detail.get("sub_orders") or []):
+    for so in detail.get("sub_orders") or []:
         lines.extend(so.get("lines") or [])
     # Channel fallback for lines with no market of their own: the order's markets
     # if they are all DAL, else the order type's own channel.
     order_markets = {_str(m).upper() for m in (detail.get("markets") or []) if _str(m)}
     order_market = (
-        "DAL" if order_markets == {"DAL"}
+        "DAL"
+        if order_markets == {"DAL"}
         or (not order_markets and order_type.upper() in _DAL_ORDER_TYPES)
         else None
     )
@@ -255,20 +272,32 @@ def _int(val, default=0) -> int:
 # Line normalizer
 # ---------------------------------------------------------------------------
 
+
 def _normalize_line(line, idx: int) -> dict:
-    description = _str(_get(
-        line, "description", "program", "daypart", "daypart_code",
-        "program_name", "line_description", "language_block", "language"
-    ), default=f"Line {idx + 1}")
+    description = _str(
+        _get(
+            line,
+            "description",
+            "program",
+            "daypart",
+            "daypart_code",
+            "program_name",
+            "line_description",
+            "language_block",
+            "language",
+        ),
+        default=f"Line {idx + 1}",
+    )
 
     # If the parser has both a language name and a daypart, combine them
     # (e.g. Charmaine: language="Filipino", daypart="M-Sun 8p-9p")
-    lang_val    = _str(_get(line, "language", "language_block"))
+    lang_val = _str(_get(line, "language", "language_block"))
     daypart_val = _str(_get(line, "daypart", "daypart_code"))
     if lang_val and daypart_val and description == daypart_val and lang_val != daypart_val:
         # Only combine if daypart looks like a real schedule (has a time marker)
         import re as _re2
-        if _re2.search(r'\d+[ap]|\d:\d{2}', daypart_val, _re2.IGNORECASE):
+
+        if _re2.search(r"\d+[ap]|\d:\d{2}", daypart_val, _re2.IGNORECASE):
             description = f"{lang_val} — {daypart_val}"
         else:
             description = lang_val  # garbled OCR — just show language name
@@ -280,14 +309,16 @@ def _normalize_line(line, idx: int) -> dict:
     # Handles both spaced ("M-Sun 8p-9p") and merged ("M-F7p-8p") OCR formats.
     if not days and not time and daypart_val and not getattr(line, "is_bonus", False):
         import re as _re
+
         _dp_match = _re.match(
-            r'^([A-Za-z][-–A-Za-z]*?)(?:\s+|(?=\d))(\d.+)$',
-            daypart_val.strip(), _re.IGNORECASE
+            r"^([A-Za-z][-–A-Za-z]*?)(?:\s+|(?=\d))(\d.+)$", daypart_val.strip(), _re.IGNORECASE
         )
         if _dp_match:
             days = _dp_match.group(1).strip()
             time = _dp_match.group(2).strip()
-    duration = _str(_get(line, "duration", "spot_length", "length", "spot_duration", "duration_seconds"))
+    duration = _str(
+        _get(line, "duration", "spot_length", "length", "spot_duration", "duration_seconds")
+    )
 
     # Weekly spots — may be a list or a scalar
     ws_raw = _get(line, "weekly_spots", "spots_per_week")
@@ -308,7 +339,7 @@ def _normalize_line(line, idx: int) -> dict:
     market = _str(_get(line, "market", "market_code"))
     language = _str(_get(line, "language", "language_code"))
     start_date = _str(_get(line, "start_date", "flight_start", "start"))
-    end_date   = _str(_get(line, "end_date",   "flight_end",   "end"))
+    end_date = _str(_get(line, "end_date", "flight_end", "end"))
     line_number = _int(_get(line, "line_number", "io_line_number", "line_num"))
 
     return {
@@ -332,20 +363,42 @@ def _normalize_line(line, idx: int) -> dict:
 # Order header normalizer
 # ---------------------------------------------------------------------------
 
+
 def _normalize_order(order_obj) -> dict:
     """Extract common header fields from any parser result object."""
-    client = _str(_get(
-        order_obj, "client", "advertiser", "client_name", "agency_name",
-        "customer_name", "company"
-    ))
-    estimate = _str(_get(
-        order_obj, "estimate_number", "estimate", "order_number",
-        "io_number", "order_id", "estimate_id"
-    ))
-    description = _str(_get(
-        order_obj, "description", "campaign", "product", "campaign_name",
-        "order_description", "title"
-    ))
+    client = _str(
+        _get(
+            order_obj,
+            "client",
+            "advertiser",
+            "client_name",
+            "agency_name",
+            "customer_name",
+            "company",
+        )
+    )
+    estimate = _str(
+        _get(
+            order_obj,
+            "estimate_number",
+            "estimate",
+            "order_number",
+            "io_number",
+            "order_id",
+            "estimate_id",
+        )
+    )
+    description = _str(
+        _get(
+            order_obj,
+            "description",
+            "campaign",
+            "product",
+            "campaign_name",
+            "order_description",
+            "title",
+        )
+    )
     market_raw = _get(order_obj, "market", "markets", "market_code")
     if isinstance(market_raw, (list, tuple)):
         markets = [_str(m) for m in market_raw if m]
@@ -355,22 +408,22 @@ def _normalize_order(order_obj) -> dict:
         markets = []
 
     flight_start = _str(_get(order_obj, "flight_start", "flight_begin", "start"))
-    flight_end   = _str(_get(order_obj, "flight_end",   "flight_stop",  "end"))
+    flight_end = _str(_get(order_obj, "flight_end", "flight_stop", "end"))
 
     # Some parsers (SCWA) put dates on lines rather than the order header
     if not flight_start or not flight_end:
         lines_for_dates = _get(order_obj, "lines", "line_items", "entries") or []
         starts = [_str(_get(ln, "start_date", "flight_start")) for ln in lines_for_dates]
-        ends   = [_str(_get(ln, "end_date",   "flight_end"))   for ln in lines_for_dates]
+        ends = [_str(_get(ln, "end_date", "flight_end")) for ln in lines_for_dates]
         starts = [s for s in starts if s]
-        ends   = [e for e in ends   if e]
+        ends = [e for e in ends if e]
         if starts and not flight_start:
             flight_start = sorted(starts)[0]
         if ends and not flight_end:
             flight_end = sorted(ends)[-1]
-    buyer        = _str(_get(order_obj, "buyer", "contact", "buyer_name", "rep"))
-    total_spots  = _int(_get(order_obj, "total_spots", "spots_total"))
-    total_cost   = _float(_get(order_obj, "total_cost", "gross_cost", "net_cost", "cost_total"))
+    buyer = _str(_get(order_obj, "buyer", "contact", "buyer_name", "rep"))
+    total_spots = _int(_get(order_obj, "total_spots", "spots_total"))
+    total_cost = _float(_get(order_obj, "total_cost", "gross_cost", "net_cost", "cost_total"))
 
     # Lines
     lines_raw = _get(order_obj, "lines", "line_items", "spots", "entries")
@@ -383,9 +436,7 @@ def _normalize_order(order_obj) -> dict:
         total_spots = sum(ln["total_spots"] for ln in normalized_lines)
     if total_cost == 0.0 and normalized_lines:
         total_cost = sum(
-            ln["rate"] * ln["total_spots"]
-            for ln in normalized_lines
-            if not ln["is_bonus"]
+            ln["rate"] * ln["total_spots"] for ln in normalized_lines if not ln["is_bonus"]
         )
 
     # Warnings
@@ -404,21 +455,27 @@ def _normalize_order(order_obj) -> dict:
         if ln.get("is_bonus"):
             continue  # Bonus spots are ROS — no specific time/day placement required
         if not ln.get("time"):
-            warnings.append(f"Line {i} ({label}): missing time range — cannot enter in Etere without it.")
+            warnings.append(
+                f"Line {i} ({label}): missing time range — cannot enter in Etere without it."
+            )
         if not ln.get("days"):
-            warnings.append(f"Line {i} ({label}): missing day pattern — cannot enter in Etere without it.")
+            warnings.append(
+                f"Line {i} ({label}): missing day pattern — cannot enter in Etere without it."
+            )
 
     # Required fields — things that must be supplied by the user before entry
     _MARKET_OPTIONS = ["CVC", "SFO", "LAX", "SEA", "HOU", "CMP", "WDC", "NYC", "MMT", "DAL"]
     required_fields = []
     if not markets or all(m in ("", "UNKNOWN") for m in markets):
         warnings.append("Market is unknown — select the correct market before entry.")
-        required_fields.append({
-            "field": "market",
-            "label": "Market",
-            "type": "select",
-            "options": _MARKET_OPTIONS,
-        })
+        required_fields.append(
+            {
+                "field": "market",
+                "label": "Market",
+                "type": "select",
+                "options": _MARKET_OPTIONS,
+            }
+        )
 
     return {
         "client": client,
@@ -442,13 +499,14 @@ def _normalize_order(order_obj) -> dict:
 # Agency-specific normalizers (where duck-typing isn't enough)
 # ---------------------------------------------------------------------------
 
+
 def _normalize_admerasia(order) -> dict:
     """Admerasia uses methods rather than plain attributes for key values."""
     # Flight dates
     try:
         start, end = order.get_flight_dates()
         flight_start = start.strftime("%m/%d/%Y") if start else ""
-        flight_end   = end.strftime("%m/%d/%Y")   if end   else ""
+        flight_end = end.strftime("%m/%d/%Y") if end else ""
     except Exception:
         flight_start = flight_end = ""
 
@@ -476,25 +534,27 @@ def _normalize_admerasia(order) -> dict:
         try:
             desc = ln.get_description()
         except Exception:
-            desc = _str(_get(ln, "description", "program", "days"), default=f"Line {i+1}")
+            desc = _str(_get(ln, "description", "program", "days"), default=f"Line {i + 1}")
 
         daily = getattr(ln, "_daily_spots", None) or getattr(ln, "weekly_spots", None) or []
 
-        lines.append({
-            "description": desc,
-            "days": _str(getattr(ln, "days", "")),
-            "time": _str(getattr(ln, "time", "")),
-            "duration": _str(getattr(ln, "duration", getattr(ln, "spot_length", ""))),
-            "weekly_spots": [int(x) for x in daily if x is not None],
-            "total_spots": total,
-            "rate": rate,
-            "is_bonus": bool(getattr(ln, "is_bonus", False)),
-            "market": market,
-            "language": _str(getattr(order, "language", "")),
-        })
+        lines.append(
+            {
+                "description": desc,
+                "days": _str(getattr(ln, "days", "")),
+                "time": _str(getattr(ln, "time", "")),
+                "duration": _str(getattr(ln, "duration", getattr(ln, "spot_length", ""))),
+                "weekly_spots": [int(x) for x in daily if x is not None],
+                "total_spots": total,
+                "rate": rate,
+                "is_bonus": bool(getattr(ln, "is_bonus", False)),
+                "market": market,
+                "language": _str(getattr(order, "language", "")),
+            }
+        )
 
     total_spots = sum(ln["total_spots"] for ln in lines)
-    total_cost  = sum(ln["rate"] * ln["total_spots"] for ln in lines if not ln["is_bonus"])
+    total_cost = sum(ln["rate"] * ln["total_spots"] for ln in lines if not ln["is_bonus"])
 
     return {
         "client": "McDonald's",
@@ -516,50 +576,52 @@ def _normalize_igraphix(order) -> dict:
     market = _str(getattr(order, "market", ""))
     paid_days = _str(getattr(order, "paid_days", "M-Su"))
     paid_time = _str(getattr(order, "paid_time", ""))
-    duration  = _str(getattr(order, "spot_duration", ""))
+    duration = _str(getattr(order, "spot_duration", ""))
     # The iGraphix IO quotes a NET total; feed the backwrite the NET per-spot
     # rate and flag rates_are_net so it grosses up at full precision (like
     # intertrend/mediasol). Never hand over the pre-grossed rate_per_spot — it
     # is rounded to 2 decimals, and gross_rate × spots × (1-fee) then drifts a
     # few cents off the IO net. The clean number is the net per spot.
-    net_total  = _float(getattr(order, "net_total", 0.0))
+    net_total = _float(getattr(order, "net_total", 0.0))
     paid_spots = _int(getattr(order, "paid_spots", 0))
-    net_rate   = round(net_total / paid_spots, 2) if paid_spots else 0.0
+    net_rate = round(net_total / paid_spots, 2) if paid_spots else 0.0
 
     lines = []
     for i, ac in enumerate(getattr(order, "ad_codes", []) or []):
         is_bonus = bool(getattr(ac, "is_bonus", False))
-        lines.append({
-            "description": f"{_str(getattr(ac, 'description', ''))} (#{_str(getattr(ac, 'ad_code', ''))})",
-            "days":        paid_days,
-            "time":        paid_time,
-            "duration":    duration,
-            "weekly_spots": [],
-            "total_spots": _int(getattr(ac, "spots", 0)),
-            "rate":        0.0 if is_bonus else net_rate,
-            "is_bonus":    is_bonus,
-            "market":      market,
-            "language":    _str(getattr(order, "language", "")),
-            "start_date":  _str(getattr(ac, "start_date", "")),
-            "end_date":    _str(getattr(ac, "end_date", "")),
-        })
+        lines.append(
+            {
+                "description": f"{_str(getattr(ac, 'description', ''))} (#{_str(getattr(ac, 'ad_code', ''))})",
+                "days": paid_days,
+                "time": paid_time,
+                "duration": duration,
+                "weekly_spots": [],
+                "total_spots": _int(getattr(ac, "spots", 0)),
+                "rate": 0.0 if is_bonus else net_rate,
+                "is_bonus": is_bonus,
+                "market": market,
+                "language": _str(getattr(order, "language", "")),
+                "start_date": _str(getattr(ac, "start_date", "")),
+                "end_date": _str(getattr(ac, "end_date", "")),
+            }
+        )
 
     total_spots = sum(ln["total_spots"] for ln in lines)
-    total_cost  = sum(ln["rate"] * ln["total_spots"] for ln in lines if not ln["is_bonus"])
+    total_cost = sum(ln["rate"] * ln["total_spots"] for ln in lines if not ln["is_bonus"])
 
     return {
-        "client":          _str(getattr(order, "client", "")),
+        "client": _str(getattr(order, "client", "")),
         "estimate_number": _str(getattr(order, "purchase_number", "")),
-        "description":     _str(getattr(order, "language", "")),
-        "markets":         [market] if market else [],
-        "flight_start":    _str(getattr(order, "flight_start", "")),
-        "flight_end":      _str(getattr(order, "flight_end", "")),
-        "buyer":           "",
-        "total_spots":     total_spots,
-        "total_cost":      round(total_cost, 2),
-        "lines":           lines,
-        "warnings":        [],
-        "rates_are_net":   True,
+        "description": _str(getattr(order, "language", "")),
+        "markets": [market] if market else [],
+        "flight_start": _str(getattr(order, "flight_start", "")),
+        "flight_end": _str(getattr(order, "flight_end", "")),
+        "buyer": "",
+        "total_spots": total_spots,
+        "total_cost": round(total_cost, 2),
+        "lines": lines,
+        "warnings": [],
+        "rates_are_net": True,
     }
 
 
@@ -567,20 +629,109 @@ def _normalize_igraphix(order) -> dict:
 # Public API
 # ---------------------------------------------------------------------------
 
-_DIRECT_DB_KEYS = {"LEXUS", "RPM", "WORLDLINK", "TIMEADVERTISING", "IGRAPHIX", "CHARMAINE", "HL", "HL_BDR", "ADMERASIA", "SAGENT", "GALEFORCE", "HYPHEN", "INTERTREND", "SIERRADONOR", "PROSIO", "SCWA", "RWNY", "TCAA_AV", "SACCOUNTYVOTERS", "TCAA", "MISFIT", "IMPACT", "IMPRENTA", "DAVISELEN", "BVK", "DART", "MEDIASOL", "OPAD", "POLARIS", "THREEOLIVES", "WALLRICH", "XML", "FIGHTTHEBITE", "ACM", "TT", "CRISPIN", "NTOOITIVE", "EQC", "LRCCD", "SACRT", "AI_FALLBACK"}
+_DIRECT_DB_KEYS = {
+    "LEXUS",
+    "RPM",
+    "WORLDLINK",
+    "TIMEADVERTISING",
+    "IGRAPHIX",
+    "CHARMAINE",
+    "HL",
+    "HL_BDR",
+    "ADMERASIA",
+    "SAGENT",
+    "GALEFORCE",
+    "HYPHEN",
+    "INTERTREND",
+    "SIERRADONOR",
+    "PROSIO",
+    "SCWA",
+    "RWNY",
+    "TCAA_AV",
+    "SACCOUNTYVOTERS",
+    "TCAA",
+    "MISFIT",
+    "IMPACT",
+    "IMPRENTA",
+    "DAVISELEN",
+    "BVK",
+    "DART",
+    "MEDIASOL",
+    "OPAD",
+    "POLARIS",
+    "THREEOLIVES",
+    "WALLRICH",
+    "XML",
+    "FIGHTTHEBITE",
+    "ACM",
+    "TT",
+    "CRISPIN",
+    "NTOOITIVE",
+    "EQC",
+    "LRCCD",
+    "SACRT",
+    "AI_FALLBACK",
+}
 
 # All direct-DB parsers are white pill by default. New parsers built from scratch
 # go directly into both sets. Pink pill was only needed during the Selenium→DirectDB
 # conversion phase (now complete).
-_DIRECT_DB_TESTED_KEYS = {"ADMERASIA", "BVK", "CHARMAINE", "THREEOLIVES", "DART", "DAVISELEN", "GALEFORCE", "HL", "HL_BDR", "HYPHEN", "IMPACT", "IGRAPHIX", "IMPRENTA", "INTERTREND", "LEXUS", "MEDIASOL", "MISFIT", "OPAD", "POLARIS", "PROSIO", "RPM", "RWNY", "SAGENT", "SACCOUNTYVOTERS", "SCWA", "SIERRADONOR", "TCAA", "TCAA_AV", "TIMEADVERTISING", "WALLRICH", "WORLDLINK", "XML", "FIGHTTHEBITE", "ACM", "TT", "CRISPIN", "NTOOITIVE", "EQC", "LRCCD", "SACRT"}
+_DIRECT_DB_TESTED_KEYS = {
+    "ADMERASIA",
+    "BVK",
+    "CHARMAINE",
+    "THREEOLIVES",
+    "DART",
+    "DAVISELEN",
+    "GALEFORCE",
+    "HL",
+    "HL_BDR",
+    "HYPHEN",
+    "IMPACT",
+    "IGRAPHIX",
+    "IMPRENTA",
+    "INTERTREND",
+    "LEXUS",
+    "MEDIASOL",
+    "MISFIT",
+    "OPAD",
+    "POLARIS",
+    "PROSIO",
+    "RPM",
+    "RWNY",
+    "SAGENT",
+    "SACCOUNTYVOTERS",
+    "SCWA",
+    "SIERRADONOR",
+    "TCAA",
+    "TCAA_AV",
+    "TIMEADVERTISING",
+    "WALLRICH",
+    "WORLDLINK",
+    "XML",
+    "FIGHTTHEBITE",
+    "ACM",
+    "TT",
+    "CRISPIN",
+    "NTOOITIVE",
+    "EQC",
+    "LRCCD",
+    "SACRT",
+}
+
 
 def list_parsers() -> list[dict]:
     """Return display info for every registered parser, sorted by display name."""
     return sorted(
-        [{"key": k, "name": _DISPLAY_NAMES.get(k, k),
-          "direct_db": k in _DIRECT_DB_KEYS,
-          "tested_db": k in _DIRECT_DB_TESTED_KEYS}
-         for k in _REGISTRY],
+        [
+            {
+                "key": k,
+                "name": _DISPLAY_NAMES.get(k, k),
+                "direct_db": k in _DIRECT_DB_KEYS,
+                "tested_db": k in _DIRECT_DB_TESTED_KEYS,
+            }
+            for k in _REGISTRY
+        ],
         key=lambda x: x["name"].lower(),
     )
 
@@ -591,25 +742,36 @@ def _normalize_sagent(order) -> dict:
     result = _normalize_order(order)
 
     week_start_dates = getattr(order, "week_start_dates", []) or []
-    flight_end_str   = getattr(order, "flight_end", "") or ""
-    raw_lines        = getattr(order, "lines", []) or []
+    flight_end_str = getattr(order, "flight_end", "") or ""
+    raw_lines = getattr(order, "lines", []) or []
 
     if not (week_start_dates and flight_end_str and raw_lines):
         return result
 
     from datetime import datetime, timedelta
+
     _month_map = {
-        'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
-        'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12,
+        "Jan": 1,
+        "Feb": 2,
+        "Mar": 3,
+        "Apr": 4,
+        "May": 5,
+        "Jun": 6,
+        "Jul": 7,
+        "Aug": 8,
+        "Sep": 9,
+        "Oct": 10,
+        "Nov": 11,
+        "Dec": 12,
     }
-    year = int(flight_end_str.split('/')[-1])
+    year = int(flight_end_str.split("/")[-1])
     week_dates = []
     for item in week_start_dates:
         parts = str(item).strip().split()
         if len(parts) == 2 and parts[0] in _month_map:
             week_dates.append(datetime(year, _month_map[parts[0]], int(parts[1])).date())
 
-    flight_end_date = datetime.strptime(flight_end_str, '%m/%d/%Y').date()
+    flight_end_date = datetime.strptime(flight_end_str, "%m/%d/%Y").date()
 
     for raw_line, norm_line in zip(raw_lines, result["lines"]):
         weekly_spots = list(getattr(raw_line, "weekly_spots", []) or [])
@@ -617,13 +779,13 @@ def _normalize_sagent(order) -> dict:
             continue
         n = min(len(weekly_spots), len(week_dates))
         first_idx = next((i for i in range(n) if weekly_spots[i] > 0), None)
-        last_idx  = next((i for i in range(n - 1, -1, -1) if weekly_spots[i] > 0), None)
+        last_idx = next((i for i in range(n - 1, -1, -1) if weekly_spots[i] > 0), None)
         if first_idx is None:
             continue
         start_d = week_dates[first_idx]
-        end_d   = min(week_dates[last_idx] + timedelta(days=6), flight_end_date)
-        norm_line["start_date"] = start_d.strftime('%m/%d/%Y')
-        norm_line["end_date"]   = end_d.strftime('%m/%d/%Y')
+        end_d = min(week_dates[last_idx] + timedelta(days=6), flight_end_date)
+        norm_line["start_date"] = start_d.strftime("%m/%d/%Y")
+        norm_line["end_date"] = end_d.strftime("%m/%d/%Y")
 
     return result
 
@@ -667,7 +829,9 @@ def get_order_detail(file_path: Path, order_type: str) -> dict:
         # swallow it; the fallback below picks up lines from the tuple directly.
         if not getattr(order_obj, "lines", None) and not getattr(order_obj, "line_items", None):
             try:
-                object.__setattr__(order_obj, "lines", lines) if hasattr(order_obj, "__slots__") else setattr(order_obj, "lines", lines)
+                object.__setattr__(order_obj, "lines", lines) if hasattr(
+                    order_obj, "__slots__"
+                ) else setattr(order_obj, "lines", lines)
             except AttributeError:
                 pass
         result = _normalize_order(order_obj)
@@ -684,11 +848,13 @@ def get_order_detail(file_path: Path, order_type: str) -> dict:
             result = _normalize_order(raw[0])
             result["lines"] = _apply_ros_overrides(result["lines"])
             return result
+
         # Multiple orders in one PDF — return each as a sub_order
         def _norm_with_ros(item):
             r = _normalize_order(item)
             r["lines"] = _apply_ros_overrides(r["lines"])
             return r
+
         sub_orders = [_norm_with_ros(item) for item in raw]
         # Roll up totals for the top-level summary
         all_warnings = []
@@ -699,7 +865,8 @@ def get_order_detail(file_path: Path, order_type: str) -> dict:
             "description": sub_orders[0].get("description", ""),
             "markets": list({m for s in sub_orders for m in s.get("markets", [])}),
             "flight_start": sub_orders[0].get("flight_start", ""),
-            "flight_end": sub_orders[-1].get("flight_end", "") or sub_orders[0].get("flight_end", ""),
+            "flight_end": sub_orders[-1].get("flight_end", "")
+            or sub_orders[0].get("flight_end", ""),
             "buyer": sub_orders[0].get("buyer", ""),
             "total_spots": sum(s.get("total_spots", 0) for s in sub_orders),
             "total_cost": round(sum(s.get("total_cost", 0.0) for s in sub_orders), 2),

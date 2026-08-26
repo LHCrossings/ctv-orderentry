@@ -19,6 +19,7 @@ Draw and mark are separate: `draw_n()` returns picks without recording them (so 
 reroll is free); the caller records them with `mark_used()` only when the operator
 commits the choice. Keyed on COD_PROGRA.
 """
+
 from __future__ import annotations
 
 import random
@@ -35,8 +36,12 @@ POOL_PATTERNS = {
 # Grid-language word (programming_grid._parse_title, free text) → pool key.
 _LANGUAGE_POOL = {
     "korean": "korean",
-    "chinese": "chinese", "mandarin": "chinese", "cantonese": "chinese",
-    "filipino": "filipino", "tagalog": "filipino", "punjabi": "filipino",
+    "chinese": "chinese",
+    "mandarin": "chinese",
+    "cantonese": "chinese",
+    "filipino": "filipino",
+    "tagalog": "filipino",
+    "punjabi": "filipino",
 }
 
 # Codes that are fillers, not show pieces — excluded from placed-group anchor
@@ -67,8 +72,10 @@ def active_pool(cur, patterns=K_POOL) -> list[dict]:
     """All currently-usable fillers matching `patterns`: [{fid, code, durata}]."""
     sql = _ACTIVE_SQL.format(patterns=" OR ".join("COD_PROGRA LIKE %s" for _ in patterns))
     cur.execute(sql, tuple(patterns))
-    return [{"fid": int(r[0]), "code": (r[1] or "").strip(), "durata": int(r[2] or 0)}
-            for r in cur.fetchall()]
+    return [
+        {"fid": int(r[0]), "code": (r[1] or "").strip(), "durata": int(r[2] or 0)}
+        for r in cur.fetchall()
+    ]
 
 
 def _used(cur) -> set[str]:
@@ -142,9 +149,9 @@ def draw_until(cur, target_frames: int, exclude_codes=(), patterns=K_POOL) -> li
         finishers = [p for p in pool if gap <= p["durata"] <= gap + _OVERSHOOT_CAP_FRAMES]
         unders = [p for p in pool if p["durata"] < gap]
         if finishers:
-            choice = random.choice(finishers)          # done, overshoot ≤ 5 min
+            choice = random.choice(finishers)  # done, overshoot ≤ 5 min
         elif unders:
-            choice = random.choice(unders)             # still short → add and continue
+            choice = random.choice(unders)  # still short → add and continue
         else:
             choice = min(pool, key=lambda p: p["durata"])  # unavoidable → least overshoot
         pool.remove(choice)

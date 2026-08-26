@@ -29,7 +29,7 @@ class TestApplicationConfig:
             auto_process=True,
             require_confirmation=False,
             headless=True,
-            browser_timeout=60
+            browser_timeout=60,
         )
 
         assert config.incoming_dir == Path("/test/incoming")
@@ -48,7 +48,7 @@ class TestApplicationConfig:
             incoming_dir=Path("/test/incoming"),
             processed_dir=Path("/test/processed"),
             error_dir=Path("/test/error"),
-            customer_db_path=Path("/test/customers.db")
+            customer_db_path=Path("/test/customers.db"),
         )
 
         # Check defaults
@@ -92,7 +92,7 @@ class TestApplicationConfig:
             incoming_dir=tmp_path / "incoming",
             processed_dir=tmp_path / "processed",
             error_dir=tmp_path / "error",
-            customer_db_path=tmp_path / "data" / "customers.db"
+            customer_db_path=tmp_path / "data" / "customers.db",
         )
 
         # Directories shouldn't exist yet
@@ -115,7 +115,7 @@ class TestApplicationConfig:
             incoming_dir=tmp_path / "incoming",
             processed_dir=tmp_path / "processed",
             error_dir=tmp_path / "error",
-            customer_db_path=tmp_path / "data" / "customers.db"
+            customer_db_path=tmp_path / "data" / "customers.db",
         )
 
         # Create once

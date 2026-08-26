@@ -15,16 +15,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from browser_automation.etere_direct_client import connect
 
 EDITABLE_FIELDS = [
-    ("separation_customer",     "Customer separation (minutes)"),
-    ("separation_event",        "Event separation (minutes)"),
-    ("separation_order",        "Order separation (minutes)"),
-    ("code_name",               "Contract code name (e.g. 'Muckleshoot', 'TVC')"),
-    ("description_name",        "Contract description name (e.g. 'Muckleshoot Casino')"),
-    ("include_market_in_code",  "Include market in code/description? (1=yes, 0=no)"),
-    ("abbreviation",            "Abbreviation"),
-    ("default_market",          "Default market (SEA / SFO / CVC)"),
-    ("billing_type",            "Billing type (agency / direct)"),
-    ("auto_aircheck",           "Auto-schedule airchecks after traffic assignment? (1=yes, 0=no)"),
+    ("separation_customer", "Customer separation (minutes)"),
+    ("separation_event", "Event separation (minutes)"),
+    ("separation_order", "Order separation (minutes)"),
+    ("code_name", "Contract code name (e.g. 'Muckleshoot', 'TVC')"),
+    ("description_name", "Contract description name (e.g. 'Muckleshoot Casino')"),
+    ("include_market_in_code", "Include market in code/description? (1=yes, 0=no)"),
+    ("abbreviation", "Abbreviation"),
+    ("default_market", "Default market (SEA / SFO / CVC)"),
+    ("billing_type", "Billing type (agency / direct)"),
+    ("auto_aircheck", "Auto-schedule airchecks after traffic assignment? (1=yes, 0=no)"),
 ]
 
 
@@ -34,9 +34,11 @@ def open_db():
 
 def list_customers(conn, order_type_filter=None):
     cur = conn.cursor()
-    query = ("SELECT customer_name, order_type, customer_id, separation_customer, "
-             "separation_event, separation_order, code_name, description_name, "
-             "include_market_in_code, auto_aircheck FROM dbo.CTV_Customers")
+    query = (
+        "SELECT customer_name, order_type, customer_id, separation_customer, "
+        "separation_event, separation_order, code_name, description_name, "
+        "include_market_in_code, auto_aircheck FROM dbo.CTV_Customers"
+    )
     params = ()
     if order_type_filter:
         query += " WHERE order_type = %s"
@@ -48,12 +50,16 @@ def list_customers(conn, order_type_filter=None):
         print("  (no customers found)")
         return rows
 
-    print(f"\n  {'#':<4} {'Name':<35} {'Type':<10} {'ID':<8} {'Sep (C/E/O)':<14} {'Code Name':<15} {'Mkt?':<6} {'AC?'}")
+    print(
+        f"\n  {'#':<4} {'Name':<35} {'Type':<10} {'ID':<8} {'Sep (C/E/O)':<14} {'Code Name':<15} {'Mkt?':<6} {'AC?'}"
+    )
     print("  " + "-" * 100)
     for i, r in enumerate(rows, 1):
         name, otype, cid, sc, se, so, cn, dn, imk, aac = r
         sep = f"{sc}/{se}/{so}"
-        print(f"  [{i:<2}] {name:<35} {otype:<10} {str(cid):<8} {sep:<14} {(cn or ''):<15} {'yes' if imk else 'no':<6} {'yes' if aac else 'no'}")
+        print(
+            f"  [{i:<2}] {name:<35} {otype:<10} {str(cid):<8} {sep:<14} {(cn or ''):<15} {'yes' if imk else 'no':<6} {'yes' if aac else 'no'}"
+        )
     return rows
 
 
@@ -104,7 +110,8 @@ def edit_customer(conn, row):
             values["default_market"],
             values["billing_type"],
             values["auto_aircheck"],
-            name, otype,
+            name,
+            otype,
         ),
     )
     conn.commit()
@@ -116,7 +123,10 @@ def delete_customer(conn, row):
     confirm = input(f"\n  Delete '{name}'? This cannot be undone. (yes/n): ").strip().lower()
     if confirm == "yes":
         cur = conn.cursor()
-        cur.execute("DELETE FROM dbo.CTV_Customers WHERE customer_name = %s AND order_type = %s", (name, otype))
+        cur.execute(
+            "DELETE FROM dbo.CTV_Customers WHERE customer_name = %s AND order_type = %s",
+            (name, otype),
+        )
         conn.commit()
         print(f"  ✓ Deleted {name}")
     else:
@@ -146,7 +156,7 @@ def main():
         if not choice:
             break
 
-        delete_mode = choice.lower().startswith('d')
+        delete_mode = choice.lower().startswith("d")
         num_str = choice[1:] if delete_mode else choice
 
         try:

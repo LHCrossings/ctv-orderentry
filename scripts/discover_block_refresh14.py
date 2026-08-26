@@ -3,6 +3,7 @@ Test: TPALINSE.ORA time window + DATEPART(dw) day filter combined.
 Hypothesis: this gives exactly the CONTRATTIFASCE assignments (no missed, no extra).
 Run from Windows: py scripts/discover_block_refresh14.py
 """
+
 import sys
 from pathlib import Path
 
@@ -15,11 +16,11 @@ FRAMES = 29.97
 #   1=Sun, 2=Mon, 3=Tue, 4=Wed, 5=Thu, 6=Fri, 7=Sat
 # Day-pattern -> set of dw values
 DAY_PATTERNS = {
-    "M-F":  {2, 3, 4, 5, 6},
+    "M-F": {2, 3, 4, 5, 6},
     "M-Sa": {2, 3, 4, 5, 6, 7},
     "M-Su": {1, 2, 3, 4, 5, 6, 7},
-    "Sa":   {7},
-    "Su":   {1},
+    "Sa": {7},
+    "Su": {1},
 }
 
 conn = connect()
@@ -27,8 +28,8 @@ cursor = conn.cursor()
 
 LINES = [
     # (line_id, day_pattern, ora_ini_h, ora_fin_h, cod_user, date_from, date_to, point_in_time)
-    (73173, "M-F",  20.0, 21.0, 5, "2026-01-05", "2026-01-11", False),
-    (73175, "M-F",  21.0, 22.0, 5, "2026-01-05", "2026-01-11", False),
+    (73173, "M-F", 20.0, 21.0, 5, "2026-01-05", "2026-01-11", False),
+    (73175, "M-F", 21.0, 22.0, 5, "2026-01-05", "2026-01-11", False),
     (73177, "M-Su", 22.0, 22.0, 5, "2026-03-16", "2026-03-22", True),
     (73178, "M-Su", 22.0, 23.5, 5, "2026-03-16", "2026-03-29", False),
 ]
@@ -51,7 +52,8 @@ for lid, day_pat, ora_ini_h, ora_fin_h, cod_user, d_from, d_to, is_point in LINE
     cursor.execute("SELECT ID_FASCE FROM CONTRATTIFASCE WHERE ID_CONTRATTIRIGHE = ?", lid)
     assigned = set(r[0] for r in cursor.fetchall())
 
-    cursor.execute(f"""
+    cursor.execute(
+        f"""
         SELECT DISTINCT tp.id_fascia
         FROM trafficPalinse tp
         JOIN TPALINSE t ON t.ID_TPALINSE = tp.id_tpalinse
@@ -59,11 +61,18 @@ for lid, day_pat, ora_ini_h, ora_fin_h, cod_user, d_from, d_to, is_point in LINE
           AND tp.Date >= ? AND tp.Date <= ?
           AND t.ORA >= ? AND t.ORA < ?
           AND DATEPART(dw, tp.Date) IN ({dw_ph})
-    """, cod_user, d_from, d_to, ora_ini, ora_ub, *dws)
+    """,
+        cod_user,
+        d_from,
+        d_to,
+        ora_ini,
+        ora_ub,
+        *dws,
+    )
     predicted = set(r[0] for r in cursor.fetchall())
 
     missed = assigned - predicted
-    extra  = predicted - assigned
+    extra = predicted - assigned
 
     label = f"{'POINT' if is_point else 'RANGE'} {ora_ini_h:.1f}h–{ora_fin_h:.1f}h [{day_pat}] {d_from}–{d_to}"
     status = "PERFECT" if not missed and not extra else "MISMATCH"
@@ -82,7 +91,8 @@ print("=" * 70)
 ORA_20 = round(20 * 3600 * FRAMES)
 ORA_22 = round(22 * 3600 * FRAMES)
 for fid in [9923, 9940, 11229]:
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT tp.Date, DATEPART(dw, tp.Date) as dw, t.ORA, t.NEWTYPE
         FROM trafficPalinse tp
         JOIN TPALINSE t ON t.ID_TPALINSE = tp.id_tpalinse
@@ -90,7 +100,11 @@ for fid in [9923, 9940, 11229]:
           AND tp.Date >= '2026-01-05' AND tp.Date <= '2026-01-11'
           AND t.ORA >= ? AND t.ORA < ?
         ORDER BY tp.Date, t.ORA
-    """, fid, ORA_20, ORA_22)
+    """,
+        fid,
+        ORA_20,
+        ORA_22,
+    )
     rows = cursor.fetchall()
     days_seen = {}
     for r in rows:
@@ -101,7 +115,7 @@ for fid in [9923, 9940, 11229]:
             days_seen[key] = (ora_h, nt)
     print(f"\n  id_fascia={fid}:")
     for (date, dw), (ora_h, nt) in sorted(days_seen.items()):
-        dow = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dw-1] if dw<=7 else "?"
+        dow = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dw - 1] if dw <= 7 else "?"
         print(f"    {date} ({dow}) ORA={ora_h:.3f}h NEWTYPE={nt}")
 
 cursor.close()

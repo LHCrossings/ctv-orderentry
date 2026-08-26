@@ -23,7 +23,7 @@ with EtereSession() as session:
     etere = EtereClient(session.driver)
 
     # Extract authenticated session cookies from the live browser
-    session_cookies = {c['name']: c['value'] for c in session.driver.get_cookies()}
+    session_cookies = {c["name"]: c["value"] for c in session.driver.get_cookies()}
     print(f"[TEST] Captured {len(session_cookies)} session cookies")
 
     with db_connect() as conn:

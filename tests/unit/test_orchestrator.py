@@ -29,7 +29,7 @@ def test_config(tmp_path):
         customer_db_path=tmp_path / "customers.db",
         batch_size=5,
         auto_process=True,
-        require_confirmation=False
+        require_confirmation=False,
     )
 
 
@@ -50,7 +50,7 @@ def sample_order():
         pdf_path=Path("/test/order.pdf"),
         order_type=OrderType.WORLDLINK,
         customer_name="Test Customer",
-        status=OrderStatus.PENDING
+        status=OrderStatus.PENDING,
     )
 
 
@@ -60,13 +60,8 @@ def sample_result():
     return ProcessingResult(
         success=True,
         order_type=OrderType.WORLDLINK,
-        contracts=[
-            Contract(
-                contract_number="WL-001",
-                order_type=OrderType.WORLDLINK
-            )
-        ],
-        error_message=None
+        contracts=[Contract(contract_number="WL-001", order_type=OrderType.WORLDLINK)],
+        error_message=None,
     )
 
 
@@ -81,7 +76,7 @@ class TestApplicationOrchestrator:
             config=test_config,
             detection_service=detection_service,
             customer_repository=customer_repository,
-            processing_service=processing_service
+            processing_service=processing_service,
         )
 
         assert orchestrator._config == test_config
@@ -89,11 +84,7 @@ class TestApplicationOrchestrator:
         assert orchestrator._customer_repository == customer_repository
         assert orchestrator._processing_service == processing_service
 
-    def test_creates_default_presentation_components(
-        self,
-        test_config,
-        mock_services
-    ):
+    def test_creates_default_presentation_components(self, test_config, mock_services):
         """Should create default presentation components if not provided."""
         detection_service, customer_repository, processing_service = mock_services
 
@@ -101,7 +92,7 @@ class TestApplicationOrchestrator:
             config=test_config,
             detection_service=detection_service,
             customer_repository=customer_repository,
-            processing_service=processing_service
+            processing_service=processing_service,
         )
 
         # Should have created presentation components
@@ -111,11 +102,7 @@ class TestApplicationOrchestrator:
         assert orchestrator._result_formatter is not None
         assert orchestrator._progress_formatter is not None
 
-    def test_accepts_custom_presentation_components(
-        self,
-        test_config,
-        mock_services
-    ):
+    def test_accepts_custom_presentation_components(self, test_config, mock_services):
         """Should accept custom presentation components."""
         detection_service, customer_repository, processing_service = mock_services
 
@@ -135,7 +122,7 @@ class TestApplicationOrchestrator:
             batch_input_collector=custom_batch,
             order_formatter=custom_order_formatter,
             result_formatter=custom_result_formatter,
-            progress_formatter=custom_progress_formatter
+            progress_formatter=custom_progress_formatter,
         )
 
         assert orchestrator._input_collector == custom_input
@@ -173,7 +160,7 @@ class TestCreateOrchestrator:
             incoming_dir=tmp_path / "incoming",
             processed_dir=tmp_path / "processed",
             error_dir=tmp_path / "error",
-            customer_db_path=tmp_path / "data" / "customers.db"
+            customer_db_path=tmp_path / "data" / "customers.db",
         )
 
         # Directories shouldn't exist yet
@@ -191,14 +178,10 @@ class TestCreateOrchestrator:
 class TestOrchestratorModes:
     """Tests for different orchestrator execution modes."""
 
-    @patch('orchestration.orchestrator.OrderScanner')
-    @patch('builtins.print')
+    @patch("orchestration.orchestrator.OrderScanner")
+    @patch("builtins.print")
     def test_run_interactive_with_no_orders(
-        self,
-        mock_print,
-        mock_scanner_class,
-        test_config,
-        mock_services
+        self, mock_print, mock_scanner_class, test_config, mock_services
     ):
         """Should handle case when no orders are found."""
         detection_service, customer_repository, processing_service = mock_services
@@ -212,7 +195,7 @@ class TestOrchestratorModes:
             config=test_config,
             detection_service=detection_service,
             customer_repository=customer_repository,
-            processing_service=processing_service
+            processing_service=processing_service,
         )
 
         orchestrator.run_interactive()
@@ -222,18 +205,13 @@ class TestOrchestratorModes:
 
         # Should print info message (checking the call happened)
         assert any(
-            "[INFO]" in str(call) and "No orders" in str(call)
-            for call in mock_print.call_args_list
+            "[INFO]" in str(call) and "No orders" in str(call) for call in mock_print.call_args_list
         )
 
-    @patch('orchestration.orchestrator.OrderScanner')
-    @patch('builtins.print')
+    @patch("orchestration.orchestrator.OrderScanner")
+    @patch("builtins.print")
     def test_run_batch_with_no_orders(
-        self,
-        mock_print,
-        mock_scanner_class,
-        test_config,
-        mock_services
+        self, mock_print, mock_scanner_class, test_config, mock_services
     ):
         """Should handle batch mode with no orders."""
         detection_service, customer_repository, processing_service = mock_services
@@ -247,7 +225,7 @@ class TestOrchestratorModes:
             config=test_config,
             detection_service=detection_service,
             customer_repository=customer_repository,
-            processing_service=processing_service
+            processing_service=processing_service,
         )
 
         orchestrator.run_batch()
@@ -255,14 +233,10 @@ class TestOrchestratorModes:
         # Should have scanned
         mock_scanner.scan_for_orders.assert_called_once()
 
-    @patch('orchestration.orchestrator.OrderScanner')
-    @patch('builtins.print')
+    @patch("orchestration.orchestrator.OrderScanner")
+    @patch("builtins.print")
     def test_run_auto_with_no_orders(
-        self,
-        mock_print,
-        mock_scanner_class,
-        test_config,
-        mock_services
+        self, mock_print, mock_scanner_class, test_config, mock_services
     ):
         """Should handle auto mode with no orders."""
         detection_service, customer_repository, processing_service = mock_services
@@ -276,7 +250,7 @@ class TestOrchestratorModes:
             config=test_config,
             detection_service=detection_service,
             customer_repository=customer_repository,
-            processing_service=processing_service
+            processing_service=processing_service,
         )
 
         orchestrator.run_auto()

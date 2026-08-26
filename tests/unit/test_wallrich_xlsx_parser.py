@@ -39,6 +39,7 @@ def est():
 
 # ── Header ───────────────────────────────────────────────────────────────────
 
+
 def test_header_fields(est):
     assert est.estimate_number == "769"
     assert est.client == "SD15"
@@ -59,11 +60,12 @@ def test_week_starts(est):
 
 # ── Lines ────────────────────────────────────────────────────────────────────
 
+
 def test_lines(est):
     assert len(est.lines) == 6
     ln1 = est.lines[0]
     assert ln1.days == "MTuWThF"
-    assert ln1.time == "7:00p-8:00p"       # leading zeros stripped from hours
+    assert ln1.time == "7:00p-8:00p"  # leading zeros stripped from hours
     assert ln1.program == "Cantonese"
     assert ln1.duration == 30
     assert ln1.rate == 50.0
@@ -85,8 +87,9 @@ def test_consolidation_splits_on_dark_weeks(est):
     ranges = consolidate_wallrich_weeks(
         est.lines[0].weekly_spots, est.week_starts, est.flight_end, 2026
     )
-    assert [(r["start_date"], r["end_date"], r["spots_per_week"], r["total_spots"])
-            for r in ranges] == [
+    assert [
+        (r["start_date"], r["end_date"], r["spots_per_week"], r["total_spots"]) for r in ranges
+    ] == [
         ("08/31/2026", "09/20/2026", 3, 9),
         ("09/28/2026", "10/25/2026", 3, 12),
         ("11/09/2026", "11/22/2026", 3, 6),
@@ -96,6 +99,7 @@ def test_consolidation_splits_on_dark_weeks(est):
 
 # ── Dispatcher ───────────────────────────────────────────────────────────────
 
+
 def test_dispatcher_routes_xlsx_to_xlsx_reader():
     estimates = parse_wallrich(FIXTURE)
     assert estimates and estimates[0].estimate_number == "769"
@@ -104,7 +108,8 @@ def test_dispatcher_routes_xlsx_to_xlsx_reader():
 def test_dispatcher_routes_pdf_to_pdf_reader(monkeypatch):
     seen = {}
     monkeypatch.setattr(
-        wallrich_parser, "parse_wallrich_pdf",
+        wallrich_parser,
+        "parse_wallrich_pdf",
         lambda p: seen.setdefault("path", p) and [] or [],
     )
     parse_wallrich("/some/order.pdf")
@@ -112,6 +117,7 @@ def test_dispatcher_routes_pdf_to_pdf_reader(monkeypatch):
 
 
 # ── Detection ────────────────────────────────────────────────────────────────
+
 
 def test_scanner_content_detection_routes_to_wallrich():
     from domain.enums import OrderType
@@ -170,6 +176,7 @@ def test_sd15_client_cell_detects_wallrich(tmp_path):
 
 # ── Tamper tests ─────────────────────────────────────────────────────────────
 
+
 def _tampered(tmp_path, mutate):
     """Copy the fixture, apply mutate(ws), return the mutated file's path.
 
@@ -199,7 +206,8 @@ def _find(ws, text):
 def test_noop_mutation_still_parses(tmp_path):
     def mutate(ws):
         r, c = _find(ws, "Ln")
-        ws.cell(row=r, column=c, value="Ln")   # rewrite same value
+        ws.cell(row=r, column=c, value="Ln")  # rewrite same value
+
     estimates = parse_wallrich_xlsx(_tampered(tmp_path, mutate))
     assert estimates[0].estimate_number == "769"
 
@@ -209,6 +217,7 @@ def test_blanked_rate_refuses(tmp_path):
         r, c = _find(ws, "Rate")
         # ws.cell(..., value=None) is a NO-OP in openpyxl — assign directly
         ws.cell(row=r + 1, column=c).value = None
+
     with pytest.raises(ValueError, match="no rate"):
         parse_wallrich_xlsx(_tampered(tmp_path, mutate))
 
@@ -216,7 +225,8 @@ def test_blanked_rate_refuses(tmp_path):
 def test_changed_week_cell_refuses(tmp_path):
     def mutate(ws):
         r, c = _find(ws, "[8/31]")
-        ws.cell(row=r + 1, column=c, value=4)   # was 3
+        ws.cell(row=r + 1, column=c, value=4)  # was 3
+
     with pytest.raises(ValueError, match="week cells sum"):
         parse_wallrich_xlsx(_tampered(tmp_path, mutate))
 
@@ -225,6 +235,7 @@ def test_renamed_rate_column_refuses(tmp_path):
     def mutate(ws):
         r, c = _find(ws, "Rate")
         ws.cell(row=r, column=c, value="Cost")
+
     with pytest.raises(ValueError, match="missing grid column"):
         parse_wallrich_xlsx(_tampered(tmp_path, mutate))
 
@@ -233,6 +244,7 @@ def test_wrong_header_total_refuses(tmp_path):
     def mutate(ws):
         r, c = _find(ws, "Total Spots:")
         ws.cell(row=r, column=c + 1, value=271)
+
     with pytest.raises(ValueError, match="header says 271"):
         parse_wallrich_xlsx(_tampered(tmp_path, mutate))
 
@@ -241,6 +253,7 @@ def test_trade_line_refuses(tmp_path):
     def mutate(ws):
         r, c = _find(ws, "C/T")
         ws.cell(row=r + 1, column=c, value="t")
+
     with pytest.raises(ValueError, match="only cash supported"):
         parse_wallrich_xlsx(_tampered(tmp_path, mutate))
 
@@ -249,5 +262,6 @@ def test_trade_spots_header_refuses(tmp_path):
     def mutate(ws):
         r, c = _find(ws, "Trade Spots:")
         ws.cell(row=r, column=c + 1, value=5)
+
     with pytest.raises(ValueError, match="Trade Spots"):
         parse_wallrich_xlsx(_tampered(tmp_path, mutate))

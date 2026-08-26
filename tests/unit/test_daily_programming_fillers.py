@@ -42,6 +42,7 @@ class StubCursor:
 
 # ── pool_for_language ────────────────────────────────────────────────────────
 
+
 @pytest.mark.parametrize(
     ("language", "pool"),
     [
@@ -71,6 +72,7 @@ def test_pool_patterns_cover_every_language_target():
 
 # ── active_pool ──────────────────────────────────────────────────────────────
 
+
 def test_active_pool_default_is_k_pool():
     cur = StubCursor([(1, "K-FILLER25-001 ", 500)])
     pool = fr.active_pool(cur)
@@ -98,6 +100,7 @@ def test_active_pool_keeps_usability_filters():
 
 
 # ── draw_until with a parameterized pool ─────────────────────────────────────
+
 
 def _pool_rows(*durs):
     return [(i + 1, f"UNIAE{1600 + i}", d) for i, d in enumerate(durs)]
@@ -130,6 +133,7 @@ def test_draw_until_respects_exclude():
 
 
 # ── anchor grouping / _is_placed hardening ───────────────────────────────────
+
 
 def _fr(hhmm):
     h, m = hhmm.split(":")

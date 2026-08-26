@@ -2,6 +2,7 @@
 Final lookup: SP parameters, agency/media center IDs, other constants.
 Run from Windows: py scripts/inspect_contract3.py
 """
+
 import pyodbc
 
 conn = pyodbc.connect(
@@ -60,8 +61,11 @@ if tables:
             for row in cursor.fetchall():
                 d = dict(zip(cols, row))
                 # Show only non-null text-ish fields
-                out = {k: v for k, v in d.items()
-                       if v is not None and isinstance(v, (str, int)) and v != 0}
+                out = {
+                    k: v
+                    for k, v in d.items()
+                    if v is not None and isinstance(v, (str, int)) and v != 0
+                }
                 print(" ", out)
         except Exception as e:
             print(f"  Error: {e}")

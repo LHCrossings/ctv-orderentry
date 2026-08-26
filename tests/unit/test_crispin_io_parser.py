@@ -57,6 +57,7 @@ def order():
 
 # ── Header ───────────────────────────────────────────────────────────────────
 
+
 def test_header_fields(order):
     assert order.source_format == "pdf"
     assert order.order_number == "212735"
@@ -81,11 +82,12 @@ def test_market_comes_from_the_market_field_not_the_station_name(order):
 
 # ── Column regimes ───────────────────────────────────────────────────────────
 
+
 def test_lines_are_merged_across_both_column_regimes(order):
     """Each line prints once per regime; the merge must union the week columns."""
     by_no = {ln.line_number: ln for ln in order.lines}
     v = by_no["001"]
-    assert len(v.week_dates) == 12                      # 3 in regime 1 + 9 in regime 2
+    assert len(v.week_dates) == 12  # 3 in regime 1 + 9 in regime 2
     assert v.week_dates[0] == date(2026, 8, 10)
     assert v.week_dates[-1] == date(2026, 10, 26)
     assert v.total_spots == 40 == v.total_spots_stated
@@ -107,6 +109,7 @@ def test_zero_cells_are_read_positionally_not_by_text_order(order):
 
 # ── Per-line flight dates ────────────────────────────────────────────────────
 
+
 def test_flight_dates_are_per_line(order):
     """M-F lines end Friday 10/30; M-Su lines run to Sunday 11/01. An order-level
     end date would stretch the M-F lines by two days."""
@@ -125,9 +128,18 @@ def test_order_flight_spans_the_line_extremes(order):
 
 # ── Airtime vs charges ───────────────────────────────────────────────────────
 
+
 def test_translation_cost_is_a_charge_not_an_airtime_line(order):
-    assert [ln.line_number for ln in order.lines] == \
-        ["001", "002", "003", "004", "006", "007", "008", "009"]
+    assert [ln.line_number for ln in order.lines] == [
+        "001",
+        "002",
+        "003",
+        "004",
+        "006",
+        "007",
+        "008",
+        "009",
+    ]
     assert len(order.charges) == 1
     ch = order.charges[0]
     assert ch.line_number == "005"
@@ -140,8 +152,7 @@ def test_bonus_lines_are_ros_fifteens(order):
     assert len(bonus) == 4
     assert {ln.length_sec for ln in bonus} == {15}
     assert {ln.daypart for ln in bonus} == {"ROS"}
-    assert {ln.base_language for ln in bonus} == \
-        {"Vietnamese", "Filipino", "Cantonese", "Mandarin"}
+    assert {ln.base_language for ln in bonus} == {"Vietnamese", "Filipino", "Cantonese", "Mandarin"}
 
 
 def test_paid_dayparts_keep_their_own_windows(order):
@@ -164,6 +175,7 @@ def test_io_rates_are_gross_so_no_gross_up_is_owed(order):
 
 # ── Reconciliation against the IO's own arithmetic ───────────────────────────
 
+
 def test_totals_reconcile_with_the_documents_own_grand_total(order):
     units = sum(ln.total_spots for ln in order.lines) + len(order.charges)
     assert units == IO_TOTAL_UNITS
@@ -174,6 +186,7 @@ def test_totals_reconcile_with_the_documents_own_grand_total(order):
 
 
 # ── The guards must REFUSE, not degrade ──────────────────────────────────────
+
 
 def _parse_with_mutated_words(mutate):
     """Re-parse the fixture with extract_words() output rewritten.
@@ -249,7 +262,7 @@ def _first_match(is_target, apply):
 def test_a_dropped_week_cell_is_refused():
     mutate, hits = _first_match(
         lambda w: w["text"] == "3" and 320 < w["x0"] < 335 and 325 < w["top"] < 340,
-        lambda ws, i: ws[:i] + ws[i + 1:],
+        lambda ws, i: ws[:i] + ws[i + 1 :],
     )
     with pytest.raises(ValueError, match=r"week columns sum to 37 but .* TOT says 40"):
         _parse_with_mutated_words(mutate)
@@ -285,6 +298,7 @@ def test_a_renamed_column_fails_loudly_instead_of_guessing_by_position():
 def test_an_unreadable_rate_is_refused_never_treated_as_zero():
     """A zero rate is a legitimate value (bonus), so it can never double as
     'couldn't read it' — the DART $0 lesson."""
+
     def blank(ws):
         return [w for w in ws if w["text"] != "117.65"]
 
@@ -295,6 +309,7 @@ def test_an_unreadable_rate_is_refused_never_treated_as_zero():
 def test_an_unclassifiable_grid_row_is_refused():
     """A row naming neither a language nor a production cost could be airtime or
     a charge; entering it either way would be wrong."""
+
     def rename_program(ws):
         for w in ws:
             if w["text"] == "TRANSLATION":
@@ -309,14 +324,14 @@ def test_an_unclassifiable_grid_row_is_refused():
 
 # ── Dispatcher ───────────────────────────────────────────────────────────────
 
+
 def test_dispatcher_routes_pdf_to_the_io_reader():
     assert parse_crispin(FIXTURE).source_format == "pdf"
 
 
 def test_dispatcher_routes_workbooks_to_the_proposal_reader(monkeypatch):
     seen = {}
-    monkeypatch.setattr(cp, "parse_crispin_xlsx",
-                        lambda p: seen.setdefault("path", p))
+    monkeypatch.setattr(cp, "parse_crispin_xlsx", lambda p: seen.setdefault("path", p))
     for ext in (".xlsx", ".xlsm"):
         seen.clear()
         cp.parse_crispin(f"/tmp/proposal{ext}")

@@ -13,6 +13,7 @@ Usage:
     uv run python3 scripts/backfill_edi_template_customers.py --yes      # apply without prompt
     uv run python3 scripts/backfill_edi_template_customers.py --force    # re-propose even if already set
 """
+
 from __future__ import annotations
 
 import json
@@ -24,8 +25,20 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 TMPL_DIR = REPO / "data" / "edi_templates"
 
-STOPWORDS = {"the", "and", "of", "for", "dept", "department", "assoc", "association",
-             "inc", "llc", "dba", "c/o"}
+STOPWORDS = {
+    "the",
+    "and",
+    "of",
+    "for",
+    "dept",
+    "department",
+    "assoc",
+    "association",
+    "inc",
+    "llc",
+    "dba",
+    "c/o",
+}
 
 
 def _search_terms(t: dict) -> list[str]:
@@ -63,20 +76,26 @@ def _find_candidates(cur, terms: list[str]) -> list[tuple[int, str]]:
 
 def _contract_evidence(cur, customer_id: int) -> tuple[int, int | None, str]:
     """(contract count, latest contract id, dominant agency 'id name')."""
-    cur.execute("""
+    cur.execute(
+        """
         SELECT COUNT(*), MAX(ct.ID_CONTRATTITESTATA)
         FROM CONTRATTITESTATA ct WHERE ct.COMMITTENTE = %s
-    """, (customer_id,))
+    """,
+        (customer_id,),
+    )
     count, latest = cur.fetchone()
     agency = ""
     if count:
-        cur.execute("""
+        cur.execute(
+            """
             SELECT TOP 1 ct.AGENZIA, ag.RAG_SOCIAL, COUNT(*) AS n
             FROM CONTRATTITESTATA ct
             LEFT JOIN ANAGRAF ag ON ag.ID_ANAGRAF = ct.AGENZIA
             WHERE ct.COMMITTENTE = %s AND ct.AGENZIA IS NOT NULL
             GROUP BY ct.AGENZIA, ag.RAG_SOCIAL ORDER BY n DESC
-        """, (customer_id,))
+        """,
+            (customer_id,),
+        )
         row = cur.fetchone()
         if row:
             agency = f"{row[0]} {(row[1] or '').strip()}"
@@ -89,10 +108,11 @@ def main() -> None:
     force = "--force" in sys.argv
 
     from browser_automation.etere_direct_client import connect
+
     conn = connect()
     cur = conn.cursor()
 
-    proposals = []   # (path, template, customer_ids, note, evidence_lines)
+    proposals = []  # (path, template, customer_ids, note, evidence_lines)
     for path in sorted(TMPL_DIR.glob("*.json")):
         t = json.loads(path.read_text())
         name = t.get("name", path.stem)
@@ -109,7 +129,9 @@ def main() -> None:
         scored = []
         for aid, aname in candidates:
             count, latest, agency = _contract_evidence(cur, aid)
-            evidence.append(f"      {aid:>5}  {aname[:45]:45s} contracts={count:<4} latest={latest} agency={agency}")
+            evidence.append(
+                f"      {aid:>5}  {aname[:45]:45s} contracts={count:<4} latest={latest} agency={agency}"
+            )
             scored.append((count, aid))
 
         # Propose only candidates with contract history; single survivor = clean.
@@ -147,11 +169,15 @@ def main() -> None:
                 a_cands = [(aid, an) for aid, an in a_cands] or []
                 if len(a_cands) == 1:
                     agency_props.append((path, t, a_cands[0]))
-                    print(f"\n  TIE-BREAK {t['name']}: customer {cid} shared — "
-                          f"propose etere_agency_id={a_cands[0][0]} ({a_cands[0][1]})")
+                    print(
+                        f"\n  TIE-BREAK {t['name']}: customer {cid} shared — "
+                        f"propose etere_agency_id={a_cands[0][0]} ({a_cands[0][1]})"
+                    )
                 else:
-                    print(f"\n  ⚠ TIE-BREAK NEEDED for {t['name']} (customer {cid} shared) "
-                          f"but agency lookup ambiguous: {a_cands} — set manually")
+                    print(
+                        f"\n  ⚠ TIE-BREAK NEEDED for {t['name']} (customer {cid} shared) "
+                        f"but agency lookup ambiguous: {a_cands} — set manually"
+                    )
 
     conn.close()
 
@@ -164,8 +190,14 @@ def main() -> None:
         print("\nNothing to write.")
         return
     if not auto_yes:
-        raw = input(f"\nWrite etere_customer_ids to {len(to_write)} template JSON(s) "
-                    f"(+{len(agency_props)} agency tie-break(s))? [y/N] ").strip().lower()
+        raw = (
+            input(
+                f"\nWrite etere_customer_ids to {len(to_write)} template JSON(s) "
+                f"(+{len(agency_props)} agency tie-break(s))? [y/N] "
+            )
+            .strip()
+            .lower()
+        )
         if raw not in ("y", "yes"):
             print("Aborted — nothing written.")
             return
@@ -176,8 +208,10 @@ def main() -> None:
         if path in agency_by_path:
             t["etere_agency_id"] = agency_by_path[path]
         path.write_text(json.dumps(t, indent=2))
-        print(f"  wrote {path.name}: etere_customer_ids={ids}"
-              + (f" etere_agency_id={t['etere_agency_id']}" if path in agency_by_path else ""))
+        print(
+            f"  wrote {path.name}: etere_customer_ids={ids}"
+            + (f" etere_agency_id={t['etere_agency_id']}" if path in agency_by_path else "")
+        )
 
 
 if __name__ == "__main__":

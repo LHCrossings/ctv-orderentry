@@ -40,7 +40,6 @@ KNOWN_TEMPLATES = [
         "HL Toyota {est} {mkt2}",
         "Toyota {mkt3} Est {est}",
     ),
-
     # ── TCAA ──
     # Source: tcaa_automation.py - "TCAA Toyota {estimate_number}"
     # TCAA has one known customer: Toyota (Seattle)
@@ -52,7 +51,6 @@ KNOWN_TEMPLATES = [
         "TCAA Toyota {est}",
         "Toyota {mkt3} Est {est}",
     ),
-
     # ── opAD ──
     # Source: opad_automation.py get_opad_defaults()
     # Code: "opAD NYSDOH 2824" → "opAD NYSDOH {est}"
@@ -63,7 +61,6 @@ KNOWN_TEMPLATES = [
         "opAD NYSDOH {est}",
         "NYSDOH {mkt3} Est {est}",
     ),
-
     # ── Daviselen ──
     # Source: daviselen_parser.py get_defaults()
     # Toyota: Code "Daviselen Toyota 175" → Desc "Toyota LAX Est 175"
@@ -92,7 +89,6 @@ KNOWN_TEMPLATES = [
         "Daviselen McD {est} {mkt2}",
         "McDonald's {mkt3} Est {est}",
     ),
-
     # ── Misfit ──
     # Source: misfit_automation.py - "Misfit CACC {YYMM}"
     # Code: "Misfit CACC 2602" → "Misfit CACC {est}"
@@ -103,7 +99,6 @@ KNOWN_TEMPLATES = [
         "Misfit CACC {est}",
         "CA Community Colleges {est}",
     ),
-
     # ── Sagent ──
     # Source: sagent_automation.py
     # Code: "Sagent Cal Fire 202" → "Sagent Cal Fire {est}"
@@ -115,7 +110,6 @@ KNOWN_TEMPLATES = [
         "Sagent Cal Fire {est}",
         "Cal Fire Est {est}",
     ),
-
     # ── WorldLink / Tatari ──
     # Source: worldlink automation - "WL {agency_first} {tracking}"
     # WL has many clients - these are common ones
@@ -138,6 +132,7 @@ def seed_templates(db_path: Path) -> None:
     # Ensure columns exist
     try:
         from browser_automation.customer_defaults import ensure_template_columns
+
         ensure_template_columns(db_path)
     except ImportError:
         # Fallback: add columns manually
@@ -175,8 +170,7 @@ def seed_templates(db_path: Path) -> None:
                 )
                 found = False
                 for db_name, db_id, existing_code, existing_desc in cursor.fetchall():
-                    if (db_name.lower() in name.lower()
-                            or name.lower() in db_name.lower()):
+                    if db_name.lower() in name.lower() or name.lower() in db_name.lower():
                         # Fuzzy match found
                         if existing_code is None and existing_desc is None:
                             conn.execute(
@@ -185,7 +179,9 @@ def seed_templates(db_path: Path) -> None:
                                    WHERE customer_name = ? AND order_type = ?""",
                                 (code_tmpl, desc_tmpl, db_name, order_type),
                             )
-                            print(f"  ✓ {order_type:10s} | {db_name} (fuzzy) → code='{code_tmpl}' desc='{desc_tmpl}'")
+                            print(
+                                f"  ✓ {order_type:10s} | {db_name} (fuzzy) → code='{code_tmpl}' desc='{desc_tmpl}'"
+                            )
                             updated += 1
                         else:
                             print(f"  ⊘ {order_type:10s} | {db_name} (already has templates)")
@@ -236,9 +232,9 @@ def list_templates(db_path: Path) -> None:
         print("Database is empty")
         return
 
-    print(f"\n{'='*100}")
+    print(f"\n{'=' * 100}")
     print(f"{'ID':<6} {'Agency':<12} {'Customer':<35} {'Code Template':<30} {'Desc Template'}")
-    print(f"{'='*100}")
+    print(f"{'=' * 100}")
 
     for cust_id, name, order_type, code_tmpl, desc_tmpl in rows:
         code_display = code_tmpl or "(none)"
@@ -250,8 +246,12 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Seed customer default templates")
-    parser.add_argument("--db", type=Path, default=Path(__file__).resolve().parent / "data" / "customers.db",
-                        help="Path to customers.db")
+    parser.add_argument(
+        "--db",
+        type=Path,
+        default=Path(__file__).resolve().parent / "data" / "customers.db",
+        help="Path to customers.db",
+    )
     parser.add_argument("--list", action="store_true", help="List all templates")
     args = parser.parse_args()
 

@@ -20,13 +20,16 @@ class TimeRange:
 
     Immutable value object with validation and conversion methods.
     """
+
     start_time: time
     end_time: time
 
     def __post_init__(self) -> None:
         """Validate that start time is before end time."""
         if self.start_time >= self.end_time:
-            raise ValueError(f"Start time {self.start_time} must be before end time {self.end_time}")
+            raise ValueError(
+                f"Start time {self.start_time} must be before end time {self.end_time}"
+            )
 
     def to_etere_format(self) -> tuple[str, str]:
         """
@@ -35,10 +38,7 @@ class TimeRange:
         Returns:
             Tuple of (start_time_str, end_time_str) in HH:MM format
         """
-        return (
-            self.start_time.strftime("%H:%M"),
-            self.end_time.strftime("%H:%M")
-        )
+        return (self.start_time.strftime("%H:%M"), self.end_time.strftime("%H:%M"))
 
     @classmethod
     def from_string(cls, time_range: str) -> "TimeRange":
@@ -57,8 +57,7 @@ class TimeRange:
         """
         start_str, end_str = time_range.split("-")
         return cls(
-            start_time=cls._parse_time(start_str.strip()),
-            end_time=cls._parse_time(end_str.strip())
+            start_time=cls._parse_time(start_str.strip()), end_time=cls._parse_time(end_str.strip())
         )
 
     @staticmethod
@@ -100,13 +99,25 @@ class DayPattern:
 
     Used for scheduling ads across specific days of the week.
     """
+
     pattern: str
 
     def __post_init__(self) -> None:
         """Validate day pattern format."""
         valid_patterns = {
-            "M-F", "Sa-Su", "M-Su", "M", "Tu", "W", "Th", "F", "Sa", "Su",
-            "M-Th", "F-Su", "M-Sa"
+            "M-F",
+            "Sa-Su",
+            "M-Su",
+            "M",
+            "Tu",
+            "W",
+            "Th",
+            "F",
+            "Sa",
+            "Su",
+            "M-Th",
+            "F-Su",
+            "M-Sa",
         }
         if self.pattern not in valid_patterns:
             raise ValueError(f"Invalid day pattern: {self.pattern}")
@@ -173,6 +184,7 @@ class ScheduleLine:
 
     Combines date range, time range, day pattern, and spot counts.
     """
+
     start_date: date
     end_date: date
     time_range: TimeRange
@@ -213,6 +225,7 @@ class OrderInput:
 
     Stores all decisions needed before automation begins.
     """
+
     order_code: str
     description: str
     customer_id: str | None = None

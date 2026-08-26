@@ -110,9 +110,7 @@ class TestOrderScanner:
         assert len(orders) == 1
         assert orders[0].pdf_path.suffix == ".pdf"
 
-    def test_scan_cache_stays_inside_its_own_directory(
-        self, mock_detection_service, incoming_dir
-    ):
+    def test_scan_cache_stays_inside_its_own_directory(self, mock_detection_service, incoming_dir):
         """Each scanned directory owns its cache, and never sees it as a file.
 
         The cache used to live in the scanned directory's PARENT to keep it out
@@ -187,9 +185,7 @@ class TestOrderScanner:
         assert OrderType.TCAA in order_types
 
     def test_scan_handles_customer_name_extraction_failure(
-        self,
-        mock_detection_service,
-        incoming_dir
+        self, mock_detection_service, incoming_dir
     ):
         """Should use default customer name if extraction fails."""
         pdf = incoming_dir / "order.pdf"
@@ -204,11 +200,7 @@ class TestOrderScanner:
         assert len(orders) == 1
         assert orders[0].customer_name == "Unknown"
 
-    def test_scan_continues_on_individual_file_error(
-        self,
-        mock_detection_service,
-        incoming_dir
-    ):
+    def test_scan_continues_on_individual_file_error(self, mock_detection_service, incoming_dir):
         """Should continue scanning if one file fails."""
         # Create PDFs
         pdf1 = incoming_dir / "good.pdf"

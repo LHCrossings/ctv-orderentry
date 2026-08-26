@@ -9,10 +9,13 @@ table if missing and never touches existing rows.
 
     uv run python scripts/setup_pi_lf_rotation_table.py
 """
+
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))  # project root → import like the other scripts
+sys.path.insert(
+    0, str(Path(__file__).parent.parent)
+)  # project root → import like the other scripts
 
 from browser_automation.etere_direct_client import connect
 
@@ -34,7 +37,9 @@ def main():
             cur.execute(stmt)
         conn.commit()
         cur.execute("SELECT COUNT(*) FROM chat.pi_lf_rotation")
-        print(f"chat.pi_lf_rotation ready — {cur.fetchone()[0]} token(s) used in the current cycle.")
+        print(
+            f"chat.pi_lf_rotation ready — {cur.fetchone()[0]} token(s) used in the current cycle."
+        )
 
 
 if __name__ == "__main__":

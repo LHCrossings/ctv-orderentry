@@ -14,6 +14,7 @@ Deleting: back up the rows first, then DELETE FROM TPALINSE by ID_TPALINSE.
 Never delete PAST rows — they're as-run history. PER/PSA rows without
 trafficPalinse are the daily filler mechanism and are EXCLUDED by design.
 """
+
 import sys
 from pathlib import Path
 
@@ -22,12 +23,21 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from browser_automation.etere_direct_client import connect
 
 FPS = 29.97
-MARKETS = {1: 'NYC', 2: 'CMP', 3: 'HOU', 4: 'SFO', 5: 'SEA',
-           6: 'LAX', 7: 'CVC', 8: 'WDC', 9: 'MMT', 10: 'DAL'}
+MARKETS = {
+    1: "NYC",
+    2: "CMP",
+    3: "HOU",
+    4: "SFO",
+    5: "SEA",
+    6: "LAX",
+    7: "CVC",
+    8: "WDC",
+    9: "MMT",
+    10: "DAL",
+}
 
 _GHOST_WHERE = (
-    "t.LIVELLO = 0 AND t.NEWTYPE = 'COM' AND t.ID_FILMATI > 0 "
-    "AND tp.id_trafficPalinse IS NULL"
+    "t.LIVELLO = 0 AND t.NEWTYPE = 'COM' AND t.ID_FILMATI > 0 AND tp.id_trafficPalinse IS NULL"
 )
 
 
@@ -48,11 +58,13 @@ def main():
             print(f"⚠ {len(rows)} future ghost spot(s) — these WILL AIR UNBILLED:\n")
             for tid, cu, d, ora, prog, dur in rows:
                 s = int(ora) / FPS
-                print(f"  {d}  {MARKETS.get(int(cu), cu):4s} "
-                      f"{int(s // 3600):02d}:{int(s % 3600 // 60):02d}:{int(s % 60):02d}  "
-                      f"dur={round(int(dur) / FPS)}s  id_tpalinse={tid}  {prog}")
+                print(
+                    f"  {d}  {MARKETS.get(int(cu), cu):4s} "
+                    f"{int(s // 3600):02d}:{int(s % 3600 // 60):02d}:{int(s % 60):02d}  "
+                    f"dur={round(int(dur) / FPS)}s  id_tpalinse={tid}  {prog}"
+                )
 
-        if '--history' in sys.argv:
+        if "--history" in sys.argv:
             cur.execute(
                 "SELECT CONVERT(varchar(7), t.DATA, 23), COUNT(*) "
                 "FROM TPALINSE t LEFT JOIN trafficPalinse tp ON tp.id_tpalinse = t.ID_TPALINSE "

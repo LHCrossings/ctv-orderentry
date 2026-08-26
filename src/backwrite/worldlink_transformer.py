@@ -22,29 +22,39 @@ if str(_src) not in sys.path:
 
 from backwrite.transformer import _apply_snapshot, _snapshot_row, compute_broadcast_month
 
-YELLOW_FILL  = PatternFill("solid", fgColor="FFFFFF00")
-GREEN_FILL   = PatternFill("solid", fgColor="FF92D050")
-AGENCY_FEE   = 0.15
-_DATA_FONT   = Font(name="Calibri", size=11)
-_BOLD_FONT   = Font(name="Calibri", size=11, bold=True)
-_TEMPLATE       = Path(__file__).parent / "templates" / "worldlink_template.xlsx"
-_TEMPLATE_BYTES = _TEMPLATE.read_bytes()   # read once at import; avoid disk I/O on every generate
+YELLOW_FILL = PatternFill("solid", fgColor="FFFFFF00")
+GREEN_FILL = PatternFill("solid", fgColor="FF92D050")
+AGENCY_FEE = 0.15
+_DATA_FONT = Font(name="Calibri", size=11)
+_BOLD_FONT = Font(name="Calibri", size=11, bold=True)
+_TEMPLATE = Path(__file__).parent / "templates" / "worldlink_template.xlsx"
+_TEMPLATE_BYTES = _TEMPLATE.read_bytes()  # read once at import; avoid disk I/O on every generate
 _CURRENCY_NF = '_("$"* #,##0.00_);_("$"* \\(#,##0.00\\);_("$"* "-"??_);_(@_)'
-_MONTH_NF    = '[$-409]mmm\\-yy;@'   # "Apr-26" — MLBF column S
-_TIME_NF     = '[h]:mm:ss;@'          # MLBF time columns E/F/G
-_INT_NF      = "0"                    # integer (spots counts)
-_PCT_NF      = "0%"                   # agency fee (0.15 → 15%)
+_MONTH_NF = "[$-409]mmm\\-yy;@"  # "Apr-26" — MLBF column S
+_TIME_NF = "[h]:mm:ss;@"  # MLBF time columns E/F/G
+_INT_NF = "0"  # integer (spots counts)
+_PCT_NF = "0%"  # agency fee (0.15 → 15%)
 
 _MONTH_NAMES = {
-    1: "January",  2: "February",  3: "March",    4: "April",
-    5: "May",      6: "June",      7: "July",      8: "August",
-    9: "September", 10: "October", 11: "November", 12: "December",
+    1: "January",
+    2: "February",
+    3: "March",
+    4: "April",
+    5: "May",
+    6: "June",
+    7: "July",
+    8: "August",
+    9: "September",
+    10: "October",
+    11: "November",
+    12: "December",
 }
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Public entry point
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def generate_worldlink_excel(io_data: dict, user_inputs: dict) -> bytes:
     """
@@ -69,6 +79,7 @@ def generate_worldlink_excel(io_data: dict, user_inputs: dict) -> bytes:
 # ──────────────────────────────────────────────────────────────────────────────
 # Revision helpers — read back a prior Excel and merge with revision PDF lines
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def read_sc_lines_from_excel(xlsx_bytes: bytes):
     """Read order lines and revision number from a prior Sales Confirmation tab.
@@ -110,17 +121,19 @@ def read_sc_lines_from_excel(xlsx_bytes: bytes):
             weeks = int(ws.cell(r, 9).value or 0)
         except (TypeError, ValueError):
             weeks = 0
-        lines.append({
-            "line_number":   line_no,
-            "action":        None,
-            "start_date":    _d(ws.cell(r, 4).value),
-            "end_date":      _d(ws.cell(r, 5).value),
-            "spots":         int(ws.cell(r, 6).value or 0),
-            "weeks":         weeks,
-            "rate":          rate,
-            "program_label": str(ws.cell(r, 8).value or ""),
-            "duration":      str(dur_raw).lstrip(":"),
-        })
+        lines.append(
+            {
+                "line_number": line_no,
+                "action": None,
+                "start_date": _d(ws.cell(r, 4).value),
+                "end_date": _d(ws.cell(r, 5).value),
+                "spots": int(ws.cell(r, 6).value or 0),
+                "weeks": weeks,
+                "rate": rate,
+                "program_label": str(ws.cell(r, 8).value or ""),
+                "duration": str(dur_raw).lstrip(":"),
+            }
+        )
         r += 1
 
     return lines, prev_revision
@@ -134,7 +147,7 @@ def merge_revision_lines(prev_lines: list, rev_lines: list) -> list:
     """
     prev_by_no = {ln["line_number"]: dict(ln) for ln in prev_lines}
     for line in rev_lines:
-        no     = line.get("line_number")
+        no = line.get("line_number")
         action = line.get("action", "ADD")
         if action == "CANCEL":
             prev_by_no.pop(no, None)
@@ -146,6 +159,7 @@ def merge_revision_lines(prev_lines: list, rev_lines: list) -> list:
 # ──────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def _fmt_time_short(t24: str) -> str:
     """HH:MM → short 12-hour label: '6a', '9a', '5p', '10p', '12a', '12p'."""
@@ -168,9 +182,9 @@ def _fmt_time_short(t24: str) -> str:
 
 def _fmt_program(line: dict) -> str:
     """Build 'M-Su 6a-9a' style string from days + time fields."""
-    days   = line.get("days_of_week", "M-Su")
+    days = line.get("days_of_week", "M-Su")
     from_t = line.get("from_time", "06:00")
-    to_t   = line.get("to_time",   "23:59")
+    to_t = line.get("to_time", "23:59")
     return f"{days} {_fmt_time_short(from_t)}-{_fmt_time_short(to_t)}"
 
 
@@ -184,7 +198,7 @@ def _count_weeks(line: dict) -> int:
         return max(1, round(tot / spw))
     try:
         start = _parse_date_str(line.get("start_date", ""))
-        end   = _parse_date_str(line.get("end_date",   ""))
+        end = _parse_date_str(line.get("end_date", ""))
         if start and end:
             return max(1, round((end - start).days / 7))
     except Exception:
@@ -194,15 +208,13 @@ def _count_weeks(line: dict) -> int:
 
 def _clean_org_name(name: str) -> str:
     """Strip trailing corporate suffixes: ', Inc.', ', LLC', etc."""
-    return re.sub(
-        r",?\s*(Inc\.?|LLC\.?|Ltd\.?|Corp\.?|Co\.?)$", "", name, flags=re.I
-    ).strip()
+    return re.sub(r",?\s*(Inc\.?|LLC\.?|Ltd\.?|Corp\.?|Co\.?)$", "", name, flags=re.I).strip()
 
 
 def _make_bill_code(agency: str, advertiser: str) -> str:
     """'WorldLink:CleanAgency AdvertiserWord'"""
     clean = _clean_org_name(agency)
-    adv   = (_clean_org_name(advertiser).split()[0] if advertiser else "").rstrip(",")
+    adv = (_clean_org_name(advertiser).split()[0] if advertiser else "").rstrip(",")
     return f"WorldLink:{clean} {adv}".strip()
 
 
@@ -239,9 +251,9 @@ def _compute_monthly_revenue(lines: list) -> Dict[date, float]:
     monthly: Dict[date, float] = defaultdict(float)
     for line in lines:
         rate = float(line.get("rate", 0) or 0)
-        spw   = line.get("spots", 0) or 0
+        spw = line.get("spots", 0) or 0
         start = _parse_date_str(line.get("start_date", ""))
-        end   = _parse_date_str(line.get("end_date",   ""))
+        end = _parse_date_str(line.get("end_date", ""))
         if not start or not end or spw == 0:
             continue
         week_start = start
@@ -267,8 +279,8 @@ def _wc(ws, row: int, col: int, val, nf: str = "General", font=None) -> None:
     """Write a value to a data cell; always sets number_format to prevent
     inheriting column-level styles (e.g. date format on col L)."""
     cell = ws.cell(row=row, column=col)
-    cell.value         = val
-    cell.font          = copy(font if font is not None else _DATA_FONT)
+    cell.value = val
+    cell.font = copy(font if font is not None else _DATA_FONT)
     cell.number_format = nf
 
 
@@ -276,22 +288,23 @@ def _wc(ws, row: int, col: int, val, nf: str = "General", font=None) -> None:
 # Sales Confirmation tab
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
-    agency        = io_data.get("agency", "")
-    advertiser    = io_data.get("advertiser", "")
-    tracking      = str(io_data.get("tracking_number", "") or "")
-    buyer         = io_data.get("buyer", "")
+    agency = io_data.get("agency", "")
+    advertiser = io_data.get("advertiser", "")
+    tracking = str(io_data.get("tracking_number", "") or "")
+    buyer = io_data.get("buyer", "")
     order_comment = io_data.get("order_comment", "") or ""
-    lines         = io_data.get("lines", [])
-    is_asian      = io_data.get("network", "") == "ASIAN"
+    lines = io_data.get("lines", [])
+    is_asian = io_data.get("network", "") == "ASIAN"
 
     agency_street = io_data.get("agency_street", "")
-    agency_city   = io_data.get("agency_city", "")
-    agency_state  = io_data.get("agency_state", "")
-    agency_zip    = io_data.get("agency_zip", "")
+    agency_city = io_data.get("agency_city", "")
+    agency_state = io_data.get("agency_state", "")
+    agency_zip = io_data.get("agency_zip", "")
 
     contract_no = str(user_inputs.get("contract_number", "") or "")
-    revision    = user_inputs.get("revision", 0)
+    revision = user_inputs.get("revision", 0)
     is_revision = int(revision) > 0
 
     # ── Overwrite header value-cells (labels stay from template) ─────────────
@@ -302,19 +315,19 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
             cell.number_format = nf
 
     if is_asian:
-        sv(1,  6,  "SALES CONFIRMATION - THE ASIAN CHANNEL")
-        sv(6,  12, "DAL")
+        sv(1, 6, "SALES CONFIRMATION - THE ASIAN CHANNEL")
+        sv(6, 12, "DAL")
 
-    sv(3,  4,  _clean_org_name(agency))
-    sv(3,  12, advertiser)
-    sv(4,  4,  buyer)
-    sv(4,  12, _to_int_if_numeric(tracking))
-    sv(5,  4,  agency_street)
-    sv(6,  4,  agency_city)
-    sv(6,  6,  agency_state)
-    sv(6,  7,  _to_int_if_numeric(agency_zip))
-    sv(8,  12, datetime.today(), "mm-dd-yy")
-    sv(9,  12, _to_int_if_numeric(contract_no))
+    sv(3, 4, _clean_org_name(agency))
+    sv(3, 12, advertiser)
+    sv(4, 4, buyer)
+    sv(4, 12, _to_int_if_numeric(tracking))
+    sv(5, 4, agency_street)
+    sv(6, 4, agency_city)
+    sv(6, 6, agency_state)
+    sv(6, 7, _to_int_if_numeric(agency_zip))
+    sv(8, 12, datetime.today(), "mm-dd-yy")
+    sv(9, 12, _to_int_if_numeric(contract_no))
     sv(10, 12, str(revision))
     # K11 "House (Worldlink)" stays from template
 
@@ -323,9 +336,9 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
 
     # ── Insert extra rows for additional lines, pushing footer/summary down ───
     DATA_START = 14
-    n_lines    = max(len(lines), 1)
-    n_inserts  = n_lines - 1
-    line_rows  = [DATA_START]
+    n_lines = max(len(lines), 1)
+    n_inserts = n_lines - 1
+    line_rows = [DATA_START]
 
     if n_inserts > 0:
         # Save and unmerge all merged ranges that will be pushed down
@@ -336,8 +349,7 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
             if mr.min_row >= insert_start
         ]
         for min_r, max_r, min_c, max_c in saved_merges:
-            ws.unmerge_cells(start_row=min_r, start_column=min_c,
-                             end_row=max_r,   end_column=max_c)
+            ws.unmerge_cells(start_row=min_r, start_column=min_c, end_row=max_r, end_column=max_c)
 
         for _ in range(n_inserts):
             new_row = line_rows[-1] + 1
@@ -347,35 +359,39 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
 
         # Re-merge at shifted positions
         for min_r, max_r, min_c, max_c in saved_merges:
-            ws.merge_cells(start_row=min_r + n_inserts, start_column=min_c,
-                           end_row=max_r   + n_inserts, end_column=max_c)
+            ws.merge_cells(
+                start_row=min_r + n_inserts,
+                start_column=min_c,
+                end_row=max_r + n_inserts,
+                end_column=max_c,
+            )
 
     last_data = line_rows[-1]
 
     # ── Write order lines into rows 14..last_data ─────────────────────────────
     for i, line in enumerate(lines):
-        r         = line_rows[i]
-        action    = line.get("action", "ADD")
+        r = line_rows[i]
+        action = line.get("action", "ADD")
         is_cancel = action == "CANCEL"
-        spots     = 0 if is_cancel else (line.get("spots", 0) or 0)
-        rate      = 0.0 if is_cancel else float(line.get("rate", 0) or 0)
-        weeks     = _count_weeks(line)
-        start_d   = _parse_date_str(line.get("start_date", ""))
-        end_d     = _parse_date_str(line.get("end_date",   ""))
-        start_dt  = datetime(start_d.year, start_d.month, start_d.day) if start_d else None
-        end_dt    = datetime(end_d.year,   end_d.month,   end_d.day)   if end_d   else None
+        spots = 0 if is_cancel else (line.get("spots", 0) or 0)
+        rate = 0.0 if is_cancel else float(line.get("rate", 0) or 0)
+        weeks = _count_weeks(line)
+        start_d = _parse_date_str(line.get("start_date", ""))
+        end_d = _parse_date_str(line.get("end_date", ""))
+        start_dt = datetime(start_d.year, start_d.month, start_d.day) if start_d else None
+        end_dt = datetime(end_d.year, end_d.month, end_d.day) if end_d else None
 
-        _wc(ws, r, 2,  line.get("line_number", i + 1))
-        _wc(ws, r, 4,  start_dt, "mm-dd-yy")
-        _wc(ws, r, 5,  end_dt,   "mm-dd-yy")
-        _wc(ws, r, 6,  spots)
-        _wc(ws, r, 7,  "week")
-        _wc(ws, r, 8,  line.get("program_label") or _fmt_program(line))
-        _wc(ws, r, 9,  weeks)
+        _wc(ws, r, 2, line.get("line_number", i + 1))
+        _wc(ws, r, 4, start_dt, "mm-dd-yy")
+        _wc(ws, r, 5, end_dt, "mm-dd-yy")
+        _wc(ws, r, 6, spots)
+        _wc(ws, r, 7, "week")
+        _wc(ws, r, 8, line.get("program_label") or _fmt_program(line))
+        _wc(ws, r, 9, weeks)
         _wc(ws, r, 10, "COM")
         _wc(ws, r, 12, f"=F{r}*I{r}")
         _wc(ws, r, 14, f":{line.get('duration', '30')}")
-        _wc(ws, r, 15, rate,           _CURRENCY_NF)
+        _wc(ws, r, 15, rate, _CURRENCY_NF)
         _wc(ws, r, 16, f"=L{r}*O{r}", _CURRENCY_NF)
 
         ws.row_dimensions[r].height = 16.5
@@ -385,23 +401,23 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
                 ws.cell(row=r, column=col).fill = YELLOW_FILL
 
     # ── Fix summary row formulas (rows shifted by inserts but refs not updated) ─
-    sum_row  = last_data + 1
+    sum_row = last_data + 1
     disc_row = sum_row + 1
-    net_row  = disc_row + 1
+    net_row = disc_row + 1
 
-    ws.cell(sum_row,  12).value = f"=SUM(L{DATA_START}:L{last_data})"
-    ws.cell(sum_row,  16).value = f"=SUM(P{DATA_START}:P{last_data})"
+    ws.cell(sum_row, 12).value = f"=SUM(L{DATA_START}:L{last_data})"
+    ws.cell(sum_row, 16).value = f"=SUM(P{DATA_START}:P{last_data})"
     ws.cell(disc_row, 16).value = f"=-1*(L{disc_row}*P{sum_row})"
     notes = order_comment
     if is_asian:
         notes = (notes + "\n\nTHE ASIAN CHANNEL") if notes else "THE ASIAN CHANNEL"
-    ws.cell(net_row,   2).value = notes
-    ws.cell(net_row,  16).value = f"=SUM(P{sum_row}:P{disc_row})"
+    ws.cell(net_row, 2).value = notes
+    ws.cell(net_row, 16).value = f"=SUM(P{sum_row}:P{disc_row})"
 
     ws.column_dimensions["P"].width = 14
 
     # ── Rewrite monthly breakdown with actual computed data ───────────────────
-    monthly_rev   = _compute_monthly_revenue(lines)
+    monthly_rev = _compute_monthly_revenue(lines)
     sorted_months = sorted(monthly_rev.keys())
 
     # Broadcast months touched by ADD/CHANGE lines — drives yellow fill on revisions
@@ -410,10 +426,10 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
         for line in lines:
             if line.get("action", "ADD") not in ("ADD", "CHANGE"):
                 continue
-            rate  = float(line.get("rate", 0) or 0)
-            spw   = line.get("spots", 0) or 0
+            rate = float(line.get("rate", 0) or 0)
+            spw = line.get("spots", 0) or 0
             start = _parse_date_str(line.get("start_date", ""))
-            end   = _parse_date_str(line.get("end_date",   ""))
+            end = _parse_date_str(line.get("end_date", ""))
             if not start or not end or spw == 0 or rate == 0:
                 continue
             wk = start
@@ -429,7 +445,7 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
             break
 
     if mbr_title is not None and sorted_months:
-        mbr_hdr        = mbr_title + 2
+        mbr_hdr = mbr_title + 2
         mbr_data_start = mbr_hdr + 1
 
         # Snapshot first existing month row for formatting
@@ -466,7 +482,7 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
                 ws.cell(r, col).number_format = _CURRENCY_NF
 
         # Restore Total row formatting from template snapshot, then fix values/formulas
-        mbr_last  = mbr_data_start + len(sorted_months) - 1
+        mbr_last = mbr_data_start + len(sorted_months) - 1
         total_row = mbr_last + 1
         _apply_snapshot(ws, total_snap, total_row, mbr_data_start + existing)
         ws.cell(total_row, 2).value = "Total"
@@ -482,18 +498,19 @@ def _fill_sc_tab(ws, io_data: dict, user_inputs: dict) -> None:
 # Monthly Lines and Broker Fees tab
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def _fill_mlbf_tab(ws, io_data: dict, user_inputs: dict) -> None:
-    agency      = io_data.get("agency", "")
-    advertiser  = io_data.get("advertiser", "")
-    tracking    = str(io_data.get("tracking_number", "") or "")
-    lines       = io_data.get("lines", [])
+    agency = io_data.get("agency", "")
+    advertiser = io_data.get("advertiser", "")
+    tracking = str(io_data.get("tracking_number", "") or "")
+    lines = io_data.get("lines", [])
     contract_no = user_inputs.get("contract_number", "")
     market_code = "DAL" if io_data.get("network", "") == "ASIAN" else "Admin"
 
     contract_val = _to_int_if_numeric(contract_no)
     tracking_val = _to_int_if_numeric(tracking)
-    bill_code    = _make_bill_code(agency, advertiser)
-    monthly_rev  = _compute_monthly_revenue(lines)
+    bill_code = _make_bill_code(agency, advertiser)
+    monthly_rev = _compute_monthly_revenue(lines)
     sorted_months = sorted(monthly_rev.keys())
 
     # Rows 1-4 preserved from template (headers, blank, billing instruction, blank).
@@ -503,29 +520,29 @@ def _fill_mlbf_tab(ws, io_data: dict, user_inputs: dict) -> None:
     # ── Billing group (rows 5 … 5+n-1) ───────────────────────────────────────
     BILL_START = 5
     for i, bm in enumerate(sorted_months):
-        r            = BILL_START + i
-        gross        = round(monthly_rev[bm], 2)
+        r = BILL_START + i
+        gross = round(monthly_rev[bm], 2)
         billing_date = datetime(bm.year, bm.month, 20)
 
-        _wc(ws, r,  1, bill_code)
-        _wc(ws, r,  2, billing_date,                  "m/d/yy")
-        _wc(ws, r,  3, f"=B{r}",                   "m/d/yy")
-        _wc(ws, r,  4, f'=TEXT(B{r},"dddd")')
-        _wc(ws, r,  5, timedelta(0),               _TIME_NF)
-        _wc(ws, r,  6, timedelta(0),               _TIME_NF)
-        _wc(ws, r,  7, timedelta(0),               _TIME_NF)
-        _wc(ws, r,  8, f"{tracking} Monthly Charges")
-        _wc(ws, r,  9, "BILLING LINE")
+        _wc(ws, r, 1, bill_code)
+        _wc(ws, r, 2, billing_date, "m/d/yy")
+        _wc(ws, r, 3, f"=B{r}", "m/d/yy")
+        _wc(ws, r, 4, f'=TEXT(B{r},"dddd")')
+        _wc(ws, r, 5, timedelta(0), _TIME_NF)
+        _wc(ws, r, 6, timedelta(0), _TIME_NF)
+        _wc(ws, r, 7, timedelta(0), _TIME_NF)
+        _wc(ws, r, 8, f"{tracking} Monthly Charges")
+        _wc(ws, r, 9, "BILLING LINE")
         _wc(ws, r, 11, "NX")
-        _wc(ws, r, 12, 1,                          _INT_NF)
+        _wc(ws, r, 12, 1, _INT_NF)
         _wc(ws, r, 14, "COM")
         _wc(ws, r, 15, tracking_val)
-        _wc(ws, r, 16, gross,                      _CURRENCY_NF)
-        _wc(ws, r, 18, f"=P{r}",                   _CURRENCY_NF)
+        _wc(ws, r, 16, gross, _CURRENCY_NF)
+        _wc(ws, r, 18, f"=P{r}", _CURRENCY_NF)
         _wc(ws, r, 19, _broadcast_month_formula(r), _MONTH_NF)
-        _wc(ws, r, 20, f"=P{r}*0.15",              _CURRENCY_NF)
+        _wc(ws, r, 20, f"=P{r}*0.15", _CURRENCY_NF)
         _wc(ws, r, 21, 4)
-        _wc(ws, r, 22, f"=P{r}-T{r}",             _CURRENCY_NF)
+        _wc(ws, r, 22, f"=P{r}-T{r}", _CURRENCY_NF)
         _wc(ws, r, 23, "House")
         _wc(ws, r, 24, "Direct Response Sales")
         _wc(ws, r, 25, "Broadcast")
@@ -538,35 +555,35 @@ def _fill_mlbf_tab(ws, io_data: dict, user_inputs: dict) -> None:
     fee_instr = BILL_START + len(sorted_months) + 1
     cell = ws.cell(fee_instr, 1)
     cell.value = "These are the lines you will paste in to show the monthly broker fees"
-    cell.fill  = GREEN_FILL
+    cell.fill = GREEN_FILL
 
     # ── Broker fee group (two blank rows after billing group) ─────────────────
     FEE_START = fee_instr + 2
     for i, bm in enumerate(sorted_months):
-        r            = FEE_START + i
-        gross        = round(monthly_rev[bm], 2)
-        broker_fee   = round(-gross * 0.85 * 0.10, 2)
+        r = FEE_START + i
+        gross = round(monthly_rev[bm], 2)
+        broker_fee = round(-gross * 0.85 * 0.10, 2)
         billing_date = datetime(bm.year, bm.month, 20)
 
-        _wc(ws, r,  1, "WorldLink Broker Fees (DO NOT INVOICE)")
-        _wc(ws, r,  2, billing_date,                  "m/d/yy")
-        _wc(ws, r,  3, f"=B{r}",                   "m/d/yy")
-        _wc(ws, r,  4, f'=TEXT(B{r},"dddd")')
-        _wc(ws, r,  5, timedelta(0),               _TIME_NF)
-        _wc(ws, r,  6, timedelta(0),               _TIME_NF)
-        _wc(ws, r,  7, timedelta(0),               _TIME_NF)
-        _wc(ws, r,  8, f"{tracking} Broker Fees")
-        _wc(ws, r,  9, "BILLING LINE")
+        _wc(ws, r, 1, "WorldLink Broker Fees (DO NOT INVOICE)")
+        _wc(ws, r, 2, billing_date, "m/d/yy")
+        _wc(ws, r, 3, f"=B{r}", "m/d/yy")
+        _wc(ws, r, 4, f'=TEXT(B{r},"dddd")')
+        _wc(ws, r, 5, timedelta(0), _TIME_NF)
+        _wc(ws, r, 6, timedelta(0), _TIME_NF)
+        _wc(ws, r, 7, timedelta(0), _TIME_NF)
+        _wc(ws, r, 8, f"{tracking} Broker Fees")
+        _wc(ws, r, 9, "BILLING LINE")
         _wc(ws, r, 11, "NX")
-        _wc(ws, r, 12, 1,                          _INT_NF)
+        _wc(ws, r, 12, 1, _INT_NF)
         _wc(ws, r, 14, "COM")
         _wc(ws, r, 15, tracking_val)
-        _wc(ws, r, 16, broker_fee,                 _CURRENCY_NF)
-        _wc(ws, r, 18, f"=P{r}",                   _CURRENCY_NF)
+        _wc(ws, r, 16, broker_fee, _CURRENCY_NF)
+        _wc(ws, r, 18, f"=P{r}", _CURRENCY_NF)
         _wc(ws, r, 19, _broadcast_month_formula(r), _MONTH_NF)
-        _wc(ws, r, 20, 0,                          _CURRENCY_NF)
+        _wc(ws, r, 20, 0, _CURRENCY_NF)
         _wc(ws, r, 21, 4)
-        _wc(ws, r, 22, f"=P{r}-T{r}",             _CURRENCY_NF)
+        _wc(ws, r, 22, f"=P{r}-T{r}", _CURRENCY_NF)
         _wc(ws, r, 23, "House")
         _wc(ws, r, 24, "Direct Response Sales")
         _wc(ws, r, 25, "Broadcast")

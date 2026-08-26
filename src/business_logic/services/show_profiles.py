@@ -31,6 +31,7 @@ Element types so far:
       close bumper → after the last segment, EVENT_TYPE 'T' (floats)
     Program segments themselves are EVENT_TYPE 'T'.
 """
+
 from __future__ import annotations
 
 import json
@@ -38,16 +39,26 @@ import re
 
 # Market code → COD_USER, and the named "OTA" (over-the-air) market group used by
 # element scopes. OTA spans both networks: SFO/CVC are CTV, DAL is TAC.
-MARKET_CODE_TO_CU = {"NYC": 1, "CMP": 2, "HOU": 3, "SFO": 4, "SEA": 5,
-                     "LAX": 6, "CVC": 7, "WDC": 8, "MMT": 9, "DAL": 10}
+MARKET_CODE_TO_CU = {
+    "NYC": 1,
+    "CMP": 2,
+    "HOU": 3,
+    "SFO": 4,
+    "SEA": 5,
+    "LAX": 6,
+    "CVC": 7,
+    "WDC": 8,
+    "MMT": 9,
+    "DAL": 10,
+}
 OTA_MARKETS = ["SFO", "CVC", "DAL"]
 CTV_MARKETS = ["NYC", "CMP", "HOU", "SFO", "SEA", "LAX", "CVC", "WDC", "MMT"]  # all CTV (no DAL)
 
 _DEFAULT_PROFILES = [
     {
         "name": "Korean News",
-        "code_re": r"^NEWSTODAY\d{6}$",   # NEWSTODAYmmddyy — PRIMARY match
-        "networks": ["CTV"],              # CTV markets only (no DAL)
+        "code_re": r"^NEWSTODAY\d{6}$",  # NEWSTODAYmmddyy — PRIMARY match
+        "networks": ["CTV"],  # CTV markets only (no DAL)
         "days": "M-F",
         "window": ("08:00", "09:00"),
         # NOTE: still in the legacy open_bumper/close_bumper shape — the validated
@@ -65,14 +76,22 @@ _DEFAULT_PROFILES = [
         # All 9 CTV markets; the 6-7a hour is a single PRGS slot, so the open and
         # KOG share it (open first).
         "name": "Kingdom of God",
-        "code_re": r"^KOG",               # KOG<mmddyy> / KOG-<mmddyy> / KOG0410 …
+        "code_re": r"^KOG",  # KOG<mmddyy> / KOG-<mmddyy> / KOG0410 …
         "networks": ["CTV"],
         "days": "Su",
         "window": ("06:00", "07:00"),
         "elements": [
-            {"kind": "id", "id": 3653, "code": "RELIGIOUSOPEN10E01",
-             "markets": "ctv", "segment": "PRGS", "break": 1, "position": "first",
-             "event_type": "F", "anchor": True},
+            {
+                "kind": "id",
+                "id": 3653,
+                "code": "RELIGIOUSOPEN10E01",
+                "markets": "ctv",
+                "segment": "PRGS",
+                "break": 1,
+                "position": "first",
+                "event_type": "F",
+                "anchor": True,
+            },
         ],
     },
     # (The per-show "Children" profile — kids FCC ID 2891 anchored at the top of
@@ -91,15 +110,30 @@ _DEFAULT_PROFILES = [
         "name": "OTA FCC ID (daily)",
         "daily": True,
         "elements": [
-            {"kind": "fcc_id", "id": 83128, "code": "ID - TACDAL - FCC",
-             "markets": ["DAL"], "placement": "last_coms_before_midnight",
-             "event_type": "T"},
-            {"kind": "fcc_id", "id": 142947, "code": "ID - CTVCVC - FCC",
-             "markets": ["CVC"], "placement": "last_coms_before_midnight",
-             "event_type": "T"},
-            {"kind": "fcc_id", "id": 142948, "code": "ID - CTVSFO - FCC",
-             "markets": ["SFO"], "placement": "last_coms_before_midnight",
-             "event_type": "T"},
+            {
+                "kind": "fcc_id",
+                "id": 83128,
+                "code": "ID - TACDAL - FCC",
+                "markets": ["DAL"],
+                "placement": "last_coms_before_midnight",
+                "event_type": "T",
+            },
+            {
+                "kind": "fcc_id",
+                "id": 142947,
+                "code": "ID - CTVCVC - FCC",
+                "markets": ["CVC"],
+                "placement": "last_coms_before_midnight",
+                "event_type": "T",
+            },
+            {
+                "kind": "fcc_id",
+                "id": 142948,
+                "code": "ID - CTVSFO - FCC",
+                "markets": ["SFO"],
+                "placement": "last_coms_before_midnight",
+                "event_type": "T",
+            },
         ],
     },
 ]
@@ -125,6 +159,7 @@ def load_profiles():
     """
     try:
         from browser_automation.etere_direct_client import connect
+
         with connect() as conn:
             cur = conn.cursor()
             cur.execute(

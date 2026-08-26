@@ -20,6 +20,7 @@ used, at which point the table is cleared and a fresh cycle begins. Keying on th
 token (not the FILMATI id) means a re-ingested file with the same PI number keeps
 its place in the cycle. See scripts/setup_pi_lf_rotation_table.py for the DDL.
 """
+
 from __future__ import annotations
 
 import random
@@ -59,14 +60,16 @@ def active_pool(cur) -> list[dict]:
         tok = token_of(desc)
         if not tok:
             continue
-        out.append({
-            "fid": int(fid),
-            "token": tok,
-            "family": "WLPI" if tok.startswith("WLPI") else "PI",
-            "code": (code or "").strip(),
-            "desc": (desc or "").strip(),
-            "durata": int(durata or 0),
-        })
+        out.append(
+            {
+                "fid": int(fid),
+                "token": tok,
+                "family": "WLPI" if tok.startswith("WLPI") else "PI",
+                "code": (code or "").strip(),
+                "desc": (desc or "").strip(),
+                "durata": int(durata or 0),
+            }
+        )
     return out
 
 
@@ -110,7 +113,7 @@ def pick(conn):
     unused = [p for p in pool if p["token"] not in used]
     reset = False
     if not unused:
-        cur.execute("DELETE FROM chat.pi_lf_rotation")   # cycle complete → start over
+        cur.execute("DELETE FROM chat.pi_lf_rotation")  # cycle complete → start over
         conn.commit()
         unused = pool
         reset = True

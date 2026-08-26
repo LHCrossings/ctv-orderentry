@@ -7,6 +7,7 @@ with "TEST "), enters all lines, then ROLLS BACK — nothing is permanently writ
 Run from Windows:
     git pull && py scripts/test_lexus_direct.py
 """
+
 import sys
 from datetime import date
 from pathlib import Path
@@ -49,9 +50,11 @@ etere_lines = _build_etere_lines(parse_result=result, include_bns=True, cutoff_d
 print(f"  Etere lines     : {len(etere_lines)}")
 for i, ln in enumerate(etere_lines, 1):
     bns = " [BNS]" if ln["is_bonus"] else ""
-    print(f"  {i:2}. {ln['days']:6} {ln['time']:15} "
-          f"{ln['start_date']} – {ln['end_date']}  "
-          f"{ln['total_spots']}x @ ${ln['rate']:.2f}{bns}")
+    print(
+        f"  {i:2}. {ln['days']:6} {ln['time']:15} "
+        f"{ln['start_date']} – {ln['end_date']}  "
+        f"{ln['total_spots']}x @ ${ln['rate']:.2f}{bns}"
+    )
 
 if not etere_lines:
     print("\n[ERROR] No lines parsed — aborting")
@@ -73,14 +76,16 @@ cursor.execute("""
 """)
 row = cursor.fetchone()
 if row:
-    agency_id      = row[0] or 0
+    agency_id = row[0] or 0
     media_center_id = row[1] or 0
     print(f"[DB] IW Group agency_id={agency_id}  media_center_id={media_center_id}")
 else:
     # Fallback — use same as HL (also IW Group billing) or 0
-    agency_id      = AGENCY_IDS.get("HL", 0)
+    agency_id = AGENCY_IDS.get("HL", 0)
     media_center_id = MEDIA_CENTER_IDS.get("HL", 0)
-    print(f"[DB] No existing Lexus contracts found — using HL defaults: agency={agency_id} mc={media_center_id}")
+    print(
+        f"[DB] No existing Lexus contracts found — using HL defaults: agency={agency_id} mc={media_center_id}"
+    )
 
 try:
     client = EtereDirectClient(conn, owner="Charmaine Lane", autocommit=False)
@@ -105,6 +110,7 @@ try:
     print(f"\n[LINES] Entering {len(etere_lines)} line(s)...")
     for i, ln in enumerate(etere_lines, 1):
         from etere_client import EtereClient
+
         days, _ = EtereClient.check_sunday_6_7a_rule(ln["days"], ln["time"])
         line_id = client.add_contract_line(
             market=MARKET,
@@ -125,7 +131,9 @@ try:
         print(f"  {i:2}. line_id={line_id}  {ln['days']} {ln['time']}{bns}")
 
     print(f"\n✓ All {len(etere_lines)} lines entered successfully.")
-    print(f"Contract #{contract_id} (TEST LEXUS 202 NYC) committed to DB — delete when done reviewing.")
+    print(
+        f"Contract #{contract_id} (TEST LEXUS 202 NYC) committed to DB — delete when done reviewing."
+    )
     conn.commit()
 
 except Exception as e:

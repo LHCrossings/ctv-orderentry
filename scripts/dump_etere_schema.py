@@ -23,6 +23,7 @@ byte-identical files):
     modules.txt         full T-SQL of the non-encrypted modules (views, triggers,
                         a handful of functions); encrypted ones listed by name only
 """
+
 from __future__ import annotations
 
 import os
@@ -32,8 +33,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from browser_automation.etere_direct_client import connect  # noqa: E402
 
-OUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                       "schema", "etere")
+OUT_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "schema", "etere"
+)
 
 
 def _fmt_type(type_name, max_length, precision, scale):
@@ -61,15 +63,27 @@ def dump_tables(cur):
         JOIN sys.columns c ON c.object_id = t.object_id
         ORDER BY s.name, t.name, c.column_id""")
     lines, current = [], None
-    for sch, tbl, _cid, col, typ, mlen, prec, scale, nullable, ident, comp, default in cur.fetchall():
+    for (
+        sch,
+        tbl,
+        _cid,
+        col,
+        typ,
+        mlen,
+        prec,
+        scale,
+        nullable,
+        ident,
+        comp,
+        default,
+    ) in cur.fetchall():
         key = f"{sch}.{tbl}"
         if key != current:
             if current is not None:
                 lines.append("")
             lines.append(f"TABLE {key}")
             current = key
-        bits = [_fmt_type(typ, mlen, prec, scale),
-                "NULL" if nullable else "NOT NULL"]
+        bits = [_fmt_type(typ, mlen, prec, scale), "NULL" if nullable else "NOT NULL"]
         if ident:
             bits.append("IDENTITY")
         if comp:
@@ -177,10 +191,12 @@ def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     with connect() as conn:
         cur = conn.cursor()
-        for fname, fn in (("tables.txt", dump_tables),
-                          ("keys_indexes.txt", dump_keys_indexes),
-                          ("routines.txt", dump_routines),
-                          ("modules.txt", dump_modules)):
+        for fname, fn in (
+            ("tables.txt", dump_tables),
+            ("keys_indexes.txt", dump_keys_indexes),
+            ("routines.txt", dump_routines),
+            ("modules.txt", dump_modules),
+        ):
             content = fn(cur)
             path = os.path.join(OUT_DIR, fname)
             with open(path, "w", encoding="utf-8", newline="\n") as f:

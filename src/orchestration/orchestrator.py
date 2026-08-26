@@ -31,46 +31,158 @@ from presentation.formatters import OrderFormatter, ProcessingResultFormatter, P
 # Registry mapping OrderType → (module_path, function_name, display_name)
 # for agencies that gather inputs upfront before the browser session opens.
 _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
-    OrderType.SAGENT:    ("browser_automation.sagent_automation",   "gather_sagent_inputs_from_pdf", "SAGENT"),
-    OrderType.DAVISELEN:   ("browser_automation.daviselen_automation",   "gather_daviselen_inputs",   "DAVISELEN"),
-    OrderType.INTERTREND:  ("browser_automation.intertrend_automation",  "gather_intertrend_inputs",  "Intertrend"),
-    OrderType.ADMERASIA: ("browser_automation.admerasia_automation", "gather_admerasia_inputs",       "ADMERASIA"),
-    OrderType.HL:        ("browser_automation.hl_automation",        "gather_hl_inputs",              "H&L PARTNERS"),
-    OrderType.HL_BDR:    ("browser_automation.hl_bdr_automation",    "gather_hl_bdr_inputs",          "H&L BDR"),
-    OrderType.IGRAPHIX:  ("browser_automation.igraphix_automation",  "gather_igraphix_inputs",        "IGRAPHIX"),
-    OrderType.IMPACT:    ("browser_automation.impact_automation",    "gather_impact_inputs",          "IMPACT"),
-    OrderType.RPM:       ("browser_automation.rpm_automation",       "gather_rpm_inputs",             "RPM"),
-    OrderType.WORLDLINK: ("browser_automation.worldlink_automation", "gather_worldlink_inputs",       "WORLDLINK"),
-    OrderType.XML:       ("browser_automation.xml_automation",       "gather_xml_inputs_from_path",   "XML (AAAA SpotTV)"),
-    OrderType.LEXUS:     ("browser_automation.lexus_automation",     "gather_lexus_inputs",           "IW Group / Lexus"),
-    OrderType.GALEFORCE:         ("browser_automation.galeforce_automation",         "gather_galeforce_inputs",         "PACO Collective"),
-    OrderType.HYPHEN:            ("browser_automation.hyphen_automation",            "gather_hyphen_inputs",            "Hyphen"),
-    OrderType.WALLRICH:          ("browser_automation.wallrich_automation",          "gather_wallrich_inputs",          "Wallrich"),
-    OrderType.TIMEADVERTISING:   ("browser_automation.timeadvertising_automation",   "gather_timeadvertising_inputs",   "Time Advertising"),
-    OrderType.SACCOUNTYVOTERS:   ("browser_automation.saccountyvoters_automation",   "gather_saccountyvoters_inputs",   "Sacramento County Voters"),
-    OrderType.SCWA:              ("browser_automation.scwa_automation",              "gather_scwa_inputs",              "Sacramento County Water Agency"),
-    OrderType.IMPRENTA:          ("browser_automation.imprenta_automation",          "gather_imprenta_inputs",          "Imprenta / PG&E"),
-    OrderType.PROSIO:            ("browser_automation.prosio_automation",             "gather_prosio_inputs",            "Prosio"),
-    OrderType.DART:              ("browser_automation.dart_automation",                "gather_dart_inputs",               "DART / Asian Channel Dallas"),
-    OrderType.POLARIS:           ("browser_automation.polaris_automation",             "gather_polaris_inputs",            "Polaris Media Group"),
-    OrderType.SIERRADONOR:       ("browser_automation.sierra_automation",              "gather_sierra_inputs",             "Sierra Donor Services"),
-    OrderType.THREEOLIVES:       ("browser_automation.threeolives_automation",         "gather_threeolives_inputs",        "3 Olives Media"),
-    OrderType.BVK:               ("browser_automation.bvk_automation",                 "gather_bvk_inputs",                "BVK"),
-    OrderType.MEDIASOL:          ("browser_automation.mediasol_automation",            "gather_mediasol_inputs",           "Media Solutions"),
-    OrderType.RWNY:              ("browser_automation.rwny_automation",                "gather_rwny_inputs",               "Resorts World NY"),
-    OrderType.FIGHTTHEBITE:      ("browser_automation.fightthebite_automation",         "gather_fightthebite_inputs",        "Fight the Bite"),
-    OrderType.MISFIT:            ("browser_automation.misfit_automation",              "gather_misfit_inputs",             "Misfit"),
-    OrderType.OPAD:              ("browser_automation.opad_automation",                "gather_opad_inputs",               "opAD"),
-    OrderType.TCAA:              ("browser_automation.tcaa_automation",                "gather_tcaa_inputs",               "TCAA / Toyota"),
-    OrderType.TCAA_AV:          ("browser_automation.tcaa_av_automation",             "gather_tcaa_av_inputs",            "TCAA Added Value"),
-    OrderType.ACM:               ("browser_automation.acm_automation",                  "gather_acm_inputs",                 "ACM"),
-    OrderType.TT:                ("browser_automation.tt_automation",                   "gather_tt_inputs",                  "T&T Public Relations"),
-    OrderType.CRISPIN:           ("browser_automation.crispin_automation",              "gather_crispin_inputs",             "Crispin / Bay Area AQMD"),
-    OrderType.NTOOITIVE:         ("browser_automation.ntooitive_automation",            "gather_ntooitive_inputs",           "Ntooitive / L.A. Care"),
-    OrderType.EQC:               ("browser_automation.eqc_automation",                  "gather_eqc_inputs",                 "Emerald Queen Casino / TH Media"),
-    OrderType.LRCCD:             ("browser_automation.lrccd_automation",                "gather_lrccd_inputs",               "LRCCD / 3Fold Communications"),
-    OrderType.SACRT:             ("browser_automation.sacrt_automation",                "gather_sacrt_inputs",               "SacRT / Sacramento Regional Transit"),
-    OrderType.AI_FALLBACK:       ("browser_automation.ai_fallback_automation",          "gather_ai_fallback_inputs",         "AI Fallback (Claude-extracted)"),
+    OrderType.SAGENT: (
+        "browser_automation.sagent_automation",
+        "gather_sagent_inputs_from_pdf",
+        "SAGENT",
+    ),
+    OrderType.DAVISELEN: (
+        "browser_automation.daviselen_automation",
+        "gather_daviselen_inputs",
+        "DAVISELEN",
+    ),
+    OrderType.INTERTREND: (
+        "browser_automation.intertrend_automation",
+        "gather_intertrend_inputs",
+        "Intertrend",
+    ),
+    OrderType.ADMERASIA: (
+        "browser_automation.admerasia_automation",
+        "gather_admerasia_inputs",
+        "ADMERASIA",
+    ),
+    OrderType.HL: ("browser_automation.hl_automation", "gather_hl_inputs", "H&L PARTNERS"),
+    OrderType.HL_BDR: ("browser_automation.hl_bdr_automation", "gather_hl_bdr_inputs", "H&L BDR"),
+    OrderType.IGRAPHIX: (
+        "browser_automation.igraphix_automation",
+        "gather_igraphix_inputs",
+        "IGRAPHIX",
+    ),
+    OrderType.IMPACT: ("browser_automation.impact_automation", "gather_impact_inputs", "IMPACT"),
+    OrderType.RPM: ("browser_automation.rpm_automation", "gather_rpm_inputs", "RPM"),
+    OrderType.WORLDLINK: (
+        "browser_automation.worldlink_automation",
+        "gather_worldlink_inputs",
+        "WORLDLINK",
+    ),
+    OrderType.XML: (
+        "browser_automation.xml_automation",
+        "gather_xml_inputs_from_path",
+        "XML (AAAA SpotTV)",
+    ),
+    OrderType.LEXUS: (
+        "browser_automation.lexus_automation",
+        "gather_lexus_inputs",
+        "IW Group / Lexus",
+    ),
+    OrderType.GALEFORCE: (
+        "browser_automation.galeforce_automation",
+        "gather_galeforce_inputs",
+        "PACO Collective",
+    ),
+    OrderType.HYPHEN: ("browser_automation.hyphen_automation", "gather_hyphen_inputs", "Hyphen"),
+    OrderType.WALLRICH: (
+        "browser_automation.wallrich_automation",
+        "gather_wallrich_inputs",
+        "Wallrich",
+    ),
+    OrderType.TIMEADVERTISING: (
+        "browser_automation.timeadvertising_automation",
+        "gather_timeadvertising_inputs",
+        "Time Advertising",
+    ),
+    OrderType.SACCOUNTYVOTERS: (
+        "browser_automation.saccountyvoters_automation",
+        "gather_saccountyvoters_inputs",
+        "Sacramento County Voters",
+    ),
+    OrderType.SCWA: (
+        "browser_automation.scwa_automation",
+        "gather_scwa_inputs",
+        "Sacramento County Water Agency",
+    ),
+    OrderType.IMPRENTA: (
+        "browser_automation.imprenta_automation",
+        "gather_imprenta_inputs",
+        "Imprenta / PG&E",
+    ),
+    OrderType.PROSIO: ("browser_automation.prosio_automation", "gather_prosio_inputs", "Prosio"),
+    OrderType.DART: (
+        "browser_automation.dart_automation",
+        "gather_dart_inputs",
+        "DART / Asian Channel Dallas",
+    ),
+    OrderType.POLARIS: (
+        "browser_automation.polaris_automation",
+        "gather_polaris_inputs",
+        "Polaris Media Group",
+    ),
+    OrderType.SIERRADONOR: (
+        "browser_automation.sierra_automation",
+        "gather_sierra_inputs",
+        "Sierra Donor Services",
+    ),
+    OrderType.THREEOLIVES: (
+        "browser_automation.threeolives_automation",
+        "gather_threeolives_inputs",
+        "3 Olives Media",
+    ),
+    OrderType.BVK: ("browser_automation.bvk_automation", "gather_bvk_inputs", "BVK"),
+    OrderType.MEDIASOL: (
+        "browser_automation.mediasol_automation",
+        "gather_mediasol_inputs",
+        "Media Solutions",
+    ),
+    OrderType.RWNY: (
+        "browser_automation.rwny_automation",
+        "gather_rwny_inputs",
+        "Resorts World NY",
+    ),
+    OrderType.FIGHTTHEBITE: (
+        "browser_automation.fightthebite_automation",
+        "gather_fightthebite_inputs",
+        "Fight the Bite",
+    ),
+    OrderType.MISFIT: ("browser_automation.misfit_automation", "gather_misfit_inputs", "Misfit"),
+    OrderType.OPAD: ("browser_automation.opad_automation", "gather_opad_inputs", "opAD"),
+    OrderType.TCAA: ("browser_automation.tcaa_automation", "gather_tcaa_inputs", "TCAA / Toyota"),
+    OrderType.TCAA_AV: (
+        "browser_automation.tcaa_av_automation",
+        "gather_tcaa_av_inputs",
+        "TCAA Added Value",
+    ),
+    OrderType.ACM: ("browser_automation.acm_automation", "gather_acm_inputs", "ACM"),
+    OrderType.TT: ("browser_automation.tt_automation", "gather_tt_inputs", "T&T Public Relations"),
+    OrderType.CRISPIN: (
+        "browser_automation.crispin_automation",
+        "gather_crispin_inputs",
+        "Crispin / Bay Area AQMD",
+    ),
+    OrderType.NTOOITIVE: (
+        "browser_automation.ntooitive_automation",
+        "gather_ntooitive_inputs",
+        "Ntooitive / L.A. Care",
+    ),
+    OrderType.EQC: (
+        "browser_automation.eqc_automation",
+        "gather_eqc_inputs",
+        "Emerald Queen Casino / TH Media",
+    ),
+    OrderType.LRCCD: (
+        "browser_automation.lrccd_automation",
+        "gather_lrccd_inputs",
+        "LRCCD / 3Fold Communications",
+    ),
+    OrderType.SACRT: (
+        "browser_automation.sacrt_automation",
+        "gather_sacrt_inputs",
+        "SacRT / Sacramento Regional Transit",
+    ),
+    OrderType.AI_FALLBACK: (
+        "browser_automation.ai_fallback_automation",
+        "gather_ai_fallback_inputs",
+        "AI Fallback (Claude-extracted)",
+    ),
 }
 
 
@@ -92,7 +204,7 @@ class ApplicationOrchestrator:
         batch_input_collector: BatchInputCollector | None = None,
         order_formatter: OrderFormatter | None = None,
         result_formatter: ProcessingResultFormatter | None = None,
-        progress_formatter: ProgressFormatter | None = None
+        progress_formatter: ProgressFormatter | None = None,
     ):
         """
         Initialize the orchestrator.
@@ -246,13 +358,14 @@ class ApplicationOrchestrator:
         for i, order in enumerate(orders, 1):
             print("\n" + "=" * 70)
             progress = self._progress_formatter.format_progress(
-                i, len(orders),
-                order.get_display_name()
+                i, len(orders), order.get_display_name()
             )
             print(progress)
             print("=" * 70)
 
-            display_name = _INPUT_GATHERERS.get(order.order_type, (None, None, order.order_type.name))[2]
+            display_name = _INPUT_GATHERERS.get(
+                order.order_type, (None, None, order.order_type.name)
+            )[2]
             print(f"Type: {display_name}")
             print(f"Customer: {order.customer_name}")
             print()
@@ -285,6 +398,7 @@ class ApplicationOrchestrator:
                     orders_with_input.append(order)
                 except Exception as e:
                     import traceback
+
                     print(f"\n[ERROR] Input gathering failed for {display_name}: {e}")
                     traceback.print_exc()
                     print("[INFO] Skipping order due to gather error")
@@ -297,9 +411,9 @@ class ApplicationOrchestrator:
 
         # Now process all orders using batch processing
         # (TCAA orders from same PDF will be grouped and processed together)
-        print(f"\n{'='*70}")
+        print(f"\n{'=' * 70}")
         print("STARTING ORDER PROCESSING")
-        print(f"{'='*70}\n")
+        print(f"{'=' * 70}\n")
 
         try:
             results = self._processing_service.process_orders_batch(orders_with_input)
@@ -311,16 +425,15 @@ class ApplicationOrchestrator:
         except Exception as e:
             print(f"\n[ERROR] Batch processing failed: {e}")
             import traceback
+
             traceback.print_exc()
 
             # Create error results for all orders
             from domain.entities import ProcessingResult
+
             results = [
                 ProcessingResult(
-                    success=False,
-                    order_type=order.order_type,
-                    contracts=[],
-                    error_message=str(e)
+                    success=False, order_type=order.order_type, contracts=[], error_message=str(e)
                 )
                 for order in orders_with_input
             ]
@@ -334,6 +447,7 @@ class ApplicationOrchestrator:
         """
         try:
             from web.parser_bridge import find_language_window_issues
+
             issues = find_language_window_issues(str(order.pdf_path), order.order_type.value)
         except Exception:
             return True  # never block entry on a validation failure
@@ -356,23 +470,21 @@ class ApplicationOrchestrator:
         Called after every agency's gather-inputs phase so the user always
         has a chance to override the stored default before automation runs.
         """
-        if 'separation' not in inputs:
+        if "separation" not in inputs:
             return inputs
 
-        sep = inputs['separation']
+        sep = inputs["separation"]
         print(f"\n[SEPARATION] Will apply  Customer={sep[0]}, Order={sep[1]}, Event={sep[2]}")
-        response = input(
-            "  Press Enter to confirm, or type new values (e.g. 25,0,15): "
-        ).strip()
+        response = input("  Press Enter to confirm, or type new values (e.g. 25,0,15): ").strip()
 
         if not response:
             return inputs
 
         try:
-            parts = [int(x.strip()) for x in response.replace(' ', '').split(',')]
+            parts = [int(x.strip()) for x in response.replace(" ", "").split(",")]
             if len(parts) == 3:
                 print(f"  ✓ Updated to  Customer={parts[0]}, Order={parts[1]}, Event={parts[2]}")
-                return {**inputs, 'separation': tuple(parts)}
+                return {**inputs, "separation": tuple(parts)}
             else:
                 print("  ⚠ Expected 3 comma-separated values — keeping original")
         except ValueError:
@@ -381,9 +493,7 @@ class ApplicationOrchestrator:
         return inputs
 
     def _process_orders_batch(
-        self,
-        orders: list[Order],
-        inputs: dict[str, any]
+        self, orders: list[Order], inputs: dict[str, any]
     ) -> list[ProcessingResult]:
         """
         Process orders in batch mode (all inputs collected upfront).
@@ -404,8 +514,7 @@ class ApplicationOrchestrator:
         for i, order in enumerate(orders, 1):
             # Show progress
             progress = self._progress_formatter.format_progress(
-                i, len(orders),
-                order.get_display_name()
+                i, len(orders), order.get_display_name()
             )
             print(f"\n{progress}")
 
@@ -428,11 +537,9 @@ class ApplicationOrchestrator:
             except Exception as e:
                 print(f"  ✗ Failed: {e}")
                 from domain.entities import ProcessingResult
+
                 error_result = ProcessingResult(
-                    success=False,
-                    order_type=order.order_type,
-                    contracts=[],
-                    error_message=str(e)
+                    success=False, order_type=order.order_type, contracts=[], error_message=str(e)
                 )
                 results.append(error_result)
 
@@ -457,8 +564,7 @@ class ApplicationOrchestrator:
         for i, order in enumerate(orders, 1):
             # Show progress
             progress = self._progress_formatter.format_progress(
-                i, len(orders),
-                order.get_display_name()
+                i, len(orders), order.get_display_name()
             )
             print(f"\n{progress}")
 
@@ -471,15 +577,14 @@ class ApplicationOrchestrator:
             except Exception as e:
                 print(f"  ✗ Failed: {e}")
                 from domain.entities import ProcessingResult
+
                 error_result = ProcessingResult(
-                    success=False,
-                    order_type=order.order_type,
-                    contracts=[],
-                    error_message=str(e)
+                    success=False, order_type=order.order_type, contracts=[], error_message=str(e)
                 )
                 results.append(error_result)
 
         return results
+
 
 def create_orchestrator(config: ApplicationConfig | None = None) -> ApplicationOrchestrator:
     """
@@ -512,5 +617,5 @@ def create_orchestrator(config: ApplicationConfig | None = None) -> ApplicationO
         config=config,
         detection_service=detection_service,
         customer_repository=customer_repository,
-        processing_service=processing_service
+        processing_service=processing_service,
     )

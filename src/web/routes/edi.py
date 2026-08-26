@@ -25,6 +25,7 @@ from business_logic.services.edi_billing import (
 # PDF helpers
 # ---------------------------------------------------------------------------
 
+
 def _extract_contract_number(pdf_bytes: bytes) -> tuple[str, str]:
     """Return (invoice_id, contract_no) from the affidavit page (page 2)."""
     a = parse_affidavit(pdf_bytes)
@@ -45,9 +46,9 @@ def _parse_pdf_affidavit(pdf_bytes: bytes) -> dict:
     if a.warnings:
         raise ValueError("; ".join(a.warnings))
     return {
-        "invoice_id":   a.invoice_id or "unknown",
-        "contract_no":  a.contract_no,
-        "total_spots":  a.total_spots,
+        "invoice_id": a.invoice_id or "unknown",
+        "contract_no": a.contract_no,
+        "total_spots": a.total_spots,
         "gross_amount": a.gross_amount,
     }
 
@@ -55,6 +56,7 @@ def _parse_pdf_affidavit(pdf_bytes: bytes) -> dict:
 # ---------------------------------------------------------------------------
 # CSV helper
 # ---------------------------------------------------------------------------
+
 
 def _parse_csv_totals(filename: str, csv_bytes: bytes) -> dict:
     """
@@ -64,8 +66,8 @@ def _parse_csv_totals(filename: str, csv_bytes: bytes) -> dict:
     """
     d = parse_postlog_csv(csv_bytes, filename)
     return {
-        "contract_no":  d.contract_no,
-        "total_spots":  d.totals_row_spots,
+        "contract_no": d.contract_no,
+        "total_spots": d.totals_row_spots,
         "gross_amount": d.totals_row_gross,
         "error": "CSV appears empty" if "CSV appears empty" in d.warnings else None,
     }
@@ -84,6 +86,7 @@ _fetch_all_reports_sync = fetch_postlog_reports
 # Router
 # ---------------------------------------------------------------------------
 
+
 def build_edi_router(templates: Jinja2Templates) -> APIRouter:
     router = APIRouter(prefix="/edi")
 
@@ -98,11 +101,13 @@ def build_edi_router(templates: Jinja2Templates) -> APIRouter:
             raw = await f.read()
             try:
                 invoice_id, contract_no = _extract_contract_number(raw)
-                contracts.append({
-                    "filename":    f.filename,
-                    "invoice_id":  invoice_id,
-                    "contract_no": contract_no,
-                })
+                contracts.append(
+                    {
+                        "filename": f.filename,
+                        "invoice_id": invoice_id,
+                        "contract_no": contract_no,
+                    }
+                )
             except Exception as e:
                 errors.append({"filename": f.filename, "error": str(e)})
         return {"contracts": contracts, "errors": errors}
@@ -110,20 +115,18 @@ def build_edi_router(templates: Jinja2Templates) -> APIRouter:
     @router.post("/post-log/generate")
     async def generate_post_logs(request: Request):
         body = await request.json()
-        contracts  = body.get("contracts", [])
+        contracts = body.get("contracts", [])
         start_date = body.get("start_date", "")
-        end_date   = body.get("end_date", "")
+        end_date = body.get("end_date", "")
 
         if not contracts:
             raise HTTPException(400, detail="No contracts provided")
         if not start_date or not end_date:
             raise HTTPException(400, detail="Date range required")
 
-        results = await asyncio.to_thread(
-            _fetch_all_reports_sync, contracts, start_date, end_date
-        )
+        results = await asyncio.to_thread(_fetch_all_reports_sync, contracts, start_date, end_date)
 
-        failures  = [r["error"] for r in results if r["error"]]
+        failures = [r["error"] for r in results if r["error"]]
         successes = [r for r in results if r["data"]]
 
         if not successes:
@@ -181,36 +184,36 @@ def build_edi_router(templates: Jinja2Templates) -> APIRouter:
             pdf = pdf_data.get(key, {})
             csv = csv_data.get(key, {})
 
-            pdf_spots  = pdf.get("total_spots")
-            pdf_gross  = pdf.get("gross_amount")
-            csv_spots  = csv.get("total_spots")
-            csv_gross  = csv.get("gross_amount")
+            pdf_spots = pdf.get("total_spots")
+            pdf_gross = pdf.get("gross_amount")
+            csv_spots = csv.get("total_spots")
+            csv_gross = csv.get("gross_amount")
 
-            spots_match = (
-                pdf_spots is not None and csv_spots is not None
-                and pdf_spots == csv_spots
-            )
+            spots_match = pdf_spots is not None and csv_spots is not None and pdf_spots == csv_spots
             gross_match = (
-                pdf_gross is not None and csv_gross is not None
+                pdf_gross is not None
+                and csv_gross is not None
                 and abs(pdf_gross - csv_gross) < 0.02
             )
 
-            results.append({
-                "contract_no":   key,
-                "invoice_id":    pdf.get("invoice_id"),
-                "pdf_filename":  pdf.get("pdf_filename"),
-                "csv_filename":  csv.get("csv_filename"),
-                "pdf_spots":     pdf_spots,
-                "pdf_gross":     pdf_gross,
-                "csv_spots":     csv_spots,
-                "csv_gross":     csv_gross,
-                "spots_match":   spots_match,
-                "gross_match":   gross_match,
-                "has_pdf":       bool(pdf),
-                "has_csv":       bool(csv),
-                "pdf_error":     pdf.get("error"),
-                "csv_error":     csv.get("error"),
-            })
+            results.append(
+                {
+                    "contract_no": key,
+                    "invoice_id": pdf.get("invoice_id"),
+                    "pdf_filename": pdf.get("pdf_filename"),
+                    "csv_filename": csv.get("csv_filename"),
+                    "pdf_spots": pdf_spots,
+                    "pdf_gross": pdf_gross,
+                    "csv_spots": csv_spots,
+                    "csv_gross": csv_gross,
+                    "spots_match": spots_match,
+                    "gross_match": gross_match,
+                    "has_pdf": bool(pdf),
+                    "has_csv": bool(csv),
+                    "pdf_error": pdf.get("error"),
+                    "csv_error": csv.get("error"),
+                }
+            )
 
         return {"results": results}
 

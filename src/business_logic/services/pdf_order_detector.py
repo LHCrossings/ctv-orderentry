@@ -55,6 +55,7 @@ class PDFOrderDetector:
         try:
             import os as _os
             import sys as _sys
+
             if _sys.platform == "win32":
                 default = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
                 if _os.path.exists(default):
@@ -70,11 +71,7 @@ class PDFOrderDetector:
         except Exception:
             return ""
 
-    def detect_order_type(
-        self,
-        pdf_path: Path | str,
-        silent: bool = False
-    ) -> OrderType:
+    def detect_order_type(self, pdf_path: Path | str, silent: bool = False) -> OrderType:
         """
         Detect order type from PDF file.
 
@@ -97,6 +94,7 @@ class PDFOrderDetector:
         # opens the file to avoid Windows file-lock conflicts with PyMuPDF.
         try:
             from browser_automation.parsers.hl_bdr_parser import is_bdr_pdf
+
             _bdr_result = is_bdr_pdf(str(pdf_path))
             print(f"[DETECT] BDR check: {_bdr_result} ({pdf_path.name})")
             if _bdr_result:
@@ -122,10 +120,7 @@ class PDFOrderDetector:
                         first_page_text = ocr_text
 
                 # Use service for detection of known agencies
-                order_type = self._service.detect_from_text(
-                    first_page_text,
-                    second_page_text
-                )
+                order_type = self._service.detect_from_text(first_page_text, second_page_text)
 
                 # If no known agency detected, check for Charmaine template
                 if order_type == OrderType.UNKNOWN:
@@ -139,23 +134,29 @@ class PDFOrderDetector:
             if order_type == OrderType.UNKNOWN and has_encoding:
                 try:
                     from browser_automation.parsers.hl_bdr_parser import is_bdr_pdf
+
                     if is_bdr_pdf(str(pdf_path)):
                         return OrderType.HL_BDR
                 except Exception:
                     pass
 
             if order_type == OrderType.UNKNOWN and not silent and has_encoding:
-                print("\n[DETECT] [!] WARNING: PDF has encoding issues - text cannot be read properly")
-                print("[DETECT] This PDF may need to be re-saved using Chrome's 'Print to PDF' feature")
+                print(
+                    "\n[DETECT] [!] WARNING: PDF has encoding issues - text cannot be read properly"
+                )
+                print(
+                    "[DETECT] This PDF may need to be re-saved using Chrome's 'Print to PDF' feature"
+                )
                 print("[DETECT] If you know the agency, you can manually specify it below:")
                 print("\nIs this an H&L Partners order? (y/n): ", end="")
                 response = input().strip().lower()
-                if response in ['y', 'yes']:
+                if response in ["y", "yes"]:
                     return OrderType.HL
 
             # Filename-based fallback for PDFs whose content doesn't carry agency markers
             if order_type == OrderType.UNKNOWN:
                 from business_logic.services.order_detection_service import detect_from_filename
+
                 order_type = detect_from_filename(pdf_path.name)
 
             return order_type
@@ -164,11 +165,7 @@ class PDFOrderDetector:
             print(f"[DETECT] Error detecting order type: {e}")
             return OrderType.UNKNOWN
 
-    def _is_charmaine_template(
-        self,
-        text: str,
-        pdf: pdfplumber.PDF
-    ) -> bool:
+    def _is_charmaine_template(self, text: str, pdf: pdfplumber.PDF) -> bool:
         """
         Detect Charmaine's Excel-based template format.
 
@@ -196,27 +193,20 @@ class PDFOrderDetector:
         )
 
         # Marker 2: Airtime/Schedule keywords
-        has_airtime = (
-            "airtime" in text_lower
-            or ("flight" in text_lower and "schedule" in text_lower)
+        has_airtime = "airtime" in text_lower or (
+            "flight" in text_lower and "schedule" in text_lower
         )
 
         # Marker 3: Advertiser or Client field
-        has_advertiser = (
-            "advertiser" in text_lower
-            or any(line.strip().lower().startswith("client ") for line in text.split('\n'))
+        has_advertiser = "advertiser" in text_lower or any(
+            line.strip().lower().startswith("client ") for line in text.split("\n")
         )
 
         # Marker 4: Bonus lines (ROS Bonus, or just BONUS with language)
-        has_bonus = (
-            "ros bonus" in text_lower
-            or "bonus" in text_lower
-        )
+        has_bonus = "ros bonus" in text_lower or "bonus" in text_lower
 
         # Marker 5: Charmaine's name (in submitted by or email)
-        has_charmaine = (
-            "charmaine" in text_lower
-        )
+        has_charmaine = "charmaine" in text_lower
 
         # Must have at least 3 of 5 markers
         markers = [has_crossings_title, has_airtime, has_advertiser, has_bonus, has_charmaine]
@@ -229,10 +219,7 @@ class PDFOrderDetector:
             if tables:
                 for table in tables:
                     for row in table:
-                        if row and any(
-                            cell and '$' in str(cell)
-                            for cell in row if cell
-                        ):
+                        if row and any(cell and "$" in str(cell) for cell in row if cell):
                             return True
         except Exception:
             pass  # Table extraction is a heuristic; failure is non-fatal
@@ -240,10 +227,7 @@ class PDFOrderDetector:
         # If we had 3+ markers, still likely Charmaine even without table parse
         return sum(markers) >= 3
 
-    def detect_multi_order_pdf(
-        self,
-        pdf_path: Path | str
-    ) -> tuple[OrderType, int]:
+    def detect_multi_order_pdf(self, pdf_path: Path | str) -> tuple[OrderType, int]:
         """
         Detect if PDF contains multiple orders and return count.
 
@@ -258,6 +242,7 @@ class PDFOrderDetector:
         # H/L Buy Detail Report uses Type3 custom fonts — detect before pdfplumber
         try:
             from browser_automation.parsers.hl_bdr_parser import is_bdr_pdf
+
             if is_bdr_pdf(str(pdf_path)):
                 return (OrderType.HL_BDR, 1)
         except Exception:
@@ -283,10 +268,7 @@ class PDFOrderDetector:
                         first_page_text = ocr_text
                         full_text = ocr_text
 
-                order_type = self._service.detect_from_text(
-                    first_page_text,
-                    second_page_text
-                )
+                order_type = self._service.detect_from_text(first_page_text, second_page_text)
 
                 # If unknown, check Charmaine
                 if order_type == OrderType.UNKNOWN:
@@ -306,6 +288,7 @@ class PDFOrderDetector:
                 # Filename fallback for PDFs with no agency text markers
                 if order_type == OrderType.UNKNOWN:
                     from business_logic.services.order_detection_service import detect_from_filename
+
                     order_type = detect_from_filename(pdf_path.name)
 
                 # All other types: assume single order
@@ -334,10 +317,14 @@ class PDFOrderDetector:
                 tables = page.extract_tables()
                 if tables:
                     has_data = any(
-                        row for table in tables for row in table
-                        if row and any(
-                            cell and ('$' in str(cell) or 'ROS' in str(cell))
-                            for cell in row if cell
+                        row
+                        for table in tables
+                        for row in table
+                        if row
+                        and any(
+                            cell and ("$" in str(cell) or "ROS" in str(cell))
+                            for cell in row
+                            if cell
                         )
                     )
                     if has_data:
@@ -346,11 +333,7 @@ class PDFOrderDetector:
                 continue
         return max(count, 1)
 
-    def split_multi_order_pdf(
-        self,
-        pdf_path: Path | str,
-        order_type: OrderType
-    ) -> list[dict]:
+    def split_multi_order_pdf(self, pdf_path: Path | str, order_type: OrderType) -> list[dict]:
         """
         Split a multi-order PDF into separate order data.
 
@@ -375,17 +358,13 @@ class PDFOrderDetector:
                     return self._service.split_tcaa_orders(full_text)
 
                 # Default: single order
-                return [{'estimate': 'Unknown', 'text': full_text}]
+                return [{"estimate": "Unknown", "text": full_text}]
 
         except Exception as e:
             print(f"[SPLIT] Error splitting multi-order PDF: {e}")
-            return [{'estimate': 'Unknown', 'text': ''}]
+            return [{"estimate": "Unknown", "text": ""}]
 
-    def extract_client_name(
-        self,
-        pdf_path: Path | str,
-        order_type: OrderType
-    ) -> str | None:
+    def extract_client_name(self, pdf_path: Path | str, order_type: OrderType) -> str | None:
         """
         Extract client/advertiser name from PDF.
 
@@ -418,6 +397,7 @@ class PDFOrderDetector:
                         from browser_automation.parsers.worldlink_parser import (
                             _vision_extract_worldlink,
                         )
+
                         od = _vision_extract_worldlink(pdf_path)
                         advertiser = (od or {}).get("advertiser", "")
                         if advertiser and advertiser != "Unknown":
@@ -433,11 +413,7 @@ class PDFOrderDetector:
             if order_type == OrderType.CHARMAINE:
                 return self._extract_charmaine_client_name(first_page_text)
 
-            return self._service.extract_client_name(
-                first_page_text,
-                second_page_text,
-                order_type
-            )
+            return self._service.extract_client_name(first_page_text, second_page_text, order_type)
 
         except Exception as e:
             print(f"[EXTRACT] Error extracting client name: {e}")
@@ -455,16 +431,14 @@ class PDFOrderDetector:
         Returns:
             Advertiser name or None
         """
-        for line in text.split('\n'):
+        for line in text.split("\n"):
             line_stripped = line.strip()
             if line_stripped.startswith("Advertiser "):
                 return line_stripped.replace("Advertiser ", "", 1).strip()
         return None
 
     def extract_customer_name(
-        self,
-        pdf_path: Path | str,
-        order_type: OrderType | None = None
+        self, pdf_path: Path | str, order_type: OrderType | None = None
     ) -> str | None:
         """
         Extract customer/advertiser name from PDF (alias for extract_client_name).
@@ -483,11 +457,7 @@ class PDFOrderDetector:
 
         return self.extract_client_name(pdf_path, order_type)
 
-    def extract_customer_name_from_text(
-        self,
-        text: str,
-        order_type: OrderType
-    ) -> str | None:
+    def extract_customer_name_from_text(self, text: str, order_type: OrderType) -> str | None:
         """
         Extract customer/advertiser name from text.
 
@@ -507,6 +477,5 @@ class PDFOrderDetector:
         return self._service.extract_client_name(
             text,
             None,  # No second page text for split orders
-            order_type
+            order_type,
         )
-

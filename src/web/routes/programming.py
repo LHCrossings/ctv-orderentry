@@ -33,11 +33,11 @@ from pydantic import BaseModel
 # Constants (verified 2026-08-07 / 2026-08-12; see spec)
 # ---------------------------------------------------------------------------
 
-FRAMES_PER_HOUR = 107892          # 29.97 fps * 3600, exact
-DAY_START = 647352                # 06:00
-DAY_END = 3236760                 # 30:00
-DAY_SPAN = DAY_END - DAY_START    # 2589408 = 24h
-OVERLAP_TOL = 2                   # universal Sat/Sun 2-frame overlap — normal
+FRAMES_PER_HOUR = 107892  # 29.97 fps * 3600, exact
+DAY_START = 647352  # 06:00
+DAY_END = 3236760  # 30:00
+DAY_SPAN = DAY_END - DAY_START  # 2589408 = 24h
+OVERLAP_TOL = 2  # universal Sat/Sun 2-frame overlap — normal
 
 STATIONS = [
     (1, "NYC", "New York"),
@@ -67,6 +67,7 @@ def _connect():
 # ---------------------------------------------------------------------------
 # Frame helpers
 # ---------------------------------------------------------------------------
+
 
 def _frames_to_bcast(frames: int) -> str:
     """Frame-of-day -> clock HH:MM for display.
@@ -109,15 +110,14 @@ def _parse_date(s: str) -> date:
 # Day validation
 # ---------------------------------------------------------------------------
 
+
 def _day_issues(blocks: list[dict]) -> list[str]:
     """blocks: offset-sorted [{'offset': int, 'duration': int, 'name': str}]."""
     issues: list[str] = []
     if not blocks:
         return ["day is empty"]
     if blocks[0]["offset"] != DAY_START:
-        issues.append(
-            f"day starts at {_frames_to_bcast(blocks[0]['offset'])} (expected 06:00)"
-        )
+        issues.append(f"day starts at {_frames_to_bcast(blocks[0]['offset'])} (expected 06:00)")
     seen: dict[int, int] = {}
     for b in blocks:
         seen[b["id"]] = seen.get(b["id"], 0) + 1
@@ -149,6 +149,7 @@ def _day_issues(blocks: list[dict]) -> list[str]:
 # Week loading (shared by the viewer and the copy engine)
 # ---------------------------------------------------------------------------
 
+
 def _load_days(cur, station: int, d_from: date, d_to: date) -> dict[date, dict]:
     """All Level-0 programmed days for a station in [d_from, d_to].
 
@@ -170,9 +171,7 @@ def _load_days(cur, station: int, d_from: date, d_to: date) -> dict[date, dict]:
     days: dict[date, dict] = {}
     for row in cur.fetchall():
         d = row[0].date() if hasattr(row[0], "date") else row[0]
-        day = days.setdefault(
-            d, {"cal_id": row[1], "schedule_id": row[2], "blocks": []}
-        )
+        day = days.setdefault(d, {"cal_id": row[1], "schedule_id": row[2], "blocks": []})
         day["blocks"].append(
             {
                 "id": row[3],
@@ -207,6 +206,7 @@ def _segment_counts(cur, block_ids: list[int]) -> dict[int, dict]:
 # ---------------------------------------------------------------------------
 # Copy engine (Phase 2) — rebuild of the 2026-08-07 gridcopy write
 # ---------------------------------------------------------------------------
+
 
 def _copy_station(
     conn, station: int, source_monday: date, t_from: date, t_to: date, commit: bool
@@ -243,6 +243,7 @@ def _copy_station(
     # Weekday-pattern-varies guard: catches Etere's own "one day copied to all
     # seven" failure mode. Mon vs Sat and Mon vs Sun block layouts must differ.
     if not issues:
+
         def _layout(d: date):
             return sorted((b["id"], b["offset"]) for b in src_days[d]["blocks"])
 
@@ -277,8 +278,7 @@ def _copy_station(
         if existing:
             head = ", ".join(existing[:5]) + ("…" if len(existing) > 5 else "")
             issues.append(
-                f"{len(existing)} target day(s) already programmed ({head}) — "
-                "targets must be empty"
+                f"{len(existing)} target day(s) already programmed ({head}) — targets must be empty"
             )
 
     # Placed-spot guard (both tables; see the ghost-spot lesson).
@@ -445,9 +445,10 @@ def _copy_station(
 # Router
 # ---------------------------------------------------------------------------
 
+
 class CopyRequest(BaseModel):
     stations: list[int]
-    source_week: str            # Monday, YYYY-MM-DD
+    source_week: str  # Monday, YYYY-MM-DD
     target_from: str | None = None  # blank -> each station's horizon + 1 day
     target_to: str
     commit: bool = False
@@ -464,9 +465,7 @@ def build_programming_router(templates: Jinja2Templates) -> APIRouter:
 
     @router.get("/programming/weekly-schedules")
     def weekly_schedules_page(request: Request):
-        return templates.TemplateResponse(
-            request, "programming/weekly_schedules.html"
-        )
+        return templates.TemplateResponse(request, "programming/weekly_schedules.html")
 
     # -- read APIs ------------------------------------------------------------
 
@@ -476,8 +475,7 @@ def build_programming_router(templates: Jinja2Templates) -> APIRouter:
         with _connect() as conn:
             cur = conn.cursor()
             cur.execute(
-                "SELECT Cod_User, MAX(Date) FROM Traffic_Calendar "
-                "WHERE Level = 0 GROUP BY Cod_User"
+                "SELECT Cod_User, MAX(Date) FROM Traffic_Calendar WHERE Level = 0 GROUP BY Cod_User"
             )
             horizon = {r[0]: str(r[1])[:10] for r in cur.fetchall()}
         return JSONResponse(
@@ -521,8 +519,7 @@ def build_programming_router(templates: Jinja2Templates) -> APIRouter:
                 (station, monday.isoformat(), (monday + timedelta(days=6)).isoformat()),
             )
             spot_counts = {
-                (r[0].date() if hasattr(r[0], "date") else r[0]): r[1]
-                for r in cur.fetchall()
+                (r[0].date() if hasattr(r[0], "date") else r[0]): r[1] for r in cur.fetchall()
             }
         out_days = []
         for i in range(7):
@@ -583,7 +580,9 @@ def build_programming_router(templates: Jinja2Templates) -> APIRouter:
         for dt, offset, bid, name in rows:
             d = dt.date() if hasattr(dt, "date") else dt
             slot = slots.setdefault((d.weekday(), offset), {})
-            ent = slot.setdefault(bid, {"name": (name or "").strip(), "first": d, "last": d, "days": 0})
+            ent = slot.setdefault(
+                bid, {"name": (name or "").strip(), "first": d, "last": d, "days": 0}
+            )
             ent["days"] += 1
             ent["first"] = min(ent["first"], d)
             ent["last"] = max(ent["last"], d)
@@ -694,7 +693,8 @@ def build_programming_router(templates: Jinja2Templates) -> APIRouter:
                         "name": (dep_name or "").strip(),
                         "station": codes.get(dep_station, str(dep_station)),
                     }
-                    if dep_id else None
+                    if dep_id
+                    else None
                 ),
             }
         )

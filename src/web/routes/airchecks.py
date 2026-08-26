@@ -24,19 +24,27 @@ from fastapi.templating import Jinja2Templates
 
 # market_id (COD_USER) → network label
 MARKET_NAMES = {
-    1: "NYC", 2: "CMP", 3: "HOU", 4: "SFO",
-    5: "SEA", 6: "LAX", 7: "CVC", 8: "WDC",
-    9: "MMT", 10: "DAL",
+    1: "NYC",
+    2: "CMP",
+    3: "HOU",
+    4: "SFO",
+    5: "SEA",
+    6: "LAX",
+    7: "CVC",
+    8: "WDC",
+    9: "MMT",
+    10: "DAL",
 }
 
-PRE_ROLL_SECS  = 20
+PRE_ROLL_SECS = 20
 POST_ROLL_SECS = 30
 
 
 def _fetch_etere_spots(contract_id: int) -> list[dict]:
     from browser_automation.etere_direct_client import connect as _db_connect
 
-    sql = """
+    sql = (
+        """
         WITH ranked AS (
             SELECT
                 f.COD_PROGRA   AS isci_code,
@@ -68,7 +76,9 @@ def _fetch_etere_spots(contract_id: int) -> list[dict]:
         FROM ranked
         WHERE rn = 1
         ORDER BY isci_code, market_id
-    """ % contract_id
+    """
+        % contract_id
+    )
 
     results = []
     with _db_connect() as conn:
@@ -77,17 +87,19 @@ def _fetch_etere_spots(contract_id: int) -> list[dict]:
         for row in cur.fetchall():
             network = MARKET_NAMES.get(int(row["market_id"]), f"MKT{row['market_id']}")
 
-            air_date  = row["air_date"]
+            air_date = row["air_date"]
             if hasattr(air_date, "date"):
                 air_date = air_date.date()
-            air_secs   = int(row["air_ms"]) / 1000
-            market_tz  = MARKET_TZ.get(network, _PT)
-            air_dt_loc = datetime.combine(air_date, datetime.min.time(), tzinfo=market_tz) + timedelta(seconds=air_secs)
-            air_dt     = air_dt_loc.astimezone(_PT).replace(tzinfo=None)  # naive PT for Datamover
+            air_secs = int(row["air_ms"]) / 1000
+            market_tz = MARKET_TZ.get(network, _PT)
+            air_dt_loc = datetime.combine(
+                air_date, datetime.min.time(), tzinfo=market_tz
+            ) + timedelta(seconds=air_secs)
+            air_dt = air_dt_loc.astimezone(_PT).replace(tzinfo=None)  # naive PT for Datamover
 
-            tz_abbr   = air_dt_loc.strftime("%Z")
-            h12       = air_dt_loc.hour % 12 or 12
-            ampm      = "AM" if air_dt_loc.hour < 12 else "PM"
+            tz_abbr = air_dt_loc.strftime("%Z")
+            h12 = air_dt_loc.hour % 12 or 12
+            ampm = "AM" if air_dt_loc.hour < 12 else "PM"
             local_display = (
                 f"{air_dt_loc.month}/{air_dt_loc.day} at "
                 f"{h12}:{air_dt_loc.strftime('%M:%S')}{ampm} {tz_abbr}"
@@ -95,21 +107,23 @@ def _fetch_etere_spots(contract_id: int) -> list[dict]:
 
             dur_secs = max(5, int(row["duration_frames"] or 0) // 30)
 
-            client_name  = (row.get("client_name") or "").strip() or None
+            client_name = (row.get("client_name") or "").strip() or None
             customer_ref = (row.get("customer_ref") or "").strip() or None
 
-            results.append({
-                "isci_code":                row["isci_code"].strip(),
-                "air_ora":                  int(row["air_ora"]),
-                "client_name":              client_name,
-                "customer_ref":             customer_ref,
-                "network":                  network,
-                "air_datetime":             air_dt.isoformat(),
-                "air_datetime_local":       local_display,
-                "duration_seconds":         dur_secs,
-                "capture_start":            (air_dt - timedelta(seconds=PRE_ROLL_SECS)).isoformat(),
-                "capture_duration_seconds": dur_secs + PRE_ROLL_SECS + POST_ROLL_SECS,
-            })
+            results.append(
+                {
+                    "isci_code": row["isci_code"].strip(),
+                    "air_ora": int(row["air_ora"]),
+                    "client_name": client_name,
+                    "customer_ref": customer_ref,
+                    "network": network,
+                    "air_datetime": air_dt.isoformat(),
+                    "air_datetime_local": local_display,
+                    "duration_seconds": dur_secs,
+                    "capture_start": (air_dt - timedelta(seconds=PRE_ROLL_SECS)).isoformat(),
+                    "capture_duration_seconds": dur_secs + PRE_ROLL_SECS + POST_ROLL_SECS,
+                }
+            )
 
     return results
 
@@ -120,14 +134,17 @@ AGENT_URL = "http://100.102.206.113:8765"
 def _fetch_agent_status() -> dict:
     import json as _json
     import urllib.request
+
     try:
         with urllib.request.urlopen(f"{AGENT_URL}/captures", timeout=3) as resp:
             caps = _json.loads(resp.read())
         return {
-            "complete":     sum(1 for c in caps if c.get("status") == "complete"),
+            "complete": sum(1 for c in caps if c.get("status") == "complete"),
             "complete_ids": [c["id"] for c in caps if c.get("status") == "complete"],
-            "scheduled":    sum(1 for c in caps if c.get("status") in ("scheduled", "pending", "recording")),
-            "unreachable":  False,
+            "scheduled": sum(
+                1 for c in caps if c.get("status") in ("scheduled", "pending", "recording")
+            ),
+            "unreachable": False,
         }
     except Exception:
         return {"complete": 0, "scheduled": 0, "unreachable": True}
@@ -157,8 +174,11 @@ def schedule_airchecks_for_contract(contract_id: int) -> dict:
     try:
         with urllib.request.urlopen(f"{AGENT_URL}/captures", timeout=4) as resp:
             existing = {
-                (str(c.get("isci_code", "")).strip().upper(), str(c.get("network", "")),
-                 str(c.get("start_time", ""))[:16])
+                (
+                    str(c.get("isci_code", "")).strip().upper(),
+                    str(c.get("network", "")),
+                    str(c.get("start_time", ""))[:16],
+                )
                 for c in _json.loads(resp.read())
             }
     except Exception:
@@ -170,15 +190,17 @@ def schedule_airchecks_for_contract(contract_id: int) -> dict:
         if key in existing:
             skipped += 1
             continue
-        payload = _json.dumps({
-            "client":           s.get("client_name") or s["isci_code"],
-            "network":          s["network"],
-            "duration_seconds": s["capture_duration_seconds"],
-            "start_time":       s["capture_start"],
-            "notes":            s.get("customer_ref") or "",
-            "isci_code":        s["isci_code"],
-            "original_ora":     s["air_ora"],
-        }).encode()
+        payload = _json.dumps(
+            {
+                "client": s.get("client_name") or s["isci_code"],
+                "network": s["network"],
+                "duration_seconds": s["capture_duration_seconds"],
+                "start_time": s["capture_start"],
+                "notes": s.get("customer_ref") or "",
+                "isci_code": s["isci_code"],
+                "original_ora": s["air_ora"],
+            }
+        ).encode()
         req = urllib.request.Request(f"{AGENT_URL}/captures", data=payload, method="POST")
         req.add_header("Content-Type", "application/json")
         try:
@@ -209,6 +231,7 @@ def build_airchecks_router(templates: Jinja2Templates) -> APIRouter:
     async def get_aircheck_settings():
         import json as _json
         import urllib.request
+
         try:
             with urllib.request.urlopen(f"{AGENT_URL}/settings", timeout=3) as resp:
                 return JSONResponse(_json.loads(resp.read()))
@@ -219,6 +242,7 @@ def build_airchecks_router(templates: Jinja2Templates) -> APIRouter:
     async def update_aircheck_settings(request: Request):
         import json as _json
         import urllib.request
+
         body = await request.body()
         req = urllib.request.Request(f"{AGENT_URL}/settings", data=body, method="PATCH")
         req.add_header("Content-Type", "application/json")
@@ -232,6 +256,7 @@ def build_airchecks_router(templates: Jinja2Templates) -> APIRouter:
     async def poll_agent():
         import json as _json
         import urllib.request
+
         req = urllib.request.Request(f"{AGENT_URL}/poll", data=b"", method="POST")
         try:
             with urllib.request.urlopen(req, timeout=15) as resp:
@@ -243,6 +268,7 @@ def build_airchecks_router(templates: Jinja2Templates) -> APIRouter:
     async def deploy_agent():
         import json as _json
         import urllib.request
+
         req = urllib.request.Request(f"{AGENT_URL}/deploy", data=b"", method="POST")
         try:
             with urllib.request.urlopen(req, timeout=15) as resp:
@@ -253,6 +279,7 @@ def build_airchecks_router(templates: Jinja2Templates) -> APIRouter:
     @router.get("/api/airchecks/etere-spots")
     async def etere_spots(contract_id: int):
         import traceback
+
         try:
             spots = await asyncio.get_running_loop().run_in_executor(
                 None, lambda: _fetch_etere_spots(contract_id)

@@ -41,7 +41,9 @@ class TestCustomerMatchingService:
 
         # Verify
         assert result == "MCDS"
-        mock_repository.find_by_fuzzy_match.assert_called_once_with("McDonald's", OrderType.WORLDLINK)
+        mock_repository.find_by_fuzzy_match.assert_called_once_with(
+            "McDonald's", OrderType.WORLDLINK
+        )
 
     def test_find_customer_not_found_no_prompt(self, service, mock_repository):
         """Should return None when customer not found and prompting disabled."""
@@ -125,9 +127,9 @@ class TestCustomerMatchingService:
 
         stats = service.get_statistics()
 
-        assert stats['total'] == 3
-        assert stats['WORLDLINK'] == 2
-        assert stats['TCAA'] == 1
+        assert stats["total"] == 3
+        assert stats["WORLDLINK"] == 2
+        assert stats["TCAA"] == 1
 
     def test_get_statistics_empty(self, service, mock_repository):
         """Should return zero statistics for empty database."""
@@ -135,8 +137,8 @@ class TestCustomerMatchingService:
 
         stats = service.get_statistics()
 
-        assert stats['total'] == 0
-        assert 'WORLDLINK' not in stats
+        assert stats["total"] == 0
+        assert "WORLDLINK" not in stats
 
 
 if __name__ == "__main__":

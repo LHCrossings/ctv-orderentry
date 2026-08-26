@@ -21,6 +21,7 @@ is committed only if it passes the verify gate, else rolled back untouched.
 
 See tasks/daily_programming_discovery.md + the project memory for the recipe.
 """
+
 from __future__ import annotations
 
 import random
@@ -88,13 +89,14 @@ def _filmati_lock(fid):
             lock = _FILMATI_LOCKS[fid] = threading.Lock()
         return lock
 
+
 # Shop LC overnight (00:00–06:00) — static setup, CTV markets only, never DAL.
 # All three assets are live events (FILMATI.LIVE_ID='1'); _sync_checksums leaves
 # live assets' FILMATI fields untouched.
 SHOP_LC = {
     "window": ("00:00", "06:00"),
     "explode": {4: 2152, 7: 2810},  # SFO, CVC — EDL-sliced hourly (station-ID overlay)
-    "generic": 2811,                # every other CTV market — single 6h event
+    "generic": 2811,  # every other CTV market — single 6h event
 }
 
 
@@ -229,16 +231,14 @@ def _group_anchors(rows):
     second window looked empty and the piece was re-inserted as a duplicate. The
     >3h gap stays a backstop for letterless codes. MIRRORS stampGroupAnchors in
     daily_programming.html — keep the two in sync."""
-    last = {}   # base -> {ora, anchor, letter} of the base's previous row
+    last = {}  # base -> {ora, anchor, letter} of the base's previous row
     anchors = []
     for ora, code in sorted(rows):
         base = _piece_base(code)
         letter = _piece_letter(code)
         prev = last.get(base)
         new_airing = (
-            prev is None
-            or letter <= prev["letter"]
-            or ora - prev["ora"] > _PIECE_GROUP_GAP
+            prev is None or letter <= prev["letter"] or ora - prev["ora"] > _PIECE_GROUP_GAP
         )
         anchor = ora if new_airing else prev["anchor"]
         if new_airing:
@@ -269,8 +269,11 @@ def _is_placed(cur, cod_user, d, lo, hi):
     # ≤5-min overshoot) can START inside [hi-TOL, hi+overshoot) — which would mark
     # the NEXT window "already placed" and silently skip its show. The window's
     # own pieces always anchor it, so dropping fillers never un-detects a placement.
-    rows = [(int(r[0]), r[1] or "") for r in cur.fetchall()
-            if not _FILLER_RE.match((r[1] or "").strip())]
+    rows = [
+        (int(r[0]), r[1] or "")
+        for r in cur.fetchall()
+        if not _FILLER_RE.match((r[1] or "").strip())
+    ]
     return any(lo - _ANCHOR_TOL <= a < hi - _ANCHOR_TOL for a in _group_anchors(rows))
 
 
@@ -340,8 +343,9 @@ def _ensure_bumper(cur, cod_user, d, slot, spec, existing):
     if not r:
         return None
     fid, dur = int(r[0]), int(r[1] or 0)
-    nid = _insert_event(cur, cod_user, d, slot["sched"], slot["block"], slot["seg"],
-                        slot["ora"], fid, dur)
+    nid = _insert_event(
+        cur, cod_user, d, slot["sched"], slot["block"], slot["seg"], slot["ora"], fid, dur
+    )
     cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
     cur.execute("SELECT XORDER FROM TPALINSE WHERE id_tpalinse=%s", (nid,))
     return {"id": nid, "xorder": int(cur.fetchone()[0])}
@@ -357,14 +361,17 @@ def _apply_filmati_sync(cur, fid, fid_rows):
     if not is_live:
         # Live event: LIVE_ID is the live-feed link and the asset never goes
         # through the Aligner — its fields as-is are the settled state.
-        cur.execute("""
+        cur.execute(
+            """
             UPDATE FILMATI SET
                 INF_DIGIT=0,
                 AUDIO=NULL,
                 AUDIO_LANGUAGE=NULL,
                 LIVE_ID=NULL
             WHERE ID_FILMATI=%s
-        """, (fid,))
+        """,
+            (fid,),
+        )
 
     for rid, prog_code in fid_rows:
         if is_live:
@@ -374,12 +381,14 @@ def _apply_filmati_sync(cur, fid, fid_rows):
             # incident) — freeze the checksum only.
             cur.execute(
                 "UPDATE TPALINSE SET SCHEDULE_CHECKSUM = dbo.sch_getFilmatiCheckSum(%s) WHERE id_tpalinse=%s",
-                (rid, rid))
+                (rid, rid),
+            )
             continue
 
         supporto_val = f"0ETX      {prog_code}"
         crawl_desc = "[EDL]\nEdl_Version=0\n[Aspect Conversion]\nCode=HL"
-        cur.execute("""
+        cur.execute(
+            """
             UPDATE TPALINSE SET
                 tipo_tc='C',
                 aspect='H',
@@ -389,7 +398,9 @@ def _apply_filmati_sync(cur, fid, fid_rows):
                 CRAWL_DESC=%s,
                 SCHEDULE_CHECKSUM = dbo.sch_getFilmatiCheckSum(%s)
             WHERE id_tpalinse=%s
-        """, (supporto_val, crawl_desc, rid, rid))
+        """,
+            (supporto_val, crawl_desc, rid, rid),
+        )
 
 
 def _drain_pending_filmati_syncs(cur, conn, pending):
@@ -412,14 +423,18 @@ def _drain_pending_filmati_syncs(cur, conn, pending):
                 finally:
                     lock.release()
                 progressed = True
-                print(f"[daily-programming] FILMATI fid={fid} sync drained "
-                      f"(rows={[r for r, _ in fid_rows]})")
+                print(
+                    f"[daily-programming] FILMATI fid={fid} sync drained "
+                    f"(rows={[r for r, _ in fid_rows]})"
+                )
             else:
                 remaining.append((fid, fid_rows))
         pending = remaining
         if pending and not progressed:
-            print(f"[daily-programming] FILMATI still contended for fids="
-                  f"{[fid for fid, _ in pending]}, retrying in {_FILMATI_RETRY_SECONDS}s")
+            print(
+                f"[daily-programming] FILMATI still contended for fids="
+                f"{[fid for fid, _ in pending]}, retrying in {_FILMATI_RETRY_SECONDS}s"
+            )
             time.sleep(_FILMATI_RETRY_SECONDS)
 
 
@@ -492,8 +507,10 @@ def _sync_checksums(cur, ids, pending):
             finally:
                 lock.release()
         else:
-            print(f"[daily-programming] FILMATI fid={fid} locked by another "
-                  f"market's thread — deferring sync for rows={[r for r, _ in fid_rows]}")
+            print(
+                f"[daily-programming] FILMATI fid={fid} locked by another "
+                f"market's thread — deferring sync for rows={[r for r, _ in fid_rows]}"
+            )
             pending.append((fid, fid_rows))
 
 
@@ -529,10 +546,21 @@ def _place_element(cur, cod_user, d, lo, hi, prgs_slots, el, program_first_id):
     if slot is None:
         return None
 
-    nid = _insert_event(cur, cod_user, d, slot["sched"], slot["block"], slot["seg"],
-                        slot["ora"], fid, _durata(cur, fid))
+    nid = _insert_event(
+        cur,
+        cod_user,
+        d,
+        slot["sched"],
+        slot["block"],
+        slot["seg"],
+        slot["ora"],
+        fid,
+        _durata(cur, fid),
+    )
     cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
-    cur.execute("UPDATE TPalinse SET EVENT_TYPE=%s WHERE id_tpalinse=%s", (el.get("event_type", "T"), nid))
+    cur.execute(
+        "UPDATE TPalinse SET EVENT_TYPE=%s WHERE id_tpalinse=%s", (el.get("event_type", "T"), nid)
+    )
     cur.execute("SELECT XORDER FROM TPALINSE WHERE id_tpalinse=%s", (nid,))
     xo = int(cur.fetchone()[0])
 
@@ -572,9 +600,7 @@ def _conform_window_xorder(cur, cod_user, d, lo, hi, part_ids, part_keys, open_b
     if not rows:
         return
     ids_csv = ",".join(str(i) for i in rows)
-    cur.execute(
-        f"SELECT id_tpalinse, offset FROM trafficPalinse WHERE id_tpalinse IN ({ids_csv})"
-    )
+    cur.execute(f"SELECT id_tpalinse, offset FROM trafficPalinse WHERE id_tpalinse IN ({ids_csv})")
     tp_off = {r[0]: int(r[1]) for r in cur.fetchall()}
 
     keys = {rid: (tp_off.get(rid, ora), ora, xo) for rid, (ora, xo) in rows.items()}
@@ -599,7 +625,9 @@ def _conform_window_xorder(cur, cod_user, d, lo, hi, part_ids, part_keys, open_b
 
 def _rebuild(cur, d, cod_user, fromid):
     with _REBUILD_LOCK:
-        cur.execute("EXEC dbo.sch_rebuildStartTimeSchedule %s,%s,0,0,NULL,%s,-1,0,1", (d, cod_user, fromid))
+        cur.execute(
+            "EXEC dbo.sch_rebuildStartTimeSchedule %s,%s,0,0,NULL,%s,-1,0,1", (d, cod_user, fromid)
+        )
         try:
             while cur.nextset():
                 pass
@@ -620,7 +648,10 @@ def _verify_sequence(cur, ids, open_b, close_b):
         return False, "missing inserted rows after rebuild"
     for k in range(1, len(seq)):
         if seq[k][0] < seq[k - 1][0] + seq[k - 1][1]:
-            return False, f"overlap at element {k + 1} (ora {seq[k][0]} < prev end {seq[k - 1][0] + seq[k - 1][1]})"
+            return (
+                False,
+                f"overlap at element {k + 1} (ora {seq[k][0]} < prev end {seq[k - 1][0] + seq[k - 1][1]})",
+            )
     if open_b:
         cur.execute("SELECT ORA FROM TPALINSE WHERE id_tpalinse=%s", (open_b["id"],))
         if cur.fetchone()[0] > seq[0][0]:
@@ -649,13 +680,17 @@ def run_market(conn, cod_user, d, assignment, pending):
             return result
         if attempt < _DEADLOCK_MAX_ATTEMPTS:
             delay = _DEADLOCK_RETRY_SECONDS * attempt + random.uniform(0.1, 1.5)
-            print(f"[daily-programming] cu={cod_user} 1205 deadlock on attempt "
-                  f"{attempt}/{_DEADLOCK_MAX_ATTEMPTS} ({result['message']}) — retrying "
-                  f"in {delay:.1f}s")
+            print(
+                f"[daily-programming] cu={cod_user} 1205 deadlock on attempt "
+                f"{attempt}/{_DEADLOCK_MAX_ATTEMPTS} ({result['message']}) — retrying "
+                f"in {delay:.1f}s"
+            )
             time.sleep(delay)
         else:
-            print(f"[daily-programming] cu={cod_user} 1205 deadlock persisted after "
-                  f"{_DEADLOCK_MAX_ATTEMPTS} attempts, giving up ({result['message']})")
+            print(
+                f"[daily-programming] cu={cod_user} 1205 deadlock persisted after "
+                f"{_DEADLOCK_MAX_ATTEMPTS} attempts, giving up ({result['message']})"
+            )
             # Re-tag so the caller can tell "lost every deadlock coin flip" apart
             # from a deterministic failure and rerun this market without the
             # parallel contention that caused it.
@@ -678,8 +713,12 @@ def _place_once(conn, cod_user, d, assignment, pending):
     cur = conn.cursor()
     shoplc = assignment["mode"] == "shoplc"
     if shoplc and cod_user == 10:
-        return {"cu": cod_user, "ok": False, "skipped": False,
-                "message": "Shop LC is CTV-only — not aired on The Asian Channel"}
+        return {
+            "cu": cod_user,
+            "ok": False,
+            "skipped": False,
+            "message": "Shop LC is CTV-only — not aired on The Asian Channel",
+        }
     lo, hi = _window(assignment["start"], assignment["end"])
     if lo is None or hi is None:
         return {"cu": cod_user, "ok": False, "skipped": False, "message": "bad time window"}
@@ -688,8 +727,10 @@ def _place_once(conn, cod_user, d, assignment, pending):
 
     cleared = _clear_noop_fillers(cur, cod_user, d, lo, hi)
     if cleared:
-        print(f"[daily-programming] cu={cod_user} cleared {cleared} NOOP gap-filler(s) "
-              f"from the target window before placing")
+        print(
+            f"[daily-programming] cu={cod_user} cleared {cleared} NOOP gap-filler(s) "
+            f"from the target window before placing"
+        )
     slots = _slots(cur, cod_user, d, lo, hi)
     open_b, close_b = _bumpers(cur, cod_user, d, lo, hi)
     if shoplc:
@@ -708,13 +749,26 @@ def _place_once(conn, cod_user, d, assignment, pending):
             plan = _explode_plan(cur, fid, cod_user)
             if len(plan) != len(slots):
                 conn.rollback()
-                return {"cu": cod_user, "ok": False, "skipped": False,
-                        "message": f"{len(plan)} segments vs {len(slots)} PRGS slots"}
+                return {
+                    "cu": cod_user,
+                    "ok": False,
+                    "skipped": False,
+                    "message": f"{len(plan)} segments vs {len(slots)} PRGS slots",
+                }
             ids = []
             base = None
             for k, ((mi, mo), slot) in enumerate(zip(plan, slots), start=1):
-                nid = _insert_event(cur, cod_user, d, slot["sched"], slot["block"], slot["seg"],
-                                    slot["ora"], fid, mo - mi + 1)
+                nid = _insert_event(
+                    cur,
+                    cod_user,
+                    d,
+                    slot["sched"],
+                    slot["block"],
+                    slot["seg"],
+                    slot["ora"],
+                    fid,
+                    mo - mi + 1,
+                )
                 if base is None:
                     base = EVENT_BASE + nid
                 cur.execute(
@@ -729,7 +783,8 @@ def _place_once(conn, cod_user, d, assignment, pending):
                     # fields (it resets EVENT_TYPE, for one) and would clobber this.
                     cur.execute(
                         "UPDATE TPalinse SET Ora_P=0, Duration_P=%s WHERE ID_Tpalinse=%s",
-                        (plan[-1][1], nid))
+                        (plan[-1][1], nid),
+                    )
                 ids.append(nid)
             first_id = ids[0]
             keys = [s["ora"] for s in slots[: len(ids)]]
@@ -739,10 +794,23 @@ def _place_once(conn, cod_user, d, assignment, pending):
             # what master control's manual drop produces: one PART=0 row at 24:00).
             if not slots:
                 conn.rollback()
-                return {"cu": cod_user, "ok": False, "skipped": False,
-                        "message": "no PRGS slot found in the overnight window"}
-            nid = _insert_event(cur, cod_user, d, slots[0]["sched"], slots[0]["block"],
-                                slots[0]["seg"], slots[0]["ora"], fid, _durata(cur, fid))
+                return {
+                    "cu": cod_user,
+                    "ok": False,
+                    "skipped": False,
+                    "message": "no PRGS slot found in the overnight window",
+                }
+            nid = _insert_event(
+                cur,
+                cod_user,
+                d,
+                slots[0]["sched"],
+                slots[0]["block"],
+                slots[0]["seg"],
+                slots[0]["ora"],
+                fid,
+                _durata(cur, fid),
+            )
             cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
             ids = [nid]
             first_id = nid
@@ -753,12 +821,20 @@ def _place_once(conn, cod_user, d, assignment, pending):
             content = piece_fids + filler_fids
             if len(piece_fids) > len(slots):
                 conn.rollback()
-                return {"cu": cod_user, "ok": False, "skipped": False,
-                        "message": f"{len(piece_fids)} pieces exceed {len(slots)} PRGS slots"}
+                return {
+                    "cu": cod_user,
+                    "ok": False,
+                    "skipped": False,
+                    "message": f"{len(piece_fids)} pieces exceed {len(slots)} PRGS slots",
+                }
             if len(content) < len(slots):
                 conn.rollback()
-                return {"cu": cod_user, "ok": False, "skipped": False,
-                        "message": f"{len(content)} pieces+fillers vs {len(slots)} PRGS slots"}
+                return {
+                    "cu": cod_user,
+                    "ok": False,
+                    "skipped": False,
+                    "message": f"{len(content)} pieces+fillers vs {len(slots)} PRGS slots",
+                }
             # One item per PRGS slot in order; surplus fillers STACK behind the
             # last slot with synthetic sort keys (the _place_weekend_drama_once
             # overflow pattern) — that's how a window the pieces underfill gets
@@ -771,8 +847,17 @@ def _place_once(conn, cod_user, d, assignment, pending):
                     slot, key = slots[i], slots[i]["ora"]
                 else:
                     slot, key = slots[-1], slots[-1]["ora"] + (i - n_slots + 1)
-                nid = _insert_event(cur, cod_user, d, slot["sched"], slot["block"], slot["seg"],
-                                    slot["ora"], cfid, _durata(cur, cfid))
+                nid = _insert_event(
+                    cur,
+                    cod_user,
+                    d,
+                    slot["sched"],
+                    slot["block"],
+                    slot["seg"],
+                    slot["ora"],
+                    cfid,
+                    _durata(cur, cfid),
+                )
                 cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, cfid))
                 ids.append(nid)
                 keys.append(key)
@@ -781,16 +866,23 @@ def _place_once(conn, cod_user, d, assignment, pending):
         # Per-show profile: ensure required bumpers exist (insert if master control
         # didn't pre-place them). The bumper file is resolved by code at runtime.
         if profile:
-            for spec, slot, label in ((profile.get("open_bumper"), slots[0], "open"),
-                                      (profile.get("close_bumper"), slots[-1], "close")):
+            for spec, slot, label in (
+                (profile.get("open_bumper"), slots[0], "open"),
+                (profile.get("close_bumper"), slots[-1], "close"),
+            ):
                 if not spec:
                     continue
-                got = _ensure_bumper(cur, cod_user, d, slot, spec,
-                                     open_b if label == "open" else close_b)
+                got = _ensure_bumper(
+                    cur, cod_user, d, slot, spec, open_b if label == "open" else close_b
+                )
                 if not got:
                     conn.rollback()
-                    return {"cu": cod_user, "ok": False, "skipped": False,
-                            "message": f"{label} bumper {spec['code']} not found in media library"}
+                    return {
+                        "cu": cod_user,
+                        "ok": False,
+                        "skipped": False,
+                        "message": f"{label} bumper {spec['code']} not found in media library",
+                    }
                 if label == "open":
                     open_b = got
                 else:
@@ -818,30 +910,45 @@ def _place_once(conn, cod_user, d, assignment, pending):
         # of the program. SFO/CVC anchor flips piece A to T; DAL drops the ID into
         # the 3rd COMS break (best-effort position — the break optimizer finalizes).
         extra_ids = []
-        for el in (elements_for(profile, cod_user) if profile else []):
+        for el in elements_for(profile, cod_user) if profile else []:
             placed = _place_element(cur, cod_user, d, lo, hi, slots, el, first_id)
             if placed is None:
                 conn.rollback()
-                return {"cu": cod_user, "ok": False, "skipped": False,
-                        "message": f"element {el.get('code') or el.get('id')} could not be placed "
-                                   f"({el.get('segment')} break {el.get('break')})"}
+                return {
+                    "cu": cod_user,
+                    "ok": False,
+                    "skipped": False,
+                    "message": f"element {el.get('code') or el.get('id')} could not be placed "
+                    f"({el.get('segment')} break {el.get('break')})",
+                }
             extra_ids.append(placed["id"])
 
         _rebuild(cur, d, cod_user, first_id)
         # Clear Etere's "needs Explode - all breakpoints" warning by re-syncing the
         # stored schedule checksum on every row we placed (parts + bumpers + elements).
-        _sync_checksums(cur, list(ids) + [b["id"] for b in (open_b, close_b) if b] + extra_ids, pending)
+        _sync_checksums(
+            cur, list(ids) + [b["id"] for b in (open_b, close_b) if b] + extra_ids, pending
+        )
         ok, msg = _verify_sequence(cur, ids, open_b, close_b)
         if ok:
             conn.commit()
-            return {"cu": cod_user, "ok": True, "skipped": False,
-                    "message": f"placed {len(ids)} elements"}
+            return {
+                "cu": cod_user,
+                "ok": True,
+                "skipped": False,
+                "message": f"placed {len(ids)} elements",
+            }
         conn.rollback()
         return {"cu": cod_user, "ok": False, "skipped": False, "message": f"verify failed: {msg}"}
     except Exception as exc:  # noqa: BLE001 - report per-market failure, leave market untouched
         conn.rollback()
-        return {"cu": cod_user, "ok": False, "skipped": False, "message": f"error: {exc}",
-                "_deadlock": _is_deadlock(exc)}
+        return {
+            "cu": cod_user,
+            "ok": False,
+            "skipped": False,
+            "message": f"error: {exc}",
+            "_deadlock": _is_deadlock(exc),
+        }
 
 
 def list_placed_pieces(cur, cod_user, d):
@@ -858,9 +965,15 @@ def list_placed_pieces(cur, cod_user, d):
         (cod_user, d),
     )
     return [
-        {"id_tpalinse": int(r[0]), "ora": int(r[1]), "fid": int(r[2]),
-         "code": (r[3] or "").strip(), "duration": int(r[4] or 0),
-         "event_type": (r[5] or "").strip(), "description": r[6] or ""}
+        {
+            "id_tpalinse": int(r[0]),
+            "ora": int(r[1]),
+            "fid": int(r[2]),
+            "code": (r[3] or "").strip(),
+            "duration": int(r[4] or 0),
+            "event_type": (r[5] or "").strip(),
+            "description": r[6] or "",
+        }
         for r in cur.fetchall()
     ]
 
@@ -912,18 +1025,27 @@ def _replace_piece_once(conn, cod_user, d, lo, hi, old_fid, new_fid, pending):
         )
         rows = [(int(r[0]), (r[1] or "T").strip() or "T") for r in cur.fetchall()]
         if not rows:
-            return {"cu": cod_user, "ok": False,
-                    "message": "placed piece not found in this window (schedule changed since the list loaded?)"}
+            return {
+                "cu": cod_user,
+                "ok": False,
+                "message": "placed piece not found in this window (schedule changed since the list loaded?)",
+            }
 
         new_dur = _durata(cur, new_fid)
         if not new_dur:
-            return {"cu": cod_user, "ok": False,
-                    "message": f"replacement asset {new_fid} has no duration"}
+            return {
+                "cu": cod_user,
+                "ok": False,
+                "message": f"replacement asset {new_fid} has no duration",
+            }
         cur.execute("SELECT LIVE_ID FROM FILMATI WHERE ID_FILMATI=%s", (new_fid,))
         r = cur.fetchone()
         if r and r[0] is not None:
-            return {"cu": cod_user, "ok": False,
-                    "message": "replacement asset is a live event — pieces must be files"}
+            return {
+                "cu": cod_user,
+                "ok": False,
+                "message": "replacement asset is a live event — pieces must be files",
+            }
 
         for rid, event_type in rows:
             cur.execute(
@@ -933,8 +1055,7 @@ def _replace_piece_once(conn, cod_user, d, lo, hi, old_fid, new_fid, pending):
             )
             cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (rid, new_fid))
             # The SP resets EVENT_TYPE — restore the original F/T lock.
-            cur.execute("UPDATE TPALINSE SET EVENT_TYPE=%s WHERE id_tpalinse=%s",
-                        (event_type, rid))
+            cur.execute("UPDATE TPALINSE SET EVENT_TYPE=%s WHERE id_tpalinse=%s", (event_type, rid))
 
         _rebuild(cur, d, cod_user, rows[0][0])
         _sync_checksums(cur, [rid for rid, _ in rows], pending)
@@ -950,12 +1071,19 @@ def _replace_piece_once(conn, cod_user, d, lo, hi, old_fid, new_fid, pending):
                 return {"cu": cod_user, "ok": False, "message": "verify failed after swap"}
         conn.commit()
         n = len(rows)
-        return {"cu": cod_user, "ok": True,
-                "message": f"{n} row(s) re-pointed {old_fid} → {new_fid} ({new_dur} frames)"}
+        return {
+            "cu": cod_user,
+            "ok": True,
+            "message": f"{n} row(s) re-pointed {old_fid} → {new_fid} ({new_dur} frames)",
+        }
     except Exception as exc:  # noqa: BLE001 - report per-market failure, leave market untouched
         conn.rollback()
-        return {"cu": cod_user, "ok": False, "message": f"error: {exc}",
-                "_deadlock": _is_deadlock(exc)}
+        return {
+            "cu": cod_user,
+            "ok": False,
+            "message": f"error: {exc}",
+            "_deadlock": _is_deadlock(exc),
+        }
 
 
 def _mkt_event_type(start: str) -> str:
@@ -1002,7 +1130,10 @@ def _fill_marketplace_once(conn, cod_user, d, windows, fid, pending):
             slots = _slots(cur, cod_user, d, lo, hi, "PRGS")
             if len(slots) != 1:
                 conn.rollback()
-                return {"ok": False, "message": f"{start}-{end}: expected 1 PRGS slot, found {len(slots)}"}
+                return {
+                    "ok": False,
+                    "message": f"{start}-{end}: expected 1 PRGS slot, found {len(slots)}",
+                }
             slot = slots[0]
             ev = _mkt_event_type(start)
             # Current live whole-file PGM occupant(s) in this :30 window.
@@ -1017,8 +1148,10 @@ def _fill_marketplace_once(conn, cod_user, d, windows, fid, pending):
             occ = [int(x[0]) for x in cur.fetchall()]
             if len(occ) > 1:
                 conn.rollback()
-                return {"ok": False,
-                        "message": f"{start}-{end}: {len(occ)} occupants in one slot — resolve manually"}
+                return {
+                    "ok": False,
+                    "message": f"{start}-{end}: {len(occ)} occupants in one slot — resolve manually",
+                }
             if occ:  # replace in place (keeps identity/XORDER, like _replace_piece_once)
                 rid = occ[0]
                 cur.execute(
@@ -1030,8 +1163,17 @@ def _fill_marketplace_once(conn, cod_user, d, windows, fid, pending):
                 cur.execute("UPDATE TPALINSE SET EVENT_TYPE=%s WHERE id_tpalinse=%s", (ev, rid))
                 nid = rid
             else:  # blank slot → insert the whole file
-                nid = _insert_event(cur, cod_user, d, slot["sched"], slot["block"], slot["seg"],
-                                    slot["ora"], fid, new_dur)
+                nid = _insert_event(
+                    cur,
+                    cod_user,
+                    d,
+                    slot["sched"],
+                    slot["block"],
+                    slot["seg"],
+                    slot["ora"],
+                    fid,
+                    new_dur,
+                )
                 cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
                 cur.execute("UPDATE TPALINSE SET EVENT_TYPE=%s WHERE id_tpalinse=%s", (ev, nid))
             ids.append(nid)
@@ -1042,7 +1184,9 @@ def _fill_marketplace_once(conn, cod_user, d, windows, fid, pending):
         _rebuild(cur, d, cod_user, min(ids))
         _sync_checksums(cur, ids, pending)
         for nid in ids:
-            cur.execute("SELECT ID_FILMATI FROM TPALINSE WHERE id_tpalinse=%s AND LIVELLO=0", (nid,))
+            cur.execute(
+                "SELECT ID_FILMATI FROM TPALINSE WHERE id_tpalinse=%s AND LIVELLO=0", (nid,)
+            )
             chk = cur.fetchone()
             if not chk or int(chk[0]) != int(fid):
                 conn.rollback()
@@ -1084,8 +1228,7 @@ def ordered_pieces(cur, base):
         "WHERE NEWTYPE='PGM' AND COD_PROGRA LIKE %s ORDER BY COD_PROGRA",
         (base + "%",),
     )
-    return [int(r[0]) for r in cur.fetchall()
-            if len(r[1]) == len(base) + 1 and r[1][-1:].isalpha()]
+    return [int(r[0]) for r in cur.fetchall() if len(r[1]) == len(base) + 1 and r[1][-1:].isalpha()]
 
 
 def place_weekend_drama(conn, cod_user, d, start, end, piece_fids, filler_fids, pending):
@@ -1102,7 +1245,9 @@ def place_weekend_drama(conn, cod_user, d, start, end, piece_fids, filler_fids, 
     Returns {cu, ok, skipped, message}."""
     result = None
     for attempt in range(1, _DEADLOCK_MAX_ATTEMPTS + 1):
-        result = _place_weekend_drama_once(conn, cod_user, d, start, end, piece_fids, filler_fids, pending)
+        result = _place_weekend_drama_once(
+            conn, cod_user, d, start, end, piece_fids, filler_fids, pending
+        )
         if not result.pop("_deadlock", False):
             return result
         if attempt < _DEADLOCK_MAX_ATTEMPTS:
@@ -1122,12 +1267,20 @@ def _place_weekend_drama_once(conn, cod_user, d, start, end, piece_fids, filler_
         slots = _slots(cur, cod_user, d, lo, hi)
         if not slots:
             conn.rollback()
-            return {"cu": cod_user, "ok": False, "skipped": False,
-                    "message": "no PRGS slots in window"}
+            return {
+                "cu": cod_user,
+                "ok": False,
+                "skipped": False,
+                "message": "no PRGS slots in window",
+            }
         if len(piece_fids) > len(slots):
             conn.rollback()
-            return {"cu": cod_user, "ok": False, "skipped": False,
-                    "message": f"{len(piece_fids)} drama pieces exceed {len(slots)} PRGS slots"}
+            return {
+                "cu": cod_user,
+                "ok": False,
+                "skipped": False,
+                "message": f"{len(piece_fids)} drama pieces exceed {len(slots)} PRGS slots",
+            }
         # Pieces then fillers, one per slot in order; overflow past the last slot
         # stacks behind its final item (Saturday manual adds / legacy 0-open days).
         content = list(piece_fids) + list(filler_fids)
@@ -1139,12 +1292,21 @@ def _place_weekend_drama_once(conn, cod_user, d, start, end, piece_fids, filler_
         for i, fid in enumerate(content):
             if i < n_slots:
                 slot = slots[i]
-                key = slot["ora"]                       # own slot → distinct break
+                key = slot["ora"]  # own slot → distinct break
             else:
-                slot = slots[-1]                        # overflow → stack behind last slot
+                slot = slots[-1]  # overflow → stack behind last slot
                 key = slots[-1]["ora"] + (i - n_slots + 1)
-            nid = _insert_event(cur, cod_user, d, slot["sched"], slot["block"], slot["seg"],
-                                slot["ora"], fid, _durata(cur, fid))
+            nid = _insert_event(
+                cur,
+                cod_user,
+                d,
+                slot["sched"],
+                slot["block"],
+                slot["seg"],
+                slot["ora"],
+                fid,
+                _durata(cur, fid),
+            )
             cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
             ids.append(nid)
             keys.append(key)
@@ -1158,14 +1320,23 @@ def _place_weekend_drama_once(conn, cod_user, d, start, end, piece_fids, filler_
         ok, msg = _verify_sequence(cur, ids, None, None)
         if ok:
             conn.commit()
-            return {"cu": cod_user, "ok": True, "skipped": False,
-                    "message": f"placed {len(piece_fids)} pieces + {len(filler_fids)} filler(s)"}
+            return {
+                "cu": cod_user,
+                "ok": True,
+                "skipped": False,
+                "message": f"placed {len(piece_fids)} pieces + {len(filler_fids)} filler(s)",
+            }
         conn.rollback()
         return {"cu": cod_user, "ok": False, "skipped": False, "message": f"verify failed: {msg}"}
     except Exception as exc:  # noqa: BLE001 - report per-market failure, leave market untouched
         conn.rollback()
-        return {"cu": cod_user, "ok": False, "skipped": False, "message": f"error: {exc}",
-                "_deadlock": _is_deadlock(exc)}
+        return {
+            "cu": cod_user,
+            "ok": False,
+            "skipped": False,
+            "message": f"error: {exc}",
+            "_deadlock": _is_deadlock(exc),
+        }
 
 
 def sweep_daily_ids(conn, cod_user, dates, pending):
@@ -1186,9 +1357,11 @@ def sweep_daily_ids(conn, cod_user, dates, pending):
                     break
                 if attempt < _DEADLOCK_MAX_ATTEMPTS:
                     delay = _DEADLOCK_RETRY_SECONDS * attempt + random.uniform(0.1, 1.5)
-                    print(f"[daily-programming] cu={cod_user} daily-ID 1205 deadlock on "
-                          f"attempt {attempt}/{_DEADLOCK_MAX_ATTEMPTS} for {d} — retrying "
-                          f"in {delay:.1f}s")
+                    print(
+                        f"[daily-programming] cu={cod_user} daily-ID 1205 deadlock on "
+                        f"attempt {attempt}/{_DEADLOCK_MAX_ATTEMPTS} for {d} — retrying "
+                        f"in {delay:.1f}s"
+                    )
                     time.sleep(delay)
             out.append(result)
     return out
@@ -1217,8 +1390,12 @@ def _place_daily_once(conn, cod_user, d, el, pending):
             r = cur.fetchone()
             if not r:
                 conn.rollback()
-                return {"date": label, "ok": False, "skipped": False,
-                        "message": f"asset {el.get('code')} not found"}
+                return {
+                    "date": label,
+                    "ok": False,
+                    "skipped": False,
+                    "message": f"asset {el.get('code')} not found",
+                }
             fid = r[0]
         fid = int(fid)
         cur.execute(
@@ -1234,16 +1411,32 @@ def _place_daily_once(conn, cod_user, d, el, pending):
             conn.rollback()
             return {"date": label, "ok": True, "skipped": True, "message": "not published yet"}
         slot = slots[-1]
-        nid = _insert_event(cur, cod_user, d, slot["sched"], slot["block"], slot["seg"],
-                            slot["ora"], fid, _durata(cur, fid))
+        nid = _insert_event(
+            cur,
+            cod_user,
+            d,
+            slot["sched"],
+            slot["block"],
+            slot["seg"],
+            slot["ora"],
+            fid,
+            _durata(cur, fid),
+        )
         cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
-        cur.execute("UPDATE TPalinse SET EVENT_TYPE=%s WHERE id_tpalinse=%s",
-                    (el.get("event_type", "T"), nid))
+        cur.execute(
+            "UPDATE TPalinse SET EVENT_TYPE=%s WHERE id_tpalinse=%s",
+            (el.get("event_type", "T"), nid),
+        )
         _rebuild(cur, d, cod_user, nid)
         _sync_checksums(cur, [nid], pending)
         conn.commit()
         return {"date": label, "ok": True, "skipped": False, "message": "placed"}
     except Exception as exc:  # noqa: BLE001 - report per-date failure, leave the day untouched
         conn.rollback()
-        return {"date": label, "ok": False, "skipped": False, "message": f"error: {exc}",
-                "_deadlock": _is_deadlock(exc)}
+        return {
+            "date": label,
+            "ok": False,
+            "skipped": False,
+            "message": f"error: {exc}",
+            "_deadlock": _is_deadlock(exc),
+        }

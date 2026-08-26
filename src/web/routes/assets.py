@@ -44,6 +44,7 @@ _SECRET = _CFG.get("AWS_SECRET_ACCESS_KEY") or None
 
 def _client():
     import boto3
+
     return boto3.client(
         "s3",
         region_name=_REGION,
@@ -64,10 +65,11 @@ def _matches(key: str, q: str) -> bool:
       newstoday 23 → key must contain both "newstoday" and "23"
     """
     import fnmatch as _fnm
+
     q_lower = q.strip().lower()
-    if '*' in q_lower:
-        full    = key.lower()
-        pattern = q_lower if q_lower.endswith('*') else q_lower + '*'
+    if "*" in q_lower:
+        full = key.lower()
+        pattern = q_lower if q_lower.endswith("*") else q_lower + "*"
         return _fnm.fnmatch(full, pattern)
     return all(t in key.lower() for t in q_lower.split() if t)
 
@@ -106,12 +108,14 @@ def build_assets_router(templates: Jinja2Templates) -> APIRouter:
                     resp = s3.list_objects_v2(**kwargs)
                     for obj in resp.get("Contents", []):
                         if _matches(obj["Key"], q):
-                            files.append({
-                                "key": obj["Key"],
-                                "size": _fmt_size(obj["Size"]),
-                                "size_bytes": obj["Size"],
-                                "last_modified": obj["LastModified"].strftime("%Y-%m-%d %H:%M"),
-                            })
+                            files.append(
+                                {
+                                    "key": obj["Key"],
+                                    "size": _fmt_size(obj["Size"]),
+                                    "size_bytes": obj["Size"],
+                                    "last_modified": obj["LastModified"].strftime("%Y-%m-%d %H:%M"),
+                                }
+                            )
                     if not resp.get("IsTruncated"):
                         break
                     kwargs["ContinuationToken"] = resp["NextContinuationToken"]

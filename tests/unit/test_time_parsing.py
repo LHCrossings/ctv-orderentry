@@ -15,12 +15,19 @@ if _ba_path not in sys.path:
     sys.path.insert(0, _ba_path)
 
 # Mock heavy dependencies before importing so tests run without a browser/pdfplumber
-for _mod in ("pdfplumber", "selenium", "selenium.webdriver",
-             "selenium.webdriver.common", "selenium.webdriver.common.by",
-             "selenium.webdriver.support", "selenium.webdriver.support.ui",
-             "selenium.webdriver.support.expected_conditions",
-             "selenium.webdriver.common.keys",
-             "selenium.common", "selenium.common.exceptions"):
+for _mod in (
+    "pdfplumber",
+    "selenium",
+    "selenium.webdriver",
+    "selenium.webdriver.common",
+    "selenium.webdriver.common.by",
+    "selenium.webdriver.support",
+    "selenium.webdriver.support.ui",
+    "selenium.webdriver.support.expected_conditions",
+    "selenium.webdriver.common.keys",
+    "selenium.common",
+    "selenium.common.exceptions",
+):
     if _mod not in sys.modules:
         sys.modules[_mod] = MagicMock()
 
@@ -30,6 +37,7 @@ from parsers.admerasia_parser import _normalize_time_to_colon_format  # noqa: E4
 # ─────────────────────────────────────────────────────────────────────────────
 # _normalize_time_to_colon_format
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestNormalizeTimeToColonFormat:
     """Tests for _normalize_time_to_colon_format in admerasia_parser."""
@@ -94,6 +102,7 @@ class TestNormalizeTimeToColonFormat:
 # ─────────────────────────────────────────────────────────────────────────────
 # EtereClient.parse_time_range
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestParseTimeRange:
     """Tests for EtereClient.parse_time_range."""

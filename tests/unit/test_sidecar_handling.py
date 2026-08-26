@@ -41,7 +41,9 @@ def test_entered_move_takes_the_sidecars_along(tmp_path):
 
     assert [f.name for f in inc.iterdir() if f.is_file()] == ["unrelated.pdf"]
     assert sorted(f.name for f in (inc / ENTERED_DIRNAME).iterdir()) == [
-        "order.pdf", "order.pdf.adm-legend.json", "order.pdf.adm.json",
+        "order.pdf",
+        "order.pdf.adm-legend.json",
+        "order.pdf.adm.json",
     ]
 
 

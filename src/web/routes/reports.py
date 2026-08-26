@@ -15,6 +15,7 @@ from fastapi.templating import Jinja2Templates
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _week_start(d) -> date:
     if isinstance(d, str):
         d = date.fromisoformat(d)
@@ -33,7 +34,8 @@ def _fetch_placements_sync(contract_id: int):
 
     with _db_connect() as conn:
         cur = conn.cursor(as_dict=True)
-        cur.execute("""
+        cur.execute(
+            """
             SELECT ID_CONTRATTITESTATA AS id,
                    COD_CONTRATTO       AS code,
                    DESCRIZIONE         AS description,
@@ -41,11 +43,14 @@ def _fetch_placements_sync(contract_id: int):
                    CONVERT(VARCHAR(10), DATA_TERMINE, 101) AS date_end
             FROM CONTRATTITESTATA
             WHERE ID_CONTRATTITESTATA = %d
-        """ % contract_id)
+        """
+            % contract_id
+        )
         hdr = cur.fetchone()
         if not hdr:
             return None, None
-        cur.execute("""
+        cur.execute(
+            """
             SELECT cr.DESCRIZIONE        AS description,
                    cr.OMAGGIO            AS is_bonus,
                    CAST(tp.DATA AS DATE) AS air_date,
@@ -56,7 +61,9 @@ def _fetch_placements_sync(contract_id: int):
             WHERE cr.ID_CONTRATTITESTATA = %d
             GROUP BY cr.DESCRIZIONE, cr.OMAGGIO, CAST(tp.DATA AS DATE)
             ORDER BY CAST(tp.DATA AS DATE), cr.DESCRIZIONE
-        """ % contract_id)
+        """
+            % contract_id
+        )
         return dict(hdr), cur.fetchall()
 
 
@@ -88,12 +95,14 @@ def _build_pivot(hdr: dict, daily_rows) -> dict:
         grand_total += total
         for i, v in enumerate(spots):
             week_totals[i] += v
-        rows_out.append({
-            "description": desc,
-            "spots": spots,
-            "total": total,
-            "is_bonus": desc in bonus_set,
-        })
+        rows_out.append(
+            {
+                "description": desc,
+                "spots": spots,
+                "total": total,
+                "is_bonus": desc in bonus_set,
+            }
+        )
 
     return {
         "header": hdr,
@@ -141,10 +150,7 @@ def _build_excel(pivot: dict) -> bytes:
 
     ws.merge_cells(f"A1:{last_col}1")
     c = ws["A1"]
-    c.value = (
-        f"{hdr.get('code', '')} — {hdr.get('description', '')} "
-        f"· Order Placement by Week"
-    )
+    c.value = f"{hdr.get('code', '')} — {hdr.get('description', '')} · Order Placement by Week"
     c.font = Font(bold=True, size=13, color="FFFFFF")
     c.fill = fill(NAVY)
     c.alignment = ctr
@@ -232,6 +238,7 @@ def _build_excel(pivot: dict) -> bytes:
 # Router
 # ---------------------------------------------------------------------------
 
+
 def _build_asrun_excel(payload: dict) -> bytes:
     """As-run-by-contract → one flat, filterable sheet.
 
@@ -269,7 +276,9 @@ def _build_asrun_excel(payload: dict) -> bytes:
 
     ws.merge_cells(f"A1:{last_col}1")
     c = ws["A1"]
-    c.value = f"{payload['contract_code']} — {payload['contract_description'] or ''} · As-Run Report"
+    c.value = (
+        f"{payload['contract_code']} — {payload['contract_description'] or ''} · As-Run Report"
+    )
     c.font = Font(bold=True, size=13, color="FFFFFF")
     c.fill = fill(NAVY)
     c.alignment = ctr
@@ -313,7 +322,15 @@ def _build_asrun_excel(payload: dict) -> bytes:
             except (ValueError, TypeError):
                 d_val = a["date"]
 
-            values = [mkt["market"], d_val, a["time"], a["spot_code"], a["spot_title"], a["type"], rate]
+            values = [
+                mkt["market"],
+                d_val,
+                a["time"],
+                a["spot_code"],
+                a["spot_title"],
+                a["type"],
+                rate,
+            ]
             for i, v in enumerate(values, start=1):
                 c = ws.cell(r, i, v)
                 c.fill = fill(bg)
@@ -324,7 +341,7 @@ def _build_asrun_excel(payload: dict) -> bytes:
                 if i == 2:
                     c.number_format = "M/D/YY"
                 if i == 7:
-                    c.number_format = '$#,##0.00'
+                    c.number_format = "$#,##0.00"
 
     if r > hr:
         ws.auto_filter.ref = f"A{hr}:{last_col}{r}"
@@ -349,7 +366,7 @@ def _build_asrun_excel(payload: dict) -> bytes:
     c.fill = fill(NAVY)
     c.alignment = ctr
     c.border = bdr()
-    c.number_format = '$#,##0.00'
+    c.number_format = "$#,##0.00"
 
     for col, width in zip("ABCDEFG", (10, 11, 10, 18, 42, 8, 12)):
         ws.column_dimensions[col].width = width
@@ -432,7 +449,18 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
 
     # ── As-Run Report ────────────────────────────────────────────────────────
 
-    MARKET_MAP = {1:"NYC",2:"CMP",3:"HOU",4:"SFO",5:"SEA",6:"LAX",7:"CVC",8:"WDC",9:"MMT",10:"DAL"}
+    MARKET_MAP = {
+        1: "NYC",
+        2: "CMP",
+        3: "HOU",
+        4: "SFO",
+        5: "SEA",
+        6: "LAX",
+        7: "CVC",
+        8: "WDC",
+        9: "MMT",
+        10: "DAL",
+    }
     FPS = 29.97
 
     def _frames_to_time(frames: int) -> str:
@@ -460,7 +488,7 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
                       AND TITLE LIKE %s
                     ORDER BY DATA, ORA
                     """,
-                    (mkt_id, date_from.isoformat(), date_to.isoformat(), like_pat)
+                    (mkt_id, date_from.isoformat(), date_to.isoformat(), like_pat),
                 )
                 rows = cur.fetchall()
                 airings = [
@@ -471,11 +499,13 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
                     }
                     for r in rows
                 ]
-                results.append({
-                    "market": MARKET_MAP.get(mkt_id, str(mkt_id)),
-                    "count": len(airings),
-                    "airings": airings,
-                })
+                results.append(
+                    {
+                        "market": MARKET_MAP.get(mkt_id, str(mkt_id)),
+                        "count": len(airings),
+                        "airings": airings,
+                    }
+                )
         return results
 
     @router.get("/reports/as-run", response_class=HTMLResponse)
@@ -491,7 +521,7 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
     ):
         try:
             d_from = date.fromisoformat(date_from)
-            d_to   = date.fromisoformat(date_to)
+            d_to = date.fromisoformat(date_to)
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format")
 
@@ -507,36 +537,43 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
-        return JSONResponse({
-            "spot_query": spot,
-            "date_from": date_from,
-            "date_to": date_to,
-            "results": results,
-            "total": sum(m["count"] for m in results),
-        })
+        return JSONResponse(
+            {
+                "spot_query": spot,
+                "date_from": date_from,
+                "date_to": date_to,
+                "results": results,
+                "total": sum(m["count"] for m in results),
+            }
+        )
 
     async def _asrun_contract_payload(contract_id: int, date_from: str, date_to: str) -> dict:
         """Shared by the JSON view and the Excel export so they can't drift."""
         try:
             d_from = date.fromisoformat(date_from)
-            d_to   = date.fromisoformat(date_to)
+            d_to = date.fromisoformat(date_to)
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format")
 
         def _run():
             from browser_automation.etere_direct_client import connect as _db_connect
+
             with _db_connect() as conn:
                 cur = conn.cursor(as_dict=True)
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT COD_CONTRATTO AS code, DESCRIZIONE AS description
                     FROM CONTRATTITESTATA
                     WHERE ID_CONTRATTITESTATA = %s
-                """, (contract_id,))
+                """,
+                    (contract_id,),
+                )
                 hdr = cur.fetchone()
                 if not hdr:
                     return None, []
 
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT
                         tp.COD_USER                        AS market_id,
                         CAST(tp.DATA AS DATE)              AS air_date,
@@ -558,7 +595,9 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
                       AND tp.DATA <= %s
                       AND tp.LIVELLO = 0
                     ORDER BY tp.COD_USER, tp.DATA, tp.ORA
-                """, (contract_id, d_from.isoformat(), d_to.isoformat()))
+                """,
+                    (contract_id, d_from.isoformat(), d_to.isoformat()),
+                )
                 rows = cur.fetchall()
             return hdr, rows
 
@@ -577,26 +616,27 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
             if mcode not in by_market:
                 by_market[mcode] = []
             rate = float(r["rate"] or 0)
-            by_market[mcode].append({
-                "date":       str(r["air_date"]),
-                "time":       _frames_to_time(r["time_frames"]),
-                "spot_code":  r["spot_code"] or "",
-                "spot_title": r["spot_title"] or "",
-                "type":       "BNS" if rate == 0 else "COM",
-                "rate":       rate,
-            })
+            by_market[mcode].append(
+                {
+                    "date": str(r["air_date"]),
+                    "time": _frames_to_time(r["time_frames"]),
+                    "spot_code": r["spot_code"] or "",
+                    "spot_title": r["spot_title"] or "",
+                    "type": "BNS" if rate == 0 else "COM",
+                    "rate": rate,
+                }
+            )
 
         markets = [
-            {"market": m, "airings": a, "count": len(a)}
-            for m, a in sorted(by_market.items())
+            {"market": m, "airings": a, "count": len(a)} for m, a in sorted(by_market.items())
         ]
         return {
-            "contract_code":        hdr["code"],
+            "contract_code": hdr["code"],
             "contract_description": hdr["description"],
-            "date_from":            date_from,
-            "date_to":              date_to,
-            "markets":              markets,
-            "total":                len(rows),
+            "date_from": date_from,
+            "date_to": date_to,
+            "markets": markets,
+            "total": len(rows),
         }
 
     @router.get("/api/reports/as-run-by-contract")
@@ -617,7 +657,9 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
         excel_bytes = await asyncio.get_running_loop().run_in_executor(
             None, lambda: _build_asrun_excel(payload)
         )
-        safe_code = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in payload["contract_code"])
+        safe_code = "".join(
+            ch if ch.isalnum() or ch in "-_" else "_" for ch in payload["contract_code"]
+        )
         filename = f"{safe_code}_AsRun_{date_from}_{date_to}.xlsx"
         return StreamingResponse(
             io.BytesIO(excel_bytes),
@@ -632,10 +674,12 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
 
         def _run():
             from browser_automation.etere_direct_client import connect as _db_connect
+
             with _db_connect() as conn:
                 cur = conn.cursor(as_dict=True)
                 term = f"%{q.upper()}%"
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT TOP 25 ID_FILMATI AS id, COD_PROGRA AS code,
                            DESCRIZIO AS title, DURATA AS durata
                     FROM FILMATI
@@ -643,7 +687,9 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
                       AND DURATA <= 1800
                       AND (UPPER(COD_PROGRA) LIKE %s OR UPPER(DESCRIZIO) LIKE %s)
                     ORDER BY COD_PROGRA
-                """, (term, term))
+                """,
+                    (term, term),
+                )
                 rows = cur.fetchall()
             for r in rows:
                 r["duration_sec"] = round(r["durata"] / 30) if r["durata"] else 0

@@ -30,6 +30,7 @@ from web.routes.reports import build_reports_router
 # App factory
 # ---------------------------------------------------------------------------
 
+
 def create_app(config: ApplicationConfig | None = None) -> FastAPI:
     if config is None:
         config = ApplicationConfig.from_defaults()
@@ -74,6 +75,7 @@ def create_app(config: ApplicationConfig | None = None) -> FastAPI:
         body = b""
         async for chunk in response.body_iterator:
             body += chunk
+
         # Inject before the LAST </body>, not the first. make_goods.html builds
         # its PDF export as a JS template literal that contains a whole
         # "</body></html>" — injecting at the first match put a literal
@@ -92,8 +94,12 @@ def create_app(config: ApplicationConfig | None = None) -> FastAPI:
         body = _inject_last(body, b"</body>", _BH_TAG)
         headers = dict(response.headers)
         headers.pop("content-length", None)  # body length changed; let Response recompute
-        return Response(content=body, status_code=response.status_code,
-                        headers=headers, media_type=response.media_type)
+        return Response(
+            content=body,
+            status_code=response.status_code,
+            headers=headers,
+            media_type=response.media_type,
+        )
 
     return app
 

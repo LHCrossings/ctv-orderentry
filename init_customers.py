@@ -14,66 +14,56 @@ from pathlib import Path
 # Known customers by agency type
 KNOWN_CUSTOMERS = {
     # SAGENT customers
-    'sagent': [
-        ('175', 'CAL FIRE'),
-        ('175', 'Cal Fire'),  # Variation
+    "sagent": [
+        ("175", "CAL FIRE"),
+        ("175", "Cal Fire"),  # Variation
     ],
-
     # TCAA customers (if you have them)
-    'tcaa': [
-        ('75', 'TCAA Toyota'),
-        ('75', 'Toyota'),
+    "tcaa": [
+        ("75", "TCAA Toyota"),
+        ("75", "Toyota"),
     ],
-
     # Misfit customers (add your known customers)
-    'misfit': [
+    "misfit": [
         # Add as: ('customer_id', 'customer_name'),
     ],
-
     # WorldLink customers
-    'worldlink': [
+    "worldlink": [
         # Add as: ('customer_id', 'customer_name'),
     ],
-
     # Daviselen customers
-    'daviselen': [
-        ('362', 'SO. CAL. TDA'),  # So Cal Toyota
-        ('362', 'SCTDA'),  # So Cal Toyota (short code)
-        ('122', 'WESTERN WASHINGTON OP. ASSOC.'),  # Seattle McDonald's
-        ('122', 'DMWW'),  # Seattle McDonald's (short code)
-        ('416', 'CAPITAL BUSINESS UNIT'),  # WDC McDonald's
-        ('416', 'DCBU'),  # WDC McDonald's (short code)
-        ('368', "MCD'S OP. ASSOC. OF SO. CAL."),  # SoCal McDonald's
-        ('368', 'DMLA'),  # SoCal McDonald's (short code)
+    "daviselen": [
+        ("362", "SO. CAL. TDA"),  # So Cal Toyota
+        ("362", "SCTDA"),  # So Cal Toyota (short code)
+        ("122", "WESTERN WASHINGTON OP. ASSOC."),  # Seattle McDonald's
+        ("122", "DMWW"),  # Seattle McDonald's (short code)
+        ("416", "CAPITAL BUSINESS UNIT"),  # WDC McDonald's
+        ("416", "DCBU"),  # WDC McDonald's (short code)
+        ("368", "MCD'S OP. ASSOC. OF SO. CAL."),  # SoCal McDonald's
+        ("368", "DMLA"),  # SoCal McDonald's (short code)
     ],
-
     # opAD customers
-    'opad': [
+    "opad": [
         # Add as: ('customer_id', 'customer_name'),
     ],
-
     # RPM customers
-    'rpm': [
+    "rpm": [
         # Add as: ('customer_id', 'customer_name'),
     ],
-
     # H&L Partners customers
-    'hl': [
+    "hl": [
         # Add as: ('customer_id', 'customer_name'),
     ],
-
     # Impact customers
-    'impact': [
+    "impact": [
         # Add as: ('customer_id', 'customer_name'),
     ],
-
     # iGraphix customers
-    'igraphix': [
+    "igraphix": [
         # Add as: ('customer_id', 'customer_name'),
     ],
-
     # Admerasia customers
-    'admerasia': [
+    "admerasia": [
         # Add as: ('customer_id', 'customer_name'),
     ],
 }
@@ -129,7 +119,7 @@ def init_database(db_path: str | Path):
                         INSERT INTO customers (customer_id, customer_name, order_type)
                         VALUES (?, ?, ?)
                         """,
-                        (customer_id, customer_name, order_type)
+                        (customer_id, customer_name, order_type),
                     )
                     added_count += 1
                     print(f"✓ Added: {customer_name} ({customer_id}) for {order_type}")
@@ -141,7 +131,7 @@ def init_database(db_path: str | Path):
                         SET customer_id = ?
                         WHERE customer_name = ? AND order_type = ?
                         """,
-                        (customer_id, customer_name, order_type)
+                        (customer_id, customer_name, order_type),
                     )
                     updated_count += 1
                     print(f"⟳ Updated: {customer_name} ({customer_id}) for {order_type}")
@@ -149,17 +139,17 @@ def init_database(db_path: str | Path):
         # Commit changes
         conn.commit()
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("Database initialization complete!")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(f"Added: {added_count} customers")
         print(f"Updated: {updated_count} customers")
         print(f"Total in database: {added_count + updated_count}")
 
         # Show summary
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("Database Summary:")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         cursor.execute("""
             SELECT order_type, COUNT(*)
@@ -240,11 +230,11 @@ def list_all_customers(db_path: str | Path):
         rows = cursor.fetchall()
 
         if rows:
-            print(f"\n{'='*80}")
+            print(f"\n{'=' * 80}")
             print(f"All Customers in Database ({len(rows)} total)")
-            print(f"{'='*80}")
+            print(f"{'=' * 80}")
             print(f"{'ID':<8} {'Name':<30} {'Type':<15} {'Created':<20}")
-            print(f"{'-'*8} {'-'*30} {'-'*15} {'-'*20}")
+            print(f"{'-' * 8} {'-' * 30} {'-' * 15} {'-' * 20}")
 
             for row in rows:
                 print(f"{row[0]:<8} {row[1]:<30} {row[2]:<15} {row[3] or 'N/A':<20}")
@@ -267,16 +257,8 @@ if __name__ == "__main__":
         default=Path(__file__).resolve().parent / "data" / "customers.db",
         help="Path to customers.db file (default: data/customers.db)",
     )
-    parser.add_argument(
-        "--list",
-        action="store_true",
-        help="List all customers in database"
-    )
-    parser.add_argument(
-        "--verify",
-        action="store_true",
-        help="Verify database contents"
-    )
+    parser.add_argument("--list", action="store_true", help="List all customers in database")
+    parser.add_argument("--verify", action="store_true", help="Verify database contents")
 
     args = parser.parse_args()
 

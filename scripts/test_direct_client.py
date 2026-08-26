@@ -4,9 +4,10 @@ Creates ONE contract with ONE line, prints the IDs, then rolls back.
 
 Run from Windows: py scripts/test_direct_client.py
 """
+
 import sys
 
-sys.path.insert(0, '.')
+sys.path.insert(0, ".")
 
 from datetime import date
 
@@ -32,7 +33,7 @@ try:
     contract_id = client.create_contract_header(
         code="TEST DIRECT 001",
         description="Direct DB test — delete me",
-        customer_id=68,          # Thunder Valley Casino
+        customer_id=68,  # Thunder Valley Casino
         agency_id=AGENCY_IDS["RPM"],
         media_center_id=MEDIA_CENTER_IDS["RPM"],
         contract_date=date.today(),

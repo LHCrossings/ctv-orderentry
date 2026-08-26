@@ -37,10 +37,7 @@ class CustomerMatchingService:
         self._repository = repository
 
     def find_customer(
-        self,
-        customer_name: str,
-        order_type: OrderType,
-        prompt_if_not_found: bool = True
+        self, customer_name: str, order_type: OrderType, prompt_if_not_found: bool = True
     ) -> str | None:
         """
         Find customer ID for a given name, with optional user interaction.
@@ -80,11 +77,7 @@ class CustomerMatchingService:
         # Prompt user for customer ID
         return self._prompt_for_new_customer(customer_name, order_type)
 
-    def _prompt_for_new_customer(
-        self,
-        customer_name: str,
-        order_type: OrderType
-    ) -> str | None:
+    def _prompt_for_new_customer(self, customer_name: str, order_type: OrderType) -> str | None:
         """
         Prompt user to enter customer ID for unknown customer.
 
@@ -108,16 +101,16 @@ class CustomerMatchingService:
                 print(f"  ... and {len(existing) - 10} more")
 
         print()
-        customer_id = input(f"Enter customer ID for '{customer_name}' (or press Enter to skip): ").strip()
+        customer_id = input(
+            f"Enter customer ID for '{customer_name}' (or press Enter to skip): "
+        ).strip()
 
         if not customer_id:
             return None
 
         # Save to database for future use
         new_customer = Customer(
-            customer_id=customer_id,
-            customer_name=customer_name,
-            order_type=order_type
+            customer_id=customer_id, customer_name=customer_name, order_type=order_type
         )
         self._repository.save(new_customer)
 
@@ -125,12 +118,7 @@ class CustomerMatchingService:
 
         return customer_id
 
-    def add_customer(
-        self,
-        customer_name: str,
-        customer_id: str,
-        order_type: OrderType
-    ) -> Customer:
+    def add_customer(self, customer_name: str, customer_id: str, order_type: OrderType) -> Customer:
         """
         Manually add a customer to the database.
 
@@ -143,18 +131,12 @@ class CustomerMatchingService:
             Created Customer entity
         """
         customer = Customer(
-            customer_id=customer_id,
-            customer_name=customer_name,
-            order_type=order_type
+            customer_id=customer_id, customer_name=customer_name, order_type=order_type
         )
         self._repository.save(customer)
         return customer
 
-    def remove_customer(
-        self,
-        customer_name: str,
-        order_type: OrderType
-    ) -> bool:
+    def remove_customer(self, customer_name: str, order_type: OrderType) -> bool:
         """
         Remove a customer from the database.
 
@@ -167,10 +149,7 @@ class CustomerMatchingService:
         """
         return self._repository.delete(customer_name, order_type)
 
-    def list_customers(
-        self,
-        order_type: OrderType | None = None
-    ) -> list[Customer]:
+    def list_customers(self, order_type: OrderType | None = None) -> list[Customer]:
         """
         List all customers, optionally filtered by order type.
 
@@ -193,9 +172,7 @@ class CustomerMatchingService:
         """
         all_customers = self._repository.list_all()
 
-        stats = {
-            'total': len(all_customers)
-        }
+        stats = {"total": len(all_customers)}
 
         # Count by order type
         for order_type in OrderType:
@@ -206,5 +183,3 @@ class CustomerMatchingService:
                 stats[order_type.name] = count
 
         return stats
-
-

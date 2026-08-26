@@ -32,6 +32,7 @@ def ta_parser(real_pdfplumber):
     """timeadvertising_parser with the REAL pdfplumber bound (the module-top
     import binds the conftest MagicMock; rebind and restore)."""
     from browser_automation.parsers import timeadvertising_parser as tp
+
     mocked = tp.pdfplumber
     tp.pdfplumber = real_pdfplumber
     yield tp
@@ -43,9 +44,11 @@ def test_sfo_glued_summary_row_parses_clean(ta_parser):
     assert order.market == "SFO"
     assert len(order.lines) == 3
     mand = order.lines[1]
-    assert "Mand. News/Drama 8pm-10pm" in mand.program   # the glued junk rides along...
-    assert _line_times(mand.program) == ("20:00", "22:00")           # ...but the daypart survives
-    assert _line_description(mand.program) == "Mand. News/Drama 8pm-10pm"  # ...and the junk is dropped
+    assert "Mand. News/Drama 8pm-10pm" in mand.program  # the glued junk rides along...
+    assert _line_times(mand.program) == ("20:00", "22:00")  # ...but the daypart survives
+    assert (
+        _line_description(mand.program) == "Mand. News/Drama 8pm-10pm"
+    )  # ...and the junk is dropped
     assert [ln.total_spots for ln in order.lines] == [12, 8, 10]
     assert sum(ln.rate * ln.total_spots for ln in order.lines) == 3600.0
 
@@ -54,7 +57,9 @@ def test_cvc_control_unchanged(ta_parser):
     order = ta_parser.parse_timeadvertising_pdf(str(FIXTURE_DIR / "graton_sep2026_cvc.pdf"))
     assert order.market == "CVC"
     assert [_line_times(ln.program) for ln in order.lines] == [
-        ("19:00", "20:00"), ("20:00", "22:00"), ("06:00", "23:59"),
+        ("19:00", "20:00"),
+        ("20:00", "22:00"),
+        ("06:00", "23:59"),
     ]
     assert sum(ln.rate * ln.total_spots for ln in order.lines) == 1200.0
 
@@ -67,10 +72,11 @@ def test_gross_total_guard():
             self.rate, self.total_spots = rate, total_spots
 
     lines = [_Ln(180.0, 12), _Ln(180.0, 8), _Ln(0.0, 10)]
-    _reconcile_gross_total(lines, "GROSS TOTAL: $ 3,600.00", "x.pdf")   # match → no raise
-    _reconcile_gross_total(lines, "no total printed here", "x.pdf")     # absent → no raise
+    _reconcile_gross_total(lines, "GROSS TOTAL: $ 3,600.00", "x.pdf")  # match → no raise
+    _reconcile_gross_total(lines, "no total printed here", "x.pdf")  # absent → no raise
     with pytest.raises(ValueError, match="GROSS TOTAL"):
         _reconcile_gross_total(lines, "GROSS TOTAL: $ 3,780.00", "x.pdf")
+
 
 # The exact program string from the Graton SF run that mis-entered.
 POLLUTED = "M-F: Mand. News/Drama 8pm-10pm $180.00 0 $ -"

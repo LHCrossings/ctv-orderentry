@@ -6,6 +6,7 @@ Usage:
     uv run python scripts/inspect_ghost_spot.py "Horsepower Duck" 2026-05-21 3
     uv run python scripts/inspect_ghost_spot.py "Knightline" 2026-05-21 3
 """
+
 import os
 import sys
 
@@ -13,8 +14,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from browser_automation.etere_direct_client import connect
 
 title_frag = sys.argv[1] if len(sys.argv) > 1 else "Horsepower Duck"
-date       = sys.argv[2] if len(sys.argv) > 2 else "2026-05-21"
-cod_user   = int(sys.argv[3]) if len(sys.argv) > 3 else 3
+date = sys.argv[2] if len(sys.argv) > 2 else "2026-05-21"
+cod_user = int(sys.argv[3]) if len(sys.argv) > 3 else 3
 
 with connect() as conn:
     cur = conn.cursor(as_dict=True)
@@ -34,7 +35,7 @@ with connect() as conn:
     # Fetch matching rows
     cur.execute(
         "SELECT * FROM TPALINSE WHERE DATA = %s AND COD_USER = %d AND TITLE LIKE %s",
-        (date, cod_user, f"%{title_frag}%")
+        (date, cod_user, f"%{title_frag}%"),
     )
     rows = cur.fetchall()
     print(f"Found {len(rows)} row(s) matching '{title_frag}' on {date} COD_USER={cod_user}:")

@@ -25,20 +25,26 @@ def run_tests():
     test_suites = [
         ("Phase 1: Domain Layer", "tests/unit/test_domain.py"),
         ("Phase 2: Detection Service", "tests/unit/test_order_detection_service.py"),
-        ("Phase 3: Customer Repository", [
-            "tests/integration/test_customer_repository.py",
-            "tests/unit/test_customer_matching_service.py"
-        ]),
+        (
+            "Phase 3: Customer Repository",
+            [
+                "tests/integration/test_customer_repository.py",
+                "tests/unit/test_customer_matching_service.py",
+            ],
+        ),
         ("Phase 4: Processing Service", "tests/unit/test_order_processing_service.py"),
-        ("Phase 5: Presentation Layer", [
-            "tests/unit/test_input_collectors.py",
-            "tests/unit/test_output_formatters.py"
-        ]),
-        ("Phase 6: Orchestration", [
-            "tests/unit/test_config.py",
-            "tests/unit/test_order_scanner.py",
-            "tests/unit/test_orchestrator.py"
-        ]),
+        (
+            "Phase 5: Presentation Layer",
+            ["tests/unit/test_input_collectors.py", "tests/unit/test_output_formatters.py"],
+        ),
+        (
+            "Phase 6: Orchestration",
+            [
+                "tests/unit/test_config.py",
+                "tests/unit/test_order_scanner.py",
+                "tests/unit/test_orchestrator.py",
+            ],
+        ),
     ]
 
     total_passed = 0
@@ -56,9 +62,7 @@ def run_tests():
 
         for test_path in test_paths:
             result = subprocess.run(
-                ["pytest", test_path, "-v", "--tb=no", "-q"],
-                capture_output=True,
-                text=True
+                ["pytest", test_path, "-v", "--tb=no", "-q"], capture_output=True, text=True
             )
 
             # Parse output for pass/fail counts
@@ -71,7 +75,7 @@ def run_tests():
                         for i, part in enumerate(parts):
                             if part == "passed":
                                 try:
-                                    count = int(parts[i-1])
+                                    count = int(parts[i - 1])
                                     phase_passed += count
                                 except (ValueError, IndexError):
                                     pass

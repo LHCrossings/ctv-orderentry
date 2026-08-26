@@ -8,6 +8,7 @@ TPALINSE.NEWTYPE is BART will be corrected.
 Run with:
     uv run python scripts/fix_bart_newtypes.py
 """
+
 import sys
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
@@ -43,8 +44,10 @@ def main():
         print("Contracts with BART spots to fix:")
         total = 0
         for r in rows:
-            print(f"  [{r['ID_CONTRATTITESTATA']}] {r['COD_CONTRATTO']}"
-                  f"  →  {r['spots']} spots  BART → {r['correct_type']}")
+            print(
+                f"  [{r['ID_CONTRATTITESTATA']}] {r['COD_CONTRATTO']}"
+                f"  →  {r['spots']} spots  BART → {r['correct_type']}"
+            )
             total += r["spots"]
         print(f"\nTotal: {total} spots")
 

@@ -15,6 +15,7 @@ class OrderType(Enum):
     Each agency has unique PDF formats and processing requirements.
     CHARMAINE is a generic catch-all for Charmaine's direct client orders.
     """
+
     WORLDLINK = "worldlink"
     TCAA = "tcaa"
     TCAA_AV = "tcaa_av"
@@ -74,7 +75,12 @@ class OrderType(Enum):
         All known agency OrderTypes are always billed as agency.
         CHARMAINE, RWNY, and UNKNOWN may be either agency or client.
         """
-        return self not in {OrderType.CHARMAINE, OrderType.RWNY, OrderType.FIGHTTHEBITE, OrderType.UNKNOWN}
+        return self not in {
+            OrderType.CHARMAINE,
+            OrderType.RWNY,
+            OrderType.FIGHTTHEBITE,
+            OrderType.UNKNOWN,
+        }
 
 
 class OrderBillingType(Enum):
@@ -95,6 +101,7 @@ class OrderBillingType(Enum):
         - Known agency OrderTypes (WORLDLINK, TCAA, MISFIT, etc.) → AGENCY
         - No agency detected in PDF → likely CLIENT → prompt user to confirm
     """
+
     AGENCY = "agency"
     CLIENT = "client"
 
@@ -119,11 +126,28 @@ class OrderBillingType(Enum):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 KNOWN_AGENCY_KEYWORDS: list[str] = [
-    "worldlink", "tatari", "tcaa", "daviselen", "misfit",
-    "igraphix", "admerasia", "opad", "rpm", "h&l partners",
-    "impact marketing", "sagent", "galeforce", "galeforcemedia",
-    "ntooitive", "time advertising", "3olivesmedia", "bvk", "intertrend",
-    "mediasol", "pulsar advertising", "american community media",
+    "worldlink",
+    "tatari",
+    "tcaa",
+    "daviselen",
+    "misfit",
+    "igraphix",
+    "admerasia",
+    "opad",
+    "rpm",
+    "h&l partners",
+    "impact marketing",
+    "sagent",
+    "galeforce",
+    "galeforcemedia",
+    "ntooitive",
+    "time advertising",
+    "3olivesmedia",
+    "bvk",
+    "intertrend",
+    "mediasol",
+    "pulsar advertising",
+    "american community media",
 ]
 """
 If ANY of these keywords appear in the PDF text (case-insensitive),
@@ -163,6 +187,7 @@ def detect_order_billing_type(pdf_text: str) -> tuple[OrderBillingType, str | No
 
 class OrderStatus(Enum):
     """Status of an order in the processing pipeline."""
+
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -177,16 +202,17 @@ class Market(Enum):
     station ID (.etere_id).  Integer values are authoritative — taken from
     etere_client.py which is confirmed correct.
     """
+
     # Crossings TV markets          code   etere_id
-    NYC = ("NYC", 1)   # New York City/New Jersey
-    CMP = ("CMP", 2)   # Chicago/Minneapolis
-    HOU = ("HOU", 3)   # Houston
-    SFO = ("SFO", 4)   # San Francisco
-    SEA = ("SEA", 5)   # Seattle
-    LAX = ("LAX", 6)   # Los Angeles
-    CVC = ("CVC", 7)   # Central Valley (Sacramento)
-    WDC = ("WDC", 8)   # Washington DC
-    MMT = ("MMT", 9)   # Multimarket National
+    NYC = ("NYC", 1)  # New York City/New Jersey
+    CMP = ("CMP", 2)  # Chicago/Minneapolis
+    HOU = ("HOU", 3)  # Houston
+    SFO = ("SFO", 4)  # San Francisco
+    SEA = ("SEA", 5)  # Seattle
+    LAX = ("LAX", 6)  # Los Angeles
+    CVC = ("CVC", 7)  # Central Valley (Sacramento)
+    WDC = ("WDC", 8)  # Washington DC
+    MMT = ("MMT", 9)  # Multimarket National
 
     # The Asian Channel markets
     DAL = ("DAL", 10)  # Dallas
@@ -213,6 +239,7 @@ class Language(Enum):
     Each language has specific ROS (Run of Schedule) time blocks.
     Maps to abbreviations used in Etere block codes.
     """
+
     MANDARIN = "M"
     CANTONESE = "C"
     PUNJABI = "P"
@@ -275,6 +302,7 @@ class BillingType(Enum):
     Format: (charge_to, invoice_header)
     These control how billing is handled in Etere contracts.
     """
+
     CUSTOMER_SHARE_AGENCY = ("Customer share indicating agency %", "Agency")
     AGENCY_WITH_CREDIT = ("Agency with Credit Note", "Customer")
     CUSTOMER_DIRECT = ("Customer", "Customer")
@@ -296,6 +324,7 @@ class SeparationInterval(Enum):
     Format: (customer_separation, order_separation, event_separation)
     These control how far apart ads must be scheduled in Etere.
     """
+
     WORLDLINK = (5, 15, 0)
     OPAD = (15, 15, 0)
     RPM = (25, 15, 0)
@@ -353,12 +382,12 @@ class SeparationInterval(Enum):
             OrderType.POLARIS: cls.POLARIS.value,
             OrderType.SIERRADONOR: cls.SIERRADONOR.value,
             OrderType.THREEOLIVES: cls.THREEOLIVES.value,
-            OrderType.BVK:         cls.BVK.value,
-            OrderType.INTERTREND:  cls.INTERTREND.value,
-            OrderType.MEDIASOL:    cls.MEDIASOL.value,
-            OrderType.RWNY:        cls.RWNY.value,
+            OrderType.BVK: cls.BVK.value,
+            OrderType.INTERTREND: cls.INTERTREND.value,
+            OrderType.MEDIASOL: cls.MEDIASOL.value,
+            OrderType.RWNY: cls.RWNY.value,
             OrderType.FIGHTTHEBITE: cls.FIGHTTHEBITE.value,
-            OrderType.ACM:          cls.ACM.value,
-            OrderType.EQC:          cls.EQC.value,
+            OrderType.ACM: cls.ACM.value,
+            OrderType.EQC: cls.EQC.value,
         }
         return mapping.get(order_type, cls.DEFAULT.value)

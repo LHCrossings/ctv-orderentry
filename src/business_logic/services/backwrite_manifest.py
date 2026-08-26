@@ -36,12 +36,12 @@ ENTERED_DIRNAME = "Entered"
 # Add new sidecar suffixes HERE — both the move and the queue's stray-row filter
 # read this one list, so they cannot drift apart.
 SIDECAR_SUFFIXES = (
-    ".manifest.json",     # this module — backwrite manifest
-    ".adm.json",          # admerasia_vision — vision grid cache
-    ".adm-legend.json",   # admerasia_vision — ISCI legend cache
-    ".ai.json",           # ai_parser — AI extraction cache
-    ".wl.json",           # worldlink scan sidecar
-    ".overrides.json",    # per-order user overrides
+    ".manifest.json",  # this module — backwrite manifest
+    ".adm.json",  # admerasia_vision — vision grid cache
+    ".adm-legend.json",  # admerasia_vision — ISCI legend cache
+    ".ai.json",  # ai_parser — AI extraction cache
+    ".wl.json",  # worldlink scan sidecar
+    ".overrides.json",  # per-order user overrides
 )
 
 
@@ -65,6 +65,7 @@ def _parse_io_detail(io_path: Path, order_type_value: str) -> dict:
     """
     try:
         from web.parser_bridge import get_order_detail
+
         return get_order_detail(io_path, str(order_type_value))
     except Exception as exc:  # noqa: BLE001 - manifest must not break entry
         return {"error": f"IO detail parse failed: {exc}"}
@@ -85,7 +86,9 @@ def write_backwrite_manifest(orders: list, result) -> Path | None:
     detail = _parse_io_detail(io_path, otype)
     # Some parsers swallow errors and return an empty order instead of raising
     # (e.g. WorldLink) — an IO with no lines at all is a failed parse too.
-    parse_failed = bool(detail.get("error")) or not (detail.get("lines") or detail.get("sub_orders"))
+    parse_failed = bool(detail.get("error")) or not (
+        detail.get("lines") or detail.get("sub_orders")
+    )
 
     manifest = {
         "manifest_version": MANIFEST_VERSION,
@@ -145,8 +148,10 @@ def _move_io_to_entered(io_path: Path) -> bool:
         move_sidecars(io_path, dest.parent)
         return True
     except OSError as exc:
-        print(f"[manifest] NOTE: IO stays in incoming for now ({exc}) — "
-              f"it will be swept into Entered/ on the next queue load")
+        print(
+            f"[manifest] NOTE: IO stays in incoming for now ({exc}) — "
+            f"it will be swept into Entered/ on the next queue load"
+        )
         return False
 
 

@@ -26,8 +26,9 @@ from browser_automation.crispin_automation import _active_days, _plan_ranges  # 
 
 # One consolidated range as EtereClient.consolidate_weeks emits it: 4 spots a week
 # for 5 weeks from Monday 8/10, ending Sunday 9/13.
-FIVE_WEEKS = [{"start_date": "08/10/2026", "end_date": "09/13/2026",
-               "spots_per_week": 4, "weeks": 5}]
+FIVE_WEEKS = [
+    {"start_date": "08/10/2026", "end_date": "09/13/2026", "spots_per_week": 4, "weeks": 5}
+]
 END = date(2026, 9, 13)
 
 
@@ -36,6 +37,7 @@ def _plan(days, start, ranges=None, end=END):
 
 
 # ── On time: unchanged behaviour ─────────────────────────────────────────────
+
 
 @pytest.mark.parametrize("days,expected_cap", [("M-F", 1), ("M-Su", 1)])
 def test_on_time_start_is_one_range_at_the_pattern_cap(days, expected_cap):
@@ -48,6 +50,7 @@ def test_on_time_start_is_one_range_at_the_pattern_cap(days, expected_cap):
 
 
 # ── A truncated first week that needs a higher cap → its own line ────────────
+
 
 def test_thursday_start_splits_an_m_f_line_and_raises_its_cap():
     """Thu 8/13: only Thu+Fri remain of that M-F week, so 4 spots need 2/day —
@@ -66,7 +69,7 @@ def test_thursday_start_splits_an_m_f_line_and_raises_its_cap():
     assert (rest["spots_per_week"], rest["weeks"]) == (4, 4)
     assert rest["max_daily"] == 1
 
-    assert _spots(got) == 20      # nothing lost
+    assert _spots(got) == 20  # nothing lost
 
 
 def test_thursday_start_does_not_split_an_m_su_line():
@@ -81,8 +84,9 @@ def test_thursday_start_does_not_split_an_m_su_line():
 
 
 def test_a_single_week_range_keeps_its_short_week_cap_without_splitting():
-    one_week = [{"start_date": "08/10/2026", "end_date": "08/16/2026",
-                 "spots_per_week": 4, "weeks": 1}]
+    one_week = [
+        {"start_date": "08/10/2026", "end_date": "08/16/2026", "spots_per_week": 4, "weeks": 1}
+    ]
     got, notes = _plan("M-F", date(2026, 8, 13), ranges=one_week, end=date(2026, 8, 16))
     assert notes == []
     assert len(got) == 1
@@ -97,6 +101,7 @@ def test_a_sunday_start_on_a_seven_day_line_stacks_the_week_on_one_day():
 
 
 # ── Spots the later start makes undeliverable ───────────────────────────────
+
 
 def test_a_saturday_start_drops_an_m_f_week_and_says_so():
     """No M-F day remains in the week of 8/10 on or after Sat 8/15, so that
@@ -113,7 +118,7 @@ def test_a_saturday_start_drops_an_m_f_week_and_says_so():
 def test_whole_weeks_before_the_new_start_are_dropped_with_a_count():
     got, notes = _plan("M-Su", date(2026, 8, 24))
     assert len(notes) == 1
-    assert "8 spot(s) dropped" in notes[0]       # the 8/10 and 8/17 weeks
+    assert "8 spot(s) dropped" in notes[0]  # the 8/10 and 8/17 weeks
     assert "2 whole week(s)" in notes[0]
     assert got[0]["date_from"] == date(2026, 8, 24)
     assert _spots(got) == 12
@@ -128,10 +133,12 @@ def test_a_range_entirely_before_the_new_start_is_dropped():
 
 # ── Invariants ───────────────────────────────────────────────────────────────
 
+
 @pytest.mark.parametrize("days", ["M-F", "M-Su", "M-Sa", "Sa-Su"])
 @pytest.mark.parametrize("offset", range(14))
 def test_cap_is_always_at_least_one_and_dates_stay_inside_the_flight(days, offset):
     from datetime import timedelta
+
     start = date(2026, 8, 10) + timedelta(days=offset)
     got, _ = _plan(days, start)
     for r in got:
@@ -140,9 +147,10 @@ def test_cap_is_always_at_least_one_and_dates_stay_inside_the_flight(days, offse
 
 
 @pytest.mark.parametrize("days", ["M-F", "M-Su"])
-@pytest.mark.parametrize("offset", range(5))   # Mon–Fri starts lose nothing
+@pytest.mark.parametrize("offset", range(5))  # Mon–Fri starts lose nothing
 def test_a_start_inside_the_working_week_never_loses_spots(days, offset):
     from datetime import timedelta
+
     got, notes = _plan(days, date(2026, 8, 10) + timedelta(days=offset))
     assert notes == []
     assert _spots(got) == 20
@@ -164,17 +172,20 @@ def test_every_range_can_physically_hold_its_spots():
                 avail = _active_days(r["date_from"], first_week_end, bits)
                 assert r["max_daily"] * avail >= r["spots_per_week"], (
                     f"{days} from {start}: {r['spots_per_week']}/wk needs more than "
-                    f"{r['max_daily']}/day over {avail} day(s)")
+                    f"{r['max_daily']}/day over {avail} day(s)"
+                )
 
 
 # ── _active_days ─────────────────────────────────────────────────────────────
 
+
 def test_active_days_counts_only_the_lines_own_days():
     from browser_automation.etere_direct_client import parse_day_bits
+
     mf = parse_day_bits("M-F")
-    assert _active_days(date(2026, 8, 10), date(2026, 8, 16), mf) == 5   # full week
-    assert _active_days(date(2026, 8, 13), date(2026, 8, 16), mf) == 2   # Thu+Fri
-    assert _active_days(date(2026, 8, 15), date(2026, 8, 16), mf) == 0   # Sat+Sun
+    assert _active_days(date(2026, 8, 10), date(2026, 8, 16), mf) == 5  # full week
+    assert _active_days(date(2026, 8, 13), date(2026, 8, 16), mf) == 2  # Thu+Fri
+    assert _active_days(date(2026, 8, 15), date(2026, 8, 16), mf) == 0  # Sat+Sun
     weekend = parse_day_bits("Sa-Su")
     assert _active_days(date(2026, 8, 10), date(2026, 8, 16), weekend) == 2
 
@@ -203,8 +214,9 @@ def test_the_real_io_replanned_for_the_wednesday_8_12_start(real_pdfplumber):
 
     lines = [(desc, r) for _ln, _d, _t, desc, ranges, _n in plan for r in ranges]
     assert len(lines) == 19
-    assert all(not notes for *_x, notes in
-               [(p[3], p[5]) for p in plan]), "no spots should be undeliverable"
+    assert all(not notes for *_x, notes in [(p[3], p[5]) for p in plan]), (
+        "no spots should be undeliverable"
+    )
     assert sum(r["spots_per_week"] * r["weeks"] for _d, r in lines) == 323
 
     # Every line now opens on 8/12, never the IO's 8/10.
@@ -213,13 +225,12 @@ def test_the_real_io_replanned_for_the_wednesday_8_12_start(real_pdfplumber):
     short = [(d, r) for d, r in lines if r["tag"]]
     assert len(short) == 3
     for desc, r in short:
-        assert "M-F" in desc or "Cantonese ROS" in desc     # the M-F dayparts
+        assert "M-F" in desc or "Cantonese ROS" in desc  # the M-F dayparts
         assert (r["date_from"], r["date_to"]) == (date(2026, 8, 12), date(2026, 8, 16))
         assert r["max_daily"] == 2 and r["weeks"] == 1
         assert "3 of 5 day(s)" in r["tag"]
 
     # The M-Su lines keep one range for the 4/wk block, still capped at 1/day.
-    m_su = [(d, r) for d, r in lines
-            if r["date_from"] == date(2026, 8, 12) and not r["tag"]]
+    m_su = [(d, r) for d, r in lines if r["date_from"] == date(2026, 8, 12) and not r["tag"]]
     assert len(m_su) == 5
     assert {r["max_daily"] for _d, r in m_su} == {1}

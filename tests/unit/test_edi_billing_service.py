@@ -2,6 +2,7 @@
 Phase 3 service tests: broadcast month range, reconcile status (incl. the
 fractional-cent rounding rule), and the TVB EDI field validators.
 """
+
 from datetime import date
 
 from business_logic.services.edi_billing import (
@@ -12,6 +13,7 @@ from business_logic.services.edi_billing import (
 
 # ── broadcast month ─────────────────────────────────────────────────────────
 
+
 def test_broadcast_june_2026():
     # matches the R31 period on the validated June invoices: 6/1–6/28
     assert broadcast_month_range(26, 6) == (date(2026, 6, 1), date(2026, 6, 28))
@@ -21,7 +23,7 @@ def test_broadcast_august_2025():
     # Aug 1 2025 is a Friday → broadcast August starts Monday July 28
     start, end = broadcast_month_range(25, 8)
     assert start == date(2025, 7, 28)
-    assert end == date(2025, 8, 31)   # Sep 1 is a Monday → Aug ends 8/31
+    assert end == date(2025, 8, 31)  # Sep 1 is a Monday → Aug ends 8/31
 
 
 def test_broadcast_december_year_rollover():
@@ -32,6 +34,7 @@ def test_broadcast_december_year_rollover():
 
 
 # ── reconcile ───────────────────────────────────────────────────────────────
+
 
 def test_reconcile_exact_match():
     assert reconcile_status(239, 4475.0, 239, 4475.0)["status"] == "match"
@@ -61,22 +64,41 @@ def test_reconcile_missing_side():
 # ── validators ──────────────────────────────────────────────────────────────
 
 GOOD_TEMPLATE = {
-    "call_letters": "CRTV", "edi_code": "9912591",
-    "agency_name": "Media Solutions", "representative": "Charmaine Lane",
-    "salesperson": "Kelly Wheeler", "advertiser_name": "OCHCA",
+    "call_letters": "CRTV",
+    "edi_code": "9912591",
+    "agency_name": "Media Solutions",
+    "representative": "Charmaine Lane",
+    "salesperson": "Kelly Wheeler",
+    "advertiser_name": "OCHCA",
     "product_name": "Crisis Crossings LA",
     "agency_address": ["707 Commons Drive", "Ste 201", "Sacramento CA", "95825"],
-    "payee_address": ["Accounts Receivable", "901 H Street Ste 120 PMB 91",
-                      "Sacramento CA", "95814"],
-    "agency_ad_code": "X", "agency_prod_code": "Y",
+    "payee_address": [
+        "Accounts Receivable",
+        "901 H Street Ste 120 PMB 91",
+        "Sacramento CA",
+        "95814",
+    ],
+    "agency_ad_code": "X",
+    "agency_prod_code": "Y",
 }
 GOOD_INV = {
-    "invoice_number": "2606-042", "invoice_date": "260630",
-    "broadcast_month": "2606", "bcast_start": "260601", "bcast_end": "260628",
-    "estimate_code": "4759", "order_number": "2763",
+    "invoice_number": "2606-042",
+    "invoice_date": "260630",
+    "broadcast_month": "2606",
+    "bcast_start": "260601",
+    "bcast_end": "260628",
+    "estimate_code": "4759",
+    "order_number": "2763",
 }
-GOOD_SPOTS = [{"run_date": "260601", "time_hhmm": "0810", "duration": 30,
-               "copy_id": "ABC123", "rate_cents": 11765}]
+GOOD_SPOTS = [
+    {
+        "run_date": "260601",
+        "time_hhmm": "0810",
+        "duration": 30,
+        "copy_id": "ABC123",
+        "rate_cents": 11765,
+    }
+]
 
 
 def _errors(issues):

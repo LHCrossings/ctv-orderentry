@@ -7,11 +7,14 @@ updates or deletes existing rows, so it can't clobber exceptions edited via the 
 
     uv run python scripts/setup_show_profiles_table.py
 """
+
 import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))  # project root → import like the other scripts
+sys.path.insert(
+    0, str(Path(__file__).parent.parent)
+)  # project root → import like the other scripts
 
 from browser_automation.etere_direct_client import connect
 from src.business_logic.services.show_profiles import default_profiles, to_config
@@ -56,14 +59,22 @@ def main():
             cur.execute(
                 "INSERT INTO chat.show_profiles (name, code_re, label, config, sort_order, updated_by) "
                 "VALUES (%s, %s, %s, %s, %s, %s)",
-                (p["name"], p.get("code_re"), p.get("label"), json.dumps(to_config(p)),
-                 (i + 1) * 10, "seed"),
+                (
+                    p["name"],
+                    p.get("code_re"),
+                    p.get("label"),
+                    json.dumps(to_config(p)),
+                    (i + 1) * 10,
+                    "seed",
+                ),
             )
             added += 1
         conn.commit()
         print(f"Seeded {added} new default profile(s); {len(existing)} already present.")
 
-        cur.execute("SELECT id, name, enabled, code_re, label, sort_order FROM chat.show_profiles ORDER BY sort_order, id")
+        cur.execute(
+            "SELECT id, name, enabled, code_re, label, sort_order FROM chat.show_profiles ORDER BY sort_order, id"
+        )
         print("Current profiles:")
         for r in cur.fetchall():
             print("  ", dict(zip(("id", "name", "enabled", "code_re", "label", "sort_order"), r)))

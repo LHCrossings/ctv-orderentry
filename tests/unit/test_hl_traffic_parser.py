@@ -38,8 +38,8 @@ for _p in (_root, _root / "browser_automation"):
         sys.path.insert(0, str(_p))
 
 FIXTURES = _root / "tests" / "fixtures" / "hl_traffic"
-WRAPPED = FIXTURES / "toyota_13935_r1_wrapped.pdf"      # layout B (the bug)
-ISCI_FIRST = FIXTURES / "toyota_13933_isci_first.pdf"   # layout A (regression)
+WRAPPED = FIXTURES / "toyota_13935_r1_wrapped.pdf"  # layout B (the bug)
+ISCI_FIRST = FIXTURES / "toyota_13933_isci_first.pdf"  # layout A (regression)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -49,6 +49,7 @@ def _use_real_pdfplumber(real_pdfplumber):
 
 def _parse(path):
     from browser_automation.parsers.hl_traffic_parser import parse_hl_traffic_pdf
+
     return parse_hl_traffic_pdf(path.read_bytes())
 
 
@@ -59,13 +60,20 @@ def wrapped():
 
 # ── Layout B: the reported bug ───────────────────────────────────────────────
 
+
 def test_both_flights_are_parsed_for_every_dialect(wrapped):
     """4 dialects × 2 flights = 8 spots. The parse returned 7."""
     assert len(wrapped.spots) == 8
     by_isci = {s.isci: s for s in wrapped.spots}
     assert sorted(by_isci) == [
-        "TYRN41271H", "TYRN41281H", "TYRN41291H", "TYRN41301H",
-        "TYRN43021H", "TYRN43031H", "TYRN43041H", "TYRN43051H",
+        "TYRN41271H",
+        "TYRN41281H",
+        "TYRN41291H",
+        "TYRN41301H",
+        "TYRN43021H",
+        "TYRN43031H",
+        "TYRN43041H",
+        "TYRN43051H",
     ]
 
 
@@ -81,10 +89,14 @@ def test_each_isci_keeps_its_own_dialect(wrapped):
     language, or the wrong-language cut airs."""
     got = {s.isci: s.dialect for s in wrapped.spots}
     assert got == {
-        "TYRN41271H": "Cantonese", "TYRN41281H": "Mandarin",
-        "TYRN41291H": "Tagalog",   "TYRN41301H": "Hindi",
-        "TYRN43021H": "Cantonese", "TYRN43031H": "Mandarin",
-        "TYRN43041H": "Tagalog",   "TYRN43051H": "Hindi",
+        "TYRN41271H": "Cantonese",
+        "TYRN41281H": "Mandarin",
+        "TYRN41291H": "Tagalog",
+        "TYRN41301H": "Hindi",
+        "TYRN43021H": "Cantonese",
+        "TYRN43031H": "Mandarin",
+        "TYRN43041H": "Tagalog",
+        "TYRN43051H": "Hindi",
     }
 
 
@@ -97,8 +109,8 @@ def test_the_last_row_of_a_table_gets_its_dates(wrapped):
 
 def test_dialects_normalise_to_the_language_window_names(wrapped):
     got = {s.isci: s.system_dialect for s in wrapped.spots}
-    assert got["TYRN43041H"] == "Filipino"     # Tagalog →
-    assert got["TYRN43051H"] == "SouthAsian"   # Hindi →
+    assert got["TYRN43041H"] == "Filipino"  # Tagalog →
+    assert got["TYRN43051H"] == "SouthAsian"  # Hindi →
     assert got["TYRN43021H"] == "Cantonese"
 
 
@@ -129,20 +141,23 @@ def test_header_fields(wrapped):
 
 # ── Layout A: unchanged ──────────────────────────────────────────────────────
 
+
 def test_isci_first_layout_is_unaffected():
     """The June #13933 instruction must parse exactly as before the fix."""
     o = _parse(ISCI_FIRST)
     assert o.estimate == "13933"
     assert len(o.spots) == 4
     assert {s.isci: s.dialect for s in o.spots} == {
-        "TYRN39271H": "Cantonese", "TYRN39281H": "Mandarin",
-        "TYRN39291H": "Hindi",     "TYRN39301H": "Tagalog",
+        "TYRN39271H": "Cantonese",
+        "TYRN39281H": "Mandarin",
+        "TYRN39291H": "Hindi",
+        "TYRN39301H": "Tagalog",
     }
-    assert {(s.date_from_sql, s.date_to_sql) for s in o.spots} == {
-        ("2026-06-02", "2026-06-21")}
+    assert {(s.date_from_sql, s.date_to_sql) for s in o.spots} == {("2026-06-02", "2026-06-21")}
 
 
 # ── Unit-level guards on the helpers ─────────────────────────────────────────
+
 
 def test_a_parenthesised_non_language_is_never_read_as_the_dialect():
     """Titles carry parentheses too. Only a known dialect may win, else a title
@@ -175,8 +190,7 @@ def test_a_metadata_line_is_claimed_by_only_one_isci():
         "TYRN02B (Mandarin)",
     ]
     claimed = set()
-    a = _resolve_dates({"idx": 1, "rest": "(Cantonese)", "after": [(2, lines[2])]},
-                       lines, claimed)
+    a = _resolve_dates({"idx": 1, "rest": "(Cantonese)", "after": [(2, lines[2])]}, lines, claimed)
     b = _resolve_dates({"idx": 3, "rest": "(Mandarin)", "after": []}, lines, claimed)
     assert a == ("8/12/26", "8/31/26"), "row A must take the line above it"
     assert b == ("9/01/26", "9/30/26"), "row B must not inherit row A's window"
@@ -184,5 +198,6 @@ def test_a_metadata_line_is_claimed_by_only_one_isci():
 
 def test_a_trailing_time_annotation_does_not_shift_the_window():
     from browser_automation.parsers.hl_traffic_parser import _date_pair
+
     assert _date_pair(":30 100% 8/12/26 8/31/26 @ 12P") == ("8/12/26", "8/31/26")
     assert _date_pair(":30 100% 8/12/26") is None

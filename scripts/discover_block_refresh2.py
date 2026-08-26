@@ -2,6 +2,7 @@
 Deep-dive: CONTRATTIFASCE structure + SPs that reference it.
 Run from Windows: py scripts/discover_block_refresh2.py
 """
+
 import sys
 from pathlib import Path
 
@@ -79,13 +80,17 @@ for row in cursor.fetchall():
 # ── 5b. FASCE that overlap with a 2PM-3PM window (frames) ────────────────────
 FRAMES = 29.97
 start_f = round(14 * 3600 * FRAMES)  # 14:00
-end_f   = round(15 * 3600 * FRAMES)  # 15:00
+end_f = round(15 * 3600 * FRAMES)  # 15:00
 print(f"\n  Blocks overlapping 14:00-15:00 (frames {start_f}-{end_f}):")
-cursor.execute("""
+cursor.execute(
+    """
     SELECT * FROM FASCE
     WHERE ORA_INI < ? AND ORA_FIN > ?
     ORDER BY ORA_INI
-""", end_f, start_f)
+""",
+    end_f,
+    start_f,
+)
 for row in cursor.fetchall():
     print(" ", dict(zip(cols, row)))
 
@@ -102,11 +107,14 @@ row = cursor.fetchone()
 if row:
     test_cid = row[0]
     print(f"  Contract ID: {test_cid}")
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT COUNT(*) FROM CONTRATTIFASCE cf
         JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = cf.ID_CONTRATTIRIGHE
         WHERE cr.ID_CONTRATTITESTATA = ?
-    """, test_cid)
+    """,
+        test_cid,
+    )
     cnt = cursor.fetchone()[0]
     print(f"  CONTRATTIFASCE rows: {cnt}")
 else:

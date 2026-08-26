@@ -61,31 +61,36 @@ with db_connect() as conn:
         line_id, line_mkt_id, desc, df, dt, block_id = row
         if line_id not in lines:
             lines[line_id] = {
-                'desc': desc,
-                'line_market': USER_ID_TO_MARKET.get(line_mkt_id, f"?{line_mkt_id}"),
-                'line_market_id': line_mkt_id,
-                'date_from': df,
-                'date_to': dt,
-                'blocks': [],
+                "desc": desc,
+                "line_market": USER_ID_TO_MARKET.get(line_mkt_id, f"?{line_mkt_id}"),
+                "line_market_id": line_mkt_id,
+                "date_from": df,
+                "date_to": dt,
+                "blocks": [],
             }
-        lines[line_id]['blocks'].append(block_id)
+        lines[line_id]["blocks"].append(block_id)
 
     # For each line, find blocks with no matching-market entries in the date range
     line_results = {}
     for line_id, info in lines.items():
         wrong_blocks = []
-        for block_id in info['blocks']:
-            cursor.execute(BLOCK_CHECK_QUERY, [
-                block_id, info['line_market_id'],
-                info['date_from'], info['date_to'],
-            ])
+        for block_id in info["blocks"]:
+            cursor.execute(
+                BLOCK_CHECK_QUERY,
+                [
+                    block_id,
+                    info["line_market_id"],
+                    info["date_from"],
+                    info["date_to"],
+                ],
+            )
             count = cursor.fetchone()[0]
             if count == 0:
                 wrong_blocks.append(block_id)
         line_results[line_id] = wrong_blocks
 
 total_lines = len(lines)
-bad_lines   = sum(1 for w in line_results.values() if w)
+bad_lines = sum(1 for w in line_results.values() if w)
 total_wrong = sum(len(w) for w in line_results.values())
 
 print(f"\nContract {CONTRACT_ID} — {total_lines} lines with block assignments\n")
@@ -95,14 +100,18 @@ print("-" * 75)
 for line_id, info in lines.items():
     wrong = line_results[line_id]
     status = f"  ✗ {len(wrong)} no-match" if wrong else ""
-    print(f"{line_id:<10} {info['line_market']:<6} {info['desc'][:40]:<40} "
-          f"{len(info['blocks']):>6} {len(wrong):>6}{status}")
+    print(
+        f"{line_id:<10} {info['line_market']:<6} {info['desc'][:40]:<40} "
+        f"{len(info['blocks']):>6} {len(wrong):>6}{status}"
+    )
     for block_id in wrong:
         print(f"           ↳ block {block_id} has no {info['line_market']} entries in date range")
 
 print("-" * 75)
 if bad_lines:
-    print(f"\n✗ {bad_lines}/{total_lines} lines have blocks with no matching-market schedule ({total_wrong} total)")
+    print(
+        f"\n✗ {bad_lines}/{total_lines} lines have blocks with no matching-market schedule ({total_wrong} total)"
+    )
     print("  Run block refresh to fix.")
 else:
     print(f"\n✓ All {total_lines} lines have correctly scheduled blocks")

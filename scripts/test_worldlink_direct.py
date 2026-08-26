@@ -12,6 +12,7 @@ After running, note the printed contract ID, enter the Selenium contract as
 usual, then compare:
     uv run python scripts/compare_contracts.py <selenium_id> <direct_id>
 """
+
 import re
 import sys
 from datetime import datetime
@@ -45,32 +46,30 @@ def _secs_to_duration(secs: int) -> str:
 
 def _parse_date(date_str: str):
     """Convert 'MM/DD/YYYY' string to date object."""
-    return datetime.strptime(date_str.strip(), '%m/%d/%Y').date()
+    return datetime.strptime(date_str.strip(), "%m/%d/%Y").date()
 
 
 def _build_notes(order_data: dict) -> str:
-    comment = order_data.get('order_comment', '') or ''
-    return re.sub(r'[-]', '', comment).strip()
+    comment = order_data.get("order_comment", "") or ""
+    return re.sub(r"[-]", "", comment).strip()
 
 
 def _extend_end_date(cursor, contract_id: int, new_end) -> None:
     """Extend contract end date in CONTRATTITESTATA if new lines go beyond it."""
     cursor.execute(
-        "SELECT DATA_TERMINE FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = %s",
-        (contract_id,)
+        "SELECT DATA_TERMINE FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = %s", (contract_id,)
     )
     row = cursor.fetchone()
     if not row:
         raise ValueError(f"Contract ID {contract_id} not found in CONTRATTITESTATA")
     current_end = row[0]
     # Normalise to date for comparison
-    current_date = current_end.date() if hasattr(current_end, 'date') else current_end
+    current_date = current_end.date() if hasattr(current_end, "date") else current_end
     if current_date is None or current_date < new_end:
         print(f"[DATES] Extending contract end: {current_date} → {new_end}")
         cursor.execute(
-            "UPDATE CONTRATTITESTATA SET DATA_TERMINE = %s "
-            "WHERE ID_CONTRATTITESTATA = %s",
-            (new_end, contract_id)
+            "UPDATE CONTRATTITESTATA SET DATA_TERMINE = %s WHERE ID_CONTRATTITESTATA = %s",
+            (new_end, contract_id),
         )
     else:
         print(f"[DATES] Contract end {current_date} already covers {new_end} — no update needed")
@@ -98,24 +97,25 @@ def _add_crossings_lines(client: EtereDirectClient, lines: list, separation: tup
     CROSSINGS network: NYC line at real rate + CMP line at $0 per PDF line.
     """
     for line in lines:
-        days = line['days_of_week']
-        rate = float(line['rate'])
+        days = line["days_of_week"]
+        rate = float(line["rate"])
         is_bonus = rate == 0.0
-        from_time = line['from_time']
-        to_time = line['to_time']
+        from_time = line["from_time"]
+        to_time = line["to_time"]
         time_range = f"{from_time}-{to_time}"
-        duration = _secs_to_duration(int(line['duration']))
-        spots_pw = int(line['spots'])
-        total = int(line['total_spots'])
-        date_from = _parse_date(line['start_date'])
-        date_to = _parse_date(line['end_date'])
+        duration = _secs_to_duration(int(line["duration"]))
+        spots_pw = int(line["spots"])
+        total = int(line["total_spots"])
+        date_from = _parse_date(line["start_date"])
+        date_to = _parse_date(line["end_date"])
         label = "BNS " if is_bonus else ""
         time_short = f"{_format_24hr_short(from_time)}-{_format_24hr_short(to_time)}"
         desc = f"(Line {line['line_number']}) {label}{days} {time_short}"
 
-        print(f"\n  [LINE {line['line_number']}] {days} {time_range} | "
-              f"{line['duration']}s | {spots_pw}/wk | ${rate}"
-              + (" [BNS]" if is_bonus else ""))
+        print(
+            f"\n  [LINE {line['line_number']}] {days} {time_range} | "
+            f"{line['duration']}s | {spots_pw}/wk | ${rate}" + (" [BNS]" if is_bonus else "")
+        )
 
         # NYC — real rate
         nyc_id = client.add_contract_line(
@@ -160,24 +160,25 @@ def _add_asian_lines(client: EtereDirectClient, lines: list, separation: tuple) 
     ASIAN network: single DAL market line per PDF line.
     """
     for line in lines:
-        days = line['days_of_week']
-        rate = float(line['rate'])
+        days = line["days_of_week"]
+        rate = float(line["rate"])
         is_bonus = rate == 0.0
-        from_time = line['from_time']
-        to_time = line['to_time']
+        from_time = line["from_time"]
+        to_time = line["to_time"]
         time_range = f"{from_time}-{to_time}"
-        duration = _secs_to_duration(int(line['duration']))
-        spots_pw = int(line['spots'])
-        total = int(line['total_spots'])
-        date_from = _parse_date(line['start_date'])
-        date_to = _parse_date(line['end_date'])
+        duration = _secs_to_duration(int(line["duration"]))
+        spots_pw = int(line["spots"])
+        total = int(line["total_spots"])
+        date_from = _parse_date(line["start_date"])
+        date_to = _parse_date(line["end_date"])
         label = "BNS " if is_bonus else ""
         time_short = f"{_format_24hr_short(from_time)}-{_format_24hr_short(to_time)}"
         desc = f"(Line {line['line_number']}) {label}{days} {time_short}"
 
-        print(f"\n  [LINE {line['line_number']}] {days} {time_range} | "
-              f"{line['duration']}s | {spots_pw}/wk | ${rate}"
-              + (" [BNS]" if is_bonus else ""))
+        print(
+            f"\n  [LINE {line['line_number']}] {days} {time_range} | "
+            f"{line['duration']}s | {spots_pw}/wk | ${rate}" + (" [BNS]" if is_bonus else "")
+        )
 
         dal_id = client.add_contract_line(
             market="DAL",
@@ -206,15 +207,15 @@ def run(pdf_path: Path) -> None:
     print(f"\n[PARSE] {pdf_path.name}")
     order_data = parse_worldlink_pdf(str(pdf_path))
 
-    network    = order_data.get('network', 'CROSSINGS')
-    order_type = order_data.get('order_type', 'new')
-    advertiser = order_data.get('advertiser', '')
-    lines      = order_data.get('lines', [])
-    order_code = order_data.get('order_code', 'WL UNKNOWN')
-    description = order_data.get('description', order_code)
-    tracking   = order_data.get('tracking_number', '')
-    notes      = _build_notes(order_data)
-    is_revision = order_type != 'new'
+    network = order_data.get("network", "CROSSINGS")
+    order_type = order_data.get("order_type", "new")
+    advertiser = order_data.get("advertiser", "")
+    lines = order_data.get("lines", [])
+    order_code = order_data.get("order_code", "WL UNKNOWN")
+    description = order_data.get("description", order_code)
+    tracking = order_data.get("tracking_number", "")
+    notes = _build_notes(order_data)
+    is_revision = order_type != "new"
 
     print(f"  Network     : {network}")
     print(f"  Order type  : {order_type}")
@@ -233,13 +234,21 @@ def run(pdf_path: Path) -> None:
         print(f"\n[REVISION] Order type: {order_type.upper()}")
         found_id, found_code = _lookup_contract_by_tracking(tracking)
         if found_id:
-            print(f"[REVISION] ✓ Found contract {found_code} (ID {found_id}) for tracking '{tracking}'")
+            print(
+                f"[REVISION] ✓ Found contract {found_code} (ID {found_id}) for tracking '{tracking}'"
+            )
             confirm = input(f"  Use {found_code} (ID {found_id})? (y/n): ").strip().lower()
-            existing_contract_id = int(found_id) if confirm == 'y' else int(input("  Existing contract DB ID: ").strip())
+            existing_contract_id = (
+                int(found_id)
+                if confirm == "y"
+                else int(input("  Existing contract DB ID: ").strip())
+            )
         else:
             if tracking:
                 print(f"[REVISION] ✗ No contract found for tracking '{tracking}'")
-            existing_contract_id = int(input("  Existing contract DB ID (ID_CONTRATTITESTATA): ").strip())
+            existing_contract_id = int(
+                input("  Existing contract DB ID (ID_CONTRATTITESTATA): ").strip()
+            )
 
     # ── Connect ──────────────────────────────────────────────────────────
     print("\n[DB] Connecting...")
@@ -250,19 +259,21 @@ def run(pdf_path: Path) -> None:
     # from ANAGRAF by create_contract_header when agency_id=None.
     cust_rec = lookup_customer(advertiser)
     if cust_rec:
-        customer_id = int(cust_rec['customer_id'])
-        agency_id = None          # triggers ANAGRAF auto-lookup
+        customer_id = int(cust_rec["customer_id"])
+        agency_id = None  # triggers ANAGRAF auto-lookup
         media_center_id = None
         print(f"[DB] customer_id={customer_id} (from customers.db: {advertiser})")
     else:
         # Fallback: grab IDs from most recent matching WL contract
         customer_id, agency_id, media_center_id = _lookup_wl_ids(cursor)
-        print(f"[DB] customer_id={customer_id}  agency_id={agency_id}  "
-              f"media_center_id={media_center_id}  (fallback from DB)")
+        print(
+            f"[DB] customer_id={customer_id}  agency_id={agency_id}  "
+            f"media_center_id={media_center_id}  (fallback from DB)"
+        )
 
     # ── Flight range ───────────────────────────────────────────────────
-    flight_start = min(_parse_date(ln['start_date']) for ln in lines)
-    flight_end   = max(_parse_date(ln['end_date'])   for ln in lines)
+    flight_start = min(_parse_date(ln["start_date"]) for ln in lines)
+    flight_end = max(_parse_date(ln["end_date"]) for ln in lines)
 
     try:
         master_market = "DAL" if network == "ASIAN" else "NYC"
@@ -277,7 +288,7 @@ def run(pdf_path: Path) -> None:
             # Read the actual customer from the existing contract so Nielsen lookup is correct
             cursor.execute(
                 "SELECT COMMITTENTE FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = %s",
-                (existing_contract_id,)
+                (existing_contract_id,),
             )
             _row = cursor.fetchone()
             if _row:
@@ -296,10 +307,10 @@ def run(pdf_path: Path) -> None:
                 media_center_id=media_center_id,
                 contract_date=flight_start,
                 contract_end_date=flight_end,
-                contract_type=1,          # Proposal — forces manual review before scheduling
+                contract_type=1,  # Proposal — forces manual review before scheduling
                 billing_type="agency",
                 master_market=master_market,
-                allow_rename=True,        # Append * if code already exists (test-only)
+                allow_rename=True,  # Append * if code already exists (test-only)
                 note=notes,
                 customer_order_ref=tracking,
             )
@@ -307,14 +318,16 @@ def run(pdf_path: Path) -> None:
 
         # Per-advertiser separation from customers.db (falls back to WL default)
         cust_rec = lookup_customer(advertiser)
-        separation = cust_rec['separation'] if cust_rec else WL_DEFAULT_SEPARATION
-        print(f"[SEP] Customer={separation[0]}, Order={separation[1]}, Event={separation[2]}"
-              + (f"  (from customers.db: {advertiser})" if cust_rec else "  (default fallback)"))
+        separation = cust_rec["separation"] if cust_rec else WL_DEFAULT_SEPARATION
+        print(
+            f"[SEP] Customer={separation[0]}, Order={separation[1]}, Event={separation[2]}"
+            + (f"  (from customers.db: {advertiser})" if cust_rec else "  (default fallback)")
+        )
 
         # Pull Nielsen from the contract's actual customer record
         wl_defaults = client.get_client_defaults(customer_id)
         if wl_defaults.get("nielsen_id"):
-            client._nielsen_id   = wl_defaults["nielsen_id"]
+            client._nielsen_id = wl_defaults["nielsen_id"]
             client._nielsen_code = wl_defaults["nielsen_code"]
             print(f"[DB] Nielsen → id={client._nielsen_id}  code={client._nielsen_code}")
 
@@ -326,13 +339,13 @@ def run(pdf_path: Path) -> None:
             _add_crossings_lines(client, lines, separation)
 
         conn.commit()
-        print(f"\n{'='*65}")
+        print(f"\n{'=' * 65}")
         print(f"✓ Contract #{contract_id} committed.")
         if not is_revision:
             print(f"  Code : TEST {order_code}")
         print("  Note : Approve in Etere, then compare with:")
         print(f"         uv run python scripts/compare_contracts.py <REF_ID> {contract_id}")
-        print(f"{'='*65}")
+        print(f"{'=' * 65}")
 
     except Exception as exc:
         print(f"\n✗ Error: {exc}")
@@ -347,4 +360,3 @@ if __name__ == "__main__":
         print("Usage: uv run python scripts/test_worldlink_direct.py <worldlink.pdf>")
         sys.exit(1)
     run(Path(sys.argv[1]))
-

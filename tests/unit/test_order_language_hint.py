@@ -37,13 +37,16 @@ def test_language_read_from_a_flat_inputs_key():
     assert _order_language_name(orders) == "Korean"
 
 
-@pytest.mark.parametrize("orders", [
-    [],
-    [_order(None)],
-    [_order({})],
-    [_order({"order": SimpleNamespace()})],
-    [_order({"order": None, "language": ""})],
-])
+@pytest.mark.parametrize(
+    "orders",
+    [
+        [],
+        [_order(None)],
+        [_order({})],
+        [_order({"order": SimpleNamespace()})],
+        [_order({"order": None, "language": ""})],
+    ],
+)
 def test_absent_language_is_empty_not_an_error(orders):
     """Most parsers have no language field — the pass must degrade, never raise."""
     assert _order_language_name(orders) == ""

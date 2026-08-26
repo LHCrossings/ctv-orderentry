@@ -26,6 +26,7 @@ from presentation.formatters.output_formatters import (
 
 # Fixtures
 
+
 @pytest.fixture
 def console_formatter():
     """Create a console formatter for testing."""
@@ -57,7 +58,7 @@ def sample_order():
         pdf_path=Path("/test/orders/order_001.pdf"),
         order_type=OrderType.WORLDLINK,
         customer_name="Test Customer",
-        status=OrderStatus.PENDING
+        status=OrderStatus.PENDING,
     )
 
 
@@ -69,19 +70,19 @@ def sample_orders():
             pdf_path=Path("/test/orders/order_001.pdf"),
             order_type=OrderType.WORLDLINK,
             customer_name="Customer A",
-            status=OrderStatus.PENDING
+            status=OrderStatus.PENDING,
         ),
         Order(
             pdf_path=Path("/test/orders/order_002.pdf"),
             order_type=OrderType.TCAA,
             customer_name="Customer B",
-            status=OrderStatus.PROCESSING
+            status=OrderStatus.PROCESSING,
         ),
         Order(
             pdf_path=Path("/test/orders/order_003.pdf"),
             order_type=OrderType.OPAD,
             customer_name="Customer C",
-            status=OrderStatus.COMPLETED
+            status=OrderStatus.COMPLETED,
         ),
     ]
 
@@ -89,10 +90,7 @@ def sample_orders():
 @pytest.fixture
 def sample_contract():
     """Create a sample contract for testing."""
-    return Contract(
-        contract_number="CON-001",
-        order_type=OrderType.WORLDLINK
-    )
+    return Contract(contract_number="CON-001", order_type=OrderType.WORLDLINK)
 
 
 @pytest.fixture
@@ -102,11 +100,12 @@ def sample_contract_with_block():
         contract_number="CON-002",
         order_type=OrderType.WORLDLINK,  # WorldLink requires block refresh
         highest_line=5,
-        market="NYC"
+        market="NYC",
     )
 
 
 # Tests for ConsoleFormatter
+
 
 class TestConsoleFormatter:
     """Tests for base ConsoleFormatter class."""
@@ -195,6 +194,7 @@ class TestConsoleFormatter:
 
 # Tests for OrderFormatter
 
+
 class TestOrderFormatter:
     """Tests for OrderFormatter class."""
 
@@ -244,6 +244,7 @@ class TestOrderFormatter:
 
 # Tests for ProcessingResultFormatter
 
+
 class TestProcessingResultFormatter:
     """Tests for ProcessingResultFormatter class."""
 
@@ -253,7 +254,7 @@ class TestProcessingResultFormatter:
             success=True,
             order_type=OrderType.WORLDLINK,
             contracts=[sample_contract],
-            error_message=None
+            error_message=None,
         )
 
         output = result_formatter.format_processing_result(result)
@@ -269,7 +270,7 @@ class TestProcessingResultFormatter:
             success=False,
             order_type=OrderType.WORLDLINK,
             contracts=[],
-            error_message="Something went wrong"
+            error_message="Something went wrong",
         )
 
         output = result_formatter.format_processing_result(result)
@@ -279,10 +280,7 @@ class TestProcessingResultFormatter:
         assert "Something went wrong" in output
 
     def test_format_batch_summary_all_success(
-        self,
-        result_formatter,
-        sample_contract,
-        sample_contract_with_block
+        self, result_formatter, sample_contract, sample_contract_with_block
     ):
         """Should format summary of all successful results."""
         results = [
@@ -290,13 +288,13 @@ class TestProcessingResultFormatter:
                 success=True,
                 order_type=OrderType.WORLDLINK,
                 contracts=[sample_contract],
-                error_message=None
+                error_message=None,
             ),
             ProcessingResult(
                 success=True,
                 order_type=OrderType.TCAA,
                 contracts=[sample_contract_with_block],
-                error_message=None
+                error_message=None,
             ),
         ]
 
@@ -315,13 +313,13 @@ class TestProcessingResultFormatter:
                 success=True,
                 order_type=OrderType.WORLDLINK,
                 contracts=[sample_contract],
-                error_message=None
+                error_message=None,
             ),
             ProcessingResult(
                 success=False,
                 order_type=OrderType.TCAA,
                 contracts=[],
-                error_message="Missing required field"
+                error_message="Missing required field",
             ),
         ]
 
@@ -331,23 +329,16 @@ class TestProcessingResultFormatter:
         assert "Failed: 1 order(s)" in output
         assert "Missing required field" in output
 
-    def test_format_batch_summary_groups_by_type(
-        self,
-        result_formatter,
-        sample_contract
-    ):
+    def test_format_batch_summary_groups_by_type(self, result_formatter, sample_contract):
         """Should group contracts by order type."""
-        contract2 = Contract(
-            contract_number="CON-002",
-            order_type=OrderType.WORLDLINK
-        )
+        contract2 = Contract(contract_number="CON-002", order_type=OrderType.WORLDLINK)
 
         results = [
             ProcessingResult(
                 success=True,
                 order_type=OrderType.WORLDLINK,
                 contracts=[sample_contract, contract2],
-                error_message=None
+                error_message=None,
             ),
         ]
 
@@ -355,7 +346,9 @@ class TestProcessingResultFormatter:
 
         assert "WORLDLINK (2 contract(s))" in output
 
-    def test_format_contracts_by_type(self, result_formatter, sample_contract, sample_contract_with_block):
+    def test_format_contracts_by_type(
+        self, result_formatter, sample_contract, sample_contract_with_block
+    ):
         """Should format contracts grouped by type."""
         contracts_by_type = {
             OrderType.WORLDLINK: [sample_contract],
@@ -373,6 +366,7 @@ class TestProcessingResultFormatter:
 
 
 # Tests for ProgressFormatter
+
 
 class TestProgressFormatter:
     """Tests for ProgressFormatter class."""

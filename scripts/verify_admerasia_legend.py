@@ -23,11 +23,11 @@ from browser_automation.parsers.admerasia_vision import extract_isci_legend  # n
 _ORDERS = "/mnt/c/Work Temp/!New/!Orders"
 FILES = [
     ("VN Houston", f"{_ORDERS}/TV-MD26-Vietnamese IO-McValue July_Crossing TV_Houston.pdf"),
-    ("VN SF",      f"{_ORDERS}/TV-MD26-Vietnamese IO-McValue July_Crossing TV_SF.pdf"),
+    ("VN SF", f"{_ORDERS}/TV-MD26-Vietnamese IO-McValue July_Crossing TV_SF.pdf"),
     ("VN NewYork", f"{_ORDERS}/TV-MD26-Vietnamese IO-McValue July_CrossingTV_NewYork.pdf"),
     ("VN Seattle", f"{_ORDERS}/TV-MD26-Vietnamese IO-McValue July_CrossingTV_Seattle.pdf"),
     ("CN Seattle", f"{_ORDERS}/TV-MD26-Chinese IO-McValue July_Crossing TV - Seattle.pdf"),
-    ("FIL LA",     f"{_ORDERS}/TV-MD26-Filipino IO-McValue July_Crossing TV_LA.pdf"),
+    ("FIL LA", f"{_ORDERS}/TV-MD26-Filipino IO-McValue July_Crossing TV_LA.pdf"),
     ("FIL NewYork", f"{_ORDERS}/TV-MD26-Filipino IO-McValue July_CrossingTV_NewYork.pdf"),
 ]
 
@@ -44,7 +44,9 @@ def main():
 
         print("  vision legend (top->bottom):")
         for r in legend:
-            print(f"    {r.isci_code} :{r.duration_sec:<2} {tuple(r.color_rgb)!s:<18} {r.color_name}")
+            print(
+                f"    {r.isci_code} :{r.duration_sec:<2} {tuple(r.color_rgb)!s:<18} {r.color_name}"
+            )
 
         cluster_isci = _assign_clusters(cg.palette, legend)
         if cluster_isci is None:
@@ -66,10 +68,14 @@ def main():
         for i, cen in enumerate(cg.palette):
             leg = next((r for r in legend if r.isci_code == cluster_isci[i]), None)
             d = _dist(cen, tuple(leg.color_rgb)) if leg else -1
-            print(f"    {cen!s:<18} -> {cluster_isci[i]}  (Δcolor {d:.0f})   spots={per[cluster_isci[i]]}")
-        print(f"  distinct colour->ISCI: {'OK' if distinct else 'FAIL (collision)'}"
-              f"  | duration-coherent rows: {'OK' if not mixed else f'FAIL {mixed}'}"
-              f"  | total spots colour-read: {sum(c.count for c in cg.cells)}")
+            print(
+                f"    {cen!s:<18} -> {cluster_isci[i]}  (Δcolor {d:.0f})   spots={per[cluster_isci[i]]}"
+            )
+        print(
+            f"  distinct colour->ISCI: {'OK' if distinct else 'FAIL (collision)'}"
+            f"  | duration-coherent rows: {'OK' if not mixed else f'FAIL {mixed}'}"
+            f"  | total spots colour-read: {sum(c.count for c in cg.cells)}"
+        )
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@
 Follow-up inspection: bonus lines, users, SP definition, ORA_FINE mystery.
 Run from Windows: py scripts/inspect_contract2.py
 """
+
 import pyodbc
 
 conn = pyodbc.connect(
@@ -68,7 +69,7 @@ cursor.execute("""
 """)
 row = cursor.fetchone()
 if row and row[0]:
-    lines = row[0].split('\n')
+    lines = row[0].split("\n")
     for ln in lines[:200]:
         print(ln)
 else:
@@ -85,7 +86,7 @@ cursor.execute("""
 """)
 row = cursor.fetchone()
 if row and row[0]:
-    lines = row[0].split('\n')
+    lines = row[0].split("\n")
     for ln in lines[:200]:
         print(ln)
 else:

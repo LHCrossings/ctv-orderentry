@@ -13,8 +13,8 @@ import sys
 from pathlib import Path
 
 _ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(_ROOT))            # browser_automation (vision parser)
-sys.path.insert(0, str(_ROOT / "src"))    # business_logic / domain
+sys.path.insert(0, str(_ROOT))  # browser_automation (vision parser)
+sys.path.insert(0, str(_ROOT / "src"))  # business_logic / domain
 
 import business_logic.services.pdf_order_detector as detector_mod  # noqa: E402
 from business_logic.services.pdf_order_detector import PDFOrderDetector  # noqa: E402
@@ -72,8 +72,10 @@ def test_image_only_worldlink_uses_vision(monkeypatch):
     OCR misread."""
     _patch_pdf(monkeypatch, "")  # no extractable text → image-only branch
     import browser_automation.parsers.worldlink_parser as wl
-    monkeypatch.setattr(wl, "_vision_extract_worldlink",
-                        lambda _p, **_k: {"advertiser": "Feeding America"})
+
+    monkeypatch.setattr(
+        wl, "_vision_extract_worldlink", lambda _p, **_k: {"advertiser": "Feeding America"}
+    )
     det = PDFOrderDetector()
     assert det.extract_client_name("scan.pdf", OrderType.WORLDLINK) == "Feeding America"
 
@@ -82,6 +84,7 @@ def test_image_only_falls_back_to_ocr_when_vision_unavailable(monkeypatch):
     """If vision yields nothing, fall back to OCR for a rough label."""
     _patch_pdf(monkeypatch, "")
     import browser_automation.parsers.worldlink_parser as wl
+
     monkeypatch.setattr(wl, "_vision_extract_worldlink", lambda _p, **_k: None)
     det = PDFOrderDetector()
     monkeypatch.setattr(det, "_ocr_first_page", lambda _p, dpi=200: _WL_TEXT)
@@ -93,6 +96,7 @@ def test_image_only_no_text_returns_none(monkeypatch):
     'Unknown'), and never raises."""
     _patch_pdf(monkeypatch, "")
     import browser_automation.parsers.worldlink_parser as wl
+
     monkeypatch.setattr(wl, "_vision_extract_worldlink", lambda _p, **_k: None)
     det = PDFOrderDetector()
     monkeypatch.setattr(det, "_ocr_first_page", lambda _p, dpi=200: "")

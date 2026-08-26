@@ -28,13 +28,20 @@ for _p in (_root, _root / "src"):
 from src.web.routes.orders import _bo_classify, _bo_optimize  # noqa: E402
 
 # The per-type ranks _bo_classify hands out, keyed by the label it returns.
-PRIO = {"BOOKEND": 1, "BILLBOARD": 2, "COMPANION": 3, "PAYING": 4,
-        "WORLDLINK": 5, "PI": 6, "PSA": 7, "STATION ID": 8}
+PRIO = {
+    "BOOKEND": 1,
+    "BILLBOARD": 2,
+    "COMPANION": 3,
+    "PAYING": 4,
+    "WORLDLINK": 5,
+    "PI": 6,
+    "PSA": 7,
+    "STATION ID": 8,
+}
 
 
 def mk(*labels, contract="C1"):
-    return [{"label": lb, "priority": PRIO[lb], "title": lb, "contract": contract}
-            for lb in labels]
+    return [{"label": lb, "priority": PRIO[lb], "title": lb, "contract": contract} for lb in labels]
 
 
 def order(*labels, **kw):
@@ -42,6 +49,7 @@ def order(*labels, **kw):
 
 
 # ── The report ───────────────────────────────────────────────────────────────
+
 
 def test_station_id_stays_after_the_closing_bookend():
     """Maija's Break 3, exactly as Etere had it — the optimizer must leave it be."""
@@ -51,7 +59,12 @@ def test_station_id_stays_after_the_closing_bookend():
 
 def test_a_scrambled_break_sorts_to_bookend_commercials_bookend_id():
     assert order("STATION ID", "PI", "BOOKEND", "WORLDLINK", "BOOKEND") == [
-        "BOOKEND", "WORLDLINK", "PI", "BOOKEND", "STATION ID"]
+        "BOOKEND",
+        "WORLDLINK",
+        "PI",
+        "BOOKEND",
+        "STATION ID",
+    ]
 
 
 def test_the_station_id_is_last_in_every_arrangement():
@@ -68,14 +81,24 @@ def test_the_station_id_is_last_in_every_arrangement():
 
 # ── Everything else must be unchanged ────────────────────────────────────────
 
+
 def test_bookend_pair_still_brackets_the_break_without_an_id():
     assert order("WORLDLINK", "BOOKEND", "PI", "BOOKEND") == [
-        "BOOKEND", "WORLDLINK", "PI", "BOOKEND"]
+        "BOOKEND",
+        "WORLDLINK",
+        "PI",
+        "BOOKEND",
+    ]
 
 
 def test_station_id_without_a_bookend_is_still_last():
     assert order("WORLDLINK", "PAYING", "PSA", "STATION ID", "PI") == [
-        "PAYING", "WORLDLINK", "PI", "PSA", "STATION ID"]
+        "PAYING",
+        "WORLDLINK",
+        "PI",
+        "PSA",
+        "STATION ID",
+    ]
 
 
 def test_a_break_with_neither_bookend_nor_id_is_untouched():
@@ -86,15 +109,14 @@ def test_a_break_with_neither_bookend_nor_id_is_untouched():
 
 def test_billboard_keeps_its_companion_adjacent():
     """A billboard and the :30 behind it move as one unit; the ID still closes."""
-    got = order("BOOKEND", "PI", "BILLBOARD", "COMPANION", "PAYING", "BOOKEND",
-                "STATION ID")
-    assert got == ["BOOKEND", "BILLBOARD", "COMPANION", "PAYING", "PI", "BOOKEND",
-                   "STATION ID"]
+    got = order("BOOKEND", "PI", "BILLBOARD", "COMPANION", "PAYING", "BOOKEND", "STATION ID")
+    assert got == ["BOOKEND", "BILLBOARD", "COMPANION", "PAYING", "PI", "BOOKEND", "STATION ID"]
     assert got.index("COMPANION") == got.index("BILLBOARD") + 1
 
 
 def test_optimize_never_adds_or_drops_a_spot():
     from collections import Counter
+
     for spots in (
         ("BOOKEND", "WORLDLINK", "PI", "BOOKEND", "STATION ID"),
         ("STATION ID", "BILLBOARD", "COMPANION", "PSA", "PAYING"),
@@ -105,15 +127,19 @@ def test_optimize_never_adds_or_drops_a_spot():
 
 # ── The classifier the ranks come from ───────────────────────────────────────
 
-@pytest.mark.parametrize("newtype,capo,fine,is_wl,expected", [
-    ("COM", 1, 1, False, "BOOKEND"),
-    ("COM", 1, 0, False, "BILLBOARD"),
-    ("COM", 0, 0, False, "PAYING"),
-    ("COM", 0, 0, True,  "WORLDLINK"),
-    ("PER", 0, 0, False, "PI"),
-    ("PSA", 0, 0, False, "PSA"),
-    ("ID",  0, 0, False, "STATION ID"),
-])
+
+@pytest.mark.parametrize(
+    "newtype,capo,fine,is_wl,expected",
+    [
+        ("COM", 1, 1, False, "BOOKEND"),
+        ("COM", 1, 0, False, "BILLBOARD"),
+        ("COM", 0, 0, False, "PAYING"),
+        ("COM", 0, 0, True, "WORLDLINK"),
+        ("PER", 0, 0, False, "PI"),
+        ("PSA", 0, 0, False, "PSA"),
+        ("ID", 0, 0, False, "STATION ID"),
+    ],
+)
 def test_classify_labels(newtype, capo, fine, is_wl, expected):
     _prio, label = _bo_classify(newtype, capo, fine, is_wl, "")
     assert label == expected
@@ -123,4 +149,5 @@ def test_station_id_outranks_the_bottom_bookend():
     """Guards the relationship directly: whatever the numbers become, the ID must
     sort after the closing bookend."""
     from src.web.routes.orders import _BO_BOTTOM_BOOKEND, _BO_STATION_ID
+
     assert _BO_STATION_ID > _BO_BOTTOM_BOOKEND

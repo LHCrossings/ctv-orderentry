@@ -51,9 +51,9 @@ try:
     from time_utils import transform_times  # type: ignore[import]
     from utils import safe_convert_date  # type: ignore[import]
 
-    _eb_app_config   = _eb_config.get_config()
-    _file_processor  = FileProcessor(_eb_app_config)
-    _AVAILABLE       = True
+    _eb_app_config = _eb_config.get_config()
+    _file_processor = FileProcessor(_eb_app_config)
+    _AVAILABLE = True
 except Exception as _exc:
     _AVAILABLE = False
     logging.warning("[EtereBridge] Not available — will fall back to built-in pipeline: %s", _exc)
@@ -87,6 +87,7 @@ def _parse_raw_durations_from_csv(csv_bytes: bytes) -> list:
     EtereBridge's nearest-15 rounding overwrites them.
     """
     import io as _io_mod
+
     text = csv_bytes.decode("utf-8", errors="replace")
     reader = csv.reader(_io_mod.StringIO(text))
     rows = list(reader)
@@ -129,12 +130,12 @@ def get_customer_order_ref(contract_id: int) -> str:
     unavailable. Best-effort: never raises."""
     try:
         from browser_automation.etere_direct_client import connect
+
         cid = int(contract_id)  # validated int → safe to inline (no placeholder)
         with connect() as conn:
             cur = conn.cursor()
             cur.execute(
-                f"SELECT CUSTOMERREF FROM CONTRATTITESTATA "
-                f"WHERE ID_CONTRATTITESTATA = {cid}"
+                f"SELECT CUSTOMERREF FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = {cid}"
             )
             row = cur.fetchone()
             return (row[0] or "").strip() if row and row[0] else ""
@@ -154,6 +155,7 @@ def _apply_stored_line_languages(df, row_languages) -> set:
         return set()
     try:
         from browser_automation.etere_direct_client import connect, fetch_line_languages
+
         line_ids = []
         for v in df["Line"].tolist():
             try:
@@ -169,7 +171,9 @@ def _apply_stored_line_languages(df, row_languages) -> set:
             if line_id in stored:
                 row_languages.at[idx] = stored[line_id]
                 overridden.add(line_id)
-        logging.info("[EtereBridge] %d line language(s) from CTV_LineLanguage catalog", len(overridden))
+        logging.info(
+            "[EtereBridge] %d line language(s) from CTV_LineLanguage catalog", len(overridden)
+        )
         return overridden
     except Exception as exc:  # noqa: BLE001 - catalog is an enhancement, never a blocker
         logging.warning("[EtereBridge] CTV_LineLanguage lookup failed: %s", exc)
@@ -210,6 +214,7 @@ def writeback_line_languages(csv_bytes: bytes, lang_by_desc: dict) -> int:
         if not rows:
             return 0
         from browser_automation.etere_direct_client import connect, upsert_line_languages
+
         with connect() as conn:
             cur = conn.cursor()
             n = upsert_line_languages(cur, rows, source="user")
@@ -250,8 +255,8 @@ def get_language_details(csv_bytes: bytes) -> list:
         # rowdescription stays unrenamed by load_and_clean_data
         if "rowdescription" not in df.columns:
             logging.warning(
-                "[EtereBridge] rowdescription column missing from DataFrame — "
-                "available: %s", list(df.columns)
+                "[EtereBridge] rowdescription column missing from DataFrame — available: %s",
+                list(df.columns),
             )
             return []
 
@@ -328,9 +333,7 @@ def run_eterebridge_pipeline(
         return None
 
     # Write CSV to a temp file; EtereBridge's load_and_clean_data requires a path.
-    with tempfile.NamedTemporaryFile(
-        suffix=".csv", prefix="eterebridge_", delete=False
-    ) as tmp:
+    with tempfile.NamedTemporaryFile(suffix=".csv", prefix="eterebridge_", delete=False) as tmp:
         tmp.write(csv_bytes)
         tmp_path = tmp.name
 
@@ -366,7 +369,9 @@ def run_eterebridge_pipeline(
                 if isinstance(desc, str) and desc in language_corrections:
                     row_languages.at[idx] = language_corrections[desc]
                     applied += 1
-            logging.info("[EtereBridge] Applied %d language correction(s): %s", applied, language_corrections)
+            logging.info(
+                "[EtereBridge] Applied %d language correction(s): %s", applied, language_corrections
+            )
 
         # 4. Transformations: bill code, market replacements, gross rate, length
         df = _file_processor.apply_transformations(df, tb180, tb171)
@@ -374,31 +379,26 @@ def run_eterebridge_pipeline(
         df = transform_times(df)
 
         # 5. Optional gross-up: replace rounded Etere rates with full-precision values
-        agency_fee     = float(user_inputs.get("agency_fee") or 0.15)
+        agency_fee = float(user_inputs.get("agency_fee") or 0.15)
         gross_up_rates = user_inputs.get("gross_up_rates") or {}
         if gross_up_rates and user_inputs.get("agency_flag") == "Agency" and (1 - agency_fee) > 0:
-            rate_map = {
-                float(k): float(v) / (1 - agency_fee)
-                for k, v in gross_up_rates.items()
-            }
+            rate_map = {float(k): float(v) / (1 - agency_fee) for k, v in gross_up_rates.items()}
             if rate_map:
-                df["Gross Rate"] = df["Gross Rate"].apply(
-                    lambda r: rate_map.get(float(r), r)
-                )
+                df["Gross Rate"] = df["Gross Rate"].apply(lambda r: rate_map.get(float(r), r))
 
         # 6. Stamp user inputs onto every row (skips the interactive verify_languages step)
         language_dict = row_languages.to_dict() if not row_languages.empty else {}
         df = _apply_user_inputs(
             df,
-            billing_type = user_inputs.get("billing_type", "Broadcast"),
-            revenue_type = user_inputs.get("revenue_type", "Internal Ad Sales"),
-            agency_flag  = user_inputs.get("agency_flag",  "Agency"),
-            sales_person = user_inputs.get("sales_person", ""),
-            affidavit    = user_inputs.get("affidavit",    "Y"),
-            estimate     = user_inputs.get("estimate",     ""),
-            contract     = user_inputs.get("contract",     ""),
-            language     = language_dict,
-            is_worldlink = user_inputs.get("is_worldlink", False),
+            billing_type=user_inputs.get("billing_type", "Broadcast"),
+            revenue_type=user_inputs.get("revenue_type", "Internal Ad Sales"),
+            agency_flag=user_inputs.get("agency_flag", "Agency"),
+            sales_person=user_inputs.get("sales_person", ""),
+            affidavit=user_inputs.get("affidavit", "Y"),
+            estimate=user_inputs.get("estimate", ""),
+            contract=user_inputs.get("contract", ""),
+            language=language_dict,
+            is_worldlink=user_inputs.get("is_worldlink", False),
         )
 
         # 7. Compute Month column (Calendar vs. Broadcast logic)
@@ -457,6 +457,7 @@ def get_language_counts(csv_bytes: bytes) -> dict:
 # Private helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def build_placement_csv_from_db(
     contract_id: int,
     date_from: str = None,
@@ -478,15 +479,15 @@ def build_placement_csv_from_db(
     # transformer._normalise_market() (keyword match, case-insensitive).
     # Keys must match EtereBridge's market_replacements dict (case-sensitive).
     _COD_USER_TO_MARKET = {
-        1:  "NEW YORK",
-        2:  "CHI MSP",
-        3:  "HOUSTON",
-        4:  "SAN FRANCISCO",
-        5:  "SEATTLE",
-        6:  "LOS ANGELES",
-        7:  "Central Valley",
-        8:  "WDC",
-        9:  "MMT",
+        1: "NEW YORK",
+        2: "CHI MSP",
+        3: "HOUSTON",
+        4: "SAN FRANCISCO",
+        5: "SEATTLE",
+        6: "LOS ANGELES",
+        7: "Central Valley",
+        8: "WDC",
+        9: "MMT",
         10: "DALLAS",
     }
     FPS = 29.97
@@ -514,6 +515,7 @@ def build_placement_csv_from_db(
 
     import sys as _sys
     from pathlib import Path as _Path
+
     _proj = _Path(__file__).parent.parent.parent
     for _p in [str(_proj), str(_proj / "browser_automation")]:
         if _p not in _sys.path:
@@ -524,7 +526,8 @@ def build_placement_csv_from_db(
     with _db_connect() as conn:
         cur = conn.cursor(as_dict=True)
 
-        cur.execute("""
+        cur.execute(
+            """
             SELECT ct.COD_CONTRATTO         AS contract_code,
                    ct.DESCRIZIONE           AS description,
                    RTRIM(ag.RAG_SOCIAL)     AS agency_name,
@@ -540,12 +543,15 @@ def build_placement_csv_from_db(
             LEFT JOIN ANAGRAF comm ON comm.ID_ANAGRAF = ct.COMMITTENTE
             LEFT JOIN ANAGRAF ae   ON ae.ID_ANAGRAF   = ct.AGENTE1
             WHERE ct.ID_CONTRATTITESTATA = %d
-        """ % contract_id)
+        """
+            % contract_id
+        )
         hdr = cur.fetchone()
         if not hdr:
             raise ValueError(f"Contract {contract_id} not found")
 
-        cur.execute("""
+        cur.execute(
+            """
             SELECT tpa.id_contrattirighe        AS line_id,
                    cr.DESCRIZIONE               AS line_desc,
                    ISNULL(f.DURATA, cr.DURATA)  AS dur_frames,
@@ -565,28 +571,34 @@ def build_placement_csv_from_db(
             WHERE ct.ID_CONTRATTITESTATA = %d
             %s
             ORDER BY CAST(tp.DATA AS DATE), tp.ORA
-        """ % (contract_id, (
-            f"AND CAST(tp.DATA AS DATE) >= '{date_from}' AND CAST(tp.DATA AS DATE) <= '{date_to}'"
-            if date_from and date_to else ""
-        )))
+        """
+            % (
+                contract_id,
+                (
+                    f"AND CAST(tp.DATA AS DATE) >= '{date_from}' AND CAST(tp.DATA AS DATE) <= '{date_to}'"
+                    if date_from and date_to
+                    else ""
+                ),
+            )
+        )
         spots = cur.fetchall()
 
     if not spots:
         raise ValueError(f"No placed spots found for contract {contract_id}")
 
-    contract_code   = hdr["contract_code"]   or ""
-    description     = hdr["description"]     or ""
-    agency_name     = hdr["agency_name"]     or ""  # empty for direct/client orders
-    client_name     = hdr["client_name"]     or ""
-    agency_address  = hdr["agency_address"]  or ""
-    agency_city     = hdr["agency_city"]     or ""
-    ae_name         = hdr["ae_name"]         or ""  # account executive (CONTRATTITESTATA.AGENTE1)
+    contract_code = hdr["contract_code"] or ""
+    description = hdr["description"] or ""
+    agency_name = hdr["agency_name"] or ""  # empty for direct/client orders
+    client_name = hdr["client_name"] or ""
+    agency_address = hdr["agency_address"] or ""
+    agency_city = hdr["agency_city"] or ""
+    ae_name = hdr["ae_name"] or ""  # account executive (CONTRATTITESTATA.AGENTE1)
     # Notes may be multi-line in Etere; collapse to one line so it survives the
     # single-row CSV header encoding read back by parse_csv.
-    notes           = (hdr["notes"] or "").replace("\r", " ").replace("\n", "; ").strip()
+    notes = (hdr["notes"] or "").replace("\r", " ").replace("\n", "; ").strip()
 
     buf = _io.StringIO()
-    w   = _csv.writer(buf)
+    w = _csv.writer(buf)
 
     # Row 0: dummy (skipped by parser)
     w.writerow([""] * 10)
@@ -594,38 +606,65 @@ def build_placement_csv_from_db(
     # parse_csv reads: agency=col0, contract_code=col1, description=col3,
     #                  address=col4, client=col5, city=col6, ae=col7, notes=col8
     # _extract_header_values reads: tb180=col0, tb171=col5 (for EtereBridge bill code)
-    w.writerow([agency_name, contract_code, "", description,
-                agency_address, client_name, agency_city, ae_name, notes, ""])
+    w.writerow(
+        [
+            agency_name,
+            contract_code,
+            "",
+            description,
+            agency_address,
+            client_name,
+            agency_city,
+            ae_name,
+            notes,
+            "",
+        ]
+    )
     # Row 2: dummy (skipped by parser)
     w.writerow([""] * 10)
     # Row 3: column headers (triggers data-section detection via "dateschedule")
-    w.writerow(["id_contrattirighe", "Textbox14", "duration3", "IMPORTO2",
-                "nome2", "dateschedule", "airtimep", "bookingcode2",
-                "timerange2", "rowdescription"])
+    w.writerow(
+        [
+            "id_contrattirighe",
+            "Textbox14",
+            "duration3",
+            "IMPORTO2",
+            "nome2",
+            "dateschedule",
+            "airtimep",
+            "bookingcode2",
+            "timerange2",
+            "rowdescription",
+        ]
+    )
 
     for s in spots:
-        dur_frames    = int(s["dur_frames"] or 0)
-        dur_sec       = int(round(dur_frames / FPS))
-        market_name   = _COD_USER_TO_MARKET.get(s["market_id"], "")
-        air_date      = s["air_date"]
-        date_str      = air_date.isoformat() if hasattr(air_date, "isoformat") else str(air_date)
+        dur_frames = int(s["dur_frames"] or 0)
+        dur_sec = int(round(dur_frames / FPS))
+        market_name = _COD_USER_TO_MARKET.get(s["market_id"], "")
+        air_date = s["air_date"]
+        date_str = air_date.isoformat() if hasattr(air_date, "isoformat") else str(air_date)
         airtime_frames = int(s["airtime_frames"] or 0)
-        daypart_start  = int(s["daypart_start"] or 0)
-        daypart_end    = int(s["daypart_end"]   or 0)
-        daypart_range  = f"{_frames_to_hhmm(daypart_start)}-{_frames_to_hhmm(daypart_end)}"
+        daypart_start = int(s["daypart_start"] or 0)
+        daypart_end = int(s["daypart_end"] or 0)
+        daypart_range = f"{_frames_to_hhmm(daypart_start)}-{_frames_to_hhmm(daypart_end)}"
 
-        w.writerow([
-            s["line_id"],
-            1 if isci_only else 4,               # Textbox14 → # column (1 for WorldLink)
-            dur_sec,
-            s["gross_rate"] or 0,
-            market_name,
-            date_str,
-            _frames_to_hhmmss(airtime_frames),   # airtimep = actual airtime HH:MM:SS
-            (s["copy_code"] or "NEED COPY") if isci_only else _format_copy(s.get("copy_title", ""), s["copy_code"]),  # bookingcode2
-            daypart_range,                        # timerange2 = contract line daypart
-            s["line_desc"] or "",
-        ])
+        w.writerow(
+            [
+                s["line_id"],
+                1 if isci_only else 4,  # Textbox14 → # column (1 for WorldLink)
+                dur_sec,
+                s["gross_rate"] or 0,
+                market_name,
+                date_str,
+                _frames_to_hhmmss(airtime_frames),  # airtimep = actual airtime HH:MM:SS
+                (s["copy_code"] or "NEED COPY")
+                if isci_only
+                else _format_copy(s.get("copy_title", ""), s["copy_code"]),  # bookingcode2
+                daypart_range,  # timerange2 = contract line daypart
+                s["line_desc"] or "",
+            ]
+        )
 
     return buf.getvalue().encode("utf-8")
 
@@ -645,23 +684,23 @@ def save_to_excel_with_template(df: pd.DataFrame, agency_fee: float = 0.15) -> b
 
     template_path = _eb_app_config.paths.template_path
     workbook = load_workbook(template_path, data_only=False)
-    sheet    = workbook.active
-    columns  = _eb_app_config.final_columns
+    sheet = workbook.active
+    columns = _eb_app_config.final_columns
 
     # Extract formulas + formatting from template row 2
-    template_formulas   = {}
+    template_formulas = {}
     template_formatting = {}
     for col in range(1, len(columns) + 1):
         cell = sheet.cell(row=2, column=col)
         if cell.value and str(cell.value).startswith("="):
             template_formulas[col] = cell.value
         template_formatting[col] = {
-            "style":         cell.style,
+            "style": cell.style,
             "number_format": cell.number_format,
-            "border":        copy(cell.border),
-            "fill":          copy(cell.fill),
-            "font":          copy(cell.font),
-            "alignment":     copy(cell.alignment),
+            "border": copy(cell.border),
+            "fill": copy(cell.fill),
+            "font": copy(cell.font),
+            "alignment": copy(cell.alignment),
         }
 
     # Write headers in row 1
@@ -669,9 +708,13 @@ def save_to_excel_with_template(df: pd.DataFrame, agency_fee: float = 0.15) -> b
         sheet.cell(row=1, column=col_num, value=col_title)
 
     monetary_columns = ["Gross Rate", "Spot Value", "Station Net", "Broker Fees"]
-    gross_col_letter  = get_column_letter(columns.index("Gross Rate") + 1)  if "Gross Rate"  in columns else None
-    air_date_letter   = get_column_letter(columns.index("Air Date") + 1)     if "Air Date"    in columns else None
-    agency_col_data   = df[columns[columns.index("Agency?")]]                if "Agency?"     in columns else None
+    gross_col_letter = (
+        get_column_letter(columns.index("Gross Rate") + 1) if "Gross Rate" in columns else None
+    )
+    air_date_letter = (
+        get_column_letter(columns.index("Air Date") + 1) if "Air Date" in columns else None
+    )
+    agency_col_data = df[columns[columns.index("Agency?")]] if "Agency?" in columns else None
 
     def _parse_time(time_str):
         if not time_str:
@@ -688,7 +731,7 @@ def save_to_excel_with_template(df: pd.DataFrame, agency_fee: float = 0.15) -> b
     # Write data rows starting at row 2
     for row_num, row_data in enumerate(df.values, start=2):
         for col_num, cell_value in enumerate(row_data, start=1):
-            cell     = sheet.cell(row=row_num, column=col_num)
+            cell = sheet.cell(row=row_num, column=col_num)
             col_name = columns[col_num - 1]
 
             if col_name in ("Time In", "Time Out"):
@@ -716,7 +759,13 @@ def save_to_excel_with_template(df: pd.DataFrame, agency_fee: float = 0.15) -> b
                     cell.value = f"={gross_col_letter}{row_num}*{agency_fee}"
                 else:
                     cell.value = None
-            elif col_num in template_formulas and col_name not in ("Time In", "Time Out", "Length", "End Date", "Broker Fees"):
+            elif col_num in template_formulas and col_name not in (
+                "Time In",
+                "Time Out",
+                "Length",
+                "End Date",
+                "Broker Fees",
+            ):
                 cell.value = template_formulas[col_num].replace("2", str(row_num))
             elif col_name in monetary_columns:
                 cell.value = cell_value if pd.notna(cell_value) else 0
@@ -726,12 +775,14 @@ def save_to_excel_with_template(df: pd.DataFrame, agency_fee: float = 0.15) -> b
             # Apply template formatting
             if col_num in template_formatting:
                 fmt = template_formatting[col_num]
-                cell.fill      = fmt["fill"]
-                cell.border    = fmt["border"]
-                cell.font      = fmt["font"]
+                cell.fill = fmt["fill"]
+                cell.border = fmt["border"]
+                cell.font = fmt["font"]
                 cell.alignment = fmt["alignment"]
-                if col_name not in ("Time In", "Time Out", "Length", "End Date") + tuple(monetary_columns):
-                    cell.style         = fmt["style"]
+                if col_name not in ("Time In", "Time Out", "Length", "End Date") + tuple(
+                    monetary_columns
+                ):
+                    cell.style = fmt["style"]
                     cell.number_format = fmt["number_format"]
 
     format_excel_monetary_columns(sheet, df, monetary_columns)
@@ -752,8 +803,8 @@ def save_to_excel_with_template(df: pd.DataFrame, agency_fee: float = 0.15) -> b
         month_col = columns.index("Month") + 1
         for row_num in range(2, len(df) + 2):
             cell = sheet.cell(row=row_num, column=month_col)
-            mv   = df["Month"].iloc[row_num - 2]
-            cell.value         = mv if pd.notna(mv) else None
+            mv = df["Month"].iloc[row_num - 2]
+            cell.value = mv if pd.notna(mv) else None
             cell.number_format = "mmm-yy"
 
     # Priority = 4
@@ -780,13 +831,13 @@ def _extract_header_values(file_path: str) -> tuple[str, str]:
     """
     try:
         with open(file_path, "r") as f:
-            f.readline()           # skip row 1 (column labels)
+            f.readline()  # skip row 1 (column labels)
             second_line = f.readline().strip()
         if not second_line:
             return "", ""
         reader = csv.reader([second_line])
-        parts  = next(reader)
-        first  = parts[0].strip() if len(parts) > 0 else ""
+        parts = next(reader)
+        first = parts[0].strip() if len(parts) > 0 else ""
         second = parts[5].strip() if len(parts) > 5 else ""
         return first, second
     except Exception as exc:
@@ -798,12 +849,12 @@ def _apply_user_inputs(
     df: pd.DataFrame,
     billing_type: str,
     revenue_type: str,
-    agency_flag:  str,
+    agency_flag: str,
     sales_person: str,
-    affidavit:    str,
-    estimate:     str,
-    contract:     str,
-    language:     dict,
+    affidavit: str,
+    estimate: str,
+    contract: str,
+    language: dict,
     is_worldlink: bool = False,
 ) -> pd.DataFrame:
     """
@@ -813,16 +864,14 @@ def _apply_user_inputs(
     """
     df["Billing Type"] = billing_type
     df["Revenue Type"] = revenue_type
-    df["Agency?"]      = agency_flag
+    df["Agency?"] = agency_flag
     df["Sales Person"] = sales_person
-    df["Affidavit?"]   = affidavit
-    df["Estimate"]     = estimate
-    df["Contract"]     = contract
-    df["Lang."]        = df.index.map(language).fillna("E")
+    df["Affidavit?"] = affidavit
+    df["Estimate"] = estimate
+    df["Contract"] = contract
+    df["Lang."] = df.index.map(language).fillna("E")
 
-    df["Type"] = df["Gross Rate"].apply(
-        lambda r: "BNS" if (pd.isna(r) or float(r) == 0) else "COM"
-    )
+    df["Type"] = df["Gross Rate"].apply(lambda r: "BNS" if (pd.isna(r) or float(r) == 0) else "COM")
 
     # WorldLink: copy Market → Make Good (per EtereBridge WorldLink branch)
     if is_worldlink and "Market" in df.columns:

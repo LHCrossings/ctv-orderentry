@@ -68,13 +68,13 @@ def _print_pre_close_summary(results: list[ProcessingResult]) -> None:
     contracts = [c for r in results if r.success for c in r.contracts]
     if not contracts:
         return
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"CONTRACTS CREATED — {len(contracts)}")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
     for c in contracts:
         etere_id = f" (ID: {c.etere_id})" if c.etere_id else ""
         print(f"  ✓ {c.contract_number}{etere_id}")
-    print(f"{'='*70}\n")
+    print(f"{'=' * 70}\n")
 
 
 class OrderProcessor(Protocol):
@@ -89,7 +89,7 @@ class OrderProcessor(Protocol):
         self,
         browser_session: Any,  # BrowserSession type
         pdf_path: Path,
-        order_input: OrderInput | None
+        order_input: OrderInput | None,
     ) -> ProcessingResult:
         """
         Process an order PDF into Etere contracts.
@@ -118,46 +118,46 @@ class OrderProcessingService:
     """
 
     _PROCESSOR_DISPATCH: dict[OrderType, str] = {
-        OrderType.TCAA:      "_process_tcaa_order",
-        OrderType.TCAA_AV:   "_process_tcaa_av_order",
-        OrderType.MISFIT:    "_process_misfit_order",
+        OrderType.TCAA: "_process_tcaa_order",
+        OrderType.TCAA_AV: "_process_tcaa_av_order",
+        OrderType.MISFIT: "_process_misfit_order",
         OrderType.DAVISELEN: "_process_daviselen_order",
-        OrderType.SAGENT:    "_process_sagent_order",
-        OrderType.GALEFORCE:        "_process_galeforce_order",
-        OrderType.HYPHEN:           "_process_hyphen_order",
-        OrderType.TIMEADVERTISING:  "_process_timeadvertising_order",
+        OrderType.SAGENT: "_process_sagent_order",
+        OrderType.GALEFORCE: "_process_galeforce_order",
+        OrderType.HYPHEN: "_process_hyphen_order",
+        OrderType.TIMEADVERTISING: "_process_timeadvertising_order",
         OrderType.CHARMAINE: "_process_charmaine_order",
         OrderType.ADMERASIA: "_process_admerasia_order",
-        OrderType.HL:        "_process_hl_order",
-        OrderType.HL_BDR:    "_process_hl_bdr_order",
-        OrderType.LEXUS:     "_process_lexus_order",
-        OrderType.IMPRENTA:  "_process_imprenta_order",
-        OrderType.OPAD:      "_process_opad_order",
-        OrderType.WALLRICH:  "_process_wallrich_order",
-        OrderType.IGRAPHIX:  "_process_igraphix_order",
-        OrderType.IMPACT:    "_process_impact_order",
-        OrderType.RPM:              "_process_rpm_order",
-        OrderType.WORLDLINK:        "_process_worldlink_order",
-        OrderType.SACCOUNTYVOTERS:  "_process_saccountyvoters_order",
-        OrderType.SCWA:             "_process_scwa_order",
-        OrderType.PROSIO:           "_process_prosio_order",
-        OrderType.DART:             "_process_dart_order",
-        OrderType.POLARIS:          "_process_polaris_order",
-        OrderType.SIERRADONOR:      "_process_sierra_order",
-        OrderType.THREEOLIVES:      "_process_threeolives_order",
-        OrderType.BVK:              "_process_bvk_order",
-        OrderType.INTERTREND:       "_process_intertrend_order",
-        OrderType.MEDIASOL:         "_process_mediasol_order",
-        OrderType.RWNY:             "_process_rwny_order",
-        OrderType.FIGHTTHEBITE:     "_process_fightthebite_order",
-        OrderType.ACM:               "_process_acm_order",
-        OrderType.TT:                "_process_tt_order",
-        OrderType.CRISPIN:           "_process_crispin_order",
-        OrderType.NTOOITIVE:         "_process_ntooitive_order",
-        OrderType.EQC:               "_process_eqc_order",
-        OrderType.LRCCD:             "_process_lrccd_order",
-        OrderType.SACRT:             "_process_sacrt_order",
-        OrderType.AI_FALLBACK:       "_process_ai_fallback_order",
+        OrderType.HL: "_process_hl_order",
+        OrderType.HL_BDR: "_process_hl_bdr_order",
+        OrderType.LEXUS: "_process_lexus_order",
+        OrderType.IMPRENTA: "_process_imprenta_order",
+        OrderType.OPAD: "_process_opad_order",
+        OrderType.WALLRICH: "_process_wallrich_order",
+        OrderType.IGRAPHIX: "_process_igraphix_order",
+        OrderType.IMPACT: "_process_impact_order",
+        OrderType.RPM: "_process_rpm_order",
+        OrderType.WORLDLINK: "_process_worldlink_order",
+        OrderType.SACCOUNTYVOTERS: "_process_saccountyvoters_order",
+        OrderType.SCWA: "_process_scwa_order",
+        OrderType.PROSIO: "_process_prosio_order",
+        OrderType.DART: "_process_dart_order",
+        OrderType.POLARIS: "_process_polaris_order",
+        OrderType.SIERRADONOR: "_process_sierra_order",
+        OrderType.THREEOLIVES: "_process_threeolives_order",
+        OrderType.BVK: "_process_bvk_order",
+        OrderType.INTERTREND: "_process_intertrend_order",
+        OrderType.MEDIASOL: "_process_mediasol_order",
+        OrderType.RWNY: "_process_rwny_order",
+        OrderType.FIGHTTHEBITE: "_process_fightthebite_order",
+        OrderType.ACM: "_process_acm_order",
+        OrderType.TT: "_process_tt_order",
+        OrderType.CRISPIN: "_process_crispin_order",
+        OrderType.NTOOITIVE: "_process_ntooitive_order",
+        OrderType.EQC: "_process_eqc_order",
+        OrderType.LRCCD: "_process_lrccd_order",
+        OrderType.SACRT: "_process_sacrt_order",
+        OrderType.AI_FALLBACK: "_process_ai_fallback_order",
     }
 
     # Order types that use direct DB entry — no browser session needed
@@ -205,11 +205,7 @@ class OrderProcessingService:
         OrderType.AI_FALLBACK,
     }
 
-    def __init__(
-        self,
-        processors: dict[OrderType, OrderProcessor],
-        orders_dir: Path | None = None
-    ):
+    def __init__(self, processors: dict[OrderType, OrderProcessor], orders_dir: Path | None = None):
         """
         Initialize service with processor registry.
 
@@ -241,9 +237,7 @@ class OrderProcessingService:
         (self._orders_dir / "failed").mkdir(parents=True, exist_ok=True)
 
     def process_orders_batch(
-        self,
-        orders: list[Order],
-        browser_session: Any = None
+        self, orders: list[Order], browser_session: Any = None
     ) -> list[ProcessingResult]:
         """
         UNIVERSAL BATCH PROCESSING: Process multiple orders with SINGLE shared browser session.
@@ -280,13 +274,13 @@ class OrderProcessingService:
                     return self._process_orders_fallback(orders)
 
                 # Create ONE session for entire batch
-                print(f"\n{'='*70}")
+                print(f"\n{'=' * 70}")
                 print(f"BATCH SESSION: {len(orders)} order(s) - SINGLE BROWSER")
-                print(f"{'='*70}")
+                print(f"{'=' * 70}")
                 print("✓ All orders will share the same browser session")
                 print("✓ You only need to log in ONCE")
                 print("✓ Browser will stay open until all orders complete")
-                print(f"{'='*70}\n")
+                print(f"{'=' * 70}\n")
 
                 with EtereSession() as shared_session:
                     # Set master market ONCE for the entire batch.
@@ -304,9 +298,7 @@ class OrderProcessingService:
         return self._process_orders_with_session(orders, browser_session)
 
     def _process_orders_with_session(
-        self,
-        orders: list[Order],
-        shared_session: any
+        self, orders: list[Order], shared_session: any
     ) -> list[ProcessingResult]:
         """
         UNIVERSAL: Process orders with shared session (works for ALL agencies).
@@ -339,9 +331,9 @@ class OrderProcessingService:
         # Process TCAA groups (multiple estimates from same PDF together)
         for pdf_path, tcaa_orders in tcaa_groups.items():
             if len(tcaa_orders) > 1:
-                print(f"\n{'='*70}")
+                print(f"\n{'=' * 70}")
                 print(f"TCAA BATCH: {len(tcaa_orders)} estimates from same PDF")
-                print(f"{'='*70}")
+                print(f"{'=' * 70}")
                 for order in tcaa_orders:
                     print(f"  - Estimate {order.estimate_number}")
                 print()
@@ -365,11 +357,7 @@ class OrderProcessingService:
         self._write_backwrite_manifests(order_groups, enriched)
         return enriched
 
-    def _process_single_order(
-        self,
-        order: Order,
-        shared_session: any
-    ) -> ProcessingResult:
+    def _process_single_order(self, order: Order, shared_session: any) -> ProcessingResult:
         """
         UNIVERSAL: Process single order with optional shared session.
 
@@ -402,8 +390,11 @@ class OrderProcessingService:
         summary falls back to just the code — never raises.
         """
         pending = [
-            c for r in results if r and r.success
-            for c in r.contracts if c.etere_id is None and c.contract_number
+            c
+            for r in results
+            if r and r.success
+            for c in r.contracts
+            if c.etere_id is None and c.contract_number
         ]
         if not pending:
             return results
@@ -411,8 +402,9 @@ class OrderProcessingService:
         ids: dict[str, int] = {}
         try:
             from browser_automation.etere_direct_client import connect as _db_connect
+
             with _db_connect() as conn:
-                ph = '%s' if type(conn).__module__.startswith('pymssql') else '?'
+                ph = "%s" if type(conn).__module__.startswith("pymssql") else "?"
                 cur = conn.cursor()
                 for code in {str(c.contract_number) for c in pending}:
                     # Exact match first; fall back to prefix match (most recent)
@@ -424,7 +416,9 @@ class OrderProcessingService:
                     )
                     row = cur.fetchone()
                     if not row:
-                        like = code.replace('[', '[[]').replace('%', '[%]').replace('_', '[_]') + '%'
+                        like = (
+                            code.replace("[", "[[]").replace("%", "[%]").replace("_", "[_]") + "%"
+                        )
                         cur.execute(
                             f"SELECT TOP 1 ID_CONTRATTITESTATA FROM CONTRATTITESTATA "
                             f"WHERE COD_CONTRATTO LIKE {ph} ORDER BY ID_CONTRATTITESTATA DESC",
@@ -456,7 +450,8 @@ class OrderProcessingService:
                 continue
             new_contracts = [
                 replace(c, etere_id=ids[str(c.contract_number)])
-                if (c.etere_id is None and str(c.contract_number) in ids) else c
+                if (c.etere_id is None and str(c.contract_number) in ids)
+                else c
                 for c in r.contracts
             ]
             enriched.append(replace(r, contracts=new_contracts))
@@ -492,9 +487,9 @@ class OrderProcessingService:
         for pdf_path, tcaa_orders in tcaa_groups.items():
             if len(tcaa_orders) > 1:
                 # Multiple TCAA orders from same PDF - batch process
-                print(f"\n{'='*70}")
+                print(f"\n{'=' * 70}")
                 print(f"BATCH PROCESSING: {len(tcaa_orders)} TCAA orders from same PDF")
-                print(f"{'='*70}")
+                print(f"{'=' * 70}")
                 for order in tcaa_orders:
                     print(f"  - Estimate {order.estimate_number}")
                 print()
@@ -542,11 +537,11 @@ class OrderProcessingService:
         never fails the entry.
         """
         import sys
+
         if not sys.stdin.isatty():
             return
         contract_ids = [
-            c.etere_id for r in results if r and r.success
-            for c in r.contracts if c.etere_id
+            c.etere_id for r in results if r and r.success for c in r.contracts if c.etere_id
         ]
         if not contract_ids:
             return
@@ -564,9 +559,11 @@ class OrderProcessingService:
         # WorldLink is ALWAYS English (business rule) — auto-catalog, no prompt.
         # Also mops up a WL contract's pre-catalog lines during revisions.
         worldlink_ids = {
-            c.etere_id for r in results if r and r.success
-            and r.order_type == OrderType.WORLDLINK
-            for c in r.contracts if c.etere_id
+            c.etere_id
+            for r in results
+            if r and r.success and r.order_type == OrderType.WORLDLINK
+            for c in r.contracts
+            if c.etere_id
         }
         try:
             from browser_automation.etere_direct_client import (
@@ -580,8 +577,9 @@ class OrderProcessingService:
                 confirm_line_languages,
                 guess_language,
             )
+
             with _db_connect() as conn:
-                ph = '%s' if type(conn).__module__.startswith('pymssql') else '?'
+                ph = "%s" if type(conn).__module__.startswith("pymssql") else "?"
                 cur = conn.cursor()
                 for cid in dict.fromkeys(contract_ids):  # unique, order-preserving
                     cur.execute(
@@ -597,19 +595,22 @@ class OrderProcessingService:
                     if not todo:
                         continue
                     if cid in worldlink_ids:
-                        upsert_line_languages(
-                            cur, {lid: "E" for lid, _ in todo}, source='entry')
+                        upsert_line_languages(cur, {lid: "E" for lid, _ in todo}, source="entry")
                         conn.commit()
-                        print(f"[LANGUAGE] ✓ WorldLink contract {cid}: "
-                              f"{len(todo)} line(s) auto-cataloged as E (always English)")
+                        print(
+                            f"[LANGUAGE] ✓ WorldLink contract {cid}: "
+                            f"{len(todo)} line(s) auto-cataloged as E (always English)"
+                        )
                         continue
                     # One prompt per unique description (identical lines across
                     # markets — ask once, apply to all of them)
                     groups: dict[str, list[int]] = {}
                     for lid, desc in todo:
                         groups.setdefault(desc, []).append(lid)
-                    print(f"\n[LANGUAGE] Contract ID {cid}: "
-                          f"{len(todo)} line(s) not yet in the language catalog")
+                    print(
+                        f"\n[LANGUAGE] Contract ID {cid}: "
+                        f"{len(todo)} line(s) not yet in the language catalog"
+                    )
                     # A line's own description wins — it is line-specific, so a
                     # Chinese IO's per-line Mandarin/Cantonese must never be
                     # flattened to the header's "Chinese". The order-level language
@@ -621,25 +622,33 @@ class OrderProcessingService:
                     # tasks/lessons.md). Offering M/C there would be a wrong guess
                     # that Enter accepts, which is worse than no guess at all.
                     if order_guess == "M/C":
-                        print(f"[LANGUAGE] IO language: {order_langs[cid]} — not "
-                              f"suggesting a code: each line is Mandarin or "
-                              f"Cantonese depending on its daypart")
+                        print(
+                            f"[LANGUAGE] IO language: {order_langs[cid]} — not "
+                            f"suggesting a code: each line is Mandarin or "
+                            f"Cantonese depending on its daypart"
+                        )
                         order_guess = None
                     elif order_guess:
-                        print(f"[LANGUAGE] IO language: {order_langs[cid]} "
-                              f"→ suggesting {order_guess} where the line "
-                              f"description doesn't say")
-                    verified = confirm_line_languages([
-                        {"label": f"{desc or '(no description)'}  ({len(lids)} line(s))",
-                         "guess": guess_language(desc) or order_guess}
-                        for desc, lids in groups.items()
-                    ])
+                        print(
+                            f"[LANGUAGE] IO language: {order_langs[cid]} "
+                            f"→ suggesting {order_guess} where the line "
+                            f"description doesn't say"
+                        )
+                    verified = confirm_line_languages(
+                        [
+                            {
+                                "label": f"{desc or '(no description)'}  ({len(lids)} line(s))",
+                                "guess": guess_language(desc) or order_guess,
+                            }
+                            for desc, lids in groups.items()
+                        ]
+                    )
                     rows = {
                         lid: lang
                         for (desc, lids), lang in zip(groups.items(), verified)
                         for lid in lids
                     }
-                    upsert_line_languages(cur, rows, source='entry')
+                    upsert_line_languages(cur, rows, source="entry")
                     conn.commit()
                     print(f"[LANGUAGE] ✓ {len(rows)} line(s) cataloged for contract {cid}")
         except (KeyboardInterrupt, EOFError):
@@ -648,17 +657,22 @@ class OrderProcessingService:
             print(f"[LANGUAGE] WARNING: language catalog pass failed: {exc}")
 
     @staticmethod
-    def _write_backwrite_manifests(order_groups: list[list[Order]], results: list[ProcessingResult]) -> None:
+    def _write_backwrite_manifests(
+        order_groups: list[list[Order]], results: list[ProcessingResult]
+    ) -> None:
         """Freeze each successful entry's backwrite knowledge to a JSON sidecar
         (tasks/backwrite-pipeline.md Phase 0). Best-effort by contract: a
         manifest problem must never fail or slow the entry itself."""
         try:
             from business_logic.services.backwrite_manifest import write_backwrite_manifests
+
             write_backwrite_manifests(order_groups, results)
         except Exception as exc:  # noqa: BLE001 - manifests are strictly additive
             print(f"[manifest] WARNING: backwrite manifest pass failed: {exc}")
 
-    def _process_tcaa_orders_batch(self, orders: list[Order], shared_session: Any = None) -> ProcessingResult:
+    def _process_tcaa_orders_batch(
+        self, orders: list[Order], shared_session: Any = None
+    ) -> ProcessingResult:
         """
         Process multiple TCAA orders from same PDF together.
 
@@ -675,22 +689,22 @@ class OrderProcessingService:
                 from tcaa_automation import process_tcaa_order
 
                 self._tcaa_processor = {
-                    'process': process_tcaa_order,
-                    'parser': parse_tcaa_pdf,
+                    "process": process_tcaa_order,
+                    "parser": parse_tcaa_pdf,
                 }
 
             # Use first order for display info
             first_order = orders[0]
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("TCAA DIRECT DB ENTRY (BATCH MODE)")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"PDF: {first_order.pdf_path.name}")
             print(f"Estimates: {', '.join(o.estimate_number for o in orders)}")
             print(f"Customer: {first_order.customer_name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
-            success = self._tcaa_processor['process'](
+            success = self._tcaa_processor["process"](
                 pdf_path=str(first_order.pdf_path),
                 estimate_number=None,  # batch — process all estimates in PDF
             )
@@ -701,31 +715,33 @@ class OrderProcessingService:
                     for o in orders
                 ]
                 print(f"\n✓ Successfully created {len(contracts)} contracts")
-                return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.TCAA)
+                return ProcessingResult(
+                    success=True, contracts=contracts, order_type=OrderType.TCAA
+                )
             else:
                 return ProcessingResult(
-                    success=False, contracts=[], order_type=OrderType.TCAA,
-                    error_message="TCAA batch processing failed"
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.TCAA,
+                    error_message="TCAA batch processing failed",
                 )
 
         except Exception as e:
             import traceback
+
             error_msg = f"TCAA batch processing error: {str(e)}"
             print(f"✗ {error_msg}")
             traceback.print_exc()
 
             return ProcessingResult(
-                success=False,
-                contracts=[],
-                order_type=OrderType.TCAA,
-                error_message=error_msg
+                success=False, contracts=[], order_type=OrderType.TCAA, error_message=error_msg
             )
 
     def process_order(
         self,
         order: Order,
         browser_session: Any = None,  # BrowserSession type, optional
-        order_input: OrderInput | None = None
+        order_input: OrderInput | None = None,
     ) -> ProcessingResult:
         """
         Process a single order through the complete workflow.
@@ -756,9 +772,9 @@ class OrderProcessingService:
             return self._create_stub_result(order)
 
         # Continue with normal processing if browser_session provided
-        print("\n" + "="*70)
+        print("\n" + "=" * 70)
         print(f"PROCESSING: {order.get_display_name()}")
-        print("="*70)
+        print("=" * 70)
         print(f"[DETECT] Order type: {order.order_type.name}")
 
         # Check if order is processable
@@ -767,7 +783,7 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=order.order_type,
-                error_message="Order is not in processable state"
+                error_message="Order is not in processable state",
             )
 
         # Move to processing folder
@@ -777,7 +793,7 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=order.order_type,
-                error_message="Failed to move file to processing folder"
+                error_message="Failed to move file to processing folder",
             )
 
         try:
@@ -793,7 +809,7 @@ class OrderProcessingService:
                     success=False,
                     contracts=[],
                     order_type=order.order_type,
-                    error_message=error_msg
+                    error_message=error_msg,
                 )
 
             # Process the order
@@ -810,15 +826,13 @@ class OrderProcessingService:
         except Exception as e:
             print(f"[ERROR] Exception during processing: {e}")
             import traceback
+
             traceback.print_exc()
 
             self._move_to_failed(processing_path)
 
             return ProcessingResult(
-                success=False,
-                contracts=[],
-                order_type=order.order_type,
-                error_message=str(e)
+                success=False, contracts=[], order_type=order.order_type, error_message=str(e)
             )
 
     def _create_stub_result(self, order: Order) -> ProcessingResult:
@@ -840,10 +854,7 @@ class OrderProcessingService:
         if order.order_input:
             inp = order.order_input
             get = inp.get if isinstance(inp, dict) else lambda k, d="": getattr(inp, k, d)
-            message += (
-                f"  Order Code: {get('order_code')}\n"
-                f"  Description: {get('description')}\n"
-            )
+            message += f"  Order Code: {get('order_code')}\n  Description: {get('description')}\n"
 
         message += (
             "\nTo process this order:\n"
@@ -853,33 +864,31 @@ class OrderProcessingService:
         )
 
         return ProcessingResult(
-            success=False,
-            order_type=order.order_type,
-            contracts=[],
-            error_message=message
+            success=False, order_type=order.order_type, contracts=[], error_message=message
         )
 
     def _run_tcaa_with_driver(self, order: Order, driver: Any) -> ProcessingResult:
         """Call TCAA processor with an already-open driver and build ProcessingResult."""
-        success = self._tcaa_processor['process'](
+        success = self._tcaa_processor["process"](
             driver=driver,
             pdf_path=str(order.pdf_path),
             estimate_number=order.estimate_number,
             order_code=order.order_input.order_code if order.order_input else None,
-            description=order.order_input.description if order.order_input else None
+            description=order.order_input.description if order.order_input else None,
         )
         if success:
             contract = Contract(
-                contract_number=f"TCAA-{order.estimate_number}",
-                order_type=OrderType.TCAA
+                contract_number=f"TCAA-{order.estimate_number}", order_type=OrderType.TCAA
             )
             print(f"\n✓ Successfully created contract for estimate {order.estimate_number}")
             return ProcessingResult(
                 success=True, contracts=[contract], order_type=OrderType.TCAA, error_message=None
             )
         return ProcessingResult(
-            success=False, contracts=[], order_type=OrderType.TCAA,
-            error_message="TCAA processing failed - check browser output for details"
+            success=False,
+            contracts=[],
+            order_type=OrderType.TCAA,
+            error_message="TCAA processing failed - check browser output for details",
         )
 
     def _process_tcaa_order(self, order: Order, shared_session: Any = None) -> ProcessingResult:
@@ -890,31 +899,31 @@ class OrderProcessingService:
                 from tcaa_automation import process_tcaa_order
 
                 self._tcaa_processor = {
-                    'process': process_tcaa_order,
-                    'parser': parse_tcaa_pdf,
+                    "process": process_tcaa_order,
+                    "parser": parse_tcaa_pdf,
                 }
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("TCAA DIRECT DB ENTRY")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"Order: {order.get_display_name()}")
             print(f"Customer: {order.customer_name}")
 
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             inp = order.order_input
-            selected_estimates = inp.get('selected_estimates') if isinstance(inp, dict) else None
+            selected_estimates = inp.get("selected_estimates") if isinstance(inp, dict) else None
             if not selected_estimates and order.estimate_number:
                 selected_estimates = [order.estimate_number]
 
-            code_prefix = inp.get('order_code_prefix') if isinstance(inp, dict) else None
-            shared_desc = inp.get('description') if isinstance(inp, dict) else None
+            code_prefix = inp.get("order_code_prefix") if isinstance(inp, dict) else None
+            shared_desc = inp.get("description") if isinstance(inp, dict) else None
 
             if selected_estimates:
                 contracts, all_ok = [], True
                 for est_num in selected_estimates:
                     per_est_code = f"{code_prefix} {est_num}" if code_prefix else None
-                    ok = self._tcaa_processor['process'](
+                    ok = self._tcaa_processor["process"](
                         pdf_path=str(order.pdf_path),
                         estimate_number=est_num,
                         order_code=per_est_code,
@@ -926,26 +935,37 @@ class OrderProcessingService:
                     else:
                         all_ok = False
                 return ProcessingResult(
-                    success=all_ok, contracts=contracts, order_type=OrderType.TCAA,
-                    error_message=None if all_ok else "One or more TCAA estimates failed — check output"
+                    success=all_ok,
+                    contracts=contracts,
+                    order_type=OrderType.TCAA,
+                    error_message=None
+                    if all_ok
+                    else "One or more TCAA estimates failed — check output",
                 )
             else:
                 # No estimate filter — process all
-                success = self._tcaa_processor['process'](
+                success = self._tcaa_processor["process"](
                     pdf_path=str(order.pdf_path),
                     estimate_number=None,
                     order_code=code_prefix,
                     description=shared_desc,
                 )
                 label = code_prefix or "TCAA"
-                contracts = [Contract(contract_number=label, order_type=OrderType.TCAA)] if success else []
+                contracts = (
+                    [Contract(contract_number=label, order_type=OrderType.TCAA)] if success else []
+                )
                 return ProcessingResult(
-                    success=success, contracts=contracts, order_type=OrderType.TCAA,
-                    error_message=None if success else "TCAA processing failed — check output for details"
+                    success=success,
+                    contracts=contracts,
+                    order_type=OrderType.TCAA,
+                    error_message=None
+                    if success
+                    else "TCAA processing failed — check output for details",
                 )
 
         except Exception as e:
             import traceback
+
             error_detail = f"TCAA processing error: {str(e)}\n{traceback.format_exc()}"
             print(f"\n✗ TCAA processing failed: {e}")
             return ProcessingResult(
@@ -960,71 +980,84 @@ class OrderProcessingService:
                 from tcaa_av_automation import process_toyota_av_order
 
                 self._tcaa_av_processor = {
-                    'process': process_toyota_av_order,
-                    'session_class': EtereSession,
+                    "process": process_toyota_av_order,
+                    "session_class": EtereSession,
                 }
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("TOYOTA AAPI AV — BROWSER AUTOMATION")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             inp = order.order_input
             pre_gathered = inp if isinstance(inp, dict) else None
             contract_label = (
-                inp.get('contract_code') if isinstance(inp, dict) else None
+                inp.get("contract_code") if isinstance(inp, dict) else None
             ) or "TCAA-AV"
 
-            success = self._tcaa_av_processor['process'](
+            success = self._tcaa_av_processor["process"](
                 pdf_path=str(order.pdf_path),
                 pre_gathered_inputs=pre_gathered,
             )
             if success:
                 return ProcessingResult(
                     success=True,
-                    contracts=[Contract(contract_number=contract_label, order_type=OrderType.TCAA_AV)],
+                    contracts=[
+                        Contract(contract_number=contract_label, order_type=OrderType.TCAA_AV)
+                    ],
                     order_type=OrderType.TCAA_AV,
                     error_message=None,
                 )
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.TCAA_AV,
-                error_message="TCAA AV processing failed — check browser output for details"
+                success=False,
+                contracts=[],
+                order_type=OrderType.TCAA_AV,
+                error_message="TCAA AV processing failed — check browser output for details",
             )
 
         except Exception as e:
             import traceback
+
             error_detail = f"TCAA AV processing error: {str(e)}\n{traceback.format_exc()}"
             print(f"\n✗ TCAA AV processing failed: {e}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.TCAA_AV,
-                error_message=error_detail
+                success=False,
+                contracts=[],
+                order_type=OrderType.TCAA_AV,
+                error_message=error_detail,
             )
 
     def _run_misfit_with_driver(self, order: Order, driver: Any) -> ProcessingResult:
         """Call Misfit processor with an already-open driver and build ProcessingResult."""
-        success = self._misfit_processor['process'](
+        success = self._misfit_processor["process"](
             driver=driver,
             pdf_path=str(order.pdf_path),
             user_input=order.order_input,
         )
         if success:
             inp = order.order_input
-            code = inp.get('order_code') if isinstance(inp, dict) else None
+            code = inp.get("order_code") if isinstance(inp, dict) else None
             if not code:
                 try:
-                    parsed_order = self._misfit_processor['parser'](str(order.pdf_path))
-                    code = f"MISFIT-{parsed_order.date.replace('/', '')}" if parsed_order.date else 'MISFIT'
+                    parsed_order = self._misfit_processor["parser"](str(order.pdf_path))
+                    code = (
+                        f"MISFIT-{parsed_order.date.replace('/', '')}"
+                        if parsed_order.date
+                        else "MISFIT"
+                    )
                 except Exception:
-                    code = 'MISFIT'
+                    code = "MISFIT"
             contract = Contract(contract_number=code, order_type=OrderType.MISFIT)
             print("\n✓ Successfully created Misfit contract")
             return ProcessingResult(
                 success=True, contracts=[contract], order_type=OrderType.MISFIT, error_message=None
             )
         return ProcessingResult(
-            success=False, contracts=[], order_type=OrderType.MISFIT,
-            error_message="Misfit processing failed - check browser output for details"
+            success=False,
+            contracts=[],
+            order_type=OrderType.MISFIT,
+            error_message="Misfit processing failed - check browser output for details",
         )
 
     def _process_misfit_order(self, order: Order, shared_session: Any = None) -> ProcessingResult:
@@ -1051,14 +1084,14 @@ class OrderProcessingService:
                 from parsers.misfit_parser import parse_misfit_pdf
 
                 self._misfit_processor = {
-                    'process': process_misfit_order,
-                    'session_class': EtereSession,
-                    'parser': parse_misfit_pdf
+                    "process": process_misfit_order,
+                    "session_class": EtereSession,
+                    "parser": parse_misfit_pdf,
                 }
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("MISFIT BROWSER AUTOMATION")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"Order: {order.get_display_name()}")
             print(f"Type: {order.order_type.name}")
             print(f"Customer: {order.customer_name}")
@@ -1072,23 +1105,20 @@ class OrderProcessingService:
                     print(f"Code: {inp.order_code}")
                     print(f"Description: {inp.description}")
 
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             return self._run_misfit_with_driver(order, None)
 
         except Exception as e:
             import traceback
+
             error_detail = f"Misfit processing error: {str(e)}\n{traceback.format_exc()}"
             print(f"\n✗ Misfit processing failed: {e}")
             return ProcessingResult(
                 success=False, contracts=[], order_type=OrderType.MISFIT, error_message=error_detail
             )
 
-    def _process_daviselen_order(
-        self,
-        order: Order,
-        shared_session: any
-    ) -> ProcessingResult:
+    def _process_daviselen_order(self, order: Order, shared_session: any) -> ProcessingResult:
         """
         Process Daviselen order using daviselen_automation.
 
@@ -1110,30 +1140,35 @@ class OrderProcessingService:
             # Import Daviselen automation
             from daviselen_automation import process_daviselen_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING DAVISELEN ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
                     contracts=[],
                     order_type=OrderType.DAVISELEN,
-                    error_message="Order inputs not collected"
+                    error_message="Order inputs not collected",
                 )
 
             success = process_daviselen_order(
-                pdf_path=str(order.pdf_path),
-                user_input=order.order_input
+                pdf_path=str(order.pdf_path), user_input=order.order_input
             )
 
             inp = order.order_input
-            code = (inp.get('order_code') or inp.get('contract_code') or 'DAVISELEN') if isinstance(inp, dict) else 'DAVISELEN'
-            contracts = [Contract(contract_number=code, order_type=OrderType.DAVISELEN)] if success else []
+            code = (
+                (inp.get("order_code") or inp.get("contract_code") or "DAVISELEN")
+                if isinstance(inp, dict)
+                else "DAVISELEN"
+            )
+            contracts = (
+                [Contract(contract_number=code, order_type=OrderType.DAVISELEN)] if success else []
+            )
 
             if success:
                 print("\n✓ Daviselen order processed successfully")
@@ -1144,11 +1179,12 @@ class OrderProcessingService:
                 success=success,
                 contracts=contracts,
                 order_type=OrderType.DAVISELEN,
-                error_message=None if success else "Processing failed"
+                error_message=None if success else "Processing failed",
             )
 
         except Exception as e:
             import traceback
+
             error_detail = f"Daviselen processing error: {str(e)}\n{traceback.format_exc()}"
 
             print(f"\n✗ Daviselen processing failed: {e}")
@@ -1157,14 +1193,10 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.DAVISELEN,
-                error_message=error_detail
+                error_message=error_detail,
             )
 
-    def _process_intertrend_order(
-        self,
-        order: Order,
-        shared_session: any
-    ) -> ProcessingResult:
+    def _process_intertrend_order(self, order: Order, shared_session: any) -> ProcessingResult:
         """
         Process Intertrend order using intertrend_automation.
 
@@ -1178,30 +1210,35 @@ class OrderProcessingService:
         try:
             from intertrend_automation import process_intertrend_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING INTERTREND ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
                     contracts=[],
                     order_type=OrderType.INTERTREND,
-                    error_message="Order inputs not collected"
+                    error_message="Order inputs not collected",
                 )
 
             success = process_intertrend_order(
-                pdf_path=str(order.pdf_path),
-                user_input=order.order_input
+                pdf_path=str(order.pdf_path), user_input=order.order_input
             )
 
             inp = order.order_input
-            code = (inp.get('order_code') or inp.get('contract_code') or 'INTERTREND') if isinstance(inp, dict) else 'INTERTREND'
-            contracts = [Contract(contract_number=code, order_type=OrderType.INTERTREND)] if success else []
+            code = (
+                (inp.get("order_code") or inp.get("contract_code") or "INTERTREND")
+                if isinstance(inp, dict)
+                else "INTERTREND"
+            )
+            contracts = (
+                [Contract(contract_number=code, order_type=OrderType.INTERTREND)] if success else []
+            )
             if success:
                 print("\n✓ Intertrend order processed successfully")
             else:
@@ -1211,18 +1248,19 @@ class OrderProcessingService:
                 success=success,
                 contracts=contracts,
                 order_type=OrderType.INTERTREND,
-                error_message=None if success else "Processing failed"
+                error_message=None if success else "Processing failed",
             )
 
         except Exception as e:
             import traceback
+
             error_detail = f"Intertrend processing error: {str(e)}\n{traceback.format_exc()}"
             print(f"\n✗ Intertrend processing failed: {e}")
             return ProcessingResult(
                 success=False,
                 contracts=[],
                 order_type=OrderType.INTERTREND,
-                error_message=error_detail
+                error_message=error_detail,
             )
 
     def _run_sagent_with_driver(
@@ -1233,22 +1271,20 @@ class OrderProcessingService:
             driver,
             str(order.pdf_path),
             shared_session=session,
-            pre_gathered_inputs=pre_gathered_inputs
+            pre_gathered_inputs=pre_gathered_inputs,
         )
         if success:
             print("\n✓ SAGENT order processed successfully")
             return ProcessingResult(success=True, contracts=[], order_type=OrderType.SAGENT)
         print("\n✗ SAGENT order processing failed")
         return ProcessingResult(
-            success=False, contracts=[], order_type=OrderType.SAGENT,
-            error_message="SAGENT processing failed - check browser output for details"
+            success=False,
+            contracts=[],
+            order_type=OrderType.SAGENT,
+            error_message="SAGENT processing failed - check browser output for details",
         )
 
-    def _process_sagent_order(
-        self,
-        order: Order,
-        shared_session: Any
-    ) -> ProcessingResult:
+    def _process_sagent_order(self, order: Order, shared_session: Any) -> ProcessingResult:
         """
         Process SAGENT order using sagent_automation.
 
@@ -1268,18 +1304,20 @@ class OrderProcessingService:
         try:
             from sagent_automation import process_sagent_order_direct
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING SAGENT ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             if not order.order_input:
                 return ProcessingResult(
-                    success=False, contracts=[], order_type=OrderType.SAGENT,
-                    error_message="Order inputs not collected"
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.SAGENT,
+                    error_message="Order inputs not collected",
                 )
 
             contract_id = process_sagent_order_direct(
@@ -1288,8 +1326,14 @@ class OrderProcessingService:
             )
             success = contract_id is not None
             inp = order.order_input
-            contract_label = (inp.get('contract_code') if isinstance(inp, dict) else None) or str(contract_id)
-            contracts = [Contract(contract_number=contract_label, order_type=OrderType.SAGENT)] if success else []
+            contract_label = (inp.get("contract_code") if isinstance(inp, dict) else None) or str(
+                contract_id
+            )
+            contracts = (
+                [Contract(contract_number=contract_label, order_type=OrderType.SAGENT)]
+                if success
+                else []
+            )
 
             if success:
                 print(f"\n✓ SAGENT order processed successfully — contract {contract_id}")
@@ -1297,12 +1341,15 @@ class OrderProcessingService:
                 print("\n✗ SAGENT order processing failed")
 
             return ProcessingResult(
-                success=success, contracts=contracts, order_type=OrderType.SAGENT,
-                error_message="" if success else "SAGENT direct DB entry failed"
+                success=success,
+                contracts=contracts,
+                order_type=OrderType.SAGENT,
+                error_message="" if success else "SAGENT direct DB entry failed",
             )
 
         except Exception as e:
             import traceback
+
             error_detail = f"SAGENT processing error: {str(e)}\n{traceback.format_exc()}"
             print(f"\n✗ SAGENT processing failed: {e}")
             return ProcessingResult(
@@ -1324,7 +1371,9 @@ class OrderProcessingService:
             return ProcessingResult(success=True, contracts=[], order_type=OrderType.GALEFORCE)
         print("\n✗ PACO order processing failed")
         return ProcessingResult(
-            success=False, contracts=[], order_type=OrderType.GALEFORCE,
+            success=False,
+            contracts=[],
+            order_type=OrderType.GALEFORCE,
             error_message="PACO processing failed - check browser output for details",
         )
 
@@ -1342,18 +1391,20 @@ class OrderProcessingService:
         try:
             from galeforce_automation import process_galeforce_order_direct
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING PACO ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             if not order.order_input:
                 return ProcessingResult(
-                    success=False, contracts=[], order_type=OrderType.GALEFORCE,
-                    error_message="Order inputs not collected"
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.GALEFORCE,
+                    error_message="Order inputs not collected",
                 )
 
             contract_id = process_galeforce_order_direct(
@@ -1362,8 +1413,12 @@ class OrderProcessingService:
             )
             success = contract_id is not None
             inp = order.order_input
-            label = (inp.get('contract_code') if isinstance(inp, dict) else None) or str(contract_id)
-            contracts = [Contract(contract_number=label, order_type=OrderType.GALEFORCE)] if success else []
+            label = (inp.get("contract_code") if isinstance(inp, dict) else None) or str(
+                contract_id
+            )
+            contracts = (
+                [Contract(contract_number=label, order_type=OrderType.GALEFORCE)] if success else []
+            )
 
             if success:
                 print(f"\n✓ PACO order processed successfully — contract {contract_id}")
@@ -1371,16 +1426,21 @@ class OrderProcessingService:
                 print("\n✗ PACO order processing failed")
 
             return ProcessingResult(
-                success=success, contracts=contracts, order_type=OrderType.GALEFORCE,
-                error_message="" if success else "PACO direct DB entry failed"
+                success=success,
+                contracts=contracts,
+                order_type=OrderType.GALEFORCE,
+                error_message="" if success else "PACO direct DB entry failed",
             )
 
         except Exception as exc:
             import traceback
+
             error_detail = f"PACO processing error: {str(exc)}\n{traceback.format_exc()}"
             print(f"\n✗ PACO processing failed: {exc}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.GALEFORCE,
+                success=False,
+                contracts=[],
+                order_type=OrderType.GALEFORCE,
                 error_message=error_detail,
             )
 
@@ -1399,7 +1459,9 @@ class OrderProcessingService:
             return ProcessingResult(success=True, contracts=[], order_type=OrderType.HYPHEN)
         print("\n✗ Hyphen order processing failed")
         return ProcessingResult(
-            success=False, contracts=[], order_type=OrderType.HYPHEN,
+            success=False,
+            contracts=[],
+            order_type=OrderType.HYPHEN,
             error_message="Hyphen processing failed - check browser output for details",
         )
 
@@ -1416,16 +1478,18 @@ class OrderProcessingService:
         try:
             from hyphen_automation import process_hyphen_order_direct
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING HYPHEN ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             if not order.order_input:
                 return ProcessingResult(
-                    success=False, contracts=[], order_type=OrderType.HYPHEN,
-                    error_message="Order inputs not collected"
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.HYPHEN,
+                    error_message="Order inputs not collected",
                 )
 
             contract_id = process_hyphen_order_direct(
@@ -1434,8 +1498,12 @@ class OrderProcessingService:
             )
             success = contract_id is not None
             inp = order.order_input
-            label = (inp.get('contract_code') if isinstance(inp, dict) else None) or str(contract_id)
-            contracts = [Contract(contract_number=label, order_type=OrderType.HYPHEN)] if success else []
+            label = (inp.get("contract_code") if isinstance(inp, dict) else None) or str(
+                contract_id
+            )
+            contracts = (
+                [Contract(contract_number=label, order_type=OrderType.HYPHEN)] if success else []
+            )
 
             if success:
                 print(f"\n✓ Hyphen order processed successfully — contract {contract_id}")
@@ -1443,16 +1511,21 @@ class OrderProcessingService:
                 print("\n✗ Hyphen order processing failed")
 
             return ProcessingResult(
-                success=success, contracts=contracts, order_type=OrderType.HYPHEN,
-                error_message="" if success else "Hyphen direct DB entry failed"
+                success=success,
+                contracts=contracts,
+                order_type=OrderType.HYPHEN,
+                error_message="" if success else "Hyphen direct DB entry failed",
             )
 
         except Exception as exc:
             import traceback
+
             error_detail = f"Hyphen processing error: {str(exc)}\n{traceback.format_exc()}"
             print(f"\n✗ Hyphen processing failed: {exc}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.HYPHEN,
+                success=False,
+                contracts=[],
+                order_type=OrderType.HYPHEN,
                 error_message=error_detail,
             )
 
@@ -1468,13 +1541,15 @@ class OrderProcessingService:
         )
         if success:
             inp = order.order_input
-            code = inp.get('order_code') if isinstance(inp, dict) else None
-            contracts = [Contract(contract_number=code or 'PROSIO', order_type=OrderType.PROSIO)]
+            code = inp.get("order_code") if isinstance(inp, dict) else None
+            contracts = [Contract(contract_number=code or "PROSIO", order_type=OrderType.PROSIO)]
             print("\n✓ Prosio order processed successfully")
             return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.PROSIO)
         print("\n✗ Prosio order processing failed")
         return ProcessingResult(
-            success=False, contracts=[], order_type=OrderType.PROSIO,
+            success=False,
+            contracts=[],
+            order_type=OrderType.PROSIO,
             error_message="Prosio processing failed - check browser output for details",
         )
 
@@ -1491,11 +1566,11 @@ class OrderProcessingService:
         try:
             from prosio_automation import process_prosio_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING PROSIO ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             pre_gathered_inputs = order.order_input if order.order_input else None
 
@@ -1505,10 +1580,13 @@ class OrderProcessingService:
 
         except Exception as exc:
             import traceback
+
             error_detail = f"Prosio processing error: {str(exc)}\n{traceback.format_exc()}"
             print(f"\n✗ Prosio processing failed: {exc}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.PROSIO,
+                success=False,
+                contracts=[],
+                order_type=OrderType.PROSIO,
                 error_message=error_detail,
             )
 
@@ -1525,17 +1603,19 @@ class OrderProcessingService:
         try:
             from browser_automation.timeadvertising_automation import process_timeadvertising_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING TIME ADVERTISING ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             if not order.order_input:
                 return ProcessingResult(
-                    success=False, contracts=[], order_type=OrderType.TIMEADVERTISING,
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.TIMEADVERTISING,
                     error_message="Order inputs not collected",
                 )
 
@@ -1545,19 +1625,32 @@ class OrderProcessingService:
             )
 
             inp = order.order_input
-            contract_label = (inp.get('contract_code') if isinstance(inp, dict) else None) or "TIMEADVERTISING"
-            contracts = [Contract(contract_number=contract_label, order_type=OrderType.TIMEADVERTISING)] if success else []
+            contract_label = (
+                inp.get("contract_code") if isinstance(inp, dict) else None
+            ) or "TIMEADVERTISING"
+            contracts = (
+                [Contract(contract_number=contract_label, order_type=OrderType.TIMEADVERTISING)]
+                if success
+                else []
+            )
             return ProcessingResult(
-                success=success, contracts=contracts, order_type=OrderType.TIMEADVERTISING,
+                success=success,
+                contracts=contracts,
+                order_type=OrderType.TIMEADVERTISING,
                 error_message=None if success else "Processing failed",
             )
 
         except Exception as exc:
             import traceback
-            error_detail = f"Time Advertising processing error: {str(exc)}\n{traceback.format_exc()}"
+
+            error_detail = (
+                f"Time Advertising processing error: {str(exc)}\n{traceback.format_exc()}"
+            )
             print(f"\n✗ Time Advertising processing failed: {exc}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.TIMEADVERTISING,
+                success=False,
+                contracts=[],
+                order_type=OrderType.TIMEADVERTISING,
                 error_message=error_detail,
             )
 
@@ -1572,38 +1665,44 @@ class OrderProcessingService:
         try:
             from charmaine_automation import process_charmaine_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING CHARMAINE ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             codes = process_charmaine_order(str(order.pdf_path))
             if codes:
                 print("\n✓ CHARMAINE order processed successfully")
-                contracts = [Contract(contract_number=c, order_type=OrderType.CHARMAINE) for c in codes]
-                return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.CHARMAINE)
+                contracts = [
+                    Contract(contract_number=c, order_type=OrderType.CHARMAINE) for c in codes
+                ]
+                return ProcessingResult(
+                    success=True, contracts=contracts, order_type=OrderType.CHARMAINE
+                )
             print("\n✗ CHARMAINE order processing failed")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.CHARMAINE,
+                success=False,
+                contracts=[],
+                order_type=OrderType.CHARMAINE,
                 error_message="CHARMAINE processing failed — check output",
             )
 
         except Exception as e:
             import traceback
+
             error_detail = f"CHARMAINE processing error: {str(e)}\n{traceback.format_exc()}"
             print(f"\n✗ CHARMAINE processing failed: {e}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.CHARMAINE, error_message=error_detail
+                success=False,
+                contracts=[],
+                order_type=OrderType.CHARMAINE,
+                error_message=error_detail,
             )
 
-    def _process_admerasia_order(
-        self,
-        order: Order,
-        shared_session: any
-    ) -> ProcessingResult:
+    def _process_admerasia_order(self, order: Order, shared_session: any) -> ProcessingResult:
         """
         Process Admerasia order using admerasia_automation.
 
@@ -1627,13 +1726,13 @@ class OrderProcessingService:
             # Import Admerasia automation
             from admerasia_automation import process_admerasia_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING ADMERASIA ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             # Get inputs from order (already collected by orchestrator)
             if not order.order_input:
@@ -1641,7 +1740,7 @@ class OrderProcessingService:
                     success=False,
                     contracts=[],
                     order_type=OrderType.ADMERASIA,
-                    error_message="Order inputs not collected"
+                    error_message="Order inputs not collected",
                 )
 
             # DirectDB — no browser session needed
@@ -1655,13 +1754,17 @@ class OrderProcessingService:
             # goes in etere_id — reporting it as contract_number would leave etere_id
             # unresolvable (no COD_CONTRATTO matches "3008") and every etere_id-keyed
             # post-pass, notably the language catalog, would silently skip this order.
-            contracts = [
-                Contract(
-                    contract_number=_gathered_code(order.order_input, contract_num),
-                    order_type=OrderType.ADMERASIA,
-                    etere_id=int(contract_num),
-                )
-            ] if contract_num else []
+            contracts = (
+                [
+                    Contract(
+                        contract_number=_gathered_code(order.order_input, contract_num),
+                        order_type=OrderType.ADMERASIA,
+                        etere_id=int(contract_num),
+                    )
+                ]
+                if contract_num
+                else []
+            )
 
             if success:
                 print(f"\n✓ Admerasia order processed successfully — contract {contract_num}")
@@ -1672,11 +1775,12 @@ class OrderProcessingService:
                 success=success,
                 contracts=contracts,
                 order_type=OrderType.ADMERASIA,
-                error_message=None if success else "Processing failed"
+                error_message=None if success else "Processing failed",
             )
 
         except Exception as e:
             import traceback
+
             error_detail = f"Admerasia processing error: {str(e)}\n{traceback.format_exc()}"
 
             print(f"\n✗ Admerasia processing failed: {e}")
@@ -1685,9 +1789,8 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.ADMERASIA,
-                error_message=error_detail
+                error_message=error_detail,
             )
-
 
     def _process_hl_order(
         self,
@@ -1707,13 +1810,13 @@ class OrderProcessingService:
         try:
             from browser_automation.hl_automation import process_hl_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING H&L PARTNERS ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             if not order.order_input:
                 return ProcessingResult(
@@ -1744,6 +1847,7 @@ class OrderProcessingService:
 
         except Exception as e:
             import traceback
+
             error_detail = f"H&L Partners processing error: {str(e)}\n{traceback.format_exc()}"
             print(f"\n✗ H&L Partners processing failed: {e}")
             return ProcessingResult(
@@ -1762,11 +1866,11 @@ class OrderProcessingService:
         try:
             from browser_automation.hl_bdr_automation import process_hl_bdr_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING H/L BUY DETAIL REPORT")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             if not order.order_input:
                 return ProcessingResult(
@@ -1784,7 +1888,9 @@ class OrderProcessingService:
             success = bool(contracts)
 
             if success:
-                print(f"\n✓ H/L BDR order processed — {len(contracts)} contract(s): {', '.join(contracts)}")
+                print(
+                    f"\n✓ H/L BDR order processed — {len(contracts)} contract(s): {', '.join(contracts)}"
+                )
             else:
                 print("\n✗ H/L BDR order processing failed")
 
@@ -1797,6 +1903,7 @@ class OrderProcessingService:
 
         except Exception as e:
             import traceback
+
             error_detail = f"H/L BDR processing error: {str(e)}\n{traceback.format_exc()}"
             print(f"\n✗ H/L BDR processing failed: {e}")
             return ProcessingResult(
@@ -1806,114 +1913,116 @@ class OrderProcessingService:
                 error_message=error_detail,
             )
 
-    def _process_lexus_order(
-        self,
-        order: Order,
-        shared_session: any
-    ) -> ProcessingResult:
+    def _process_lexus_order(self, order: Order, shared_session: any) -> ProcessingResult:
         """
         Process Lexus / IW Group order using lexus_automation.
         """
         try:
             from browser_automation.lexus_automation import process_lexus_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING LEXUS / IW GROUP ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
                     contracts=[],
                     order_type=OrderType.LEXUS,
-                    error_message="Order inputs not collected"
+                    error_message="Order inputs not collected",
                 )
 
             success = process_lexus_order(
-                file_path=str(order.pdf_path),
-                user_input=order.order_input
+                file_path=str(order.pdf_path), user_input=order.order_input
             )
 
             inp = order.order_input
-            quarter_contracts = inp.get('contracts', []) if isinstance(inp, dict) else []
-            contracts = [
-                Contract(contract_number=q.get('contract_code', 'LEXUS'), order_type=OrderType.LEXUS)
-                for q in quarter_contracts
-            ] if success and quarter_contracts else (
-                [Contract(contract_number='LEXUS', order_type=OrderType.LEXUS)] if success else []
+            quarter_contracts = inp.get("contracts", []) if isinstance(inp, dict) else []
+            contracts = (
+                [
+                    Contract(
+                        contract_number=q.get("contract_code", "LEXUS"), order_type=OrderType.LEXUS
+                    )
+                    for q in quarter_contracts
+                ]
+                if success and quarter_contracts
+                else (
+                    [Contract(contract_number="LEXUS", order_type=OrderType.LEXUS)]
+                    if success
+                    else []
+                )
             )
             return ProcessingResult(
                 success=success,
                 contracts=contracts,
                 order_type=OrderType.LEXUS,
-                error_message=None if success else "Processing failed"
+                error_message=None if success else "Processing failed",
             )
 
         except Exception as e:
             import traceback
+
             error_detail = f"Lexus processing error: {str(e)}\n{traceback.format_exc()}"
             print(f"\n✗ Lexus processing failed: {e}")
             return ProcessingResult(
-                success=False,
-                contracts=[],
-                order_type=OrderType.LEXUS,
-                error_message=error_detail
+                success=False, contracts=[], order_type=OrderType.LEXUS, error_message=error_detail
             )
 
-    def _process_imprenta_order(
-        self,
-        order: Order,
-        shared_session: any
-    ) -> ProcessingResult:
+    def _process_imprenta_order(self, order: Order, shared_session: any) -> ProcessingResult:
         """Process Imprenta / PG&E order using imprenta_automation."""
         try:
             from browser_automation.imprenta_automation import process_imprenta_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING IMPRENTA ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
                     contracts=[],
                     order_type=OrderType.IMPRENTA,
-                    error_message="Order inputs not collected"
+                    error_message="Order inputs not collected",
                 )
 
             success = process_imprenta_order(
-                file_path=str(order.pdf_path),
-                user_input=order.order_input
+                file_path=str(order.pdf_path), user_input=order.order_input
             )
 
-            contracts = [Contract(contract_number=order.order_input.get("contract_code", "imprenta"), order_type=OrderType.IMPRENTA)] if success else []
+            contracts = (
+                [
+                    Contract(
+                        contract_number=order.order_input.get("contract_code", "imprenta"),
+                        order_type=OrderType.IMPRENTA,
+                    )
+                ]
+                if success
+                else []
+            )
             return ProcessingResult(
                 success=success,
                 contracts=contracts,
                 order_type=OrderType.IMPRENTA,
-                error_message=None if success else "Processing failed"
+                error_message=None if success else "Processing failed",
             )
 
         except Exception as e:
             import traceback
+
             error_detail = f"Imprenta processing error: {str(e)}\n{traceback.format_exc()}"
             print(f"\n✗ Imprenta processing failed: {e}")
             return ProcessingResult(
                 success=False,
                 contracts=[],
                 order_type=OrderType.IMPRENTA,
-                error_message=error_detail
+                error_message=error_detail,
             )
 
-    def _process_igraphix_order(
-        self,
-        order: Order,
-        shared_session: any
-    ) -> ProcessingResult:
+    def _process_igraphix_order(self, order: Order, shared_session: any) -> ProcessingResult:
         """
         Process iGraphix order using igraphix_automation.
 
@@ -1937,25 +2046,24 @@ class OrderProcessingService:
         try:
             from igraphix_automation import process_igraphix_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING IGRAPHIX ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
                     contracts=[],
                     order_type=OrderType.IGRAPHIX,
-                    error_message="Order inputs not collected"
+                    error_message="Order inputs not collected",
                 )
 
             success = process_igraphix_order(
-                pdf_path=str(order.pdf_path),
-                user_input=order.order_input
+                pdf_path=str(order.pdf_path), user_input=order.order_input
             )
 
             if success:
@@ -1964,18 +2072,25 @@ class OrderProcessingService:
                 print("\n✗ iGraphix order processing failed")
 
             inp = order.order_input
-            contract_label = (inp.get('contract_code') if isinstance(inp, dict) else None) or "IGRAPHIX"
-            contracts = [Contract(contract_number=contract_label, order_type=OrderType.IGRAPHIX)] if success else []
+            contract_label = (
+                inp.get("contract_code") if isinstance(inp, dict) else None
+            ) or "IGRAPHIX"
+            contracts = (
+                [Contract(contract_number=contract_label, order_type=OrderType.IGRAPHIX)]
+                if success
+                else []
+            )
 
             return ProcessingResult(
                 success=success,
                 contracts=contracts,
                 order_type=OrderType.IGRAPHIX,
-                error_message=None if success else "Processing failed"
+                error_message=None if success else "Processing failed",
             )
 
         except Exception as e:
             import traceback
+
             error_detail = f"iGraphix processing error: {str(e)}\n{traceback.format_exc()}"
 
             print(f"\n✗ iGraphix processing failed: {e}")
@@ -1984,14 +2099,10 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.IGRAPHIX,
-                error_message=error_detail
+                error_message=error_detail,
             )
 
-    def _process_impact_order(
-        self,
-        order: Order,
-        shared_session: any
-    ) -> ProcessingResult:
+    def _process_impact_order(self, order: Order, shared_session: any) -> ProcessingResult:
         """
         Process Impact Marketing order using impact_automation.
 
@@ -2015,25 +2126,24 @@ class OrderProcessingService:
         try:
             from browser_automation.impact_automation import process_impact_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING IMPACT MARKETING ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
                     contracts=[],
                     order_type=OrderType.IMPACT,
-                    error_message="Order inputs not collected"
+                    error_message="Order inputs not collected",
                 )
 
             codes = process_impact_order(
-                pdf_path=str(order.pdf_path),
-                pre_gathered_inputs=order.order_input
+                pdf_path=str(order.pdf_path), pre_gathered_inputs=order.order_input
             )
 
             success = bool(codes)
@@ -2047,27 +2157,21 @@ class OrderProcessingService:
                 success=success,
                 contracts=contracts,
                 order_type=OrderType.IMPACT,
-                error_message=None if success else "Processing failed"
+                error_message=None if success else "Processing failed",
             )
 
         except Exception as e:
             import traceback
+
             error_detail = f"Impact Marketing processing error: {str(e)}\n{traceback.format_exc()}"
 
             print(f"\n✗ Impact Marketing processing failed: {e}")
 
             return ProcessingResult(
-                success=False,
-                contracts=[],
-                order_type=OrderType.IMPACT,
-                error_message=error_detail
+                success=False, contracts=[], order_type=OrderType.IMPACT, error_message=error_detail
             )
 
-    def _process_opad_order(
-        self,
-        order: Order,
-        shared_session: any
-    ) -> ProcessingResult:
+    def _process_opad_order(self, order: Order, shared_session: any) -> ProcessingResult:
         """
         Process opAD order using opad_automation.
 
@@ -2091,30 +2195,31 @@ class OrderProcessingService:
             # Import opAD automation
             from opad_automation import process_opad_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING opAD ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
                     contracts=[],
                     order_type=OrderType.OPAD,
-                    error_message="Order inputs not collected"
+                    error_message="Order inputs not collected",
                 )
 
-            success = process_opad_order(
-                pdf_path=str(order.pdf_path),
-                user_input=order.order_input
-            )
+            success = process_opad_order(pdf_path=str(order.pdf_path), user_input=order.order_input)
 
             inp = order.order_input
-            code = inp.get('order_code') if isinstance(inp, dict) else None
-            contracts = [Contract(contract_number=code or 'OPAD', order_type=OrderType.OPAD)] if success else []
+            code = inp.get("order_code") if isinstance(inp, dict) else None
+            contracts = (
+                [Contract(contract_number=code or "OPAD", order_type=OrderType.OPAD)]
+                if success
+                else []
+            )
 
             if success:
                 print("\n✓ opAD order processed successfully")
@@ -2125,27 +2230,21 @@ class OrderProcessingService:
                 success=success,
                 contracts=contracts,
                 order_type=OrderType.OPAD,
-                error_message=None if success else "Processing failed"
+                error_message=None if success else "Processing failed",
             )
 
         except Exception as e:
             import traceback
+
             error_detail = f"opAD processing error: {str(e)}\n{traceback.format_exc()}"
 
             print(f"\n✗ opAD processing failed: {e}")
 
             return ProcessingResult(
-                success=False,
-                contracts=[],
-                order_type=OrderType.OPAD,
-                error_message=error_detail
+                success=False, contracts=[], order_type=OrderType.OPAD, error_message=error_detail
             )
 
-    def _process_wallrich_order(
-        self,
-        order: Order,
-        shared_session: any
-    ) -> ProcessingResult:
+    def _process_wallrich_order(self, order: Order, shared_session: any) -> ProcessingResult:
         """Process Wallrich order using wallrich_automation."""
         try:
             from browser_automation.wallrich_automation import process_wallrich_order
@@ -2155,7 +2254,7 @@ class OrderProcessingService:
                     success=False,
                     contracts=[],
                     order_type=OrderType.WALLRICH,
-                    error_message="Order inputs not collected"
+                    error_message="Order inputs not collected",
                 )
 
             success = process_wallrich_order(
@@ -2164,8 +2263,10 @@ class OrderProcessingService:
             )
 
             inp = order.order_input
-            label = (inp.get('order_code') if isinstance(inp, dict) else None) or "WALLRICH"
-            contracts = [Contract(contract_number=label, order_type=OrderType.WALLRICH)] if success else []
+            label = (inp.get("order_code") if isinstance(inp, dict) else None) or "WALLRICH"
+            contracts = (
+                [Contract(contract_number=label, order_type=OrderType.WALLRICH)] if success else []
+            )
             return ProcessingResult(
                 success=success,
                 contracts=contracts,
@@ -2175,6 +2276,7 @@ class OrderProcessingService:
 
         except Exception as e:
             import traceback
+
             return ProcessingResult(
                 success=False,
                 contracts=[],
@@ -2182,11 +2284,7 @@ class OrderProcessingService:
                 error_message=f"Wallrich processing error: {str(e)}\n{traceback.format_exc()}",
             )
 
-    def _process_rpm_order(
-        self,
-        order: Order,
-        shared_session: any
-    ) -> ProcessingResult:
+    def _process_rpm_order(self, order: Order, shared_session: any) -> ProcessingResult:
         """
         Process RPM order using rpm_automation.
 
@@ -2209,26 +2307,23 @@ class OrderProcessingService:
         try:
             from browser_automation.rpm_automation import process_rpm_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING RPM ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
                     contracts=[],
                     order_type=OrderType.RPM,
-                    error_message="Order inputs not collected"
+                    error_message="Order inputs not collected",
                 )
 
-            success = process_rpm_order(
-                pdf_path=str(order.pdf_path),
-                user_input=order.order_input
-            )
+            success = process_rpm_order(pdf_path=str(order.pdf_path), user_input=order.order_input)
 
             if success:
                 print("\n✓ RPM order processed successfully")
@@ -2236,31 +2331,29 @@ class OrderProcessingService:
                 print("\n✗ RPM order processing failed")
 
             inp = order.order_input
-            contract_label = (inp.get('contract_code') if isinstance(inp, dict) else None) or "RPM"
-            contracts = [Contract(contract_number=contract_label, order_type=OrderType.RPM)] if success else []
+            contract_label = (inp.get("contract_code") if isinstance(inp, dict) else None) or "RPM"
+            contracts = (
+                [Contract(contract_number=contract_label, order_type=OrderType.RPM)]
+                if success
+                else []
+            )
             return ProcessingResult(
                 success=success,
                 contracts=contracts,
                 order_type=OrderType.RPM,
-                error_message=None if success else "Processing failed"
+                error_message=None if success else "Processing failed",
             )
 
         except Exception as e:
             import traceback
+
             error_detail = f"RPM processing error: {str(e)}\n{traceback.format_exc()}"
             print(f"\n✗ RPM processing failed: {e}")
             return ProcessingResult(
-                success=False,
-                contracts=[],
-                order_type=OrderType.RPM,
-                error_message=error_detail
+                success=False, contracts=[], order_type=OrderType.RPM, error_message=error_detail
             )
 
-    def _process_worldlink_order(
-        self,
-        order: Order,
-        shared_session: any
-    ) -> ProcessingResult:
+    def _process_worldlink_order(self, order: Order, shared_session: any) -> ProcessingResult:
         """
         Process WorldLink order using worldlink_automation.
 
@@ -2281,20 +2374,20 @@ class OrderProcessingService:
         try:
             from browser_automation.worldlink_automation import process_worldlink_order_direct
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING WORLDLINK ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             if not order.order_input:
                 return ProcessingResult(
                     success=False,
                     contracts=[],
                     order_type=OrderType.WORLDLINK,
-                    error_message="Order inputs not collected"
+                    error_message="Order inputs not collected",
                 )
 
             contract_num = process_worldlink_order_direct(user_input=order.order_input)
@@ -2302,29 +2395,36 @@ class OrderProcessingService:
             success = contract_num is not None
             contracts = []
             if success:
-                highest_line = order.order_input.get('highest_line') if isinstance(order.order_input, dict) else None
+                highest_line = (
+                    order.order_input.get("highest_line")
+                    if isinstance(order.order_input, dict)
+                    else None
+                )
                 etere_id = None
                 try:
                     from browser_automation.etere_direct_client import connect as _db_connect
+
                     with _db_connect() as _conn:
-                        _ph = '%s' if type(_conn).__module__.startswith('pymssql') else '?'
+                        _ph = "%s" if type(_conn).__module__.startswith("pymssql") else "?"
                         _cur = _conn.cursor()
                         _cur.execute(
                             f"SELECT TOP 1 ID_CONTRATTITESTATA FROM CONTRATTITESTATA "
                             f"WHERE COD_CONTRATTO = {_ph}",
-                            (contract_num,)
+                            (contract_num,),
                         )
                         _row = _cur.fetchone()
                         if _row:
                             etere_id = int(_row[0])
                 except Exception:
                     pass
-                contracts = [Contract(
-                    contract_number=contract_num,
-                    order_type=OrderType.WORLDLINK,
-                    highest_line=highest_line,
-                    etere_id=etere_id,
-                )]
+                contracts = [
+                    Contract(
+                        contract_number=contract_num,
+                        order_type=OrderType.WORLDLINK,
+                        highest_line=highest_line,
+                        etere_id=etere_id,
+                    )
+                ]
 
             if success:
                 print("\n✓ WorldLink order processed successfully")
@@ -2335,18 +2435,19 @@ class OrderProcessingService:
                 success=success,
                 contracts=contracts,
                 order_type=OrderType.WORLDLINK,
-                error_message=None if success else "Processing failed"
+                error_message=None if success else "Processing failed",
             )
 
         except Exception as e:
             import traceback
+
             error_detail = f"WorldLink processing error: {str(e)}\n{traceback.format_exc()}"
             print(f"\n✗ WorldLink processing failed: {e}")
             return ProcessingResult(
                 success=False,
                 contracts=[],
                 order_type=OrderType.WORLDLINK,
-                error_message=error_detail
+                error_message=error_detail,
             )
 
     def _process_dart_order(
@@ -2363,11 +2464,11 @@ class OrderProcessingService:
         try:
             from browser_automation.dart_automation import process_dart_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING DART ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             if not order.order_input:
                 return ProcessingResult(
@@ -2391,13 +2492,17 @@ class OrderProcessingService:
             # As with Admerasia: process_dart_order returns the Etere DB id despite its
             # docstring, so it belongs in etere_id and the gathered code in
             # contract_number. See the Admerasia handler for why this matters.
-            contracts = [
-                Contract(
-                    contract_number=_gathered_code(order.order_input, contract_num),
-                    order_type=OrderType.DART,
-                    etere_id=int(contract_num),
-                )
-            ] if success else []
+            contracts = (
+                [
+                    Contract(
+                        contract_number=_gathered_code(order.order_input, contract_num),
+                        order_type=OrderType.DART,
+                        etere_id=int(contract_num),
+                    )
+                ]
+                if success
+                else []
+            )
             return ProcessingResult(
                 success=success,
                 contracts=contracts,
@@ -2407,6 +2512,7 @@ class OrderProcessingService:
 
         except Exception as e:
             import traceback
+
             error_detail = f"DART processing error: {str(e)}\n{traceback.format_exc()}"
             print(f"\n✗ DART processing failed: {e}")
             return ProcessingResult(
@@ -2429,11 +2535,11 @@ class OrderProcessingService:
         try:
             from browser_automation.polaris_automation import process_polaris_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING POLARIS ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             if not order.order_input:
                 return ProcessingResult(
@@ -2455,8 +2561,12 @@ class OrderProcessingService:
                 print("\n✗ Polaris order processing failed")
 
             inp = order.order_input
-            code = inp.get('order_code') if isinstance(inp, dict) else None
-            contracts = [Contract(contract_number=code or 'POLARIS', order_type=OrderType.POLARIS)] if success else []
+            code = inp.get("order_code") if isinstance(inp, dict) else None
+            contracts = (
+                [Contract(contract_number=code or "POLARIS", order_type=OrderType.POLARIS)]
+                if success
+                else []
+            )
             return ProcessingResult(
                 success=success,
                 contracts=contracts,
@@ -2466,6 +2576,7 @@ class OrderProcessingService:
 
         except Exception as e:
             import traceback
+
             error_detail = f"Polaris processing error: {str(e)}\n{traceback.format_exc()}"
             print(f"\n✗ Polaris processing failed: {e}")
             return ProcessingResult(
@@ -2494,18 +2605,36 @@ class OrderProcessingService:
             inp = order.order_input
             contracts = []
             if isinstance(inp, dict):
-                ph1 = inp.get('phase1_inputs', {})
-                ph2 = inp.get('phase2_inputs', {})
-                if ph1.get('contract_code'):
-                    contracts.append(Contract(contract_number=ph1['contract_code'], order_type=OrderType.SACCOUNTYVOTERS))
-                if ph2.get('contract_code'):
-                    contracts.append(Contract(contract_number=ph2['contract_code'], order_type=OrderType.SACCOUNTYVOTERS))
+                ph1 = inp.get("phase1_inputs", {})
+                ph2 = inp.get("phase2_inputs", {})
+                if ph1.get("contract_code"):
+                    contracts.append(
+                        Contract(
+                            contract_number=ph1["contract_code"],
+                            order_type=OrderType.SACCOUNTYVOTERS,
+                        )
+                    )
+                if ph2.get("contract_code"):
+                    contracts.append(
+                        Contract(
+                            contract_number=ph2["contract_code"],
+                            order_type=OrderType.SACCOUNTYVOTERS,
+                        )
+                    )
             if not contracts:
-                contracts = [Contract(contract_number='SACCOUNTYVOTERS', order_type=OrderType.SACCOUNTYVOTERS)]
-            return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.SACCOUNTYVOTERS)
+                contracts = [
+                    Contract(
+                        contract_number="SACCOUNTYVOTERS", order_type=OrderType.SACCOUNTYVOTERS
+                    )
+                ]
+            return ProcessingResult(
+                success=True, contracts=contracts, order_type=OrderType.SACCOUNTYVOTERS
+            )
         print("\n✗ SacCountyVoters order processing failed")
         return ProcessingResult(
-            success=False, contracts=[], order_type=OrderType.SACCOUNTYVOTERS,
+            success=False,
+            contracts=[],
+            order_type=OrderType.SACCOUNTYVOTERS,
             error_message="SacCountyVoters processing failed - check browser output for details",
         )
 
@@ -2523,13 +2652,13 @@ class OrderProcessingService:
         try:
             from browser_automation.saccountyvoters_automation import process_saccountyvoters_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING SACRAMENTO COUNTY VOTERS ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             pre_gathered_inputs = order.order_input if order.order_input else None
 
@@ -2539,10 +2668,13 @@ class OrderProcessingService:
 
         except Exception as exc:
             import traceback
+
             error_detail = f"SacCountyVoters processing error: {str(exc)}\n{traceback.format_exc()}"
             print(f"\n✗ SacCountyVoters processing failed: {exc}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.SACCOUNTYVOTERS,
+                success=False,
+                contracts=[],
+                order_type=OrderType.SACCOUNTYVOTERS,
                 error_message=error_detail,
             )
 
@@ -2555,13 +2687,13 @@ class OrderProcessingService:
         try:
             from browser_automation.scwa_automation import process_scwa_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING SACRAMENTO COUNTY WATER AGENCY ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             pre_gathered_inputs = order.order_input if order.order_input else None
 
@@ -2574,11 +2706,21 @@ class OrderProcessingService:
                 if success:
                     print("\n✓ SCWA order processed successfully")
                     inp = order.order_input
-                    code = (inp.get('order_code') or inp.get('contract_code') or 'SCWA') if isinstance(inp, dict) else 'SCWA'
-                    return ProcessingResult(success=True, contracts=[Contract(contract_number=code, order_type=OrderType.SCWA)], order_type=OrderType.SCWA)
+                    code = (
+                        (inp.get("order_code") or inp.get("contract_code") or "SCWA")
+                        if isinstance(inp, dict)
+                        else "SCWA"
+                    )
+                    return ProcessingResult(
+                        success=True,
+                        contracts=[Contract(contract_number=code, order_type=OrderType.SCWA)],
+                        order_type=OrderType.SCWA,
+                    )
                 print("\n✗ SCWA order processing failed")
                 return ProcessingResult(
-                    success=False, contracts=[], order_type=OrderType.SCWA,
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.SCWA,
                     error_message="SCWA processing failed - check browser output for details",
                 )
 
@@ -2586,10 +2728,13 @@ class OrderProcessingService:
 
         except Exception as exc:
             import traceback
+
             error_detail = f"SCWA processing error: {str(exc)}\n{traceback.format_exc()}"
             print(f"\n✗ SCWA processing failed: {exc}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.SCWA,
+                success=False,
+                contracts=[],
+                order_type=OrderType.SCWA,
                 error_message=error_detail,
             )
 
@@ -2602,13 +2747,13 @@ class OrderProcessingService:
         try:
             from browser_automation.sierra_automation import process_sierra_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING SIERRA DONOR SERVICES ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             pre_gathered_inputs = order.order_input if order.order_input else None
 
@@ -2621,11 +2766,23 @@ class OrderProcessingService:
                 if success:
                     print("\n✓ Sierra Donor order processed successfully")
                     inp = order.order_input
-                    code = (inp.get('order_code') or inp.get('contract_code') or 'SIERRADONOR') if isinstance(inp, dict) else 'SIERRADONOR'
-                    return ProcessingResult(success=True, contracts=[Contract(contract_number=code, order_type=OrderType.SIERRADONOR)], order_type=OrderType.SIERRADONOR)
+                    code = (
+                        (inp.get("order_code") or inp.get("contract_code") or "SIERRADONOR")
+                        if isinstance(inp, dict)
+                        else "SIERRADONOR"
+                    )
+                    return ProcessingResult(
+                        success=True,
+                        contracts=[
+                            Contract(contract_number=code, order_type=OrderType.SIERRADONOR)
+                        ],
+                        order_type=OrderType.SIERRADONOR,
+                    )
                 print("\n✗ Sierra Donor order processing failed")
                 return ProcessingResult(
-                    success=False, contracts=[], order_type=OrderType.SIERRADONOR,
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.SIERRADONOR,
                     error_message="Sierra Donor processing failed - check browser output for details",
                 )
 
@@ -2633,10 +2790,13 @@ class OrderProcessingService:
 
         except Exception as exc:
             import traceback
+
             error_detail = f"Sierra Donor processing error: {str(exc)}\n{traceback.format_exc()}"
             print(f"\n✗ Sierra Donor processing failed: {exc}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.SIERRADONOR,
+                success=False,
+                contracts=[],
+                order_type=OrderType.SIERRADONOR,
                 error_message=error_detail,
             )
 
@@ -2649,11 +2809,11 @@ class OrderProcessingService:
         try:
             from browser_automation.rwny_automation import process_rwny_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING RESORTS WORLD NEW YORK ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             pre_gathered_inputs = order.order_input if order.order_input else None
 
@@ -2666,12 +2826,22 @@ class OrderProcessingService:
                 if success:
                     print("\n✓ RWNY order processed successfully")
                     inp = order.order_input
-                    code = (inp.get('contract_code') or inp.get('order_code')) if isinstance(inp, dict) else None
-                    contracts = [Contract(contract_number=code or 'RWNY', order_type=OrderType.RWNY)]
-                    return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.RWNY)
+                    code = (
+                        (inp.get("contract_code") or inp.get("order_code"))
+                        if isinstance(inp, dict)
+                        else None
+                    )
+                    contracts = [
+                        Contract(contract_number=code or "RWNY", order_type=OrderType.RWNY)
+                    ]
+                    return ProcessingResult(
+                        success=True, contracts=contracts, order_type=OrderType.RWNY
+                    )
                 print("\n✗ RWNY order processing failed")
                 return ProcessingResult(
-                    success=False, contracts=[], order_type=OrderType.RWNY,
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.RWNY,
                     error_message="RWNY processing failed - check browser output for details",
                 )
 
@@ -2679,10 +2849,13 @@ class OrderProcessingService:
 
         except Exception as exc:
             import traceback
+
             error_detail = f"RWNY processing error: {str(exc)}\n{traceback.format_exc()}"
             print(f"\n✗ RWNY processing failed: {exc}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.RWNY,
+                success=False,
+                contracts=[],
+                order_type=OrderType.RWNY,
                 error_message=error_detail,
             )
 
@@ -2695,11 +2868,11 @@ class OrderProcessingService:
         try:
             from browser_automation.fightthebite_automation import process_fightthebite_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING FIGHT THE BITE ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             pre_gathered_inputs = order.order_input if order.order_input else None
 
@@ -2711,7 +2884,7 @@ class OrderProcessingService:
             if success:
                 print("\n✓ Fight the Bite order processed successfully")
                 inp = pre_gathered_inputs
-                code = (inp.get('contract_code') if isinstance(inp, dict) else None) or 'FTB'
+                code = (inp.get("contract_code") if isinstance(inp, dict) else None) or "FTB"
                 return ProcessingResult(
                     success=True,
                     contracts=[Contract(contract_number=code, order_type=OrderType.FIGHTTHEBITE)],
@@ -2719,16 +2892,21 @@ class OrderProcessingService:
                 )
             print("\n✗ Fight the Bite order processing failed")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.FIGHTTHEBITE,
+                success=False,
+                contracts=[],
+                order_type=OrderType.FIGHTTHEBITE,
                 error_message="Fight the Bite processing failed — check output for details",
             )
 
         except Exception as exc:
             import traceback
+
             error_detail = f"Fight the Bite processing error: {str(exc)}\n{traceback.format_exc()}"
             print(f"\n✗ Fight the Bite processing failed: {exc}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.FIGHTTHEBITE,
+                success=False,
+                contracts=[],
+                order_type=OrderType.FIGHTTHEBITE,
                 error_message=error_detail,
             )
 
@@ -2741,13 +2919,13 @@ class OrderProcessingService:
         try:
             from browser_automation.threeolives_automation import process_threeolives_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING 3 OLIVES MEDIA ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             pre_gathered_inputs = order.order_input if order.order_input else None
 
@@ -2759,20 +2937,33 @@ class OrderProcessingService:
             if success:
                 print("\n✓ 3 Olives Media order processed successfully")
                 inp = pre_gathered_inputs
-                code = (inp.get('order_code') or inp.get('contract_code') or 'THREEOLIVES') if isinstance(inp, dict) else 'THREEOLIVES'
-                return ProcessingResult(success=True, contracts=[Contract(contract_number=code, order_type=OrderType.THREEOLIVES)], order_type=OrderType.THREEOLIVES)
+                code = (
+                    (inp.get("order_code") or inp.get("contract_code") or "THREEOLIVES")
+                    if isinstance(inp, dict)
+                    else "THREEOLIVES"
+                )
+                return ProcessingResult(
+                    success=True,
+                    contracts=[Contract(contract_number=code, order_type=OrderType.THREEOLIVES)],
+                    order_type=OrderType.THREEOLIVES,
+                )
             print("\n✗ 3 Olives Media order processing failed")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.THREEOLIVES,
+                success=False,
+                contracts=[],
+                order_type=OrderType.THREEOLIVES,
                 error_message="3 Olives Media processing failed",
             )
 
         except Exception as exc:
             import traceback
+
             error_detail = f"3 Olives Media processing error: {str(exc)}\n{traceback.format_exc()}"
             print(f"\n✗ 3 Olives Media processing failed: {exc}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.THREEOLIVES,
+                success=False,
+                contracts=[],
+                order_type=OrderType.THREEOLIVES,
                 error_message=error_detail,
             )
 
@@ -2780,13 +2971,13 @@ class OrderProcessingService:
         try:
             from browser_automation.bvk_automation import process_bvk_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING BVK ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             pre_gathered_inputs = order.order_input if order.order_input else None
 
@@ -2798,20 +2989,33 @@ class OrderProcessingService:
             if success:
                 print("\n✓ BVK order processed successfully")
                 inp = pre_gathered_inputs
-                code = (inp.get('order_code') or inp.get('contract_code') or 'BVK') if isinstance(inp, dict) else 'BVK'
-                return ProcessingResult(success=True, contracts=[Contract(contract_number=code, order_type=OrderType.BVK)], order_type=OrderType.BVK)
+                code = (
+                    (inp.get("order_code") or inp.get("contract_code") or "BVK")
+                    if isinstance(inp, dict)
+                    else "BVK"
+                )
+                return ProcessingResult(
+                    success=True,
+                    contracts=[Contract(contract_number=code, order_type=OrderType.BVK)],
+                    order_type=OrderType.BVK,
+                )
             print("\n✗ BVK order processing failed")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.BVK,
+                success=False,
+                contracts=[],
+                order_type=OrderType.BVK,
                 error_message="BVK processing failed",
             )
 
         except Exception as exc:
             import traceback
+
             error_detail = f"BVK processing error: {str(exc)}\n{traceback.format_exc()}"
             print(f"\n✗ BVK processing failed: {exc}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.BVK,
+                success=False,
+                contracts=[],
+                order_type=OrderType.BVK,
                 error_message=error_detail,
             )
 
@@ -2822,28 +3026,34 @@ class OrderProcessingService:
             from browser_automation.acm_automation import run_acm_order
             from browser_automation.parsers.acm_parser import parse_acm_xlsx
 
-            parsed  = parse_acm_xlsx(str(order.pdf_path))
+            parsed = parse_acm_xlsx(str(order.pdf_path))
             results = run_acm_order(parsed, inp)  # list of (label, success)
 
             contracts = [
                 Contract(contract_number=label, order_type=OrderType.ACM)
-                for label, ok in results if ok
+                for label, ok in results
+                if ok
             ]
             overall_success = bool(contracts)
 
             if not overall_success:
                 return ProcessingResult(
-                    success=False, contracts=[], order_type=OrderType.ACM,
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.ACM,
                     error_message="ACM processing failed — check output above",
                 )
             return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.ACM)
 
         except Exception as exc:
             import traceback
+
             error_detail = f"ACM processing error: {exc}\n{traceback.format_exc()}"
             print(f"\n✗ ACM processing failed: {exc}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.ACM,
+                success=False,
+                contracts=[],
+                order_type=OrderType.ACM,
                 error_message=error_detail,
             )
 
@@ -2854,28 +3064,34 @@ class OrderProcessingService:
             from browser_automation.parsers.tt_parser import parse_tt_xlsx
             from browser_automation.tt_automation import run_tt_order
 
-            parsed  = parse_tt_xlsx(str(order.pdf_path))
+            parsed = parse_tt_xlsx(str(order.pdf_path))
             results = run_tt_order(parsed, inp)  # list of (label, success)
 
             contracts = [
                 Contract(contract_number=label, order_type=OrderType.TT)
-                for label, ok in results if ok
+                for label, ok in results
+                if ok
             ]
             overall_success = bool(contracts)
 
             if not overall_success:
                 return ProcessingResult(
-                    success=False, contracts=[], order_type=OrderType.TT,
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.TT,
                     error_message="T&T processing failed — check output above",
                 )
             return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.TT)
 
         except Exception as exc:
             import traceback
+
             error_detail = f"T&T processing error: {exc}\n{traceback.format_exc()}"
             print(f"\n✗ T&T processing failed: {exc}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.TT,
+                success=False,
+                contracts=[],
+                order_type=OrderType.TT,
                 error_message=error_detail,
             )
 
@@ -2889,26 +3105,32 @@ class OrderProcessingService:
             # The dispatcher, NOT parse_crispin_xlsx — Crispin has two source
             # formats (the official Brand Time Schedule IO .pdf and the proposal
             # .xlsm) and the gather parses through this same entry point.
-            parsed  = parse_crispin(str(order.pdf_path))
+            parsed = parse_crispin(str(order.pdf_path))
             results = run_crispin_order(parsed, inp)  # list of (label, success)
 
             contracts = [
                 Contract(contract_number=label, order_type=OrderType.CRISPIN)
-                for label, ok in results if ok
+                for label, ok in results
+                if ok
             ]
             if not contracts:
                 return ProcessingResult(
-                    success=False, contracts=[], order_type=OrderType.CRISPIN,
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.CRISPIN,
                     error_message="Crispin processing failed — check output above",
                 )
             return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.CRISPIN)
 
         except Exception as exc:
             import traceback
+
             error_detail = f"Crispin processing error: {exc}\n{traceback.format_exc()}"
             print(f"\n✗ Crispin processing failed: {exc}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.CRISPIN,
+                success=False,
+                contracts=[],
+                order_type=OrderType.CRISPIN,
                 error_message=error_detail,
             )
 
@@ -2924,27 +3146,34 @@ class OrderProcessingService:
             # through this same entry point. The gather's Option-sheet choice
             # must reach this re-parse or a multi-option workbook would enter
             # a different proposal than the one Lee approved.
-            parsed  = parse_ntooitive(str(order.pdf_path),
-                                      sheet_name=inp.get('sheet_name'))
+            parsed = parse_ntooitive(str(order.pdf_path), sheet_name=inp.get("sheet_name"))
             results = run_ntooitive_order(parsed, inp)  # list of (label, success)
 
             contracts = [
                 Contract(contract_number=label, order_type=OrderType.NTOOITIVE)
-                for label, ok in results if ok
+                for label, ok in results
+                if ok
             ]
             if not contracts:
                 return ProcessingResult(
-                    success=False, contracts=[], order_type=OrderType.NTOOITIVE,
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.NTOOITIVE,
                     error_message="Ntooitive processing failed — check output above",
                 )
-            return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.NTOOITIVE)
+            return ProcessingResult(
+                success=True, contracts=contracts, order_type=OrderType.NTOOITIVE
+            )
 
         except Exception as exc:
             import traceback
+
             error_detail = f"Ntooitive processing error: {exc}\n{traceback.format_exc()}"
             print(f"\n✗ Ntooitive processing failed: {exc}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.NTOOITIVE,
+                success=False,
+                contracts=[],
+                order_type=OrderType.NTOOITIVE,
                 error_message=error_detail,
             )
 
@@ -2955,26 +3184,32 @@ class OrderProcessingService:
             from browser_automation.eqc_automation import run_eqc_order
             from browser_automation.parsers.eqc_parser import parse_eqc_xlsx
 
-            parsed  = parse_eqc_xlsx(str(order.pdf_path))
+            parsed = parse_eqc_xlsx(str(order.pdf_path))
             results = run_eqc_order(parsed, inp)  # list of (code, success)
 
             contracts = [
                 Contract(contract_number=code, order_type=OrderType.EQC)
-                for code, ok in results if ok
+                for code, ok in results
+                if ok
             ]
             if not contracts:
                 return ProcessingResult(
-                    success=False, contracts=[], order_type=OrderType.EQC,
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.EQC,
                     error_message="EQC processing failed — check output above",
                 )
             return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.EQC)
 
         except Exception as exc:
             import traceback
+
             error_detail = f"EQC processing error: {exc}\n{traceback.format_exc()}"
             print(f"\n✗ EQC processing failed: {exc}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.EQC,
+                success=False,
+                contracts=[],
+                order_type=OrderType.EQC,
                 error_message=error_detail,
             )
 
@@ -2985,28 +3220,34 @@ class OrderProcessingService:
             from browser_automation.lrccd_automation import run_lrccd_order
             from browser_automation.parsers.lrccd_parser import parse_lrccd_pdf
 
-            parsed  = parse_lrccd_pdf(str(order.pdf_path))
+            parsed = parse_lrccd_pdf(str(order.pdf_path))
             results = run_lrccd_order(parsed, inp)  # list of (label, success), one per flight
 
             contracts = [
                 Contract(contract_number=label, order_type=OrderType.LRCCD)
-                for label, ok in results if ok
+                for label, ok in results
+                if ok
             ]
             overall_success = bool(contracts)
 
             if not overall_success:
                 return ProcessingResult(
-                    success=False, contracts=[], order_type=OrderType.LRCCD,
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.LRCCD,
                     error_message="LRCCD processing failed — check output above",
                 )
             return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.LRCCD)
 
         except Exception as exc:
             import traceback
+
             error_detail = f"LRCCD processing error: {exc}\n{traceback.format_exc()}"
             print(f"\n✗ LRCCD processing failed: {exc}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.LRCCD,
+                success=False,
+                contracts=[],
+                order_type=OrderType.LRCCD,
                 error_message=error_detail,
             )
 
@@ -3017,28 +3258,34 @@ class OrderProcessingService:
             from browser_automation.parsers.sacrt_parser import parse_sacrt_pdf
             from browser_automation.sacrt_automation import run_sacrt_order
 
-            parsed  = parse_sacrt_pdf(str(order.pdf_path))
+            parsed = parse_sacrt_pdf(str(order.pdf_path))
             results = run_sacrt_order(parsed, inp)  # [(label, success)]
 
             contracts = [
                 Contract(contract_number=label, order_type=OrderType.SACRT)
-                for label, ok in results if ok
+                for label, ok in results
+                if ok
             ]
             overall_success = bool(contracts)
 
             if not overall_success:
                 return ProcessingResult(
-                    success=False, contracts=[], order_type=OrderType.SACRT,
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.SACRT,
                     error_message="SacRT processing failed — check output above",
                 )
             return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.SACRT)
 
         except Exception as exc:
             import traceback
+
             error_detail = f"SacRT processing error: {exc}\n{traceback.format_exc()}"
             print(f"\n✗ SacRT processing failed: {exc}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.SACRT,
+                success=False,
+                contracts=[],
+                order_type=OrderType.SACRT,
                 error_message=error_detail,
             )
 
@@ -3049,26 +3296,36 @@ class OrderProcessingService:
             from browser_automation.ai_fallback_automation import run_ai_order
             from browser_automation.parsers.ai_parser import parse_ai_order
 
-            parsed  = parse_ai_order(str(order.pdf_path))   # cached — same extraction the operator previewed
-            results = run_ai_order(parsed, inp)             # list of (label, success)
+            parsed = parse_ai_order(
+                str(order.pdf_path)
+            )  # cached — same extraction the operator previewed
+            results = run_ai_order(parsed, inp)  # list of (label, success)
 
             contracts = [
                 Contract(contract_number=label, order_type=OrderType.AI_FALLBACK)
-                for label, ok in results if ok
+                for label, ok in results
+                if ok
             ]
             if not contracts:
                 return ProcessingResult(
-                    success=False, contracts=[], order_type=OrderType.AI_FALLBACK,
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.AI_FALLBACK,
                     error_message="AI fallback processing failed — check output above",
                 )
-            return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.AI_FALLBACK)
+            return ProcessingResult(
+                success=True, contracts=contracts, order_type=OrderType.AI_FALLBACK
+            )
 
         except Exception as exc:
             import traceback
+
             error_detail = f"AI fallback processing error: {exc}\n{traceback.format_exc()}"
             print(f"\n✗ AI fallback processing failed: {exc}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.AI_FALLBACK,
+                success=False,
+                contracts=[],
+                order_type=OrderType.AI_FALLBACK,
                 error_message=error_detail,
             )
 
@@ -3077,17 +3334,19 @@ class OrderProcessingService:
         try:
             from browser_automation.mediasol_automation import process_mediasol_order
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print("PROCESSING MEDIA SOLUTIONS ORDER")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"File: {order.pdf_path.name}")
             if order.customer_name:
                 print(f"Customer: {order.customer_name}")
-            print(f"{'='*70}\n")
+            print(f"{'=' * 70}\n")
 
             if not order.order_input:
                 return ProcessingResult(
-                    success=False, contracts=[], order_type=OrderType.MEDIASOL,
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.MEDIASOL,
                     error_message="Order inputs not collected",
                 )
 
@@ -3102,19 +3361,30 @@ class OrderProcessingService:
                 print("\n✗ Media Solutions order processing failed")
 
             inp = order.order_input
-            code = (inp.get('order_code') or inp.get('contract_code') or 'MEDIASOL') if isinstance(inp, dict) else 'MEDIASOL'
-            contracts = [Contract(contract_number=code, order_type=OrderType.MEDIASOL)] if success else []
+            code = (
+                (inp.get("order_code") or inp.get("contract_code") or "MEDIASOL")
+                if isinstance(inp, dict)
+                else "MEDIASOL"
+            )
+            contracts = (
+                [Contract(contract_number=code, order_type=OrderType.MEDIASOL)] if success else []
+            )
             return ProcessingResult(
-                success=success, contracts=contracts, order_type=OrderType.MEDIASOL,
+                success=success,
+                contracts=contracts,
+                order_type=OrderType.MEDIASOL,
                 error_message=None if success else "Processing failed",
             )
 
         except Exception as e:
             import traceback
+
             error_detail = f"Media Solutions processing error: {str(e)}\n{traceback.format_exc()}"
             print(f"\n✗ Media Solutions processing failed: {e}")
             return ProcessingResult(
-                success=False, contracts=[], order_type=OrderType.MEDIASOL,
+                success=False,
+                contracts=[],
+                order_type=OrderType.MEDIASOL,
                 error_message=error_detail,
             )
 
@@ -3159,11 +3429,7 @@ class OrderProcessingService:
             print(f"[ERROR] Failed to move file to failed: {e}")
             return None
 
-    def register_processor(
-        self,
-        order_type: OrderType,
-        processor: OrderProcessor
-    ) -> None:
+    def register_processor(self, order_type: OrderType, processor: OrderProcessor) -> None:
         """
         Register a processor for a specific order type.
 
@@ -3180,8 +3446,6 @@ class OrderProcessingService:
         return list(self._processors.keys())
 
 
-
-
 def get_default_order_values(order: Order) -> tuple[str, str]:
     """
     Get smart default values for order code and description.
@@ -3196,6 +3460,7 @@ def get_default_order_values(order: Order) -> tuple[str, str]:
         # SAGENT orders - parse PDF to get defaults
         try:
             from parsers.sagent_parser import parse_sagent_pdf
+
             sagent_order = parse_sagent_pdf(str(order.pdf_path))
             code = sagent_order.get_default_contract_code()
             description = sagent_order.get_default_description()
@@ -3208,6 +3473,7 @@ def get_default_order_values(order: Order) -> tuple[str, str]:
         # GaleForce orders - parse PDF to get defaults
         try:
             from parsers.galeforce_parser import parse_galeforce_pdf
+
             gf_order = parse_galeforce_pdf(str(order.pdf_path))
             return (gf_order.get_default_contract_code(), gf_order.get_default_description())
         except Exception as e:
@@ -3228,12 +3494,14 @@ def get_default_order_values(order: Order) -> tuple[str, str]:
         # Charmaine client orders - parse PDF for smart defaults
         try:
             from browser_automation.parsers.charmaine_parser import parse_charmaine_pdf
+
             parsed = parse_charmaine_pdf(str(order.pdf_path))
             # Default code from advertiser abbreviation + YYMM
             from datetime import datetime
+
             yymm = datetime.now().strftime("%y%m")
             code = f"{parsed.get('advertiser', 'CLIENT')[:4].upper()} {yymm}"
-            description = parsed.get('campaign', 'Client Order')
+            description = parsed.get("campaign", "Client Order")
             return (code, description)
         except Exception:
             return ("CLIENT", "Client Order")
@@ -3242,6 +3510,7 @@ def get_default_order_values(order: Order) -> tuple[str, str]:
         # opAD orders - parse PDF to get smart defaults
         try:
             from opad_automation import get_opad_defaults
+
             return get_opad_defaults(str(order.pdf_path))
         except Exception as e:
             print(f"[WARN] Could not parse opAD defaults: {e}")

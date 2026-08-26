@@ -48,7 +48,7 @@ def main():
         for rec in UPDATES:
             cursor = conn.execute(
                 "SELECT customer_name FROM customers WHERE LOWER(customer_name) = ?",
-                (rec["customer_name"].lower(),)
+                (rec["customer_name"].lower(),),
             )
             row = cursor.fetchone()
             if not row:
@@ -68,13 +68,15 @@ def main():
                     rec["description_name"],
                     rec["include_market_in_code"],
                     rec["customer_name"].lower(),
-                )
+                ),
             )
             mkt_flag = "include market" if rec["include_market_in_code"] else "no market"
-            print(f"  ✓  {rec['customer_name']}: "
-                  f"code_name={rec['code_name']!r}, "
-                  f"description_name={rec['description_name']!r}, "
-                  f"{mkt_flag}")
+            print(
+                f"  ✓  {rec['customer_name']}: "
+                f"code_name={rec['code_name']!r}, "
+                f"description_name={rec['description_name']!r}, "
+                f"{mkt_flag}"
+            )
 
         conn.commit()
         print("\nMigration complete.")

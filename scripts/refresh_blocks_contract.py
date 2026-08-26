@@ -5,6 +5,7 @@ DLL-confirmed Traffic_Calendar SQL method (no Etere login required).
 Usage:
     uv run python scripts/refresh_blocks_contract.py 2611
 """
+
 import os
 import sys
 
@@ -34,7 +35,9 @@ def main():
                 total_blocks += n
 
         conn.commit()
-        print(f"\n[DONE] {len(line_ids)} line(s) refreshed, {total_blocks} block(s) assigned total.")
+        print(
+            f"\n[DONE] {len(line_ids)} line(s) refreshed, {total_blocks} block(s) assigned total."
+        )
 
 
 if __name__ == "__main__":

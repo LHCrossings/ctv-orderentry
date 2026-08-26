@@ -35,10 +35,7 @@ def test_home_buttons_found():
 
 
 def test_every_home_button_goes_home():
-    offenders = [
-        f"{rel}: {tag}" for rel, tag, href in _home_buttons() if href != "/"
-    ]
+    offenders = [f"{rel}: {tag}" for rel, tag, href in _home_buttons() if href != "/"]
     assert not offenders, (
-        "Home buttons must link to '/' (Lee: 'Home goes to home'):\n  "
-        + "\n  ".join(offenders)
+        "Home buttons must link to '/' (Lee: 'Home goes to home'):\n  " + "\n  ".join(offenders)
     )

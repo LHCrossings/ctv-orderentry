@@ -58,39 +58,41 @@ TMPL_DIR.mkdir(parents=True, exist_ok=True)
 # Back-compat dict shapes over the service dataclasses
 # ---------------------------------------------------------------------------
 
+
 def _parse_export_csv(csv_bytes: bytes) -> dict:
     d = parse_postlog_csv(csv_bytes)
     return {
-        "spots":         d.spots,
-        "spot_count":    d.spot_count,
-        "gross_cents":   d.gross_cents,
-        "bcast_start":   d.bcast_start,
-        "bcast_end":     d.bcast_end,
+        "spots": d.spots,
+        "spot_count": d.spot_count,
+        "gross_cents": d.gross_cents,
+        "bcast_start": d.bcast_start,
+        "bcast_end": d.bcast_end,
         "estimate_code": d.estimate_code,
-        "advertiser":    d.advertiser,
-        "market":        d.market,
-        "warnings":      d.warnings,
+        "advertiser": d.advertiser,
+        "market": d.market,
+        "warnings": d.warnings,
     }
 
 
 def _parse_affidavit_pdf(pdf_path: Path) -> dict:
     a = parse_affidavit(pdf_path.read_bytes(), source=pdf_path.name)
     return {
-        "advertiser":       a.advertiser,
-        "market":           a.market,
+        "advertiser": a.advertiser,
+        "market": a.market,
         "rep_order_number": a.rep_order_number,
-        "agency_ad_code":   a.agency_ad_code,
+        "agency_ad_code": a.agency_ad_code,
         "agency_prod_code": a.agency_prod_code,
-        "product_name":     a.product_name,
-        "comment_top":      a.comment_top,
-        "comment_bottom":   a.comment_bottom,
-        "warnings":         a.warnings,
+        "product_name": a.product_name,
+        "comment_top": a.comment_top,
+        "comment_bottom": a.comment_bottom,
+        "warnings": a.warnings,
     }
 
 
 # ---------------------------------------------------------------------------
 # Router
 # ---------------------------------------------------------------------------
+
 
 def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
     router = APIRouter(prefix="/edi/export", tags=["edi-export"])
@@ -109,7 +111,7 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
         for f in INCOMING.iterdir():
             if f.is_dir():
                 continue
-            m = re.match(r'^(\d{4}-\d{3})', f.name)
+            m = re.match(r"^(\d{4}-\d{3})", f.name)
             if not m:
                 continue
             key = m.group(1)
@@ -124,7 +126,7 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
         # Authoritative customer lookup — one Etere query for the whole batch.
         contract_nos = []
         for p in pairs.values():
-            if p["csv"] and (m2 := re.search(r'_(\d+)_postlog', p["csv"])):
+            if p["csv"] and (m2 := re.search(r"_(\d+)_postlog", p["csv"])):
                 contract_nos.append(m2.group(1))
         customer_by_contract, lookup_err = await asyncio.to_thread(
             lookup_contract_customers, contract_nos
@@ -141,21 +143,24 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
             info["warnings"] = []
             try:
                 parsed = _parse_export_csv((INCOMING / p["csv"]).read_bytes())
-                info.update({
-                    "spot_count":    parsed["spot_count"],
-                    "gross_cents":   parsed["gross_cents"],
-                    "bcast_start":   parsed["bcast_start"],
-                    "bcast_end":     parsed["bcast_end"],
-                    "estimate_code": parsed["estimate_code"],
-                })
+                info.update(
+                    {
+                        "spot_count": parsed["spot_count"],
+                        "gross_cents": parsed["gross_cents"],
+                        "bcast_start": parsed["bcast_start"],
+                        "bcast_end": parsed["bcast_end"],
+                        "estimate_code": parsed["estimate_code"],
+                    }
+                )
                 info["warnings"].extend(parsed["warnings"])
                 advertiser = parsed.get("advertiser", "")
                 csv_market = parsed.get("market", "")
             except Exception as e:
                 logger.warning("Post-log CSV parse failed for %s: %s", p["csv"], e)
                 info["warnings"].append(f"CSV parse failed: {e}")
-                info.update(spot_count=0, gross_cents=0,
-                            bcast_start="", bcast_end="", estimate_code="")
+                info.update(
+                    spot_count=0, gross_cents=0, bcast_start="", bcast_end="", estimate_code=""
+                )
                 advertiser = csv_market = ""
             # PDF affidavit is authoritative for the advertiser text; the
             # market comes from resolve_market (CSV spot-level data first —
@@ -167,8 +172,14 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
                 if pdf["advertiser"]:
                     advertiser = pdf["advertiser"]
                 pdf_market = pdf["market"]
-                for key in ("rep_order_number", "agency_ad_code", "agency_prod_code",
-                            "product_name", "comment_top", "comment_bottom"):
+                for key in (
+                    "rep_order_number",
+                    "agency_ad_code",
+                    "agency_prod_code",
+                    "product_name",
+                    "comment_top",
+                    "comment_bottom",
+                ):
                     if pdf[key]:
                         info[key] = pdf[key]
             market = resolve_market(csv_market, pdf_market)
@@ -186,10 +197,10 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
                 advertiser=advertiser,
             )
             info["suggested_template"] = m.name
-            info["match_confidence"]   = m.confidence
-            info["match_candidates"]   = m.candidates
-            info["match_detail"]       = m.detail
-            info["etere_customer_id"]   = cust["customer_id"] if cust else None
+            info["match_confidence"] = m.confidence
+            info["match_candidates"] = m.candidates
+            info["match_detail"] = m.detail
+            info["etere_customer_id"] = cust["customer_id"] if cust else None
             info["etere_customer_name"] = cust["customer_name"] if cust else ""
             # Apply market-based comment_top from template if not already set
             if not info.get("comment_top") and market:
@@ -224,10 +235,10 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
     # ── Generate single .txt ──────────────────────────────────────────────
     @router.post("/generate")
     async def generate_one(request: Request):
-        body    = await request.json()
-        csv_fn  = body.get("csv_filename", "")
+        body = await request.json()
+        csv_fn = body.get("csv_filename", "")
         tmpl_nm = body.get("template_name", "")
-        inv     = body.get("invoice_fields", {})
+        inv = body.get("invoice_fields", {})
 
         if not csv_fn or Path(csv_fn).name != csv_fn:
             raise HTTPException(400, f"Invalid filename: {csv_fn}")
@@ -239,14 +250,14 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
             raise HTTPException(404, f"Template not found: {tmpl_nm}")
 
         parsed = _parse_export_csv(csv_path.read_bytes())
-        inv.setdefault("spot_count",  parsed["spot_count"])
+        inv.setdefault("spot_count", parsed["spot_count"])
         inv.setdefault("gross_cents", parsed["gross_cents"])
         inv.setdefault("bcast_start", parsed["bcast_start"])
-        inv.setdefault("bcast_end",   parsed["bcast_end"])
+        inv.setdefault("bcast_end", parsed["bcast_end"])
 
-        content  = _generate_edi(template, inv, parsed["spots"])
-        inv_num  = inv.get("invoice_number", Path(csv_fn).stem)
-        dl_name  = f"{inv_num}_{_slug(tmpl_nm)}.txt"
+        content = _generate_edi(template, inv, parsed["spots"])
+        inv_num = inv.get("invoice_number", Path(csv_fn).stem)
+        dl_name = f"{inv_num}_{_slug(tmpl_nm)}.txt"
         return Response(
             content=content.encode("utf-8"),
             media_type="text/plain",
@@ -257,12 +268,12 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
     @router.post("/generate-batch")
     async def generate_batch(request: Request):
         items = await request.json()
-        buf   = io.BytesIO()
+        buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for item in items:
-                csv_fn  = item.get("csv_filename", "")
+                csv_fn = item.get("csv_filename", "")
                 tmpl_nm = item.get("template_name", "")
-                inv     = item.get("invoice_fields", {})
+                inv = item.get("invoice_fields", {})
                 if not csv_fn or Path(csv_fn).name != csv_fn:
                     logger.warning("Rejected invalid filename in batch: %r", csv_fn)
                     continue
@@ -273,10 +284,10 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
                 if not template:
                     continue
                 parsed = _parse_export_csv(csv_path.read_bytes())
-                inv.setdefault("spot_count",  parsed["spot_count"])
+                inv.setdefault("spot_count", parsed["spot_count"])
                 inv.setdefault("gross_cents", parsed["gross_cents"])
                 inv.setdefault("bcast_start", parsed["bcast_start"])
-                inv.setdefault("bcast_end",   parsed["bcast_end"])
+                inv.setdefault("bcast_end", parsed["bcast_end"])
                 content = _generate_edi(template, inv, parsed["spots"])
                 inv_num = inv.get("invoice_number", Path(csv_fn).stem)
                 zf.writestr(f"{inv_num}_{_slug(tmpl_nm)}.txt", content)

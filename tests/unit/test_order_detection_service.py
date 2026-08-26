@@ -183,9 +183,7 @@ class TestOrderDetectionService:
         # of SPOTS PER WEEK
         KBTV M-F 7:00p- 8:00p Cantonese 30 3 3 27 $50.00
         """
-        assert service.detect_from_text(text) not in (
-            OrderType.WALLRICH, OrderType.OPAD
-        )
+        assert service.detect_from_text(text) not in (OrderType.WALLRICH, OrderType.OPAD)
 
     # ========================================================================
     # DAVISELEN DETECTION
@@ -383,10 +381,13 @@ class TestOrderDetectionService:
 
     def test_detect_rpm_from_header(self, service):
         """Should detect RPM from 'RPM' in first 300 characters."""
-        text = """
+        text = (
+            """
         RPM Advertising Agency
         Order Details
-        """ + "x" * 500  # Add more text to test header detection
+        """
+            + "x" * 500
+        )  # Add more text to test header detection
         assert service.detect_from_text(text) == OrderType.RPM
 
     def test_detect_rpm_from_markets(self, service):
@@ -515,7 +516,6 @@ class TestOrderDetectionService:
         client = service.extract_client_name(text, None, OrderType.WORLDLINK)
         assert client is None
 
-
     # ========================================================================
     # GALEFORCE DETECTION
     # ========================================================================
@@ -592,6 +592,7 @@ class TestDetectionPrecedence:
 # ============================================================================
 # SACRAMENTO COUNTY VOTERS DETECTION
 # ============================================================================
+
 
 class TestSacCountyVotersDetection:
     """Tests for Sacramento County Voter Registration order detection."""

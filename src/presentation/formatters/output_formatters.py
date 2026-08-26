@@ -46,11 +46,7 @@ class ConsoleFormatter:
         Returns:
             Formatted header string
         """
-        lines = [
-            char * self._width,
-            text,
-            char * self._width
-        ]
+        lines = [char * self._width, text, char * self._width]
         return "\n".join(lines)
 
     def subheader(self, text: str) -> str:
@@ -197,10 +193,7 @@ class ProcessingResultFormatter(ConsoleFormatter):
 
         return "\n".join(lines)
 
-    def format_batch_summary(
-        self,
-        results: list[ProcessingResult]
-    ) -> str:
+    def format_batch_summary(self, results: list[ProcessingResult]) -> str:
         """
         Format a summary of batch processing results.
 
@@ -219,7 +212,9 @@ class ProcessingResultFormatter(ConsoleFormatter):
         # Overall stats
         total_contracts = sum(len(r.contracts) for r in successful)
 
-        lines.append(f"\n{self.success(f'Successfully processed: {len(successful)}/{len(results)} order(s)')}")
+        lines.append(
+            f"\n{self.success(f'Successfully processed: {len(successful)}/{len(results)} order(s)')}"
+        )
         lines.append(self.key_value("Total contracts created", total_contracts, 2))
 
         if failed:
@@ -248,16 +243,15 @@ class ProcessingResultFormatter(ConsoleFormatter):
         if failed:
             lines.append(self.subheader("Failed Orders"))
             for result in failed:
-                lines.append(f"  - {result.order_type.name}: {result.error_message or 'Unknown error'}")
+                lines.append(
+                    f"  - {result.order_type.name}: {result.error_message or 'Unknown error'}"
+                )
 
         lines.append("\n" + "=" * self._width)
 
         return "\n".join(lines)
 
-    def format_contracts_by_type(
-        self,
-        contracts_by_type: dict[OrderType, list[Contract]]
-    ) -> str:
+    def format_contracts_by_type(self, contracts_by_type: dict[OrderType, list[Contract]]) -> str:
         """
         Format contracts grouped by order type.
 
@@ -290,12 +284,7 @@ class ProcessingResultFormatter(ConsoleFormatter):
 class ProgressFormatter(ConsoleFormatter):
     """Formatter for progress indicators."""
 
-    def format_progress(
-        self,
-        current: int,
-        total: int,
-        description: str = ""
-    ) -> str:
+    def format_progress(self, current: int, total: int, description: str = "") -> str:
         """
         Format a progress indicator.
 

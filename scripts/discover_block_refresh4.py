@@ -2,6 +2,7 @@
 Find which database contains the real FASCE/blocks data.
 Run from Windows: py scripts/discover_block_refresh4.py
 """
+
 import sys
 from pathlib import Path
 
@@ -28,7 +29,7 @@ print("\n" + "=" * 60)
 print("Searching for FASCE table with known ID_FASCE values")
 print("=" * 60)
 for db in databases:
-    if db in ('master', 'tempdb', 'model', 'msdb'):
+    if db in ("master", "tempdb", "model", "msdb"):
         continue
     try:
         cursor.execute(f"""
@@ -44,7 +45,9 @@ for db in databases:
         total = cursor.fetchone()[0]
         print(f"  [{db}] FASCE rows={total}  matches={matches}")
         if matches > 0:
-            cursor.execute(f"SELECT TOP 3 * FROM [{db}].dbo.FASCE WHERE ID_FASCE IN ({KNOWN_IDS_STR})")
+            cursor.execute(
+                f"SELECT TOP 3 * FROM [{db}].dbo.FASCE WHERE ID_FASCE IN ({KNOWN_IDS_STR})"
+            )
             cols = [d[0] for d in cursor.description]
             print(f"    Cols: {cols}")
             for row in cursor.fetchall():

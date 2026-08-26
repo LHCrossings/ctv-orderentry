@@ -28,8 +28,8 @@ for _p in (_root, _root / "browser_automation"):
 # is collected BEFORE tests/unit, and leaving the real pdfplumber installed makes the
 # still-mocked unit tests (e.g. test_order_scanner) start really parsing files.
 _SAVED_MODULES = {
-    k: sys.modules.get(k) for k in
-    [m for m in list(sys.modules) if m == "pdfplumber" or m.startswith("pdfplumber.")]
+    k: sys.modules.get(k)
+    for k in [m for m in list(sys.modules) if m == "pdfplumber" or m.startswith("pdfplumber.")]
     + ["browser_automation.parsers.admerasia_traffic_legend", "admerasia_traffic_legend"]
 }
 
@@ -48,13 +48,18 @@ from browser_automation.parsers.admerasia_traffic_legend import read_text_legend
 def _restore_pdfplumber_mock():
     """Put the conftest mocks back so later (unit) tests see the environment they expect."""
     yield
-    for _m in [m for m in list(sys.modules)
-               if m == "pdfplumber" or m.startswith("pdfplumber.")
-               or m.endswith("admerasia_traffic_legend")]:
+    for _m in [
+        m
+        for m in list(sys.modules)
+        if m == "pdfplumber"
+        or m.startswith("pdfplumber.")
+        or m.endswith("admerasia_traffic_legend")
+    ]:
         sys.modules.pop(_m, None)
     for _m, _obj in _SAVED_MODULES.items():
         if _obj is not None:
             sys.modules[_m] = _obj
+
 
 _USED = _root / "incoming" / "Used"
 

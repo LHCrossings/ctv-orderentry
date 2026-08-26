@@ -12,6 +12,7 @@ credentials.env) — never hardcoded. The device is HTTP-only; we proxy it
 server-side (keeps the key off the client, avoids mixed content, and a single
 cached device poll serves every Control Room user regardless of headcount).
 """
+
 import asyncio
 import json as _json
 import os
@@ -43,6 +44,7 @@ def _monitor_key() -> str:
         return key
     try:
         import credential_loader  # reuse its .env parser + root discovery
+
         root = Path(credential_loader.__file__).parent
         for name in (".env", "credentials.env"):
             p = root / name
@@ -89,12 +91,14 @@ def _summarize(raw: dict) -> dict:
     offair = []
     for sid, st in stations.items():
         sinces = [a["since"] for a in st["alarms"] if a["since"]]
-        offair.append({
-            "stationId": sid,
-            "stationName": st["stationName"],
-            "titles": sorted({a["title"] for a in st["alarms"]}),
-            "since": min(sinces) if sinces else None,
-        })
+        offair.append(
+            {
+                "stationId": sid,
+                "stationName": st["stationName"],
+                "titles": sorted({a["title"] for a in st["alarms"]}),
+                "since": min(sinces) if sinces else None,
+            }
+        )
     offair.sort(key=lambda x: x["stationName"])
 
     return {
@@ -111,17 +115,26 @@ def _fetch_alarms() -> dict:
     'unknown/unreachable' payload on any failure so the UI can degrade gracefully."""
     key = _monitor_key()
     if not key:
-        return {"state": "unknown", "unreachable": True,
-                "error": "STIRLITZ_MONITOR_KEY not configured",
-                "offair": [], "counts": {"stations": 0, "offair": 0}}
+        return {
+            "state": "unknown",
+            "unreachable": True,
+            "error": "STIRLITZ_MONITOR_KEY not configured",
+            "offair": [],
+            "counts": {"stations": 0, "offair": 0},
+        }
     url = f"{STIRLITZ_HOST}{_ALARM_PATH}?accessKey={key}"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "ctv-control-room"})
         with urllib.request.urlopen(req, timeout=3) as resp:
             raw = _json.loads(resp.read())
     except Exception as exc:  # noqa: BLE001 - device blip must not break the UI
-        return {"state": "unknown", "unreachable": True, "error": str(exc),
-                "offair": [], "counts": {"stations": 0, "offair": 0}}
+        return {
+            "state": "unknown",
+            "unreachable": True,
+            "error": str(exc),
+            "offair": [],
+            "counts": {"stations": 0, "offair": 0},
+        }
     return _summarize(raw)
 
 

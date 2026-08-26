@@ -38,11 +38,13 @@ def _reset_test_table():
     """Create a fresh empty isolated test table; skip the test if no SQL Server."""
     try:
         from dotenv import load_dotenv
+
         load_dotenv(Path(__file__).resolve().parents[2] / ".env")
     except Exception:  # noqa: BLE001 - dotenv optional
         pass
     try:
         from browser_automation.etere_direct_client import connect
+
         conn = connect()
     except Exception as exc:  # noqa: BLE001 - no DB (e.g. CI) → skip, don't fail
         pytest.skip(f"SQL Server not available: {exc}")
@@ -56,6 +58,7 @@ def _reset_test_table():
 def _drop_test_table():
     try:
         from browser_automation.etere_direct_client import connect
+
         conn = connect()
         cur = conn.cursor()
         cur.execute(f"IF OBJECT_ID('{_TEST_TABLE}','U') IS NOT NULL DROP TABLE {_TEST_TABLE}")
@@ -82,9 +85,7 @@ class TestCustomerRepository:
     def test_save_customer(self, repository):
         """Should save customer to database."""
         customer = Customer(
-            customer_id="MCDS",
-            customer_name="McDonald's",
-            order_type=OrderType.WORLDLINK
+            customer_id="MCDS", customer_name="McDonald's", order_type=OrderType.WORLDLINK
         )
 
         repository.save(customer)
@@ -94,9 +95,7 @@ class TestCustomerRepository:
     def test_find_by_name_exact_match(self, repository):
         """Should find customer by exact name match."""
         customer = Customer(
-            customer_id="MCDS",
-            customer_name="McDonald's",
-            order_type=OrderType.WORLDLINK
+            customer_id="MCDS", customer_name="McDonald's", order_type=OrderType.WORLDLINK
         )
         repository.save(customer)
 
@@ -109,9 +108,7 @@ class TestCustomerRepository:
     def test_find_by_name_case_insensitive(self, repository):
         """Should find customer regardless of case."""
         customer = Customer(
-            customer_id="MCDS",
-            customer_name="McDonald's",
-            order_type=OrderType.WORLDLINK
+            customer_id="MCDS", customer_name="McDonald's", order_type=OrderType.WORLDLINK
         )
         repository.save(customer)
 
@@ -123,9 +120,7 @@ class TestCustomerRepository:
     def test_find_by_name_different_order_type(self, repository):
         """Should not find customer with wrong order type."""
         customer = Customer(
-            customer_id="MCDS",
-            customer_name="McDonald's",
-            order_type=OrderType.WORLDLINK
+            customer_id="MCDS", customer_name="McDonald's", order_type=OrderType.WORLDLINK
         )
         repository.save(customer)
 
@@ -135,11 +130,7 @@ class TestCustomerRepository:
 
     def test_find_by_fuzzy_match_exact(self, repository):
         """Fuzzy match should find exact matches."""
-        customer = Customer(
-            customer_id="TOYO",
-            customer_name="Toyota",
-            order_type=OrderType.TCAA
-        )
+        customer = Customer(customer_id="TOYO", customer_name="Toyota", order_type=OrderType.TCAA)
         repository.save(customer)
 
         found = repository.find_by_fuzzy_match("Toyota", OrderType.TCAA)
@@ -152,7 +143,7 @@ class TestCustomerRepository:
         customer = Customer(
             customer_id="MCDS",
             customer_name="McDonald's Corporation",
-            order_type=OrderType.WORLDLINK
+            order_type=OrderType.WORLDLINK,
         )
         repository.save(customer)
 
@@ -181,9 +172,7 @@ class TestCustomerRepository:
     def test_delete_customer(self, repository):
         """Should delete customer from database."""
         customer = Customer(
-            customer_id="MCDS",
-            customer_name="McDonald's",
-            order_type=OrderType.WORLDLINK
+            customer_id="MCDS", customer_name="McDonald's", order_type=OrderType.WORLDLINK
         )
         repository.save(customer)
 
@@ -203,17 +192,13 @@ class TestCustomerRepository:
     def test_update_customer(self, repository):
         """Saving existing customer should update it."""
         customer = Customer(
-            customer_id="OLD_ID",
-            customer_name="Test Company",
-            order_type=OrderType.WORLDLINK
+            customer_id="OLD_ID", customer_name="Test Company", order_type=OrderType.WORLDLINK
         )
         repository.save(customer)
 
         # Update with new ID
         updated = Customer(
-            customer_id="NEW_ID",
-            customer_name="Test Company",
-            order_type=OrderType.WORLDLINK
+            customer_id="NEW_ID", customer_name="Test Company", order_type=OrderType.WORLDLINK
         )
         repository.save(updated)
 
@@ -243,14 +228,10 @@ class TestCustomerRepository:
     def test_same_name_different_order_types(self, repository):
         """Same customer name can have different IDs for different order types."""
         customer1 = Customer(
-            customer_id="WL_MCDS",
-            customer_name="McDonald's",
-            order_type=OrderType.WORLDLINK
+            customer_id="WL_MCDS", customer_name="McDonald's", order_type=OrderType.WORLDLINK
         )
         customer2 = Customer(
-            customer_id="TCAA_MCDS",
-            customer_name="McDonald's",
-            order_type=OrderType.TCAA
+            customer_id="TCAA_MCDS", customer_name="McDonald's", order_type=OrderType.TCAA
         )
 
         repository.save(customer1)
@@ -271,7 +252,7 @@ class TestLegacyJSONMigration:
     @pytest.fixture
     def json_file(self):
         """A sample legacy JSON file + a fresh isolated test table."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix=".json", delete=False) as json_f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as json_f:
             json_path = Path(json_f.name)
             json_f.write("""{
                 "worldlink": {

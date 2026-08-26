@@ -23,6 +23,7 @@ from orchestration import ApplicationConfig, create_orchestrator
 
 class _Tee:
     """Write to multiple streams simultaneously (terminal + log file)."""
+
     def __init__(self, *streams):
         self._streams = streams
 
@@ -71,50 +72,36 @@ Modes:
   batch                  - Collect all inputs upfront, then process
   auto                   - Process all orders automatically
   scan                   - Just scan and display available orders
-        """
+        """,
     )
 
     parser.add_argument(
-        "--batch",
-        action="store_true",
-        help="Run in batch mode (collect all inputs upfront)"
+        "--batch", action="store_true", help="Run in batch mode (collect all inputs upfront)"
     )
 
-    parser.add_argument(
-        "--auto",
-        action="store_true",
-        help="Run in automatic mode (no user input)"
-    )
+    parser.add_argument("--auto", action="store_true", help="Run in automatic mode (no user input)")
 
     parser.add_argument(
-        "--scan",
-        action="store_true",
-        help="Scan and display orders without processing"
+        "--scan", action="store_true", help="Scan and display orders without processing"
     )
 
-    parser.add_argument(
-        "--incoming",
-        type=Path,
-        help="Override incoming directory path"
-    )
+    parser.add_argument("--incoming", type=Path, help="Override incoming directory path")
 
     parser.add_argument(
-        "--config",
-        type=Path,
-        help="Load configuration from file (not implemented yet)"
+        "--config", type=Path, help="Load configuration from file (not implemented yet)"
     )
 
     parser.add_argument(
         "--files",
         nargs="+",
         metavar="FILENAME",
-        help="Process only these specific filenames (from incoming/)"
+        help="Process only these specific filenames (from incoming/)",
     )
 
     parser.add_argument(
         "--pause",
         action="store_true",
-        help="Wait for Enter keypress before exiting (used when launched from the web UI)"
+        help="Wait for Enter keypress before exiting (used when launched from the web UI)",
     )
 
     args = parser.parse_args()
@@ -134,7 +121,7 @@ Modes:
                 auto_process=config.auto_process,
                 require_confirmation=config.require_confirmation,
                 headless=config.headless,
-                browser_timeout=config.browser_timeout
+                browser_timeout=config.browser_timeout,
             )
 
         # Create orchestrator
@@ -155,10 +142,7 @@ Modes:
             from orchestration.order_scanner import OrderScanner
             from presentation.formatters import order_formatter
 
-            scanner = OrderScanner(
-                PDFOrderDetector(),
-                config.incoming_dir
-            )
+            scanner = OrderScanner(PDFOrderDetector(), config.incoming_dir)
             orders = scanner.scan_for_orders()
 
             if orders:
@@ -186,6 +170,7 @@ Modes:
     except Exception as e:
         print(f"\n[ERROR] Application failed: {e}")
         import traceback
+
         traceback.print_exc()
 
     finally:

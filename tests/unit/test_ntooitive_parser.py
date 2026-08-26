@@ -39,6 +39,7 @@ def order():
 
 # ── Header / option selection ────────────────────────────────────────────────
 
+
 def test_header_fields(order):
     assert order.source_format == "xlsx"
     assert order.agency == "Ntooitive"
@@ -78,6 +79,7 @@ def test_unknown_sheet_refuses():
 
 # ── Flight dates ─────────────────────────────────────────────────────────────
 
+
 def test_flight_dates_resolve_the_yearless_header(order):
     # Header says "8/18 -11/30" with no year; the week grid opens Mon 8/17/26.
     assert order.flight_start == "08/18/2026"
@@ -88,6 +90,7 @@ def test_flight_dates_resolve_the_yearless_header(order):
 
 
 # ── Lines ────────────────────────────────────────────────────────────────────
+
 
 def test_line_shapes(order):
     assert len(order.lines) == 4
@@ -121,6 +124,7 @@ def test_money_reconciles(order):
 
 # ── PDF print reader — must reproduce the workbook exactly ───────────────────
 
+
 @pytest.fixture(scope="module")
 def pdf_order(real_pdfplumber):
     return parse_ntooitive_pdf(PDF)
@@ -136,11 +140,19 @@ def test_pdf_matches_xlsx(order, pdf_order):
     assert pdf_order.implied_commission == pytest.approx(order.implied_commission)
 
     def key(ln):
-        return (ln.language_block, ln.spot_type, ln.rate, ln.length_sec,
-                ln.total_spots, tuple(ln.week_spots))
+        return (
+            ln.language_block,
+            ln.spot_type,
+            ln.rate,
+            ln.length_sec,
+            ln.total_spots,
+            tuple(ln.week_spots),
+        )
+
     assert [key(ln) for ln in pdf_order.lines] == [key(ln) for ln in order.lines]
-    assert [(c.description, c.amount) for c in pdf_order.charges] == \
-           [(c.description, c.amount) for c in order.charges]
+    assert [(c.description, c.amount) for c in pdf_order.charges] == [
+        (c.description, c.amount) for c in order.charges
+    ]
 
 
 def test_dispatcher_routes_both_formats(real_pdfplumber):
@@ -158,8 +170,10 @@ def test_dispatcher_routes_both_formats(real_pdfplumber):
 #   row 21 = BONUS Mandarin:  V21 = rate ('-')
 #   E13 = Gross (Airtime), E14 = Gross Translation Fees, E15 = Gross Amount
 
+
 def _tampered(tmp_path, mutate) -> str:
     import openpyxl
+
     wb = openpyxl.load_workbook(XLSX, data_only=True)
     mutate(wb)
     out = str(tmp_path / "tampered.xlsx")
@@ -170,6 +184,7 @@ def _tampered(tmp_path, mutate) -> str:
 def test_noop_mutation_still_parses(tmp_path):
     def mutate(wb):
         wb["Option 1"]["K6"] = "Somebody Else"
+
     o = parse_ntooitive_xlsx(_tampered(tmp_path, mutate))
     assert o.gross_airtime == pytest.approx(12000.0)
     assert len(o.lines) == 4
@@ -179,7 +194,8 @@ def test_blanked_paid_rate_refuses(tmp_path):
     def mutate(wb):
         ws = wb["Option 1"]
         ws["V19"] = None
-        ws["W19"] = None   # keep rate×units from tripping first
+        ws["W19"] = None  # keep rate×units from tripping first
+
     with pytest.raises(ValueError, match="no readable rate"):
         parse_ntooitive_xlsx(_tampered(tmp_path, mutate))
 
@@ -189,6 +205,7 @@ def test_dropped_week_cell_refuses(tmp_path):
     # total reconciliation is the first guard to see it.
     def mutate(wb):
         wb["Option 1"]["F19"] = None
+
     with pytest.raises(ValueError, match="sheet says"):
         parse_ntooitive_xlsx(_tampered(tmp_path, mutate))
 
@@ -197,6 +214,7 @@ def test_wrong_total_unit_cell_refuses(tmp_path):
     # Total Unit # disagreeing with the week cells while all money still foots.
     def mutate(wb):
         wb["Option 1"]["U19"] = 61
+
     with pytest.raises(ValueError, match="Total Unit #"):
         parse_ntooitive_xlsx(_tampered(tmp_path, mutate))
 
@@ -204,6 +222,7 @@ def test_wrong_total_unit_cell_refuses(tmp_path):
 def test_rate_column_flipping_to_net_refuses(tmp_path):
     def mutate(wb):
         wb["Option 1"]["V18"] = "Promo Unit Cost (NET)"
+
     with pytest.raises(ValueError, match="not gross"):
         parse_ntooitive_xlsx(_tampered(tmp_path, mutate))
 
@@ -211,6 +230,7 @@ def test_rate_column_flipping_to_net_refuses(tmp_path):
 def test_renamed_rate_column_refuses(tmp_path):
     def mutate(wb):
         wb["Option 1"]["V18"] = "Unit Price"
+
     with pytest.raises(ValueError, match="missing 'rate' column"):
         parse_ntooitive_xlsx(_tampered(tmp_path, mutate))
 
@@ -218,13 +238,15 @@ def test_renamed_rate_column_refuses(tmp_path):
 def test_rate_on_a_bonus_row_refuses(tmp_path):
     def mutate(wb):
         wb["Option 1"]["V21"] = 50
+
     with pytest.raises(ValueError, match="BONUS line"):
         parse_ntooitive_xlsx(_tampered(tmp_path, mutate))
 
 
 def test_wrong_line_total_refuses(tmp_path):
     def mutate(wb):
-        wb["Option 1"]["W19"] = 7100   # rate 120 × 60 = 7200
+        wb["Option 1"]["W19"] = 7100  # rate 120 × 60 = 7200
+
     with pytest.raises(ValueError, match="sheet says"):
         parse_ntooitive_xlsx(_tampered(tmp_path, mutate))
 
@@ -233,7 +255,8 @@ def test_wrong_header_airtime_refuses(tmp_path):
     def mutate(wb):
         ws = wb["Option 1"]
         ws["E13"] = 11000
-        ws["E15"] = 11800   # keep airtime+translation==contract from masking it
+        ws["E15"] = 11800  # keep airtime+translation==contract from masking it
+
     with pytest.raises(ValueError, match="Gross \\(Airtime\\)"):
         parse_ntooitive_xlsx(_tampered(tmp_path, mutate))
 
@@ -245,6 +268,7 @@ def test_unclassified_charge_refuses(tmp_path):
         ws = wb["Option 1"]
         ws["C14"] = None
         ws["E14"] = None
+
     with pytest.raises(ValueError, match="non-airtime money"):
         parse_ntooitive_xlsx(_tampered(tmp_path, mutate))
 
@@ -256,11 +280,13 @@ def test_dropped_line_trips_the_footer(tmp_path):
         ws = wb["Option 1"]
         for col in "ABCDEFGHIJKLMNOPQRSTUVWX":
             ws[f"{col}20"] = None
+
     with pytest.raises(ValueError, match="Total Paid"):
         parse_ntooitive_xlsx(_tampered(tmp_path, mutate))
 
 
 # ── Tampered PDF word stream (the layer that fails in the wild) ─────────────
+
 
 def _mutated_pdfplumber(real, mutate):
     class _Page:
@@ -299,23 +325,27 @@ def test_pdf_dropped_cell_refuses(real_pdfplumber, monkeypatch):
         out = []
         for w in words:
             # Drop the first Mandarin-row week cell ('5' at ~x226, top ~207.7)
-            if not dropped["n"] and w["text"] == "5" and 200 < w["top"] < 215 \
-                    and 215 < w["x0"] < 240:
+            if (
+                not dropped["n"]
+                and w["text"] == "5"
+                and 200 < w["top"] < 215
+                and 215 < w["x0"] < 240
+            ):
                 dropped["n"] = 1
                 continue
             out.append(w)
         return out
 
-    monkeypatch.setitem(sys.modules, "pdfplumber",
-                        _mutated_pdfplumber(real_pdfplumber, mutate))
+    monkeypatch.setitem(sys.modules, "pdfplumber", _mutated_pdfplumber(real_pdfplumber, mutate))
     with pytest.raises(ValueError, match="Total Unit #"):
         parse_ntooitive_pdf(PDF)
     assert dropped["n"] == 1
 
 
 def test_pdf_noop_mutation_still_parses(real_pdfplumber, monkeypatch):
-    monkeypatch.setitem(sys.modules, "pdfplumber",
-                        _mutated_pdfplumber(real_pdfplumber, lambda w: w))
+    monkeypatch.setitem(
+        sys.modules, "pdfplumber", _mutated_pdfplumber(real_pdfplumber, lambda w: w)
+    )
     o = parse_ntooitive_pdf(PDF)
     assert o.gross_airtime == pytest.approx(12000.0)
     assert len(o.lines) == 4
@@ -323,8 +353,10 @@ def test_pdf_noop_mutation_still_parses(real_pdfplumber, monkeypatch):
 
 # ── Automation helpers ───────────────────────────────────────────────────────
 
+
 def test_split_daypart_union():
     from browser_automation.ntooitive_automation import split_daypart_union
+
     assert split_daypart_union("M-F 6a-7a & 8p-9p") == ("M-F", "6a-7a; 8p-9p")
     assert split_daypart_union("M- F 8a-9a") == ("M-F", "8a-9a")
     assert split_daypart_union("M-Su 11a-1p") == ("M-Su", "11a-1p")
@@ -335,24 +367,28 @@ def test_line_plan_delivers_every_spot_on_the_io_start(order):
     # The proposal's own start (Tue 8/18) already truncates the first week:
     # Mandarin's 5 spots over 4 remaining weekdays need 2/day — its own line.
     from browser_automation.ntooitive_automation import _line_plan
+
     plan = _line_plan(order, date(2026, 8, 18), order.flight_end)
-    entered = sum(r['spots_per_week'] * r['weeks']
-                  for _ln, _d, _t, _desc, ranges, _n in plan for r in ranges)
+    entered = sum(
+        r["spots_per_week"] * r["weeks"] for _ln, _d, _t, _desc, ranges, _n in plan for r in ranges
+    )
     assert entered == sum(ln.total_spots for ln in order.lines) == 204
 
     mand_ranges = plan[0][4]
-    assert mand_ranges[0]['date_from'] == date(2026, 8, 18)
-    assert mand_ranges[0]['weeks'] == 1
-    assert mand_ranges[0]['max_daily'] == 2          # 5 spots / 4 days left
-    assert mand_ranges[1]['max_daily'] == 1          # full weeks
+    assert mand_ranges[0]["date_from"] == date(2026, 8, 18)
+    assert mand_ranges[0]["weeks"] == 1
+    assert mand_ranges[0]["max_daily"] == 2  # 5 spots / 4 days left
+    assert mand_ranges[1]["max_daily"] == 1  # full weeks
 
 
 def test_line_plan_late_start_drops_and_notes(order):
     from browser_automation.ntooitive_automation import _line_plan
+
     plan = _line_plan(order, date(2026, 8, 26), order.flight_end)
-    entered = sum(r['spots_per_week'] * r['weeks']
-                  for _ln, _d, _t, _desc, ranges, _n in plan for r in ranges)
+    entered = sum(
+        r["spots_per_week"] * r["weeks"] for _ln, _d, _t, _desc, ranges, _n in plan for r in ranges
+    )
     notes = [n for _ln, _d, _t, _desc, _r, ns in plan for n in ns]
-    assert entered == 187                             # 204 − 17 undeliverable
-    assert len(notes) == 4                            # one dropped week per line
+    assert entered == 187  # 204 − 17 undeliverable
+    assert len(notes) == 4  # one dropped week per line
     assert all("precede the start date" in n for n in notes)

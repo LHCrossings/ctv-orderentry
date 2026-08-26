@@ -45,26 +45,30 @@ def _hhmm(h, m=0):
 
 # ── the day-aware window lookup ────────────────────────────────────────────────
 
-@pytest.mark.parametrize("weekday,hh,mm,expect", [
-    # Cantonese owns weekday 19:00-20:00; this is the "Variety Talk Show" slot.
-    ("Monday",    19, 44, "Cantonese"),
-    ("Friday",    19, 30, "Cantonese"),
-    # ...and weekday 23:30-23:59, the tail Mandarin does NOT get on a weekday.
-    ("Friday",    23, 40, "Cantonese"),
-    # Mandarin owns weekday 20:00-23:30 — the "Mandarin Show" slot.
-    ("Thursday",  22, 10, "Mandarin"),
-    ("Monday",    23, 5,  "Mandarin"),
-    # THE CRITICAL EDGE: Cantonese has NO weekend window, so the same clock time that
-    # is Cantonese on a weekday is Mandarin on Saturday. This is what makes the two
-    # Saturday rows ("If You Are The One", "Bestie Time") resolvable.
-    ("Saturday",  23, 40, "Mandarin"),
-    ("Saturday",  22, 40, "Mandarin"),
-    ("Saturday",  21, 20, "Mandarin"),
-    # Other languages still resolve as before.
-    ("Wednesday", 11, 0,  "Vietnamese"),
-    ("Tuesday",    9, 0,  "Korean"),
-    ("Thursday",  17, 0,  "Filipino"),
-])
+
+@pytest.mark.parametrize(
+    "weekday,hh,mm,expect",
+    [
+        # Cantonese owns weekday 19:00-20:00; this is the "Variety Talk Show" slot.
+        ("Monday", 19, 44, "Cantonese"),
+        ("Friday", 19, 30, "Cantonese"),
+        # ...and weekday 23:30-23:59, the tail Mandarin does NOT get on a weekday.
+        ("Friday", 23, 40, "Cantonese"),
+        # Mandarin owns weekday 20:00-23:30 — the "Mandarin Show" slot.
+        ("Thursday", 22, 10, "Mandarin"),
+        ("Monday", 23, 5, "Mandarin"),
+        # THE CRITICAL EDGE: Cantonese has NO weekend window, so the same clock time that
+        # is Cantonese on a weekday is Mandarin on Saturday. This is what makes the two
+        # Saturday rows ("If You Are The One", "Bestie Time") resolvable.
+        ("Saturday", 23, 40, "Mandarin"),
+        ("Saturday", 22, 40, "Mandarin"),
+        ("Saturday", 21, 20, "Mandarin"),
+        # Other languages still resolve as before.
+        ("Wednesday", 11, 0, "Vietnamese"),
+        ("Tuesday", 9, 0, "Korean"),
+        ("Thursday", 17, 0, "Filipino"),
+    ],
+)
 def test_classify_ctv_unique(weekday, hh, mm, expect):
     assert classify_language(weekday, _hhmm(hh, mm)) == [expect]
 
@@ -141,12 +145,16 @@ def test_route_tables_are_the_shared_objects():
 
 # ── ISCI repair ────────────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("raw,fixed", [
-    ("MCIMO46526VH", "MCIM046526VH"),   # Beverages Launch IO prints letter O for zero
-    ("MCICO02326VH", "MCIC002326VH"),
-    ("MCIM106526VH", "MCIM106526VH"),   # already clean — untouched
-    ("MCIC010326VH", "MCIC010326VH"),
-])
+
+@pytest.mark.parametrize(
+    "raw,fixed",
+    [
+        ("MCIMO46526VH", "MCIM046526VH"),  # Beverages Launch IO prints letter O for zero
+        ("MCICO02326VH", "MCIC002326VH"),
+        ("MCIM106526VH", "MCIM106526VH"),  # already clean — untouched
+        ("MCIC010326VH", "MCIC010326VH"),
+    ],
+)
 def test_normalize_isci(raw, fixed):
     assert normalize_isci(raw) == fixed
 
@@ -197,6 +205,7 @@ def test_pick_isci_empty_map():
 
 # ── end-to-end through match_creatives ─────────────────────────────────────────
 
+
 class _Cell:
     def __init__(self, row, col, day, count, cluster):
         self.row, self.col, self.day = row, col, day
@@ -210,8 +219,13 @@ class _Grid:
 
 
 def _spot(sid, d, hh, mm, dur_sec, langs):
-    return {"id": sid, "date": d, "ora": round((hh * 60 + mm) * 60 * _FPS),
-            "duration": round(dur_sec * _FPS), "languages": langs}
+    return {
+        "id": sid,
+        "date": d,
+        "ora": round((hh * 60 + mm) * 60 * _FPS),
+        "duration": round(dur_sec * _FPS),
+        "languages": langs,
+    }
 
 
 def test_match_creatives_splits_one_colour_across_two_languages():
@@ -219,11 +233,12 @@ def test_match_creatives_splits_one_colour_across_two_languages():
     dates — one Cantonese daypart, one Mandarin — must yield DIFFERENT ISCIs."""
     flight = date(2026, 8, 17)
     # row 0 = Cantonese programme (Wed 8/19), row 1 = Mandarin programme (Mon 8/24).
-    grid = _Grid([_Cell(0, 2, 19, 1, 0), _Cell(1, 7, 24, 1, 0)],
-                 list(range(17, 32)))
+    grid = _Grid([_Cell(0, 2, 19, 1, 0), _Cell(1, 7, 24, 1, 0)], list(range(17, 32)))
     cluster_lang_isci = {0: dict(_SHARED)}
-    filmati = {"MCIM014326VH": {"filmati_id": 144722, "duration": round(30 * _FPS)},
-               "MCIC010326VH": {"filmati_id": 144721, "duration": round(30 * _FPS)}}
+    filmati = {
+        "MCIM014326VH": {"filmati_id": 144722, "duration": round(30 * _FPS)},
+        "MCIC010326VH": {"filmati_id": 144721, "duration": round(30 * _FPS)},
+    }
     spots = [
         _spot(1, date(2026, 8, 19), 19, 44, 30, ["Cantonese"]),
         _spot(2, date(2026, 8, 24), 23, 5, 30, ["Mandarin"]),
@@ -243,11 +258,13 @@ def test_match_creatives_reports_missing_filmati_with_the_language_resolved():
     flight = date(2026, 8, 17)
     grid = _Grid([_Cell(0, 3, 20, 1, 0)], list(range(17, 32)))
     res = match_creatives(
-        grid, {0: 15}, {},
+        grid,
+        {0: 15},
+        {},
         {0: {"Mandarin": "MCIM107526VH", "Cantonese": "MCIC088526VH"}},
         flight,
         [_spot(9, date(2026, 8, 20), 22, 10, 15, ["Mandarin"])],
-        {},   # nothing ingested
+        {},  # nothing ingested
     )
     a = res.assignments[0]
     assert not a.ok
@@ -261,12 +278,20 @@ def test_match_creatives_warns_when_a_row_mixes_languages():
     spot is scheduled outside its programme's daypart."""
     flight = date(2026, 8, 17)
     grid = _Grid([_Cell(0, 2, 19, 1, 0), _Cell(0, 5, 22, 1, 0)], list(range(17, 32)))
-    filmati = {"MCIM014326VH": {"filmati_id": 144722, "duration": round(30 * _FPS)},
-               "MCIC010326VH": {"filmati_id": 144721, "duration": round(30 * _FPS)}}
+    filmati = {
+        "MCIM014326VH": {"filmati_id": 144722, "duration": round(30 * _FPS)},
+        "MCIC010326VH": {"filmati_id": 144721, "duration": round(30 * _FPS)},
+    }
     res = match_creatives(
-        grid, {0: 30}, {}, {0: dict(_SHARED)}, flight,
-        [_spot(1, date(2026, 8, 19), 19, 44, 30, ["Cantonese"]),
-         _spot(2, date(2026, 8, 22), 22, 40, 30, ["Mandarin"])],
+        grid,
+        {0: 30},
+        {},
+        {0: dict(_SHARED)},
+        flight,
+        [
+            _spot(1, date(2026, 8, 19), 19, 44, 30, ["Cantonese"]),
+            _spot(2, date(2026, 8, 22), 22, 40, 30, ["Mandarin"]),
+        ],
         filmati,
     )
     assert any("multiple languages" in w for w in res.warnings)
@@ -279,9 +304,12 @@ def test_match_creatives_single_language_path_unchanged():
     grid = _Grid([_Cell(0, 0, 26, 2, 0)], [26])
     filmati = {"MCIV106525VH": {"filmati_id": 500, "duration": round(15 * _FPS)}}
     res = match_creatives(
-        grid, {0: 15}, {}, {0: {None: "MCIV106525VH"}}, flight,
-        [_spot(1, date(2026, 1, 26), 11, 0, 15, []),
-         _spot(2, date(2026, 1, 26), 12, 0, 15, [])],
+        grid,
+        {0: 15},
+        {},
+        {0: {None: "MCIV106525VH"}},
+        flight,
+        [_spot(1, date(2026, 1, 26), 11, 0, 15, []), _spot(2, date(2026, 1, 26), 12, 0, 15, [])],
         filmati,
     )
     assert [a.filmati_id for a in res.assignments] == [500, 500]

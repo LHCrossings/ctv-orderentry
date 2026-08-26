@@ -48,9 +48,11 @@ class TestIoDetailForContract:
         # containment matching is ambiguous, index matching is correct (entry
         # walked the same parsed list that produced the sub_orders).
         m = _manifest(
-            ["HL Toyota 13937 CV Est 13937",
-             "HL Toyota 13937 CV Est 13938",
-             "HL Toyota 13937 CV Est 13939"],
+            [
+                "HL Toyota 13937 CV Est 13937",
+                "HL Toyota 13937 CV Est 13938",
+                "HL Toyota 13937 CV Est 13939",
+            ],
             [_sub("13937", "oct"), _sub("13938", "nov"), _sub("13939", "dec")],
         )
         assert _io_detail_for_contract(m, 1)["lines"][0]["description"] == "nov"

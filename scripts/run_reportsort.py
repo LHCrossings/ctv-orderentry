@@ -18,6 +18,7 @@ Two modes:
 
 Both modes use the same CTV/TAC Pre/Post templates in ReportSort/.
 """
+
 import argparse
 import os
 import subprocess
@@ -31,10 +32,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from browser_automation.etere_direct_client import ETERE_WEB_URL, etere_web_login, etere_web_logout
 
-AGENCY_ID      = 133
+AGENCY_ID = 133
 REPORTSORT_DIR = Path(__file__).parent.parent.parent / "ReportSort"
-INPUT_CSV      = REPORTSORT_DIR / "input" / "placement-confirmation.csv"
-MAIN_PY        = REPORTSORT_DIR / "main.py"
+INPUT_CSV = REPORTSORT_DIR / "input" / "placement-confirmation.csv"
+MAIN_PY = REPORTSORT_DIR / "main.py"
 
 # K: on Windows, the SMB mount elsewhere; override via K_ARCHIVES_ROOT.
 _ARCHIVES_ROOT = Path(
@@ -44,7 +45,7 @@ _ARCHIVES_ROOT = Path(
     )
 )
 POST_LOG_BASE = _ARCHIVES_ROOT / "Post Logs"
-PRE_LOG_BASE  = _ARCHIVES_ROOT / "Pre Logs"
+PRE_LOG_BASE = _ARCHIVES_ROOT / "Pre Logs"
 
 
 def parse_date(date_str: str) -> datetime:
@@ -72,7 +73,7 @@ def build_output_folder(log_type: str, date_from: str, date_to: str) -> Path:
         return POST_LOG_BASE / folder_name
     else:
         dt_from = parse_date(date_from)
-        dt_to   = parse_date(date_to)
+        dt_to = parse_date(date_to)
         folder_name = f"{dt_from.strftime('%m%d')}-{dt_to.strftime('%m%d')}"
         return PRE_LOG_BASE / folder_name
 
@@ -138,7 +139,9 @@ def download_report(
 
     content_type = resp.headers.get("Content-Type", "")
     if "text/html" in content_type:
-        raise RuntimeError("Got HTML instead of CSV - session may have expired or report returned an error page.")
+        raise RuntimeError(
+            "Got HTML instead of CSV - session may have expired or report returned an error page."
+        )
 
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     csv_path.write_bytes(resp.content)
@@ -157,10 +160,14 @@ def run_sort(
     print(f"[INFO] Running ReportSort ({log_type}logs) ...")
     print(f"[INFO] Output folder: {output_folder}")
     args = [
-        str(python_exe), str(MAIN_PY),
-        "--log-type", log_type,
-        "--output-folder", str(output_folder),
-        "--input-file", str(csv_path),
+        str(python_exe),
+        str(MAIN_PY),
+        "--log-type",
+        log_type,
+        "--output-folder",
+        str(output_folder),
+        "--input-file",
+        str(csv_path),
     ]
     if only_booking:
         args += ["--only-booking", only_booking]
@@ -169,18 +176,25 @@ def run_sort(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Download an Etere placement confirmation report and run ReportSort")
+    parser = argparse.ArgumentParser(
+        description="Download an Etere placement confirmation report and run ReportSort"
+    )
     parser.add_argument("log_type", choices=["post", "pre"])
     parser.add_argument("date_from", help="MM/DD/YYYY")
     parser.add_argument("date_to", help="MM/DD/YYYY")
-    parser.add_argument("--contract-id", type=int, help="Single-contract pull: Etere ID_CONTRATTITESTATA")
-    parser.add_argument("--contract-code", help="Single-contract pull: COD_CONTRATTO, used to select the report rows")
+    parser.add_argument(
+        "--contract-id", type=int, help="Single-contract pull: Etere ID_CONTRATTITESTATA"
+    )
+    parser.add_argument(
+        "--contract-code",
+        help="Single-contract pull: COD_CONTRATTO, used to select the report rows",
+    )
     parser.add_argument("--output-folder", help="Override the K:\\!Archives destination")
     args = parser.parse_args()
 
-    log_type  = args.log_type
+    log_type = args.log_type
     date_from = args.date_from
-    date_to   = args.date_to
+    date_to = args.date_to
 
     if args.contract_id and not args.contract_code:
         print("[ERROR] --contract-id requires --contract-code")

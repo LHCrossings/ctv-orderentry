@@ -24,12 +24,15 @@ from pathlib import Path
 # sys.path by default, the repo root is not).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-DEFAULT_PDF = "/mnt/c/Work Temp/!New/!Orders/3FOLD_LRCCD Fall&Spring Enrollment 26-27_AIRTIME_Signed.pdf"
+DEFAULT_PDF = (
+    "/mnt/c/Work Temp/!New/!Orders/3FOLD_LRCCD Fall&Spring Enrollment 26-27_AIRTIME_Signed.pdf"
+)
 
 
 def _load_env() -> None:
     try:
         from dotenv import load_dotenv
+
         load_dotenv(".env")
         load_dotenv("credentials.env")
     except Exception:
@@ -57,6 +60,7 @@ def _norm_time(raw: str) -> str:
         return "ROS"
     try:
         from browser_automation.etere_client import EtereClient
+
         a, b = EtereClient.parse_time_range(raw)
         return f"{a}-{b}"
     except Exception:
@@ -79,7 +83,15 @@ def _core_key(market, language, duration, rate, is_bonus, start, end):
 def _ai_lines(order):
     for ln in order.lines:
         yield {
-            "key": _core_key(ln.market, ln.language, ln.duration, ln.rate, ln.is_bonus, ln.start_date, ln.end_date),
+            "key": _core_key(
+                ln.market,
+                ln.language,
+                ln.duration,
+                ln.rate,
+                ln.is_bonus,
+                ln.start_date,
+                ln.end_date,
+            ),
             "days": _norm_days(ln.days),
             "time": _norm_time(ln.time_range),
             "desc": ln.description,
@@ -94,6 +106,7 @@ def _ai_lines(order):
 
 class _Wk:
     """Shim so AI week dates feed consolidate_weeks (expects .start_date MM/DD/YYYY)."""
+
     def __init__(self, d):
         self.start_date = d
 
@@ -105,15 +118,20 @@ def _show_consolidation(rows, flight_end):
     if not weekly:
         return
     from browser_automation.etere_client import EtereClient
+
     print("\nEntry preview (weekly grids → consolidate_weeks → contract lines):")
     for r in weekly:
         cols = ", ".join(f"{d}:{s}" for d, s in zip(r["week_dates"], r["week_spots"]))
         print(f"  {r['desc'][:46]:<46} weeks[{cols}]")
         try:
-            runs = EtereClient.consolidate_weeks(r["week_spots"], [_Wk(d) for d in r["week_dates"]], flight_end=flight_end)
+            runs = EtereClient.consolidate_weeks(
+                r["week_spots"], [_Wk(d) for d in r["week_dates"]], flight_end=flight_end
+            )
             for run in runs:
                 total = run["spots_per_week"] * run["weeks"]
-                print(f"      → line: {run['start_date']}–{run['end_date']}  {run['spots_per_week']}/wk × {run['weeks']}wk = {total} spots")
+                print(
+                    f"      → line: {run['start_date']}–{run['end_date']}  {run['spots_per_week']}/wk × {run['weeks']}wk = {total} spots"
+                )
         except Exception as e:
             print(f"      (consolidate_weeks error: {e})")
 
@@ -125,7 +143,9 @@ def _lrccd_lines():
         doc = parse_lrccd_pdf(path)
         for ln in doc.lines:
             yield {
-                "key": _core_key(ln.market, ln.language, ln.duration, ln.rate, ln.is_bonus, ln.start, ln.end),
+                "key": _core_key(
+                    ln.market, ln.language, ln.duration, ln.rate, ln.is_bonus, ln.start, ln.end
+                ),
                 "days": _norm_days(ln.days),
                 "time": _norm_time(ln.time),
                 "desc": ln.description,
@@ -133,6 +153,7 @@ def _lrccd_lines():
                 "rate": ln.rate,
                 "is_bonus": ln.is_bonus,
             }
+
     return gen
 
 
@@ -149,6 +170,7 @@ def _reconcile(rows):
 def main() -> int:
     _load_env()
     import os
+
     if not os.environ.get("ANTHROPIC_API_KEY"):
         print("✗ ANTHROPIC_API_KEY not set.")
         print("  Add it to the project's .env (loaded automatically, stays out of the terminal):")
@@ -164,13 +186,16 @@ def main() -> int:
     if compare in ("none", "off"):
         compare = None
 
-    print(f"\n{'='*72}\nAI extraction: {pdf}\n{'='*72}")
+    print(f"\n{'=' * 72}\nAI extraction: {pdf}\n{'=' * 72}")
     from browser_automation.parsers.ai_parser import parse_ai_pdf
+
     order, usage = parse_ai_pdf(pdf)
 
     print(f"client={order.client!r}  agency={order.agency!r}  markets={order.markets}")
     print(f"flight={order.flight_start} -> {order.flight_end}  rates_are_net={order.rates_are_net}")
-    print(f"lines={len(order.lines)}  | tokens in/out={usage['input_tokens']}/{usage['output_tokens']}  est_cost=${usage['est_cost_usd']}")
+    print(
+        f"lines={len(order.lines)}  | tokens in/out={usage['input_tokens']}/{usage['output_tokens']}  est_cost=${usage['est_cost_usd']}"
+    )
     if order.warnings:
         print("\nMODEL WARNINGS:")
         for w in order.warnings:
@@ -178,9 +203,11 @@ def main() -> int:
 
     ai_rows = list(_ai_lines(order))
     print("\nAI lines:")
-    for r in sorted(ai_rows, key=lambda x: (str(x['key'][6]), x['key'][2], x['desc'])):
+    for r in sorted(ai_rows, key=lambda x: (str(x["key"][6]), x["key"][2], x["desc"])):
         tag = "BNS" if r["is_bonus"] else "   "
-        print(f"  {tag} :{r['key'][2]:<2} {r['key'][0]:<4} {r['key'][1]:<11} {r['days']:<6} {r['time']:<12} sp={r['spots']:<3} ${r['rate']}")
+        print(
+            f"  {tag} :{r['key'][2]:<2} {r['key'][0]:<4} {r['key'][1]:<11} {r['days']:<6} {r['time']:<12} sp={r['spots']:<3} ${r['rate']}"
+        )
 
     a_tot, a_paid, a_cost = _reconcile(ai_rows)
     print(f"\nAI totals: spots={a_tot} paid={a_paid} paid_cost=${a_cost:,.2f}")
@@ -193,7 +220,7 @@ def main() -> int:
         return 0
 
     # ── Diff against the trusted deterministic parser ─────────────────────
-    print(f"\n{'='*72}\nDIFF vs trusted '{compare}' parser\n{'='*72}")
+    print(f"\n{'=' * 72}\nDIFF vs trusted '{compare}' parser\n{'=' * 72}")
     det_rows = list(_COMPARATORS[compare]()(pdf))
     ai_by = {r["key"]: r for r in ai_rows}
     det_by = {r["key"]: r for r in det_rows}
@@ -221,26 +248,38 @@ def main() -> int:
         if dmark != "✓" or not tmark.startswith("✓"):
             print(f"  {d['desc'][:40]:<40} days:{dmark}  time:{tmark}")
 
-    print(f"\nmatched lines: days agree {days_ok}/{len(matched)}, "
-          f"time agree {time_ok}/{len(matched)} ({ros_expected} ROS handled downstream)")
+    print(
+        f"\nmatched lines: days agree {days_ok}/{len(matched)}, "
+        f"time agree {time_ok}/{len(matched)} ({ros_expected} ROS handled downstream)"
+    )
 
     if ai_only:
-        print(f"\nAI produced {len(ai_only)} line(s) with NO trusted match (possible hallucination / mis-read):")
+        print(
+            f"\nAI produced {len(ai_only)} line(s) with NO trusted match (possible hallucination / mis-read):"
+        )
         for k in ai_only:
-            print(f"  + {ai_by[k]['desc'][:50]:<50} :{k[2]} {k[0]} ${k[3]} bonus={k[4]} {k[5]}->{k[6]}")
+            print(
+                f"  + {ai_by[k]['desc'][:50]:<50} :{k[2]} {k[0]} ${k[3]} bonus={k[4]} {k[5]}->{k[6]}"
+            )
     if det_only:
         print(f"\nTrusted parser had {len(det_only)} line(s) the AI MISSED:")
         for k in det_only:
-            print(f"  - {det_by[k]['desc'][:50]:<50} :{k[2]} {k[0]} ${k[3]} bonus={k[4]} {k[5]}->{k[6]}")
+            print(
+                f"  - {det_by[k]['desc'][:50]:<50} :{k[2]} {k[0]} ${k[3]} bonus={k[4]} {k[5]}->{k[6]}"
+            )
 
     d_tot, d_paid, d_cost = _reconcile(det_rows)
     print("\nReconciliation:")
-    print(f"  total spots  AI={a_tot:<5} trusted={d_tot:<5} {'✓' if a_tot==d_tot else '✗'}")
-    print(f"  paid spots   AI={a_paid:<5} trusted={d_paid:<5} {'✓' if a_paid==d_paid else '✗'}")
-    print(f"  paid cost    AI=${a_cost:<10,.2f} trusted=${d_cost:<10,.2f} {'✓' if abs(a_cost-d_cost)<0.01 else '✗'}")
+    print(f"  total spots  AI={a_tot:<5} trusted={d_tot:<5} {'✓' if a_tot == d_tot else '✗'}")
+    print(f"  paid spots   AI={a_paid:<5} trusted={d_paid:<5} {'✓' if a_paid == d_paid else '✗'}")
+    print(
+        f"  paid cost    AI=${a_cost:<10,.2f} trusted=${d_cost:<10,.2f} {'✓' if abs(a_cost - d_cost) < 0.01 else '✗'}"
+    )
 
-    perfect = (not ai_only and not det_only and a_tot == d_tot and abs(a_cost - d_cost) < 0.01)
-    print(f"\n{'✓ AI extraction matches the trusted parser on all lines + totals.' if perfect else '✗ Differences found above — review before trusting the AI path here.'}")
+    perfect = not ai_only and not det_only and a_tot == d_tot and abs(a_cost - d_cost) < 0.01
+    print(
+        f"\n{'✓ AI extraction matches the trusted parser on all lines + totals.' if perfect else '✗ Differences found above — review before trusting the AI path here.'}"
+    )
     return 0
 
 

@@ -4,6 +4,7 @@ Set separation to (5, 0, 5) on all 06:00-09:00 lines for a given contract.
 Usage:
     uv run python scripts/fix_separation_6am_9am.py 2611
 """
+
 import os
 import sys
 
@@ -11,10 +12,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from browser_automation.etere_direct_client import connect
 
-FPS           = 29.97
-ORA_INIZIO_6  = round(6 * 3600 * FPS)   # 647352
-ORA_FINE_9    = round(9 * 3600 * FPS)   # 971028
-SEP_5_MIN     = round(5 * 60 * FPS)     # 8991
+FPS = 29.97
+ORA_INIZIO_6 = round(6 * 3600 * FPS)  # 647352
+ORA_FINE_9 = round(9 * 3600 * FPS)  # 971028
+SEP_5_MIN = round(5 * 60 * FPS)  # 8991
 
 
 def main():
@@ -26,13 +27,16 @@ def main():
     with connect() as conn:
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT ID_CONTRATTIRIGHE, Interv_Committente, INTERVALLO, INTERV_CONTRATTO
             FROM   CONTRATTIRIGHE
             WHERE  ID_CONTRATTITESTATA = ?
               AND  ORA_INIZIO = ?
               AND  ORA_FINE   = ?
-        """, [contract_id, ORA_INIZIO_6, ORA_FINE_9])
+        """,
+            [contract_id, ORA_INIZIO_6, ORA_FINE_9],
+        )
         rows = cursor.fetchall()
 
         if not rows:
@@ -49,13 +53,16 @@ def main():
         #   Interv_Committente = Customer
         #   INTERVALLO         = Order   (old Etere web had this swapped with INTERV_CONTRATTO)
         #   INTERV_CONTRATTO   = Event
-        cursor.execute(f"""
+        cursor.execute(
+            f"""
             UPDATE CONTRATTIRIGHE
             SET    Interv_Committente = ?,
                    INTERVALLO         = ?,
                    INTERV_CONTRATTO   = ?
             WHERE  ID_CONTRATTIRIGHE IN ({placeholders})
-        """, [SEP_5_MIN, 0, SEP_5_MIN, *line_ids])
+        """,
+            [SEP_5_MIN, 0, SEP_5_MIN, *line_ids],
+        )
 
         conn.commit()
         print(f"\n[DONE] Updated {cursor.rowcount} line(s) → separation (5, 0, 5).")

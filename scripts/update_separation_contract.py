@@ -12,6 +12,7 @@ Examples:
     uv run python scripts/update_separation_contract.py 2611 --customer 15
     uv run python scripts/update_separation_contract.py 2611 --customer 25 --event 0 --order 0
 """
+
 import argparse
 import os
 import sys
@@ -31,24 +32,29 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("contract_id", type=int)
     parser.add_argument("--customer", type=int, default=0, metavar="MINUTES")
-    parser.add_argument("--event",    type=int, default=0, metavar="MINUTES")
-    parser.add_argument("--order",    type=int, default=0, metavar="MINUTES")
+    parser.add_argument("--event", type=int, default=0, metavar="MINUTES")
+    parser.add_argument("--order", type=int, default=0, metavar="MINUTES")
     args = parser.parse_args()
 
     customer_frames = minutes_to_frames(args.customer)
-    order_frames    = minutes_to_frames(args.order)
-    event_frames    = minutes_to_frames(args.event)
+    order_frames = minutes_to_frames(args.order)
+    event_frames = minutes_to_frames(args.event)
 
-    print(f"[INFO] Contract {args.contract_id}: setting separation "
-          f"customer={args.customer}, order={args.order}, event={args.event} min ...")
+    print(
+        f"[INFO] Contract {args.contract_id}: setting separation "
+        f"customer={args.customer}, order={args.order}, event={args.event} min ..."
+    )
 
     with connect() as conn:
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT COUNT(*) FROM CONTRATTIRIGHE
             WHERE ID_CONTRATTITESTATA = ?
-        """, [args.contract_id])
+        """,
+            [args.contract_id],
+        )
         count = cursor.fetchone()[0]
 
         if not count:
@@ -61,17 +67,22 @@ def main():
         #   Interv_Committente = Customer
         #   INTERVALLO         = Order   (old Etere web had this swapped with INTERV_CONTRATTO)
         #   INTERV_CONTRATTO   = Event
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE CONTRATTIRIGHE
             SET    Interv_Committente = ?,
                    INTERVALLO         = ?,
                    INTERV_CONTRATTO   = ?
             WHERE  ID_CONTRATTITESTATA = ?
-        """, [customer_frames, order_frames, event_frames, args.contract_id])
+        """,
+            [customer_frames, order_frames, event_frames, args.contract_id],
+        )
 
         conn.commit()
-        print(f"\n[DONE] {cursor.rowcount} line(s) updated — "
-              f"customer={args.customer}, order={args.order}, event={args.event} min.")
+        print(
+            f"\n[DONE] {cursor.rowcount} line(s) updated — "
+            f"customer={args.customer}, order={args.order}, event={args.event} min."
+        )
 
 
 if __name__ == "__main__":

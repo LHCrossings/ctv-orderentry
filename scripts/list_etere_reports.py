@@ -52,18 +52,18 @@ def list_reports():
         else:
             custom_reports.append(entry)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"CUSTOM REPORTS ({len(custom_reports)} found)")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     if custom_reports:
         for rdl, title in sorted(custom_reports, key=lambda x: x[1].lower()):
             print(f"  {rdl:<50}  {title}")
     else:
         print("  (none)")
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"SYSTEM REPORTS ({len(system_reports)} found)")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     for rdl, title in sorted(system_reports, key=lambda x: x[1].lower()):
         print(f"  {rdl:<50}  {title}")
 

@@ -2,6 +2,7 @@
 Inspect web_wf_getblocks and related SPs to find the correct block-assignment logic.
 Run from Windows: py scripts/discover_block_refresh7.py
 """
+
 import sys
 from pathlib import Path
 
@@ -11,20 +12,29 @@ from browser_automation.etere_direct_client import connect
 conn = connect()
 cursor = conn.cursor()
 
-SPS = ['web_wf_getblocks', 'web_getPriceListBlocks', 'web_sales_getcontractlineblocks',
-       'web_sales_addblocks', 'web_addblocks', 'web_refreshblocks']
+SPS = [
+    "web_wf_getblocks",
+    "web_getPriceListBlocks",
+    "web_sales_getcontractlineblocks",
+    "web_sales_addblocks",
+    "web_addblocks",
+    "web_refreshblocks",
+]
 
 # ── 1. Parameters of candidate SPs ───────────────────────────────────────────
 print("=" * 60)
 print("Parameters of block-related SPs")
 print("=" * 60)
 for sp in SPS:
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT PARAMETER_NAME, DATA_TYPE, PARAMETER_MODE
         FROM INFORMATION_SCHEMA.PARAMETERS
         WHERE SPECIFIC_NAME = ?
         ORDER BY ORDINAL_POSITION
-    """, sp)
+    """,
+        sp,
+    )
     rows = cursor.fetchall()
     if rows:
         print(f"\n  [{sp}]")

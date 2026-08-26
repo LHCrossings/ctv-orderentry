@@ -2,6 +2,7 @@
 Find what table ID_FASCE values actually reference.
 Run from Windows: py scripts/discover_block_refresh5.py
 """
+
 import sys
 from pathlib import Path
 
@@ -45,7 +46,7 @@ cols = [d[0] for d in cursor.description]
 print(f"  Cols: {cols}")
 for row in cursor.fetchall():
     d = dict(zip(cols, row))
-    print(" ", {k: v for k, v in d.items() if v is not None and v != '' and v != 0})
+    print(" ", {k: v for k, v in d.items() if v is not None and v != "" and v != 0})
 
 # ── 4. Brute-force: which tables have a column containing value 11202? ────────
 print("\n" + "=" * 60)

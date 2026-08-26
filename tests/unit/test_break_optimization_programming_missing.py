@@ -24,8 +24,16 @@ for _p in (_root, _root / "src"):
 
 from src.web.routes.orders import _BO_FPS, _bo_build_breaks, _bo_frames_to_time  # noqa: E402
 
-PRIO = {"BOOKEND": 1, "BILLBOARD": 2, "COMPANION": 3, "PAYING": 4,
-        "WORLDLINK": 5, "PI": 6, "PSA": 7, "STATION ID": 8}
+PRIO = {
+    "BOOKEND": 1,
+    "BILLBOARD": 2,
+    "COMPANION": 3,
+    "PAYING": 4,
+    "WORLDLINK": 5,
+    "PI": 6,
+    "PSA": 7,
+    "STATION ID": 8,
+}
 
 
 def F(h, m=0, s=0):
@@ -35,10 +43,17 @@ def F(h, m=0, s=0):
 def spot(sid, ora, label="PAYING", intended=None, title=None, dur=900):
     newtype = {"PI": "PER", "PSA": "PSA", "STATION ID": "ID"}.get(label, "COM")
     return {
-        "id": sid, "ora": ora, "time": _bo_frames_to_time(ora),
-        "title": title or f"SPOT{sid}", "cod_progra": "", "newtype": newtype,
-        "label": label, "priority": PRIO[label], "duration": dur,
-        "contract": "C1", "is_fixed": False,
+        "id": sid,
+        "ora": ora,
+        "time": _bo_frames_to_time(ora),
+        "title": title or f"SPOT{sid}",
+        "cod_progra": "",
+        "newtype": newtype,
+        "label": label,
+        "priority": PRIO[label],
+        "duration": dur,
+        "contract": "C1",
+        "is_fixed": False,
         "intended_ora": intended,
         "intended_time": _bo_frames_to_time(intended) if intended is not None else None,
     }
@@ -46,10 +61,19 @@ def spot(sid, ora, label="PAYING", intended=None, title=None, dur=900):
 
 def fixed(sid, ora, newtype="PGM"):
     return {
-        "id": sid, "ora": ora, "time": _bo_frames_to_time(ora),
-        "title": "SHOW PART", "cod_progra": "SHOW", "newtype": newtype,
-        "label": newtype, "priority": 0, "duration": 0, "contract": "",
-        "is_fixed": True, "intended_ora": None, "intended_time": None,
+        "id": sid,
+        "ora": ora,
+        "time": _bo_frames_to_time(ora),
+        "title": "SHOW PART",
+        "cod_progra": "SHOW",
+        "newtype": newtype,
+        "label": newtype,
+        "priority": 0,
+        "duration": 0,
+        "contract": "",
+        "is_fixed": True,
+        "intended_ora": None,
+        "intended_time": None,
     }
 
 
@@ -58,10 +82,11 @@ TO = F(8)  # window 7:00–8:00
 
 # ── Normal windows stay exactly as before ────────────────────────────────────
 
+
 def test_programmed_window_is_not_flagged_and_still_optimizes():
     rows = [
         fixed(1, F(7)),
-        spot(10, F(7, 12), "STATION ID"),   # out of order → must still be caught
+        spot(10, F(7, 12), "STATION ID"),  # out of order → must still be caught
         spot(11, F(7, 12, 30), "PAYING"),
         fixed(2, F(7, 30)),
         spot(12, F(7, 57), "PAYING", intended=F(7, 57)),
@@ -100,10 +125,13 @@ def test_native_spots_without_offsets_do_not_flag():
 
 # ── Signal 1: the window has no programming at all ───────────────────────────
 
+
 def test_window_without_pgm_rows_is_flagged_and_inert():
-    rows = [spot(10, F(7, 5), intended=F(7, 5)),
-            spot(11, F(7, 5, 30), "PI"),
-            spot(12, F(7, 6), intended=F(7, 20))]
+    rows = [
+        spot(10, F(7, 5), intended=F(7, 5)),
+        spot(11, F(7, 5, 30), "PI"),
+        spot(12, F(7, 6), intended=F(7, 20)),
+    ]
     breaks, has_pgm = _bo_build_breaks(rows, TO)
     assert has_pgm is False
     assert len(breaks) == 1
@@ -127,9 +155,11 @@ def test_a_noop_does_not_count_as_programming():
 def test_flagged_break_reports_no_phantom_artifacts():
     """Duplicate PI products and an odd bookend count inside a scrunched
     mega-break are artifacts of the missing programming, not real problems."""
-    rows = [spot(10, F(7, 5), "PI", title="PI-504-030: A"),
-            spot(11, F(7, 5, 30), "PI", title="PI-504-060: B"),
-            spot(12, F(7, 6), "BOOKEND")]
+    rows = [
+        spot(10, F(7, 5), "PI", title="PI-504-030: A"),
+        spot(11, F(7, 5, 30), "PI", title="PI-504-060: B"),
+        spot(12, F(7, 6), "BOOKEND"),
+    ]
     breaks, _ = _bo_build_breaks(rows, TO)
     brk = breaks[0]
     assert brk["programming_missing"] is True
@@ -139,16 +169,17 @@ def test_flagged_break_reports_no_phantom_artifacts():
 
 # ── Signal 2: absorbed spots from later programming ──────────────────────────
 
+
 def test_break_with_foreign_offsets_is_flagged_absorbed_and_itemized():
     """Jenna's Break 3: the show's own spots plus later spots the EE scrunch
     pulled up because the next show's programming isn't placed."""
     rows = [
         fixed(1, F(7)),
-        spot(10, F(7, 30), intended=F(7, 30)),                    # earlier, closed break
+        spot(10, F(7, 30), intended=F(7, 30)),  # earlier, closed break
         fixed(2, F(7, 31)),
-        spot(11, F(7, 57), "PI"),                                  # native (no offset)
-        spot(12, F(7, 58), intended=F(7, 58)),                     # native
-        spot(13, F(7, 59), intended=F(8, 10), title="REDFIN"),     # absorbed
+        spot(11, F(7, 57), "PI"),  # native (no offset)
+        spot(12, F(7, 58), intended=F(7, 58)),  # native
+        spot(13, F(7, 59), intended=F(8, 10), title="REDFIN"),  # absorbed
         spot(14, F(7, 59, 30), intended=F(8, 30), title="4IMPRINT"),  # absorbed
     ]
     breaks, has_pgm = _bo_build_breaks(rows, TO)
@@ -166,10 +197,12 @@ def test_break_with_foreign_offsets_is_flagged_absorbed_and_itemized():
 def test_next_show_placed_keeps_the_terminal_break_normal():
     """A closing PGM row in the 3-min buffer (the next show IS placed) means
     the terminal break is real and stays optimizable."""
-    rows = [fixed(1, F(7)),
-            spot(10, F(7, 57), intended=F(7, 57)),
-            spot(11, F(7, 58), intended=F(7, 57)),
-            fixed(2, F(8))]
+    rows = [
+        fixed(1, F(7)),
+        spot(10, F(7, 57), intended=F(7, 57)),
+        spot(11, F(7, 58), intended=F(7, 57)),
+        fixed(2, F(8)),
+    ]
     breaks, has_pgm = _bo_build_breaks(rows, TO)
     assert has_pgm is True
     assert breaks[-1]["programming_missing"] is False

@@ -25,15 +25,18 @@ from domain.entities import Customer
 from domain.enums import OrderType
 
 # The 14 columns _row_to_customer expects, in order.
-_COLS = ("customer_id, customer_name, order_type, abbreviation, default_market, "
-         "billing_type, separation_customer, separation_event, separation_order, "
-         "code_name, description_name, include_market_in_code, auto_aircheck, owner")
+_COLS = (
+    "customer_id, customer_name, order_type, abbreviation, default_market, "
+    "billing_type, separation_customer, separation_event, separation_order, "
+    "code_name, description_name, include_market_in_code, auto_aircheck, owner"
+)
 _TABLE = "dbo.CTV_Customers"
 
 
 def _connect():
     """Short-lived connection to the shared Etere SQL Server."""
     from browser_automation.etere_direct_client import connect
+
     return connect()
 
 
@@ -55,11 +58,7 @@ class CustomerRepository:
         self._db_path = db_path  # kept for compat; unused
         self._table = table or _TABLE
 
-    def find_by_name(
-        self,
-        customer_name: str,
-        order_type: OrderType
-    ) -> Customer | None:
+    def find_by_name(self, customer_name: str, order_type: OrderType) -> Customer | None:
         """Find customer by exact name (case-insensitive) for a specific order type."""
         normalized_name = customer_name.strip().lower()
         with _connect() as conn:
@@ -71,10 +70,7 @@ class CustomerRepository:
             row = cur.fetchone()
         return self._row_to_customer(row) if row else None
 
-    def find_by_name_any_type(
-        self,
-        customer_name: str
-    ) -> Customer | None:
+    def find_by_name_any_type(self, customer_name: str) -> Customer | None:
         """
         Find customer by name across ALL order types (exact first, then partial
         containment). Used for Charmaine-style orders where the same client may
@@ -99,19 +95,11 @@ class CustomerRepository:
                 return self._row_to_customer(row)
         return None
 
-    def find_by_name_fuzzy(
-        self,
-        customer_name: str,
-        order_type: OrderType
-    ) -> Customer | None:
+    def find_by_name_fuzzy(self, customer_name: str, order_type: OrderType) -> Customer | None:
         """Alias for find_by_fuzzy_match (used by automation modules)."""
         return self.find_by_fuzzy_match(customer_name, order_type)
 
-    def find_by_fuzzy_match(
-        self,
-        customer_name: str,
-        order_type: OrderType
-    ) -> Customer | None:
+    def find_by_fuzzy_match(self, customer_name: str, order_type: OrderType) -> Customer | None:
         """
         Find customer using fuzzy matching for specific order type.
 
@@ -315,8 +303,9 @@ class LegacyJSONCustomerRepository(CustomerRepository):
     to the new SQLite-based one. It can import JSON data into SQLite.
     """
 
-    def __init__(self, db_path: Path | str = None, json_path: Path | str | None = None,
-                 table: str = None):
+    def __init__(
+        self, db_path: Path | str = None, json_path: Path | str | None = None, table: str = None
+    ):
         """
         Initialize with optional JSON file for migration.
 
@@ -338,7 +327,7 @@ class LegacyJSONCustomerRepository(CustomerRepository):
             return
 
         try:
-            with open(self._json_path, 'r') as f:
+            with open(self._json_path, "r") as f:
                 data = json.load(f)
 
             # JSON format: {"order_type": {"customer_name": "customer_id"}}
@@ -352,9 +341,7 @@ class LegacyJSONCustomerRepository(CustomerRepository):
 
                 for customer_name, customer_id in customers_dict.items():
                     customer = Customer(
-                        customer_id=customer_id,
-                        customer_name=customer_name,
-                        order_type=order_type
+                        customer_id=customer_id, customer_name=customer_name, order_type=order_type
                     )
                     self.save(customer)
                     migrated_count += 1

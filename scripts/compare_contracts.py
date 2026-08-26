@@ -16,6 +16,7 @@ grouped as:
 
 Run from Windows:  py scripts/compare_contracts.py 2381 2782
 """
+
 import sys
 from pathlib import Path
 
@@ -36,9 +37,9 @@ HEADER_SKIP = {
     "DATA_AGGIORNAMENTO",
     "DATACREAZIONE",
     "DATAORAMODIFICA",
-    "NOTE",                    # free-text note
-    "RIFERIMENTO_ORDINE",      # customer order ref (free-text)
-    "CUSTOMERCOLOR",           # cosmetic color, not functionally meaningful
+    "NOTE",  # free-text note
+    "RIFERIMENTO_ORDINE",  # customer order ref (free-text)
+    "CUSTOMERCOLOR",  # cosmetic color, not functionally meaningful
 }
 
 LINE_SKIP = {
@@ -50,8 +51,9 @@ LINE_SKIP = {
     "DATAORAMODIFICA",
     "DATA_INSERIMENTO",
     "DATA_AGGIORNAMENTO",
-    "NOTERIGHE",               # free-text note on line
+    "NOTERIGHE",  # free-text note on line
 }
+
 
 # ── Numeric zero is often the same as NULL for Etere unused fields ────────────
 def _norm(v):
@@ -74,9 +76,7 @@ def _fmt(v):
 
 
 def fetch_header(cur, contract_id):
-    cur.execute(
-        "SELECT * FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = %s", (contract_id,)
-    )
+    cur.execute("SELECT * FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = %s", (contract_id,))
     cols = [d[0] for d in cur.description]
     row = cur.fetchone()
     if not row:
@@ -130,22 +130,20 @@ def compare_dicts(ref, test, skip_keys, label):
             ok_lines.append(f"  [OK]     {k:40s}  {_fmt(rv)}")
         elif tv is None and rv is not None:
             nulls += 1
-            null_lines.append(
-                f"  [NULL!]  {k:40s}  ref={_fmt(rv)}  →  test=NULL"
-            )
+            null_lines.append(f"  [NULL!]  {k:40s}  ref={_fmt(rv)}  →  test=NULL")
         else:
             diffs += 1
-            diff_lines.append(
-                f"  [DIFF!]  {k:40s}  ref={_fmt(rv)}  →  test={_fmt(tv)}"
-            )
+            diff_lines.append(f"  [DIFF!]  {k:40s}  ref={_fmt(rv)}  →  test={_fmt(tv)}")
 
     # Print in order: problems first, then OK, then expected-diff
-    print(f"\n{'─'*70}")
+    print(f"\n{'─' * 70}")
     print(f"  {label}")
-    print(f"{'─'*70}")
+    print(f"{'─' * 70}")
 
     if diff_lines or null_lines:
-        print(f"\n  *** {len(diff_lines)} MISMATCH(ES), {len(nulls if isinstance(nulls, list) else [])} ***")
+        print(
+            f"\n  *** {len(diff_lines)} MISMATCH(ES), {len(nulls if isinstance(nulls, list) else [])} ***"
+        )
 
     for line in diff_lines:
         print(line)
@@ -179,47 +177,53 @@ def run(ref_id, test_id, last: int = 0):
     cur = conn.cursor()
 
     # ── 1. Header ────────────────────────────────────────────────────────────
-    ref_h  = fetch_header(cur, ref_id)
+    ref_h = fetch_header(cur, ref_id)
     test_h = fetch_header(cur, test_id)
 
-    ref_code  = ref_h.get("COD_CONTRATTO", "?")
+    ref_code = ref_h.get("COD_CONTRATTO", "?")
     test_code = test_h.get("COD_CONTRATTO", "?")
     print(f"\n  Ref  code : {ref_code}")
     print(f"  Test code : {test_code}")
 
-    h_diffs, h_nulls = compare_dicts(ref_h, test_h, HEADER_SKIP, "CONTRACT HEADER (CONTRATTITESTATA)")
+    h_diffs, h_nulls = compare_dicts(
+        ref_h, test_h, HEADER_SKIP, "CONTRACT HEADER (CONTRATTITESTATA)"
+    )
 
     # ── 2. Lines ─────────────────────────────────────────────────────────────
-    ref_lines  = fetch_lines(cur, ref_id)
+    ref_lines = fetch_lines(cur, ref_id)
     test_lines = fetch_lines(cur, test_id)
 
     if last:
-        ref_lines  = ref_lines[-last:]
+        ref_lines = ref_lines[-last:]
         test_lines = test_lines[-last:]
 
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print("  CONTRACT LINES (CONTRATTIRIGHE)")
     print(f"  Ref has {len(ref_lines)} line(s), Test has {len(test_lines)} line(s)")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     if len(ref_lines) != len(test_lines):
-        print(f"\n  *** LINE COUNT MISMATCH — only comparing the first "
-              f"{min(len(ref_lines), len(test_lines))} lines ***\n")
+        print(
+            f"\n  *** LINE COUNT MISMATCH — only comparing the first "
+            f"{min(len(ref_lines), len(test_lines))} lines ***\n"
+        )
 
     total_line_diffs = 0
     total_line_nulls = 0
 
     for i, (rl, tl) in enumerate(zip(ref_lines, test_lines), 1):
         ld, ln = compare_dicts(
-            rl, tl, LINE_SKIP,
+            rl,
+            tl,
+            LINE_SKIP,
             f"LINE {i}/{max(len(ref_lines), len(test_lines))}  "
-            f"ref_line_id={rl['ID_CONTRATTIRIGHE']}  test_line_id={tl['ID_CONTRATTIRIGHE']}"
+            f"ref_line_id={rl['ID_CONTRATTIRIGHE']}  test_line_id={tl['ID_CONTRATTIRIGHE']}",
         )
         total_line_diffs += ld
         total_line_nulls += ln
 
         # Block assignments
-        ref_blocks  = fetch_blocks(cur, rl["ID_CONTRATTIRIGHE"])
+        ref_blocks = fetch_blocks(cur, rl["ID_CONTRATTIRIGHE"])
         test_blocks = fetch_blocks(cur, tl["ID_CONTRATTIRIGHE"])
         print(f"\n  BLOCKS:  ref={len(ref_blocks)}  test={len(test_blocks)}", end="")
         if len(ref_blocks) != len(test_blocks):
@@ -229,15 +233,15 @@ def run(ref_id, test_id, last: int = 0):
 
         # Show block IDs for manual spot-check
         if ref_blocks or test_blocks:
-            ref_ids  = [b["ID_FASCE"] for b in ref_blocks]
+            ref_ids = [b["ID_FASCE"] for b in ref_blocks]
             test_ids = [b["ID_FASCE"] for b in test_blocks]
             print(f"  Block IDs ref  : {ref_ids}")
             print(f"  Block IDs test : {test_ids}")
 
     # ── 3. Summary ───────────────────────────────────────────────────────────
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print("  SUMMARY")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
     print(f"  Header mismatches  : {h_diffs}")
     print(f"  Header nulls       : {h_nulls}")
     print(f"  Line mismatches    : {total_line_diffs}")
@@ -254,10 +258,15 @@ def run(ref_id, test_id, last: int = 0):
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("ref_id", type=int)
     parser.add_argument("test_id", type=int)
-    parser.add_argument("--last", type=int, default=0,
-                        help="Compare only the last N lines from each contract (by ID order)")
+    parser.add_argument(
+        "--last",
+        type=int,
+        default=0,
+        help="Compare only the last N lines from each contract (by ID order)",
+    )
     args = parser.parse_args()
     run(args.ref_id, args.test_id, last=args.last)

@@ -22,14 +22,17 @@ block_ids = [int(a) for a in sys.argv[1:]] if len(sys.argv) > 1 else [11205]
 with db_connect() as conn:
     cursor = conn.cursor()
     placeholders = ",".join("?" * len(block_ids))
-    cursor.execute(f"""
+    cursor.execute(
+        f"""
         SELECT tp.id_fascia, tp.Cod_User, tp.Date, tp.offset,
                tb.Name
         FROM   trafficPalinse tp
         LEFT JOIN Traffic_Block tb ON tb.ID_TrafficBlock = tp.id_fascia
         WHERE  tp.id_fascia IN ({placeholders})
         ORDER BY tp.id_fascia, tp.Cod_User, tp.Date
-    """, block_ids)
+    """,
+        block_ids,
+    )
     rows = cursor.fetchall()
 
 if not rows:
@@ -43,5 +46,5 @@ for block_id, cod_user, date, offset, name in rows:
         current = block_id
         print(f"\nBlock {block_id}: {name}")
         print(f"  {'Market':<6} {'Date':<14} {'Offset':>10}")
-        print(f"  {'-'*35}")
+        print(f"  {'-' * 35}")
     print(f"  {market:<6} {str(date):<14} {offset:>10}")

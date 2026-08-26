@@ -7,6 +7,7 @@ After editing, use Block Refresh to re-assign blocks.
 Usage:
     uv run python scripts/unschedule_contract.py 2611
 """
+
 import os
 import sys
 

@@ -40,36 +40,37 @@ REVENUE_TYPES = [
 ]
 
 _LANG_KEYWORDS: List[Tuple[str, str]] = [
-    ("cantonese",   "C"),
-    ("mandarin",    "M"),
-    ("chinese",     "M"),
+    ("cantonese", "C"),
+    ("mandarin", "M"),
+    ("chinese", "M"),
     ("south asian", "SA"),
-    ("hindi",       "SA"),
-    ("punjabi",     "SA"),
-    ("filipino",    "T"),
-    ("tagalog",     "T"),
-    ("vietnamese",  "V"),
-    ("hmong",       "Hm"),
-    ("korean",      "K"),
-    ("japanese",    "J"),
+    ("hindi", "SA"),
+    ("punjabi", "SA"),
+    ("filipino", "T"),
+    ("tagalog", "T"),
+    ("vietnamese", "V"),
+    ("hmong", "Hm"),
+    ("korean", "K"),
+    ("japanese", "J"),
 ]
 
 # Etere placement CSVs may use full market names in nome2; normalise to codes.
 _MARKET_NORMALISE: List[Tuple[str, str]] = [
     ("san francisco", "SFO"),
-    ("sacramento",    "CVC"),
-    ("central valley","CVC"),
-    ("los angeles",   "LAX"),
-    ("seattle",       "SEA"),
-    ("houston",       "HOU"),
-    ("chicago",       "CMP"),
-    ("minneapolis",   "CMP"),
-    ("washington",    "WDC"),
-    ("new york",      "NYC"),
-    ("new jersey",    "NYC"),
-    ("dallas",        "DAL"),
-    ("multimarket",   "MMT"),
+    ("sacramento", "CVC"),
+    ("central valley", "CVC"),
+    ("los angeles", "LAX"),
+    ("seattle", "SEA"),
+    ("houston", "HOU"),
+    ("chicago", "CMP"),
+    ("minneapolis", "CMP"),
+    ("washington", "WDC"),
+    ("new york", "NYC"),
+    ("new jersey", "NYC"),
+    ("dallas", "DAL"),
+    ("multimarket", "MMT"),
 ]
+
 
 def _normalise_market(raw: str) -> str:
     """Convert Etere market name variants to standard codes (e.g. 'San Francisco' → 'SFO').
@@ -85,41 +86,43 @@ def _normalise_market(raw: str) -> str:
 # DATA CLASSES
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class CsvHeader:
-    agency:        str
-    client:        str
+    agency: str
+    client: str
     contract_code: str
-    description:   str
-    order_date:    str
-    address:       str
-    city:          str
-    ae:            str = ""   # account executive (Etere AGENTE1), DB path only
-    notes:         str = ""   # contract notes (Etere CONTRATTITESTATA.NOTE), DB path only
+    description: str
+    order_date: str
+    address: str
+    city: str
+    ae: str = ""  # account executive (Etere AGENTE1), DB path only
+    notes: str = ""  # contract notes (Etere CONTRATTITESTATA.NOTE), DB path only
 
 
 @dataclass
 class SpotRow:
-    contract_code:   str
-    client:          str
-    line_id:         int
-    priority:        int
-    duration_s:      int
-    flight_start:    date
-    time_from:       str   # "HH:MM"
-    time_to:         str   # "HH:MM"
-    gross_rate:      float
-    days_pattern:    str
-    market:          str
-    air_date:        date
-    air_time:        str   # "HH:MM:SS"
-    copy_code:       str
+    contract_code: str
+    client: str
+    line_id: int
+    priority: int
+    duration_s: int
+    flight_start: date
+    time_from: str  # "HH:MM"
+    time_to: str  # "HH:MM"
+    gross_rate: float
+    days_pattern: str
+    market: str
+    air_date: date
+    air_time: str  # "HH:MM:SS"
+    copy_code: str
     row_description: str
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def strip_redundant_code(name: str) -> str:
     """Drop a trailing " (CODE)" when the title already starts with "CODE:".
@@ -149,7 +152,7 @@ def detect_language(text: str) -> str:
 
 def _strip_line_prefix(desc: str) -> str:
     """Remove '(Line N) ' prefix from rowdescription."""
-    return re.sub(r'^\(Line \d+\)\s*', '', desc)
+    return re.sub(r"^\(Line \d+\)\s*", "", desc)
 
 
 def _parse_date(s: str) -> date:
@@ -191,6 +194,7 @@ def compute_broadcast_month(d: date) -> date:
 # CSV PARSING
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def parse_csv(data: bytes) -> Tuple[CsvHeader, List[SpotRow]]:
     """Parse an Etere placement confirmation CSV.
 
@@ -207,15 +211,15 @@ def parse_csv(data: bytes) -> Tuple[CsvHeader, List[SpotRow]]:
         h_parts = next(reader, [])
 
     csv_header = CsvHeader(
-        agency        = h_parts[0].strip() if len(h_parts) > 0 else "",
-        contract_code = h_parts[1].strip() if len(h_parts) > 1 else "",
-        order_date    = h_parts[2].strip() if len(h_parts) > 2 else "",
-        description   = h_parts[3].strip() if len(h_parts) > 3 else "",
-        address       = h_parts[4].strip() if len(h_parts) > 4 else "",
-        client        = h_parts[5].strip() if len(h_parts) > 5 else "",
-        city          = h_parts[6].strip() if len(h_parts) > 6 else "",
-        ae            = h_parts[7].strip() if len(h_parts) > 7 else "",
-        notes         = h_parts[8].strip() if len(h_parts) > 8 else "",
+        agency=h_parts[0].strip() if len(h_parts) > 0 else "",
+        contract_code=h_parts[1].strip() if len(h_parts) > 1 else "",
+        order_date=h_parts[2].strip() if len(h_parts) > 2 else "",
+        description=h_parts[3].strip() if len(h_parts) > 3 else "",
+        address=h_parts[4].strip() if len(h_parts) > 4 else "",
+        client=h_parts[5].strip() if len(h_parts) > 5 else "",
+        city=h_parts[6].strip() if len(h_parts) > 6 else "",
+        ae=h_parts[7].strip() if len(h_parts) > 7 else "",
+        notes=h_parts[8].strip() if len(h_parts) > 8 else "",
     )
 
     # ── Find data column header row ───────────────────────────────────────
@@ -253,7 +257,7 @@ def parse_csv(data: bytes) -> Tuple[CsvHeader, List[SpotRow]]:
         timerange = row.get("timerange2", "").strip()
         time_parts = timerange.split("-", 1)
         time_from = time_parts[0].strip() if time_parts else ""
-        time_to   = time_parts[1].strip() if len(time_parts) > 1 else ""
+        time_to = time_parts[1].strip() if len(time_parts) > 1 else ""
 
         try:
             gross_rate = float(row.get("IMPORTO2", 0) or 0)
@@ -262,7 +266,7 @@ def parse_csv(data: bytes) -> Tuple[CsvHeader, List[SpotRow]]:
 
         try:
             duration_s = int(row.get("duration3", 30) or 30)
-            if duration_s % 5 == 4:   # snap 1-frame-short: :14→:15, :29→:30, :59→:60
+            if duration_s % 5 == 4:  # snap 1-frame-short: :14→:15, :29→:30, :59→:60
                 duration_s += 1
         except (ValueError, TypeError):
             duration_s = 30
@@ -277,23 +281,25 @@ def parse_csv(data: bytes) -> Tuple[CsvHeader, List[SpotRow]]:
         except (ValueError, TypeError):
             priority = 4
 
-        spots.append(SpotRow(
-            contract_code   = row.get("COD_CONTRATTO1", "").strip(),
-            client          = row.get("committente",    "").strip(),
-            line_id         = line_id,
-            priority        = priority,
-            duration_s      = duration_s,
-            flight_start    = flight_start,
-            time_from       = time_from,
-            time_to         = time_to,
-            gross_rate      = gross_rate,
-            days_pattern    = row.get("Textbox25", "").strip(),
-            market          = _normalise_market(row.get("nome2", "").strip()),
-            air_date        = air_date,
-            air_time        = row.get("airtimep",    "").strip(),
-            copy_code       = strip_redundant_code(row.get("bookingcode2","")),
-            row_description = row.get("rowdescription","").strip(),
-        ))
+        spots.append(
+            SpotRow(
+                contract_code=row.get("COD_CONTRATTO1", "").strip(),
+                client=row.get("committente", "").strip(),
+                line_id=line_id,
+                priority=priority,
+                duration_s=duration_s,
+                flight_start=flight_start,
+                time_from=time_from,
+                time_to=time_to,
+                gross_rate=gross_rate,
+                days_pattern=row.get("Textbox25", "").strip(),
+                market=_normalise_market(row.get("nome2", "").strip()),
+                air_date=air_date,
+                air_time=row.get("airtimep", "").strip(),
+                copy_code=strip_redundant_code(row.get("bookingcode2", "")),
+                row_description=row.get("rowdescription", "").strip(),
+            )
+        )
 
     return csv_header, spots
 
@@ -309,11 +315,12 @@ TEMPLATE_PATH = Path(__file__).parent / "template.xlsx"
 # PLACEHOLDER HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _phone_to_int(val: str) -> object:
     """Strip non-digits and return int so Excel phone-number formats apply."""
     if not val:
         return ""
-    digits = re.sub(r'\D', '', str(val))
+    digits = re.sub(r"\D", "", str(val))
     if len(digits) >= 7:
         try:
             return int(digits)
@@ -331,11 +338,11 @@ def _replace_placeholder(cell, ctx: dict) -> bool:
     if not isinstance(cell.value, str):
         return False
     text = cell.value
-    keys = re.findall(r'<([^>]+)>', text)
+    keys = re.findall(r"<([^>]+)>", text)
     if not keys:
         return False
     stripped = text.strip()
-    if len(keys) == 1 and stripped == f'<{keys[0]}>' and keys[0] in ctx:
+    if len(keys) == 1 and stripped == f"<{keys[0]}>" and keys[0] in ctx:
         cell.value = ctx[keys[0]]
         return True
     changed = False
@@ -343,10 +350,10 @@ def _replace_placeholder(cell, ctx: dict) -> bool:
         if k in ctx:
             v = ctx[k]
             if isinstance(v, (date, datetime)):
-                v = v.strftime('%m/%d/%Y')
+                v = v.strftime("%m/%d/%Y")
             elif v is None:
-                v = ''
-            text = text.replace(f'<{k}>', str(v))
+                v = ""
+            text = text.replace(f"<{k}>", str(v))
             changed = True
     if changed:
         cell.value = text.strip()
@@ -359,16 +366,17 @@ def _copy_row_format(ws, src_row: int, dst_row: int) -> None:
     dst = list(ws.iter_rows(min_row=dst_row, max_row=dst_row))[0]
     for s, d in zip(src, dst):
         if s.has_style:
-            d.font         = copy.copy(s.font)
-            d.border       = copy.copy(s.border)
-            d.fill         = copy.copy(s.fill)
+            d.font = copy.copy(s.font)
+            d.border = copy.copy(s.border)
+            d.fill = copy.copy(s.fill)
             d.number_format = s.number_format
-            d.alignment    = copy.copy(s.alignment)
+            d.alignment = copy.copy(s.alignment)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SHEET FILLERS
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _snapshot_row(ws, row_num: int) -> List[dict]:
     """Capture all cells in a row into a list of dicts before any insertions."""
@@ -376,16 +384,18 @@ def _snapshot_row(ws, row_num: int) -> List[dict]:
     snaps = []
     for col_idx in range(1, max_col + 1):
         cell = ws.cell(row=row_num, column=col_idx)
-        snaps.append({
-            'col':           col_idx,
-            'value':         cell.value,
-            'has_style':     cell.has_style,
-            'font':          copy.copy(cell.font)      if cell.has_style else None,
-            'border':        copy.copy(cell.border)    if cell.has_style else None,
-            'fill':          copy.copy(cell.fill)      if cell.has_style else None,
-            'number_format': cell.number_format        if cell.has_style else None,
-            'alignment':     copy.copy(cell.alignment) if cell.has_style else None,
-        })
+        snaps.append(
+            {
+                "col": col_idx,
+                "value": cell.value,
+                "has_style": cell.has_style,
+                "font": copy.copy(cell.font) if cell.has_style else None,
+                "border": copy.copy(cell.border) if cell.has_style else None,
+                "fill": copy.copy(cell.fill) if cell.has_style else None,
+                "number_format": cell.number_format if cell.has_style else None,
+                "alignment": copy.copy(cell.alignment) if cell.has_style else None,
+            }
+        )
 
     # Capture intra-row merged ranges (e.g. B16:G16) so inserted rows stay consistent
     row_merges = []
@@ -399,32 +409,31 @@ def _snapshot_row(ws, row_num: int) -> List[dict]:
     return snaps, row_merges, row_height
 
 
-def _apply_snapshot(
-    ws, snapshot_pair, new_row: int, ref_row: int
-) -> None:
+def _apply_snapshot(ws, snapshot_pair, new_row: int, ref_row: int) -> None:
     """Write a row snapshot to new_row, updating formula row references."""
     snapshot, row_merges, row_height = snapshot_pair
     for snap in snapshot:
-        col_idx  = snap['col']
-        val      = snap['value']
+        col_idx = snap["col"]
+        val = snap["value"]
         dst_cell = ws.cell(row=new_row, column=col_idx)
-        if isinstance(val, str) and val.startswith('='):
+        if isinstance(val, str) and val.startswith("="):
             val = re.sub(
-                r'([A-Z]+)' + str(ref_row),
-                lambda m, nr=new_row: f'{m.group(1)}{nr}',
+                r"([A-Z]+)" + str(ref_row),
+                lambda m, nr=new_row: f"{m.group(1)}{nr}",
                 val,
             )
         dst_cell.value = val
-        if snap['has_style']:
-            dst_cell.font          = copy.copy(snap['font'])
-            dst_cell.border        = copy.copy(snap['border'])
-            dst_cell.fill          = copy.copy(snap['fill'])
-            dst_cell.number_format = snap['number_format']
-            dst_cell.alignment     = copy.copy(snap['alignment'])
+        if snap["has_style"]:
+            dst_cell.font = copy.copy(snap["font"])
+            dst_cell.border = copy.copy(snap["border"])
+            dst_cell.fill = copy.copy(snap["fill"])
+            dst_cell.number_format = snap["number_format"]
+            dst_cell.alignment = copy.copy(snap["alignment"])
         else:
             # Explicitly clear any formatting insert_rows may have inherited
             # from the row that was pushed down (e.g. thick right borders).
             from openpyxl.styles import Border
+
             dst_cell.border = Border()
 
     # Restore row height so cloned rows match the template row exactly
@@ -434,13 +443,18 @@ def _apply_snapshot(
     # Re-apply same intra-row merges to the new row
     for col_start, col_end in row_merges:
         ws.merge_cells(
-            start_row=new_row, start_column=col_start,
-            end_row=new_row,   end_column=col_end,
+            start_row=new_row,
+            start_column=col_start,
+            end_row=new_row,
+            end_column=col_end,
         )
 
 
 def _fill_monthly_breakdown(
-    ws, monthly_gross: dict, monthly_net: dict, last_line_row: int,
+    ws,
+    monthly_gross: dict,
+    monthly_net: dict,
+    last_line_row: int,
     agency_fee: float = 0.0,
 ) -> None:
     """Replace the hardcoded monthly breakdown table with actual monthly totals.
@@ -451,11 +465,12 @@ def _fill_monthly_breakdown(
     never drift from Python-side rounding.
     """
     from openpyxl.utils import get_column_letter
+
     # Find "Month" header row below the data lines
     month_hdr_row: Optional[int] = None
     for row in ws.iter_rows(min_row=last_line_row + 1):
         for cell in row:
-            if isinstance(cell.value, str) and cell.value.strip().lower() == 'month':
+            if isinstance(cell.value, str) and cell.value.strip().lower() == "month":
                 month_hdr_row = row[0].row
                 break
         if month_hdr_row:
@@ -466,12 +481,12 @@ def _fill_monthly_breakdown(
     # Determine column positions from header row
     month_col = gross_col = net_col = None
     for cell in ws[month_hdr_row]:
-        v = str(cell.value or '').strip().lower()
-        if v == 'month':
+        v = str(cell.value or "").strip().lower()
+        if v == "month":
             month_col = cell.column
-        elif v == 'gross' and month_col is not None and gross_col is None:
+        elif v == "gross" and month_col is not None and gross_col is None:
             gross_col = cell.column
-        elif v == 'net' and gross_col is not None and net_col is None:
+        elif v == "net" and gross_col is not None and net_col is None:
             net_col = cell.column
 
     if month_col is None:
@@ -482,7 +497,7 @@ def _fill_monthly_breakdown(
     total_row: Optional[int] = None
     for row in ws.iter_rows(min_row=month_hdr_row + 1):
         cell = ws.cell(row=row[0].row, column=month_col)
-        if isinstance(cell.value, str) and 'total' in cell.value.lower():
+        if isinstance(cell.value, str) and "total" in cell.value.lower():
             total_row = row[0].row
             break
         data_rows.append(row[0].row)
@@ -493,9 +508,9 @@ def _fill_monthly_breakdown(
     # Sort months in calendar order
     month_order = {m: i for i, m in enumerate(calendar.month_name) if m}
     sorted_months = sorted(monthly_gross.keys(), key=lambda m: month_order.get(m, 99))
-    n_needed   = len(sorted_months)
+    n_needed = len(sorted_months)
     n_existing = len(data_rows)
-    ref_snap   = _snapshot_row(ws, data_rows[0])
+    ref_snap = _snapshot_row(ws, data_rows[0])
 
     # Expand rows if needed
     if n_needed > n_existing:
@@ -518,7 +533,7 @@ def _fill_monthly_breakdown(
         if net_col:
             # Net as a live formula off the gross cell → can't drift from rounding
             gcl = get_column_letter(gross_col)
-            ws.cell(row=rn, column=net_col).value = f'={gcl}{rn}*{(1 - agency_fee):g}'
+            ws.cell(row=rn, column=net_col).value = f"={gcl}{rn}*{(1 - agency_fee):g}"
 
     # Delete extra template rows (shrink to exactly n_needed data rows)
     extra_rows = data_rows[n_needed:]
@@ -530,6 +545,7 @@ def _fill_monthly_breakdown(
     # Add double-bottom border to the last data row (separates months from Total)
     if n_needed > 0:
         from openpyxl.styles import Border, Side
+
         double = Side(border_style="double")
         last_data_row = data_rows[n_needed - 1]
         for col in (month_col, gross_col, net_col):
@@ -541,13 +557,13 @@ def _fill_monthly_breakdown(
     # Update Total row — SUM formulas over the month rows (no Python rounding)
     if total_row and n_needed > 0:
         first_dr = data_rows[0]
-        last_dr  = data_rows[n_needed - 1]
+        last_dr = data_rows[n_needed - 1]
         if gross_col:
             gcl = get_column_letter(gross_col)
-            ws.cell(row=total_row, column=gross_col).value = f'=SUM({gcl}{first_dr}:{gcl}{last_dr})'
+            ws.cell(row=total_row, column=gross_col).value = f"=SUM({gcl}{first_dr}:{gcl}{last_dr})"
         if net_col:
             ncl = get_column_letter(net_col)
-            ws.cell(row=total_row, column=net_col).value = f'=SUM({ncl}{first_dr}:{ncl}{last_dr})'
+            ws.cell(row=total_row, column=net_col).value = f"=SUM({ncl}{first_dr}:{ncl}{last_dr})"
 
 
 def _apply_direct_mode(ws) -> None:
@@ -571,31 +587,31 @@ def _apply_direct_mode(ws) -> None:
 
     max_col = ws.max_column
     gross_p_row: Optional[int] = None
-    disc_row:    Optional[int] = None
-    net_p_row:   Optional[int] = None
+    disc_row: Optional[int] = None
+    net_p_row: Optional[int] = None
 
     for row in ws.iter_rows():
         for cell in row:
             if isinstance(cell, _MergedCell) or not isinstance(cell.value, str):
                 continue
             v = cell.value.strip()
-            if v == 'Gross Amount':
+            if v == "Gross Amount":
                 gross_p_row = cell.row
-            elif v == 'Agency Discount':
+            elif v == "Agency Discount":
                 disc_row = cell.row
                 for col in range(1, max_col + 1):
                     _safe_set(ws, disc_row, col, None)
-            elif v == 'Net Amount of Contract':
+            elif v == "Net Amount of Contract":
                 net_p_row = cell.row
                 if gross_p_row:
-                    _safe_set(ws, net_p_row, 16, f'=P{gross_p_row}')
+                    _safe_set(ws, net_p_row, 16, f"=P{gross_p_row}")
 
     # Monthly breakdown: rename "Gross" → "Net", clear the Net column
     for row in ws.iter_rows():
         row_has_month = any(
             not isinstance(c, _MergedCell)
             and isinstance(c.value, str)
-            and c.value.strip().lower() == 'month'
+            and c.value.strip().lower() == "month"
             for c in row
         )
         if not row_has_month:
@@ -605,11 +621,11 @@ def _apply_direct_mode(ws) -> None:
         for cell in row:
             if isinstance(cell, _MergedCell):
                 continue
-            v = str(cell.value or '').strip().lower()
-            if v == 'gross':
+            v = str(cell.value or "").strip().lower()
+            if v == "gross":
                 gross_col = cell.column
-                cell.value = 'Net'
-            elif v == 'net' and gross_col is not None:
+                cell.value = "Net"
+            elif v == "net" and gross_col is not None:
                 net_col = cell.column
         if net_col:
             for r in range(month_hdr_row, ws.max_row + 1):
@@ -618,18 +634,21 @@ def _apply_direct_mode(ws) -> None:
 
 
 def _fill_sales_confirmation(
-    ws, ctx: dict, sc_lines: List[dict],
-    monthly_gross: dict, monthly_net: dict,
+    ws,
+    ctx: dict,
+    sc_lines: List[dict],
+    monthly_gross: dict,
+    monthly_net: dict,
     agency_fee: float = 0.15,
 ) -> None:
     """Fill the Sales Confirmation sheet using placeholder replacement."""
     # Detect line template rows: any row that contains '<date_range_start>'
     line_rows: List[int] = []
     for row in ws.iter_rows():
-        if any(isinstance(c.value, str) and '<date_range_start>' in c.value for c in row):
+        if any(isinstance(c.value, str) and "<date_range_start>" in c.value for c in row):
             line_rows.append(row[0].row)
 
-    n_tmpl  = len(line_rows)
+    n_tmpl = len(line_rows)
     n_lines = len(sc_lines)
     max_col = ws.max_column
 
@@ -638,20 +657,20 @@ def _fill_sales_confirmation(
     if line_rows:
         hdr_row_num = line_rows[0] - 1
         for cell in ws[hdr_row_num]:
-            if isinstance(cell.value, str) and 'days' in cell.value.lower():
+            if isinstance(cell.value, str) and "days" in cell.value.lower():
                 weeks_col = cell.column
                 break
 
     # Snapshot first template row BEFORE any insertions (avoids read-after-insert issues)
-    ref_row  = line_rows[0] if line_rows else None
+    ref_row = line_rows[0] if line_rows else None
     snapshot = _snapshot_row(ws, ref_row) if ref_row else ([], [])
 
     # Shrink: delete surplus template rows when we have fewer lines than the template.
     # Use the same save/unmerge/delete/remerge pattern as the expand branch;
     # openpyxl's auto-shift of merged cells on delete is unreliable.
     if n_lines < n_tmpl and n_lines > 0:
-        first_delete = line_rows[n_lines]     # first row to remove
-        n_deletes    = n_tmpl - n_lines       # number of rows to remove
+        first_delete = line_rows[n_lines]  # first row to remove
+        n_deletes = n_tmpl - n_lines  # number of rows to remove
 
         saved_merges = [
             (mr.min_row, mr.max_row, mr.min_col, mr.max_col)
@@ -659,8 +678,7 @@ def _fill_sales_confirmation(
             if mr.min_row >= first_delete
         ]
         for min_r, max_r, min_c, max_c in saved_merges:
-            ws.unmerge_cells(start_row=min_r, start_column=min_c,
-                             end_row=max_r,   end_column=max_c)
+            ws.unmerge_cells(start_row=min_r, start_column=min_c, end_row=max_r, end_column=max_c)
 
         ws.delete_rows(first_delete, n_deletes)
 
@@ -668,8 +686,10 @@ def _fill_sales_confirmation(
         for min_r, max_r, min_c, max_c in saved_merges:
             if min_r >= first_delete + n_deletes:
                 ws.merge_cells(
-                    start_row=min_r - n_deletes, start_column=min_c,
-                    end_row=max_r   - n_deletes, end_column=max_c,
+                    start_row=min_r - n_deletes,
+                    start_column=min_c,
+                    end_row=max_r - n_deletes,
+                    end_column=max_c,
                 )
 
         line_rows = line_rows[:n_lines]
@@ -678,7 +698,7 @@ def _fill_sales_confirmation(
     # Expand: insert rows when we need more lines than template provides
     if n_lines > n_tmpl and n_tmpl > 0:
         insert_start = line_rows[-1] + 1
-        n_inserts    = n_lines - n_tmpl
+        n_inserts = n_lines - n_tmpl
 
         # Explicitly manage merges that sit at or after the insertion zone.
         # openpyxl's auto-shift is unreliable near merged areas, so we
@@ -689,8 +709,7 @@ def _fill_sales_confirmation(
             if mr.min_row >= insert_start
         ]
         for min_r, max_r, min_c, max_c in saved_merges:
-            ws.unmerge_cells(start_row=min_r, start_column=min_c,
-                             end_row=max_r,   end_column=max_c)
+            ws.unmerge_cells(start_row=min_r, start_column=min_c, end_row=max_r, end_column=max_c)
 
         for _ in range(n_inserts):
             new_row = line_rows[-1] + 1
@@ -700,22 +719,26 @@ def _fill_sales_confirmation(
 
         # Re-merge at shifted positions
         for min_r, max_r, min_c, max_c in saved_merges:
-            ws.merge_cells(start_row=min_r + n_inserts, start_column=min_c,
-                           end_row=max_r + n_inserts,   end_column=max_c)
+            ws.merge_cells(
+                start_row=min_r + n_inserts,
+                start_column=min_c,
+                end_row=max_r + n_inserts,
+                end_column=max_c,
+            )
 
     # Update SUM formulas that span the line range
     if line_rows:
-        first_line   = line_rows[0]
-        last_line    = line_rows[-1]
+        first_line = line_rows[0]
+        last_line = line_rows[-1]
         line_row_set = set(line_rows)
         for row in ws.iter_rows():
             if row[0].row in line_row_set:
                 continue
             for cell in row:
-                if isinstance(cell.value, str) and '=SUM(' in cell.value:
+                if isinstance(cell.value, str) and "=SUM(" in cell.value:
                     cell.value = re.sub(
-                        r'([A-Z]+)\d+:([A-Z]+)\d+',
-                        lambda m: f'{m.group(1)}{first_line}:{m.group(2)}{last_line}',
+                        r"([A-Z]+)\d+:([A-Z]+)\d+",
+                        lambda m: f"{m.group(1)}{first_line}:{m.group(2)}{last_line}",
                         cell.value,
                     )
 
@@ -726,17 +749,17 @@ def _fill_sales_confirmation(
     # references fixed row numbers that shift when extra lines are inserted.
     # Rebuild all three formulas using the actual post-insertion row positions.
     if line_rows:
-        gross_row = last_line + 1   # Gross Amount row
-        disc_row  = last_line + 2   # Agency Discount row
-        net_row   = last_line + 3   # Net Amount of Contract row
+        gross_row = last_line + 1  # Gross Amount row
+        disc_row = last_line + 2  # Agency Discount row
+        net_row = last_line + 3  # Net Amount of Contract row
         # P(gross_row): sum of per-line dollar amounts (=L*O per line)
-        ws.cell(row=gross_row, column=16).value = f'=SUM(P{first_line}:P{last_line})'
+        ws.cell(row=gross_row, column=16).value = f"=SUM(P{first_line}:P{last_line})"
         # L(disc_row): stamp actual agency fee (replaces hardcoded 0.15 in template)
         ws.cell(row=disc_row, column=12).value = round(agency_fee, 4)
         # P(disc_row): agency discount dollar amount (negative)
-        ws.cell(row=disc_row, column=16).value = f'=-1*(L{disc_row}*P{gross_row})'
+        ws.cell(row=disc_row, column=16).value = f"=-1*(L{disc_row}*P{gross_row})"
         # P(net_row): net amount = gross + discount (discount is negative)
-        ws.cell(row=net_row, column=16).value = f'=P{gross_row}+P{disc_row}'
+        ws.cell(row=net_row, column=16).value = f"=P{gross_row}+P{disc_row}"
 
     # Fill line rows — use explicit ws.cell() to avoid row-iteration truncation
     for i, row_num in enumerate(line_rows):
@@ -746,7 +769,7 @@ def _fill_sales_confirmation(
                 cell = ws.cell(row=row_num, column=col_idx)
                 _replace_placeholder(cell, line_ctx)
                 if weeks_col is not None and col_idx == weeks_col:
-                    cell.value = sc_lines[i].get('weeks', 1)
+                    cell.value = sc_lines[i].get("weeks", 1)
             # Sequential line number in column B (handles hardcoded "1" in template)
             ws.cell(row=row_num, column=2).value = i + 1
 
@@ -789,29 +812,29 @@ def _fill_run_sheet(
     # Find template rows (rows 2+ that contain any <placeholder>)
     tmpl_rows: List[int] = []
     for row in ws.iter_rows(min_row=2):
-        if any(isinstance(c.value, str) and '<' in c.value for c in row):
+        if any(isinstance(c.value, str) and "<" in c.value for c in row):
             tmpl_rows.append(row[0].row)
 
     if not tmpl_rows:
         return
 
-    ref_row  = tmpl_rows[0]
-    max_col  = ws.max_column
+    ref_row = tmpl_rows[0]
+    max_col = ws.max_column
     snapshot = _snapshot_row(ws, ref_row)
     snaps, *_ = snapshot
 
     # Build col → field map from the first template row
     col_map: dict = {}
     for snap in snaps:
-        val = snap['value']
+        val = snap["value"]
         if isinstance(val, str):
-            m = re.search(r'<([^>]+)>', val)
+            m = re.search(r"<([^>]+)>", val)
             if m:
-                col_map[snap['col']] = m.group(1)
-            elif re.match(r'=([A-Z]+)\d+$', val.strip()):
-                col_map[snap['col']] = ('formula', val)
+                col_map[snap["col"]] = m.group(1)
+            elif re.match(r"=([A-Z]+)\d+$", val.strip()):
+                col_map[snap["col"]] = ("formula", val)
 
-    n_tmpl  = len(tmpl_rows)
+    n_tmpl = len(tmpl_rows)
     n_spots = len(run_rows)
 
     # Expand using snapshot
@@ -829,15 +852,15 @@ def _fill_run_sheet(
         row_num = tmpl_rows[spot_idx]
         for col_idx, spec in col_map.items():
             cell = ws.cell(row=row_num, column=col_idx)
-            if isinstance(spec, tuple) and spec[0] == 'formula':
+            if isinstance(spec, tuple) and spec[0] == "formula":
                 cell.value = re.sub(
-                    r'([A-Z]+)\d+',
-                    lambda m, nr=row_num: f'{m.group(1)}{nr}',
+                    r"([A-Z]+)\d+",
+                    lambda m, nr=row_num: f"{m.group(1)}{nr}",
                     spec[1],
                 )
-            elif spec == 'broker_fees' and is_agency and agency_fee > 0:
+            elif spec == "broker_fees" and is_agency and agency_fee > 0:
                 # Live formula so gross/broker/net reconcile inside Excel (no drift).
-                cell.value = f'=P{row_num}*{agency_fee:g}'
+                cell.value = f"=P{row_num}*{agency_fee:g}"
             elif spec in rr:
                 cell.value = rr[spec]
 
@@ -850,14 +873,15 @@ def _fill_run_sheet(
 def _fill_pivot(ws, run_rows: List[dict]) -> None:
     """Fill the Sheet1 pivot with monthly gross/net totals."""
     from collections import defaultdict
+
     monthly_gross: dict = defaultdict(float)
-    monthly_net:   dict = defaultdict(float)
+    monthly_net: dict = defaultdict(float)
     for rr in run_rows:
-        m = rr.get('month')
+        m = rr.get("month")
         if isinstance(m, datetime):
-            key = m.strftime('%B %Y')
-            monthly_gross[key] += rr.get('gross_rate', 0) or 0
-            monthly_net[key]   += rr.get('station_net', 0) or 0
+            key = m.strftime("%B %Y")
+            monthly_gross[key] += rr.get("gross_rate", 0) or 0
+            monthly_net[key] += rr.get("station_net", 0) or 0
 
     months = sorted(monthly_gross)
     if not months:
@@ -866,19 +890,19 @@ def _fill_pivot(ws, run_rows: List[dict]) -> None:
     # Find the <month> placeholder row
     month_row: Optional[int] = None
     for row in ws.iter_rows():
-        if any(isinstance(c.value, str) and '<month>' in c.value for c in row):
+        if any(isinstance(c.value, str) and "<month>" in c.value for c in row):
             month_row = row[0].row
             break
     if month_row is None:
         return
 
     # Determine column positions from the placeholder row
-    ph_cells  = list(ws.iter_rows(min_row=month_row, max_row=month_row))[0]
+    ph_cells = list(ws.iter_rows(min_row=month_row, max_row=month_row))[0]
     month_col = gross_col = net_col = None
     for cell in ph_cells:
         if cell.value is None:
             continue
-        if isinstance(cell.value, str) and '<month>' in cell.value:
+        if isinstance(cell.value, str) and "<month>" in cell.value:
             month_col = cell.column - 1
         elif month_col is not None and gross_col is None:
             gross_col = cell.column - 1
@@ -889,7 +913,7 @@ def _fill_pivot(ws, run_rows: List[dict]) -> None:
     grand_row: Optional[int] = None
     for row in ws.iter_rows(min_row=month_row + 1):
         cell = row[month_col] if month_col is not None else row[0]
-        if isinstance(cell.value, str) and 'Grand' in cell.value:
+        if isinstance(cell.value, str) and "Grand" in cell.value:
             grand_row = cell.row
             break
 
@@ -901,7 +925,7 @@ def _fill_pivot(ws, run_rows: List[dict]) -> None:
 
     # Fill month rows
     for i, month_name in enumerate(months):
-        rn    = month_row + i
+        rn = month_row + i
         cells = list(ws.iter_rows(min_row=rn, max_row=rn))[0]
         for cell in cells:
             col = cell.column - 1
@@ -927,6 +951,7 @@ def _fill_pivot(ws, run_rows: List[dict]) -> None:
 # EXISTING ORDER READER
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def read_existing_order_fields(data: bytes) -> dict:
     """Extract header field values from an existing Sales Confirmation Excel.
 
@@ -945,27 +970,27 @@ def read_existing_order_fields(data: bytes) -> dict:
     # Header section rows 3–13 at fixed column positions (these rows never expand)
     # D=4, F=6, G=7, K=11, L=12
     fields = {
-        "agency":          cv(3,  4),
-        "client":          cv(3, 12),
-        "contact_person":  cv(4,  4),
-        "estimate":        cv(4, 12),
-        "address":         cv(5,  4),
-        "billing_type":    cv(5, 12),
-        "city":            cv(6,  4),
-        "state":           cv(6,  6),
-        "zip":             cv(6,  7),
-        "market":          cv(6, 12),
-        "phone":           cv(8,  4),
-        "order_date":      cv(8, 12),
-        "fax":             cv(9,  4),
-        "contract":        cv(9, 12),
-        "email_1":         cv(10, 4),
-        "revision":        cv(10, 12),
-        "email_2":         cv(11, 4),
-        "sales_person":    cv(11, 11),
-        "email_3":         cv(12, 4),
-        "email_4":         cv(13, 4),
-        "notes":           "",
+        "agency": cv(3, 4),
+        "client": cv(3, 12),
+        "contact_person": cv(4, 4),
+        "estimate": cv(4, 12),
+        "address": cv(5, 4),
+        "billing_type": cv(5, 12),
+        "city": cv(6, 4),
+        "state": cv(6, 6),
+        "zip": cv(6, 7),
+        "market": cv(6, 12),
+        "phone": cv(8, 4),
+        "order_date": cv(8, 12),
+        "fax": cv(9, 4),
+        "contract": cv(9, 12),
+        "email_1": cv(10, 4),
+        "revision": cv(10, 12),
+        "email_2": cv(11, 4),
+        "sales_person": cv(11, 11),
+        "email_3": cv(12, 4),
+        "email_4": cv(13, 4),
+        "notes": "",
     }
 
     # Read estimate_run from Run Sheet tab (col 15 = "Estimate", row 2 = first data row)
@@ -977,8 +1002,9 @@ def read_existing_order_fields(data: bytes) -> dict:
 
     # Content-search rows for fields that shift position after line insertion
     from openpyxl.cell.cell import MergedCell as _MC
+
     fields["agency_flag"] = "Non-Agency"
-    fields["agency_fee"]  = ""
+    fields["agency_fee"] = ""
     for row in ws.iter_rows():
         for cell in row:
             if isinstance(cell, _MC) or not isinstance(cell.value, str):
@@ -993,7 +1019,9 @@ def read_existing_order_fields(data: bytes) -> dict:
                 if fee_val is not None:
                     try:
                         pct = float(fee_val) * 100
-                        fields["agency_fee"] = str(int(pct)) if pct == int(pct) else str(round(pct, 1))
+                        fields["agency_fee"] = (
+                            str(int(pct)) if pct == int(pct) else str(round(pct, 1))
+                        )
                     except (ValueError, TypeError):
                         pass
 
@@ -1003,6 +1031,7 @@ def read_existing_order_fields(data: bytes) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 # ETEREBRIDGE INTEGRATION
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _canon_agency(flag) -> str:
     """Commercial-log column Z ('Agency') only ever holds 'Agency' or
@@ -1036,9 +1065,9 @@ def _eb_df_to_run_rows(df, agency_fee: float, is_agency: bool) -> List[dict]:
 
     rows: List[dict] = []
     for _, row in df.iterrows():
-        gross  = float(_clean(row.get("Gross Rate")) or 0)
+        gross = float(_clean(row.get("Gross Rate")) or 0)
         broker = round(gross * agency_fee, 2) if is_agency else 0.0
-        net    = round(gross - broker, 2)
+        net = round(gross - broker, 2)
 
         air_dt = row.get("Air Date")
         if isinstance(air_dt, pd.Timestamp):
@@ -1063,39 +1092,42 @@ def _eb_df_to_run_rows(df, agency_fee: float, is_agency: bool) -> List[dict]:
         media_val = _clean(row.get("Media"))
         if isinstance(media_val, str):
             media_val = strip_redundant_code(media_val)
-        rows.append({
-            "bill_code":    _clean(row.get("Bill Code")),
-            "air_date":     air_date,
-            "day":          air_date.strftime("%A") if air_date else "",
-            "time_in":      _hhmm_to_timedelta(str(_clean(row.get("Time In")) or "")),
-            "time_out":     _hhmm_to_timedelta(str(_clean(row.get("Time Out")) or "")),
-            "length":       timedelta(seconds=int(_clean(row.get("Length")) or 0)),
-            "media":        media_val,
-            "program":      _clean(row.get("Program")),
-            "lang":         _clean(row.get("Lang.")),
-            "line":         _clean(row.get("Line")),
-            "type":         _clean(row.get("Type")),
-            "estimate":     _clean(row.get("Estimate")),
-            "gross_rate":   gross,
-            "spot_value":   gross,
-            "month":        month_dt,
-            "broker_fees":  broker,
-            "priority":     4,
-            "station_net":  net,
-            "sales_person": _clean(row.get("Sales Person")),
-            "revenue_type": _clean(row.get("Revenue Type")),
-            "billing_type": _clean(row.get("Billing Type")),
-            "agency_flag":  _canon_agency(_clean(row.get("Agency?"))),
-            "affidavit":    _clean(row.get("Affidavit?")),
-            "contract":     _clean(row.get("Contract")),
-            "market":       _normalise_market(str(_clean(row.get("Market")) or "")),
-        })
+        rows.append(
+            {
+                "bill_code": _clean(row.get("Bill Code")),
+                "air_date": air_date,
+                "day": air_date.strftime("%A") if air_date else "",
+                "time_in": _hhmm_to_timedelta(str(_clean(row.get("Time In")) or "")),
+                "time_out": _hhmm_to_timedelta(str(_clean(row.get("Time Out")) or "")),
+                "length": timedelta(seconds=int(_clean(row.get("Length")) or 0)),
+                "media": media_val,
+                "program": _clean(row.get("Program")),
+                "lang": _clean(row.get("Lang.")),
+                "line": _clean(row.get("Line")),
+                "type": _clean(row.get("Type")),
+                "estimate": _clean(row.get("Estimate")),
+                "gross_rate": gross,
+                "spot_value": gross,
+                "month": month_dt,
+                "broker_fees": broker,
+                "priority": 4,
+                "station_net": net,
+                "sales_person": _clean(row.get("Sales Person")),
+                "revenue_type": _clean(row.get("Revenue Type")),
+                "billing_type": _clean(row.get("Billing Type")),
+                "agency_flag": _canon_agency(_clean(row.get("Agency?"))),
+                "affidavit": _clean(row.get("Affidavit?")),
+                "contract": _clean(row.get("Contract")),
+                "market": _normalise_market(str(_clean(row.get("Market")) or "")),
+            }
+        )
     return rows
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # IO-SOURCED SALES CONFIRMATION LINES
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _sc_lines_from_io(io_detail: dict) -> List[dict]:
     """
@@ -1104,21 +1136,21 @@ def _sc_lines_from_io(io_detail: dict) -> List[dict]:
     One SC row per IO line, preserving per-line flight dates when available
     (e.g. SCWA May and June appear as separate rows with their own date ranges).
     """
-    lines        = io_detail.get("lines") or []
+    lines = io_detail.get("lines") or []
     flight_start = io_detail.get("flight_start") or ""
-    flight_end   = io_detail.get("flight_end")   or ""
+    flight_end = io_detail.get("flight_end") or ""
 
     sc: List[dict] = []
     for idx, ln in enumerate(lines):
-        total_spots  = int(ln.get("total_spots") or 0)
+        total_spots = int(ln.get("total_spots") or 0)
         weekly_spots = ln.get("weekly_spots") or []
-        is_bonus     = bool(ln.get("is_bonus"))
-        rate         = float(ln.get("rate") or 0)
+        is_bonus = bool(ln.get("is_bonus"))
+        rate = float(ln.get("rate") or 0)
 
         # Duration: "30" / ":30" / "30 seconds" → ":30"
         dur_raw = str(ln.get("duration") or "30")
-        dur_m   = re.search(r'\d+', dur_raw)
-        length  = f":{dur_m.group()}" if dur_m else ":30"
+        dur_m = re.search(r"\d+", dur_raw)
+        length = f":{dur_m.group()}" if dur_m else ":30"
 
         # If weekly_spots is a per-day schedule (one entry per calendar day,
         # values 0/1), it's not a weekly cadence — treat as order-basis.
@@ -1126,21 +1158,21 @@ def _sc_lines_from_io(io_detail: dict) -> List[dict]:
             weekly_spots = []
 
         # Always order-basis: total spots × 1 order
-        spw   = total_spots
-        per   = "Order"
+        spw = total_spots
+        per = "Order"
         weeks = 1
 
         # Per-line dates when available (e.g. SCWA per-month); fall back to order flight
         line_start = ln.get("start_date") or flight_start
-        line_end   = ln.get("end_date")   or flight_end
+        line_end = ln.get("end_date") or flight_end
 
         # Description: prefix with days + time when they're not already embedded
         description = ln.get("description") or f"Line {idx + 1}"
-        days  = (ln.get("days") or "").strip()
+        days = (ln.get("days") or "").strip()
         time_ = (ln.get("time") or "").strip()
         # Normalize 3-digit minutes: "10:300p" → "10:30p" (PDF OCR artifact)
-        time_       = re.sub(r'(\d+):(\d{2})\d+([aApPnN])', r'\1:\2\3', time_)
-        description = re.sub(r'(\d+):(\d{2})\d+([aApPnN])', r'\1:\2\3', description)
+        time_ = re.sub(r"(\d+):(\d{2})\d+([aApPnN])", r"\1:\2\3", time_)
+        description = re.sub(r"(\d+):(\d{2})\d+([aApPnN])", r"\1:\2\3", description)
         if days and time_ and days not in description and time_ not in description:
             line_desc = f"{days} {time_}  {description}".strip()
         else:
@@ -1150,21 +1182,23 @@ def _sc_lines_from_io(io_detail: dict) -> List[dict]:
         if io_line_num:
             line_desc = f"(Line {io_line_num}) {line_desc}"
 
-        sc.append({
-            "line_number":      idx + 1,
-            "date_range_start": line_start,
-            "date_range_end":   line_end,
-            "spot_count":       spw,
-            "per":              per,
-            "weeks":            weeks,
-            "line_description": line_desc,
-            "type":             "BNS" if is_bonus else "COM",
-            "length":           length,
-            # A bonus confirmation line always bills $0 — some IOs (e.g. RWNY)
-            # print a nominal "value" rate on bonus rows that must not reach
-            # the SC totals.
-            "gross_rate":       0.0 if is_bonus else rate,
-        })
+        sc.append(
+            {
+                "line_number": idx + 1,
+                "date_range_start": line_start,
+                "date_range_end": line_end,
+                "spot_count": spw,
+                "per": per,
+                "weeks": weeks,
+                "line_description": line_desc,
+                "type": "BNS" if is_bonus else "COM",
+                "length": length,
+                # A bonus confirmation line always bills $0 — some IOs (e.g. RWNY)
+                # print a nominal "value" rate on bonus rows that must not reach
+                # the SC totals.
+                "gross_rate": 0.0 if is_bonus else rate,
+            }
+        )
 
     return sc
 
@@ -1172,6 +1206,7 @@ def _sc_lines_from_io(io_detail: dict) -> List[dict]:
 # ─────────────────────────────────────────────────────────────────────────────
 # PHASE 3 — IO-vs-Etere reconciliation (tasks/backwrite-pipeline.md §2.4)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _rates_match(a: float, b: float) -> bool:
     """Two dollar rates are the same buy. Half-a-cent-per-dollar plus a 2¢ floor
@@ -1220,9 +1255,13 @@ def reconcile_io_vs_etere(
     #    the same amount Etere stores) in the Etere rate set. Bonus lines are
     #    excluded — they schedule at $0 regardless of any nominal "value" rate
     #    the IO prints on them (RWNY prints the standard rate there). ─────────
-    io_rates = sorted({round(float(ln.get("rate") or 0), 4)
-                       for ln in lines
-                       if not ln.get("is_bonus") and (ln.get("rate") or 0) > 0})
+    io_rates = sorted(
+        {
+            round(float(ln.get("rate") or 0), 4)
+            for ln in lines
+            if not ln.get("is_bonus") and (ln.get("rate") or 0) > 0
+        }
+    )
     etere_rates = sorted({round(s.gross_rate, 4) for s in spots if s.gross_rate > 0})
     rate_findings = []
     for io_rate in io_rates:
@@ -1230,15 +1269,21 @@ def reconcile_io_vs_etere(
         if any(_rates_match(expected, g) for g in etere_rates):
             continue  # ordered exactly as scheduled
         # Not found at the expected gross — diagnose the gross-up direction.
-        if is_agency and agency_fee > 0 and any(_rates_match(expected / (1 - agency_fee), g)
-                                                for g in etere_rates):
+        if (
+            is_agency
+            and agency_fee > 0
+            and any(_rates_match(expected / (1 - agency_fee), g) for g in etere_rates)
+        ):
             rec["ok"] = False
             rate_findings.append(
                 f"rate ${io_rate:,.2f} → Etere has ${expected / (1 - agency_fee):,.2f}, "
                 f"~1/(1-{agency_fee:.0%}) too high (grossed up one time too many)"
             )
-        elif is_agency and agency_fee > 0 and any(_rates_match(expected * (1 - agency_fee), g)
-                                                  for g in etere_rates):
+        elif (
+            is_agency
+            and agency_fee > 0
+            and any(_rates_match(expected * (1 - agency_fee), g) for g in etere_rates)
+        ):
             rec["ok"] = False
             rate_findings.append(
                 f"rate ${io_rate:,.2f} → Etere has ${expected * (1 - agency_fee):,.2f}, "
@@ -1256,8 +1301,11 @@ def reconcile_io_vs_etere(
 
     # ── Paid-spot-count check: revision or partial entry. Bonus counts are
     #    unreliable on many IOs, so paid is the hard check, bonus a soft note. ─
-    io_paid = sum(int(ln.get("total_spots") or 0)
-                  for ln in lines if not ln.get("is_bonus") and (ln.get("rate") or 0) > 0)
+    io_paid = sum(
+        int(ln.get("total_spots") or 0)
+        for ln in lines
+        if not ln.get("is_bonus") and (ln.get("rate") or 0) > 0
+    )
     etere_paid = sum(1 for s in spots if s.gross_rate > 0)
     rec["detail"]["io_paid_spots"] = io_paid
     rec["detail"]["etere_paid_spots"] = etere_paid
@@ -1269,7 +1317,9 @@ def reconcile_io_vs_etere(
         )
 
     # ── Missing-market check ─────────────────────────────────────────────────
-    io_markets = {(ln.get("market") or "").strip().upper() for ln in lines if (ln.get("market") or "").strip()}
+    io_markets = {
+        (ln.get("market") or "").strip().upper() for ln in lines if (ln.get("market") or "").strip()
+    }
     etere_markets = {(s.market or "").strip().upper() for s in spots if (s.market or "").strip()}
     if io_markets:
         missing = sorted(io_markets - etere_markets)
@@ -1287,7 +1337,15 @@ def reconcile_io_vs_etere(
 # MAIN ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────────────
 
-def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, raw_csv: bytes = b"", io_detail: dict = None, validation_out: Optional[dict] = None) -> bytes:
+
+def generate_excel(
+    header: CsvHeader,
+    spots: List[SpotRow],
+    user_inputs: dict,
+    raw_csv: bytes = b"",
+    io_detail: dict = None,
+    validation_out: Optional[dict] = None,
+) -> bytes:
     """Generate backwrite Excel from template and return raw bytes.
 
     If ``validation_out`` (a dict) is provided, it is populated with a totals
@@ -1296,15 +1354,15 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
     with human-readable ``messages`` describing each mismatch and by how much.
     """
     billing_type = user_inputs.get("billing_type", "Broadcast")
-    agency_flag  = _canon_agency(user_inputs.get("agency_flag", "Agency"))
-    agency_fee   = float(user_inputs.get("agency_fee", 0.15) or 0)
+    agency_flag = _canon_agency(user_inputs.get("agency_flag", "Agency"))
+    agency_fee = float(user_inputs.get("agency_fee", 0.15) or 0)
     sales_person = user_inputs.get("sales_person", "")
     revenue_type = user_inputs.get("revenue_type", "Internal Ad Sales")
-    affidavit     = user_inputs.get("affidavit",     "Y")
-    estimate      = user_inputs.get("estimate",      "")
-    estimate_run  = user_inputs.get("estimate_run",  "")
-    contract      = user_inputs.get("contract",      "")
-    revision      = user_inputs.get("revision",      "")
+    affidavit = user_inputs.get("affidavit", "Y")
+    estimate = user_inputs.get("estimate", "")
+    estimate_run = user_inputs.get("estimate_run", "")
+    contract = user_inputs.get("contract", "")
+    revision = user_inputs.get("revision", "")
 
     is_agency = agency_flag == "Agency"
     bill_code = f"{header.agency}:{header.client}" if header.agency else header.client
@@ -1315,8 +1373,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
     _gross_up_dict = user_inputs.get("gross_up_rates") or {}
     if _gross_up_dict and is_agency and (1 - agency_fee) > 0:
         _gross_up_map = {
-            round(float(k), 4): float(v) / (1 - agency_fee)
-            for k, v in _gross_up_dict.items()
+            round(float(k), 4): float(v) / (1 - agency_fee) for k, v in _gross_up_dict.items()
         }
         # Also index by net rate so IO-sourced SC lines (which carry net rates,
         # not the CSV gross rates used as keys above) can resolve correctly.
@@ -1335,6 +1392,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
     if raw_csv:
         try:
             from .eterebridge_runner import run_eterebridge_pipeline
+
             eb_df = run_eterebridge_pipeline(raw_csv, user_inputs)
             if eb_df is not None and not eb_df.empty:
                 run_rows = _eb_df_to_run_rows(eb_df, agency_fee, is_agency)
@@ -1347,37 +1405,39 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
                 month_date = compute_broadcast_month(s.air_date)
             else:
                 month_date = date(s.air_date.year, s.air_date.month, 1)
-            month_dt    = datetime(month_date.year, month_date.month, month_date.day)
+            month_dt = datetime(month_date.year, month_date.month, month_date.day)
             broker_fees = round(s.gross_rate * agency_fee, 2) if is_agency else 0.0
             station_net = round(s.gross_rate - broker_fees, 2)
-            run_rows.append({
-                "bill_code":    bill_code,
-                "air_date":     s.air_date,
-                "day":          s.air_date.strftime("%A"),
-                "time_in":      _hhmm_to_timedelta(s.time_from),
-                "time_out":     _hhmm_to_timedelta(s.time_to),
-                "length":       timedelta(seconds=s.duration_s),
-                "media":        s.copy_code,
-                "program":      s.air_time,
-                "lang":         detect_language(s.row_description),
-                "line":         s.line_id,
-                "type":         "BNS" if s.gross_rate == 0 else "COM",
-                "estimate":     estimate,
-                "estimate_run": estimate_run,
-                "gross_rate":   s.gross_rate,
-                "spot_value":   s.gross_rate,
-                "month":        month_dt,
-                "broker_fees":  broker_fees,
-                "priority":     4,
-                "station_net":  station_net,
-                "sales_person": sales_person,
-                "revenue_type": revenue_type,
-                "billing_type": billing_type,
-                "agency_flag":  agency_flag,
-                "affidavit":    affidavit,
-                "contract":     contract,
-                "market":       s.market,
-            })
+            run_rows.append(
+                {
+                    "bill_code": bill_code,
+                    "air_date": s.air_date,
+                    "day": s.air_date.strftime("%A"),
+                    "time_in": _hhmm_to_timedelta(s.time_from),
+                    "time_out": _hhmm_to_timedelta(s.time_to),
+                    "length": timedelta(seconds=s.duration_s),
+                    "media": s.copy_code,
+                    "program": s.air_time,
+                    "lang": detect_language(s.row_description),
+                    "line": s.line_id,
+                    "type": "BNS" if s.gross_rate == 0 else "COM",
+                    "estimate": estimate,
+                    "estimate_run": estimate_run,
+                    "gross_rate": s.gross_rate,
+                    "spot_value": s.gross_rate,
+                    "month": month_dt,
+                    "broker_fees": broker_fees,
+                    "priority": 4,
+                    "station_net": station_net,
+                    "sales_person": sales_person,
+                    "revenue_type": revenue_type,
+                    "billing_type": billing_type,
+                    "agency_flag": agency_flag,
+                    "affidavit": affidavit,
+                    "contract": contract,
+                    "market": s.market,
+                }
+            )
 
     # Apply gross-up to all run rows regardless of which path built them
     if _gross_up_map:
@@ -1385,8 +1445,8 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
             grossed = _grossed_up(r["gross_rate"])
             if grossed != r["gross_rate"]:
                 broker = round(grossed * agency_fee, 2) if is_agency else 0.0
-                r["gross_rate"]  = grossed
-                r["spot_value"]  = grossed
+                r["gross_rate"] = grossed
+                r["spot_value"] = grossed
                 r["broker_fees"] = broker
                 r["station_net"] = round(grossed - broker, 2)
 
@@ -1415,7 +1475,7 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
         # into separate contract lines with the same description — merge them back.
         # Rate is included so that two IO lines with identical daypart text but
         # different rates (e.g. two Vietnamese slots at $140 and $120) stay separate.
-        _io_line_re = re.compile(r'^\(Line (\d+)\)')
+        _io_line_re = re.compile(r"^\(Line (\d+)\)")
         groups: Dict[tuple, List[SpotRow]] = OrderedDict()
         group_io_num: Dict[tuple, int] = {}
         for s in spots:
@@ -1433,68 +1493,71 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
 
         sc_lines: List[dict] = []
         for idx, ((desc, _rate), group) in enumerate(groups_items):
-            d_start     = min(s.air_date for s in group)
-            d_end       = max(s.air_date for s in group)
+            d_start = min(s.air_date for s in group)
+            d_end = max(s.air_date for s in group)
             total_spots = len(group)
-            spw         = total_spots
-            weeks       = 1
-            per         = "Order"
-            first       = group[0]
-            sc_lines.append({
-                "line_number":      idx + 1,
-                "date_range_start": d_start.strftime("%m/%d/%Y"),
-                "date_range_end":   d_end.strftime("%m/%d/%Y"),
-                "spot_count":       spw,
-                "per":              per,
-                "weeks":            weeks,
-                "line_description": desc,
-                "type":             "BNS" if first.gross_rate == 0 else "COM",
-                "length":           f":{first.duration_s}",
-                "gross_rate":       _grossed_up(first.gross_rate),
-            })
+            spw = total_spots
+            weeks = 1
+            per = "Order"
+            first = group[0]
+            sc_lines.append(
+                {
+                    "line_number": idx + 1,
+                    "date_range_start": d_start.strftime("%m/%d/%Y"),
+                    "date_range_end": d_end.strftime("%m/%d/%Y"),
+                    "spot_count": spw,
+                    "per": per,
+                    "weeks": weeks,
+                    "line_description": desc,
+                    "type": "BNS" if first.gross_rate == 0 else "COM",
+                    "length": f":{first.duration_s}",
+                    "gross_rate": _grossed_up(first.gross_rate),
+                }
+            )
 
     # ── Single-value context ──────────────────────────────────────────────────
     total_gross = sum(_grossed_up(s.gross_rate) for s in spots) if spots else 0.0
-    total_net   = total_gross * (1 - agency_fee) if is_agency else total_gross
-    markets     = sorted(set(s.market for s in spots))
+    total_net = total_gross * (1 - agency_fee) if is_agency else total_gross
+    markets = sorted(set(s.market for s in spots))
     d_start_all = min(s.air_date for s in spots) if spots else date.today()
-    d_end_all   = max(s.air_date for s in spots) if spots else date.today()
+    d_end_all = max(s.air_date for s in spots) if spots else date.today()
 
     ctx: dict = {
-        "agency":           header.agency if agency_flag == "Agency" else header.client,
-        "client":           header.client,
-        "contract_code":    header.contract_code,
-        "description":      header.description,
-        "estimate":         estimate,
-        "address":          user_inputs.get("address") or header.address,
-        "billing_type":     billing_type,
-        "city":             user_inputs.get("city") or header.city,
-        "order_date":       user_inputs.get("order_date") or f"{date.today().month}/{date.today().day}/{date.today().year}",
-        "contract":         contract,
-        "sales_person":     sales_person,
-        "revenue_type":     revenue_type,
-        "agency_flag":      agency_flag,
-        "affidavit":        affidavit,
+        "agency": header.agency if agency_flag == "Agency" else header.client,
+        "client": header.client,
+        "contract_code": header.contract_code,
+        "description": header.description,
+        "estimate": estimate,
+        "address": user_inputs.get("address") or header.address,
+        "billing_type": billing_type,
+        "city": user_inputs.get("city") or header.city,
+        "order_date": user_inputs.get("order_date")
+        or f"{date.today().month}/{date.today().day}/{date.today().year}",
+        "contract": contract,
+        "sales_person": sales_person,
+        "revenue_type": revenue_type,
+        "agency_flag": agency_flag,
+        "affidavit": affidavit,
         "date_range_start": d_start_all.strftime("%m/%d/%Y"),
-        "date_range_end":   d_end_all.strftime("%m/%d/%Y"),
-        "spot_count":       len(spots),
-        "total_gross":      total_gross,
-        "total_net":        total_net,
-        "market":           ", ".join(markets),
-        "bill_code":        bill_code,
+        "date_range_end": d_end_all.strftime("%m/%d/%Y"),
+        "spot_count": len(spots),
+        "total_gross": total_gross,
+        "total_net": total_net,
+        "market": ", ".join(markets),
+        "bill_code": bill_code,
         # Contact / address fields supplied by user (or pre-filled from existing order)
-        "contact_person":   user_inputs.get("contact_person", ""),
-        "phone":            _phone_to_int(user_inputs.get("phone", "")),
-        "fax":              _phone_to_int(user_inputs.get("fax", "")),
-        "email_1":          user_inputs.get("email_1", ""),
-        "email_2":          user_inputs.get("email_2", ""),
-        "email_3":          user_inputs.get("email_3", ""),
-        "email_4":          user_inputs.get("email_4", ""),
-        "state":            user_inputs.get("state", ""),
-        "zip":              user_inputs.get("zip", ""),
-        "notes":            user_inputs.get("notes", "").replace('\r\n', '\n').replace('\r', '\n'),
-        "revision":         revision,
-        "per":              "Wk",
+        "contact_person": user_inputs.get("contact_person", ""),
+        "phone": _phone_to_int(user_inputs.get("phone", "")),
+        "fax": _phone_to_int(user_inputs.get("fax", "")),
+        "email_1": user_inputs.get("email_1", ""),
+        "email_2": user_inputs.get("email_2", ""),
+        "email_3": user_inputs.get("email_3", ""),
+        "email_4": user_inputs.get("email_4", ""),
+        "state": user_inputs.get("state", ""),
+        "zip": user_inputs.get("zip", ""),
+        "notes": user_inputs.get("notes", "").replace("\r\n", "\n").replace("\r", "\n"),
+        "revision": revision,
+        "per": "Wk",
     }
 
     # ── Load template and fill ────────────────────────────────────────────────
@@ -1505,20 +1568,22 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
             for cell in row:
                 if cell.hyperlink:
                     cell.hyperlink = None
-                if isinstance(cell.value, str) and cell.value.lower().startswith('mailto:'):
+                if isinstance(cell.value, str) and cell.value.lower().startswith("mailto:"):
                     cell.value = ""
     # Monthly totals for Sales Confirmation breakdown
     _mg: dict = defaultdict(float)
     for rr in run_rows:
-        m = rr.get('month')
+        m = rr.get("month")
         if isinstance(m, datetime):
-            _mg[m.strftime('%B')] += rr.get('gross_rate', 0) or 0
+            _mg[m.strftime("%B")] += rr.get("gross_rate", 0) or 0
     # Full precision — the Sales Confirmation breakdown writes gross as-is and
     # derives net + totals with Excel formulas, so nothing rounds until display.
     monthly_gross = {k: v for k, v in _mg.items()}
-    monthly_net   = {k: v * (1 - agency_fee) for k, v in monthly_gross.items()}
+    monthly_net = {k: v * (1 - agency_fee) for k, v in monthly_gross.items()}
 
-    _fill_sales_confirmation(wb["Sales Confirmation"], ctx, sc_lines, monthly_gross, monthly_net, agency_fee)
+    _fill_sales_confirmation(
+        wb["Sales Confirmation"], ctx, sc_lines, monthly_gross, monthly_net, agency_fee
+    )
     if not is_agency:
         _apply_direct_mode(wb["Sales Confirmation"])
     _fill_run_sheet(wb["Run Sheet"], run_rows, agency_fee=agency_fee, is_agency=is_agency)
@@ -1529,25 +1594,33 @@ def generate_excel(header: CsvHeader, spots: List[SpotRow], user_inputs: dict, r
     # residual rounding issue or a structural one (e.g. a line whose
     # spots/week × weeks ≠ its actual spot count).
     if validation_out is not None:
-        factor  = (1 - agency_fee) if is_agency else 1.0
-        g_run   = sum(_grossed_up(s.gross_rate) for s in spots)
-        g_sc    = sum(ln.get('spot_count', 0) * ln.get('weeks', 1) * ln.get('gross_rate', 0)
-                      for ln in sc_lines)
+        factor = (1 - agency_fee) if is_agency else 1.0
+        g_run = sum(_grossed_up(s.gross_rate) for s in spots)
+        g_sc = sum(
+            ln.get("spot_count", 0) * ln.get("weeks", 1) * ln.get("gross_rate", 0)
+            for ln in sc_lines
+        )
         g_month = sum(monthly_gross.values())
         rec = {
             "ok": True,
-            "gross": {"run_sheet": round(g_run, 2), "sc_lines": round(g_sc, 2),
-                      "monthly": round(g_month, 2)},
-            "net":   {"run_sheet": round(g_run * factor, 2), "sc_lines": round(g_sc * factor, 2),
-                      "monthly": round(g_month * factor, 2)},
+            "gross": {
+                "run_sheet": round(g_run, 2),
+                "sc_lines": round(g_sc, 2),
+                "monthly": round(g_month, 2),
+            },
+            "net": {
+                "run_sheet": round(g_run * factor, 2),
+                "sc_lines": round(g_sc * factor, 2),
+                "monthly": round(g_month * factor, 2),
+            },
             "messages": [],
         }
         eps = 0.01
         checks = [
-            ("Gross", "run sheet", g_run,   "SC lines", g_sc),
-            ("Gross", "run sheet", g_run,   "monthly breakdown", g_month),
-            ("Net",   "run sheet", g_run * factor, "SC lines", g_sc * factor),
-            ("Net",   "run sheet", g_run * factor, "monthly breakdown", g_month * factor),
+            ("Gross", "run sheet", g_run, "SC lines", g_sc),
+            ("Gross", "run sheet", g_run, "monthly breakdown", g_month),
+            ("Net", "run sheet", g_run * factor, "SC lines", g_sc * factor),
+            ("Net", "run sheet", g_run * factor, "monthly breakdown", g_month * factor),
         ]
         for label, a_name, a_val, b_name, b_val in checks:
             if abs(a_val - b_val) > eps:
