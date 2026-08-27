@@ -3222,7 +3222,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 "city": contact.get("city", ""),
                 "state": contact.get("state", ""),
                 "zip": contact.get("zip", ""),
-                "notes": str((gi.get("notes") if isinstance(gi, dict) else "") or ""),
+                # Etere's contract Notes field is the source; the manifest's
+                # gathered inputs carry notes only for parsers that set them.
+                "notes": str(
+                    (getattr(header, "notes", "") or "")
+                    or (gi.get("notes") if isinstance(gi, dict) else "")
+                    or ""
+                ),
                 "gross_up_rates": gross_up,
                 "language_corrections": lang_corrections,
                 "revision": "",
