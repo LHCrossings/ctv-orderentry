@@ -20,6 +20,7 @@ from typing import Any, List, Optional
 from fastapi import (
     APIRouter,
     Body,
+    Depends,
     File,
     HTTPException,
     Query,
@@ -28,6 +29,8 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
+
+from ..auth import require_export_token
 
 _src_path = Path(__file__).parent.parent.parent
 if str(_src_path) not in sys.path:
@@ -11282,6 +11285,118 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 "trade_net": round(sum(g["net"] for g in trade_groups), 2),
                 "all_markets": all_markets,
             }
+
+        try:
+            return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    # ── Etere Revenue by ANAGRAF (external — salesportal reconciliation) ──────
+
+    # All-time, unbounded scan over TPALINSE/CONTRATTIRIGHE/CONTRATTITESTATA
+    # (~2.5s) — too slow to re-run on every salesportal reconciliation click.
+    # Revenue rollups don't need per-request freshness, so cache like
+    # _etere_session_state above.
+    _etere_revenue_cache_lock = _threading.Lock()
+    _etere_revenue_cache_state: dict = {"data": None, "born_at": 0.0}
+    _ETERE_REVENUE_CACHE_TTL = 15 * 60  # seconds
+
+    @router.get("/api/master-control/etere-revenue-bulk")
+    async def etere_revenue_bulk(_auth: None = Depends(require_export_token)):
+        """All-time airtime revenue per ID_ANAGRAF, split by role (client vs
+        buying agency), for salesportal's Etere-reconciliation page. Same
+        actual-aired-spot-at-contract-rate logic as booked_business_load,
+        with Trade always excluded, but rolled up by ANAGRAF id instead of
+        by contract/month — a customer or agency can be linked to more than
+        one ID_ANAGRAF (e.g. booked direct vs. booked through an agency), so
+        this must stay keyed by ID_ANAGRAF, never collapsed by name."""
+
+        def _compute():
+            from browser_automation.etere_direct_client import connect as _connect
+
+            with _connect() as conn:
+                cur = conn.cursor(as_dict=True)
+
+                def _sum_by_role(role_column: str):
+                    cur.execute(f"""
+                        SELECT
+                            ct.{role_column}                    AS id_anagraf,
+                            ISNULL(SUM(
+                                CASE WHEN cr.CONTROLLACAPOFILA = 1 AND cr.CONTROLLAFINEFILA = 1
+                                     THEN cr.IMPORTO * 0.5
+                                     ELSE cr.IMPORTO
+                                END
+                            ), 0)                                AS total_revenue,
+                            COUNT(*)                              AS spot_count
+                        FROM TPALINSE t
+                        JOIN trafficTPalinse tp
+                          ON tp.ID_TPalinse = t.ID_TPALINSE
+                        JOIN CONTRATTIRIGHE cr
+                          ON cr.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe
+                        JOIN CONTRATTITESTATA ct
+                          ON ct.ID_CONTRATTITESTATA = tp.ID_CONTRATTITESTATA
+                        WHERE cr.NEWTYPE LIKE '%%COM%%'
+                          AND cr.IMPORTO > 0
+                          AND t.LIVELLO = 0
+                          AND cr.NEWTYPE NOT LIKE '%%TRD%%'
+                          AND (ct.CAMBIOMERCE = 0 OR ct.CAMBIOMERCE IS NULL)
+                          AND ct.ID_PAGAMENTI != 4
+                          AND ct.{role_column} IS NOT NULL
+                          AND ct.{role_column} != 0
+                        GROUP BY ct.{role_column}
+                    """)
+                    return {
+                        str(r["id_anagraf"]): {
+                            "total_revenue": round(float(r["total_revenue"] or 0), 2),
+                            "spot_count": r["spot_count"],
+                        }
+                        for r in cur.fetchall()
+                    }
+
+                return {
+                    "customers": _sum_by_role("COMMITTENTE"),
+                    "agencies": _sum_by_role("AGENZIA"),
+                }
+
+        def _run():
+            now = _time.monotonic()
+            with _etere_revenue_cache_lock:
+                c = _etere_revenue_cache_state
+                if c["data"] is not None and (now - c["born_at"]) < _ETERE_REVENUE_CACHE_TTL:
+                    return c["data"]
+            data = _compute()
+            with _etere_revenue_cache_lock:
+                _etere_revenue_cache_state["data"] = data
+                _etere_revenue_cache_state["born_at"] = now
+            return data
+
+        try:
+            return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    # ── Etere ANAGRAF identity bulk (external — salesportal reconciliation) ───
+
+    @router.get("/api/master-control/etere-anagraf-bulk")
+    async def etere_anagraf_bulk(_auth: None = Depends(require_export_token)):
+        """Full ANAGRAF identity export for salesportal's Etere-reconciliation
+        page — the name-matching source `anagraf_store.fetch_live_anagraf_rows()`
+        calls to propose/link a CRM agency or customer to an Etere ID_ANAGRAF.
+        Keys are the raw ANAGRAF column names salesportal's parser expects."""
+
+        def _run():
+            from browser_automation.etere_direct_client import connect as _connect
+
+            with _connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                cur.execute("""
+                    SELECT
+                        ID_ANAGRAF, COD_CONTO, RAG_SOCIAL, CITTA, VIA, CAP,
+                        PROVINCIA, TELEFONO, E_MAIL, AGENTE1, AGENZIA,
+                        CENTROMEDIA, FlagAgent
+                    FROM ANAGRAF
+                """)
+                return {"rows": cur.fetchall()}
 
         try:
             return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
