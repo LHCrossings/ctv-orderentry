@@ -200,13 +200,22 @@ def plan(evs: list[Ev], inv: list[Filler], hour_end: float, market: int) -> tupl
     interior = breaks[:-1]
     while R - ID_MIN_AIR >= 30.0:  # largest PI that still leaves ≥5s for the ID
         # where does the next PI go? final break unless it would exceed the cap
-        # Evenness (Lee): the next PI goes to the SHORTEST break, interior or
-        # final — never "dump at the end". The final break is capped at 2:30.
-        candidates = list(interior) + ([final] if final.length + 30 <= FINAL_BREAK_MAX else [])
-        if not candidates:
-            candidates = [final]
-        target = min(candidates, key=lambda b: b.length)
+        # Evenness (Lee): the next PI goes to the SHORTEST interior break. The
+        # final break may take it only if it stays ≤ the longest interior break
+        # ("the final break must never be the longest") and ≤ 2:30.
         sec = 60 if R - ID_MIN_AIR >= 60.0 else 30
+        # The final break will also receive the ID (25s) and typically one PSA
+        # (~15s) in the end game — count that reserve now, or it looks 40s
+        # lighter than it will end up and steals PIs from interior breaks.
+        end_reserve = 25.0 + 15.0
+
+        def eff(b: Break) -> float:
+            return b.length + (end_reserve if b is final else 0.0)
+
+        longest_interior = max((b.length for b in interior), default=0.0)
+        final_ok = eff(final) + sec <= min(FINAL_BREAK_MAX, longest_interior) if interior else True
+        candidates = list(interior) + ([final] if final_ok else [])
+        target = min(candidates, key=eff)
         f = take("PI", sec, target) or (take("PI", 30, target) if sec == 60 else None)
         if not f:
             break

@@ -15,6 +15,9 @@ show ends 08:54:18, UNIAE1667 filler 4:35.88, end break :15 COM + :30 PI + :15 P
    the others; the final break ≤ 2:30. Fill is therefore a DISTRIBUTION problem
    (place PIs into the shortest interior breaks until the final break ≤ 2:30 and
    break lengths are balanced), then the PSA/ID end game at the top of the hour.
+   **The final break must never be the LONGEST break** (Lee, 8/27, after seeing
+   the prototype put 2:25 at the end): a PI lands in the final break only if it
+   stays ≤ the longest interior break; otherwise shortest interior break first.
 1. **Structure** COMS/PRGS exists through June; orders land in COMS; Daily
    Programming fills PRGS. The show's Etere length is a PLACEHOLDER (exact for
    Punjabi, AVS, Namaste; not in general), so the real remainder is only known
