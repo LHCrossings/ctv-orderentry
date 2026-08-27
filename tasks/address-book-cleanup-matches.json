@@ -1,0 +1,1464 @@
+[
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 48,
+   "name": "BidenHarrisCampaign",
+   "sales_role": "Advertiser"
+  },
+  "hits": []
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 200,
+   "name": "Bilingo Media",
+   "sales_role": "Advertiser"
+  },
+  "hits": [
+   {
+    "score": 0.33,
+    "id": 160,
+    "name": "H&L Partners (Production)",
+    "role": "Adv",
+    "agency": null,
+    "city": "Oakland",
+    "note": "This is the billing entity for Production Orders f",
+    "extra": "",
+    "contracts": 1,
+    "last": "2022-02-15",
+    "why": [
+     "word:bilingo"
+    ]
+   },
+   {
+    "score": 0.33,
+    "id": 316,
+    "name": "BROADCAST BILLING",
+    "role": "Agt3",
+    "agency": null,
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 0,
+    "last": "-",
+    "why": [
+     "word:bilingo"
+    ]
+   },
+   {
+    "score": 0.33,
+    "id": 317,
+    "name": "CALENDAR BILLING",
+    "role": "Agt3",
+    "agency": null,
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 0,
+    "last": "-",
+    "why": [
+     "word:bilingo"
+    ]
+   }
+  ]
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 207,
+   "name": "Canella Media",
+   "sales_role": "Advertiser"
+  },
+  "hits": [
+   {
+    "score": 0.33,
+    "id": 273,
+    "name": "Cannella Response",
+    "role": "Adv",
+    "agency": "Worldlink",
+    "city": "Los Angeles",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2023-05-22",
+    "why": [
+     "word:canella"
+    ]
+   }
+  ]
+ },
+ {
+  "sp": {
+   "entity_type": "agency",
+   "entity_id": 96,
+   "name": "CCMedia",
+   "sales_role": "Agency"
+  },
+  "hits": []
+ },
+ {
+  "sp": {
+   "entity_type": "agency",
+   "entity_id": 120,
+   "name": "Crispin",
+   "sales_role": "Agency"
+  },
+  "hits": [
+   {
+    "score": 2.0,
+    "id": 446,
+    "name": "Crispin LLC",
+    "role": "Agency",
+    "agency": null,
+    "city": "New York",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2026-08-12",
+    "why": [
+     "word:crispin",
+     "substr"
+    ]
+   },
+   {
+    "score": 1.17,
+    "id": 448,
+    "name": "Bay Area Air Quality Management District (Crispin)",
+    "role": "Adv",
+    "agency": "Crispin LLC",
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2026-08-12",
+    "why": [
+     "word:crispin",
+     "substr"
+    ]
+   }
+  ]
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 57,
+   "name": "Desert Media Partners",
+   "sales_role": "Advertiser"
+  },
+  "hits": [
+   {
+    "score": 2.0,
+    "id": 452,
+    "name": "Desert Media Partners",
+    "role": "Adv",
+    "agency": null,
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 0,
+    "last": "-",
+    "why": [
+     "word:desert,partners",
+     "substr"
+    ]
+   },
+   {
+    "score": 0.5,
+    "id": 8,
+    "name": "H&L Partners",
+    "role": "Agency",
+    "agency": null,
+    "city": "Oakland",
+    "note": "",
+    "extra": "",
+    "contracts": 81,
+    "last": "2026-11-30",
+    "why": [
+     "word:partners"
+    ]
+   },
+   {
+    "score": 0.33,
+    "id": 158,
+    "name": "Springboard Partners",
+    "role": "Agency",
+    "agency": null,
+    "city": "Los Angeles",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2022-02-06",
+    "why": [
+     "word:partners"
+    ]
+   },
+   {
+    "score": 0.33,
+    "id": 160,
+    "name": "H&L Partners (Production)",
+    "role": "Adv",
+    "agency": null,
+    "city": "Oakland",
+    "note": "This is the billing entity for Production Orders f",
+    "extra": "",
+    "contracts": 1,
+    "last": "2022-02-15",
+    "why": [
+     "word:partners"
+    ]
+   },
+   {
+    "score": 0.33,
+    "id": 187,
+    "name": "Allison + Partners",
+    "role": "Agency",
+    "agency": null,
+    "city": "Atlanta",
+    "note": "",
+    "extra": "",
+    "contracts": 8,
+    "last": "2025-11-10",
+    "why": [
+     "word:partners"
+    ]
+   }
+  ]
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 102,
+   "name": "DHCS",
+   "sales_role": "Advertiser"
+  },
+  "hits": [
+   {
+    "score": 2.5,
+    "id": 136,
+    "name": "DHCS (Media Solutions)",
+    "role": "Adv",
+    "agency": "Media Solutions",
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 4,
+    "last": "2023-04-10",
+    "why": [
+     "word:dhcs",
+     "substr",
+     "exact-word"
+    ]
+   },
+   {
+    "score": 2.5,
+    "id": 313,
+    "name": "DHCS (GMMB)",
+    "role": "Adv",
+    "agency": "GMMB",
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2024-02-05",
+    "why": [
+     "word:dhcs",
+     "substr",
+     "exact-word"
+    ]
+   },
+   {
+    "score": 0.17,
+    "id": 58,
+    "name": "Sacramento County DHS Public Health Department",
+    "role": "Adv",
+    "agency": null,
+    "city": "Sacramento",
+    "note": "",
+    "extra": "",
+    "contracts": 2,
+    "last": "2021-10-01",
+    "why": [
+     "word:dhcs"
+    ]
+   }
+  ]
+ },
+ {
+  "sp": {
+   "entity_type": "agency",
+   "entity_id": 98,
+   "name": "Edutainment Media Inc",
+   "sales_role": "Agency"
+  },
+  "hits": []
+ },
+ {
+  "sp": {
+   "entity_type": "agency",
+   "entity_id": 99,
+   "name": "Emerging Networks",
+   "sales_role": "Agency"
+  },
+  "hits": [
+   {
+    "score": 0.25,
+    "id": 244,
+    "name": "Hispanic Communications Network",
+    "role": "Agency",
+    "agency": null,
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 2,
+    "last": "2023-10-09",
+    "why": [
+     "word:networks"
+    ]
+   },
+   {
+    "score": 0.17,
+    "id": 301,
+    "name": "Negligence Network (MJ Ventures)",
+    "role": "Adv",
+    "agency": "Worldlink",
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2023-11-07",
+    "why": [
+     "word:networks"
+    ]
+   },
+   {
+    "score": 0.11,
+    "id": 294,
+    "name": "California Hmong Advocates Network and Building Our Future",
+    "role": "Adv",
+    "agency": null,
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2023-10-28",
+    "why": [
+     "word:networks"
+    ]
+   }
+  ]
+ },
+ {
+  "sp": {
+   "entity_type": "agency",
+   "entity_id": 100,
+   "name": "Ethnic Media Services",
+   "sales_role": "Agency"
+  },
+  "hits": []
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 463,
+   "name": "Ethnic Media Services",
+   "sales_role": "Advertiser"
+  },
+  "hits": []
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 187,
+   "name": "Hard Rock Hotel & Casino",
+   "sales_role": "Advertiser"
+  },
+  "hits": [
+   {
+    "score": 0.2,
+    "id": 417,
+    "name": "Snoqualmie Casino",
+    "role": "Adv",
+    "agency": null,
+    "city": "Snoqualmie",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2026-02-02",
+    "why": [
+     "word:casino"
+    ]
+   },
+   {
+    "score": 0.2,
+    "id": 129,
+    "name": "Muckleshoot Casino",
+    "role": "Adv",
+    "agency": "Rodi Platcow Malin",
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 24,
+    "last": "2026-07-06",
+    "why": [
+     "word:casino"
+    ]
+   },
+   {
+    "score": 0.2,
+    "id": 387,
+    "name": "Graton Casino",
+    "role": "Adv",
+    "agency": "Time Advertising, Inc.",
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 30,
+    "last": "2026-08-31",
+    "why": [
+     "word:casino"
+    ]
+   },
+   {
+    "score": 0.2,
+    "id": 278,
+    "name": "Sycuan Casino",
+    "role": "Adv",
+    "agency": "Sycuan Casino (In-house)",
+    "city": "El Cajon",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2023-08-16",
+    "why": [
+     "word:casino"
+    ]
+   },
+   {
+    "score": 0.17,
+    "id": 20,
+    "name": "Emerald Queen Casino",
+    "role": "Adv",
+    "agency": "TH Media",
+    "city": "Fife",
+    "note": "",
+    "extra": "",
+    "contracts": 55,
+    "last": "2026-07-06",
+    "why": [
+     "word:casino"
+    ]
+   }
+  ]
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 224,
+   "name": "Icon Media Direct Gunthy Renker",
+   "sales_role": "Advertiser"
+  },
+  "hits": [
+   {
+    "score": 0.5,
+    "id": 171,
+    "name": "Icon Media Direct, Inc.",
+    "role": "Adv",
+    "agency": "Worldlink",
+    "city": "Sherman Oaks",
+    "note": "",
+    "extra": "",
+    "contracts": 14,
+    "last": "2023-06-26",
+    "why": [
+     "word:direct,icon"
+    ]
+   },
+   {
+    "score": 0.33,
+    "id": 310,
+    "name": "Empower App (Icon Media Direct, Inc.)",
+    "role": "Adv",
+    "agency": "Worldlink",
+    "city": "Sherman Oaks",
+    "note": "",
+    "extra": "",
+    "contracts": 22,
+    "last": "2025-04-28",
+    "why": [
+     "word:direct,icon"
+    ]
+   },
+   {
+    "score": 0.33,
+    "id": 288,
+    "name": "Rue Gilt Group (Icon Media Direct, Inc)",
+    "role": "Adv",
+    "agency": "Worldlink",
+    "city": "Sherman Oaks",
+    "note": "",
+    "extra": "",
+    "contracts": 22,
+    "last": "2026-03-30",
+    "why": [
+     "word:direct,icon"
+    ]
+   },
+   {
+    "score": 0.33,
+    "id": 351,
+    "name": "Centene Corporation (Icon Media Direct, Inc.)",
+    "role": "Adv",
+    "agency": "Worldlink",
+    "city": "Sherman Oaks",
+    "note": "",
+    "extra": "",
+    "contracts": 3,
+    "last": "2025-01-06",
+    "why": [
+     "word:direct,icon"
+    ]
+   },
+   {
+    "score": 0.2,
+    "id": 256,
+    "name": "Direct Donor",
+    "role": "Adv",
+    "agency": "Worldlink",
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 18,
+    "last": "2023-09-25",
+    "why": [
+     "word:direct"
+    ]
+   }
+  ]
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 254,
+   "name": "Internal Ad Sales",
+   "sales_role": "Advertiser"
+  },
+  "hits": [
+   {
+    "score": 0.25,
+    "id": 264,
+    "name": "Television Ad Group",
+    "role": "Adv",
+    "agency": "Worldlink",
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2023-03-28",
+    "why": [
+     "word:ad"
+    ]
+   }
+  ]
+ },
+ {
+  "sp": {
+   "entity_type": "agency",
+   "entity_id": 48,
+   "name": "JP Marketing",
+   "sales_role": "Agency"
+  },
+  "hits": []
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 167,
+   "name": "JSM Media",
+   "sales_role": "Advertiser"
+  },
+  "hits": []
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 59,
+   "name": "Kingdom of God",
+   "sales_role": "Advertiser"
+  },
+  "hits": []
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 263,
+   "name": "LA Community College District",
+   "sales_role": "Advertiser"
+  },
+  "hits": [
+   {
+    "score": 0.4,
+    "id": 418,
+    "name": "Borough of Manhattan Community College",
+    "role": "Adv",
+    "agency": null,
+    "city": "New York",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2026-02-11",
+    "why": [
+     "word:college,community"
+    ]
+   },
+   {
+    "score": 0.4,
+    "id": 218,
+    "name": "Los Rios Community College",
+    "role": "Adv",
+    "agency": "3Fold Communications",
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 9,
+    "last": "2026-11-10",
+    "why": [
+     "word:college,community"
+    ]
+   },
+   {
+    "score": 0.4,
+    "id": 270,
+    "name": "CA Community Colleges",
+    "role": "Adv",
+    "agency": "Misfit",
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 6,
+    "last": "2026-01-26",
+    "why": [
+     "word:college,community"
+    ]
+   },
+   {
+    "score": 0.25,
+    "id": 268,
+    "name": "Pro Media Group (LA)",
+    "role": "Adv",
+    "agency": null,
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2023-04-24",
+    "why": [
+     "word:la"
+    ]
+   },
+   {
+    "score": 0.25,
+    "id": 269,
+    "name": "Community Initiatives",
+    "role": "Adv",
+    "agency": null,
+    "city": "Oakland",
+    "note": "",
+    "extra": "",
+    "contracts": 2,
+    "last": "2024-07-06",
+    "why": [
+     "word:community"
+    ]
+   }
+  ]
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 88,
+   "name": "Lockard & Wechsler Emson",
+   "sales_role": "Advertiser"
+  },
+  "hits": [
+   {
+    "score": 0.4,
+    "id": 324,
+    "name": "Bullseye Pro (Lockard & Wechsler)",
+    "role": "Adv",
+    "agency": "Worldlink",
+    "city": "Los Angeles",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2024-04-23",
+    "why": [
+     "word:lockard,wechsler"
+    ]
+   },
+   {
+    "score": 0.33,
+    "id": 322,
+    "name": "Ruby Horsepower Scrubber (Lockard & Wechsler)",
+    "role": "Adv",
+    "agency": "Worldlink",
+    "city": "Los Angeles",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2024-04-23",
+    "why": [
+     "word:lockard,wechsler"
+    ]
+   },
+   {
+    "score": 0.29,
+    "id": 323,
+    "name": "Pocket Hose Copper Bullet (Lockard & Wechsler)",
+    "role": "Adv",
+    "agency": "Worldlink",
+    "city": "Los Angeles",
+    "note": "",
+    "extra": "",
+    "contracts": 2,
+    "last": "2024-07-01",
+    "why": [
+     "word:lockard,wechsler"
+    ]
+   }
+  ]
+ },
+ {
+  "sp": {
+   "entity_type": "agency",
+   "entity_id": 31,
+   "name": "McHale Media",
+   "sales_role": "Agency"
+  },
+  "hits": []
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 249,
+   "name": "NAM",
+   "sales_role": "Advertiser"
+  },
+  "hits": []
+ },
+ {
+  "sp": {
+   "entity_type": "agency",
+   "entity_id": 32,
+   "name": "NKB",
+   "sales_role": "Agency"
+  },
+  "hits": []
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 373,
+   "name": "Placer Community Foundation",
+   "sales_role": "Advertiser"
+  },
+  "hits": [
+   {
+    "score": 0.4,
+    "id": 178,
+    "name": "Sacramento Region Community Foundation",
+    "role": "Adv",
+    "agency": null,
+    "city": "Sacramento",
+    "note": "",
+    "extra": "",
+    "contracts": 5,
+    "last": "2026-04-27",
+    "why": [
+     "word:community,foundation"
+    ]
+   },
+   {
+    "score": 0.25,
+    "id": 269,
+    "name": "Community Initiatives",
+    "role": "Adv",
+    "agency": null,
+    "city": "Oakland",
+    "note": "",
+    "extra": "",
+    "contracts": 2,
+    "last": "2024-07-06",
+    "why": [
+     "word:community"
+    ]
+   },
+   {
+    "score": 0.25,
+    "id": 438,
+    "name": "American Community Media",
+    "role": "Adv",
+    "agency": null,
+    "city": "San Francisco",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2026-06-15",
+    "why": [
+     "word:community"
+    ]
+   },
+   {
+    "score": 0.2,
+    "id": 124,
+    "name": "Sierra Health Foundation",
+    "role": "Adv",
+    "agency": null,
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 3,
+    "last": "2022-01-05",
+    "why": [
+     "word:foundation"
+    ]
+   },
+   {
+    "score": 0.2,
+    "id": 267,
+    "name": "Nichi Bei Foundation",
+    "role": "Adv",
+    "agency": null,
+    "city": "San Francisco",
+    "note": "",
+    "extra": "",
+    "contracts": 2,
+    "last": "2024-02-06",
+    "why": [
+     "word:foundation"
+    ]
+   }
+  ]
+ },
+ {
+  "sp": {
+   "entity_type": "agency",
+   "entity_id": 73,
+   "name": "PMCC",
+   "sales_role": "Agency"
+  },
+  "hits": []
+ },
+ {
+  "sp": {
+   "entity_type": "agency",
+   "entity_id": 106,
+   "name": "Runyon",
+   "sales_role": "Agency"
+  },
+  "hits": []
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 594,
+   "name": "San Joaquin County Registrar of Voters",
+   "sales_role": "Advertiser"
+  },
+  "hits": [
+   {
+    "score": 2.0,
+    "id": 451,
+    "name": "San Joaquin County Registrar of Voters",
+    "role": "Adv",
+    "agency": "SY Communications",
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 0,
+    "last": "-",
+    "why": [
+     "word:joaquin,registrar,san,voters",
+     "substr"
+    ]
+   },
+   {
+    "score": 0.33,
+    "id": 120,
+    "name": "Santa Clara County Registrar of Voters",
+    "role": "Adv",
+    "agency": null,
+    "city": "Bldg. 2",
+    "note": "",
+    "extra": "",
+    "contracts": 2,
+    "last": "2021-12-27",
+    "why": [
+     "word:registrar,voters"
+    ]
+   },
+   {
+    "score": 0.33,
+    "id": 414,
+    "name": "Health Plan of San Joaquin",
+    "role": "Adv",
+    "agency": null,
+    "city": "French Camp",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2026-01-18",
+    "why": [
+     "word:joaquin,san"
+    ]
+   },
+   {
+    "score": 0.29,
+    "id": 177,
+    "name": "San Joaquin Country Public Works",
+    "role": "Adv",
+    "agency": null,
+    "city": "Stockton",
+    "note": "",
+    "extra": "",
+    "contracts": 4,
+    "last": "2025-04-09",
+    "why": [
+     "word:joaquin,san"
+    ]
+   },
+   {
+    "score": 0.2,
+    "id": 196,
+    "name": "County of San Mateo",
+    "role": "Adv",
+    "agency": null,
+    "city": "San Mateo",
+    "note": "",
+    "extra": "",
+    "contracts": 5,
+    "last": "2026-05-05",
+    "why": [
+     "word:san"
+    ]
+   }
+  ]
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 104,
+   "name": "San Joaquin Valley APCD",
+   "sales_role": "Advertiser"
+  },
+  "hits": [
+   {
+    "score": 0.33,
+    "id": 414,
+    "name": "Health Plan of San Joaquin",
+    "role": "Adv",
+    "agency": null,
+    "city": "French Camp",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2026-01-18",
+    "why": [
+     "word:joaquin,san"
+    ]
+   },
+   {
+    "score": 0.33,
+    "id": 451,
+    "name": "San Joaquin County Registrar of Voters",
+    "role": "Adv",
+    "agency": "SY Communications",
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 0,
+    "last": "-",
+    "why": [
+     "word:joaquin,san"
+    ]
+   },
+   {
+    "score": 0.29,
+    "id": 177,
+    "name": "San Joaquin Country Public Works",
+    "role": "Adv",
+    "agency": null,
+    "city": "Stockton",
+    "note": "",
+    "extra": "",
+    "contracts": 4,
+    "last": "2025-04-09",
+    "why": [
+     "word:joaquin,san"
+    ]
+   },
+   {
+    "score": 0.2,
+    "id": 196,
+    "name": "County of San Mateo",
+    "role": "Adv",
+    "agency": null,
+    "city": "San Mateo",
+    "note": "",
+    "extra": "",
+    "contracts": 5,
+    "last": "2026-05-05",
+    "why": [
+     "word:san"
+    ]
+   },
+   {
+    "score": 0.2,
+    "id": 375,
+    "name": "Valley Water",
+    "role": "Adv",
+    "agency": "Loma Media",
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2024-12-23",
+    "why": [
+     "word:valley"
+    ]
+   }
+  ]
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 397,
+   "name": "Santa Clara County Emergency Operations Center",
+   "sales_role": "Advertiser"
+  },
+  "hits": [
+   {
+    "score": 0.38,
+    "id": 285,
+    "name": "Santa Clara Valley Medical Center (SCCO)",
+    "role": "Adv",
+    "agency": "Hyphen",
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2023-09-07",
+    "why": [
+     "word:center,clara,santa"
+    ]
+   },
+   {
+    "score": 0.29,
+    "id": 120,
+    "name": "Santa Clara County Registrar of Voters",
+    "role": "Adv",
+    "agency": null,
+    "city": "Bldg. 2",
+    "note": "",
+    "extra": "",
+    "contracts": 2,
+    "last": "2021-12-27",
+    "why": [
+     "word:clara,santa"
+    ]
+   },
+   {
+    "score": 0.29,
+    "id": 398,
+    "name": "Santa Clara Valley Healthcare",
+    "role": "Adv",
+    "agency": "Hyphen",
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2025-10-20",
+    "why": [
+     "word:clara,santa"
+    ]
+   },
+   {
+    "score": 0.14,
+    "id": 382,
+    "name": "Marjaree Mason Center",
+    "role": "Adv",
+    "agency": "Hyphen",
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2025-04-14",
+    "why": [
+     "word:center"
+    ]
+   },
+   {
+    "score": 0.12,
+    "id": 210,
+    "name": "Center for Medicare & Medicaid Services",
+    "role": "Adv",
+    "agency": "IW Group, Inc.",
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 14,
+    "last": "2025-01-20",
+    "why": [
+     "word:center"
+    ]
+   }
+  ]
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 60,
+   "name": "Shop LC",
+   "sales_role": "Advertiser"
+  },
+  "hits": [
+   {
+    "score": 1.67,
+    "id": 443,
+    "name": "Shop LC (Tatari)",
+    "role": "Adv",
+    "agency": "Worldlink",
+    "city": "San Francisco",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2026-07-13",
+    "why": [
+     "word:lc,shop",
+     "substr"
+    ]
+   },
+   {
+    "score": 1.0,
+    "id": 445,
+    "name": "ShopLC (PGM)",
+    "role": "Adv",
+    "agency": null,
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 0,
+    "last": "-",
+    "why": [
+     "substr"
+    ]
+   }
+  ]
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 401,
+   "name": "Soluna Outreach Solutions",
+   "sales_role": "Advertiser"
+  },
+  "hits": [
+   {
+    "score": 0.33,
+    "id": 23,
+    "name": "Media Solutions",
+    "role": "Agency",
+    "agency": null,
+    "city": "Sacramento",
+    "note": "",
+    "extra": "",
+    "contracts": 19,
+    "last": "2023-04-10",
+    "why": [
+     "word:solutions"
+    ]
+   },
+   {
+    "score": 0.25,
+    "id": 21,
+    "name": "opAD Media Solutions LLC",
+    "role": "Agency",
+    "agency": null,
+    "city": "New York",
+    "note": "",
+    "extra": "",
+    "contracts": 31,
+    "last": "2026-01-05",
+    "why": [
+     "word:solutions"
+    ]
+   },
+   {
+    "score": 0.25,
+    "id": 87,
+    "name": "Misfit c/o Media Solutions",
+    "role": "Agency",
+    "agency": null,
+    "city": "Sacramento",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2022-01-04",
+    "why": [
+     "word:solutions"
+    ]
+   },
+   {
+    "score": 0.25,
+    "id": 169,
+    "name": "Edelman c/o M&M Media Solutions, Inc.",
+    "role": "Agency",
+    "agency": null,
+    "city": "Sacramento",
+    "note": "",
+    "extra": "",
+    "contracts": 3,
+    "last": "2024-05-06",
+    "why": [
+     "word:solutions"
+    ]
+   },
+   {
+    "score": 0.25,
+    "id": 435,
+    "name": "Sheso",
+    "role": "Agency",
+    "agency": null,
+    "city": "",
+    "note": "\"Ivette Montejo | Outreach & Program Coordinator\n\n",
+    "extra": "",
+    "contracts": 2,
+    "last": "2026-06-02",
+    "why": [
+     "word:outreach"
+    ]
+   }
+  ]
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 191,
+   "name": "Surer Word",
+   "sales_role": "Advertiser"
+  },
+  "hits": [
+   {
+    "score": 0.17,
+    "id": 432,
+    "name": "Resorts World New York",
+    "role": "Adv",
+    "agency": null,
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 2,
+    "last": "2026-07-18",
+    "why": [
+     "word:word"
+    ]
+   }
+  ]
+ },
+ {
+  "sp": {
+   "entity_type": "agency",
+   "entity_id": 107,
+   "name": "TDW and Co",
+   "sales_role": "Agency"
+  },
+  "hits": [
+   {
+    "score": 0.5,
+    "id": 249,
+    "name": "TDW+Co Seattle",
+    "role": "Agency",
+    "agency": null,
+    "city": "Seattle",
+    "note": "",
+    "extra": "",
+    "contracts": 33,
+    "last": "2023-03-01",
+    "why": [
+     "word:tdw"
+    ]
+   }
+  ]
+ },
+ {
+  "sp": {
+   "entity_type": "agency",
+   "entity_id": 108,
+   "name": "The Sax Agency",
+   "sales_role": "Agency"
+  },
+  "hits": []
+ },
+ {
+  "sp": {
+   "entity_type": "agency",
+   "entity_id": 90,
+   "name": "Tzunu Strategies",
+   "sales_role": "Agency"
+  },
+  "hits": [
+   {
+    "score": 0.33,
+    "id": 242,
+    "name": "Waterfront Strategies",
+    "role": "Agency",
+    "agency": null,
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2022-10-25",
+    "why": [
+     "word:strategies"
+    ]
+   },
+   {
+    "score": 0.25,
+    "id": 233,
+    "name": "Gleeson Digital Strategies",
+    "role": "Agency",
+    "agency": null,
+    "city": "Sacramento",
+    "note": "",
+    "extra": "",
+    "contracts": 4,
+    "last": "2023-09-18",
+    "why": [
+     "word:strategies"
+    ]
+   }
+  ]
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 186,
+   "name": "UC Davis",
+   "sales_role": "Advertiser"
+  },
+  "hits": [
+   {
+    "score": 1.5,
+    "id": 93,
+    "name": "UC Davis Health System",
+    "role": "Adv",
+    "agency": "Birdsall, Voss & Associates, Inc. dba BVK",
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 6,
+    "last": "2026-05-18",
+    "why": [
+     "word:davis,uc",
+     "substr"
+    ]
+   }
+  ]
+ },
+ {
+  "sp": {
+   "entity_type": "customer",
+   "entity_id": 593,
+   "name": "Wellpoint",
+   "sales_role": "Advertiser"
+  },
+  "hits": []
+ },
+ {
+  "sp": {
+   "entity_type": "agency",
+   "entity_id": 121,
+   "name": "SY Communications: San Joaquin County Registrar of Voters",
+   "sales_role": "Agency"
+  },
+  "hits": [
+   {
+    "score": 1.8,
+    "id": 451,
+    "name": "San Joaquin County Registrar of Voters",
+    "role": "Adv",
+    "agency": "SY Communications",
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 0,
+    "last": "-",
+    "why": [
+     "word:joaquin,registrar,san,voters",
+     "substr"
+    ]
+   },
+   {
+    "score": 1.2,
+    "id": 450,
+    "name": "SY Communications",
+    "role": "Agency",
+    "agency": null,
+    "city": "",
+    "note": "",
+    "extra": "",
+    "contracts": 0,
+    "last": "-",
+    "why": [
+     "word:sy",
+     "substr"
+    ]
+   },
+   {
+    "score": 0.29,
+    "id": 120,
+    "name": "Santa Clara County Registrar of Voters",
+    "role": "Adv",
+    "agency": null,
+    "city": "Bldg. 2",
+    "note": "",
+    "extra": "",
+    "contracts": 2,
+    "last": "2021-12-27",
+    "why": [
+     "word:registrar,voters"
+    ]
+   },
+   {
+    "score": 0.29,
+    "id": 414,
+    "name": "Health Plan of San Joaquin",
+    "role": "Adv",
+    "agency": null,
+    "city": "French Camp",
+    "note": "",
+    "extra": "",
+    "contracts": 1,
+    "last": "2026-01-18",
+    "why": [
+     "word:joaquin,san"
+    ]
+   },
+   {
+    "score": 0.25,
+    "id": 177,
+    "name": "San Joaquin Country Public Works",
+    "role": "Adv",
+    "agency": null,
+    "city": "Stockton",
+    "note": "",
+    "extra": "",
+    "contracts": 4,
+    "last": "2025-04-09",
+    "why": [
+     "word:joaquin,san"
+    ]
+   }
+  ]
+ }
+]

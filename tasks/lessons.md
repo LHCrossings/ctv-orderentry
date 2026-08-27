@@ -4,6 +4,32 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## "I Don't Have Access" and "It Works Like X" Are Claims — Probe Before Stating Them
+
+**Session:** SpotOps address book + CIB transfer path (2026-08-27)
+
+**Rule:** Three times today I stated something about the environment that a one-minute
+read-only probe would have settled: (1) "no access to portal.sales" — it resolved over
+Tailscale and served JSON with no login; (2) the ETXServer log glob (`Etere.ETXServer*`)
+— the files are PREFIXED `au64.etereau64.NNN.<host>.`, so the first fleet scan returned
+FILES=0 on every box; (3) "the Datamover pushes over SMB" — inferred from file arrivals
+until Lee challenged it, then confirmed live (258 open files on `\\CIB01\etxdb`).
+Each was cheap to verify and each cost a round-trip with Lee when stated unverified.
+
+**How to apply:**
+1. Before saying a resource is unreachable or a capability is missing, try it:
+   `getent hosts`, a `urllib` GET, an `ssm send-command` with `hostname`. Report what
+   the probe returned, not what the config suggests.
+2. Before scanning a fleet with a filename pattern, list the directory on ONE box first
+   and build the glob from real names.
+3. Label inferences as inferences ("I believe X because Y") until a probe upgrades
+   them; when the user pushes back, the correct move is the probe, not the argument.
+4. Corollary that worked well: when a user's mental model and mine differ, both are
+   usually partly right — the Restore.log histogram showed "files move all day" AND
+   "half of them move at 06:00". Measure the split instead of picking a side.
+
+---
+
 ## "When We Do It" Is a Statement of FUTURE Intent — Not a Go-Ahead for Production Writes
 
 **Session:** Shop LC Saturday fix, 2026-08-12 — Lee: "I didn't really intend to do all of this right now"
