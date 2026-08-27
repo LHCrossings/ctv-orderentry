@@ -18,6 +18,13 @@ show ends 08:54:18, UNIAE1667 filler 4:35.88, end break :15 COM + :30 PI + :15 P
    **The final break must never be the LONGEST break** (Lee, 8/27, after seeing
    the prototype put 2:25 at the end): a PI lands in the final break only if it
    stays ≤ the longest interior break; otherwise shortest interior break first.
+   **COMS blocks carry the TARGET length of each break** (Lee): the grid was set
+   up with breaks as even as possible, knowing SE gives flexibility at the end.
+   So the planner should (a) read each break's scheduled duration from the COMS
+   block/segment structure, (b) fill each break toward its target (deficit =
+   target − current), largest deficit first, (c) balance any remainder evenly,
+   final break never the longest and ≤ 2:30. "Shortest break first" is only the
+   fallback when no block structure is available.
 1. **Structure** COMS/PRGS exists through June; orders land in COMS; Daily
    Programming fills PRGS. The show's Etere length is a PLACEHOLDER (exact for
    Punjabi, AVS, Namaste; not in general), so the real remainder is only known
