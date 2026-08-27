@@ -163,6 +163,11 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
         "gather_ntooitive_inputs",
         "Ntooitive / L.A. Care",
     ),
+    OrderType.SJCOUNTY: (
+        "browser_automation.sjcounty_automation",
+        "gather_sjcounty_inputs",
+        "San Joaquin County",
+    ),
     OrderType.EQC: (
         "browser_automation.eqc_automation",
         "gather_eqc_inputs",

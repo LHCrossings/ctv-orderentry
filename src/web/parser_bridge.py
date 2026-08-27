@@ -60,6 +60,7 @@ _DISPLAY_NAMES = {
     "TT": "T&T Public Relations",
     "CRISPIN": "Crispin / Bay Area AQMD",
     "NTOOITIVE": "Ntooitive / L.A. Care",
+    "SJCOUNTY": "San Joaquin County",
     "EQC": "EQC / TH Media",
     "LRCCD": "LRCCD / 3Fold Communications",
     "SACRT": "SacRT / Sacramento Regional Transit",
@@ -112,6 +113,7 @@ _REGISTRY = {
     "CRISPIN": ("browser_automation.parsers.crispin_parser", "parse_crispin"),
     # Dispatcher: proposal workbook (.xlsx/.xlsm) or its PDF print
     "NTOOITIVE": ("browser_automation.parsers.ntooitive_parser", "parse_ntooitive"),
+    "SJCOUNTY": ("browser_automation.parsers.sjcounty_parser", "parse_sjcounty"),
     "EQC": ("browser_automation.parsers.eqc_parser", "parse_eqc_xlsx"),
     "LRCCD": ("browser_automation.parsers.lrccd_parser", "parse_lrccd_pdf"),
     "SACRT": ("browser_automation.parsers.sacrt_parser", "parse_sacrt_pdf"),
@@ -162,10 +164,14 @@ _LANG_KEYWORDS = [
 def _line_language(ln: dict) -> str:
     """Best-effort canonical language for a normalized line (its language field,
     else scanned from the description). '' if none recognized."""
-    hay = f"{ln.get('language') or ''} {ln.get('description') or ''}".lower()
-    for kw, canon in _LANG_KEYWORDS:
-        if kw in hay:
-            return canon
+    # The line's own language field is authoritative when the parser set one
+    # ("Chinese" for a Mandarin & Cantonese block); scan the description only
+    # as a fallback, or "(Mandarin & Cantonese)" in the title wins by keyword
+    # order and the block gets validated against one dialect's window.
+    for hay in ((ln.get("language") or "").lower(), (ln.get("description") or "").lower()):
+        for kw, canon in _LANG_KEYWORDS:
+            if kw in hay:
+                return canon
     return ""
 
 
@@ -667,6 +673,7 @@ _DIRECT_DB_KEYS = {
     "TT",
     "CRISPIN",
     "NTOOITIVE",
+    "SJCOUNTY",
     "EQC",
     "LRCCD",
     "SACRT",
@@ -714,6 +721,7 @@ _DIRECT_DB_TESTED_KEYS = {
     "TT",
     "CRISPIN",
     "NTOOITIVE",
+    "SJCOUNTY",
     "EQC",
     "LRCCD",
     "SACRT",

@@ -56,6 +56,7 @@ class OrderType(Enum):
     SACRT = "sacrt"
     CRISPIN = "crispin"
     NTOOITIVE = "ntooitive"
+    SJCOUNTY = "sjcounty"
     AI_FALLBACK = "ai_fallback"
     UNKNOWN = "unknown"
 

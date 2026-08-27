@@ -26,7 +26,7 @@ from domain.enums import OrderStatus, OrderType
 # size+mtime so repeat scans are instant; a changed/new file misses and is
 # re-detected. Bump the version to invalidate every entry after detection logic
 # changes.
-_SCAN_CACHE_VERSION = 7  # v7: Wallrich PDF rule client-keyed too; opAD excludes KBTV
+_SCAN_CACHE_VERSION = 8  # v8: San Joaquin County xlsx/filename rule; v7: Wallrich PDF rule client-keyed too; opAD excludes KBTV
 _SCAN_CACHE_NAME = ".scan_cache.json"
 
 
@@ -102,6 +102,11 @@ def _detect_xlsx_content(file_path: Path) -> OrderType:
                 if "NTOOITIVE" in v:
                     wb.close()
                     return OrderType.NTOOITIVE
+                # San Joaquin County (Registrar of Voters) — client-keyed;
+                # the sheet writes "San Joaquin  County" with a double space.
+                if "SAN JOAQUIN COUNTY" in " ".join(v.split()):
+                    wb.close()
+                    return OrderType.SJCOUNTY
                 # Wallrich — Lee (2026-08-21): the CLEAR definer is the
                 # CLIENT, not the station or the Strata layout ("anyone can
                 # use Strata layouts"). SMUD anywhere (the Estimate cell

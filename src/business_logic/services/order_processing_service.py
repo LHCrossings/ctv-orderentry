@@ -154,6 +154,7 @@ class OrderProcessingService:
         OrderType.TT: "_process_tt_order",
         OrderType.CRISPIN: "_process_crispin_order",
         OrderType.NTOOITIVE: "_process_ntooitive_order",
+        OrderType.SJCOUNTY: "_process_sjcounty_order",
         OrderType.EQC: "_process_eqc_order",
         OrderType.LRCCD: "_process_lrccd_order",
         OrderType.SACRT: "_process_sacrt_order",
@@ -199,6 +200,7 @@ class OrderProcessingService:
         OrderType.TT,
         OrderType.CRISPIN,
         OrderType.NTOOITIVE,
+        OrderType.SJCOUNTY,
         OrderType.EQC,
         OrderType.LRCCD,
         OrderType.SACRT,
@@ -3131,6 +3133,44 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.CRISPIN,
+                error_message=error_detail,
+            )
+
+    def _process_sjcounty_order(self, order: Order, shared_session=None) -> ProcessingResult:
+        """Process a San Joaquin County order — one contract (CVC, direct)."""
+        inp = order.order_input if isinstance(order.order_input, dict) else {}
+        try:
+            from browser_automation.parsers.sjcounty_parser import parse_sjcounty
+            from browser_automation.sjcounty_automation import run_sjcounty_order
+
+            parsed = parse_sjcounty(str(order.pdf_path))
+            results = run_sjcounty_order(parsed, inp)  # list of (label, success)
+
+            contracts = [
+                Contract(contract_number=label, order_type=OrderType.SJCOUNTY)
+                for label, ok in results
+                if ok
+            ]
+            if not contracts:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.SJCOUNTY,
+                    error_message="SJ County processing failed — check output above",
+                )
+            return ProcessingResult(
+                success=True, contracts=contracts, order_type=OrderType.SJCOUNTY
+            )
+
+        except Exception as exc:
+            import traceback
+
+            error_detail = f"SJ County processing error: {exc}\n{traceback.format_exc()}"
+            print(f"\n✗ SJ County processing failed: {exc}")
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.SJCOUNTY,
                 error_message=error_detail,
             )
 

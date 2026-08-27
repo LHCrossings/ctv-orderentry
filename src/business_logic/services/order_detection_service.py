@@ -170,6 +170,10 @@ class OrderDetectionService:
         if self._is_ntooitive(first_page_text):
             return OrderType.NTOOITIVE
 
+        # San Joaquin County (Registrar of Voters) — the CLIENT is the definer
+        if self._is_sjcounty(first_page_text):
+            return OrderType.SJCOUNTY
+
         # Resorts World New York (check before SCWA — both use "Crossings TV Media Proposal")
         if self._is_rwny(first_page_text):
             return OrderType.RWNY
@@ -236,6 +240,11 @@ class OrderDetectionService:
         if "3fold" in lower and "media plan" in lower:
             return True
         return "los rios community college" in lower and "media plan" in lower
+
+    def _is_sjcounty(self, text: str) -> bool:
+        """San Joaquin County (Registrar of Voters) proposal — keyed on the
+        client name (Lee: the client is the definer, never the template)."""
+        return "san joaquin county" in " ".join(text.split()).lower()
 
     def _is_ntooitive(self, text: str) -> bool:
         """
@@ -969,6 +978,8 @@ def detect_from_filename(filename: str) -> OrderType:
         return OrderType.CRISPIN
     if "NTOOITIVE" in name_upper:
         return OrderType.NTOOITIVE
+    if "SAN JOAQUIN COUNTY" in " ".join(name_upper.split()):
+        return OrderType.SJCOUNTY
     # Wallrich — SMUD is the client and the clear definer (Lee, 2026-08-21);
     # the xlsx content check in order_scanner matches SMUD/SD15 cells too.
     if "SMUD" in name_upper:
