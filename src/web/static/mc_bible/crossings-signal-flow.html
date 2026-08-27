@@ -3,25 +3,26 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Crossings TV — Signal Flow — MCR-01</title>
+<title>Crossings TV — Signal Flow</title>
 <style>
   :root {
-    --bg: #0a0d10;
-    --panel: #14181d;
-    --panel2: #191e24;
-    --panel3: #10141a;
-    --hair: rgba(255,255,255,0.08);
-    --text: #dfe4e8;
-    --text-dim: rgba(223,228,232,0.5);
-    --text-faint: rgba(223,228,232,0.3);
-    --led-ready: #3ecf6e;
-    --led-proc: #f0a83c;
-    --led-air: #eab308;
-    --led-cable: #ec4899;
-    --led-mon: #38bdf8;
-    --bus: #2fb8d6;
+    --bg: #eef1f5;
+    --panel: #ffffff;
+    --panel2: #f6f7f9;
+    --panel3: #eef0f3;
+    --hair: rgba(20,30,50,0.12);
+    --text: #12161f;
+    --text-dim: rgba(18,22,31,0.78);
+    --text-faint: rgba(18,22,31,0.58);
+    --led-ready: #1f9d55;
+    --led-proc: #c9790a;
+    --led-air: #b8860b;
+    --led-cable: #c2296b;
+    --led-mon: #0f79b8;
+    --bus: #0f9c8f;
     --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Consolas", monospace;
     --cg: "Arial Narrow", "Helvetica Neue Condensed", Arial, sans-serif;
+    --shadow: 0 1px 2px rgba(20,30,50,0.04), 0 4px 12px rgba(20,30,50,0.06);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -29,14 +30,16 @@
     font-family: var(--mono);
     color: var(--text);
     padding: 30px 16px 48px;
+    zoom: 1;
   }
 
   .rack {
-    max-width: 1120px;
+    max-width: 1250px;
     margin: 0 auto;
     background: var(--panel);
     border: 1px solid var(--hair);
-    border-radius: 6px;
+    border-radius: 10px;
+    box-shadow: var(--shadow);
   }
 
   .rack-header {
@@ -56,6 +59,14 @@
     text-transform: uppercase;
     color: var(--text);
   }
+  .title-block { display: flex; flex-direction: column; gap: 4px; }
+  .subtitle {
+    font-family: var(--cg);
+    font-size: 9.5px;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    color: var(--text-faint);
+  }
   .rack-header .status {
     font-size: 10px;
     letter-spacing: 0.06em;
@@ -65,10 +76,10 @@
     gap: 6px;
   }
   .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
-  .dot.air { background: var(--led-air); box-shadow: 0 0 5px var(--led-air); }
-  .dot.ready { background: var(--led-ready); box-shadow: 0 0 5px var(--led-ready); }
-  .dot.proc  { background: var(--led-proc); box-shadow: 0 0 5px var(--led-proc); }
-  .dot.mon   { background: var(--led-mon); box-shadow: 0 0 5px var(--led-mon); }
+  .dot.air { background: var(--led-air); }
+  .dot.ready { background: var(--led-ready); }
+  .dot.proc  { background: var(--led-proc); }
+  .dot.mon   { background: var(--led-mon); }
 
   .header-controls { display: flex; align-items: center; gap: 10px; }
   .ctrl-btn {
@@ -84,7 +95,7 @@
     cursor: pointer;
     transition: color .15s ease, border-color .15s ease;
   }
-  .ctrl-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+  .ctrl-btn:hover { color: var(--text); border-color: rgba(20,30,50,0.28); }
 
   .hint-bar {
     font-size: 9.5px;
@@ -96,7 +107,7 @@
   .hint-bar .k { color: var(--bus); }
 
   .layout { display: flex; gap: 20px; padding: 14px 22px 22px; align-items: flex-start; }
-  .diagram { flex: 0 0 780px; min-width: 0; }
+  .diagram { flex: 0 0 900px; min-width: 0; }
   .aside { flex: 1; min-width: 250px; }
 
   .sec-label {
@@ -113,20 +124,20 @@
   .bus-line {
     width: 2px;
     background: var(--bus);
-    box-shadow: 0 0 6px rgba(47,184,214,0.6);
+    box-shadow: 0 0 6px rgba(15,156,143,0.5);
     margin: 0 auto;
   }
   .bus-tick {
     width: 7px; height: 7px;
     background: var(--bus);
-    box-shadow: 0 0 6px rgba(47,184,214,0.7);
+    box-shadow: 0 0 6px rgba(15,156,143,0.6);
     margin: 0 auto;
     transform: rotate(45deg);
   }
   .bus-label {
     text-align: center;
     font-size: 9.5px;
-    color: rgba(47,184,214,0.75);
+    color: rgba(15,156,143,0.85);
     letter-spacing: 0.04em;
     margin: 2px 0;
   }
@@ -135,20 +146,21 @@
   .tile {
     background: var(--panel2);
     border: 1px solid var(--hair);
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 8px 14px;
     position: relative;
+    box-shadow: var(--shadow);
     transition: border-color .15s ease;
   }
   .tile.full { width: 100%; }
   .tile-wrap { display: flex; justify-content: center; }
   .tile-wrap .tile { min-width: 170px; }
 
-  .tile.led-ready { border-color: rgba(62,207,110,0.35); }
-  .tile.led-proc  { border-color: rgba(240,168,60,0.35); }
-  .tile.led-air   { border-color: rgba(234,179,8,0.4); box-shadow: 0 0 10px rgba(234,179,8,0.12); }
-  .tile.led-mon   { border-color: rgba(56,189,248,0.35); }
-  .tile.led-cable { border-color: rgba(236,72,153,0.4); box-shadow: 0 0 10px rgba(236,72,153,0.12); }
+  .tile.led-ready { background: rgba(31,157,85,0.09); border-color: rgba(31,157,85,0.45); }
+  .tile.led-proc  { background: rgba(201,121,10,0.09); border-color: rgba(201,121,10,0.45); }
+  .tile.led-air   { background: rgba(184,134,11,0.11); border-color: rgba(184,134,11,0.5); }
+  .tile.led-mon   { background: rgba(15,121,184,0.09); border-color: rgba(15,121,184,0.45); }
+  .tile.led-cable { background: rgba(194,41,107,0.09); border-color: rgba(194,41,107,0.45); }
 
   /* ── shape variety, by pipeline role ── */
   .tile.shape-pill {
@@ -170,24 +182,26 @@
   .tile-head {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 7px;
     cursor: pointer;
     padding: 2px 0;
     user-select: none;
+    text-align: center;
   }
   .tile-head.static { cursor: default; }
   .tile-title { font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em; color: var(--text); }
-  .tile-sub { font-size: 10px; color: var(--text-dim); line-height: 1.6; }
+  .tile-sub { font-size: 10px; color: var(--text-dim); line-height: 1.6; text-align: center; }
 
   .chevron {
-    margin-left: auto;
+    margin-left: 2px;
     font-size: 9px;
     color: var(--text-faint);
     transition: transform .2s ease, color .2s ease;
     flex: none;
   }
   .tile.open .chevron { transform: rotate(90deg); color: var(--bus); }
-  .tile-head:hover .tile-title { color: #fff; }
+  .tile-head:hover .tile-title { color: #000; }
   .tile-head:hover .chevron { color: var(--text-dim); }
 
   .tile-body {
@@ -201,7 +215,7 @@
     opacity: 1;
     margin-top: 7px;
   }
-  .tile.open { border-color: rgba(255,255,255,0.16); }
+  .tile.open { border-color: rgba(20,30,50,0.3); }
 
   .tag {
     display: inline-block;
@@ -227,22 +241,22 @@
   .tag.bdg-sw   { background: rgb(93,83,196); }   /* software — same purple as Phoenix TV */
   .tag.bdg-src  { background: rgb(196,104,64); }  /* source */
   .tag.bdg-proc { background: rgb(90,160,224); }  /* protocol / stream, matches MediaLive Group title */
-  .tag.bdg-mon  { background: rgb(48,176,140); }  /* protocol / stream, matches Non-MediaLive Group title */
+  .tag.bdg-mon  { background: rgb(48,176,140); }  /* protocol / stream, matches MediaLive Group [2] title */
 
   /* ── section title colors — pipeline-stage coding, same hue family as Phoenix TV ── */
-  .sec-label.sc-source  { color: rgb(224,130,90); }
-  .sec-label.sc-process { color: rgb(100,168,230); }
-  .sec-label.sc-monitor { color: rgb(64,196,158); }
+  .sec-label.sc-source  { color: rgb(178,92,50); }
+  .sec-label.sc-process { color: rgb(60,110,180); }
+  .sec-label.sc-monitor { color: rgb(20,140,110); }
   .sec-label.sc-onair    { color: var(--led-air); }
-  .sec-label.sc-router  { color: rgb(158,156,148); }
-  .sec-label.sc-final    { color: rgb(150,198,100); }
+  .sec-label.sc-router  { color: rgb(100,105,115); }
+  .sec-label.sc-final    { color: rgb(70,140,60); }
 
-  .frame.accent-process { border-left: 3px solid rgb(90,160,224); }
-  .frame.accent-monitor { border-left: 3px solid rgb(48,176,140); }
-  .frame.accent-onair    { border-left: 3px solid var(--led-air); }
-  .frame.accent-router  { border-left: 3px solid rgb(120,150,180); }
-  .frame.accent-final    { border-left: 3px solid rgb(150,198,100); }
-  .frame.accent-source  { border-left: 3px solid rgb(196,104,64); }
+  .frame.accent-process { border-left: 3px solid rgb(60,110,180); background: rgba(60,110,180,0.045); }
+  .frame.accent-monitor { border-left: 3px solid rgb(20,140,110); background: rgba(20,140,110,0.045); }
+  .frame.accent-onair    { border-left: 3px solid var(--led-air); background: rgba(184,134,11,0.05); }
+  .frame.accent-router  { border-left: 3px solid rgb(100,105,115); background: rgba(100,105,115,0.045); }
+  .frame.accent-final    { border-left: 3px solid rgb(70,140,60); background: rgba(70,140,60,0.045); }
+  .frame.accent-source  { border-left: 3px solid rgb(178,92,50); background: rgba(178,92,50,0.045); }
 
   .spec-box {
     margin-top: 6px;
@@ -258,13 +272,18 @@
   .spec-box .row .k { color: var(--text-faint); flex: none; }
   .spec-box .row .v { color: var(--text-dim); text-align: right; word-break: break-all; }
 
+  /* ── stacked variant — label above value, for narrow tiles with long values ── */
+  .spec-box.stack-rows .row { flex-direction: column; align-items: center; gap: 1px; margin-bottom: 5px; text-align: center; }
+  .spec-box.stack-rows .row:last-child { margin-bottom: 0; }
+  .spec-box.stack-rows .row .v { text-align: center; }
+
   .conn { display: flex; flex-direction: column; align-items: center; position: relative; }
-  .conn-line { width: 1.5px; background: rgba(255,255,255,0.15); }
+  .conn-line { width: 1.5px; background: rgba(20,30,50,0.18); }
   .conn-tip {
     width: 0; height: 0;
     border-left: 4px solid transparent;
     border-right: 4px solid transparent;
-    border-top: 7px solid rgba(255,255,255,0.2);
+    border-top: 7px solid rgba(20,30,50,0.25);
   }
   .conn-label {
     position: absolute;
@@ -278,9 +297,9 @@
 
   .frame {
     border: 1px solid var(--hair);
-    border-radius: 5px;
+    border-radius: 8px;
     padding: 10px 12px 12px;
-    background: rgba(255,255,255,0.015);
+    background: rgba(20,30,50,0.012);
   }
   .split-row { display: flex; gap: 12px; align-items: flex-start; }
   .split-col { flex: 1; display: flex; flex-direction: column; align-items: center; }
@@ -292,19 +311,43 @@
   .stack .tile-wrap { margin-bottom: 8px; }
   .stack .tile-wrap:last-child { margin-bottom: 0; }
 
-  .branch-arrow {
-    flex: 0 0 26px;
-    margin-top: 46px;
+  /* ── fork labels under a multi-way SVG split ── */
+  .fork-labels {
     display: flex;
-    align-items: center;
-    justify-content: center;
+    justify-content: space-around;
+    gap: 6px;
+    padding: 0 4px 4px;
+    font-size: 9px;
+    color: var(--text-faint);
+    text-align: center;
+    line-height: 1.4;
   }
-  .branch-arrow-line { width: 14px; height: 1.5px; background: rgba(240,168,60,0.55); }
-  .branch-arrow-tip {
+
+  /* ── bubble group — visually clusters related tiles before/after a fork ── */
+  .bubble-group {
+    border: 1px dashed rgba(20,30,50,0.2);
+    border-radius: 14px;
+    padding: 12px 10px 10px;
+    background: rgba(20,30,50,0.015);
+    margin-bottom: 4px;
+  }
+  .bubble-label {
+    font-family: var(--cg);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    text-align: center;
+    margin-bottom: 8px;
+  }
+
+  /* ── small inline side-branch arrow (e.g. hub → monitoring app) ── */
+  .side-arrow { display: flex; align-items: center; justify-content: center; }
+  .side-arrow-line { width: 16px; height: 1.5px; }
+  .side-arrow-tip {
     width: 0; height: 0;
     border-top: 4px solid transparent;
     border-bottom: 4px solid transparent;
-    border-left: 7px solid rgba(240,168,60,0.55);
     margin-left: -1px;
   }
 
@@ -318,7 +361,7 @@
   }
 
   /* ── aside panels ── */
-  .panel-block { background: var(--panel2); border: 1px solid var(--hair); border-radius: 5px; margin-bottom: 12px; overflow: hidden; }
+  .panel-block { background: var(--panel2); border: 1px solid var(--hair); border-radius: 8px; margin-bottom: 12px; overflow: hidden; box-shadow: var(--shadow); }
   .panel-head {
     font-family: var(--cg);
     font-size: 10px;
@@ -350,7 +393,7 @@
   .panel-row-head.static { cursor: default; }
   .panel-row-head .k { color: var(--text); display: flex; align-items: center; gap: 6px; }
   .panel-row-head .v { color: var(--text-dim); text-align: right; display: flex; align-items: center; gap: 7px; }
-  .panel-row-head:hover .k { color: #fff; }
+  .panel-row-head:hover .k { color: #000; }
   .panel-row .chevron { font-size: 8px; }
 
   .panel-row-body {
@@ -365,7 +408,7 @@
     opacity: 1;
     padding: 0 12px 10px;
   }
-  .panel-row.open { background: rgba(255,255,255,0.015); }
+  .panel-row.open { background: rgba(20,30,50,0.02); }
 
   .stream-card {
     background: var(--panel3);
@@ -399,11 +442,12 @@
     flex-wrap: wrap;
     gap: 8px 16px;
     border: 1px solid var(--hair);
-    border-radius: 5px;
+    border-radius: 8px;
     padding: 9px 13px;
     margin-top: 16px;
     font-size: 9.5px;
     color: var(--text-dim);
+    background: var(--panel2);
   }
   .legend-strip .item { display: flex; align-items: center; gap: 6px; }
 
@@ -419,11 +463,12 @@
 
 <div class="rack">
   <div class="rack-header">
-    <h1>Crossings TV — Signal Flow</h1>
+    <div class="title-block">
+      <h1>Crossings TV — Signal Flow</h1>
+    </div>
     <div class="header-controls">
       <button class="ctrl-btn" id="expandAllBtn">Expand All</button>
       <button class="ctrl-btn" id="collapseAllBtn">Collapse All</button>
-      <div class="status"><span class="dot air"></span> MCR-01 · DRAFT REV B</div>
     </div>
   </div>
   <p class="hint-bar">Click any <span class="k">▸ box or badge</span> to expand technical detail — click again to collapse.</p>
@@ -435,11 +480,11 @@
 
       <div class="frame accent-source">
         <p class="sec-label sc-source">Origin — AWS VPC</p>
+        <p style="margin:-6px 0 8px; text-align:center; font-size:8.5px; color:var(--text-faint); letter-spacing:0.02em;">(VPC = Virtual Private Cloud)</p>
         <div class="tile-wrap">
-          <div class="tile full led-ready shape-pill" data-tile>
-            <div class="tile-head"><span class="dot ready"></span><span class="tile-title">Playout Automation</span><span class="chevron">▸</span></div>
+          <div class="tile led-ready shape-pill" data-tile>
+            <div class="tile-head"><span class="dot ready"></span><span class="tile-title">Playout Automation</span><span class="tag bdg bdg-src" style="margin:0 0 0 4px;">Source</span><span class="chevron">▸</span></div>
             <div class="tile-body">
-              <span class="tag bdg bdg-src">Source</span>
               <div class="tile-sub">Runs on the CIBs — see CIB Encoder Assignments →</div>
               <div class="tile-sub">Output: 1920×1080, 29.97 interlaced — all channels</div>
               <div class="tile-sub">Exception: CVC Tower feed (SD NTSC) — see below</div>
@@ -448,235 +493,321 @@
         </div>
       </div>
 
-      <div class="conn" style="height:22px;">
-        <div class="conn-line" style="height:12px;"></div><div class="conn-tip"></div>
-        <span class="conn-label">Per-market encoding — CIB01, 03–06</span>
+      <svg viewBox="0 0 900 40" height="40" style="display:block;width:100%;overflow:visible;">
+        <defs>
+          <marker id="arrPOtoEG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="rgb(60,110,180)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+          <marker id="arrPOtoNDI" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="rgba(100,105,115,0.7)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <path d="M450 0 L450 12 L272 12 L272 36" fill="none" stroke="rgb(60,110,180)" stroke-width="1.6" marker-end="url(#arrPOtoEG)"/>
+        <path d="M450 0 L450 12 L730 12 L730 36" fill="none" stroke="rgba(100,105,115,0.7)" stroke-width="1.6" marker-end="url(#arrPOtoNDI)"/>
+      </svg>
+
+      <div class="split-row" style="gap:16px; align-items:flex-start;">
+        <div class="split-col" style="flex:1.6;">
+          <div class="bubble-group" style="width:100%; margin-bottom:0;">
+            <p class="bubble-label">Encoder Groups</p>
+            <p class="sec-label" style="margin:-4px 0 8px;">MediaLive</p>
+            <div class="split-row">
+              <div class="split-col">
+                <div class="frame accent-process" style="width:100%;">
+                  <div class="tile full led-proc" data-tile>
+                    <div class="tile-head static"><span class="dot proc"></span><span class="tile-title">WDC · CHI · MSP · MMT · SEA · SFO · CVC</span></div>
+                  </div>
+                </div>
+              </div>
+              <div class="split-col">
+                <div class="frame accent-process" style="width:100%;">
+                  <div class="tile full led-proc" data-tile>
+                    <div class="tile-head static"><span class="dot proc"></span><span class="tile-title">NYC · LAX</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="split-col" style="flex:1;">
+          <div class="tile-wrap" style="width:100%;">
+            <div class="tile full" data-tile style="min-width:0; border-color:rgba(100,105,115,0.35); background:rgba(100,105,115,0.06);">
+              <div class="tile-head"><span class="dot" style="background:rgb(100,105,115);"></span><span class="tile-title">NDI</span><span class="chevron">▸</span></div>
+              <div class="tile-body">
+                <div class="tile-sub">Network Device Interface — IP-based video transport protocol</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="conn" style="height:14px;"><div class="conn-line" style="height:6px;"></div><div class="conn-tip"></div></div>
+
+          <div class="tile-wrap" style="width:100%;">
+            <div class="tile full led-proc shape-hex" data-tile>
+              <div class="tile-head"><span class="dot proc"></span><span class="tile-title">Jumpbox</span><span class="chevron">▸</span></div>
+              <div class="tile-body">
+                <span class="tag bdg bdg-sw">Software</span>
+                <div class="tile-sub">Etere AV Converter service — CIB05</div>
+                <div class="tile-sub">SD NTSC 720×486 → MPEG-2 · custom PIDs · muxrate 4M</div>
+                <div class="tile-sub" style="color:var(--led-ready);">CVC Tower feed only — routes onward via Central Router</div>
+                <div class="spec-box stack-rows">
+                  <div class="row"><span class="k">Source</span><span class="v">NDI · EC2AMAZ-6VAQA0L</span></div>
+                  <div class="row"><span class="k">Service name</span><span class="v">Crossings Sacramento</span></div>
+                  <div class="row"><span class="k">Video</span><span class="v">mpeg2video · streamid 4281 · 2.5M</span></div>
+                  <div class="row"><span class="k">Audio</span><span class="v">ac3 · streamid 4282 · 320K</span></div>
+                  <div class="row"><span class="k">Format</span><span class="v">NTSC UYVY 720×486@29.97i 4:3</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div class="bus-tick"></div>
-      <div class="bus-line" style="height:14px;"></div>
+      <svg viewBox="0 0 900 34" height="34" style="display:block;width:100%;overflow:visible;">
+        <defs>
+          <marker id="arrEGtoRT" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="rgb(60,110,180)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+          <marker id="arrJBtoRT" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="rgba(201,121,10,0.75)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <path d="M272 0 L272 10 L440 10 L440 30" fill="none" stroke="rgb(60,110,180)" stroke-width="1.6" marker-end="url(#arrEGtoRT)"/>
+        <path d="M730 0 L730 10 L460 10 L460 30" fill="none" stroke="rgba(201,121,10,0.75)" stroke-width="1.6" marker-end="url(#arrJBtoRT)"/>
+      </svg>
+      <p style="text-align:center; font-size:9.5px; color:rgba(15,156,143,0.85); letter-spacing:0.04em; margin:-4px 0 10px;">All networks converge</p>
 
-      <div class="branch-row">
-        <div class="branch-col-main">
-
-          <div class="split-row">
-            <div class="split-col">
-              <div class="frame accent-process" style="width:100%;">
-                <p class="sec-label sc-process">MediaLive Group [7]</p>
-                <div class="tile full led-proc" data-tile>
-                  <div class="tile-head"><span class="dot proc"></span><span class="tile-title">WDC · CHI · MSP · MMT · SEA · SFO · CVC</span><span class="chevron">▸</span></div>
-                  <div class="tile-body">
-                    <span class="tag bdg bdg-proc">RTP · Pro-MPEG</span>
-                    <div class="tile-sub">Encoded on CIB01, 03–06</div>
-                  </div>
-                </div>
-                <div class="conn" style="height:14px;"><div class="conn-line" style="height:6px;"></div><div class="conn-tip"></div></div>
-                <div class="tile full led-proc" data-tile>
-                  <div class="tile-head"><span class="dot proc"></span><span class="tile-title">AWS Elemental MediaLive</span><span class="chevron">▸</span></div>
-                  <div class="tile-body">
-                    <div class="tile-sub">Comcast-specific A/V processing applied</div>
-                  </div>
-                </div>
-                <p class="note">SFO channel — 2 outputs: HD (Comcast) + downsampled HD (SFO Tower)</p>
-              </div>
-            </div>
-            <div class="split-col">
-              <div class="frame accent-monitor" style="width:100%;">
-                <p class="sec-label sc-monitor">Non-MediaLive Group [2]</p>
-                <div class="tile full led-mon" data-tile>
-                  <div class="tile-head"><span class="dot mon"></span><span class="tile-title">NYC · LAX</span><span class="chevron">▸</span></div>
-                  <div class="tile-body">
-                    <span class="tag bdg bdg-mon">DVB · UDP</span>
-                    <div class="tile-sub">Sent as Etere exports — no further processing</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="conn" style="height:20px;">
-            <div class="conn-line" style="height:10px;"></div><div class="conn-tip"></div>
-            <span class="conn-label">All networks converge</span>
-          </div>
-
-          <div class="frame accent-router">
-            <p class="sec-label sc-router">Central Router</p>
-            <div class="tile-wrap">
+      <div class="frame accent-router" style="margin:0 auto 10px; max-width:700px;">
+        <p class="sec-label sc-router">Central Router</p>
+        <div class="split-row" style="align-items:stretch;">
+          <div class="split-col" style="flex:1.5; min-width:0; justify-content:center;">
+            <div class="tile-wrap" style="width:100%;">
               <div class="tile full led-mon shape-hex" data-tile>
-                <div class="tile-head"><span class="dot mon"></span><span class="tile-title">Haivision SRT Gateway — 44.235.103.12</span><span class="chevron">▸</span></div>
+                <div class="tile-head"><span class="dot mon"></span><span class="tile-title">Haivision SRT Gateway — 10.0.0.32</span><span class="chevron">▸</span></div>
                 <div class="tile-body">
-                  <div class="tile-sub">Distributes every network on request — up to 10 simultaneous connections per port</div>
-                  <div class="tile-sub">Comcast collection ports kept separate from public monitoring ports</div>
-                  <div class="spec-box">
-                    <div class="row"><span class="k">WDC</span><span class="v">6206</span></div>
-                    <div class="row"><span class="k">CHI</span><span class="v">6204</span></div>
-                    <div class="row"><span class="k">MSP</span><span class="v">6205</span></div>
-                    <div class="row"><span class="k">MMT</span><span class="v">6207</span></div>
-                    <div class="row"><span class="k">SEA</span><span class="v">6203</span></div>
-                    <div class="row"><span class="k">SFO</span><span class="v">6200</span></div>
-                    <div class="row"><span class="k">CVC</span><span class="v">6201</span></div>
-                  </div>
-                  <div class="tile-sub" style="margin-top:5px;">Reserved for Comcast — do not use for monitoring</div>
+                  <div class="tile-sub">Internal IP — used for routing within the network</div>
+                  <div class="tile-sub">Public IP (accessed from outside): 44.235.103.12</div>
                 </div>
               </div>
             </div>
           </div>
-
-          <div class="conn" style="height:20px;">
-            <div class="conn-line" style="height:10px;"></div><div class="conn-tip"></div>
+          <div class="split-col" style="flex:0 0 22px; min-width:0; position:relative;">
+            <svg viewBox="0 0 22 100" preserveAspectRatio="none" style="position:absolute; top:0; left:0; width:100%; height:100%; overflow:visible;">
+              <defs>
+                <marker id="arrHVtoPP" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M2 1L8 5L2 9" fill="none" stroke="rgba(15,156,143,0.75)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </marker>
+                <marker id="arrHVtoKQ" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M2 1L8 5L2 9" fill="none" stroke="rgba(15,156,143,0.75)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </marker>
+                <marker id="arrHVtoST" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M2 1L8 5L2 9" fill="none" stroke="rgba(15,156,143,0.75)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </marker>
+              </defs>
+              <path d="M0 50 L22 16.7" fill="none" stroke="rgba(15,156,143,0.75)" stroke-width="1.5" marker-end="url(#arrHVtoPP)"/>
+              <path d="M0 50 L22 50" fill="none" stroke="rgba(15,156,143,0.75)" stroke-width="1.5" marker-end="url(#arrHVtoKQ)"/>
+              <path d="M0 50 L22 83.3" fill="none" stroke="rgba(15,156,143,0.75)" stroke-width="1.5" marker-end="url(#arrHVtoST)"/>
+            </svg>
           </div>
+          <div class="split-col" style="flex:0.9; min-width:0; display:flex; flex-direction:column; gap:8px; justify-content:center;">
+            <div class="tile led-mon" data-tile style="min-width:0; width:100%; padding:6px 8px;">
+              <div class="tile-head"><span class="dot mon"></span><span class="tile-title" style="font-size:9.5px;">Play Pro App</span><span class="chevron">▸</span></div>
+              <div class="tile-body">
+                <span class="tag bdg bdg-sw">Software</span>
+                <div class="tile-sub">Playback / monitoring client connected to the Haivision SRT Gateway</div>
+              </div>
+            </div>
+            <div class="tile led-cable" data-tile style="min-width:0; width:100%; padding:6px 8px;">
+              <div class="tile-head"><span class="dot" style="background:var(--led-cable);"></span><span class="tile-title" style="font-size:9.5px;">KQTA-LD 15.3</span><span class="tag" style="margin:0 0 0 4px;">SFO OTA</span><span class="chevron">▸</span></div>
+              <div class="tile-body">
+                <div class="tile-sub">San Francisco tower</div>
+              </div>
+            </div>
+            <div class="tile led-mon" data-tile style="min-width:0; width:100%; padding:6px 8px;">
+              <div class="tile-head"><span class="dot mon"></span><span class="tile-title" style="font-size:9.5px;">Stirlitz Media — IP Multiviewer</span><span class="chevron">▸</span></div>
+              <div class="tile-body">
+                <span class="tag bdg bdg-sw">Software</span>
+                <div class="tile-sub">IP: <a href="http://34.208.18.64/files/index.html" style="color:var(--bus);text-decoration:none;">34.208.18.64/files/index.html</a></div>
+                <div class="tile-sub">Where MC (Master Control) monitors the feeds</div>
+                <div class="tile-sub">Takes the same feed being sent to Final Distribution</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-          <div class="frame accent-final">
+      <svg viewBox="0 0 900 40" height="40" style="display:block;width:100%;overflow:visible;">
+        <defs>
+          <marker id="arrRTtoFD" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="rgba(15,156,143,0.75)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+          <marker id="arrRTtoMX" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="rgb(70,140,60)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <path d="M450 0 L450 12 L174 12 L174 36" fill="none" stroke="rgba(15,156,143,0.75)" stroke-width="1.6" marker-end="url(#arrRTtoFD)"/>
+        <path d="M450 0 L450 12 L632 12 L632 36" fill="none" stroke="rgb(70,140,60)" stroke-width="1.6" marker-end="url(#arrRTtoMX)"/>
+      </svg>
+
+      <div class="split-row" style="gap:16px; align-items:flex-start; margin-top:0;">
+        <div class="split-col" style="flex:1.3;">
+
+          <div class="frame accent-final" style="width:100%;">
             <p class="sec-label sc-final">Final Distribution</p>
             <div class="split-row">
               <div class="split-col">
-                <div class="tile full led-cable shape-cut" data-tile>
-                  <div class="tile-head"><span class="dot" style="background:var(--led-cable);box-shadow:0 0 5px var(--led-cable);"></span><span class="tile-title">Comcast Pickup</span><span class="chevron">▸</span></div>
-                  <div class="tile-body">
-                    <div class="tile-sub">Rocky Mountain (Denver, CO) &amp; Stone Mountain (GA)</div>
-                    <div class="tile-sub">WDC, MSP, MMT, CHI, SFO, SEA, CVC</div>
-                  </div>
-                </div>
-              </div>
-              <div class="split-col">
-                <div class="tile full led-cable shape-cut" data-tile>
-                  <div class="tile-head"><span class="dot" style="background:var(--led-cable);box-shadow:0 0 5px var(--led-cable);"></span><span class="tile-title">Colocation America</span><span class="chevron">▸</span></div>
-                  <div class="tile-body">
-                    <span class="tag bdg bdg-hw">Hardware</span>
-                    <div class="tile-sub">Machine in LA — receives from Haivision</div>
-                    <div class="tile-sub">NYC, WDC</div>
-                  </div>
-                </div>
-                <div class="conn" style="height:14px;"><div class="conn-line" style="height:6px;"></div><div class="conn-tip"></div></div>
-                <div class="tile full led-cable shape-cut" data-tile>
-                  <div class="tile-head static"><span class="tile-title">Charter Pickup</span></div>
-                  <div class="tile-sub" style="margin-top:4px;">NYC, WDC — via Colocation America</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </div><!-- /branch-col-main -->
-
-        <div class="branch-arrow" title="MediaLive Group markets (CVC, SFO) also feed Direct to Multiplex">
-          <div class="branch-arrow-line"></div><div class="branch-arrow-tip"></div>
-        </div>
-
-        <div class="branch-col-side">
-          <div class="frame accent-onair">
-            <p class="sec-label sc-onair">Direct to Multiplex</p>
-            <p class="note" style="margin-top:0; border-top:none; padding-top:0;">Fed by Playout Automation + MediaLive Group (CVC, SFO) — bypasses Haivision Central Router</p>
-
-            <svg viewBox="0 0 300 26" height="26" style="display:block;width:100%;overflow:visible;margin-bottom:4px;">
-              <defs>
-                <marker id="arrMx" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                  <path d="M2 1L8 5L2 9" fill="none" stroke="rgba(234,179,8,0.5)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </marker>
-              </defs>
-              <path d="M150 0 L50 0 L50 24" fill="none" stroke="rgba(234,179,8,0.5)" stroke-width="1.5" marker-end="url(#arrMx)"/>
-              <path d="M150 0 L150 24" fill="none" stroke="rgba(234,179,8,0.5)" stroke-width="1.5" marker-end="url(#arrMx)"/>
-              <path d="M150 0 L250 0 L250 24" fill="none" stroke="rgba(234,179,8,0.5)" stroke-width="1.5" marker-end="url(#arrMx)"/>
-            </svg>
-
-            <div class="split-row">
-              <div class="split-col">
-                <div class="tile full led-air" data-tile>
-                  <div class="tile-head"><span class="dot" style="background:var(--led-air);box-shadow:0 0 5px var(--led-air);"></span><span class="tile-title">CVC Tower Feed</span><span class="chevron">▸</span></div>
-                  <div class="tile-body">
-                    <span class="tag bdg bdg-sw">Software</span>
-                    <div class="tile-sub">Etere AV Converter service — CIB05</div>
-                    <div class="tile-sub">SD NTSC 720×486 → MPEG-2 · custom PIDs · muxrate 4M</div>
-                    <div class="spec-box">
-                      <div class="row"><span class="k">Source</span><span class="v">NDI · EC2AMAZ-6VAQA0L</span></div>
-                      <div class="row"><span class="k">Service name</span><span class="v">Crossings Sacramento</span></div>
-                      <div class="row"><span class="k">Video</span><span class="v">mpeg2video · streamid 4281 · 2.5M</span></div>
-                      <div class="row"><span class="k">Audio</span><span class="v">ac3 · streamid 4282 · 320K</span></div>
-                      <div class="row"><span class="k">Format</span><span class="v">NTSC UYVY 720×486@29.97i 4:3</span></div>
+                <div class="bubble-group" style="width:100%;">
+                  <p class="bubble-label">Comcast</p>
+                  <div class="tile-wrap">
+                    <div class="tile full led-cable shape-cut" data-tile style="min-width:0;">
+                      <div class="tile-head"><span class="dot" style="background:var(--led-cable);"></span><span class="tile-title">Comcast Pickup</span><span class="chevron">▸</span></div>
+                      <div class="tile-body">
+                        <div class="tile-sub">Rocky Mountain (Denver, CO) &amp; Stone Mountain (GA)</div>
+                        <div class="tile-sub">WDC, MSP, MMT, CHI, SFO, SEA, CVC</div>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
               <div class="split-col">
-                <div class="tile full led-air" data-tile>
-                  <div class="tile-head"><span class="dot" style="background:var(--led-air);box-shadow:0 0 5px var(--led-air);"></span><span class="tile-title">SFO Tower Feed</span><span class="chevron">▸</span></div>
-                  <div class="tile-body">
-                    <span class="tag bdg bdg-sw">Software</span>
-                    <div class="tile-sub">2nd output of SFO channel, AWS Elemental MediaLive</div>
-                    <div class="tile-sub">Downsampled to lower-bitrate HD</div>
+                <div class="bubble-group" style="width:100%;">
+                  <p class="bubble-label">Charter</p>
+                  <div class="tile-wrap">
+                    <div class="tile full led-ready shape-cut" data-tile style="min-width:0;">
+                      <div class="tile-head"><span class="dot ready"></span><span class="tile-title">Colocation America</span><span class="tag bdg bdg-hw" style="margin:0 0 0 4px;">Hardware</span><span class="chevron">▸</span></div>
+                      <div class="tile-body">
+                        <div class="tile-sub">Machine in LA — receives from Haivision</div>
+                        <div class="tile-sub">NYC, WDC, LAX</div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-              <div class="split-col">
-                <div class="tile full led-air" data-tile>
-                  <div class="tile-head"><span class="dot" style="background:var(--led-air);box-shadow:0 0 5px var(--led-air);"></span><span class="tile-title">Dallas</span><span class="chevron">▸</span></div>
-                  <div class="tile-body">
-                    <span class="tag bdg bdg-sw">Software</span>
-                    <div class="tile-sub">Playout Automation (CIB05)</div>
-                    <div class="tile-sub" style="color:var(--led-proc);">TBD — details pending</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="conn" style="height:16px;"><div class="conn-line" style="height:8px;"></div><div class="conn-tip"></div></div>
-
-            <div class="tile-wrap">
-              <div class="tile full led-mon shape-hex" data-tile>
-                <div class="tile-head"><span class="dot mon"></span><span class="tile-title">Multiplex</span><span class="chevron">▸</span></div>
-                <div class="tile-body">
-                  <div class="tile-sub">Third-party distribution vendor — separate from Haivision</div>
-                  <div class="tile-sub" style="color:var(--led-proc);">Location: Iowa — city TBD</div>
-                </div>
-              </div>
-            </div>
-
-            <div class="conn" style="height:16px;"><div class="conn-line" style="height:8px;"></div><div class="conn-tip"></div></div>
-
-            <div class="stack">
-              <div class="tile-wrap">
-                <div class="tile full led-air shape-cut" data-tile>
-                  <div class="tile-head static"><span class="tile-title">HC2 Broadcasting</span></div>
-                  <div class="tile-sub" style="margin-top:4px;">Sacramento, CA — airs ch. 8.2</div>
-                </div>
-              </div>
-              <div class="tile-wrap">
-                <div class="tile full led-air shape-cut" data-tile>
-                  <div class="tile-head static"><span class="tile-title">KQTA-LD 15.3</span></div>
-                  <div class="tile-sub" style="margin-top:4px;">San Francisco tower</div>
-                </div>
-              </div>
-              <div class="tile-wrap">
-                <div class="tile full led-air shape-cut" data-tile>
-                  <div class="tile-head"><span class="dot" style="background:var(--led-air);box-shadow:0 0 5px var(--led-air);"></span><span class="tile-title">KLEG 44.3</span><span class="chevron">▸</span></div>
-                  <div class="tile-body">
-                    <span class="tag">Low power</span>
-                    <div class="tile-sub" style="color:var(--led-proc);">TBD — details pending</div>
-                  </div>
-                </div>
-              </div>
-              <div class="tile-wrap">
-                <div class="tile full led-air shape-cut" data-tile>
-                  <div class="tile-head"><span class="dot" style="background:var(--led-air);box-shadow:0 0 5px var(--led-air);"></span><span class="tile-title">KFWD 52.4</span><span class="chevron">▸</span></div>
-                  <div class="tile-body">
-                    <span class="tag">High power</span>
-                    <div class="tile-sub" style="color:var(--led-proc);">TBD — details pending</div>
+                  <div class="conn" style="height:14px;"><div class="conn-line" style="height:6px;"></div><div class="conn-tip"></div></div>
+                  <div class="tile-wrap">
+                    <div class="tile full led-cable shape-cut" data-tile style="min-width:0;">
+                      <div class="tile-head"><span class="dot" style="background:var(--led-cable);"></span><span class="tile-title">Charter Pickup</span><span class="chevron">▸</span></div>
+                      <div class="tile-body">
+                        <div class="tile-sub">NYC, WDC, LAX — via Colocation America</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-
-            <p class="note">Ends here — does not route through Haivision or Final Distribution</p>
           </div>
-        </div><!-- /branch-col-side -->
 
-      </div><!-- /branch-row -->
+        </div><!-- /Final Distribution col -->
+
+        <div class="split-col" style="flex:2;">
+
+          <div class="tile-wrap">
+            <div class="tile full led-mon shape-hex" data-tile>
+              <div class="tile-head"><span class="dot mon"></span><span class="tile-title">Multiplex</span><span class="chevron">▸</span></div>
+              <div class="tile-body">
+                <div class="tile-sub">Third-party distribution vendor — separate from Haivision</div>
+              </div>
+            </div>
+          </div>
+
+          <svg viewBox="0 0 400 30" height="30" style="display:block;width:100%;overflow:visible;">
+            <defs>
+              <marker id="arrMXsplit" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M2 1L8 5L2 9" fill="none" stroke="rgb(70,140,60)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </marker>
+            </defs>
+            <path d="M200 0 L200 8 L82.6 8 L82.6 28" fill="none" stroke="rgb(70,140,60)" stroke-width="1.5" marker-end="url(#arrMXsplit)"/>
+            <path d="M200 0 L200 8 L292.6 8 L292.6 28" fill="none" stroke="rgb(70,140,60)" stroke-width="1.5" marker-end="url(#arrMXsplit)"/>
+          </svg>
+
+          <div class="split-row" style="gap:20px;">
+            <div class="split-col" style="flex:1;">
+              <div class="bubble-group" style="width:100%;">
+                <p class="bubble-label">CVC</p>
+                <div class="tile-wrap">
+                  <div class="tile full led-mon" data-tile style="min-width:0;">
+                    <div class="tile-head static"><span class="dot mon"></span><span class="tile-title">HC2 Broadcasting</span></div>
+                  </div>
+                </div>
+                <div class="conn" style="height:12px;"><div class="conn-line" style="height:5px;"></div><div class="conn-tip"></div></div>
+                <div class="tile-wrap">
+                  <div class="tile full led-cable shape-cut" data-tile style="min-width:0;">
+                    <div class="tile-head"><span class="dot" style="background:var(--led-cable);"></span><span class="tile-title">KBTV-CD 8.2</span><span class="chevron">▸</span></div>
+                    <div class="tile-body">
+                      <div class="tile-sub">Sacramento, CA</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="split-col" style="flex:1.3;">
+              <div class="bubble-group" style="width:100%;">
+                <p class="bubble-label">Dallas</p>
+                <div class="tile-wrap" style="margin-bottom:10px;">
+                  <div class="tile full shape-hex" data-tile style="border-color:rgba(184,134,11,0.35);">
+                    <div class="tile-head"><span class="dot" style="background:var(--led-air);"></span><span class="tile-title">Dallas</span><span class="chevron">▸</span></div>
+                    <div class="tile-body">
+                      <span class="tag bdg" style="background:var(--led-air);">Direct feed</span>
+                      <div class="tile-sub">Bypasses MediaLive &amp; Haivision — via Multiplex</div>
+                    </div>
+                  </div>
+                </div>
+
+                <svg viewBox="0 0 300 26" height="26" style="display:block;width:100%;overflow:visible;margin-bottom:4px;">
+                  <defs>
+                    <marker id="arrDal2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                      <path d="M2 1L8 5L2 9" fill="none" stroke="rgba(184,134,11,0.5)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                  </defs>
+                  <path d="M150 0 L45 0 L45 24" fill="none" stroke="rgba(184,134,11,0.5)" stroke-width="1.5" marker-end="url(#arrDal2)"/>
+                  <path d="M150 0 L255 0 L255 24" fill="none" stroke="rgba(184,134,11,0.5)" stroke-width="1.5" marker-end="url(#arrDal2)"/>
+                </svg>
+
+                <div class="split-row" style="gap:24px;">
+                  <div class="split-col">
+                    <div class="tile-wrap" style="width:100%;">
+                      <div class="tile full led-mon" data-tile style="min-width:0;">
+                        <div class="tile-head"><span class="dot mon"></span><span class="tile-title">RNN</span><span class="chevron">▸</span></div>
+                        <div class="tile-body">
+                          <div class="tile-sub">Relays to KFWD 52.4</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="conn" style="height:12px;"><div class="conn-line" style="height:5px;"></div><div class="conn-tip"></div></div>
+                    <div class="tile-wrap" style="width:100%;">
+                      <div class="tile full led-cable shape-cut" data-tile style="min-width:0;">
+                        <div class="tile-head"><span class="dot" style="background:var(--led-cable);"></span><span class="tile-title">KFWD 52.4</span><span class="chevron">▸</span></div>
+                        <div class="tile-body">
+                          <span class="tag">High power</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="split-col">
+                    <div class="tile-wrap" style="width:100%;">
+                      <div class="tile full led-cable shape-cut" data-tile style="min-width:0;">
+                        <div class="tile-head"><span class="dot" style="background:var(--led-cable);"></span><span class="tile-title">KLEG 44.3</span><span class="chevron">▸</span></div>
+                        <div class="tile-body">
+                          <span class="tag">Low power</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /Multiplex hub col -->
+
+      </div><!-- /split-row (2-col) -->
+
 
       <div class="legend-strip">
         <div class="item"><span class="dot ready"></span>Ready / normal path</div>
         <div class="item"><span class="dot proc"></span>Processing / encoding</div>
         <div class="item"><span class="dot mon"></span>Monitoring / hub</div>
-        <div class="item"><span class="dot" style="background:var(--led-air);box-shadow:0 0 5px var(--led-air);"></span>On-air / tower broadcast</div>
-        <div class="item"><span class="dot" style="background:var(--led-cable);box-shadow:0 0 5px var(--led-cable);"></span>Cable / final delivery</div>
+        <div class="item"><span class="dot" style="background:var(--led-air);"></span>On-air / tower broadcast</div>
+        <div class="item"><span class="dot" style="background:var(--led-cable);"></span>Cable / final delivery</div>
       </div>
       <div class="legend-strip" style="margin-top:8px;">
         <div class="item"><span class="tag bdg bdg-hw" style="margin:0;">Hardware</span>badge</div>
@@ -748,7 +879,7 @@
         </div>
 
         <div class="panel-row" data-row>
-          <div class="panel-row-head"><span class="k"><span class="dot" style="background:var(--led-air);box-shadow:0 0 5px var(--led-air);"></span>CIB05</span><span class="v">10.0.0.238 — CT — MMT, DAL <span class="chevron">▸</span></span></div>
+          <div class="panel-row-head"><span class="k"><span class="dot" style="background:var(--led-air);"></span>CIB05</span><span class="v">10.0.0.238 — CT — MMT, DAL <span class="chevron">▸</span></span></div>
           <div class="panel-row-body">
             <div class="stream-card">
               <div class="name">MMT — RTP (Pro-MPEG)</div>
@@ -757,14 +888,14 @@
               <div class="row"><span class="k">URL</span><span class="v">rtp://10.0.0.221:5000</span></div>
             </div>
             <div class="stream-card">
-              <div class="name">DAL — <span style="color:var(--led-proc);">TBD</span></div>
-              <div class="row"><span class="k">Status</span><span class="v" style="color:var(--led-proc);">Awaiting details — see "Direct to Multiplex" section</span></div>
+              <div class="name">DAL — <span style="color:var(--led-air);">Direct feed</span></div>
+              <div class="row"><span class="k">Status</span><span class="v" style="color:var(--led-air);">Bypasses MediaLive &amp; Haivision — see "Dallas" section</span></div>
             </div>
           </div>
         </div>
 
         <div class="panel-row" data-row>
-          <div class="panel-row-head"><span class="k"><span class="dot proc"></span>CIB06</span><span class="v">CT — CHI, MSP <span class="chevron">▸</span></span></div>
+          <div class="panel-row-head"><span class="k"><span class="dot proc"></span>CIB06</span><span class="v">10.0.0.224 — CT — CHI, MSP <span class="chevron">▸</span></span></div>
           <div class="panel-row-body">
             <div class="stream-card">
               <div class="name">CHI — RTP (Pro-MPEG)</div>
@@ -820,7 +951,12 @@
         <div class="panel-row" data-row>
           <div class="panel-row-head static"><span class="k">CVC Tower</span><span class="v">:6018</span></div>
         </div>
-        <div class="panel-note">Host 44.235.103.12, mode=caller. Comcast uses separate reserved ports 6200–6207 — do not use.</div>
+      </div>
+
+      <div class="panel-block">
+        <div class="panel-head">Notes</div>
+        <div class="panel-note" style="border-top:none;">Host 44.235.103.12, mode=caller. Comcast uses separate reserved ports 6200–6207 — do not use.</div>
+        <div class="panel-note">SFO channel — 2 outputs: HD (Comcast) + downsampled HD (SFO Tower)</div>
       </div>
 
       <div class="panel-block">
@@ -831,6 +967,7 @@
     </div><!-- /aside -->
 
   </div><!-- /layout -->
+
 
   <p class="footer-note">Recreated from "Crossings TV Signal Flow" reference doc — for internal review</p>
 

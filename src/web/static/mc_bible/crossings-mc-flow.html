@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Crossings TV — MC Flow</title>
+<style>
+  :root {
+    --bg: #eef1f5;
+    --panel: #ffffff;
+    --panel2: #f6f7f9;
+    --panel3: #eef0f3;
+    --hair: rgba(20,30,50,0.12);
+    --text: #1f2733;
+    --text-dim: rgba(31,39,51,0.58);
+    --text-faint: rgba(31,39,51,0.38);
+    --led-ready: #1f9d55;
+    --led-proc: #c9790a;
+    --led-air: #b8860b;
+    --led-cable: #c2296b;
+    --led-mon: #0f79b8;
+    --bus: #0f9c8f;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Consolas", monospace;
+    --cg: "Arial Narrow", "Helvetica Neue Condensed", Arial, sans-serif;
+    --shadow: 0 1px 2px rgba(20,30,50,0.04), 0 4px 12px rgba(20,30,50,0.06);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    font-family: var(--mono);
+    color: var(--text);
+    padding: 30px 16px 48px;
+  }
+
+  .rack {
+    max-width: 1120px;
+    margin: 0 auto;
+    background: var(--panel);
+    border: 1px solid var(--hair);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+  }
+
+  .rack-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 22px;
+    border-bottom: 1px solid var(--hair);
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .rack-header h1 {
+    font-family: var(--cg);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+  .title-block { display: flex; flex-direction: column; gap: 4px; }
+  .subtitle {
+    font-family: var(--cg);
+    font-size: 9.5px;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    color: var(--text-faint);
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
+  .dot.air { background: var(--led-air); }
+  .dot.ready { background: var(--led-ready); }
+  .dot.proc  { background: var(--led-proc); }
+  .dot.mon   { background: var(--led-mon); }
+
+  .header-controls { display: flex; align-items: center; gap: 10px; }
+  .ctrl-btn {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    background: var(--panel2);
+    border: 1px solid var(--hair);
+    border-radius: 3px;
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: color .15s ease, border-color .15s ease;
+  }
+  .ctrl-btn:hover { color: var(--text); border-color: rgba(20,30,50,0.28); }
+
+  .hint-bar {
+    font-size: 9.5px;
+    color: var(--text-faint);
+    text-align: center;
+    padding: 8px 22px 0;
+    letter-spacing: 0.03em;
+  }
+  .hint-bar .k { color: var(--bus); }
+
+  .layout { display: flex; gap: 20px; padding: 14px 22px 22px; align-items: flex-start; }
+  .diagram { flex: 0 0 780px; min-width: 0; }
+  .aside { flex: 1; min-width: 250px; }
+
+  .sec-label {
+    font-family: var(--cg);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin: 4px 0 8px;
+    text-align: center;
+  }
+
+  .tile {
+    background: var(--panel2);
+    border: 1px solid var(--hair);
+    border-radius: 6px;
+    padding: 8px 14px;
+    position: relative;
+    box-shadow: var(--shadow);
+    transition: border-color .15s ease;
+  }
+  .tile.full { width: 100%; }
+  .tile-wrap { display: flex; justify-content: center; }
+  .tile-wrap .tile { min-width: 170px; }
+
+  .tile.led-ready { background: rgba(31,157,85,0.09); border-color: rgba(31,157,85,0.45); }
+  .tile.led-proc  { background: rgba(201,121,10,0.09); border-color: rgba(201,121,10,0.45); }
+  .tile.led-air   { background: rgba(184,134,11,0.11); border-color: rgba(184,134,11,0.5); }
+  .tile.led-mon   { background: rgba(15,121,184,0.09); border-color: rgba(15,121,184,0.45); }
+  .tile.led-cable { background: rgba(194,41,107,0.09); border-color: rgba(194,41,107,0.45); }
+  .tile.led-legacy { background: rgba(31,39,51,0.05); border-color: rgba(31,39,51,0.16); opacity: 0.8; }
+
+  .tile.shape-pill { border-radius: 999px; padding-left: 22px; padding-right: 22px; }
+  .tile.shape-hex {
+    border-radius: 0;
+    clip-path: polygon(3% 0%, 97% 0%, 100% 50%, 97% 100%, 3% 100%, 0% 50%);
+    padding-left: 26px; padding-right: 26px;
+  }
+  .tile.shape-cut {
+    border-radius: 0;
+    clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+  }
+  .tile.shape-circle {
+    border-radius: 50%;
+    aspect-ratio: 1 / 1;
+    width: 128px; height: 128px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center;
+    padding: 10px;
+  }
+  .tile.shape-circle .tile-head { justify-content: center; }
+  .tile.shape-circle .chevron { display: none; }
+
+  .tile-head { display: flex; align-items: center; gap: 7px; cursor: pointer; padding: 2px 0; user-select: none; }
+  .logo-icon { width: 16px; height: 16px; object-fit: contain; flex: none; }
+  .logo-mono {
+    width: 16px; height: 16px; border-radius: 4px; background: #d4262c; color: #fff;
+    font-size: 8px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex: none;
+  }
+  .tile-head.static { cursor: default; }
+  .tile-head.centered { justify-content: center; }
+  .tile-head.centered .chevron { position: absolute; right: 14px; margin-left: 0; }
+  .tile-body.centered { text-align: center; }
+  .tile-title { font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em; color: var(--text); }
+  .tile-sub { font-size: 10px; color: var(--text-dim); line-height: 1.6; }
+
+  .chevron { margin-left: auto; font-size: 9px; color: var(--text-faint); transition: transform .2s ease, color .2s ease; flex: none; }
+  .tile.open .chevron { transform: rotate(90deg); color: var(--bus); }
+  .tile-head:hover .tile-title { color: #000; }
+  .tile-head:hover .chevron { color: var(--text-dim); }
+
+  .tile-body { max-height: 0; opacity: 0; overflow: hidden; transition: max-height .28s ease, opacity .22s ease, margin-top .22s ease; }
+  .tile.open .tile-body { max-height: 600px; opacity: 1; margin-top: 7px; }
+  .tile.open { border-color: rgba(20,30,50,0.3); }
+
+  .tag {
+    display: inline-block; font-size: 8px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--text-faint); border: 1px solid var(--hair); border-radius: 2px; padding: 1px 5px; margin-bottom: 5px;
+  }
+  .tag.bdg { font-weight: 700; color: #fff; border: none; border-radius: 3px; padding: 2px 6px; }
+  .tag.bdg-hw   { background: rgb(31,111,176); }
+  .tag.bdg-sw   { background: rgb(124,79,224); }
+  .tag.bdg-src  { background: rgb(214,101,52); }
+  .tag.bdg-temp { background: rgb(224,138,0); color:#fff; }
+  .tag.bdg-legacy { background: rgba(31,39,51,0.14); color: var(--text-dim); }
+  .tag.bdg-ready { background: rgb(22,163,90); }
+  .tag.bdg-mon  { background: rgb(6,140,190); }
+  .tag.bdg-final{ background: rgb(194,41,107); }
+  .tag.bdg-folder{ background: rgb(100,105,115); }
+
+  .sec-label.sc-source  { color: rgb(178,92,50); }
+  .sec-label.sc-process { color: rgb(60,110,180); }
+  .sec-label.sc-monitor { color: rgb(20,140,110); }
+  .sec-label.sc-onair    { color: var(--led-air); }
+  .sec-label.sc-router  { color: rgb(100,105,115); }
+  .sec-label.sc-final    { color: rgb(70,140,60); }
+
+  .frame.accent-process { border-left: 3px solid rgb(60,110,180); background: rgba(60,110,180,0.045); }
+  .frame.accent-monitor { border-left: 3px solid rgb(20,140,110); background: rgba(20,140,110,0.045); }
+  .frame.accent-onair    { border-left: 3px solid var(--led-air); background: rgba(184,134,11,0.05); }
+  .frame.accent-router  { border-left: 3px solid rgb(100,105,115); background: rgba(100,105,115,0.045); }
+  .frame.accent-final    { border-left: 3px solid rgb(70,140,60); background: rgba(70,140,60,0.045); }
+  .frame.accent-source  { border-left: 3px solid rgb(178,92,50); background: rgba(178,92,50,0.045); }
+
+  .spec-box {
+    margin-top: 6px; background: var(--panel3); border: 1px solid var(--hair); border-radius: 3px;
+    padding: 7px 9px; font-size: 9.5px; color: var(--text-dim); line-height: 1.65;
+  }
+  .spec-box .row { display: flex; justify-content: space-between; gap: 10px; }
+  .spec-box .row .k { color: var(--text-faint); flex: none; }
+  .spec-box .row .v { color: var(--text-dim); text-align: right; word-break: break-all; }
+  .spec-box.stack-rows .row { flex-direction: column; align-items: flex-start; gap: 1px; margin-bottom: 5px; }
+  .spec-box.stack-rows .row:last-child { margin-bottom: 0; }
+  .spec-box.stack-rows .row .v { text-align: left; }
+
+  .conn { display: flex; flex-direction: column; align-items: center; position: relative; }
+  .conn-line { width: 1.5px; background: rgba(20,30,50,0.18); }
+  .conn-tip { width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 7px solid rgba(20,30,50,0.25); }
+  .conn-label { position: absolute; left: calc(50% + 9px); top: 50%; transform: translateY(-50%); font-size: 9.5px; color: var(--text-faint); white-space: nowrap; }
+
+  .frame { border: 1px solid var(--hair); border-radius: 8px; padding: 10px 12px 12px; background: rgba(20,30,50,0.012); }
+  .split-row { display: flex; gap: 12px; align-items: flex-start; }
+  .split-col { flex: 1; display: flex; flex-direction: column; align-items: center; }
+
+  .branch-row { display: flex; gap: 4px; align-items: flex-start; }
+  .branch-col-main { flex: 1.3; min-width: 0; display: flex; flex-direction: column; }
+  .branch-col-side { flex: 1; min-width: 0; }
+
+  .bubble-group { border: 1px dashed rgba(20,30,50,0.2); border-radius: 14px; padding: 12px 10px 10px; background: rgba(20,30,50,0.015); margin-bottom: 4px; }
+  .bubble-group.legacy { border-color: rgba(31,39,51,0.14); }
+  .bubble-label { font-family: var(--cg); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); text-align: center; margin-bottom: 8px; }
+
+  .note { text-align: center; font-size: 10px; color: var(--text-faint); padding: 6px 10px; margin-top: 8px; border-top: 1px dashed var(--hair); }
+
+  .panel-block { background: var(--panel2); border: 1px solid var(--hair); border-radius: 8px; margin-bottom: 12px; overflow: hidden; box-shadow: var(--shadow); }
+  .panel-head {
+    font-family: var(--cg); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim);
+    padding: 8px 12px; border-bottom: 1px solid var(--hair); display: flex; justify-content: space-between; align-items: center;
+  }
+  .panel-head .hint { font-size: 8.5px; color: var(--text-faint); text-transform: none; letter-spacing: 0.02em; }
+  .panel-head.toggle { cursor: pointer; user-select: none; }
+  .panel-head.toggle .chevron { font-size: 9px; color: var(--text-faint); transition: transform .2s ease, color .2s ease; }
+  .panel-block.open .panel-head.toggle .chevron { transform: rotate(90deg); color: var(--bus); }
+  .panel-content { max-height: 0; opacity: 0; overflow: hidden; transition: max-height .28s ease, opacity .22s ease; }
+  .panel-block.open .panel-content { max-height: 800px; opacity: 1; }
+  .panel-row { border-top: 1px solid var(--hair); }
+  .panel-row:first-of-type { border-top: none; }
+  .panel-row-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 12px; font-size: 10px; cursor: pointer; user-select: none; }
+  .panel-row-head.static { cursor: default; }
+  .panel-row-head .k { color: var(--text); display: flex; align-items: center; gap: 6px; }
+  .panel-row-head .v { color: var(--text-dim); text-align: right; display: flex; align-items: center; gap: 7px; }
+  .panel-row-head:hover .k { color: #000; }
+  .panel-row .chevron { font-size: 8px; }
+  .panel-row-body { max-height: 0; opacity: 0; overflow: hidden; transition: max-height .28s ease, opacity .22s ease; padding: 0 12px; }
+  .panel-row.open .panel-row-body { max-height: 800px; opacity: 1; padding: 0 12px 10px; }
+  .panel-row.open { background: rgba(20,30,50,0.02); }
+
+  .stream-card { background: var(--panel3); border: 1px solid var(--hair); border-radius: 3px; padding: 6px 9px; margin-top: 6px; font-size: 9px; }
+  .stream-card .row { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
+  .stream-card .row .k { color: var(--text-faint); flex: none; }
+  .stream-card .row .v { color: var(--text-dim); text-align: right; word-break: break-all; }
+
+  .panel-note { font-size: 9.5px; color: var(--text-faint); line-height: 1.55; padding: 8px 12px; border-top: 1px solid var(--hair); }
+
+  .legend-strip { display: flex; flex-wrap: wrap; gap: 8px 16px; border: 1px solid var(--hair); border-radius: 8px; padding: 9px 13px; margin-top: 16px; font-size: 9.5px; color: var(--text-dim); background: var(--panel2); }
+  .legend-strip .item { display: flex; align-items: center; gap: 6px; }
+
+  .footer-note { text-align: center; font-size: 9.5px; color: var(--text-faint); padding: 4px 22px 18px; }
+
+  a.link-out { color: var(--bus); text-decoration: none; border-bottom: 1px dashed var(--bus); }
+  a.link-out:hover { border-bottom-style: solid; }
+</style>
+</head>
+<body>
+
+<div class="rack">
+  <div class="rack-header">
+    <div class="title-block">
+      <h1>Crossings TV — MC Flow</h1>
+      <p class="subtitle">Programming Process to Etere Playout Automation — file intake through Etere schedule publish</p>
+    </div>
+    <div class="header-controls">
+      <button class="ctrl-btn" id="expandAllBtn">Expand All</button>
+      <button class="ctrl-btn" id="collapseAllBtn">Collapse All</button>
+    </div>
+  </div>
+  <p class="hint-bar">Click any <span class="k">▸ box or badge</span> to expand technical detail — click again to collapse.</p>
+
+  <div class="layout">
+
+    <!-- ═══════════ DIAGRAM ═══════════ -->
+    <div class="diagram">
+
+      <!-- STAGE 1: INTAKE -->
+      <div class="frame accent-source">
+        <p class="sec-label sc-source">Stage 1 — Show File Receipt</p>
+        <div class="bubble-group">
+          <p class="bubble-label">Intake Sources</p>
+          <div class="split-row">
+            <div class="split-col">
+              <div class="tile shape-pill led-ready" data-tile>
+                <div class="tile-head"><span class="dot ready"></span><span class="tile-title">OneDrive</span><span class="tag bdg bdg-src" style="margin:0;">Source</span><span class="chevron">▸</span></div>
+                <div class="tile-body"><div class="tile-sub">Providers upload</div></div>
+              </div>
+            </div>
+            <div class="split-col">
+              <div class="tile shape-pill led-ready" data-tile>
+                <div class="tile-head"><span class="dot ready"></span><span class="tile-title">Box</span><span class="tag bdg bdg-src" style="margin:0;">Source</span><span class="chevron">▸</span></div>
+                <div class="tile-body"><div class="tile-sub">Crossings TV downloads</div></div>
+              </div>
+            </div>
+            <div class="split-col">
+              <div class="tile shape-pill led-ready" data-tile>
+                <div class="tile-head"><span class="dot ready"></span><span class="tile-title">YouTube</span><span class="tag bdg bdg-src" style="margin:0;">Source</span><span class="chevron">▸</span></div>
+                <div class="tile-body"><div class="tile-sub">Manual download</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="conn" style="height:14px;"><div class="conn-line" style="height:7px;"></div><div class="conn-tip"></div></div>
+          <div class="split-row" style="justify-content:center;">
+            <div class="split-col" style="flex:0;">
+              <div class="tile shape-circle led-mon">
+                <div class="tile-head static" style="flex-direction:column; gap:4px;">
+                  <span class="tile-title" style="font-size:10.5px;">Phoenix TV</span>
+                  <span class="tag bdg bdg-hw" style="margin:0;">Hardware</span>
+                  <a class="link-out" href="../Phoenix%20TV%20Flowcharts/Phoenix%20TV%20NA%20Channel%20-%20Flow.html" target="_blank" style="font-size:8px; line-height:1.3;">View Flow →</a>
+                </div>
+              </div>
+            </div>
+            <div class="split-col" style="flex:0;">
+              <div class="tile shape-circle led-mon">
+                <div class="tile-head static" style="flex-direction:column; gap:4px;">
+                  <span class="tile-title" style="font-size:10.5px;">FTP<br/>Nexus Server</span>
+                  <span class="tag bdg bdg-hw" style="margin:0;">Hardware</span>
+                  <span class="tile-sub" style="font-size:8px; line-height:1.3;">Dish Network</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="conn" style="height:20px;"><div class="conn-line" style="height:14px;"></div><div class="conn-tip"></div></div>
+
+      <!-- STAGE 2: EDIT + TRANSFER -->
+      <div class="frame accent-process">
+        <p class="sec-label sc-process">Stage 2 — QC, Edit &amp; Transfer</p>
+        <div class="tile-wrap">
+          <div class="tile full led-proc shape-hex" data-tile>
+            <div class="tile-head centered"><span class="dot proc"></span><span class="tile-title">Edius X</span><span class="tag bdg bdg-sw" style="margin:0;">Software</span><span class="chevron">▸</span></div>
+            <div class="tile-body centered">
+              <div class="tile-sub">Quality Check (QC) · segment cutting · audio/ratio fixes</div>
+              <div class="tile-sub" style="color:var(--text-faint);">EDIT-01 · EDIT-03 · EDIT-04 (server room)</div>
+            </div>
+          </div>
+        </div>
+        <div class="conn" style="height:14px;"><div class="conn-line" style="height:7px;"></div><div class="conn-tip"></div></div>
+        <p class="note" style="border-top:none; margin-top:0; padding-top:0;">File Transfer</p>
+        <div class="split-row">
+          <div class="split-col">
+            <div class="tile full led-proc" data-tile>
+              <div class="tile-head"><span class="dot proc"></span><span class="tile-title">FTP Transfer</span><span class="chevron">▸</span></div>
+              <div class="tile-body"><span class="tag bdg bdg-temp">Temporary</span><div class="tile-sub">Planned for removal</div></div>
+            </div>
+          </div>
+          <div class="split-col">
+            <div class="tile full led-ready" data-tile>
+              <div class="tile-head"><span class="dot ready"></span><span class="tile-title">OneDrive Upload</span><span class="chevron">▸</span></div>
+              <div class="tile-body"><div class="tile-sub">Long-term landing spot ahead of Datamover</div><div style="text-align:center; margin-top:6px;"><span class="tag bdg bdg-folder">To DM</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="conn" style="height:20px;"><div class="conn-line" style="height:14px;"></div><div class="conn-tip"></div></div>
+
+      <!-- STAGE 3: DATAMOVER / AWS -->
+      <div class="frame accent-monitor">
+        <p class="sec-label sc-monitor">Stage 3 — Datamover → Cloud</p>
+
+        <div class="bubble-group">
+          <p class="bubble-label">Download From</p>
+          <div class="split-row" style="justify-content:center;">
+            <div class="split-col" style="flex:0;">
+              <div class="tile shape-circle led-proc">
+                <div class="tile-head static" style="flex-direction:column; gap:5px;">
+                  <span class="tile-title" style="font-size:10.5px;">FTP<br/>Transfer</span>
+                  <span class="tag bdg bdg-temp" style="margin:0;">Temporary</span>
+                </div>
+              </div>
+            </div>
+            <div class="split-col" style="flex:0;">
+              <div class="tile shape-circle led-ready">
+                <div class="tile-head static" style="flex-direction:column; gap:5px;">
+                  <span class="tile-title" style="font-size:10.5px;">OneDrive<br/>Upload</span>
+                  <span class="tag bdg bdg-src" style="margin:0;">Source</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="conn" style="height:14px;"><div class="conn-line" style="height:7px;"></div><div class="conn-tip"></div></div>
+
+        <p class="note" style="border-top:none; margin:0 0 8px;">Files are downloaded onto Datamover and placed in the <span class="tag bdg bdg-folder" style="margin:0;">To Programming</span> or <span class="tag bdg bdg-folder" style="margin:0;">To Commercial</span> folder, then Etere ActiveSync is restarted</p>
+
+        <div class="tile-wrap">
+          <div class="tile full led-proc" data-tile>
+            <div class="tile-head centered"><span class="dot proc"></span><span class="tile-title">Restart Etere ActiveSync</span><span class="chevron">▸</span></div>
+            <div class="tile-body centered">
+              <span class="tag bdg bdg-sw">Software</span>
+              <div class="tile-sub">Restarting the utility triggers ingest of the new files</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="conn" style="height:14px;"><div class="conn-line" style="height:7px;"></div><div class="conn-tip"></div></div>
+
+        <div class="tile-wrap">
+          <div class="tile full led-ready shape-hex" data-tile>
+            <div class="tile-head centered"><span class="dot ready"></span><span class="tile-title">AWS S3</span><span class="chevron">▸</span></div>
+            <div class="tile-body centered"><span class="tag bdg bdg-mon">Cloud</span><div class="tile-sub">Cloud storage — Etere pulls source media from here</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="conn" style="height:20px;"><div class="conn-line" style="height:14px;"></div><div class="conn-tip"></div></div>
+
+      <!-- STAGE 4: MEDIA LIBRARY -->
+      <div class="frame accent-router">
+        <p class="sec-label sc-router">Stage 4 — Etere Media Library</p>
+        <div class="tile-wrap">
+          <div class="tile full led-mon" data-tile>
+            <div class="tile-head centered"><span class="dot mon"></span><span class="tile-title">Verify &amp; Lock</span><span class="chevron">▸</span></div>
+            <div class="tile-body centered"><span class="tag bdg bdg-sw">Software</span><div class="tile-sub">In Etere Media Library, confirm each file has loaded into AWS S3, then lock it for playout</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="conn" style="height:20px;"><div class="conn-line" style="height:14px;"></div><div class="conn-tip"></div></div>
+
+      <!-- STAGE 5: SCHEDULE BUILD -->
+      <div class="frame accent-onair">
+        <p class="sec-label sc-onair">Stage 5 — Schedule Build</p>
+        <div class="tile-wrap">
+          <div class="tile full led-air" data-tile>
+            <div class="tile-head centered"><span class="dot" style="background:var(--led-air);"></span><span class="tile-title">Control Room — Daily Programming</span><span class="chevron">▸</span></div>
+            <div class="tile-body centered">
+              <div class="tile-sub">In-house port (built with Claude) — automates schedule placement across all markets</div>
+              <div class="tile-sub" style="margin-top:6px; color:var(--text-faint);">Note: Multigrid is the manual version of this show-placement feature — superseded by this port.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="conn" style="height:20px;"><div class="conn-line" style="height:14px;"></div><div class="conn-tip"></div></div>
+
+      <!-- STAGE 6: PAD / PUBLISH / HANDOFF -->
+      <div class="frame accent-final">
+        <p class="sec-label sc-final">Stage 6 — Pad, Publish &amp; Handoff</p>
+        <p class="note" style="margin:-4px 0 10px; border-top:none;">All steps below take place within the Etere software</p>
+        <div class="split-row">
+          <div class="split-col">
+            <div class="tile full led-ready" data-tile>
+              <div class="tile-head"><span class="dot ready"></span><span class="tile-title">Executive Editor</span><span class="chevron">▸</span></div>
+              <div class="tile-body"><span class="tag bdg bdg-sw">Software</span><div class="tile-sub">"Padding" the schedule to ensure shows, commercials, spots, and PIs all fit their designated time blocks</div></div>
+            </div>
+          </div>
+          <div class="split-col">
+            <div class="tile full led-ready" data-tile>
+              <div class="tile-head"><span class="dot ready"></span><span class="tile-title">Publish</span><span class="chevron">▸</span></div>
+              <div class="tile-body"><span class="tag bdg bdg-ready">Ready</span><div class="tile-sub">Sends the schedule to automation playout</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="conn" style="height:14px;"><div class="conn-line" style="height:7px;"></div><div class="conn-tip"></div></div>
+        <div class="tile-wrap">
+          <div class="tile full led-cable shape-cut" data-tile>
+            <div class="tile-head centered"><span class="dot" style="background:var(--led-cable);"></span><span class="tile-title">CIB Workstations — Playout Automation</span><span class="chevron">▸</span></div>
+            <div class="tile-body centered">
+              <span class="tag bdg bdg-final">Handoff</span>
+              <div class="tile-sub">Ends here — continues in Crossings TV — Signal Flow</div>
+              <div class="spec-box" style="text-align:left;">
+                <div class="row"><span class="k">CIB01</span><span class="v">NYC, WDC</span></div>
+                <div class="row"><span class="k">CIB03</span><span class="v">SFO, SEA</span></div>
+                <div class="row"><span class="k">CIB04</span><span class="v">LAX, CVC</span></div>
+                <div class="row"><span class="k">CIB05</span><span class="v">MMT, Dallas</span></div>
+                <div class="row"><span class="k">CIB06</span><span class="v">CHI, MSP</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="note">→ Continues in "Crossings TV — Signal Flow"</p>
+      </div>
+
+      <div class="legend-strip">
+        <div class="item"><span class="dot ready"></span>Ready / normal path</div>
+        <div class="item"><span class="dot proc"></span>Editing / processing</div>
+        <div class="item"><span class="dot mon"></span>Storage / verification</div>
+        <div class="item"><span class="dot" style="background:var(--led-air);"></span>Scheduling</div>
+        <div class="item"><span class="dot" style="background:var(--led-cable);"></span>Handoff</div>
+      </div>
+      <div class="legend-strip" style="margin-top:8px;">
+        <div class="item"><span class="tag bdg bdg-hw" style="margin:0;">Hardware</span>badge</div>
+        <div class="item"><span class="tag bdg bdg-sw" style="margin:0;">Software</span>badge</div>
+        <div class="item"><span class="tag bdg bdg-src" style="margin:0;">Source</span>badge</div>
+        <div class="item"><span class="tag bdg bdg-temp" style="margin:0;">Temporary</span>badge</div>
+        <div class="item"><span class="tag bdg bdg-legacy" style="margin:0;">Legacy</span>badge</div>
+        <div class="item">○ circle = hardware hub · ⬡ hex = cloud/gateway · ✂ cut-corner = terminal/handoff</div>
+      </div>
+
+    </div><!-- /diagram -->
+
+    <!-- ═══════════ ASIDE ═══════════ -->
+    <div class="aside">
+
+      <div class="panel-block">
+        <div class="panel-head">Server Room — Sacramento Location <span class="hint">click to expand</span></div>
+        <div class="panel-row" data-row>
+          <div class="panel-row-head"><span class="k"><span class="dot proc"></span>EDIT-01</span><span class="v"><span class="chevron">▸</span></span></div>
+          <div class="panel-row-body"><div class="stream-card"><div class="row"><span class="k">Software</span><span class="v">Edius X</span></div></div></div>
+        </div>
+        <div class="panel-row" data-row>
+          <div class="panel-row-head"><span class="k"><span class="dot proc"></span>EDIT-03</span><span class="v"><span class="chevron">▸</span></span></div>
+          <div class="panel-row-body"><div class="stream-card"><div class="row"><span class="k">Software</span><span class="v">Edius X</span></div></div></div>
+        </div>
+        <div class="panel-row" data-row>
+          <div class="panel-row-head"><span class="k"><span class="dot proc"></span>EDIT-04</span><span class="v"><span class="chevron">▸</span></span></div>
+          <div class="panel-row-body"><div class="stream-card"><div class="row"><span class="k">Software</span><span class="v">Edius X</span></div></div></div>
+        </div>
+        <div class="panel-row" data-row>
+          <div class="panel-row-head"><span class="k"><span class="dot mon"></span>EDIT-02</span><span class="v">Phoenix TV recording <span class="chevron">▸</span></span></div>
+          <div class="panel-row-body">
+            <div class="stream-card">
+              <div class="row"><span class="k">Role</span><span class="v">Live recording — 24 hours</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-block" data-panel>
+        <div class="panel-head toggle"><span>Datamover — Etere Utilities</span><span class="chevron">▸</span></div>
+        <div class="panel-content">
+          <div class="panel-row"><div class="panel-row-head static"><span class="k">Etere ActiveSync</span></div></div>
+          <div class="panel-row"><div class="panel-row-head static"><span class="k">Etere Data Mover</span></div></div>
+          <div class="panel-row"><div class="panel-row-head static"><span class="k">Etere Ingest — Operations by T-Workflow</span></div></div>
+          <div class="panel-note" style="color:var(--led-proc); font-weight:600;">All 3 utilities must be running at all times.</div>
+        </div>
+      </div>
+
+
+    </div><!-- /aside -->
+
+  </div><!-- /layout -->
+
+  <p class="footer-note">Companion to "Crossings TV — Signal Flow" — together the two charts cover file receipt through final distribution</p>
+
+</div>
+
+<script>
+  document.querySelectorAll('[data-tile] > .tile-head:not(.static)').forEach(function (head) {
+    head.addEventListener('click', function () { head.closest('.tile').classList.toggle('open'); });
+  });
+  document.querySelectorAll('[data-row] > .panel-row-head:not(.static)').forEach(function (head) {
+    head.addEventListener('click', function () { head.closest('.panel-row').classList.toggle('open'); });
+  });
+  document.querySelectorAll('[data-panel] > .panel-head.toggle').forEach(function (head) {
+    head.addEventListener('click', function () { head.closest('.panel-block').classList.toggle('open'); });
+  });
+  document.getElementById('expandAllBtn').addEventListener('click', function () {
+    document.querySelectorAll('[data-tile]').forEach(function (t) { if (t.querySelector('.tile-head:not(.static)')) t.classList.add('open'); });
+    document.querySelectorAll('[data-row]').forEach(function (r) { if (r.querySelector('.panel-row-head:not(.static)')) r.classList.add('open'); });
+    document.querySelectorAll('[data-panel]').forEach(function (p) { if (p.querySelector('.panel-head.toggle')) p.classList.add('open'); });
+  });
+  document.getElementById('collapseAllBtn').addEventListener('click', function () {
+    document.querySelectorAll('[data-tile].open').forEach(function (t) { t.classList.remove('open'); });
+    document.querySelectorAll('[data-row].open').forEach(function (r) { r.classList.remove('open'); });
+    document.querySelectorAll('[data-panel].open').forEach(function (p) { p.classList.remove('open'); });
+  });
+</script>
+
+</body>
+</html>
