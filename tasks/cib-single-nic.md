@@ -108,7 +108,7 @@ CIB03: eni-09ffb64408d395ca8 (10.0.0.28) detached; verified single NIC/IMDS/SSM/
 CIB04: eni-037d016e4f4d499a6 (10.0.0.21) detached; KL→us-west-2 transit was flapping (TTNET path to
 us-west-2/eu-west-1 down intermittently 14:20–15:30 KL while us-east-1/ap-southeast-1 fine — ISP
 routing, NOT us) so my SSM verify was delayed; Lee confirmed both boxes on air with one NIC from his
-California RDP. Both still on Etere .9165 (no reboot) — reboot/update at Lee's convenience.
+California RDP. Lee then rebooted both with Windows Update + Etere 36.1.360.9454 → all five CIBs identical: m7i + gp3 6000/500 + single NIC + Etere 36.1.360.9454 + current Windows.
 **ALL FIVE CIBs SINGLE-NIC.** Detached ENIs kept for undo: CIB01 eni-08f05e939119f65ea, CIB06
 eni-03c376b4d64d792d4, CIB05 eni-0bc3543a644af967b, CIB03 eni-09ffb64408d395ca8, CIB04
 eni-037d016e4f4d499a6. Next: 8/29 MLFD scan (first rollovers on new config) → delete these 5 +
