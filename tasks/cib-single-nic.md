@@ -100,3 +100,5 @@ MGS only, NFY/WORKSTATIONS .224, NTP via NAT OK. Total hands-on ~10 min incl. re
 Detached eni-0bc3543a644af967b (10.0.0.55; kept for undo). 27/33 sockets had been on WAN; ETXServer
 reconnected <1 min; etAlign proved by its 00:37:47 sweep (it holds SQL only during sweeps — a
 "no 1433 connection" snapshot between sweeps is normal). 0 errors. Reboot/Etere update = Lee's call.
+CIB05 rebooted 06:01Z with Windows Update (KB5120238) + Etere 36.1.360.9454: 0 cred errors, MGS only,
+NFY/WORKSTATIONS .238, 48 conns from .238. CIB01/05/06 now identical reference config.
