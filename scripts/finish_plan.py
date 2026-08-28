@@ -208,8 +208,13 @@ def plan(evs: list[Ev], inv: list[Filler], hour_end: float, market: int) -> tupl
     longest, then add PI → PSA → ID. Existing ID rows are re-placed (same asset)."""
     notes: list[str] = []
     old_ids = [e for e in evs if e.newtype == "ID"]
-    kept = [e for e in evs if e.newtype != "ID"]
+    # NOOPs are Etere/EE gap-fillers, i.e. empty time — never content (MMT bare test 8/28)
+    kept = [e for e in evs if e.newtype not in ("ID", "NOOP")]
     pieces = [e for e in kept if e.is_program]
+
+    def _is_bump(p: Ev, kind: str) -> bool:
+        return "BUMP" in p.desc.upper() and kind in p.desc.upper()
+
     breaks: list[Break] = []
     for i in range(len(pieces)):
         lo = pieces[i].end
@@ -218,7 +223,15 @@ def plan(evs: list[Ev], inv: list[Filler], hour_end: float, market: int) -> tupl
         # anything after the last piece belongs to the final break even if it spilled past hour_end
         if i == len(pieces) - 1:
             items = [e for e in kept if not e.is_program and e.ora >= lo - 0.5]
-        if items or i == len(pieces) - 1:
+        # A break exists after the last piece, wherever spots already sit, and between
+        # two story pieces (never open-bump→story or story→close-bump) even if it is
+        # empty right now — a break that held only fillers must not vanish with them.
+        structural = (
+            i + 1 < len(pieces)
+            and not _is_bump(pieces[i], "OPEN")
+            and not _is_bump(pieces[i + 1], "CLOSE")
+        )
+        if items or i == len(pieces) - 1 or structural:
             breaks.append(Break(i, items))
     final = breaks[-1]
     interior = breaks[:-1]
