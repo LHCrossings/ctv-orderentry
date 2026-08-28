@@ -115,3 +115,6 @@ eni-037d016e4f4d499a6. Next: 8/29 MLFD scan (first rollovers on new config) → 
 orphans (CIB02 WAN 10.0.0.43/.51, vpn-nic 10.0.0.18) → Health event should resolve ~9/4.
 Gotcha: awk on ENI description "CIB04 WAN" split on the space → detach was sent with a bogus id and
 failed safely; always hard-code IDs from the snapshot rather than parsing descriptions.
+Post-boot verify CIB03 (boot 00:40) + CIB04 (boot 00:38), 00:46 local: single NIC, DNS single record,
+IMDS 5/5, SSM 0 cred errors (MGS up, normal MDS startup touch), Etere 36.1.3.0 file version, Au/ETX/
+etAlign 2/2/2, 0 ETXServer errors, NFY + WORKSTATIONS on primary IPs. **Fleet verified uniform.**
