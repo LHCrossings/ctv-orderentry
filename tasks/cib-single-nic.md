@@ -87,6 +87,6 @@ NFY_SUBSCRIPTIONS re-registration, DNS cleanup, and the SSM/IMDS error rate afte
   MGS only (10-line MDS startup touch), NFY + WORKSTATIONS re-registered from .248 within 3 min,
   DNS single record, **w32time now reaches Amazon Time Sync 169.254.169.123 at stratum 2** (it was
   unreachable on dual-NIC boxes — the same black hole). Windows Update reachable via NAT.
-- Lee also updated Etere to the latest version on CIB01 → CIB01 = reference config (m7i + gp3
+- Lee also updated Etere to the latest version (36.1.360.9454) on CIB01 → CIB01 = reference config (m7i + gp3
   6000/500 + single NIC + current Etere). Watch MLFD for CPU headroom over the next days before
   updating Etere on the other boxes.
