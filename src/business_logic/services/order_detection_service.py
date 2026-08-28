@@ -174,6 +174,10 @@ class OrderDetectionService:
         if self._is_sjcounty(first_page_text):
             return OrderType.SJCOUNTY
 
+        # Prince of Peace (Kwan Loong Oil) — house Sales Confirmation, client-keyed
+        if self._is_pop(first_page_text):
+            return OrderType.POP
+
         # Resorts World New York (check before SCWA — both use "Crossings TV Media Proposal")
         if self._is_rwny(first_page_text):
             return OrderType.RWNY
@@ -245,6 +249,14 @@ class OrderDetectionService:
         """San Joaquin County (Registrar of Voters) proposal — keyed on the
         client name (Lee: the client is the definer, never the template)."""
         return "san joaquin county" in " ".join(text.split()).lower()
+
+    def _is_pop(self, text: str) -> bool:
+        """Prince of Peace Sales Confirmation — the house 'SALES CONFIRMATION -
+        CROSSINGS TV' template with Prince of Peace as the Client (client-keyed;
+        other clients' confirmations must not route here)."""
+        from browser_automation.parsers.pop_parser import is_pop_text
+
+        return is_pop_text(text)
 
     def _is_ntooitive(self, text: str) -> bool:
         """
@@ -980,6 +992,8 @@ def detect_from_filename(filename: str) -> OrderType:
         return OrderType.NTOOITIVE
     if "SAN JOAQUIN COUNTY" in " ".join(name_upper.split()):
         return OrderType.SJCOUNTY
+    if "PRINCE OF PEACE" in " ".join(name_upper.split()):
+        return OrderType.POP
     # Wallrich — SMUD is the client and the clear definer (Lee, 2026-08-21);
     # the xlsx content check in order_scanner matches SMUD/SD15 cells too.
     if "SMUD" in name_upper:

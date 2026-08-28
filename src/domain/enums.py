@@ -57,6 +57,7 @@ class OrderType(Enum):
     CRISPIN = "crispin"
     NTOOITIVE = "ntooitive"
     SJCOUNTY = "sjcounty"
+    POP = "pop"  # Prince of Peace (Kwan Loong Oil) — house Sales Confirmation, direct 0%
     AI_FALLBACK = "ai_fallback"
     UNKNOWN = "unknown"
 

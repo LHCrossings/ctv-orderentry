@@ -155,6 +155,7 @@ class OrderProcessingService:
         OrderType.CRISPIN: "_process_crispin_order",
         OrderType.NTOOITIVE: "_process_ntooitive_order",
         OrderType.SJCOUNTY: "_process_sjcounty_order",
+        OrderType.POP: "_process_pop_order",
         OrderType.EQC: "_process_eqc_order",
         OrderType.LRCCD: "_process_lrccd_order",
         OrderType.SACRT: "_process_sacrt_order",
@@ -201,6 +202,7 @@ class OrderProcessingService:
         OrderType.CRISPIN,
         OrderType.NTOOITIVE,
         OrderType.SJCOUNTY,
+        OrderType.POP,
         OrderType.EQC,
         OrderType.LRCCD,
         OrderType.SACRT,
@@ -3171,6 +3173,42 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.SJCOUNTY,
+                error_message=error_detail,
+            )
+
+    def _process_pop_order(self, order: Order, shared_session=None) -> ProcessingResult:
+        """Process a Prince of Peace sales confirmation — one contract (direct, 0%)."""
+        inp = order.order_input if isinstance(order.order_input, dict) else {}
+        try:
+            from browser_automation.parsers.pop_parser import parse_pop
+            from browser_automation.pop_automation import run_pop_order
+
+            parsed = parse_pop(str(order.pdf_path))
+            results = run_pop_order(parsed, inp)  # list of (label, success)
+
+            contracts = [
+                Contract(contract_number=label, order_type=OrderType.POP)
+                for label, ok in results
+                if ok
+            ]
+            if not contracts:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.POP,
+                    error_message="POP processing failed — check output above",
+                )
+            return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.POP)
+
+        except Exception as exc:
+            import traceback
+
+            error_detail = f"POP processing error: {exc}\n{traceback.format_exc()}"
+            print(f"\n✗ POP processing failed: {exc}")
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.POP,
                 error_message=error_detail,
             )
 
