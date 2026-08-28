@@ -4,24 +4,24 @@ Spec: `tasks/finish-hour.md` (v0.3). Live-proven write path: `scripts/finish_app
 (LAX/CVC/WDC/MMT 8/28 08:00, MMT also from bare). Lee: "you now can do everything on your own."
 
 ## Phase 1 — Fill & Finish page (Control Room, next to the Break Optimization cards)
-- [ ] `src/business_logic/services/finish_service.py` — lift `scripts/finish_plan.py` +
+- [x] `src/business_logic/services/finish_service.py` — lift `scripts/finish_plan.py` +
       `scripts/finish_apply.py` into importable functions: `load_window`, `load_inventory`,
       `plan`, `apply_hour(conn, market, date, lo, hi, dry_run)`, `day_programs(cur, market, date)`
       (program windows = consecutive EVENT_TYPE='F' anchors on the broadcast day). Scripts become
       thin CLI wrappers so the CLI and the page share ONE code path.
-- [ ] Route blueprint `src/web/routes/finish.py`: page `/finish`, `GET /finish/day?market&date`
+- [x] Route blueprint `src/web/routes/finish.py`: page `/finish`, `GET /finish/day?market&date`
       (programs list, each with remainder + derived badge), `GET /finish/plan?market&date&lo&hi`
       (timeline + edits, read-only), `POST /finish/apply` (same args; runs apply, returns AFTER).
       Register in `app.py`.
-- [ ] Template `templates/finish.html` in the BO Log-Version pattern: network/market pills +
+- [x] Template `templates/finish.html` in the BO Log-Version pattern: network/market pills +
       date (auto-load, no Load button), day's programs listed log-style, expand → packed
       timeline with the remainder + planned edits, one **Finish** button per program
       (confirm), finished badge DERIVED (planner reports 0 edits + ID present). Existing CSS
       classes only (`prg-*`, `expand-btn`, `--nord4` on dark).
-- [ ] Portal card next to the Break Optimization cards (before Dallas Live View, which stays last).
-- [ ] Verify: page loads 8/28 for all 9 markets; badges: all finished; pick a bare hour tomorrow
+- [x] Portal card next to the Break Optimization cards (before Dallas Live View, which stays last).
+- [~] Verify: endpoints + page tested locally on MMT 8/28 (page/card/day/plan/400); first live click from the page = Lee's. Remaining: page loads 8/28 for all 9 markets; badges: all finished; pick a bare hour tomorrow
       and Finish it from the page (first live click = Lee's). `uv run ruff check` clean.
-- [ ] Commit + push; deploy note (Lee deploys).
+- [x] Commit + push; deploy note (Lee deploys).
 
 ## Phase 2 — one-button chain from Daily Programming ("set up Korean News → everything")
 Order per market, stop-on-problem, report per step:
