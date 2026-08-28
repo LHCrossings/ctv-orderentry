@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fill &amp; Finish — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 1400px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px 24px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+            margin-bottom: 16px;
+        }
+        .controls-row { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+        .field-group { display: flex; flex-direction: column; gap: 4px; }
+        .field-label { font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .field-input { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 7px 12px; font-size: 0.9rem; color: var(--text-primary); outline: none; font-family: inherit; width: 90px; }
+        .field-input:focus { border-color: var(--nord10); }
+        .pill-group { display: flex; gap: 6px; flex-wrap: wrap; }
+        .mkt-pill { background: transparent; border: 1px solid var(--border-color); border-radius: 20px; padding: 5px 12px; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); cursor: pointer; transition: all 0.15s; font-family: inherit; }
+        .mkt-pill:hover:not(.active) { border-color: var(--nord10); color: var(--nord10); }
+        .mkt-pill.active { background: var(--nord10); border-color: var(--nord10); color: var(--nord6); }
+
+        .log-meta { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+        .expand-btn { background: transparent; border: 1px solid var(--border-color); border-radius: 6px; padding: 2px 10px; font-size: 0.74rem; color: var(--text-muted); cursor: pointer; font-family: inherit; }
+        .expand-btn:hover { border-color: var(--nord10); color: var(--nord10); }
+        .prg-refresh { flex-shrink: 0; white-space: nowrap; color: var(--nord4); border-color: var(--nord3); }
+        .prg-refresh:hover { color: var(--nord8); border-color: var(--nord8); }
+
+        /* Program block (log style — same as Break Optimization Log Style) */
+        .prg-block { margin-bottom: 6px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); }
+        .prg-header { display: flex; align-items: center; gap: 12px; background: var(--nord2); color: var(--nord5); padding: 9px 16px; cursor: pointer; user-select: none; }
+        .prg-header:hover { background: var(--nord3); }
+        .prg-chevron { font-size: 0.7rem; transition: transform 0.15s; color: var(--nord4); flex-shrink: 0; }
+        .prg-block.collapsed .prg-chevron { transform: rotate(-90deg); }
+        .prg-time { font-family: monospace; font-size: 0.83rem; color: var(--nord8); min-width: 130px; }
+        .prg-name { font-weight: 600; font-size: 0.88rem; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .prg-stat { font-size: 0.72rem; color: var(--nord4); flex-shrink: 0; white-space: nowrap; }
+        .prg-stat.warn { color: var(--nord13); font-weight: 700; }
+        .prg-stat.bad { color: var(--nord11); font-weight: 700; }
+        .prg-stat.done { color: var(--nord14); font-weight: 700; }
+        .prg-apply-btn { background: rgba(163,190,140,0.15); border: 1px solid rgba(163,190,140,0.4); color: var(--nord14); border-radius: 6px; padding: 3px 10px; font-size: 0.72rem; font-weight: 700; cursor: pointer; font-family: inherit; flex-shrink: 0; }
+        .prg-apply-btn:hover { background: rgba(163,190,140,0.3); }
+        .prg-apply-btn:disabled { opacity: 0.5; cursor: default; }
+        .prg-block.finished .prg-header { opacity: 0.6; }
+        .prg-body { background: var(--bg-secondary); padding: 10px 12px; }
+        .prg-block.collapsed .prg-body { display: none; }
+        .prg-loading, .prg-note { padding: 14px 16px; font-size: 0.84rem; color: var(--text-muted); font-style: italic; }
+
+        /* Packed timeline */
+        .tl { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        .tl td { padding: 3px 8px; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
+        .tl td.t { font-family: monospace; color: var(--text-secondary); width: 100px; }
+        .tl td.d { font-family: monospace; color: var(--text-secondary); width: 70px; text-align: right; }
+        .tl td.k { width: 44px; font-weight: 700; font-size: 0.7rem; color: var(--text-muted); }
+        .tl td.n { white-space: normal; }
+        .tl tr.pgm td { background: rgba(94,129,172,0.08); color: var(--text-primary); }
+        .tl tr.pgm td.n { font-weight: 600; }
+        .tl tr.new td { background: rgba(163,190,140,0.18); }
+        .tl tr.new td.k { color: var(--nord14); }
+        .tl tr.del td { background: rgba(191,97,106,0.14); text-decoration: line-through; color: var(--text-muted); }
+        .tl tr.keep td.k { color: var(--nord3); }
+        .tl tr.brk td { border-bottom: 2px solid var(--nord9); font-size: 0.72rem; color: var(--text-muted); text-align: right; padding-top: 0; }
+        .plan-notes { font-size: 0.78rem; color: var(--text-secondary); margin: 0 0 8px; padding-left: 18px; }
+        .plan-notes li.bad { color: var(--nord11); font-weight: 600; }
+        .plan-foot { display: flex; align-items: center; gap: 14px; margin-top: 10px; font-size: 0.8rem; color: var(--text-secondary); flex-wrap: wrap; }
+        .plan-foot strong { color: var(--text-primary); }
+        .empty-state { padding: 40px; text-align: center; color: var(--text-muted); font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="home-btn">🏠</a>
+            <div class="logo-icon">🏁</div>
+            <div>
+                <h1>Fill &amp; Finish</h1>
+                <div class="logo-sub">Master Control</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="tool-card">
+        <div class="controls-row">
+            <div class="field-group">
+                <label class="field-label">Date</label>
+                <input type="date" id="datePicker" class="field-input" style="width:140px" />
+            </div>
+            <div class="field-group">
+                <label class="field-label">Market</label>
+                <div class="pill-group">
+                    <button class="mkt-pill" data-market="NYC" onclick="selectMkt(this)">NYC</button>
+                    <button class="mkt-pill" data-market="CMP" onclick="selectMkt(this)">CMP</button>
+                    <button class="mkt-pill" data-market="HOU" onclick="selectMkt(this)">HOU</button>
+                    <button class="mkt-pill" data-market="SFO" onclick="selectMkt(this)">SFO</button>
+                    <button class="mkt-pill" data-market="SEA" onclick="selectMkt(this)">SEA</button>
+                    <button class="mkt-pill" data-market="LAX" onclick="selectMkt(this)">LAX</button>
+                    <button class="mkt-pill" data-market="CVC" onclick="selectMkt(this)">CVC</button>
+                    <button class="mkt-pill" data-market="WDC" onclick="selectMkt(this)">WDC</button>
+                    <button class="mkt-pill" data-market="MMT" onclick="selectMkt(this)">MMT</button>
+                    <button class="mkt-pill" data-market="DAL" onclick="selectMkt(this)">DAL</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="logArea"><div class="empty-state">Pick a market — the day's shows load automatically.</div></div>
+</main>
+
+<script>
+let selectedMarket = null;
+let currentDate    = null;
+let programs       = [];   // from finish/day
+let plans          = {};   // pi -> plan response (lazy-loaded on expand)
+
+function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function hm(hms) { return (hms || '').slice(0, 5); }            // "08:00:00.00" -> "08:00"
+function mmss(sec) {
+    sec = Math.max(0, sec || 0);
+    const m = Math.floor(sec / 60), s = sec - m * 60;
+    return `${m}:${s.toFixed(2).padStart(5, '0')}`;
+}
+
+function selectMkt(el) {
+    document.querySelectorAll('.mkt-pill').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+    selectedMarket = el.dataset.market;
+    loadPrograms();   // auto-load, no Load button
+}
+
+async function loadPrograms() {
+    const dateVal = document.getElementById('datePicker').value;
+    if (!dateVal || !selectedMarket) return;
+    currentDate = dateVal;
+    programs = []; plans = {};
+    document.getElementById('logArea').innerHTML = '<div class="empty-state">Reading the day\'s schedule…</div>';
+    try {
+        const resp = await fetch(`/api/master-control/finish/day?date=${encodeURIComponent(dateVal)}&market=${encodeURIComponent(selectedMarket)}`);
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            document.getElementById('logArea').innerHTML = `<div class="empty-state">${esc(err.detail || err.error || resp.statusText)}</div>`;
+            return;
+        }
+        const data = await resp.json();
+        programs = data.programs || [];
+        renderPrograms(data);
+    } catch (e) {
+        document.getElementById('logArea').innerHTML = `<div class="empty-state">Network error: ${esc(e.message)}</div>`;
+    }
+}
+
+// Derived state → header badge. Never a stored flag: EE edits stay honest.
+function statFor(p) {
+    switch (p.state) {
+        case 'finished': return { cls: 'done', text: `✓ finished · ID airs ${p.id_airs != null ? p.id_airs.toFixed(1) : '?'}s` };
+        case 'ready':    return { cls: 'warn', text: `${p.n_delete} remove · ${p.n_insert} add · ID would air ${p.id_airs != null ? p.id_airs.toFixed(1) : '?'}s` };
+        case 'unplaced': return { cls: 'bad',  text: `programming not placed · ${Math.round(p.remainder / 60)} min open` };
+        case 'cannot':   return { cls: 'bad',  text: p.error || 'cannot land the ID' };
+        case 'na':       return { cls: '',     text: 'nothing to finish' };
+        default:         return { cls: '',     text: '' };
+    }
+}
+
+function renderPrograms(data) {
+    if (!programs.length) {
+        document.getElementById('logArea').innerHTML = '<div class="empty-state">No programs on this day\'s schedule.</div>';
+        return;
+    }
+    const nFin = programs.filter(p => p.state === 'finished').length;
+    const nReady = programs.filter(p => p.state === 'ready').length;
+    let html = `<div class="log-meta">
+        <strong>${esc(data.market)}</strong> &nbsp;·&nbsp; ${esc(data.date)}
+        &nbsp;&nbsp;<span>${programs.length} shows · ${nFin} finished · ${nReady} to finish</span>
+        &nbsp;&nbsp;
+        <button class="expand-btn" onclick="expandAll()">Expand all</button>
+        <button class="expand-btn" onclick="collapseAll()">Collapse all</button>
+    </div>`;
+    programs.forEach((p, pi) => {
+        const st = statFor(p);
+        const canFinish = p.state === 'ready';
+        html += `<div class="prg-block collapsed ${p.state === 'finished' ? 'finished' : ''}" id="prg-${pi}">
+  <div class="prg-header" onclick="togglePrg(${pi})">
+    <span class="prg-chevron">▾</span>
+    <span class="prg-time">${hm(p.lo_hms)}&nbsp;–&nbsp;${hm(p.hi_hms)}</span>
+    <span class="prg-name">${esc(p.title || '?')}</span>
+    <button class="expand-btn prg-refresh" title="Re-read this show from Etere"
+            onclick="event.stopPropagation();refreshProgram(${pi})">↻ Refresh</button>
+    <button class="prg-apply-btn" id="prg-apply-${pi}" style="display:${canFinish ? '' : 'none'}"
+            onclick="event.stopPropagation();finishProgram(${pi})">Finish</button>
+    <span class="prg-stat ${st.cls}" id="prg-stat-${pi}">${esc(st.text)}</span>
+  </div>
+  <div class="prg-body" id="prg-body-${pi}"><div class="prg-loading">Loading…</div></div>
+</div>`;
+    });
+    document.getElementById('logArea').innerHTML = html;
+}
+
+function togglePrg(pi) {
+    const block = document.getElementById(`prg-${pi}`);
+    const wasCollapsed = block.classList.contains('collapsed');
+    block.classList.toggle('collapsed');
+    if (wasCollapsed && !(pi in plans)) loadPlan(pi);
+}
+
+async function refreshProgram(pi) {
+    // Re-read the whole day (states are derived from live data) but keep this block open
+    const block = document.getElementById(`prg-${pi}`);
+    const open = !block.classList.contains('collapsed');
+    await loadPrograms();
+    if (open && document.getElementById(`prg-${pi}`)) togglePrg(pi);
+}
+
+function expandAll() { programs.forEach((p, pi) => { const b = document.getElementById(`prg-${pi}`); if (b.classList.contains('collapsed')) togglePrg(pi); }); }
+function collapseAll() { programs.forEach((p, pi) => document.getElementById(`prg-${pi}`).classList.add('collapsed')); }
+
+async function loadPlan(pi) {
+    const p = programs[pi];
+    const body = document.getElementById(`prg-body-${pi}`);
+    try {
+        const resp = await fetch(`/api/master-control/finish/plan?date=${encodeURIComponent(currentDate)}&market=${encodeURIComponent(selectedMarket)}&lo=${p.lo}&hi=${p.hi}`);
+        const plan = await resp.json();
+        plans[pi] = plan;
+        body.innerHTML = renderPlan(p, plan);
+    } catch (e) {
+        body.innerHTML = `<div class="prg-note">Could not load: ${esc(e.message)}</div>`;
+    }
+}
+
+function renderPlan(p, plan) {
+    if (plan.error && !plan.timeline?.length) return `<div class="prg-note">${esc(plan.error)}</div>`;
+    let html = '<ul class="plan-notes">';
+    (plan.notes || []).forEach(n => { html += `<li class="${n.startsWith('⚠') ? 'bad' : ''}">${esc(n)}</li>`; });
+    html += '</ul>';
+    const dels = (plan.edits || []).filter(e => e.op === 'delete');
+    html += '<table class="tl">';
+    // deletions shown at their current position (struck through) before the packed plan
+    dels.forEach(e => {
+        html += `<tr class="del"><td class="t">${esc(e.time)}</td><td class="d">${mmss(e.dur)}</td><td class="k">${esc(e.type)}</td><td class="n">remove · ${esc(e.desc)}</td></tr>`;
+    });
+    (plan.timeline || []).forEach(it => {
+        const cls = it.tag === 'pgm' ? 'pgm' : it.tag === 'new' ? 'new' : it.tag === 'keep' ? 'keep' : 'paid';
+        const label = it.tag === 'new' ? 'add · ' : '';
+        html += `<tr class="${cls}"><td class="t">${esc(it.time)}</td><td class="d">${mmss(it.dur)}</td><td class="k">${esc(it.type)}</td><td class="n">${label}${esc(it.desc)}</td></tr>`;
+        if (it.break_end) html += `<tr class="brk"><td colspan="4">break ${it.break} · ${mmss(it.break_len)}</td></tr>`;
+    });
+    html += '</table>';
+    const over = plan.overrun != null ? plan.overrun : 0;
+    html += `<div class="plan-foot">
+        <span>now ends <strong>${esc(plan.actual_end_hms)}</strong> (${over >= 0 ? '+' : ''}${over.toFixed(1)}s past the hour)</span>
+        <span>after Finish ends <strong>${esc(plan.planned_end_hms)}</strong></span>
+        ${plan.id_airs != null ? `<span>Station ID airs <strong>${plan.id_airs.toFixed(1)}s</strong> before the F event</span>` : ''}
+        <span>${plan.n_delete} remove · ${plan.n_insert} add</span>
+    </div>`;
+    return html;
+}
+
+async function finishProgram(pi) {
+    const p = programs[pi];
+    const plan = plans[pi];
+    const summary = plan ? `${plan.n_delete} remove, ${plan.n_insert} add; ends ${plan.planned_end_hms}` : `${p.n_delete} remove, ${p.n_insert} add`;
+    if (!confirm(`Finish ${p.title} (${hm(p.lo_hms)}–${hm(p.hi_hms)}) in ${selectedMarket}?\n\n${summary}\n\nWrites to Etere. The schedule is NOT published — publish it yourself when you're done.`)) return;
+    const btn = document.getElementById(`prg-apply-${pi}`);
+    btn.disabled = true; btn.textContent = 'Finishing…';
+    try {
+        const resp = await fetch('/api/master-control/finish/apply', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ market: selectedMarket, date: currentDate, lo: p.lo, hi: p.hi }),
+        });
+        const r = await resp.json();
+        const stat = document.getElementById(`prg-stat-${pi}`);
+        if (r.status === 'applied' || r.status === 'finished') {
+            await refreshProgram(pi);
+        } else {
+            stat.className = 'prg-stat bad';
+            stat.textContent = `${r.status}: ${r.message || 'see log'}`;
+            btn.disabled = false; btn.textContent = 'Finish';
+            document.getElementById(`prg-body-${pi}`).innerHTML =
+                `<div class="prg-note">Rolled back — nothing changed.<br>${esc((r.log || []).join('\n')).replace(/\n/g, '<br>')}</div>`;
+        }
+    } catch (e) {
+        btn.disabled = false; btn.textContent = 'Finish';
+        alert('Network error: ' + e.message);
+    }
+}
+
+const _today = new Date().toISOString().slice(0, 10);
+document.getElementById('datePicker').value = _today;
+document.getElementById('datePicker').addEventListener('change', () => { if (selectedMarket) loadPrograms(); });
+</script>
+<script src="/static/js/to-top-fab.js?v=1"></script>
+</body>
+</html>
