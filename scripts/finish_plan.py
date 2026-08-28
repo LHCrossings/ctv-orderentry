@@ -194,30 +194,89 @@ def pool(inv: list[Filler], kind: str, sec: int) -> list[Filler]:
     )
 
 
+def _is_pi(x, sec: int) -> bool:
+    kind = getattr(x, "kind", None) or (
+        "PI" if getattr(x, "newtype", "") == "PER" else getattr(x, "newtype", "")
+    )
+    return kind == "PI" and abs(x.dur - sec) <= 0.5
+
+
 def plan(evs: list[Ev], inv: list[Filler], hour_end: float, market: int) -> tuple[list, list[str]]:
+    """Fix it or finish it (Lee 8/28): existing fill stays as given; remove only
+    what the end game needs (spill-over first, final break next, then the
+    longest interior break), move a PI only when the final break would be the
+    longest, then add PI → PSA → ID. Existing ID rows are re-placed (same asset)."""
     notes: list[str] = []
-    kept = [e for e in evs if not e.is_fill]
-    stripped = [e for e in evs if e.is_fill]
-    # Program pieces + interior breaks (COM/BNS/kept PER between pieces)
+    old_ids = [e for e in evs if e.newtype == "ID"]
+    kept = [e for e in evs if e.newtype != "ID"]
     pieces = [e for e in kept if e.is_program]
-    # A break exists only where the COMS structure already has one — i.e. the gap
-    # between two program pieces already holds spots (paid or Etere fill) — plus
-    # the final break after the last program piece. Bumper→story and
-    # close-bump→filler-program gaps are NOT breaks.
     breaks: list[Break] = []
     for i in range(len(pieces)):
         lo = pieces[i].end
         hi = pieces[i + 1].ora if i + 1 < len(pieces) else hour_end
         items = [e for e in kept if not e.is_program and lo - 0.5 <= e.ora < hi]
-        had_any = any(not e.is_program and lo - 0.5 <= e.ora < hi for e in evs)
-        if had_any or i == len(pieces) - 1:
+        # anything after the last piece belongs to the final break even if it spilled past hour_end
+        if i == len(pieces) - 1:
+            items = [e for e in kept if not e.is_program and e.ora >= lo - 0.5]
+        if items or i == len(pieces) - 1:
             breaks.append(Break(i, items))
     final = breaks[-1]
-    fixed = sum(e.dur for e in kept)
-    R = hour_end - (pieces[0].ora if pieces else 0) - fixed  # true remainder once packed
-    notes.append(f"stripped {len(stripped)} existing fill rows; packed remainder = {mmss(R)}")
+    interior = breaks[:-1]
+    R = hour_end - pieces[0].ora - sum(e.dur for e in kept)
+    notes.append(
+        f"existing fill kept as given ({sum(1 for e in kept if e.is_fill)} rows); packed remainder = {mmss(R)}"
+        + (f"; {len(old_ids)} existing ID re-placed" if old_ids else "")
+    )
 
-    used: set[int] = set()
+    used: set[int] = {e.filmati for e in kept if e.is_fill}
+    deletes: list[str] = []
+    moves: list[str] = []
+
+    # ── FIX phase: remove existing fill until the ID can land (R ≥ 5s) ──
+    def removable():
+        """Fewest edits: the smallest single existing fill item that covers the
+        deficit (final break first, then longest interior); if none covers it,
+        the largest available so the next pass gets closer."""
+        need = ID_MIN_AIR - R
+        cands = []
+        for order, b in enumerate([final] + sorted(interior, key=lambda b: -b.length)):
+            for pos, x in enumerate(b.items):
+                if isinstance(x, Ev) and x.is_fill:
+                    cands.append((b, x, order, -pos))
+        if not cands:
+            return None, None
+        enough = [c for c in cands if c[1].dur >= need]
+        if enough:
+            b, x, *_ = min(enough, key=lambda c: (c[1].dur, c[2], c[3]))
+        else:
+            b, x, *_ = max(cands, key=lambda c: (c[1].dur, -c[2], -c[3]))
+        return b, x
+
+    while R < ID_MIN_AIR:
+        b, x = removable()
+        if x is None:
+            break
+        b.items.remove(x)
+        R += x.dur
+        deletes.append(f"remove {x.desc[:28]} ({mmss(x.dur)}) from break {b.after_piece_idx}")
+
+    # ── final break must never be the longest: move its PIs into the shortest interior break ──
+    end_reserve = 25.0 + 15.0
+    while interior and final.items:
+        longest_interior = max(b.length for b in interior)
+        if (
+            final.length + end_reserve <= max(FINAL_BREAK_MAX, 0)
+            and final.length + end_reserve <= longest_interior
+        ):
+            break
+        pis = [x for x in final.items if isinstance(x, Ev) and x.is_fill and x.newtype == "PER"]
+        if not pis:
+            break
+        x = pis[-1]
+        target = min(interior, key=lambda b: b.length)
+        final.items.remove(x)
+        target.items.append(x)
+        moves.append(f"move {x.desc[:28]} ({mmss(x.dur)}) final → break {target.after_piece_idx}")
 
     def take(kind, sec, brk: Break):
         for f in pool(inv, kind, sec):
@@ -227,18 +286,9 @@ def plan(evs: list[Ev], inv: list[Filler], hour_end: float, market: int) -> tupl
             return f
         return None
 
-    # ── PI phase: distribute for evenness; final break ≤ 2:30 ──
-    interior = breaks[:-1]
-    while R - ID_MIN_AIR >= 30.0:  # largest PI that still leaves ≥5s for the ID
-        # where does the next PI go? final break unless it would exceed the cap
-        # Evenness (Lee): the next PI goes to the SHORTEST interior break. The
-        # final break may take it only if it stays ≤ the longest interior break
-        # ("the final break must never be the longest") and ≤ 2:30.
+    # ── FINISH phase: PIs for evenness; final break ≤ 2:30 and never the longest ──
+    while R - ID_MIN_AIR >= 30.0:
         sec = 60 if R - ID_MIN_AIR >= 60.0 else 30
-        # The final break will also receive the ID (25s) and typically one PSA
-        # (~15s) in the end game — count that reserve now, or it looks 40s
-        # lighter than it will end up and steals PIs from interior breaks.
-        end_reserve = 25.0 + 15.0
 
         def eff(b: Break) -> float:
             return b.length + (end_reserve if b is final else 0.0)
@@ -267,42 +317,30 @@ def plan(evs: list[Ev], inv: list[Filler], hour_end: float, market: int) -> tupl
     swaps = []
     if R < ID_MIN_AIR:
         # swap a :30 PI → :15 + :10 PSA (+5s); else a :60 → :30 + :15 + :10
-        for b in [final] + interior:
-            pis = [
-                x
-                for x in b.items
-                if isinstance(x, Filler) and x.kind == "PI" and abs(x.dur - 30) <= 0.5
-            ]
-            if pis:
-                x = pis[-1]
-                b.items.remove(x)
-                R += x.dur
-                for sec in (15, 10):
-                    g = take("PSA", sec, b)
-                    b.items.append(g)
-                    R -= g.dur
-                swaps.append(f"swapped {x.desc[:20]} → :15+:10 PSA in break {b.after_piece_idx}")
-                break
-        else:
+        for sec, repl in (
+            (30, (("PSA", 15), ("PSA", 10))),
+            (60, (("PI", 30), ("PSA", 15), ("PSA", 10))),
+        ):
+            done = False
             for b in [final] + interior:
-                pis = [
-                    x
-                    for x in b.items
-                    if isinstance(x, Filler) and x.kind == "PI" and abs(x.dur - 60) <= 0.5
-                ]
+                pis = [x for x in b.items if _is_pi(x, sec)]
                 if pis:
                     x = pis[-1]
                     b.items.remove(x)
                     R += x.dur
-                    for kind, sec in (("PI", 30), ("PSA", 15), ("PSA", 10)):
-                        g = take(kind, sec, b)
-                        b.items.append(g)
-                        R -= g.dur
+                    for kind, s2 in repl:
+                        g = take(kind, s2, b)
+                        if g:
+                            b.items.append(g)
+                            R -= g.dur
                     swaps.append(
-                        f"swapped {x.desc[:20]} → :30 PI + :15 + :10 PSA in break {b.after_piece_idx}"
+                        f"swap {x.desc[:20]} → {'+'.join(f':{s2}' for _, s2 in repl)} in break {b.after_piece_idx}"
                     )
+                    done = True
                     break
-    notes.extend(swaps)
+            if done:
+                break
+    notes.extend(deletes + moves + swaps)
     id_asset = ID_ASSET.get(market, ID_GENERIC)
     if ID_MIN_AIR <= R <= 25.5:
         final.items.append(
@@ -311,6 +349,8 @@ def plan(evs: list[Ev], inv: list[Filler], hour_end: float, market: int) -> tupl
         notes.append(f"ID {id_asset} placed; airs {R:.1f}s before the top-of-hour F event")
     else:
         notes.append(f"⚠ cannot land ID: pre-ID gap {R:.1f}s outside [5,25]")
+    n_new = sum(1 for b in breaks for x in b.items if isinstance(x, Filler))
+    notes.append(f"edits: {len(deletes)} delete, {len(moves)} move, {n_new} insert (incl. ID)")
     return breaks, notes
 
 
@@ -349,7 +389,8 @@ def main():
             continue
         for it in b.items:
             kind = getattr(it, "newtype", None) or getattr(it, "kind", "")
-            print(f"  {hms(t)} {mmss(it.dur):>8} {kind:4}      {it.desc[:40]}")
+            tag = "NEW " if isinstance(it, Filler) else ("keep" if it.is_fill else "    ")
+            print(f"  {hms(t)} {mmss(it.dur):>8} {kind:4} {tag} {it.desc[:40]}")
             t += it.dur
         if b.items:
             print(f"           └ break {i}: {mmss(b.length)}")

@@ -152,3 +152,11 @@ trafficPalinse). Delete-and-verify inside one transaction; restore SQL first.
   the :30/:60 ratio is whatever the live media-library poll says (FILMATI
   `PI-*`/`PSA-*`, DATA_SCAD not expired) and will drift over time — never hardcode
   the inventory. Same FILE twice in one hour is still not allowed.
+- **"Fix it or finish it" (Lee 8/28, DECIDED):** existing fill (MC's Etere pass,
+  hand-placed PIs/PSAs) is KEPT AS GIVEN. Finish removes only what the end game
+  needs — the smallest single fill item that covers the deficit (final break
+  first, then longest interior; largest item if none covers it) — moves a PI out
+  of the final break only if it would be the longest, then adds PI → PSA → ID.
+  An already-finished hour yields ZERO edits (that is the finished badge).
+  Verified 8/28 08:00: NYC/SEA (Lee's hand fills) → 0 edits; LAX/CVC/WDC/MMT → 1
+  delete + ID (+1 PSA for CVC). Strip-and-refill is gone from the prototype.
