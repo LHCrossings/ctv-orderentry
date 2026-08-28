@@ -34,7 +34,6 @@ from scripts.finish_plan import (  # noqa: E402
 from src.business_logic.services.daily_programming_run import (  # noqa: E402
     _durata,
     _insert_event,
-    _rebuild,
     _slots,
     _sync_checksums,
 )
@@ -43,6 +42,21 @@ SCRATCH = os.environ.get(
     "CLAUDE_SCRATCHPAD",
     "/tmp/claude-1000/-home-scrib-dev-ctv-orderentry/0411d39e-68df-4801-b73a-a7c6e5ab8ca2/scratchpad",
 )
+
+
+def _rebuild_shiftup(cur, d, cod_user, fromid):
+    """sch_rebuildStartTimeSchedule with @shiftup=1 @shiftupInsideProgram=1: pack
+    every 'T' row up behind its predecessor (what EE does on delete). Daily
+    Programming's call passes @shiftup=0, which fills the hole with a NOOP instead
+    (CVC 8/28 dry run: deleted :60 left a 60s NOOP, tail did not move)."""
+    cur.execute(
+        "EXEC dbo.sch_rebuildStartTimeSchedule %s,%s,0,0,NULL,%s,-1,1,1,0", (d, cod_user, fromid)
+    )
+    try:
+        while cur.nextset():
+            pass
+    except Exception:
+        pass
 
 
 def _supporto(cur, filmati: int) -> str:
@@ -139,6 +153,7 @@ def main():
             assert cur.rowcount == 1, f"delete of {e.id} touched {cur.rowcount} rows"
             cur.execute("DELETE FROM trafficPalinse WHERE id_tpalinse=%s", (e.id,))
         new_ids = []
+        binding: dict[int, str] = {}
         for b, x in inserts:
             brk_start = pieces[b.after_piece_idx].end
             slots = _slots(
@@ -168,9 +183,9 @@ def main():
             )
             cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, x.filmati))
             cur.execute(
-                "UPDATE TPALINSE SET EVENT_TYPE='T', NOTE='CTV_FINISH', SUPPORTO=%s WHERE ID_TPALINSE=%s",
-                (_supporto(cur, x.filmati), nid),
+                "UPDATE TPALINSE SET EVENT_TYPE='T', NOTE='CTV_FINISH' WHERE ID_TPALINSE=%s", (nid,)
             )
+            binding[nid] = _supporto(cur, x.filmati)
             # Traffic_InsertEvent adds a trafficPalinse row; hand-placed IDs/PSAs carry none
             cur.execute(
                 "DELETE FROM trafficPalinse WHERE id_tpalinse=%s AND ID_ContrattiRighe=0", (nid,)
@@ -202,15 +217,46 @@ def main():
             cur.execute("UPDATE TPALINSE SET XORDER=%s WHERE ID_TPALINSE=%s", (xo, nid))
             new_ids.append(nid)
         # rebuild the rest of the day from the hour's first piece (open bump)
-        _rebuild(cur, a.date, a.market, pieces[0].id)
+        # Etere's NOOP gap-fillers in the hour are stale after our edit — soft-delete (Etere's own pattern)
+        cur.execute(
+            "UPDATE TPALINSE SET LIVELLO=666 WHERE COD_USER=%s AND DATA=%s AND LIVELLO=0 AND NEWTYPE='NOOP' AND ORA>=%s AND ORA<%s",
+            (a.market, a.date, int(lo * FPS), int(hi * FPS)),
+        )
+        _rebuild_shiftup(cur, a.date, a.market, pieces[0].id)
+        cur.execute(
+            "SELECT COUNT(*) FROM TPALINSE WHERE COD_USER=%s AND DATA=%s AND LIVELLO=0 AND NEWTYPE='NOOP' AND ORA>=%s AND ORA<%s",
+            (a.market, a.date, int(lo * FPS), int(hi * FPS)),
+        )
+        if cur.fetchone()[0]:
+            raise RuntimeError(
+                "rebuild left a live NOOP gap-filler in the hour — plan did not reach the top"
+            )
         if new_ids:
             _sync_checksums(cur, new_ids, [])
+            # bind LAST: the rebuild SP re-derives SUPPORTO from COD_PROGRA (LAX/CVC 8/28)
+            for nid, sup in binding.items():
+                cur.execute("UPDATE TPALINSE SET SUPPORTO=%s WHERE ID_TPALINSE=%s", (sup, nid))
+            # binding guard: the CIB resolves SUPPORTO by FILE_ID; no row bound any other
+            # way has ever aired (LAX 8/28 first-run defect). Wrong binding → rollback.
+            ids_csv = ",".join(str(i) for i in new_ids)
+            cur.execute(
+                f"""SELECT t.ID_TPALINSE, t.SUPPORTO FROM TPALINSE t
+                    WHERE t.ID_TPALINSE IN ({ids_csv})
+                      AND NOT EXISTS (SELECT 1 FROM FS_FILMATI ff WHERE ff.ID_FILMATI=t.ID_FILMATI
+                                      AND t.SUPPORTO LIKE '%' + ff.FILE_ID + '%')"""
+            )
+            bad = cur.fetchall()
+            if bad:
+                raise RuntimeError(f"SUPPORTO not bound to FILE_ID: {bad}")
+            cur.execute(f"SELECT COUNT(*) FROM trafficPalinse WHERE id_tpalinse IN ({ids_csv})")
+            if cur.fetchone()[0]:
+                raise RuntimeError("inserted rows still carry a trafficPalinse row")
         # verify
         after = load_window(cur, a.market, a.date, lo, hi)
         end = after[-1].end
         print("\nAFTER")
         for e in after:
-            if e.ora >= pieces[-1].ora - 0.5:
+            if e.ora >= planned_end - 120:
                 print(
                     f"  {hms(e.ora)} {e.newtype:4} {e.desc[:40]}{'  [new]' if e.id in new_ids else ''}"
                 )
