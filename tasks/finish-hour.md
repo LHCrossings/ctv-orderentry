@@ -171,3 +171,10 @@ trafficPalinse). Delete-and-verify inside one transaction; restore SQL first.
   aired. (c) `Traffic_InsertEvent` adds a trafficPalinse row hand-placed IDs lack — delete.
   (d) soft-delete the hour's live NOOPs before the rebuild and assert none survive.
   Tooling: `scripts/finish_apply.py` (dry run by default, `--apply` writes; restore SQL first).
+- **First full live day: 2026-08-28 08:00 Korean News, all 9 markets.** Lee by hand
+  (NYC/CMP/HOU/SFO/SEA), `finish_apply.py --apply` for LAX/CVC/WDC/MMT; Lee checked
+  each in SE/EE: "100% perfect". Yellow-triangle refresh (= Explode) added to every run.
+- **OPEN: publish.** Lee publishes the schedule after checking. Decide for the page
+  whether Finish ends with a publish or leaves it to the operator (Lee's call).
+- Next: COMS block target lengths → Fill & Finish page (BO log pattern, badge = planner
+  reports 0 edits) → per-show Finish button calling the apply path with a confirm.
