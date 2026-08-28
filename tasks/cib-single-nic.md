@@ -95,3 +95,8 @@ NFY_SUBSCRIPTIONS re-registration, DNS cleanup, and the SSM/IMDS error rate afte
 Detached eni-03c376b4d64d792d4 (10.0.0.20; kept for undo). 24 of 30 sockets had been on the WAN
 NIC; etAlign/ETXServer reconnected from .224 within 2 min, 0 errors. Post-boot: 0 cred errors,
 MGS only, NFY/WORKSTATIONS .224, NTP via NAT OK. Total hands-on ~10 min incl. reboot.
+
+## CIB05 — DONE 2026-08-28 05:33Z detach
+Detached eni-0bc3543a644af967b (10.0.0.55; kept for undo). 27/33 sockets had been on WAN; ETXServer
+reconnected <1 min; etAlign proved by its 00:37:47 sweep (it holds SQL only during sweeps — a
+"no 1433 connection" snapshot between sweeps is normal). 0 errors. Reboot/Etere update = Lee's call.
