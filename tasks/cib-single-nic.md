@@ -102,3 +102,16 @@ reconnected <1 min; etAlign proved by its 00:37:47 sweep (it holds SQL only duri
 "no 1433 connection" snapshot between sweeps is normal). 0 errors. Reboot/Etere update = Lee's call.
 CIB05 rebooted 06:01Z with Windows Update (KB5120238) + Etere 36.1.360.9454: 0 cred errors, MGS only,
 NFY/WORKSTATIONS .238, 48 conns from .238. CIB01/05/06 now identical reference config.
+
+## CIB03 — DONE 07:15Z; CIB04 — DONE 07:29Z (2026-08-28)
+CIB03: eni-09ffb64408d395ca8 (10.0.0.28) detached; verified single NIC/IMDS/SSM/Etere reconnects, 0 errors.
+CIB04: eni-037d016e4f4d499a6 (10.0.0.21) detached; KL→us-west-2 transit was flapping (TTNET path to
+us-west-2/eu-west-1 down intermittently 14:20–15:30 KL while us-east-1/ap-southeast-1 fine — ISP
+routing, NOT us) so my SSM verify was delayed; Lee confirmed both boxes on air with one NIC from his
+California RDP. Both still on Etere .9165 (no reboot) — reboot/update at Lee's convenience.
+**ALL FIVE CIBs SINGLE-NIC.** Detached ENIs kept for undo: CIB01 eni-08f05e939119f65ea, CIB06
+eni-03c376b4d64d792d4, CIB05 eni-0bc3543a644af967b, CIB03 eni-09ffb64408d395ca8, CIB04
+eni-037d016e4f4d499a6. Next: 8/29 MLFD scan (first rollovers on new config) → delete these 5 +
+orphans (CIB02 WAN 10.0.0.43/.51, vpn-nic 10.0.0.18) → Health event should resolve ~9/4.
+Gotcha: awk on ENI description "CIB04 WAN" split on the space → detach was sent with a bogus id and
+failed safely; always hard-code IDs from the snapshot rather than parsing descriptions.
