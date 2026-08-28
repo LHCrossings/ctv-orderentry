@@ -45,6 +45,23 @@ SCRATCH = os.environ.get(
 )
 
 
+def _supporto(cur, filmati: int) -> str:
+    """Playout binding = channel prefix + FS_FILMATI.FILE_ID (never COD_PROGRA/DESCRIZIO).
+    sch_UpdateSupportAndProperties writes prefix+COD_PROGRA, which is NOT what the
+    1,300 IDs that aired last week carry (`0ETX      ID - NEW - GENERIC`). Same
+    rule as orders._pi_filler_supporto."""
+    cur.execute(
+        "SELECT TOP 1 ISNULL(d.LEGACY_BASESUPP, CAST(d.LEGACY_MEDIAID AS VARCHAR) + 'ETX      '), ff.FILE_ID"
+        " FROM FS_FILMATI ff JOIN FS_METADEVICE d ON d.ID_METADEVICE = ff.ID_METADEVICE"
+        " WHERE ff.ID_FILMATI = %s AND d.LEGACY_MEDIAID IS NOT NULL ORDER BY d.LEGACY_MEDIAID",
+        (int(filmati),),
+    )
+    r = cur.fetchone()
+    if not r or not r[1]:
+        raise RuntimeError(f"no FS_FILMATI FILE_ID for {filmati}")
+    return (str(r[0]) + str(r[1]))[:30]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--market", type=int, required=True)
@@ -151,7 +168,12 @@ def main():
             )
             cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, x.filmati))
             cur.execute(
-                "UPDATE TPALINSE SET EVENT_TYPE='T', NOTE='CTV_FINISH' WHERE ID_TPALINSE=%s", (nid,)
+                "UPDATE TPALINSE SET EVENT_TYPE='T', NOTE='CTV_FINISH', SUPPORTO=%s WHERE ID_TPALINSE=%s",
+                (_supporto(cur, x.filmati), nid),
+            )
+            # Traffic_InsertEvent adds a trafficPalinse row; hand-placed IDs/PSAs carry none
+            cur.execute(
+                "DELETE FROM trafficPalinse WHERE id_tpalinse=%s AND ID_ContrattiRighe=0", (nid,)
             )
             # XORDER: between the previous planned item in this break (or the piece) and the next live row
             prev = None
