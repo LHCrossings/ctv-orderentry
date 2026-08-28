@@ -160,3 +160,14 @@ trafficPalinse). Delete-and-verify inside one transaction; restore SQL first.
   An already-finished hour yields ZERO edits (that is the finished badge).
   Verified 8/28 08:00: NYC/SEA (Lee's hand fills) → 0 edits; LAX/CVC/WDC/MMT → 1
   delete + ID (+1 PSA for CVC). Strip-and-refill is gone from the prototype.
+- **Write path lessons from the first live hour (LAX 8/28, then CVC dry runs):**
+  (a) `sch_rebuildStartTimeSchedule` params 8–10 are `@shiftup, @shiftupInsideProgram,
+  @forceShiftUp`. Daily Programming passes shiftup=0 (fixed slots; a hole becomes a
+  NOOP). Finish needs **1,1,0** — every 'T' row packs behind its predecessor, exactly
+  EE's delete behaviour; grid block boundaries are NOT anchors (NYC's hand-placed
+  close bump sits 25s before the 08:59:00 COMS start). (b) `sch_UpdateSupportAndProperties`
+  AND the rebuild both write SUPPORTO as prefix+COD_PROGRA; bind prefix+FILE_ID as the
+  LAST step and assert it inside the transaction — no row bound any other way has ever
+  aired. (c) `Traffic_InsertEvent` adds a trafficPalinse row hand-placed IDs lack — delete.
+  (d) soft-delete the hour's live NOOPs before the rebuild and assert none survive.
+  Tooling: `scripts/finish_apply.py` (dry run by default, `--apply` writes; restore SQL first).
