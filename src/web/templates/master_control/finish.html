@@ -69,6 +69,8 @@
         .tl tr.new td.k { color: var(--nord14); }
         .tl tr.del td { background: rgba(191,97,106,0.14); text-decoration: line-through; color: var(--text-muted); }
         .tl tr.keep td.k { color: var(--nord3); }
+        .tl tr.move td { background: rgba(235,203,139,0.18); }
+        .tl tr.move td.k { color: var(--nord13); }
         .tl tr.brk td { border-bottom: 2px solid var(--nord9); font-size: 0.72rem; color: var(--text-muted); text-align: right; padding-top: 0; }
         .plan-notes { font-size: 0.78rem; color: var(--text-secondary); margin: 0 0 8px; padding-left: 18px; }
         .plan-notes li.bad { color: var(--nord11); font-weight: 600; }
@@ -257,8 +259,8 @@ function renderPlan(p, plan) {
         html += `<tr class="del"><td class="t">${esc(e.time)}</td><td class="d">${mmss(e.dur)}</td><td class="k">${esc(e.type)}</td><td class="n">remove · ${esc(e.desc)}</td></tr>`;
     });
     (plan.timeline || []).forEach(it => {
-        const cls = it.tag === 'pgm' ? 'pgm' : it.tag === 'new' ? 'new' : it.tag === 'keep' ? 'keep' : 'paid';
-        const label = it.tag === 'new' ? 'add · ' : '';
+        const cls = it.tag === 'pgm' ? 'pgm' : it.tag === 'new' ? 'new' : it.tag === 'move' ? 'move' : it.tag === 'keep' ? 'keep' : 'paid';
+        const label = it.tag === 'new' ? 'add · ' : it.tag === 'move' ? 'moved here · ' : '';
         html += `<tr class="${cls}"><td class="t">${esc(it.time)}</td><td class="d">${mmss(it.dur)}</td><td class="k">${esc(it.type)}</td><td class="n">${label}${esc(it.desc)}</td></tr>`;
         if (it.break_end) html += `<tr class="brk"><td colspan="4">break ${it.break} · ${mmss(it.break_len)}</td></tr>`;
     });
@@ -268,7 +270,7 @@ function renderPlan(p, plan) {
         <span>now ends <strong>${esc(plan.actual_end_hms)}</strong> (${over >= 0 ? '+' : ''}${over.toFixed(1)}s past the hour)</span>
         <span>after Finish ends <strong>${esc(plan.planned_end_hms)}</strong></span>
         ${plan.id_airs != null ? `<span>Station ID airs <strong>${plan.id_airs.toFixed(1)}s</strong> before the F event</span>` : ''}
-        <span>${plan.n_delete} remove · ${plan.n_insert} add</span>
+        <span>${plan.n_delete} remove · ${plan.n_move || 0} move · ${plan.n_insert} add</span>
     </div>`;
     return html;
 }

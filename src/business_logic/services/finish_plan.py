@@ -268,7 +268,7 @@ def plan(evs: list[Ev], inv: list[Filler], hour_end: float, market: int) -> tupl
     R = hour_end - pieces[0].ora - sum(e.dur for e in kept)
     notes.append(
         f"existing fill kept as given ({sum(1 for e in kept if e.is_fill)} rows); packed remainder = {mmss(R)}"
-        + (f"; {len(old_ids)} existing ID re-placed" if old_ids else "")
+        + (f"; {len(old_ids)} existing ID" if old_ids else "")
     )
 
     used: set[int] = {e.filmati for e in kept if e.is_fill}

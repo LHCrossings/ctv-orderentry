@@ -126,17 +126,43 @@ def plan_window(cur, market: int, date: str, lo: float, hi: float, rows=None) ->
     )
     inv = load_inventory(cur, market, date)
     breaks, notes = plan(evs, inv, hi, market)
-    planned = {id(x) for b in breaks for x in b.items}
-    deletes = [e for e in evs if e.newtype != "ID" and e.is_fill and id(e) not in planned]
+    # An existing Station ID of the right asset is KEPT, not deleted and re-added:
+    # the plan's ID slot is taken by the live row (new PSAs go in ahead of it via
+    # XORDER) so the page shows a nudge as 0 remove / 1 add (Lee 8/28).
     old_ids = [e for e in evs if e.newtype == "ID"]
-    inserts = [(b, x) for b in breaks for x in b.items if isinstance(x, Filler)]
-    id_only = bool(old_ids) and len(inserts) == 1 and inserts[0][1].kind == "ID" and not deletes
-    cannot = any(n.startswith("⚠") for n in notes)
-    finished = id_only and not cannot
-    if not id_only:
-        deletes = deletes + old_ids
-
+    final = breaks[-1]
+    planned_id = next((x for x in final.items if isinstance(x, Filler) and x.kind == "ID"), None)
+    extra_deletes: list[Ev] = []
+    if old_ids and planned_id is not None and old_ids[-1].filmati == planned_id.filmati:
+        final.items.remove(planned_id)
+        final.items.append(old_ids[-1])
+        extra_deletes = old_ids[:-1]  # a second ID in the hour (per-show habit) goes
+    else:
+        extra_deletes = old_ids  # wrong asset (or none) -> re-placed by the planned ID
     pieces = [e for e in evs if e.is_program]
+
+    def _actual_break(e: Ev) -> int:
+        idx = -1
+        for i, pc in enumerate(pieces):
+            if e.ora >= pc.end - 0.5:
+                idx = i
+        return idx
+
+    moves = [
+        (x, b.after_piece_idx)
+        for b in breaks
+        for x in b.items
+        if isinstance(x, Ev) and not x.is_program and _actual_break(x) != b.after_piece_idx
+    ]
+    planned = {id(x) for b in breaks for x in b.items}
+    deletes = [
+        e for e in evs if e.newtype != "ID" and e.is_fill and id(e) not in planned
+    ] + extra_deletes
+    inserts = [(b, x) for b in breaks for x in b.items if isinstance(x, Filler)]
+    cannot = any(n.startswith("⚠") for n in notes)
+    id_only = not deletes and not inserts and not moves  # nothing to write
+    finished = id_only and not cannot
+
     timeline, edits = [], []
     t = pieces[0].ora
     for i, p in enumerate(pieces):
@@ -151,13 +177,17 @@ def plan_window(cur, market: int, date: str, lo: float, hi: float, rows=None) ->
                 tag = "new"
                 edits.append({"op": "insert", **_item_dict(it, t, tag), "break": i})
             else:
-                tag = "keep" if it.is_fill else "paid"
+                tag = (
+                    "move" if any(it is m for m, _ in moves) else ("keep" if it.is_fill else "paid")
+                )
             timeline.append({**_item_dict(it, t, tag), "break": i})
             t += it.dur
         timeline[-1]["break_len"] = t - b_start
         timeline[-1]["break_end"] = True
     for e in deletes:
         edits.insert(0, {"op": "delete", **_item_dict(e, e.ora, "del")})
+    for e, tgt in moves:
+        edits.append({"op": "move", **_item_dict(e, e.ora, "move"), "break": tgt})
     actual_end = max(e.end for e in evs)
     rem_s = hi - pieces[0].ora - sum(e.dur for e in evs if e.newtype not in ("ID", "NOOP"))
     if len(pieces) == 1 and not breaks[0].items if breaks else True:
@@ -183,10 +213,10 @@ def plan_window(cur, market: int, date: str, lo: float, hi: float, rows=None) ->
         "ok": not cannot and state in ("ready", "finished"),
         "state": state,
         "remainder": rem_s,
-        "finished": finished if not id_only else True,
+        "finished": finished,
         "notes": notes,
         "timeline": timeline,
-        "edits": edits if not id_only else [],
+        "edits": edits,
         "planned_end": t,
         "planned_end_hms": hms(t),
         "actual_end": actual_end,
@@ -194,12 +224,14 @@ def plan_window(cur, market: int, date: str, lo: float, hi: float, rows=None) ->
         "window_end": hi,
         "overrun": actual_end - hi,
         "id_airs": id_airs,
-        "n_delete": len(deletes) if not id_only else 0,
-        "n_insert": len(inserts) if not id_only else 0,
+        "n_delete": len(deletes),
+        "n_move": len(moves),
+        "n_insert": len(inserts),
         "_breaks": breaks,
         "_evs": evs,
-        "_deletes": deletes if not id_only else [],
-        "_inserts": inserts if not id_only else [],
+        "_deletes": deletes,
+        "_moves": moves,
+        "_inserts": inserts,
         "_id_only": id_only,
     }
 
@@ -304,7 +336,7 @@ def apply_window(
 
     n_ck = _refresh_checksums(cur, market, date, lo_f, hi_f)
     log(f"  checksums refreshed (yellow triangles): {n_ck}")
-    if r["_id_only"] or (not r["_deletes"] and not r["_inserts"]):
+    if r["_id_only"]:
         conn.commit() if apply else conn.rollback()
         log("hour already finished — 0 edits")
         return {
@@ -314,7 +346,13 @@ def apply_window(
             "message": "already finished",
         }
 
-    evs, breaks, deletes, inserts = r["_evs"], r["_breaks"], r["_deletes"], r["_inserts"]
+    evs, breaks, deletes, inserts, moves = (
+        r["_evs"],
+        r["_breaks"],
+        r["_deletes"],
+        r["_inserts"],
+        r["_moves"],
+    )
     pieces = [e for e in evs if e.is_program]
     start_of = {}
     t = pieces[0].ora
@@ -345,6 +383,10 @@ def apply_window(
     log(f"  restore SQL: {rpath}")
     for e in deletes:
         log(f"  DEL  {hms(e.ora)} {e.newtype:4} {e.desc[:40]}  (id {e.id})")
+    for e, tgt in moves:
+        log(
+            f"  MOVE {hms(e.ora)} {e.newtype:4} {e.desc[:40]}  (id {e.id}) → break {tgt} at {hms(start_of[id(e)])}"
+        )
     for b, x in inserts:
         log(
             f"  INS  {hms(start_of[id(x)])} {x.kind:4} {x.desc[:40]}  (filmati {x.filmati}) → break {b.after_piece_idx}"
@@ -358,8 +400,36 @@ def apply_window(
             if cur.rowcount != 1:
                 raise RuntimeError(f"delete of {e.id} touched {cur.rowcount} rows")
             cur.execute("DELETE FROM trafficPalinse WHERE id_tpalinse=%s", (e.id,))
+
+        def _seat(row_id: int, b, x) -> None:
+            """Give row_id an XORDER between its planned predecessor in break b and the next live row."""
+            prev = None
+            for it in b.items:
+                if it is x:
+                    break
+                prev = it
+            if isinstance(prev, Ev):
+                prev_id = prev.id
+            elif isinstance(prev, Filler):
+                prev_id = new_ids[-1]
+            else:
+                prev_id = pieces[b.after_piece_idx].id
+            cur.execute("SELECT XORDER FROM TPALINSE WHERE ID_TPALINSE=%s", (prev_id,))
+            xo_prev = cur.fetchone()[0]
+            cur.execute(
+                "SELECT MIN(XORDER) FROM TPALINSE WHERE COD_USER=%s AND DATA=%s AND LIVELLO=0 AND XORDER>%s AND ID_TPALINSE<>%s",
+                (market, date, xo_prev, row_id),
+            )
+            xo_next = cur.fetchone()[0]
+            xo = (xo_prev + xo_next) // 2 if xo_next else xo_prev + 1000
+            if not (xo_prev < xo < (xo_next or xo + 1)):
+                raise RuntimeError(f"no XORDER room between {xo_prev} and {xo_next}")
+            cur.execute("UPDATE TPALINSE SET XORDER=%s WHERE ID_TPALINSE=%s", (xo, row_id))
+
         new_ids: list[int] = []
         binding: dict[int, str] = {}
+        for e, tgt in moves:
+            _seat(e.id, next(bb for bb in breaks if bb.after_piece_idx == tgt), e)
         for b, x in inserts:
             brk_start = pieces[b.after_piece_idx].end
             slots = _slots(
@@ -395,28 +465,7 @@ def apply_window(
             cur.execute(
                 "DELETE FROM trafficPalinse WHERE id_tpalinse=%s AND ID_ContrattiRighe=0", (nid,)
             )
-            prev = None
-            for it in b.items:
-                if it is x:
-                    break
-                prev = it
-            if isinstance(prev, Ev):
-                prev_id = prev.id
-            elif isinstance(prev, Filler):
-                prev_id = new_ids[-1]
-            else:
-                prev_id = pieces[b.after_piece_idx].id
-            cur.execute("SELECT XORDER FROM TPALINSE WHERE ID_TPALINSE=%s", (prev_id,))
-            xo_prev = cur.fetchone()[0]
-            cur.execute(
-                "SELECT MIN(XORDER) FROM TPALINSE WHERE COD_USER=%s AND DATA=%s AND LIVELLO=0 AND XORDER>%s AND ID_TPALINSE<>%s",
-                (market, date, xo_prev, nid),
-            )
-            xo_next = cur.fetchone()[0]
-            xo = (xo_prev + xo_next) // 2 if xo_next else xo_prev + 1000
-            if not (xo_prev < xo < (xo_next or xo + 1)):
-                raise RuntimeError(f"no XORDER room between {xo_prev} and {xo_next}")
-            cur.execute("UPDATE TPALINSE SET XORDER=%s WHERE ID_TPALINSE=%s", (xo, nid))
+            _seat(nid, b, x)
             new_ids.append(nid)
         cur.execute(
             "UPDATE TPALINSE SET LIVELLO=666 WHERE COD_USER=%s AND DATA=%s AND LIVELLO=0 AND NEWTYPE='NOOP' AND ORA>=%s AND ORA<%s",
@@ -449,6 +498,11 @@ def apply_window(
             if cur.fetchone()[0]:
                 raise RuntimeError("inserted rows still carry a trafficPalinse row")
         after = window_from_day(load_day(cur, market, date), lo, hi)
+        after_by_id = {e.id: e for e in after}
+        for e, tgt in moves:
+            a = after_by_id.get(e.id)
+            if a is None or abs(a.ora - start_of[id(e)]) > 0.2:
+                raise RuntimeError(f"moved row {e.id} did not land at {hms(start_of[id(e)])}")
         end = max(e.end for e in after)
         after_rows = [
             {
