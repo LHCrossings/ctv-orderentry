@@ -146,3 +146,9 @@ trafficPalinse). Delete-and-verify inside one transaction; restore SQL first.
   the longest are the only constraints.
 - Master control's Etere filler pass runs overnight before Lee inserts the show;
   Finish strips those PI/PSA/ID rows and refills (matches what Lee does by hand).
+- **Same campaign's :30 and :60 in one hour is FINE, non-adjacent** (Lee 8/28):
+  :30s are too scarce to avoid it. The rule is fair rotation through every
+  active spot per LENGTH POOL (least-recently-aired, per market, 14-day lookback);
+  the :30/:60 ratio is whatever the live media-library poll says (FILMATI
+  `PI-*`/`PSA-*`, DATA_SCAD not expired) and will drift over time — never hardcode
+  the inventory. Same FILE twice in one hour is still not allowed.
