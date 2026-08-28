@@ -59,3 +59,10 @@ Window: KL afternoon = US late night; AVOID 18:00-21:00 KL (06:00 rollovers ET/C
 ## Suggested order
 CIB01 (metric already 300 → lowest risk, proves the Etere cache/NFY mechanics) → CIB06 → CIB05
 (the two flagged) → CIB03 → CIB04.
+
+## CIB01 test-bench plan (Lee, 8/28)
+NYC + WDC overnight (00:00–06:00 ET = 12:00–18:00 KL): Lee re-routes Haivision to deliver alternate
+content to those two networks, CIB01 goes offline, we do the full procedure with reboots/tests as
+needed, then hand back. Must be back on air before the 06:00 ET rollover / Aligner burst (18:00 KL)
+— target hand-back ≤17:30 KL. Use CIB01 to settle: Etere device.ini cache refresh behaviour,
+NFY_SUBSCRIPTIONS re-registration, DNS cleanup, and the SSM/IMDS error rate afterwards.
