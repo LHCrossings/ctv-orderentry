@@ -184,3 +184,17 @@ trafficPalinse). Delete-and-verify inside one transaction; restore SQL first.
   already-finished hour, so clicking Finish twice tidies order. BO helpers were
   hoisted from `build_router` to module level in `orders.py` for this; bulk-apply
   uses the same `bo_apply_market`.
+
+## Overrun (content > slot) — Lee's rules, 2026-08-28 (design later, page currently REFUSES)
+Happens when a show is so heavily booked that, once programming is placed, it runs past
+its slot and there are NO PI/PSA rows left to remove. Two remedies, case by case:
+1. **Tiny overrun** → adjust the START of the next show (its F event moves later /
+   flips F→T so it follows). Threshold TBD with Lee — "tiny" is probably ≤ ~30–60 s;
+   the following show absorbs it from its own remainder.
+2. **Real overrun** → actual PAID spots must MOVE to another break/show that has room,
+   respecting separation, daypart/language window of the contract line, and bookend/
+   billboard pairing. This is the spot-relocator problem (`tasks/spot-relocator.md`);
+   Finish should PROPOSE candidate moves (which spot, to which show) and the operator
+   confirms — never silently relocate paid airtime.
+Until built: state `overrun` shows "runs M:SS past its slot · check programming", no
+Finish button. Lee: "you'd be better at doing those calculations than any of us."
