@@ -768,6 +768,18 @@ fix it in ANAGRAF/Etere, don't special-case it in a parser. See [[pi-supporto-bi
 
 **Session:** WDC PIs airing in some blocks but not others — Maija (2026-07-22)
 
+**Recurrence via Etere's OWN SP (Fill & Finish first live row, LAX 2026-08-28):**
+`sch_UpdateSupportAndProperties` — the call our FCC daily-ID job makes after
+`Traffic_InsertEvent` — writes SUPPORTO as prefix + **COD_PROGRA**
+(`0ETX      STATIONID_NEW_GENERIC`), while every one of the ~1,300 Station IDs
+that aired the prior week carries prefix + **FILE_ID** (`0ETX      ID - NEW -
+GENERIC`). For any asset whose COD_PROGRA ≠ FILE_ID the SP's binding is wrong.
+Rule: after ANY insert path, overwrite SUPPORTO from FS_FILMATI.FILE_ID yourself
+(`finish_apply._supporto`) and verify the first live row against an AIRED
+sibling's SUPPORTO before calling a write path done. Also: `Traffic_InsertEvent`
+adds a `trafficPalinse` row (ID_ContrattiRighe=0) that hand-placed IDs/PSAs never
+have (24 of 1,898 ID rows) — delete it to match the convention.
+
 **Rule:** `TPALINSE.SUPPORTO` is the playout clip binding: `<prefix> + FILE_ID`
 (e.g. `0ETX      PI-493-030`), where `prefix` = `FS_METADEVICE.LEGACY_BASESUPP`
 and `FILE_ID` = `FS_FILMATI.FILE_ID`. It is what the CIB uses to find the media
