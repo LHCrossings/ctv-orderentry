@@ -90,3 +90,8 @@ NFY_SUBSCRIPTIONS re-registration, DNS cleanup, and the SSM/IMDS error rate afte
 - Lee also updated Etere to the latest version (36.1.360.9454) on CIB01 → CIB01 = reference config (m7i + gp3
   6000/500 + single NIC + current Etere). Watch MLFD for CPU headroom over the next days before
   updating Etere on the other boxes.
+
+## CIB06 — DONE 2026-08-28 05:17Z detach, 05:21Z reboot + Etere 36.1.360.9454
+Detached eni-03c376b4d64d792d4 (10.0.0.20; kept for undo). 24 of 30 sockets had been on the WAN
+NIC; etAlign/ETXServer reconnected from .224 within 2 min, 0 errors. Post-boot: 0 cred errors,
+MGS only, NFY/WORKSTATIONS .224, NTP via NAT OK. Total hands-on ~10 min incl. reboot.
