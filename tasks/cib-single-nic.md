@@ -66,3 +66,19 @@ content to those two networks, CIB01 goes offline, we do the full procedure with
 needed, then hand back. Must be back on air before the 06:00 ET rollover / Aligner burst (18:00 KL)
 — target hand-back ≤17:30 KL. Use CIB01 to settle: Etere device.ini cache refresh behaviour,
 NFY_SUBSCRIPTIONS re-registration, DNS cleanup, and the SSM/IMDS error rate afterwards.
+
+## CIB01 — DONE 2026-08-28 04:19Z (off air, Haivision covering NYC/WDC)
+- Detached eni-08f05e939119f65ea (10.0.0.62) hot; ENI kept `available` for undo — delete after a clean day.
+- OS: single adapter, single default via 10.0.0.193, IMDS 5/5, SSM answered in 8 s.
+- Etere: all procs reconnected from .248 within 1 min on their own (etAlign/Au→SQL, ETXServer→Jumpbox). No ETXServer errors.
+- DNS: the .62 A record deregistered itself when the NIC vanished → **no DC step needed**.
+- Workstation device.ini caches refresh from RESOURCE_INI at Etere app login (all Jumpbox caches
+  written ≥7/23 say .248; only never-reopened slots are stale) → **no cache step needed**.
+- NFY_SUBSCRIPTIONS: etAlign (child of EtereAu64, one per Au) is the subscriber and had registered
+  from .62. Killing etAlign is NOT respawned by Au. Relaunch in usrcib1's session via one-shot
+  scheduled task (principal usrcib1, LogonType Interactive, exec etalign.exe user.00N\2026), then
+  unregister task. New etAlign registered SCHEDULE_PUBLISH_REQ from .248 within 3 min; remaining
+  types register over the following day. Stale .62 rows (dead PIDs) expire 9/1–9/2 — harmless.
+  ⇒ For the other boxes: only needed if NFY shows the WAN IP for that machine (CIB03/04/05/06
+  currently show PRIMARY, so likely skip).
+- Learned: hosts files + RESOURCE_INI master were already right; the whole per-box job is detach + verify.
