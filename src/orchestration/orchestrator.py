@@ -171,7 +171,7 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
     OrderType.POP: (
         "browser_automation.pop_automation",
         "gather_pop_inputs",
-        "Prince of Peace / Kwan Loong Oil",
+        "POP",
     ),
     OrderType.EQC: (
         "browser_automation.eqc_automation",

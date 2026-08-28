@@ -61,7 +61,7 @@ _DISPLAY_NAMES = {
     "CRISPIN": "Crispin / Bay Area AQMD",
     "NTOOITIVE": "Ntooitive / L.A. Care",
     "SJCOUNTY": "San Joaquin County",
-    "POP": "Prince of Peace / Kwan Loong Oil",
+    "POP": "POP",
     "EQC": "EQC / TH Media",
     "LRCCD": "LRCCD / 3Fold Communications",
     "SACRT": "SacRT / Sacramento Regional Transit",
