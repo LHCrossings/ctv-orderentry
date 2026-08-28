@@ -150,7 +150,13 @@ def window_from_day(rows: list[tuple], lo: float, hi: float) -> list[Ev]:
     if start is not None:
         end = len(rows)
         for k in range(start + 1, len(rows)):
-            if str(rows[k][4] or "").strip() == "F":
+            r = rows[k]
+            is_f = str(r[4] or "").strip() == "F"
+            # a guide window may end before the next F anchor (12:00-13:00 inside a
+            # 12:00 F ... 14:00 F span): program/NOOP content at or past `hi` is the
+            # next window; spilled spots (COM/PER past `hi`) still belong to this one
+            next_pgm = r[1] >= hi_f - FPS and str(r[3]).strip() in ("PGM", "NOOP")
+            if is_f or next_pgm:
                 end = k
                 break
         sel = rows[start:end]

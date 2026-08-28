@@ -42,6 +42,8 @@
         .prg-block.collapsed .prg-chevron { transform: rotate(-90deg); }
         .prg-time { font-family: monospace; font-size: 0.83rem; color: var(--nord8); min-width: 130px; }
         .prg-name { font-weight: 600; font-size: 0.88rem; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .prg-code { font-weight: 400; font-size: 0.72rem; color: var(--nord4); opacity: 0.7; margin-left: 10px; font-family: monospace; }
+        .prg-lang { font-size: 0.72rem; background: rgba(136,192,208,0.18); color: var(--nord8); padding: 2px 8px; border-radius: 10px; font-weight: 700; flex-shrink: 0; }
         .prg-stat { font-size: 0.72rem; color: var(--nord4); flex-shrink: 0; white-space: nowrap; }
         .prg-stat.warn { color: var(--nord13); font-weight: 700; }
         .prg-stat.bad { color: var(--nord11); font-weight: 700; }
@@ -168,7 +170,9 @@ function statFor(p) {
     switch (p.state) {
         case 'finished': return { cls: 'done', text: `✓ finished · ID airs ${p.id_airs != null ? p.id_airs.toFixed(1) : '?'}s` };
         case 'ready':    return { cls: 'warn', text: `${p.n_delete} remove · ${p.n_insert} add · ID would air ${p.id_airs != null ? p.id_airs.toFixed(1) : '?'}s` };
-        case 'unplaced': return { cls: 'bad',  text: `programming not placed · ${Math.round(p.remainder / 60)} min open` };
+        case 'unplaced': return { cls: 'bad',  text: `programming not placed · ${Math.round((p.remainder || 0) / 60)} min open` };
+        case 'overrun':  return { cls: 'bad',  text: `runs ${mmss(-(p.remainder || 0)).replace(/\.\d+$/, '')} past its slot · check programming` };
+        case 'follows':  return { cls: '',     text: 'next show follows · ID at the top of the hour' };
         case 'cannot':   return { cls: 'bad',  text: p.error || 'cannot land the ID' };
         case 'na':       return { cls: '',     text: 'nothing to finish' };
         default:         return { cls: '',     text: '' };
@@ -196,7 +200,8 @@ function renderPrograms(data) {
   <div class="prg-header" onclick="togglePrg(${pi})">
     <span class="prg-chevron">▾</span>
     <span class="prg-time">${hm(p.lo_hms)}&nbsp;–&nbsp;${hm(p.hi_hms)}</span>
-    <span class="prg-name">${esc(p.title || '?')}</span>
+    <span class="prg-name">${esc(p.title || p.code || '?')}${p.code && p.title ? `<span class="prg-code">${esc(p.code)}</span>` : ''}</span>
+    ${p.language ? `<span class="prg-lang">${esc(p.language)}</span>` : ''}
     <button class="expand-btn prg-refresh" title="Re-read this show from Etere"
             onclick="event.stopPropagation();refreshProgram(${pi})">↻ Refresh</button>
     <button class="prg-apply-btn" id="prg-apply-${pi}" style="display:${canFinish ? '' : 'none'}"

@@ -37,6 +37,7 @@ from src.business_logic.services.finish_plan import (
     window_from_day,
 )
 
+OVERRUN_SECONDS = 30.0  # content past the slot end by more than this = programming problem
 UNPLACED_SECONDS = 300.0  # > 5 min of true remainder = programming still missing, not a fill job
 
 RESTORE_DIR = os.environ.get("CTV_FINISH_RESTORE_DIR", os.path.join("logs", "finish-restore"))
@@ -107,7 +108,22 @@ def plan_window(cur, market: int, date: str, lo: float, hi: float, rows=None) ->
     rows = rows if rows is not None else load_day(cur, market, date)
     evs = window_from_day(rows, lo, hi)
     if not evs or not any(e.is_program for e in evs):
-        return {"ok": False, "error": "no program pieces in window", "timeline": [], "edits": []}
+        return {
+            "ok": False,
+            "state": "unplaced",
+            "remainder": hi - lo,
+            "error": "no programming placed",
+            "timeline": [],
+            "edits": [],
+            "n_delete": 0,
+            "n_insert": 0,
+        }
+    # Is the window's end a fixed (F) event? If the next show simply FOLLOWS (a
+    # half-hour boundary with no F anchor), there is nothing to finish here: the
+    # hour's ID belongs to the window that ends at the F event.
+    hi_fixed = any(
+        str(r[4] or "").strip() == "F" and abs(r[1] - int(hi * FPS)) <= FPS for r in rows
+    )
     inv = load_inventory(cur, market, date)
     breaks, notes = plan(evs, inv, hi, market)
     planned = {id(x) for b in breaks for x in b.items}
@@ -150,6 +166,10 @@ def plan_window(cur, market: int, date: str, lo: float, hi: float, rows=None) ->
         )
     elif rem_s > UNPLACED_SECONDS:
         state = "unplaced"  # the precondition (all programming placed) is not met
+    elif rem_s < -OVERRUN_SECONDS:
+        state = "overrun"  # more content than the slot holds — a programming problem, not a fill
+    elif not hi_fixed:
+        state = "follows"  # next show follows directly; the ID lands at the hour's F event
     elif cannot:
         state = "cannot"
     elif finished:
@@ -184,14 +204,63 @@ def plan_window(cur, market: int, date: str, lo: float, hi: float, rows=None) ->
     }
 
 
-def list_programs(cur, market: int, date: str) -> list[dict]:
-    """The day's program windows (F→F) with the derived Finish state for each."""
-    from src.business_logic.services.finish_plan import day_programs
+def _guide_secs(txt: str) -> float | None:
+    """'HH:MM' / 'HH:MM:SS' guide time -> broadcast seconds (hours < 6 are post-midnight)."""
+    try:
+        parts = [int(x) for x in str(txt).strip().split(":")]
+    except ValueError:
+        return None
+    if len(parts) < 2:
+        return None
+    sec = parts[0] * 3600 + parts[1] * 60 + (parts[2] if len(parts) > 2 else 0)
+    return float(sec + 24 * 3600 if parts[0] < 6 else sec)
 
+
+def day_windows(market: int, date: str, rows: list[tuple]) -> list[dict]:
+    """The day's program windows: from the K: programming grid (same source as
+    Daily Programming — real titles, language, half-hour slots) when it can be read,
+    else from Etere's F anchors (file codes)."""
+    import datetime as _dt
+
+    from src.business_logic.services.finish_plan import day_programs
+    from src.business_logic.services.programming_grid import get_day_programs
+
+    network = "TAC" if market == 10 else "CTV"
+    out = []
+    try:
+        grid = get_day_programs(network, _dt.date.fromisoformat(date))
+    except Exception:  # noqa: BLE001 — grid unreadable → fallback below
+        grid = {"found": False}
+    if grid.get("found"):
+        for g in grid.get("programs", []):
+            lo, hi = _guide_secs(g.get("start")), _guide_secs(g.get("end"))
+            if lo is None or hi is None:
+                continue
+            if hi <= lo:
+                hi += 24 * 3600
+            out.append(
+                {
+                    "lo": lo,
+                    "hi": hi,
+                    "title": g.get("title") or "",
+                    "language": g.get("language") or "",
+                    "source": "grid",
+                }
+            )
+    if not out:
+        for p in day_programs(rows):
+            out.append({**p, "language": "", "source": "etere"})
+    return out
+
+
+def list_programs(cur, market: int, date: str) -> list[dict]:
+    """The day's program windows with the derived Finish state for each."""
     rows = load_day(cur, market, date)
     out = []
-    for p in day_programs(rows):
+    for p in day_windows(market, date, rows):
         r = plan_window(cur, market, date, p["lo"], p["hi"], rows=rows)
+        evs = window_from_day(rows, p["lo"], p["hi"])
+        code = next((e.desc for e in evs if e.is_program and "BUMP" not in e.desc.upper()), "")
         out.append(
             {
                 "lo": p["lo"],
@@ -199,7 +268,9 @@ def list_programs(cur, market: int, date: str) -> list[dict]:
                 "lo_hms": hms(p["lo"]),
                 "hi_hms": hms(p["hi"]),
                 "title": p["title"],
-                "n_events": p["n_events"],
+                "language": p.get("language", ""),
+                "code": code,
+                "source": p.get("source"),
                 "ok": r.get("ok", False),
                 "state": r.get("state", "cannot" if r.get("error") else "ready"),
                 "remainder": r.get("remainder"),
