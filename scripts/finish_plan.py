@@ -96,23 +96,53 @@ class Break:
 
 
 def load_window(cur, market: int, date: str, lo: float, hi: float) -> list[Ev]:
+    """Events of one hour window, walked in XORDER between the two type-F anchors.
+
+    An ORA cut (`ORA < hour_end`) misses rows that SPILL past the top of the hour
+    (SEA 8/28: PI-488-030 at 09:00:01 ahead of the 09:00 F event). The window is
+    everything from this hour's F event up to (not including) the next F event in
+    playlist order; the ORA cut is only the fallback when no F anchor exists.
+    """
     cur.execute(
         """
         SELECT t.ID_TPALINSE, t.ORA, t.DURATION, t.NEWTYPE, t.EVENT_TYPE, t.ID_FILMATI,
-               ISNULL(f.DESCRIZIO,''), tp.ID_ContrattiRighe
+               ISNULL(f.DESCRIZIO,''), tp.ID_ContrattiRighe, t.XORDER
         FROM TPALINSE t
         LEFT JOIN FILMATI f ON f.ID_FILMATI = t.ID_FILMATI
         LEFT JOIN trafficPalinse tp ON tp.id_tpalinse = t.ID_TPALINSE
-        WHERE t.COD_USER=%s AND t.DATA=%s AND t.LIVELLO=0 AND t.ORA>=%s AND t.ORA<%s
-        ORDER BY t.ORA, t.XORDER
+        WHERE t.COD_USER=%s AND t.DATA=%s AND t.LIVELLO=0
+        ORDER BY t.XORDER, t.ORA
         """,
-        (market, date, int(lo * FPS), int(hi * FPS)),
+        (market, date),
     )
-    evs = {}
+    rows = []
+    seen = set()
     for r in cur.fetchall():
-        if r[0] in evs:
+        if r[0] in seen:
             continue
-        evs[r[0]] = Ev(
+        seen.add(r[0])
+        rows.append(r)
+    lo_f, hi_f = int(lo * FPS), int(hi * FPS)
+    start = next(
+        (
+            i
+            for i, r in enumerate(rows)
+            if str(r[4] or "").strip() == "F" and abs(r[1] - lo_f) <= FPS
+        ),
+        None,
+    )
+    if start is not None:
+        end = len(rows)
+        for k in range(start + 1, len(rows)):
+            if str(rows[k][4] or "").strip() == "F":
+                end = k
+                break
+        sel = rows[start:end]
+    else:
+        sel = [r for r in rows if lo_f <= r[1] < hi_f]
+        sel.sort(key=lambda r: (r[1], r[8]))
+    return [
+        Ev(
             r[0],
             r[1] / FPS,
             (r[2] or 0) / FPS,
@@ -122,7 +152,8 @@ def load_window(cur, market: int, date: str, lo: float, hi: float) -> list[Ev]:
             r[6],
             r[7],
         )
-    return list(evs.values())
+        for r in sel
+    ]
 
 
 def load_inventory(cur, market: int, date: str) -> list[Filler]:

@@ -134,3 +134,15 @@ trafficPalinse). Delete-and-verify inside one transaction; restore SQL first.
    half-hour pair, compare with what Lee did by hand. No writes.
 3. Page: Fill & Finish (BO log-version pattern), finished badge derived.
 4. Write path behind a confirm, one show at a time; first live click = Lee's.
+
+## v0.3 notes (2026-08-28, SEA hand-fill session)
+- **Window = XORDER walk between type-F anchors, not an ORA cut.** Etere's
+  filler pass overruns the hour (SEA: PI-488-030 at 09:00:01, EE shows the
+  overrun as red `0000:31.05` on the 09:00 F event). `ORA < hour_end` misses
+  those rows; a spilled PAID spot would corrupt the remainder. Fixed in
+  `finish_plan.py::load_window`; the ORA cut remains only as a no-anchor fallback.
+- **Final break composition has no hard rule** (Lee): :30 PI + PSA + ID (Lee's
+  NYC) and :60 PI + PSA + ID (planner) are both fine. Evenness + ≤2:30 + never
+  the longest are the only constraints.
+- Master control's Etere filler pass runs overnight before Lee inserts the show;
+  Finish strips those PI/PSA/ID rows and refills (matches what Lee does by hand).
