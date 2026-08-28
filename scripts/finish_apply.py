@@ -59,6 +59,20 @@ def _rebuild_shiftup(cur, d, cod_user, fromid):
         pass
 
 
+def _refresh_checksums(cur, market: int, date: str, lo_f: int, hi_f: int) -> int:
+    """Clear yellow triangles in the hour (Lee 8/28): a piece dragged in before its
+    file reached the CIBs keeps a pre-download SCHEDULE_CHECKSUM; once the file
+    settles, stored != live and EE shows the triangle until someone Explodes it.
+    Storing the live value IS Explode. Touches TPALINSE only — never FILMATI."""
+    cur.execute(
+        """UPDATE TPALINSE SET SCHEDULE_CHECKSUM = dbo.sch_getFilmatiCheckSum(ID_TPALINSE)
+           WHERE COD_USER=%s AND DATA=%s AND LIVELLO=0 AND ORA>=%s AND ORA<%s
+             AND ISNULL(SCHEDULE_CHECKSUM,0) <> ISNULL(dbo.sch_getFilmatiCheckSum(ID_TPALINSE),0)""",
+        (market, date, lo_f, hi_f),
+    )
+    return cur.rowcount
+
+
 def _supporto(cur, filmati: int) -> str:
     """Playout binding = channel prefix + FS_FILMATI.FILE_ID (never COD_PROGRA/DESCRIZIO).
     sch_UpdateSupportAndProperties writes prefix+COD_PROGRA, which is NOT what the
@@ -99,13 +113,18 @@ def main():
     deletes = [e for e in evs if e.newtype != "ID" and e.is_fill and id(e) not in planned_items]
     old_ids = [e for e in evs if e.newtype == "ID"]
     inserts = [(b, x) for b in breaks for x in b.items if isinstance(x, Filler)]
+    # yellow triangles: refresh stale checksums in the hour whether or not the fill needs work
+    n_ck = _refresh_checksums(cur, a.market, a.date, int(lo * FPS), int(hi * FPS))
+    print(f"  checksums refreshed (yellow triangles): {n_ck}")
     # an existing ID that the plan re-places with the same asset in the same spot is a no-op
     if old_ids and len(inserts) == 1 and inserts[0][1].kind == "ID" and not deletes:
         print("hour already finished — 0 edits")
+        conn.commit() if a.apply else conn.rollback()
         return 0
     deletes += old_ids  # any other case: the old ID is re-placed by the new one
     if not deletes and not inserts:
         print("nothing to do")
+        conn.commit() if a.apply else conn.rollback()
         return 0
 
     pieces = [e for e in evs if e.is_program]
