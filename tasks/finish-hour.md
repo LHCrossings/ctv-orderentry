@@ -177,3 +177,10 @@ trafficPalinse). Delete-and-verify inside one transaction; restore SQL first.
 - **DECIDED (Lee 8/28): the OPERATOR publishes** for now; auto-publish is a switch to add once the page is trusted.
 - Next: COMS block target lengths → Fill & Finish page (BO log pattern, badge = planner
   reports 0 edits) → per-show Finish button calling the apply path with a confirm.
+- **Finish = fill + order (Lee 8/28, after the first page click on MMT 14:00):** the
+  PSA/ID Finish inserts land where the planner packs them, but the BREAK order is
+  Break Optimization's job (tiers, bookends, ID last). `apply_window` now runs
+  `orders.bo_apply_market` on the window inside the same transaction — also on an
+  already-finished hour, so clicking Finish twice tidies order. BO helpers were
+  hoisted from `build_router` to module level in `orders.py` for this; bulk-apply
+  uses the same `bo_apply_market`.

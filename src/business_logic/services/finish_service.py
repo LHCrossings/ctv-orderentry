@@ -337,11 +337,23 @@ def apply_window(
     n_ck = _refresh_checksums(cur, market, date, lo_f, hi_f)
     log(f"  checksums refreshed (yellow triangles): {n_ck}")
     if r["_id_only"]:
+        # nothing to fill — still put the breaks in order (Finish = fill + order)
+        try:
+            bo = _bo_apply(conn, market, date, lo_f, hi_f)
+        except Exception as exc:  # noqa: BLE001 — ordering must never break a finished hour
+            conn.rollback()
+            log(f"ROLLED BACK: break optimization failed: {exc}")
+            return {**_public(r), "status": "error", "message": f"break optimization: {exc}"}
+        log(
+            f"  break optimization: {bo.get('breaks_changed', 0)} of {bo.get('breaks_total', 0)} "
+            f"breaks reordered, {bo.get('spots_updated', 0)} spots"
+        )
         conn.commit() if apply else conn.rollback()
-        log("hour already finished — 0 edits")
+        log("hour already finished — 0 fill edits")
         return {
             **_public(r),
             "status": "finished",
+            "bo": bo,
             "checksums": n_ck,
             "message": "already finished",
         }
@@ -519,6 +531,27 @@ def apply_window(
         log(f"  ends {hms(end)}  planned {hms(planned_end)}")
         if abs(end - planned_end) > 0.2:
             raise RuntimeError("packed end does not match the plan")
+        # Break Optimization on the touched window (Lee 8/28: "the PI and PSA are out
+        # of order" after Finish) — same transaction, so a BO failure rolls Finish back.
+        bo = _bo_apply(conn, market, date, lo_f, hi_f)
+        log(
+            f"  break optimization: {bo.get('breaks_changed', 0)} of {bo.get('breaks_total', 0)} "
+            f"breaks reordered, {bo.get('spots_updated', 0)} spots"
+        )
+        after = window_from_day(load_day(cur, market, date), lo, hi)
+        end = max(e.end for e in after)
+        after_rows = [
+            _item_dict(
+                e,
+                e.ora,
+                "new"
+                if e.id in new_ids
+                else ("pgm" if e.is_program else ("keep" if e.is_fill else "paid")),
+            )
+            for e in after
+        ]
+        if abs(end - planned_end) > 0.2:
+            raise RuntimeError("packed end changed after break optimization")
         if not apply:
             conn.rollback()
             log("DRY RUN — rolled back")
@@ -529,6 +562,7 @@ def apply_window(
                 "after": after_rows,
                 "end_hms": hms(end),
                 "restore": rpath,
+                "bo": bo,
             }
         conn.commit()
         with open(rpath, "a") as fh:
@@ -543,11 +577,25 @@ def apply_window(
             "end_hms": hms(end),
             "new_ids": new_ids,
             "restore": rpath,
+            "bo": bo,
         }
     except Exception as exc:  # noqa: BLE001 — anything wrong → the hour is untouched
         conn.rollback()
         log(f"ROLLED BACK: {exc}")
         return {**_public(r), "status": "error", "message": str(exc), "restore": rpath}
+
+
+def _bo_apply(conn, market: int, date: str, lo_f: int, hi_f: int) -> dict:
+    """Break Optimization's own reorder for one window (helpers live in web.routes.orders)."""
+    import sys
+    from pathlib import Path
+
+    src = str(Path(__file__).resolve().parents[2])
+    if src not in sys.path:
+        sys.path.insert(0, src)
+    from web.routes.orders import bo_apply_market
+
+    return bo_apply_market(conn, market, date, lo_f, hi_f)
 
 
 def _public(r: dict) -> dict:

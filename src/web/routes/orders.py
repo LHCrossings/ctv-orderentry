@@ -725,6 +725,442 @@ def _bo_build_breaks(annotated: list, to_frames: int) -> tuple[list, bool]:
     return breaks, window_has_pgm
 
 
+# ---- Break Optimization helpers (hoisted from build_router 2026-08-28 so Fill & Finish can reuse them) ----
+
+
+def _bo_frames_to_hhmm(frames: int) -> str:
+    secs = round(frames / _BO_FPS)
+    h, mn = divmod(secs, 3600)
+    return f"{h:02d}:{mn // 60:02d}"
+
+
+def _bo_window_to_frames(t_from: str, t_to: str) -> tuple[int, int]:
+    # broadcast-day aware (post-midnight = 24:00–29:59) AND window-aware: the
+    # day's final show ends at 06:00 next morning (= 30:00), not at 06:00 today
+    return _bcast_window_to_frames(t_from, t_to, _BO_FPS)
+
+
+def _bo_pi_library_pick(cur, duration: int, exclude_keys: set):
+    """Pick a valid replacement filler of the same length (±5 frames) from the
+    FILMATI library — PI first, PSA fallback — whose product key is not already
+    used in the break. Returns a filmati dict or None. Mirrors the proven
+    blacklist filler-selection query."""
+    for pattern in ("PI-%%", "PSA-%%"):
+        cur.execute(
+            "SELECT TOP 20 ID_FILMATI, COD_PROGRA, DESCRIZIO, DURATA, NEWTYPE"
+            " FROM FILMATI"
+            " WHERE DESCRIZIO LIKE %s"
+            "   AND DESCRIZIO NOT LIKE 'DO NOT%%'"
+            "   AND (DATA_SCAD IS NULL OR DATA_SCAD > GETDATE())"
+            "   AND ABS(DURATA - %s) <= 5"
+            " ORDER BY NEWID()",
+            (pattern, duration),
+        )
+        for row in cur.fetchall():
+            if _pi_product_key(row["DESCRIZIO"]) not in exclude_keys:
+                return dict(row)
+    return None
+
+
+def _bo_resolve_pi_duplicates(cur, breaks: list) -> None:
+    """When a break contains two PI spots of the same product (e.g. two PI-504),
+    replace one of them IN PLACE with a different valid same-length PI from the
+    FILMATI library (PSA fallback). Nothing moves between breaks or time slots —
+    the switch stays inside the pod/program. Modifies breaks in-place: sets the
+    replacement payload on the affected optimized spot and updates the
+    'changed' / 'violation' / 'pi_unresolvable' flags."""
+
+    def _pi_keys(brk):
+        return [_pi_product_key(s["title"]) for s in brk["optimized"] if s["label"] == "PI"]
+
+    for brk in breaks:
+        # A break waiting on programming holds spots scrunched in from other
+        # shows — duplicate PIs across it are an artifact, and a creative
+        # swap would be a real write into a phantom break. Leave it alone.
+        if brk.get("programming_missing"):
+            continue
+        keys = _pi_keys(brk)
+        if len(keys) == len(set(keys)):
+            brk["pi_unresolvable"] = False
+            continue
+
+        # Extra occurrences (2nd, 3rd, … of any product key) are the duplicates
+        # to replace. Positions never shift (replacement is in-place), so a single
+        # pass over the pre-computed indices is safe.
+        seen: set = set()
+        dup_indices: list = []
+        for j, s in enumerate(brk["optimized"]):
+            if s["label"] != "PI":
+                continue
+            k = _pi_product_key(s["title"])
+            if k in seen:
+                dup_indices.append(j)
+            else:
+                seen.add(k)
+
+        replacements: list = []
+        for dup_idx in dup_indices:
+            dup_spot = brk["optimized"][dup_idx]
+            # Replacement must differ from every OTHER PI product left in the break
+            exclude = {
+                _pi_product_key(s["title"])
+                for m, s in enumerate(brk["optimized"])
+                if s["label"] == "PI" and m != dup_idx
+            }
+            pick = _bo_pi_library_pick(cur, dup_spot["duration"], exclude)
+            if not pick:
+                continue  # nothing fits at this length
+            old_title = dup_spot["title"]
+            new_title = (pick["DESCRIZIO"] or "").strip()
+            brk["optimized"][dup_idx] = {
+                **dup_spot,
+                "title": new_title,
+                "replace_filmati_id": int(pick["ID_FILMATI"]),
+                "replace_title": new_title,
+                "replace_cod_progra": (pick["COD_PROGRA"] or "").strip(),
+                "replace_newtype": (pick["NEWTYPE"] or "PER").strip(),
+                "pi_replacement": f"{old_title} → {new_title}",
+            }
+            replacements.append(f"{old_title} → {new_title}")
+
+        new_keys = _pi_keys(brk)
+        brk["pi_replacements"] = replacements
+        # Any product key still duplicated had no same-length filler → manual fix
+        brk["pi_unresolvable"] = len(new_keys) != len(set(new_keys))
+        # A creative swap keeps the id order, so flag 'changed' explicitly.
+        cur_ids = [s["id"] for s in brk["current"]]
+        opt_ids = [s["id"] for s in brk["optimized"]]
+        brk["changed"] = brk["changed"] or bool(replacements) or cur_ids != opt_ids
+        brk["ordering_violation"] = brk["violation"] = brk["changed"] or brk["pi_unresolvable"]
+
+
+def _bo_apply_pi_replacement(cur, u: dict, id_tpalinse: int) -> None:
+    """If an optimized-spot payload carries a library PI/PSA replacement, swap the
+    creative on its TPALINSE row in place (ID_FILMATI + identity fields). ORA /
+    XORDER / DURATION are left untouched — the library match is within ±5 frames,
+    so downstream pod timing is unaffected. Mirrors the auto-assign creative
+    update (ID_FILMATI) and the blacklist filler SUPPORTO convention."""
+    fid = u.get("replace_filmati_id")
+    if not fid:
+        return
+    title = (u.get("replace_title") or "").strip()
+    supporto = _pi_filler_supporto(cur, fid, title)
+    cur.execute(
+        "UPDATE TPALINSE SET ID_FILMATI = %d, COD_PROGRA = %s, NEWTYPE = %s,"
+        " TITLE = %s, SUPPORTO = %s WHERE ID_TPALINSE = %d",
+        (
+            int(fid),
+            (u.get("replace_cod_progra") or ""),
+            (u.get("replace_newtype") or "PER"),
+            title,
+            supporto,
+            id_tpalinse,
+        ),
+    )
+    # Yellow-triangle removal: the swap leaves the row's stored
+    # SCHEDULE_CHECKSUM reflecting the OLD creative, so EE flags the spot.
+    # PI/PSA fillers rotate near-daily, so the file already exists locally
+    # on the playout servers — freezing the checksum fully clears the
+    # triangle here (unlike fresh-from-S3 shows, where the per-CIB download
+    # re-stales it). Same recipe as daily programming's _sync_checksums:
+    # normalize the checksum-input FILMATI fields to canonical settled
+    # values — never on live-feed assets (LIVE_ID guard) — then re-store.
+    cur.execute(
+        "UPDATE FILMATI SET INF_DIGIT = 0, AUDIO = NULL, AUDIO_LANGUAGE = NULL"
+        " WHERE ID_FILMATI = %d AND LIVE_ID IS NULL",
+        (int(fid),),
+    )
+    cur.execute(
+        "UPDATE TPALINSE SET SCHEDULE_CHECKSUM = dbo.sch_getFilmatiCheckSum(%d)"
+        " WHERE ID_TPALINSE = %d",
+        (id_tpalinse, id_tpalinse),
+    )
+
+
+def _bo_fetch_sep_context(cur, market_id: int, date: str, from_frames: int, to_frames: int) -> list:
+    """COM/BNS spots in a ±1-hr window — used for separation checking."""
+    one_hour = round(3600 * _BO_FPS)
+    ext_from = max(0, from_frames - one_hour)
+    ext_to = to_frames + one_hour
+    cur.execute(
+        "SELECT t.ID_TPALINSE, t.ORA, t.TITLE,"
+        " ct.COMMITTENTE, ct.ID_CONTRATTITESTATA AS contract_id,"
+        " COALESCE(cr.Interv_Committente, 0)    AS cust_sep,"
+        " COALESCE(cr.INTERV_CONTRATTO, 0)      AS order_sep,"
+        " COALESCE(cr.CONTROLLACAPOFILA, 0)     AS capofila,"
+        " COALESCE(cr.CONTROLLAFINEFILA, 0)     AS finefila,"
+        " COALESCE(cr.ORA_INIZIOF, cr.ORA_INIZIO) AS line_time_from,"
+        " COALESCE(cr.ORA_FINEF,   cr.ORA_FINE)   AS line_time_to"
+        " FROM TPALINSE t"
+        " LEFT JOIN trafficTPalinse tp ON tp.ID_TPalinse = t.ID_TPALINSE"
+        " LEFT JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe"
+        " LEFT JOIN CONTRATTITESTATA ct ON ct.ID_CONTRATTITESTATA = tp.ID_CONTRATTITESTATA"
+        " WHERE t.DATA = %s AND t.COD_USER = %d"
+        " AND t.NEWTYPE IN ('COM', 'BNS')"
+        " AND t.ORA >= %d AND t.ORA < %d"
+        " AND t.LIVELLO = 0",
+        (date, market_id, ext_from, ext_to),
+    )
+    return [dict(r) for r in cur.fetchall()]
+
+
+def _bo_check_separation(breaks: list, sep_spots: list) -> None:
+    """
+    For each COM/BNS spot inside a break, check two separation rules:
+      - Customer separation (Interv_Committente): gap between any two spots for
+        the same customer (COMMITTENTE), regardless of which contract they're on.
+      - Order separation (INTERV_CONTRATTO): gap between spots under the same
+        contract header (ID_CONTRATTITESTATA). Catches cases like Admerasia
+        where customer sep = 0 but order sep > 0.
+    Attaches 'sep_violations' list to every break; sets violation=True when found.
+    """
+    from collections import defaultdict
+
+    by_cust: dict = defaultdict(list)
+    by_contract: dict = defaultdict(list)
+    id_to_meta: dict = {}
+
+    for s in sep_spots:
+        sid = s["ID_TPALINSE"]
+        cid = s.get("COMMITTENTE")
+        ctr_id = s.get("contract_id")
+        cust_sep = int(s.get("cust_sep") or 0)
+        order_sep = int(s.get("order_sep") or 0)
+        is_bookend = bool(s.get("capofila")) and bool(s.get("finefila"))
+        is_billboard = bool(s.get("capofila")) and not bool(s.get("finefila"))
+        ctr_id_int = int(ctr_id) if ctr_id is not None else None
+        entry = {
+            "id": sid,
+            "ora": s["ORA"],
+            "title": (s.get("TITLE") or "").strip(),
+            "is_bookend": is_bookend,
+            "is_billboard": is_billboard,
+            "ctr_id": ctr_id_int,
+        }
+        if cid is not None:
+            by_cust[int(cid)].append(entry)
+        if ctr_id_int is not None:
+            by_contract[ctr_id_int].append(entry)
+        id_to_meta[sid] = {
+            "cust_id": int(cid) if cid is not None else None,
+            "ctr_id": ctr_id_int,
+            "cust_sep": cust_sep,
+            "order_sep": order_sep,
+            "is_bookend": is_bookend,
+            "is_billboard": is_billboard,
+            "time_from": _bo_frames_to_hhmm(int(s["line_time_from"]))
+            if s.get("line_time_from") is not None
+            else None,
+            "time_to": _bo_frames_to_hhmm(int(s["line_time_to"]))
+            if s.get("line_time_to") is not None
+            else None,
+        }
+
+    def _check_group(
+        spot,
+        group_list,
+        req,
+        seen_pairs,
+        violations,
+        spot_is_bookend=False,
+        spot_is_billboard=False,
+        spot_ctr_id=None,
+    ):
+        sid = spot["id"]
+        for other in group_list:
+            if other["id"] == sid:
+                continue
+            # Bookend pairs intentionally share a break — not a separation violation
+            if spot_is_bookend and other.get("is_bookend"):
+                continue
+            # Billboard+companion pairs are by design adjacent in the same contract
+            other_ctr = other.get("ctr_id")
+            same_contract = spot_ctr_id is not None and spot_ctr_id == other_ctr
+            if same_contract and (spot_is_billboard or other.get("is_billboard")):
+                continue
+            pair_key = (min(sid, other["id"]), max(sid, other["id"]))
+            if pair_key in seen_pairs:
+                continue
+            gap = abs(spot["ora"] - other["ora"])
+            if gap < req:
+                seen_pairs.add(pair_key)
+                spot_meta = id_to_meta.get(sid, {})
+                other_meta = id_to_meta.get(other["id"], {})
+                violations.append(
+                    {
+                        "spot_id": sid,
+                        "spot_title": spot["title"],
+                        "spot_time": spot["time"],
+                        "spot_valid_from": spot_meta.get("time_from"),
+                        "spot_valid_to": spot_meta.get("time_to"),
+                        "conflict_id": other["id"],
+                        "conflict_title": other["title"],
+                        "conflict_time": _bo_frames_to_time(other["ora"]),
+                        "conflict_valid_from": other_meta.get("time_from"),
+                        "conflict_valid_to": other_meta.get("time_to"),
+                        "req_mins": round(req / (_BO_FPS * 60), 1),
+                        "actual_mins": round(gap / (_BO_FPS * 60), 1),
+                    }
+                )
+
+    for brk in breaks:
+        # Gaps between these spots are an artifact of the day-of EE
+        # compaction (programming not placed yet) — the real gaps return
+        # when programming is inserted, so separation math is meaningless.
+        if brk.get("programming_missing"):
+            brk["sep_violations"] = []
+            continue
+        violations = []
+        seen_pairs: set = set()
+        for spot in brk["current"]:
+            sid = spot["id"]
+            meta = id_to_meta.get(sid)
+            if not meta:
+                continue
+            is_be = meta["is_bookend"]
+            is_bb = meta["is_billboard"]
+            ctr = meta["ctr_id"]
+            if meta["cust_sep"] > 0 and meta["cust_id"] is not None:
+                _check_group(
+                    spot,
+                    by_cust[meta["cust_id"]],
+                    meta["cust_sep"],
+                    seen_pairs,
+                    violations,
+                    is_be,
+                    is_bb,
+                    ctr,
+                )
+            if meta["order_sep"] > 0 and ctr is not None:
+                _check_group(
+                    spot,
+                    by_contract[ctr],
+                    meta["order_sep"],
+                    seen_pairs,
+                    violations,
+                    is_be,
+                    is_bb,
+                    ctr,
+                )
+        brk["sep_violations"] = violations
+        if violations:
+            brk["violation"] = True
+
+
+def _bo_process_market(
+    cur, market_id: int, date: str, from_frames: int, to_frames: int
+) -> tuple[list, bool]:
+    """Fetch, annotate, segment, and optimise all breaks for one market.
+    Returns (break list, window_has_programming)."""
+    _BO_BUFFER = round(3 * 60 * _BO_FPS)
+    # tp.Offset = trafficPalinse.offset, the spot's intended nominal break
+    # position. Neither a BO pack nor the day-of EE compaction rewrites it,
+    # so it identifies spots pulled up from later shows' breaks.
+    cur.execute(
+        "SELECT t.ID_TPALINSE, t.ORA, t.XORDER, t.TITLE, t.COD_PROGRA, t.NEWTYPE, t.DURATION,"
+        " cr.CONTROLLACAPOFILA, cr.CONTROLLAFINEFILA, ct.COD_CONTRATTO, tp.Offset AS TP_OFFSET"
+        " FROM TPALINSE t"
+        " LEFT JOIN trafficTPalinse tp ON tp.ID_TPalinse = t.ID_TPALINSE"
+        " LEFT JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe"
+        " LEFT JOIN CONTRATTITESTATA ct ON ct.ID_CONTRATTITESTATA = tp.ID_CONTRATTITESTATA"
+        " WHERE t.DATA = %s AND t.COD_USER = %d"
+        " AND t.ORA >= %d AND t.ORA < %d"
+        " AND t.LIVELLO = 0"
+        " ORDER BY t.XORDER, t.ORA",
+        (date, market_id, from_frames, to_frames + _BO_BUFFER),
+    )
+    rows = cur.fetchall()
+
+    prev_label, prev_contract = None, ""
+    annotated = []
+    for r in rows:
+        nt = (r["NEWTYPE"] or "").strip()
+        contract = (r["COD_CONTRATTO"] or "").strip()
+        is_wl = contract.startswith("WL")
+        pri, label = _bo_classify(
+            nt,
+            r["CONTROLLACAPOFILA"],
+            r["CONTROLLAFINEFILA"],
+            is_wl,
+            prev_label,
+            prev_contract,
+            contract,
+        )
+        prev_label, prev_contract = label, contract
+        toff = r.get("TP_OFFSET")
+        annotated.append(
+            {
+                "id": r["ID_TPALINSE"],
+                "ora": r["ORA"],
+                "time": _bo_frames_to_time(r["ORA"]),
+                "title": (r["TITLE"] or "").strip(),
+                "cod_progra": (r["COD_PROGRA"] or "").strip(),
+                "newtype": nt,
+                "label": label,
+                "priority": pri,
+                "duration": r["DURATION"] or 0,
+                "contract": contract,
+                "is_fixed": pri == 0,
+                "intended_ora": int(toff) if toff is not None else None,
+                "intended_time": _bo_frames_to_time(int(toff)) if toff is not None else None,
+            }
+        )
+
+    breaks, window_has_pgm = _bo_build_breaks(annotated, to_frames)
+
+    _bo_resolve_pi_duplicates(cur, breaks)
+    _bo_check_separation(
+        breaks, _bo_fetch_sep_context(cur, market_id, date, from_frames, to_frames)
+    )
+    return breaks, window_has_pgm
+
+
+def bo_apply_market(conn, market_id: int, date: str, from_frames: int, to_frames: int) -> dict:
+    """Break Optimization write for ONE market/window: process, then rewrite ORA +
+    XORDER (same-multiset) for every changed break. Does NOT commit — the caller
+    owns the transaction (bulk-apply commits per market; Fill & Finish runs this
+    inside its own transaction after inserting PIs/PSAs/ID, Lee 2026-08-28).
+    Flagged breaks (programming_missing) are never written."""
+    cur = conn.cursor(as_dict=True)
+    breaks, _prog_placed = _bo_process_market(cur, market_id, date, from_frames, to_frames)
+    changed_breaks = [b for b in breaks if b["changed"] and not b.get("programming_missing")]
+    all_updates = []
+    for brk in changed_breaks:
+        all_updates.extend(brk["optimized"])
+    out = {
+        "breaks_total": len(breaks),
+        "breaks_changed": len(changed_breaks),
+        "spots_updated": len(all_updates),
+        "breaks_waiting": sum(1 for b in breaks if b.get("programming_missing")),
+    }
+    if not all_updates:
+        return out
+    ids = [int(u["id"]) for u in all_updates]
+    id_ph = ",".join(["%d"] * len(ids))
+    cur2 = conn.cursor(as_dict=True)
+    cur2.execute(
+        f"SELECT ID_TPALINSE, XORDER FROM TPALINSE WHERE ID_TPALINSE IN ({id_ph})", tuple(ids)
+    )
+    xorder_map = {r["ID_TPALINSE"]: r["XORDER"] for r in cur2.fetchall()}
+    sorted_xorders = sorted(v for v in xorder_map.values() if v is not None)
+    cur3 = conn.cursor()
+    for i, u in enumerate(all_updates):
+        new_ora = int(u["new_ora"])
+        new_xorder = sorted_xorders[i] if i < len(sorted_xorders) else None
+        if new_xorder is not None:
+            cur3.execute(
+                "UPDATE TPALINSE SET ORA = %d, ORA_P = %d, XORDER = %d WHERE ID_TPALINSE = %d",
+                (new_ora, new_ora, new_xorder, int(u["id"])),
+            )
+        else:
+            cur3.execute(
+                "UPDATE TPALINSE SET ORA = %d, ORA_P = %d WHERE ID_TPALINSE = %d",
+                (new_ora, new_ora, int(u["id"])),
+            )
+        _bo_apply_pi_replacement(cur3, u, int(u["id"]))
+    return out
+
+
 def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRouter:
     router = APIRouter()
 
@@ -6445,387 +6881,6 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     }
     # _BO_FPS and _bo_frames_to_time are module-level (shared with _bo_build_breaks)
 
-    def _bo_frames_to_hhmm(frames: int) -> str:
-        secs = round(frames / _BO_FPS)
-        h, mn = divmod(secs, 3600)
-        return f"{h:02d}:{mn // 60:02d}"
-
-    def _bo_window_to_frames(t_from: str, t_to: str) -> tuple[int, int]:
-        # broadcast-day aware (post-midnight = 24:00–29:59) AND window-aware: the
-        # day's final show ends at 06:00 next morning (= 30:00), not at 06:00 today
-        return _bcast_window_to_frames(t_from, t_to, _BO_FPS)
-
-    def _bo_pi_library_pick(cur, duration: int, exclude_keys: set):
-        """Pick a valid replacement filler of the same length (±5 frames) from the
-        FILMATI library — PI first, PSA fallback — whose product key is not already
-        used in the break. Returns a filmati dict or None. Mirrors the proven
-        blacklist filler-selection query."""
-        for pattern in ("PI-%%", "PSA-%%"):
-            cur.execute(
-                "SELECT TOP 20 ID_FILMATI, COD_PROGRA, DESCRIZIO, DURATA, NEWTYPE"
-                " FROM FILMATI"
-                " WHERE DESCRIZIO LIKE %s"
-                "   AND DESCRIZIO NOT LIKE 'DO NOT%%'"
-                "   AND (DATA_SCAD IS NULL OR DATA_SCAD > GETDATE())"
-                "   AND ABS(DURATA - %s) <= 5"
-                " ORDER BY NEWID()",
-                (pattern, duration),
-            )
-            for row in cur.fetchall():
-                if _pi_product_key(row["DESCRIZIO"]) not in exclude_keys:
-                    return dict(row)
-        return None
-
-    def _bo_resolve_pi_duplicates(cur, breaks: list) -> None:
-        """When a break contains two PI spots of the same product (e.g. two PI-504),
-        replace one of them IN PLACE with a different valid same-length PI from the
-        FILMATI library (PSA fallback). Nothing moves between breaks or time slots —
-        the switch stays inside the pod/program. Modifies breaks in-place: sets the
-        replacement payload on the affected optimized spot and updates the
-        'changed' / 'violation' / 'pi_unresolvable' flags."""
-
-        def _pi_keys(brk):
-            return [_pi_product_key(s["title"]) for s in brk["optimized"] if s["label"] == "PI"]
-
-        for brk in breaks:
-            # A break waiting on programming holds spots scrunched in from other
-            # shows — duplicate PIs across it are an artifact, and a creative
-            # swap would be a real write into a phantom break. Leave it alone.
-            if brk.get("programming_missing"):
-                continue
-            keys = _pi_keys(brk)
-            if len(keys) == len(set(keys)):
-                brk["pi_unresolvable"] = False
-                continue
-
-            # Extra occurrences (2nd, 3rd, … of any product key) are the duplicates
-            # to replace. Positions never shift (replacement is in-place), so a single
-            # pass over the pre-computed indices is safe.
-            seen: set = set()
-            dup_indices: list = []
-            for j, s in enumerate(brk["optimized"]):
-                if s["label"] != "PI":
-                    continue
-                k = _pi_product_key(s["title"])
-                if k in seen:
-                    dup_indices.append(j)
-                else:
-                    seen.add(k)
-
-            replacements: list = []
-            for dup_idx in dup_indices:
-                dup_spot = brk["optimized"][dup_idx]
-                # Replacement must differ from every OTHER PI product left in the break
-                exclude = {
-                    _pi_product_key(s["title"])
-                    for m, s in enumerate(brk["optimized"])
-                    if s["label"] == "PI" and m != dup_idx
-                }
-                pick = _bo_pi_library_pick(cur, dup_spot["duration"], exclude)
-                if not pick:
-                    continue  # nothing fits at this length
-                old_title = dup_spot["title"]
-                new_title = (pick["DESCRIZIO"] or "").strip()
-                brk["optimized"][dup_idx] = {
-                    **dup_spot,
-                    "title": new_title,
-                    "replace_filmati_id": int(pick["ID_FILMATI"]),
-                    "replace_title": new_title,
-                    "replace_cod_progra": (pick["COD_PROGRA"] or "").strip(),
-                    "replace_newtype": (pick["NEWTYPE"] or "PER").strip(),
-                    "pi_replacement": f"{old_title} → {new_title}",
-                }
-                replacements.append(f"{old_title} → {new_title}")
-
-            new_keys = _pi_keys(brk)
-            brk["pi_replacements"] = replacements
-            # Any product key still duplicated had no same-length filler → manual fix
-            brk["pi_unresolvable"] = len(new_keys) != len(set(new_keys))
-            # A creative swap keeps the id order, so flag 'changed' explicitly.
-            cur_ids = [s["id"] for s in brk["current"]]
-            opt_ids = [s["id"] for s in brk["optimized"]]
-            brk["changed"] = brk["changed"] or bool(replacements) or cur_ids != opt_ids
-            brk["ordering_violation"] = brk["violation"] = brk["changed"] or brk["pi_unresolvable"]
-
-    def _bo_apply_pi_replacement(cur, u: dict, id_tpalinse: int) -> None:
-        """If an optimized-spot payload carries a library PI/PSA replacement, swap the
-        creative on its TPALINSE row in place (ID_FILMATI + identity fields). ORA /
-        XORDER / DURATION are left untouched — the library match is within ±5 frames,
-        so downstream pod timing is unaffected. Mirrors the auto-assign creative
-        update (ID_FILMATI) and the blacklist filler SUPPORTO convention."""
-        fid = u.get("replace_filmati_id")
-        if not fid:
-            return
-        title = (u.get("replace_title") or "").strip()
-        supporto = _pi_filler_supporto(cur, fid, title)
-        cur.execute(
-            "UPDATE TPALINSE SET ID_FILMATI = %d, COD_PROGRA = %s, NEWTYPE = %s,"
-            " TITLE = %s, SUPPORTO = %s WHERE ID_TPALINSE = %d",
-            (
-                int(fid),
-                (u.get("replace_cod_progra") or ""),
-                (u.get("replace_newtype") or "PER"),
-                title,
-                supporto,
-                id_tpalinse,
-            ),
-        )
-        # Yellow-triangle removal: the swap leaves the row's stored
-        # SCHEDULE_CHECKSUM reflecting the OLD creative, so EE flags the spot.
-        # PI/PSA fillers rotate near-daily, so the file already exists locally
-        # on the playout servers — freezing the checksum fully clears the
-        # triangle here (unlike fresh-from-S3 shows, where the per-CIB download
-        # re-stales it). Same recipe as daily programming's _sync_checksums:
-        # normalize the checksum-input FILMATI fields to canonical settled
-        # values — never on live-feed assets (LIVE_ID guard) — then re-store.
-        cur.execute(
-            "UPDATE FILMATI SET INF_DIGIT = 0, AUDIO = NULL, AUDIO_LANGUAGE = NULL"
-            " WHERE ID_FILMATI = %d AND LIVE_ID IS NULL",
-            (int(fid),),
-        )
-        cur.execute(
-            "UPDATE TPALINSE SET SCHEDULE_CHECKSUM = dbo.sch_getFilmatiCheckSum(%d)"
-            " WHERE ID_TPALINSE = %d",
-            (id_tpalinse, id_tpalinse),
-        )
-
-    def _bo_fetch_sep_context(
-        cur, market_id: int, date: str, from_frames: int, to_frames: int
-    ) -> list:
-        """COM/BNS spots in a ±1-hr window — used for separation checking."""
-        one_hour = round(3600 * _BO_FPS)
-        ext_from = max(0, from_frames - one_hour)
-        ext_to = to_frames + one_hour
-        cur.execute(
-            "SELECT t.ID_TPALINSE, t.ORA, t.TITLE,"
-            " ct.COMMITTENTE, ct.ID_CONTRATTITESTATA AS contract_id,"
-            " COALESCE(cr.Interv_Committente, 0)    AS cust_sep,"
-            " COALESCE(cr.INTERV_CONTRATTO, 0)      AS order_sep,"
-            " COALESCE(cr.CONTROLLACAPOFILA, 0)     AS capofila,"
-            " COALESCE(cr.CONTROLLAFINEFILA, 0)     AS finefila,"
-            " COALESCE(cr.ORA_INIZIOF, cr.ORA_INIZIO) AS line_time_from,"
-            " COALESCE(cr.ORA_FINEF,   cr.ORA_FINE)   AS line_time_to"
-            " FROM TPALINSE t"
-            " LEFT JOIN trafficTPalinse tp ON tp.ID_TPalinse = t.ID_TPALINSE"
-            " LEFT JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe"
-            " LEFT JOIN CONTRATTITESTATA ct ON ct.ID_CONTRATTITESTATA = tp.ID_CONTRATTITESTATA"
-            " WHERE t.DATA = %s AND t.COD_USER = %d"
-            " AND t.NEWTYPE IN ('COM', 'BNS')"
-            " AND t.ORA >= %d AND t.ORA < %d"
-            " AND t.LIVELLO = 0",
-            (date, market_id, ext_from, ext_to),
-        )
-        return [dict(r) for r in cur.fetchall()]
-
-    def _bo_check_separation(breaks: list, sep_spots: list) -> None:
-        """
-        For each COM/BNS spot inside a break, check two separation rules:
-          - Customer separation (Interv_Committente): gap between any two spots for
-            the same customer (COMMITTENTE), regardless of which contract they're on.
-          - Order separation (INTERV_CONTRATTO): gap between spots under the same
-            contract header (ID_CONTRATTITESTATA). Catches cases like Admerasia
-            where customer sep = 0 but order sep > 0.
-        Attaches 'sep_violations' list to every break; sets violation=True when found.
-        """
-        from collections import defaultdict
-
-        by_cust: dict = defaultdict(list)
-        by_contract: dict = defaultdict(list)
-        id_to_meta: dict = {}
-
-        for s in sep_spots:
-            sid = s["ID_TPALINSE"]
-            cid = s.get("COMMITTENTE")
-            ctr_id = s.get("contract_id")
-            cust_sep = int(s.get("cust_sep") or 0)
-            order_sep = int(s.get("order_sep") or 0)
-            is_bookend = bool(s.get("capofila")) and bool(s.get("finefila"))
-            is_billboard = bool(s.get("capofila")) and not bool(s.get("finefila"))
-            ctr_id_int = int(ctr_id) if ctr_id is not None else None
-            entry = {
-                "id": sid,
-                "ora": s["ORA"],
-                "title": (s.get("TITLE") or "").strip(),
-                "is_bookend": is_bookend,
-                "is_billboard": is_billboard,
-                "ctr_id": ctr_id_int,
-            }
-            if cid is not None:
-                by_cust[int(cid)].append(entry)
-            if ctr_id_int is not None:
-                by_contract[ctr_id_int].append(entry)
-            id_to_meta[sid] = {
-                "cust_id": int(cid) if cid is not None else None,
-                "ctr_id": ctr_id_int,
-                "cust_sep": cust_sep,
-                "order_sep": order_sep,
-                "is_bookend": is_bookend,
-                "is_billboard": is_billboard,
-                "time_from": _bo_frames_to_hhmm(int(s["line_time_from"]))
-                if s.get("line_time_from") is not None
-                else None,
-                "time_to": _bo_frames_to_hhmm(int(s["line_time_to"]))
-                if s.get("line_time_to") is not None
-                else None,
-            }
-
-        def _check_group(
-            spot,
-            group_list,
-            req,
-            seen_pairs,
-            violations,
-            spot_is_bookend=False,
-            spot_is_billboard=False,
-            spot_ctr_id=None,
-        ):
-            sid = spot["id"]
-            for other in group_list:
-                if other["id"] == sid:
-                    continue
-                # Bookend pairs intentionally share a break — not a separation violation
-                if spot_is_bookend and other.get("is_bookend"):
-                    continue
-                # Billboard+companion pairs are by design adjacent in the same contract
-                other_ctr = other.get("ctr_id")
-                same_contract = spot_ctr_id is not None and spot_ctr_id == other_ctr
-                if same_contract and (spot_is_billboard or other.get("is_billboard")):
-                    continue
-                pair_key = (min(sid, other["id"]), max(sid, other["id"]))
-                if pair_key in seen_pairs:
-                    continue
-                gap = abs(spot["ora"] - other["ora"])
-                if gap < req:
-                    seen_pairs.add(pair_key)
-                    spot_meta = id_to_meta.get(sid, {})
-                    other_meta = id_to_meta.get(other["id"], {})
-                    violations.append(
-                        {
-                            "spot_id": sid,
-                            "spot_title": spot["title"],
-                            "spot_time": spot["time"],
-                            "spot_valid_from": spot_meta.get("time_from"),
-                            "spot_valid_to": spot_meta.get("time_to"),
-                            "conflict_id": other["id"],
-                            "conflict_title": other["title"],
-                            "conflict_time": _bo_frames_to_time(other["ora"]),
-                            "conflict_valid_from": other_meta.get("time_from"),
-                            "conflict_valid_to": other_meta.get("time_to"),
-                            "req_mins": round(req / (_BO_FPS * 60), 1),
-                            "actual_mins": round(gap / (_BO_FPS * 60), 1),
-                        }
-                    )
-
-        for brk in breaks:
-            # Gaps between these spots are an artifact of the day-of EE
-            # compaction (programming not placed yet) — the real gaps return
-            # when programming is inserted, so separation math is meaningless.
-            if brk.get("programming_missing"):
-                brk["sep_violations"] = []
-                continue
-            violations = []
-            seen_pairs: set = set()
-            for spot in brk["current"]:
-                sid = spot["id"]
-                meta = id_to_meta.get(sid)
-                if not meta:
-                    continue
-                is_be = meta["is_bookend"]
-                is_bb = meta["is_billboard"]
-                ctr = meta["ctr_id"]
-                if meta["cust_sep"] > 0 and meta["cust_id"] is not None:
-                    _check_group(
-                        spot,
-                        by_cust[meta["cust_id"]],
-                        meta["cust_sep"],
-                        seen_pairs,
-                        violations,
-                        is_be,
-                        is_bb,
-                        ctr,
-                    )
-                if meta["order_sep"] > 0 and ctr is not None:
-                    _check_group(
-                        spot,
-                        by_contract[ctr],
-                        meta["order_sep"],
-                        seen_pairs,
-                        violations,
-                        is_be,
-                        is_bb,
-                        ctr,
-                    )
-            brk["sep_violations"] = violations
-            if violations:
-                brk["violation"] = True
-
-    def _bo_process_market(
-        cur, market_id: int, date: str, from_frames: int, to_frames: int
-    ) -> tuple[list, bool]:
-        """Fetch, annotate, segment, and optimise all breaks for one market.
-        Returns (break list, window_has_programming)."""
-        _BO_BUFFER = round(3 * 60 * _BO_FPS)
-        # tp.Offset = trafficPalinse.offset, the spot's intended nominal break
-        # position. Neither a BO pack nor the day-of EE compaction rewrites it,
-        # so it identifies spots pulled up from later shows' breaks.
-        cur.execute(
-            "SELECT t.ID_TPALINSE, t.ORA, t.XORDER, t.TITLE, t.COD_PROGRA, t.NEWTYPE, t.DURATION,"
-            " cr.CONTROLLACAPOFILA, cr.CONTROLLAFINEFILA, ct.COD_CONTRATTO, tp.Offset AS TP_OFFSET"
-            " FROM TPALINSE t"
-            " LEFT JOIN trafficTPalinse tp ON tp.ID_TPalinse = t.ID_TPALINSE"
-            " LEFT JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe"
-            " LEFT JOIN CONTRATTITESTATA ct ON ct.ID_CONTRATTITESTATA = tp.ID_CONTRATTITESTATA"
-            " WHERE t.DATA = %s AND t.COD_USER = %d"
-            " AND t.ORA >= %d AND t.ORA < %d"
-            " AND t.LIVELLO = 0"
-            " ORDER BY t.XORDER, t.ORA",
-            (date, market_id, from_frames, to_frames + _BO_BUFFER),
-        )
-        rows = cur.fetchall()
-
-        prev_label, prev_contract = None, ""
-        annotated = []
-        for r in rows:
-            nt = (r["NEWTYPE"] or "").strip()
-            contract = (r["COD_CONTRATTO"] or "").strip()
-            is_wl = contract.startswith("WL")
-            pri, label = _bo_classify(
-                nt,
-                r["CONTROLLACAPOFILA"],
-                r["CONTROLLAFINEFILA"],
-                is_wl,
-                prev_label,
-                prev_contract,
-                contract,
-            )
-            prev_label, prev_contract = label, contract
-            toff = r.get("TP_OFFSET")
-            annotated.append(
-                {
-                    "id": r["ID_TPALINSE"],
-                    "ora": r["ORA"],
-                    "time": _bo_frames_to_time(r["ORA"]),
-                    "title": (r["TITLE"] or "").strip(),
-                    "cod_progra": (r["COD_PROGRA"] or "").strip(),
-                    "newtype": nt,
-                    "label": label,
-                    "priority": pri,
-                    "duration": r["DURATION"] or 0,
-                    "contract": contract,
-                    "is_fixed": pri == 0,
-                    "intended_ora": int(toff) if toff is not None else None,
-                    "intended_time": _bo_frames_to_time(int(toff)) if toff is not None else None,
-                }
-            )
-
-        breaks, window_has_pgm = _bo_build_breaks(annotated, to_frames)
-
-        _bo_resolve_pi_duplicates(cur, breaks)
-        _bo_check_separation(
-            breaks, _bo_fetch_sep_context(cur, market_id, date, from_frames, to_frames)
-        )
-        return breaks, window_has_pgm
-
     @router.get("/api/master-control/break-optimization/load")
     async def load_break_optimization(
         market: str = Query(...),
@@ -6925,68 +6980,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             results = []
             with _connect() as conn:
                 for market_name, market_id in bulk_markets.items():
-                    cur = conn.cursor(as_dict=True)
-                    breaks, _prog_placed = _bo_process_market(
-                        cur, market_id, date, from_frames, to_frames
-                    )
-                    # Flagged breaks already come back changed=False with an
-                    # identity optimization; the explicit filter is insurance
-                    # that a waiting-on-programming break is never written.
-                    changed_breaks = [
-                        b for b in breaks if b["changed"] and not b.get("programming_missing")
-                    ]
-                    all_updates = []
-                    for brk in changed_breaks:
-                        all_updates.extend(brk["optimized"])
-                    if not all_updates:
-                        results.append(
-                            {
-                                "market": market_name,
-                                "breaks_total": len(breaks),
-                                "breaks_changed": 0,
-                                "spots_updated": 0,
-                                "breaks_waiting": sum(
-                                    1 for b in breaks if b.get("programming_missing")
-                                ),
-                            }
-                        )
-                        continue
-                    ids = [int(u["id"]) for u in all_updates]
-                    id_ph = ",".join(["%d"] * len(ids))
-                    cur2 = conn.cursor(as_dict=True)
-                    cur2.execute(
-                        f"SELECT ID_TPALINSE, XORDER FROM TPALINSE WHERE ID_TPALINSE IN ({id_ph})",
-                        tuple(ids),
-                    )
-                    xorder_map = {r["ID_TPALINSE"]: r["XORDER"] for r in cur2.fetchall()}
-                    sorted_xorders = sorted(v for v in xorder_map.values() if v is not None)
-                    cur3 = conn.cursor()
-                    for i, u in enumerate(all_updates):
-                        new_ora = int(u["new_ora"])
-                        new_xorder = sorted_xorders[i] if i < len(sorted_xorders) else None
-                        if new_xorder is not None:
-                            cur3.execute(
-                                "UPDATE TPALINSE SET ORA = %d, ORA_P = %d, XORDER = %d WHERE ID_TPALINSE = %d",
-                                (new_ora, new_ora, new_xorder, int(u["id"])),
-                            )
-                        else:
-                            cur3.execute(
-                                "UPDATE TPALINSE SET ORA = %d, ORA_P = %d WHERE ID_TPALINSE = %d",
-                                (new_ora, new_ora, int(u["id"])),
-                            )
-                        _bo_apply_pi_replacement(cur3, u, int(u["id"]))
+                    r = bo_apply_market(conn, market_id, date, from_frames, to_frames)
                     conn.commit()
-                    results.append(
-                        {
-                            "market": market_name,
-                            "breaks_total": len(breaks),
-                            "breaks_changed": len(changed_breaks),
-                            "spots_updated": len(all_updates),
-                            "breaks_waiting": sum(
-                                1 for b in breaks if b.get("programming_missing")
-                            ),
-                        }
-                    )
+                    results.append({"market": market_name, **r})
             return results
 
         try:
