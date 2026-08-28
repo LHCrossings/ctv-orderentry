@@ -88,10 +88,11 @@ class Break:
     def length(self) -> float:
         return sum(i.dur for i in self.items)
 
-    def campaigns_adjacent_ok(self, f: Filler) -> bool:
-        last = self.items[-1] if self.items else None
-        c = getattr(last, "campaign", None)
-        return not (c and c == f.campaign)
+    def campaign_ok(self, f: Filler) -> bool:
+        """Never the :30 and :60 (or any two cuts) of the same campaign in the SAME
+        BREAK (Lee 8/28). Anywhere else in the show is fine — :30s are scarce and
+        rotate more often, so the same file may well air twice in one show."""
+        return not any(getattr(it, "campaign", None) == f.campaign for it in self.items)
 
 
 def load_day(cur, market: int, date: str) -> list[tuple]:
@@ -322,11 +323,14 @@ def plan(evs: list[Ev], inv: list[Filler], hour_end: float, market: int) -> tupl
         moves.append(f"move {x.desc[:28]} ({mmss(x.dur)}) final → break {target.after_piece_idx}")
 
     def take(kind, sec, brk: Break):
-        for f in pool(inv, kind, sec):
-            if f.filmati in used or not brk.campaigns_adjacent_ok(f):
-                continue
-            used.add(f.filmati)
-            return f
+        # Fair rotation: prefer a file not yet in this show, but a repeat within the
+        # show is allowed (Lee 8/28) — the only hard rule is campaign_ok per break.
+        for allow_repeat in (False, True):
+            for f in pool(inv, kind, sec):
+                if (f.filmati in used and not allow_repeat) or not brk.campaign_ok(f):
+                    continue
+                used.add(f.filmati)
+                return f
         return None
 
     # ── FINISH phase: PIs for evenness; final break ≤ 2:30 and never the longest ──

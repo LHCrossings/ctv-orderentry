@@ -198,3 +198,8 @@ its slot and there are NO PI/PSA rows left to remove. Two remedies, case by case
    confirms — never silently relocate paid airtime.
 Until built: state `overrun` shows "runs M:SS past its slot · check programming", no
 Finish button. Lee: "you'd be better at doing those calculations than any of us."
+- **Campaign rule, corrected (Lee 8/28):** the ONLY hard rule is no two cuts of the same
+  `PI-nnn` in the SAME BREAK (`Break.campaign_ok`, whole break, not just the neighbour).
+  The same FILE airing twice in one show is fine — :30s are scarce and rotate more.
+  `take()` prefers a file not yet used in the show, then allows repeats. There is NO
+  "duplicate PI in an hour" defect rule — I had inferred one; Lee did not ask for it.

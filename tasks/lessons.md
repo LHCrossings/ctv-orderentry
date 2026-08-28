@@ -1572,3 +1572,19 @@ Never rely on `is_bonus=True` to set the booking code automatically.
 - Master market = **DAL** only for WorldLink / The Asian Channel
 
 When writing a new agency automation, do NOT include a `set_master_market` call. The session handles it. The line-level `market` argument to `add_contract_line()` is separate and correct to set per line.
+
+---
+
+## "Sloppy" Is the User's Judgment, Not a Rule Specification — Ask What They Saw
+
+**Session:** Fill & Finish, MMT 14:00 (2026-08-28) — Lee: "let's not assume that's what I was referring to"
+
+**Rule:** Lee said MC "sometimes does a sloppy job" on a show; I inferred the defect
+(same PI file twice in the hour) from what *I* found in the data and proposed a rule
+for it. Lee's actual rule was different and narrower: the same file twice in a show is
+FINE; only a :30 and :60 of one campaign in the SAME BREAK is wrong. Had I built the
+inferred rule, Finish would have "fixed" behaviour he wants (scarce :30s recycling).
+
+**How to apply:** when a user calls something wrong without naming the defect, list what
+you see and ask which item they mean before proposing a rule — never promote your own
+diagnosis to their intent. Related: [[fill-and-finish]] rotation rules.
