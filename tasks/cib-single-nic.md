@@ -113,6 +113,17 @@ California RDP. Lee then rebooted both with Windows Update + Etere 36.1.360.9454
 eni-03c376b4d64d792d4, CIB05 eni-0bc3543a644af967b, CIB03 eni-09ffb64408d395ca8, CIB04
 eni-037d016e4f4d499a6. Next: 8/29 MLFD scan (first rollovers on new config) → delete these 5 +
 orphans (CIB02 WAN 10.0.0.43/.51, vpn-nic 10.0.0.18) → Health event should resolve ~9/4.
+
+## ENI CLEANUP — DONE 2026-08-31
+Weekend MLFD survey (8/28+8/29+8/30) came back clean on all 10 channels (every |MLFD|>=30 line
+was an ME=00:00:00 boundary blip; all channels settled +2), so the undo window closed. Deleted
+all 8 leftover ENIs (Lee approved, each re-verified `available` immediately before delete):
+the 5 detached CIB WAN ENIs above + orphans CIB02 WAN eni-0ac25621999d084b3 (10.0.0.43),
+CIB02 WAN eni-0f228f26b16726004 (10.0.0.51), vpn-nic eni-08ed4f47c25886154 (10.0.0.18 — the
+live vpn-nic 10.0.0.36 on the Jumpbox instance untouched). Remaining `available` ENIs are all
+MediaLive input endpoints (AWS-managed, normal when idle) — leave them. Runbook COMPLETE except:
+Health event → Resolved ~9/4–9/6 (Lee checks console), optional "SRT Streams SG" removal from
+CIB06 primary, and the deferred SG/EIP audit.
 Gotcha: awk on ENI description "CIB04 WAN" split on the space → detach was sent with a bogus id and
 failed safely; always hard-code IDs from the snapshot rather than parsing descriptions.
 Post-boot verify CIB03 (boot 00:40) + CIB04 (boot 00:38), 00:46 local: single NIC, DNS single record,
