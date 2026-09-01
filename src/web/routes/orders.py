@@ -508,7 +508,9 @@ def _pi_filler_supporto(cur, filmati_id, fallback_desc: str = "") -> str:
         # — the DESCRIZIO before the colon — never the full description.
         code = (fallback_desc or "").split(":", 1)[0].strip()
         supporto = "0ETX      " + code
-    return supporto[:30]
+    # TPALINSE.SUPPORTO is varchar(42) — [:30] here clipped any binding over 30
+    # chars into one the playout server can't resolve (DAL's 31-char station ID).
+    return supporto[:42]
 
 
 # ─── Break optimization ordering (pure helpers, module level so they are

@@ -74,7 +74,11 @@ def _refresh_checksums(cur, market: int, date: str, lo_f: int, hi_f: int) -> int
 
 def _supporto(cur, filmati: int) -> str:
     """Playout binding = channel prefix + FS_FILMATI.FILE_ID (same rule as
-    orders._pi_filler_supporto)."""
+    orders._pi_filler_supporto). NEVER truncate short of the column:
+    TPALINSE.SUPPORTO is varchar(42), and a clipped binding cannot resolve to a
+    file — DAL's station ID ('0ETX      ID - TACDAL - GENERIC', 31 chars) was
+    cut to 30 here, so every DAL Finish rolled back on its own verify (Maija 9/1;
+    the aired hand-placed siblings all carry the full 31 chars, STATUS='A')."""
     cur.execute(
         "SELECT TOP 1 ISNULL(d.LEGACY_BASESUPP, CAST(d.LEGACY_MEDIAID AS VARCHAR) + 'ETX      '), ff.FILE_ID"
         " FROM FS_FILMATI ff JOIN FS_METADEVICE d ON d.ID_METADEVICE = ff.ID_METADEVICE"
@@ -84,7 +88,10 @@ def _supporto(cur, filmati: int) -> str:
     r = cur.fetchone()
     if not r or not r[1]:
         raise RuntimeError(f"no FS_FILMATI FILE_ID for {filmati}")
-    return (str(r[0]) + str(r[1]))[:30]
+    sup = str(r[0]) + str(r[1])
+    if len(sup) > 42:
+        raise RuntimeError(f"SUPPORTO overflows varchar(42), cannot bind: {sup!r}")
+    return sup
 
 
 def _item_dict(it, start: float, tag: str) -> dict:
@@ -442,9 +449,15 @@ def apply_window(
         binding: dict[int, str] = {}
         for e, tgt in moves:
             _seat(e.id, next(bb for bb in breaks if bb.after_piece_idx == tgt), e)
+        # The grid's COMS segments sit at NOMINAL offsets (NYC evening: :14, :25:30,
+        # :29) while a real break lands wherever the piece ends (19:07:23) — a ±120s
+        # search failed on most blocks (Maija 9/1). The segment only decides which
+        # traffic break a filler row is booked under (playout = ORA/XORDER), so the
+        # nearest segment anywhere in the show's window is correct.
+        coms = _slots(cur, market, date, lo_f, hi_f, "COMS")
         for b, x in inserts:
             brk_start = pieces[b.after_piece_idx].end
-            slots = _slots(
+            slots = coms or _slots(
                 cur,
                 market,
                 date,
@@ -454,7 +467,7 @@ def apply_window(
             )
             if not slots:
                 raise RuntimeError(
-                    f"no COMS segment near {hms(brk_start)} for break {b.after_piece_idx}"
+                    f"no COMS segment in {hms(lo)}-{hms(hi)} for break {b.after_piece_idx}"
                 )
             slot = min(slots, key=lambda s: abs(s["ora"] - brk_start * FPS))
             ora = int(round(start_of[id(x)] * FPS))
@@ -497,13 +510,13 @@ def apply_window(
             for nid, sup in binding.items():
                 cur.execute("UPDATE TPALINSE SET SUPPORTO=%s WHERE ID_TPALINSE=%s", (sup, nid))
             ids_csv = ",".join(str(i) for i in new_ids)
+            # exact readback: the row must carry precisely prefix+FILE_ID (the old
+            # LIKE '%FILE_ID%' test could not see a truncated write as such)
             cur.execute(
-                f"""SELECT t.ID_TPALINSE, t.SUPPORTO FROM TPALINSE t
-                    WHERE t.ID_TPALINSE IN ({ids_csv})
-                      AND NOT EXISTS (SELECT 1 FROM FS_FILMATI ff WHERE ff.ID_FILMATI=t.ID_FILMATI
-                                      AND t.SUPPORTO LIKE '%' + ff.FILE_ID + '%')"""
+                f"SELECT ID_TPALINSE, SUPPORTO FROM TPALINSE WHERE ID_TPALINSE IN ({ids_csv})"
             )
-            bad = cur.fetchall()
+            got = dict(cur.fetchall())
+            bad = [(nid, got.get(nid)) for nid, sup in binding.items() if got.get(nid) != sup]
             if bad:
                 raise RuntimeError(f"SUPPORTO not bound to FILE_ID: {bad}")
             cur.execute(f"SELECT COUNT(*) FROM trafficPalinse WHERE id_tpalinse IN ({ids_csv})")
