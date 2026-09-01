@@ -4,6 +4,39 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Width/Limit Copied From a Prior Fix Is Still a Guess — Read the Schema and Diff an Aired Sibling
+
+**Session:** Maija's first Fill & Finish team test (2026-09-01) — most blocks errored
+
+**Rule:** Two independent Finish failures, one shared shape: a constant carried forward
+without checking what it constrains. (1) `_supporto()` truncated the playout binding
+`[:30]` — inherited from the 7/22 PI-binding fix — but `TPALINSE.SUPPORTO` is
+**varchar(42)**, and DAL's station ID binding is 31 chars: every DAL Finish wrote a
+clipped binding and rolled back on its own verify. One `INFORMATION_SCHEMA` query plus
+one look at an aired sibling row (which carried all 31 chars, STATUS='A') settled it.
+(2) The break→COMS-segment search used ±120s around the actual break position — but the
+grid's COMS segments sit at NOMINAL offsets (:14/:25:30/:29) while breaks land wherever
+the pieces end (19:07:23), so most CTV blocks found nothing. The window the constant
+implied ("breaks are near their nominal segments") was never true of DP-placed content.
+
+**How to apply:**
+1. Before truncating/bounding to a literal, verify it against the live schema
+   (`CHARACTER_MAXIMUM_LENGTH`) — and when a "convention" constant exists in a sibling
+   helper, suspect it was sized for that helper's data, not yours.
+2. **An aired row is the oracle for any playout-facing value.** Diff what you write
+   against what Etere/hand placement wrote for the same asset and did air. (Third
+   appearance of this rule: sch_UpdateSupportAndProperties, PI fillers, now width.)
+3. A transaction verify that fires on your own write is a SUCCESS — the DAL rollbacks
+   meant zero corrupted rows reached playout. Fix the write, keep the verify, and make
+   it exact (readback == written value; a `LIKE '%x%'` containment test cannot see a
+   truncation of x).
+4. When a proximity search fails "sometimes, per market": check whether you're
+   searching near where the item nominally SHOULD be (grid offset) instead of where
+   the schedule actually put it. If the association is bookkeeping (playout order is
+   ORA/XORDER), nearest-in-window beats nearest-to-nominal.
+
+---
+
 ## "I Don't Have Access" and "It Works Like X" Are Claims — Probe Before Stating Them
 
 **Session:** SpotOps address book + CIB transfer path (2026-08-27)
