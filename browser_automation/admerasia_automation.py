@@ -346,6 +346,32 @@ def gather_admerasia_inputs(pdf_path: str) -> Optional[dict]:
     flight_start, flight_end = order.get_flight_dates()
     print(f"[PARSE] ✓ Flight: {flight_start} - {flight_end}")
 
+    # Sponsorship section (9/2026+ IOs): the parser reads and reconciles it but the
+    # automation does NOT enter it — those rows need manual entry (Lee 9/1). Require
+    # an explicit yes so the money can never be skipped silently.
+    spons = getattr(order, "sponsorship", None)
+    if spons:
+        print("\n[SPONSORSHIP] ⚠ This IO carries a sponsorship section that will NOT be auto-entered:")
+        for r in spons["rows"]:
+            bits = [r["label"]]
+            if r.get("date_range"):
+                bits.append(r["date_range"])
+            if r.get("spots") is not None:
+                bits.append(f"{r['spots']} spots")
+            bits.append(f"${r['cost']}" if r.get("cost") else "no cost")
+            print("   - " + "  ".join(bits))
+        if spons.get("cost") or spons.get("date_range"):
+            print(f"   - Package: {spons.get('date_range') or '?'}  "
+                  f"{'$' + spons['cost'] if spons.get('cost') else 'no cost read'}")
+        if spons.get("sponsorship_spots") is not None:
+            print(f"   Sponsorship spots: {spons['sponsorship_spots']} "
+                  "(separate from the TVC lines below)")
+        resp = input("  Enter the TVC lines only — sponsorship must be entered MANUALLY. "
+                     "Continue? [y/N]: ").strip().lower()
+        if resp not in ("y", "yes"):
+            print("[CANCELLED] Sponsorship section left for manual handling")
+            return None
+
     # Verification step — show human-readable summary before proceeding
     order = _verify_parsed_order(order, pdf_path)
     if order is None:

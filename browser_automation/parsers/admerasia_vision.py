@@ -69,6 +69,7 @@ Rules:
 - sum(daily_spots) for a row MUST equal that row's printed Total Spots. If you can't make them match, still give your best reading and add a specific warning.
 - daypart: copy the time window but strip any timezone prefix (PST, PT, ET, CT, EST, ...). Keep am/pm exactly.
 - Do NOT include footer/total rows as program rows. Do NOT invent rows.
+- Some IOs append a SPONSORSHIP section below the program rows: a '15s Spots' row (its calendar band holds creative-rotation text, not per-day counts) and an 'OBB & CBB' package row, with 'Sponsorship Spots' / 'Total TVC spots' counters at the bottom. These are NOT program rows — exclude them exactly like the footer/total rows.
 - Read the header facts (order_number, language, market, campaign_period) from the document text."""
 
 _INSTRUCTION = (

@@ -25,6 +25,26 @@ import pdfplumber
 # Word-grouping y-tolerance for the grid read — see read_grid_cells().
 SPOT_Y_TOL = 0.5
 
+# The 9/2026 McDonald's IOs append a SPONSORSHIP section under the TVC program rows:
+# a '15s Spots' row whose calendar band holds free text ('8 EVM AM 8 EVM ROD') and an
+# 'OBB & CBB' package row. Those band digits would otherwise read as a phantom program
+# row (row-count guard fired on the first such IO). Everything from the first
+# sponsorship label down is not TVC grid.
+_SPONSORSHIP_LABELS = ("15s spots", "obb & cbb")
+
+
+def sponsorship_top(words) -> float | None:
+    """Top y of the sponsorship section's first label line, or None when absent."""
+    lines: dict[int, list] = defaultdict(list)
+    for w in words:
+        lines[round(w["top"])].append(w)
+    tops = []
+    for ws in lines.values():
+        txt = " ".join(x["text"] for x in sorted(ws, key=lambda x: x["x0"])).lower()
+        if any(lbl in txt for lbl in _SPONSORSHIP_LABELS):
+            tops.append(min(x["top"] for x in ws))
+    return min(tops) if tops else None
+
 
 @dataclass
 class PositionalGrid:
@@ -101,8 +121,15 @@ def read_grid_cells(path: str) -> GridGeometry:
     ROW_TOL = 2.0        # between the <0.5pt intra-row jitter and the ~5pt row pitch
     FOOTER_GAP = 45      # a large vertical jump = end of grid (totals / notes block)
 
+    spons_top = sponsorship_top(words)
     grid_words = sorted(
-        (w for w in digits if w["top"] > dn_y + 0.5 and to_col(w) is not None),
+        (
+            w
+            for w in digits
+            if w["top"] > dn_y + 0.5
+            and (spons_top is None or w["top"] < spons_top - 0.5)
+            and to_col(w) is not None
+        ),
         key=lambda w: w["top"],
     )
     cells: list[GridCell] = []

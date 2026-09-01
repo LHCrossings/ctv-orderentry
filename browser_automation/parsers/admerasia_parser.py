@@ -92,6 +92,9 @@ class AdmerasiaOrder:
     lines: List[AdmerasiaLine] = field(default_factory=list)
     week_start_dates: List[date] = field(default_factory=list)
     rates_are_net: bool = True   # Admerasia IOs are always quoted net
+    # Sponsorship section (9/2026+ IOs): '15s Spots' / 'OBB & CBB' rows below the TVC
+    # grid. NOT auto-entered — surfaced at gather for explicit manual-entry confirm.
+    sponsorship: Optional[dict] = None
     
     def get_estimate_number(self) -> str:
         """
@@ -392,6 +395,32 @@ def parse_admerasia_pdf(pdf_path: str, time_overrides: dict = None) -> Admerasia
             for n in xcheck_notes:
                 print(f"   - {n}")
 
+        # Sponsorship section (9/2026+): not TVC airtime — carried on the order for
+        # the gather's explicit confirm, and reconciled against the IO's own counters
+        # so skipping it can never silently drop spots or money.
+        sponsorship = _extract_sponsorship(pdf_path)
+        if sponsorship:
+            tvc_printed = sum(vl.printed_total for vl in vis.lines)
+            total_tvc = sponsorship.get("total_tvc")
+            if total_tvc is not None and tvc_printed != total_tvc:
+                raise AdmerasiaVisionError(
+                    f"TVC rows sum to {tvc_printed} spots but the order prints "
+                    f"Total TVC spots {total_tvc}. Manual review required."
+                )
+            sp_rows = sum(r["spots"] or 0 for r in sponsorship["rows"])
+            sp_total = sponsorship.get("sponsorship_spots")
+            if sp_total is not None and sp_rows != sp_total:
+                raise AdmerasiaVisionError(
+                    f"Sponsorship rows sum to {sp_rows} spots but the order prints "
+                    f"Sponsorship Spots {sp_total}. Manual review required."
+                )
+            grand = sponsorship.get("total_spots")
+            if None not in (grand, total_tvc, sp_total) and grand != total_tvc + sp_total:
+                raise AdmerasiaVisionError(
+                    f"Total spots {grand} != TVC {total_tvc} + Sponsorship {sp_total}. "
+                    "Manual review required."
+                )
+
         # Alignment guardrail: the scheduler maps grid column i to
         # (campaign_start + i days), so the first grid column must be the campaign
         # start date — otherwise every day-of-week label would shift.
@@ -444,13 +473,120 @@ def parse_admerasia_pdf(pdf_path: str, time_overrides: dict = None) -> Admerasia
             markets=markets,
             language=language,
             lines=lines,
-            week_start_dates=week_start_dates
+            week_start_dates=week_start_dates,
+            sponsorship=sponsorship,
         )
         
         # Vestigial (vision needs no time overrides); kept for signature compat.
         order._time_overrides = time_overrides or {}
 
         return order
+
+
+def _extract_sponsorship(pdf_path: str) -> Optional[dict]:
+    """Read the Sponsorship section the 9/2026 McDonald's IOs append below the TVC
+    grid: a '15s Spots' row (no cost — the spots ride the sponsorship) and an
+    'OBB & CBB' package row (one package price), plus the counters 'Sponsorship
+    Spots' / 'Total TVC spots' / 'Total spots'. These rows are NOT TVC airtime:
+    the positional reader stops above them (admerasia_positional.sponsorship_top)
+    and entry skips them only after an explicit operator confirm — this reads the
+    section's own printed numbers so the skip reconciles, never silently."""
+    try:
+        from .admerasia_positional import SPOT_Y_TOL
+    except ImportError:
+        from admerasia_positional import SPOT_Y_TOL
+    with pdfplumber.open(pdf_path) as pdf:
+        words = pdf.pages[0].extract_words(y_tolerance=SPOT_Y_TOL)
+
+    by_line: Dict[int, list] = {}
+    for w in words:
+        by_line.setdefault(round(w["top"]), []).append(w)
+
+    # Match by phrase CONTAINMENT, not startswith — unrelated text can share the
+    # visual line (the red '* If the program has changed...' footnote prints at the
+    # same y as 'Sponsorship Spots' on the Chinese IO). Counter labels vary per IO:
+    # Chinese prints 'Total TVC spots', Vietnamese 'Total Regular Spots'.
+    label_rows: List[tuple] = []  # (label, top)
+    counters: List[tuple] = []    # (key, top)
+    for ws in by_line.values():
+        txt = " ".join(x["text"] for x in sorted(ws, key=lambda x: x["x0"])).lower()
+        top = min(x["top"] for x in ws)
+        if "15s spots" in txt:
+            label_rows.append(("15s Spots", top))
+        elif "obb & cbb" in txt:
+            label_rows.append(("OBB & CBB", top))
+        elif "sponsorship spots" in txt:
+            counters.append(("sponsorship_spots", top))
+        elif "total tvc spot" in txt or "total regular spot" in txt:
+            counters.append(("total_tvc", top))
+        elif "total spot" in txt:
+            counters.append(("total_spots", top))
+    if not label_rows:
+        return None
+
+    # Total Spots column values (x≈676); costs live at x≥705 ('$' '1' ',281.00' pieces).
+    spot_col = [w for w in words if w["text"].isdigit() and 650 < w["x0"] < 705]
+
+    def _nearest_count(top: float, tol: float) -> Optional[int]:
+        best = min(spot_col, key=lambda w: abs(w["top"] - top), default=None)
+        return int(best["text"]) if best is not None and abs(best["top"] - top) < tol else None
+
+    rows = []
+    for label, top in sorted(label_rows, key=lambda r: r[1]):
+        cost_ws = sorted(
+            (w for w in words if w["x0"] >= 705 and abs(w["top"] - top) < 2.2),
+            key=lambda w: w["x0"],
+        )
+        cost_txt = "".join(w["text"] for w in cost_ws).replace("$", "").replace(",", "")
+        drange = "".join(
+            w["text"]
+            for w in sorted(
+                (w for w in words if 350 < w["x0"] < 415 and abs(w["top"] - top) < 2.2),
+                key=lambda w: w["x0"],
+            )
+        )
+        rows.append(
+            {
+                "label": label,
+                "spots": _nearest_count(top, 2.2),
+                "cost": str(Decimal(cost_txt)) if cost_txt else None,
+                "date_range": drange or None,
+            }
+        )
+    # The Vietnamese layout prints the package cost + date range ONCE, in a merged
+    # cell vertically centred BETWEEN the two label rows — attach those at block
+    # level when no individual row claimed them.
+    blk_lo = min(t for _, t in label_rows) - 2.2
+    blk_hi = max(t for _, t in label_rows) + 6.0
+    out: dict = {"rows": rows}
+    if not any(r["cost"] for r in rows):
+        cost_txt = "".join(
+            w["text"]
+            for w in sorted(
+                (w for w in words if w["x0"] >= 705 and blk_lo < w["top"] < blk_hi),
+                key=lambda w: (w["top"], w["x0"]),
+            )
+        ).replace("$", "").replace(",", "")
+        if cost_txt:
+            out["cost"] = str(Decimal(cost_txt))
+    if not any(r["date_range"] for r in rows):
+        drange = "".join(
+            w["text"]
+            for w in sorted(
+                (w for w in words if 350 < w["x0"] < 415 and blk_lo < w["top"] < blk_hi),
+                key=lambda w: (w["top"], w["x0"]),
+            )
+        )
+        if drange:
+            out["date_range"] = drange
+    # First non-None wins: containment also matches the grid's own 'Total Spots'
+    # COLUMN HEADER line, whose lookup finds no value — it must not block the real
+    # counter further down the page.
+    for key, top in counters:
+        val = _nearest_count(top, 3.0)
+        if val is not None and key not in out:
+            out[key] = val
+    return out
 
 
 def _find_broadcast_table(tables: list) -> tuple:
