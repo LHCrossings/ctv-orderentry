@@ -57,6 +57,11 @@
       background: var(--bg-secondary); border: 1px solid var(--border-color);
       border-radius: 6px; overflow: hidden;
     }
+    /* Alternate card shading + a left stripe so the eye can tell where one invoice
+       ends and the next begins while scrolling step 3 (Lee 2026-09-01). */
+    .file-list .file-card:nth-child(odd)  { border-left: 4px solid var(--accent-primary); }
+    .file-list .file-card:nth-child(even) { border-left: 4px solid var(--nord10, var(--border-color)); background: var(--bg-primary); }
+    .file-list .file-card:nth-child(even) .file-card-header { background: var(--bg-secondary); }
     .file-card-header {
       display: flex; align-items: center; gap: .75rem; padding: .7rem 1rem;
       border-bottom: 1px solid var(--border-color);
