@@ -107,6 +107,17 @@
     .badge.amber { background: rgba(208,135,112,.16); color: #b35c3e; }
     .badge.red   { background: rgba(191,97,106,.16); color: var(--accent-danger); cursor: pointer; }
     .badge.gray  { background: var(--bg-primary); color: var(--text-secondary); border: 1px solid var(--border-color); }
+
+    .recon-summary {
+      display: none; align-items: center; gap: .75rem; flex-wrap: wrap;
+      margin: -.5rem 0 1.25rem; padding: .6rem .9rem; border-radius: 6px;
+      font-size: .9rem; font-weight: 600; border: 1px solid var(--border-color);
+      background: var(--bg-secondary); color: var(--text-primary);
+    }
+    .recon-summary.show { display: flex; }
+    .recon-summary.all-ok   { background: rgba(45,106,79,.10);  border-color: rgba(45,106,79,.35);  color: #2d6a4f; }
+    .recon-summary.has-bad  { background: rgba(191,97,106,.10); border-color: rgba(191,97,106,.35); color: var(--accent-danger); }
+    .recon-summary .badge { font-size: .8rem; }
     .match-badge { font-size: .75rem; font-weight: 600; }
     .match-badge.ok   { color: #2d6a4f; }
     .match-badge.warn { color: #d08770; }
@@ -161,6 +172,7 @@
     <h1>Monthly EDI Billing</h1>
     <p>Drop the month's affidavit PDFs → fetch post logs → verify → export the EDI ZIP.</p>
   </div>
+  <div class="recon-summary" id="recon-summary"></div>
 
   <!-- Step 1: intake -->
   <div class="step">
@@ -340,7 +352,37 @@ function rowExportable(r) {
   return recOk && !r.has_errors && r.csv_filename && r.suggested_template;
 }
 
+function renderSummary() {
+  const el = $('recon-summary');
+  const n = rows.length;
+  if (!n) { el.className = 'recon-summary'; el.innerHTML = ''; return; }
+  const st = r => (r.reconcile && r.reconcile.status) || 'missing';
+  const match    = rows.filter(r => st(r) === 'match').length;
+  const rounding = rows.filter(r => st(r) === 'rounding').length;
+  const mismatch = rows.filter(r => st(r) === 'mismatch').length;
+  const pending  = n - match - rounding - mismatch;
+  const reconciled = match + rounding;
+  const roundNote = rounding ? ` <span class="badge amber">🟡 ${rounding} within rounding</span>` : '';
+  let cls, html;
+  if (pending) {
+    cls = '';
+    html = `⏳ ${pending} of ${n} awaiting post logs` +
+           (reconciled ? ` <span class="badge green">🟢 ${reconciled} reconciled</span>` : '') +
+           (mismatch ? ` <span class="badge red">🔴 ${mismatch} mismatch</span>` : '');
+  } else if (!mismatch) {
+    cls = 'all-ok';
+    html = `✅ All ${n} invoice${n === 1 ? '' : 's'} reconciled${roundNote}`;
+  } else {
+    cls = 'has-bad';
+    html = `🔴 ${mismatch} of ${n} do not reconcile` +
+           ` <span class="badge green">🟢 ${reconciled} reconciled</span>${roundNote}`;
+  }
+  el.className = 'recon-summary show ' + cls;
+  el.innerHTML = html;
+}
+
 function renderRows() {
+  renderSummary();
   const el = $('row-list');
   if (!rows.length) { el.innerHTML = '<div class="empty">Drop PDFs to begin.</div>'; updateExportBtn(); return; }
   el.innerHTML = rows.map((r, idx) => {
