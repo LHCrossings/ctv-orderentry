@@ -525,7 +525,15 @@ def _bo_classify(
     prev_label: str,
     prev_contract: str = "",
     contract: str = "",
+    linked_to=None,
+    prev_line_id=None,
 ):
+    # 'COMS' is what the scheduler has written for every spot that has no asset
+    # yet since 2026-04 (it becomes 'COM' when traffic is assigned). Left unmapped
+    # it fell through to priority 0 = FIXED, which split breaks at every
+    # unassigned spot and dropped the :15 of a linked billboard pair (SEA 9/22).
+    if newtype == "COMS":
+        newtype = "COM"
     if capo and fine:
         return 1, "BOOKEND"
     if capo and not fine:
@@ -533,8 +541,11 @@ def _bo_classify(
     if (
         prev_label == "BILLBOARD"
         and newtype in ("COM", "BNS")
-        and contract
-        and contract == prev_contract
+        and (
+            # Etere's linked spot: this line names the billboard's line
+            (linked_to and prev_line_id and int(linked_to) == int(prev_line_id))
+            or (contract and contract == prev_contract)
+        )
     ):
         return 3, "COMPANION"
     if newtype in ("COM", "BNS") and not is_wl:
@@ -901,7 +912,7 @@ def _bo_fetch_sep_context(cur, market_id: int, date: str, from_frames: int, to_f
         " LEFT JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe"
         " LEFT JOIN CONTRATTITESTATA ct ON ct.ID_CONTRATTITESTATA = tp.ID_CONTRATTITESTATA"
         " WHERE t.DATA = %s AND t.COD_USER = %d"
-        " AND t.NEWTYPE IN ('COM', 'BNS')"
+        " AND t.NEWTYPE IN ('COM', 'COMS', 'BNS')"
         " AND t.ORA >= %d AND t.ORA < %d"
         " AND t.LIVELLO = 0",
         (date, market_id, ext_from, ext_to),
@@ -1063,7 +1074,8 @@ def _bo_process_market(
     # so it identifies spots pulled up from later shows' breaks.
     cur.execute(
         "SELECT t.ID_TPALINSE, t.ORA, t.XORDER, t.TITLE, t.COD_PROGRA, t.NEWTYPE, t.DURATION,"
-        " cr.CONTROLLACAPOFILA, cr.CONTROLLAFINEFILA, ct.COD_CONTRATTO, tp.Offset AS TP_OFFSET"
+        " cr.CONTROLLACAPOFILA, cr.CONTROLLAFINEFILA, ct.COD_CONTRATTO, tp.Offset AS TP_OFFSET,"
+        " cr.ID_CONTRATTIRIGHE AS LINE_ID, cr.IDLINKEDSPOTSCHEDPOS AS LINKED_TO"
         " FROM TPALINSE t"
         " LEFT JOIN trafficTPalinse tp ON tp.ID_TPalinse = t.ID_TPALINSE"
         " LEFT JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe"
@@ -1076,7 +1088,7 @@ def _bo_process_market(
     )
     rows = cur.fetchall()
 
-    prev_label, prev_contract = None, ""
+    prev_label, prev_contract, prev_line_id = None, "", None
     annotated = []
     for r in rows:
         nt = (r["NEWTYPE"] or "").strip()
@@ -1090,8 +1102,10 @@ def _bo_process_market(
             prev_label,
             prev_contract,
             contract,
+            linked_to=r.get("LINKED_TO"),
+            prev_line_id=prev_line_id,
         )
-        prev_label, prev_contract = label, contract
+        prev_label, prev_contract, prev_line_id = label, contract, r.get("LINE_ID")
         toff = r.get("TP_OFFSET")
         annotated.append(
             {
@@ -1741,7 +1755,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 g["_last_ora"] = r["ORA"]
                 g["to"] = _offair_ampm(r["ORA"])
                 g["ids"].append(r["id"])
-                is_com = (r["NEWTYPE"] or "").strip().upper() in ("COM", "BNS", "TRD")
+                is_com = (r["NEWTYPE"] or "").strip().upper() in ("COM", "COMS", "BNS", "TRD")
                 if is_com:
                     g["n_com"] += 1
                     if r["client_name"]:
