@@ -4,6 +4,38 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Row Binds to a FILE NAME, Not a Code — Every Placement Path Must Rebind From FILE_ID (NYC aired black)
+
+**Session:** NYC 9/2/2026 06:00 Phoenix Evening Express black for 18 minutes; DAL rebound with
+minutes to spare; 98 future rows across all markets carried the same bad binding
+
+**Rule:** `TPALINSE.SUPPORTO` must equal `prefix + FS_FILMATI.FILE_ID` — that is what the CIB
+opens. Etere's `sch_UpdateSupportAndProperties` builds it from `COD_PROGRA`. The two are
+identical until our **rename-programming** tool gives an asset its schedule code
+(`CD-TeresaTeng03-0119A` → `CD-TERESATENG03-090226A`, `PH-EVENINGEXP090226A` → `…090126A`);
+from then on every Daily Programming placement of that asset points at a file that does not
+exist. The nightly aligner rewrites some rows before air (CMP/HOU/MMT/SFO/SEA/LAX played) and
+not others (NYC/WDC/CVC/DAL), so the failure looks random and market-specific. It is neither.
+The 7/22 PI lesson and the 8/28 Finish lesson had already said "bind from FILE_ID" — Finish
+got the guard, Daily Programming (10 SP call sites) did not. **A lesson applied to one
+placement path is not applied.** `_bind_supporto()` now follows every SP call in
+`daily_programming_run.py`; the rename tool rebinds the asset's unaired rows;
+`scripts/check_bindings.py [--fix]` reports/rebinds mismatches for the days ahead.
+
+**How to apply:**
+1. Any code that inserts or re-points a TPALINSE row calls `_bind_supporto(cur, id, filmati)`
+   right after `sch_UpdateSupportAndProperties`. Grep for the SP name when adding a path.
+2. Diagnosing "black on air / red X" on one market while the same file plays elsewhere:
+   compare `RTRIM(SUPPORTO)` with `'0ETX      ' + FILE_ID` for the row BEFORE looking at
+   files, checksums or servers. The as-run log (`au64…asrun.log`, status X) prints the
+   binding the AU actually tried.
+3. Run `scripts/check_bindings.py` after any rename-programming batch and before a Daily
+   Programming day is published; zero rows is the only acceptable output.
+4. Where the AU logs live on a CIB: `C:\Users\usrcib<N>\AppData\Local\Etere\Log\user.<channel>\`
+   (channel 001 = NYC and 008 = WDC both on CIB1). `Program Files (x86)\Etere\Logs` is dead.
+
+---
+
 ## The Yellow Triangle Is NOT (Only) the Checksum — Diff the Flagged Row Against the SAME Asset in a Clean Market
 
 **Session:** Finish on CVC 9/2 left triangles everywhere — Lee: "I don't think your findings are entirely correct" (2026-09-01)
