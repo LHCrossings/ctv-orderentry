@@ -150,3 +150,103 @@ def test_comment_over_130_is_error():
     inv = dict(GOOD_INV, comment_top="x" * 131)
     errs = _errors(validate_invoice(GOOD_TEMPLATE, inv, GOOD_SPOTS))
     assert any(e["field"] == "comment_top" for e in errs)
+
+
+# ── R34 commission from affidavit net (Lee, 2026-09-02) ─────────────────────
+# TVInvoices carries 2-decimal rates, so the EDI gross drifts from our
+# affidavit gross; the commission (a dollar field) absorbs the drift so the
+# EDI net equals our invoice to the penny.
+
+from pathlib import Path
+
+from business_logic.services.edi_billing import (
+    commission_plan,
+    generate_edi,
+    parse_affidavit,
+)
+
+_FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "edi"
+
+
+def test_commission_plan_2606_042_absorbs_rate_drift():
+    # EDI gross 56 × $117.65 = $6,588.40; our net $5,600.00
+    plan = commission_plan(658840, 112, 15.0, 560000)
+    assert plan["mode"] == "net"
+    assert plan["commission"] == 98840  # not the 15% figure 98826
+    assert plan["pct_commission"] == 98826
+    assert plan["net"] == 560000
+    assert plan["delta_cents"] == 14
+
+
+def test_commission_plan_2605_054():
+    plan = commission_plan(329420, 56, 15.0, 280000)
+    assert plan["mode"] == "net"
+    assert (plan["commission"], plan["net"]) == (49420, 280000)
+
+
+def test_commission_plan_without_net_is_plain_percentage():
+    plan = commission_plan(447500, 239, 15.0)
+    assert plan["mode"] == "pct"
+    assert (plan["commission"], plan["net"]) == (67125, 380375)
+
+
+def test_commission_plan_beyond_rounding_falls_back():
+    # 2 spots: a $1.00 gap cannot be rate rounding (max 2 × $0.005)
+    plan = commission_plan(20000, 2, 15.0, 16900)
+    assert plan["mode"] == "pct-fallback"
+    assert plan["commission"] == 3000  # percentage, not 3100
+    assert plan["net"] == 17000
+
+
+def test_r34_uses_affidavit_net():
+    spots = [dict(GOOD_SPOTS[0]) for _ in range(56)]
+    inv = {**GOOD_INV, "gross_cents": 658840, "spot_count": 112, "net_cents": 560000}
+    r34 = next(
+        ln for ln in generate_edi(GOOD_TEMPLATE, inv, spots).splitlines() if ln.startswith("34;")
+    )
+    assert r34 == "34;;658840;98840;560000;;;;;;;;112;;;;"
+
+
+def test_r34_without_net_unchanged():
+    inv = {**GOOD_INV, "gross_cents": 447500, "spot_count": 239}
+    r34 = next(
+        ln
+        for ln in generate_edi(GOOD_TEMPLATE, inv, GOOD_SPOTS).splitlines()
+        if ln.startswith("34;")
+    )
+    assert r34 == "34;;447500;67125;380375;;;;;;;;239;;;;"
+
+
+def test_validate_warns_when_net_override_out_of_tolerance():
+    inv = {**GOOD_INV, "gross_cents": 11765, "spot_count": 1, "net_cents": 9000}
+    issues = validate_invoice(GOOD_TEMPLATE, inv, GOOD_SPOTS)
+    assert [i for i in issues if i["field"] == "commission" and i["level"] == "warn"]
+    assert not _errors(issues)
+
+
+def test_validate_silent_when_net_override_is_rounding_sized():
+    inv = {**GOOD_INV, "gross_cents": 11765, "spot_count": 1, "net_cents": 10000}
+    issues = validate_invoice(GOOD_TEMPLATE, inv, GOOD_SPOTS)
+    assert not [i for i in issues if i["field"] == "commission"]
+
+
+def test_net_due_regex_survives_split_digits():
+    # Real June affidavits: the renderer drops a space into the figure.
+    from business_logic.services.edi_billing import _NET_DUE_RE, _money
+
+    for line, want in [
+        ("Net Amount Due $ 3 ,803.75", 3803.75),
+        ("Net Amount Due $ 9 99.94", 999.94),
+        ("Net Amount Due $ 8 ,478.75", 8478.75),
+        ("Net Amount Due $ 5,600.00", 5600.00),
+    ]:
+        assert _money(_NET_DUE_RE.search(line).group(1)) == want
+
+
+def test_parse_affidavit_reads_commission_and_net(real_pdfplumber):
+    a = parse_affidavit((_FIXTURES / "2606-042_affidavit.pdf").read_bytes(), source="fixture")
+    assert a.invoice_id == "2606-042"
+    assert a.total_spots == 112
+    assert a.gross_amount == 6588.24
+    assert a.commission_amount == 988.24
+    assert a.net_amount == 5600.00

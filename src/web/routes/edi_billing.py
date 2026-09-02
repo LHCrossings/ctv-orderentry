@@ -29,6 +29,7 @@ from business_logic.services.edi_billing import (
 from business_logic.services.edi_billing import (
     all_templates,
     broadcast_month_range,
+    commission_plan,
     diff_pdf_csv,
     fetch_postlog_reports,
     generate_edi,
@@ -128,6 +129,8 @@ def _assemble_rows() -> list[dict]:
             advertiser = a.advertiser
             row["pdf_spots"] = a.total_spots
             row["pdf_gross"] = a.gross_amount
+            row["pdf_commission"] = a.commission_amount
+            row["pdf_net"] = a.net_amount
 
         # --- post-log side ---
         d = None
@@ -207,6 +210,9 @@ def _assemble_rows() -> list[dict]:
                 v = getattr(a, f_)
                 if v:
                     inv[f_] = v
+            if a.net_amount is not None:
+                # R34 commission = EDI gross − this net, so the EDI net equals our invoice
+                inv["net_cents"] = int(round(a.net_amount * 100))
         # comment_top precedence: PDF comment box → template per-market map →
         # template default (e.g. H&L CVC/SFO always carry their market comment)
         if not inv.get("comment_top") and m.name:
@@ -219,6 +225,17 @@ def _assemble_rows() -> list[dict]:
 
         # --- validation (with the suggested template if any) ---
         tmpl = next((t for t in tmpl_list if t["name"] == m.name), None)
+        # What R34 will carry — shown on the row so Lee sees the upload figures
+        row["commission"] = (
+            commission_plan(
+                d.gross_cents,
+                d.spot_count,
+                float((tmpl or {}).get("commission_pct", 15.0)),
+                inv.get("net_cents"),
+            )
+            if d
+            else None
+        )
         row["issues"] = validate_invoice(tmpl or {}, inv, d.spots if d else [])
         row["has_errors"] = any(i["level"] == "error" for i in row["issues"])
         rows.append(row)
@@ -359,6 +376,9 @@ def build_edi_billing_router(jinja: Jinja2Templates) -> APIRouter:
             d = parse_postlog_csv((INCOMING / csv_fn).read_bytes(), csv_fn)
             inv.setdefault("spot_count", d.spot_count)
             inv.setdefault("gross_cents", d.gross_cents)
+            # The R34 net override comes from the paired affidavit below —
+            # never from the browser.
+            inv.pop("net_cents", None)
             inv.setdefault("bcast_start", d.bcast_start)
             inv.setdefault("bcast_end", d.bcast_end)
 
@@ -377,6 +397,8 @@ def build_edi_billing_router(jinja: Jinja2Templates) -> APIRouter:
             pair = _pairs().get(m.group(1)) if m else None
             if pair and pair["pdf"]:
                 a = parse_affidavit((INCOMING / pair["pdf"]).read_bytes(), source=pair["pdf"])
+                if a.net_amount is not None:
+                    inv["net_cents"] = int(round(a.net_amount * 100))
                 rec = reconcile_status(
                     a.total_spots,
                     a.gross_amount,

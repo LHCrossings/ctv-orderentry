@@ -289,6 +289,20 @@ function reconcileBadge(r) {
   return `<span class="badge gray" title="${rec.detail}">⏳ ${rec.detail || 'pending'}</span>`;
 }
 
+// R34 figures as they will upload. When the affidavit net is known the
+// commission absorbs the 2-decimal rate drift so the EDI net equals our invoice.
+function commissionNote(r) {
+  const c = r.commission;
+  if (!c || c.mode === 'pct') return '';
+  const cents = v => fmt_dollars(v / 100);
+  if (c.mode === 'net') {
+    const sign = c.delta_cents >= 0 ? '+' : '−';
+    const aff = r.pdf_commission != null ? `, affidavit ${fmt_dollars(r.pdf_commission)}` : '';
+    return ` · EDI commission ${cents(c.commission)} (${sign}${cents(Math.abs(c.delta_cents))}${aff}) → net ${cents(c.net)} ✓`;
+  }
+  return ` · EDI net ${cents(c.net)} ≠ our ${fmt_dollars(r.pdf_net)} — see warning`;
+}
+
 function matchBadge(r) {
   const conf = r.match_confidence;
   const cust = r.etere_customer_name ? ` (${r.etere_customer_name})` : '';
@@ -322,7 +336,7 @@ function renderRows() {
         <input type="checkbox" class="row-select" ${exportable ? '' : 'disabled'}/>
         <span class="inv-num">${r.invoice_number}</span>
         ${reconcileBadge(r)}
-        <span class="meta">affidavit ${r.pdf_spots ?? '—'} / ${fmt_dollars(r.pdf_gross)} · post-log ${r.csv_spots ?? '—'} / ${fmt_dollars(r.csv_gross)}</span>
+        <span class="meta">affidavit ${r.pdf_spots ?? '—'} / ${fmt_dollars(r.pdf_gross)} · post-log ${r.csv_spots ?? '—'} / ${fmt_dollars(r.csv_gross)}${commissionNote(r)}</span>
         <span style="margin-left:auto"></span>
         ${matchBadge(r)}
       </div>

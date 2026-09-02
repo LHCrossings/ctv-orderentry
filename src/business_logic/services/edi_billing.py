@@ -35,6 +35,19 @@ INCOMING_DIR = _BASE / "incoming" / "EDI"
 # ---------------------------------------------------------------------------
 
 _SUBTOTAL_RE = re.compile(r"COPY LIST Subtotals\s+(\d+)\s+\$\s*([\d,]+\.?\d*)")
+# Affidavit summary block: "Agency Commission 15% $ 988.24" / "Net Amount Due $ 5,600.00".
+# The net is what we actually bill (QuickBooks invoice) — the EDI R34 must land on it.
+# The renderer sometimes drops a space into the figure ("$ 3 ,803.75",
+# "$ 9 99.94"), so accept spaces/commas up to the cents and strip them.
+_COMMISSION_RE = re.compile(r"Agency Commission\s+[\d.]+\s*%\s+\$\s*(\d[\d, ]*\.\d{2})")
+_NET_DUE_RE = re.compile(r"Net Amount Due\s+\$\s*(\d[\d, ]*\.\d{2})")
+
+
+def _money(text: str) -> float:
+    """'3 ,803.75' → 3803.75 (spaces and thousands separators removed)."""
+    return round(float(text.replace(",", "").replace(" ", "")), 2)
+
+
 _ROW_RE = re.compile(
     r"^\d{1,2}/\d{1,2}/\d{2,4}"
     r"\s+\w+"
@@ -57,6 +70,8 @@ class AffidavitData:
     market: str = ""
     total_spots: int | None = None
     gross_amount: float | None = None
+    commission_amount: float | None = None  # the affidavit's printed 15% line (display only)
+    net_amount: float | None = None  # "Net Amount Due" — what our invoice bills
     rep_order_number: str = ""
     agency_ad_code: str = ""
     agency_prod_code: str = ""
@@ -108,6 +123,10 @@ def parse_affidavit(pdf_bytes: bytes, source: str = "") -> AffidavitData:
             if sub_m := _SUBTOTAL_RE.search(text):
                 total_spots = int(sub_m.group(1))
                 gross_amount = float(sub_m.group(2).replace(",", ""))
+            if c_m := _COMMISSION_RE.search(text):
+                out.commission_amount = _money(c_m.group(1))
+            if n_m := _NET_DUE_RE.search(text):
+                out.net_amount = _money(n_m.group(1))
             for line in text.splitlines():
                 if row_m := _ROW_RE.match(line.strip()):
                     cnt = int(row_m.group(1))
@@ -366,15 +385,58 @@ def _r51(spot: dict) -> str:
     return ";".join(f) + ";"
 
 
-def _r34(t: dict, gross: int, spot_count: int) -> str:
+def commission_plan(
+    gross_cents: int, spot_count: int, pct: float, net_cents: int | None = None
+) -> dict:
+    """
+    Decide the R34 commission for one invoice.
+
+    TVInvoices carries spot rates to 2 decimals, so the EDI gross (sum of the
+    rounded R51 rates) drifts from our affidavit gross, which sums the
+    full-precision gross-up rates. We cannot change the per-spot rates, but
+    R34 takes the commission in DOLLARS and only requires gross − commission
+    = net. So when the affidavit net is known, commission = EDI gross − our
+    net, and the EDI net matches our invoice to the penny (Lee, 2026-09-02).
+
+    The override is applied only when it is rounding-sized: the difference
+    from the plain percentage must be within spot_count × $0.005 — the same
+    bound reconcile_status() uses for its 'rounding' badge. Beyond that the
+    gap is a real mismatch, so fall back to the percentage and let the caller
+    warn — never invent a large commission delta silently.
+
+    Returns {commission, net, pct_commission, mode, delta_cents, tolerance_cents}
+    with mode 'net' (override applied), 'pct' (no net known), or
+    'pct-fallback' (net known but out of tolerance). All money in cents.
+    """
+    pct_comm = int(round(gross_cents * pct / 100))
+    plan = {
+        "pct_commission": pct_comm,
+        "commission": pct_comm,
+        "net": gross_cents - pct_comm,
+        "mode": "pct",
+        "delta_cents": 0,
+        "tolerance_cents": max(1, int(round(spot_count * 0.5))),
+    }
+    if net_cents is None:
+        return plan
+    comm = gross_cents - int(net_cents)
+    delta = comm - pct_comm
+    plan["delta_cents"] = delta
+    if abs(delta) <= spot_count * 0.5:
+        plan.update(commission=comm, net=int(net_cents), mode="net")
+    else:
+        plan["mode"] = "pct-fallback"
+    return plan
+
+
+def _r34(t: dict, gross: int, spot_count: int, net_cents: int | None = None) -> str:
     pct = float(t.get("commission_pct", 15.0))
-    comm = int(round(gross * pct / 100))
-    net = gross - comm
+    plan = commission_plan(gross, spot_count, pct, net_cents)
     f = _pad([], 16)
     f[0] = "34"
     f[2] = str(gross)
-    f[3] = str(comm)
-    f[4] = str(net)
+    f[3] = str(plan["commission"])
+    f[4] = str(plan["net"])
     f[12] = str(spot_count)
     return ";".join(f) + ";"
 
@@ -394,7 +456,7 @@ def generate_edi(template: dict, inv: dict, spots: list[dict]) -> str:
     for spot in spots:
         lines.append(_r51(spot))
     lines.extend(_r33_lines(inv))
-    lines.append(_r34(template, gross, count))
+    lines.append(_r34(template, gross, count, inv.get("net_cents")))
     lines.append(f"12;1;{gross};")
     return "\n".join(lines)
 
@@ -771,6 +833,23 @@ def validate_invoice(template: dict, inv: dict, spots: list[dict]) -> list[dict]
         "comment_bottom_4",
     ):
         _maxlen(f_, str(inv.get(f_, "") or ""), 130)
+
+    # Commission: the affidavit-net override must be rounding-sized
+    if inv.get("net_cents") is not None:
+        gross = int(inv.get("gross_cents") or sum(s.get("rate_cents", 0) for s in spots))
+        count = int(inv.get("spot_count") or len(spots))
+        plan = commission_plan(
+            gross, count, float(template.get("commission_pct", 15.0)), int(inv["net_cents"])
+        )
+        if plan["mode"] == "pct-fallback":
+            warn(
+                "commission",
+                f"affidavit net ${int(inv['net_cents']) / 100:,.2f} is "
+                f"${abs(plan['delta_cents']) / 100:,.2f} from the "
+                f"{template.get('commission_pct', 15.0)}% figure — beyond rounding "
+                f"(max ${plan['tolerance_cents'] / 100:,.2f}); R34 falls back to the "
+                f"percentage and the EDI net will NOT match our invoice",
+            )
 
     # Spots (R51) — at least one required
     if not spots:

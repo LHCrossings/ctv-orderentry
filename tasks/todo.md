@@ -1,4 +1,4 @@
-# EDI R34 commission = EDI gross − affidavit net (2026-09-02) — awaiting Lee's go
+# ✅ DONE — EDI R34 commission = EDI gross − affidavit net (2026-09-02)
 
 Lee: TVInvoices only carries 2-decimal spot rates, so the EDI gross drifts from our affidavit
 gross (fractional-cent gross-up rates). We cannot change the R51 rates, but R34 takes the
@@ -8,20 +8,26 @@ equals our invoice to the penny. Only the commission differs from the affidavit'
 Evidence: 2606-042 EDI gross 6,588.40 / 15% 988.26 / net 5,600.14 vs our net 5,600.00 →
 commission must be 988.40. 2605-054: 3,294.20 / 494.13 / 2,800.07 vs 2,800.00 → 494.20.
 
-- [ ] `parse_affidavit`: capture `Net Amount Due $ X` → `AffidavitData.net_amount` and
+- [x] `parse_affidavit`: capture `Net Amount Due $ X` → `AffidavitData.net_amount` and
       `Agency Commission 15% $ Y` → `commission_amount` (display only).
-- [ ] `_r34(t, gross, count, net_cents=None)`: when `net_cents` given → comm = gross − net_cents;
+- [x] `_r34(t, gross, count, net_cents=None)`: when `net_cents` given → comm = gross − net_cents;
       else today's round(gross × pct). Guard: only apply when |comm − pct-based| ≤ spot_count × 1¢
       (same tolerance family as the 'rounding' reconcile badge); beyond that fall back to pct and
       raise a validation WARN — never invent a large commission delta silently.
-- [ ] Export route: recompute `net_cents` server-side from the paired affidavit (like the reconcile
+- [x] Export route: recompute `net_cents` server-side from the paired affidavit (like the reconcile
       gate), never trust the client. `generate_edi` reads `inv["net_cents"]`.
-- [ ] Row assembly + billing.html: show "EDI commission $988.40 (affidavit $988.24, +$0.16) → net
+- [x] Row assembly + billing.html: show "EDI commission $988.40 (affidavit $988.24, +$0.16) → net
       $5,600.00 ✓" in the rounding badge detail so Lee sees what will be uploaded.
-- [ ] Tests: unit test on _r34 (override, guard, fallback); goldens 2606-009/016/058 must stay
+- [x] Tests: unit test on _r34 (override, guard, fallback); goldens 2606-009/016/058 must stay
       byte-identical (their 15% is exact, no net override in the fixture → unchanged); add
       2606-042 affidavit as a parse fixture (net 5,600.00, commission 988.24).
-- [ ] ruff clean, commit, push. Windows repo pulls (Lee).
+- [x] ruff clean, commit, push. Windows repo pulls (Lee).
+
+**Review:** live June batch (15 rows) re-assembled: 14 rows delta 0¢ (exact 15% already),
+only 2606-042 changes → R34 `658840;98840;560000` = net $5,600.00. Goldens byte-identical.
+Found + fixed on the way: the affidavit renderer splits digits in the summary figure
+(`$ 3 ,803.75`, `$ 9 99.94`) — regex accepts spaces up to the cents; the guard had correctly
+refused those three rows while the parse was wrong (fallback to 15% + amber warning).
 
 ---
 
