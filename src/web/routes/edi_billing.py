@@ -300,6 +300,23 @@ def build_edi_billing_router(jinja: Jinja2Templates) -> APIRouter:
             saved.append({"filename": name, "invoice_id": inv_id, "contract_no": a.contract_no})
         return {"saved": saved, "errors": errors}
 
+    # ── Clear the month (deliberate button; confirmed client-side) ────────
+    @router.post("/clear")
+    async def clear_incoming():
+        """Delete every file directly inside incoming/EDI so a new month starts clean.
+
+        Only regular files at the top level are removed; sub-directories are left alone.
+        """
+        if not INCOMING.exists():
+            return {"deleted": 0, "names": []}
+        names = []
+        for f in sorted(INCOMING.iterdir()):
+            if f.is_file():
+                f.unlink()
+                names.append(f.name)
+        logger.info("EDI incoming cleared: %d file(s)", len(names))
+        return {"deleted": len(names), "names": names}
+
     # ── Fetch post logs (deliberate button; ONE Etere session) ────────────
     @router.post("/fetch")
     async def fetch(request: Request):
