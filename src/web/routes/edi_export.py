@@ -202,12 +202,14 @@ def build_edi_export_router(jinja: Jinja2Templates) -> APIRouter:
             info["match_detail"] = m.detail
             info["etere_customer_id"] = cust["customer_id"] if cust else None
             info["etere_customer_name"] = cust["customer_name"] if cust else ""
-            # Apply market-based comment_top from template if not already set
-            if not info.get("comment_top") and market:
+            # comment_top precedence (same as /edi/billing): PDF comment box →
+            # template per-market map → template default
+            if not info.get("comment_top") and info.get("suggested_template"):
                 tmpl = next((t for t in tmpl_list if t["name"] == info["suggested_template"]), {})
                 by_mkt = tmpl.get("comment_top_by_market", {})
-                if market in by_mkt:
-                    info["comment_top"] = by_mkt[market]
+                info["comment_top"] = (by_mkt.get(market) if market else "") or tmpl.get(
+                    "comment_top", ""
+                )
             result.append(info)
         return result
 
