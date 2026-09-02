@@ -58,18 +58,41 @@ def _rebuild_shiftup(cur, d, cod_user, fromid):
         pass
 
 
-def _refresh_checksums(cur, market: int, date: str, lo_f: int, hi_f: int) -> int:
-    """Clear yellow triangles in the hour (Lee 8/28): a piece dragged in before its
-    file reached the CIBs keeps a pre-download SCHEDULE_CHECKSUM; once the file
-    settles, stored != live and EE shows the triangle until someone Explodes it.
-    Storing the live value IS Explode. Touches TPALINSE only — never FILMATI."""
+def _explode_window(cur, market: int, date: str, lo_f: int, hi_f: int) -> dict:
+    """Etere's "Explode - all breakpoints" for the window, so a finished show carries
+    no yellow triangles (Lee 9/1: Finish must clear ALL of them, not just the rows it
+    touched). EE flags a row for either of two things, and Explode fixes both:
+
+    1. Event in/out outside the asset: the scheduler writes every commercial with
+       TIMECODE_O = POS_FIN + 1 (its DURATION is the nominal length, so a short asset
+       overruns by 2-3 frames) — CVC 9/2 had 183 such rows, every one a triangle,
+       while the same assets in the 8 markets MC had exploded read
+       TIMECODE_I/O = POS_INI/POS_FIN, DURATION = POS_FIN - POS_INI + 1. Program
+       PARTs are sub-ranges of one file and stay inside the asset, so PART=0 only.
+       Live assets (LIVE_ID set) are never conformed.
+    2. Stored SCHEDULE_CHECKSUM != live: a row placed before its file reached the
+       CIBs keeps a pre-download value. Storing the live value IS Explode.
+
+    Runs BEFORE plan_window (the planner reads DURATION) and touches TPALINSE only —
+    never FILMATI. A DURATION change needs a start-time rebuild; the caller does it."""
+    cur.execute(
+        """UPDATE t SET t.TIMECODE_I = f.POS_INI, t.TIMECODE_O = f.POS_FIN,
+                        t.DURATION = f.POS_FIN - f.POS_INI + 1
+           FROM TPALINSE t JOIN FILMATI f ON f.ID_FILMATI = t.ID_FILMATI
+           WHERE t.COD_USER=%s AND t.DATA=%s AND t.LIVELLO=0 AND t.ORA>=%s AND t.ORA<%s
+             AND t.PART = 0 AND t.NEWTYPE <> 'NOOP' AND f.LIVE_ID IS NULL
+             AND (t.TIMECODE_I <> f.POS_INI OR t.TIMECODE_O <> f.POS_FIN
+                  OR t.DURATION <> f.POS_FIN - f.POS_INI + 1)""",
+        (market, date, lo_f, hi_f),
+    )
+    n_tc = cur.rowcount
     cur.execute(
         """UPDATE TPALINSE SET SCHEDULE_CHECKSUM = dbo.sch_getFilmatiCheckSum(ID_TPALINSE)
            WHERE COD_USER=%s AND DATA=%s AND LIVELLO=0 AND ORA>=%s AND ORA<%s
              AND ISNULL(SCHEDULE_CHECKSUM,0) <> ISNULL(dbo.sch_getFilmatiCheckSum(ID_TPALINSE),0)""",
         (market, date, lo_f, hi_f),
     )
-    return cur.rowcount
+    return {"timecodes": n_tc, "checksums": cur.rowcount}
 
 
 def _supporto(cur, filmati: int) -> str:
@@ -330,6 +353,10 @@ def apply_window(
     """Plan + write one window. `apply=False` does everything and rolls back."""
     cur = conn.cursor()
     lo_f, hi_f = int(lo * FPS), int(hi * FPS)
+    # Explode first: the planner reads DURATION, so it must see the conformed rows.
+    # Rolled back with everything else if the plan cannot land or apply=False.
+    xp = _explode_window(cur, market, date, lo_f, hi_f)
+    log(f"  exploded (yellow triangles): {xp['timecodes']} timecodes, {xp['checksums']} checksums")
     r = plan_window(cur, market, date, lo, hi)
     for n in r.get("notes", []):
         log(f"  • {n}")
@@ -341,11 +368,19 @@ def apply_window(
             "message": r.get("error") or "plan cannot land the ID",
         }
 
-    n_ck = _refresh_checksums(cur, market, date, lo_f, hi_f)
-    log(f"  checksums refreshed (yellow triangles): {n_ck}")
     if r["_id_only"]:
         # nothing to fill — still put the breaks in order (Finish = fill + order)
         try:
+            if xp["timecodes"]:
+                # conformed DURATIONs move the rows behind them by a frame or two;
+                # re-time from the first program piece and prove the hour's end held
+                _rebuild_shiftup(cur, date, market, next(e for e in r["_evs"] if e.is_program).id)
+                after = window_from_day(load_day(cur, market, date), lo, hi)
+                end = max(e.end for e in after)
+                if abs(end - r["actual_end"]) > 0.2:
+                    raise RuntimeError(
+                        f"explode moved the hour's end {hms(r['actual_end'])} -> {hms(end)}"
+                    )
             bo = _bo_apply(conn, market, date, lo_f, hi_f)
         except Exception as exc:  # noqa: BLE001 — ordering must never break a finished hour
             conn.rollback()
@@ -361,7 +396,7 @@ def apply_window(
             **_public(r),
             "status": "finished",
             "bo": bo,
-            "checksums": n_ck,
+            "exploded": xp,
             "message": "already finished",
         }
 
@@ -571,7 +606,7 @@ def apply_window(
             return {
                 **_public(r),
                 "status": "dry-run",
-                "checksums": n_ck,
+                "exploded": xp,
                 "after": after_rows,
                 "end_hms": hms(end),
                 "restore": rpath,
@@ -585,7 +620,7 @@ def apply_window(
         return {
             **_public(r),
             "status": "applied",
-            "checksums": n_ck,
+            "exploded": xp,
             "after": after_rows,
             "end_hms": hms(end),
             "new_ids": new_ids,

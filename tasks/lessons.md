@@ -4,6 +4,44 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## The Yellow Triangle Is NOT (Only) the Checksum — Diff the Flagged Row Against the SAME Asset in a Clean Market
+
+**Session:** Finish on CVC 9/2 left triangles everywhere — Lee: "I don't think your findings are entirely correct" (2026-09-01)
+
+**Rule:** For two months every triangle note said "stored SCHEDULE_CHECKSUM != live". Finish
+refreshed checksums, the DB said 70 of 71 rows in the window matched, and I told Lee twice
+that EE just needed a reload. He reloaded: triangles on half the day, only in CVC. The
+checksum test was a *sufficient* cause I had once confirmed with Profiler and then treated as
+the *only* cause. The actual discriminator took one query: the same asset's TPALINSE row in a
+market MC had exploded. CVC rows carried `TIMECODE_O = POS_FIN + 1` (the scheduler writes the
+nominal length; a short asset overruns by 2-3 frames); exploded rows carry
+`TIMECODE_I/O = POS_INI/POS_FIN, DURATION = POS_FIN-POS_INI+1`. EE flags an event whose
+in/out lies OUTSIDE its asset — 100% of the flagged commercials in four screenshots, 0% of
+the clean ones, and program PARTs (sub-ranges inside one file) correctly unflagged. Stale
+checksum is the *other* trigger (programs in the never-exploded hours). Explode fixes both;
+`_refresh_checksums` fixed one. Out-of-bounds rows do air (27 A / 121 Q, 0 E since 8/20).
+
+**How to apply:**
+1. When a validator I wrote says "clean" and the user's screen says "flagged", the user's
+   screen is the ground truth and my model is incomplete — stop defending it after ONE
+   reload check. Do not say "EE needs a reload" twice.
+2. **The oracle for a per-row flag is the same asset's row in a market where the flag is
+   absent**, diffed column by column (`CVC vs others`: TIMECODE_O, VISIONATO, CRAWL_DESC
+   popped out in one query). Diffing flagged-vs-clean *assets* within the broken market
+   found nothing for an hour — the property was per ROW, not per asset.
+3. Take a *truth set* from the screenshots (which rows are flagged, which are not) and
+   require a candidate rule to score 100/0 on it before building on it. The checksum rule
+   scored 0/… on the 06-09 rows and I built on it anyway.
+4. A mass condition that is "only in market X" (196 rows CVC vs 5 elsewhere) is almost never
+   a per-asset property (assets are shared) — look for what a per-market OPERATOR action
+   (MC's Explode) would have written.
+5. `finish_service._explode_window` now mimics Explode for the whole window (timecodes +
+   DURATION + checksum, PART=0, LIVE_ID NULL, before `plan_window` since the planner reads
+   DURATION; `_id_only` path re-times and asserts the hour end held). "Finish a show" means
+   zero triangles in it, not zero triangles on the rows Finish inserted.
+
+---
+
 ## A Width/Limit Copied From a Prior Fix Is Still a Guess — Read the Schema and Diff an Aired Sibling
 
 **Session:** Maija's first Fill & Finish team test (2026-09-01) — most blocks errored
