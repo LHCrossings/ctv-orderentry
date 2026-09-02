@@ -129,3 +129,18 @@ failed safely; always hard-code IDs from the snapshot rather than parsing descri
 Post-boot verify CIB03 (boot 00:40) + CIB04 (boot 00:38), 00:46 local: single NIC, DNS single record,
 IMDS 5/5, SSM 0 cred errors (MGS up, normal MDS startup touch), Etere 36.1.3.0 file version, Au/ETX/
 etAlign 2/2/2, 0 ETXServer errors, NFY + WORKSTATIONS on primary IPs. **Fleet verified uniform.**
+
+## Instance-type change checklist (2nd occurrence: Datamover m7i, 2026-09-01 22:12 PT)
+Changing the instance type on these Windows boxes drops the 169.254.169.x link-local routes
+(Jumpbox 9/1, Datamover 9/1). Symptom: SSM agent Stopped, errors.log "Failed to get IMDS
+token ... A socket operation was attempted to an unreachable network"; also no Time Sync /
+KMS. `Get-NetRoute | ? DestinationPrefix -like '169.254.169.*'` prints NOTHING. Fix (run on the box):
+```powershell
+$if = (Get-NetIPConfiguration | ? IPv4DefaultGateway | Select -First 1).InterfaceIndex
+Get-NetRoute | ? { $_.DestinationPrefix -like '169.254.169.*' -and $_.NextHop -ne '0.0.0.0' } | Remove-NetRoute -Confirm:$false
+'254','250','251','249','123','253' | % { New-NetRoute -DestinationPrefix "169.254.169.$_/32" -InterfaceIndex $if -NextHop 0.0.0.0 -RouteMetric 1 -ErrorAction SilentlyContinue | Out-Null }
+Invoke-RestMethod -Method Put -Uri http://169.254.169.254/latest/api/token -Headers @{'X-aws-ec2-metadata-token-ttl-seconds'='60'} -TimeoutSec 5
+Start-Service AmazonSSMAgent
+```
+Do this BEFORE trusting SSM after any resize. Also check hand-started monitoring (Prometheus on the
+Datamover) came back — Grafana read "no data" after the 9/1 resize because :9090 was not listening.
