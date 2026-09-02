@@ -49,3 +49,5 @@ The command reads the hook's stdin JSON, exits quietly unless the Bash command c
 `git pull` writes its progress lines to stderr; PowerShell paints those as a red
 `NativeCommandError` block even when the pull succeeded. Judge a pull by `$LASTEXITCODE`
 (the scripts do), never by the colour or by matching the word "error".
+
+Hook installed on Lee's machine 2026-09-01 (see `.claude/settings.json`).
