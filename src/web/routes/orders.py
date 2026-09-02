@@ -10838,6 +10838,18 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         (p["new_code"], p["new_title"], p["asset_id"]),
                     )
                     schedule_updated += cursor.rowcount
+                    # A renamed code no longer matches the file name; any future row still
+                    # bound by code (Etere's SP default) would air black (NYC 9/2/2026).
+                    # Rebind unaired rows of this asset to prefix + FILE_ID.
+                    cursor.execute(
+                        "UPDATE t SET t.SUPPORTO = '0ETX      ' + RTRIM(fs.FILE_ID)"
+                        " FROM TPALINSE t CROSS APPLY (SELECT TOP 1 FILE_ID FROM FS_FILMATI x"
+                        "   WHERE x.ID_FILMATI = t.ID_FILMATI AND x.ID_METADEVICE <> 6 ORDER BY x.LASTUPDATE DESC) fs"
+                        " WHERE t.ID_FILMATI = %d AND t.LIVELLO = 0 AND t.STATUS = 'I'"
+                        "   AND t.DATA >= CAST(GETDATE() AS date)"
+                        "   AND RTRIM(t.SUPPORTO) <> '0ETX      ' + RTRIM(fs.FILE_ID)",
+                        (p["asset_id"],),
+                    )
                 conn.commit()
             return JSONResponse({"updated": updated, "schedule_updated": schedule_updated})
         except HTTPException:

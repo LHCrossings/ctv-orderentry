@@ -347,6 +347,7 @@ def _ensure_bumper(cur, cod_user, d, slot, spec, existing):
         cur, cod_user, d, slot["sched"], slot["block"], slot["seg"], slot["ora"], fid, dur
     )
     cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
+    _bind_supporto(cur, nid, fid)
     cur.execute("SELECT XORDER FROM TPALINSE WHERE id_tpalinse=%s", (nid,))
     return {"id": nid, "xorder": int(cur.fetchone()[0])}
 
@@ -436,6 +437,31 @@ def _drain_pending_filmati_syncs(cur, conn, pending):
                 f"{[fid for fid, _ in pending]}, retrying in {_FILMATI_RETRY_SECONDS}s"
             )
             time.sleep(_FILMATI_RETRY_SECONDS)
+
+
+def _bind_supporto(cur, tpalinse_id: int, filmati: int):
+    """Rebind a placed row's playout binding from the asset's FILE name.
+
+    sch_UpdateSupportAndProperties writes SUPPORTO = prefix + COD_PROGRA, but the CIB
+    resolves prefix + FS_FILMATI.FILE_ID. The two diverge whenever an asset has been
+    renamed to its schedule code (scripts/rename-programming) while the file kept its
+    ingest name — then the row points at a file that does not exist and airs BLACK
+    (NYC 9/2/2026 06:00, Phoenix Evening Express; 98 future rows were bound the same
+    way). Finish has done this since 8/28 (finish_service._supporto); Daily Programming
+    now does it after every SP call. Live assets have no FS_FILMATI row and keep the
+    SP's 0LIVE binding. Returns the binding written, or None when left alone."""
+    cur.execute(
+        "SELECT TOP 1 ISNULL(d.LEGACY_BASESUPP, CAST(d.LEGACY_MEDIAID AS VARCHAR) + 'ETX      '), ff.FILE_ID"
+        " FROM FS_FILMATI ff JOIN FS_METADEVICE d ON d.ID_METADEVICE = ff.ID_METADEVICE"
+        " WHERE ff.ID_FILMATI = %s AND d.LEGACY_MEDIAID IS NOT NULL ORDER BY d.LEGACY_MEDIAID",
+        (int(filmati),),
+    )
+    r = cur.fetchone()
+    if not r or not r[1]:
+        return None
+    sup = (r[0] or "") + str(r[1]).strip()
+    cur.execute("UPDATE TPALINSE SET SUPPORTO=%s WHERE ID_TPALINSE=%s", (sup, int(tpalinse_id)))
+    return sup
 
 
 def _sync_checksums(cur, ids, pending):
@@ -558,6 +584,7 @@ def _place_element(cur, cod_user, d, lo, hi, prgs_slots, el, program_first_id):
         _durata(cur, fid),
     )
     cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
+    _bind_supporto(cur, nid, fid)
     cur.execute(
         "UPDATE TPalinse SET EVENT_TYPE=%s WHERE id_tpalinse=%s", (el.get("event_type", "T"), nid)
     )
@@ -776,6 +803,7 @@ def _place_once(conn, cod_user, d, assignment, pending):
                     (k, mi, mo, mo - mi + 1, base, nid),
                 )
                 cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
+                _bind_supporto(cur, nid, fid)
                 if shoplc:
                     # Mirror master control's live-asset custom-parts explode:
                     # parts carry the WHOLE program's Ora_P/Duration_P, not their own.
@@ -812,6 +840,7 @@ def _place_once(conn, cod_user, d, assignment, pending):
                 _durata(cur, fid),
             )
             cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
+            _bind_supporto(cur, nid, fid)
             ids = [nid]
             first_id = nid
             keys = [slots[0]["ora"]]
@@ -859,6 +888,7 @@ def _place_once(conn, cod_user, d, assignment, pending):
                     _durata(cur, cfid),
                 )
                 cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, cfid))
+                _bind_supporto(cur, nid, cfid)
                 ids.append(nid)
                 keys.append(key)
             first_id = ids[0]
@@ -1054,6 +1084,7 @@ def _replace_piece_once(conn, cod_user, d, lo, hi, old_fid, new_fid, pending):
                 (new_fid, new_dur, new_dur - 1, rid),
             )
             cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (rid, new_fid))
+            _bind_supporto(cur, rid, new_fid)
             # The SP resets EVENT_TYPE — restore the original F/T lock.
             cur.execute("UPDATE TPALINSE SET EVENT_TYPE=%s WHERE id_tpalinse=%s", (event_type, rid))
 
@@ -1160,6 +1191,7 @@ def _fill_marketplace_once(conn, cod_user, d, windows, fid, pending):
                     (fid, new_dur, new_dur - 1, rid),
                 )
                 cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (rid, fid))
+                _bind_supporto(cur, rid, fid)
                 cur.execute("UPDATE TPALINSE SET EVENT_TYPE=%s WHERE id_tpalinse=%s", (ev, rid))
                 nid = rid
             else:  # blank slot → insert the whole file
@@ -1175,6 +1207,7 @@ def _fill_marketplace_once(conn, cod_user, d, windows, fid, pending):
                     new_dur,
                 )
                 cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
+                _bind_supporto(cur, nid, fid)
                 cur.execute("UPDATE TPALINSE SET EVENT_TYPE=%s WHERE id_tpalinse=%s", (ev, nid))
             ids.append(nid)
 
@@ -1308,6 +1341,7 @@ def _place_weekend_drama_once(conn, cod_user, d, start, end, piece_fids, filler_
                 _durata(cur, fid),
             )
             cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
+            _bind_supporto(cur, nid, fid)
             ids.append(nid)
             keys.append(key)
         cur.execute("UPDATE TPalinse SET EVENT_TYPE='F' WHERE id_tpalinse=%s", (ids[0],))
@@ -1423,6 +1457,7 @@ def _place_daily_once(conn, cod_user, d, el, pending):
             _durata(cur, fid),
         )
         cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fid))
+        _bind_supporto(cur, nid, fid)
         cur.execute(
             "UPDATE TPalinse SET EVENT_TYPE=%s WHERE id_tpalinse=%s",
             (el.get("event_type", "T"), nid),
