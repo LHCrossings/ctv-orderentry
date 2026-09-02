@@ -199,6 +199,7 @@
     <h2><span class="step-n">3</span>Verify &amp; export</h2>
     <div class="file-list" id="row-list"><div class="empty">Drop PDFs to begin.</div></div>
     <div class="export-bar">
+      <button class="btn btn-secondary" id="btn-select-all" disabled>Select all</button>
       <button class="btn btn-primary" id="btn-export" disabled>Export selected → ZIP</button>
       <span class="status" id="export-status"></span>
     </div>
@@ -452,10 +453,26 @@ function onSelectChange(e) {
   updateExportBtn();
 }
 
+function selectableBoxes() {
+  return [...document.querySelectorAll('.row-select:not(:disabled)')];
+}
+
 function updateExportBtn() {
   const any = [...document.querySelectorAll('.row-select')].some(cb => cb.checked);
   $('btn-export').disabled = !any;
+  const boxes = selectableBoxes();
+  const allOn = boxes.length > 0 && boxes.every(cb => cb.checked);
+  const btn = $('btn-select-all');
+  btn.disabled = !boxes.length;
+  btn.textContent = allOn ? 'Clear selection' : (boxes.length ? `Select all (${boxes.length})` : 'Select all');
 }
+
+$('btn-select-all').addEventListener('click', () => {
+  const boxes = selectableBoxes();
+  const allOn = boxes.length > 0 && boxes.every(cb => cb.checked);
+  boxes.forEach(cb => { cb.checked = !allOn; });
+  updateExportBtn();
+});
 
 // ── Live validation ────────────────────────────────────────────────────────
 function collectFields(card) {
