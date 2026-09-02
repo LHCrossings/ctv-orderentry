@@ -6,9 +6,12 @@ $repo = 'C:\Users\usrjp\windev\ctv-orderentry'
 $name = 'CTV OrderEntry Server'
 Set-Location $repo
 "--- before: $(git -c safe.directory=* log --oneline -1 2>&1)"
-$pull = git -c safe.directory=* pull --ff-only 2>&1 | Out-String
-"--- pull: $($pull.Trim())"
-if ($pull -match 'error|fatal|conflict') { throw "pull failed: $pull" }
+# git writes progress to stderr; PowerShell wraps those lines as NativeCommandError records
+# (the "weird red messages" of a normal pull). Stringify every line and trust the exit code.
+$pull = (git -c safe.directory=* pull --ff-only 2>&1 | ForEach-Object { "$_" }) -join "`n"
+$code = $LASTEXITCODE
+"--- pull (exit $code): $($pull.Trim())"
+if ($code -ne 0) { throw "pull failed (exit $code)" }
 "--- after:  $(git -c safe.directory=* log --oneline -1 2>&1)"
 $procs = @(Get-CimInstance Win32_Process -Filter "Name='python.exe'" | Where-Object { $_.CommandLine -like '*web_main.py*' })
 "--- stopping $($procs.Count) web_main.py process(es): $(($procs | ForEach-Object { $_.ProcessId }) -join ',')"
