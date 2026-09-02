@@ -1709,14 +1709,26 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     LEFT JOIN ANAGRAF cl ON cl.ID_ANAGRAF = ct.COMMITTENTE
                     WHERE t.DATA BETWEEN %s AND %s
                       AND t.LIVELLO = 0
+                      AND t.COD_USER BETWEEN 1 AND 10   -- real stations only (templates <0, test 11/12 sit Idle by nature)
                       AND t.STATUS = 'I'
-                      AND t.ASRUN_STATUS_M = 'I'
+                      -- two stuck signatures (both = a past-day row never confirmed as
+                      -- transmitted): (a) the nightly reconcile ran and stamped it "never
+                      -- ran"; (b) the reconcile never ran for that market-day at all, so
+                      -- the stamp is still NULL (7/27/2026: five markets reset at ~22:15,
+                      -- 613 contract spots invisible to the post-log report and to this
+                      -- tool). Only days at least two calendar days old count as past —
+                      -- the current broadcast day is legitimately Idle ahead of playout.
+                      AND (t.ASRUN_STATUS_M = 'I'
+                           OR (t.ASRUN_STATUS_M IS NULL
+                               AND t.DATA < DATEADD(day, -1, CAST(GETDATE() AS date))))
                       -- station IDs are 25s dynamic fillers placed last in a
-                      -- program, INTENDED to be cut off — never billing-relevant
-                      AND ISNULL(t.NEWTYPE, '') <> 'ID'
+                      -- program, INTENDED to be cut off — never billing-relevant;
+                      -- NOOPs are gap fillers; the 29:59 row is the end-of-day marker
+                      AND ISNULL(t.NEWTYPE, '') NOT IN ('ID', 'NOOP')
+                      AND t.ORA < %s
                     ORDER BY t.COD_USER, t.DATA, t.ORA
                     """,
-                    (str(win_start), str(win_end)),
+                    (str(win_start), str(win_end), int(29.98 * 3600 * _OFFAIR_FPS)),
                 )
                 raw = cur.fetchall()
 
@@ -1815,8 +1827,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             LASTUPDATE = GETDATE()
                         WHERE ID_TPALINSE IN ({ph})
                           AND LIVELLO = 0
+                          AND COD_USER BETWEEN 1 AND 10
                           AND STATUS = 'I'
-                          AND ASRUN_STATUS_M = 'I'
+                          AND (ASRUN_STATUS_M = 'I'
+                               OR (ASRUN_STATUS_M IS NULL
+                                   AND DATA < DATEADD(day, -1, CAST(GETDATE() AS date))))
                         """,
                         tuple(chunk),
                     )

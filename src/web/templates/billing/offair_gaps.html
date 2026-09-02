@@ -301,7 +301,7 @@ function render(data, year, month) {
 
     if (!data.gaps.length) {
         html += `<div class="all-clear"><div class="big">✅</div>
-                 No stuck spots in this billing window — every reconciled day is clean.</div>`;
+                 No stuck spots in this billing window — no past day carries unconfirmed spots.</div>`;
         resultsDiv.innerHTML = html;
         resultsDiv.style.display = 'block';
         return;
