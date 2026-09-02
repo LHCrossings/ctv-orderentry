@@ -59,9 +59,26 @@
     }
     /* Alternate card shading + a left stripe so the eye can tell where one invoice
        ends and the next begins while scrolling step 3 (Lee 2026-09-01). */
-    .file-list .file-card:nth-child(odd)  { border-left: 4px solid var(--accent-primary); }
-    .file-list .file-card:nth-child(even) { border-left: 4px solid var(--nord10, var(--border-color)); background: var(--bg-primary); }
-    .file-list .file-card:nth-child(even) .file-card-header { background: var(--bg-secondary); }
+    /* Two distinct hues (Nord frost blue vs aurora orange), tinted body + stronger header
+       tint, so alternation is obvious at a glance (Lee: neutrals were too similar). */
+    .file-list .file-card:nth-child(odd) {
+      border-left: 6px solid var(--nord10);
+      background: var(--bg-secondary);
+      background: color-mix(in srgb, var(--nord10) 10%, var(--bg-primary));
+    }
+    .file-list .file-card:nth-child(odd) .file-card-header {
+      background: var(--bg-tertiary, var(--bg-secondary));
+      background: color-mix(in srgb, var(--nord10) 24%, var(--bg-primary));
+    }
+    .file-list .file-card:nth-child(even) {
+      border-left: 6px solid var(--nord12);
+      background: var(--bg-primary);
+      background: color-mix(in srgb, var(--nord12) 10%, var(--bg-primary));
+    }
+    .file-list .file-card:nth-child(even) .file-card-header {
+      background: var(--bg-secondary);
+      background: color-mix(in srgb, var(--nord12) 24%, var(--bg-primary));
+    }
     .file-card-header {
       display: flex; align-items: center; gap: .75rem; padding: .7rem 1rem;
       border-bottom: 1px solid var(--border-color);
