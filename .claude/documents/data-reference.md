@@ -236,6 +236,26 @@ and market are identical.
 
 ---
 
+## Linked Billboards (source: hand-linked oracle rows, 2026-09-01)
+
+Etere's line-form "linked spot" is two columns on the **spot** line (the :15/:30 that
+follows the billboard), nothing on the billboard line:
+
+| Column | Value |
+|---|---|
+| `CONTRATTIRIGHE.IDLINKEDSPOTSCHEDPOS` | the billboard line's `ID_CONTRATTIRIGHE` |
+| `CONTRATTIRIGHE.LINKEDSPOTSCHEDPOS` | `1` = the linked billboard airs immediately BEFORE this spot |
+
+SP params 58/59 (`@linkedspotpos`, `@linkedspotid`) write them; `add_contract_line(...,
+linked_line_id=<billboard line id>, linked_pos=1)` passes them and verifies the readback.
+Order of entry: billboard line first (`is_billboard=True` → Top, priority 3, separation 0),
+then the spot line linked to it. Spot counts of the pair should match. Oracle: PACO BMO 27
+lines 72799→72808 (Aug 2026) and Daviselen Toyota 1325 lines 71588→71590 (Feb 2026); every
+placement shows the billboard one XORDER ahead of its spot. To link two lines already
+written by hand: `scripts/link_billboard.py --spot <id> --billboard <id> [--apply]`.
+
+---
+
 ## Scheduling Types (source-confirmed from Etere.Web.Sales.dll)
 
 Each contract line has a `selectedSchedulingType` (0–6) that maps to three DB

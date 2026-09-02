@@ -877,6 +877,13 @@ EXEC web_sales_savecontractgeneral
         dubbing_cost: float = 0.0,
         row_status: int = 0,   # 0=Ready, 2=Change Data (use 2 for revision lines on approved contracts)
         language: Optional[str] = None,  # user-VERIFIED language code → CTV_LineLanguage
+        # Linked billboard (Etere's "linked spot" on the line form). Set on the SPOT
+        # line: the billboard line's id, and pos 1 = that billboard airs immediately
+        # BEFORE this spot. Oracle: PACO BMO 27 72799→72808, Daviselen 1325 71588→71590 —
+        # placed billboard-then-spot at consecutive XORDERs every time. The billboard
+        # line is an ordinary is_billboard line and keeps its own link at 0.
+        linked_line_id: Optional[int] = None,
+        linked_pos: int = 1,
         # Unused kwargs kept for interface compatibility with EtereClient
         **_kwargs,
     ) -> int:
@@ -1103,8 +1110,8 @@ EXEC web_sales_InsertContractLine
             0,                  # @split
             0,                  # @idpianoconti
             note,               # @note
-            0,                  # @linkedspotpos
-            0,                  # @linkedspotid
+            linked_pos if linked_line_id else 0,   # @linkedspotpos  → LINKEDSPOTSCHEDPOS
+            linked_line_id or 0,                   # @linkedspotid   → IDLINKEDSPOTSCHEDPOS
         ]
 
         cursor = self._conn.cursor()
@@ -1119,6 +1126,19 @@ EXEC web_sales_InsertContractLine
         )
         row = cursor.fetchone()
         line_id = row[0] if row else 0
+
+        # The SP is encrypted: prove the link landed rather than trust the parameter.
+        if line_id and linked_line_id:
+            cursor.execute(
+                f"SELECT IDLINKEDSPOTSCHEDPOS, LINKEDSPOTSCHEDPOS FROM CONTRATTIRIGHE WHERE ID_CONTRATTIRIGHE={self._ph}",
+                [line_id],
+            )
+            got = cursor.fetchone()
+            if not got or (int(got[0] or 0), int(got[1] or 0)) != (int(linked_line_id), int(linked_pos)):
+                raise RuntimeError(
+                    f"linked spot not stored on line {line_id}: got {got}, "
+                    f"expected ({linked_line_id}, {linked_pos})"
+                )
 
         # Clear SECEVENTTYPE — column default is 'CTM' but Selenium always sends ''.
         # Secondary events are assigned manually by operators inside Etere, never during entry.
