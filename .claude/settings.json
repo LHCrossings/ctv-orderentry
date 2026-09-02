@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c 'import json,sys;c=json.load(sys.stdin).get(\"tool_input\",{}).get(\"command\",\"\");sys.exit(0 if \"git push\" in c else 1)' && \"$CLAUDE_PROJECT_DIR\"/scripts/deploy/post_push.sh",
+            "timeout": 420,
+            "statusMessage": "post-push deploy: local checkout, Jumpbox server, Datamover agent if changed"
+          }
+        ]
+      }
+    ]
+  }
+}
