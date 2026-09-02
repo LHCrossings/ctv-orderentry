@@ -1,3 +1,57 @@
+# ⏸ PAUSED — Agency Pre/Post Logs — third card on /scripts/reportsort (2026-09-02)
+
+**Status (Lee, 2026-09-02): WAIT.** Lee is asking Aki exactly what she needs before anything is
+built — she may need only AMOUNTS (per-contract/per-month totals), not every individual spot.
+If it is amounts, the answer is a revenue/summary query, not ReportSort at all. Do NOT start
+the plan below until Lee relays Aki's answer.
+
+Ask (Lee, via Aki): pick an agency, enter dates, get a Pre/Post log for EVERY contract of
+that agency in the range, using the same CTV/TAC templates as the Worldlink card. Aki's
+"WL consolidated logs for the year" attempt failed in the billing tool — that tool is not
+for this. WL 2026 YTD = ~246K placed spots / 152 contracts, so a single year-long Etere
+report call is the likely failure mode; the new card must chunk the pull.
+
+## Plan
+- [ ] `GET /api/scripts/reportsort/agencies` — `SELECT a.ID_ANAGRAF, a.RAG_SOCIAL, COUNT(*)`
+      from CONTRATTITESTATA JOIN ANAGRAF ON AGENZIA, ordered by name; only agencies that
+      own contracts. Feeds a searchable dropdown (same `.search-dropdown` pattern as the
+      contract card, data-idx delegation, never inline onclick).
+- [ ] `scripts/run_reportsort.py` agency mode: `--agency-id N --output-folder DIR`.
+      - Pull the placement-confirmation report **per calendar month** inside the range
+        (`filters[1]=agency`, `agencyid=agency`, contract blank) and concatenate the CSVs
+        (keep rows 0–3 of the first chunk only). Etere has a ~70 s fixed cost per call, so a
+        year ≈ 12 calls ≈ 15–20 min — print `[INFO] chunk k/n` so the terminal shows progress.
+      - Query CONTRATTITESTATA for the agency's COD_CONTRATTO values overlapping the range
+        and pass them to ReportSort as the exact allow-list (75 agency contracts have codes
+        that do not start with a letter, e.g. `3Fold LRCC 2611` — the WL heuristics would
+        silently drop them). Footer rows fall out for free, same as single mode.
+      - Default output = per-run temp dir (browser download), NOT `K:\!Archives` — the WL
+        card keeps that path untouched.
+- [ ] `ReportSort/main.py` (separate repo, own commit): `--only-booking` becomes repeatable
+      (`action="append"` → set membership). Single-contract callers pass one value and behave
+      exactly as today; WL batch passes none and keeps the heuristics byte-for-byte.
+- [ ] Route `run_reportsort`: accept `agency_id`; reuse the token/temp-dir mechanics; after
+      exit 0, zip every `*.xlsx` in the folder into `<Agency>_<pre|post>_<from>-<to>.zip` and
+      emit ONE `[DOWNLOAD:token|zip]` line (150 individual links is not a UI). Keep the
+      per-file lines too so a small pull still shows the workbooks.
+- [ ] Template: third `.tool-card` titled **Agency Pre/Post Logs** — agency search, log type,
+      from/to, Run, terminal, download row. Existing classes only; `formatDateInput` from the
+      injected date helper.
+- [ ] Verify: (1) WL regression oracle — run the old and new `main.py` over the same archived
+      WL CSV into two folders, diff every workbook cell-by-cell, expect 0 diffs;
+      (2) agency pull for a small agency over one month end-to-end from the page → zip opens,
+      one workbook per contract, TAC template only when Dallas rows present;
+      (3) a 2-month range crosses a chunk boundary → row count equals the sum of the two
+      single-month pulls, no duplicated header rows; (4) `uv run ruff check` clean.
+- [ ] Commit + push both repos; note for Lee: Aki should pull a quarter at a time until we
+      have measured a full-year run.
+
+## Open question for Lee
+- Chunk = calendar month or broadcast month? Calendar is simpler and invisible in the output
+  (ReportSort re-sorts every booking by market/date). Going with calendar unless told otherwise.
+
+---
+
 # Fill & Finish — page + one-button chain (2026-08-28)
 
 Spec: `tasks/finish-hour.md` (v0.3). Live-proven write path: `scripts/finish_apply.py`
