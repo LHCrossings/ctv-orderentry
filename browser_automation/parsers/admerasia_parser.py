@@ -513,7 +513,9 @@ def _extract_sponsorship(pdf_path: str) -> Optional[dict]:
         top = min(x["top"] for x in ws)
         if "15s spots" in txt:
             label_rows.append(("15s Spots", top))
-        elif "obb & cbb" in txt:
+        elif re.search(r"\bobb\b", txt):
+            # 'OBB & CBB' on the first 9/2026 IOs; the McValue Rv1 (9/1) prints just
+            # 'OBB' — missing it made the rows sum to 16 against 'Sponsorship Spots 32'
             label_rows.append(("OBB & CBB", top))
         elif "sponsorship spots" in txt:
             counters.append(("sponsorship_spots", top))
