@@ -117,6 +117,9 @@ Order per market, stop-on-problem, report per step:
 3. Break Optimization bulk-apply on those windows (exists: `/break-optimization/bulk-apply`) —
    separation check; later: automated relocation (spot relocator design, `tasks/spot-relocator.md`)
 4. Log time fill (exists: `_mc_fill_program_spots` / traffic log-sync)
+   - Lee 9/1: also wanted as a Finish-button combo — Finish a show, then find that show
+     on its market log (`_find_traffic_log` + day sheet) and fill its times. Inputs the
+     log route already takes: market, date, program window, language. Deferred to Phase 2.
 5. Publish stays with the operator for now; auto-publish switch later (Lee 8/28)
 - [ ] Design doc `tasks/finish-chain.md` before code: idempotency per step, failure surface,
       what "done" looks like on the Daily Programming page.
