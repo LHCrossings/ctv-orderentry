@@ -315,16 +315,35 @@ def day_windows(market: int, date: str, rows: list[tuple]) -> list[dict]:
     return out
 
 
+def _triangle_oras(cur, market: int, date: str) -> list[int]:
+    """ORA of every live row EE would flag with the yellow triangle today: event
+    in/out outside its asset, or stored checksum != live (the two Explode triggers,
+    see _explode_window). One pass per day — the checksum UDF is not cheap."""
+    cur.execute(
+        """SELECT t.ORA FROM TPALINSE t JOIN FILMATI f ON f.ID_FILMATI = t.ID_FILMATI
+           WHERE t.COD_USER=%s AND t.DATA=%s AND t.LIVELLO=0 AND t.NEWTYPE <> 'NOOP'
+             AND (t.TIMECODE_I < f.POS_INI OR t.TIMECODE_O > f.POS_FIN
+                  OR ISNULL(t.SCHEDULE_CHECKSUM,0) <> ISNULL(dbo.sch_getFilmatiCheckSum(t.ID_TPALINSE),0))""",
+        (market, date),
+    )
+    return [int(r[0]) for r in cur.fetchall()]
+
+
 def list_programs(cur, market: int, date: str) -> list[dict]:
     """The day's program windows with the derived Finish state for each."""
     rows = load_day(cur, market, date)
+    tri = _triangle_oras(cur, market, date)
     out = []
     for p in day_windows(market, date, rows):
         r = plan_window(cur, market, date, p["lo"], p["hi"], rows=rows)
         evs = window_from_day(rows, p["lo"], p["hi"])
         code = next((e.desc for e in evs if e.is_program and "BUMP" not in e.desc.upper()), "")
+        lo_f, hi_f = int(p["lo"] * FPS), int(p["hi"] * FPS)
         out.append(
             {
+                # yellow triangles still in the window — a "finished" show with any
+                # is not finished (Lee 9/1); the page offers Finish again to explode it
+                "triangles": sum(1 for o in tri if lo_f <= o < hi_f),
                 "lo": p["lo"],
                 "hi": p["hi"],
                 "lo_hms": hms(p["lo"]),

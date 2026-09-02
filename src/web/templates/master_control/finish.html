@@ -170,7 +170,9 @@ async function loadPrograms() {
 // Derived state → header badge. Never a stored flag: EE edits stay honest.
 function statFor(p) {
     switch (p.state) {
-        case 'finished': return { cls: 'done', text: `✓ finished · ID airs ${p.id_airs != null ? p.id_airs.toFixed(1) : '?'}s` };
+        case 'finished': return p.triangles
+            ? { cls: 'warn', text: `✓ filled · ${p.triangles} yellow triangle${p.triangles === 1 ? '' : 's'} · ID airs ${p.id_airs != null ? p.id_airs.toFixed(1) : '?'}s` }
+            : { cls: 'done', text: `✓ finished · ID airs ${p.id_airs != null ? p.id_airs.toFixed(1) : '?'}s` };
         case 'ready':    return { cls: 'warn', text: `${p.n_delete} remove · ${p.n_insert} add · ID would air ${p.id_airs != null ? p.id_airs.toFixed(1) : '?'}s` };
         case 'unplaced': return { cls: 'bad',  text: `programming not placed · ${Math.round((p.remainder || 0) / 60)} min open` };
         case 'overrun':  return { cls: 'bad',  text: `runs ${mmss(-(p.remainder || 0)).replace(/\.\d+$/, '')} past its slot · check programming` };
@@ -186,18 +188,22 @@ function renderPrograms(data) {
         document.getElementById('logArea').innerHTML = '<div class="empty-state">No programs on this day\'s schedule.</div>';
         return;
     }
-    const nFin = programs.filter(p => p.state === 'finished').length;
+    const nFin = programs.filter(p => p.state === 'finished' && !p.triangles).length;
     const nReady = programs.filter(p => p.state === 'ready').length;
+    const nTri = programs.reduce((n, p) => n + (p.triangles || 0), 0);
     let html = `<div class="log-meta">
         <strong>${esc(data.market)}</strong> &nbsp;·&nbsp; ${esc(data.date)}
-        &nbsp;&nbsp;<span>${programs.length} shows · ${nFin} finished · ${nReady} to finish</span>
+        &nbsp;&nbsp;<span>${programs.length} shows · ${nFin} finished · ${nReady} to finish${nTri ? ` · ${nTri} yellow triangles` : ''}</span>
         &nbsp;&nbsp;
         <button class="expand-btn" onclick="expandAll()">Expand all</button>
         <button class="expand-btn" onclick="collapseAll()">Collapse all</button>
     </div>`;
     programs.forEach((p, pi) => {
         const st = statFor(p);
-        const canFinish = p.state === 'ready';
+        // a filled show that still carries triangles gets the button back: the same
+        // apply path makes 0 fill edits and explodes the window (timecodes + checksums)
+        const canFinish = p.state === 'ready' || (p.state === 'finished' && p.triangles > 0);
+        const btnLabel = p.state === 'finished' ? 'Clear triangles' : 'Finish';
         html += `<div class="prg-block collapsed ${p.state === 'finished' ? 'finished' : ''}" id="prg-${pi}">
   <div class="prg-header" onclick="togglePrg(${pi})">
     <span class="prg-chevron">▾</span>
@@ -207,7 +213,7 @@ function renderPrograms(data) {
     <button class="expand-btn prg-refresh" title="Re-read this show from Etere"
             onclick="event.stopPropagation();refreshProgram(${pi})">↻ Refresh</button>
     <button class="prg-apply-btn" id="prg-apply-${pi}" style="display:${canFinish ? '' : 'none'}"
-            onclick="event.stopPropagation();finishProgram(${pi})">Finish</button>
+            onclick="event.stopPropagation();finishProgram(${pi})">${btnLabel}</button>
     <span class="prg-stat ${st.cls}" id="prg-stat-${pi}">${esc(st.text)}</span>
   </div>
   <div class="prg-body" id="prg-body-${pi}"><div class="prg-loading">Loading…</div></div>
@@ -278,8 +284,10 @@ function renderPlan(p, plan) {
 async function finishProgram(pi) {
     const p = programs[pi];
     const plan = plans[pi];
-    const summary = plan ? `${plan.n_delete} remove, ${plan.n_insert} add; ends ${plan.planned_end_hms}` : `${p.n_delete} remove, ${p.n_insert} add`;
-    if (!confirm(`Finish ${p.title} (${hm(p.lo_hms)}–${hm(p.hi_hms)}) in ${selectedMarket}?\n\n${summary}\n\nWrites to Etere. The schedule is NOT published — publish it yourself when you're done.`)) return;
+    const summary = (plan ? `${plan.n_delete} remove, ${plan.n_insert} add; ends ${plan.planned_end_hms}` : `${p.n_delete} remove, ${p.n_insert} add`)
+        + (p.triangles ? `; explode ${p.triangles} yellow triangle${p.triangles === 1 ? '' : 's'}` : '');
+    const verb = p.state === 'finished' ? 'Clear triangles in' : 'Finish';
+    if (!confirm(`${verb} ${p.title} (${hm(p.lo_hms)}–${hm(p.hi_hms)}) in ${selectedMarket}?\n\n${summary}\n\nWrites to Etere. The schedule is NOT published — publish it yourself when you're done.`)) return;
     const btn = document.getElementById(`prg-apply-${pi}`);
     btn.disabled = true; btn.textContent = 'Finishing…';
     try {
@@ -294,12 +302,12 @@ async function finishProgram(pi) {
         } else {
             stat.className = 'prg-stat bad';
             stat.textContent = `${r.status}: ${r.message || 'see log'}`;
-            btn.disabled = false; btn.textContent = 'Finish';
+            btn.disabled = false; btn.textContent = p.state === 'finished' ? 'Clear triangles' : 'Finish';
             document.getElementById(`prg-body-${pi}`).innerHTML =
                 `<div class="prg-note">Rolled back — nothing changed.<br>${esc((r.log || []).join('\n')).replace(/\n/g, '<br>')}</div>`;
         }
     } catch (e) {
-        btn.disabled = false; btn.textContent = 'Finish';
+        btn.disabled = false; btn.textContent = p.state === 'finished' ? 'Clear triangles' : 'Finish';
         alert('Network error: ' + e.message);
     }
 }
