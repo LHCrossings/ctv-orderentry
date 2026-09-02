@@ -167,6 +167,10 @@ async function loadPrograms() {
     }
 }
 
+// A filled show that still carries yellow triangles is redone from scratch: strip its
+// PI/PSA/ID rows and let Finish fill again (Lee 9/1 — what he did by hand on CVC 10:00).
+function isRefill(p) { return p.state === 'finished' && p.triangles > 0; }
+
 // Derived state → header badge. Never a stored flag: EE edits stay honest.
 function statFor(p) {
     switch (p.state) {
@@ -202,8 +206,8 @@ function renderPrograms(data) {
         const st = statFor(p);
         // a filled show that still carries triangles gets the button back: the same
         // apply path makes 0 fill edits and explodes the window (timecodes + checksums)
-        const canFinish = p.state === 'ready' || (p.state === 'finished' && p.triangles > 0);
-        const btnLabel = p.state === 'finished' ? 'Clear triangles' : 'Finish';
+        const canFinish = p.state === 'ready' || isRefill(p);
+        const btnLabel = isRefill(p) ? 'Refill' : 'Finish';
         html += `<div class="prg-block collapsed ${p.state === 'finished' ? 'finished' : ''}" id="prg-${pi}">
   <div class="prg-header" onclick="togglePrg(${pi})">
     <span class="prg-chevron">▾</span>
@@ -244,7 +248,7 @@ async function loadPlan(pi) {
     const p = programs[pi];
     const body = document.getElementById(`prg-body-${pi}`);
     try {
-        const resp = await fetch(`/api/master-control/finish/plan?date=${encodeURIComponent(currentDate)}&market=${encodeURIComponent(selectedMarket)}&lo=${p.lo}&hi=${p.hi}`);
+        const resp = await fetch(`/api/master-control/finish/plan?date=${encodeURIComponent(currentDate)}&market=${encodeURIComponent(selectedMarket)}&lo=${p.lo}&hi=${p.hi}&refill=${isRefill(p) ? 1 : 0}`);
         const plan = await resp.json();
         plans[pi] = plan;
         body.innerHTML = renderPlan(p, plan);
@@ -286,14 +290,14 @@ async function finishProgram(pi) {
     const plan = plans[pi];
     const summary = (plan ? `${plan.n_delete} remove, ${plan.n_insert} add; ends ${plan.planned_end_hms}` : `${p.n_delete} remove, ${p.n_insert} add`)
         + (p.triangles ? `; explode ${p.triangles} yellow triangle${p.triangles === 1 ? '' : 's'}` : '');
-    const verb = p.state === 'finished' ? 'Clear triangles in' : 'Finish';
+    const verb = isRefill(p) ? 'Refill' : 'Finish';
     if (!confirm(`${verb} ${p.title} (${hm(p.lo_hms)}–${hm(p.hi_hms)}) in ${selectedMarket}?\n\n${summary}\n\nWrites to Etere. The schedule is NOT published — publish it yourself when you're done.`)) return;
     const btn = document.getElementById(`prg-apply-${pi}`);
     btn.disabled = true; btn.textContent = 'Finishing…';
     try {
         const resp = await fetch('/api/master-control/finish/apply', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ market: selectedMarket, date: currentDate, lo: p.lo, hi: p.hi }),
+            body: JSON.stringify({ market: selectedMarket, date: currentDate, lo: p.lo, hi: p.hi, refill: isRefill(p) }),
         });
         const r = await resp.json();
         const stat = document.getElementById(`prg-stat-${pi}`);
@@ -302,12 +306,12 @@ async function finishProgram(pi) {
         } else {
             stat.className = 'prg-stat bad';
             stat.textContent = `${r.status}: ${r.message || 'see log'}`;
-            btn.disabled = false; btn.textContent = p.state === 'finished' ? 'Clear triangles' : 'Finish';
+            btn.disabled = false; btn.textContent = isRefill(p) ? 'Refill' : 'Finish';
             document.getElementById(`prg-body-${pi}`).innerHTML =
                 `<div class="prg-note">Rolled back — nothing changed.<br>${esc((r.log || []).join('\n')).replace(/\n/g, '<br>')}</div>`;
         }
     } catch (e) {
-        btn.disabled = false; btn.textContent = p.state === 'finished' ? 'Clear triangles' : 'Finish';
+        btn.disabled = false; btn.textContent = isRefill(p) ? 'Refill' : 'Finish';
         alert('Network error: ' + e.message);
     }
 }

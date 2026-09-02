@@ -19,9 +19,12 @@ def main():
     ap.add_argument("--hour", type=int, required=True)
     ap.add_argument("--minutes", type=int, default=60)
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument(
+        "--refill", action="store_true", help="strip existing PI/PSA/ID and fill from scratch"
+    )
     a = ap.parse_args()
     lo = a.hour * 3600.0
-    r = apply_window(connect(), a.market, a.date, lo, lo + a.minutes * 60, a.apply)
+    r = apply_window(connect(), a.market, a.date, lo, lo + a.minutes * 60, a.apply, refill=a.refill)
     print(f"\n{r['status'].upper()}" + (f": {r['message']}" if r.get("message") else ""))
     return 0 if r["status"] in ("applied", "dry-run", "finished") else 1
 

@@ -35,7 +35,19 @@ checksum is the *other* trigger (programs in the never-exploded hours). Explode 
 4. A mass condition that is "only in market X" (196 rows CVC vs 5 elsewhere) is almost never
    a per-asset property (assets are shared) — look for what a per-market OPERATOR action
    (MC's Explode) would have written.
-5. `finish_service._explode_window` now mimics Explode for the whole window (timecodes +
+5. **A verify tolerance must be derived from what the write legitimately changes.** My
+   first `_id_only` guard rejected any hour-end shift > 0.2s — but conforming 20 spots by
+   1-3 frames each legitimately moves the end ~1s, so every real hour "failed" with
+   "explode moved the hour's end" and nothing was written (Lee, CVC 10:00/14:00). Assert
+   the INVARIANT (ID still airs ≥ 5s, no content spills), not a magic delta.
+6. **"Fix it or finish it" has a limit — offer Refill.** Lee's manual cure (delete the
+   PIs/PSA/ID, click Finish) is now `refill=True`: strip every `is_fill` row, plan from
+   scratch; the page offers "Refill" on a filled show that still carries triangles.
+7. **A window whose next show is not placed has no F anchor at `hi`** — the F→F walk
+   swallowed the next hour's scheduler spots ("runs 25:55 past its slot", CVC 17:00).
+   Assume the next show starts at the grid's `hi` (Lee): stop the walk at the first PAID
+   row past `hi`, treat `hi` as fixed when no PGM sits there.
+8. `finish_service._explode_window` now mimics Explode for the whole window (timecodes +
    DURATION + checksum, PART=0, LIVE_ID NULL, before `plan_window` since the planner reads
    DURATION; `_id_only` path re-times and asserts the hour end held). "Finish a show" means
    zero triangles in it, not zero triangles on the rows Finish inserted.

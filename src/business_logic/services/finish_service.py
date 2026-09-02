@@ -28,6 +28,7 @@ from src.business_logic.services.daily_programming_run import (
 )
 from src.business_logic.services.finish_plan import (
     FPS,
+    ID_MIN_AIR,
     Ev,
     Filler,
     hms,
@@ -131,12 +132,21 @@ def _item_dict(it, start: float, tag: str) -> dict:
     }
 
 
-def plan_window(cur, market: int, date: str, lo: float, hi: float, rows=None) -> dict:
+def plan_window(
+    cur, market: int, date: str, lo: float, hi: float, rows=None, refill: bool = False
+) -> dict:
     """Read-only: the packed timeline Finish would produce, plus the edit list.
     `finished` is DERIVED: nothing to delete/insert except re-placing the ID that is
-    already there (planner reports 0 edits + ID present)."""
+    already there (planner reports 0 edits + ID present).
+
+    `refill` (Lee 9/1): strip every existing PI/PSA/ID the window holds and plan the
+    fill from scratch — what Lee did by hand on CVC 9/2 10:00 (delete the PIs and the
+    ID, click Finish) to get a show with no yellow triangles. Paid spots and programs
+    are never touched; the pre-strip remainder still decides "unplaced"."""
     rows = rows if rows is not None else load_day(cur, market, date)
-    evs = window_from_day(rows, lo, hi)
+    evs_all = window_from_day(rows, lo, hi)
+    strip: list[Ev] = [e for e in evs_all if e.is_fill] if refill else []
+    evs = [e for e in evs_all if not e.is_fill] if refill else evs_all
     if not evs or not any(e.is_program for e in evs):
         return {
             "ok": False,
@@ -154,8 +164,18 @@ def plan_window(cur, market: int, date: str, lo: float, hi: float, rows=None) ->
     hi_fixed = any(
         str(r[4] or "").strip() == "F" and abs(r[1] - int(hi * FPS)) <= FPS for r in rows
     )
+    # No F at `hi` and no program placed there either: the next show is simply not
+    # placed yet. Assume it will start at `hi` (Lee 9/1) so the hour can be finished
+    # now; when Daily Programming places it, its F event cuts the ID exactly there.
+    next_placed = any(str(r[3]).strip() == "PGM" and abs(r[1] - int(hi * FPS)) <= FPS for r in rows)
+    assume_fixed = not hi_fixed and not next_placed
+    hi_fixed = hi_fixed or assume_fixed
     inv = load_inventory(cur, market, date)
     breaks, notes = plan(evs, inv, hi, market)
+    if refill:
+        notes.insert(0, f"refill: {len(strip)} existing PI/PSA/ID rows removed, fill re-planned")
+    if assume_fixed:
+        notes.append(f"next show not placed yet — assuming it starts at {hms(hi)}")
     # An existing Station ID of the right asset is KEPT, not deleted and re-added:
     # the plan's ID slot is taken by the live row (new PSAs go in ahead of it via
     # XORDER) so the page shows a nudge as 0 remove / 1 add (Lee 8/28).
@@ -185,9 +205,11 @@ def plan_window(cur, market: int, date: str, lo: float, hi: float, rows=None) ->
         if isinstance(x, Ev) and not x.is_program and _actual_break(x) != b.after_piece_idx
     ]
     planned = {id(x) for b in breaks for x in b.items}
-    deletes = [
-        e for e in evs if e.newtype != "ID" and e.is_fill and id(e) not in planned
-    ] + extra_deletes
+    deletes = (
+        [e for e in evs if e.newtype != "ID" and e.is_fill and id(e) not in planned]
+        + extra_deletes
+        + strip
+    )
     inserts = [(b, x) for b in breaks for x in b.items if isinstance(x, Filler)]
     cannot = any(n.startswith("⚠") for n in notes)
     id_only = not deletes and not inserts and not moves  # nothing to write
@@ -218,8 +240,8 @@ def plan_window(cur, market: int, date: str, lo: float, hi: float, rows=None) ->
         edits.insert(0, {"op": "delete", **_item_dict(e, e.ora, "del")})
     for e, tgt in moves:
         edits.append({"op": "move", **_item_dict(e, e.ora, "move"), "break": tgt})
-    actual_end = max(e.end for e in evs)
-    rem_s = hi - pieces[0].ora - sum(e.dur for e in evs if e.newtype not in ("ID", "NOOP"))
+    actual_end = max(e.end for e in evs_all)
+    rem_s = hi - pieces[0].ora - sum(e.dur for e in evs_all if e.newtype not in ("ID", "NOOP"))
     if len(pieces) == 1 and not breaks[0].items if breaks else True:
         state = (
             "na"  # a single fixed event with no breaks (overnight live feed) — nothing to finish
@@ -367,16 +389,24 @@ def list_programs(cur, market: int, date: str) -> list[dict]:
 
 
 def apply_window(
-    conn, market: int, date: str, lo: float, hi: float, apply: bool, log=print
+    conn,
+    market: int,
+    date: str,
+    lo: float,
+    hi: float,
+    apply: bool,
+    log=print,
+    refill: bool = False,
 ) -> dict:
-    """Plan + write one window. `apply=False` does everything and rolls back."""
+    """Plan + write one window. `apply=False` does everything and rolls back.
+    `refill`: strip the existing PI/PSA/ID rows first and fill from scratch."""
     cur = conn.cursor()
     lo_f, hi_f = int(lo * FPS), int(hi * FPS)
     # Explode first: the planner reads DURATION, so it must see the conformed rows.
     # Rolled back with everything else if the plan cannot land or apply=False.
     xp = _explode_window(cur, market, date, lo_f, hi_f)
     log(f"  exploded (yellow triangles): {xp['timecodes']} timecodes, {xp['checksums']} checksums")
-    r = plan_window(cur, market, date, lo, hi)
+    r = plan_window(cur, market, date, lo, hi, refill=refill)
     for n in r.get("notes", []):
         log(f"  • {n}")
     if not r["ok"]:
@@ -391,14 +421,19 @@ def apply_window(
         # nothing to fill — still put the breaks in order (Finish = fill + order)
         try:
             if xp["timecodes"]:
-                # conformed DURATIONs move the rows behind them by a frame or two;
-                # re-time from the first program piece and prove the hour's end held
+                # conformed DURATIONs move everything behind them by 1-3 frames each
+                # (20 spots ≈ 1s — a fixed 0.2s end tolerance rejected every real
+                # hour, Lee 9/1). Re-time from the first program piece and prove the
+                # hour still FINISHES: the ID airs ≥ ID_MIN_AIR and no content spills.
                 _rebuild_shiftup(cur, date, market, next(e for e in r["_evs"] if e.is_program).id)
                 after = window_from_day(load_day(cur, market, date), lo, hi)
-                end = max(e.end for e in after)
-                if abs(end - r["actual_end"]) > 0.2:
+                ids = [e for e in after if e.newtype == "ID"]
+                id_airs = hi - ids[-1].ora if ids else 0.0
+                spill = max((e.end for e in after if e.newtype != "ID"), default=lo)
+                if id_airs < ID_MIN_AIR or spill > hi + 0.5:
                     raise RuntimeError(
-                        f"explode moved the hour's end {hms(r['actual_end'])} -> {hms(end)}"
+                        f"after explode the ID airs {id_airs:.1f}s and content ends "
+                        f"{hms(spill)} — use Refill on this show"
                     )
             bo = _bo_apply(conn, market, date, lo_f, hi_f)
         except Exception as exc:  # noqa: BLE001 — ordering must never break a finished hour

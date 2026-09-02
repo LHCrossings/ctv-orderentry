@@ -156,8 +156,15 @@ def window_from_day(rows: list[tuple], lo: float, hi: float) -> list[Ev]:
             # a guide window may end before the next F anchor (12:00-13:00 inside a
             # 12:00 F ... 14:00 F span): program/NOOP content at or past `hi` is the
             # next window; spilled spots (COM/PER past `hi`) still belong to this one
-            next_pgm = r[1] >= hi_f - FPS and str(r[3]).strip() in ("PGM", "NOOP")
-            if is_f or next_pgm:
+            # When the next show is not placed yet there is no F anchor at `hi`, and
+            # the walk would swallow the next hour's scheduler spots (CVC 9/2 17:00 read
+            # "runs 25:55 past its slot", Lee 9/1). Assume the next show starts at `hi`:
+            # a PAID spot at or past `hi` is the next hour's; only our own fill
+            # (PI/PSA/ID) may spill past the top and still belong to this window.
+            past_hi = r[1] >= hi_f - FPS
+            next_pgm = past_hi and str(r[3]).strip() in ("PGM", "NOOP")
+            next_paid = past_hi and not _ev(r).is_fill and not _ev(r).is_program
+            if is_f or next_pgm or next_paid:
                 end = k
                 break
         sel = rows[start:end]

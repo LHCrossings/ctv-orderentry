@@ -35,6 +35,7 @@ class FinishApplyBody(BaseModel):
     date: str
     lo: float
     hi: float
+    refill: bool = False  # strip existing PI/PSA/ID and fill from scratch (Lee 9/1)
 
 
 def _market_id(code: str) -> int:
@@ -71,6 +72,7 @@ def build_finish_router(templates: Jinja2Templates) -> APIRouter:
         date: str = Query(...),
         lo: float = Query(...),
         hi: float = Query(...),
+        refill: bool = Query(False),
     ):
         mid = _market_id(market)
 
@@ -79,7 +81,7 @@ def build_finish_router(templates: Jinja2Templates) -> APIRouter:
             from src.business_logic.services.finish_service import plan_window
 
             with connect() as conn:
-                r = plan_window(conn.cursor(), mid, date, lo, hi)
+                r = plan_window(conn.cursor(), mid, date, lo, hi, refill=refill)
             return {k: v for k, v in r.items() if not k.startswith("_")}
 
         return await asyncio.get_running_loop().run_in_executor(None, _run)
@@ -94,7 +96,9 @@ def build_finish_router(templates: Jinja2Templates) -> APIRouter:
 
             log: list[str] = []
             with connect() as conn:
-                r = apply_window(conn, mid, body.date, body.lo, body.hi, True, log=log.append)
+                r = apply_window(
+                    conn, mid, body.date, body.lo, body.hi, True, log=log.append, refill=body.refill
+                )
             r["log"] = log
             return r
 
