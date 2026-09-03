@@ -54,10 +54,10 @@ Plain-language version:
 | Name | Instance ID | Type | OS | Private IP | Public IP | Subnet | Duty |
 |---|---|---|---|---|---|---|---|
 | CIB_01 | i-0ff950a64257f46cb | m7i.2xlarge | Windows | 10.0.0.248 | — | Res-subnet | Playout: **NYC** (Etere channel 001) + **WDC** (008) |
-| CIB_03 | i-0d991ada339ad8750 | m7i.2xlarge | Windows | 10.0.0.218 | — | Res-subnet | Playout: channels 004 + 005 (**SFO + SEA** [CONFIRM]) |
-| CIB_04 | i-047c0def44d5a1a09 | m7i.2xlarge | Windows | 10.0.0.203 | — | Res-subnet | Playout: channels 006 + 007 (**LAX + CVC** [CONFIRM]) |
+| CIB_03 | i-0d991ada339ad8750 | m7i.2xlarge | Windows | 10.0.0.218 | — | Res-subnet | Playout: **SFO** (004) + **SEA** (005) |
+| CIB_04 | i-047c0def44d5a1a09 | m7i.2xlarge | Windows | 10.0.0.203 | — | Res-subnet | Playout: **LAX** (006) + **CVC** (007) |
 | CIB_05 | i-0e5fd27b8b08e8112 | m7i.2xlarge | Windows | 10.0.0.238 | — | Res-subnet | Playout: **MMT** (009) + **DAL** (010). Ex domain controller. |
-| CIB_06 | i-0eb6756aa1edcea83 | m7i.2xlarge | Windows | 10.0.0.224 | — | Res-subnet | Playout: channels 002 + 003 (**CMP + HOU** [CONFIRM]) |
+| CIB_06 | i-0eb6756aa1edcea83 | m7i.2xlarge | Windows | 10.0.0.224 | — | Res-subnet | Playout: **CMP** (002) + **HOU** (003) |
 | CIB_TEST | i-0ad305348ee0fdcd3 | m7i.2xlarge | Windows | 10.0.0.22 | 44.226.226.62 | mgmt-subnet | Spare / test playout box. **Stopped.** On-demand by design. |
 | Datamover | i-00350e9c4ab66f867 | m7i.2xlarge | Windows | 10.0.0.199 | 35.83.140.112 | Res-subnet | Media mover (EtereMM9.exe), **PDC** domain controller, K:/M: file shares, air-check agent, Prometheus, CrashPlan, OneDrive |
 | SQL Server | i-0c37cea16e35f6a2d | m7i.xlarge | Windows + SQL Std | 10.0.0.146 | — | DB-subnet | Etere database (`Etere_crossing`). Nightly 02:00 PT backup. |
@@ -76,9 +76,8 @@ Notes:
 - All playout boxes are identical as of 2026-08-28 [OPS]: m7i.2xlarge, one NIC,
   C: gp3 500 GB at 6000 IOPS / 500 MB/s, Etere 36.1.360.9454.
 - Etere channel numbers follow the Etere market IDs (1 NYC, 2 CMP, 3 HOU, 4 SFO,
-  5 SEA, 6 LAX, 7 CVC, 8 WDC, 9 MMT, 10 DAL). CIB_01 and CIB_05 are verified
-  from their log folders. The other three pairings are inferred from that
-  numbering. [CONFIRM]
+  5 SEA, 6 LAX, 7 CVC, 8 WDC, 9 MMT, 10 DAL). All five CIB pairings confirmed by
+  Lee 2026-09-03.
 
 ### 2.2 Storage volumes [LIVE]
 
@@ -218,8 +217,8 @@ on port 5000.
 | MMT | 9865589 | rtp://10.0.0.221:5000 | 10.0.0.124 | 4303233 |
 | DAL | 7617948 | rtp://10.0.0.231:5000 | 10.0.0.70 | **none — input DETACHED** |
 
-DAL has an input but no channel. The Asian Channel is delivered by a different
-path (probably SRT direct from the CIB or via Haivision). [CONFIRM]
+DAL has an input but no channel. Lee (2026-09-03): the DAL input exists for
+**future use** if needed. The Asian Channel is not delivered through MediaLive today.
 
 ### 4.4 MediaLive channels [LIVE]
 
@@ -261,8 +260,8 @@ flows exist in the account.
 ### 4.6 Monitoring: Stirlitz IP Multiviewer [OPS]
 
 - `http://34.208.18.64` (plain HTTP, port 80). Tile layout in `/live/screens`
-  lists each station's SRT source (`srt://10.0.0.x:port`), i.e. it pulls from
-  the Haivision. [CONFIRM the source IPs]
+  lists each station's SRT source (`srt://10.0.0.x:port`). Every tile **pulls
+  from the Haivision** (Lee, 2026-09-03). Per-station port list to be added.
 - Alarm API: `GET /alarmsState/monitor?accessKey=…` (key-only). Four conditions
   per station: video freeze, video no-data, audio below threshold, audio no-data.
 - Feeds the Control Room broadcast-health indicator (plan in `tasks/broadcast-health.md`).
@@ -337,10 +336,9 @@ flows exist in the account.
 
 ## 6. Open items and known gaps (as of 2026-09-03)
 
-- Confirm CIB_03 / CIB_04 / CIB_06 channel pairings (section 2.1).
 - Document the Haivision route list and each affiliate destination (section 4.5).
-- Confirm how DAL is delivered (section 4.3).
-- Confirm the Multiviewer's SRT source addresses (section 4.6).
+- Document how the Asian Channel (DAL) reaches its distributor today (section 4.3).
+- Add the Multiviewer's per-station SRT ports on the Haivision (section 4.6).
 - Release two idle Elastic IPs; delete the detached `vpn-nic` ENI (10.0.0.36);
   scope "Send to MediaLive" SG to the VPC; ask whether Haivision SSH/22 from the
   world is needed.
