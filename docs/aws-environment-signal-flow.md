@@ -419,8 +419,10 @@ reason those routes show a "warn" status.
 - Confirm what the seven "Play Pro" SRT destinations are for. All are
   disconnected today. [CONFIRM]
 - The Washington DC route carried the "Comcast - MMT" destination (:6207) as a
-  leftover from a signal cover-up. Lee removed it 2026-09-03. Re-read
-  `/api/routes` to confirm the dangling destination ID went with it.
+  leftover from a signal cover-up. Lee removed it 2026-09-03 (verified via
+  `/api/routes`). The route still references one destination ID (`a3adb49a…`)
+  that no longer exists in `/api/destinations`; harmless, but it can be cleared
+  by editing the route in the web UI.
 
 - Release two idle Elastic IPs; delete the detached `vpn-nic` ENI (10.0.0.36);
   scope "Send to MediaLive" SG to the VPC; ask whether Haivision SSH/22 from the
