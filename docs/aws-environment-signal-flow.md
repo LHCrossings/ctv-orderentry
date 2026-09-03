@@ -259,9 +259,30 @@ flows exist in the account.
 
 ### 4.6 Monitoring: Stirlitz IP Multiviewer [OPS]
 
-- `http://34.208.18.64` (plain HTTP, port 80). Tile layout in `/live/screens`
-  lists each station's SRT source (`srt://10.0.0.x:port`). Every tile **pulls
-  from the Haivision** (Lee, 2026-09-03). Per-station port list to be added.
+- `http://34.208.18.64` (plain HTTP, port 80). Every tile pulls SRT **from the
+  Haivision** (10.0.0.32). Tile → source map read live from `/live/screens` on
+  2026-09-03 [LIVE]:
+
+| Multiviewer tile | SRT source on Haivision |
+|---|---|
+| New York | srt://10.0.0.32:6014 |
+| Chicago Minneapolis | srt://10.0.0.32:6204 |
+| Houston | srt://10.0.0.32:6205 |
+| San Francisco | srt://10.0.0.32:6200 |
+| SFO KQTA 15.3 (SFO over-the-air) | srt://10.0.0.32:6016 |
+| Seattle | srt://10.0.0.32:6203 |
+| Los Angeles | srt://10.0.0.32:6008 |
+| Central Valley CA | srt://10.0.0.32:6201 |
+| CVC KBTV 8.2 (CVC over-the-air) | srt://10.0.0.32:6018 |
+| Washington DC | srt://10.0.0.32:6206 |
+| National Multimarket | srt://10.0.0.32:6207 |
+| Dallas KLEG 44.3 / KFWD 52.4 (The Asian Channel) | srt://10.0.0.32:6015 |
+
+  Twelve tiles: the nine MediaLive markets, two over-the-air tower feeds (SFO,
+  CVC), and Dallas. The Haivision therefore carries a **DAL** stream even though
+  DAL has no MediaLive channel, so DAL reaches the Haivision by another path
+  (section 4.3). The SFO Tower correlation is direct: MediaLive output
+  `udp://10.0.0.32:5016` → Haivision SRT `:6016`.
 - Alarm API: `GET /alarmsState/monitor?accessKey=…` (key-only). Four conditions
   per station: video freeze, video no-data, audio below threshold, audio no-data.
 - Feeds the Control Room broadcast-health indicator (plan in `tasks/broadcast-health.md`).
@@ -337,8 +358,8 @@ flows exist in the account.
 ## 6. Open items and known gaps (as of 2026-09-03)
 
 - Document the Haivision route list and each affiliate destination (section 4.5).
-- Document how the Asian Channel (DAL) reaches its distributor today (section 4.3).
-- Add the Multiviewer's per-station SRT ports on the Haivision (section 4.6).
+- Document how the Asian Channel (DAL) reaches the Haivision and its distributor today (sections 4.3, 4.6).
+
 - Release two idle Elastic IPs; delete the detached `vpn-nic` ENI (10.0.0.36);
   scope "Send to MediaLive" SG to the VPC; ask whether Haivision SSH/22 from the
   world is needed.
