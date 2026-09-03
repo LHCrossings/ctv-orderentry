@@ -219,10 +219,12 @@ on port 5000.
 | MMT | 9865589 | rtp://10.0.0.221:5000 | 10.0.0.124 | 4303233 |
 | DAL | 7617948 | rtp://10.0.0.231:5000 | 10.0.0.70 | **none — input DETACHED** |
 
-DAL has an input but no channel. Lee (2026-09-03): the DAL input exists for
-**future use** if needed. The Asian Channel is not delivered through MediaLive
-today. It arrives at the Haivision as UDP on port 5015 ("Etere DAL Tower In")
-and leaves as SRT :6015 to the Dallas OTA operator (KFWD 52.4 / KLEG 44.3).
+DAL has an input but no channel. Lee (2026-09-03): **CIB_05's Etere AU sends
+the DAL output directly to the Haivision** as UDP on port 5015 ("Etere DAL Tower
+In"). There is no MediaLive encode in between. It leaves the Haivision as SRT
+:6015 to the Dallas OTA operator (KFWD 52.4 / KLEG 44.3). The DAL MediaLive
+input is staged for the future: if the direct feed keeps showing packet issues,
+DAL will be routed through a MediaLive channel like the other nine markets.
 
 ### 4.4 MediaLive channels [LIVE]
 
@@ -282,7 +284,7 @@ flows exist in the account.
 | | | | :6207 | Comcast - MMT (also attached here, see section 6) | ok |
 | National Multimarket | Etere MMT In :5019 | MediaLive MMT | :6207 | Comcast - MMT | ok |
 | | | | :6019 | Play Pro MMT | disconnected |
-| Dallas | Etere DAL Tower In :5015 | **not MediaLive** (see section 6) | :6015 | Joe Winston - Dallas OTA (KFWD and KLEG) | ok |
+| Dallas | Etere DAL Tower In :5015 | **CIB_05 Etere AU directly** (no MediaLive) | :6015 | Joe Winston - Dallas OTA (KFWD and KLEG) | ok |
 | Etere Test Feed 1 | Test CIB 1 In :5020 | — | :6020 | Etere - Test CIB 1 | stopped |
 | Etere Test Feed 2 | Test CIB 2 In :5021 | — | :6021 | Etere - Test CIB 2 | stopped |
 
@@ -398,9 +400,9 @@ reason those routes show a "warn" status.
 
 ## 6. Open items and known gaps (as of 2026-09-03)
 
-- Confirm which machine sends UDP to the Haivision on port 5015 (DAL) and port
-  5018 (CVC Tower). Neither has a MediaLive channel. Likely CIB_05 direct and
-  the Jumpbox NDI converter. [CONFIRM]
+- Confirm the sender of UDP port 5018 (CVC Tower) on the Haivision. No MediaLive
+  channel feeds it; likely the Jumpbox NDI converter. [CONFIRM]
+  (DAL on 5015 is confirmed: CIB_05 Etere AU direct.)
 - Confirm what the seven "Play Pro" SRT destinations are for. All are
   disconnected today. [CONFIRM]
 - The Washington DC route carries the "Comcast - MMT" destination (:6207) in
