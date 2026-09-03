@@ -1,3 +1,35 @@
+# ⏳ ACTIVE — MVMS (Marathon Ventures) WorldLink post-log export (2026-09-02)
+
+Aki forwarded Marathon Ventures' data request: spot-level "post log" of aired spots, Q1 2025 →
+Q3 2026, in their 17-column template (`/mnt/c/Work Temp/!New/!Orders/MVMS Data Request - SAMPLE
+Crossings TV.xlsx`). Lee's decisions (9/2): **WorldLink agency (ANAGRAF 133) only; COM + BNS
+only (no PER); "Agency" = the client agency (Tatari, Marketing Architects, Direct Donor…) parsed
+from the client name's parenthetical, plus a Rep column = Worldlink; 800 Number stays blank
+(not in Etere); one xlsx per quarter saved to K: for Aki; one-off script kept in the repo.**
+Aired = `TPALINSE.STATUS='Q'` (A = aborted, never aired — see ee-status memory).
+
+## Plan
+- [x] `scripts/mvms_post_log_export.py --from 2025-01-01 --to 2026-09-30 --out-dir "<K:>"`
+      (defaults: agency 133, types COM,BNS). Per calendar quarter: query TPALINSE Q rows →
+      trafficPalinse → CONTRATTIRIGHE → CONTRATTITESTATA(AGENZIA=133) → ANAGRAF ×2 → FILMATI;
+      enclosing PGM = latest PGM row on the same market/day with ORA ≤ spot ORA.
+- [x] Derivations: post-midnight ORA ≥ 24h → next calendar date, time − 24h; Length `m:ss`;
+      Rate = CONTRATTIRIGHE.IMPORTO (BNS → 0.00); Daypart code from the LINE window
+      (EM 6-9a / DA 9a-6p per Marathon's sample / PR 6-11p / LF 11p-2a / ON 2-6a; ROS when the
+      window spans ≥ 3 codes). Lee 9/2: Rate = as entered in Etere (unit price on the NYC line,
+      0.00 on the other 8 market lines of the same order line), NO extra unit-rate column.; Time Period `(h:mm:ss AM-…)`;
+      Agency alias map (MA→Marketing Architects, DD/Direct→Direct Donor, Tatari→Tatari Inc,
+      Icon/IMD→Icon Media Direct, Inc., KCLL→Key Contacts - Legal Leads),
+      Advertiser = client name minus the parenthetical.
+- [x] Workbook per quarter: Marathon's 17 columns in their order + extras at the right
+      (Rep, Spot Type, Market, Line Descr); a Summary sheet (rows per market/month/agency).
+- [~] Verify: per-quarter row count == direct COUNT(*) of the same filter; distinct parsed
+      agency list printed for Lee; spot-check 3 rows against EE; post-midnight rows land on the
+      next date; every file < 1,048,576 rows; `uv run ruff check` clean.
+- [ ] Commit + push; tell Lee the K: folder; note for Aki: 800 Number blank by design.
+
+---
+
 # ✅ DONE — EDI R34 commission = EDI gross − affidavit net (2026-09-02)
 
 Lee: TVInvoices only carries 2-decimal spot rates, so the EDI gross drifts from our affidavit
