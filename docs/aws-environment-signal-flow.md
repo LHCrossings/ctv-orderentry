@@ -337,7 +337,7 @@ Comcast/Charter/OTA destinations must stay connected.
 - GPU driver upgraded to NVIDIA GRID 19.6 / 582.78 on 2026-08-26 after repeated
   BSOD 0x119 crashes.
 
-### 4.7 Other feeds on the Jumpbox [OPS, CONFIRM details]
+### 4.7 Other feeds on the Jumpbox [OPS]
 
 - **CVC Tower (Sacramento OTA, KBTV 8.2)** — confirmed by Lee 2026-09-03. The
   Etere AU that plays CVC outputs the channel twice: as RTP to MediaLive (the
@@ -348,7 +348,7 @@ Comcast/Charter/OTA destinations must stay connected.
 
   | Setting | Value |
   |---|---|
-  | Source | NDI `EC2AMAZ-6VAQA0L (01ETX0006N)`, bandwidth Highest |
+  | Source | NDI `EC2AMAZ-6VAQA0L (01ETX0006N)` = **CIB_04** (hostname verified over SSM 2026-09-03), bandwidth Highest |
   | Input format | NTSC UYVY 720×486 @ 29.97 interlaced, 4:3; audio 48 kHz 2-ch 16-bit |
   | Output | `udp://10.0.0.32:5018`, DVB transport stream, service name "Crossings Sacramento", service ID 428 |
   | Video | MPEG-2, 1.5 Mbps, B-frames on, PID 4281 |
