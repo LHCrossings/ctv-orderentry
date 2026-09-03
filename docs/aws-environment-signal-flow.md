@@ -292,8 +292,13 @@ flows exist in the account.
 
 Naming pattern: Comcast/Charter destinations use ports 620x (cable headends),
 tower/OTA destinations use 601x, and the "Play Pro" destinations use the even
-600x/601x ports. All seven Play Pro destinations are disconnected; they are the
-reason those routes show a "warn" status.
+600x/601x ports.
+
+**Play Pro** = Haivision Play Pro, the mobile app. Staff connect to a market's
+Play Pro listener from a phone or tablet to watch that channel live. When
+nobody is connected the destination shows "disconnected" and the route shows
+"warn". **This is normal** (Lee, 2026-09-03), not a fault. Only the
+Comcast/Charter/OTA destinations must stay connected.
 
 - The Haivision also delivered alternate content to NYC and WDC while CIB_01 was
   offline on 2026-08-28. It is the operator's manual failover tool.
@@ -416,8 +421,6 @@ reason those routes show a "warn" status.
 
 ## 6. Open items and known gaps (as of 2026-09-03)
 
-- Confirm what the seven "Play Pro" SRT destinations are for. All are
-  disconnected today. [CONFIRM]
 - The Washington DC route carried the "Comcast - MMT" destination (:6207) as a
   leftover from a signal cover-up. Lee removed it 2026-09-03 (verified via
   `/api/routes`). The route still references one destination ID (`a3adb49a…`)
