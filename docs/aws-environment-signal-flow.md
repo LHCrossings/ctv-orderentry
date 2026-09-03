@@ -23,7 +23,10 @@ flowchart LR
     DM -->|SMB push, 24h look-ahead<br/>burst at 06:00 rollover| CIB[5 × CIB playout servers<br/>Etere ETXServer<br/>2 channels each]
     SQL[(SQL Server<br/>Etere DB<br/>10.0.0.146)] <-->|schedule, as-run| CIB
     ET[ETERE_01 / ETERE_02<br/>operator workstations] <--> SQL
-    JB[Jumpbox<br/>RDP bastion + Control Room app<br/>NDI / Shop LC feeds] <--> CIB
+    JB[Jumpbox<br/>RDP bastion + Control Room app<br/>NDI→MPEG-2 converter, Shop LC feed] <--> CIB
+    CIB -->|NDI CVC| JB
+    JB -->|UDP MPEG-2 TS :5018<br/>CVC Tower| HV
+    CIB -->|UDP :5015<br/>DAL direct| HV
     CIB -->|RTP push :5000<br/>1 input per market| ML[AWS Elemental MediaLive<br/>9 channels, single pipeline<br/>H.264 1080i CBR, AC-3]
     ML -->|UDP MPEG-TS<br/>10.0.0.32:50xx| HV[Haivision SRT Gateway<br/>10.0.0.32 / 44.235.103.12]
     HV -->|SRT| AFF[Affiliates / cable headends<br/>Comcast and others]
@@ -255,9 +258,9 @@ flows exist in the account.
 
 - Firmware 4.2.0-3694. Web UI and REST API at `https://44.235.103.12` (self-signed cert).
 - Every **source** is a UDP unicast listener on `0.0.0.0:50xx`. MediaLive pushes
-  the nine market streams to these ports. Two more sources (DAL 5015, CVC Tower
-  5018) have **no MediaLive channel behind them**; they are fed directly from
-  inside the VPC (see 4.7 and section 6).
+  the nine market streams to these ports. Two more sources have **no MediaLive
+  channel behind them**: DAL 5015 comes straight from CIB_05's Etere AU, and CVC
+  Tower 5018 comes from the Jumpbox converter (see 4.7).
 - Every **destination** is an **SRT listener** on `0.0.0.0:6xxx`. The affiliates
   and the tower operators are SRT **callers**: they connect in to the Haivision.
   This is why the security group opens UDP 6000–6021 and 6200–6209 to the world.
@@ -279,9 +282,8 @@ flows exist in the account.
 | Los Angeles | Etere LAX In :5009 | MediaLive LAX | :6008 | Charter - LAX | ok |
 | Central Valley CA | Etere CVC In :5006 | MediaLive CVC | :6201 | Comcast - CVC | ok |
 | | | | :6006 | Play Pro CVC | disconnected |
-| Sacramento OTA | Etere CVC Tower In :5018 | **not MediaLive** (Jumpbox NDI converter, see 4.7) | :6018 | Joe Winston - Sacramento OTA (KBTV) | ok |
+| Sacramento OTA | Etere CVC Tower In :5018 | **Jumpbox NDI→MPEG-2 converter** (see 4.7) | :6018 | Joe Winston - Sacramento OTA (KBTV) | ok |
 | Washington DC | Etere WDC In :5017 | MediaLive WDC | :6206 | Comcast - WDC | ok |
-| | | | :6207 | Comcast - MMT (also attached here, see section 6) | ok |
 | National Multimarket | Etere MMT In :5019 | MediaLive MMT | :6207 | Comcast - MMT | ok |
 | | | | :6019 | Play Pro MMT | disconnected |
 | Dallas | Etere DAL Tower In :5015 | **CIB_05 Etere AU directly** (no MediaLive) | :6015 | Joe Winston - Dallas OTA (KFWD and KLEG) | ok |
@@ -332,11 +334,25 @@ reason those routes show a "warn" status.
 
 ### 4.7 Other feeds on the Jumpbox [OPS, CONFIRM details]
 
-- **CVC Tower NDI** — the Jumpbox converts and streams this 24/7. The Haivision
-  source "Etere CVC Tower In" (UDP 5018) has no MediaLive channel behind it, so
-  the Jumpbox is the sender for the Sacramento OTA (KBTV 8.2) feed. [CONFIRM]
-  It is a sustained real-time load: never move the Jumpbox to a burstable type,
-  and a resize drops the tower stream.
+- **CVC Tower (Sacramento OTA, KBTV 8.2)** — confirmed by Lee 2026-09-03. The
+  Etere AU that plays CVC outputs the channel twice: as RTP to MediaLive (the
+  cable path) **and as an NDI stream**. The Jumpbox pulls that NDI stream,
+  converts it to an MPEG-2 transport stream, and sends it by UDP to the
+  Haivision on port 5018, which hands it to Joe Winston's KBTV transmitter as
+  SRT :6018. Converter process on the Jumpbox ("Sac Tower"):
+
+  | Setting | Value |
+  |---|---|
+  | Source | NDI `EC2AMAZ-6VAQA0L (01ETX0006N)`, bandwidth Highest |
+  | Input format | NTSC UYVY 720×486 @ 29.97 interlaced, 4:3; audio 48 kHz 2-ch 16-bit |
+  | Output | `udp://10.0.0.32:5018`, DVB transport stream, service name "Crossings Sacramento", service ID 428 |
+  | Video | MPEG-2, 1.5 Mbps, B-frames on, PID 4281 |
+  | Audio | AC-3, 128 kbps, PID 4282 |
+  | Mux rate | 2.5 Mbps; PMT PID 4280 |
+  | Loudness | disabled |
+
+  This is a sustained real-time load: never move the Jumpbox to a burstable
+  type, and a resize drops the tower stream.
 - **Shop LC** — live feed received on UDP 5050 from four whitelisted IPs
   (67.79.26.10, 209.36.98.76, 209.36.98.66, 66.162.212.34). Etere schedules it
   as a live event (`LIVE_ID`), so the rows must never be "exploded". Rules on the
@@ -400,14 +416,11 @@ reason those routes show a "warn" status.
 
 ## 6. Open items and known gaps (as of 2026-09-03)
 
-- Confirm the sender of UDP port 5018 (CVC Tower) on the Haivision. No MediaLive
-  channel feeds it; likely the Jumpbox NDI converter. [CONFIRM]
-  (DAL on 5015 is confirmed: CIB_05 Etere AU direct.)
 - Confirm what the seven "Play Pro" SRT destinations are for. All are
   disconnected today. [CONFIRM]
-- The Washington DC route carries the "Comcast - MMT" destination (:6207) in
-  addition to its own, plus one dangling destination ID that no longer exists.
-  Two routes feeding one listener may be intentional; check. [CONFIRM]
+- The Washington DC route carried the "Comcast - MMT" destination (:6207) as a
+  leftover from a signal cover-up. Lee removed it 2026-09-03. Re-read
+  `/api/routes` to confirm the dangling destination ID went with it.
 
 - Release two idle Elastic IPs; delete the detached `vpn-nic` ENI (10.0.0.36);
   scope "Send to MediaLive" SG to the VPC; ask whether Haivision SSH/22 from the
