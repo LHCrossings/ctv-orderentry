@@ -44,7 +44,16 @@ jobs:
           # bump. 1.98.8 = the version our own machines run.
           version: 1.98.8
           use-cache: 'true'
-          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          # OAuth client (self-mints an ephemeral key per run — nothing to
+          # rotate, unlike the old reusable TAILSCALE_AUTHKEY which expired
+          # every 90 days). Requires repo secrets TS_OAUTH_CLIENT_ID /
+          # TS_OAUTH_SECRET (OAuth client with writable "auth_keys" scope and a
+          # tag matching `tags` below), and an ACL granting tag:ci → DEPLOY_HOST:22.
+          # See https://tailscale.com/kb/1215/oauth-clients
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          # Must match tag(s) on the OAuth client in the admin console.
+          tags: tag:ci
           # Wait until deploy host is reachable on tailnet.
           ping: ${{ vars.DEPLOY_HOST }}
 
