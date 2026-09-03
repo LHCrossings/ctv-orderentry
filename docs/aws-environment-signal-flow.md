@@ -98,8 +98,10 @@ Notes:
   Deploys on every push to `main`.
 - **Tailscale** — overlay network. Staff reach K:/M: shares, air checks, and the
   Datamover agent through Tailscale, not through open security-group rules.
-- **Affiliate headends** (Comcast and others) — receive SRT from the Haivision.
-  Route list lives in the Haivision web UI at `https://44.235.103.12`. [CONFIRM the list]
+- **Affiliate headends and tower operators** — Comcast (CVC, CMP, HOU, SFO, SEA,
+  WDC, MMT), Charter (NYC, LAX), KQTA (SFO over-the-air), and Joe Winston's
+  transmitter sites (KBTV Sacramento, KFWD/KLEG Dallas). Each one SRT-calls into
+  its own Haivision listener port (table in 4.5).
 
 ---
 
@@ -218,7 +220,9 @@ on port 5000.
 | DAL | 7617948 | rtp://10.0.0.231:5000 | 10.0.0.70 | **none — input DETACHED** |
 
 DAL has an input but no channel. Lee (2026-09-03): the DAL input exists for
-**future use** if needed. The Asian Channel is not delivered through MediaLive today.
+**future use** if needed. The Asian Channel is not delivered through MediaLive
+today. It arrives at the Haivision as UDP on port 5015 ("Etere DAL Tower In")
+and leaves as SRT :6015 to the Dallas OTA operator (KFWD 52.4 / KLEG 44.3).
 
 ### 4.4 MediaLive channels [LIVE]
 
@@ -245,17 +249,52 @@ Encode profile (same shape on every channel):
 Container: MPEG-2 TS, 1000 ms buffer, no FEC. No MediaPackage, no MediaConnect
 flows exist in the account.
 
-### 4.5 Haivision SRT Gateway [OPS + LIVE]
+### 4.5 Haivision SRT Gateway [LIVE 2026-09-03, read via REST API]
 
 - Firmware 4.2.0-3694. Web UI and REST API at `https://44.235.103.12` (self-signed cert).
-- Receives the nine MediaLive UDP streams on ports 5003–5019 (VPC-internal).
-- Publishes SRT. The security group opens UDP 6000–6021 and 6200–6209 to the
-  world for SRT callers/listeners. UDP 5000–5029 is also open from
-  100.20.174.0/24 (an AWS range, likely a MediaLive public egress). [CONFIRM]
-- Also delivered alternate content to NYC and WDC while CIB_01 was offline on
-  2026-08-28. It is the operator's manual failover tool.
-- Route/source/destination list must be read from the UI or
-  `GET /api/routes`. Reference: `.claude/documents/haivision-srt-gateway-api.md`.
+- Every **source** is a UDP unicast listener on `0.0.0.0:50xx`. MediaLive pushes
+  the nine market streams to these ports. Two more sources (DAL 5015, CVC Tower
+  5018) have **no MediaLive channel behind them**; they are fed directly from
+  inside the VPC (see 4.7 and section 6).
+- Every **destination** is an **SRT listener** on `0.0.0.0:6xxx`. The affiliates
+  and the tower operators are SRT **callers**: they connect in to the Haivision.
+  This is why the security group opens UDP 6000–6021 and 6200–6209 to the world.
+  The Multiviewer is simply one more SRT client on the same listener ports.
+- 14 routes. 12 running, 2 stopped test routes.
+
+| Route | Source (UDP in) | Fed by | SRT listener out | Who connects | State |
+|---|---|---|---|---|---|
+| New York | Etere NYC In :5014 | MediaLive NYC | :6014 | Charter - NYC | ok |
+| Chicago/Minneapolis | Etere CMP In :5011 | MediaLive CMP | :6204 | Comcast - CMP | ok |
+| | | | :6010 | Play Pro CMP | disconnected |
+| Houston | Etere HOU In :5013 | MediaLive HOU | :6205 | Comcast - HOU | ok |
+| | | | :6012 | Play Pro HOU | disconnected |
+| San Francisco Cable | Etere SFO in :5005 | MediaLive SFO | :6200 | Comcast - SFO | ok |
+| | | | :6004 | Play Pro SFO | disconnected |
+| San Francisco OTA | Etere SFO Tower In :5016 | MediaLive SFO (2nd output, 4 Mbps) | :6016 | KQTA - SFO Tower | ok |
+| Seattle | Etere SEA In :5003 | MediaLive SEA | :6203 | Comcast - SEA | ok |
+| | | | :6002 | Play Pro SEA | disconnected |
+| Los Angeles | Etere LAX In :5009 | MediaLive LAX | :6008 | Charter - LAX | ok |
+| Central Valley CA | Etere CVC In :5006 | MediaLive CVC | :6201 | Comcast - CVC | ok |
+| | | | :6006 | Play Pro CVC | disconnected |
+| Sacramento OTA | Etere CVC Tower In :5018 | **not MediaLive** (Jumpbox NDI converter, see 4.7) | :6018 | Joe Winston - Sacramento OTA (KBTV) | ok |
+| Washington DC | Etere WDC In :5017 | MediaLive WDC | :6206 | Comcast - WDC | ok |
+| | | | :6207 | Comcast - MMT (also attached here, see section 6) | ok |
+| National Multimarket | Etere MMT In :5019 | MediaLive MMT | :6207 | Comcast - MMT | ok |
+| | | | :6019 | Play Pro MMT | disconnected |
+| Dallas | Etere DAL Tower In :5015 | **not MediaLive** (see section 6) | :6015 | Joe Winston - Dallas OTA (KFWD and KLEG) | ok |
+| Etere Test Feed 1 | Test CIB 1 In :5020 | — | :6020 | Etere - Test CIB 1 | stopped |
+| Etere Test Feed 2 | Test CIB 2 In :5021 | — | :6021 | Etere - Test CIB 2 | stopped |
+
+Naming pattern: Comcast/Charter destinations use ports 620x (cable headends),
+tower/OTA destinations use 601x, and the "Play Pro" destinations use the even
+600x/601x ports. All seven Play Pro destinations are disconnected; they are the
+reason those routes show a "warn" status.
+
+- The Haivision also delivered alternate content to NYC and WDC while CIB_01 was
+  offline on 2026-08-28. It is the operator's manual failover tool.
+- API reference: `.claude/documents/haivision-srt-gateway-api.md`. Login is in
+  `credentials.env` (`HAIVISION_USER` / `HAIVISION_PASS`), never in the repo.
 
 ### 4.6 Monitoring: Stirlitz IP Multiviewer [OPS]
 
@@ -291,9 +330,11 @@ flows exist in the account.
 
 ### 4.7 Other feeds on the Jumpbox [OPS, CONFIRM details]
 
-- **CVC Tower NDI** — the Jumpbox converts and streams this 24/7. It is a
-  sustained real-time load: never move the Jumpbox to a burstable type, and a
-  resize drops the tower stream.
+- **CVC Tower NDI** — the Jumpbox converts and streams this 24/7. The Haivision
+  source "Etere CVC Tower In" (UDP 5018) has no MediaLive channel behind it, so
+  the Jumpbox is the sender for the Sacramento OTA (KBTV 8.2) feed. [CONFIRM]
+  It is a sustained real-time load: never move the Jumpbox to a burstable type,
+  and a resize drops the tower stream.
 - **Shop LC** — live feed received on UDP 5050 from four whitelisted IPs
   (67.79.26.10, 209.36.98.76, 209.36.98.66, 66.162.212.34). Etere schedules it
   as a live event (`LIVE_ID`), so the rows must never be "exploded". Rules on the
@@ -357,8 +398,14 @@ flows exist in the account.
 
 ## 6. Open items and known gaps (as of 2026-09-03)
 
-- Document the Haivision route list and each affiliate destination (section 4.5).
-- Document how the Asian Channel (DAL) reaches the Haivision and its distributor today (sections 4.3, 4.6).
+- Confirm which machine sends UDP to the Haivision on port 5015 (DAL) and port
+  5018 (CVC Tower). Neither has a MediaLive channel. Likely CIB_05 direct and
+  the Jumpbox NDI converter. [CONFIRM]
+- Confirm what the seven "Play Pro" SRT destinations are for. All are
+  disconnected today. [CONFIRM]
+- The Washington DC route carries the "Comcast - MMT" destination (:6207) in
+  addition to its own, plus one dangling destination ID that no longer exists.
+  Two routes feeding one listener may be intentional; check. [CONFIRM]
 
 - Release two idle Elastic IPs; delete the detached `vpn-nic` ENI (10.0.0.36);
   scope "Send to MediaLive" SG to the VPC; ask whether Haivision SSH/22 from the
