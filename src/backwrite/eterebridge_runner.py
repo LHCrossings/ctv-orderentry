@@ -143,6 +143,48 @@ def get_customer_order_ref(contract_id: int) -> str:
         return ""
 
 
+def get_etere_billing_type(contract) -> dict:
+    """Billing type Etere holds for a contract: CONTRATTITESTATA.CENTROMEDIA 316 = Broadcast,
+    317 = Calendar (same mapping the one-click backwrite uses). `contract` is the Etere ID
+    (int / digit string) or the contract code. Returns
+    {"found": bool, "contract_id": int|None, "code": str, "billing": "Broadcast"|"Calendar"|None}.
+    Best-effort: never raises."""
+    out = {"found": False, "contract_id": None, "code": "", "billing": None}
+    ref = str(contract or "").strip()
+    if not ref:
+        return out
+    try:
+        from browser_automation.etere_direct_client import connect
+
+        with connect() as conn:
+            cur = conn.cursor()
+            if ref.isdigit():
+                cur.execute(
+                    "SELECT ID_CONTRATTITESTATA, RTRIM(COD_CONTRATTO), CENTROMEDIA "
+                    "FROM CONTRATTITESTATA WHERE ID_CONTRATTITESTATA = %s",
+                    (int(ref),),
+                )
+            else:
+                cur.execute(
+                    "SELECT ID_CONTRATTITESTATA, RTRIM(COD_CONTRATTO), CENTROMEDIA "
+                    "FROM CONTRATTITESTATA WHERE RTRIM(COD_CONTRATTO) = %s",
+                    (ref,),
+                )
+            row = cur.fetchone()
+        if not row:
+            return out
+        cm = int(row[2] or 0)
+        out.update(
+            found=True,
+            contract_id=int(row[0]),
+            code=row[1] or "",
+            billing="Broadcast" if cm == 316 else ("Calendar" if cm == 317 else None),
+        )
+    except Exception:
+        pass
+    return out
+
+
 def _apply_stored_line_languages(df, row_languages) -> set:
     """Override detected languages with the CTV_LineLanguage catalog.
 

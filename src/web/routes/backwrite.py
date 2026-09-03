@@ -33,6 +33,16 @@ SALES_PEOPLE = [
 ]
 
 
+def _etere_billing(contract_id: int) -> Optional[str]:
+    """'Broadcast' / 'Calendar' from CONTRATTITESTATA.CENTROMEDIA, None if unset/unknown."""
+    try:
+        from backwrite.eterebridge_runner import get_etere_billing_type
+
+        return get_etere_billing_type(contract_id).get("billing")
+    except Exception:
+        return None
+
+
 def _lookup_wl_contract_by_tracking(tracking: str) -> Optional[dict]:
     """Find the Etere contract for a WorldLink IO by its tracking number.
 
@@ -301,6 +311,14 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
+    @router.get("/etere-billing-type")
+    async def backwrite_etere_billing_type(contract: str = ""):
+        """Billing type Etere holds for a contract (ID or code) — the manual page compares it
+        with the operator's Broadcast/Calendar choice before generating (Sky River 8/31, 2026-09)."""
+        from backwrite.eterebridge_runner import get_etere_billing_type
+
+        return JSONResponse(get_etere_billing_type(contract))
+
     @router.post("/preview-from-db")
     async def backwrite_preview_from_db(contract_id: str = Form(...)):
         """Build placement CSV from DB and return preview JSON + base64 CSV bytes."""
@@ -390,6 +408,8 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
                 "language_options": language_options,
                 "csv_b64": base64.b64encode(csv_bytes).decode("ascii"),
                 "contract_id": cid,
+                # What Etere says the billing type is — pre-selects the dropdown.
+                "etere_billing": _etere_billing(cid),
             }
         )
 

@@ -1061,6 +1061,41 @@ function toggleAgencyFee() {
     updateGrossupSection();
 }
 
+// ── Billing type vs Etere ────────────────────────────────────────────────────
+// Resolves the contract (DB-fetched id, else the Contract field: id or code), asks the
+// server what Etere holds (CENTROMEDIA 316/317) and pops a confirm when it differs from
+// the dropdown. Returns true to proceed. Lookup failures never block generation.
+async function confirmBillingTypeMatchesEtere() {
+    const chosen = document.getElementById('billing_type').value;
+    const ref = window._dbSelectedContractId || (document.getElementById('contract').value || '').trim();
+    if (!ref) return true;
+    let info;
+    try {
+        const resp = await fetch('/backwrite/etere-billing-type?contract=' + encodeURIComponent(ref));
+        if (!resp.ok) return true;
+        info = await resp.json();
+    } catch (e) {
+        console.warn('billing-type lookup failed', e);
+        return true;
+    }
+    if (!info || !info.found) return true;
+    const label = info.code ? `${info.code} (#${info.contract_id})` : `#${info.contract_id}`;
+    if (!info.billing) {
+        return confirm(
+            `Etere has NO billing type set on contract ${label}.\n\n` +
+            `You chose ${chosen}. Generate anyway?\n\n` +
+            `(Set Broadcast/Calendar on the contract in Booked Business to stop this prompt.)`
+        );
+    }
+    if (info.billing === chosen) return true;
+    return confirm(
+        `Billing type mismatch on contract ${label}.\n\n` +
+        `Etere says: ${info.billing}\nYou chose:  ${chosen}\n\n` +
+        `A Calendar contract written as Broadcast drops its month-boundary spots ` +
+        `(and vice versa).\n\nGenerate as ${chosen} anyway?`
+    );
+}
+
 // ── Form submit → download ────────────────────────────────────────────────────
 bwForm.addEventListener('submit', async e => {
     e.preventDefault();
@@ -1070,6 +1105,16 @@ bwForm.addEventListener('submit', async e => {
     }
     generateBtn.disabled = true;
     generateBtn.textContent = '⏳ Generating...';
+
+    // Billing type guard: the chosen Broadcast/Calendar must match the contract in Etere.
+    // A Calendar contract written as Broadcast drops its month-boundary spots from the
+    // affidavit (Sky River 8/31/2026). The check is advisory — cancel keeps the form as is.
+    if (!(await confirmBillingTypeMatchesEtere())) {
+        generateBtn.disabled = false;
+        generateBtn.textContent = '↓ Generate Excel';
+        showStatus(formStatus, 'Generation cancelled — fix the Billing Type (or the contract in Etere) and try again.', 'error');
+        return;
+    }
 
     // Serialize language corrections
     serializeLangCorrections();
@@ -1266,6 +1311,8 @@ async function fetchFromDB() {
         formCard.style.display    = 'block';
         generateBtn.disabled      = false;
         if (data.contract_id) setIfEmpty('contract', String(data.contract_id));
+        // Pre-select what Etere says; the submit handler re-checks it against the final choice.
+        if (data.etere_billing) document.getElementById('billing_type').value = data.etere_billing;
     } catch (e) {
         showStatus(uploadStatus, 'Error: ' + e.message, 'error');
     } finally {

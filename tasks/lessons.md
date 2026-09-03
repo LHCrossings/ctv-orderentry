@@ -4,6 +4,32 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Calendar Contract Backwritten as Broadcast Silently Drops Its Month-Boundary Spots — The Billing Type Comes From Etere, Not the Operator
+
+**Session:** Sky River 2608-034, one aired 8/31 spot missing from the affidavit (2026-09-03)
+
+**Rule:** Calendar August ends 8/31; broadcast August ends 8/30 (broadcast September starts Mon
+8/31). Three Calendar contracts (CENTROMEDIA 317) were backwritten by hand as Broadcast, so the
+8/31 spot was tagged Sep-26 and fell off the August invoice; the totals reconciliation could not
+see it because the affidavit's own total was internally consistent. Only the days where calendar
+month != broadcast month (the 1st..first-Monday tail, or the last days of a month) are ever
+affected, so the error is invisible on most months and most contracts.
+
+**How to apply:**
+1. Billing type is a property of the CONTRACT in Etere (`CONTRATTITESTATA.CENTROMEDIA`,
+   316 Broadcast / 317 Calendar), never an operator choice. The one-click path already reads
+   it and refuses when unset; the legacy `/backwrite` page now pre-selects it from Etere and
+   pops a confirm when the dropdown disagrees (`/backwrite/etere-billing-type`).
+2. Audit = diff the Commercial Log's Billing Type column (Y) per contract against CENTROMEDIA
+   (the live log holds only unbilled rows; use `Commercial Log - Backup.xlsx` for billed
+   ones), then list Calendar contracts with STATUS Q spots on boundary days. Both queries are
+   in the 2026-09-03 session; a mismatch with zero boundary spots is label-only.
+3. Reconciling an invoice: match every Etere placement (trafficPalinse→TPALINSE) to an
+   affidavit row by date + time-out (±90 s); the leftover IS the missing spot. Aired =
+   STATUS 'Q' (or 'D' intraday); 'A' is aborted.
+
+---
+
 ## A Row Binds to a FILE NAME, Not a Code — Every Placement Path Must Rebind From FILE_ID (NYC aired black)
 
 **Session:** NYC 9/2/2026 06:00 Phoenix Evening Express black for 18 minutes; DAL rebound with
