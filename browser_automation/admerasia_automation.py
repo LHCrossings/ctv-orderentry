@@ -182,6 +182,7 @@ def _save_customer_to_db(
             separation_event=int(separation[2]),
             code_name=abbreviation,
             description_name=customer_name,
+            auto_aircheck=True,  # every Admerasia IO demands an air-check per creative (note 10)
         ))
         print(f"[CUSTOMER DB] ✓ Saved '{customer_name}' (ID: {customer_id}) for future lookups")
 
