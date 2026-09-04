@@ -32,7 +32,9 @@ def hms(sec: float) -> str:
 
 
 def mmss(sec: float) -> str:
-    return f"{int(sec // 60)}:{sec % 60:05.2f}"
+    sign = "-" if sec < 0 else ""
+    sec = abs(sec)
+    return f"{sign}{int(sec // 60)}:{sec % 60:05.2f}"
 
 
 @dataclass
@@ -148,6 +150,13 @@ def window_from_day(rows: list[tuple], lo: float, hi: float) -> list[Ev]:
         ),
         None,
     )
+    # Is there an F anchor at `hi`? Then playlist order is the truth: everything
+    # ahead of that anchor in XORDER airs before the next show and is this window's,
+    # paid spots that spill past the top of the hour included (NYC 9/4 08:00: a
+    # Redfin :15 intended for the 08:59 break sat at 09:00:12 behind a 4imprint :30;
+    # treating it as the next hour's made Finish seat the ID ahead of it, and Break
+    # Optimization then rightly moved the ID last and the packed end changed).
+    anchor_at_hi = any(str(r[4] or "").strip() == "F" and abs(r[1] - hi_f) <= FPS for r in rows)
     if start is not None:
         end = len(rows)
         for k in range(start + 1, len(rows)):
@@ -161,9 +170,12 @@ def window_from_day(rows: list[tuple], lo: float, hi: float) -> list[Ev]:
             # "runs 25:55 past its slot", Lee 9/1). Assume the next show starts at `hi`:
             # a PAID spot at or past `hi` is the next hour's; only our own fill
             # (PI/PSA/ID) may spill past the top and still belong to this window.
+            # With an F anchor at `hi` that assumption is unnecessary and wrong.
             past_hi = r[1] >= hi_f - FPS
             next_pgm = past_hi and str(r[3]).strip() in ("PGM", "NOOP")
-            next_paid = past_hi and not _ev(r).is_fill and not _ev(r).is_program
+            next_paid = (
+                past_hi and not anchor_at_hi and not _ev(r).is_fill and not _ev(r).is_program
+            )
             if is_f or next_pgm or next_paid:
                 end = k
                 break
@@ -239,6 +251,16 @@ def _is_pi(x, sec: int) -> bool:
     return kind == "PI" and abs(x.dur - sec) <= 0.5
 
 
+def packed_remainder(evs: list[Ev], hour_end: float) -> float:
+    """Seconds left before `hour_end` once every program, paid spot and existing
+    PI/PSA in the window has aired back-to-back from the first program piece.
+    ID rows and NOOP gap-fillers are empty time, not content. Negative = overage."""
+    pieces = [e for e in evs if e.is_program]
+    if not pieces:
+        return hour_end
+    return hour_end - pieces[0].ora - sum(e.dur for e in evs if e.newtype not in ("ID", "NOOP"))
+
+
 def plan(evs: list[Ev], inv: list[Filler], hour_end: float, market: int) -> tuple[list, list[str]]:
     """Fix it or finish it (Lee 8/28): existing fill stays as given; remove only
     what the end game needs (spill-over first, final break next, then the
@@ -273,7 +295,7 @@ def plan(evs: list[Ev], inv: list[Filler], hour_end: float, market: int) -> tupl
             breaks.append(Break(i, items))
     final = breaks[-1]
     interior = breaks[:-1]
-    R = hour_end - pieces[0].ora - sum(e.dur for e in kept)
+    R = packed_remainder(evs, hour_end)
     notes.append(
         f"existing fill kept as given ({sum(1 for e in kept if e.is_fill)} rows); packed remainder = {mmss(R)}"
         + (f"; {len(old_ids)} existing ID" if old_ids else "")

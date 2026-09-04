@@ -7,6 +7,13 @@ omit row shape = NEWSTODAY040926 (135045): FINTERRUZIONI MARKIN<MARKOUT, BULK_VI
 INSERTION_POINT=0, FLAG=''; explode keeps MARKIN, resumes at MARKOUT+1; DURATION/DURATA =
 EOM − Σ(MARKOUT−MARKIN).
 
+## Follow-up: Finish NYC 9/4 08:00 "packed end changed after break optimization" (2026-09-04)
+- [x] window_from_day: paid spot past `hi` is this hour's when an F anchor exists at `hi` (Redfin :15 case)
+- [x] plan_window: overage (remainder < 5 s with fill kept) → auto-refill (Lee: strip ALL PI/PSA, refill); overrun judged on program+paid only; error text for overrun
+- [x] mmss negative fix; packed_remainder shared helper; tests/unit/test_finish_plan_window.py
+- [x] dry-run NYC 08:00: 8 PIs stripped, 7 inserts, ends 09:00:12.78, BO 0 changes
+- [ ] Lee clicks Finish on NYC 9/4 08:00 (page) — first live overage refill
+
 ## Plan
 - [x] `parse_edius_csv` → `(splits, eom, omits)`; GAP markers must pair adjacently, never last, never zero-length (ValueError otherwise)
 - [x] `expected_parts(splits, eom, omits)` reproduces the 040926 explode plan exactly

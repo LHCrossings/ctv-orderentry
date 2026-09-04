@@ -4,6 +4,39 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Spot Ahead of the F Anchor Is This Hour's — and an Over-Full Hour Strips ALL Its Fill, Then Refills (Lee)
+
+**Session:** Finish NYC 9/4 08:00 "packed end changed after break optimization" (2026-09-04)
+
+**Rule:** NEWSTODAY ran 50:47 and Daily Programming had placed four long breaks, so the hour
+was 33 s over before Finish touched it. Two defects compounded: (1) `window_from_day`'s
+"a paid spot at/past `hi` belongs to the next hour" heuristic — written for the case where
+the next show is NOT placed — fired even though a 09:00 F anchor existed, so a Redfin :15
+sitting at 09:00:12 behind a 4imprint :30 (both intended for the 08:59 break, XORDER ahead
+of the anchor) vanished from the window; Finish seated the ID ahead of it and Break
+Optimization then correctly moved the ID last, changing the packed end. (2) Lee's actual
+rule for an over-full hour: "remove all PI and PSA spots to allow for programs and
+commercials to be aired, then fill back in" — not the fewest-edits FIX phase, and not a
+"programming problem" refusal. `plan_window` now auto-refills when the packed remainder
+with existing fill kept is < 5 s, and judges `overrun` on program + paid only.
+
+**How to apply:**
+1. When an F anchor exists at `hi`, playlist order (XORDER) is the truth: everything ahead
+   of the anchor airs before the next show and is this window's, spilled paid spots
+   included. The past-`hi` heuristics are ONLY for the no-anchor case. A guard written for
+   one precondition must check that precondition before firing.
+2. Overage ⇒ Refill, automatically; `overrun` = program + paid alone exceed the slot. The
+   note names it: "overage -0:32.73: 8 existing PI/PSA/ID rows removed …".
+3. `packed_remainder(evs, hi)` is the ONE remainder formula (planner, state, note); `mmss`
+   handles negatives (it printed -17.7 s as "-1:42.28", which sent me chasing a phantom
+   minute).
+4. A post-write verify that fires after a second subsystem ran (BO after Finish) usually
+   means the two disagree about membership, not that BO is wrong — diff the window each
+   one saw. `scripts/finish_apply.py --market --date --hour` (no `--apply`) reproduces any
+   Finish failure with a rollback.
+
+---
+
 ## An EDL "Omit" Is a Range Mark, Not Two Splits — and Etere Nets the Cut From DURATION Inclusively
 
 **Session:** NEWSTODAY GAP markers, MBC.csv → asset 148268 (2026-09-04)

@@ -34,6 +34,8 @@ from src.business_logic.services.finish_plan import (
     hms,
     load_day,
     load_inventory,
+    mmss,
+    packed_remainder,
     plan,
     window_from_day,
 )
@@ -145,6 +147,12 @@ def plan_window(
     are never touched; the pre-strip remainder still decides "unplaced"."""
     rows = rows if rows is not None else load_day(cur, market, date)
     evs_all = window_from_day(rows, lo, hi)
+    # Overage (Lee 9/4): a long show (Korean News runs past 50:00 some days) plus its
+    # paid spots can leave less than the ID's 5s even before any new fill. Then the
+    # existing PI/PSA rows are what has to give: strip every one so program and paid
+    # spots air, and fill back in whatever room is left — the Refill path, automatic.
+    auto_refill = not refill and packed_remainder(evs_all, hi) < ID_MIN_AIR
+    refill = refill or auto_refill
     strip: list[Ev] = [e for e in evs_all if e.is_fill] if refill else []
     evs = [e for e in evs_all if not e.is_fill] if refill else evs_all
     if not evs or not any(e.is_program for e in evs):
@@ -172,7 +180,13 @@ def plan_window(
     hi_fixed = hi_fixed or assume_fixed
     inv = load_inventory(cur, market, date)
     breaks, notes = plan(evs, inv, hi, market)
-    if refill:
+    if auto_refill:
+        notes.insert(
+            0,
+            f"overage {mmss(packed_remainder(evs_all, hi))}: {len(strip)} existing PI/PSA/ID rows "
+            "removed so program and paid spots air; fill re-planned",
+        )
+    elif refill:
         notes.insert(0, f"refill: {len(strip)} existing PI/PSA/ID rows removed, fill re-planned")
     if assume_fixed:
         notes.append(f"next show not placed yet — assuming it starts at {hms(hi)}")
@@ -241,14 +255,18 @@ def plan_window(
     for e, tgt in moves:
         edits.append({"op": "move", **_item_dict(e, e.ora, "move"), "break": tgt})
     actual_end = max(e.end for e in evs_all)
-    rem_s = hi - pieces[0].ora - sum(e.dur for e in evs_all if e.newtype not in ("ID", "NOOP"))
+    rem_s = packed_remainder(evs_all, hi)
+    # Overrun is judged on what Finish can never remove — program pieces and paid
+    # spots. Existing PI/PSA rows are ours to strip (auto-refill above), so a negative
+    # remainder that they cause is an overage to fix, not a programming problem.
+    hard_rem = packed_remainder([e for e in evs_all if not e.is_fill], hi)
     if len(pieces) == 1 and not breaks[0].items if breaks else True:
         state = (
             "na"  # a single fixed event with no breaks (overnight live feed) — nothing to finish
         )
     elif rem_s > UNPLACED_SECONDS:
         state = "unplaced"  # the precondition (all programming placed) is not met
-    elif rem_s < -OVERRUN_SECONDS:
+    elif hard_rem < -OVERRUN_SECONDS:
         state = "overrun"  # more content than the slot holds — a programming problem, not a fill
     elif not hi_fixed:
         state = "follows"  # next show follows directly; the ID lands at the hour's F event
@@ -261,9 +279,15 @@ def plan_window(
     id_airs = next(
         (float(n.split("airs ")[1].split("s")[0]) for n in notes if "ID" in n and "airs" in n), None
     )
+    error = None
+    if state == "overrun":
+        error = f"overrun: program and paid spots run {mmss(-hard_rem)} past {hms(hi)}"
+    elif cannot:
+        error = "plan cannot land the ID"
     return {
         "ok": not cannot and state in ("ready", "finished"),
         "state": state,
+        "error": error,
         "remainder": rem_s,
         "finished": finished,
         "notes": notes,
