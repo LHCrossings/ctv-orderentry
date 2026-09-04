@@ -19,8 +19,8 @@ Contract Format:
     - Code: "Admerasia {client token} {estimate}"
       where estimate = "{prefix}{market_code} {YYMM}"
       Examples: "Admerasia McD 14HO 2602", "Admerasia SMG 7SE 2609"
-    - Description: "{client name} Est {prefix} {etere_market} {YYMM}"
-      Examples: "McDonald's Est 14 HOU 2602", "Seoul Medical Group Est 7 SEA 2609"
+    - Description: "{client name} Est {prefix} {etere_market} {YYMM-YYMM calendar range}"
+      Examples: "McDonald's Est 14 HOU 2602", "Seoul Medical Group Est 1 SEA 2610-2612"
 
 Rate Handling:
     - PDF rates are NET

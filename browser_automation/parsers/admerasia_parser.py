@@ -362,19 +362,41 @@ def get_default_order_code(order: AdmerasiaOrder) -> str:
     return f"Admerasia {order.client.abbreviation} {order.get_estimate_number()}"
 
 
+def get_campaign_yymm_range(order: AdmerasiaOrder) -> str:
+    """
+    Calendar-month span of the campaign as "YYMM" or "YYMM-YYMM" (Lee 9/4: Admerasia
+    is calendar billed, so the DESCRIPTION shows every month the flight touches).
+
+    Bounds come from the header's "Campaign Period: 10/15/2026 - 12/7/2026" line;
+    the flight dates derived from the grid are the fallback.
+    """
+    start, end = order.get_flight_dates()
+    period = _extract_campaign_period(order.header_text or "")
+    m = re.match(r'\s*(\d{1,2}/\d{1,2}/\d{4})\s*-\s*(\d{1,2}/\d{1,2}/\d{4})', period)
+    if m:
+        try:
+            start = datetime.strptime(m.group(1), '%m/%d/%Y').date()
+            end = datetime.strptime(m.group(2), '%m/%d/%Y').date()
+        except ValueError:
+            pass
+    first = f"{start.year % 100:02d}{start.month:02d}"
+    last = f"{end.year % 100:02d}{end.month:02d}"
+    return first if first == last else f"{first}-{last}"
+
+
 def get_default_order_description(order: AdmerasiaOrder) -> str:
     """
     Get default contract description.
 
-    Format: "[client name] Est [Order Prefix] [Market Code] [YYMM]"
-    Examples: "McDonald's Est 11 SEA 2602", "Seoul Medical Group Est 1 SEA 2610"
+    Format: "[client name] Est [Order Prefix] [Market Code] [YYMM-YYMM]"
+    Examples: "McDonald's Est 11 SEA 2602-2603", "Seoul Medical Group Est 1 SEA 2610-2612"
+    The CODE keeps the single start month ("Admerasia SMG 1SE 2610") — only the
+    description carries the calendar range (Lee 9/4).
     """
-    estimate_num = order.get_estimate_number()  # e.g., "11SE 2602"
     order_prefix = order.order_number.split('-')[0].lstrip('0')  # e.g., "11" (strip leading zeros)
     market_code = order.get_market_code()  # e.g., "SEA"
-    yymm = estimate_num.split()[1]  # e.g., "2602"
 
-    return f"{order.client.description_name} Est {order_prefix} {market_code} {yymm}"
+    return f"{order.client.description_name} Est {order_prefix} {market_code} {get_campaign_yymm_range(order)}"
 
 
 # ============================================================================

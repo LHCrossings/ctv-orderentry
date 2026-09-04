@@ -112,20 +112,29 @@ def test_no_ref_line_is_unknown_not_mcdonalds():
 def test_smg_code_and_description():
     o = _order(SMG_HEADER, "01-SMG-2610VT")
     assert get_default_order_code(o) == "Admerasia SMG 1SE 2610"
-    assert get_default_order_description(o) == "Seoul Medical Group Est 1 SEA 2610"
+    assert get_default_order_description(o) == "Seoul Medical Group Est 1 SEA 2610-2612"
     assert o.client_name == "Seoul Medical Group"
 
 
 def test_smg_second_estimate_and_month_follow_the_io():
-    o = _order(SMG_HEADER, "07-SMG-2609CT", start=date(2026, 9, 7))
+    header = SMG_HEADER.replace("10/15/2026 - 12/7/2026", "9/7/2026 - 9/27/2026")
+    o = _order(header, "07-SMG-2609CT", start=date(2026, 9, 7))
     assert get_default_order_code(o) == "Admerasia SMG 7SE 2609"
+    # single calendar month → no range
     assert get_default_order_description(o) == "Seoul Medical Group Est 7 SEA 2609"
 
 
 def test_mcdonalds_code_and_description_unchanged():
     o = _order(MCD_HEADER, "11-MD10-2602CT", start=date(2026, 2, 2))
     assert get_default_order_code(o) == "Admerasia McD 11SE 2602"
-    assert get_default_order_description(o) == "McDonald's Est 11 SEA 2602"
+    # 2/2–3/1 touches February and March on the calendar → range in the description only
+    assert get_default_order_description(o) == "McDonald's Est 11 SEA 2602-2603"
+
+
+def test_description_range_falls_back_to_flight_dates_without_a_campaign_period():
+    o = _order("Ref: Seoul Medical Group\nDMA: Seattle", "01-SMG-2610VT")
+    o.week_start_dates = [date(2026, 10, 15), date(2026, 11, 26)]  # flight end = 12/2
+    assert get_default_order_description(o) == "Seoul Medical Group Est 1 SEA 2610-2612"
 
 
 def test_notes_fallback_names_the_real_client():
