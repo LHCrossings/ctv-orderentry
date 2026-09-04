@@ -5506,6 +5506,22 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         # (plain JSONResponse/json.dumps can't serialize datetime → 500 → empty page).
         return JSONResponse(jsonable_encoder([dict(r) for r in rows]))
 
+    def _customer_order_type_key(raw) -> str:
+        """The parser key as the gathers look it up: lowercase and a real OrderType.
+
+        The admin form is free text; 'opAD' / 'ADMERASIA' / a pasted client name once made
+        four rows invisible to their parsers (lookups fell back to hardcoded defaults)."""
+        from src.domain.enums import OrderType as _OT
+
+        ot = _OT.parse_key(raw)
+        if ot is None:
+            valid = ", ".join(sorted(o.value for o in _OT))
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown order type {str(raw).strip()!r}. Use a parser key: {valid}",
+            )
+        return ot.value
+
     @router.post("/api/orders/customers")
     async def create_order_customer(body: dict = Body(...)):
         from browser_automation.etere_direct_client import connect as _db_connect
@@ -5513,7 +5529,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         vals = (
             body.get("customer_id", ""),
             body.get("customer_name", ""),
-            body.get("order_type", ""),
+            _customer_order_type_key(body.get("order_type", "")),
             body.get("code_name", ""),
             body.get("description_name", ""),
             body.get("billing_type", "agency"),

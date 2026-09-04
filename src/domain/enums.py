@@ -61,6 +61,22 @@ class OrderType(Enum):
     AI_FALLBACK = "ai_fallback"
     UNKNOWN = "unknown"
 
+    @classmethod
+    def parse_key(cls, value) -> "OrderType | None":
+        """Resolve a stored/typed parser key ('opAD', ' RPM ') to its OrderType, or None.
+
+        CTV_Customers.order_type is the join key every gather uses; four rows once carried
+        mis-cased or free-text keys ('ADMERASIA', 'opAD', 'brentan', a client name) and
+        their lookups silently failed to the hardcoded defaults (2026-09-04).
+        """
+        key = str(value or "").strip().lower()
+        if not key:
+            return None
+        try:
+            return cls(key)
+        except ValueError:
+            return None
+
     def requires_block_refresh(self) -> bool:
         """Determine if this order type needs manual block refresh after processing."""
         # WorldLink block refresh is now automated — no manual step needed

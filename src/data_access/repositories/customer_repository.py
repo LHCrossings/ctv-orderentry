@@ -230,7 +230,7 @@ class CustomerRepository:
             return Customer(
                 customer_id=row[0],
                 customer_name=row[1],
-                order_type=OrderType(row[2]),
+                order_type=OrderType.parse_key(row[2]) or OrderType(row[2]),
                 abbreviation=row[3] or "",
                 default_market=row[4],
                 billing_type=row[5] or "agency",
@@ -247,7 +247,7 @@ class CustomerRepository:
             return Customer(
                 customer_id=row[0],
                 customer_name=row[1],
-                order_type=OrderType(row[2]),
+                order_type=OrderType.parse_key(row[2]) or OrderType(row[2]),
                 abbreviation=row[3] or "",
                 default_market=row[4],
                 billing_type=row[5] or "agency",
@@ -263,7 +263,7 @@ class CustomerRepository:
             return Customer(
                 customer_id=row[0],
                 customer_name=row[1],
-                order_type=OrderType(row[2]),
+                order_type=OrderType.parse_key(row[2]) or OrderType(row[2]),
                 abbreviation=row[3] or "",
                 default_market=row[4],
                 billing_type=row[5] or "agency",
@@ -278,7 +278,7 @@ class CustomerRepository:
             return Customer(
                 customer_id=row[0],
                 customer_name=row[1],
-                order_type=OrderType(row[2]),
+                order_type=OrderType.parse_key(row[2]) or OrderType(row[2]),
                 abbreviation=row[3] or "",
                 default_market=row[4],
                 billing_type=row[5] or "agency",
@@ -291,7 +291,7 @@ class CustomerRepository:
             return Customer(
                 customer_id=row[0],
                 customer_name=row[1],
-                order_type=OrderType(row[2]),
+                order_type=OrderType.parse_key(row[2]) or OrderType(row[2]),
             )
 
 
