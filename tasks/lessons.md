@@ -4,6 +4,26 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## `tasks/todo.md` Is a SHARED File — Append a Section, Never `cat >` It; Stage-Only Work Can Be Swept Into a Sibling Session's Commit
+
+**Session:** Admerasia SMG client (2026-09-04)
+
+**Rule:** I wrote my plan with `cat > tasks/todo.md`, erasing 185 lines of another live
+session's monitor-wall/EDL/Finish plan. Minutes later that session committed with a sweep
+(`git commit -a` style), so my nine staged files — and the clobbered todo — landed under ITS
+message ("tasks: monitor wall + finish follow-ups ticked") and were pushed before my own
+`git commit` ran ("nothing added to commit"). Two sessions share one working tree.
+
+**How to apply:**
+1. Plans go into `tasks/todo.md` as a NEW `## <task> (date)` section (`>>` / edit), never a
+   whole-file write. Read the file first; if it holds another active section, keep it.
+2. Stage and commit in ONE command, immediately — never leave work staged across a tool call
+   when another session may be committing in the same checkout.
+3. If a sibling commit swallowed your change, do not amend a pushed commit: add a follow-up
+   commit whose message names the hash that actually carries the code (`5edb21b` → `d5fc0fb`).
+
+---
+
 ## A Spot Ahead of the F Anchor Is This Hour's — and an Over-Full Hour Strips ALL Its Fill, Then Refills (Lee)
 
 **Session:** Finish NYC 9/4 08:00 "packed end changed after break optimization" (2026-09-04)
