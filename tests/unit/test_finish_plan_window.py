@@ -128,7 +128,10 @@ def test_overage_with_room_auto_refills(monkeypatch):
     inv = [Filler(9001, "PI-900-030: New", 30.0, "PI", "PI-900", 0)]
     r = _plan(rows, inv, monkeypatch)
     assert r["state"] == "ready" and r["ok"]
-    assert r["notes"][0].startswith("overage -1:") and "2 existing PI/PSA/ID rows removed" in r["notes"][0]
+    assert (
+        r["notes"][0].startswith("overage -1:")
+        and "2 existing PI/PSA/ID rows removed" in r["notes"][0]
+    )
     assert r["n_delete"] == 2 and r["n_insert"] == 2  # :30 PI + ID
     assert not r["strip_only"]
 
