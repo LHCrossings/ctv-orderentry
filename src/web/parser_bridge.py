@@ -565,7 +565,7 @@ def _normalize_admerasia(order) -> dict:
     total_cost = sum(ln["rate"] * ln["total_spots"] for ln in lines if not ln["is_bonus"])
 
     return {
-        "client": "McDonald's",
+        "client": _str(getattr(order, "client_name", None), default="McDonald's"),
         "estimate_number": _str(getattr(order, "order_number", "")),
         "description": _str(getattr(order, "language", "")),
         "markets": [market] if market else [],

@@ -6,21 +6,21 @@ Browser automation for entering Admerasia agency orders into Etere.
 ADMERASIA BUSINESS RULES
 ═══════════════════════════════════════════════════════════════════════════════
 
-Known Customers:
-    1. McDonald's (ID: 42) → ALL markets
-       - All Admerasia orders are McDonald's
-       - Separation: 3, 5, 0 (customer=3, order=5, event=0)
+Known Customers (ADMERASIA_CLIENTS in parsers/admerasia_parser.py, keyed on the
+IO's "Ref:" line — the notes block quotes McDonald's on EVERY Admerasia IO):
+    1. McDonald's (ID: 42) → ALL markets — separation 3, 5, 0; code token "McD"
+    2. Seoul Medical Group / SMG (ID: 478) → SEA first — separation 15, 0, 0; token "SMG"
 
 Billing (Universal for ALL Admerasia):
     - Charge To: "Customer share indicating agency %"
     - Invoice Header: "Agency"
 
 Contract Format:
-    - Code: "Admerasia McD {estimate}"
+    - Code: "Admerasia {client token} {estimate}"
       where estimate = "{prefix}{market_code} {YYMM}"
-      Example: "Admerasia McD 14HO 2602"
-    - Description: "McDonald's Est {prefix} {etere_market} {YYMM}"
-      Example: "McDonald's Est 14 HOU 2602"
+      Examples: "Admerasia McD 14HO 2602", "Admerasia SMG 7SE 2609"
+    - Description: "{client name} Est {prefix} {etere_market} {YYMM}"
+      Examples: "McDonald's Est 14 HOU 2602", "Seoul Medical Group Est 7 SEA 2609"
 
 Rate Handling:
     - PDF rates are NET
@@ -49,7 +49,6 @@ IMPORTS - Universal utilities, no duplication
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
-import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -69,23 +68,19 @@ from parsers.admerasia_parser import (
     get_default_order_code,
     get_default_order_description,
     parse_admerasia_pdf,
+    resolve_admerasia_client,
 )
 
+from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+from browser_automation.customer_defaults import prompt_customer_id
 from src.domain.enums import BillingType, OrderType
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONSTANTS
 # ═══════════════════════════════════════════════════════════════════════════════
-
-# McDonald's is the only known Admerasia customer
-MCDONALDS_CUSTOMER_ID = 42
-
-# Admerasia separation intervals: (customer, order, event) = (3, 5, 0)
-# Etere fields: customer=3, order=5, event=0
-ADMERASIA_SEPARATION = (3, 5, 0)
-
-# Default database path (for future customer DB integration)
-from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
+# Per-client values (customer ID, code token, description prefix, separation)
+# live in ADMERASIA_CLIENTS (admerasia_parser.py), resolved from the IO's Ref: line.
+# CUSTOMER_DB_PATH is kept for call-site compatibility; the store is dbo.CTV_Customers.
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CUSTOMER LOOKUP
@@ -97,51 +92,53 @@ def lookup_customer(
     db_path: str = CUSTOMER_DB_PATH
 ) -> Optional[dict]:
     """
-    Look up customer from Admerasia order.
+    Look up the advertiser of an Admerasia order.
 
-    All Admerasia orders are McDonald's (Customer ID: 42).
-    Detection checks header text AND order number (which contains "MD10").
-
-    Args:
-        header_text: Header text from parsed order
-        order_number: Order number (e.g., "05-MD10-2602FT")
-        db_path: Path to customers.db
+    The client is the header's "Ref:" line (McDonald's, Seoul Medical Group, ...).
+    The notes block is NOT consulted — every Admerasia IO quotes McDonald's
+    boilerplate there whatever the client. Order of precedence: the shared
+    customer table (CTV_Customers, by client name) → the hardcoded profile in
+    ADMERASIA_CLIENTS → None for an advertiser we have never seen.
 
     Returns:
-        Dict with customer info or None if not found
+        Dict with customer info (customer_id, client_name, abbreviation,
+        separation, billing_type, from_db) or None if not found
     """
-    # Combine texts for detection
-    search_text = f"{header_text} {order_number}".upper()
+    client = resolve_admerasia_client(header_text)
 
     # Try database first
-    if os.path.exists(db_path):
-        try:
-            from src.data_access.repositories.customer_repository import CustomerRepository
+    try:
+        from src.data_access.repositories.customer_repository import CustomerRepository
 
-            repo = CustomerRepository(db_path)
-            customer = repo.find_by_name("McDonald's", OrderType.ADMERASIA)
+        repo = CustomerRepository(db_path)
+        customer = repo.find_by_name(client.name, OrderType.ADMERASIA)
 
-            if customer:
-                return {
-                    'customer_id': customer.customer_id,
-                    'abbreviation': customer.abbreviation or 'McD',
-                    'separation': (
-                        customer.separation_customer,
-                        customer.separation_event,
-                        customer.separation_order
-                    ),
-                    'billing_type': customer.billing_type,
-                }
-        except Exception as e:
-            print(f"[CUSTOMER DB] ⚠ Database lookup failed: {e}")
+        if customer:
+            return {
+                'customer_id': customer.customer_id,
+                'client_name': client.name,
+                'abbreviation': customer.abbreviation or client.abbreviation,
+                # (customer, order, event) — the order add_contract_line expects
+                'separation': (
+                    customer.separation_customer,
+                    customer.separation_order,
+                    customer.separation_event,
+                ),
+                'billing_type': customer.billing_type,
+                'from_db': True,
+            }
+    except Exception as e:
+        print(f"[CUSTOMER DB] ⚠ Database lookup failed: {e}")
 
-    # Fallback: Hardcoded McDonald's
-    if "MCDONALD" in search_text or "MD10" in search_text:
+    # Fallback: hardcoded profile for the known clients
+    if client.customer_id is not None:
         return {
-            'customer_id': str(MCDONALDS_CUSTOMER_ID),
-            'abbreviation': 'McD',
-            'separation': ADMERASIA_SEPARATION,
+            'customer_id': str(client.customer_id),
+            'client_name': client.name,
+            'abbreviation': client.abbreviation,
+            'separation': client.separation,
             'billing_type': 'agency',
+            'from_db': False,
         }
 
     return None
@@ -150,38 +147,43 @@ def lookup_customer(
 def _save_customer_to_db(
     customer_name: str,
     customer_id: str,
+    separation: tuple = (15, 0, 0),
+    abbreviation: str = "",
     db_path: str = CUSTOMER_DB_PATH
 ) -> None:
     """
-    Save customer to database for future lookups (self-learning).
+    Save a newly confirmed customer for future lookups (self-learning).
 
-    Uses INSERT OR IGNORE so it only writes on first discovery —
-    subsequent calls for the same (customer_name, order_type) are no-ops.
+    Only called when lookup_customer() did NOT find the client in the shared
+    customer table, so an existing row's stored defaults are never overwritten.
 
     Args:
-        customer_name: Customer display name (e.g., "McDonald's")
-        customer_id: Etere customer ID (e.g., "42")
-        db_path: Path to customers.db
+        customer_name: Customer display name (e.g., "Seoul Medical Group")
+        customer_id: Etere customer ID (e.g., "478")
+        separation: (customer, order, event) minutes — the gather/entry order
+        abbreviation: code token (e.g., "SMG")
+        db_path: kept for compatibility (the repository is the shared SQL table)
     """
     try:
-        import sqlite3
-        from pathlib import Path
+        from src.data_access.repositories.customer_repository import CustomerRepository
+        from src.domain.entities import Customer
 
-        db = Path(db_path)
-        if not db.parent.exists():
-            db.parent.mkdir(parents=True, exist_ok=True)
-
-        with sqlite3.connect(db) as conn:
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO customers (customer_id, customer_name, order_type)
-                VALUES (?, ?, ?)
-                """,
-                (str(customer_id), customer_name, "ADMERASIA")
-            )
-            conn.commit()
-
-        print(f"[CUSTOMER DB] ✓ Ensured '{customer_name}' (ID: {customer_id}) in database")
+        repo = CustomerRepository(db_path)
+        if repo.find_by_name(customer_name, OrderType.ADMERASIA):
+            return
+        repo.save(Customer(
+            customer_id=str(customer_id),
+            customer_name=customer_name,
+            order_type=OrderType.ADMERASIA,
+            abbreviation=abbreviation,
+            billing_type='agency',
+            separation_customer=int(separation[0]),
+            separation_order=int(separation[1]),
+            separation_event=int(separation[2]),
+            code_name=abbreviation,
+            description_name=customer_name,
+        ))
+        print(f"[CUSTOMER DB] ✓ Saved '{customer_name}' (ID: {customer_id}) for future lookups")
 
     except Exception as e:
         # Non-fatal: database save failure shouldn't block order processing
@@ -317,7 +319,7 @@ def gather_admerasia_inputs(pdf_path: str) -> Optional[dict]:
 
     This function:
     1. Parses the PDF to extract order details
-    2. Auto-detects customer (always McDonald's for Admerasia)
+    2. Auto-detects the advertiser from the Ref: line (McDonald's, Seoul Medical Group)
     3. Prompts for any missing/ambiguous information (garbled times)
     4. Prepares all data needed for unattended automation
 
@@ -387,30 +389,37 @@ def gather_admerasia_inputs(pdf_path: str) -> Optional[dict]:
         print(f"\n[MARKET] ✗ Could not determine market from DMA: {order.markets}")
         market = input("  Enter market code (HOU, LAX, SEA, NYC, etc.): ").strip().upper()
 
-    # Lookup customer (always McDonald's)
+    # Lookup customer — the advertiser on the Ref: line (McDonald's, SMG, ...)
+    client_name = order.client_name
     customer = lookup_customer(order.header_text, order.order_number)
 
     if customer:
-        print(f"\n[CUSTOMER] ✓ Auto-detected: McDonald's (ID: {customer['customer_id']})")
+        print(f"\n[CUSTOMER] ✓ Auto-detected: {customer['client_name']} (ID: {customer['customer_id']})")
         customer_id = customer['customer_id']
         separation = customer['separation']
     else:
-        print("\n[CUSTOMER] ✗ Could not auto-detect customer")
+        print(f"\n[CUSTOMER] ✗ Unknown Admerasia client: {client_name or '(no Ref: line)'}")
         print("Please enter customer details:")
-        customer_id = input("  Customer ID: ").strip()
+        customer_id = prompt_customer_id(None)
+        if customer_id is None:
+            print("[CANCELLED] No customer ID entered")
+            return None
 
         print("\nSeparation intervals (minutes):")
-        cust_sep = input("  Customer separation [3]: ").strip() or "3"
+        cust_sep = input("  Customer separation [15]: ").strip() or "15"
         event_sep = input("  Event separation [0]: ").strip() or "0"
-        order_sep = input("  Order separation [5]: ").strip() or "5"
+        order_sep = input("  Order separation [0]: ").strip() or "0"
         separation = (int(cust_sep), int(event_sep), int(order_sep))
 
-    # Self-learning: Save customer to database for future lookups
-    _save_customer_to_db(
-        customer_name="McDonald's",
-        customer_id=str(customer_id),
-        db_path=CUSTOMER_DB_PATH
-    )
+    # Self-learning: remember a client the customer table did not know yet
+    if not (customer and customer.get('from_db')):
+        _save_customer_to_db(
+            customer_name=client_name or f"Admerasia {customer_id}",
+            customer_id=str(customer_id),
+            separation=separation,
+            abbreviation=order.client.abbreviation,
+            db_path=CUSTOMER_DB_PATH,
+        )
 
     # Get Etere line specifications (parsed and analyzed)
     etere_lines = order.get_etere_lines()

@@ -26,7 +26,7 @@ from domain.enums import OrderStatus, OrderType
 # size+mtime so repeat scans are instant; a changed/new file misses and is
 # re-detected. Bump the version to invalidate every entry after detection logic
 # changes.
-_SCAN_CACHE_VERSION = 8  # v8: San Joaquin County xlsx/filename rule; v7: Wallrich PDF rule client-keyed too; opAD excludes KBTV
+_SCAN_CACHE_VERSION = 9  # v9: Admerasia detects any Ref:/Order Number IO (SMG); v8: San Joaquin County xlsx/filename rule; v7: Wallrich PDF rule client-keyed too; opAD excludes KBTV
 _SCAN_CACHE_NAME = ".scan_cache.json"
 
 

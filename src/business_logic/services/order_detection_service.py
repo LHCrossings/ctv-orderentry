@@ -615,12 +615,19 @@ class OrderDetectionService:
         """
         Check if text matches Admerasia order patterns.
 
-        Primary: "Admerasia" present with McDonald's branding.
+        Primary: "Admerasia" present with the IO header ("Ref: <client>" +
+        "Order Number:") — any Admerasia advertiser (McDonald's, Seoul Medical
+        Group, ...). The client itself is read from the Ref: line downstream.
+        Legacy: "Admerasia" + McDonald's branding.
         Fallback: Order Number + -MD pattern (e.g. "07-MD10-...") without
         requiring "Admerasia" text — covers clean McDonald's-branded IOs.
         """
         text_upper = text.upper()
         has_admerasia = "Admerasia" in text or "ADMERASIA" in text_upper
+
+        # Admerasia name + IO header shape → definitive, whoever the client is
+        if has_admerasia and "Ref:" in text and "Order Number:" in text:
+            return True
 
         # Admerasia name + McDonald's → definitive
         if has_admerasia and ("McDonald" in text or "Ref: McDonald" in text):
@@ -811,7 +818,9 @@ class OrderDetectionService:
             return m.group(1).strip() if m else None
 
         elif order_type == OrderType.ADMERASIA:
-            # "Ref: McDonald's" is always present on Admerasia IOs
+            # "Ref: <advertiser>" heads every Admerasia IO (McDonald's, Seoul
+            # Medical Group, ...). Never read the client from the notes block —
+            # it quotes McDonald's boilerplate on every client's IO.
             m = re.search(r"Ref:\s*(.+)", first_page_text)
             if m:
                 return m.group(1).strip()

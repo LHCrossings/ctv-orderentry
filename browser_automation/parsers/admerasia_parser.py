@@ -4,7 +4,7 @@ Parses Admerasia PDF insertion orders with specific business rules
 
 BUSINESS RULES:
 1. All rates are NET - must gross up by dividing by 0.85
-2. Customer intervals: Always 3, 5, 0 (customer, order, event)
+2. Customer intervals per client (ADMERASIA_CLIENTS): McDonald's 3, 5, 0; SMG 15, 0, 0
 3. Day representation: M, T, W, R, F, S, U (single letters)
 4. Program names are disregarded - only use days and times in descriptions
 5. One order = one language = one market
@@ -37,6 +37,81 @@ MARKET_CODES = {
     "SACRAMENTO": "CV",  # Central Valley
     "DALLAS": "DL"
 }
+
+
+# ============================================================================
+# CLIENT PROFILES
+# ============================================================================
+#
+# Admerasia is the AGENCY; the advertiser is the "Ref:" line of the IO header.
+# Every client shares the same IO layout and entry rules (Priority, paid only,
+# net rates); only these per-client values differ.
+#
+# The profile is resolved from the Ref: line ONLY — never from the notes
+# block, which quotes McDonald's boilerplate on every Admerasia IO
+# ("Kindly do NOT provide any BONUS ads for McDonald's") regardless of client.
+
+@dataclass(frozen=True)
+class AdmerasiaClient:
+    name: str                      # ANAGRAF RAG_SOCIAL — the Ref: line
+    customer_id: Optional[int]     # Etere customer ID; None → operator prompt
+    abbreviation: str              # token in the contract code: "Admerasia {abbr} 7SE 2609"
+    description_name: str          # prefix of the description: "{desc} Est 7 SEA 2609"
+    separation: Tuple[int, int, int]  # (customer, order, event) minutes
+    ref_keys: Tuple[str, ...]      # uppercase substrings that identify the Ref: line
+
+
+ADMERASIA_CLIENTS: Tuple[AdmerasiaClient, ...] = (
+    AdmerasiaClient(
+        name="McDonald's",
+        customer_id=42,
+        abbreviation="McD",
+        description_name="McDonald's",
+        separation=(3, 5, 0),
+        ref_keys=("MCDONALD",),
+    ),
+    AdmerasiaClient(
+        name="Seoul Medical Group",
+        customer_id=478,
+        abbreviation="SMG",
+        description_name="Seoul Medical Group",
+        separation=(15, 0, 0),
+        ref_keys=("SEOUL MEDICAL", "SMG"),
+    ),
+)
+
+DEFAULT_SEPARATION = (15, 0, 0)
+
+
+def extract_ref_client(header_text: str) -> str:
+    """The advertiser named on the IO's `Ref:` line ('' when absent)."""
+    m = re.search(r"Ref:\s*(.+)", header_text or "")
+    return m.group(1).strip() if m else ""
+
+
+def resolve_admerasia_client(header_text: str) -> AdmerasiaClient:
+    """
+    Map the IO's Ref: line to a client profile.
+
+    An unknown advertiser gets a generic profile built from its own name
+    (initials as the code token, no customer ID) so the gather prompts for the
+    ID instead of silently booking it as McDonald's.
+    """
+    ref = extract_ref_client(header_text)
+    ref_upper = ref.upper()
+    for client in ADMERASIA_CLIENTS:
+        if any(key in ref_upper for key in client.ref_keys):
+            return client
+    initials = "".join(w[0] for w in re.findall(r"[A-Za-z]+", ref)).upper() or "XXX"
+    return AdmerasiaClient(
+        name=ref or "Unknown",
+        customer_id=None,
+        abbreviation=initials,
+        description_name=ref or "Unknown",
+        separation=DEFAULT_SEPARATION,
+        ref_keys=(),
+    )
+
 
 # DMA to Etere market code
 DMA_TO_ETERE = {
@@ -95,7 +170,16 @@ class AdmerasiaOrder:
     # Sponsorship section (9/2026+ IOs): '15s Spots' / 'OBB & CBB' rows below the TVC
     # grid. NOT auto-entered — surfaced at gather for explicit manual-entry confirm.
     sponsorship: Optional[dict] = None
-    
+
+    @property
+    def client(self) -> AdmerasiaClient:
+        """Advertiser profile resolved from the header's Ref: line."""
+        return resolve_admerasia_client(self.header_text)
+
+    @property
+    def client_name(self) -> str:
+        return self.client.name
+
     def get_estimate_number(self) -> str:
         """
         Generate estimate number from order number and market.
@@ -241,7 +325,7 @@ def get_default_notes(order: AdmerasiaOrder) -> str:
     
     Includes header text from PDF (campaign info, DMA, restrictions).
     """
-    return order.header_text if order.header_text else f"McDonald's Order {order.order_number}"
+    return order.header_text if order.header_text else f"{order.client_name} Order {order.order_number}"
 
 
 def get_language_block_prefix(language: str) -> str:
@@ -271,26 +355,26 @@ def extract_order_total_from_pdf(pdf_path: str) -> Optional[int]:
 def get_default_order_code(order: AdmerasiaOrder) -> str:
     """
     Get default contract code.
-    
-    Format: "Admerasia McD [Estimate Number]"
-    Example: "Admerasia McD 11SE 2602"
+
+    Format: "Admerasia [client abbreviation] [Estimate Number]"
+    Examples: "Admerasia McD 11SE 2602", "Admerasia SMG 1SE 2610"
     """
-    return f"Admerasia McD {order.get_estimate_number()}"
+    return f"Admerasia {order.client.abbreviation} {order.get_estimate_number()}"
 
 
 def get_default_order_description(order: AdmerasiaOrder) -> str:
     """
     Get default contract description.
-    
-    Format: "McDonald's Est [Order Prefix] [Market Code] [YYMM]"
-    Example: "McDonald's Est 11 SEA 2602"
+
+    Format: "[client name] Est [Order Prefix] [Market Code] [YYMM]"
+    Examples: "McDonald's Est 11 SEA 2602", "Seoul Medical Group Est 1 SEA 2610"
     """
     estimate_num = order.get_estimate_number()  # e.g., "11SE 2602"
     order_prefix = order.order_number.split('-')[0].lstrip('0')  # e.g., "11" (strip leading zeros)
     market_code = order.get_market_code()  # e.g., "SEA"
     yymm = estimate_num.split()[1]  # e.g., "2602"
-    
-    return f"McDonald's Est {order_prefix} {market_code} {yymm}"
+
+    return f"{order.client.description_name} Est {order_prefix} {market_code} {yymm}"
 
 
 # ============================================================================
@@ -1835,27 +1919,20 @@ def get_admerasia_billing_defaults() -> Dict[str, str]:
     }
 
 
-def get_default_separation_intervals() -> Tuple[int, int, int]:
+def get_default_separation_intervals(header_text: str = "") -> Tuple[int, int, int]:
     """
-    Get default separation intervals for Admerasia.
-    Format: (customer, order, event) in minutes
-    
-    ALWAYS: 3, 5, 0
+    Default separation intervals for the IO's client, (customer, order, event) in
+    minutes — McDonald's (3, 5, 0), Seoul Medical Group (15, 0, 0).
     """
-    return (3, 5, 0)
+    return resolve_admerasia_client(header_text).separation
 
 
 def get_customer_id_from_client(header_text: str) -> Optional[int]:
     """
-    Map Admerasia client to Etere customer ID.
-    
-    Known mappings:
-    - McDonald's: Customer ID 42
+    Map the IO's Ref: client to its Etere customer ID (McDonald's 42, Seoul
+    Medical Group 478). None for an unknown client → operator prompt.
     """
-    if "MCDONALD" in header_text.upper():
-        return 42
-    
-    return None  # Will trigger customer search if not McDonald's
+    return resolve_admerasia_client(header_text).customer_id
 
 
 def get_language_from_order(order: AdmerasiaOrder) -> str:

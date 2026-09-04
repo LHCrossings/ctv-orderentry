@@ -55,7 +55,7 @@ class VisionGrid(BaseModel):
     warnings: list[str] = Field(default_factory=list, description="Anything ambiguous or hard to read — cite the row.")
 
 
-_SYSTEM = """You read the calendar grid of an Admerasia / McDonald's television broadcast order into structured data. Accuracy of DAY placement is the entire job.
+_SYSTEM = """You read the calendar grid of an Admerasia television broadcast order (advertisers such as McDonald's or Seoul Medical Group) into structured data. Accuracy of DAY placement is the entire job.
 
 Grid layout:
 - The 'Broadcast Order' table has a header with a row of day-of-week letters (T W R F S U then M T W R F S U, repeating) and DIRECTLY BELOW it a row of day-of-MONTH numbers (7 8 9 10 ... 31 1 2 ... 9). Output that day-number row, left to right, as calendar_days.
