@@ -170,6 +170,7 @@ async function loadPrograms() {
 // A filled show that still carries yellow triangles is redone from scratch: strip its
 // PI/PSA/ID rows and let Finish fill again (Lee 9/1 — what he did by hand on CVC 10:00).
 function isRefill(p) { return p.state === 'finished' && p.triangles > 0; }
+function btnLabelFor(p) { return isRefill(p) ? 'Refill' : (p.state === 'overrun' ? 'Strip fill' : 'Finish'); }
 
 // Derived state → header badge. Never a stored flag: EE edits stay honest.
 function statFor(p) {
@@ -179,7 +180,12 @@ function statFor(p) {
             : { cls: 'done', text: `✓ finished · ID airs ${p.id_airs != null ? p.id_airs.toFixed(1) : '?'}s` };
         case 'ready':    return { cls: 'warn', text: `${p.n_delete} remove · ${p.n_insert} add · ID would air ${p.id_airs != null ? p.id_airs.toFixed(1) : '?'}s` };
         case 'unplaced': return { cls: 'bad',  text: `programming not placed · ${Math.round((p.remainder || 0) / 60)} min open` };
-        case 'overrun':  return { cls: 'bad',  text: `runs ${mmss(-(p.remainder || 0)).replace(/\.\d+$/, '')} past its slot · check programming` };
+        case 'overrun': {
+            const over = mmss(-(p.hard_remainder != null ? p.hard_remainder : (p.remainder || 0))).replace(/\.\d+$/, '');
+            return p.strip_only
+                ? { cls: 'bad',  text: `program + paid run ${over} past the slot · strip ${p.n_delete} PI/PSA so paid spots air · check programming` }
+                : { cls: 'bad',  text: `program + paid run ${over} past the slot with no fill left · check programming` };
+        }
         case 'follows':  return { cls: '',     text: 'next show follows · ID at the top of the hour' };
         case 'cannot':   return { cls: 'bad',  text: p.error || 'cannot land the ID' };
         case 'na':       return { cls: '',     text: 'nothing to finish' };
@@ -206,8 +212,10 @@ function renderPrograms(data) {
         const st = statFor(p);
         // a filled show that still carries triangles gets the button back: the same
         // apply path makes 0 fill edits and explodes the window (timecodes + checksums)
-        const canFinish = p.state === 'ready' || isRefill(p);
-        const btnLabel = isRefill(p) ? 'Refill' : 'Finish';
+        // an over-full hour (program + paid alone spill) still gets a button: the same
+        // apply path strips every PI/PSA/ID so the paid spots air (Lee 9/4)
+        const canFinish = p.state === 'ready' || isRefill(p) || (p.state === 'overrun' && p.strip_only);
+        const btnLabel = btnLabelFor(p);
         html += `<div class="prg-block collapsed ${p.state === 'finished' ? 'finished' : ''}" id="prg-${pi}">
   <div class="prg-header" onclick="togglePrg(${pi})">
     <span class="prg-chevron">▾</span>
@@ -290,7 +298,7 @@ async function finishProgram(pi) {
     const plan = plans[pi];
     const summary = (plan ? `${plan.n_delete} remove, ${plan.n_insert} add; ends ${plan.planned_end_hms}` : `${p.n_delete} remove, ${p.n_insert} add`)
         + (p.triangles ? `; explode ${p.triangles} yellow triangle${p.triangles === 1 ? '' : 's'}` : '');
-    const verb = isRefill(p) ? 'Refill' : 'Finish';
+    const verb = btnLabelFor(p);
     if (!confirm(`${verb} ${p.title} (${hm(p.lo_hms)}–${hm(p.hi_hms)}) in ${selectedMarket}?\n\n${summary}\n\nWrites to Etere. The schedule is NOT published — publish it yourself when you're done.`)) return;
     const btn = document.getElementById(`prg-apply-${pi}`);
     btn.disabled = true; btn.textContent = 'Finishing…';
@@ -306,12 +314,12 @@ async function finishProgram(pi) {
         } else {
             stat.className = 'prg-stat bad';
             stat.textContent = `${r.status}: ${r.message || 'see log'}`;
-            btn.disabled = false; btn.textContent = isRefill(p) ? 'Refill' : 'Finish';
+            btn.disabled = false; btn.textContent = btnLabelFor(p);
             document.getElementById(`prg-body-${pi}`).innerHTML =
                 `<div class="prg-note">Rolled back — nothing changed.<br>${esc((r.log || []).join('\n')).replace(/\n/g, '<br>')}</div>`;
         }
     } catch (e) {
-        btn.disabled = false; btn.textContent = isRefill(p) ? 'Refill' : 'Finish';
+        btn.disabled = false; btn.textContent = btnLabelFor(p);
         alert('Network error: ' + e.message);
     }
 }

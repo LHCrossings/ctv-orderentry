@@ -260,14 +260,27 @@ def plan_window(
     # spots. Existing PI/PSA rows are ours to strip (auto-refill above), so a negative
     # remainder that they cause is an overage to fix, not a programming problem.
     hard_rem = packed_remainder([e for e in evs_all if not e.is_fill], hi)
+    # Program + paid alone spill past the top: Finish still strips every PI/PSA/ID so
+    # the paid spots get the room (Lee 9/4: "remove all PI and PSA spots to allow for
+    # programs and commercials to be aired"), writes that, and reports what is still
+    # over — which spot moves is a programming call. `plan()` inserted nothing (no
+    # room), so the plan is deletes-only.
+    strip_only = hard_rem < 0 and bool(deletes)
+    if strip_only:
+        inserts = []
+        notes.append(
+            f"overrun {mmss(-hard_rem)} even with all fill removed — removing {len(deletes)} "
+            f"PI/PSA/ID rows so paid spots air; program + paid still end {mmss(-hard_rem)} "
+            f"past {hms(hi)} (programming call)"
+        )
     if len(pieces) == 1 and not breaks[0].items if breaks else True:
         state = (
             "na"  # a single fixed event with no breaks (overnight live feed) — nothing to finish
         )
     elif rem_s > UNPLACED_SECONDS:
         state = "unplaced"  # the precondition (all programming placed) is not met
-    elif hard_rem < -OVERRUN_SECONDS:
-        state = "overrun"  # more content than the slot holds — a programming problem, not a fill
+    elif hard_rem < 0:
+        state = "overrun"  # program + paid spill even with zero fill — a programming problem
     elif not hi_fixed:
         state = "follows"  # next show follows directly; the ID lands at the hour's F event
     elif cannot:
@@ -280,15 +293,20 @@ def plan_window(
         (float(n.split("airs ")[1].split("s")[0]) for n in notes if "ID" in n and "airs" in n), None
     )
     error = None
-    if state == "overrun":
-        error = f"overrun: program and paid spots run {mmss(-hard_rem)} past {hms(hi)}"
-    elif cannot:
+    if state == "overrun" and not strip_only:
+        error = (
+            f"overrun: program and paid spots run {mmss(-hard_rem)} past {hms(hi)} "
+            "and no PI/PSA is left to remove"
+        )
+    elif cannot and not strip_only:
         error = "plan cannot land the ID"
     return {
-        "ok": not cannot and state in ("ready", "finished"),
+        "ok": (not cannot and state in ("ready", "finished")) or strip_only,
         "state": state,
+        "strip_only": strip_only,
         "error": error,
         "remainder": rem_s,
+        "hard_remainder": hard_rem,
         "finished": finished,
         "notes": notes,
         "timeline": timeline,

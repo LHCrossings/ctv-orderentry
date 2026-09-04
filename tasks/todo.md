@@ -12,7 +12,8 @@ EOM − Σ(MARKOUT−MARKIN).
 - [x] plan_window: overage (remainder < 5 s with fill kept) → auto-refill (Lee: strip ALL PI/PSA, refill); overrun judged on program+paid only; error text for overrun
 - [x] mmss negative fix; packed_remainder shared helper; tests/unit/test_finish_plan_window.py
 - [x] dry-run NYC 08:00: 8 PIs stripped, 7 inserts, ends 09:00:12.78, BO 0 changes
-- [ ] Lee clicks Finish on NYC 9/4 08:00 (page) — first live overage refill
+- [x] Lee clicked Finish on NYC 9/4 08:00 — live overage refill worked (hour reads finished, ID airs 12.3 s)
+- [x] overrun (program+paid alone spill) → strip-only plan stays writable (`strip_only`, 'Strip fill' button); refuses only with nothing left to strip
 
 ## Plan
 - [x] `parse_edius_csv` → `(splits, eom, omits)`; GAP markers must pair adjacently, never last, never zero-length (ValueError otherwise)

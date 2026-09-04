@@ -20,6 +20,11 @@ commercials to be aired, then fill back in" — not the fewest-edits FIX phase, 
 "programming problem" refusal. `plan_window` now auto-refills when the packed remainder
 with existing fill kept is < 5 s, and judges `overrun` on program + paid only.
 
+Lee's follow-up the same afternoon: when program + paid ALONE still spill, do not refuse — strip
+every PI/PSA/ID anyway (`strip_only`, page button "Strip fill"), write it, and report the
+remaining overage; which paid spot moves is the programming call. A refusal that leaves the
+fill in place only makes the spill worse.
+
 **How to apply:**
 1. When an F anchor exists at `hi`, playlist order (XORDER) is the truth: everything ahead
    of the anchor airs before the next show and is this window's, spilled paid spots

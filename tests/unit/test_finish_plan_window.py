@@ -98,3 +98,64 @@ def test_ev_is_fill_needs_no_contract_line():
     pi = Ev(1, 0, 30, "PER", "T", 5, "PI-505-030: Alien Power", None)
     paid_per = Ev(2, 0, 30, "PER", "T", 6, "PAID PER", 4242)
     assert pi.is_fill and not paid_per.is_fill
+
+
+# ── plan_window state machine on synthetic hours (inventory patched, no DB) ──
+from business_logic.services import finish_service as fs  # noqa: E402
+
+# finish_service imports finish_plan under the `src.` prefix; use ITS Filler so isinstance holds
+Filler = fs.Filler
+
+
+def _plan(rows, inv, monkeypatch):
+    monkeypatch.setattr(fs, "load_inventory", lambda cur, market, date: inv)
+    return fs.plan_window(None, 1, "2026-09-04", H8, H9, rows=rows)
+
+
+def _pi(i, ora_s, dur_s, code):
+    return _row(i, ora_s, dur_s, "PER", "T", f"PI-{code}: Filler", line=None)
+
+
+def test_overage_with_room_auto_refills(monkeypatch):
+    # program 3500 + paid 60 + existing PIs 120 → -80 with fill, +40 without → strip + refill
+    rows = [
+        _row(1, H8, 3500, "PGM", "F", "SHOW"),
+        _row(2, H8 + 3500, 60, "COM", "T", "PAID60", line=1),
+        _pi(3, H8 + 3560, 60, "444-060"),
+        _pi(4, H8 + 3620, 60, "467-060"),
+        _row(9, H9, 600, "PGM", "F", "NEXT"),
+    ]
+    inv = [Filler(9001, "PI-900-030: New", 30.0, "PI", "PI-900", 0)]
+    r = _plan(rows, inv, monkeypatch)
+    assert r["state"] == "ready" and r["ok"]
+    assert r["notes"][0].startswith("overage -1:") and "2 existing PI/PSA/ID rows removed" in r["notes"][0]
+    assert r["n_delete"] == 2 and r["n_insert"] == 2  # :30 PI + ID
+    assert not r["strip_only"]
+
+
+def test_overrun_strips_all_fill_and_stays_writable(monkeypatch):
+    # program 3560 + paid 60 = 3620 → program+paid alone spill 20s; two PIs present
+    rows = [
+        _row(1, H8, 3560, "PGM", "F", "SHOW"),
+        _row(2, H8 + 3560, 60, "COM", "T", "PAID60", line=1),
+        _pi(3, H8 + 3620, 60, "444-060"),
+        _pi(4, H8 + 3680, 30, "505-030"),
+        _row(9, H9, 600, "PGM", "F", "NEXT"),
+    ]
+    r = _plan(rows, [Filler(9001, "PI-900-030: New", 30.0, "PI", "PI-900", 0)], monkeypatch)
+    assert r["state"] == "overrun" and r["ok"] and r["strip_only"]
+    assert r["n_delete"] == 2 and r["n_insert"] == 0 and r["error"] is None
+    assert abs(r["hard_remainder"] + 20.0) < 0.1
+    assert any(n.startswith("overrun 0:") and "removing 2 PI/PSA/ID rows" in n for n in r["notes"])
+    assert {e["op"] for e in r["edits"]} == {"delete"}
+
+
+def test_overrun_with_nothing_left_to_strip_refuses(monkeypatch):
+    rows = [
+        _row(1, H8, 3560, "PGM", "F", "SHOW"),
+        _row(2, H8 + 3560, 60, "COM", "T", "PAID60", line=1),
+        _row(9, H9, 600, "PGM", "F", "NEXT"),
+    ]
+    r = _plan(rows, [], monkeypatch)
+    assert r["state"] == "overrun" and not r["ok"] and not r["strip_only"]
+    assert "no PI/PSA is left to remove" in r["error"]
