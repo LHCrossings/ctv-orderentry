@@ -23,6 +23,7 @@ from web.routes.edi import build_edi_router
 from web.routes.edi_billing import build_edi_billing_router
 from web.routes.edi_export import build_edi_export_router
 from web.routes.finish import build_finish_router
+from web.routes.monitor_wall import build_monitor_wall_router
 from web.routes.orders import build_router
 from web.routes.programming import build_programming_router
 from web.routes.reports import build_reports_router
@@ -56,12 +57,13 @@ def create_app(config: ApplicationConfig | None = None) -> FastAPI:
     app.include_router(build_broadcast_health_router(templates))
     app.include_router(build_programming_router(templates))
     app.include_router(build_finish_router(templates))
+    app.include_router(build_monitor_wall_router(templates))
 
     # Inject the global Broadcast Health indicator on every HTML page. Doing it
     # in one middleware avoids editing ~58 per-page headers (there is no shared
     # base template) and automatically covers future pages. Non-HTML responses
     # (JSON, static assets, SSE streams) are passed through untouched.
-    _BH_TAG = b'<script src="/static/js/broadcast-health.js?v=20260904b"></script>'
+    _BH_TAG = b'<script src="/static/js/broadcast-health.js?v=20260904c"></script>'
 
     # Shared date/time entry helpers (formatDateInput / parseDateInput /
     # fmtAirtime), previously copy-pasted into a dozen templates. Injected into

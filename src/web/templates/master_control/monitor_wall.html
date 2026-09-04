@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Monitor Wall — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        /* one wall, edge to edge; the header keeps the site's chrome */
+        main.wall { max-width: none; padding: 0; background: var(--nord0); min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
+        .wall-bar { display: flex; align-items: center; gap: 16px; padding: 6px 16px; color: var(--nord4); font-size: 0.8rem; background: var(--nord1); }
+        .wall-bar a { color: var(--nord8); text-decoration: none; }
+        .wall-bar a:hover { text-decoration: underline; }
+        .wall-bar .spacer { flex: 1; }
+        .wall-bar .stale { color: var(--nord13); }
+        .wall-bar .err { color: var(--nord11); }
+        .wall-frame { flex: 1; display: flex; align-items: center; justify-content: center; }
+        .wall-frame img { max-width: 100%; max-height: calc(100vh - 100px); width: 100%; object-fit: contain; display: block; background: #000; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="home-btn">🏠</a>
+            <div class="logo-icon">🖥️</div>
+            <div>
+                <h1>Monitor <span>Wall</span></h1>
+                <div class="logo-sub">Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main class="wall">
+    <div class="wall-bar">
+        <span>Stirlitz screen <strong>{{ screen }}</strong></span>
+        <span id="wallStatus">connecting…</span>
+        <span class="spacer"></span>
+        <a href="#" id="wallFull">full screen</a>
+        <a href="{{ stirlitz_url }}" target="_blank" rel="noopener">open the Stirlitz page ↗</a>
+    </div>
+    <div class="wall-frame">
+        <img id="wall" alt="Monitor wall" />
+    </div>
+</main>
+
+<script>
+(function () {
+    // Double-buffered refresh: fetch the next JPEG off-screen, swap when it has
+    // decoded, so the wall never flashes blank. Paused while the tab is hidden.
+    const SCREEN = {{ screen | tojson }};
+    const PERIOD_MS = 750;
+    const img = document.getElementById('wall');
+    const status = document.getElementById('wallStatus');
+    let lastOk = 0, failures = 0, timer = null;
+
+    function tick() {
+        if (document.hidden) { timer = setTimeout(tick, PERIOD_MS); return; }
+        const next = new Image();
+        const started = performance.now();
+        next.onload = function () {
+            img.src = next.src;
+            lastOk = Date.now(); failures = 0;
+            status.textContent = 'live · ' + Math.round(performance.now() - started) + ' ms';
+            status.className = '';
+            timer = setTimeout(tick, PERIOD_MS);
+        };
+        next.onerror = function () {
+            failures += 1;
+            const age = lastOk ? Math.round((Date.now() - lastOk) / 1000) + 's old' : 'no frame yet';
+            status.textContent = 'multiviewer not answering · ' + age;
+            status.className = failures > 3 ? 'err' : 'stale';
+            timer = setTimeout(tick, Math.min(PERIOD_MS * failures, 5000));
+        };
+        next.src = '/api/master-control/monitor-wall/frame?screen=' + encodeURIComponent(SCREEN) + '&t=' + Date.now();
+    }
+    document.addEventListener('visibilitychange', function () { if (!document.hidden && !timer) tick(); });
+    document.getElementById('wallFull').addEventListener('click', function (e) {
+        e.preventDefault();
+        const el = document.querySelector('.wall-frame');
+        if (el.requestFullscreen) el.requestFullscreen();
+    });
+    tick();
+})();
+</script>
+
+</body>
+</html>
