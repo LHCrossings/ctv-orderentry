@@ -1,3 +1,22 @@
+# ⏳ ACTIVE — EDL import: GAP (omit) markers (2026-09-04)
+
+Lee: NEWSTODAY episodes sometimes drop an internal section; EDIUS export marks it as two
+adjacent point markers commented `GAP` (first = in, second = out). Today's file
+`/mnt/c/Work Temp/!New/!Orders/MBC.csv` → asset NEWSTODAY090426 (148268). Oracle for the
+omit row shape = NEWSTODAY040926 (135045): FINTERRUZIONI MARKIN<MARKOUT, BULK_VIDEO=1,
+INSERTION_POINT=0, FLAG=''; explode keeps MARKIN, resumes at MARKOUT+1; DURATION/DURATA =
+EOM − Σ(MARKOUT−MARKIN).
+
+## Plan
+- [x] `parse_edius_csv` → `(splits, eom, omits)`; GAP markers must pair adjacently, never last, never zero-length (ValueError otherwise)
+- [x] `expected_parts(splits, eom, omits)` reproduces the 040926 explode plan exactly
+- [x] `apply_edl_from_csv(..., omits=)` writes BULK_VIDEO rows per VERSION, DURATION/DURATA net of the gaps
+- [x] both routes pass omits; `count` = len(parts); message names gaps
+- [x] tests/unit/test_edl_import.py (MBC.csv shape, oracle plan, refusals, SQL capture)
+- [x] live dry-run on 148268 + 135045 (oracle V0 header + explode plan reproduced exactly; 50/60fps rows ±1 frame rounding)
+- [ ] live COMMIT on 148268 — CLI write blocked by the permission classifier; Lee drops MBC.csv on /scripts/import-edl (or approves the CLI write)
+- [x] commit, push, post_push.sh, lesson
+
 # ⏳ ACTIVE — MVMS (Marathon Ventures) WorldLink post-log export (2026-09-02)
 
 Aki forwarded Marathon Ventures' data request: spot-level "post log" of aired spots, Q1 2025 →

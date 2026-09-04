@@ -4,6 +4,35 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## An EDL "Omit" Is a Range Mark, Not Two Splits — and Etere Nets the Cut From DURATION Inclusively
+
+**Session:** NEWSTODAY GAP markers, MBC.csv → asset 148268 (2026-09-04)
+
+**Rule:** The EDIUS importer had only ever written pure splits (MARKIN=MARKOUT). Master control
+sometimes drops an internal section of a show and exports it as two ADJACENT point markers
+commented `GAP`. Fed to the splits-only importer, those two markers became two more splits: the
+cut-out section would have aired as its own part and DURATION would have overstated the show
+by the cut. Etere's own shape for the cut (oracle NEWSTODAY040926, 135045, plus ~4,100
+hand-entered siblings) is ONE FINTERRUZIONI row with MARKIN<MARKOUT, BULK_VIDEO=1,
+INSERTION_POINT=0, FLAG=''. Explode keeps MARKIN and resumes at MARKOUT+1, but the header
+DURATION/DURATA is `EOM+1 − Σ(MARKOUT−MARKIN+1)` — Etere counts the omit inclusively, so it
+is `EOM − Σ(MARKOUT−MARKIN)` (89940 on the oracle). Mimic the stored value, not the arithmetic
+you would derive from the explode plan; the two differ by one frame per gap.
+
+**How to apply:**
+1. `parse_edius_csv` returns `(splits, eom, omits)`; GAP markers must pair adjacently (a plain
+   split between them, a lone GAP, or a GAP as the last marker all raise). The Comment column
+   is the machine-readable signal — never infer a gap from marker spacing.
+2. `expected_parts(splits, eom, omits)` is what the explode self-check compares against; a
+   splits-only expectation would have "validated" the wrong 6-part write.
+3. Verify a marks writer by DRY-RUNNING it on a hand-marked oracle (write in a txn, snapshot,
+   rollback) and requiring the VERSION-0 header and the explode plan to match byte-for-byte.
+   Only the 50/60 fps VERSION rows may differ, by rounding.
+4. The one-click importer is the right place for the live write; when the classifier blocks
+   a direct production write from the CLI, hand the click to Lee rather than routing around it.
+
+---
+
 ## A Calendar Contract Backwritten as Broadcast Silently Drops Its Month-Boundary Spots — The Billing Type Comes From Etere, Not the Operator
 
 **Session:** Sky River 2608-034, one aired 8/31 spot missing from the affidavit (2026-09-03)

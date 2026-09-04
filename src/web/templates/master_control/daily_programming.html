@@ -913,7 +913,7 @@
         fmEdlPanel.style.display = 'block';
         fmEdlStatus.innerHTML = '<b>' + escHtml(file.code) + '</b> is a single file with no EDL and no a/b/c pieces, ' +
             'but this slot has <b>' + pd.prgs_slots + ' breaks</b>. It needs EDL markup — enter it in Etere, ' +
-            'or drop today’s EDIUS marker CSV here (last marker = EOM, the rest = splits).';
+            'or drop today’s EDIUS marker CSV here (last marker = EOM, the rest = splits; an adjacent pair commented GAP = section to omit).';
         fmEdlText.value = '';
         fmEdlResult.innerHTML = '';
         setAssignText(modalIdx, '→ ' + file.code + ' · needs EDL markup', true);

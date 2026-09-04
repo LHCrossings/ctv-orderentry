@@ -1871,17 +1871,19 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except (TypeError, ValueError):
             return {"ok": False, "error": "Missing/invalid filmati"}
         try:
-            splits, eom = parse_edius_csv(body.get("csv") or "")
+            splits, eom, omits = parse_edius_csv(body.get("csv") or "")
         except ValueError as exc:
             return {"ok": False, "error": str(exc)}
         try:
             with _db_connect() as conn:
-                res = apply_edl_from_csv(conn, filmati, splits, eom)  # cod_user=None → no explode
+                # cod_user=None → no explode
+                res = apply_edl_from_csv(conn, filmati, splits, eom, omits=omits)
         except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
             return {"ok": False, "error": f"EDL import failed: {exc}"}
         res["splits"] = splits
         res["eom"] = eom
-        res["count"] = len(splits) + 1
+        res["omits"] = omits
+        res["count"] = len(splits) + len(omits) + 1
         return res
 
     @router.get("/scripts/separation", response_class=HTMLResponse)
@@ -6156,17 +6158,18 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             return {"ok": False, "error": "Missing/invalid filmati"}
         coduser = int(body.get("coduser") or 1)
         try:
-            splits, eom = parse_edius_csv(body.get("csv") or "")
+            splits, eom, omits = parse_edius_csv(body.get("csv") or "")
         except ValueError as exc:
             return {"ok": False, "error": str(exc)}
         try:
             with _db_connect() as conn:
-                res = apply_edl_from_csv(conn, filmati, splits, eom, coduser)
+                res = apply_edl_from_csv(conn, filmati, splits, eom, coduser, omits=omits)
         except Exception as exc:  # noqa: BLE001 - surface DB errors to the UI
             return {"ok": False, "error": f"EDL import failed: {exc}"}
         res["splits"] = splits
         res["eom"] = eom
-        res["count"] = len(splits) + 1
+        res["omits"] = omits
+        res["count"] = len(splits) + len(omits) + 1
         return res
 
     @router.get("/api/master-control/daily-programming/placement")
