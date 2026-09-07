@@ -151,7 +151,11 @@ async function loadPrograms() {
     if (!dateVal || !selectedMarket) return;
     currentDate = dateVal;
     programs = []; plans = {};
-    document.getElementById('logArea').innerHTML = '<div class="empty-state">Reading the day\'s schedule…</div>';
+    // Hold the list's height while it reloads so the page does not collapse and jump
+    // to the top on every Finish (Maija 9/7: "can it stay in the exact spot?")
+    const area = document.getElementById('logArea');
+    if (area.firstElementChild) area.style.minHeight = area.offsetHeight + 'px';
+    area.innerHTML = '<div class="empty-state">Reading the day\'s schedule…</div>';
     try {
         const resp = await fetch(`/api/master-control/finish/day?date=${encodeURIComponent(dateVal)}&market=${encodeURIComponent(selectedMarket)}`);
         if (!resp.ok) {
@@ -164,6 +168,8 @@ async function loadPrograms() {
         renderPrograms(data);
     } catch (e) {
         document.getElementById('logArea').innerHTML = `<div class="empty-state">Network error: ${esc(e.message)}</div>`;
+    } finally {
+        area.style.minHeight = '';
     }
 }
 
@@ -243,10 +249,13 @@ function togglePrg(pi) {
 
 async function refreshProgram(pi) {
     // Re-read the whole day (states are derived from live data) but keep this block open
+    // and the page where the operator left it
     const block = document.getElementById(`prg-${pi}`);
     const open = !block.classList.contains('collapsed');
+    const y = window.scrollY;
     await loadPrograms();
     if (open && document.getElementById(`prg-${pi}`)) togglePrg(pi);
+    window.scrollTo(0, y);
 }
 
 function expandAll() { programs.forEach((p, pi) => { const b = document.getElementById(`prg-${pi}`); if (b.classList.contains('collapsed')) togglePrg(pi); }); }

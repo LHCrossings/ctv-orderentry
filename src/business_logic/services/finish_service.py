@@ -27,10 +27,12 @@ from src.business_logic.services.daily_programming_run import (
     _sync_checksums,
 )
 from src.business_logic.services.finish_plan import (
+    FCC_ID_ASSET,
     FPS,
     ID_MIN_AIR,
     Ev,
     Filler,
+    accepted_id_assets,
     hms,
     load_day,
     load_inventory,
@@ -120,6 +122,31 @@ def _supporto(cur, filmati: int) -> str:
     return sup
 
 
+def _seat(cur, market: int, date: str, row_id: int, prev_id: int) -> int:
+    """Give row_id the XORDER slot right behind prev_id (before the next live row of the
+    day). EE numbers rows densely after its own edits, so two neighbours can sit 1 apart
+    ("no XORDER room between 2529995 and 2529996" — DAL 9/4 01:00, Maija): then every
+    later row of the day, live or soft-deleted, moves up by 1000 first (order kept)."""
+    cur.execute("SELECT XORDER FROM TPALINSE WHERE ID_TPALINSE=%s", (prev_id,))
+    xo_prev = cur.fetchone()[0]
+    cur.execute(
+        "SELECT MIN(XORDER) FROM TPALINSE WHERE COD_USER=%s AND DATA=%s AND LIVELLO=0 AND XORDER>%s AND ID_TPALINSE<>%s",
+        (market, date, xo_prev, row_id),
+    )
+    xo_next = cur.fetchone()[0]
+    if xo_next is not None and xo_next - xo_prev < 2:
+        cur.execute(
+            "UPDATE TPALINSE SET XORDER = XORDER + 1000 WHERE COD_USER=%s AND DATA=%s AND XORDER>%s AND ID_TPALINSE<>%s",
+            (market, date, xo_prev, row_id),
+        )
+        xo_next += 1000
+    xo = (xo_prev + xo_next) // 2 if xo_next is not None else xo_prev + 1000
+    if not (xo_prev < xo < (xo_next if xo_next is not None else xo + 1)):
+        raise RuntimeError(f"no XORDER room between {xo_prev} and {xo_next}")
+    cur.execute("UPDATE TPALINSE SET XORDER=%s WHERE ID_TPALINSE=%s", (xo, row_id))
+    return xo
+
+
 def _item_dict(it, start: float, tag: str) -> dict:
     kind = getattr(it, "newtype", None) or getattr(it, "kind", "")
     return {
@@ -190,17 +217,29 @@ def plan_window(
         notes.insert(0, f"refill: {len(strip)} existing PI/PSA/ID rows removed, fill re-planned")
     if assume_fixed:
         notes.append(f"next show not placed yet — assuming it starts at {hms(hi)}")
-    # An existing Station ID of the right asset is KEPT, not deleted and re-added:
+    # An existing Station ID of an accepted asset is KEPT, not deleted and re-added:
     # the plan's ID slot is taken by the live row (new PSAs go in ahead of it via
-    # XORDER) so the page shows a nudge as 0 remove / 1 add (Lee 8/28).
+    # XORDER) so the page shows a nudge as 0 remove / 1 add (Lee 8/28). Accepted =
+    # the market's regular ID or its FCC ID (Lee 9/7: the FCC ID takes precedence
+    # over the regular one — SFO 9/2 23:30 got a generic ID ADDED behind the FCC one
+    # the daily sweep had dropped mid-break, and the pair spilled past midnight).
+    # Preference: the asset the plan wants for this hour, else any accepted one.
     old_ids = [e for e in evs if e.newtype == "ID"]
     final = breaks[-1]
     planned_id = next((x for x in final.items if isinstance(x, Filler) and x.kind == "ID"), None)
     extra_deletes: list[Ev] = []
-    if old_ids and planned_id is not None and old_ids[-1].filmati == planned_id.filmati:
+    keep_id: Ev | None = None
+    if old_ids and planned_id is not None:
+        ok = accepted_id_assets(market)
+        keep_id = next(
+            (e for e in reversed(old_ids) if e.filmati == planned_id.filmati), None
+        ) or next((e for e in reversed(old_ids) if e.filmati in ok), None)
+    if keep_id is not None:
         final.items.remove(planned_id)
-        final.items.append(old_ids[-1])
-        extra_deletes = old_ids[:-1]  # a second ID in the hour (per-show habit) goes
+        final.items.append(keep_id)
+        extra_deletes = [e for e in old_ids if e is not keep_id]  # a second ID in the hour goes
+        if keep_id.filmati in FCC_ID_ASSET.values():
+            notes.append("FCC ID kept as the hour's ID (takes precedence over the regular one)")
     else:
         extra_deletes = old_ids  # wrong asset (or none) -> re-placed by the planned ID
     pieces = [e for e in evs if e.is_program]
@@ -504,16 +543,27 @@ def apply_window(
         r["_moves"],
     )
     pieces = [e for e in evs if e.is_program]
-    start_of = {}
-    t = pieces[0].ora
+    # id(piece | item) -> planned start, chained from the F anchor. Chained in whole
+    # FRAMES (the SP's own arithmetic): a float chain rounded per row can land a piece
+    # one frame late, and sch_rebuildStartTimeSchedule fills even a 1-frame hole with
+    # a NOOP (SFO 9/3 23:30 dry run: NOOP 0.03s ahead of part C).
+    start_of: dict[int, float] = {}
+    start_f: dict[int, int] = {}
+    fr = int(round(pieces[0].ora * FPS))
+
+    def _chain(obj) -> None:
+        nonlocal fr
+        start_f[id(obj)] = fr
+        start_of[id(obj)] = fr / FPS
+        fr += int(round(obj.dur * FPS))
+
     for i, p in enumerate(pieces):
-        t += p.dur
+        _chain(p)
         b = next((x for x in breaks if x.after_piece_idx == i), None)
         if b:
             for it in b.items:
-                start_of[id(it)] = t
-                t += it.dur
-    planned_end = t
+                _chain(it)
+    planned_end = fr / FPS
 
     os.makedirs(RESTORE_DIR, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -529,7 +579,14 @@ def apply_window(
                 vals = ",".join("NULL" if v is None else f"'{v}'" for v in row)
                 fh.write(f"INSERT INTO trafficPalinse ({','.join(cols)}) VALUES ({vals});\n")
             fh.write(f"UPDATE TPALINSE SET LIVELLO=0 WHERE ID_TPALINSE={e.id};\n")
+        for e, _tgt in moves:
+            cur.execute("SELECT ORA, XORDER FROM TPALINSE WHERE ID_TPALINSE=%s", (e.id,))
+            ora0, xo0 = cur.fetchone()
+            fh.write(
+                f"UPDATE TPALINSE SET ORA={ora0}, ORA_P={ora0}, XORDER={xo0} WHERE ID_TPALINSE={e.id};\n"
+            )
         fh.write("-- inserted rows are appended after the run; undo them with LIVELLO=666\n")
+        fh.write("-- then EXEC sch_rebuildStartTimeSchedule for the day to re-time the hour\n")
     log(f"  restore SQL: {rpath}")
     for e in deletes:
         log(f"  DEL  {hms(e.ora)} {e.newtype:4} {e.desc[:40]}  (id {e.id})")
@@ -551,78 +608,78 @@ def apply_window(
                 raise RuntimeError(f"delete of {e.id} touched {cur.rowcount} rows")
             cur.execute("DELETE FROM trafficPalinse WHERE id_tpalinse=%s", (e.id,))
 
-        def _seat(row_id: int, b, x) -> None:
-            """Give row_id an XORDER between its planned predecessor in break b and the next live row."""
-            prev = None
-            for it in b.items:
-                if it is x:
-                    break
-                prev = it
-            if isinstance(prev, Ev):
-                prev_id = prev.id
-            elif isinstance(prev, Filler):
-                prev_id = new_ids[-1]
-            else:
-                prev_id = pieces[b.after_piece_idx].id
-            cur.execute("SELECT XORDER FROM TPALINSE WHERE ID_TPALINSE=%s", (prev_id,))
-            xo_prev = cur.fetchone()[0]
-            cur.execute(
-                "SELECT MIN(XORDER) FROM TPALINSE WHERE COD_USER=%s AND DATA=%s AND LIVELLO=0 AND XORDER>%s AND ID_TPALINSE<>%s",
-                (market, date, xo_prev, row_id),
-            )
-            xo_next = cur.fetchone()[0]
-            xo = (xo_prev + xo_next) // 2 if xo_next else xo_prev + 1000
-            if not (xo_prev < xo < (xo_next or xo + 1)):
-                raise RuntimeError(f"no XORDER room between {xo_prev} and {xo_next}")
-            cur.execute("UPDATE TPALINSE SET XORDER=%s WHERE ID_TPALINSE=%s", (xo, row_id))
-
         new_ids: list[int] = []
         binding: dict[int, str] = {}
-        for e, tgt in moves:
-            _seat(e.id, next(bb for bb in breaks if bb.after_piece_idx == tgt), e)
+        moved = {id(e) for e, _ in moves}
         # The grid's COMS segments sit at NOMINAL offsets (NYC evening: :14, :25:30,
         # :29) while a real break lands wherever the piece ends (19:07:23) — a ±120s
         # search failed on most blocks (Maija 9/1). The segment only decides which
         # traffic break a filler row is booked under (playout = ORA/XORDER), so the
         # nearest segment anywhere in the show's window is correct.
         coms = _slots(cur, market, date, lo_f, hi_f, "COMS")
-        for b, x in inserts:
-            brk_start = pieces[b.after_piece_idx].end
-            slots = coms or _slots(
-                cur,
-                market,
-                date,
-                int((brk_start - 120) * FPS),
-                int((brk_start + 120) * FPS),
-                "COMS",
-            )
-            if not slots:
-                raise RuntimeError(
-                    f"no COMS segment in {hms(lo)}-{hms(hi)} for break {b.after_piece_idx}"
+        # Walk the plan in playlist order so every row's predecessor is already seated:
+        # a moved row may follow a PSA that is inserted in this same pass (SFO 9/2: the
+        # FCC ID moves to the bottom, behind the new PSAs).
+        for b in breaks:
+            prev_id = pieces[b.after_piece_idx].id
+            for x in b.items:
+                if isinstance(x, Filler):
+                    brk_start = pieces[b.after_piece_idx].end
+                    slots = coms or _slots(
+                        cur,
+                        market,
+                        date,
+                        int((brk_start - 120) * FPS),
+                        int((brk_start + 120) * FPS),
+                        "COMS",
+                    )
+                    if not slots:
+                        raise RuntimeError(
+                            f"no COMS segment in {hms(lo)}-{hms(hi)} for break {b.after_piece_idx}"
+                        )
+                    slot = min(slots, key=lambda s: abs(s["ora"] - brk_start * FPS))
+                    ora = start_f[id(x)]
+                    nid = _insert_event(
+                        cur,
+                        market,
+                        date,
+                        slot["sched"],
+                        slot["block"],
+                        slot["seg"],
+                        ora,
+                        x.filmati,
+                        _durata(cur, x.filmati),
+                    )
+                    cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, x.filmati))
+                    cur.execute(
+                        "UPDATE TPALINSE SET EVENT_TYPE='T', NOTE='CTV_FINISH' WHERE ID_TPALINSE=%s",
+                        (nid,),
+                    )
+                    binding[nid] = _supporto(cur, x.filmati)
+                    cur.execute(
+                        "DELETE FROM trafficPalinse WHERE id_tpalinse=%s AND ID_ContrattiRighe=0",
+                        (nid,),
+                    )
+                    _seat(cur, market, date, nid, prev_id)
+                    new_ids.append(nid)
+                    prev_id = nid
+                else:
+                    if id(x) in moved:
+                        _seat(cur, market, date, x.id, prev_id)
+                    prev_id = x.id
+        # Conform ORA to the plan BEFORE the rebuild. A row moved by XORDER alone keeps
+        # its old ORA, and sch_rebuildStartTimeSchedule then fills the hole ahead of it
+        # with a NOOP instead of pulling it up (every plan with a move rolled back on
+        # "rebuild left a live NOOP" — Boxing Queen 9/3 all markets, MBuhay LAX 9/4,
+        # Frontline SFO 9/4, Chinese Drama DAL 9/4; Maija). Same recipe as Break
+        # Optimization: write ORA/ORA_P, the rebuild then only confirms.
+        planned_rows = list(pieces) + [x for b in breaks for x in b.items if isinstance(x, Ev)]
+        for e in planned_rows:
+            if int(round(e.ora * FPS)) != start_f[id(e)]:
+                cur.execute(
+                    "UPDATE TPALINSE SET ORA=%s, ORA_P=%s WHERE ID_TPALINSE=%s",
+                    (start_f[id(e)], start_f[id(e)], e.id),
                 )
-            slot = min(slots, key=lambda s: abs(s["ora"] - brk_start * FPS))
-            ora = int(round(start_of[id(x)] * FPS))
-            nid = _insert_event(
-                cur,
-                market,
-                date,
-                slot["sched"],
-                slot["block"],
-                slot["seg"],
-                ora,
-                x.filmati,
-                _durata(cur, x.filmati),
-            )
-            cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, x.filmati))
-            cur.execute(
-                "UPDATE TPALINSE SET EVENT_TYPE='T', NOTE='CTV_FINISH' WHERE ID_TPALINSE=%s", (nid,)
-            )
-            binding[nid] = _supporto(cur, x.filmati)
-            cur.execute(
-                "DELETE FROM trafficPalinse WHERE id_tpalinse=%s AND ID_ContrattiRighe=0", (nid,)
-            )
-            _seat(nid, b, x)
-            new_ids.append(nid)
         cur.execute(
             "UPDATE TPALINSE SET LIVELLO=666 WHERE COD_USER=%s AND DATA=%s AND LIVELLO=0 AND NEWTYPE='NOOP' AND ORA>=%s AND ORA<%s",
             (market, date, lo_f, hi_f),

@@ -19,6 +19,14 @@ from browser_automation.etere_direct_client import connect
 FPS = 29.97
 ID_ASSET = {4: 67911, 7: 67909, 10: 83129}  # OTA markets; everyone else generic
 ID_GENERIC = 67910
+# The once-daily FCC ID (children's-records notice) the Daily Programming sweep places in
+# the last COMS break before midnight on the OTA markets. Lee 9/7: "FCC ID requirements
+# take precedence over that final hour regular station ID" — in the hour that ends at
+# midnight the FCC ID IS the hour's ID (seated last, cut by the midnight F event like any
+# ID), never a second generic one beside it. An FCC ID master control placed in any other
+# hour is accepted as that hour's ID too — one ID per hour, no churn.
+FCC_ID_ASSET = {4: 142948, 7: 142947, 10: 83128}
+MIDNIGHT = 24 * 3600.0
 ID_MIN_AIR = 5.0
 ID_TARGET_MAX = 10.0
 FINAL_BREAK_MAX = 150.0  # 2:30 — Lee
@@ -251,6 +259,30 @@ def _is_pi(x, sec: int) -> bool:
     return kind == "PI" and abs(x.dur - sec) <= 0.5
 
 
+def id_asset_for(market: int, hour_end: float) -> int:
+    """The ID Finish plants at the end of a window: the FCC asset for an OTA market's
+    pre-midnight hour (so the daily sweep, which dedupes on any live copy of the asset,
+    has nothing left to add), else the market's regular one."""
+    fcc = FCC_ID_ASSET.get(market)
+    if fcc and abs(hour_end - MIDNIGHT) <= 1.0:
+        return fcc
+    return ID_ASSET.get(market, ID_GENERIC)
+
+
+def accepted_id_assets(market: int) -> set[int]:
+    """Every asset that counts as this market's hour ID (regular + FCC)."""
+    out = {ID_ASSET.get(market, ID_GENERIC)}
+    if market in FCC_ID_ASSET:
+        out.add(FCC_ID_ASSET[market])
+    return out
+
+
+def is_end_game(x) -> bool:
+    """PSA or ID — the top-of-hour end game, budgeted by `end_reserve` in plan()."""
+    kind = getattr(x, "kind", None) or getattr(x, "newtype", "")
+    return kind in ("PSA", "ID")
+
+
 def packed_remainder(evs: list[Ev], hour_end: float) -> float:
     """Seconds left before `hour_end` once every program, paid spot and existing
     PI/PSA in the window has aired back-to-back from the first program piece.
@@ -334,13 +366,18 @@ def plan(evs: list[Ev], inv: list[Filler], hour_end: float, market: int) -> tupl
         deletes.append(f"remove {x.desc[:28]} ({mmss(x.dur)}) from break {b.after_piece_idx}")
 
     # ── final break must never be the longest: move its PIs into the shortest interior break ──
+    # The reserve stands in for the end game (a PSA + the 25s ID). Measure the final
+    # break's CORE against it — PIs and paid spots only — never the PSAs already sitting
+    # there, or a finished hour re-reads as "final break 15s too long → move a PI"
+    # (LAX MBuhay 9/4 18:00, Maija: "doesn't gray out after Finished").
     end_reserve = 25.0 + 15.0
+
+    def final_eff() -> float:
+        return sum(x.dur for x in final.items if not is_end_game(x)) + end_reserve
+
     while interior and final.items:
         longest_interior = max(b.length for b in interior)
-        if (
-            final.length + end_reserve <= max(FINAL_BREAK_MAX, 0)
-            and final.length + end_reserve <= longest_interior
-        ):
+        if final_eff() <= max(FINAL_BREAK_MAX, 0) and final_eff() <= longest_interior:
             break
         pis = [x for x in final.items if isinstance(x, Ev) and x.is_fill and x.newtype == "PER"]
         if not pis:
@@ -367,7 +404,7 @@ def plan(evs: list[Ev], inv: list[Filler], hour_end: float, market: int) -> tupl
         sec = 60 if R - ID_MIN_AIR >= 60.0 else 30
 
         def eff(b: Break) -> float:
-            return b.length + (end_reserve if b is final else 0.0)
+            return final_eff() if b is final else b.length
 
         longest_interior = max((b.length for b in interior), default=0.0)
         final_ok = eff(final) + sec <= min(FINAL_BREAK_MAX, longest_interior) if interior else True
@@ -417,7 +454,7 @@ def plan(evs: list[Ev], inv: list[Filler], hour_end: float, market: int) -> tupl
             if done:
                 break
     notes.extend(deletes + moves + swaps)
-    id_asset = ID_ASSET.get(market, ID_GENERIC)
+    id_asset = id_asset_for(market, hour_end)
     if ID_MIN_AIR <= R <= 25.5:
         final.items.append(
             Filler(id_asset, f"STATION ID (airs {R:.1f}s of 25)", 25.09, "ID", "ID", 0)

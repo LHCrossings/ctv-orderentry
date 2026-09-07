@@ -4,6 +4,37 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Row Moved by XORDER Alone Keeps Its ORA — Etere's Rebuild Fills the Hole With a NOOP, Never Pulls Up; and a Reserve That Stands In for Items You Then Place Is Not Idempotent
+
+**Session:** Maija's Fill & Finish feedback (2026-09-07) — "programming lines don't gray out after Finished" (7 shows), "adds an ID instead of moving the FCC one", "no XORDER room"
+
+**Rule:** Every Finish plan that contained a MOVE rolled back with "rebuild left a live NOOP".
+`_seat` re-pointed the moved PI's XORDER into the interior break but left its ORA at the old
+final-break time; `sch_rebuildStartTimeSchedule @shiftup=1` then wrote a 29-minute NOOP ahead
+of it and a 60 s NOOP where it used to sit — the SP honours a row's ORA and fills gaps, it does
+not pull rows up. Verified on four of Maija's seven shows with a rolled-back dry run; the
+error was invisible to her because the page just failed to gray out. Second defect in the same
+shows: the "final break ≤ 2:30" rule added a 40 s reserve for PSA + ID and counted the PSA it
+had itself placed, so a finished hour re-read as "final break 15 s too long → move a PI" (LAX
+MBuhay). Third: on the OTA markets the daily FCC ID is the hour's ID in the pre-midnight hour
+(Lee: "FCC ID requirements take precedence over that final hour regular station ID") — Finish
+deleted it (DAL 07:00) or added a generic one behind it (SFO 23:30, sweep ran after Finish).
+
+**How to apply:**
+1. Any row you re-order gets its planned ORA/ORA_P written BEFORE the rebuild (what Break
+   Optimization does); chain the plan in whole FRAMES — a float chain rounded per row lands a
+   piece one frame late and the SP fills even a 1-frame hole with a NOOP (SFO 9/3 dry run).
+2. A rule that budgets for items it will place later must measure the CORE it applies to
+   (PI + paid), not the items that later satisfy the budget — `final_eff()` excludes PSA/ID.
+   Idempotency test = re-run `plan_window` on the post-write rows inside the transaction
+   and require `finished`.
+3. Seat in PLANNED order (a moved row may follow a PSA inserted in the same pass). When two
+   XORDER neighbours are 1 apart, shift every later row of the day by +1000 instead of raising.
+4. "Doesn't gray out" from an operator = "the write failed or the re-read disagrees": dry-run
+   the exact page window (`apply_window(..., apply=False)`), never the CLI hour.
+
+---
+
 ## `tasks/todo.md` Is a SHARED File — Append a Section, Never `cat >` It; Stage-Only Work Can Be Swept Into a Sibling Session's Commit
 
 **Session:** Admerasia SMG client (2026-09-04)

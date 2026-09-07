@@ -220,3 +220,13 @@ client table — do not fork a second OrderType.
   `OrderType()` rejects it → McD has always used the hardcoded (3,5,0), not the row's 15/0/0.
 - `lookup_customer` now returns separation as (customer, ORDER, event) — the order
   `add_contract_line` expects; the old code returned (customer, event, order) from a DB hit.
+
+## Fill & Finish — Maija's 9/7 feedback (2026-09-07)
+- [x] moves rolled back ("rebuild left a live NOOP"): conform ORA/ORA_P to the plan in frames before the rebuild; seat in planned order
+- [x] planner idempotent: final-break rule measures PI+paid core, not the PSA it placed (LAX MBuhay 9/4)
+- [x] FCC ID = the hour's ID on SFO/CVC/DAL (Lee): accepted assets, pre-midnight window plans the FCC asset, generic beside it deleted, FCC moved to the bottom (SFO 9/2 23:30)
+- [x] `_seat` opens an XORDER gap (+1000 on later rows) instead of "no XORDER room" (DAL 9/4 01:00)
+- [x] page keeps scroll position across a Finish refresh
+- [x] dry runs: Boxing Queen NYC 9/3, MBuhay LAX 9/4, Chinese Drama DAL 9/4, Frontline SFO 9/4, SFO 9/2 + 9/3 23:30, DAL 9/5 16:00, NYC 9/4 08:00 oracle — all `finished` on re-plan inside the txn
+- [ ] Evening Express 6:00 Sat 9/5 "not placed": not reproducible now (DP had not placed it when Maija looked); ask which market if it recurs
+- [ ] FCC sweep after Finish still pushes the fill past midnight until Finish is clicked again — teach `_place_daily_once` to seat behind the hour's fill, or run the sweep before Finish (workflow note)
