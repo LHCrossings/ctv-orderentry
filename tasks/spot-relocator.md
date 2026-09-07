@@ -238,3 +238,12 @@ catalogued (the insert/move SPs are encrypted).
 **Reuse:** solver `browser_automation/spot_relocator.py`; page `templates/scripts/spot_relocator.html`;
 `daily_programming_run._insert_event/_slots/_conform_window_xorder`; `finish_service._explode_window`;
 `worldlink_room_blacklist` pull-a-spot flow; `_bind_supporto`; `check_ghost_spots.py`.
+
+**P0 (Lee's idea, 2026-09-07, NOT yet done) — enter WorldLink paid lines as Rotation, not Priority.**
+`worldlink_automation.py` passes `scheduling_type=0` at three call sites (CTV lines ×2, Asian
+lines ×1). `add_contract_line`'s own default would already pick Rotation for any window >2h
+(`_wide_window`), so WL's explicit 0 is the only thing forcing first-fit stacking. WL bonus lines
+have been Rotation since 2026-06-25 — compare how bonus vs paid WL spots spread on a recent
+month before/after as the check. Applies to NEW orders only: flipping PRENOTAZIONE on entered
+lines does not move placed spots. Deliberate exception to the "week columns → Priority" rule;
+record it in lessons when shipped. Addresses the stacking half of the complaint, not "make room".
