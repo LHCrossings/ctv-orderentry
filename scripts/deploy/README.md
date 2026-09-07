@@ -7,6 +7,8 @@ process must be restarted. These scripts make that one command, and chain the ot
 | Script | What it does |
 |---|---|
 | `post_push.sh` | Run after every `git push` to main. Pulls Lee's local Windows checkout, runs `deploy_jumpbox.sh` (skipped for docs-only pushes), runs `deploy_datamover_agent.sh` only when `datamover_agent/agent.py` changed. Remembers the last deployed commit in `.git/last-deployed`. |
+| `post_push.sh` (ReportSort step) | Runs first, on every push from this shell — including one made inside `../ReportSort`. When the sibling ReportSort checkout's HEAD differs from `.git/last-deployed-reportsort`, waits for its origin/master, pulls Lee's local Windows ReportSort and the Jumpbox ReportSort (`deploy_jumpbox.sh jumpbox_reportsort.ps1`, pull only — `main.py` runs per call, no restart). ReportSort is a separate repo only technically; it deploys as part of this project. |
+| `jumpbox_reportsort.ps1` | Pull-only PowerShell for `C:\Users\usrjp\windev\ReportSort`. |
 | `deploy_jumpbox.sh` | SSM → Jumpbox: `git pull --ff-only`, stop `web_main.py`, `Start-ScheduledTask "CTV OrderEntry Server"`, verify `:8000` answers. |
 | `jumpbox_deploy.ps1` | The PowerShell the above sends. |
 | `jumpbox_register_task.ps1` | One-time: registers the `CTV OrderEntry Server` task — runs the server as `CTVETERE\usrjp` in his **interactive** RDP session (the K: drive mapping the program grid and traffic logs need lives there), no stored password, no execution time limit. Registered 2026-09-01. |

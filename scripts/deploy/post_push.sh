@@ -11,13 +11,54 @@ cd "$(git rev-parse --show-toplevel)" || exit 0
 [[ "$(git rev-parse --abbrev-ref HEAD)" == "main" ]] || { echo "post_push: not on main, skipping deploy"; exit 0; }
 head=$(git rev-parse HEAD)
 state=.git/last-deployed
+
+# 0a. ReportSort — a sibling repo with its own remote, but it started life as part of this
+# project and still deploys as one (Lee 2026-09-07: "I forget that those are technically
+# different projects"). The hook fires on ANY `git push` from this shell, including one made
+# inside ../ReportSort, so this block runs before the ctv "already deployed" shortcut below.
+# Deploy = pull the local Windows checkout + the Jumpbox checkout (main.py runs per call, no
+# restart). State: .git/last-deployed-reportsort.
+rs="$(git rev-parse --show-toplevel)/../ReportSort"
+rs_state=.git/last-deployed-reportsort
+if [[ -d "$rs/.git" && "$(git -C "$rs" rev-parse --abbrev-ref HEAD)" == "master" ]]; then
+  rs_head=$(git -C "$rs" rev-parse HEAD)
+  rs_last=$(cat "$rs_state" 2>/dev/null || echo "")
+  if [[ "$rs_head" != "$rs_last" ]]; then
+    echo "post_push: ReportSort at ${rs_head:0:7} (deployed: ${rs_last:0:7}) — deploying"
+    rs_ok=1
+    for _i in 1 2 3 4 5 6; do
+      rs_remote=$(timeout 40 git -C "$rs" ls-remote origin refs/heads/master 2>/dev/null | cut -f1)
+      [[ "$rs_remote" == "$rs_head" ]] && break
+      echo "post_push: ReportSort origin/master is ${rs_remote:-unreachable}, waiting for ${rs_head:0:7} ($_i/6)"; sleep 5
+    done
+    if [[ "$rs_remote" != "$rs_head" ]]; then
+      echo "post_push: WARNING ReportSort origin/master never showed ${rs_head:0:7} — push it first"; rs_ok=0
+    else
+      win_rs=/mnt/c/Users/scrib/windev/ReportSort
+      if [[ -d "$win_rs/.git" ]]; then
+        if git -C "$win_rs" pull --ff-only -q 2>/tmp/post_push_win_rs.err && [[ "$(git -C "$win_rs" rev-parse HEAD)" == "$rs_head" ]]; then
+          echo "post_push: local Windows ReportSort -> $(git -C "$win_rs" log --oneline -1 | cut -c1-80)"
+        else
+          echo "post_push: WARNING local Windows ReportSort is at $(git -C "$win_rs" rev-parse --short HEAD), not ${rs_head:0:7}: $(tr '\n' ' ' </tmp/post_push_win_rs.err | cut -c1-200)"; rs_ok=0
+        fi
+      fi
+      if scripts/deploy/deploy_jumpbox.sh scripts/deploy/jumpbox_reportsort.ps1 > /tmp/post_push_reportsort.log 2>&1 \
+         && grep -q "^--- after:  ${rs_head:0:7}" /tmp/post_push_reportsort.log; then
+        grep '^--- after' /tmp/post_push_reportsort.log | cut -c1-90 | sed 's/^/post_push: jumpbox ReportSort /'
+      else
+        echo "post_push: WARNING Jumpbox ReportSort pull FAILED or not at ${rs_head:0:7} — see /tmp/post_push_reportsort.log"; tail -4 /tmp/post_push_reportsort.log; rs_ok=0
+      fi
+    fi
+    if [[ "$rs_ok" -eq 1 ]]; then echo "$rs_head" > "$rs_state"; else fail=1; fi
+  fi
+fi
 last=$(cat "$state" 2>/dev/null || echo "")
 if [[ -n "$last" ]] && git cat-file -e "$last" 2>/dev/null; then
   changed=$(git diff --name-only "$last" "$head")
 else
   changed=$(git diff --name-only HEAD~1 "$head" 2>/dev/null || git ls-files)
 fi
-[[ -z "$changed" && "$last" == "$head" ]] && { echo "post_push: $head already deployed"; exit 0; }
+[[ -z "$changed" && "$last" == "$head" ]] && { echo "post_push: $head already deployed"; exit $(( fail ? 2 : 0 )); }
 
 code_changed=$(grep -v -E '^(tasks/|\.claude/|logs/|.*\.md$)' <<<"$changed" || true)
 agent_changed=$(grep -x 'datamover_agent/agent.py' <<<"$changed" || true)
