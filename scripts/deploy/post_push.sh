@@ -24,20 +24,41 @@ agent_changed=$(grep -x 'datamover_agent/agent.py' <<<"$changed" || true)
 
 echo "post_push: deploying $head ($(wc -l <<<"$changed" | tr -d ' ') files changed since ${last:-<none>})"
 
-# 1. local Windows checkout (pull only)
+# 0. Wait until GitHub actually serves the pushed commit. The PostToolUse hook fires the instant
+# `git push` returns, and on 2026-09-07 both pulls below came back "Already up to date" at the
+# OLD commit (replication lag) while the state file recorded the new one as deployed.
+for _i in 1 2 3 4 5 6; do
+  remote=$(timeout 40 git ls-remote origin refs/heads/main 2>/dev/null | cut -f1)
+  [[ "$remote" == "$head" ]] && break
+  echo "post_push: origin/main is ${remote:-unreachable}, waiting for $head ($_i/6)"; sleep 5
+done
+[[ "$remote" == "$head" ]] || { echo "post_push: WARNING origin/main never showed $head — not deploying"; exit 2; }
+
+# 1. local Windows checkout (pull only) — verified: pulled HEAD must BE the pushed commit
 win=/mnt/c/Users/scrib/windev/ctv-orderentry
 if [[ -d "$win/.git" ]]; then
-  if git -C "$win" pull --ff-only -q 2>/tmp/post_push_win.err; then
+  win_ok=0
+  for _i in 1 2 3; do
+    if git -C "$win" pull --ff-only -q 2>/tmp/post_push_win.err && [[ "$(git -C "$win" rev-parse HEAD)" == "$head" ]]; then
+      win_ok=1; break
+    fi
+    sleep 5
+  done
+  if [[ "$win_ok" -eq 1 ]]; then
     echo "post_push: local Windows checkout -> $(git -C "$win" log --oneline -1)"
   else
-    echo "post_push: WARNING local Windows pull failed: $(tr '\n' ' ' </tmp/post_push_win.err | cut -c1-200)"; fail=1
+    echo "post_push: WARNING local Windows checkout is at $(git -C "$win" rev-parse --short HEAD), not $head: $(tr '\n' ' ' </tmp/post_push_win.err | cut -c1-200)"; fail=1
   fi
 fi
 
 # 2. Jumpbox
 if [[ -n "$code_changed" ]]; then
-  if scripts/deploy/deploy_jumpbox.sh > /tmp/post_push_jumpbox.log 2>&1; then
+  if scripts/deploy/deploy_jumpbox.sh > /tmp/post_push_jumpbox.log 2>&1 \
+     && grep -q "^--- after:  ${head:0:7}" /tmp/post_push_jumpbox.log; then
     grep -E '^--- (after|server)' /tmp/post_push_jumpbox.log | sed 's/^/post_push: jumpbox /'
+  elif grep -q '^--- after:' /tmp/post_push_jumpbox.log && ! grep -q "^--- after:  ${head:0:7}" /tmp/post_push_jumpbox.log; then
+    echo "post_push: WARNING Jumpbox pulled $(grep '^--- after:' /tmp/post_push_jumpbox.log | cut -c13-19), not ${head:0:7} — server restarted on OLD code, rerun post_push.sh"
+    exit 2
   else
     echo "post_push: WARNING Jumpbox deploy FAILED — see /tmp/post_push_jumpbox.log"; tail -5 /tmp/post_push_jumpbox.log
     exit 2

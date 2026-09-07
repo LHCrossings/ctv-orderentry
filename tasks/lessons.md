@@ -1897,3 +1897,26 @@ paid and bonus, CTV and DAL — a deliberate exception to the "week columns → 
    `scheduling_type=1` and asserts no `scheduling_type=0` remains in the module.
 3. Check the effect on the next WL month: compare per-show fill of WL spots against the prior
    month (bonus lines have been Rotation since 6/25, so they are the before/after control).
+
+---
+
+## A Post-Push Deploy Hook Races GitHub Replication — Verify the Pulled HEAD IS the Pushed Commit
+
+**Session:** WorldLink Rotation deploy (2026-09-07)
+
+**Rule:** `post_push.sh` fired the instant `git push` returned; the Windows pull and the Jumpbox
+pull both answered "Already up to date" at the OLD commit (GitHub had not yet served the new
+one), the script saw two clean exits and stamped the new commit as deployed. The next manual
+run said "already deployed" while nothing had moved. "The pull exited 0" is not "the host has
+the code" — same family as the Finish/DAL rule: a verify must read back the value it meant to
+write (here: `rev-parse HEAD == pushed head`), not a proxy for it.
+
+**How to apply:**
+1. `post_push.sh` now waits (≤30 s) until `git ls-remote origin main` shows the pushed commit,
+   then requires the Windows checkout's HEAD and the Jumpbox `--- after:` line to equal it,
+   retrying the Windows pull; a mismatch exits 2 and the state file does not advance.
+2. If a deploy looks done but a host is behind: `echo <previous-hash> > .git/last-deployed`
+   and rerun `scripts/deploy/post_push.sh`.
+3. When `git push` itself hangs: probe with `/dev/tcp/github.com/22`; if open, retry with
+   `GIT_SSH_COMMAND="ssh -o ConnectTimeout=20 -o ServerAliveInterval=10"` — that is what
+   got the WL push through after four plain attempts timed out.
