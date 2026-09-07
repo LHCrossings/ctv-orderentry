@@ -1,7 +1,7 @@
 """
 Download a placement confirmation report from Etere and run ReportSort.
 
-Two modes:
+Three modes:
 
   Worldlink batch (default) — every Worldlink (agency 133) booking in the date
   range, split into one file per booking code, written to K:\\!Archives:
@@ -16,14 +16,26 @@ Two modes:
           --contract-id 2999 --contract-code "Admerasia McD 11SE 2608" \\
           --output-folder /tmp/pull
 
-Both modes use the same CTV/TAC Pre/Post templates in ReportSort/.
+  Agency — every contract of one agency (any ANAGRAF agency id) in the range,
+  one workbook per contract, written to an explicit output folder. The report
+  is pulled per calendar month (Etere's fixed ~70 s per call makes a year
+  ~12 calls) and the chunks are concatenated; the agency's own contract codes
+  from CONTRATTITESTATA are the exact allow-list handed to ReportSort:
+
+      uv run python scripts/run_reportsort.py post 01/01/2026 06/30/2026 \\
+          --agency-id 203 --output-folder /tmp/pull
+
+All modes use the same CTV/TAC Pre/Post templates in ReportSort/.
 """
 
 import argparse
+import calendar
+import csv
+import io
 import os
 import subprocess
 import sys
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import requests
@@ -91,12 +103,63 @@ def set_master_market(session, coduser: int) -> None:
     print(f"[MARKET] Master market set to coduser={coduser}")
 
 
+def month_chunks(start: date, end: date) -> list[tuple[date, date]]:
+    """Split [start, end] into calendar-month pieces (first and last clipped)."""
+    out = []
+    cur = start
+    while cur <= end:
+        last = date(cur.year, cur.month, calendar.monthrange(cur.year, cur.month)[1])
+        out.append((cur, min(last, end)))
+        cur = last + timedelta(days=1)
+    return out
+
+
+HEADER_ROWS = 4  # ReportSort: rows 0-2 report banner, row 3 column names, data from row 4
+
+
+def concat_report_csvs(parts: list[bytes]) -> bytes:
+    """Join per-chunk placement-confirmation CSVs into one: the 4 header rows of
+    the first chunk, then every chunk's data rows (its own header rows dropped).
+    Parsed as CSV, not split on newlines — a quoted field may span lines. Report
+    footer rows ride along; the caller's exact code list filters them out."""
+    rows: list[list[str]] = []
+    for blob in parts:
+        chunk = list(csv.reader(io.StringIO(blob.decode("utf-8-sig"), newline="")))
+        if len(chunk) <= HEADER_ROWS:
+            continue  # nothing in that month
+        if not rows:
+            rows.extend(chunk[:HEADER_ROWS])
+        rows.extend(chunk[HEADER_ROWS:])
+    if not rows:
+        return b""
+    buf = io.StringIO(newline="")
+    csv.writer(buf, lineterminator="\r\n").writerows(rows)
+    return buf.getvalue().encode("utf-8")
+
+
+def agency_contract_codes(agency_id: int, start: date, end: date) -> list[str]:
+    """COD_CONTRATTO of every contract of the agency whose flight overlaps the range."""
+    from browser_automation.etere_direct_client import connect
+
+    with connect() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """SELECT RTRIM(COD_CONTRATTO) FROM CONTRATTITESTATA
+               WHERE AGENZIA = %s AND COD_CONTRATTO IS NOT NULL
+                 AND DATA_INIZIO <= %s AND DATA_TERMINE >= %s
+               ORDER BY COD_CONTRATTO""",
+            (agency_id, end, start),
+        )
+        return [r[0] for r in cur.fetchall() if r[0]]
+
+
 def download_report(
     session,
     date_from: str,
     date_to: str,
     csv_path: Path,
     contract_id: int | None = None,
+    agency_id: int = AGENCY_ID,
 ) -> None:
     """Download placement confirmation CSV from Etere.
 
@@ -108,8 +171,8 @@ def download_report(
         agency_param, filter0, filter1 = 0, str(contract_id), ""
         scope = f"contract {contract_id}"
     else:
-        agency_param, filter0, filter1 = AGENCY_ID, "", str(AGENCY_ID)
-        scope = f"agency {AGENCY_ID}"
+        agency_param, filter0, filter1 = agency_id, "", str(agency_id)
+        scope = f"agency {agency_id}"
 
     url = (
         f"{ETERE_WEB_URL}/reportsetere/report"
@@ -149,11 +212,25 @@ def download_report(
     print(f"[INFO] Saved {size_kb:.1f} KB to {csv_path}")
 
 
+def download_agency_report(session, agency_id: int, start: date, end: date, csv_path: Path) -> None:
+    """Agency pull in calendar-month chunks, concatenated into csv_path."""
+    chunks = month_chunks(start, end)
+    parts: list[bytes] = []
+    for k, (lo, hi) in enumerate(chunks, start=1):
+        print(f"[INFO] chunk {k}/{len(chunks)}: {lo:%m/%d/%Y} - {hi:%m/%d/%Y}")
+        part = csv_path.with_name(f"chunk-{k:02d}.csv")
+        download_report(session, f"{lo:%m/%d/%Y}", f"{hi:%m/%d/%Y}", part, agency_id=agency_id)
+        parts.append(part.read_bytes())
+        part.unlink()
+    csv_path.write_bytes(concat_report_csvs(parts))
+    print(f"[INFO] {len(chunks)} chunk(s) joined into {csv_path.name}")
+
+
 def run_sort(
     log_type: str,
     output_folder: Path,
     csv_path: Path,
-    only_booking: str | None = None,
+    only_booking: str | list[str] | None = None,
 ) -> int:
     """Run ReportSort main.py non-interactively."""
     python_exe = Path(sys.executable)
@@ -169,8 +246,9 @@ def run_sort(
         "--input-file",
         str(csv_path),
     ]
-    if only_booking:
-        args += ["--only-booking", only_booking]
+    codes = [only_booking] if isinstance(only_booking, str) else (only_booking or [])
+    for code in codes:
+        args += ["--only-booking", code]
     result = subprocess.run(args, cwd=str(REPORTSORT_DIR))
     return result.returncode
 
@@ -189,6 +267,9 @@ def main():
         "--contract-code",
         help="Single-contract pull: COD_CONTRATTO, used to select the report rows",
     )
+    parser.add_argument(
+        "--agency-id", type=int, help="Agency pull: every contract of this ANAGRAF agency id"
+    )
     parser.add_argument("--output-folder", help="Override the K:\\!Archives destination")
     args = parser.parse_args()
 
@@ -198,6 +279,12 @@ def main():
 
     if args.contract_id and not args.contract_code:
         print("[ERROR] --contract-id requires --contract-code")
+        sys.exit(1)
+    if args.agency_id and args.contract_id:
+        print("[ERROR] --agency-id and --contract-id are exclusive")
+        sys.exit(1)
+    if args.agency_id and not args.output_folder:
+        print("[ERROR] --agency-id requires --output-folder (never the Worldlink archive)")
         sys.exit(1)
 
     if not MAIN_PY.exists():
@@ -209,20 +296,38 @@ def main():
     else:
         output_folder = build_output_folder(log_type, date_from, date_to)
 
-    # A single-contract pull keeps its CSV beside its own output so concurrent
-    # AE runs can't overwrite each other's shared input file.
-    csv_path = (output_folder / "placement-confirmation.csv") if args.contract_id else INPUT_CSV
+    # A single-contract or agency pull keeps its CSV beside its own output so
+    # concurrent AE runs can't overwrite each other's shared input file.
+    own_csv = bool(args.contract_id or args.agency_id)
+    csv_path = (output_folder / "placement-confirmation.csv") if own_csv else INPUT_CSV
+
+    only_booking: str | list[str] | None = args.contract_code
+    if args.agency_id:
+        start, end = parse_date(date_from).date(), parse_date(date_to).date()
+        only_booking = agency_contract_codes(args.agency_id, start, end)
+        if not only_booking:
+            print(
+                f"[ERROR] agency {args.agency_id} has no contract overlapping {date_from} - {date_to}"
+            )
+            sys.exit(1)
+        print(f"[INFO] {len(only_booking)} contract(s) for agency {args.agency_id} in range:")
+        for code in only_booking:
+            print(f"       {code}")
 
     print("[INFO] Logging into Etere ...")
     session = etere_web_login()
     set_master_market(session, coduser=10)  # DAL (Dallas) — required for TAC spots
 
     try:
-        download_report(session, date_from, date_to, csv_path, contract_id=args.contract_id)
+        if args.agency_id:
+            csv_path.parent.mkdir(parents=True, exist_ok=True)
+            download_agency_report(session, args.agency_id, start, end, csv_path)
+        else:
+            download_report(session, date_from, date_to, csv_path, contract_id=args.contract_id)
     finally:
         etere_web_logout(session)
 
-    rc = run_sort(log_type, output_folder, csv_path, only_booking=args.contract_code)
+    rc = run_sort(log_type, output_folder, csv_path, only_booking=only_booking)
     if rc != 0:
         print(f"[ERROR] ReportSort exited with code {rc}")
         sys.exit(rc)

@@ -252,6 +252,31 @@
         <div id="cTerminal" class="terminal"></div>
         <div id="cDownloads" class="dl-row"></div>
     </div>
+
+    <div class="tool-card">
+        <h2>Agency Post Logs</h2>
+        <p>Pulls the Placement Confirmation report for every contract of one agency in the date range and formats one workbook per contract with the same CTV or TAC template. Etere builds the report one calendar month at a time (about 70 seconds each), so a full year takes 15–20 minutes — the terminal shows each chunk. You get one zip plus the individual workbooks; nothing is written to the Worldlink archive folders.</p>
+
+        <div class="input-row">
+            <div class="field-group search-wrap" style="flex:1 1 240px; min-width:220px;">
+                <label class="field-label" for="agencySearch">Agency</label>
+                <input id="agencySearch" class="field-input" type="text" placeholder="Tatari, Admerasia, 3Fold…" autocomplete="off" />
+                <div id="agencyDropdown" class="search-dropdown" style="display:none;"></div>
+            </div>
+            <div class="field-group date">
+                <label class="field-label" for="aDateFrom">From Date</label>
+                <input id="aDateFrom" class="field-input" type="text" placeholder="MM/DD/YYYY" onblur="formatDateInput(this)" />
+            </div>
+            <div class="field-group date">
+                <label class="field-label" for="aDateTo">To Date</label>
+                <input id="aDateTo" class="field-input" type="text" placeholder="MM/DD/YYYY" onblur="formatDateInput(this)" />
+            </div>
+            <button id="aRunBtn" class="run-btn" onclick="runAgencySort()">&#9654; Run</button>
+        </div>
+
+        <div id="aTerminal" class="terminal"></div>
+        <div id="aDownloads" class="dl-row"></div>
+    </div>
 </main>
 
 <script>
@@ -411,6 +436,87 @@ function runContractSort() {
     streamRun(`/api/scripts/reportsort?${params}`,
               document.getElementById('cTerminal'),
               document.getElementById('cRunBtn'),
+              (token, name) => {
+                  const a = document.createElement('a');
+                  a.className = 'dl-link';
+                  a.href = `/api/scripts/reportsort/download?token=${token}&name=${encodeURIComponent(name)}`;
+                  a.textContent = '⬇ ' + name;
+                  dls.appendChild(a);
+                  dls.classList.add('visible');
+              });
+}
+
+// ── Agency card (post logs only) ────────────────────────────────────────────
+const aInput    = document.getElementById('agencySearch');
+const aDropdown = document.getElementById('agencyDropdown');
+let _aTimer = null;
+let _selectedAgency = null;
+
+function selectAgency(r) {
+    _selectedAgency = r;
+    aInput.value = r.name;
+    aDropdown.style.display = 'none';
+}
+
+async function searchAgencies() {
+    const q = aInput.value.trim();
+    const resp = await fetch(`/api/scripts/reportsort/agencies?q=${encodeURIComponent(q)}`);
+    if (!resp.ok) return;
+    const rows = await resp.json();
+    if (!rows.length) {
+        aDropdown.innerHTML = '<div class="dropdown-item"><span class="dropdown-desc">No agencies found.</span></div>';
+    } else {
+        // data-idx + delegation, never an inline onclick with the name interpolated in
+        aDropdown.innerHTML = rows.map((r, i) =>
+            `<div class="dropdown-item" data-idx="${i}">
+                <div class="dropdown-code">${esc(r.name)}</div>
+                <div class="dropdown-desc">${r.contracts} contract${r.contracts === 1 ? '' : 's'} &nbsp;·&nbsp; ${esc(r.date_start)} – ${esc(r.date_end)}</div>
+            </div>`
+        ).join('');
+        aDropdown.querySelectorAll('.dropdown-item[data-idx]').forEach(el => {
+            el.addEventListener('click', () => selectAgency(rows[+el.dataset.idx]));
+        });
+    }
+    aDropdown.style.display = 'block';
+}
+
+aInput.addEventListener('input', () => {
+    _selectedAgency = null;
+    clearTimeout(_aTimer);
+    _aTimer = setTimeout(searchAgencies, 350);
+});
+aInput.addEventListener('focus', () => { if (!_selectedAgency) searchAgencies(); });
+aInput.addEventListener('keydown', e => {
+    if (e.key === 'Escape') aDropdown.style.display = 'none';
+});
+document.addEventListener('click', e => {
+    if (!e.target.closest('#agencySearch') && !e.target.closest('#agencyDropdown'))
+        aDropdown.style.display = 'none';
+});
+
+function runAgencySort() {
+    if (!_selectedAgency) { aInput.focus(); return; }
+    const dateFrom = document.getElementById('aDateFrom').value.trim();
+    const dateTo   = document.getElementById('aDateTo').value.trim();
+    if (!dateFrom || !dateTo) {
+        document.getElementById(dateFrom ? 'aDateTo' : 'aDateFrom').focus();
+        return;
+    }
+
+    const dls = document.getElementById('aDownloads');
+    dls.innerHTML = '';
+    dls.classList.remove('visible');
+
+    const params = new URLSearchParams({
+        log_type:  'post',
+        date_from: dateFrom,
+        date_to:   dateTo,
+        agency_id: _selectedAgency.id,
+    });
+
+    streamRun(`/api/scripts/reportsort?${params}`,
+              document.getElementById('aTerminal'),
+              document.getElementById('aRunBtn'),
               (token, name) => {
                   const a = document.createElement('a');
                   a.className = 'dl-link';

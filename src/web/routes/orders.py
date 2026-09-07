@@ -5,6 +5,7 @@ Order queue routes: list, upload, move-to-used, history, restore, detail.
 import asyncio
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -12,6 +13,7 @@ import tempfile
 import threading as _threading
 import time as _time
 import uuid as _uuid
+import zipfile
 from datetime import date as _date_cls
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -2122,6 +2124,39 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def reportsort_page(request: Request):
         return templates.TemplateResponse(request, "scripts/reportsort.html")
 
+    @router.get("/api/scripts/reportsort/agencies")
+    async def reportsort_agencies(q: str = Query("")):
+        """Agencies that own contracts, for the Agency Post Logs card's search box."""
+
+        def _run():
+            from browser_automation.etere_direct_client import connect as _db_connect
+
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                term = f"%{q.upper()}%"
+                cur.execute(
+                    """
+                    SELECT TOP 25
+                        a.ID_ANAGRAF                                          AS id,
+                        RTRIM(a.RAG_SOCIAL)                                   AS name,
+                        COUNT(*)                                              AS contracts,
+                        CONVERT(VARCHAR(10), MIN(ct.DATA_INIZIO),  101)       AS date_start,
+                        CONVERT(VARCHAR(10), MAX(ct.DATA_TERMINE), 101)       AS date_end
+                    FROM CONTRATTITESTATA ct
+                    JOIN ANAGRAF a ON a.ID_ANAGRAF = ct.AGENZIA
+                    WHERE ct.AGENZIA > 0 AND UPPER(a.RAG_SOCIAL) LIKE %s
+                    GROUP BY a.ID_ANAGRAF, a.RAG_SOCIAL
+                    ORDER BY COUNT(*) DESC, a.RAG_SOCIAL
+                    """,
+                    (term,),
+                )
+                return [dict(r) for r in cur.fetchall()]
+
+        try:
+            return JSONResponse(await asyncio.get_running_loop().run_in_executor(None, _run))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     @router.get("/api/scripts/reportsort")
     async def run_reportsort(
         log_type: str = Query(...),
@@ -2129,6 +2164,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         date_to: str = Query(...),
         contract_id: Optional[int] = Query(None),
         contract_code: str = Query(""),
+        agency_id: Optional[int] = Query(None),
     ):
         project_root = Path(__file__).parent.parent.parent.parent
         script_path = project_root / "scripts" / "run_reportsort.py"
@@ -2146,8 +2182,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         # into the Worldlink K:\!Archives batch folders.
         out_dir = None
         token = ""
-        if contract_id:
-            if not contract_code.strip():
+        if contract_id and agency_id:
+            raise HTTPException(status_code=400, detail="contract_id and agency_id are exclusive")
+        if contract_id or agency_id:
+            if contract_id and not contract_code.strip():
                 raise HTTPException(
                     status_code=400, detail="contract_code is required with contract_id"
                 )
@@ -2155,14 +2193,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             token = _uuid.uuid4().hex
             out_dir = _REPORTSORT_TMP / token
             out_dir.mkdir(parents=True, exist_ok=True)
-            args += [
-                "--contract-id",
-                str(contract_id),
-                "--contract-code",
-                contract_code,
-                "--output-folder",
-                str(out_dir),
-            ]
+            if contract_id:
+                args += ["--contract-id", str(contract_id), "--contract-code", contract_code]
+            else:
+                # Agency pull (Aki, 2026-09-07): every contract of the agency in the range,
+                # one workbook each, zipped for the download row. Same sandbox as a single
+                # pull — never the Worldlink K:\!Archives folders.
+                args += ["--agency-id", str(agency_id)]
+            args += ["--output-folder", str(out_dir)]
 
         async def event_stream():
             process = await asyncio.create_subprocess_exec(
@@ -2176,7 +2214,17 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 yield f"data: {text}\n\n"
             await process.wait()
             if out_dir is not None and process.returncode == 0:
-                for f in sorted(out_dir.glob("*.xlsx")):
+                files = sorted(out_dir.glob("*.xlsx"))
+                if agency_id and len(files) > 1:
+                    # one zip first (150 links is not a UI), the workbooks after it
+                    tag = re.sub(r"[^A-Za-z0-9]+", "_", f"{date_from}-{date_to}").strip("_")
+                    zpath = out_dir / f"agency_{agency_id}_{log_type}log_{tag}.zip"
+                    with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as zf:
+                        for f in files:
+                            zf.write(f, f.name)
+                    yield f"data: [INFO] {len(files)} workbooks zipped into {zpath.name}\n\n"
+                    yield f"data: [DOWNLOAD:{token}|{zpath.name}]\n\n"
+                for f in files:
                     yield f"data: [DOWNLOAD:{token}|{f.name}]\n\n"
             yield f"data: [EXIT:{process.returncode}]\n\n"
 
@@ -2194,11 +2242,12 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         path = (_REPORTSORT_TMP / token / Path(name).name).resolve()
         if not str(path).startswith(str(_REPORTSORT_TMP.resolve())) or not path.is_file():
             raise HTTPException(status_code=404, detail="File not found")
-        return FileResponse(
-            path,
-            filename=path.name,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        media = (
+            "application/zip"
+            if path.suffix.lower() == ".zip"
+            else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+        return FileResponse(path, filename=path.name, media_type=media)
 
     @router.get("/scripts/delete-spots", response_class=HTMLResponse)
     async def delete_spots_page(request: Request):
