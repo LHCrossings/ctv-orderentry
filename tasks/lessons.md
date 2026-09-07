@@ -24,6 +24,33 @@ message ("tasks: monitor wall + finish follow-ups ticked") and were pushed befor
 
 ---
 
+## A Traffic File's Flight Dates Belong on the ROW — Deduping on ISCI Alone Drops Every Later Flight (Direct Donor, second appearance of the HL lesson)
+
+**Session:** TRAFFIC-AATV-SHC-SEPT 3Q26.xls — Lee: "It only saw the first line and stopped" (2026-09-07)
+
+**Rule:** The Direct Donor parser read VALID FLIGHT DATES from the first data row only and
+deduped rows on ISCI. Shriners September has TWO flights: 8/31–9/06 = SHCMS at 100%, then
+9/07–9/27 = SHCMS/SHCJM/SHCPG at 33/33/34. The repeated SHCMS row was skipped as a duplicate,
+the three ISCIs were assigned as one rotation across 8/31–9/06, and weeks 2–4 got nothing.
+The HL multi-flight lesson (2026-06-26) said "track dates per spot, never at the instruction
+level" — it was applied to HL and RPM, not to the sibling that had the same shape.
+
+**How to apply:**
+1. Any traffic parser row that carries its own date range puts it on the SPOT; the
+   instruction-level range is the min/max union, for contract search only. Dedupe on
+   `(ISCI, from, to)` — the same creative legitimately repeats once per flight at a
+   different weight.
+2. Expose `periods` (grouped by window, file order) and make the page's Assign loop walk
+   them with each period's `date_from/date_to`, the way the Lexus card already did.
+   `tatariPeriods(r)` wraps single-window formats (Tatari/MA/IMD) so they are unchanged.
+3. When a lesson names a data shape ("a file carries several flights"), grep every
+   parser in the family for the same shape the day the lesson is written — a lesson
+   applied to one parser is not applied (same family as the `_bind_supporto` rule).
+4. Regression oracle: the single-flight May FAM file parses byte-identical old vs new;
+   the September file is committed as `tests/fixtures/directdonor/`.
+
+---
+
 ## A Spot Ahead of the F Anchor Is This Hour's — and an Over-Full Hour Strips ALL Its Fill, Then Refills (Lee)
 
 **Session:** Finish NYC 9/4 08:00 "packed end changed after break optimization" (2026-09-04)

@@ -9256,7 +9256,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
                         instr = parse_directdonor_traffic_ods(pdf_bytes, filename)
 
-                        isci_codes = [s.isci for s in instr.spots]
+                        isci_codes = sorted({s.isci for s in instr.spots})
                         placeholders = (
                             ",".join(f"'{c}'" for c in isci_codes) if isci_codes else "''"
                         )
@@ -9272,22 +9272,35 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             for r in cur.fetchall()
                         }
 
-                        spots_out = []
-                        for s in instr.spots:
+                        def _dd_spot_out(s):
                             found = s.isci in filmati_map
-                            spots_out.append(
-                                {
-                                    "isci": s.isci,
-                                    "title": s.title
-                                    or (filmati_map[s.isci]["db_title"] if found else ""),
-                                    "duration_sec": s.duration_sec,
-                                    "rotation_pct": s.rotation_pct,
-                                    "filmati_id": filmati_map[s.isci]["filmati_id"]
-                                    if found
-                                    else None,
-                                    "found": found,
-                                }
-                            )
+                            return {
+                                "isci": s.isci,
+                                "title": s.title
+                                or (filmati_map[s.isci]["db_title"] if found else ""),
+                                "duration_sec": s.duration_sec,
+                                "rotation_pct": s.rotation_pct,
+                                "filmati_id": filmati_map[s.isci]["filmati_id"] if found else None,
+                                "found": found,
+                                "date_from_sql": s.date_from_sql,
+                                "date_to_sql": s.date_to_sql,
+                            }
+
+                        spots_out = [_dd_spot_out(s) for s in instr.spots]
+
+                        # One entry per flight window (file order). The same ISCI may sit in
+                        # several periods at different weights; the page assigns each period
+                        # against its own date range.
+                        periods_out = [
+                            {
+                                "date_from_sql": per.date_from_sql,
+                                "date_to_sql": per.date_to_sql,
+                                "date_from_display": per.date_from_display,
+                                "date_to_display": per.date_to_display,
+                                "spots": [_dd_spot_out(s) for s in per.spots],
+                            }
+                            for per in instr.periods
+                        ]
 
                         from collections import defaultdict as _dd
 
@@ -9353,6 +9366,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 "date_from_display": instr.date_from_display,
                                 "date_to_display": instr.date_to_display,
                                 "spots": spots_out,
+                                "periods": periods_out,
                                 "duration_groups": duration_groups,
                                 "contract_candidates": contracts,
                             }
