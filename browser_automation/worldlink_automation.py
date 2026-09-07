@@ -364,6 +364,13 @@ def gather_worldlink_inputs(pdf_path: str) -> Optional[dict]:
 # Order matches Etere UI entry: CMP=2, HOU=3, SFO=4, SEA=5, LAX=6, CVC=7, WDC=8, MMT=9
 CROSSINGS_ZERO_MARKETS = ["CMP", "HOU", "SFO", "SEA", "LAX", "CVC", "WDC", "MMT"]
 
+# Every WorldLink line schedules as Rotation (PRENOTAZIONE=1), paid and bonus alike
+# (Lee, 2026-09-07). Priority (0) first-fit stacked WL spots into the first eligible
+# show of the week/month and blocked later orders; Rotation spreads them across the
+# flight. Deliberate exception to the "week columns -> Priority" default.
+WL_SCHEDULING_TYPE = 1
+
+
 
 def _secs_to_duration(secs: int) -> str:
     """Convert integer seconds to HH:MM:SS:FF string for EtereDirectClient."""
@@ -425,7 +432,7 @@ def _add_crossings_lines_direct(client, lines: list, separation: tuple, row_stat
             rate=rate, total_spots=total, spots_per_week=spots_pw,
             date_from=date_from, date_to=date_to, duration=duration,
             is_bonus=is_bonus, booking_code=booking, separation_intervals=separation,
-            scheduling_type=0, row_status=row_status,
+            scheduling_type=WL_SCHEDULING_TYPE, row_status=row_status,
             language="E",  # WorldLink is ALWAYS English — business rule, not a guess
         )
         print(f"    NYC line_id={nyc_id}  rate=${rate}")
@@ -436,7 +443,7 @@ def _add_crossings_lines_direct(client, lines: list, separation: tuple, row_stat
                 rate=0.0, total_spots=total, spots_per_week=spots_pw,
                 date_from=date_from, date_to=date_to, duration=duration,
                 is_bonus=is_bonus, booking_code=booking, separation_intervals=separation,
-                scheduling_type=0, row_status=row_status,
+                scheduling_type=WL_SCHEDULING_TYPE, row_status=row_status,
                 language="E",  # WorldLink is ALWAYS English
             )
             print(f"    {mkt} line_id={mkt_id}  rate=$0.00")
@@ -469,7 +476,7 @@ def _add_asian_lines_direct(client, lines: list, separation: tuple, row_status: 
             rate=rate, total_spots=total, spots_per_week=spots_pw,
             date_from=date_from, date_to=date_to, duration=duration,
             is_bonus=is_bonus, booking_code=10 if is_bonus else 2,
-            separation_intervals=separation, scheduling_type=0, row_status=row_status,
+            separation_intervals=separation, scheduling_type=WL_SCHEDULING_TYPE, row_status=row_status,
             language="E",  # WorldLink is ALWAYS English
         )
         print(f"    DAL line_id={dal_id}  rate=${rate}")

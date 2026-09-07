@@ -1843,3 +1843,26 @@ inferred rule, Finish would have "fixed" behaviour he wants (scarce :30s recycli
 **How to apply:** when a user calls something wrong without naming the defect, list what
 you see and ask which item they mean before proposing a rule — never promote your own
 diagnosis to their intent. Related: [[fill-and-finish]] rotation rules.
+
+---
+
+## WorldLink Lines Are ALWAYS Rotation — Priority First-Fit Stacks Them Into the First Eligible Show
+
+**Session:** Lee, 2026-09-07 ("change Worldlink from here on out. All lines are rotation")
+
+**Rule:** `worldlink_automation.py` passed `scheduling_type=0` (Priority) on every line at three
+call sites. Etere's Priority scheduler is first-fit: at the start of a month/week every WL spot
+landed in the first eligible show, the show filled with wide-window (M-Su, 6a-12m) spots that
+could air anywhere, and later orders for that show did not place until master control moved
+them by hand. `add_contract_line`'s own default already picks Rotation for any window >2h; the
+explicit 0 was the only thing suppressing it. Now `WL_SCHEDULING_TYPE = 1` at all three sites,
+paid and bonus, CTV and DAL — a deliberate exception to the "week columns → Priority" default.
+
+**How to apply:**
+1. New WL orders only: flipping PRENOTAZIONE on an entered line does not move placed spots.
+   Clogged shows stay clogged until something reschedules them (the Spot Relocator plan,
+   `tasks/spot-relocator.md`).
+2. `tests/unit/test_worldlink_scheduling_type.py` pins every WL `add_contract_line` call to
+   `scheduling_type=1` and asserts no `scheduling_type=0` remains in the module.
+3. Check the effect on the next WL month: compare per-show fill of WL spots against the prior
+   month (bonus lines have been Rotation since 6/25, so they are the before/after control).

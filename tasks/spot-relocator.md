@@ -239,7 +239,7 @@ catalogued (the insert/move SPs are encrypted).
 `daily_programming_run._insert_event/_slots/_conform_window_xorder`; `finish_service._explode_window`;
 `worldlink_room_blacklist` pull-a-spot flow; `_bind_supporto`; `check_ghost_spots.py`.
 
-**P0 (Lee's idea, 2026-09-07, NOT yet done) — enter WorldLink paid lines as Rotation, not Priority.**
+**P0 — DONE 2026-09-07: every WorldLink line enters as Rotation (`WL_SCHEDULING_TYPE = 1`, test `test_worldlink_scheduling_type.py`).**
 `worldlink_automation.py` passes `scheduling_type=0` at three call sites (CTV lines ×2, Asian
 lines ×1). `add_contract_line`'s own default would already pick Rotation for any window >2h
 (`_wide_window`), so WL's explicit 0 is the only thing forcing first-fit stacking. WL bonus lines
