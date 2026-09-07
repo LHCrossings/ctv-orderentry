@@ -175,3 +175,66 @@ feasibility must check `avail = MaxDuration − other-advertiser usage` per pod,
 - Etere's "reschedule in booked segments" moves >1 spot to satisfy sep — our solver only needs to
   find *a* feasible assignment, then the Applier writes it deterministically.
 - Insert procs are `WITH ENCRYPTION`; solver must enforce `MaxDuration − used ≥ duration` itself.
+
+---
+
+## FUTURE PLAN — Secondary scheduler ("rebalancer"), not a replacement (Lee, 2026-09-07)
+
+**The complaint:** Etere's scheduler is priority-first-fit. At the start of a month and of each
+week it stacks everything into the first eligible show. When a new order arrives, the show it
+bought is full of spots that COULD air elsewhere (M-Su, 6a-12m, 9a-5p windows), the order does
+not place, and master control hand-moves the wide-window spots out, seats the order, then finds
+the displaced spots a separation-valid home. We want that logic to run automatically.
+
+**Decision:** build a SECONDARY scheduler that runs after Etere places and only MOVES spots.
+Etere stays the system of record (billing, affidavits, N_PASSAGGI accounting, make-goods, the
+playlist rebuild all hang off its placements). Same shape as Finish / Break Optimization /
+Daily Programming, which are all trusted post-processors on Etere's output. A full replacement
+is only an option after the rebalancer has run for months and every rule Etere enforces is
+catalogued (the insert/move SPs are encrypted).
+
+**Two modes, one constraint model:**
+1. **Make room for line X** (on demand, after an order fails to place). Find wide-window spots in
+   the ordered show, prove a separation-valid home for each inside its own window (same day
+   first, then other flight days), seat the stuck spots, write the whole plan in ONE transaction
+   with readback verify + rollback. = the existing `solve_line`/`plan_line` solver + an Applier.
+2. **Level the day** (proactive, per market, D+2..D+7). Spread wide-window and bonus spots evenly
+   across their eligible shows and weeks instead of front-loading, so ordered shows keep headroom
+   before an order arrives. Objective: zero separation violations, balanced fill, minimal moves.
+   This is what "make sure a day looks correct" means in code.
+
+**Open questions to settle before the first write (in order):**
+- [ ] Does Etere ever RE-SHUFFLE already-placed spots on its own (nightly, on contract save, on
+      line edit)? Belief: it only places the new line. Verify by diffing a market-day's
+      trafficPalinse (id, clusterIndex, ORA) across several days of Etere activity. If it does
+      reshuffle, the leveler fights it and the design changes.
+- [ ] **Moveable policy** (written, Lee-approved). June scope = WL only (`COD_CONTRATTO LIKE 'WL%'`).
+      Widening needs: which contract types / spot types may move; whether paid Crossings spots
+      with wide windows may move; PINNED = bookends, billboards + their linked spot line, Top/
+      Bottom, Fixed-time (PRENOTAZIONE=3), first-break-only (SELECTEDSEGMENTS), aired/transmitted
+      rows, today's already-played hours.
+- [ ] Full separation rule set in the model: customer (Interv_Committente, advertiser-wide across
+      contracts), order (INTERV_CONTRATTO), event (INTERVALLO), product-code rules
+      (rulesProductCode), max/day and max/week (PASSAGGI_GIORNALIERI / maxWeekSchedule).
+- [ ] Write primitive: test Etere's own `Trf_MoveEvent(@src,@dst)` / `Trf_MoveEventToBlankSpace`
+      on a scratch future date inside a rolled-back transaction. If they keep both tables,
+      clusterIndex/offset, XORDER and start times consistent, the Applier is small and
+      Etere-blessed. If not, fall back to the Finish pattern: delete both rows, Traffic_InsertEvent,
+      `_conform_window_xorder`, `sch_rebuildStartTimeSchedule`, `_bind_supporto`, explode-mimic
+      timecodes/checksum, and the ghost-spot watchdog (`scripts/check_ghost_spots.py`).
+
+**Phases:**
+- [ ] P1 — Finish read-only "make room for line X" on the existing page: multi-shortfall loop,
+      plan shown as a move list (spot, from break, to break, why it is valid). Lee approves plans
+      by hand for ~2 weeks and compares to what MC would have done.
+- [ ] P2 — Applier: one transaction per plan, readback == planned for every moved row, rollback
+      on any mismatch. Pilot one market, one day; verify in SE and EE (no triangles, no ghosts).
+- [ ] P3 — Leveling pass: scoring + move plan for a market-day / week; on-demand button per
+      market first, nightly job for D+2..D+7 once trusted. Report = moves made + why.
+- [ ] P4 — Hook to order entry: after a contract is entered, run "make room" for any line whose
+      placed < ordered, propose the plan (or auto-apply under the approved policy).
+- [ ] P5 (maybe, later) — full replacement scheduler, only if P1–P4 have run clean for months.
+
+**Reuse:** solver `browser_automation/spot_relocator.py`; page `templates/scripts/spot_relocator.html`;
+`daily_programming_run._insert_event/_slots/_conform_window_xorder`; `finish_service._explode_window`;
+`worldlink_room_blacklist` pull-a-spot flow; `_bind_supporto`; `check_ghost_spots.py`.
