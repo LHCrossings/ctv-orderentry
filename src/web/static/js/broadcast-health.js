@@ -17,6 +17,7 @@
   var POLL_MS = 10000;                       // client poll cadence (server caches ~5s)
   var STATUS_URL = "/api/broadcast-health/status";
   var MULTIVIEWER_URL = "/master-control/monitor-wall";  // Control Room's own copy of the Stirlitz 0.0 wall — where to look on an outage
+  var MEDIA_URL = "/master-control/media-check";        // nightly file-size check findings (TheOne090726B, 2026-09-07)
   var ALERTED_KEY = "bhAlertedStations";     // sessionStorage dedupe of toasts
 
   function alerted() {
@@ -39,6 +40,10 @@
       ".bh-indicator.offair .bh-dot{background:var(--nord11,#bf616a);animation:bh-pulse 1.1s infinite;}" +
       ".bh-indicator.unknown .bh-dot{background:var(--nord3,#4c566a);}" +
       ".bh-indicator.offair{color:var(--nord11,#bf616a);}" +
+      ".bh-indicator.media .bh-dot{background:var(--nord13,#ebcb8b);animation:bh-pulse 1.6s infinite;}" +
+      ".bh-indicator.media{color:var(--nord13,#ebcb8b);}" +
+      ".bh-toast.media{background:var(--nord13,#ebcb8b);color:var(--nord0,#2e3440);}" +
+      ".bh-toast.media .bh-toast-x{color:var(--nord0,#2e3440);}" +
       "@keyframes bh-pulse{0%,100%{opacity:1}50%{opacity:.3}}" +
       ".bh-toast-wrap{position:fixed;bottom:20px;right:20px;z-index:100000;display:flex;" +
       "flex-direction:column;gap:10px;max-width:360px;}" +
@@ -112,6 +117,23 @@
     setTimeout(function () { if (t.parentNode) t.remove(); }, 30000);  // auto-dismiss; indicator stays red
   }
 
+  function showMediaToast(f) {
+    var t = document.createElement("div");
+    t.className = "bh-toast media";
+    t.innerHTML =
+      '<div><b>⚠ Bad media file: ' + esc(f.code) + "</b>" +
+      "<small>" + esc(f.kind) + (f.first ? " — first airs " + esc(f.first) : "") + "</small></div>";
+    var x = document.createElement("button");
+    x.className = "bh-toast-x";
+    x.textContent = "×";
+    x.setAttribute("aria-label", "Dismiss");
+    x.onclick = function (e) { e.stopPropagation(); e.preventDefault(); t.remove(); };
+    t.appendChild(x);
+    t.onclick = function () { window.open(MEDIA_URL, "_blank", "noopener"); };
+    toastWrap().appendChild(t);
+    setTimeout(function () { if (t.parentNode) t.remove(); }, 30000);
+  }
+
   function esc(s) {
     return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
@@ -119,7 +141,8 @@
   function render(data) {
     var el = ensureIndicator();
     var offair = (data && data.offair) || [];
-    if (!data || data.state === "unknown" || data.unreachable) {
+    var media = (data && data.media && data.media.findings) || [];
+    if ((!data || data.state === "unknown" || data.unreachable) && !media.length) {
       el.className = "bh-indicator unknown";
       el.querySelector(".bh-label").textContent = "Health unknown";
       el.title = "Broadcast health unavailable" + (data && data.error ? " — " + data.error : "");
@@ -127,6 +150,7 @@
     }
     if (data.state === "offair" && offair.length) {
       el.className = "bh-indicator offair";
+      el.href = MULTIVIEWER_URL;
       var names = offair.map(function (s) { return s.stationName; }).join(", ");
       el.querySelector(".bh-label").textContent =
         offair.length + " off air";
@@ -142,8 +166,28 @@
       var pruned = new Set();
       seen.forEach(function (id) { if (current.has(id)) pruned.add(id); });
       saveAlerted(pruned);
+    } else if (media.length) {
+      // Nothing off air, but the nightly file-size check flagged a placed file.
+      el.className = "bh-indicator media";
+      el.href = MEDIA_URL;
+      el.querySelector(".bh-label").textContent =
+        media.length + " bad media file" + (media.length > 1 ? "s" : "");
+      el.title = "Media check: " + media.map(function (f) {
+        return f.code + " (" + f.kind + (f.first ? ", first airs " + f.first : "") + ")";
+      }).join("; ") + " — click for details";
+      var seenM = alerted();
+      var currentM = new Set();
+      media.forEach(function (f) {
+        var key = "media:" + f.id;
+        currentM.add(key);
+        if (!seenM.has(key)) { showMediaToast(f); seenM.add(key); }
+      });
+      var prunedM = new Set();
+      seenM.forEach(function (id) { if (currentM.has(id)) prunedM.add(id); });
+      saveAlerted(prunedM);
     } else {
       el.className = "bh-indicator ok";
+      el.href = MULTIVIEWER_URL;
       el.querySelector(".bh-label").textContent = "All networks on air";
       el.title = "All " + ((data.counts && data.counts.stations) || "") + " networks on air";
       saveAlerted(new Set());   // clear dedupe when everything is healthy

@@ -225,3 +225,12 @@ client table — do not fork a second OrderType.
 - [x] dry runs: Boxing Queen NYC 9/3, MBuhay LAX 9/4, Chinese Drama DAL 9/4, Frontline SFO 9/4, SFO 9/2 + 9/3 23:30, DAL 9/5 16:00, NYC 9/4 08:00 oracle — all `finished` on re-plan inside the txn
 - [ ] Evening Express 6:00 Sat 9/5 "not placed": not reproducible now (DP had not placed it when Maija looked); ask which market if it recurs
 - [ ] FCC sweep after Finish still pushes the fill past midnight until Finish is clicked again — teach `_place_daily_once` to seat behind the hour's fill, or run the sweep before Finish (workflow note)
+
+## Nightly media file-size check (2026-09-08)
+
+Built after the 9/7 freeze (DAL/WDC/NYC on TheOne090726B, 37 MB for 30:41 — truncated at source).
+- [x] `business_logic/services/media_integrity.py` — `classify` (truncated < 12,000 B/frame; inconsistent same-codec copies) + `scan` over TPALINSE I/C rows next 2 days, playout devices only (S3 master + CIB1/3/4/5/6; Proxy/WIP/test excluded)
+- [x] `scripts/check_media_sizes.py` — CLI, exit 1 on findings; oracle: `today=2026-09-07` flags exactly THEONE090726B
+- [x] Broadcast Health: background task (first status poll → scan now, then daily 03:00), `media` in status, `/api/broadcast-health/media`, POST `.../rescan`, page `/master-control/media-check`; header turns amber + toast per finding
+- [x] 8 unit tests; in-process smoke (page 200, scan 333 assets)
+- [ ] Watch the first live nights for false positives (lowest legit file seen so far: 22,396 B/frame)

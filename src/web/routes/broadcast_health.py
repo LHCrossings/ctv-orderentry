@@ -14,14 +14,15 @@ cached device poll serves every Control Room user regardless of headcount).
 """
 
 import asyncio
+import datetime as _dt
 import json as _json
 import os
 import time
 import urllib.request
 from pathlib import Path
 
-from fastapi import APIRouter
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 # The single Stirlitz box (see stirlitz-multiviewer-api.md). Overridable via env
@@ -153,11 +154,116 @@ async def _get_status() -> dict:
         return data
 
 
+# ---------------------------------------------------------------------------
+# Media integrity — nightly file-size check (2026-09-07 TheOne090726B freeze).
+#
+# The rules live in business_logic/services/media_integrity.py (shared with
+# scripts/check_media_sizes.py). The web app has no scheduler, so the first
+# status poll after startup starts one background task: it scans immediately,
+# then again every day at _MEDIA_HOUR (server clock = Pacific, after the
+# evening ingest and before the 06:00 broadcast day). Findings ride along in the
+# status payload so the header indicator turns amber on every page.
+# ---------------------------------------------------------------------------
+_MEDIA_HOUR = 3
+_MEDIA_DAYS = 2
+_media: dict = {"data": None, "task": None}
+_media_lock = asyncio.Lock()
+
+
+def _run_media_scan() -> dict:
+    """Blocking scan; never raises (an unreachable DB must not break the header)."""
+    try:
+        from browser_automation.etere_direct_client import connect
+        from src.business_logic.services.media_integrity import scan
+
+        with connect() as conn:
+            return scan(conn, days=_MEDIA_DAYS)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "state": "unknown",
+            "error": str(exc),
+            "checked_at": _dt.datetime.now().isoformat(timespec="seconds"),
+            "findings": [],
+            "assets": 0,
+        }
+
+
+def _seconds_until(hour: int) -> float:
+    now = _dt.datetime.now()
+    nxt = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+    if nxt <= now:
+        nxt += _dt.timedelta(days=1)
+    return (nxt - now).total_seconds()
+
+
+async def _media_rescan() -> dict:
+    async with _media_lock:
+        _media["data"] = await asyncio.to_thread(_run_media_scan)
+        return _media["data"]
+
+
+async def _media_loop() -> None:
+    while True:
+        await _media_rescan()
+        await asyncio.sleep(_seconds_until(_MEDIA_HOUR))
+
+
+def _ensure_media_task() -> None:
+    t = _media.get("task")
+    if t is None or t.done():
+        _media["task"] = asyncio.get_running_loop().create_task(_media_loop())
+
+
+def _media_summary() -> dict:
+    """Compact form for the header: one line per finding, soonest airing first."""
+    d = _media.get("data")
+    if not d:
+        return {"state": "unknown", "count": 0, "findings": []}
+    items = []
+    for f in d.get("findings", []):
+        first = f["airings"][0] if f.get("airings") else None
+        items.append(
+            {
+                "id": f["id_filmati"],
+                "code": f["code"],
+                "kind": f["kind"],
+                "first": f"{first['market']} {first['date'][5:]} {first['time']}" if first else "",
+            }
+        )
+    return {
+        "state": d.get("state", "unknown"),
+        "checked_at": d.get("checked_at"),
+        "count": len(items),
+        "findings": items,
+    }
+
+
 def build_broadcast_health_router(templates: Jinja2Templates) -> APIRouter:
     router = APIRouter()
 
     @router.get("/api/broadcast-health/status")
     async def broadcast_health_status():
-        return JSONResponse(await _get_status())
+        _ensure_media_task()
+        data = dict(await _get_status())
+        data["media"] = _media_summary()
+        return JSONResponse(data)
+
+    @router.get("/api/broadcast-health/media")
+    async def broadcast_health_media():
+        _ensure_media_task()
+        return JSONResponse(_media.get("data") or {"state": "unknown", "findings": [], "assets": 0})
+
+    @router.post("/api/broadcast-health/media/rescan")
+    async def broadcast_health_media_rescan():
+        _ensure_media_task()
+        return JSONResponse(await _media_rescan())
+
+    @router.get("/master-control/media-check", response_class=HTMLResponse)
+    async def media_check_page(request: Request):
+        return templates.TemplateResponse(
+            request,
+            "master_control/media_check.html",
+            {"media_hour": f"{_MEDIA_HOUR:02d}:00", "days": _MEDIA_DAYS},
+        )
 
     return router

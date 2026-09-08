@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Media Check — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        .mc-bar { display: flex; align-items: center; gap: 16px; margin: 18px 0; font-size: 0.9rem; color: var(--text-secondary); }
+        .mc-bar .spacer { flex: 1; }
+        .mc-bar button { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--nord4); background: var(--nord6); color: var(--nord0); cursor: pointer; font: inherit; font-size: 0.85rem; }
+        .mc-bar button:disabled { opacity: 0.5; cursor: wait; }
+        .mc-ok { padding: 18px; border-radius: 10px; background: var(--nord6); border-left: 5px solid var(--nord14); }
+        .mc-err { padding: 18px; border-radius: 10px; background: var(--nord6); border-left: 5px solid var(--nord11); }
+        .mc-finding { padding: 14px 18px; border-radius: 10px; background: var(--nord6); border-left: 5px solid var(--nord13); margin-bottom: 12px; }
+        .mc-finding h3 { margin: 0 0 4px; font-size: 1rem; }
+        .mc-finding h3 .kind { font-size: 0.72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--nord11); margin-left: 8px; }
+        .mc-finding .detail { color: var(--text-secondary); font-size: 0.88rem; }
+        .mc-finding table { margin-top: 8px; font-size: 0.82rem; border-collapse: collapse; }
+        .mc-finding td, .mc-finding th { padding: 2px 12px 2px 0; text-align: left; }
+        .mc-finding th { color: var(--text-muted); font-weight: 500; }
+        .mc-note { font-size: 0.82rem; color: var(--text-muted); margin-top: 24px; line-height: 1.5; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="home-btn">🏠</a>
+            <div class="logo-icon">🎞️</div>
+            <div>
+                <h1>Media <span>Check</span></h1>
+                <div class="logo-sub">Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="mc-bar">
+        <span id="mcStatus">loading…</span>
+        <span class="spacer"></span>
+        <button id="mcRescan">Rescan now</button>
+    </div>
+    <div id="mcBody"></div>
+    <p class="mc-note">
+        Every file placed in the next {{ days }} days is checked at {{ media_hour }} each night (and on server start).
+        A conformed house MP4 is about 38,500 bytes per frame; a file far below that was truncated before it reached
+        Etere and will hold its slot frozen or black for its whole stated length in every market that carries it
+        (The One piece B, 9/7/2026: 37 MB for 30:41). Copies whose size differs between the S3 master and a CIB are
+        partial transfers. The fix is master control's: re-export or re-ingest the file and swap it into the schedule,
+        then Rescan.
+    </p>
+</main>
+
+<script>
+(function () {
+    const body = document.getElementById('mcBody');
+    const status = document.getElementById('mcStatus');
+    const btn = document.getElementById('mcRescan');
+
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+    function render(d) {
+        if (!d || d.state === 'unknown') {
+            status.textContent = 'scan not available';
+            body.innerHTML = '<div class="mc-err"><b>Scan did not run.</b> ' + esc(d && d.error || 'No result yet — the first scan starts with the first page load after a server restart.') + '</div>';
+            return;
+        }
+        status.textContent = 'checked ' + esc(d.checked_at || '').replace('T', ' ') + ' · ' + d.assets + ' placed assets · ' + d.from + ' to ' + d.to;
+        if (!d.findings.length) {
+            body.innerHTML = '<div class="mc-ok"><b>All placed media files look complete.</b></div>';
+            return;
+        }
+        body.innerHTML = d.findings.map(function (f) {
+            const airs = f.airings.map(function (a) {
+                return '<tr><td>' + esc(a.market) + '</td><td>' + esc(a.date) + '</td><td>' + esc(a.time) + '</td><td>' + esc(a.status) + '</td></tr>';
+            }).join('');
+            const copies = f.copies.map(function (c) {
+                return '<tr><td>' + esc(c.device) + '</td><td>' + (c.size ? c.size.toLocaleString() : '—') + '</td><td>' + esc(c.codec) + '</td></tr>';
+            }).join('');
+            return '<div class="mc-finding">' +
+                '<h3>' + esc(f.code) + ' <span class="kind">' + esc(f.kind) + '</span></h3>' +
+                '<div class="detail">' + esc(f.newtype) + ' · ' + esc(f.detail) + ' · asset ' + f.id_filmati + '</div>' +
+                '<table><tr><th>Market</th><th>Date</th><th>Time</th><th>Status</th></tr>' + airs + '</table>' +
+                '<table><tr><th>Copy</th><th>Bytes</th><th>Codec</th></tr>' + copies + '</table>' +
+                '</div>';
+        }).join('');
+    }
+
+    function load() {
+        fetch('/api/broadcast-health/media').then(r => r.json()).then(render).catch(() => render(null));
+    }
+    btn.onclick = function () {
+        btn.disabled = true; status.textContent = 'scanning…';
+        fetch('/api/broadcast-health/media/rescan', { method: 'POST' }).then(r => r.json()).then(render)
+            .catch(() => render(null)).finally(() => { btn.disabled = false; });
+    };
+    load();
+})();
+</script>
+</body>
+</html>

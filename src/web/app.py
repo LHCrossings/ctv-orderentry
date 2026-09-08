@@ -63,7 +63,7 @@ def create_app(config: ApplicationConfig | None = None) -> FastAPI:
     # in one middleware avoids editing ~58 per-page headers (there is no shared
     # base template) and automatically covers future pages. Non-HTML responses
     # (JSON, static assets, SSE streams) are passed through untouched.
-    _BH_TAG = b'<script src="/static/js/broadcast-health.js?v=20260904c"></script>'
+    _BH_TAG = b'<script src="/static/js/broadcast-health.js?v=20260908"></script>'
 
     # Shared date/time entry helpers (formatDateInput / parseDateInput /
     # fmtAirtime), previously copy-pasted into a dozen templates. Injected into
