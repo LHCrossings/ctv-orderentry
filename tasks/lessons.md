@@ -4,6 +4,37 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Threshold Calibrated on "the Lowest Legit Value Seen" Was Calibrated on the Defect — Compare a Piece to Its SIBLINGS, Not to a Constant
+
+**Session:** Maija, V-TOPNEWS090826 froze in NYC/WDC/CMP/HOU/MMT 9/8; "did the dot turn yellow and we missed it?" (2026-09-09)
+
+**Rule:** The nightly media-size check shipped 9/8 with `truncated < 12,000 B/frame`, chosen
+to sit under "the lowest legit value seen, 22,396". That 22,396 B/frame asset WAS
+`TOPNEWS090826A` — 241.7 MB where a full 6:00 export is 415.8 MB (58%, cut at about 3:29) —
+sitting in the calibration sample the night before it froze five markets. The 03:00 scan
+covered it (333 assets, STATUS I, S3 copy present) and reported 0 findings; the header dot
+never went amber, and the Jumpbox's cached scan result proves it. TheOne was caught only
+because it was 2% of size; a partial truncation looks "legit" to any absolute constant.
+Etere offers no other signal: `FS_FILMATI.DUR`, `FILMATI.DUR_FISICA`, `POS_FIN` all mirror
+the declared DURATA, `BITRATE`/`CLIP_SIZE` are 0. Second finding: the dot keeps no history
+(5 s in-memory cache; the Stirlitz box has `navigationEnabledOptions=["monitor"]`, no alarm
+history), so "did it turn red/yellow and we missed it" is unanswerable after the fact.
+
+**How to apply:**
+1. When calibrating a threshold from live data, look at every sample near the cutoff and
+   ask what it IS before calling it legit — the tail of the distribution is where the
+   defects live. A house export at fixed bitrate cannot legitimately be 58% of its siblings.
+2. Judge a piece RELATIVE to its siblings: same show batch (code minus piece letter) or the
+   same show's prior weeks. `B/frame < 75% × sibling median` over 8/10–9/8 flags exactly
+   THEONE090726B, TOPNEWS090826A, and one debatable PH-EVENINGEXP090126D (68%); 99% of
+   pieces sit at ratio 1.00. Keep the absolute floor as a backstop for single-piece assets.
+3. A health indicator that can be missed needs a transition log (offair/media on→off with
+   timestamps) and a "recent events" view; without it every "did we miss it" is a guess.
+4. Verify a guard on the NEXT real incident, not the one it was built from: the oracle for
+   9/8 was `today=2026-09-08` against the pre-air rows — run it whenever MC reports a freeze.
+
+---
+
 ## A Row Moved by XORDER Alone Keeps Its ORA — Etere's Rebuild Fills the Hole With a NOOP, Never Pulls Up; and a Reserve That Stands In for Items You Then Place Is Not Idempotent
 
 **Session:** Maija's Fill & Finish feedback (2026-09-07) — "programming lines don't gray out after Finished" (7 shows), "adds an ID instead of moving the FCC one", "no XORDER room"
