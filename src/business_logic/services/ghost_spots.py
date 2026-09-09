@@ -71,16 +71,16 @@ def summarize(rows: list[dict]) -> list[dict]:
 
 
 def scan(conn, today: dt.date | None = None) -> dict:
-    """Future ghost spots: every COM playlist row dated after `today`, plus today's rows
-    that have not aired yet (STATUS 'I'). Read-only."""
+    """Future ghost spots: every COM playlist row dated after `today`. Today's own rows are
+    left out — the day is already on air and master control fixes it by hand (Lee 9/9:
+    the 27 kept 9/9 rows re-alerted all morning). Read-only."""
     today = today or dt.date.today()
     cur = conn.cursor()
     cur.execute(
         "SELECT t.ID_TPALINSE, t.COD_USER, t.DATA, t.ORA, RTRIM(t.COD_PROGRA), RTRIM(t.TITLE),"
         " t.DURATION, t.STATUS"
         " FROM TPALINSE t LEFT JOIN trafficPalinse tp ON tp.id_tpalinse = t.ID_TPALINSE"
-        f" WHERE {GHOST_WHERE}"
-        f"   AND (t.DATA > '{today:%Y-%m-%d}' OR (t.DATA = '{today:%Y-%m-%d}' AND t.STATUS = 'I'))"
+        f" WHERE {GHOST_WHERE} AND t.DATA > '{today:%Y-%m-%d}'"
         " ORDER BY t.DATA, t.ORA, t.COD_USER"
     )
     rows = []

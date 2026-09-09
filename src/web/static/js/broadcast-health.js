@@ -207,7 +207,9 @@
         if (!seenM.has(key)) { showMediaToast(f); seenM.add(key); }
       });
       if (ghosts.count) {
-        var gkey = "ghosts:" + ghosts.count;
+        // One toast per browser session while ghosts persist — keyed on the condition,
+        // not the count, which drops as the day airs (Lee 9/9: toast every 15 s).
+        var gkey = "ghosts";
         currentM.add(gkey);
         if (!seenM.has(gkey)) { showGhostToast(ghosts); seenM.add(gkey); }
       }
