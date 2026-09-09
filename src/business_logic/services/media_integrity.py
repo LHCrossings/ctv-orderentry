@@ -7,12 +7,22 @@ slot for the clip's full DURATA showing a frozen/black picture, so one bad expor
 market off air for the length of the piece, in every market that carries the show. All six
 copies were the same size: the truncation happened at the source, not in the Datamover.
 
-Two rules, both derived from the 2026-09-07 population (570 scheduled assets):
-  * truncated    — the smallest sized playout copy is below MIN_BYTES_PER_FRAME. The lowest
-                   legitimate file seen was 22,396 B/frame (a short news piece); the bad one
-                   was 670. Proxies (device "Proxy", H264, ~9,700) are excluded by device.
+Three rules:
+  * truncated (vs siblings) — a piece whose best playout copy is below SIBLING_RATIO of the
+                   median bytes-per-frame of the OTHER pieces in its export batch (same code
+                   minus the trailing piece letter, e.g. TOPNEWS090826A/B/C). Added 2026-09-09:
+                   TOPNEWS090826A was 241.7 MB = 22,396 B/frame (58% of B and C) and froze five
+                   markets on 9/8 while the absolute floor below passed it — that "lowest legit
+                   value seen" on 9/8 WAS the defect. Backtest 7/1–9/8 (5,636 assets): flags
+                   exactly THEONE072726A (5%), THEONE090726B (2%), TOPNEWS090826A (58%).
+  * truncated (vs house)    — the smallest sized playout copy is below MIN_BYTES_PER_FRAME;
+                   backstop for assets with no siblings. Proxies (device "Proxy", H264,
+                   ~9,700) are excluded by device.
   * inconsistent — copies of one asset with the same codec differ in size across the S3
                    master and the CIBs (a partial or interrupted copy on one box).
+
+Etere offers no other truncation signal: FS_FILMATI.DUR, FILMATI.DUR_FISICA and POS_FIN all
+mirror the declared DURATA, BITRATE and CLIP_SIZE are 0, and the AU marks the clip Done.
 
 Playout devices = FS_METADEVICE rows whose LEGACY_MEDIAID is a digit: '0' = AWS S3 master,
 '1'/'3'/'4'/'5'/'6' = CIB1/3/4/5/6. Excluded: Proxy (H264), WIP, training, CIB_TEST ('A').
@@ -24,12 +34,19 @@ Shared by `scripts/check_media_sizes.py` (CLI) and the Broadcast Health nightly 
 from __future__ import annotations
 
 import datetime as dt
+import re
+import statistics
 from dataclasses import asdict, dataclass, field
 
 FPS = 29.97
 MIN_BYTES_PER_FRAME = 12_000
 HOUSE_BYTES_PER_FRAME = 38_500
 COPY_TOLERANCE = 0.02
+SIBLING_RATIO = 0.75
+SIBLING_LOOKBACK_DAYS = 45  # how far back scan() looks for the other pieces of a batch
+
+# <base ending in a digit (the date code)> <optional rN re-export tag> <piece letter>
+_PIECE_RE = re.compile(r"(.*?\d)(?:[rR]\d+)?([A-Z])")  # lazy base so R1 is read as the tag
 
 MARKETS = {
     1: "NYC",
@@ -55,6 +72,7 @@ class Finding:
     detail: str
     copies: list[dict] = field(default_factory=list)  # [{device, size, codec}]
     airings: list[dict] = field(default_factory=list)  # [{market, date, time, status}]
+    siblings: list[dict] = field(default_factory=list)  # [{code, bpf}] other pieces of the batch
 
 
 def hms(frames: int) -> str:
@@ -62,12 +80,28 @@ def hms(frames: int) -> str:
     return "%02d:%02d:%02d" % (s // 3600, (s % 3600) // 60, s % 60)
 
 
-def classify(durata: int, copies: list[dict]) -> list[tuple[str, str]]:
+def sibling_key(code: str) -> str | None:
+    """Export-batch key of a program piece: the code minus its trailing piece letter and
+    any rN re-export tag. `TOPNEWS090826A`, `V-TOPNEWS090826R1A` and `THEONE090726r1B`
+    → `TOPNEWS090826` / `V-TOPNEWS090826` / `THEONE090726`. None for codes that do not
+    end in <digit><letter> (commercials such as `SCV15K28`, PSAs, IDs) — they have no
+    batch and only the absolute floor applies to them.
+    """
+    m = _PIECE_RE.fullmatch((code or "").strip())
+    return m.group(1) if m else None
+
+
+def classify(
+    durata: int, copies: list[dict], sibling_bpf: list[float] | None = None
+) -> list[tuple[str, str]]:
     """Pure rule evaluation over one asset's playout copies.
 
     `copies` = [{"device": "CIB1", "size": 123, "codec": "MP4"}, ...]. Copies with no
     size (0/None — the CIB has not stamped the file yet) are ignored; they are not
-    evidence either way. Returns [(kind, detail), ...], empty when the asset looks fine.
+    evidence either way. `sibling_bpf` = bytes-per-frame of the OTHER pieces of the same
+    export batch (best copy each); when given, a piece below SIBLING_RATIO of their median
+    is truncated even if it clears the absolute floor. Returns [(kind, detail), ...],
+    empty when the asset looks fine.
     """
     out: list[tuple[str, str]] = []
     if not durata or durata <= 0:
@@ -76,8 +110,20 @@ def classify(durata: int, copies: list[dict]) -> list[tuple[str, str]]:
     if not sized:
         return out
     smallest = min(sized, key=lambda c: c["size"])
+    largest = max(sized, key=lambda c: c["size"])
     bpf = smallest["size"] / durata
-    if bpf < MIN_BYTES_PER_FRAME:
+    best_bpf = largest["size"] / durata
+    others = [b for b in (sibling_bpf or []) if b and b > 0]
+    if others and best_bpf < SIBLING_RATIO * statistics.median(others):
+        med = statistics.median(others)
+        out.append(
+            (
+                "truncated",
+                f"{largest['size']:,} bytes for {hms(durata)} = {best_bpf:,.0f} B/frame, "
+                f"{best_bpf / med:.0%} of its {len(others)} sibling piece(s) (~{med:,.0f})",
+            )
+        )
+    elif bpf < MIN_BYTES_PER_FRAME:
         devs = sorted({c["device"] for c in sized if c["size"] == smallest["size"]})
         out.append(
             (
@@ -154,10 +200,41 @@ def scan(conn, days: int = 2, today: dt.date | None = None) -> dict:
             copies.setdefault(fid, []).append(
                 {"device": dev or "?", "size": int(size or 0), "codec": codec or ""}
             )
+    # Sibling pool: best playout copy of every asset created in the look-back window,
+    # keyed by export batch. The placed assets join the pool with the copies just loaded,
+    # so a batch older than the window still compares among its own placed pieces.
+    pool: dict[str, list[tuple[int, str, float]]] = {}  # key -> [(id, code, bpf)]
+    since = today - dt.timedelta(days=SIBLING_LOOKBACK_DAYS)
+    cur.execute(
+        "SELECT f.ID_FILMATI, RTRIM(f.COD_PROGRA), f.DURATA, MAX(x.PHYSICAL_SIZE)"
+        " FROM FILMATI f JOIN FS_FILMATI x ON x.ID_FILMATI = f.ID_FILMATI"
+        " JOIN FS_METADEVICE d ON d.ID_METADEVICE = x.ID_METADEVICE"
+        " WHERE d.LEGACY_MEDIAID LIKE '[0-9]' AND x.PHYSICAL_SIZE > 0 AND f.DURATA > 0"
+        f"   AND f.CREATIONDATE >= '{since:%Y-%m-%d}'"
+        " GROUP BY f.ID_FILMATI, f.COD_PROGRA, f.DURATA"
+    )
+    seen: set[int] = set()
+    for fid, code, durata, size in cur.fetchall():
+        key = sibling_key(code)
+        if key:
+            pool.setdefault(key, []).append((int(fid), code, int(size) / int(durata)))
+            seen.add(int(fid))
+    for fid in ids:
+        if fid in seen:
+            continue
+        key = sibling_key(assets[fid]["code"])
+        sized = [c["size"] for c in copies.get(fid, []) if c.get("size")]
+        if key and sized:
+            pool.setdefault(key, []).append(
+                (fid, assets[fid]["code"], max(sized) / assets[fid]["durata"])
+            )
+
     findings: list[Finding] = []
     for fid in ids:
         a = assets[fid]
-        for kind, detail in classify(a["durata"], copies.get(fid, [])):
+        key = sibling_key(a["code"])
+        others = [(c, b) for i, c, b in pool.get(key, []) if i != fid] if key else []
+        for kind, detail in classify(a["durata"], copies.get(fid, []), [b for _, b in others]):
             findings.append(
                 Finding(
                     id_filmati=fid,
@@ -168,6 +245,7 @@ def scan(conn, days: int = 2, today: dt.date | None = None) -> dict:
                     detail=detail,
                     copies=sorted(copies.get(fid, []), key=lambda c: c["device"]),
                     airings=a["airings"],
+                    siblings=[{"code": c, "bpf": round(b)} for c, b in sorted(others)],
                 )
             )
     findings.sort(

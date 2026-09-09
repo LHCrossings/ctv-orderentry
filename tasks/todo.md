@@ -234,3 +234,17 @@ Built after the 9/7 freeze (DAL/WDC/NYC on TheOne090726B, 37 MB for 30:41 — tr
 - [x] Broadcast Health: background task (first status poll → scan now, then daily 03:00), `media` in status, `/api/broadcast-health/media`, POST `.../rescan`, page `/master-control/media-check`; header turns amber + toast per finding
 - [x] 8 unit tests; in-process smoke (page 200, scan 333 assets)
 - [ ] Watch the first live nights for false positives (lowest legit file seen so far: 22,396 B/frame)
+
+## Media check: sibling-relative rule + health-dot event log (2026-09-09, Lee "sure")
+
+Context: TOPNEWS090826A (22,396 B/frame, 58% of siblings) froze 5 markets 9/8; 03:00 scan said 0 findings.
+
+- [x] `media_integrity.py`: `sibling_key(code)` (base = code minus trailing piece letter / rN tag, base must end in a digit); `scan()` loads S3-copy B/frame for the last ~30 days of FILMATI, flags a piece < 75% of the median of its OTHER siblings (kind "short vs siblings"); absolute floor kept as backstop
+- [x] Backtest 7/25–9/8 (3,264 assets, module's own classify): flags exactly THEONE072726A (5%), THEONE090726B (2%), TOPNEWS090826A (58%); live scan 9/9–9/11: 374 assets, 0 findings, 3.1 s
+- [x] Unit tests for sibling_key + the sibling rule
+- [x] `broadcast_health.py`: transition log — diff each new status/media payload against the previous, append JSONL events (offair on/off per station, media finding on/off, feed unknown/back) to `data/broadcast_health_events.jsonl`, bounded
+- [x] `GET /api/broadcast-health/events?days=7` + page `/master-control/health-events` (Nord, 🏠 home), linked from media-check page
+- [x] Unit tests for the diff → events function
+- [x] ruff clean, pytest unit, commit (explicit staging) + push + post_push
+
+Review: kind stays 'truncated' (detail says 'vs siblings'); best copy is compared (a half-copied CIB stays 'inconsistent'); events file data/broadcast_health_events.jsonl per host, bounded 5000→4000 lines; page /master-control/health-events + portal card; 765 unit tests green.

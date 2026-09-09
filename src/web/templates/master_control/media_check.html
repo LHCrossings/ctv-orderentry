@@ -49,11 +49,12 @@
     <div id="mcBody"></div>
     <p class="mc-note">
         Every file placed in the next {{ days }} days is checked at {{ media_hour }} each night (and on server start).
-        A conformed house MP4 is about 38,500 bytes per frame; a file far below that was truncated before it reached
-        Etere and will hold its slot frozen or black for its whole stated length in every market that carries it
-        (The One piece B, 9/7/2026: 37 MB for 30:41). Copies whose size differs between the S3 master and a CIB are
-        partial transfers. The fix is master control's: re-export or re-ingest the file and swap it into the schedule,
-        then Rescan.
+        A conformed house MP4 is about 38,500 bytes per frame. A piece well below the other pieces of its own export
+        (TOPNEWS090826A, 9/8/2026: 58% of B and C) or far below the house figure (The One piece B, 9/7/2026: 37 MB for
+        30:41) was truncated before it reached Etere and will hold its slot frozen or black for its whole stated length
+        in every market that carries it. Copies whose size differs between the S3 master and a CIB are partial
+        transfers. The fix is master control's: re-export or re-ingest the file and swap it into the schedule, then
+        Rescan. Past changes of the header dot are on <a href="/master-control/health-events">Health Events</a>.
     </p>
 </main>
 
@@ -80,6 +81,9 @@
             const airs = f.airings.map(function (a) {
                 return '<tr><td>' + esc(a.market) + '</td><td>' + esc(a.date) + '</td><td>' + esc(a.time) + '</td><td>' + esc(a.status) + '</td></tr>';
             }).join('');
+            const sibs = (f.siblings && f.siblings.length) ? '<table><tr><th>Sibling piece</th><th>B/frame</th></tr>' + f.siblings.map(function (x) {
+                return '<tr><td>' + esc(x.code) + '</td><td>' + Number(x.bpf).toLocaleString() + '</td></tr>';
+            }).join('') + '</table>' : '';
             const copies = f.copies.map(function (c) {
                 return '<tr><td>' + esc(c.device) + '</td><td>' + (c.size ? c.size.toLocaleString() : '—') + '</td><td>' + esc(c.codec) + '</td></tr>';
             }).join('');
@@ -88,6 +92,7 @@
                 '<div class="detail">' + esc(f.newtype) + ' · ' + esc(f.detail) + ' · asset ' + f.id_filmati + '</div>' +
                 '<table><tr><th>Market</th><th>Date</th><th>Time</th><th>Status</th></tr>' + airs + '</table>' +
                 '<table><tr><th>Copy</th><th>Bytes</th><th>Codec</th></tr>' + copies + '</table>' +
+                sibs +
                 '</div>';
         }).join('');
     }

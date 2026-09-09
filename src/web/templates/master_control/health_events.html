@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Health Events — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        .he-bar { display: flex; align-items: center; gap: 16px; margin: 18px 0; font-size: 0.9rem; color: var(--text-secondary); }
+        .he-bar .spacer { flex: 1; }
+        .he-bar select { padding: 5px 10px; border-radius: 6px; border: 1px solid var(--nord4); background: var(--nord6); color: var(--nord0); font: inherit; font-size: 0.85rem; }
+        .he-empty { padding: 18px; border-radius: 10px; background: var(--nord6); border-left: 5px solid var(--nord14); }
+        .he-table { width: 100%; border-collapse: collapse; background: var(--nord6); border-radius: 10px; overflow: hidden; font-size: 0.88rem; }
+        .he-table th, .he-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--nord5); vertical-align: top; }
+        .he-table th { color: var(--text-muted); font-weight: 500; font-size: 0.78rem; text-transform: uppercase; letter-spacing: .04em; }
+        .he-table td.when { white-space: nowrap; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+        .he-pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.74rem; font-weight: 600; color: var(--nord6); white-space: nowrap; }
+        .he-pill.offair, .he-pill.feed_lost { background: var(--nord11); }
+        .he-pill.onair, .he-pill.feed_back, .he-pill.media_clear { background: var(--nord14); color: var(--nord0); }
+        .he-pill.media { background: var(--nord13); color: var(--nord0); }
+        .he-pill.start { background: var(--nord3); }
+        .he-day { background: var(--nord5); color: var(--text-secondary); font-weight: 600; font-size: 0.8rem; }
+        .he-note { font-size: 0.82rem; color: var(--text-muted); margin-top: 24px; line-height: 1.5; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="home-btn">🏠</a>
+            <div class="logo-icon">🩺</div>
+            <div>
+                <h1>Health <span>Events</span></h1>
+                <div class="logo-sub">Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="he-bar">
+        <span id="heStatus">loading…</span>
+        <span class="spacer"></span>
+        <label>Show <select id="heDays">
+            <option value="1">last 24 hours</option>
+            <option value="7" selected>last 7 days</option>
+            <option value="30">last 30 days</option>
+            <option value="90">last 90 days</option>
+        </select></label>
+    </div>
+    <div id="heBody"></div>
+    <p class="he-note">
+        Every change of the on-air dot in the page header is recorded here: a station going off air (Stirlitz video
+        freeze / black / no data) and coming back, a bad media file found by the nightly <a href="/master-control/media-check">Media Check</a>
+        and cleared, the Stirlitz feed dropping out, and Control Room server restarts. Times are the server's clock
+        (Pacific). Recording started 2026-09-09; the dot itself keeps no memory, so nothing before that exists.
+    </p>
+</main>
+
+<script>
+(function () {
+    const body = document.getElementById('heBody');
+    const status = document.getElementById('heStatus');
+    const sel = document.getElementById('heDays');
+    const LABEL = { start: 'server start', feed_lost: 'feed lost', feed_back: 'feed back', offair: 'off air', onair: 'on air', media: 'bad media', media_clear: 'media ok' };
+
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+    function pad(n) { return (n < 10 ? '0' : '') + n; }
+    function describe(e) {
+        switch (e.kind) {
+            case 'offair': return '<b>' + esc(e.station) + '</b> off air' + (e.titles && e.titles.length ? ' — ' + esc(e.titles.join(', ')) : '');
+            case 'onair': return '<b>' + esc(e.station) + '</b> back on air';
+            case 'media': return '<b>' + esc(e.code) + '</b> flagged ' + esc(e.detail || '') + (e.first ? ' — first airs ' + esc(e.first) : '');
+            case 'media_clear': return '<b>' + esc(e.code) + '</b> no longer flagged';
+            case 'feed_lost': return 'Stirlitz alarm feed unreachable' + (e.error ? ' — ' + esc(e.error) : '');
+            case 'feed_back': return 'Stirlitz alarm feed back';
+            case 'start': return 'Control Room server started (dot state reset)';
+            default: return esc(JSON.stringify(e));
+        }
+    }
+
+    function render(d) {
+        if (!d) { status.textContent = 'events not available'; body.innerHTML = '<div class="he-empty">Could not load the event log.</div>'; return; }
+        const ev = d.events || [];
+        status.textContent = ev.length + ' event' + (ev.length === 1 ? '' : 's') + ' in the last ' + d.days + ' day' + (d.days === 1 ? '' : 's');
+        if (!ev.length) { body.innerHTML = '<div class="he-empty"><b>Nothing recorded.</b> The dot did not change in this window.</div>'; return; }
+        let html = '<table class="he-table"><tr><th>When</th><th>Event</th><th>Detail</th></tr>';
+        let day = null;
+        ev.forEach(function (e) {
+            const t = new Date(e.at);
+            const dayKey = isNaN(t) ? e.at.slice(0, 10) : t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate());
+            if (dayKey !== day) { day = dayKey; html += '<tr class="he-day"><td colspan="3">' + esc(dayKey) + '</td></tr>'; }
+            const when = isNaN(t) ? e.at : pad(t.getHours()) + ':' + pad(t.getMinutes()) + ':' + pad(t.getSeconds());
+            html += '<tr><td class="when">' + esc(when) + '</td><td><span class="he-pill ' + esc(e.kind) + '">' + esc(LABEL[e.kind] || e.kind) + '</span></td><td>' + describe(e) + '</td></tr>';
+        });
+        body.innerHTML = html + '</table>';
+    }
+
+    function load() {
+        fetch('/api/broadcast-health/events?days=' + encodeURIComponent(sel.value)).then(r => r.json()).then(render).catch(() => render(null));
+    }
+    sel.onchange = load;
+    load();
+})();
+</script>
+</body>
+</html>

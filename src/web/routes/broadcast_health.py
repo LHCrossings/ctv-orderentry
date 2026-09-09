@@ -21,9 +21,11 @@ import time
 import urllib.request
 from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+
+from business_logic.services.health_events import EventLog, diff_events
 
 # The single Stirlitz box (see stirlitz-multiviewer-api.md). Overridable via env
 # for testing, mirroring the hardcoded AGENT_URL pattern in airchecks.py.
@@ -151,6 +153,7 @@ async def _get_status() -> dict:
         data = await asyncio.to_thread(_fetch_alarms)
         _cache["data"] = data
         _cache["ts"] = time.monotonic()
+        _record(data)
         return data
 
 
@@ -199,7 +202,8 @@ def _seconds_until(hour: int) -> float:
 async def _media_rescan() -> dict:
     async with _media_lock:
         _media["data"] = await asyncio.to_thread(_run_media_scan)
-        return _media["data"]
+    _record(_cache["data"])
+    return _media["data"]
 
 
 async def _media_loop() -> None:
@@ -238,6 +242,38 @@ def _media_summary() -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Event log — transitions of what the header dot shows (2026-09-09, Maija: "did it turn
+# yellow and we missed it?"). Only changes are written; a quiet day writes nothing.
+# data/ is gitignored and per host, so the Jumpbox keeps its own history.
+# ---------------------------------------------------------------------------
+_EVENTS_PATH = Path(__file__).resolve().parents[3] / "data" / "broadcast_health_events.jsonl"
+_events = EventLog(_EVENTS_PATH)
+_last_snapshot: dict = {"data": None}
+
+
+def _snapshot(status: dict | None) -> dict:
+    status = status or {}
+    return {
+        "unreachable": bool(status.get("unreachable")) or status.get("state") == "unknown",
+        "error": status.get("error", ""),
+        "offair": status.get("offair") or [],
+        "media": _media_summary().get("findings", []),
+    }
+
+
+def _record(status: dict | None) -> None:
+    """Diff the current dot state against the last one seen and append the transitions.
+    Never raises — a full disk must not break the header."""
+    try:
+        snap = _snapshot(status)
+        events = diff_events(_last_snapshot["data"], snap)
+        _last_snapshot["data"] = snap
+        _events.append(events)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def build_broadcast_health_router(templates: Jinja2Templates) -> APIRouter:
     router = APIRouter()
 
@@ -265,5 +301,13 @@ def build_broadcast_health_router(templates: Jinja2Templates) -> APIRouter:
             "master_control/media_check.html",
             {"media_hour": f"{_MEDIA_HOUR:02d}:00", "days": _MEDIA_DAYS},
         )
+
+    @router.get("/api/broadcast-health/events")
+    async def broadcast_health_events(days: int = Query(7, ge=1, le=90)):
+        return JSONResponse({"days": days, "events": _events.read(days=days)})
+
+    @router.get("/master-control/health-events", response_class=HTMLResponse)
+    async def health_events_page(request: Request):
+        return templates.TemplateResponse(request, "master_control/health_events.html", {})
 
     return router
