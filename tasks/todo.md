@@ -255,3 +255,12 @@ Review: kind stays 'truncated' (detail says 'vs siblings'); best copy is compare
 - [x] nightly task runs it beside the media scan; status payload `media.ghosts` {count, titles}; header dot amber "N ghost spots", toast; media-check page lists by creative + all rows
 - [x] events: ghosts / ghosts_clear transitions, labels on Health Events
 - [x] tests: 5 ghost + 1 events; 771 unit green; live CLI + in-process rescan (27 ghosts = the 9/9 rows Lee kept)
+
+## Booked Business: air-date range filter (2026-09-09, Aki via Lee "go ahead and build it, keep the broker fee line")
+
+- [x] `_bb_report_window(year, month, date_from, date_to)` module-level in orders.py: month mode = broadcast/calendar bounds per CENTROMEDIA (unchanged); range mode = one window for every contract, labels say "air dates"
+- [x] `/booked-business/load` takes optional `date_from`/`date_to` (ISO); airtime + production queries use the window; WL broker fee line kept in both modes
+- [x] template: "Custom dates" toggle beside the month arrows → two date fields (formatDateInput) + Apply; arrows return to month mode; Unset Contracts panel hidden in range mode
+- [x] unit test for the window helper; ruff; commit + push + post_push
+
+Review: helper `_bb_report_window` (module-level, tested 7 ways); route parses ISO dates → 400 on bad/missing/reversed; live in-process: Aug 2026 month unchanged ($213,827.86 gross), Aug 12–20 range $67,486.26 gross incl. WL broker fee line; union 7/27–8/31 ≥ month; 778 unit green. Template only (no static cache-bust needed).

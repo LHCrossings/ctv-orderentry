@@ -195,6 +195,67 @@ def _bcast_time_to_frames(t: str, fps: float) -> int:
     return round((h * 3600 + mn * 60 + s) * fps)
 
 
+def _bb_report_window(
+    year: int,
+    month: int,
+    date_from: _date_cls | None = None,
+    date_to: _date_cls | None = None,
+) -> dict:
+    """Pick the Booked Business date window.
+
+    Month mode (no range given): revenue is counted from placed spots whose air
+    date falls in the contract's OWN billing month — broadcast bounds
+    (Monday of the week containing the 1st → day before the next such Monday)
+    for Broadcast contracts (CENTROMEDIA 316), calendar bounds for Calendar
+    (317) or unset ones. That distinction is what the month arrows preserve.
+
+    Range mode (Aki, 2026-09-09: "what aired Aug 12–20"): one fixed air-date
+    window applied to every contract regardless of billing type — inside an
+    arbitrary range the broadcast/calendar split has no meaning, so both
+    bounds collapse to the same pair and the label says so.
+    """
+    import calendar as _cal
+
+    def _md(d):
+        return f"{d.strftime('%b')} {d.day}"
+
+    if date_from is not None or date_to is not None:
+        if date_from is None or date_to is None:
+            raise ValueError("date_from and date_to must be given together")
+        if date_to < date_from:
+            raise ValueError("date_to is before date_from")
+        label = f"{_md(date_from)} – {_md(date_to)}, {date_to.year}"
+        return {
+            "mode": "range",
+            "bcast_start": date_from,
+            "bcast_end": date_to,
+            "cal_start": date_from,
+            "cal_end": date_to,
+            "month_label": label,
+            "bcast_bounds": label,
+            "cal_bounds": label,
+            "range_label": label,
+        }
+
+    first = _date_cls(year, month, 1)
+    bcast_start = first - timedelta(days=first.weekday())
+    cal_end = _date_cls(year, month, _cal.monthrange(year, month)[1])
+    ny, nm = (year, month + 1) if month < 12 else (year + 1, 1)
+    nfirst = _date_cls(ny, nm, 1)
+    bcast_end = nfirst - timedelta(days=nfirst.weekday()) - timedelta(days=1)
+    return {
+        "mode": "month",
+        "bcast_start": bcast_start,
+        "bcast_end": bcast_end,
+        "cal_start": first,
+        "cal_end": cal_end,
+        "month_label": f"{_cal.month_name[month]} {year}",
+        "bcast_bounds": f"{_md(bcast_start)} – {_md(bcast_end)}, {bcast_end.year}",
+        "cal_bounds": f"{_md(first)} – {_md(cal_end)}, {cal_end.year}",
+        "range_label": None,
+    }
+
+
 def _bcast_window_to_frames(t_from: str, t_to: str, fps: float) -> tuple[int, int]:
     """Convert a [start, end) time-of-day pair to broadcast-day frames.
 
@@ -11091,19 +11152,33 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         return templates.TemplateResponse(request, "master_control/booked_business.html")
 
     @router.get("/api/master-control/booked-business/load")
-    async def booked_business_load(year: int, month: int, show_trade: bool = False):
+    async def booked_business_load(
+        year: int,
+        month: int,
+        show_trade: bool = False,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ):
+        # date_from/date_to (ISO yyyy-mm-dd, both or neither) switch the report
+        # to air-date range mode: one window for every contract, billing type
+        # ignored. Without them it is the month report (broadcast vs calendar
+        # bounds per contract). Parsed here so a bad date is a 400, not a 500.
+        try:
+            _df = _date_cls.fromisoformat(date_from) if date_from else None
+            _dt = _date_cls.fromisoformat(date_to) if date_to else None
+            window = _bb_report_window(year, month, _df, _dt)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
         def _run():
-            import calendar as _cal
             from collections import defaultdict
 
             from browser_automation.etere_direct_client import connect as _connect
 
-            bcast_start = _bb_broadcast_month_start(year, month)
-            cal_start = _date_cls(year, month, 1)
-            month_end = _bb_month_end(year, month)
-
-            _ny, _nm = (year, month + 1) if month < 12 else (year + 1, 1)
-            bcast_end = _bb_broadcast_month_start(_ny, _nm) - timedelta(days=1)
+            bcast_start = window["bcast_start"]
+            bcast_end = window["bcast_end"]
+            cal_start = window["cal_start"]
+            month_end = window["cal_end"]
 
             trade_guard = (
                 "-- show all"
@@ -11391,17 +11466,12 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 key=lambda m: _MKT_ORDER.index(m) if m in _MKT_ORDER else 99,
             )
 
-            def _md(d):
-                return f"{d.strftime('%b')} {d.day}"
-
-            month_label = f"{_cal.month_name[month]} {year}"
-            bcast_label = f"{_md(bcast_start)} – {_md(bcast_end)}, {bcast_end.year}"
-            cal_label = f"{_md(cal_start)} – {_md(month_end)}, {month_end.year}"
-
             return {
-                "month_label": month_label,
-                "bcast_bounds": bcast_label,
-                "cal_bounds": cal_label,
+                "mode": window["mode"],
+                "month_label": window["month_label"],
+                "bcast_bounds": window["bcast_bounds"],
+                "cal_bounds": window["cal_bounds"],
+                "range_label": window["range_label"],
                 "ae_groups": ae_groups,
                 "grand_gross": grand_gross,
                 "grand_net": grand_net,

@@ -52,6 +52,26 @@
             margin-top: 0.2rem;
             text-align: center;
         }
+        .bb-range {
+            display: none;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+        .bb-range.open { display: flex; }
+        .bb-range input {
+            width: 7.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 6px;
+            padding: 0.4rem 0.6rem;
+            font-size: 0.9rem;
+            font-family: inherit;
+        }
+        .bb-range input:focus { outline: none; border-color: var(--nord10); }
+        .bb-nav button.active { border-color: var(--nord10); color: var(--nord10); }
         .bb-tabs {
             display: flex;
             gap: 0.5rem;
@@ -275,6 +295,13 @@
                     <div class="bb-bounds" id="bounds-label"></div>
                 </div>
                 <button id="next-btn">&#8594;</button>
+                <button id="range-btn" onclick="toggleRange()" title="Report on the spots that aired between two calendar dates, whatever the contract's billing type">Custom dates</button>
+                <div class="bb-range" id="range-controls">
+                    <input id="range-from" placeholder="from (m/d/yy)" onblur="formatDateInput(this)" onkeydown="if(event.key==='Enter')applyRange()" />
+                    <span>–</span>
+                    <input id="range-to" placeholder="to (m/d/yy)" onblur="formatDateInput(this)" onkeydown="if(event.key==='Enter')applyRange()" />
+                    <button onclick="applyRange()">Apply</button>
+                </div>
             </div>
             <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
                 <div class="bb-tabs">
@@ -326,6 +353,9 @@
 
 <script>
     let currentYear, currentMonth;
+    // Air-date range mode (Aki 9/9): rangeFrom/rangeTo are ISO strings when the
+    // "Custom dates" panel has been applied; null means the month report.
+    let rangeFrom = null, rangeTo = null;
     let activeTab = 'net';
     let lastData = null;
     let selectedMarkets = new Set();
@@ -345,16 +375,57 @@
         if (lastData) render(lastData);
     }
 
+    // The arrows always step the MONTH report; using one leaves range mode.
     document.getElementById('prev-btn').onclick = () => {
+        leaveRange();
         currentMonth--;
         if (currentMonth < 1) { currentMonth = 12; currentYear--; }
         load();
     };
     document.getElementById('next-btn').onclick = () => {
+        leaveRange();
         currentMonth++;
         if (currentMonth > 12) { currentMonth = 1; currentYear++; }
         load();
     };
+
+    function toggleRange() {
+        const panel = document.getElementById('range-controls');
+        const open = !panel.classList.contains('open');
+        panel.classList.toggle('open', open);
+        document.getElementById('range-btn').classList.toggle('active', open);
+        if (open) {
+            document.getElementById('range-from').focus();
+        } else if (rangeFrom) {
+            leaveRange();
+            load();
+        }
+    }
+
+    function leaveRange() {
+        rangeFrom = rangeTo = null;
+        document.getElementById('range-controls').classList.remove('open');
+        document.getElementById('range-btn').classList.remove('active');
+    }
+
+    function applyRange() {
+        const fromEl = document.getElementById('range-from');
+        const toEl = document.getElementById('range-to');
+        const from = parseDateInput(fromEl.value);
+        const to = parseDateInput(toEl.value);
+        if (!from || !to) {
+            (from ? toEl : fromEl).focus();
+            return;
+        }
+        if (to < from) {
+            document.getElementById('report-area').innerHTML =
+                '<div class="bb-empty">The "to" date is before the "from" date.</div>';
+            return;
+        }
+        formatDateInput(fromEl); formatDateInput(toEl);
+        rangeFrom = from; rangeTo = to;
+        load();
+    }
 
     function fmt(n) {
         return '$' + Number(n).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
@@ -420,15 +491,24 @@
         document.getElementById('bounds-label').textContent = '';
         try {
             const showTrade = document.getElementById('show-trade').checked;
-            const res = await fetch(`/api/master-control/booked-business/load?year=${currentYear}&month=${currentMonth}&show_trade=${showTrade}`);
+            let url = `/api/master-control/booked-business/load?year=${currentYear}&month=${currentMonth}&show_trade=${showTrade}`;
+            if (rangeFrom && rangeTo) url += `&date_from=${rangeFrom}&date_to=${rangeTo}`;
+            const res = await fetch(url);
             if (!res.ok) throw new Error(await res.text());
             lastData = await res.json();
             document.getElementById('month-label').textContent = lastData.month_label;
-            document.getElementById('bounds-label').textContent =
-                `Broadcast: ${lastData.bcast_bounds}  ·  Calendar: ${lastData.cal_bounds}`;
+            document.getElementById('bounds-label').textContent = lastData.mode === 'range'
+                ? 'Air dates · spots placed in this window, billing type not applied'
+                : `Broadcast: ${lastData.bcast_bounds}  ·  Calendar: ${lastData.cal_bounds}`;
             buildMarketPills(_ALL_MARKETS);
             render(lastData);
-            loadUnsetContracts();
+            if (lastData.mode === 'range') {
+                // Billing type is what that panel fixes; range mode ignores it.
+                unsetContracts = [];
+                document.getElementById('unset-panel').style.display = 'none';
+            } else {
+                loadUnsetContracts();
+            }
         } catch (e) {
             document.getElementById('report-area').innerHTML =
                 `<div class="bb-empty">Error: ${e.message}</div>`;
@@ -439,7 +519,7 @@
         const col = activeTab;
         if (!data.ae_groups || data.ae_groups.length === 0) {
             document.getElementById('report-area').innerHTML =
-                '<div class="bb-empty">No booked business found for this month.</div>';
+                `<div class="bb-empty">No booked business found for ${data.mode === 'range' ? 'these dates' : 'this month'}.</div>`;
             return;
         }
 
