@@ -18,8 +18,8 @@
         .he-table td.when { white-space: nowrap; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
         .he-pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.74rem; font-weight: 600; color: var(--nord6); white-space: nowrap; }
         .he-pill.offair, .he-pill.feed_lost { background: var(--nord11); }
-        .he-pill.onair, .he-pill.feed_back, .he-pill.media_clear { background: var(--nord14); color: var(--nord0); }
-        .he-pill.media { background: var(--nord13); color: var(--nord0); }
+        .he-pill.onair, .he-pill.feed_back, .he-pill.media_clear, .he-pill.ghosts_clear { background: var(--nord14); color: var(--nord0); }
+        .he-pill.media, .he-pill.ghosts { background: var(--nord13); color: var(--nord0); }
         .he-pill.start { background: var(--nord3); }
         .he-day { background: var(--nord5); color: var(--text-secondary); font-weight: 600; font-size: 0.8rem; }
         .he-note { font-size: 0.82rem; color: var(--text-muted); margin-top: 24px; line-height: 1.5; }
@@ -55,7 +55,7 @@
     <div id="heBody"></div>
     <p class="he-note">
         Every change of the on-air dot in the page header is recorded here: a station going off air (Stirlitz video
-        freeze / black / no data) and coming back, a bad media file found by the nightly <a href="/master-control/media-check">Media Check</a>
+        freeze / black / no data) and coming back, a bad media file or ghost spots found by the nightly <a href="/master-control/media-check">Media Check</a>
         and cleared, the Stirlitz feed dropping out, and Control Room server restarts. Times are the server's clock
         (Pacific). Recording started 2026-09-09; the dot itself keeps no memory, so nothing before that exists.
     </p>
@@ -66,7 +66,7 @@
     const body = document.getElementById('heBody');
     const status = document.getElementById('heStatus');
     const sel = document.getElementById('heDays');
-    const LABEL = { start: 'server start', feed_lost: 'feed lost', feed_back: 'feed back', offair: 'off air', onair: 'on air', media: 'bad media', media_clear: 'media ok' };
+    const LABEL = { start: 'server start', feed_lost: 'feed lost', feed_back: 'feed back', offair: 'off air', onair: 'on air', media: 'bad media', media_clear: 'media ok', ghosts: 'ghost spots', ghosts_clear: 'ghosts ok' };
 
     function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
     function pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -76,6 +76,8 @@
             case 'onair': return '<b>' + esc(e.station) + '</b> back on air';
             case 'media': return '<b>' + esc(e.code) + '</b> flagged ' + esc(e.detail || '') + (e.first ? ' — first airs ' + esc(e.first) : '');
             case 'media_clear': return '<b>' + esc(e.code) + '</b> no longer flagged';
+            case 'ghosts': return '<b>' + e.count + '</b> commercial' + (e.count === 1 ? '' : 's') + ' in the playlist with no contract behind ' + (e.count === 1 ? 'it' : 'them');
+            case 'ghosts_clear': return 'Playlist clean again — ' + e.count + ' ghost spot' + (e.count === 1 ? '' : 's') + ' gone';
             case 'feed_lost': return 'Stirlitz alarm feed unreachable' + (e.error ? ' — ' + esc(e.error) : '');
             case 'feed_back': return 'Stirlitz alarm feed back';
             case 'start': return 'Control Room server started (dot state reset)';

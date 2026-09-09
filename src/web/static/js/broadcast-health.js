@@ -138,11 +138,31 @@
     return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  function showGhostToast(g) {
+    var t = document.createElement("div");
+    t.className = "bh-toast media";
+    t.innerHTML =
+      '<div><b>⚠ ' + g.count + " ghost spot" + (g.count > 1 ? "s" : "") + " in the playlist</b>" +
+      "<small>" + esc((g.titles || []).map(function (x) { return x.title + " ×" + x.count; }).join(", ")) +
+      " — commercials with no contract behind them</small></div>";
+    var x = document.createElement("button");
+    x.className = "bh-toast-x";
+    x.textContent = "×";
+    x.setAttribute("aria-label", "Dismiss");
+    x.onclick = function (e) { e.stopPropagation(); e.preventDefault(); t.remove(); };
+    t.appendChild(x);
+    t.onclick = function () { window.open(MEDIA_URL, "_blank", "noopener"); };
+    toastWrap().appendChild(t);
+    setTimeout(function () { if (t.parentNode) t.remove(); }, 30000);
+  }
+
   function render(data) {
     var el = ensureIndicator();
     var offair = (data && data.offair) || [];
     var media = (data && data.media && data.media.findings) || [];
-    if ((!data || data.state === "unknown" || data.unreachable) && !media.length) {
+    var ghosts = (data && data.media && data.media.ghosts) || { count: 0, titles: [] };
+    var amber = media.length || ghosts.count;
+    if ((!data || data.state === "unknown" || data.unreachable) && !amber) {
       el.className = "bh-indicator unknown";
       el.querySelector(".bh-label").textContent = "Health unknown";
       el.title = "Broadcast health unavailable" + (data && data.error ? " — " + data.error : "");
@@ -166,15 +186,19 @@
       var pruned = new Set();
       seen.forEach(function (id) { if (current.has(id)) pruned.add(id); });
       saveAlerted(pruned);
-    } else if (media.length) {
-      // Nothing off air, but the nightly file-size check flagged a placed file.
+    } else if (amber) {
+      // Nothing off air, but the nightly check flagged a placed file and/or ghost spots.
       el.className = "bh-indicator media";
       el.href = MEDIA_URL;
-      el.querySelector(".bh-label").textContent =
-        media.length + " bad media file" + (media.length > 1 ? "s" : "");
-      el.title = "Media check: " + media.map(function (f) {
+      var parts = [];
+      if (media.length) parts.push(media.length + " bad media file" + (media.length > 1 ? "s" : ""));
+      if (ghosts.count) parts.push(ghosts.count + " ghost spot" + (ghosts.count > 1 ? "s" : ""));
+      el.querySelector(".bh-label").textContent = parts.join(" · ");
+      var tips = media.map(function (f) {
         return f.code + " (" + f.kind + (f.first ? ", first airs " + f.first : "") + ")";
-      }).join("; ") + " — click for details";
+      });
+      if (ghosts.count) tips.push("ghost spots: " + (ghosts.titles || []).map(function (x) { return x.title + " ×" + x.count; }).join(", "));
+      el.title = "Media check: " + tips.join("; ") + " — click for details";
       var seenM = alerted();
       var currentM = new Set();
       media.forEach(function (f) {
@@ -182,6 +206,11 @@
         currentM.add(key);
         if (!seenM.has(key)) { showMediaToast(f); seenM.add(key); }
       });
+      if (ghosts.count) {
+        var gkey = "ghosts:" + ghosts.count;
+        currentM.add(gkey);
+        if (!seenM.has(gkey)) { showGhostToast(ghosts); seenM.add(gkey); }
+      }
       var prunedM = new Set();
       seenM.forEach(function (id) { if (currentM.has(id)) prunedM.add(id); });
       saveAlerted(prunedM);

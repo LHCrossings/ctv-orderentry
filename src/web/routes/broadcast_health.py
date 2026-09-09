@@ -177,10 +177,24 @@ def _run_media_scan() -> dict:
     """Blocking scan; never raises (an unreachable DB must not break the header)."""
     try:
         from browser_automation.etere_direct_client import connect
+        from src.business_logic.services.ghost_spots import scan as scan_ghosts
         from src.business_logic.services.media_integrity import scan
 
         with connect() as conn:
-            return scan(conn, days=_MEDIA_DAYS)
+            result = scan(conn, days=_MEDIA_DAYS)
+            # Ghost spots (playlist rows with no contract) ride in the same nightly result;
+            # 2026-09-09: 783 4imprint rows aired double for two days before anyone saw one.
+            try:
+                result["ghosts"] = scan_ghosts(conn)
+            except Exception as exc:  # noqa: BLE001
+                result["ghosts"] = {
+                    "state": "unknown",
+                    "error": str(exc),
+                    "count": 0,
+                    "by_title": [],
+                    "rows": [],
+                }
+            return result
     except Exception as exc:  # noqa: BLE001
         return {
             "state": "unknown",
@@ -234,11 +248,27 @@ def _media_summary() -> dict:
                 "first": f"{first['market']} {first['date'][5:]} {first['time']}" if first else "",
             }
         )
+    g = d.get("ghosts") or {}
+    ghosts = {
+        "state": g.get("state", "unknown"),
+        "count": int(g.get("count") or 0),
+        "titles": [
+            {
+                "title": x["title"],
+                "count": x["count"],
+                "first": f"{x['first']['market']} {x['first']['date'][5:]} {x['first']['time'][:5]}"
+                if x.get("first")
+                else "",
+            }
+            for x in (g.get("by_title") or [])[:5]
+        ],
+    }
     return {
         "state": d.get("state", "unknown"),
         "checked_at": d.get("checked_at"),
         "count": len(items),
         "findings": items,
+        "ghosts": ghosts,
     }
 
 
@@ -259,6 +289,7 @@ def _snapshot(status: dict | None) -> dict:
         "error": status.get("error", ""),
         "offair": status.get("offair") or [],
         "media": _media_summary().get("findings", []),
+        "ghosts": _media_summary().get("ghosts", {}).get("count", 0),
     }
 
 

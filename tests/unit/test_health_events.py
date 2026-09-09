@@ -64,6 +64,19 @@ def test_feed_loss_is_not_a_recovery():
     assert _kinds(back) == ["feed_back", "offair"] and back[1]["station"] == "NYC"
 
 
+def test_ghost_count_transitions():
+    clean = _snap()
+    ghosts = dict(_snap(), ghosts=783)
+    ev = diff_events(clean, ghosts, AT)
+    assert _kinds(ev) == ["ghosts"] and ev[0]["count"] == 783
+    assert (
+        diff_events(ghosts, dict(_snap(), ghosts=702), AT) == []
+    )  # count change alone is not a transition
+    ev = diff_events(ghosts, clean, AT)
+    assert _kinds(ev) == ["ghosts_clear"] and ev[0]["count"] == 783
+    assert _kinds(diff_events(None, ghosts, AT)) == ["start", "ghosts"]
+
+
 def test_events_carry_the_timestamp_given():
     ev = diff_events(None, _snap(), AT)
     assert ev == [{"at": AT, "kind": "start"}]

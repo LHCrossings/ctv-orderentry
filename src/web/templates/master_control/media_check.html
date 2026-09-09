@@ -54,7 +54,10 @@
         30:41) was truncated before it reached Etere and will hold its slot frozen or black for its whole stated length
         in every market that carries it. Copies whose size differs between the S3 master and a CIB are partial
         transfers. The fix is master control's: re-export or re-ingest the file and swap it into the schedule, then
-        Rescan. Past changes of the header dot are on <a href="/master-control/health-events">Health Events</a>.
+        Rescan. The same scan lists ghost spots: commercials still in the playlist after their contract placement was
+        removed (Etere's unscheduler does this; 4imprint aired double on 9/7 and 9/8/2026). Clean them with
+        <code>scripts/check_ghost_spots.py</code> guidance: back up, delete the future playlist rows, never the aired ones.
+        Past changes of the header dot are on <a href="/master-control/health-events">Health Events</a>.
     </p>
 </main>
 
@@ -73,11 +76,30 @@
             return;
         }
         status.textContent = 'checked ' + esc(d.checked_at || '').replace('T', ' ') + ' · ' + d.assets + ' placed assets · ' + d.from + ' to ' + d.to;
+        var g = d.ghosts || { count: 0, by_title: [], rows: [] };
+        var ghostHtml;
+        if (g.state === 'unknown') {
+            ghostHtml = '<div class="mc-err"><b>Ghost-spot check did not run.</b> ' + esc(g.error || '') + '</div>';
+        } else if (!g.count) {
+            ghostHtml = '<div class="mc-ok"><b>No ghost spots.</b> Every upcoming commercial in the playlist is attached to a contract.</div>';
+        } else {
+            var groups = (g.by_title || []).map(function (x) {
+                return '<tr><td>' + esc(x.title) + '</td><td>' + x.count + '</td><td>' + esc(x.markets) + '</td><td>' + (x.first ? esc(x.first.market + ' ' + x.first.date + ' ' + x.first.time) : '') + '</td></tr>';
+            }).join('');
+            var rows = (g.rows || []).map(function (r) {
+                return '<tr><td>' + esc(r.date) + '</td><td>' + esc(r.market) + '</td><td>' + esc(r.time) + '</td><td>' + esc(r.code) + '</td><td>' + esc(r.title) + '</td><td>' + r.id_tpalinse + '</td></tr>';
+            }).join('');
+            ghostHtml = '<div class="mc-finding"><h3>' + g.count + ' ghost spot' + (g.count > 1 ? 's' : '') + ' <span class="kind">no contract</span></h3>' +
+                '<div class="detail">Commercials in the playlist (TPALINSE) with no contract placement (trafficPalinse) behind them. They air unbilled and against separation. Usual cause: a spot unscheduled in Etere or Strategic Editor, which removes the contract side only.</div>' +
+                '<table><tr><th>Creative</th><th>Spots</th><th>Markets</th><th>First</th></tr>' + groups + '</table>' +
+                '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:.85rem">All rows' + (g.count > (g.rows || []).length ? ' (first ' + g.rows.length + ')' : '') + '</summary>' +
+                '<table><tr><th>Date</th><th>Mkt</th><th>Time</th><th>Code</th><th>Title</th><th>id_tpalinse</th></tr>' + rows + '</table></details></div>';
+        }
         if (!d.findings.length) {
-            body.innerHTML = '<div class="mc-ok"><b>All placed media files look complete.</b></div>';
+            body.innerHTML = '<div class="mc-ok"><b>All placed media files look complete.</b></div>' + ghostHtml;
             return;
         }
-        body.innerHTML = d.findings.map(function (f) {
+        body.innerHTML = ghostHtml + d.findings.map(function (f) {
             const airs = f.airings.map(function (a) {
                 return '<tr><td>' + esc(a.market) + '</td><td>' + esc(a.date) + '</td><td>' + esc(a.time) + '</td><td>' + esc(a.status) + '</td></tr>';
             }).join('');

@@ -7,8 +7,8 @@ answered. `diff_events` turns two successive status snapshots into the transitio
 them; `EventLog` appends them as JSON lines and reads them back for the Health Events page.
 
 A snapshot is {"unreachable": bool, "offair": [{stationId, stationName, titles, since}],
-"media": [{id, code, kind, first}]} — built by broadcast_health.py from the payload it
-already serves. Only transitions are logged, so a quiet day writes nothing.
+"media": [{id, code, kind, first}], "ghosts": <count>} — built by broadcast_health.py from
+the payload it already serves. Only transitions are logged, so a quiet day writes nothing.
 """
 
 from __future__ import annotations
@@ -29,7 +29,8 @@ def diff_events(prev: dict | None, cur: dict, at: str | None = None) -> list[dic
     """Transitions from `prev` to `cur`. `prev is None` = first snapshot after a server
     start: log the start itself plus whatever is already active, never a recovery.
 
-    Event kinds: start, feed_lost, feed_back, offair, onair, media, media_clear.
+    Event kinds: start, feed_lost, feed_back, offair, onair, media, media_clear,
+    ghosts, ghosts_clear (ghost-spot count went from 0 to n / back to 0).
     """
     at = at or now_iso()
     ev: list[dict] = []
@@ -75,6 +76,13 @@ def diff_events(prev: dict | None, cur: dict, at: str | None = None) -> list[dic
         for mid, m in p_med.items():
             if mid not in c_med:
                 add("media_clear", code=m.get("code"), id=mid)
+
+    p_ghosts = int((prev or {}).get("ghosts") or 0)
+    c_ghosts = int(cur.get("ghosts") or 0)
+    if c_ghosts and not p_ghosts:
+        add("ghosts", count=c_ghosts)
+    elif prev is not None and p_ghosts and not c_ghosts:
+        add("ghosts_clear", count=p_ghosts)
     return ev
 
 

@@ -248,3 +248,10 @@ Context: TOPNEWS090826A (22,396 B/frame, 58% of siblings) froze 5 markets 9/8; 0
 - [x] ruff clean, pytest unit, commit (explicit staging) + push + post_push
 
 Review: kind stays 'truncated' (detail says 'vs siblings'); best copy is compared (a half-copied CIB stays 'inconsistent'); events file data/broadcast_health_events.jsonl per host, bounded 5000→4000 lines; page /master-control/health-events + portal card; 765 unit tests green.
+
+## Ghost-spot check in Broadcast Health (2026-09-09, Lee "go ahead and add the ghost check")
+
+- [x] `business_logic/services/ghost_spots.py`: shared scan (COM rows, LIVELLO 0, no trafficPalinse; dated after today or today+Idle), summarize by creative, format_report; CLI `check_ghost_spots.py` now uses it
+- [x] nightly task runs it beside the media scan; status payload `media.ghosts` {count, titles}; header dot amber "N ghost spots", toast; media-check page lists by creative + all rows
+- [x] events: ghosts / ghosts_clear transitions, labels on Health Events
+- [x] tests: 5 ghost + 1 events; 771 unit green; live CLI + in-process rescan (27 ghosts = the 9/9 rows Lee kept)
