@@ -4,6 +4,32 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## Etere's Unscheduler Removes the CONTRACT Side Only — Every By-Hand Unschedule Must Be Followed by the Ghost Check (second appearance of the 7/14 lesson)
+
+**Session:** Maija, 4imprint spots "not attached to an order" in Exec Editor (2026-09-09)
+
+**Rule:** For the 9/3 WL 215721 hiatus I asked Lee to clear the 9/7+ spots with Etere's
+unscheduler and then edited the order. The utility deleted the trafficPalinse rows and left
+all 783 TPALINSE rows in the playlist; the scheduler then placed the new lines 12-15 beside
+them, so every 4imprint :30 slot aired TWICE from 9/7 (51 ghosts aired free before Maija saw
+one). My readback compared ordered vs placed on the CONTRACT side and was blind to playlist-only
+rows. The 7/14 lesson said "manual EE/SE ops cause ghosts too" and gave the watchdog the WL
+automation runs — the by-hand path had no watchdog, so the lesson was not applied to it.
+
+**How to apply:**
+1. After ANY unschedule that is not the automation's own (`_unschedule_spots`) — Etere's
+   unscheduler, SE deletes, a hiatus edit — run `scripts/check_ghost_spots.py` before the
+   scheduler refills, and again after. Zero future ghosts is the only acceptable output.
+2. A revision readback must count the PLAYLIST too: TPALINSE COM rows for the advertiser's
+   creatives in the window vs trafficPalinse rows — they must match.
+3. Cleanup = backup INSERTs to `logs/`, DELETE the Idle rows from the cut-over date on
+   (Lee 9/9: keep 9/9 and earlier, he had hand-set half the shows), verify linked count
+   unchanged and zero ghosts left, one transaction. `logs/4imprint-ghosts-restore-20260909.sql`.
+4. The ghost check belongs in the nightly Broadcast Health scan next to the media check, so a
+   ghost shows as amber on the dot instead of on master control's screen.
+
+---
+
 ## A Threshold Calibrated on "the Lowest Legit Value Seen" Was Calibrated on the Defect — Compare a Piece to Its SIBLINGS, Not to a Constant
 
 **Session:** Maija, V-TOPNEWS090826 froze in NYC/WDC/CMP/HOU/MMT 9/8; "did the dot turn yellow and we missed it?" (2026-09-09)
