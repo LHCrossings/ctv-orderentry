@@ -4,6 +4,43 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Playlist Row Already Says Which Block It Belongs To — Read the Booking, Never Infer Membership From the Clock or an Anchor
+
+**Session:** Maija's Fill & Finish test report (2026-09-10): spots after the ID, DAL blocks
+"disappearing", To the Point / Vietnamese Past & Present "programming not placed", Korean Drama over
+
+**Rule:** `window_from_day` decided which rows a Finish window owned from ORA and the F
+anchors — a paid row past `hi` with no anchor was "the next hour's", a PI past `hi` was
+"our fill". Both were guesses, and both were wrong on the same day: DAL 17:30 DART :15
+booked in the 17:30 block sat at 18:00:14 (nothing placed at 18:00) and was cut, so Finish
+seated the ID ahead of it; the PIs hand-booked into DAL's EMPTY 21:30 block sat behind the
+20:00 show's last piece, were read as this window's fill, and auto-refill stripped them
+(the block vanished from EE). Every row Etere books carries `trafficPalinse.offset` — the
+nominal frame-of-day of the break it was booked into, the block column EE shows. That IS
+the membership; the walk only needs to decide the UNBOOKED rows (Finish's own fill, NOOPs).
+Second guess in the same file: "> 5 min open ⇒ programming not placed". To the Point runs
+46:00 in a 60:00 slot; "placed" means every catalog piece letter is on the playlist
+(`missing_pieces`), not a remainder size — MC hand-filled 11 PIs into each of five markets.
+
+**How to apply:**
+1. When a row could belong to either of two neighbours, look for the column Etere already
+   wrote about it (booking offset, block id, contract line) before writing a positional
+   heuristic. If the UI shows it (EE's block column), the DB has it.
+2. A rule that keys on "past `hi`" or "after the anchor" must state which rows it is FOR;
+   here it is only for rows with no booking. Grep the old rule's tests: every fixture was
+   unbooked, so the tests could not see the defect.
+3. A precondition ("all programming placed") is a property of the data (catalog vs
+   playlist), not a threshold on a derived number. Keep the threshold only as a labelled
+   backstop (`UNPLACED_SECONDS` 20 min) and name the reason in the state text.
+4. Seat every planned row in plan order (`_seat` is a no-op when already there) and verify
+   the invariant "nothing this block owns sits behind its ID" after the write — the
+   screenshot symptom becomes a rollback, never a broadcast.
+5. Overrun + a language filler piece = swap the filler for the longest same-pool filler that
+   fits (`filler_swaps`), planned on Explode's length (POS_FIN−POS_INI+1) and written with
+   Daily Programming's replace recipe inside the same transaction.
+
+---
+
 ## Etere's Unscheduler Removes the CONTRACT Side Only — Every By-Hand Unschedule Must Be Followed by the Ghost Check (second appearance of the 7/14 lesson)
 
 **Session:** Maija, 4imprint spots "not attached to an order" in Exec Editor (2026-09-09)

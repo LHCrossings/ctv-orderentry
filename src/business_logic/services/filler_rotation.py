@@ -57,7 +57,8 @@ def pool_for_language(language) -> str | None:
 
 
 _ACTIVE_SQL = """
-    SELECT ID_FILMATI, COD_PROGRA, DURATA
+    SELECT ID_FILMATI, COD_PROGRA, DURATA,
+           CASE WHEN LIVE_ID IS NULL AND POS_FIN > POS_INI THEN POS_FIN - POS_INI + 1 ELSE DURATA END
     FROM FILMATI WITH(NOLOCK)
     WHERE NEWTYPE = 'PGM'
       AND ({patterns})
@@ -69,11 +70,18 @@ _ACTIVE_SQL = """
 
 
 def active_pool(cur, patterns=K_POOL) -> list[dict]:
-    """All currently-usable fillers matching `patterns`: [{fid, code, durata}]."""
+    """All currently-usable fillers matching `patterns`: [{fid, code, durata, frames}].
+    `frames` is the placed length Explode writes (POS_FIN - POS_INI + 1), `durata` the
+    catalog DURATA — Finish plans a filler swap on `frames`."""
     sql = _ACTIVE_SQL.format(patterns=" OR ".join("COD_PROGRA LIKE %s" for _ in patterns))
     cur.execute(sql, tuple(patterns))
     return [
-        {"fid": int(r[0]), "code": (r[1] or "").strip(), "durata": int(r[2] or 0)}
+        {
+            "fid": int(r[0]),
+            "code": (r[1] or "").strip(),
+            "durata": int(r[2] or 0),
+            "frames": int(r[3] or 0),
+        }
         for r in cur.fetchall()
     ]
 

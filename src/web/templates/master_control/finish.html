@@ -184,8 +184,8 @@ function statFor(p) {
         case 'finished': return p.triangles
             ? { cls: 'warn', text: `✓ filled · ${p.triangles} yellow triangle${p.triangles === 1 ? '' : 's'} · ID airs ${p.id_airs != null ? p.id_airs.toFixed(1) : '?'}s` }
             : { cls: 'done', text: `✓ finished · ID airs ${p.id_airs != null ? p.id_airs.toFixed(1) : '?'}s` };
-        case 'ready':    return { cls: 'warn', text: `${p.n_delete} remove · ${p.n_insert} add · ID would air ${p.id_airs != null ? p.id_airs.toFixed(1) : '?'}s` };
-        case 'unplaced': return { cls: 'bad',  text: `programming not placed · ${Math.round((p.remainder || 0) / 60)} min open` };
+        case 'ready':    return { cls: 'warn', text: `${p.n_swap ? p.n_swap + ' filler swap · ' : ''}${p.n_delete} remove · ${p.n_insert} add · ID would air ${p.id_airs != null ? p.id_airs.toFixed(1) : '?'}s` };
+        case 'unplaced': return { cls: 'bad',  text: `programming not placed · ${p.error || (Math.round((p.remainder || 0) / 60) + ' min open')}` };
         case 'overrun': {
             const over = mmss(-(p.hard_remainder != null ? p.hard_remainder : (p.remainder || 0))).replace(/\.\d+$/, '');
             return p.strip_only
@@ -286,8 +286,8 @@ function renderPlan(p, plan) {
         html += `<tr class="del"><td class="t">${esc(e.time)}</td><td class="d">${mmss(e.dur)}</td><td class="k">${esc(e.type)}</td><td class="n">remove · ${esc(e.desc)}</td></tr>`;
     });
     (plan.timeline || []).forEach(it => {
-        const cls = it.tag === 'pgm' ? 'pgm' : it.tag === 'new' ? 'new' : it.tag === 'move' ? 'move' : it.tag === 'keep' ? 'keep' : 'paid';
-        const label = it.tag === 'new' ? 'add · ' : it.tag === 'move' ? 'moved here · ' : '';
+        const cls = it.tag === 'pgm' ? 'pgm' : it.tag === 'new' ? 'new' : (it.tag === 'move' || it.tag === 'swap') ? 'move' : it.tag === 'keep' ? 'keep' : 'paid';
+        const label = it.tag === 'new' ? 'add · ' : it.tag === 'move' ? 'moved here · ' : it.tag === 'swap' ? 'filler swapped in · ' : '';
         html += `<tr class="${cls}"><td class="t">${esc(it.time)}</td><td class="d">${mmss(it.dur)}</td><td class="k">${esc(it.type)}</td><td class="n">${label}${esc(it.desc)}</td></tr>`;
         if (it.break_end) html += `<tr class="brk"><td colspan="4">break ${it.break} · ${mmss(it.break_len)}</td></tr>`;
     });
@@ -297,7 +297,7 @@ function renderPlan(p, plan) {
         <span>now ends <strong>${esc(plan.actual_end_hms)}</strong> (${over >= 0 ? '+' : ''}${over.toFixed(1)}s past the hour)</span>
         <span>after Finish ends <strong>${esc(plan.planned_end_hms)}</strong></span>
         ${plan.id_airs != null ? `<span>Station ID airs <strong>${plan.id_airs.toFixed(1)}s</strong> before the F event</span>` : ''}
-        <span>${plan.n_delete} remove · ${plan.n_move || 0} move · ${plan.n_insert} add</span>
+        <span>${plan.n_swap ? plan.n_swap + ' filler swap · ' : ''}${plan.n_delete} remove · ${plan.n_move || 0} move · ${plan.n_insert} add</span>
     </div>`;
     return html;
 }

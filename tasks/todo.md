@@ -264,3 +264,27 @@ Review: kind stays 'truncated' (detail says 'vs siblings'); best copy is compare
 - [x] unit test for the window helper; ruff; commit + push + post_push
 
 Review: helper `_bb_report_window` (module-level, tested 7 ways); route parses ISO dates → 400 on bad/missing/reversed; live in-process: Aug 2026 month unchanged ($213,827.86 gross), Aug 12–20 range $67,486.26 gross incl. WL broker fee line; union 7/27–8/31 ≥ month; 778 unit green. Template only (no static cache-bust needed).
+
+## Fill & Finish — Maija's 9/10 feedback (2026-09-10, Lee "really good feedback")
+Diagnosis (live DB 9/10): (1)(2) spots after the ID = window membership by clock/anchor;
+a spot's block is `trafficPalinse.offset` (EE's block column) and Finish ignored it —
+DAL 9/10 17:30 DART15M04 (block 17:30) at 18:00:14 was cut as "next hour's" with no F
+anchor at 18:00. (3) DAL 21:30 block emptied = next-block PIs walked into the 20:00–21:30
+window as "our fill" and stripped by auto-refill. (4)(5) To the Point / Viet Past&Present =
+short shows (9–11 min open) tripped `UNPLACED_SECONDS=300` → "programming not placed".
+(6) Korean Drama over = K-FILLER too long; no swap rule.
+- [x] `load_day` carries `tp.offset` + COD_PROGRA; `window_from_day` = block membership
+      (owned/foreign), unbooked rows keep the XORDER walk; fallback includes owned rows
+- [x] apply: seat every planned row in plan order (owned spilled spots ahead of the ID);
+      restore SQL backs up ORA/XORDER of every planned row; `_seat` no-op when already seated
+- [x] unplaced = no pieces OR catalog letters missing (non-filler bases) OR > 20 min open
+- [x] filler swap: overrun + filler piece → longest same-pool filler that fits; swap in-txn
+      (mimic DP replace_piece + explode timecodes); page tag 'swap'
+- [x] unit tests (membership, catalog, swap pick); ruff; dry runs on DAL 17:30 9/10,
+      SEA 14:00 9/10, forced-overrun Korean hour; commit + push + post_push; lessons
+
+Review: 786 unit green (9 new). Live oracles (grid mirrored from K: for WSL): SFO 9/10 22:00,
+DAL 9/10 25:30 + 28:00 read "23/9/24 remove" before (next block's PIs) → "finished, 0" after;
+SEA 9/11 09:00 Korean Drama dry run: K-FILLER25-015 (12:30) → -039 (10:10), 5 spilled paid
+spots seated ahead of the ID, end == plan, rolled back; SEA 9/11 17:00 (10.5 min open, was
+"unplaced") dry run lands 12 PIs + ID at 17:59:54. Nothing written to production.

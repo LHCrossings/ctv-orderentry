@@ -74,12 +74,13 @@ def test_pool_patterns_cover_every_language_target():
 
 
 def test_active_pool_default_is_k_pool():
-    cur = StubCursor([(1, "K-FILLER25-001 ", 500)])
+    cur = StubCursor([(1, "K-FILLER25-001 ", 500, 498)])
     pool = fr.active_pool(cur)
     sql, params = cur.calls[0]
     assert params == ("K-FILLER[0-9][0-9]-%",)
     assert sql.count("COD_PROGRA LIKE %s") == 1
-    assert pool == [{"fid": 1, "code": "K-FILLER25-001", "durata": 500}]
+    # frames = the placed length Explode writes (POS_FIN - POS_INI + 1); Finish swaps on it
+    assert pool == [{"fid": 1, "code": "K-FILLER25-001", "durata": 500, "frames": 498}]
 
 
 def test_active_pool_multi_pattern_ors_one_like_per_pattern():
@@ -103,7 +104,8 @@ def test_active_pool_keeps_usability_filters():
 
 
 def _pool_rows(*durs):
-    return [(i + 1, f"UNIAE{1600 + i}", d) for i, d in enumerate(durs)]
+    # (fid, code, DURATA, placed frames) — the 4th column is what Finish swaps on
+    return [(i + 1, f"UNIAE{1600 + i}", d, d) for i, d in enumerate(durs)]
 
 
 def test_draw_until_forwards_patterns():

@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 
 from browser_automation.etere_direct_client import connect
 
+from .filler_rotation import FILLER_CODE_PREFIXES, POOL_PATTERNS, active_pool
+
 FPS = 29.97
 ID_ASSET = {4: 67911, 7: 67909, 10: 83129}  # OTA markets; everyone else generic
 ID_GENERIC = 67910
@@ -55,6 +57,11 @@ class Ev:
     filmati: int
     desc: str
     contract_line: int | None  # trafficPalinse.ID_ContrattiRighe (-1 = freestanding)
+    # trafficPalinse.offset: frame-of-day of the traffic break the row is BOOKED into —
+    # the block column Executive Editor shows. None = unbooked (Finish's own fill, NOOPs,
+    # hand-dropped rows). Decides which window owns the row (Maija 9/10).
+    blk: int | None = None
+    code: str = ""  # TPALINSE.COD_PROGRA
 
     @property
     def end(self) -> float:
@@ -63,6 +70,12 @@ class Ev:
     @property
     def is_program(self) -> bool:
         return self.newtype == "PGM"
+
+    @property
+    def is_filler(self) -> bool:
+        """A language filler program piece (K-FILLER, CHINESEFILLER, UNIAE/UNIAM) — the one
+        piece of a show Finish may swap for a shorter one when program + paid overrun."""
+        return self.is_program and self.code.upper().startswith(FILLER_CODE_PREFIXES)
 
     @property
     def campaign(self) -> str | None:
@@ -110,7 +123,8 @@ def load_day(cur, market: int, date: str) -> list[tuple]:
     cur.execute(
         """
         SELECT t.ID_TPALINSE, t.ORA, t.DURATION, t.NEWTYPE, t.EVENT_TYPE, t.ID_FILMATI,
-               ISNULL(f.DESCRIZIO,''), tp.ID_ContrattiRighe, t.XORDER
+               ISNULL(f.DESCRIZIO,''), tp.ID_ContrattiRighe, t.XORDER, tp.offset,
+               RTRIM(ISNULL(t.COD_PROGRA,''))
         FROM TPALINSE t
         LEFT JOIN FILMATI f ON f.ID_FILMATI = t.ID_FILMATI
         LEFT JOIN trafficPalinse tp ON tp.id_tpalinse = t.ID_TPALINSE
@@ -138,58 +152,81 @@ def _ev(r) -> Ev:
         r[5],
         r[6],
         r[7],
+        r[9] if len(r) > 9 else None,
+        str(r[10]).strip() if len(r) > 10 and r[10] is not None else "",
     )
+
+
+def _booked_in(r, lo_f: int, hi_f: int) -> bool | None:
+    """Is the row booked into a traffic break inside [lo, hi)? trafficPalinse.offset is
+    the nominal frame-of-day of the segment the scheduler (or a hand placement) booked
+    the row under — Executive Editor's block column. True/False for a booked row, None
+    for an unbooked one (Finish's own fill, NOOPs, hand-dropped IDs)."""
+    off = r[9] if len(r) > 9 else None
+    if off is None:
+        return None
+    return lo_f - FPS <= off < hi_f - FPS
 
 
 def window_from_day(rows: list[tuple], lo: float, hi: float) -> list[Ev]:
-    """Events of one window, walked in XORDER between the two type-F anchors.
+    """Events of one window: the rows BOOKED into its traffic blocks, plus the unbooked
+    rows (Finish's own fill, NOOPs) that sit with them in playlist order.
 
-    An ORA cut (`ORA < hour_end`) misses rows that SPILL past the top of the hour
-    (SEA 8/28: PI-488-030 at 09:00:01 ahead of the 09:00 F event). The window is
-    everything from this window's F event up to (not including) the next F event in
-    playlist order; the ORA cut is only the fallback when no F anchor exists.
+    The block a row is booked into (trafficPalinse.offset, EE's block column) is the
+    truth about which show it belongs to — never its clock position, which drifts as
+    the hour packs (Maija 9/10: DAL 17:30 DART :15 booked in the 17:30 block sat at
+    18:00:14 and was cut as "the next hour's", so Finish seated the ID ahead of it;
+    the PIs booked in DAL's empty 21:30 block sat after the 20:00 show's last piece
+    and were stripped as "this window's fill", emptying the block in EE). Anchors and
+    ORA only decide the UNBOOKED rows:
+      * walk XORDER from this window's F anchor; stop at the next F, at a program piece
+        booked past `hi`, or at unbooked program/NOOP content past `hi`
+      * a booked row of another window is skipped — and once one has been seen, unbooked
+        fill past `hi` behind it is that window's hand fill, not ours
+      * an unbooked paid row past `hi` with no F anchor at `hi` is the next hour's (old
+        rule, kept for rows with no trafficPalinse — a ghost spot)
+    Without an F anchor at `lo` the fallback is the ORA cut for unbooked rows plus every
+    row booked inside the window wherever it sits.
     """
     lo_f, hi_f = int(lo * FPS), int(hi * FPS)
-    start = next(
-        (
-            i
-            for i, r in enumerate(rows)
-            if str(r[4] or "").strip() == "F" and abs(r[1] - lo_f) <= FPS
-        ),
-        None,
-    )
-    # Is there an F anchor at `hi`? Then playlist order is the truth: everything
-    # ahead of that anchor in XORDER airs before the next show and is this window's,
-    # paid spots that spill past the top of the hour included (NYC 9/4 08:00: a
-    # Redfin :15 intended for the 08:59 break sat at 09:00:12 behind a 4imprint :30;
-    # treating it as the next hour's made Finish seat the ID ahead of it, and Break
-    # Optimization then rightly moved the ID last and the packed end changed).
-    anchor_at_hi = any(str(r[4] or "").strip() == "F" and abs(r[1] - hi_f) <= FPS for r in rows)
-    if start is not None:
-        end = len(rows)
-        for k in range(start + 1, len(rows)):
-            r = rows[k]
-            is_f = str(r[4] or "").strip() == "F"
-            # a guide window may end before the next F anchor (12:00-13:00 inside a
-            # 12:00 F ... 14:00 F span): program/NOOP content at or past `hi` is the
-            # next window; spilled spots (COM/PER past `hi`) still belong to this one
-            # When the next show is not placed yet there is no F anchor at `hi`, and
-            # the walk would swallow the next hour's scheduler spots (CVC 9/2 17:00 read
-            # "runs 25:55 past its slot", Lee 9/1). Assume the next show starts at `hi`:
-            # a PAID spot at or past `hi` is the next hour's; only our own fill
-            # (PI/PSA/ID) may spill past the top and still belong to this window.
-            # With an F anchor at `hi` that assumption is unnecessary and wrong.
-            past_hi = r[1] >= hi_f - FPS
-            next_pgm = past_hi and str(r[3]).strip() in ("PGM", "NOOP")
-            next_paid = (
-                past_hi and not anchor_at_hi and not _ev(r).is_fill and not _ev(r).is_program
-            )
-            if is_f or next_pgm or next_paid:
-                end = k
-                break
-        sel = rows[start:end]
-    else:
-        sel = sorted((r for r in rows if lo_f <= r[1] < hi_f), key=lambda r: (r[1], r[8]))
+
+    def _is_f(r) -> bool:
+        return str(r[4] or "").strip() == "F"
+
+    start = next((i for i, r in enumerate(rows) if _is_f(r) and abs(r[1] - lo_f) <= FPS), None)
+    anchor_at_hi = any(_is_f(r) and abs(r[1] - hi_f) <= FPS for r in rows)
+    if start is None:
+        sel = [
+            r
+            for r in rows
+            if _booked_in(r, lo_f, hi_f) is True
+            or (_booked_in(r, lo_f, hi_f) is None and lo_f <= r[1] < hi_f)
+        ]
+        sel.sort(key=lambda r: (r[1], r[8]))
+        return [_ev(r) for r in sel]
+    sel, seen_foreign = [rows[start]], False
+    for r in rows[start + 1 :]:
+        if _is_f(r):
+            break
+        own = _booked_in(r, lo_f, hi_f)
+        kind = str(r[3]).strip()
+        if own is False:
+            if kind == "PGM" and r[9] >= hi_f - FPS:
+                break  # the next show's piece: nothing behind it is ours
+            seen_foreign = True
+            continue
+        if own is True:
+            sel.append(r)
+            continue
+        ev = _ev(r)
+        past_hi = r[1] >= hi_f - FPS
+        if past_hi and kind in ("PGM", "NOOP"):
+            break
+        if past_hi and not anchor_at_hi and not ev.is_fill and not ev.is_program:
+            break  # unbooked paid row past the top with no anchor: the next hour's
+        if past_hi and seen_foreign and ev.is_fill:
+            continue  # hand fill behind the next block's booked rows is that block's
+        sel.append(r)
     return [_ev(r) for r in sel]
 
 
@@ -291,6 +328,84 @@ def packed_remainder(evs: list[Ev], hour_end: float) -> float:
     if not pieces:
         return hour_end
     return hour_end - pieces[0].ora - sum(e.dur for e in evs if e.newtype not in ("ID", "NOOP"))
+
+
+def missing_pieces(cur, evs: list[Ev]) -> dict[str, list[str]]:
+    """Catalog pieces of each show in the window that are NOT placed: {base: [letters]}.
+
+    A show's pieces share a base code and differ by a trailing letter (THEPOINT090926A..D);
+    the FILMATI catalog says how many there are. Fillers and bumpers carry no letter and
+    are skipped. THIS is what "programming placed" means — not the size of the remainder:
+    To the Point runs 46:00 in a 60:00 slot and Vietnamese Past & Present 18:00 in 30:00,
+    and both read "programming not placed" on a 5-minute remainder rule (Maija 9/10)."""
+    present: dict[str, set[str]] = {}
+    for e in evs:
+        if not e.is_program or e.is_filler or "BUMP" in e.desc.upper():
+            continue
+        c = e.code.strip()
+        if not (c[-1:].isalpha() and c[-1:].isupper()):
+            continue
+        present.setdefault(c[:-1], set()).add(c[-1])
+    out: dict[str, list[str]] = {}
+    for base, letters in present.items():
+        pat = base.replace("[", "[[]").replace("%", "[%]").replace("_", "[_]") + "_"
+        cur.execute(
+            """SELECT RTRIM(COD_PROGRA) FROM FILMATI WITH(NOLOCK)
+               WHERE NEWTYPE='PGM' AND COD_PROGRA LIKE %s
+                 AND COD_PROGRA NOT LIKE '%%DO NOT USE%%' AND DESCRIZIO NOT LIKE '%%DO NOT USE%%'
+                 AND COD_PROGRA NOT LIKE '%%HIATUS%%'""",
+            (pat,),
+        )
+        catalog = {
+            r[0][-1]
+            for r in cur.fetchall()
+            if len(r[0]) == len(base) + 1 and r[0][-1].isalpha() and r[0][-1].isupper()
+        }
+        miss = sorted(catalog - letters)
+        if miss:
+            out[base] = miss
+    return out
+
+
+# filler code prefix -> filler_rotation pool key (same language, same shows)
+FILLER_POOL = {
+    "K-FILLER": "korean",
+    "CHINESEFILLER": "chinese",
+    "UNIAM": "chinese",
+    "UNIAE": "filipino",
+}
+
+
+def filler_swaps(cur, evs: list[Ev], hour_end: float) -> list[tuple[Ev, dict]]:
+    """Overrun cure (Maija 9/10, Korean Drama): program + paid spill past the slot and the
+    window holds a language filler piece → swap it for the LONGEST filler of the same pool
+    that lets the ID land (program + paid end ≥ ID_MIN_AIR before the top), last filler
+    first, never a code already in the window. Returns (piece, {fid, code, frames}) pairs;
+    plan_window plans with the new duration and apply_window re-points the row."""
+    hard = packed_remainder([e for e in evs if not e.is_fill], hour_end)
+    if hard >= ID_MIN_AIR:
+        return []
+    present = {e.code.upper() for e in evs if e.is_program}
+    swaps: list[tuple[Ev, dict]] = []
+    for f in reversed([e for e in evs if e.is_filler]):
+        key = next((k for p, k in FILLER_POOL.items() if f.code.upper().startswith(p)), None)
+        if key is None:
+            continue
+        budget = f.dur + hard - ID_MIN_AIR  # the most the replacement may run
+        fits = [
+            c
+            for c in active_pool(cur, POOL_PATTERNS[key])
+            if c["frames"] and c["frames"] / FPS <= budget and c["code"].upper() not in present
+        ]
+        if not fits:
+            continue
+        best = max(fits, key=lambda c: c["frames"])
+        swaps.append((f, best))
+        present.add(best["code"].upper())
+        hard += f.dur - best["frames"] / FPS
+        if hard >= ID_MIN_AIR:
+            break
+    return swaps
 
 
 def plan(evs: list[Ev], inv: list[Filler], hour_end: float, market: int) -> tuple[list, list[str]]:

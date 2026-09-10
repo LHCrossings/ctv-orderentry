@@ -33,9 +33,11 @@ from src.business_logic.services.finish_plan import (
     Ev,
     Filler,
     accepted_id_assets,
+    filler_swaps,
     hms,
     load_day,
     load_inventory,
+    missing_pieces,
     mmss,
     packed_remainder,
     plan,
@@ -43,7 +45,12 @@ from src.business_logic.services.finish_plan import (
 )
 
 OVERRUN_SECONDS = 30.0  # content past the slot end by more than this = programming problem
-UNPLACED_SECONDS = 300.0  # > 5 min of true remainder = programming still missing, not a fill job
+# "Programming placed" is decided by the piece catalog (finish_plan.missing_pieces); this is
+# only a backstop for a window a full show still leaves mostly empty (a Korean drama hour
+# with no K-FILLER placed reads ~22 min open). Maija 9/10: To the Point (46:00 in 60:00) and
+# Vietnamese Past & Present (18:00 in 30:00) are complete shows that need 9-11 min of fill —
+# the old 5-minute rule called both "not placed" and MC filled them by hand.
+UNPLACED_SECONDS = 1200.0
 
 RESTORE_DIR = os.environ.get("CTV_FINISH_RESTORE_DIR", os.path.join("logs", "finish-restore"))
 
@@ -129,11 +136,17 @@ def _seat(cur, market: int, date: str, row_id: int, prev_id: int) -> int:
     later row of the day, live or soft-deleted, moves up by 1000 first (order kept)."""
     cur.execute("SELECT XORDER FROM TPALINSE WHERE ID_TPALINSE=%s", (prev_id,))
     xo_prev = cur.fetchone()[0]
+    cur.execute("SELECT XORDER FROM TPALINSE WHERE ID_TPALINSE=%s", (row_id,))
+    xo_row = cur.fetchone()[0]
     cur.execute(
         "SELECT MIN(XORDER) FROM TPALINSE WHERE COD_USER=%s AND DATA=%s AND LIVELLO=0 AND XORDER>%s AND ID_TPALINSE<>%s",
         (market, date, xo_prev, row_id),
     )
     xo_next = cur.fetchone()[0]
+    # Already the row right behind prev_id (every planned row is seated in plan order,
+    # most are in place already): nothing to write.
+    if xo_prev < xo_row and (xo_next is None or xo_row < xo_next):
+        return xo_row
     if xo_next is not None and xo_next - xo_prev < 2:
         cur.execute(
             "UPDATE TPALINSE SET XORDER = XORDER + 1000 WHERE COD_USER=%s AND DATA=%s AND XORDER>%s AND ID_TPALINSE<>%s",
@@ -193,6 +206,27 @@ def plan_window(
             "n_delete": 0,
             "n_insert": 0,
         }
+    # Overrun with a language filler in the window (Korean Drama, Maija 9/10): swap the
+    # filler for the longest same-pool filler that lets the ID land, and plan with the
+    # new length. `evs_all` keeps the live rows for "now ends"; the planned lists carry
+    # the replacement (same TPALINSE row, new asset).
+    swaps = filler_swaps(cur, evs, hi)
+    swapped: dict[int, Ev] = {}
+    for old, new in swaps:
+        swapped[id(old)] = Ev(
+            old.id,
+            old.ora,
+            new["frames"] / FPS,
+            old.newtype,
+            old.event_type,
+            new["fid"],
+            new["code"],
+            old.contract_line,
+            old.blk,
+            new["code"],
+        )
+    evs = [swapped.get(id(e), e) for e in evs]
+    evs_planned = [swapped.get(id(e), e) for e in evs_all]
     # Is the window's end a fixed (F) event? If the next show simply FOLLOWS (a
     # half-hour boundary with no F anchor), there is nothing to finish here: the
     # hour's ID belongs to the window that ends at the F event.
@@ -215,6 +249,20 @@ def plan_window(
         )
     elif refill:
         notes.insert(0, f"refill: {len(strip)} existing PI/PSA/ID rows removed, fill re-planned")
+    for old, new in swaps:
+        notes.insert(
+            1 if refill else 0,
+            f"filler swap: {old.code} ({mmss(old.dur)}) → {new['code']} "
+            f"({mmss(new['frames'] / FPS)}) so program + paid fit the slot",
+        )
+    # Rows booked in this window's blocks that sit at or past the top of the hour — behind
+    # the ID, or behind the next block's spots — come back ahead of the ID (Maija 9/10).
+    late = [e for e in evs if not e.is_program and not e.is_fill and e.ora >= hi - 1.0]
+    if late:
+        notes.append(
+            f"{len(late)} spot(s) booked in this block sit past {hms(hi)} — seated back ahead of the ID: "
+            + ", ".join(e.desc[:20] for e in late)
+        )
     if assume_fixed:
         notes.append(f"next show not placed yet — assuming it starts at {hms(hi)}")
     # An existing Station ID of an accepted asset is KEPT, not deleted and re-added:
@@ -265,13 +313,14 @@ def plan_window(
     )
     inserts = [(b, x) for b in breaks for x in b.items if isinstance(x, Filler)]
     cannot = any(n.startswith("⚠") for n in notes)
-    id_only = not deletes and not inserts and not moves  # nothing to write
+    id_only = not deletes and not inserts and not moves and not swaps  # nothing to write
     finished = id_only and not cannot
 
     timeline, edits = [], []
+    swapped_ids = {e.id for e in swapped.values()}
     t = pieces[0].ora
     for i, p in enumerate(pieces):
-        timeline.append(_item_dict(p, t, "pgm"))
+        timeline.append(_item_dict(p, t, "swap" if p.id in swapped_ids else "pgm"))
         t += p.dur
         b = next((x for x in breaks if x.after_piece_idx == i), None)
         if not b:
@@ -293,12 +342,20 @@ def plan_window(
         edits.insert(0, {"op": "delete", **_item_dict(e, e.ora, "del")})
     for e, tgt in moves:
         edits.append({"op": "move", **_item_dict(e, e.ora, "move"), "break": tgt})
+    for old, new in swaps:
+        ne = swapped[id(old)]
+        edits.append(
+            {"op": "swap", **_item_dict(ne, old.ora, "swap"), "old": old.code, "old_dur": old.dur}
+        )
     actual_end = max(e.end for e in evs_all)
-    rem_s = packed_remainder(evs_all, hi)
+    rem_s = packed_remainder(evs_planned, hi)
     # Overrun is judged on what Finish can never remove — program pieces and paid
     # spots. Existing PI/PSA rows are ours to strip (auto-refill above), so a negative
     # remainder that they cause is an overage to fix, not a programming problem.
-    hard_rem = packed_remainder([e for e in evs_all if not e.is_fill], hi)
+    hard_rem = packed_remainder([e for e in evs_planned if not e.is_fill], hi)
+    # The precondition "all programming placed" is read from the piece catalog: every
+    # letter the library holds for each show in the window is on the playlist.
+    missing = missing_pieces(cur, evs)
     # Program + paid alone spill past the top: Finish still strips every PI/PSA/ID so
     # the paid spots get the room (Lee 9/4: "remove all PI and PSA spots to allow for
     # programs and commercials to be aired"), writes that, and reports what is still
@@ -316,7 +373,7 @@ def plan_window(
         state = (
             "na"  # a single fixed event with no breaks (overnight live feed) — nothing to finish
         )
-    elif rem_s > UNPLACED_SECONDS:
+    elif missing or rem_s > UNPLACED_SECONDS:
         state = "unplaced"  # the precondition (all programming placed) is not met
     elif hard_rem < 0:
         state = "overrun"  # program + paid spill even with zero fill — a programming problem
@@ -332,7 +389,13 @@ def plan_window(
         (float(n.split("airs ")[1].split("s")[0]) for n in notes if "ID" in n and "airs" in n), None
     )
     error = None
-    if state == "overrun" and not strip_only:
+    if state == "unplaced":
+        error = (
+            "pieces not placed: " + "; ".join(f"{b} {', '.join(m)}" for b, m in missing.items())
+            if missing
+            else f"{mmss(rem_s).split('.')[0]} open — more than fill can cover, check programming"
+        )
+    elif state == "overrun" and not strip_only:
         error = (
             f"overrun: program and paid spots run {mmss(-hard_rem)} past {hms(hi)} "
             "and no PI/PSA is left to remove"
@@ -360,11 +423,14 @@ def plan_window(
         "n_delete": len(deletes),
         "n_move": len(moves),
         "n_insert": len(inserts),
+        "n_swap": len(swaps),
+        "missing_pieces": missing,
         "_breaks": breaks,
         "_evs": evs,
         "_deletes": deletes,
         "_moves": moves,
         "_inserts": inserts,
+        "_swaps": [(old, swapped[id(old)]) for old, _ in swaps],
         "_id_only": id_only,
     }
 
@@ -461,6 +527,7 @@ def list_programs(cur, market: int, date: str) -> list[dict]:
                 "finished": bool(r.get("finished")),
                 "n_delete": r.get("n_delete", 0),
                 "n_insert": r.get("n_insert", 0),
+                "n_swap": r.get("n_swap", 0),
                 "overrun": r.get("overrun"),
                 "id_airs": r.get("id_airs"),
                 "error": r.get("error"),
@@ -535,14 +602,17 @@ def apply_window(
             "message": "already finished",
         }
 
-    evs, breaks, deletes, inserts, moves = (
+    evs, breaks, deletes, inserts, moves, swaps = (
         r["_evs"],
         r["_breaks"],
         r["_deletes"],
         r["_inserts"],
         r["_moves"],
+        r["_swaps"],
     )
     pieces = [e for e in evs if e.is_program]
+    # every existing row the plan seats and re-times, in plan order
+    planned_rows = list(pieces) + [x for b in breaks for x in b.items if isinstance(x, Ev)]
     # id(piece | item) -> planned start, chained from the F anchor. Chained in whole
     # FRAMES (the SP's own arithmetic): a float chain rounded per row can land a piece
     # one frame late, and sch_rebuildStartTimeSchedule fills even a 1-frame hole with
@@ -579,11 +649,24 @@ def apply_window(
                 vals = ",".join("NULL" if v is None else f"'{v}'" for v in row)
                 fh.write(f"INSERT INTO trafficPalinse ({','.join(cols)}) VALUES ({vals});\n")
             fh.write(f"UPDATE TPALINSE SET LIVELLO=0 WHERE ID_TPALINSE={e.id};\n")
-        for e, _tgt in moves:
+        for e in planned_rows:  # every planned row is re-seated and re-timed
             cur.execute("SELECT ORA, XORDER FROM TPALINSE WHERE ID_TPALINSE=%s", (e.id,))
             ora0, xo0 = cur.fetchone()
             fh.write(
                 f"UPDATE TPALINSE SET ORA={ora0}, ORA_P={ora0}, XORDER={xo0} WHERE ID_TPALINSE={e.id};\n"
+            )
+        for old, _new in swaps:
+            cur.execute(
+                "SELECT ID_FILMATI, DURATION, TIMECODE_I, TIMECODE_O, RTRIM(COD_PROGRA), RTRIM(TITLE),"
+                " RTRIM(SUPPORTO), RTRIM(EVENT_TYPE) FROM TPALINSE WHERE ID_TPALINSE=%s",
+                (old.id,),
+            )
+            fid0, dur0, ti0, to0, cod0, tit0, sup0, ev0 = cur.fetchone()
+            fh.write(
+                f"UPDATE TPALINSE SET ID_FILMATI={fid0}, DURATION={dur0}, TIMECODE_I={ti0}, TIMECODE_O={to0},"
+                f" COD_PROGRA='{cod0}', TITLE='{tit0}', SUPPORTO='{sup0}', EVENT_TYPE='{ev0}'"
+                f" WHERE ID_TPALINSE={old.id};\n"
+                f"-- then EXEC sch_UpdateSupportAndProperties {old.id},{fid0},1 and re-sync SCHEDULE_CHECKSUM\n"
             )
         fh.write("-- inserted rows are appended after the run; undo them with LIVELLO=666\n")
         fh.write("-- then EXEC sch_rebuildStartTimeSchedule for the day to re-time the hour\n")
@@ -598,6 +681,10 @@ def apply_window(
         log(
             f"  INS  {hms(start_of[id(x)])} {x.kind:4} {x.desc[:40]}  (filmati {x.filmati}) → break {b.after_piece_idx}"
         )
+    for old, new in swaps:
+        log(
+            f"  SWAP {hms(old.ora)} PGM  {old.code} ({mmss(old.dur)}) → {new.code} ({mmss(new.dur)})  (id {old.id})"
+        )
 
     try:
         for e in deletes:
@@ -608,23 +695,68 @@ def apply_window(
                 raise RuntimeError(f"delete of {e.id} touched {cur.rowcount} rows")
             cur.execute("DELETE FROM trafficPalinse WHERE id_tpalinse=%s", (e.id,))
 
-        new_ids: list[int] = []
         binding: dict[int, str] = {}
-        moved = {id(e) for e, _ in moves}
+        # Filler swap: the row keeps its identity (id, XORDER, block booking), only the
+        # asset changes — Daily Programming's replace_piece recipe, plus Explode's in/out
+        # + DURATION so the swapped row carries no yellow triangle.
+        swapped_ids: list[int] = []
+        for old, new in swaps:
+            cur.execute(
+                "SELECT POS_INI, POS_FIN, LIVE_ID, DURATA FROM FILMATI WHERE ID_FILMATI=%s",
+                (new.filmati,),
+            )
+            frow = cur.fetchone()
+            if not frow:
+                raise RuntimeError(f"replacement filler {new.filmati} is not in FILMATI")
+            pos_ini, pos_fin, live, durata = frow
+            if live is not None:
+                raise RuntimeError(f"replacement filler {new.code} is a live event")
+            if pos_fin and pos_ini is not None and pos_fin > pos_ini:
+                ti, to, frames = int(pos_ini), int(pos_fin), int(pos_fin - pos_ini + 1)
+            else:
+                frames = int(durata or 0)
+                ti, to = 0, frames - 1
+            if abs(frames / FPS - new.dur) > 0.5:
+                raise RuntimeError(f"filler {new.code} changed length since the plan was made")
+            cur.execute(
+                "UPDATE TPALINSE SET ID_FILMATI=%s, DURATION=%s, TIMECODE_I=%s, TIMECODE_O=%s"
+                " WHERE ID_TPALINSE=%s AND LIVELLO=0 AND NEWTYPE='PGM' AND ID_FILMATI=%s",
+                (new.filmati, frames, ti, to, old.id, old.filmati),
+            )
+            if cur.rowcount != 1:
+                raise RuntimeError(f"swap of {old.id} touched {cur.rowcount} rows")
+            cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (old.id, new.filmati))
+            # the SP resets EVENT_TYPE (and may re-derive the length): re-assert both
+            cur.execute(
+                "UPDATE TPALINSE SET DURATION=%s, TIMECODE_I=%s, TIMECODE_O=%s, EVENT_TYPE=%s"
+                " WHERE ID_TPALINSE=%s",
+                (frames, ti, to, (old.event_type or "T"), old.id),
+            )
+            binding[old.id] = _supporto(cur, new.filmati)
+            swapped_ids.append(old.id)
+
+        new_ids: list[int] = []
         # The grid's COMS segments sit at NOMINAL offsets (NYC evening: :14, :25:30,
         # :29) while a real break lands wherever the piece ends (19:07:23) — a ±120s
         # search failed on most blocks (Maija 9/1). The segment only decides which
         # traffic break a filler row is booked under (playout = ORA/XORDER), so the
         # nearest segment anywhere in the show's window is correct.
         coms = _slots(cur, market, date, lo_f, hi_f, "COMS")
-        # Walk the plan in playlist order so every row's predecessor is already seated:
-        # a moved row may follow a PSA that is inserted in this same pass (SFO 9/2: the
-        # FCC ID moves to the bottom, behind the new PSAs).
-        for b in breaks:
-            prev_id = pieces[b.after_piece_idx].id
-            for x in b.items:
+        # Walk the plan in playlist order and seat EVERY row right behind its planned
+        # predecessor (`_seat` is a no-op for a row already there). Planned order IS the
+        # playlist order: a spot booked in this block that sat behind the ID — or behind
+        # the next block's spots — comes back ahead of the ID (Maija 9/10), and a moved
+        # row may follow a PSA inserted in this same pass (SFO 9/2: the FCC ID moves to
+        # the bottom, behind the new PSAs).
+        prev_id = pieces[0].id
+        for i, p in enumerate(pieces):
+            if i:
+                _seat(cur, market, date, p.id, prev_id)
+                prev_id = p.id
+            b = next((x for x in breaks if x.after_piece_idx == i), None)
+            for x in b.items if b else []:
                 if isinstance(x, Filler):
-                    brk_start = pieces[b.after_piece_idx].end
+                    brk_start = p.end
                     slots = coms or _slots(
                         cur,
                         market,
@@ -664,8 +796,7 @@ def apply_window(
                     new_ids.append(nid)
                     prev_id = nid
                 else:
-                    if id(x) in moved:
-                        _seat(cur, market, date, x.id, prev_id)
+                    _seat(cur, market, date, x.id, prev_id)
                     prev_id = x.id
         # Conform ORA to the plan BEFORE the rebuild. A row moved by XORDER alone keeps
         # its old ORA, and sch_rebuildStartTimeSchedule then fills the hole ahead of it
@@ -673,7 +804,6 @@ def apply_window(
         # "rebuild left a live NOOP" — Boxing Queen 9/3 all markets, MBuhay LAX 9/4,
         # Frontline SFO 9/4, Chinese Drama DAL 9/4; Maija). Same recipe as Break
         # Optimization: write ORA/ORA_P, the rebuild then only confirms.
-        planned_rows = list(pieces) + [x for b in breaks for x in b.items if isinstance(x, Ev)]
         for e in planned_rows:
             if int(round(e.ora * FPS)) != start_f[id(e)]:
                 cur.execute(
@@ -693,11 +823,12 @@ def apply_window(
             raise RuntimeError(
                 "rebuild left a live NOOP gap-filler in the hour — plan did not reach the top"
             )
-        if new_ids:
-            _sync_checksums(cur, new_ids, [])
+        touched = new_ids + swapped_ids
+        if touched:
+            _sync_checksums(cur, touched, [])
             for nid, sup in binding.items():
                 cur.execute("UPDATE TPALINSE SET SUPPORTO=%s WHERE ID_TPALINSE=%s", (sup, nid))
-            ids_csv = ",".join(str(i) for i in new_ids)
+            ids_csv = ",".join(str(i) for i in binding)
             # exact readback: the row must carry precisely prefix+FILE_ID (the old
             # LIKE '%FILE_ID%' test could not see a truncated write as such)
             cur.execute(
@@ -707,7 +838,9 @@ def apply_window(
             bad = [(nid, got.get(nid)) for nid, sup in binding.items() if got.get(nid) != sup]
             if bad:
                 raise RuntimeError(f"SUPPORTO not bound to FILE_ID: {bad}")
-            cur.execute(f"SELECT COUNT(*) FROM trafficPalinse WHERE id_tpalinse IN ({ids_csv})")
+        if new_ids:
+            new_csv = ",".join(str(i) for i in new_ids)
+            cur.execute(f"SELECT COUNT(*) FROM trafficPalinse WHERE id_tpalinse IN ({new_csv})")
             if cur.fetchone()[0]:
                 raise RuntimeError("inserted rows still carry a trafficPalinse row")
         after = window_from_day(load_day(cur, market, date), lo, hi)
@@ -753,6 +886,16 @@ def apply_window(
         ]
         if abs(end - planned_end) > 0.2:
             raise RuntimeError("packed end changed after break optimization")
+        # The ID is the last content of the hour — nothing this block owns may sit behind
+        # it (Maija 9/10: DART :15 + two PIs aired after the DAL 17:30 ID, WOOF + Pholicious
+        # after the 15:30 one). Break Optimization seats the ID last; prove it held.
+        ids_after = [e for e in after if e.newtype == "ID"]
+        if ids_after:
+            tail = max((e.end for e in after if e.newtype not in ("ID", "NOOP")), default=lo)
+            if tail > ids_after[-1].ora + 0.5:
+                raise RuntimeError(
+                    f"content still sits behind the Station ID (ends {hms(tail)}, ID at {hms(ids_after[-1].ora)})"
+                )
         if not apply:
             conn.rollback()
             log("DRY RUN — rolled back")
