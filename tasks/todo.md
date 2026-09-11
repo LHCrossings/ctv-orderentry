@@ -304,7 +304,12 @@ returns while it reloads → getElementById('prg-B') is null.
       coalesce reloads; in-flight shows keep their 'Finishing…' button across a reload;
       re-find elements by identity after a reload; never throw on a missing block
 - [x] unit test for the error wrapper; ruff; commit + push + post_push
-- [ ] (4) multi-select: recommend a sequential "Finish all ready" queue — Lee decides
+- [x] (4) multi-select (Lee 9/11: "choose three or four lines, then hit finish"): tick box on
+      every finishable show, header button "Finish selected (n)"; one confirm listing the
+      shows; applies run ONE AT A TIME in schedule order via the same applyOne() as the
+      single button; one re-read at the end; failures named in the header note and left
+      ticked. Verified headless (jsdom harness in the session scratchpad): 3 boxes on
+      ready/refill/strip shows only, max 1 parallel apply, rollback + 500 both reported.
 
 Review: 26 finish tests green (3 new); node --check on the page script; TestClient smoke:
 page 200, simulated DB failure → 500 `{status:'error', message:'OSError: …'}` on /day and

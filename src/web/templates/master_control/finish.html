@@ -51,6 +51,9 @@
         .prg-apply-btn { background: rgba(163,190,140,0.15); border: 1px solid rgba(163,190,140,0.4); color: var(--nord14); border-radius: 6px; padding: 3px 10px; font-size: 0.72rem; font-weight: 700; cursor: pointer; font-family: inherit; flex-shrink: 0; }
         .prg-apply-btn:hover { background: rgba(163,190,140,0.3); }
         .prg-apply-btn:disabled { opacity: 0.5; cursor: default; }
+        .prg-pick { width: 15px; height: 15px; margin: 0; flex-shrink: 0; cursor: pointer; accent-color: var(--nord14); }
+        .batch-note { font-size: 0.78rem; margin-left: 8px; }
+        .batch-note.bad { color: var(--nord11); font-weight: 700; }
         .prg-block.finished .prg-header { opacity: 0.6; }
         .prg-body { background: var(--bg-secondary); padding: 10px 12px; }
         .prg-block.collapsed .prg-body { display: none; }
@@ -152,6 +155,12 @@ function selectMkt(el) {
 let reloading = null, reloadAgain = false;
 const inflight = new Set();     // p.lo of shows whose Finish is being written right now
 const forceOpen = new Set();    // p.lo of shows to expand after the next reload
+const selected = new Set();     // p.lo of shows ticked for "Finish selected" (Lee 9/11)
+let batchNote = null;           // {cls, text} shown in the day's header after a batch
+let currentMarket = null;
+// a show gets a Finish button (and a tick box) in exactly these states: to fill, a filled
+// show that still carries triangles (Refill), or an over-full hour to strip (Lee 9/4)
+const canFinish = p => p.state === 'ready' || isRefill(p) || (p.state === 'overrun' && p.strip_only);
 const byId = id => document.getElementById(id);
 const indexOfLo = lo => programs.findIndex(q => q.lo === lo);
 
@@ -175,11 +184,11 @@ function loadPrograms() {
 async function _loadPrograms() {
     const dateVal = document.getElementById('datePicker').value;
     if (!dateVal || !selectedMarket) return;
-    const sameDay = currentDate === dateVal;
-    currentDate = dateVal;
+    const sameDay = currentDate === dateVal && currentMarket === selectedMarket;
+    currentDate = dateVal; currentMarket = selectedMarket;
     // remember which shows are open so a reload keeps them open (by time, not index)
     const openLos = sameDay ? programs.filter((p, pi) => { const b = byId(`prg-${pi}`); return b && !b.classList.contains('collapsed'); }).map(p => p.lo) : [];
-    if (!sameDay) { forceOpen.clear(); inflight.clear(); }
+    if (!sameDay) { forceOpen.clear(); inflight.clear(); selected.clear(); batchNote = null; }
     programs = []; plans = {};
     // Hold the list's height while it reloads so the page does not collapse and jump
     // to the top on every Finish (Maija 9/7: "can it stay in the exact spot?")
@@ -194,6 +203,8 @@ async function _loadPrograms() {
             return;
         }
         programs = data.programs || [];
+        // a tick survives a reload only while the show can still be finished
+        [...selected].forEach(lo => { const q = programs.find(x => x.lo === lo); if (!q || !canFinish(q)) selected.delete(lo); });
         renderPrograms(data);
         const reopen = new Set([...openLos, ...forceOpen]); forceOpen.clear();
         programs.forEach((p, pi) => { if (reopen.has(p.lo)) togglePrg(pi); });
@@ -244,6 +255,9 @@ function renderPrograms(data) {
         &nbsp;&nbsp;
         <button class="expand-btn" onclick="expandAll()">Expand all</button>
         <button class="expand-btn" onclick="collapseAll()">Collapse all</button>
+        &nbsp;&nbsp;
+        <button class="prg-apply-btn" id="finishSelectedBtn" style="display:${selected.size ? '' : 'none'}" onclick="finishSelected()">Finish selected (${selected.size})</button>
+        ${batchNote ? `<span class="batch-note ${batchNote.cls}">${esc(batchNote.text)}</span>` : ''}
     </div>`;
     programs.forEach((p, pi) => {
         const st = statFor(p);
@@ -251,17 +265,18 @@ function renderPrograms(data) {
         // apply path makes 0 fill edits and explodes the window (timecodes + checksums)
         // an over-full hour (program + paid alone spill) still gets a button: the same
         // apply path strips every PI/PSA/ID so the paid spots air (Lee 9/4)
-        const canFinish = p.state === 'ready' || isRefill(p) || (p.state === 'overrun' && p.strip_only);
+        const fin = canFinish(p);
         const btnLabel = btnLabelFor(p);
         html += `<div class="prg-block collapsed ${p.state === 'finished' ? 'finished' : ''}" id="prg-${pi}">
   <div class="prg-header" onclick="togglePrg(${pi})">
     <span class="prg-chevron">▾</span>
+    ${fin && !inflight.has(p.lo) ? `<input type="checkbox" class="prg-pick" title="Tick shows, then Finish selected" ${selected.has(p.lo) ? 'checked' : ''} onclick="event.stopPropagation()" onchange="togglePick(${p.lo}, this.checked)">` : ''}
     <span class="prg-time">${hm(p.lo_hms)}&nbsp;–&nbsp;${hm(p.hi_hms)}</span>
     <span class="prg-name">${esc(p.title || p.code || '?')}${p.code && p.title ? `<span class="prg-code">${esc(p.code)}</span>` : ''}</span>
     ${p.language ? `<span class="prg-lang">${esc(p.language)}</span>` : ''}
     <button class="expand-btn prg-refresh" title="Re-read this show from Etere"
             onclick="event.stopPropagation();refreshProgram(${pi})">↻ Refresh</button>
-    <button class="prg-apply-btn" id="prg-apply-${pi}" style="display:${canFinish || inflight.has(p.lo) ? '' : 'none'}" ${inflight.has(p.lo) ? 'disabled' : ''}
+    <button class="prg-apply-btn" id="prg-apply-${pi}" style="display:${fin || inflight.has(p.lo) ? '' : 'none'}" ${inflight.has(p.lo) ? 'disabled' : ''}
             onclick="event.stopPropagation();finishProgram(${pi})">${inflight.has(p.lo) ? 'Finishing…' : btnLabel}</button>
     <span class="prg-stat ${st.cls}" id="prg-stat-${pi}">${esc(st.text)}</span>
   </div>
@@ -335,46 +350,99 @@ function renderPlan(p, plan) {
     return html;
 }
 
-async function finishProgram(pi) {
-    const p = programs[pi];
-    const plan = plans[pi];
-    const summary = (plan ? `${plan.n_delete} remove, ${plan.n_insert} add; ends ${plan.planned_end_hms}` : `${p.n_delete} remove, ${p.n_insert} add`)
+function togglePick(lo, on) {
+    if (on) selected.add(lo); else selected.delete(lo);
+    const b = byId('finishSelectedBtn');
+    if (b) { b.style.display = selected.size ? '' : 'none'; b.textContent = `Finish selected (${selected.size})`; }
+}
+
+function summaryFor(p) {
+    const plan = plans[indexOfLo(p.lo)];
+    return (plan ? `${plan.n_delete} remove, ${plan.n_insert} add; ends ${plan.planned_end_hms}` : `${p.n_delete} remove, ${p.n_insert} add`)
         + (p.triangles ? `; explode ${p.triangles} yellow triangle${p.triangles === 1 ? '' : 's'}` : '');
-    const verb = btnLabelFor(p);
-    if (!confirm(`${verb} ${p.title} (${hm(p.lo_hms)}–${hm(p.hi_hms)}) in ${selectedMarket}?\n\n${summary}\n\nWrites to Etere. The schedule is NOT published — publish it yourself when you're done.`)) return;
+}
+
+// One show's write: the same apply path for a single Finish and for a batch.
+// Returns the server's JSON (status applied/finished/cannot/error) or {status:'error'}.
+async function applyOne(p) {
     inflight.add(p.lo);
-    const btn = byId(`prg-apply-${pi}`);
+    const btn = byId(`prg-apply-${indexOfLo(p.lo)}`);
     if (btn) { btn.disabled = true; btn.textContent = 'Finishing…'; }
     try {
         const resp = await fetch('/api/master-control/finish/apply', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ market: selectedMarket, date: currentDate, lo: p.lo, hi: p.hi, refill: isRefill(p) }),
         });
-        const r = await parseJson(resp);
-        inflight.delete(p.lo);
-        if (r.status === 'applied' || r.status === 'finished') {
-            forceOpen.add(p.lo);
-            const y = window.scrollY;
-            await loadPrograms();
-            window.scrollTo(0, y);
-            return;
-        }
-        // Another show's reload may have re-rendered the list meanwhile: find this show
-        // again by its start time, and fall back to an alert if it is not on screen
-        const qi = indexOfLo(p.lo);
-        const stat = byId(`prg-stat-${qi}`), btn2 = byId(`prg-apply-${qi}`), body = byId(`prg-body-${qi}`);
-        const msg = `${r.status || 'error'}: ${r.message || 'see log'}`;
-        if (!stat) { alert(`${verb} ${p.title}: ${msg}`); return; }
-        stat.className = 'prg-stat bad';
-        stat.textContent = msg;
-        if (btn2) { btn2.disabled = false; btn2.textContent = btnLabelFor(p); }
-        if (body) body.innerHTML = `<div class="prg-note">Rolled back — nothing changed.<br>${esc((r.log || []).join('\n')).replace(/\n/g, '<br>')}</div>`;
+        return await parseJson(resp);
     } catch (e) {
+        return { status: 'error', message: e.message };
+    } finally {
         inflight.delete(p.lo);
-        const btn2 = byId(`prg-apply-${indexOfLo(p.lo)}`);
-        if (btn2) { btn2.disabled = false; btn2.textContent = btnLabelFor(p); }
-        alert(`${verb} ${p.title}: ${e.message}`);
     }
+}
+
+// Paint a failed show's row in place (the list may have been re-rendered meanwhile:
+// find the show again by its start time; fall back to an alert if it is off screen)
+function showFailure(p, r) {
+    const qi = indexOfLo(p.lo);
+    const stat = byId(`prg-stat-${qi}`), btn2 = byId(`prg-apply-${qi}`), body = byId(`prg-body-${qi}`);
+    const msg = `${r.status || 'error'}: ${r.message || 'see log'}`;
+    if (!stat) { alert(`${btnLabelFor(p)} ${p.title}: ${msg}`); return; }
+    stat.className = 'prg-stat bad';
+    stat.textContent = msg;
+    if (btn2) { btn2.disabled = false; btn2.textContent = btnLabelFor(p); }
+    if (body) body.innerHTML = `<div class="prg-note">Rolled back — nothing changed.<br>${esc((r.log || []).join('\n')).replace(/\n/g, '<br>')}</div>`;
+}
+
+const isDone = r => r.status === 'applied' || r.status === 'finished';
+
+async function finishProgram(pi) {
+    const p = programs[pi];
+    const verb = btnLabelFor(p);
+    if (!confirm(`${verb} ${p.title} (${hm(p.lo_hms)}–${hm(p.hi_hms)}) in ${selectedMarket}?\n\n${summaryFor(p)}\n\nWrites to Etere. The schedule is NOT published — publish it yourself when you're done.`)) return;
+    const r = await applyOne(p);
+    if (isDone(r)) {
+        selected.delete(p.lo);
+        forceOpen.add(p.lo);
+        const y = window.scrollY;
+        await loadPrograms();
+        window.scrollTo(0, y);
+    } else {
+        showFailure(p, r);
+    }
+}
+
+// Tick three or four shows, hit Finish selected: they fill and finish ONE AT A TIME in
+// schedule order (each is its own Etere transaction; running them in parallel is the
+// likeliest source of the 9/11 500s), then the day is re-read once (Lee 9/11).
+async function finishSelected() {
+    const picks = programs.filter(p => selected.has(p.lo) && canFinish(p) && !inflight.has(p.lo));
+    if (!picks.length) return;
+    const lines = picks.map(p => `• ${hm(p.lo_hms)}–${hm(p.hi_hms)}  ${p.title}  — ${btnLabelFor(p)}: ${summaryFor(p)}`).join('\n');
+    if (!confirm(`Finish ${picks.length} show${picks.length === 1 ? '' : 's'} in ${selectedMarket}, one after another?\n\n${lines}\n\nWrites to Etere. The schedule is NOT published — publish it yourself when you're done.`)) return;
+    const b = byId('finishSelectedBtn');
+    if (b) { b.disabled = true; b.textContent = `Finishing 1 of ${picks.length}…`; }
+    const failed = [];
+    for (let i = 0; i < picks.length; i++) {
+        const p = picks[i];
+        if (b) b.textContent = `Finishing ${i + 1} of ${picks.length}…`;
+        const r = await applyOne(p);
+        if (isDone(r)) {
+            selected.delete(p.lo);
+            const stat = byId(`prg-stat-${indexOfLo(p.lo)}`);
+            if (stat) { stat.className = 'prg-stat done'; stat.textContent = '✓ finished'; }
+        } else {
+            failed.push(`${hm(p.lo_hms)} ${p.title}: ${r.status || 'error'}: ${r.message || 'see log'}`);
+            showFailure(p, r);
+        }
+    }
+    const nOk = picks.length - failed.length;
+    batchNote = failed.length
+        ? { cls: 'bad', text: `${nOk} of ${picks.length} finished · ${failed.join(' · ')}` }
+        : { cls: '', text: `${nOk} show${nOk === 1 ? '' : 's'} finished` };
+    const y = window.scrollY;
+    await loadPrograms();     // one re-read for the whole batch; failed shows stay ticked
+    window.scrollTo(0, y);
 }
 
 const _today = new Date().toISOString().slice(0, 10);
