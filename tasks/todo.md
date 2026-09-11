@@ -288,3 +288,25 @@ DAL 9/10 25:30 + 28:00 read "23/9/24 remove" before (next block's PIs) → "fini
 SEA 9/11 09:00 Korean Drama dry run: K-FILLER25-015 (12:30) → -039 (10:10), 5 spilled paid
 spots seated ahead of the ID, end == plan, rolled back; SEA 9/11 17:00 (10.5 min open, was
 "unplaced") dry run lands 12 PIs + ID at 17:59:54. Nothing written to production.
+
+## Fill & Finish — Ashe's 9/11 notes (2026-09-11, via Lee)
+Report: (1) "Internal Server Error" fills the page after a Finish (day list 500); (2) alert
+"Unexpected token 'I' … not valid JSON" on DAL Korean Drama (apply 500, write had landed);
+(3) alert "Cannot read properties of null (reading 'classList')" when two shows are
+finished back to back (schedule fine); (4) ask: multi-select Finish like Daily Programming.
+Diagnosis: the Jumpbox server keeps NO log (scheduled task, no redirect), so the two 500s
+have no traceback anywhere; list_programs reproduces clean now for LAX/DAL/NYC/MMT 9/10–9/11
+(11–21 s from WSL). (3) is a page race: finish A → loadPrograms() wipes the list; finish B
+returns while it reloads → getElementById('prg-B') is null.
+- [x] finish.py: every endpoint returns JSON `{status:'error', message}` on an exception
+      (HTTP 500) and logs the traceback (logger.exception) to `logs/server-errors.log`
+- [x] finish.html: read the body as text and only then JSON (real message on a 500);
+      coalesce reloads; in-flight shows keep their 'Finishing…' button across a reload;
+      re-find elements by identity after a reload; never throw on a missing block
+- [x] unit test for the error wrapper; ruff; commit + push + post_push
+- [ ] (4) multi-select: recommend a sequential "Finish all ready" queue — Lee decides
+
+Review: 26 finish tests green (3 new); node --check on the page script; TestClient smoke:
+page 200, simulated DB failure → 500 `{status:'error', message:'OSError: …'}` on /day and
+/apply, traceback in logs/server-errors.log, bad market still 400. Root cause of Ashe's two
+500s stays UNKNOWN until the next one lands in that log — nothing in Etere was touched.

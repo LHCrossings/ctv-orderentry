@@ -146,10 +146,40 @@ function selectMkt(el) {
     loadPrograms();   // auto-load, no Load button
 }
 
-async function loadPrograms() {
+// One reload at a time. Two shows finished back to back used to race: show A's reload
+// wiped the list while show B's Finish was still writing, so B's callback found no
+// block and threw "Cannot read properties of null (reading 'classList')" (Ashe 9/11).
+let reloading = null, reloadAgain = false;
+const inflight = new Set();     // p.lo of shows whose Finish is being written right now
+const forceOpen = new Set();    // p.lo of shows to expand after the next reload
+const byId = id => document.getElementById(id);
+const indexOfLo = lo => programs.findIndex(q => q.lo === lo);
+
+async function parseJson(resp) {
+    // The server answers JSON even on a failure; anything else (a proxy page, a bare
+    // "Internal Server Error") becomes a readable message instead of a JSON parse error
+    const text = await resp.text();
+    try { return JSON.parse(text); }
+    catch (e) { throw new Error(`HTTP ${resp.status} ${resp.statusText}: ${text.replace(/<[^>]+>/g, ' ').trim().slice(0, 160)}`); }
+}
+
+function loadPrograms() {
+    if (reloading) { reloadAgain = true; return reloading; }
+    reloading = _loadPrograms().finally(() => {
+        reloading = null;
+        if (reloadAgain) { reloadAgain = false; loadPrograms(); }
+    });
+    return reloading;
+}
+
+async function _loadPrograms() {
     const dateVal = document.getElementById('datePicker').value;
     if (!dateVal || !selectedMarket) return;
+    const sameDay = currentDate === dateVal;
     currentDate = dateVal;
+    // remember which shows are open so a reload keeps them open (by time, not index)
+    const openLos = sameDay ? programs.filter((p, pi) => { const b = byId(`prg-${pi}`); return b && !b.classList.contains('collapsed'); }).map(p => p.lo) : [];
+    if (!sameDay) { forceOpen.clear(); inflight.clear(); }
     programs = []; plans = {};
     // Hold the list's height while it reloads so the page does not collapse and jump
     // to the top on every Finish (Maija 9/7: "can it stay in the exact spot?")
@@ -158,14 +188,15 @@ async function loadPrograms() {
     area.innerHTML = '<div class="empty-state">Reading the day\'s schedule…</div>';
     try {
         const resp = await fetch(`/api/master-control/finish/day?date=${encodeURIComponent(dateVal)}&market=${encodeURIComponent(selectedMarket)}`);
+        const data = await parseJson(resp);
         if (!resp.ok) {
-            const err = await resp.json().catch(() => ({}));
-            document.getElementById('logArea').innerHTML = `<div class="empty-state">${esc(err.detail || err.error || resp.statusText)}</div>`;
+            document.getElementById('logArea').innerHTML = `<div class="empty-state">${esc(data.message || data.detail || data.error || resp.statusText)}</div>`;
             return;
         }
-        const data = await resp.json();
         programs = data.programs || [];
         renderPrograms(data);
+        const reopen = new Set([...openLos, ...forceOpen]); forceOpen.clear();
+        programs.forEach((p, pi) => { if (reopen.has(p.lo)) togglePrg(pi); });
     } catch (e) {
         document.getElementById('logArea').innerHTML = `<div class="empty-state">Network error: ${esc(e.message)}</div>`;
     } finally {
@@ -230,8 +261,8 @@ function renderPrograms(data) {
     ${p.language ? `<span class="prg-lang">${esc(p.language)}</span>` : ''}
     <button class="expand-btn prg-refresh" title="Re-read this show from Etere"
             onclick="event.stopPropagation();refreshProgram(${pi})">↻ Refresh</button>
-    <button class="prg-apply-btn" id="prg-apply-${pi}" style="display:${canFinish ? '' : 'none'}"
-            onclick="event.stopPropagation();finishProgram(${pi})">${btnLabel}</button>
+    <button class="prg-apply-btn" id="prg-apply-${pi}" style="display:${canFinish || inflight.has(p.lo) ? '' : 'none'}" ${inflight.has(p.lo) ? 'disabled' : ''}
+            onclick="event.stopPropagation();finishProgram(${pi})">${inflight.has(p.lo) ? 'Finishing…' : btnLabel}</button>
     <span class="prg-stat ${st.cls}" id="prg-stat-${pi}">${esc(st.text)}</span>
   </div>
   <div class="prg-body" id="prg-body-${pi}"><div class="prg-loading">Loading…</div></div>
@@ -241,7 +272,8 @@ function renderPrograms(data) {
 }
 
 function togglePrg(pi) {
-    const block = document.getElementById(`prg-${pi}`);
+    const block = byId(`prg-${pi}`);
+    if (!block) return;   // list re-rendered under us — nothing to toggle
     const wasCollapsed = block.classList.contains('collapsed');
     block.classList.toggle('collapsed');
     if (wasCollapsed && !(pi in plans)) loadPlan(pi);
@@ -250,23 +282,24 @@ function togglePrg(pi) {
 async function refreshProgram(pi) {
     // Re-read the whole day (states are derived from live data) but keep this block open
     // and the page where the operator left it
-    const block = document.getElementById(`prg-${pi}`);
-    const open = !block.classList.contains('collapsed');
+    const p = programs[pi];
+    if (p) forceOpen.add(p.lo);
     const y = window.scrollY;
     await loadPrograms();
-    if (open && document.getElementById(`prg-${pi}`)) togglePrg(pi);
     window.scrollTo(0, y);
 }
 
-function expandAll() { programs.forEach((p, pi) => { const b = document.getElementById(`prg-${pi}`); if (b.classList.contains('collapsed')) togglePrg(pi); }); }
-function collapseAll() { programs.forEach((p, pi) => document.getElementById(`prg-${pi}`).classList.add('collapsed')); }
+function expandAll() { programs.forEach((p, pi) => { const b = byId(`prg-${pi}`); if (b && b.classList.contains('collapsed')) togglePrg(pi); }); }
+function collapseAll() { programs.forEach((p, pi) => { const b = byId(`prg-${pi}`); if (b) b.classList.add('collapsed'); }); }
 
 async function loadPlan(pi) {
     const p = programs[pi];
-    const body = document.getElementById(`prg-body-${pi}`);
+    const body = byId(`prg-body-${pi}`);
+    if (!p || !body) return;
     try {
         const resp = await fetch(`/api/master-control/finish/plan?date=${encodeURIComponent(currentDate)}&market=${encodeURIComponent(selectedMarket)}&lo=${p.lo}&hi=${p.hi}&refill=${isRefill(p) ? 1 : 0}`);
-        const plan = await resp.json();
+        const plan = await parseJson(resp);
+        if (!resp.ok) throw new Error(plan.message || plan.detail || resp.statusText);
         plans[pi] = plan;
         body.innerHTML = renderPlan(p, plan);
     } catch (e) {
@@ -309,27 +342,38 @@ async function finishProgram(pi) {
         + (p.triangles ? `; explode ${p.triangles} yellow triangle${p.triangles === 1 ? '' : 's'}` : '');
     const verb = btnLabelFor(p);
     if (!confirm(`${verb} ${p.title} (${hm(p.lo_hms)}–${hm(p.hi_hms)}) in ${selectedMarket}?\n\n${summary}\n\nWrites to Etere. The schedule is NOT published — publish it yourself when you're done.`)) return;
-    const btn = document.getElementById(`prg-apply-${pi}`);
-    btn.disabled = true; btn.textContent = 'Finishing…';
+    inflight.add(p.lo);
+    const btn = byId(`prg-apply-${pi}`);
+    if (btn) { btn.disabled = true; btn.textContent = 'Finishing…'; }
     try {
         const resp = await fetch('/api/master-control/finish/apply', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ market: selectedMarket, date: currentDate, lo: p.lo, hi: p.hi, refill: isRefill(p) }),
         });
-        const r = await resp.json();
-        const stat = document.getElementById(`prg-stat-${pi}`);
+        const r = await parseJson(resp);
+        inflight.delete(p.lo);
         if (r.status === 'applied' || r.status === 'finished') {
-            await refreshProgram(pi);
-        } else {
-            stat.className = 'prg-stat bad';
-            stat.textContent = `${r.status}: ${r.message || 'see log'}`;
-            btn.disabled = false; btn.textContent = btnLabelFor(p);
-            document.getElementById(`prg-body-${pi}`).innerHTML =
-                `<div class="prg-note">Rolled back — nothing changed.<br>${esc((r.log || []).join('\n')).replace(/\n/g, '<br>')}</div>`;
+            forceOpen.add(p.lo);
+            const y = window.scrollY;
+            await loadPrograms();
+            window.scrollTo(0, y);
+            return;
         }
+        // Another show's reload may have re-rendered the list meanwhile: find this show
+        // again by its start time, and fall back to an alert if it is not on screen
+        const qi = indexOfLo(p.lo);
+        const stat = byId(`prg-stat-${qi}`), btn2 = byId(`prg-apply-${qi}`), body = byId(`prg-body-${qi}`);
+        const msg = `${r.status || 'error'}: ${r.message || 'see log'}`;
+        if (!stat) { alert(`${verb} ${p.title}: ${msg}`); return; }
+        stat.className = 'prg-stat bad';
+        stat.textContent = msg;
+        if (btn2) { btn2.disabled = false; btn2.textContent = btnLabelFor(p); }
+        if (body) body.innerHTML = `<div class="prg-note">Rolled back — nothing changed.<br>${esc((r.log || []).join('\n')).replace(/\n/g, '<br>')}</div>`;
     } catch (e) {
-        btn.disabled = false; btn.textContent = btnLabelFor(p);
-        alert('Network error: ' + e.message);
+        inflight.delete(p.lo);
+        const btn2 = byId(`prg-apply-${indexOfLo(p.lo)}`);
+        if (btn2) { btn2.disabled = false; btn2.textContent = btnLabelFor(p); }
+        alert(`${verb} ${p.title}: ${e.message}`);
     }
 }
 
