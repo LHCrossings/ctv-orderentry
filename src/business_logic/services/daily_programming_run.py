@@ -284,7 +284,21 @@ def _durata(cur, filmati):
 
 
 def _insert_event(cur, cod_user, d, sched, block, seg, ora, filmati, duration):
-    """Traffic_InsertEvent into a block+segment; return the new TPALINSE id (found by ora)."""
+    """Traffic_InsertEvent into a block+segment; return the NEW TPALINSE id.
+
+    The new row is the LIVE row of this asset at this ORA whose id did not exist before
+    the call. Matching on (asset, ORA) alone returned a soft-deleted twin on DAL 9/12
+    25:30 (Ashe 9/14): Fill & Finish had just stripped a hand-placed 60s PI (LIVELLO=666,
+    ORA kept) and re-planned the same file at the same ORA; the lookup handed back the
+    ghost, Finish seated the ghost, and the real new row stayed where Etere had dropped it
+    (behind the Station ID) — caught by the post-write verify, so the hour rolled back
+    with "content still sits behind the Station ID". Every placement path shares this
+    helper, so Daily Programming's re-place-after-delete had the same exposure."""
+    cur.execute(
+        "SELECT ISNULL(MAX(ID_TPALINSE), 0) FROM TPALINSE WHERE COD_USER=%s AND DATA=%s",
+        (cod_user, d),
+    )
+    before = cur.fetchone()[0]
     cur.execute(
         f"EXEC Traffic_InsertEvent 0,'{d}',{cod_user},{sched},{block},{seg},{ora},'{d}',{ora},'{d}',0,{filmati},0,0,0,0,0,0,0,{duration}"
     )
@@ -294,10 +308,17 @@ def _insert_event(cur, cod_user, d, sched, block, seg, ora, filmati, duration):
     except Exception:
         pass
     cur.execute(
-        "SELECT id_tpalinse FROM TPALINSE WHERE COD_USER=%s AND DATA=%s AND ID_FILMATI=%s AND ORA=%s AND PART=0",
-        (cod_user, d, filmati, ora),
+        "SELECT MAX(id_tpalinse) FROM TPALINSE WHERE COD_USER=%s AND DATA=%s AND ID_FILMATI=%s"
+        " AND ORA=%s AND PART=0 AND LIVELLO=0 AND ID_TPALINSE>%s",
+        (cod_user, d, filmati, ora, before),
     )
-    return cur.fetchone()[0]
+    row = cur.fetchone()
+    if not row or row[0] is None:
+        raise RuntimeError(
+            f"Traffic_InsertEvent left no new live row for asset {filmati} at ORA {ora} "
+            f"(market {cod_user} {d})"
+        )
+    return row[0]
 
 
 def _ensure_after(cur, cod_user, d, row_id, before_xorder):

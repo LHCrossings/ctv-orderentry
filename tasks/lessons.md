@@ -4,6 +4,35 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Row You Just Created Is Identified by "Did Not Exist Before" — Never by the Values You Asked For
+
+**Session:** Ashe, Fill & Finish DAL 9/12 25:30 "content still sits behind the Station ID" (2026-09-14)
+
+**Rule:** `_insert_event` (every Daily Programming and Finish insert) found the row
+`Traffic_InsertEvent` had just created by `(market, date, asset, ORA, PART=0)` — no
+LIVELLO filter, no ordering. Refill had just soft-deleted a hand-placed 60 s PI (LIVELLO=666,
+ORA kept) and the planner re-drew the same file at the same ORA (the fill ahead of it had the
+same length as before), so the lookup could return the DEAD twin: Finish seated the ghost,
+the real new row stayed where Etere's XORDER put it — behind the ID — and the post-write
+verify rolled the hour back. SQL Server returns the twin in undefined order, which is why it
+"only happened in DAL, once". Ashe's cure (delete the PIs by hand first) changed the chain so
+the ORAs no longer coincided. Reproduced against the real SP in a rolled-back transaction:
+two rows at one (asset, ORA), one dead.
+
+**How to apply:**
+1. Identify a freshly inserted row by an id watermark (`MAX(ID) before` → `ID > before AND
+   LIVELLO=0`), never by the attributes you passed in — those are exactly what a stale or
+   deleted twin shares. Raise when nothing new is found; a silent wrong id is the worst case.
+2. When a write path soft-deletes and re-inserts in one pass, assume the same identity CAN
+   recur at the same position; the 7/10 lesson ("Traffic_InsertEvent inherits stale xorders
+   from 666 rows") was the same family seen from the XORDER side.
+3. Reconstruct an operator's failed hour from the soft-deleted rows (LIVELLO=666 keep ORA,
+   asset, LASTUPDATE) and work backwards from the error's numbers: the ID's reported position
+   and the tail end pinned the break contents to the frame before any code was read.
+4. The verify that fired is the success story — keep it exact; fix the write.
+
+---
+
 ## A Guard Whose Source Query Cannot See the Rows It Was Built For Reports "Clean" — Validate the Rule Against What AIRED, Not Against the Cases You Have
 
 **Session:** Lee ran `check_bindings.py --days 2 --fix` after the PTNews scan (2026-09-14)

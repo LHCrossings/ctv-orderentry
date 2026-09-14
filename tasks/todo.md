@@ -328,3 +328,8 @@ and check_bindings had the same blind spot (4 rows reported vs 264).
 - [x] Broadcast Health nightly: bindings scan (report-only) → header amber, media-check page, event log
 - [x] tests: SQL contract, summarize, rename route uses the service, event differ
 - [x] lessons.md + memory
+
+## Fill & Finish: DAL 9/12 25:30 "content still sits behind the Station ID" (Ashe 9/14)
+- [x] root cause: `_insert_event` matched the new row by (asset, ORA) → soft-deleted twin from the refill strip
+- [x] fix: id watermark + LIVELLO=0, raise when no new row; unit tests; live SP repro in a rollback
+- [ ] Master Control card order (Set up, F&F, Optimize, Logs) — Ashe suggests waiting a week for the others; Lee to decide
