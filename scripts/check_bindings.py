@@ -7,6 +7,11 @@ renamed to its schedule code (scripts/rename-programming) and then placed carrie
 binding to a non-existent file until the nightly aligner happens to rewrite it. Live
 assets (LIVE_ID set) are excluded; only unaired rows (STATUS I/E) are touched.
 
+The FILE_ID comes from a SIZED copy whose name carries no colon, CIB copies first, S3 as
+the fallback. 2026-09-14: PI-LF-0011 had a stale CIB5 record `PI-LF-0011: Ellipse Deluxe`
+(size 0) next to the real S3 `PI-LF-0011`; "latest non-S3 copy" picked the stale one and
+--fix wrote a colon binding that can never load (see the PI SUPPORTO lesson).
+
     uv run python3 scripts/check_bindings.py            # report next 7 days
     uv run python3 scripts/check_bindings.py --days 3
     uv run python3 scripts/check_bindings.py --fix      # rebind, verified, restore SQL written
@@ -43,8 +48,10 @@ def main() -> None:
     where = f"""
         FROM TPALINSE t JOIN FILMATI f ON f.ID_FILMATI = t.ID_FILMATI
         CROSS APPLY (SELECT TOP 1 FILE_ID FROM FS_FILMATI x
-                     WHERE x.ID_FILMATI = t.ID_FILMATI AND x.ID_METADEVICE <> 6
-                     ORDER BY x.LASTUPDATE DESC) fs
+                     WHERE x.ID_FILMATI = t.ID_FILMATI
+                       AND x.PHYSICAL_SIZE > 0 AND x.FILE_ID NOT LIKE '%:%'
+                     ORDER BY CASE WHEN x.ID_METADEVICE = 6 THEN 1 ELSE 0 END,
+                              x.LASTUPDATE DESC) fs
         WHERE t.DATA BETWEEN CAST(GETDATE() AS date) AND DATEADD(day, {int(a.days)}, CAST(GETDATE() AS date))
           AND t.LIVELLO = 0 AND t.COD_USER BETWEEN 1 AND 10 AND f.LIVE_ID IS NULL AND t.ID_FILMATI > 0
           AND RTRIM(t.SUPPORTO) <> '{PREFIX}' + RTRIM(fs.FILE_ID)
