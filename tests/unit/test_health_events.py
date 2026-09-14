@@ -109,3 +109,13 @@ def test_event_log_stays_bounded(tmp_path, monkeypatch):
     log = EventLog(tmp_path / "events.jsonl")
     log.append([{"at": AT, "kind": "start"} for _ in range(12)])
     assert len((tmp_path / "events.jsonl").read_text().splitlines()) == 5
+
+
+def test_binding_mismatches_log_like_ghosts():
+    clean = _snap()
+    bad = dict(_snap(), bindings=258)
+    ev = diff_events(clean, bad, AT)
+    assert _kinds(ev) == ["bindings"] and ev[0]["count"] == 258
+    assert diff_events(bad, dict(_snap(), bindings=4), AT) == [], "count changes are not events"
+    ev = diff_events(bad, clean, AT)
+    assert _kinds(ev) == ["bindings_clear"] and ev[0]["count"] == 258

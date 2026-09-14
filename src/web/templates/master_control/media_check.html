@@ -95,11 +95,30 @@
                 '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:.85rem">All rows' + (g.count > (g.rows || []).length ? ' (first ' + g.rows.length + ')' : '') + '</summary>' +
                 '<table><tr><th>Date</th><th>Mkt</th><th>Time</th><th>Code</th><th>Title</th><th>id_tpalinse</th></tr>' + rows + '</table></details></div>';
         }
+        var b = d.bindings || { count: 0, by_code: [], rows: [] };
+        var bindHtml;
+        if (b.state === 'unknown') {
+            bindHtml = '<div class="mc-err"><b>Playout-binding check did not run.</b> ' + esc(b.error || '') + '</div>';
+        } else if (!b.count) {
+            bindHtml = '<div class="mc-ok"><b>Every upcoming row is bound to a file its asset has.</b></div>';
+        } else {
+            var bgroups = (b.by_code || []).map(function (x) {
+                return '<tr><td>' + esc(x.code) + '</td><td>' + esc(x.file) + '</td><td>' + x.count + '</td><td>' + esc(x.markets) + '</td><td>' + (x.first ? esc(x.first.market + ' ' + x.first.date + ' ' + x.first.time) : '') + '</td></tr>';
+            }).join('');
+            var brows = (b.rows || []).map(function (r) {
+                return '<tr><td>' + esc(r.date) + '</td><td>' + esc(r.market) + '</td><td>' + esc(r.time) + '</td><td>' + esc(r.code) + '</td><td>' + esc(r.bound) + '</td><td>' + esc(r.file) + '</td></tr>';
+            }).join('');
+            bindHtml = '<div class="mc-finding"><h3>' + b.count + ' playlist row' + (b.count > 1 ? 's' : '') + ' bound to a missing file <span class="kind">would air black</span></h3>' +
+                '<div class="detail">TPALINSE.SUPPORTO names a file the asset does not have — usually a show renamed to its schedule code after Etere refreshed its rows (NYC 9/2). Fix: <code>uv run python3 scripts/check_bindings.py --days 2 --fix</code> on the server (verified, restore SQL written).</div>' +
+                '<table><tr><th>Code</th><th>File</th><th>Rows</th><th>Markets</th><th>First</th></tr>' + bgroups + '</table>' +
+                '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:.85rem">All rows' + (b.count > (b.rows || []).length ? ' (first ' + b.rows.length + ')' : '') + '</summary>' +
+                '<table><tr><th>Date</th><th>Mkt</th><th>Time</th><th>Code</th><th>Bound to</th><th>File</th></tr>' + brows + '</table></details></div>';
+        }
         if (!d.findings.length) {
-            body.innerHTML = '<div class="mc-ok"><b>All placed media files look complete.</b></div>' + ghostHtml;
+            body.innerHTML = '<div class="mc-ok"><b>All placed media files look complete.</b></div>' + ghostHtml + bindHtml;
             return;
         }
-        body.innerHTML = ghostHtml + d.findings.map(function (f) {
+        body.innerHTML = ghostHtml + bindHtml + d.findings.map(function (f) {
             const airs = f.airings.map(function (a) {
                 return '<tr><td>' + esc(a.market) + '</td><td>' + esc(a.date) + '</td><td>' + esc(a.time) + '</td><td>' + esc(a.status) + '</td></tr>';
             }).join('');

@@ -10957,6 +10957,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def rename_programming_apply(payload: dict = Body(...)):
         try:
             from browser_automation.etere_direct_client import connect as _db_connect
+            from src.business_logic.services.playout_binding import rebind_asset
 
             pairs = payload.get("pairs", [])
             if not pairs:
@@ -10983,16 +10984,12 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     schedule_updated += cursor.rowcount
                     # A renamed code no longer matches the file name; any future row still
                     # bound by code (Etere's SP default) would air black (NYC 9/2/2026).
-                    # Rebind unaired rows of this asset to prefix + FILE_ID.
-                    cursor.execute(
-                        "UPDATE t SET t.SUPPORTO = '0ETX      ' + RTRIM(fs.FILE_ID)"
-                        " FROM TPALINSE t CROSS APPLY (SELECT TOP 1 FILE_ID FROM FS_FILMATI x"
-                        "   WHERE x.ID_FILMATI = t.ID_FILMATI AND x.ID_METADEVICE <> 6 ORDER BY x.LASTUPDATE DESC) fs"
-                        " WHERE t.ID_FILMATI = %d AND t.LIVELLO = 0 AND t.STATUS = 'I'"
-                        "   AND t.DATA >= CAST(GETDATE() AS date)"
-                        "   AND RTRIM(t.SUPPORTO) <> '0ETX      ' + RTRIM(fs.FILE_ID)",
-                        (p["asset_id"],),
-                    )
+                    # Rebind unaired rows of this asset to prefix + FILE_ID — from the S3
+                    # master, NOT a CIB copy: until the aligner restores the file the night
+                    # before air there is no CIB copy, and the old "newest non-S3 copy" rule
+                    # silently rebound nothing more than a day out (Teresa Teng 12/13,
+                    # Beauty Tycoon 23 for 9/15-16, found 2026-09-14).
+                    rebind_asset(cursor, p["asset_id"])
                 conn.commit()
             return JSONResponse({"updated": updated, "schedule_updated": schedule_updated})
         except HTTPException:

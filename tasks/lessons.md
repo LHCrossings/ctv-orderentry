@@ -4,6 +4,38 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Guard Whose Source Query Cannot See the Rows It Was Built For Reports "Clean" — Validate the Rule Against What AIRED, Not Against the Cases You Have
+
+**Session:** Lee ran `check_bindings.py --days 2 --fix` after the PTNews scan (2026-09-14)
+
+**Rule:** Both playout-binding guards (the rename tool's rebind and `check_bindings.py`) took
+the FILE_ID from "the newest NON-S3 copy". A CIB copy only exists after the aligner restores
+the file the night before air, so every row more than a day out had NO candidate and dropped
+out of the CROSS APPLY — the guard printed 4 rows while 264 were wrong (Teresa Teng 12/13,
+Beauty Tycoon 23, all ten markets). Same query, second defect: a stale size-0 CIB record
+`PI-LF-0011: Ellipse Deluxe` sorted first and `--fix` WROTE a colon binding that can never
+load. The 9/2 fix had been verified only on the 98 rows it was written for — all restored,
+all due within a day — so the blind spot never showed.
+
+**How to apply:**
+1. A "did X go wrong" query must be able to return every row X can affect. Ask what makes a
+   row DISAPPEAR from the result (an inner join / CROSS APPLY with no match) and whether that
+   condition correlates with the failure (here: "not restored yet" == "more than a day out").
+2. Validate a rule against the AIRED oracle, not the incident sample: prefix + rule(FILE_ID)
+   vs SUPPORTO over last week's Q/D rows — 36,285 rows, 0 differences settled S3-first, sized,
+   colon-free in one query. A rule that fits only the rows you were handed is a guess.
+3. One rule, one module (`services/playout_binding.py`), every consumer imports it — the two
+   guards had drifted into the same bug independently. A test asserts no consumer keeps the
+   old predicate.
+4. Etere rewrites SUPPORTO from COD_PROGRA whenever it refreshes a renamed asset's rows
+   (Explode signature on exactly the renamed shows, hours after our correct placement), so
+   rebinding at rename time is necessary but not sufficient: the nightly Broadcast Health
+   scan now reports mismatches (amber dot) so the rewrite is caught before air.
+5. A `--fix` that writes must read back its own value against the aired oracle for that asset
+   before it counts as done; `REBOUND 4 row(s)` was a success message on a wrong write.
+
+---
+
 ## A Playlist Row Already Says Which Block It Belongs To — Read the Booking, Never Infer Membership From the Clock or an Anchor
 
 **Session:** Maija's Fill & Finish test report (2026-09-10): spots after the ID, DAL blocks

@@ -138,6 +138,24 @@
     return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  function showBindingToast(b) {
+    var t = document.createElement("div");
+    t.className = "bh-toast media";
+    t.innerHTML =
+      '<div><b>⚠ ' + b.count + " playlist row" + (b.count > 1 ? "s" : "") + " bound to a missing file</b>" +
+      "<small>" + esc((b.codes || []).map(function (x) { return x.code + " ×" + x.count; }).join(", ")) +
+      " — would air black; scripts/check_bindings.py --fix rebinds them</small></div>";
+    var x = document.createElement("button");
+    x.className = "bh-toast-x";
+    x.textContent = "×";
+    x.setAttribute("aria-label", "Dismiss");
+    x.onclick = function (e) { e.stopPropagation(); e.preventDefault(); t.remove(); };
+    t.appendChild(x);
+    t.onclick = function () { window.open(MEDIA_URL, "_blank", "noopener"); };
+    toastWrap().appendChild(t);
+    setTimeout(function () { if (t.parentNode) t.remove(); }, 30000);
+  }
+
   function showGhostToast(g) {
     var t = document.createElement("div");
     t.className = "bh-toast media";
@@ -161,7 +179,8 @@
     var offair = (data && data.offair) || [];
     var media = (data && data.media && data.media.findings) || [];
     var ghosts = (data && data.media && data.media.ghosts) || { count: 0, titles: [] };
-    var amber = media.length || ghosts.count;
+    var bindings = (data && data.media && data.media.bindings) || { count: 0, codes: [] };
+    var amber = media.length || ghosts.count || bindings.count;
     if ((!data || data.state === "unknown" || data.unreachable) && !amber) {
       el.className = "bh-indicator unknown";
       el.querySelector(".bh-label").textContent = "Health unknown";
@@ -193,11 +212,13 @@
       var parts = [];
       if (media.length) parts.push(media.length + " bad media file" + (media.length > 1 ? "s" : ""));
       if (ghosts.count) parts.push(ghosts.count + " ghost spot" + (ghosts.count > 1 ? "s" : ""));
+      if (bindings.count) parts.push(bindings.count + " misbound row" + (bindings.count > 1 ? "s" : ""));
       el.querySelector(".bh-label").textContent = parts.join(" · ");
       var tips = media.map(function (f) {
         return f.code + " (" + f.kind + (f.first ? ", first airs " + f.first : "") + ")";
       });
       if (ghosts.count) tips.push("ghost spots: " + (ghosts.titles || []).map(function (x) { return x.title + " ×" + x.count; }).join(", "));
+      if (bindings.count) tips.push("bound to a missing file (would air black): " + (bindings.codes || []).map(function (x) { return x.code + " ×" + x.count + (x.first ? " from " + x.first : ""); }).join(", "));
       el.title = "Media check: " + tips.join("; ") + " — click for details";
       var seenM = alerted();
       var currentM = new Set();
@@ -212,6 +233,11 @@
         var gkey = "ghosts";
         currentM.add(gkey);
         if (!seenM.has(gkey)) { showGhostToast(ghosts); seenM.add(gkey); }
+      }
+      if (bindings.count) {
+        var bkey = "bindings";
+        currentM.add(bkey);
+        if (!seenM.has(bkey)) { showBindingToast(bindings); seenM.add(bkey); }
       }
       var prunedM = new Set();
       seenM.forEach(function (id) { if (currentM.has(id)) prunedM.add(id); });

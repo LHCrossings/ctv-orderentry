@@ -179,6 +179,7 @@ def _run_media_scan() -> dict:
         from browser_automation.etere_direct_client import connect
         from src.business_logic.services.ghost_spots import scan as scan_ghosts
         from src.business_logic.services.media_integrity import scan
+        from src.business_logic.services.playout_binding import scan as scan_bindings
 
         with connect() as conn:
             result = scan(conn, days=_MEDIA_DAYS)
@@ -192,6 +193,20 @@ def _run_media_scan() -> dict:
                     "error": str(exc),
                     "count": 0,
                     "by_title": [],
+                    "rows": [],
+                }
+            # Playout bindings (report-only): rows whose SUPPORTO names a file the asset
+            # does not have air BLACK (NYC 9/2). Etere rewrites the binding from the code
+            # whenever it refreshes a renamed asset's rows, so this has to be re-checked
+            # every night, not only at rename time (2026-09-14: 258 rows for 9/15-16).
+            try:
+                result["bindings"] = scan_bindings(conn, days=_MEDIA_DAYS)
+            except Exception as exc:  # noqa: BLE001
+                result["bindings"] = {
+                    "state": "unknown",
+                    "error": str(exc),
+                    "count": 0,
+                    "by_code": [],
                     "rows": [],
                 }
             return result
@@ -263,12 +278,29 @@ def _media_summary() -> dict:
             for x in (g.get("by_title") or [])[:5]
         ],
     }
+    b = d.get("bindings") or {}
+    bindings = {
+        "state": b.get("state", "unknown"),
+        "count": int(b.get("count") or 0),
+        "codes": [
+            {
+                "code": x["code"],
+                "file": x["file"],
+                "count": x["count"],
+                "first": f"{x['first']['market']} {x['first']['date'][5:]} {x['first']['time'][:5]}"
+                if x.get("first")
+                else "",
+            }
+            for x in (b.get("by_code") or [])[:5]
+        ],
+    }
     return {
         "state": d.get("state", "unknown"),
         "checked_at": d.get("checked_at"),
         "count": len(items),
         "findings": items,
         "ghosts": ghosts,
+        "bindings": bindings,
     }
 
 
@@ -290,6 +322,7 @@ def _snapshot(status: dict | None) -> dict:
         "offair": status.get("offair") or [],
         "media": _media_summary().get("findings", []),
         "ghosts": _media_summary().get("ghosts", {}).get("count", 0),
+        "bindings": _media_summary().get("bindings", {}).get("count", 0),
     }
 
 

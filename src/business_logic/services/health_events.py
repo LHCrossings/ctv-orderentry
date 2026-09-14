@@ -30,7 +30,8 @@ def diff_events(prev: dict | None, cur: dict, at: str | None = None) -> list[dic
     start: log the start itself plus whatever is already active, never a recovery.
 
     Event kinds: start, feed_lost, feed_back, offair, onair, media, media_clear,
-    ghosts, ghosts_clear (ghost-spot count went from 0 to n / back to 0).
+    ghosts, ghosts_clear (ghost-spot count went from 0 to n / back to 0),
+    bindings, bindings_clear (rows bound to a missing playout file, same shape).
     """
     at = at or now_iso()
     ev: list[dict] = []
@@ -83,6 +84,13 @@ def diff_events(prev: dict | None, cur: dict, at: str | None = None) -> list[dic
         add("ghosts", count=c_ghosts)
     elif prev is not None and p_ghosts and not c_ghosts:
         add("ghosts_clear", count=p_ghosts)
+    # Playout bindings naming a missing file (would air black) — same shape as ghosts.
+    p_bind = int((prev or {}).get("bindings") or 0)
+    c_bind = int(cur.get("bindings") or 0)
+    if c_bind and not p_bind:
+        add("bindings", count=c_bind)
+    elif prev is not None and p_bind and not c_bind:
+        add("bindings_clear", count=p_bind)
     return ev
 
 

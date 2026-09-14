@@ -315,3 +315,16 @@ Review: 26 finish tests green (3 new); node --check on the page script; TestClie
 page 200, simulated DB failure → 500 `{status:'error', message:'OSError: …'}` on /day and
 /apply, traceback in logs/server-errors.log, bad market still 400. Root cause of Ashe's two
 500s stays UNKNOWN until the next one lands in that log — nothing in Etere was touched.
+
+## Playout binding: one rule, three consumers (2026-09-14)
+Renamed programming (Teresa Teng 12/13, Beauty Tycoon 23) arrived code-bound for 9/15-16 even
+though DP bound them right at placement: Etere re-ran its support update on exactly those rows
+after the rename (Explode signature on the renamed shows only). The rename tool's own rebind
+required a CIB copy (`ID_METADEVICE <> 6`) so it was a no-op for anything not yet restored,
+and check_bindings had the same blind spot (4 rows reported vs 264).
+- [x] `services/playout_binding.py`: FILE_ID = sized, colon-free copy, S3 first; scan / rebind / rebind_asset
+- [x] `scripts/check_bindings.py` → CLI over the service
+- [x] rename-programming apply → `rebind_asset` (no CIB-copy requirement, I and E rows)
+- [x] Broadcast Health nightly: bindings scan (report-only) → header amber, media-check page, event log
+- [x] tests: SQL contract, summarize, rename route uses the service, event differ
+- [x] lessons.md + memory
