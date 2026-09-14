@@ -7448,7 +7448,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 filmati_title_map = {r["ID_FILMATI"]: (r["DESCRIZIO"] or "") for r in filmati_rows}
 
                 # Build SUPPORTO string per filmati from FS_FILMATI + FS_METADEVICE.
-                # Format: LEGACY_BASESUPP + FILE_ID  (e.g. "0ETX      TOY30M1206")
+                # Format: LEGACY_BASESUPP + FILE_ID  (e.g. "0ETX      TOY30M1206"). S3 first:
+                # with no ORDER BY the first copy returned decided the prefix, so the 9/14
+                # 01:03 Lexus/BVFL run wrote '1ETX      ' (CIB1's) on 321 rows. A 1ETX row
+                # airs (19 aired Q since June), but every other writer and 36k aired rows
+                # say 0ETX — be deterministic.
                 cur.execute(f"""
                     SELECT ff.ID_FILMATI, ff.FILE_ID, ff.VIDEOSTANDARD, ff.DUR,
                            ISNULL(d.LEGACY_BASESUPP,
@@ -7457,6 +7461,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     JOIN FS_METADEVICE d ON d.ID_METADEVICE = ff.ID_METADEVICE
                     WHERE ff.ID_FILMATI IN ({placeholders})
                       AND d.LEGACY_MEDIAID IS NOT NULL
+                    ORDER BY CASE WHEN d.LEGACY_MEDIAID = '0' THEN 0 ELSE 1 END, ff.LASTUPDATE DESC
                 """)
                 # VIDEOSTANDARD "D" (digital HD) and null both map to ASPECT "H"
                 _VS_TO_ASPECT = {"D": "H"}
@@ -7883,6 +7888,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     JOIN FS_METADEVICE d ON d.ID_METADEVICE = ff.ID_METADEVICE
                     WHERE ff.ID_FILMATI IN ({placeholders})
                       AND d.LEGACY_MEDIAID IS NOT NULL
+                    ORDER BY CASE WHEN d.LEGACY_MEDIAID = '0' THEN 0 ELSE 1 END, ff.LASTUPDATE DESC
                 """)
                 _VS_TO_ASPECT = {"D": "H"}
                 filmati_supporto_map: dict = {}
@@ -8267,6 +8273,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     FROM FS_FILMATI ff
                     JOIN FS_METADEVICE d ON d.ID_METADEVICE = ff.ID_METADEVICE
                     WHERE ff.ID_FILMATI IN ({fid_str}) AND d.LEGACY_MEDIAID IS NOT NULL
+                    ORDER BY CASE WHEN d.LEGACY_MEDIAID = '0' THEN 0 ELSE 1 END, ff.LASTUPDATE DESC
                 """)
                 _VS_ASPECT = {"D": "H"}
                 filmati_supporto_map: dict = {}
@@ -10275,6 +10282,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     JOIN FS_METADEVICE d ON d.ID_METADEVICE = ff.ID_METADEVICE
                     WHERE ff.ID_FILMATI IN ({fid_ph})
                       AND d.LEGACY_MEDIAID IS NOT NULL
+                    ORDER BY CASE WHEN d.LEGACY_MEDIAID = '0' THEN 0 ELSE 1 END, ff.LASTUPDATE DESC
                 """)
                 _VS_TO_ASPECT: dict = {"D": "H"}
                 filmati_supporto_map: dict = {}

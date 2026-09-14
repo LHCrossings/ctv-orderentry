@@ -27,7 +27,25 @@ def test_mismatch_where_scopes_unaired_non_live_rows_in_window():
     assert "BETWEEN '2026-09-14' AND '2026-09-16'" in w
     assert "t.STATUS IN ('I', 'E')" in w and "f.LIVE_ID IS NULL" in w and "t.LIVELLO = 0" in w
     assert "t.ID_FILMATI = 127964" in w
-    assert f"<> '{pb.PREFIX}' + RTRIM(fs.FILE_ID)" in w
+    assert "RTRIM(SUBSTRING(t.SUPPORTO, 11, 100)) <> RTRIM(fs.FILE_ID)" in w, (
+        "the FILE part must match"
+    )
+    assert "t.SUPPORTO NOT LIKE '[0-9]ETX      %'" in w, (
+        "any device prefix is fine (1ETX rows aired on all markets)"
+    )
+    assert f"<> '{pb.PREFIX}' + RTRIM(fs.FILE_ID)" not in w, (
+        "a 1ETX binding to the right file is not a mismatch"
+    )
+
+
+def test_traffic_assign_builders_prefer_the_s3_prefix():
+    src = (ROOT / "src/web/routes/orders.py").read_text()
+    builders = src.count("AS supporto_prefix")
+    assert builders == 4
+    assert (
+        src.count("ORDER BY CASE WHEN d.LEGACY_MEDIAID = '0' THEN 0 ELSE 1 END, ff.LASTUPDATE DESC")
+        >= builders
+    )
 
 
 def _row(code, file, market, date, time, tid):

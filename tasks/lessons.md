@@ -62,6 +62,13 @@ all due within a day — so the blind spot never showed.
    scan now reports mismatches (amber dot) so the rewrite is caught before air.
 5. A `--fix` that writes must read back its own value against the aired oracle for that asset
    before it counts as done; `REBOUND 4 row(s)` was a success message on a wrong write.
+6. **Same day, the other direction (Lee, 01:40 nightly scan): the new guard flagged 49 rows as
+   "would air black" because their prefix was `1ETX      ` (CIB1's LEGACY_BASESUPP, written by the
+   traffic-assign builder, which had no ORDER BY) instead of `0ETX      `.** Nineteen `1ETX` rows
+   had aired Q on all ten markets since June: the CIB resolves the FILE part, not the device prefix.
+   Validate a rule's EVERY term against the aired oracle — I had checked the FILE_ID term over
+   36k rows and inherited the prefix term from a constant. Prefix-agnostic rule: 440,929 aired
+   rows, 0 mismatches. A guard that cries wolf on its first night teaches the team to ignore it.
 
 ---
 

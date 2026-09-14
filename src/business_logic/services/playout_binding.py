@@ -65,13 +65,21 @@ def mismatch_where(d_from: dt.date, d_to: dt.date, asset_id: int | None = None) 
 
     Live assets (LIVE_ID set, `0LIVE…` bindings) are excluded; only I/E rows are in scope —
     aired rows are the as-run record. Dates are literals so the SQL runs on pymssql and
-    pyodbc alike."""
+    pyodbc alike.
+
+    The FILE part is what the CIB resolves; the 10-char device prefix is not: `1ETX      X`
+    (CIB1's LEGACY_BASESUPP, written by the traffic-assign builder when a CIB1 copy sorted
+    first) aired Q on all ten markets (FEEDING2ME18 6/22, SHRINERS2ME25 9/3), and the
+    2026-09-14 01:40 nightly scan flagged 49 such Lexus/BVFL rows as "would air black" —
+    a false alarm (Lee). So: any `<digit>ETX      ` prefix is accepted, the FILE_ID must
+    match (aired oracle 6/1-9/13: 440,929 rows, 0 mismatches); a rebind normalises to
+    `0ETX      ` like every other writer."""
     sql = (
         f" FROM TPALINSE t JOIN FILMATI f ON f.ID_FILMATI = t.ID_FILMATI {FILE_ID_APPLY}"
         f" WHERE t.DATA BETWEEN '{d_from:%Y-%m-%d}' AND '{d_to:%Y-%m-%d}'"
         " AND t.LIVELLO = 0 AND t.COD_USER BETWEEN 1 AND 10 AND t.ID_FILMATI > 0"
         " AND f.LIVE_ID IS NULL AND t.STATUS IN ('I', 'E')"
-        f" AND RTRIM(t.SUPPORTO) <> '{PREFIX}' + RTRIM(fs.FILE_ID)"
+        f" AND (t.SUPPORTO NOT LIKE '[0-9]ETX      %' OR RTRIM(SUBSTRING(t.SUPPORTO, {len(PREFIX) + 1}, 100)) <> RTRIM(fs.FILE_ID))"
     )
     if asset_id is not None:
         sql += f" AND t.ID_FILMATI = {int(asset_id)}"
@@ -102,7 +110,9 @@ def fetch_mismatches(conn, days: int = 2, today: dt.date | None = None) -> list[
                 "time": hms(int(ora)),
                 "status": st,
                 "code": code,
-                "bound": supp[len(PREFIX) :] if supp.startswith(PREFIX) else supp,
+                "bound": supp[len(PREFIX) :]
+                if len(supp) > len(PREFIX) and supp[1:4] == "ETX"
+                else supp,
                 "file": fid,
                 "id_filmati": int(filmati),
             }
