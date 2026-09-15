@@ -20,6 +20,8 @@
         .he-pill.offair, .he-pill.feed_lost { background: var(--nord11); }
         .he-pill.onair, .he-pill.feed_back, .he-pill.media_clear, .he-pill.bindings_clear, .he-pill.ghosts_clear { background: var(--nord14); color: var(--nord0); }
         .he-pill.media, .he-pill.ghosts, .he-pill.bindings { background: var(--nord13); color: var(--nord0); }
+        .he-pill.media_ack { background: var(--nord9); color: var(--nord0); }
+        .he-pill.media_unack { background: var(--nord12); color: var(--nord0); }
         .he-pill.start { background: var(--nord3); }
         .he-day { background: var(--nord5); color: var(--text-secondary); font-weight: 600; font-size: 0.8rem; }
         .he-note { font-size: 0.82rem; color: var(--text-muted); margin-top: 24px; line-height: 1.5; }
@@ -66,7 +68,7 @@
     const body = document.getElementById('heBody');
     const status = document.getElementById('heStatus');
     const sel = document.getElementById('heDays');
-    const LABEL = { start: 'server start', feed_lost: 'feed lost', feed_back: 'feed back', offair: 'off air', onair: 'on air', media: 'bad media', media_clear: 'media ok', ghosts: 'ghost spots', ghosts_clear: 'ghosts ok', bindings: 'misbound files', bindings_clear: 'bindings ok' };
+    const LABEL = { start: 'server start', feed_lost: 'feed lost', feed_back: 'feed back', offair: 'off air', onair: 'on air', media: 'bad media', media_clear: 'media ok', ghosts: 'ghost spots', ghosts_clear: 'ghosts ok', bindings: 'misbound files', bindings_clear: 'bindings ok', media_ack: 'media dismissed', media_unack: 'dismiss undone' };
 
     function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
     function pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -76,6 +78,8 @@
             case 'onair': return '<b>' + esc(e.station) + '</b> back on air';
             case 'media': return '<b>' + esc(e.code) + '</b> flagged ' + esc(e.detail || '') + (e.first ? ' — first airs ' + esc(e.first) : '');
             case 'media_clear': return '<b>' + esc(e.code) + '</b> no longer flagged';
+            case 'media_ack': return '<b>' + esc(e.code) + '</b> dismissed by master control — file looked at, plays fine' + (e.note ? ': ' + esc(e.note) : '') + ' (' + esc(e.detail || '') + ')';
+            case 'media_unack': return '<b>' + esc(e.code) + '</b> dismissal undone — alarming again';
             case 'ghosts': return '<b>' + e.count + '</b> commercial' + (e.count === 1 ? '' : 's') + ' in the playlist with no contract behind ' + (e.count === 1 ? 'it' : 'them');
             case 'ghosts_clear': return 'Playlist clean again — ' + e.count + ' ghost spot' + (e.count === 1 ? '' : 's') + ' gone';
             case 'bindings': return '<b>' + e.count + '</b> playlist row' + (e.count === 1 ? '' : 's') + ' bound to a file the asset does not have (would air black)';

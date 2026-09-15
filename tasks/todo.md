@@ -333,3 +333,14 @@ and check_bindings had the same blind spot (4 rows reported vs 264).
 - [x] root cause: `_insert_event` matched the new row by (asset, ORA) → soft-deleted twin from the refill strip
 - [x] fix: id watermark + LIVELLO=0, raise when no new row; unit tests; live SP repro in a rollback
 - [ ] Master Control card order (Set up, F&F, Optimize, Logs) — Ashe suggests waiting a week for the others; Lee to decide
+
+## Media Check: per-file dismiss for master control (2026-09-15, Lee "Let's do the acknowledge control")
+Context: McD SEA billboards MD07BBV418 / MD06BBM418 (6-7 s, ~11k B/frame) tripped the 12,000 floor;
+files are complete (Lee viewed them). No dismiss existed → dot amber + toast every session through 9/26.
+- [x] `services/media_acks.py`: JSON store `data/media_acks.json`, keyed by id_filmati, pinned to the copy size (re-ingest = new alert); `apply()` splits findings into active / dismissed
+- [x] `broadcast_health.py`: header summary counts active only; `/api/broadcast-health/media` annotates `ack`; POST `/media/ack`, DELETE `/media/ack/{id}`; event log kinds `media_ack` / `media_unack`
+- [x] `media_check.html`: Dismiss button (optional note) on each finding; dismissed cards muted with Undo
+- [x] `health_events.html`: labels for the two new kinds; toast hint "dismiss on Media Check"; bump `?v=`
+- [x] tests: store + apply (size pin, undo, prune) + event kinds; ruff clean
+- [x] commit, push, post_push.sh
+- [x] 7SE 2609 phantom OPEN/CLOSE billboard lines 83456/83457: Lee deleted them (planned, not used)

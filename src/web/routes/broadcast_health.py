@@ -21,11 +21,12 @@ import time
 import urllib.request
 from pathlib import Path
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
-from business_logic.services.health_events import EventLog, diff_events
+from business_logic.services.health_events import EventLog, diff_events, now_iso
+from business_logic.services.media_acks import MediaAcks
 
 # The single Stirlitz box (see stirlitz-multiviewer-api.md). Overridable via env
 # for testing, mirroring the hardcoded AGENT_URL pattern in airchecks.py.
@@ -252,8 +253,11 @@ def _media_summary() -> dict:
     d = _media.get("data")
     if not d:
         return {"state": "unknown", "count": 0, "findings": []}
+    # Dismissed findings (master control looked, the file is fine) do not alarm: they are
+    # left out of the dot, the toast and the event snapshot, and shown muted on the page.
+    active, dismissed = _acks.apply(d.get("findings", []))
     items = []
-    for f in d.get("findings", []):
+    for f in active:
         first = f["airings"][0] if f.get("airings") else None
         items.append(
             {
@@ -299,6 +303,7 @@ def _media_summary() -> dict:
         "checked_at": d.get("checked_at"),
         "count": len(items),
         "findings": items,
+        "dismissed": len(dismissed),
         "ghosts": ghosts,
         "bindings": bindings,
     }
@@ -311,6 +316,22 @@ def _media_summary() -> dict:
 # ---------------------------------------------------------------------------
 _EVENTS_PATH = Path(__file__).resolve().parents[3] / "data" / "broadcast_health_events.jsonl"
 _events = EventLog(_EVENTS_PATH)
+# Media Check dismissals (2026-09-15, McD SEA billboards): master control's "this file is
+# fine", pinned to the copy size so a re-ingested file alerts again.
+_ACKS_PATH = _EVENTS_PATH.parent / "media_acks.json"
+_acks = MediaAcks(_ACKS_PATH)
+
+
+def _media_payload() -> dict:
+    """The full scan result for the Media Check page, every finding annotated with `ack`
+    (None = alarming, record = dismissed); active first."""
+    d = _media.get("data")
+    if not d:
+        return {"state": "unknown", "findings": [], "assets": 0}
+    active, dismissed = _acks.apply(d.get("findings", []))
+    return {**d, "findings": active + dismissed, "dismissed": len(dismissed)}
+
+
 _last_snapshot: dict = {"data": None}
 
 
@@ -351,7 +372,48 @@ def build_broadcast_health_router(templates: Jinja2Templates) -> APIRouter:
     @router.get("/api/broadcast-health/media")
     async def broadcast_health_media():
         _ensure_media_task()
-        return JSONResponse(_media.get("data") or {"state": "unknown", "findings": [], "assets": 0})
+        return JSONResponse(_media_payload())
+
+    @router.post("/api/broadcast-health/media/ack")
+    async def broadcast_health_media_ack(body: dict = Body(...)):
+        """Dismiss one current finding: the file was looked at and plays fine. Only a
+        finding the last scan produced can be dismissed (the record pins its copy size)."""
+        try:
+            fid = int(body.get("id"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "id (asset id) is required")
+        finding = next(
+            (f for f in (_media.get("data") or {}).get("findings", []) if f["id_filmati"] == fid),
+            None,
+        )
+        if finding is None:
+            raise HTTPException(404, f"asset {fid} is not a current finding")
+        rec = _acks.ack(finding, note=str(body.get("note") or ""))
+        _events.append(
+            [
+                {
+                    "at": now_iso(),
+                    "kind": "media_ack",
+                    "code": finding["code"],
+                    "id": fid,
+                    "detail": finding["kind"],
+                    "note": rec["note"],
+                }
+            ]
+        )
+        _record(_cache["data"])  # the finding leaves the dot: logged as media_clear too
+        return JSONResponse(_media_payload())
+
+    @router.delete("/api/broadcast-health/media/ack/{fid}")
+    async def broadcast_health_media_unack(fid: int):
+        rec = _acks.unack(fid)
+        if rec is None:
+            raise HTTPException(404, f"asset {fid} was not dismissed")
+        _events.append(
+            [{"at": now_iso(), "kind": "media_unack", "code": rec.get("code"), "id": fid}]
+        )
+        _record(_cache["data"])
+        return JSONResponse(_media_payload())
 
     @router.post("/api/broadcast-health/media/rescan")
     async def broadcast_health_media_rescan():

@@ -122,7 +122,8 @@
     t.className = "bh-toast media";
     t.innerHTML =
       '<div><b>⚠ Bad media file: ' + esc(f.code) + "</b>" +
-      "<small>" + esc(f.kind) + (f.first ? " — first airs " + esc(f.first) : "") + "</small></div>";
+      "<small>" + esc(f.kind) + (f.first ? " — first airs " + esc(f.first) : "") +
+      " · click to check, or dismiss it there if the file is fine</small></div>";
     var x = document.createElement("button");
     x.className = "bh-toast-x";
     x.textContent = "×";
