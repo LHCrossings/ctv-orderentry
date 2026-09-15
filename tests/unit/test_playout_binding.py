@@ -118,5 +118,27 @@ def test_no_consumer_keeps_the_old_non_s3_rule():
         "scripts/check_bindings.py",
         "src/web/routes/orders.py",
         "src/web/routes/broadcast_health.py",
+        "src/business_logic/services/daily_programming_run.py",
+        "src/business_logic/services/finish_service.py",
     ):
         assert "ID_METADEVICE <> 6" not in (ROOT / rel).read_text(), rel
+
+
+def test_every_placement_writer_takes_the_binding_from_the_one_function():
+    """2026-09-15: Daily Programming's `_apply_filmati_sync` built SUPPORTO as
+    f"0ETX      {prog_code}" — the CODE — on every row of the asset, after `_bind_supporto`
+    had bound the new row to the FILE. Every placement of a renamed show broke its own
+    binding (142 rows for 9/17; NYC 9/2 aired black). No writer may build the value by hand."""
+    for rel in (
+        "src/business_logic/services/daily_programming_run.py",
+        "src/business_logic/services/finish_service.py",
+    ):
+        src = (ROOT / rel).read_text()
+        assert "binding(cur," in src, f"{rel} must take the binding from playout_binding.binding"
+        for hand_built in (
+            'f"0ETX      {',
+            "'0ETX      ' +",
+            '"0ETX      " +',
+            "ETX      '), ff.FILE_ID",
+        ):
+            assert hand_built not in src, f"{rel} builds a binding by hand: {hand_built!r}"

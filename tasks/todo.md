@@ -344,3 +344,11 @@ files are complete (Lee viewed them). No dismiss existed → dot amber + toast e
 - [x] tests: store + apply (size pin, undo, prune) + event kinds; ruff clean
 - [x] commit, push, post_push.sh
 - [x] 7SE 2609 phantom OPEN/CLOSE billboard lines 83456/83457: Lee deleted them (planned, not used)
+
+## Playout binding: Daily Programming's own checksum sync rewrote it from the code (2026-09-15, Lee "figure out why this keeps happening")
+Root cause: `_apply_filmati_sync` (2ef37da, July triangle fix) writes `supporto = prefix + COD_PROGRA` on EVERY
+row of the asset after `_bind_supporto` bound it right; the nightly aligner repairs rows once the file is on a CIB,
+so only S3-only assets stay broken (142 rows 9/17; NYC 9/2 black; 9/14 batch). Etere's SP is innocent (rolled-back test).
+- [x] `playout_binding.binding(cur, asset_id)` = one function for the value; DP `_bind_supporto`, `_apply_filmati_sync`, Finish `_supporto` use it
+- [x] tests: repro-shaped unit test on the sync SQL, consumer grep covers DP + Finish
+- [x] lessons.md + memory (actor pinned: ours), commit, push, deploy, re-run check_bindings

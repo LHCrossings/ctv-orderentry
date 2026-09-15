@@ -30,6 +30,7 @@ import threading
 import time
 
 from src.business_logic.services.filler_rotation import FILLER_CODE_PREFIXES
+from src.business_logic.services.playout_binding import binding
 from src.business_logic.services.show_profiles import daily_elements, elements_for, profile_for
 
 FPS = 29.97
@@ -395,7 +396,8 @@ def _apply_filmati_sync(cur, fid, fid_rows):
             (fid,),
         )
 
-    for rid, prog_code in fid_rows:
+    sup = None if is_live else binding(cur, fid)
+    for rid, _prog_code in fid_rows:
         if is_live:
             # Live-asset row: sch_UpdateSupportAndProperties already wrote the
             # REAL supporto/CRAWL_DESC — the Explode-mimicking cosmetics below
@@ -407,22 +409,20 @@ def _apply_filmati_sync(cur, fid, fid_rows):
             )
             continue
 
-        supporto_val = f"0ETX      {prog_code}"
+        # SUPPORTO is the playout binding, not a cosmetic: prefix + FILE_ID by the one
+        # rule. Until 2026-09-15 this wrote prefix + COD_PROGRA on every row of the asset,
+        # undoing _bind_supporto for every renamed show (142 rows for 9/17; NYC 9/2).
+        # None = no sized copy yet: leave the row's binding alone.
         crawl_desc = "[EDL]\nEdl_Version=0\n[Aspect Conversion]\nCode=HL"
-        cur.execute(
-            """
-            UPDATE TPALINSE SET
-                tipo_tc='C',
-                aspect='H',
-                audio_ty='M',
-                supporto=%s,
-                visionato='X',
-                CRAWL_DESC=%s,
-                SCHEDULE_CHECKSUM = dbo.sch_getFilmatiCheckSum(%s)
-            WHERE id_tpalinse=%s
-        """,
-            (supporto_val, crawl_desc, rid, rid),
+        sets = (
+            "tipo_tc='C', aspect='H', audio_ty='M', visionato='X', CRAWL_DESC=%s,"
+            " SCHEDULE_CHECKSUM = dbo.sch_getFilmatiCheckSum(%s)"
         )
+        params: list = [crawl_desc, rid]
+        if sup is not None:
+            sets = "supporto=%s, " + sets
+            params.insert(0, sup)
+        cur.execute(f"UPDATE TPALINSE SET {sets} WHERE id_tpalinse=%s", (*params, rid))
 
 
 def _drain_pending_filmati_syncs(cur, conn, pending):
@@ -470,17 +470,11 @@ def _bind_supporto(cur, tpalinse_id: int, filmati: int):
     (NYC 9/2/2026 06:00, Phoenix Evening Express; 98 future rows were bound the same
     way). Finish has done this since 8/28 (finish_service._supporto); Daily Programming
     now does it after every SP call. Live assets have no FS_FILMATI row and keep the
-    SP's 0LIVE binding. Returns the binding written, or None when left alone."""
-    cur.execute(
-        "SELECT TOP 1 ISNULL(d.LEGACY_BASESUPP, CAST(d.LEGACY_MEDIAID AS VARCHAR) + 'ETX      '), ff.FILE_ID"
-        " FROM FS_FILMATI ff JOIN FS_METADEVICE d ON d.ID_METADEVICE = ff.ID_METADEVICE"
-        " WHERE ff.ID_FILMATI = %s AND d.LEGACY_MEDIAID IS NOT NULL ORDER BY d.LEGACY_MEDIAID",
-        (int(filmati),),
-    )
-    r = cur.fetchone()
-    if not r or not r[1]:
+    SP's 0LIVE binding. Returns the binding written, or None when left alone.
+    The value comes from playout_binding.binding — the one rule every writer shares."""
+    sup = binding(cur, filmati)
+    if sup is None:
         return None
-    sup = (r[0] or "") + str(r[1]).strip()
     cur.execute("UPDATE TPALINSE SET SUPPORTO=%s WHERE ID_TPALINSE=%s", (sup, int(tpalinse_id)))
     return sup
 
@@ -517,10 +511,13 @@ def _sync_checksums(cur, ids, pending):
     mutation, not a schedule-row one. For live assets we skip the normalisation
     entirely and freeze the checksum against the fields as-is.
 
-    NOTE: the tipo_tc/aspect/audio_ty/supporto/visionato/CRAWL_DESC fields set below
-    are NOT inputs to the checksum — they are cosmetic (they mirror what Explode
-    writes so the row looks identical in the UI). The FILMATI normalisation above is
-    what actually prevents the triangle. Idempotent; also auto-heals stale rows.
+    NOTE: the tipo_tc/aspect/audio_ty/visionato/CRAWL_DESC fields set below are NOT
+    inputs to the checksum — they are cosmetic (they mirror what Explode writes so the
+    row looks identical in the UI). SUPPORTO is NOT cosmetic: it is the playout binding
+    and comes from playout_binding.binding (2026-09-15 — writing prefix + COD_PROGRA
+    here rewrote every row of every renamed asset after _bind_supporto had bound the
+    new row right). The FILMATI normalisation above is what actually prevents the
+    triangle. Idempotent; also auto-heals stale rows.
 
     CONCURRENCY (2026-07-09): rows are grouped by their FILMATI id and each
     group's read-then-write runs under _filmati_lock(fid). Daily Programming

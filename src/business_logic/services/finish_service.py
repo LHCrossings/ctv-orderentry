@@ -43,6 +43,7 @@ from src.business_logic.services.finish_plan import (
     plan,
     window_from_day,
 )
+from src.business_logic.services.playout_binding import binding
 
 OVERRUN_SECONDS = 30.0  # content past the slot end by more than this = programming problem
 # "Programming placed" is decided by the piece catalog (finish_plan.missing_pieces); this is
@@ -108,24 +109,14 @@ def _explode_window(cur, market: int, date: str, lo_f: int, hi_f: int) -> dict:
 
 
 def _supporto(cur, filmati: int) -> str:
-    """Playout binding = channel prefix + FS_FILMATI.FILE_ID (same rule as
-    orders._pi_filler_supporto). NEVER truncate short of the column:
-    TPALINSE.SUPPORTO is varchar(42), and a clipped binding cannot resolve to a
-    file — DAL's station ID ('0ETX      ID - TACDAL - GENERIC', 31 chars) was
-    cut to 30 here, so every DAL Finish rolled back on its own verify (Maija 9/1;
-    the aired hand-placed siblings all carry the full 31 chars, STATUS='A')."""
-    cur.execute(
-        "SELECT TOP 1 ISNULL(d.LEGACY_BASESUPP, CAST(d.LEGACY_MEDIAID AS VARCHAR) + 'ETX      '), ff.FILE_ID"
-        " FROM FS_FILMATI ff JOIN FS_METADEVICE d ON d.ID_METADEVICE = ff.ID_METADEVICE"
-        " WHERE ff.ID_FILMATI = %s AND d.LEGACY_MEDIAID IS NOT NULL ORDER BY d.LEGACY_MEDIAID",
-        (int(filmati),),
-    )
-    r = cur.fetchone()
-    if not r or not r[1]:
+    """Playout binding = prefix + FS_FILMATI.FILE_ID by the one rule in
+    playout_binding.binding (never truncated: TPALINSE.SUPPORTO is varchar(42) and a
+    clipped binding cannot resolve — DAL's 31-char station ID was cut to 30 here, so
+    every DAL Finish rolled back on its own verify, Maija 9/1). A Finish row must be
+    bindable, so no copy is an error here, not a skip."""
+    sup = binding(cur, filmati)
+    if sup is None:
         raise RuntimeError(f"no FS_FILMATI FILE_ID for {filmati}")
-    sup = str(r[0]) + str(r[1])
-    if len(sup) > 42:
-        raise RuntimeError(f"SUPPORTO overflows varchar(42), cannot bind: {sup!r}")
     return sup
 
 

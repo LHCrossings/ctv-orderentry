@@ -4,6 +4,39 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## "Etere Rewrote It" Was Our Own Second Write — Reproduce the Rewrite Before Naming the Actor, and Give a Value ONE Producer
+
+**Session:** Lee, `check_bindings.py` 142 rows for 9/17, "figure out why this keeps happening" (2026-09-15)
+
+**Rule:** Since 9/2 every note said "Etere rewrites SUPPORTO from COD_PROGRA when it refreshes a
+renamed asset's rows" — an inference from the shape of the damage, never reproduced. The
+rewriter was Daily Programming's own `_apply_filmati_sync` (2ef37da, the July yellow-triangle
+fix): after `_bind_supporto` bound the NEW row to the file, the checksum sync ran over EVERY
+row of the asset and wrote `supporto = f"0ETX      {prog_code}"` — the code — as an
+"Explode-mimicking cosmetic". Etere's own `sch_UpdateSupportAndProperties` left both an
+S3-only and a CIB-copy asset file-bound in a rolled-back test. The nightly aligner repairs the
+rows once the file reaches a CIB, so only S3-only assets ever showed (the "S3-only" and
+"random per market" signatures of 9/2 and 9/14 were the repair, not the damage). Three
+guards were built around the wrong actor before anyone ran the suspect code in a transaction.
+
+**How to apply:**
+1. Before writing "X rewrites Y", reproduce it: call the suspect (SP or our function) on a
+   real row inside `BEGIN TRAN … ROLLBACK` and read the column back. Here that took one
+   query per suspect and settled it in a minute.
+2. Grep OUR code for every writer of the column before blaming the vendor:
+   `grep -n SUPPORTO` across services found the f-string in the same file as the fix.
+3. A value the playout server depends on gets ONE producer function (`playout_binding.binding`)
+   and every writer calls it; a structural test greps the writers for hand-built literals.
+   "Cosmetic" is not a category for a column the AU opens a file by.
+4. A timestamp that matches your own fix to the second is your fix: the DB clock is Pacific,
+   `LASTUPDATE` triggers stamp every UPDATE, and I nearly reported my own `--fix` as Etere's
+   08:12:50 sweep. Convert clocks first.
+5. Discriminate with a CONTROL: the five unwalked markets held 1,265 renamed rows all correct,
+   the five placed today broke exactly their S3-only shows — that ruled out "market-scoped
+   operator action" and pointed at "asset-scoped, after placement, undone by the aligner".
+
+---
+
 ## A Row You Just Created Is Identified by "Did Not Exist Before" — Never by the Values You Asked For
 
 **Session:** Ashe, Fill & Finish DAL 9/12 25:30 "content still sits behind the Station ID" (2026-09-14)

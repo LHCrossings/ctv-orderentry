@@ -45,6 +45,9 @@ MARKETS = {
     10: "DAL",
 }
 MAX_ROWS = 400
+MAX_LEN = (
+    42  # TPALINSE.SUPPORTO is varchar(42); a clipped binding cannot load (DAL ID, 31 chars, 9/1)
+)
 
 # The file an asset's binding must name — see the module docstring. Aliases: `t` = TPALINSE.
 FILE_ID_APPLY = (
@@ -53,6 +56,37 @@ FILE_ID_APPLY = (
     " WHERE x.ID_FILMATI = t.ID_FILMATI AND x.PHYSICAL_SIZE > 0 AND x.FILE_ID NOT LIKE '%:%'"
     " ORDER BY CASE WHEN d.LEGACY_MEDIAID = '0' THEN 0 ELSE 1 END, x.LASTUPDATE DESC) fs"
 )
+
+# The same rule for ONE asset, as a parameterised statement (pymssql: literal % doubled).
+FILE_ID_FOR_ASSET = (
+    "SELECT TOP 1 x.FILE_ID FROM FS_FILMATI x"
+    " JOIN FS_METADEVICE d ON d.ID_METADEVICE = x.ID_METADEVICE"
+    " WHERE x.ID_FILMATI = %s AND x.PHYSICAL_SIZE > 0 AND x.FILE_ID NOT LIKE '%%:%%'"
+    " ORDER BY CASE WHEN d.LEGACY_MEDIAID = '0' THEN 0 ELSE 1 END, x.LASTUPDATE DESC"
+)
+
+
+def binding(cur, asset_id: int) -> str | None:
+    """The playout binding a row of `asset_id` must carry: PREFIX + the FILE_ID the rule
+    picks (sized, colon-free, S3 master first, newest). None when the asset has no such
+    copy yet — leave the row alone, the nightly scan re-checks it. Raises when the value
+    would not fit varchar(42).
+
+    Every writer takes the value from here — Daily Programming `_bind_supporto` and
+    `_apply_filmati_sync`, Finish `_supporto` — so no placement path can build it from
+    the code again. 2026-09-15: `_apply_filmati_sync` wrote prefix + COD_PROGRA on every
+    row of an asset AFTER `_bind_supporto` had bound the new row right, so each Daily
+    Programming placement of a renamed show broke its own binding; the nightly aligner
+    repaired rows once the file reached a CIB, which is why only S3-only assets ever
+    showed (142 rows for 9/17; the 9/14 batch; NYC 9/2 aired black)."""
+    cur.execute(FILE_ID_FOR_ASSET, (int(asset_id),))
+    r = cur.fetchone()
+    if not r or not r[0]:
+        return None
+    sup = PREFIX + str(r[0]).strip()
+    if len(sup) > MAX_LEN:
+        raise RuntimeError(f"SUPPORTO overflows varchar({MAX_LEN}), cannot bind: {sup!r}")
+    return sup
 
 
 def hms(frames: int) -> str:
