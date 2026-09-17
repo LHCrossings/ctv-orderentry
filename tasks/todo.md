@@ -377,3 +377,12 @@ Registered EDIT-04 as SSM node mi-02599888d685ee9e5 (activation SAC-EXPORT, role
 - [ ] EDIT-04 hygiene for Jenna/Maija: OS has no cumulative update since 3/2024 (Win10 EOL), L: mapping → 192.168.50.27 is dead
       (343 SMB timeouts/30 d), Edge Default profile still has its 12 bookmarks (nothing wiped locally), power loss 8/20 22:46
 - [ ] delete the activation script from the Windows desktop (code single-use, expired 9/18)
+
+## EDIT-04 transport correction + ADSRV01 exposure (2026-09-17, Lee: FileZilla client, not Etere-web FTP)
+Corrected the transport (my first write-up wrongly said a direct Tailscale copy to the Datamover):
+- Hop 1 EDIT-04 -> ADSRV01 (192.168.50.20) = SMB over Tailscale (EDIT-04 tx 53.9 GB to adsrv01 since 9/14 reboot, <1 MB to Datamover).
+- Hop 2 ADSRV01 -> Datamover C:\WIP = FTP: Jumpbox (usrjp, 10.0.0.45) FileZilla client saved site "Crossings" = ADSRV01 Tailscale 100.104.122.111:21 as lee.hudson; downloads land under final name in WIP (Preallocate=0) -> ActiveSync sweeps mid-write = truncation.
+- [x] Datamover FileZilla server (port 21/990) = Etere-web only, unused per Lee; ADSRV01 FileZilla server is the real one.
+- [ ] SECURITY (new): ADSRV01 FileZilla-Server firewall rule is on the PUBLIC profile; internet host 80.94.95.221 hit :21 with an RDP/mstshash exploit probe. ADSRV01 on office LAN (gw 192.168.50.1) -> office firewall forwards FTP (and likely RDP) from the internet. Scope to Tailscale/office subnet.
+- [ ] Fix the ingest race: FTP-pull into C:\WIP_incoming then MOVE into C:\WIP (atomic), or switch that pull to WinSCP (.filepart+rename); optionally ask Etere for an ActiveSync file-stability setting.
+- caveat: ADSRV01 FTP logs retain 9/14+ only (9/6-7 gone); 9/14-16 logs show only scanner noise, no internal RETR -> the two original RETR lines unseen; mechanism rests on Datamover dm.job partial-size reads.
