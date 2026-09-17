@@ -352,3 +352,13 @@ so only S3-only assets stay broken (142 rows 9/17; NYC 9/2 black; 9/14 batch). E
 - [x] `playout_binding.binding(cur, asset_id)` = one function for the value; DP `_bind_supporto`, `_apply_filmati_sync`, Finish `_supporto` use it
 - [x] tests: repro-shaped unit test on the sync SQL, consumer grep covers DP + Finish
 - [x] lessons.md + memory (actor pinned: ours), commit, push, deploy, re-run check_bindings
+
+## Bee deploy: Tailscale SSH now owns port 22 (2026-09-17, Lee "I got a deploy error from git")
+Run 35174061370 (5a73dfa) + its rerun: `ssh: handshake failed: EOF` at appleboy/ssh-action; Connect Tailscale (incl. ping) green.
+Banner on 100.105.177.118:22 = `SSH-2.0-Tailscale`; peer record advertises sshHostKeys → Tailscale SSH enabled on the Bee
+(host "portal", untagged) some time after the green 9/15 15:33Z deploy. Tailscale SSH ignores DEPLOY_SSH_KEY and needs an
+`ssh` ACL rule for tag:ci → Bee as jellee26; none exists, so it drops the handshake. Lee has no Tailscale admin → Kurt/Jenna.
+- [ ] Kurt/Jenna: either `sudo tailscale set --ssh=false` on the Bee (OpenSSH + existing key work again), or add ACL ssh rule
+      {src tag:ci, dst the Bee, users jellee26, action accept}
+- [ ] then `gh run rerun 35174061370 --failed` (or next push) and confirm the Bee is on 5a73dfa
+Jumpbox + Windows checkout are on 5a73dfa (post_push verified) — team sees the card order; only the Bee docker lags at 9d871a4.
