@@ -362,3 +362,18 @@ Banner on 100.105.177.118:22 = `SSH-2.0-Tailscale`; peer record advertises sshHo
       {src tag:ci, dst the Bee, users jellee26, action accept}
 - [ ] then `gh run rerun 35174061370 --failed` (or next push) and confirm the Bee is on 5a73dfa
 Jumpbox + Windows checkout are on 5a73dfa (post_push verified) — team sees the card order; only the Bee docker lags at 9d871a4.
+
+## EDIT-04 (Jenna's export PC) diagnostics via SSM hybrid node (2026-09-17, Lee + Maija's email)
+Registered EDIT-04 as SSM node mi-02599888d685ee9e5 (activation SAC-EXPORT, role SSMHybridServiceRole). Read-only surveys only.
+- [x] Exports are complete: 177 uploads since 8/25 size-matched to S3 except the 2 known truncations (TheOne090726B 2%, TopNews090826A 58%);
+      local copies are full size, local B has no black frames.
+- [x] Root cause of the truncations: Datamover ActiveSync (5-min loop) ingested `\\10.0.0.199\wip\<file>` while the copy from
+      Sacramento was still running (dm.job logs: read 12 min / 4 min after render; partial bytes went to S3 and every CIB).
+      Tailscale EDIT-04→Datamover is DERP-relayed (no UDP 41641 on the Datamover SG) so copies are slow and stay open long.
+- [x] "You Are the One exported in full but black after 30-40%" = the 9/7 hour as aired in NYC/WDC/DAL: A played (28 min), truncated B
+      died at ~70 s (TPALINSE DURATION 2099); header said 30:41 so Etere showed it complete. r1 re-export aired clean.
+- [ ] Lee: pick the ingest fix — staging folder on the Datamover C: volume + MOVE into WIP (atomic), and/or ask Etere for the
+      ActiveSync file-stability setting; optionally allow UDP 41641 from the office IP on sg-002282178e877efcc
+- [ ] EDIT-04 hygiene for Jenna/Maija: OS has no cumulative update since 3/2024 (Win10 EOL), L: mapping → 192.168.50.27 is dead
+      (343 SMB timeouts/30 d), Edge Default profile still has its 12 bookmarks (nothing wiped locally), power loss 8/20 22:46
+- [ ] delete the activation script from the Windows desktop (code single-use, expired 9/18)
