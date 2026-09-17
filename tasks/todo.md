@@ -332,7 +332,7 @@ and check_bindings had the same blind spot (4 rows reported vs 264).
 ## Fill & Finish: DAL 9/12 25:30 "content still sits behind the Station ID" (Ashe 9/14)
 - [x] root cause: `_insert_event` matched the new row by (asset, ORA) → soft-deleted twin from the refill strip
 - [x] fix: id watermark + LIVELLO=0, raise when no new row; unit tests; live SP repro in a rollback
-- [ ] Master Control card order (Set up, F&F, Optimize, Logs) — Ashe suggests waiting a week for the others; Lee to decide
+- [x] Master Control card order (Set up, F&F, Optimize, Logs) — Lee approved 9/17, done
 
 ## Media Check: per-file dismiss for master control (2026-09-15, Lee "Let's do the acknowledge control")
 Context: McD SEA billboards MD07BBV418 / MD06BBM418 (6-7 s, ~11k B/frame) tripped the 12,000 floor;
