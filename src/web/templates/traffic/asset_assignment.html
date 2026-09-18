@@ -1485,7 +1485,7 @@
             // Route by format — mixed uploads are allowed; each item declares its own format
             const daviselen = items.filter(i => i.format === 'daviselen');
             const lexus     = items.filter(i => i.format === 'lexus');
-            const tatari    = items.filter(i => i.format === 'tatari' || i.format === 'directdonor' || i.format === 'ma' || i.format === 'imd');
+            const tatari    = items.filter(i => i.format === 'tatari' || i.format === 'directdonor' || i.format === 'ma' || i.format === 'imd' || i.format === 'trafinst');
             const hl        = items.filter(i => i.format === 'hl' || i.format === 'rpm');
             const unknown   = items.filter(i => i.format === 'unknown' || i.error);
 
@@ -2170,7 +2170,9 @@
 
             const durSuffix = (r.format === 'ma' && r.spots && r.spots.length)
                 ? ` <span style="font-size:0.8rem;color:var(--text-muted);font-weight:400;">· :${r.spots[0].duration_sec}s · ${esc(r.product_code || '')}</span>`
-                : '';
+                : (r.format === 'trafinst')
+                    ? ` <span style="font-size:0.8rem;color:var(--text-muted);font-weight:400;">· ${esc(r.agency || '')}${r.estimate ? ' · ' + esc(r.estimate) : ''}</span>`
+                    : '';
             card.innerHTML = `
                 <h2 style="margin-bottom:4px;">${esc(r.advertiser)}${durSuffix}</h2>
                 <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">

@@ -166,6 +166,7 @@ _TRAFFIC_FORMAT_LABELS = [
     "Direct Donor (WorldLink)",
     "Marketing Architects (WorldLink)",
     "Icon Media Direct (WorldLink)",
+    "Traffic Instructions sheet (Mynt Agency / WorldLink)",
     "H&L Partners",
     "RPM",
 ]
@@ -9030,6 +9031,108 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+    def _rotation_sheet_item(cur, filename, fmt, instr, **extra):
+        """Build the assign-assets page's rotation-sheet payload (the shape the tatari /
+        ma / imd / directdonor branches emit by hand) from a parsed instruction whose spots
+        carry ``isci, title, duration_sec, rotation_pct`` and, per row, their own
+        ``date_from_sql/date_to_sql`` + display strings; ``instr.periods`` groups the rows by
+        flight so the page's Assign loop scopes each period to its own dates.
+        ``cur`` is an ``as_dict`` cursor on the Etere DB."""
+        from collections import defaultdict
+
+        isci_codes = [s.isci for s in instr.spots]
+        placeholders = ",".join(f"'{c}'" for c in isci_codes) if isci_codes else "''"
+        cur.execute(
+            f"SELECT ID_FILMATI, COD_PROGRA, DESCRIZIO FROM FILMATI WHERE COD_PROGRA IN ({placeholders})"
+        )
+        filmati_map = {
+            r["COD_PROGRA"]: {"filmati_id": r["ID_FILMATI"], "db_title": r["DESCRIZIO"] or ""}
+            for r in cur.fetchall()
+        }
+
+        def _spot_out(s):
+            found = s.isci in filmati_map
+            return {
+                "isci": s.isci,
+                "title": s.title or (filmati_map[s.isci]["db_title"] if found else ""),
+                "duration_sec": s.duration_sec,
+                "rotation_pct": s.rotation_pct,
+                "filmati_id": filmati_map[s.isci]["filmati_id"] if found else None,
+                "found": found,
+                "date_from_sql": s.date_from_sql,
+                "date_to_sql": s.date_to_sql,
+            }
+
+        spots_out = [_spot_out(s) for s in instr.spots]
+        periods_out = [
+            {
+                "date_from_sql": per.date_from_sql,
+                "date_to_sql": per.date_to_sql,
+                "date_from_display": per.date_from_display,
+                "date_to_display": per.date_to_display,
+                "spots": [_spot_out(s) for s in per.spots],
+            }
+            for per in instr.periods
+        ]
+
+        by_dur: dict = defaultdict(list)
+        for s in spots_out:
+            by_dur[s["duration_sec"]].append(s)
+        duration_groups = [
+            {"duration_sec": dur, "spots": grp, "all_found": all(s["found"] for s in grp)}
+            for dur, grp in sorted(by_dur.items())
+        ]
+
+        term = f"%{instr.search_suggestion}%"
+        date_filter = ""
+        if instr.date_from_sql:
+            date_filter += f" AND cr.DATA_FINE >= '{instr.date_from_sql}'"
+        if instr.date_to_sql:
+            date_filter += f" AND cr.DATA_INIZIO <= '{instr.date_to_sql}'"
+        durations = list(by_dur)
+        dur_having = ""
+        if len(durations) == 1:
+            dur_having = (
+                f" HAVING SUM(CASE WHEN CAST(ROUND(CAST(cr.DURATA AS FLOAT)"
+                f" / {_FPS_GLOBAL}, 0) AS INT) = {durations[0]} THEN 1 ELSE 0 END) > 0"
+            )
+        cur.execute(
+            f"""
+            SELECT TOP 10
+                ct.ID_CONTRATTITESTATA AS id,
+                ct.COD_CONTRATTO       AS code,
+                ct.DESCRIZIONE         AS description,
+                CONVERT(VARCHAR(10), MIN(cr.DATA_INIZIO), 101) AS date_start,
+                CONVERT(VARCHAR(10), MAX(cr.DATA_FINE),   101) AS date_end,
+                COUNT(DISTINCT cr.ID_CONTRATTIRIGHE) AS line_count
+            FROM CONTRATTITESTATA ct
+            JOIN CONTRATTIRIGHE cr ON cr.ID_CONTRATTITESTATA = ct.ID_CONTRATTITESTATA
+            WHERE (ct.DESCRIZIONE LIKE %s OR ct.COD_CONTRATTO LIKE %s)
+              {date_filter}
+            GROUP BY ct.ID_CONTRATTITESTATA, ct.COD_CONTRATTO, ct.DESCRIZIONE
+            {dur_having}
+            ORDER BY ct.ID_CONTRATTITESTATA DESC
+        """,
+            (term, term),
+        )
+        contracts = [dict(r) for r in cur.fetchall()]
+
+        return {
+            "filename": filename,
+            "format": fmt,
+            "advertiser": instr.advertiser,
+            "search_suggestion": instr.search_suggestion,
+            "date_from_sql": instr.date_from_sql,
+            "date_to_sql": instr.date_to_sql,
+            "date_from_display": instr.date_from_display,
+            "date_to_display": instr.date_to_display,
+            "spots": spots_out,
+            "periods": periods_out,
+            "duration_groups": duration_groups,
+            "contract_candidates": contracts,
+            **extra,
+        }
+
     @router.post("/api/traffic/parse-instructions")
     async def parse_traffic_instructions(files: List[UploadFile] = File(...)):
         """Auto-detect agency format and parse one or more traffic instruction PDFs.
@@ -9042,6 +9145,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
         for f in files:
             parsed_files.append((f.filename, await f.read()))
 
+        from browser_automation.parsers.trafinst_traffic_parser import (
+            is_trafinst_text as _is_trafinst,
+        )
+
         def _detect_format(text: str) -> str:
             upper = text.upper()
             if "DAVIS ELEN ADVERTISING" in upper:
@@ -9050,6 +9157,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 return "lexus"
             if "TRAFFIC INSTRUCTIONS" in upper and "tatari" in text.lower():
                 return "tatari"
+            if _is_trafinst(text):  # agency sheet: layout markers, any From: agency
+                return "trafinst"
             if "marketing architects" in text.lower():
                 return "ma"
             if "icon media direct" in text.lower():
@@ -9487,6 +9596,24 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 "duration_groups": duration_groups,
                                 "contract_candidates": contracts,
                             }
+                        )
+
+                    elif fmt == "trafinst":
+                        from browser_automation.parsers.trafinst_traffic_parser import (
+                            parse_trafinst_traffic_pdf,
+                        )
+
+                        instr = parse_trafinst_traffic_pdf(pdf_bytes)
+                        items.append(
+                            _rotation_sheet_item(
+                                cur,
+                                filename,
+                                "trafinst",
+                                instr,
+                                agency=instr.agency,
+                                client_code=instr.client_code,
+                                estimate=instr.estimate,
+                            )
                         )
 
                     elif fmt == "rpm":

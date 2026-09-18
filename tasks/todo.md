@@ -394,3 +394,9 @@ Corrected the transport (my first write-up wrongly said a direct Tailscale copy 
 - [x] Rejected: Python lock around the SP — hangs (SQL locks of open txns + Python lock cycle), verified rolled back
 - [x] Verified: 4-thread rolled-back harness converges on attempt 2; 818 unit tests pass
 - [x] Lee reran Set up across markets for 9/18 — "ok, it worked"; all 9 CTV markets hold 5 live parts
+
+## Traffic Instructions agency sheet (Mynt Agency / Pacagen, WorldLink) — drag-drop (2026-09-18)
+- [x] Parser `browser_automation/parsers/trafinst_traffic_parser.py`: layout-detected (Code/Name With 800# + % to Run), agency from From:, per-row flights → periods, % reconciliation, duplicate guard
+- [x] Route: `_rotation_sheet_item` helper (shared payload builder) + `trafinst` branch/detector/badge; page filter + agency/estimate suffix
+- [x] Verified live: parse endpoint → 6/6 creatives found, contract 3081 sole candidate, :30 lines returned; 9 parser tests + full unit suite
+- [ ] Maija: next Mynt sheet via drag-drop; 3081 was assigned by hand this time (216 pool rows), no re-assign needed
