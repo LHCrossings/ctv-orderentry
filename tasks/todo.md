@@ -393,4 +393,4 @@ Corrected the transport (my first write-up wrongly said a direct Tailscale copy 
 - [x] Fix: `_drain_results` re-raises deadlocks; `InsertLeftNoRow` is retryable; all 5 except sites tag `_is_retryable`
 - [x] Rejected: Python lock around the SP — hangs (SQL locks of open txns + Python lock cycle), verified rolled back
 - [x] Verified: 4-thread rolled-back harness converges on attempt 2; 818 unit tests pass
-- [ ] Lee: rerun Set up across markets for 9/18 after deploy; NYC/HOU/SEA/WDC should place (retry or solo pass)
+- [x] Lee reran Set up across markets for 9/18 — "ok, it worked"; all 9 CTV markets hold 5 live parts
