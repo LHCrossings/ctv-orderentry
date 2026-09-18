@@ -15,11 +15,16 @@
 # Takes 3 to 6 minutes, most of it tracerpt + XML decode.
 # Send the zip to Etere together with tasks/emails/etere-au-cpu-spin-20260918.md.
 
+# Decode-only rerun on a folder that already holds au-cpu.etl (and optionally au-cpu.xml):
+#   powershell -ExecutionPolicy Bypass -File cib_au_cpu_sample.ps1 -Reuse C:\Windows\Temp\au-cpu-<host>-<stamp>
+param([string]$Reuse = '')
+
 $ErrorActionPreference = 'Stop'
-$stamp = Get-Date -Format 'yyyyMMdd-HHmm'
-$dir = "C:\Windows\Temp\au-cpu-$env:COMPUTERNAME-$stamp"
+$KERNEL_MIN = [uint64]'9223372036854775808'   # 0x8000000000000000; a hex literal that size is a NEGATIVE int64 in PowerShell
+if ($Reuse) { $dir = $Reuse } else { $dir = "C:\Windows\Temp\au-cpu-$env:COMPUTERNAME-$(Get-Date -Format 'yyyyMMdd-HHmm')" }
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 $report = Join-Path $dir 'report.txt'
+Remove-Item (Join-Path $dir 'report.txt'), (Join-Path $dir 'au-modules.tsv') -ErrorAction SilentlyContinue
 function Say($s) { Write-Host $s; Add-Content -Path $report -Value $s }
 
 Say "HOST $env:COMPUTERNAME  $(Get-Date)  TZ $((Get-TimeZone).Id)"
@@ -49,7 +54,7 @@ function ToAddr([string]$s) {
     try { return [System.Convert]::ToUInt64($s, 16) } catch { try { return [uint64]$s } catch { return [uint64]0 } }
 }
 function ModOf([int]$apid, [uint64]$addr) {
-    if ($addr -ge [uint64]0x8000000000000000) { return 'kernel' }
+    if ($addr -ge $KERNEL_MIN) { return 'kernel' }
     foreach ($m in $mods[$apid]) { if ($addr -ge $m.base -and $addr -lt ($m.base + $m.size)) { return "$($m.name)+0x$(($addr - $m.base).ToString('x'))" } }
     return "0x$($addr.ToString('x'))"
 }
@@ -73,21 +78,27 @@ $wprp = @'
 $wprpPath = Join-Path $dir 'cpu.wprp'
 [IO.File]::WriteAllText($wprpPath, $wprp)
 $etl = Join-Path $dir 'au-cpu.etl'
-Say "--- WPR start $(Get-Date -Format 'HH:mm:ss') ---"
-try {
-    & wpr -start "$wprpPath!CPUSample" -filemode
-    Start-Sleep -Seconds 10
-    & wpr -stop $etl
-} catch {
-    & wpr -cancel 2>$null
-    throw
+if (Test-Path $etl) {
+    Say "reusing trace: $etl  $([math]::Round((Get-Item $etl).Length/1MB,1)) MB"
+} else {
+    Say "--- WPR start $(Get-Date -Format 'HH:mm:ss') ---"
+    try {
+        & wpr -start "$wprpPath!CPUSample" -filemode
+        Start-Sleep -Seconds 10
+        & wpr -stop $etl
+    } catch {
+        & wpr -cancel 2>$null
+        throw
+    }
+    Say "trace: $etl  $([math]::Round((Get-Item $etl).Length/1MB,1)) MB"
 }
-Say "trace: $etl  $([math]::Round((Get-Item $etl).Length/1MB,1)) MB"
 
 # --- 3. decode: tracerpt -> XML, stream it, histogram the hot threads ---
 $xml = Join-Path $dir 'au-cpu.xml'
-Say "--- tracerpt $(Get-Date -Format 'HH:mm:ss') (a few minutes) ---"
-& tracerpt $etl -o $xml -of XML -y | Out-Null
+if (-not (Test-Path $xml)) {
+    Say "--- tracerpt $(Get-Date -Format 'HH:mm:ss') (a few minutes) ---"
+    & tracerpt $etl -o $xml -of XML -y | Out-Null
+}
 Say "xml: $([math]::Round((Get-Item $xml).Length/1MB,1)) MB  decode start $(Get-Date -Format 'HH:mm:ss')"
 
 $ipHist = @{}      # "pid|module+off" -> count
