@@ -120,7 +120,7 @@ function Get-Exports([string]$path) {
     return $res
 }
 function Sym([int]$apid, [string]$modoff) {
-    # "module+0xoff" -> "module!Export+0xN" when an export lies within 32 KB before the offset
+    # "module+0xoff" -> "module!Export+0xN" when an export lies within 1 KB before the offset
     if ($modoff -notmatch '^(.+)\+0x([0-9a-f]+)$') { return $modoff }
     $mname = $matches[1]; $off = [uint32][Convert]::ToUInt64($matches[2], 16)
     $m = $mods[$apid] | Where-Object { $_.name -eq $mname } | Select-Object -First 1
@@ -131,7 +131,7 @@ function Sym([int]$apid, [string]$modoff) {
     if ($idx -lt 0) { $idx = (-bnot $idx) - 1 }
     if ($idx -lt 0) { return $modoff }
     $d = [uint32]($off - $ex.rvas[$idx])
-    if ($d -gt 0x8000) { return $modoff }
+    if ($d -gt 0x400) { return $modoff }   # only trust an export within 1 KB; farther = unexported internal code, label would mislead
     return "$modoff  =  $mname!$($ex.names[$idx])+0x$($d.ToString('x'))"
 }
 
