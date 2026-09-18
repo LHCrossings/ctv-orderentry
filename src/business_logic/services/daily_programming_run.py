@@ -83,6 +83,29 @@ def _is_deadlock(exc):
     return bool(args) and args[0] == 1205
 
 
+class InsertLeftNoRow(RuntimeError):
+    """Traffic_InsertEvent returned without leaving the row it was asked for.
+
+    Reproduced 2026-09-18 (Korean News, NYC/HOU/SEA/WDC failed 3 runs in a row while
+    one market placed each time): four market threads calling Traffic_InsertEvent at
+    once make all but one of them SQL Server's 1205 deadlock victim. When the 1205
+    arrives after the SP has already emitted a result set, pymssql raises it from
+    nextset(), where it used to be swallowed — so the failure surfaced as this guard,
+    was tagged deterministic, and never reached run_market's retry or the solo second
+    pass. Treated as retryable (see _is_retryable): a lost insert under contention is
+    exactly what the jittered retry and the one-market-at-a-time rerun exist for.
+
+    Do NOT try to prevent the collision with a Python lock around the SP: the SP blocks
+    on locks held by another market's OPEN transaction, and that transaction's thread
+    then waits for the Python lock — the whole run hangs (verified in a rolled-back
+    four-market test the same day)."""
+
+
+def _is_retryable(exc):
+    """A failure that a fresh attempt (and, failing that, a solo rerun) may cure."""
+    return _is_deadlock(exc) or isinstance(exc, InsertLeftNoRow)
+
+
 def _filmati_lock(fid):
     with _FILMATI_LOCKS_GUARD:
         lock = _FILMATI_LOCKS.get(fid)
@@ -303,11 +326,7 @@ def _insert_event(cur, cod_user, d, sched, block, seg, ora, filmati, duration):
     cur.execute(
         f"EXEC Traffic_InsertEvent 0,'{d}',{cod_user},{sched},{block},{seg},{ora},'{d}',{ora},'{d}',0,{filmati},0,0,0,0,0,0,0,{duration}"
     )
-    try:
-        while cur.nextset():
-            pass
-    except Exception:
-        pass
+    late_error = _drain_results(cur)
     cur.execute(
         "SELECT MAX(id_tpalinse) FROM TPALINSE WHERE COD_USER=%s AND DATA=%s AND ID_FILMATI=%s"
         " AND ORA=%s AND PART=0 AND LIVELLO=0 AND ID_TPALINSE>%s",
@@ -315,11 +334,26 @@ def _insert_event(cur, cod_user, d, sched, block, seg, ora, filmati, duration):
     )
     row = cur.fetchone()
     if not row or row[0] is None:
-        raise RuntimeError(
+        raise InsertLeftNoRow(
             f"Traffic_InsertEvent left no new live row for asset {filmati} at ORA {ora} "
-            f"(market {cod_user} {d})"
+            f"(market {cod_user} {d})" + (f"; SP error: {late_error}" if late_error else "")
         )
     return row[0]
+
+
+def _drain_results(cur):
+    """Consume an SP's trailing result sets. pymssql delivers a server error that
+    occurs AFTER the SP's first result set from nextset(), not execute() — a 1205
+    deadlock victim must propagate from here so run_market can retry it. Any other
+    late error is returned as text for the caller's own diagnosis."""
+    try:
+        while cur.nextset():
+            pass
+    except Exception as exc:  # noqa: BLE001 - a deadlock is retryable, anything else is reported
+        if _is_deadlock(exc):
+            raise
+        return exc
+    return None
 
 
 def _ensure_after(cur, cod_user, d, row_id, before_xorder):
@@ -673,11 +707,7 @@ def _rebuild(cur, d, cod_user, fromid):
         cur.execute(
             "EXEC dbo.sch_rebuildStartTimeSchedule %s,%s,0,0,NULL,%s,-1,0,1", (d, cod_user, fromid)
         )
-        try:
-            while cur.nextset():
-                pass
-        except Exception:
-            pass
+        _drain_results(cur)
 
 
 def _verify_sequence(cur, ids, open_b, close_b):
@@ -995,7 +1025,7 @@ def _place_once(conn, cod_user, d, assignment, pending):
             "ok": False,
             "skipped": False,
             "message": f"error: {exc}",
-            "_deadlock": _is_deadlock(exc),
+            "_deadlock": _is_retryable(exc),
         }
 
 
@@ -1131,7 +1161,7 @@ def _replace_piece_once(conn, cod_user, d, lo, hi, old_fid, new_fid, pending):
             "cu": cod_user,
             "ok": False,
             "message": f"error: {exc}",
-            "_deadlock": _is_deadlock(exc),
+            "_deadlock": _is_retryable(exc),
         }
 
 
@@ -1246,7 +1276,7 @@ def _fill_marketplace_once(conn, cod_user, d, windows, fid, pending):
         return {"ok": True, "message": f"placed into {len(ids)} slot(s)", "ids": ids}
     except Exception as exc:  # noqa: BLE001 - report failure, leave the day untouched
         conn.rollback()
-        return {"ok": False, "message": f"error: {exc}", "_deadlock": _is_deadlock(exc)}
+        return {"ok": False, "message": f"error: {exc}", "_deadlock": _is_retryable(exc)}
 
 
 def _prgs_duration_total(cur, cod_user, d, lo, hi):
@@ -1387,7 +1417,7 @@ def _place_weekend_drama_once(conn, cod_user, d, start, end, piece_fids, filler_
             "ok": False,
             "skipped": False,
             "message": f"error: {exc}",
-            "_deadlock": _is_deadlock(exc),
+            "_deadlock": _is_retryable(exc),
         }
 
 
@@ -1491,5 +1521,5 @@ def _place_daily_once(conn, cod_user, d, el, pending):
             "ok": False,
             "skipped": False,
             "message": f"error: {exc}",
-            "_deadlock": _is_deadlock(exc),
+            "_deadlock": _is_retryable(exc),
         }

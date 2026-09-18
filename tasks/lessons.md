@@ -4,6 +4,40 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Swallowed `nextset()` Error Turns a Deadlock Into a "Deterministic" Failure — and a Python Lock Over Open SQL Transactions Hangs the Run
+
+**Session:** Lee, Korean News 9/18 "I've tried 3 times" — NYC/HOU/SEA/WDC failed every run, one market placed each time (2026-09-18)
+
+**Rule:** Every run reported `Traffic_InsertEvent left no new live row for asset 149398 at ORA
+863136` — the 9/14 watermark guard — in four markets while a fifth placed cleanly. The
+single-market reproduction succeeded in every market; firing the SP in four markets at once
+(rolled back) made three of them SQL Server 1205 deadlock victims and one the winner. That
+1205 never reached `run_market`'s retry: `_insert_event` drained the SP's result sets with
+`try: while cur.nextset(): pass / except Exception: pass`, and pymssql raises a server error
+that occurs after the first result set from `nextset()`, not `execute()`. So the deadlock was
+eaten, the guard fired, the failure was tagged non-retryable, and the solo second pass never
+ran. The pattern was deterministic because the parallel fan-out re-collided the same way on
+every run. First cure tried — a process-wide lock around the SP call — HUNG the four-market
+test: the SP blocks on locks held by another market's OPEN transaction, whose thread is
+waiting for the Python lock.
+
+**How to apply:**
+1. Never `except Exception: pass` around `nextset()`. Drain via `_drain_results`: a 1205 is
+   re-raised so the retry path sees it; any other late error is carried into the guard's
+   message. A guard that fires with no cause text is hiding the cause.
+2. "One market succeeds, the rest fail identically, every run" is the contention signature,
+   not a data defect — reproduce with N concurrent rolled-back transactions before reading
+   the data. The sequential repro passing is itself the discriminator.
+3. A lost insert under contention (`InsertLeftNoRow`) is retryable (`_is_retryable`), so
+   the jittered retry and the one-market-at-a-time rerun cover the case where the SP
+   swallows the deadlock internally and returns nothing.
+4. Do not serialize an Etere SP with a Python lock while the callers hold transactions
+   open — Python lock + SQL row locks form a cycle SQL Server cannot see. Retry, or run the
+   markets sequentially; the harness `scratchpad/diag4-6` pattern (barrier, per-thread
+   connection, ROLLBACK, NOLOCK final count) is the safe way to test either.
+
+---
+
 ## "Etere Rewrote It" Was Our Own Second Write — Reproduce the Rewrite Before Naming the Actor, and Give a Value ONE Producer
 
 **Session:** Lee, `check_bindings.py` 142 rows for 9/17, "figure out why this keeps happening" (2026-09-15)

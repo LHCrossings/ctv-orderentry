@@ -386,3 +386,11 @@ Corrected the transport (my first write-up wrongly said a direct Tailscale copy 
 - [ ] SECURITY (new): ADSRV01 FileZilla-Server firewall rule is on the PUBLIC profile; internet host 80.94.95.221 hit :21 with an RDP/mstshash exploit probe. ADSRV01 on office LAN (gw 192.168.50.1) -> office firewall forwards FTP (and likely RDP) from the internet. Scope to Tailscale/office subnet.
 - [ ] Fix the ingest race: FTP-pull into C:\WIP_incoming then MOVE into C:\WIP (atomic), or switch that pull to WinSCP (.filepart+rename); optionally ask Etere for an ActiveSync file-stability setting.
 - caveat: ADSRV01 FTP logs retain 9/14+ only (9/6-7 gone); 9/14-16 logs show only scanner noise, no internal RETR -> the two original RETR lines unseen; mechanism rests on Datamover dm.job partial-size reads.
+
+## Korean News 9/18 — four markets fail Traffic_InsertEvent (2026-09-18)
+- [x] Reproduce: sequential SP insert OK in every market; 4 concurrent → 3× 1205, 1 winner
+- [x] Root cause: `_insert_event` swallowed the 1205 raised from `nextset()`; guard fired, tagged non-retryable, no retry / solo pass
+- [x] Fix: `_drain_results` re-raises deadlocks; `InsertLeftNoRow` is retryable; all 5 except sites tag `_is_retryable`
+- [x] Rejected: Python lock around the SP — hangs (SQL locks of open txns + Python lock cycle), verified rolled back
+- [x] Verified: 4-thread rolled-back harness converges on attempt 2; 818 unit tests pass
+- [ ] Lee: rerun Set up across markets for 9/18 after deploy; NYC/HOU/SEA/WDC should place (retry or solo pass)
