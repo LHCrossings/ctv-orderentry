@@ -130,7 +130,7 @@ function Sym([int]$apid, [string]$modoff) {
     $idx = [Array]::BinarySearch($ex.rvas, $off)
     if ($idx -lt 0) { $idx = (-bnot $idx) - 1 }
     if ($idx -lt 0) { return $modoff }
-    $d = $off - $ex.rvas[$idx]
+    $d = [uint32]($off - $ex.rvas[$idx])
     if ($d -gt 0x8000) { return $modoff }
     return "$modoff  =  $mname!$($ex.names[$idx])+0x$($d.ToString('x'))"
 }
