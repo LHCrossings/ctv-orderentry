@@ -1,5 +1,16 @@
 name: deploy
 
+# Fleet-standard deploy — a self-contained copy of the standard shape (the same
+# proven logic lives in every CTV tool; ctv-template carries the canonical copy).
+# Everything below the per-repo settings block is IDENTICAL across repos, so a
+# future change can be synced with a diff. See ctv-common/docs/deploy-standard.md.
+#
+# Requires (GitHub → repo Settings; ADMIN on the repo is needed to set these):
+#   vars:    DEPLOY_HOST, DEPLOY_USER
+#            DEPLOY_ALLOWED_ACTORS (opt, defaults to repo owner)
+#            DOCKER_BUILD_SSH_KEY  (opt, ssh-agent key path — only if ssh_agent below is true)
+#   secrets: TS_OAUTH_CLIENT_ID, TS_OAUTH_SECRET, DEPLOY_SSH_KEY
+
 on:
   push:
     branches: [main]
@@ -13,10 +24,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Verify deploy is authorized
-        # Tripwire: fail loudly if anyone other than an allowed actor triggers a
-        # deploy. Runs first, before any secrets (Tailscale / SSH key) are used.
-        # Configure the allowlist via the DEPLOY_ALLOWED_ACTORS repo variable
-        # (comma- or space-separated logins); defaults to the repo owner.
         env:
           ACTOR: ${{ github.actor }}
           ALLOWED: ${{ vars.DEPLOY_ALLOWED_ACTORS }}
@@ -37,58 +44,95 @@ jobs:
       - name: Connect Tailscale
         uses: tailscale/github-action@v4
         with:
-          # Pinned (not 'latest'): resolving 'latest' queries pkgs.tailscale.com
-          # on EVERY run, so a package-server outage fails the whole deploy
-          # (2026-07-16, two deploys lost). With a pinned version the action's
-          # cache serves the binary and pkgs is only needed once per version
-          # bump. 1.98.8 = the version our own machines run.
-          version: 1.98.8
-          use-cache: 'true'
-          # OAuth client (self-mints an ephemeral key per run — nothing to
-          # rotate, unlike the old reusable TAILSCALE_AUTHKEY which expired
-          # every 90 days). Requires repo secrets TS_OAUTH_CLIENT_ID /
-          # TS_OAUTH_SECRET (OAuth client with writable "auth_keys" scope and a
-          # tag matching `tags` below), and an ACL granting tag:ci → DEPLOY_HOST:22.
-          # See https://tailscale.com/kb/1215/oauth-clients
+          version: "1.98.8"
+          use-cache: "true"
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          # Must match tag(s) on the OAuth client in the admin console.
           tags: tag:ci
-          # Wait until deploy host is reachable on tailnet.
           ping: ${{ vars.DEPLOY_HOST }}
 
-      - uses: appleboy/ssh-action@v1.2.2
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          # ======================= PER-REPO SETTINGS =======================
+          # The ONLY lines that differ between repos. Everything else is identical.
+          DEPLOY_PATH: /opt/ctv-orderentry
+          RESTART_MODE: compose
+          COMPOSE_SERVICE: "control-room"
+          COMPOSE_PROJECT: ""
+          SYSTEMD_UNIT: ""
+          CONTAINER_NAME: "ctv-control-room"
+          BUILD_COMMAND: ""
+          SSH_AGENT: "false"
+          SMOKE: "true"
+          SMOKE_PORT: "4000"
+          # ==================================================================
+          DOCKER_BUILD_SSH_KEY: ${{ vars.DOCKER_BUILD_SSH_KEY }}
+          REF: ${{ github.ref_name }}
         with:
           host: ${{ vars.DEPLOY_HOST }}
           username: ${{ vars.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: DEPLOY_PATH,RESTART_MODE,COMPOSE_SERVICE,COMPOSE_PROJECT,SYSTEMD_UNIT,CONTAINER_NAME,BUILD_COMMAND,SSH_AGENT,SMOKE,SMOKE_PORT,DOCKER_BUILD_SSH_KEY,REF
           script: |
             set -euxo pipefail
-            # The checkout is owned by a different user than DEPLOY_USER, so Git's
-            # safe.directory guard blocks git commands. Allow this path (idempotent).
-            git config --global --add safe.directory /opt/ctv-orderentry
-            cd /opt/ctv-orderentry
+            git config --global --add safe.directory "$DEPLOY_PATH"
+            cd "$DEPLOY_PATH"
             git fetch origin
-            git checkout "${{ github.ref_name }}"
-            # This checkout is a deploy target and must mirror origin exactly.
-            # If commits were made directly on the server (e.g. a live hotfix),
-            # --ff-only would refuse forever. Preserve them on a timestamped
-            # branch, show them in the run log, then reset to origin.
-            if [ "$(git rev-list --count "origin/${{ github.ref_name }}..HEAD")" -gt 0 ]; then
+            git checkout "$REF"
+
+            # Preserve any commits made directly on the deploy host so a deploy
+            # never silently discards server-local drift.
+            if [ "$(git rev-list --count "origin/$REF..HEAD")" -gt 0 ]; then
               backup="server-local/$(date +%Y%m%d-%H%M%S)"
               echo "::warning title=Local commits on deploy host::preserved on branch $backup"
-              git log --stat "origin/${{ github.ref_name }}..HEAD"
+              git log --stat "origin/$REF..HEAD" || true
               git branch "$backup"
-              git reset --hard "origin/${{ github.ref_name }}"
+              git reset --hard "origin/$REF"
             fi
-            git pull --ff-only origin "${{ github.ref_name }}"
-            docker compose build control-room
-            # up can fail with a name conflict if a previous recreate was
-            # interrupted and left a renamed container (e.g. <id>_ctv-control-room)
-            # holding the fixed container_name. Self-heal: remove anything
-            # matching the name and retry once.
-            docker compose up -d control-room || {
-              echo "compose up failed — removing stale ctv-control-room containers and retrying"
-              docker ps -aq --filter "name=ctv-control-room" | xargs -r docker rm -f
-              docker compose up -d control-room
-            }
+            git pull --ff-only origin "$REF"
+
+            # Build-time private-dep fetch over ssh-agent — only where the image
+            # needs it and no deploy-key file is configured.
+            if [ "$SSH_AGENT" = "true" ]; then
+              eval "$(ssh-agent -s)"
+              ssh-add "${DOCKER_BUILD_SSH_KEY:-$HOME/.ssh/id_ed25519}"
+            fi
+
+            case "$RESTART_MODE" in
+              compose)
+                docker compose build "$COMPOSE_SERVICE"
+                docker compose up -d "$COMPOSE_SERVICE" || {
+                  echo "compose up failed — removing stale containers and retrying"
+                  name="${CONTAINER_NAME:-$COMPOSE_SERVICE}"
+                  docker ps -aq --filter "name=$name" | xargs -r docker rm -f
+                  docker compose up -d "$COMPOSE_SERVICE"
+                }
+                ;;
+              compose-systemd)
+                export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+                docker compose -p "$COMPOSE_PROJECT" build
+                systemctl --user restart "$SYSTEMD_UNIT"
+                ;;
+              native-systemd)
+                export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+                export PATH="$HOME/.local/bin:$PATH"
+                if [ -n "$BUILD_COMMAND" ]; then
+                  eval "$BUILD_COMMAND"
+                fi
+                systemctl --user restart "$SYSTEMD_UNIT"
+                ;;
+              *)
+                echo "::error title=Bad restart_mode::'$RESTART_MODE' is not compose|compose-systemd|native-systemd"
+                exit 1
+                ;;
+            esac
+
+            # Smoke gates every deploy (Fleet Standard 3).
+            if [ "$SMOKE" = "true" ]; then
+              if [ -f deploy/smoke.sh ]; then
+                PORT="$SMOKE_PORT" bash deploy/smoke.sh
+              else
+                echo "::warning title=No smoke test::deploy/smoke.sh absent — deploy not gated"
+              fi
+            fi
