@@ -4,6 +4,29 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Per-Line "Apply? [y/n]" Reads as "Continue or Back Out" — Say What "n" Does and Offer Abort
+
+**Session:** Lee, WL 216153 Framebridge revision — "I said no thinking it would back me out" (2026-09-21)
+
+**Rule:** The revision flow asked `Apply? [y/n]` for the line 9 CHANGE. Lee answered "n"
+expecting the revision to stop; the code skipped that ONE line and went on to enter the
+line 12 ADD, so the week of 9/21 was booked at 18 spots instead of 12 and the header read
+$876 for an $846 order. The fix was the automation's own re-attribution run by hand
+(`_apply_reattribution` → line 9 to 9/20 / 6 spots, its 9/21–9/23 placements re-pointed to
+line 12, header refreshed; restore in `logs/wl-216153-line9-restore-20260922.sql`).
+
+**How to apply:**
+1. A yes/no prompt inside a multi-step write must state the consequence of BOTH answers
+   in the prompt text, and any flow that has already decided to write something must offer
+   a third answer that writes nothing (`_ask_apply` → `[y/n/abort]`, `RevisionAborted`
+   rolls the whole revision back before the generic `except`).
+2. A skipped CHANGE whose rebook ADD is still entered is a double-booking, not a no-op —
+   when an operator skips a CHANGE, the rebook ADD that depends on it should be flagged.
+3. Diagnosing the aftermath: line total N_PASSAGGI is the FLIGHT total, not per week
+   (12 = 2 wks × 6). Check per-week placement counts before concluding a line ran hot.
+
+---
+
 ## A Swallowed `nextset()` Error Turns a Deadlock Into a "Deterministic" Failure — and a Python Lock Over Open SQL Transactions Hangs the Run
 
 **Session:** Lee, Korean News 9/18 "I've tried 3 times" — NYC/HOU/SEA/WDC failed every run, one market placed each time (2026-09-18)

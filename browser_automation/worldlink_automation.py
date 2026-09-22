@@ -493,6 +493,35 @@ def _line_exists_in_etere(conn, ph: str, contract_id: int, wl_line_number: int) 
     return (cur.fetchone()[0] or 0) > 0
 
 
+class RevisionAborted(Exception):
+    """Operator chose 'abort' at a revision prompt — roll back the whole revision."""
+
+
+def _ask_apply(prompt: str, wl_num: int) -> str:
+    """Revision prompt with three answers.
+
+    y      → apply this line and continue
+    n      → leave THIS line exactly as it is in Etere and continue with the rest
+    abort  → stop the whole revision; nothing is written to Etere
+
+    Lee answered "n" to a bare "Apply? [y/n]" on WL 216153 (2026-09-21) thinking
+    it would back the revision out; it skipped the CHANGE and entered the ADD,
+    double-booking a week. The prompt now says what "n" does and offers abort.
+    Re-prompts until it gets one of the three answers.
+    """
+    print(f"    y = apply to line {wl_num}   n = leave line {wl_num} as is and continue   "
+          f"abort = stop, write nothing")
+    while True:
+        ans = input(f"\n  {prompt} [y/n/abort]: ").strip().lower()
+        if ans in ('y', 'yes'):
+            return 'y'
+        if ans in ('n', 'no'):
+            return 'n'
+        if ans in ('a', 'abort'):
+            raise RevisionAborted(f"aborted at line {wl_num}")
+        print("    Please answer y, n or abort.")
+
+
 def _find_wl_line_ids(conn, ph: str, contract_id: int, wl_line_number: int) -> list:
     """Return list of (ID_CONTRATTIRIGHE, COD_USER) for a WL line number across all markets."""
     cur = conn.cursor()
@@ -1067,17 +1096,17 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
                         print("    in-progress week's rebook line (earliest first, up to its total —")
                         print("    aired spots count toward it); the rest are erased. Future-week")
                         print("    rebook lines stay unplaced for normal scheduling.")
-                        answer = input("\n  Queue re-attribution (runs after ADD lines are entered)? [y/n]: ").strip().lower()
+                        answer = _ask_apply("Queue re-attribution (runs after ADD lines are entered)?", wl_num)
                         if answer != 'y':
-                            print(f"  [Line {wl_num}] Skipped.")
+                            print(f"  [Line {wl_num}] Skipped — left as is in Etere.")
                             continue
                         deferred_reattr.append({'io_line': io_line, 'etere_lines': etere_lines,
                                                 'rebooks': rebooks})
                         continue
 
-                    answer = input("\n  Apply? [y/n]: ").strip().lower()
+                    answer = _ask_apply(f"Apply this change to line {wl_num}?", wl_num)
                     if answer != 'y':
-                        print(f"  [Line {wl_num}] Skipped.")
+                        print(f"  [Line {wl_num}] Skipped — left as is in Etere.")
                         continue
 
                     removed = _unschedule_spots(conn, ph, line_ids, first_available)
@@ -1134,6 +1163,16 @@ def process_worldlink_order_direct(user_input: dict) -> Optional[str]:
         if is_revision:
             _session_revised.append(contract_code)
         return contract_code
+
+    except RevisionAborted as exc:
+        print(f"\n[DIRECT] ✗ Revision {exc} — rolled back, nothing written to Etere.")
+        if conn:
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
+        return None
 
     except Exception as exc:
         print(f"\n[DIRECT] ✗ Error: {exc}")
