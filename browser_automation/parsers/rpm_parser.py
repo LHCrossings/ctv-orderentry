@@ -390,6 +390,19 @@ def _parse_weekly_distribution(row_data: list[str], start_index: int, num_weeks:
     return weekly_spots
 
 
+
+def _estimate_from_cpe(token: str) -> str:
+    """The estimate number out of a Strata CPE token.
+
+    CPE = Client/Product/Estimate; the AEInboxOrder print shows it as
+    ``/MC/11062`` (client blank, product MC). The contract code and
+    CUSTOMERREF want the bare estimate ``11062`` — the last numeric segment
+    (Muckleshoot 11062, 2026-09-22: the raw token produced the code
+    ``RPM Muckleshoot /MC/11062``). A token with no digits is returned as is.
+    """
+    nums = re.findall(r'\d+', token)
+    return nums[-1] if nums else token
+
 def parse_rpm_pdf(pdf_path: str) -> tuple[Optional[RPMOrder], list[RPMLine]]:
     """
     Parse RPM insertion order PDF.
@@ -497,7 +510,7 @@ def parse_rpm_pdf(pdf_path: str) -> tuple[Optional[RPMOrder], list[RPMLine]]:
             if not estimate and "CPE:" in line:
                 m = re.search(r'CPE:\s*(\S+)', line)
                 if m:
-                    estimate = m.group(1)
+                    estimate = _estimate_from_cpe(m.group(1))
 
             if not flight_start and "Flight Start:" in line and "Date" not in line:
                 m = re.search(r'Flight Start:\s*(\d{1,2}/\d{1,2}/\d{2,4})', line)
