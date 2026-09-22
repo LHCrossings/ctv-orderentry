@@ -76,6 +76,13 @@ def _extract_market_code(market_text: str) -> str:
         return "SEA"
 
 
+
+# A daypart whose end time wrapped to the next PDF line: "11:30P- LF $57.00 ...".
+# Any two-letter Strata daypart code may follow (RT/PT/LF/AV/DT/PA/WK...); the old
+# RT|DT|PA|WK|PT list missed AV and LF, so those lines lost their time ("???") and
+# entered as 6a-12m (Muckleshoot 11062 lines 6 and 13, 2026-09-22).
+_SPLIT_TIME_RE = re.compile(r'(\d+:\d+[ap])-\s+([A-Z]{2})\b', re.IGNORECASE)
+
 def _normalize_daypart_name(program_name: str) -> tuple[str, str]:
     """
     Convert RPM program name to standardized format with language.
@@ -143,7 +150,17 @@ def _normalize_daypart_name(program_name: str) -> tuple[str, str]:
     language_code = "ROS"  # Default
     language_display = "ROS"
     
-    if any(w in program_name.upper() for w in ("CHINESE", "MANDARIN", "CANTONESE", "CANO", "MAND", "SHANGHAI", "MARNARIN")):
+    upper = program_name.upper()
+    # Keep the dialect when the program names it: the line description drives the
+    # language-catalog prompt, and a bare "Chinese" made every Cantonese line show
+    # the combined M/C guess (Muckleshoot 11062 line 13, 2026-09-22).
+    if "CANTONESE" in upper or "CANO" in upper:
+        language_code = "C"
+        language_display = "Cantonese"
+    elif any(w in upper for w in ("MANDARIN", "MAND", "SHANGHAI", "MARNARIN")):
+        language_code = "M"
+        language_display = "Mandarin"
+    elif "CHINESE" in upper:
         language_code = "M/C"
         language_display = "Chinese"
     elif "VIETNAMESE" in program_name.upper():
@@ -568,7 +585,7 @@ def parse_rpm_pdf(pdf_path: str) -> tuple[Optional[RPMOrder], list[RPMLine]]:
             if re.match(r'^(MT[A-Za-z]+SaSu|MT[A-Za-z]+Sa\b|MT[A-Za-z]+F\b|SaSu\w*)', line_text, re.IGNORECASE):
                 try:
                     # Handle split time: "MTuWThFSaSu 6:00a- RT $0.00..."
-                    split_match = re.search(r'(\d+:\d+[ap])-\s+(RT|DT|PA|WK|PT)', line_text, re.IGNORECASE)
+                    split_match = _SPLIT_TIME_RE.search(line_text)
                     if split_match:
                         i += 1
                         if i < len(text_lines):
