@@ -39,7 +39,7 @@ def test_split_time_not_on_complete_range():
         ("MTuWThF 11:30p-12:00a CANTONESE NEWS", "M-F 11:30p-12m Cantonese", "C"),
         ("MTuWThF 8:00p-9:00p MANDARIN NEWS", "M-F 8p-9p Mandarin", "M"),
         ("MTuWThF 6:00a-7:00a CHINESE NEWS", "M-F 6a-7a Chinese", "M/C"),
-        ("MTuWThFSaSu 6:00a-12:00a ASIAN ROTATION", "M-Su 6a-12m MCV ROS", "L"),
+        ("MTuWThFSaSu 6:00a-12:00a ASIAN ROTATION", "M-Su 6a-12m Bonus MCV ROS", "L"),
         ("MTuWThF 11:00a-12:00p VIETNAMESE NEWS", "M-F 11a-12n Vietnamese", "V"),
     ],
 )
@@ -50,5 +50,5 @@ def test_dialect_preserved(program, daypart, code):
 def test_mcv_ros_guesses_L():
     from browser_automation.line_language import guess_language
 
-    assert guess_language("(Line 6) M-Su MCV ROS") == "L"
+    assert guess_language("(Line 6) M-Su Bonus MCV ROS") == "L"
     assert guess_language("M-F 6a-7a Chinese") == "M/C"

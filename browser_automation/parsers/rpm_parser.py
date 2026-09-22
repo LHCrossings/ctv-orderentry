@@ -170,7 +170,7 @@ def _normalize_daypart_name(program_name: str) -> tuple[str, str]:
         # RPM's "Asian rotation" bonus rotates through Mandarin, Cantonese and
         # Vietnamese; the catalog code for a multi-language buy is L (Lee, 2026-09-22).
         language_code = "L"
-        language_display = "MCV ROS"
+        language_display = "Bonus MCV ROS"
     
     # Build final daypart string
     daypart = f"{day_pattern} {time_range} {language_display}"
