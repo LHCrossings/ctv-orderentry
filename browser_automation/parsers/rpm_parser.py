@@ -167,8 +167,10 @@ def _normalize_daypart_name(program_name: str) -> tuple[str, str]:
         language_code = "V"
         language_display = "Vietnamese"
     elif "ASIAN ROTATION" in program_name.upper():
-        language_code = "ROS"
-        language_display = "ROS"
+        # RPM's "Asian rotation" bonus rotates through Mandarin, Cantonese and
+        # Vietnamese; the catalog code for a multi-language buy is L (Lee, 2026-09-22).
+        language_code = "L"
+        language_display = "MCV ROS"
     
     # Build final daypart string
     daypart = f"{day_pattern} {time_range} {language_display}"

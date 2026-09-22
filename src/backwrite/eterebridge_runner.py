@@ -119,7 +119,7 @@ def _parse_raw_durations_from_csv(csv_bytes: bytes) -> list:
 def get_language_options() -> list:
     """Return the list of valid language codes from EtereBridge config."""
     if not _AVAILABLE:
-        return ["E", "C", "M", "V", "T", "K", "J", "SA", "Hm"]
+        return ["E", "C", "M", "M/C", "V", "T", "K", "J", "SA", "Hm", "L"]
     return list(_eb_app_config.language_options)
 
 

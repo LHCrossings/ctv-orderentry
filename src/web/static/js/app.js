@@ -433,7 +433,7 @@ function bwlRender(details, options) {
         return;
     }
     unavail.classList.add('hidden');
-    const opts = options.length ? options : ['E', 'C', 'M', 'V', 'T', 'K', 'J', 'SA', 'Hm'];
+    const opts = options.length ? options : ['E', 'C', 'M', 'M/C', 'V', 'T', 'K', 'J', 'SA', 'Hm', 'L'];
 
     const bulkSel = document.getElementById('bwl-bulk-select');
     bulkSel.textContent = '';

@@ -14,12 +14,16 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-# Valid codes (superset of EtereBridge config; 'M/C' = combined Chinese block)
+# Valid codes (superset of EtereBridge config). 'M/C' = a Mandarin + Cantonese
+# buy. 'L' = any other multi-language buy (e.g. an MCV rotation bonus) — the
+# column answers "what did the client order", never "where did the spot land"
+# (Lee, 2026-09-22; L was once a placeholder for "language unknown").
 LANGUAGE_CODES = ["E", "C", "M", "M/C", "V", "T", "K", "J", "SA", "Hm", "P", "H", "L"]
 
 # Keyword → code guesses for IO line descriptions / language-block names.
 # Order matters: more specific phrases first.
 _KEYWORD_GUESSES = [
+    (r'\bmcv\b|\bmulti[- ]?lang', 'L'),
     (r'\bmandarin\b.*\bcantonese\b|\bcantonese\b.*\bmandarin\b|\bchinese\b', 'M/C'),
     (r'\bmandarin\b', 'M'),
     (r'\bcantonese\b', 'C'),

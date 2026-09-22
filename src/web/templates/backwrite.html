@@ -947,14 +947,15 @@ function showLanguageVerification(details, options) {
 
     const opts = (options && options.length)
         ? options
-        : ['E','C','M','V','T','K','J','SA','Hm'];
+        : ['E','C','M','M/C','V','T','K','J','SA','Hm','L'];
 
     // Populate bulk-apply dropdown with same options
     const bulkSel = document.getElementById('bulk-lang-select');
     bulkSel.innerHTML = opts.map(code => `<option value="${code}">${code}</option>`).join('');
 
     tbody.innerHTML = details.map(item => {
-        const optHtml = opts.map(code =>
+        const rowOpts = (item.lang && !opts.includes(item.lang)) ? [...opts, item.lang] : opts;
+        const optHtml = rowOpts.map(code =>
             `<option value="${code}"${code === item.lang ? ' selected' : ''}>${code}</option>`
         ).join('');
         return `<tr data-desc="${item.description.replace(/"/g, '&quot;')}" data-orig-lang="${item.lang}">
