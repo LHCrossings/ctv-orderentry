@@ -4,6 +4,31 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Missing Time Defaulted to the Whole Broadcast Day — a Paid Line's Window Is Never Defaultable
+
+**Session:** Lee, "I think I made some incorrect language entries" — RPM Muckleshoot 11062 (2026-09-22)
+
+**Rule:** The RPM parser's wrapped-time regex listed five daypart codes (RT|DT|PA|WK|PT); an
+`AV` (bonus) and an `LF` (late fringe) line whose end time wrapped to the next PDF line lost
+their time (`???`), and `_parse_rpm_daypart` defaulted a missing time to `6a-12m`. Line 13,
+the $57 Cantonese late news at 11:30p-12a, entered with 42 blocks across the whole day and a
+description of `M-F ??? Chinese`; Lee saw only a language prompt he could not judge and
+answered M/C. Fixed in place (window 23:30-23:59, one C block, LANG C; restore in
+`logs/muckleshoot-3086-line13-restore-20260922.sql`) — nothing was placed yet.
+
+**How to apply:**
+1. A value that decides WHERE spots air (time window, days, market) is never defaulted when
+   unreadable; the gather refuses and names the line (`"???" in daypart` guard). Same family
+   as the `except: rate = 0` rule — a wrong default that looks like data is worse than a stop.
+2. A code list copied from the rows you had (`RT|DT|PA|WK|PT`) is a guess about the vocabulary;
+   match the SHAPE (`[A-Z]{2}\b`) and let the row's other columns validate it.
+3. A line description drives the language-catalog prompt, so it must carry what the human
+   needs to answer: keep the dialect (`Cantonese`/`Mandarin`) when the program names it.
+4. When a user reports "wrong language entries", check the WINDOW and blocks of every
+   suspicious line too — the language was the visible symptom, the window was the damage.
+
+---
+
 ## A Per-Line "Apply? [y/n]" Reads as "Continue or Back Out" — Say What "n" Does and Offer Abort
 
 **Session:** Lee, WL 216153 Framebridge revision — "I said no thinking it would back me out" (2026-09-21)

@@ -226,6 +226,17 @@ def gather_rpm_inputs(pdf_path: str) -> Optional[dict]:
     print(f"[PARSE] ✓ Flight: {order.flight_start} - {order.flight_end}")
     print(f"[PARSE] ✓ Lines: {len(lines)}")
 
+    # A line whose time could not be read would enter as 6a-12m (the
+    # _parse_rpm_daypart fallback) — Muckleshoot 11062 line 13 (11:30p-12a
+    # Cantonese news) took the whole day, 2026-09-22. Refuse at gather time.
+    unreadable = [ln for ln in lines if "???" in ln.daypart]
+    if unreadable:
+        print("\n[PARSE] ✗ Time could not be read on these line(s) — fix the parser "
+              "or enter them by hand; refusing to default them to 6a-12m:")
+        for ln in unreadable:
+            print(f"    Line {ln.line_number}: {ln.daypart}  ${ln.rate}  {ln.total_spots} spots")
+        return None
+
     market = order.market  # Already SEA/SFO/CVC from parser
 
     # Market short codes for contract codes (e.g. CVC → CV, SFO → SF)
