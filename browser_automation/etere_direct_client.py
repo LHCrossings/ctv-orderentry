@@ -230,6 +230,7 @@ AGENCY_IDS: dict[str, int] = {
     "NTOOITIVE": 299,  # Ntooitive (L.A. Care; Commissione 15%)
     "3FOLD": 203,  # 3Fold Communications (LRCCD)
     "THMEDIA": 19,  # TH Media (Emerald Queen Casino)
+    "IW": 12,  # IW Group, Inc. (Covered California; Commissione 15%). ANAGRAF 13 is the Lexus Dealer Association (client), not IW.
 }
 
 # Media center (CENTROMEDIA) IDs

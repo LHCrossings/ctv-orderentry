@@ -156,6 +156,7 @@ class OrderProcessingService:
         OrderType.NTOOITIVE: "_process_ntooitive_order",
         OrderType.SJCOUNTY: "_process_sjcounty_order",
         OrderType.POP: "_process_pop_order",
+        OrderType.IWCCA: "_process_iwcca_order",
         OrderType.EQC: "_process_eqc_order",
         OrderType.LRCCD: "_process_lrccd_order",
         OrderType.SACRT: "_process_sacrt_order",
@@ -203,6 +204,7 @@ class OrderProcessingService:
         OrderType.NTOOITIVE,
         OrderType.SJCOUNTY,
         OrderType.POP,
+        OrderType.IWCCA,
         OrderType.EQC,
         OrderType.LRCCD,
         OrderType.SACRT,
@@ -3209,6 +3211,42 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.POP,
+                error_message=error_detail,
+            )
+
+    def _process_iwcca_order(self, order: Order, shared_session=None) -> ProcessingResult:
+        """Process an IW Group / Covered California TELEVISION ORDER — one contract per IO."""
+        inp = order.order_input if isinstance(order.order_input, dict) else {}
+        try:
+            from browser_automation.iwcca_automation import run_iwcca_order
+            from browser_automation.parsers.iwcca_parser import parse_iwcca
+
+            parsed = parse_iwcca(str(order.pdf_path))
+            results = run_iwcca_order(parsed, inp)  # list of (label, success)
+
+            contracts = [
+                Contract(contract_number=label, order_type=OrderType.IWCCA)
+                for label, ok in results
+                if ok
+            ]
+            if not contracts:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.IWCCA,
+                    error_message="IW CCA processing failed — check output above",
+                )
+            return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.IWCCA)
+
+        except Exception as exc:
+            import traceback
+
+            error_detail = f"IW CCA processing error: {exc}\n{traceback.format_exc()}"
+            print(f"\n✗ IW CCA processing failed: {exc}")
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.IWCCA,
                 error_message=error_detail,
             )
 

@@ -62,6 +62,7 @@ _DISPLAY_NAMES = {
     "NTOOITIVE": "Ntooitive / L.A. Care",
     "SJCOUNTY": "San Joaquin County",
     "POP": "POP",
+    "IWCCA": "IW Group / Covered CA",
     "EQC": "EQC / TH Media",
     "LRCCD": "LRCCD / 3Fold Communications",
     "SACRT": "SacRT / Sacramento Regional Transit",
@@ -116,6 +117,7 @@ _REGISTRY = {
     "NTOOITIVE": ("browser_automation.parsers.ntooitive_parser", "parse_ntooitive"),
     "SJCOUNTY": ("browser_automation.parsers.sjcounty_parser", "parse_sjcounty"),
     "POP": ("browser_automation.parsers.pop_parser", "parse_pop"),
+    "IWCCA": ("browser_automation.parsers.iwcca_parser", "parse_iwcca"),
     "EQC": ("browser_automation.parsers.eqc_parser", "parse_eqc_xlsx"),
     "LRCCD": ("browser_automation.parsers.lrccd_parser", "parse_lrccd_pdf"),
     "SACRT": ("browser_automation.parsers.sacrt_parser", "parse_sacrt_pdf"),
@@ -633,6 +635,63 @@ def _normalize_igraphix(order) -> dict:
     }
 
 
+def _normalize_iwcca(order) -> dict:
+    """IW Group / Covered California: the IO quotes NET. Feed the backwrite the NET
+    per-spot rate + rates_are_net (it grosses up at full precision); Etere entry
+    grosses up separately from the ANAGRAF commission. Market is a hint only
+    ("KBTV" → CVC) — when absent the UI must ask (required_fields)."""
+    market = _str(getattr(order, "market_hint", ""))
+    lines = []
+    for ln in getattr(order, "lines", []) or []:
+        is_bonus = bool(getattr(ln, "is_bonus", False))
+        lines.append(
+            {
+                "description": _str(getattr(ln, "description", "")),
+                "days": _str(getattr(ln, "days", "")),
+                "time": _str(getattr(ln, "time", "")),
+                "duration": _str(getattr(ln, "length_sec", "")),
+                "weekly_spots": [int(x) for x in getattr(ln, "weekly_spots", []) or []],
+                "total_spots": _int(getattr(ln, "total_spots", 0)),
+                "rate": 0.0 if is_bonus else _float(getattr(ln, "net_rate", 0.0)),
+                "is_bonus": is_bonus,
+                "market": market,
+                "language": _str(getattr(ln, "language", "")),
+                "start_date": _str(getattr(order, "flight_start", "")),
+                "end_date": _str(getattr(order, "flight_end", "")),
+            }
+        )
+    total_spots = sum(ln["total_spots"] for ln in lines)
+    total_cost = sum(ln["rate"] * ln["total_spots"] for ln in lines if not ln["is_bonus"])
+    warnings = ["Rates in this IO are NET — entry grosses up by the agency commission."]
+    required_fields = []
+    if not market:
+        warnings.append("Market is not stated on the IO — confirm it before entry (Lee: default CVC).")
+        required_fields.append(
+            {
+                "field": "market",
+                "label": "Market",
+                "type": "select",
+                "options": ["CVC", "SFO", "LAX", "SEA", "HOU", "CMP", "WDC", "NYC", "MMT", "DAL"],
+            }
+        )
+    return {
+        "client": "Covered California",
+        "agency": "IW Group",
+        "estimate_number": _str(getattr(order, "order_no", "")),
+        "description": _str(getattr(order, "campaign", "")),
+        "markets": [market] if market else [],
+        "flight_start": _str(getattr(order, "flight_start", "")),
+        "flight_end": _str(getattr(order, "flight_end", "")),
+        "buyer": "",
+        "total_spots": total_spots,
+        "total_cost": round(total_cost, 2),
+        "lines": lines,
+        "warnings": warnings,
+        "required_fields": required_fields,
+        "rates_are_net": True,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -677,6 +736,7 @@ _DIRECT_DB_KEYS = {
     "NTOOITIVE",
     "SJCOUNTY",
     "POP",
+    "IWCCA",
     "EQC",
     "LRCCD",
     "SACRT",
@@ -726,6 +786,7 @@ _DIRECT_DB_TESTED_KEYS = {
     "NTOOITIVE",
     "SJCOUNTY",
     "POP",
+    "IWCCA",
     "EQC",
     "LRCCD",
     "SACRT",
@@ -895,6 +956,8 @@ def get_order_detail(file_path: Path, order_type: str) -> dict:
         result = _normalize_admerasia(raw)
     elif order_type == "IGRAPHIX":
         result = _normalize_igraphix(raw)
+    elif order_type == "IWCCA":
+        result = _normalize_iwcca(raw)
     elif order_type == "SAGENT":
         result = _normalize_sagent(raw)
     else:

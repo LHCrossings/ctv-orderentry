@@ -400,3 +400,41 @@ Corrected the transport (my first write-up wrongly said a direct Tailscale copy 
 - [x] Route: `_rotation_sheet_item` helper (shared payload builder) + `trafinst` branch/detector/badge; page filter + agency/estimate suffix
 - [x] Verified live: parse endpoint → 6/6 creatives found, contract 3081 sole candidate, :30 lines returned; 9 parser tests + full unit suite
 - [ ] Maija: next Mynt sheet via drag-drop; 3081 was assigned by hand this time (216 pool rows), no re-assign needed
+
+# ⏳ ACTIVE — IW Group / Covered California IO parser (`iwcca`) (2026-09-23)
+
+Lee: new IO type, client **Covered California (ANAGRAF 386)** via **IW Group (ANAGRAF 12, 15%)**.
+Three IOs in `/mnt/c/Work Temp/!New/!Orders/CCA_Crossings TV_0000353{82,93,97}_{Chinese,Vietnamese,Filipino}.pdf`.
+Rules from Lee: rates are NET → gross up; all three are CVC (only two say KBTV) → **prompt the market,
+default CVC**; AV lines enter as **BNS** (booking 10), never AV; separation **15,0,0**; `OrderNo` →
+**Customer Order Ref**; IO `Campaign` + `Description` → contract **notes**; code `IW CCA <yymm> <C|V|T>`;
+description `Covered CA Brand Awareness 2610 <Chinese|Viet|Filipino>` (past: `Covered CA VML 2510 Chinese`).
+
+## Format facts (from the PDFs + Etere oracle IW CCA 2510 C/V = contracts 2167/2168)
+- Header line: `Station: … Flight Dates: 10/05/2026 - 12/20/2026 (11 weeks) OrderNo: 35382 Date: 9/22/2026`;
+  `Campaign:` wraps onto a second line (`… Brannding -` / `Awareness`); `Description:` one line.
+- Grid: 12 week columns, day numbers at x = 253 + 24·k (centre match, tol 8); **zero cells are not printed**
+  (the flight has 4 dark weeks: 10/26, 11/02, 11/30, 12/21). Each line = data row (`Days Time [DP] Len w… Total Cost Net`)
+  + description row below (`AV …` prefix = bonus). Fields by label/position; DP column optional.
+- Reconcile and RAISE: per line Σweeks == Total Spots and spots×rate == Net; Subtotal row; **monthly summary**
+  (`OCT '26 NOV '26 DEC '26` spots + net, broadcast months) ; `Total Net`.
+- Oracle 2167/2168: market 7 (CVC), BNS = booking 10, hand-entered lines were Rotation (PRENOTAZIONE 1), split per
+  broadcast month, separation 5/25/0 (Lee now: 15,0,0). 2510 headers carried P_AGENZIA 0 and NET rates — Lee: this time gross up.
+
+## Plan (POP = template, commit 3a6948c; agency header pattern from ntooitive_automation)
+- [x] `browser_automation/parsers/iwcca_parser.py`: `IWCCALine`, `IWCCAOrder(rates_are_net=True)`, `is_iwcca_text`, `parse_iwcca(path)`
+      (pdfplumber words, cluster rows on raw `top`, week columns from the day-number header, centre-distance cells, reconciliation guards)
+- [x] `browser_automation/iwcca_automation.py`: `gather_iwcca_inputs` (customer 386 via customers.db upsert, market prompt [CVC],
+      code/description bracket defaults, language letter from the IO language, start-date confirm, separation from DB else 15,0,0),
+      `run_iwcca_order` (header: agency fallback `AGENCY_IDS["IW"]=12`, `lookup_customer_defaults=True`, `customer_order_ref=OrderNo`,
+      `note=Campaign | Description`, `allow_rename=True`; lines: gross = net/(1−fee) full precision then round(2) like intertrend,
+      `consolidate_weeks` per line, `booking_code=10 if bonus else 2`, `separation_intervals=(15,0,0)`, description `"{BNS }M-F 8p-10p Mandarin :30"`)
+- [x] `src/domain/enums.py` OrderType.IWCCA; `order_processing_service` (dispatch, `_DIRECT_DB_ORDER_TYPES`, `_process_iwcca_order` returning the gathered code);
+      `orchestrator._INPUT_GATHERERS`; `parser_bridge` (`_DISPLAY_NAMES`, `_REGISTRY`, `_normalize_iwcca` with NET per-spot rate + `rates_are_net`,
+      `_DIRECT_DB_KEYS`, `_DIRECT_DB_TESTED_KEYS`); `order_detection_service` (text: `TELEVISION ORDER` + `Covered California`; filename `CCA_`), bump `_SCAN_CACHE_VERSION`
+- [x] `AGENCY_IDS["IW"] = 12` (ANAGRAF 13 = Lexus Dealer Association, the Lexus docstring is mislabeled) (Lexus docstring says 13 — verify ANAGRAF 13 before touching Lexus; ANAGRAF 386.AGENZIA = 12)
+- [x] tests: `tests/fixtures/iwcca/` (3 PDFs) + `tests/unit/test_iwcca_parser.py` (totals per file, dark weeks, AV→bonus, tamper tests: dropped cell / slid cell / blanked rate / renamed header must refuse)
+- [x] standalone parse of all 3 (+ full Etere dry run of the Chinese IO: 15 lines, rolled back, nothing left behind) → totals 207/$5,750, 174/$3,360, 80/$1,600; language-window pre-check clean
+- [ ] ruff, pytest, commit, push, post_push.sh; memory + lessons
+
+## Decisions (Lee, 9/23): language suffix on the description — yes; Rotation on paid lines like 2510; consolidate equal consecutive weeks (reconciled against the IO's monthly summary).

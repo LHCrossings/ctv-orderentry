@@ -173,6 +173,11 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
         "gather_pop_inputs",
         "POP",
     ),
+    OrderType.IWCCA: (
+        "browser_automation.iwcca_automation",
+        "gather_iwcca_inputs",
+        "IW Group / Covered California",
+    ),
     OrderType.EQC: (
         "browser_automation.eqc_automation",
         "gather_eqc_inputs",

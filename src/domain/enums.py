@@ -58,6 +58,7 @@ class OrderType(Enum):
     NTOOITIVE = "ntooitive"
     SJCOUNTY = "sjcounty"
     POP = "pop"  # Prince of Peace (Kwan Loong Oil) — house Sales Confirmation, direct 0%
+    IWCCA = "iwcca"  # IW Group / Covered California — NET "TELEVISION ORDER" IO, agency 12 @ 15%
     AI_FALLBACK = "ai_fallback"
     UNKNOWN = "unknown"
 

@@ -178,6 +178,11 @@ class OrderDetectionService:
         if self._is_pop(first_page_text):
             return OrderType.POP
 
+        # IW Group / Covered California TELEVISION ORDER — keyed on the client
+        # (IW Group alone is also the Lexus agency)
+        if self._is_iwcca(first_page_text):
+            return OrderType.IWCCA
+
         # Resorts World New York (check before SCWA — both use "Crossings TV Media Proposal")
         if self._is_rwny(first_page_text):
             return OrderType.RWNY
@@ -257,6 +262,12 @@ class OrderDetectionService:
         from browser_automation.parsers.pop_parser import is_pop_text
 
         return is_pop_text(text)
+
+    def _is_iwcca(self, text: str) -> bool:
+        """IW Group 'TELEVISION ORDER' for Covered California (client-keyed)."""
+        from browser_automation.parsers.iwcca_parser import is_iwcca_text
+
+        return is_iwcca_text(text)
 
     def _is_ntooitive(self, text: str) -> bool:
         """
@@ -1003,6 +1014,9 @@ def detect_from_filename(filename: str) -> OrderType:
         return OrderType.SJCOUNTY
     if "PRINCE OF PEACE" in " ".join(name_upper.split()):
         return OrderType.POP
+    # IW Group's Covered California IOs are named "CCA_Crossings TV_<OrderNo>_<Language>.pdf"
+    if name_upper.startswith("CCA_"):
+        return OrderType.IWCCA
     # Wallrich — SMUD is the client and the clear definer (Lee, 2026-08-21);
     # the xlsx content check in order_scanner matches SMUD/SD15 cells too.
     if "SMUD" in name_upper:
