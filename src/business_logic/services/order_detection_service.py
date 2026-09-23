@@ -819,6 +819,21 @@ class OrderDetectionService:
         elif order_type == OrderType.RWNY:
             return "Resorts World New York"
 
+        elif order_type == OrderType.IWCCA:
+            # The type is client-keyed (IW Group is also the Lexus agency); the
+            # language in the filename tells the three sibling IOs apart in the queue.
+            t = (first_page_text or "").lower()
+            lang = (
+                "Vietnamese"
+                if "vietnamese" in t
+                else "Filipino"
+                if ("taglish" in t or "filipino" in t or "tagalog" in t)
+                else "Chinese"
+                if ("mandarin" in t or "cantonese" in t or "chinese" in t)
+                else ""
+            )
+            return f"Covered CA ({lang})" if lang else "Covered CA"
+
         elif order_type == OrderType.SCWA:
             # PDF is two-column; address follows on same line — stop at "Address:"
             m = re.search(r"Advertiser\s+(.*?)\s+Address:", first_page_text)

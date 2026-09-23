@@ -1312,7 +1312,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             # Agency column label. For most parsers the order-type code IS the
             # agency; EQC is named after the client (Emerald Queen Casino), so
             # surface its real agency (TH Media) instead of the "eqc" code.
-            agency_label = "TH Media" if ov == "eqc" else ov
+            agency_label = _queue_agency_label(ov)
             result.append(
                 {
                     "filename": order.pdf_path.name,
@@ -3333,7 +3333,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     {
                         "filename": io_name,
                         "order_type": ov,
-                        "agency_label": "TH Media" if ov == "eqc" else ov,
+                        "agency_label": _queue_agency_label(ov),
                         "customer_name": m.get("customer_name")
                         or detail.get("client")
                         or "Unknown",
@@ -12520,3 +12520,15 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             raise HTTPException(status_code=500, detail=str(exc))
 
     return router
+
+
+# Agency column of the pending/awaiting queues. For most parsers the order-type
+# code IS the agency; the client-keyed types name their real agency here.
+_QUEUE_AGENCY_LABELS = {
+    "eqc": "TH Media",  # Emerald Queen Casino
+    "iwcca": "IW Group",  # Covered California
+}
+
+
+def _queue_agency_label(order_type_value: str) -> str:
+    return _QUEUE_AGENCY_LABELS.get(order_type_value, order_type_value)
