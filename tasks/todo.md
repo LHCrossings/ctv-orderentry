@@ -438,3 +438,13 @@ description `Covered CA Brand Awareness 2610 <Chinese|Viet|Filipino>` (past: `Co
 - [ ] ruff, pytest, commit, push, post_push.sh; memory + lessons
 
 ## Decisions (Lee, 9/23): language suffix on the description — yes; Rotation on paid lines like 2510; consolidate equal consecutive weeks (reconciled against the IO's monthly summary).
+
+## McD DC 3097/3098 lines 5-7 reshape to the 9/22 proposal (2026-09-23)
+
+Both contracts identical (Daviselen McD 73/74, WDC, $2,050 each). Nothing placed yet (0 trafficPalinse rows).
+Agreed table: L5 2,2,2,1 @ $10 = $70; L6 4,4,4,4 @ $20 = $320; L7 5,4,4,4 @ $20 = $340. Header stays $2,050.
+
+- [x] Read both contracts, confirm 0 placed spots
+- [x] Dry run (rollback) of the reshape — scratchpad `mcd_revise.py`
+- [x] Lee's go → `--apply` 9/23; restore file logs/mcd-3097-3098-lines567-restore-20260923.sql
+- [x] Fresh-connection readback: 88 paid spots / $2,050 per contract, CIG $2,050, both headers $2,050
