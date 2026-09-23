@@ -296,10 +296,12 @@ automatically: `frames = minutes × 60 × fps`. If writing directly via
 2. `intervalloRigheContratto` (order/contract-line separation)
 3. `intervalloEvento` (event separation)
 
-DB column → C# field → meaning:
-- `Interv_Committente` → `intervalloCommittente` → customer separation
-- `INTERVALLO` → `intervalloEvento` → event separation
-- `INTERV_CONTRATTO` → `intervalloRigheContratto` → order separation
+DB column → line-form field → meaning (verified on the live line form 2026-09-23:
+line 84375 shows Customer 15 / Order 25 / Event 0 with `Interv_Committente`=15 min,
+`INTERVALLO`=25 min, `INTERV_CONTRATTO`=0):
+- `Interv_Committente` → `intervalloCommittente` (`contractLineGeneralicomm`) → customer separation
+- `INTERVALLO` → `intervalloRigheContratto` (`contractLineGeneralisster`) → **order** separation
+- `INTERV_CONTRATTO` → `intervalloEvento` (`contractLineGeneralievent`) → **event** separation
 
 ---
 

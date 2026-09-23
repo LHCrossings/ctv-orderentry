@@ -448,3 +448,4 @@ Agreed table: L5 2,2,2,1 @ $10 = $70; L6 4,4,4,4 @ $20 = $320; L7 5,4,4,4 @ $20 
 - [x] Dry run (rollback) of the reshape — scratchpad `mcd_revise.py`
 - [x] Lee's go → `--apply` 9/23; restore file logs/mcd-3097-3098-lines567-restore-20260923.sql
 - [x] Fresh-connection readback: 88 paid spots / $2,050 per contract, CIG $2,050, both headers $2,050
+- [x] Separation 9/23: lines 1-4 + BNS (25,0,0); lines 5-7 (10,25,0) = cust/order/event; restore logs/mcd-3097-3098-separation-restore-20260923.sql
