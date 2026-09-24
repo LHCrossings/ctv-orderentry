@@ -449,3 +449,18 @@ Agreed table: L5 2,2,2,1 @ $10 = $70; L6 4,4,4,4 @ $20 = $320; L7 5,4,4,4 @ $20 
 - [x] Lee's go → `--apply` 9/23; restore file logs/mcd-3097-3098-lines567-restore-20260923.sql
 - [x] Fresh-connection readback: 88 paid spots / $2,050 per contract, CIG $2,050, both headers $2,050
 - [x] Separation 9/23: lines 1-4 + BNS (25,0,0); lines 5-7 (10,25,0) = cust/order/event; restore logs/mcd-3097-3098-separation-restore-20260923.sql
+
+## Production-only EDI invoices on /edi/billing (2026-09-24)
+Oracle: Lee's hand-built 2605-011_BVK_PROD.txt (+ PMX 2503-049, !SAMPLE PROD.txt) and the
+TVInvoices rendering CRTV-TV202605_2605-011.pdf. Shape: estimate `<est>PRD`, R32 `EST <est>
+PRODUCTION`, ONE R51 `Y;<yymm>15;;0611;30;PRODUCTION;<gross cents>`, R33 `PRODUCTION CHARGES`,
+R34 gross/commission/net with 1 spot, R12 gross. Trigger case: Crispin 2608-020 ($2,447.06 gross,
+$2,080.00 net) alongside airtime 2608-019.
+- [x] parse_affidavit: detect "charges are for production only" → is_production; gross from the
+      plain `Subtotals 1 $ x` line (no COPY LIST on a production affidavit)
+- [x] lookup_contract_customers returns CUSTOMERREF (`Order 212735, Est 0001` → estimate 0001)
+- [x] production_invoice(inv, affidavit, estimate) → (inv, [synthetic spot]); constants cite oracle
+- [x] _assemble_rows / validate / export: production rows need no CSV; reconcile = production
+- [x] billing.html: PRODUCTION badge, excluded from fetch, exportable without CSV
+- [x] tests: 31/32/51/33/34/12 records reproduce 2605-011_BVK_PROD byte-for-byte; 2608-020 parse
+- [x] live check: _assemble_rows on 2608-019 + 2608-020 → 020 exportable, 019 unchanged

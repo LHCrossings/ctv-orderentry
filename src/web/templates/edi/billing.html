@@ -319,7 +319,7 @@ async function intakeFiles(files) {
 
 // ── Step 2: fetch ──────────────────────────────────────────────────────────
 $('btn-fetch').addEventListener('click', async () => {
-  const need = rows.filter(r => r.pdf_filename && !r.csv_filename && r.contract_no);
+  const need = rows.filter(r => r.pdf_filename && !r.csv_filename && r.contract_no && !r.is_production);
   if (!need.length) { $('fetch-status').textContent = 'All rows already have post logs.'; return; }
   const btn = $('btn-fetch');
   btn.disabled = true;
@@ -382,7 +382,7 @@ function matchBadge(r) {
 
 function rowExportable(r) {
   const recOk = r.reconcile && (r.reconcile.status === 'match' || r.reconcile.status === 'rounding');
-  return recOk && !r.has_errors && r.csv_filename && r.suggested_template;
+  return recOk && !r.has_errors && (r.csv_filename || r.is_production) && r.suggested_template;
 }
 
 function renderSummary() {
@@ -433,8 +433,11 @@ function renderRows() {
       <div class="file-card-header">
         <input type="checkbox" class="row-select" ${exportable ? '' : 'disabled'}/>
         <span class="inv-num">${r.invoice_number}</span>
+        ${r.is_production ? '<span class="badge amber" title="No airtime — uploaded as one PRODUCTION line for the whole gross">PRODUCTION</span>' : ''}
         ${reconcileBadge(r)}
-        <span class="meta">affidavit ${r.pdf_spots ?? '—'} / ${fmt_dollars(r.pdf_gross)} · post-log ${r.csv_spots ?? '—'} / ${fmt_dollars(r.csv_gross)}${commissionNote(r)}</span>
+        <span class="meta">${r.is_production
+          ? `production ${fmt_dollars(r.pdf_gross)} gross / ${fmt_dollars(r.pdf_net)} net · no post-log${commissionNote(r)}`
+          : `affidavit ${r.pdf_spots ?? '—'} / ${fmt_dollars(r.pdf_gross)} · post-log ${r.csv_spots ?? '—'} / ${fmt_dollars(r.csv_gross)}${commissionNote(r)}`}</span>
         <span style="margin-left:auto"></span>
         ${matchBadge(r)}
       </div>

@@ -35,6 +35,10 @@ INCOMING_DIR = _BASE / "incoming" / "EDI"
 # ---------------------------------------------------------------------------
 
 _SUBTOTAL_RE = re.compile(r"COPY LIST Subtotals\s+(\d+)\s+\$\s*([\d,]+\.?\d*)")
+# A production-only affidavit has no COPY LIST; its summary reads "Subtotals 1 $ 2,447.06"
+# where the 1 is the charge line, not a spot.
+_PROD_SUBTOTAL_RE = re.compile(r"^Subtotals\s+\d+\s+\$\s*(\d[\d, ]*\.\d{2})", re.MULTILINE)
+_PRODUCTION_ONLY_RE = re.compile(r"charges are for production only", re.IGNORECASE)
 # Affidavit summary block: "Agency Commission 15% $ 988.24" / "Net Amount Due $ 5,600.00".
 # The net is what we actually bill (QuickBooks invoice) — the EDI R34 must land on it.
 # The renderer sometimes drops a space into the figure ("$ 3 ,803.75",
@@ -78,6 +82,9 @@ class AffidavitData:
     product_name: str = ""
     comment_top: str = ""
     comment_bottom: str = ""
+    # Production-only invoice (no airtime): "The above charges are for production
+    # only" in the COMMENTS box. Carried as ONE synthetic R51 — see production_invoice().
+    is_production: bool = False
     warnings: list[str] = field(default_factory=list)
 
 
@@ -135,6 +142,11 @@ def parse_affidavit(pdf_bytes: bytes, source: str = "") -> AffidavitData:
                     if rate > 0:
                         row_gross += cnt * rate
         out.total_spots = total_spots if total_spots is not None else row_spots
+        if _PRODUCTION_ONLY_RE.search(full_text):
+            out.is_production = True
+            out.total_spots = 0
+            if gross_amount is None and (pm := _PROD_SUBTOTAL_RE.search(full_text)):
+                gross_amount = _money(pm.group(1))
         out.gross_amount = round(gross_amount if gross_amount is not None else row_gross, 2)
 
         # --- comment-box fields (may span pages) ---
@@ -465,6 +477,81 @@ def generate_edi(template: dict, inv: dict, spots: list[dict]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Production-only invoices
+# ---------------------------------------------------------------------------
+# TVInvoices needs at least one R51, so a production charge rides as ONE synthetic
+# spot. Shape copied from Lee's hand-built uploads (2605-011 BVK, 2503-049 PMX,
+# "!SAMPLE PROD.txt"): the 15th of the invoice month at 06:11, :30, copy
+# "PRODUCTION", rate = the whole gross; estimate "<est>PRD"; R32 "EST <est>
+# PRODUCTION"; R33 "PRODUCTION CHARGES"; R34 with 1 spot.
+PRODUCTION_SPOT_DAY = 15
+PRODUCTION_SPOT_TIME = "0611"
+PRODUCTION_SPOT_LENGTH = 30
+PRODUCTION_COPY_ID = "PRODUCTION"
+PRODUCTION_COMMENT_BOTTOM = "PRODUCTION CHARGES"
+
+
+def estimate_from_customer_ref(customer_ref: str) -> str:
+    """'Order 212735, Est 0001' → '0001'; '' when the ref names no estimate."""
+    m = re.search(r"\bEst\.?\s+(\S+)", customer_ref or "", re.IGNORECASE)
+    return m.group(1).rstrip(",.:") if m else ""
+
+
+def production_invoice(inv: dict, a: AffidavitData, estimate: str = "") -> tuple[dict, list[dict]]:
+    """
+    Fill a production-only invoice from its affidavit and return (inv, spots).
+
+    Computed fields (gross, spot count, dates, net, the synthetic spot) are
+    always overwritten from the affidavit; estimate/comments are only filled
+    when the caller has not set them, so an operator edit on the page survives.
+    Raises ValueError when the affidavit carries no gross — a production
+    invoice with no amount is not an invoice.
+    """
+    if a.gross_amount is None or a.gross_amount <= 0:
+        raise ValueError(f"production affidavit {a.invoice_id or '?'} has no gross amount")
+    yymm = str(inv.get("broadcast_month") or (a.invoice_id or "")[:4])
+    if not _YYMM.match(yymm):
+        raise ValueError(f"production affidavit {a.invoice_id or '?'}: no YYMM month")
+    start, end = broadcast_month_range(int(yymm[:2]), int(yymm[2:]))
+    gross_cents = int(round(a.gross_amount * 100))
+
+    est = (estimate or "").strip()
+    if est and not est.upper().endswith("PRD"):
+        est_code = f"{est}PRD"
+    else:
+        est_code = est
+    if not inv.get("estimate_code"):
+        inv["estimate_code"] = est_code
+    if not inv.get("comment_top"):
+        inv["comment_top"] = f"EST {est} PRODUCTION" if est else "PRODUCTION"
+    if not inv.get("comment_bottom") or a.comment_bottom == inv.get("comment_bottom"):
+        # The affidavit's own comment is the "production only" boilerplate — replace it.
+        inv["comment_bottom"] = PRODUCTION_COMMENT_BOTTOM
+
+    inv.update(
+        {
+            "broadcast_month": yymm,
+            "bcast_start": start.strftime("%y%m%d"),
+            "bcast_end": end.strftime("%y%m%d"),
+            "gross_cents": gross_cents,
+            "spot_count": 1,
+            "is_production": True,
+        }
+    )
+    if a.net_amount is not None:
+        inv["net_cents"] = int(round(a.net_amount * 100))
+    spot = {
+        "run_date": f"{yymm}{PRODUCTION_SPOT_DAY:02d}",
+        "time_hhmm": PRODUCTION_SPOT_TIME,
+        "duration": PRODUCTION_SPOT_LENGTH,
+        "copy_id": PRODUCTION_COPY_ID,
+        "rate_cents": gross_cents,
+        "market": a.market,
+    }
+    return inv, [spot]
+
+
+# ---------------------------------------------------------------------------
 # Template store
 # ---------------------------------------------------------------------------
 
@@ -566,8 +653,8 @@ def lookup_contract_customers(contract_nos: list[str | int]) -> tuple[dict[int, 
     The affidavit's "Contract Number" is CONTRATTITESTATA.ID_CONTRATTITESTATA
     (verified live 2026-07-09).
 
-    Returns ({contract_id: {customer_id, customer_name, agency_id, agency_name}},
-    error) — on DB failure the dict is empty and error holds the message so
+    Returns ({contract_id: {customer_id, customer_name, agency_id, agency_name,
+    customer_ref}}, error) — on DB failure the dict is empty and error holds the message so
     callers can fall back to fuzzy matching with a visible warning.
     """
     nos = sorted({int(n) for n in contract_nos if str(n).strip().isdigit()})
@@ -588,7 +675,7 @@ def lookup_contract_customers(contract_nos: list[str | int]) -> tuple[dict[int, 
             cur.execute(
                 f"""
                 SELECT ct.ID_CONTRATTITESTATA, ct.COMMITTENTE, cust.RAG_SOCIAL,
-                       ct.AGENZIA, ag.RAG_SOCIAL
+                       ct.AGENZIA, ag.RAG_SOCIAL, ct.CUSTOMERREF
                 FROM CONTRATTITESTATA ct
                 LEFT JOIN ANAGRAF cust ON cust.ID_ANAGRAF = ct.COMMITTENTE
                 LEFT JOIN ANAGRAF ag   ON ag.ID_ANAGRAF = ct.AGENZIA
@@ -597,12 +684,14 @@ def lookup_contract_customers(contract_nos: list[str | int]) -> tuple[dict[int, 
                 tuple(nos),
             )
             out = {}
-            for cid, cust_id, cust_name, ag_id, ag_name in cur.fetchall():
+            for cid, cust_id, cust_name, ag_id, ag_name, cust_ref in cur.fetchall():
                 out[int(cid)] = {
                     "customer_id": int(cust_id) if cust_id is not None else None,
                     "customer_name": (cust_name or "").strip(),
                     "agency_id": int(ag_id) if ag_id is not None else None,
                     "agency_name": (ag_name or "").strip(),
+                    # Entry writes the agency's order/estimate here ("Order 212735, Est 0001")
+                    "customer_ref": (cust_ref or "").strip(),
                 }
             return out, None
         finally:

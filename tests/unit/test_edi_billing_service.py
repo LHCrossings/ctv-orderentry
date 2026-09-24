@@ -5,8 +5,15 @@ fractional-cent rounding rule), and the TVB EDI field validators.
 
 from datetime import date
 
+import pytest
+
 from business_logic.services.edi_billing import (
+    AffidavitData,
     broadcast_month_range,
+    estimate_from_customer_ref,
+    generate_edi,
+    invoice_info,
+    production_invoice,
     reconcile_status,
     validate_invoice,
 )
@@ -161,7 +168,6 @@ from pathlib import Path
 
 from business_logic.services.edi_billing import (
     commission_plan,
-    generate_edi,
     parse_affidavit,
 )
 
@@ -266,3 +272,106 @@ def test_parse_affidavit_crispin_mmi_2608_019(real_pdfplumber):
     assert a.net_amount == 5280.13
     assert a.rep_order_number == "212735"
     assert a.comment_bottom == "BAAQ 2026 TV SUMMERCAMPAIGN"
+
+
+def test_parse_affidavit_production_only_2608_020(real_pdfplumber):
+    """A production-only affidavit has no COPY LIST: zero spots, gross from the
+    plain Subtotals line, flagged is_production."""
+    a = parse_affidavit((_FIXTURES / "2608-020_affidavit.pdf").read_bytes(), source="fixture")
+    assert a.is_production is True
+    assert a.invoice_id == "2608-020"
+    assert a.contract_no == "3012"
+    assert a.total_spots == 0
+    assert a.gross_amount == 2447.06
+    assert a.commission_amount == 367.06
+    assert a.net_amount == 2080.00
+
+
+def test_airtime_affidavit_is_not_production(real_pdfplumber):
+    a = parse_affidavit((_FIXTURES / "2608-019_affidavit.pdf").read_bytes(), source="fixture")
+    assert a.is_production is False
+
+
+def test_estimate_from_customer_ref():
+    assert estimate_from_customer_ref("Order 212735, Est 0001") == "0001"
+    assert estimate_from_customer_ref("Est. 4807") == "4807"
+    assert estimate_from_customer_ref("") == ""
+    assert estimate_from_customer_ref("PO 12345") == ""
+
+
+def _strip_pad(line: str) -> str:
+    return line.rstrip(";")
+
+
+def test_production_invoice_reproduces_bvk_2605_011():
+    """Oracle: Lee's hand-built 2605-011_BVK_PROD.txt (May 2026 TVInvoices upload).
+    Every populated field of records 31/32/51/33/34/12 must match; only the
+    trailing empty-field padding differs (the generator pads to the spec width)."""
+    a = AffidavitData(
+        invoice_id="2605-011",
+        market="CVC",
+        gross_amount=3176.47,
+        commission_amount=476.47,
+        net_amount=2700.00,
+        is_production=True,
+        comment_bottom="The above charges are for production only. Airtime",
+    )
+    inv = invoice_info("2605-011.csv")
+    inv.update(order_number="2738", agency_ad_code="UCD", agency_prod_code="UCD")
+    inv, spots = production_invoice(inv, a, "4807")
+    assert inv["estimate_code"] == "4807PRD"
+    assert spots == [
+        {
+            "run_date": "260515",
+            "time_hhmm": "0611",
+            "duration": 30,
+            "copy_id": "PRODUCTION",
+            "rate_cents": 317647,
+            "market": "CVC",
+        }
+    ]
+    template = {
+        "representative": "Charmaine Lane",
+        "salesperson": "Jennifer Murphy",
+        "advertiser_name": "UC Davis Health",
+        "product_name": "UC Davis Health",
+        "commission_pct": 15,
+    }
+    got = [
+        _strip_pad(ln)
+        for ln in generate_edi(template, inv, spots).splitlines()
+        if ln[:2] in ("31", "32", "51", "33", "34", "12")
+    ]
+    assert got == [
+        "31;Charmaine Lane;Jennifer Murphy;UC Davis Health;UC Davis Health;260531;;4807PRD;"
+        "2605-011;2605;260427;260531;260427;260531;260427;260531;;;Y;;;;2738;;UCD;;UCD",
+        "32;EST 4807 PRODUCTION",
+        "51;Y;260515;;0611;30;PRODUCTION;317647",
+        "33;PRODUCTION CHARGES",
+        "34;;317647;47647;270000;;;;;;;;1",
+        "12;1;317647",
+    ]
+    assert validate_invoice(template | {"call_letters": "CRSE"}, inv, spots) == []
+
+
+def test_production_invoice_keeps_operator_estimate_and_needs_gross():
+    a = AffidavitData(
+        invoice_id="2608-020",
+        market="SFO",
+        gross_amount=2447.06,
+        net_amount=2080.0,
+        is_production=True,
+    )
+    inv = invoice_info("2608-020.csv")
+    inv["estimate_code"] = "0001PRD"  # already set on the page → not overwritten
+    inv, spots = production_invoice(inv, a, "9999")
+    assert inv["estimate_code"] == "0001PRD"
+    assert inv["comment_top"] == "EST 9999 PRODUCTION"
+    assert inv["net_cents"] == 208000 and inv["gross_cents"] == 244706
+    assert (inv["bcast_start"], inv["bcast_end"]) == ("260727", "260830")
+    with pytest.raises(ValueError):
+        production_invoice(
+            invoice_info("2608-021.csv"),
+            AffidavitData(invoice_id="2608-021", is_production=True),
+            "",
+        )

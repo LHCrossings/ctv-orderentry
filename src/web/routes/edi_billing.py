@@ -31,6 +31,7 @@ from business_logic.services.edi_billing import (
     broadcast_month_range,
     commission_plan,
     diff_pdf_csv,
+    estimate_from_customer_ref,
     fetch_postlog_reports,
     generate_edi,
     get_template,
@@ -39,6 +40,7 @@ from business_logic.services.edi_billing import (
     match_template,
     parse_affidavit,
     parse_postlog_csv,
+    production_invoice,
     reconcile_status,
     resolve_market,
     slug,
@@ -75,6 +77,33 @@ def _pairs() -> dict[str, dict]:
     return pairs
 
 
+def _production_estimate(
+    cust: dict | None, sibling_estimates: dict[str, str], contract_no: str
+) -> str:
+    """Estimate for a production-only invoice: the contract's CUSTOMERREF ("Order
+    212735, Est 0001") first, else the estimate of an airtime invoice for the same
+    contract in this batch (BVK: 4807 → 4807PRD)."""
+    est = estimate_from_customer_ref((cust or {}).get("customer_ref", ""))
+    return est or sibling_estimates.get(contract_no, "")
+
+
+def _production_pair(inv_no: str) -> tuple[object | None, dict | None]:
+    """(affidavit, etere contract row) for a production-only invoice in incoming/EDI,
+    or (None, None) when the PDF is missing or is not production-only. Server-side:
+    the export never trusts the browser about what an invoice is."""
+    p = _pairs().get(inv_no)
+    if not p or not p["pdf"]:
+        return None, None
+    a = parse_affidavit((INCOMING / p["pdf"]).read_bytes(), source=p["pdf"])
+    if not a.is_production:
+        return None, None
+    cust = None
+    if a.contract_no:
+        found, _err = lookup_contract_customers([a.contract_no])
+        cust = found.get(int(a.contract_no))
+    return a, cust
+
+
 def _assemble_rows() -> list[dict]:
     """
     One row per invoice in incoming/EDI: parsed totals, reconcile status,
@@ -95,6 +124,15 @@ def _assemble_rows() -> list[dict]:
             contract_nos.append(m.group(1))
     customer_by_contract, lookup_err = lookup_contract_customers(contract_nos)
 
+    parsed_csvs: dict[str, object] = {}
+    sibling_estimates: dict[str, str] = {}  # contract → estimate from an airtime CSV
+    for key, p in pairs.items():
+        if p["csv"]:
+            d0 = parse_postlog_csv((INCOMING / p["csv"]).read_bytes(), p["csv"])
+            parsed_csvs[key] = d0
+            if d0.contract_no and d0.estimate_code:
+                sibling_estimates.setdefault(d0.contract_no, d0.estimate_code)
+
     # Batch month = majority MMYY prefix; off-month rows get flagged (never
     # rejected — Lee's call 2026-07-09).
     months = [k[:4] for k in pairs]
@@ -105,12 +143,18 @@ def _assemble_rows() -> list[dict]:
         p = pairs[key]
         a = parsed_pdfs.get(key)
 
+        is_production = bool(a and a.is_production)
         row: dict = {
             "invoice_number": key,
             "pdf_filename": p["pdf"] or "",
             "csv_filename": p["csv"] or "",
+            "is_production": is_production,
             "warnings": [],
         }
+        if is_production and p["csv"]:
+            row["warnings"].append(
+                f"production-only invoice — ignoring post-log {p['csv']} (delete it)"
+            )
         if lookup_err:
             row["warnings"].append(lookup_err)
         if batch_month and key[:4] != batch_month:
@@ -135,8 +179,8 @@ def _assemble_rows() -> list[dict]:
         # --- post-log side ---
         d = None
         csv_market = ""
-        if p["csv"]:
-            d = parse_postlog_csv((INCOMING / p["csv"]).read_bytes(), p["csv"])
+        if p["csv"] and not is_production:
+            d = parsed_csvs[key]
             row["warnings"].extend(d.warnings)
             csv_market = d.market
             advertiser = advertiser or d.advertiser
@@ -167,6 +211,11 @@ def _assemble_rows() -> list[dict]:
                 "detail": "post-log not fetched yet" if a else "no affidavit",
             }
         )
+        if is_production:
+            row["reconcile"] = {
+                "status": "match",
+                "detail": "production-only invoice — no post-log; gross/net from the affidavit",
+            }
 
         # --- customer + template match ---
         cust = customer_by_contract.get(int(contract_no)) if contract_no.isdigit() else None
@@ -213,6 +262,16 @@ def _assemble_rows() -> list[dict]:
             if a.net_amount is not None:
                 # R34 commission = EDI gross − this net, so the EDI net equals our invoice
                 inv["net_cents"] = int(round(a.net_amount * 100))
+        prod_spots: list[dict] = []
+        if is_production:
+            try:
+                inv, prod_spots = production_invoice(
+                    inv, a, _production_estimate(cust, sibling_estimates, contract_no)
+                )
+            except ValueError as e:
+                row["warnings"].append(str(e))
+            if not inv.get("estimate_code"):
+                row["warnings"].append("production invoice: no estimate found — enter one")
         # comment_top precedence: PDF comment box → template per-market map →
         # template default (e.g. H&L CVC/SFO always carry their market comment)
         if not inv.get("comment_top") and m.name:
@@ -226,17 +285,16 @@ def _assemble_rows() -> list[dict]:
         # --- validation (with the suggested template if any) ---
         tmpl = next((t for t in tmpl_list if t["name"] == m.name), None)
         # What R34 will carry — shown on the row so Lee sees the upload figures
-        row["commission"] = (
-            commission_plan(
-                d.gross_cents,
-                d.spot_count,
-                float((tmpl or {}).get("commission_pct", 15.0)),
-                inv.get("net_cents"),
+        pct = float((tmpl or {}).get("commission_pct", 15.0))
+        if d:
+            row["commission"] = commission_plan(
+                d.gross_cents, d.spot_count, pct, inv.get("net_cents")
             )
-            if d
-            else None
-        )
-        row["issues"] = validate_invoice(tmpl or {}, inv, d.spots if d else [])
+        elif prod_spots:
+            row["commission"] = commission_plan(inv["gross_cents"], 1, pct, inv.get("net_cents"))
+        else:
+            row["commission"] = None
+        row["issues"] = validate_invoice(tmpl or {}, inv, d.spots if d else prod_spots)
         row["has_errors"] = any(i["level"] == "error" for i in row["issues"])
         rows.append(row)
 
@@ -349,6 +407,18 @@ def build_edi_billing_router(jinja: Jinja2Templates) -> APIRouter:
         spots = []
         if csv_fn and Path(csv_fn).name == csv_fn and (INCOMING / csv_fn).exists():
             spots = parse_postlog_csv((INCOMING / csv_fn).read_bytes(), csv_fn).spots
+        elif not csv_fn:
+            a, cust = await asyncio.to_thread(_production_pair, str(inv.get("invoice_number", "")))
+            if a:
+                try:
+                    inv, spots = production_invoice(
+                        inv, a, _production_estimate(cust, {}, a.contract_no)
+                    )
+                except ValueError as e:
+                    return {
+                        "issues": [{"field": "gross", "level": "error", "message": str(e)}],
+                        "has_errors": True,
+                    }
         issues = validate_invoice(tmpl, inv, spots)
         return {"issues": issues, "has_errors": any(i["level"] == "error" for i in issues)}
 
@@ -382,12 +452,42 @@ def build_edi_billing_router(jinja: Jinja2Templates) -> APIRouter:
             force = bool(item.get("force"))
             label = inv.get("invoice_number") or csv_fn
 
-            if not csv_fn or Path(csv_fn).name != csv_fn or not (INCOMING / csv_fn).exists():
-                refused.append({"row": label, "reason": f"post-log CSV not found: {csv_fn}"})
-                continue
             template = get_template(tmpl_nm)
             if not template:
                 refused.append({"row": label, "reason": f"template not found: {tmpl_nm}"})
+                continue
+
+            if not csv_fn:
+                # Production-only invoice: no post-log exists. Everything that
+                # decides money comes from the affidavit on disk, not the browser.
+                a, cust = _production_pair(str(inv.get("invoice_number", "")))
+                if not a:
+                    refused.append(
+                        {
+                            "row": label,
+                            "reason": "post-log CSV not found and the affidavit is not production-only",
+                        }
+                    )
+                    continue
+                try:
+                    inv, prod_spots = production_invoice(
+                        inv, a, _production_estimate(cust, {}, a.contract_no)
+                    )
+                except ValueError as e:
+                    refused.append({"row": label, "reason": str(e)})
+                    continue
+                issues = validate_invoice(template, inv, prod_spots)
+                errs = [f"{i['field']}: {i['message']}" for i in issues if i["level"] == "error"]
+                if errs and not force:
+                    refused.append(
+                        {"row": label, "reason": "validation errors: " + "; ".join(errs)}
+                    )
+                    continue
+                prepared.append((label, tmpl_nm, template, inv, prod_spots))
+                continue
+
+            if Path(csv_fn).name != csv_fn or not (INCOMING / csv_fn).exists():
+                refused.append({"row": label, "reason": f"post-log CSV not found: {csv_fn}"})
                 continue
 
             d = parse_postlog_csv((INCOMING / csv_fn).read_bytes(), csv_fn)
