@@ -41,6 +41,7 @@ from business_logic.services.edi_billing import (
     parse_affidavit,
     parse_postlog_csv,
     production_invoice,
+    production_plan,
     reconcile_status,
     resolve_market,
     slug,
@@ -291,7 +292,7 @@ def _assemble_rows() -> list[dict]:
                 d.gross_cents, d.spot_count, pct, inv.get("net_cents")
             )
         elif prod_spots:
-            row["commission"] = commission_plan(inv["gross_cents"], 1, pct, inv.get("net_cents"))
+            row["commission"] = production_plan(inv["gross_cents"], inv["net_cents"])
         else:
             row["commission"] = None
         row["issues"] = validate_invoice(tmpl or {}, inv, d.spots if d else prod_spots)

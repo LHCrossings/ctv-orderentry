@@ -464,3 +464,5 @@ $2,080.00 net) alongside airtime 2608-019.
 - [x] billing.html: PRODUCTION badge, excluded from fetch, exportable without CSV
 - [x] tests: 31/32/51/33/34/12 records reproduce 2605-011_BVK_PROD byte-for-byte; 2608-020 parse
 - [x] live check: _assemble_rows on 2608-019 + 2608-020 → 020 exportable, 019 unchanged
+- [x] Lee 9/24 defaults: R51 = 20th of the invoice month at 12:00; estimate verbatim (no PRD);
+      R32 left blank for the operator; commission = affidavit gross − net (agency Y / direct N)

@@ -371,7 +371,9 @@ def _r31(t: dict, inv: dict) -> str:
     f[13] = inv.get("bcast_end", "")
     f[14] = inv.get("bcast_start", "")
     f[15] = inv.get("bcast_end", "")
-    f[18] = "Y"
+    # Agency-commission flag: N only when the invoice itself says no commission
+    # applies (a direct production charge); airtime rows are always agency.
+    f[18] = "N" if inv.get("agency_commission") is False else "Y"
     f[21] = inv.get("rep_order_number", "")
     f[22] = inv.get("order_number", "")
     f[24] = inv.get("agency_ad_code", "") or t.get("agency_ad_code", "")
@@ -444,9 +446,33 @@ def commission_plan(
     return plan
 
 
-def _r34(t: dict, gross: int, spot_count: int, net_cents: int | None = None) -> str:
+def production_plan(gross_cents: int, net_cents: int) -> dict:
+    """R34 for a production-only invoice: no per-spot rounding exists, so the
+    commission is exactly gross − net from the affidavit — 15% for an agency
+    invoice, 0 for a direct one. Same keys as commission_plan()."""
+    comm = int(gross_cents) - int(net_cents)
+    return {
+        "pct_commission": comm,
+        "commission": comm,
+        "net": int(net_cents),
+        "mode": "production",
+        "delta_cents": 0,
+        "tolerance_cents": 0,
+    }
+
+
+def _r34(
+    t: dict,
+    gross: int,
+    spot_count: int,
+    net_cents: int | None = None,
+    production: bool = False,
+) -> str:
     pct = float(t.get("commission_pct", 15.0))
-    plan = commission_plan(gross, spot_count, pct, net_cents)
+    if production and net_cents is not None:
+        plan = production_plan(gross, net_cents)
+    else:
+        plan = commission_plan(gross, spot_count, pct, net_cents)
     f = _pad([], 16)
     f[0] = "34"
     f[2] = str(gross)
@@ -471,7 +497,7 @@ def generate_edi(template: dict, inv: dict, spots: list[dict]) -> str:
     for spot in spots:
         lines.append(_r51(spot))
     lines.extend(_r33_lines(inv))
-    lines.append(_r34(template, gross, count, inv.get("net_cents")))
+    lines.append(_r34(template, gross, count, inv.get("net_cents"), bool(inv.get("is_production"))))
     lines.append(f"12;1;{gross};")
     return "\n".join(lines)
 
@@ -481,11 +507,15 @@ def generate_edi(template: dict, inv: dict, spots: list[dict]) -> str:
 # ---------------------------------------------------------------------------
 # TVInvoices needs at least one R51, so a production charge rides as ONE synthetic
 # spot. Shape copied from Lee's hand-built uploads (2605-011 BVK, 2503-049 PMX,
-# "!SAMPLE PROD.txt"): the 15th of the invoice month at 06:11, :30, copy
-# "PRODUCTION", rate = the whole gross; estimate "<est>PRD"; R32 "EST <est>
-# PRODUCTION"; R33 "PRODUCTION CHARGES"; R34 with 1 spot.
-PRODUCTION_SPOT_DAY = 15
-PRODUCTION_SPOT_TIME = "0611"
+# "!SAMPLE PROD.txt"): one day in the invoice month, :30, copy "PRODUCTION",
+# rate = the whole gross; estimate verbatim; R32 left blank for the operator; R33
+# "PRODUCTION CHARGES"; R34 with 1 spot. Commission comes from the affidavit,
+# not the template: agency production is gross − 15%, direct production is
+# gross with no commission (agency flag N).
+# Lee's defaults from 2026-09-24 on: the 20th of the invoice month at 12:00 (his
+# earlier hand-built files used the 15th at 06:11).
+PRODUCTION_SPOT_DAY = 20
+PRODUCTION_SPOT_TIME = "1200"
 PRODUCTION_SPOT_LENGTH = 30
 PRODUCTION_COPY_ID = "PRODUCTION"
 PRODUCTION_COMMENT_BOTTOM = "PRODUCTION CHARGES"
@@ -502,28 +532,28 @@ def production_invoice(inv: dict, a: AffidavitData, estimate: str = "") -> tuple
     Fill a production-only invoice from its affidavit and return (inv, spots).
 
     Computed fields (gross, spot count, dates, net, the synthetic spot) are
-    always overwritten from the affidavit; estimate/comments are only filled
+    always overwritten from the affidavit; the estimate and R33 are only filled
     when the caller has not set them, so an operator edit on the page survives.
-    Raises ValueError when the affidavit carries no gross — a production
-    invoice with no amount is not an invoice.
+    R32 (top comment) is never prefilled — that is where Lee adds his own label.
+    Raises ValueError when the affidavit carries no gross or no net — a
+    production invoice with no amount is not an invoice.
     """
     if a.gross_amount is None or a.gross_amount <= 0:
         raise ValueError(f"production affidavit {a.invoice_id or '?'} has no gross amount")
+    if a.net_amount is None:
+        raise ValueError(f"production affidavit {a.invoice_id or '?'} has no Net Amount Due")
     yymm = str(inv.get("broadcast_month") or (a.invoice_id or "")[:4])
     if not _YYMM.match(yymm):
         raise ValueError(f"production affidavit {a.invoice_id or '?'}: no YYMM month")
     start, end = broadcast_month_range(int(yymm[:2]), int(yymm[2:]))
     gross_cents = int(round(a.gross_amount * 100))
 
+    # The estimate number goes in verbatim — Lee (2026-09-24): never append PRD or
+    # PRODUCTION to it; the May 2026 BVK "4807PRD" was a one-off.
     est = (estimate or "").strip()
-    if est and not est.upper().endswith("PRD"):
-        est_code = f"{est}PRD"
-    else:
-        est_code = est
     if not inv.get("estimate_code"):
-        inv["estimate_code"] = est_code
-    if not inv.get("comment_top"):
-        inv["comment_top"] = f"EST {est} PRODUCTION" if est else "PRODUCTION"
+        inv["estimate_code"] = est
+    # R32 (top comment) is left for the operator — Lee types any suffix/label there.
     if not inv.get("comment_bottom") or a.comment_bottom == inv.get("comment_bottom"):
         # The affidavit's own comment is the "production only" boilerplate — replace it.
         inv["comment_bottom"] = PRODUCTION_COMMENT_BOTTOM
@@ -536,10 +566,11 @@ def production_invoice(inv: dict, a: AffidavitData, estimate: str = "") -> tuple
             "gross_cents": gross_cents,
             "spot_count": 1,
             "is_production": True,
+            "net_cents": int(round(a.net_amount * 100)),
         }
     )
-    if a.net_amount is not None:
-        inv["net_cents"] = int(round(a.net_amount * 100))
+    # Agency vs direct is a fact of the invoice: any commission → agency (Y).
+    inv["agency_commission"] = gross_cents - inv["net_cents"] > 0
     spot = {
         "run_date": f"{yymm}{PRODUCTION_SPOT_DAY:02d}",
         "time_hhmm": PRODUCTION_SPOT_TIME,
@@ -927,7 +958,8 @@ def validate_invoice(template: dict, inv: dict, spots: list[dict]) -> list[dict]
         _maxlen(f_, str(inv.get(f_, "") or ""), 130)
 
     # Commission: the affidavit-net override must be rounding-sized
-    if inv.get("net_cents") is not None:
+    # (production invoices take gross − net verbatim, see production_plan)
+    if inv.get("net_cents") is not None and not inv.get("is_production"):
         gross = int(inv.get("gross_cents") or sum(s.get("rate_cents", 0) for s in spots))
         count = int(inv.get("spot_count") or len(spots))
         plan = commission_plan(

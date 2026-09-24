@@ -305,8 +305,10 @@ def _strip_pad(line: str) -> str:
 
 def test_production_invoice_reproduces_bvk_2605_011():
     """Oracle: Lee's hand-built 2605-011_BVK_PROD.txt (May 2026 TVInvoices upload).
-    Every populated field of records 31/32/51/33/34/12 must match; only the
-    trailing empty-field padding differs (the generator pads to the spec width)."""
+    Every populated field of records 31/32/51/33/34/12 must match, except what
+    Lee changed on 2026-09-24: the R51 date/time are now the 20th at 12:00 (the
+    May file used the 15th at 06:11) and the estimate is the plain number (the
+    May file's 4807PRD suffix was a one-off). Trailing padding differs too."""
     a = AffidavitData(
         invoice_id="2605-011",
         market="CVC",
@@ -319,11 +321,13 @@ def test_production_invoice_reproduces_bvk_2605_011():
     inv = invoice_info("2605-011.csv")
     inv.update(order_number="2738", agency_ad_code="UCD", agency_prod_code="UCD")
     inv, spots = production_invoice(inv, a, "4807")
-    assert inv["estimate_code"] == "4807PRD"
+    assert inv["estimate_code"] == "4807"
+    assert not inv.get("comment_top")  # R32 is the operator's; Lee typed this one in May
+    inv["comment_top"] = "EST 4807 PRODUCTION"
     assert spots == [
         {
-            "run_date": "260515",
-            "time_hhmm": "0611",
+            "run_date": "260520",
+            "time_hhmm": "1200",
             "duration": 30,
             "copy_id": "PRODUCTION",
             "rate_cents": 317647,
@@ -343,10 +347,10 @@ def test_production_invoice_reproduces_bvk_2605_011():
         if ln[:2] in ("31", "32", "51", "33", "34", "12")
     ]
     assert got == [
-        "31;Charmaine Lane;Jennifer Murphy;UC Davis Health;UC Davis Health;260531;;4807PRD;"
+        "31;Charmaine Lane;Jennifer Murphy;UC Davis Health;UC Davis Health;260531;;4807;"
         "2605-011;2605;260427;260531;260427;260531;260427;260531;;;Y;;;;2738;;UCD;;UCD",
         "32;EST 4807 PRODUCTION",
-        "51;Y;260515;;0611;30;PRODUCTION;317647",
+        "51;Y;260520;;1200;30;PRODUCTION;317647",
         "33;PRODUCTION CHARGES",
         "34;;317647;47647;270000;;;;;;;;1",
         "12;1;317647",
@@ -363,10 +367,11 @@ def test_production_invoice_keeps_operator_estimate_and_needs_gross():
         is_production=True,
     )
     inv = invoice_info("2608-020.csv")
-    inv["estimate_code"] = "0001PRD"  # already set on the page → not overwritten
+    inv["estimate_code"] = "0001PRD"  # typed on the page → kept verbatim, never overwritten
     inv, spots = production_invoice(inv, a, "9999")
     assert inv["estimate_code"] == "0001PRD"
-    assert inv["comment_top"] == "EST 9999 PRODUCTION"
+    assert not inv.get("comment_top")
+    assert inv["comment_bottom"] == "PRODUCTION CHARGES"
     assert inv["net_cents"] == 208000 and inv["gross_cents"] == 244706
     assert (inv["bcast_start"], inv["bcast_end"]) == ("260727", "260830")
     with pytest.raises(ValueError):
@@ -375,3 +380,67 @@ def test_production_invoice_keeps_operator_estimate_and_needs_gross():
             AffidavitData(invoice_id="2608-021", is_production=True),
             "",
         )
+    with pytest.raises(ValueError):  # gross but no net
+        production_invoice(
+            invoice_info("2608-021.csv"),
+            AffidavitData(invoice_id="2608-021", gross_amount=100.0, is_production=True),
+            "",
+        )
+
+
+def test_estimate_goes_in_verbatim_no_prd_suffix():
+    a = AffidavitData(
+        invoice_id="2608-020", gross_amount=2447.06, net_amount=2080.0, is_production=True
+    )
+    inv, _ = production_invoice(invoice_info("2608-020.csv"), a, "0001")
+    assert inv["estimate_code"] == "0001"
+    assert not inv.get("comment_top")
+
+
+def test_direct_production_invoice_has_no_commission_and_flag_n():
+    """Some production is billed direct: net == gross, R34 commission 0, R31 agency flag N."""
+    a = AffidavitData(
+        invoice_id="2609-030",
+        market="CVC",
+        gross_amount=1500.00,
+        net_amount=1500.00,
+        is_production=True,
+    )
+    inv, spots = production_invoice(invoice_info("2609-030.csv"), a, "77")
+    assert inv["agency_commission"] is False
+    template = {
+        "representative": "House",
+        "salesperson": "X",
+        "advertiser_name": "A",
+        "product_name": "P",
+        "commission_pct": 15,
+        "call_letters": "CRTV",
+    }
+    lines = generate_edi(template, inv, spots).splitlines()
+    assert [ln for ln in lines if ln.startswith("31;")][0].split(";")[18] == "N"
+    assert [ln for ln in lines if ln.startswith("34;")][0].rstrip(
+        ";"
+    ) == "34;;150000;0;150000;;;;;;;;1"
+    assert [ln for ln in lines if ln.startswith("51;")][0].rstrip(
+        ";"
+    ) == "51;Y;260920;;1200;30;PRODUCTION;150000"
+    assert [i for i in validate_invoice(template, inv, spots) if i["field"] == "commission"] == []
+
+
+def test_agency_production_invoice_flag_y_and_affidavit_commission():
+    a = AffidavitData(
+        invoice_id="2608-020",
+        market="SFO",
+        gross_amount=2447.06,
+        commission_amount=367.06,
+        net_amount=2080.0,
+        is_production=True,
+    )
+    inv, spots = production_invoice(invoice_info("2608-020.csv"), a, "0001")
+    assert inv["agency_commission"] is True
+    template = {"commission_pct": 15, "call_letters": "CRTV"}
+    lines = generate_edi(template, inv, spots).splitlines()
+    assert [ln for ln in lines if ln.startswith("31;")][0].split(";")[18] == "Y"
+    assert [ln for ln in lines if ln.startswith("34;")][0].rstrip(
+        ";"
+    ) == "34;;244706;36706;208000;;;;;;;;1"
