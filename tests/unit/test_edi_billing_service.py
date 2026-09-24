@@ -250,3 +250,19 @@ def test_parse_affidavit_reads_commission_and_net(real_pdfplumber):
     assert a.gross_amount == 6588.24
     assert a.commission_amount == 988.24
     assert a.net_amount == 5600.00
+
+
+def test_parse_affidavit_crispin_mmi_2608_019(real_pdfplumber):
+    """Crispin/MMI affidavit: Estimate field reads 'Order 212735, Est 0001' — the
+    order number must reach rep_order_number without a Davis-Elen 'Order #:' box."""
+    a = parse_affidavit((_FIXTURES / "2608-019_affidavit.pdf").read_bytes(), source="fixture")
+    assert a.invoice_id == "2608-019"
+    assert a.contract_no == "3012"
+    assert a.market == "SFO"
+    assert a.advertiser == "Bay Area Air Quality Management District (Crispin)"
+    assert a.total_spots == 96
+    assert a.gross_amount == 6211.92
+    assert a.commission_amount == 931.79
+    assert a.net_amount == 5280.13
+    assert a.rep_order_number == "212735"
+    assert a.comment_bottom == "BAAQ 2026 TV SUMMERCAMPAIGN"

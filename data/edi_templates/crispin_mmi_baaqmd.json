@@ -1,0 +1,31 @@
+{
+  "name": "Crispin (MMI Agency) BAAQMD",
+  "edi_code": "9913914",
+  "call_letters": "CRTV",
+  "commission_pct": 15,
+  "representative": "Charmaine Lane",
+  "salesperson": "Alexander Boyle",
+  "agency_name": "MMI Agency",
+  "advertiser_name": "Bay Area AQMD",
+  "product_name": "Bay Area Air Quality",
+  "agency_address": [
+    "1712 Pease St",
+    "Houston TX",
+    "77003"
+  ],
+  "agency_ad_code": "BAAQ",
+  "agency_prod_code": "BAAQ",
+  "payee_name": "Crossings TV",
+  "payee_address": [
+    "Accounts Receivable",
+    "901 H Street Ste 120 PMB 91",
+    "Sacramento CA",
+    "95814"
+  ],
+  "advertiser_match": "Bay Area Air Quality Management District (Crispin)",
+  "market_match": "SFO",
+  "etere_customer_ids": [
+    448
+  ],
+  "etere_agency_id": 446
+}

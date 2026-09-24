@@ -194,3 +194,19 @@ def test_blank_affidavit_market_falls_back_to_csv():
 def test_pdf_market_used_when_csv_unknown():
     assert resolve_market("", "SFO") == "SFO"
     assert resolve_market("garbage", "SFO") == "SFO"
+
+
+def test_real_templates_crispin_mmi_matches_customer_448_only():
+    """The live template set: BAAQMD via Crispin (ANAGRAF 448, agency 446) picks the
+    MMI Agency template; the legacy Allison & Partners BAAQMD customer (183) does not."""
+    import json
+    from pathlib import Path
+
+    tdir = Path(__file__).resolve().parents[2] / "data" / "edi_templates"
+    templates = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(tdir.glob("*.json"))]
+    hit = match_template(templates, customer_id=448, agency_id=446, market="SFO")
+    assert hit.confidence == "customer-id"
+    assert hit.name == "Crispin (MMI Agency) BAAQMD"
+    crispin = next(t for t in templates if t["name"] == hit.name)
+    assert crispin["edi_code"] == "9913914"
+    assert match_template(templates, customer_id=183, market="SFO").confidence == "none"

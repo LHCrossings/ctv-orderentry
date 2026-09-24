@@ -140,6 +140,9 @@ def parse_affidavit(pdf_bytes: bytes, source: str = "") -> AffidavitData:
         # --- comment-box fields (may span pages) ---
         if m := re.search(r"Order\s*#:\s*(\d+)", full_text):
             out.rep_order_number = m.group(1).strip()
+        elif m := re.search(r"\bOrder\s+(\d{4,})\b", full_text):
+            # Crispin/MMI: the affidavit Estimate field reads "Order 212735, Est 0001"
+            out.rep_order_number = m.group(1).strip()
         if m := re.search(r"CLIENT\s+(\w+)", full_text):
             out.agency_ad_code = m.group(1).strip()
         if m := re.search(r"PRODUCT\s+(\w+)\s+(.+?)(?:\s+http|\s+CPE\b|\n|$)", full_text):
