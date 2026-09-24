@@ -210,3 +210,17 @@ def test_real_templates_crispin_mmi_matches_customer_448_only():
     crispin = next(t for t in templates if t["name"] == hit.name)
     assert crispin["edi_code"] == "9913914"
     assert match_template(templates, customer_id=183, market="SFO").confidence == "none"
+
+
+def test_every_listed_template_is_found_by_name():
+    """The row list globs data/edi_templates/*.json; validate/export call
+    get_template(name). Both must see the same set — a file saved under a name
+    that is not slug(name) used to come back empty from get_template, which the
+    page showed as "call_letters: '' must be exactly 4 characters" (Crispin row,
+    2026-09-24). Four older files share that shape (copacino_soundtransit, ...)."""
+    from business_logic.services.edi_billing import all_templates, get_template
+
+    listed = all_templates()
+    assert listed
+    missing = [t["name"] for t in listed if get_template(t["name"]) != t]
+    assert not missing, missing

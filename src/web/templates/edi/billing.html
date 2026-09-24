@@ -368,6 +368,9 @@ function commissionNote(r) {
     const aff = r.pdf_commission != null ? `, affidavit ${fmt_dollars(r.pdf_commission)}` : '';
     return ` · EDI commission ${cents(c.commission)} (${sign}${cents(Math.abs(c.delta_cents))}${aff}) → net ${cents(c.net)} ✓`;
   }
+  if (c.mode === 'production') {
+    return ` · commission ${cents(c.commission)} from the affidavit → net ${cents(c.net)} ✓`;
+  }
   return ` · EDI net ${cents(c.net)} ≠ our ${fmt_dollars(r.pdf_net)} — see warning`;
 }
 

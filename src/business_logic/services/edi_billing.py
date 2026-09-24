@@ -602,8 +602,14 @@ def all_templates() -> list[dict]:
 
 
 def get_template(name: str) -> dict | None:
+    """Template by its display name. The file is normally <slug(name)>.json, but
+    several live templates were saved under a hand-typed file name (copacino_
+    soundtransit, opad_nysdoh, ...), so fall back to the name field itself —
+    the row list globs every file, and validate/export must find the same set."""
     p = TEMPLATE_DIR / f"{slug(name)}.json"
-    return json.loads(p.read_text()) if p.exists() else None
+    if p.exists():
+        return json.loads(p.read_text())
+    return next((t for t in all_templates() if t.get("name") == name), None)
 
 
 # ---------------------------------------------------------------------------
