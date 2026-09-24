@@ -4,6 +4,36 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Hand-Built Oracle Shows WHAT Was Done, Not WHICH Parts Are Policy — Ask Before Promoting a One-Off to a Default; and Two Lookups Over One Store Must Share One Key
+
+**Session:** Lee, Crispin/MMI production EDI invoice 2608-020 (2026-09-24)
+
+**Rule:** Lee's May BVK production upload (2605-011) was the only oracle for a production-only
+EDI. I copied every detail of it into code as the rule: estimate `4807PRD`, R32 `EST 4807
+PRODUCTION`, the 15th at 06:11. Three corrections followed in ten minutes: the PRD suffix was a
+one-time choice ("this time I would not"), the R32 comment is where HE types a label by hand, and
+the date/time defaults he actually wanted were the 20th at 12:00. The file faithfully recorded his
+choices; it could not tell me which of them were conventions. Same day, second defect: the
+template row list globbed `data/edi_templates/*.json` while validate/export opened
+`<slug(name)>.json` — my file was named by hand, so the row matched on the page and then failed
+with `call_letters: '' must be exactly 4 characters`. Four older templates had the same latent
+mismatch and would have failed the next time anyone validated them.
+
+**How to apply:**
+1. When one hand-made artifact is the whole spec, split its fields into "structural" (record
+   types, which field carries the gross) and "chosen values" (suffixes, comments, dates, times)
+   and ASK about the chosen ones before hardcoding — one question, listed, beats three
+   corrections. Anything an operator types per invoice (R32 here) is prefilled with NOTHING.
+2. When a store is read by more than one path (glob vs slug file name), the paths must agree on
+   the key or one must fall back to the other; write the test that iterates the listing and
+   asserts the by-key lookup returns each item (`test_every_listed_template_is_found_by_name`).
+   That test found the four older drifts the moment it existed.
+3. A validator complaining about a field the template plainly has (`call_letters: ''` on a
+   template that says CRTV) means the validator got a DIFFERENT object than the one on screen —
+   look for the second lookup path before looking at the data.
+
+---
+
 ## A "COMMITTED" Print on a Write That Never Persisted — pymssql Runs Autocommit OFF, So a SQL-Level COMMIT Commits Nothing; Verify Every Write From a FRESH Connection
 
 **Session:** Lee, unplace Maija's Korean specials 9/23–9/24 (2026-09-23)
