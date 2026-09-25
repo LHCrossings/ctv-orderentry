@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agency XML Export – CTV Order Entry</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <link rel="stylesheet" href="/static/css/app.css" />
+    <style>
+        .bw-card {
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 28px 32px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+        }
+        .bw-card h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin: 0 0 18px 0;
+        }
+        .bw-card.hidden { display: none; }
+        .upload-zone {
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 32px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            position: relative;
+        }
+        .upload-zone:hover, .upload-zone.drag-over {
+            border-color: var(--accent-primary);
+            background: #f0f4f8;
+        }
+        .upload-zone input[type=file] {
+            position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+        }
+        .upload-zone .upload-icon { font-size: 2rem; margin-bottom: 8px; }
+        .upload-zone p { margin: 4px 0; color: var(--text-secondary); font-size: 0.9rem; }
+        .upload-zone .file-name { margin-top: 10px; font-weight: 600; color: var(--accent-primary); font-size: 0.9rem; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 28px; }
+        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        .form-group label {
+            font-size: 0.82rem; font-weight: 600; color: var(--text-secondary);
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .form-group input {
+            padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px;
+            font-family: inherit; font-size: 0.92rem; color: var(--text-primary); background: white;
+        }
+        .form-group input:focus { outline: none; border-color: var(--accent-primary); }
+        .form-group .hint { font-size: 0.78rem; color: var(--text-muted); text-transform: none; letter-spacing: 0; font-weight: 400; }
+        .form-check { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; color: var(--text-secondary); margin-top: 16px; }
+        .btn-generate {
+            display: inline-flex; align-items: center; gap: 8px; padding: 11px 28px;
+            background: var(--accent-primary); color: white; border: none; border-radius: 7px;
+            font-family: inherit; font-size: 0.95rem; font-weight: 600; cursor: pointer; margin-top: 8px;
+        }
+        .btn-generate:hover:not(:disabled) { background: var(--nord10); }
+        .btn-generate:disabled { opacity: 0.5; cursor: not-allowed; }
+        .status-msg { font-size: 0.88rem; padding: 8px 14px; border-radius: 6px; margin-top: 12px; display: none; }
+        .status-msg.error { background: #fde8ea; color: var(--accent-danger); display: block; }
+        .status-msg.info  { background: #e6f4ea; color: #2d6a4f; display: block; }
+        .flight-line { font-size: 0.9rem; color: var(--text-secondary); margin: 0 0 12px; }
+        .flight-line b { color: var(--text-primary); }
+        .num { text-align: right; font-variant-numeric: tabular-nums; }
+        .note { font-size: 0.85rem; color: var(--text-secondary); margin: 10px 0 0; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="home-btn">🏠</a>
+            <div class="logo-icon">📤</div>
+            <div>
+                <h1>CTV <span>Order Entry</span></h1>
+                <div class="logo-sub">Agency XML Export</div>
+            </div>
+        </div>
+        <span class="header-badge">TVB SpotTV Proposal</span>
+    </div>
+</header>
+
+<main style="max-width: 900px; margin: 0 auto; padding: 24px 16px;">
+
+    <div class="bw-card">
+        <h2>Step 1 — Drop the proposal workbook</h2>
+        <div class="upload-zone" id="ax-zone">
+            <input type="file" id="ax-input" accept=".xlsm,.xlsx" />
+            <div class="upload-icon">📊</div>
+            <p>Drop the Crossings TV Media Proposal (.xlsm / .xlsx) here</p>
+            <p>or click to browse</p>
+            <div class="file-name" id="ax-filename"></div>
+        </div>
+        <div class="status-msg" id="ax-upload-status"></div>
+    </div>
+
+    <div class="bw-card hidden" id="ax-preview-card">
+        <h2>Step 2 — Lines read from the sheet</h2>
+        <p class="flight-line" id="ax-flight"></p>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Program</th><th>Daypart</th><th>Days / time</th>
+                        <th class="num">Len</th><th class="num">Rate</th><th class="num">Spots</th><th>Flight</th>
+                    </tr>
+                </thead>
+                <tbody id="ax-lines"></tbody>
+            </table>
+        </div>
+        <p class="note" id="ax-notes"></p>
+    </div>
+
+    <div class="bw-card hidden" id="ax-form-card">
+        <h2>Step 3 — Confirm the header and download</h2>
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="f-proposal_id">Proposal ID <span class="hint">uniqueIdentifier / SellerReference, e.g. BAAQMD-2026-R1C</span></label>
+                <input id="f-proposal_id" name="proposal_id" />
+            </div>
+            <div class="form-group">
+                <label for="f-call_letters">Station code <span class="hint">the buyer's callLetters for us, e.g. 3131CA</span></label>
+                <input id="f-call_letters" name="call_letters" placeholder="3131CA" />
+            </div>
+            <div class="form-group">
+                <label for="f-buyer_company">Buying company <span class="hint">agency name as the buyer knows it</span></label>
+                <input id="f-buyer_company" name="buyer_company" />
+            </div>
+            <div class="form-group">
+                <label for="f-buyer_name">Buyer contact</label>
+                <input id="f-buyer_name" name="buyer_name" />
+            </div>
+            <div class="form-group">
+                <label for="f-advertiser">Advertiser</label>
+                <input id="f-advertiser" name="advertiser" />
+            </div>
+            <div class="form-group">
+                <label for="f-product">Product</label>
+                <input id="f-product" name="product" />
+            </div>
+            <div class="form-group">
+                <label for="f-proposal_name">Proposal name</label>
+                <input id="f-proposal_name" name="proposal_name" />
+            </div>
+            <div class="form-group">
+                <label for="f-salesperson">Salesperson</label>
+                <input id="f-salesperson" name="salesperson" />
+            </div>
+            <div class="form-group">
+                <label for="f-send_date">Send date</label>
+                <input id="f-send_date" name="send_date" type="date" />
+            </div>
+        </div>
+        <label class="form-check">
+            <input type="checkbox" id="f-include_spots_per_week" name="include_spots_per_week" value="1" />
+            Include weekly spot counts (SpotsPerWeek) — off matches the file the agency ingested
+        </label>
+        <button type="button" class="btn-generate" id="ax-generate">&#8595; Download XML</button>
+        <div class="status-msg" id="ax-form-status"></div>
+    </div>
+
+</main>
+
+<script>
+(function () {
+    const FIELDS = ['proposal_id', 'proposal_name', 'advertiser', 'product',
+                    'buyer_company', 'buyer_name', 'call_letters', 'salesperson', 'send_date'];
+    let workbook = null;
+
+    const $ = id => document.getElementById(id);
+    function showStatus(el, msg, type) { el.textContent = msg; el.className = 'status-msg ' + type; }
+    function hideStatus(el) { el.textContent = ''; el.className = 'status-msg'; }
+    async function errorText(resp) {
+        try { const j = await resp.json(); return j.detail || JSON.stringify(j); }
+        catch (e) { return resp.statusText || ('HTTP ' + resp.status); }
+    }
+    const money = v => '$' + Number(v).toFixed(2);
+    const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+    const zone = $('ax-zone');
+    zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', e => {
+        e.preventDefault(); zone.classList.remove('drag-over');
+        const f = e.dataTransfer.files[0];
+        if (f) handleFile(f);
+    });
+    $('ax-input').addEventListener('change', function () { if (this.files[0]) handleFile(this.files[0]); });
+
+    async function handleFile(file) {
+        workbook = file;
+        $('ax-filename').textContent = file.name;
+        hideStatus($('ax-upload-status')); hideStatus($('ax-form-status'));
+        $('ax-preview-card').classList.add('hidden');
+        $('ax-form-card').classList.add('hidden');
+        const fd = new FormData();
+        fd.append('workbook', file, file.name);
+        try {
+            const resp = await fetch('/orders/agency-xml/preview', { method: 'POST', body: fd });
+            if (!resp.ok) throw new Error(await errorText(resp));
+            renderPreview(await resp.json());
+        } catch (e) {
+            showStatus($('ax-upload-status'), 'Could not read the workbook: ' + e.message, 'error');
+        }
+    }
+
+    function renderPreview(p) {
+        $('ax-flight').innerHTML = `<b>${esc(p.market_label || '')}</b> &nbsp;·&nbsp; flight <b>${p.flight_start}</b> to <b>${p.flight_end}</b> &nbsp;·&nbsp; ${p.lines.length} line(s)`;
+        $('ax-lines').innerHTML = p.lines.map(ln => `
+            <tr>
+                <td>${esc(ln.program)}</td>
+                <td>${esc(ln.daypart_name)}</td>
+                <td>${ln.windows.map(w => esc(w.days) + ' ' + w.start + '–' + w.end).join('<br>')}</td>
+                <td class="num">:${ln.length_sec}</td>
+                <td class="num">${money(ln.rate)}</td>
+                <td class="num">${ln.total_spots}</td>
+                <td>${ln.start} → ${ln.end}</td>
+            </tr>`).join('');
+        $('ax-notes').textContent = (p.notes || []).join(' · ');
+        FIELDS.forEach(k => { $('f-' + k).value = p.header[k] || ''; });
+        $('ax-preview-card').classList.remove('hidden');
+        $('ax-form-card').classList.remove('hidden');
+        $('f-call_letters').focus();
+    }
+
+    $('ax-generate').addEventListener('click', async function () {
+        const status = $('ax-form-status');
+        hideStatus(status);
+        if (!workbook) { showStatus(status, 'Drop the proposal workbook first.', 'error'); return; }
+        const fd = new FormData();
+        fd.append('workbook', workbook, workbook.name);
+        FIELDS.forEach(k => fd.append(k, $('f-' + k).value.trim()));
+        if ($('f-include_spots_per_week').checked) fd.append('include_spots_per_week', '1');
+        this.disabled = true;
+        try {
+            const resp = await fetch('/orders/agency-xml/generate', { method: 'POST', body: fd });
+            if (!resp.ok) throw new Error(await errorText(resp));
+            const blob  = await resp.blob();
+            const disp  = resp.headers.get('Content-Disposition') || '';
+            const match = disp.match(/filename="([^"]+)"/);
+            const fname = match ? match[1] : 'proposal.xml';
+            const url   = URL.createObjectURL(blob);
+            const link  = document.createElement('a');
+            link.href = url; link.download = fname; link.click();
+            URL.revokeObjectURL(url);
+            showStatus(status, 'Downloaded ' + fname + ' — schema-validated against SpotTVCableProposal 0.3.0.5A.', 'info');
+        } catch (e) {
+            showStatus(status, 'Error: ' + e.message, 'error');
+        } finally { this.disabled = false; }
+    });
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AAAA-Message xmlns:tvb="http://www.AAAA.org/schemas/spotTV" xmlns:tvb-tp="http://www.AAAA.org/schemas/TVBGeneralTypes" xmlns="http://www.AAAA.org/schemas/spotTVCableProposal">
+	<AAAA-Values>
+		<SchemaName>SpotTVCableProposal</SchemaName>
+		<SchemaVersion>0.3.0.5A</SchemaVersion>
+		<Media>SpotTV</Media>
+		<BusinessObject>Proposal</BusinessObject>
+		<Action>New</Action>
+		<UniqueMessageID>CROSSINGS-BAAQMD-2026-R1C</UniqueMessageID>
+	</AAAA-Values>
+	<Proposal uniqueIdentifier="BAAQMD-2026-R1C" version="1" sendDateTime="2026-07-23T00:00:00" weekStartDay="Mo" startDate="2026-07-27" endDate="2026-11-01">
+		<Seller companyName="Crossings TV">
+			<Salesperson name="Charmaine Lane"/>
+		</Seller>
+		<Buyer buyingCompanyName="Allison Worldwide">
+			<BuyerName>Alexander Boyle</BuyerName>
+		</Buyer>
+		<Advertiser name="Bay Area Quality Management District">
+			<Product name="BAAQMD 2026"/>
+		</Advertiser>
+		<Name>Crossings TV - BAAQMD 2026</Name>
+		<SellerReference>BAAQMD-2026-R1C</SellerReference>
+		<Outlets>
+			<TelevisionStation callLetters="3131CA" parentPlus="N" outletId="OUT0"/>
+		</Outlets>
+		<AvailList startDate="2026-07-27" endDate="2026-11-01" identifier="AL001" isPackage="N">
+			<Name>San Francisco Bay Area - Xfinity Channel 3131 and KQTA 15.3</Name>
+			<OutletReferences>
+				<OutletReference outletFromProposalRef="OUT0" outletForListId="OUL0"/>
+			</OutletReferences>
+			<AvailLineWithDetailedPeriods>
+				<OutletReference outletFromListRef="OUL0"/>
+				<DayTimes>
+					<DayTime>
+						<StartTime>19:00</StartTime>
+						<EndTime>20:00</EndTime>
+						<Days>
+							<tvb-tp:Monday>Y</tvb-tp:Monday>
+							<tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+							<tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+							<tvb-tp:Thursday>Y</tvb-tp:Thursday>
+							<tvb-tp:Friday>Y</tvb-tp:Friday>
+							<tvb-tp:Saturday>N</tvb-tp:Saturday>
+							<tvb-tp:Sunday>N</tvb-tp:Sunday>
+						</Days>
+						<ProgramName>Cantonese News</ProgramName>
+					</DayTime>
+				</DayTimes>
+				<DaypartName>CHINESE</DaypartName>
+				<AvailName>Cantonese News</AvailName>
+				<SpotLength>00:00:30</SpotLength>
+				<Periods>
+					<DetailedPeriod startDate="2026-07-27" endDate="2026-11-01">
+						<Rate>120.00</Rate>
+					</DetailedPeriod>
+				</Periods>
+			</AvailLineWithDetailedPeriods>
+			<AvailLineWithDetailedPeriods>
+				<OutletReference outletFromListRef="OUL0"/>
+				<DayTimes>
+					<DayTime>
+						<StartTime>20:00</StartTime>
+						<EndTime>21:00</EndTime>
+						<Days>
+							<tvb-tp:Monday>Y</tvb-tp:Monday>
+							<tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+							<tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+							<tvb-tp:Thursday>Y</tvb-tp:Thursday>
+							<tvb-tp:Friday>Y</tvb-tp:Friday>
+							<tvb-tp:Saturday>Y</tvb-tp:Saturday>
+							<tvb-tp:Sunday>Y</tvb-tp:Sunday>
+						</Days>
+						<ProgramName>Mandarin News</ProgramName>
+					</DayTime>
+				</DayTimes>
+				<DaypartName>CHINESE</DaypartName>
+				<AvailName>Mandarin News</AvailName>
+				<SpotLength>00:00:30</SpotLength>
+				<Periods>
+					<DetailedPeriod startDate="2026-07-27" endDate="2026-11-01">
+						<Rate>120.00</Rate>
+					</DetailedPeriod>
+				</Periods>
+			</AvailLineWithDetailedPeriods>
+			<AvailLineWithDetailedPeriods>
+				<OutletReference outletFromListRef="OUL0"/>
+				<DayTimes>
+					<DayTime>
+						<StartTime>18:00</StartTime>
+						<EndTime>19:00</EndTime>
+						<Days>
+							<tvb-tp:Monday>Y</tvb-tp:Monday>
+							<tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+							<tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+							<tvb-tp:Thursday>Y</tvb-tp:Thursday>
+							<tvb-tp:Friday>Y</tvb-tp:Friday>
+							<tvb-tp:Saturday>N</tvb-tp:Saturday>
+							<tvb-tp:Sunday>N</tvb-tp:Sunday>
+						</Days>
+						<ProgramName>Filipino News/Talk</ProgramName>
+					</DayTime>
+				</DayTimes>
+				<DaypartName>FILIPINO</DaypartName>
+				<AvailName>Filipino News/Talk</AvailName>
+				<SpotLength>00:00:30</SpotLength>
+				<Periods>
+					<DetailedPeriod startDate="2026-07-27" endDate="2026-11-01">
+						<Rate>100.00</Rate>
+					</DetailedPeriod>
+				</Periods>
+			</AvailLineWithDetailedPeriods>
+			<AvailLineWithDetailedPeriods>
+				<OutletReference outletFromListRef="OUL0"/>
+				<DayTimes>
+					<DayTime>
+						<StartTime>11:00</StartTime>
+						<EndTime>13:00</EndTime>
+						<Days>
+							<tvb-tp:Monday>Y</tvb-tp:Monday>
+							<tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+							<tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+							<tvb-tp:Thursday>Y</tvb-tp:Thursday>
+							<tvb-tp:Friday>Y</tvb-tp:Friday>
+							<tvb-tp:Saturday>Y</tvb-tp:Saturday>
+							<tvb-tp:Sunday>Y</tvb-tp:Sunday>
+						</Days>
+						<ProgramName>Vietnamese News /Variety</ProgramName>
+					</DayTime>
+				</DayTimes>
+				<DaypartName>VIETNAMESE</DaypartName>
+				<AvailName>Vietnamese News /Variety</AvailName>
+				<SpotLength>00:00:30</SpotLength>
+				<Periods>
+					<DetailedPeriod startDate="2026-07-27" endDate="2026-11-01">
+						<Rate>100.00</Rate>
+					</DetailedPeriod>
+				</Periods>
+			</AvailLineWithDetailedPeriods>
+			<AvailLineWithDetailedPeriods>
+				<OutletReference outletFromListRef="OUL0"/>
+				<DayTimes>
+					<DayTime>
+						<StartTime>06:00</StartTime>
+						<EndTime>24:00</EndTime>
+						<Days>
+							<tvb-tp:Monday>Y</tvb-tp:Monday>
+							<tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+							<tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+							<tvb-tp:Thursday>Y</tvb-tp:Thursday>
+							<tvb-tp:Friday>Y</tvb-tp:Friday>
+							<tvb-tp:Saturday>Y</tvb-tp:Saturday>
+							<tvb-tp:Sunday>Y</tvb-tp:Sunday>
+						</Days>
+						<ProgramName>Cantonese</ProgramName>
+					</DayTime>
+				</DayTimes>
+				<DaypartName>CHINESE</DaypartName>
+				<AvailName>Cantonese</AvailName>
+				<SpotLength>00:00:15</SpotLength>
+				<Periods>
+					<DetailedPeriod startDate="2026-07-27" endDate="2026-11-01">
+						<Rate>0.00</Rate>
+					</DetailedPeriod>
+				</Periods>
+			</AvailLineWithDetailedPeriods>
+			<AvailLineWithDetailedPeriods>
+				<OutletReference outletFromListRef="OUL0"/>
+				<DayTimes>
+					<DayTime>
+						<StartTime>06:00</StartTime>
+						<EndTime>24:00</EndTime>
+						<Days>
+							<tvb-tp:Monday>Y</tvb-tp:Monday>
+							<tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+							<tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+							<tvb-tp:Thursday>Y</tvb-tp:Thursday>
+							<tvb-tp:Friday>Y</tvb-tp:Friday>
+							<tvb-tp:Saturday>Y</tvb-tp:Saturday>
+							<tvb-tp:Sunday>Y</tvb-tp:Sunday>
+						</Days>
+						<ProgramName>Mandarin</ProgramName>
+					</DayTime>
+				</DayTimes>
+				<DaypartName>CHINESE</DaypartName>
+				<AvailName>Mandarin</AvailName>
+				<SpotLength>00:00:15</SpotLength>
+				<Periods>
+					<DetailedPeriod startDate="2026-07-27" endDate="2026-11-01">
+						<Rate>0.00</Rate>
+					</DetailedPeriod>
+				</Periods>
+			</AvailLineWithDetailedPeriods>
+			<AvailLineWithDetailedPeriods>
+				<OutletReference outletFromListRef="OUL0"/>
+				<DayTimes>
+					<DayTime>
+						<StartTime>06:00</StartTime>
+						<EndTime>24:00</EndTime>
+						<Days>
+							<tvb-tp:Monday>Y</tvb-tp:Monday>
+							<tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+							<tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+							<tvb-tp:Thursday>Y</tvb-tp:Thursday>
+							<tvb-tp:Friday>Y</tvb-tp:Friday>
+							<tvb-tp:Saturday>Y</tvb-tp:Saturday>
+							<tvb-tp:Sunday>Y</tvb-tp:Sunday>
+						</Days>
+						<ProgramName>Filipino</ProgramName>
+					</DayTime>
+				</DayTimes>
+				<DaypartName>FILIPINO</DaypartName>
+				<AvailName>Filipino</AvailName>
+				<SpotLength>00:00:15</SpotLength>
+				<Periods>
+					<DetailedPeriod startDate="2026-07-27" endDate="2026-11-01">
+						<Rate>0.00</Rate>
+					</DetailedPeriod>
+				</Periods>
+			</AvailLineWithDetailedPeriods>
+			<AvailLineWithDetailedPeriods>
+				<OutletReference outletFromListRef="OUL0"/>
+				<DayTimes>
+					<DayTime>
+						<StartTime>06:00</StartTime>
+						<EndTime>24:00</EndTime>
+						<Days>
+							<tvb-tp:Monday>Y</tvb-tp:Monday>
+							<tvb-tp:Tuesday>Y</tvb-tp:Tuesday>
+							<tvb-tp:Wednesday>Y</tvb-tp:Wednesday>
+							<tvb-tp:Thursday>Y</tvb-tp:Thursday>
+							<tvb-tp:Friday>Y</tvb-tp:Friday>
+							<tvb-tp:Saturday>Y</tvb-tp:Saturday>
+							<tvb-tp:Sunday>Y</tvb-tp:Sunday>
+						</Days>
+						<ProgramName>Vietnamese</ProgramName>
+					</DayTime>
+				</DayTimes>
+				<DaypartName>VIETNAMESE</DaypartName>
+				<AvailName>Vietnamese</AvailName>
+				<SpotLength>00:00:15</SpotLength>
+				<Periods>
+					<DetailedPeriod startDate="2026-07-27" endDate="2026-11-01">
+						<Rate>0.00</Rate>
+					</DetailedPeriod>
+				</Periods>
+			</AvailLineWithDetailedPeriods>
+		</AvailList>
+	</Proposal>
+</AAAA-Message>

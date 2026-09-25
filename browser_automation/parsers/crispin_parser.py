@@ -117,6 +117,8 @@ class CrispinLine:
     date_from: Optional[date] = None   # this line's flight start (DATES column)
     date_to: Optional[date] = None     # this line's flight end
     total_spots_stated: Optional[int] = None  # the IO's own TOT, for reconciling
+    # ── proposal workbook only ──
+    amount_stated: Optional[float] = None     # 'Proposed Contract Amount' cell (rate × spots)
 
     @property
     def is_bonus(self) -> bool:
@@ -180,6 +182,8 @@ class CrispinOrder:
     revision: str = ""            # "2"
     client_code: str = ""         # "BAAQ"
     station_code: str = ""        # "3131CA"
+    # ── proposal workbook only ──
+    title: str = ""               # the sheet banner, e.g. "Crossings TV:  BAAQMD"
 
     @property
     def paid_lines(self) -> List[CrispinLine]:
@@ -261,6 +265,16 @@ def parse_crispin_xlsx(path: str) -> CrispinOrder:
     contact = str(hdr.get("contact", "")).strip()
     email = str(hdr.get("email", "")).strip()
     order_date = _to_date(hdr.get("revision"))
+    # Sheet title: the "Crossings TV:  <client>" banner above the header block.
+    # (The Station cell is a bare "Crossings TV" — the colon is the discriminator.)
+    title = ""
+    for r in rows:
+        for c in r:
+            if isinstance(c, str) and c.strip().lower().startswith("crossings tv:"):
+                title = " ".join(c.split())
+                break
+        if title:
+            break
 
     # ── Market banner + column-header row ──
     market_label = ""
@@ -287,6 +301,8 @@ def parse_crispin_xlsx(path: str) -> CrispinOrder:
                     col["length"] = ci
                 elif cl.startswith("total spots"):
                     col["total_spots"] = ci
+                elif cl.startswith("proposed contract"):
+                    col["amount"] = ci
             # week columns = header cells that are real dates
             for ci, cval in enumerate(r):
                 d = _to_date(cval)
@@ -360,6 +376,9 @@ def parse_crispin_xlsx(path: str) -> CrispinOrder:
         length_sec = int(m.group(1)) if m else 30
 
         spots = [int(_num(r[ci])) if ci < len(r) else 0 for ci in week_cols]
+        amount_stated = None
+        if "amount" in col and col["amount"] < len(r) and r[col["amount"]] not in (None, ""):
+            amount_stated = _num(r[col["amount"]])
 
         lines.append(CrispinLine(
             language_block=str(lang_raw).strip(),
@@ -369,6 +388,7 @@ def parse_crispin_xlsx(path: str) -> CrispinOrder:
             length_sec=length_sec,
             week_dates=list(week_dates),
             week_spots=spots,
+            amount_stated=amount_stated,
         ))
 
     if not lines:
@@ -384,7 +404,22 @@ def parse_crispin_xlsx(path: str) -> CrispinOrder:
         order_date=order_date,
         lines=lines,
         source_path=path,
+        title=title,
     )
+
+    # ── Reconcile each line's money against the sheet's own arithmetic ──
+    # 'Proposed Contract Amount' = Discounted Rate × Total Spots. A mismatch
+    # means the wrong column was read as the rate (DART lesson) — refuse.
+    for ln in lines:
+        if ln.amount_stated is None:
+            continue
+        expect = round(ln.rate * ln.total_spots, 2)
+        if abs(expect - round(ln.amount_stated, 2)) > 0.005:
+            raise ValueError(
+                f"Crispin parser: line '{ln.language_block}' rate {ln.rate:.2f} × {ln.total_spots} "
+                f"spots = {expect:.2f} but the sheet's Proposed Contract Amount is "
+                f"{ln.amount_stated:.2f} — refusing."
+            )
 
     # ── Reconcile against the footer (Brentan/SCWA totals lesson) ──
     paid_sum = sum(ln.total_spots for ln in order.paid_lines)

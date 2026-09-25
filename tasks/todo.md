@@ -466,3 +466,19 @@ $2,080.00 net) alongside airtime 2608-019.
 - [x] live check: _assemble_rows on 2608-019 + 2608-020 → 020 exportable, 019 unchanged
 - [x] Lee 9/24 defaults: R51 = 20th of the invoice month at 12:00; estimate verbatim (no PRD);
       R32 left blank for the operator; commission = affidavit gross − net (agency Y / direct N)
+
+## Agency XML Export card (2026-09-25)
+
+Oracle: `/mnt/c/Work Temp/!New/!Orders/BAAQMD_2026_R1C_3131CA-only.xml` (Kurt+Charmaine, ingested by the agency)
+built from `Crossings TV Media Proposal_BAAQMD_2026_REV1.xlsm`.
+
+- [x] Read the proposal workbook by header label (Language/Daypart/Discounted Rate/Length/week dates/Total Spots/Proposed Contract Amount); reconcile per line + totals, raise on mismatch
+- [x] Emit the AAAA-Message in Kurt's shape (no demos/phones/comments, ProgramName per DayTime, DaypartName = language family, one DetailedPeriod per line, Rate only), validate against the XSD (lxml)
+- [x] Regression: BAAQMD workbook + Kurt's header values → canonical-equal to Kurt's XML
+- [x] Card on /orders: drop .xlsm → preview + editable header fields → Download XML
+- [x] Unit tests (workbook fixture, tampered-cell refusals, oracle equality)
+- [x] Update memory; commit + push + deploy (no user correction → no lessons entry)
+
+Review: exporter reproduces Kurt's ingested file tree-for-tree from the REV1 workbook; 900 unit tests
+pass; Crispin reader gained a rate×spots == Proposed Contract Amount refusal. Awaiting the new
+proposal workbook from Lee to run the first real export.
