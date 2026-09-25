@@ -184,6 +184,8 @@ class CrispinOrder:
     station_code: str = ""        # "3131CA"
     # ── proposal workbook only ──
     title: str = ""               # the sheet banner, e.g. "Crossings TV:  BAAQMD"
+    subtitle: str = ""            # variant label under it, e.g. "NEW CREATIVE"
+    sheet_name: str = ""          # the tab this order was read from
 
     @property
     def paid_lines(self) -> List[CrispinLine]:
@@ -230,19 +232,40 @@ _HEADER_LABELS = {"agency", "advertiser", "contact", "email", "station",
                   "languages", "payment terms", "revision"}
 
 
+def _is_proposal_sheet(ws) -> bool:
+    for row in ws.iter_rows(values_only=True):
+        cells = [str(c).strip().lower() for c in row if c is not None]
+        if "language" in cells and "daypart" in cells:
+            return True
+    return False
+
+
 def _pick_sheet(wb):
-    """Return the worksheet holding the airtime grid (Language + Daypart header)."""
+    """Return the first worksheet holding the airtime grid (Language + Daypart header)."""
     for ws in wb.worksheets:
-        for row in ws.iter_rows(values_only=True):
-            cells = [str(c).strip().lower() for c in row if c is not None]
-            if "language" in cells and "daypart" in cells:
-                return ws
+        if _is_proposal_sheet(ws):
+            return ws
     return wb.active
 
 
-def parse_crispin_xlsx(path: str) -> CrispinOrder:
+def proposal_sheet_names(path: str) -> List[str]:
+    """Every tab that carries a Language/Daypart grid — a workbook can hold several
+    proposal variants (e.g. 'new creative' and 'REUSE'), one XML each."""
+    wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
+    try:
+        return [ws.title for ws in wb.worksheets if _is_proposal_sheet(ws)]
+    finally:
+        wb.close()
+
+
+def parse_crispin_xlsx(path: str, sheet_name: Optional[str] = None) -> CrispinOrder:
     wb = openpyxl.load_workbook(path, data_only=True)
-    ws = _pick_sheet(wb)
+    if sheet_name is not None:
+        if sheet_name not in wb.sheetnames:
+            raise ValueError(f"Crispin parser: no sheet named '{sheet_name}'")
+        ws = wb[sheet_name]
+    else:
+        ws = _pick_sheet(wb)
     rows = list(ws.iter_rows(values_only=True))
 
     # ── Header label→value pairs (label cell, value = next non-empty cell) ──
@@ -267,11 +290,16 @@ def parse_crispin_xlsx(path: str) -> CrispinOrder:
     order_date = _to_date(hdr.get("revision"))
     # Sheet title: the "Crossings TV:  <client>" banner above the header block.
     # (The Station cell is a bare "Crossings TV" — the colon is the discriminator.)
-    title = ""
-    for r in rows:
-        for c in r:
+    # The cell directly under it is the variant subtitle ("NEW CREATIVE" / "RE-USE
+    # CREATIVE") when the workbook offers several proposals as separate tabs.
+    title = subtitle = ""
+    for ri, r in enumerate(rows):
+        for ci, c in enumerate(r):
             if isinstance(c, str) and c.strip().lower().startswith("crossings tv:"):
                 title = " ".join(c.split())
+                below = rows[ri + 1][ci] if ri + 1 < len(rows) and ci < len(rows[ri + 1]) else None
+                if isinstance(below, str) and below.strip():
+                    subtitle = " ".join(below.split())
                 break
         if title:
             break
@@ -301,7 +329,7 @@ def parse_crispin_xlsx(path: str) -> CrispinOrder:
                     col["length"] = ci
                 elif cl.startswith("total spots"):
                     col["total_spots"] = ci
-                elif cl.startswith("proposed contract"):
+                elif "proposed contract" in cl:      # 'GROSS Proposed Contract Amount' too
                     col["amount"] = ci
             # week columns = header cells that are real dates
             for ci, cval in enumerate(r):
@@ -405,6 +433,8 @@ def parse_crispin_xlsx(path: str) -> CrispinOrder:
         lines=lines,
         source_path=path,
         title=title,
+        subtitle=subtitle,
+        sheet_name=ws.title,
     )
 
     # ── Reconcile each line's money against the sheet's own arithmetic ──

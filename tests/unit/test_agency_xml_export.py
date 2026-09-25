@@ -7,8 +7,11 @@ built from the REV1 proposal workbook beside it.
 
 from __future__ import annotations
 
+import io
+import json
 import sys
 import xml.etree.ElementTree as ET
+import zipfile
 from datetime import date
 from pathlib import Path
 
@@ -199,20 +202,89 @@ def test_untouched_copy_still_parses(tmp_path):
     assert len(order.lines) == 8
 
 
+# ── Header memory + a two-tab workbook (Winter 2026, gross rates) ──────────────
+
+WINTER = FIX / "proposal_baaqmd_2026_winter.xlsm"
+
+
+def test_default_header_ignores_a_missing_memory_file(order, tmp_path):
+    h = ax.default_header(order, memory_path=tmp_path / "none.json")
+    assert (h.buyer_company, h.call_letters) == ("Crispin LLC", "")
+
+
+def test_remembered_buyer_and_station_code_prefill_the_next_proposal(order, tmp_path):
+    mem = tmp_path / "headers.json"
+    ax.remember_header(ax.ExportHeader(**KURT_HEADER), path=mem)
+    h = ax.default_header(order, memory_path=mem)
+    assert h.buyer_company == "Allison Worldwide"
+    assert h.call_letters == "3131CA"
+    assert h.buyer_name == "Alexander Boyle"  # the sheet's contact still wins when present
+    assert (
+        ax.remembered_header("bay area quality management district", mem)["call_letters"]
+        == "3131CA"
+    )
+
+
+def test_winter_workbook_has_two_proposal_tabs():
+    from browser_automation.parsers.crispin_parser import proposal_sheet_names
+
+    assert proposal_sheet_names(str(WINTER)) == ["new creative", "REUSE"]
+    new = parse_crispin_xlsx(str(WINTER), "new creative")
+    reuse = parse_crispin_xlsx(str(WINTER), "REUSE")
+    assert (new.subtitle, reuse.subtitle) == ("NEW CREATIVE", "RE-USE CREATIVE")
+    # gross rates reconcile against the 'GROSS Proposed Contract Amount' column
+    assert [ln.amount_stated for ln in new.lines][:4] == [6353.1, 6353.1, 3529.5, 5294.25]
+    assert [ln.total_spots for ln in new.paid_lines] == [45, 45, 30, 45]
+    assert [ln.total_spots for ln in reuse.paid_lines] == [45, 45, 45, 45]
+
+
+def test_winter_defaults_carry_the_tab_variant(tmp_path):
+    new = parse_crispin_xlsx(str(WINTER), "new creative")
+    h = ax.default_header(new, memory_path=tmp_path / "none.json")
+    assert h.proposal_id == "BAAQMD-2026-NEW-CREATIVE"
+    assert h.proposal_name == "Crossings TV - BAAQMD 2026 New Creative"
+    assert h.product == "BAAQMD 2026"
+    assert h.buyer_company == "CRISPIN"
+    pv = ax.build_preview(new, ax.ExportHeader(**{**KURT_HEADER, "proposal_id": h.proposal_id}))
+    assert (pv.flight_start, pv.flight_end) == (date(2026, 11, 9), date(2027, 2, 21))
+    assert [ln.rate for ln in pv.lines][:4] == [141.18, 141.18, 117.65, 117.65]
+    assert ax.validate_proposal_xml(ax.build_proposal_xml(pv)) == []
+
+
 # ── The page ────────────────────────────────────────────────────────────────
 
 
 @pytest.fixture
-def client():
+def client(tmp_path, monkeypatch):
     from fastapi import FastAPI
     from fastapi.templating import Jinja2Templates
     from fastapi.testclient import TestClient
 
-    from web.routes.agency_xml import build_agency_xml_router
+    from web.routes import agency_xml as route
 
+    monkeypatch.setattr(ax, "HEADER_MEMORY_PATH", tmp_path / "headers.json")
+    monkeypatch.setattr(
+        route, "remember_header", lambda h: ax.remember_header(h, tmp_path / "headers.json")
+    )
+    monkeypatch.setattr(
+        route, "default_header", lambda o: ax.default_header(o, tmp_path / "headers.json")
+    )
     app = FastAPI()
-    app.include_router(build_agency_xml_router(Jinja2Templates(directory="src/web/templates")))
+    app.include_router(
+        route.build_agency_xml_router(Jinja2Templates(directory="src/web/templates"))
+    )
     return TestClient(app)
+
+
+def _shared(**over):
+    form = {
+        k: (v.isoformat() if isinstance(v, date) else v)
+        for k, v in KURT_HEADER.items()
+        if k in ("advertiser", "buyer_company", "buyer_name", "call_letters", "send_date")
+    }
+    form["salesperson"] = "Charmaine Lane"
+    form.update(over)
+    return form
 
 
 def test_page_preview_and_download(client):
@@ -221,28 +293,95 @@ def test_page_preview_and_download(client):
         r = client.post("/orders/agency-xml/preview", files={"workbook": (WORKBOOK.name, fh)})
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["header"]["proposal_id"] == "BAAQMD-2026"
-    assert body["header"]["call_letters"] == ""
-    assert len(body["lines"]) == 8
-    assert body["lines"][4]["windows"] == [{"start": "06:00", "end": "24:00", "days": "MTWTFSS"}]
+    assert body["shared"]["call_letters"] == ""
+    assert [s["sheet"] for s in body["sheets"]] == ["BAAQMD"]
+    sh = body["sheets"][0]
+    assert sh["proposal_id"] == "BAAQMD-2026"
+    assert len(sh["lines"]) == 8
+    assert sh["lines"][4]["windows"] == [{"start": "06:00", "end": "24:00", "days": "MTWTFSS"}]
+    assert sh["paid_total"] == 17820.0
 
-    form = {k: (v.isoformat() if isinstance(v, date) else v) for k, v in KURT_HEADER.items()}
-    form["salesperson"] = "Charmaine Lane"
+    picked = [
+        {
+            "sheet": "BAAQMD",
+            "proposal_id": "BAAQMD-2026-R1C",
+            "proposal_name": "Crossings TV - BAAQMD 2026",
+            "product": "BAAQMD 2026",
+        }
+    ]
     with WORKBOOK.open("rb") as fh:
         r = client.post(
-            "/orders/agency-xml/generate", data=form, files={"workbook": (WORKBOOK.name, fh)}
+            "/orders/agency-xml/generate",
+            data={**_shared(), "sheets": json.dumps(picked)},
+            files={"workbook": (WORKBOOK.name, fh)},
         )
     assert r.status_code == 200, r.text
     assert r.headers["content-disposition"] == 'attachment; filename="BAAQMD-2026-R1C.xml"'
     assert _tree(ET.fromstring(r.content)) == _tree(ET.parse(ORACLE).getroot())
 
+    # the buyer/station values are remembered for the advertiser's next proposal
+    with WINTER.open("rb") as fh:
+        r = client.post("/orders/agency-xml/preview", files={"workbook": (WINTER.name, fh)})
+    assert r.json()["shared"]["call_letters"] == "3131CA"
+    assert r.json()["shared"]["buyer_company"] == "Allison Worldwide"
+
+
+def test_two_ticked_tabs_download_a_zip(client):
+    picked = [
+        {
+            "sheet": "new creative",
+            "proposal_id": "BAAQMD-2026-NEW-CREATIVE",
+            "proposal_name": "Crossings TV - BAAQMD 2026 New Creative",
+            "product": "BAAQMD 2026",
+        },
+        {
+            "sheet": "REUSE",
+            "proposal_id": "BAAQMD-2026-RE-USE-CREATIVE",
+            "proposal_name": "Crossings TV - BAAQMD 2026 Re-Use Creative",
+            "product": "BAAQMD 2026",
+        },
+    ]
+    with WINTER.open("rb") as fh:
+        r = client.post(
+            "/orders/agency-xml/generate",
+            data={**_shared(), "sheets": json.dumps(picked)},
+            files={"workbook": (WINTER.name, fh)},
+        )
+    assert r.status_code == 200, r.text
+    assert r.headers["content-disposition"] == 'attachment; filename="BAAQMD-2026-proposals.zip"'
+    with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
+        assert zf.namelist() == ["BAAQMD-2026-NEW-CREATIVE.xml", "BAAQMD-2026-RE-USE-CREATIVE.xml"]
+        for name in zf.namelist():
+            assert ax.validate_proposal_xml(zf.read(name)) == []
+        root = ET.fromstring(zf.read("BAAQMD-2026-RE-USE-CREATIVE.xml"))
+    ns = {"p": ax.NS_PROPOSAL}
+    assert root.find("p:Proposal", ns).get("uniqueIdentifier") == "BAAQMD-2026-RE-USE-CREATIVE"
+    assert len(root.findall(".//p:AvailLineWithDetailedPeriods", ns)) == 8
+
+
+def test_duplicate_proposal_ids_refuse(client):
+    picked = [
+        {"sheet": "new creative", "proposal_id": "X", "proposal_name": "n", "product": "p"},
+        {"sheet": "REUSE", "proposal_id": "X", "proposal_name": "n", "product": "p"},
+    ]
+    with WINTER.open("rb") as fh:
+        r = client.post(
+            "/orders/agency-xml/generate",
+            data={**_shared(), "sheets": json.dumps(picked)},
+            files={"workbook": (WINTER.name, fh)},
+        )
+    assert r.status_code == 400 and "Proposal ID" in r.json()["detail"]
+
 
 def test_page_refuses_a_blank_station_code(client):
-    form = {k: (v.isoformat() if isinstance(v, date) else v) for k, v in KURT_HEADER.items()}
-    form["call_letters"] = ""
+    picked = [
+        {"sheet": "BAAQMD", "proposal_id": "BAAQMD-2026-R1C", "proposal_name": "n", "product": "p"}
+    ]
     with WORKBOOK.open("rb") as fh:
         r = client.post(
-            "/orders/agency-xml/generate", data=form, files={"workbook": (WORKBOOK.name, fh)}
+            "/orders/agency-xml/generate",
+            data={**_shared(call_letters=""), "sheets": json.dumps(picked)},
+            files={"workbook": (WORKBOOK.name, fh)},
         )
     assert r.status_code == 400
     assert "call_letters" in r.json()["detail"]

@@ -72,6 +72,12 @@
         .flight-line b { color: var(--text-primary); }
         .num { text-align: right; font-variant-numeric: tabular-nums; }
         .note { font-size: 0.85rem; color: var(--text-secondary); margin: 10px 0 0; }
+        .sheet-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+        .sheet-head input[type=checkbox] { width: 18px; height: 18px; }
+        .sheet-head h2 { margin: 0; }
+        .sheet-head .sub { font-size: 0.85rem; color: var(--text-secondary); }
+        .bw-card.off .sheet-body { opacity: 0.45; }
+        .form-grid-3 { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 14px 28px; margin-bottom: 14px; }
     </style>
 </head>
 <body>
@@ -104,36 +110,17 @@
         <div class="status-msg" id="ax-upload-status"></div>
     </div>
 
-    <div class="bw-card hidden" id="ax-preview-card">
-        <h2>Step 2 — Lines read from the sheet</h2>
-        <p class="flight-line" id="ax-flight"></p>
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Program</th><th>Daypart</th><th>Days / time</th>
-                        <th class="num">Len</th><th class="num">Rate</th><th class="num">Spots</th><th>Flight</th>
-                    </tr>
-                </thead>
-                <tbody id="ax-lines"></tbody>
-            </table>
-        </div>
-        <p class="note" id="ax-notes"></p>
-    </div>
+    <div id="ax-sheets"></div>
 
     <div class="bw-card hidden" id="ax-form-card">
         <h2>Step 3 — Confirm the header and download</h2>
         <div class="form-grid">
             <div class="form-group">
-                <label for="f-proposal_id">Proposal ID <span class="hint">uniqueIdentifier / SellerReference, e.g. BAAQMD-2026-R1C</span></label>
-                <input id="f-proposal_id" name="proposal_id" />
-            </div>
-            <div class="form-group">
                 <label for="f-call_letters">Station code <span class="hint">the buyer's callLetters for us, e.g. 3131CA</span></label>
                 <input id="f-call_letters" name="call_letters" placeholder="3131CA" />
             </div>
             <div class="form-group">
-                <label for="f-buyer_company">Buying company <span class="hint">agency name as the buyer knows it</span></label>
+                <label for="f-buyer_company">Buying company <span class="hint">agency name as the buyer's system knows it</span></label>
                 <input id="f-buyer_company" name="buyer_company" />
             </div>
             <div class="form-group">
@@ -143,14 +130,6 @@
             <div class="form-group">
                 <label for="f-advertiser">Advertiser</label>
                 <input id="f-advertiser" name="advertiser" />
-            </div>
-            <div class="form-group">
-                <label for="f-product">Product</label>
-                <input id="f-product" name="product" />
-            </div>
-            <div class="form-group">
-                <label for="f-proposal_name">Proposal name</label>
-                <input id="f-proposal_name" name="proposal_name" />
             </div>
             <div class="form-group">
                 <label for="f-salesperson">Salesperson</label>
@@ -173,9 +152,11 @@
 
 <script>
 (function () {
-    const FIELDS = ['proposal_id', 'proposal_name', 'advertiser', 'product',
-                    'buyer_company', 'buyer_name', 'call_letters', 'salesperson', 'send_date'];
+    const SHARED = ['advertiser', 'buyer_company', 'buyer_name', 'call_letters', 'salesperson', 'send_date'];
+    const PER_TAB = ['proposal_id', 'proposal_name', 'product'];
+    const LABELS = { proposal_id: 'Proposal ID', proposal_name: 'Proposal name', product: 'Product' };
     let workbook = null;
+    let sheets = [];
 
     const $ = id => document.getElementById(id);
     function showStatus(el, msg, type) { el.textContent = msg; el.className = 'status-msg ' + type; }
@@ -184,7 +165,7 @@
         try { const j = await resp.json(); return j.detail || JSON.stringify(j); }
         catch (e) { return resp.statusText || ('HTTP ' + resp.status); }
     }
-    const money = v => '$' + Number(v).toFixed(2);
+    const money = v => '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
     const zone = $('ax-zone');
@@ -201,7 +182,7 @@
         workbook = file;
         $('ax-filename').textContent = file.name;
         hideStatus($('ax-upload-status')); hideStatus($('ax-form-status'));
-        $('ax-preview-card').classList.add('hidden');
+        $('ax-sheets').innerHTML = '';
         $('ax-form-card').classList.add('hidden');
         const fd = new FormData();
         fd.append('workbook', file, file.name);
@@ -214,9 +195,8 @@
         }
     }
 
-    function renderPreview(p) {
-        $('ax-flight').innerHTML = `<b>${esc(p.market_label || '')}</b> &nbsp;·&nbsp; flight <b>${p.flight_start}</b> to <b>${p.flight_end}</b> &nbsp;·&nbsp; ${p.lines.length} line(s)`;
-        $('ax-lines').innerHTML = p.lines.map(ln => `
+    function sheetCard(sh, i) {
+        const rows = sh.lines.map(ln => `
             <tr>
                 <td>${esc(ln.program)}</td>
                 <td>${esc(ln.daypart_name)}</td>
@@ -226,20 +206,59 @@
                 <td class="num">${ln.total_spots}</td>
                 <td>${ln.start} → ${ln.end}</td>
             </tr>`).join('');
-        $('ax-notes').textContent = (p.notes || []).join(' · ');
-        FIELDS.forEach(k => { $('f-' + k).value = p.header[k] || ''; });
-        $('ax-preview-card').classList.remove('hidden');
+        const fields = PER_TAB.map(k => `
+            <div class="form-group">
+                <label for="s${i}-${k}">${LABELS[k]}</label>
+                <input id="s${i}-${k}" value="${esc(sh[k] || '')}" />
+            </div>`).join('');
+        return `
+        <div class="bw-card" id="sheet-${i}">
+            <div class="sheet-head">
+                <input type="checkbox" id="s${i}-on" checked />
+                <h2>Step 2 — Tab “${esc(sh.sheet)}”</h2>
+                <span class="sub">${esc(sh.subtitle || '')}</span>
+            </div>
+            <div class="sheet-body">
+                <p class="flight-line"><b>${esc(sh.market_label || '')}</b> &nbsp;·&nbsp; flight <b>${sh.flight_start}</b> to <b>${sh.flight_end}</b> &nbsp;·&nbsp; ${sh.lines.length} line(s) &nbsp;·&nbsp; paid <b>${money(sh.paid_total)}</b></p>
+                <div class="form-grid-3">${fields}</div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Program</th><th>Daypart</th><th>Days / time</th><th class="num">Len</th><th class="num">Rate</th><th class="num">Spots</th><th>Flight</th></tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+                <p class="note">${esc((sh.notes || []).join(' · '))}</p>
+            </div>
+        </div>`;
+    }
+
+    function renderPreview(p) {
+        sheets = p.sheets;
+        $('ax-sheets').innerHTML = sheets.map(sheetCard).join('');
+        sheets.forEach((sh, i) => {
+            const box = $(`s${i}-on`);
+            box.addEventListener('change', () => $(`sheet-${i}`).classList.toggle('off', !box.checked));
+        });
+        SHARED.forEach(k => { $('f-' + k).value = p.shared[k] || ''; });
         $('ax-form-card').classList.remove('hidden');
-        $('f-call_letters').focus();
+        if (!$('f-call_letters').value) $('f-call_letters').focus();
     }
 
     $('ax-generate').addEventListener('click', async function () {
         const status = $('ax-form-status');
         hideStatus(status);
         if (!workbook) { showStatus(status, 'Drop the proposal workbook first.', 'error'); return; }
+        const picked = sheets.map((sh, i) => $(`s${i}-on`).checked ? {
+            sheet: sh.sheet,
+            proposal_id: $(`s${i}-proposal_id`).value.trim(),
+            proposal_name: $(`s${i}-proposal_name`).value.trim(),
+            product: $(`s${i}-product`).value.trim(),
+        } : null).filter(Boolean);
+        if (!picked.length) { showStatus(status, 'Tick at least one tab to export.', 'error'); return; }
         const fd = new FormData();
         fd.append('workbook', workbook, workbook.name);
-        FIELDS.forEach(k => fd.append(k, $('f-' + k).value.trim()));
+        fd.append('sheets', JSON.stringify(picked));
+        SHARED.forEach(k => fd.append(k, $('f-' + k).value.trim()));
         if ($('f-include_spots_per_week').checked) fd.append('include_spots_per_week', '1');
         this.disabled = true;
         try {
@@ -253,7 +272,7 @@
             const link  = document.createElement('a');
             link.href = url; link.download = fname; link.click();
             URL.revokeObjectURL(url);
-            showStatus(status, 'Downloaded ' + fname + ' — schema-validated against SpotTVCableProposal 0.3.0.5A.', 'info');
+            showStatus(status, `Downloaded ${fname} (${picked.length} proposal${picked.length > 1 ? 's' : ''}) — schema-validated against SpotTVCableProposal 0.3.0.5A.`, 'info');
         } catch (e) {
             showStatus(status, 'Error: ' + e.message, 'error');
         } finally { this.disabled = false; }

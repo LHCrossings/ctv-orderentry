@@ -29,6 +29,7 @@ proposal id, product) are defaulted from the sheet and confirmed on the page.
 
 from __future__ import annotations
 
+import json
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -50,6 +51,12 @@ XSD_PATH = (
     / "tvb_xml_schemas"
     / f"spotTVCableProposal-{SCHEMA_VERSION}.xsd"
 )
+
+# Header values the sheet never states (buyer company as the agency's system names
+# itself, our station code in that system) are remembered per advertiser after a
+# successful export, so a repeat proposal needs no typing.
+HEADER_MEMORY_PATH = Path(__file__).resolve().parents[2] / "data" / "agency_xml_headers.json"
+_REMEMBERED_FIELDS = ("buyer_company", "buyer_name", "call_letters", "salesperson")
 
 DAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
@@ -162,18 +169,50 @@ def _short_client(order: CrispinOrder) -> str:
     return "".join(w[0] for w in words).upper() if words else "PROPOSAL"
 
 
-def default_header(order: CrispinOrder) -> ExportHeader:
+def _memory_key(advertiser: str) -> str:
+    return " ".join(advertiser.lower().split())
+
+
+def remembered_header(advertiser: str, path: Path = HEADER_MEMORY_PATH) -> dict:
+    try:
+        store = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    entry = store.get(_memory_key(advertiser)) or {}
+    return {k: str(entry.get(k, "")).strip() for k in _REMEMBERED_FIELDS if entry.get(k)}
+
+
+def remember_header(header: ExportHeader, path: Path = HEADER_MEMORY_PATH) -> None:
+    try:
+        store = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(store, dict):
+            store = {}
+    except (OSError, ValueError):
+        store = {}
+    store[_memory_key(header.advertiser)] = {
+        **{k: getattr(header, k) for k in _REMEMBERED_FIELDS},
+        "advertiser": header.advertiser,
+        "updated": date.today().isoformat(),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(store, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def default_header(order: CrispinOrder, memory_path: Path = HEADER_MEMORY_PATH) -> ExportHeader:
     short = _short_client(order)
     year = order.week_dates[0].year if order.week_dates else date.today().year
-    slug = re.sub(r"[^A-Za-z0-9]+", "-", short).strip("-").upper()
+    variant = " ".join(w.capitalize() for w in (order.subtitle or "").split())
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", f"{short} {year} {variant}").strip("-").upper()
+    known = remembered_header(order.advertiser, memory_path)
     return ExportHeader(
-        proposal_id=f"{slug}-{year}",
-        proposal_name=f"Crossings TV - {short} {year}",
+        proposal_id=slug,
+        proposal_name=f"Crossings TV - {short} {year}" + (f" {variant}" if variant else ""),
         advertiser=order.advertiser,
         product=f"{short} {year}",
-        buyer_company=order.agency,
-        buyer_name=order.contact,
-        call_letters="",
+        buyer_company=known.get("buyer_company") or order.agency,
+        buyer_name=order.contact or known.get("buyer_name", ""),
+        call_letters=known.get("call_letters", ""),
+        salesperson=known.get("salesperson") or "Charmaine Lane",
         send_date=date.today(),
     )
 
