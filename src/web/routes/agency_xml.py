@@ -115,6 +115,7 @@ def build_agency_xml_router(templates: Jinja2Templates) -> APIRouter:
                 h = pv.header
                 if shared is None:
                     shared = {
+                        "sheet_agency": order.agency,
                         "advertiser": h.advertiser,
                         "buyer_company": h.buyer_company,
                         "buyer_name": h.buyer_name,

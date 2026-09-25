@@ -482,4 +482,5 @@ built from `Crossings TV Media Proposal_BAAQMD_2026_REV1.xlsm`.
 Review: exporter reproduces Kurt's ingested file tree-for-tree from the REV1 workbook; 900 unit tests
 pass; Crispin reader gained a rate×spots == Proposed Contract Amount refusal. Winter 2026 workbook (two tabs) added 9/25: one XML per ticked tab (zip when several), header
 memory per advertiser; both Winter XMLs written to Lee's !Orders folder for the joint test.
-OPEN: rates are gross on the Winter sheet — confirm the agency does not gross up a second time.
+Lee 9/25: the Discounted Rate Gross column is what the agency wants (120/100 grossed for 15%);
+buyer = the sheet's Agency cell (Crispin LLC — BAAQMD's agency changed), memory re-keyed by agency.

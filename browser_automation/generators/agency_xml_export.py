@@ -52,11 +52,26 @@ XSD_PATH = (
     / f"spotTVCableProposal-{SCHEMA_VERSION}.xsd"
 )
 
-# Header values the sheet never states (buyer company as the agency's system names
-# itself, our station code in that system) are remembered per advertiser after a
-# successful export, so a repeat proposal needs no typing.
+# The sheet's Agency cell decides WHO the buyer is (Lee 9/25: BAAQMD moved from Allison
+# to Crispin — the sheet said CRISPIN, the older hand-made XML still said Allison). What
+# the sheet cannot state is remembered PER AGENCY after a successful export: the buyer
+# company's proper spelling ("Crispin LLC" for a cell reading "CRISPIN"), our station
+# code in that agency's system (3131CA), and the salesperson.
 HEADER_MEMORY_PATH = Path(__file__).resolve().parents[2] / "data" / "agency_xml_headers.json"
-_REMEMBERED_FIELDS = ("buyer_company", "buyer_name", "call_letters", "salesperson")
+_REMEMBERED_FIELDS = ("buyer_company", "call_letters", "salesperson")
+_LEGAL_SUFFIXES = {
+    "llc",
+    "l.l.c",
+    "l.l.c.",
+    "inc",
+    "inc.",
+    "ltd",
+    "ltd.",
+    "co",
+    "co.",
+    "corp",
+    "corp.",
+}
 
 DAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
@@ -169,16 +184,21 @@ def _short_client(order: CrispinOrder) -> str:
     return "".join(w[0] for w in words).upper() if words else "PROPOSAL"
 
 
-def _memory_key(advertiser: str) -> str:
-    return " ".join(advertiser.lower().split())
+def agency_key(agency: str) -> str:
+    """'CRISPIN' and 'Crispin LLC' are one agency: lowercase, legal suffixes dropped."""
+    words = [w for w in re.split(r"[\s,]+", agency.lower()) if w and w not in _LEGAL_SUFFIXES]
+    return " ".join(words)
 
 
-def remembered_header(advertiser: str, path: Path = HEADER_MEMORY_PATH) -> dict:
+def remembered_header(agency: str, path: Path = HEADER_MEMORY_PATH) -> dict:
+    key = agency_key(agency)
+    if not key:
+        return {}
     try:
         store = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
-    entry = store.get(_memory_key(advertiser)) or {}
+    entry = store.get(key) or {}
     return {k: str(entry.get(k, "")).strip() for k in _REMEMBERED_FIELDS if entry.get(k)}
 
 
@@ -189,9 +209,11 @@ def remember_header(header: ExportHeader, path: Path = HEADER_MEMORY_PATH) -> No
             store = {}
     except (OSError, ValueError):
         store = {}
-    store[_memory_key(header.advertiser)] = {
+    key = agency_key(header.buyer_company)
+    if not key:
+        return
+    store[key] = {
         **{k: getattr(header, k) for k in _REMEMBERED_FIELDS},
-        "advertiser": header.advertiser,
         "updated": date.today().isoformat(),
     }
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -203,14 +225,14 @@ def default_header(order: CrispinOrder, memory_path: Path = HEADER_MEMORY_PATH) 
     year = order.week_dates[0].year if order.week_dates else date.today().year
     variant = " ".join(w.capitalize() for w in (order.subtitle or "").split())
     slug = re.sub(r"[^A-Za-z0-9]+", "-", f"{short} {year} {variant}").strip("-").upper()
-    known = remembered_header(order.advertiser, memory_path)
+    known = remembered_header(order.agency, memory_path)
     return ExportHeader(
         proposal_id=slug,
         proposal_name=f"Crossings TV - {short} {year}" + (f" {variant}" if variant else ""),
         advertiser=order.advertiser,
         product=f"{short} {year}",
         buyer_company=known.get("buyer_company") or order.agency,
-        buyer_name=order.contact or known.get("buyer_name", ""),
+        buyer_name=order.contact,
         call_letters=known.get("call_letters", ""),
         salesperson=known.get("salesperson") or "Charmaine Lane",
         send_date=date.today(),

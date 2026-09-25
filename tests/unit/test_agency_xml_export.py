@@ -212,17 +212,30 @@ def test_default_header_ignores_a_missing_memory_file(order, tmp_path):
     assert (h.buyer_company, h.call_letters) == ("Crispin LLC", "")
 
 
-def test_remembered_buyer_and_station_code_prefill_the_next_proposal(order, tmp_path):
+def test_memory_is_keyed_by_the_sheet_agency_never_the_advertiser(order, tmp_path):
+    """Lee 9/25: BAAQMD moved from Allison to Crispin. The sheet's Agency cell picks the
+    buyer; memory only supplies that agency's spelling and station code."""
     mem = tmp_path / "headers.json"
-    ax.remember_header(ax.ExportHeader(**KURT_HEADER), path=mem)
-    h = ax.default_header(order, memory_path=mem)
-    assert h.buyer_company == "Allison Worldwide"
-    assert h.call_letters == "3131CA"
-    assert h.buyer_name == "Alexander Boyle"  # the sheet's contact still wins when present
-    assert (
-        ax.remembered_header("bay area quality management district", mem)["call_letters"]
-        == "3131CA"
+    ax.remember_header(
+        ax.ExportHeader(**{**KURT_HEADER, "buyer_company": "Allison Worldwide"}), path=mem
     )
+    ax.remember_header(
+        ax.ExportHeader(
+            **{**KURT_HEADER, "buyer_company": "Crispin LLC", "call_letters": "3131CA"}
+        ),
+        path=mem,
+    )
+    h = ax.default_header(order, memory_path=mem)  # REV1 sheet says "Crispin LLC"
+    assert (h.buyer_company, h.call_letters, h.buyer_name) == (
+        "Crispin LLC",
+        "3131CA",
+        "Alexander Boyle",
+    )
+    winter = parse_crispin_xlsx(str(WINTER), "REUSE")  # Winter sheet says "CRISPIN"
+    h = ax.default_header(winter, memory_path=mem)
+    assert (h.buyer_company, h.call_letters) == ("Crispin LLC", "3131CA")
+    assert ax.remembered_header("allison + partners, llc", mem) == {}
+    assert ax.agency_key("Crispin LLC") == ax.agency_key("CRISPIN") == "crispin"
 
 
 def test_winter_workbook_has_two_proposal_tabs():
@@ -244,7 +257,7 @@ def test_winter_defaults_carry_the_tab_variant(tmp_path):
     assert h.proposal_id == "BAAQMD-2026-NEW-CREATIVE"
     assert h.proposal_name == "Crossings TV - BAAQMD 2026 New Creative"
     assert h.product == "BAAQMD 2026"
-    assert h.buyer_company == "CRISPIN"
+    assert h.buyer_company == "CRISPIN"  # the sheet's Agency cell
     pv = ax.build_preview(new, ax.ExportHeader(**{**KURT_HEADER, "proposal_id": h.proposal_id}))
     assert (pv.flight_start, pv.flight_end) == (date(2026, 11, 9), date(2027, 2, 21))
     assert [ln.rate for ln in pv.lines][:4] == [141.18, 141.18, 117.65, 117.65]
@@ -319,11 +332,11 @@ def test_page_preview_and_download(client):
     assert r.headers["content-disposition"] == 'attachment; filename="BAAQMD-2026-R1C.xml"'
     assert _tree(ET.fromstring(r.content)) == _tree(ET.parse(ORACLE).getroot())
 
-    # the buyer/station values are remembered for the advertiser's next proposal
+    # the agency's spelling + station code are remembered for that agency's next sheet
     with WINTER.open("rb") as fh:
         r = client.post("/orders/agency-xml/preview", files={"workbook": (WINTER.name, fh)})
-    assert r.json()["shared"]["call_letters"] == "3131CA"
-    assert r.json()["shared"]["buyer_company"] == "Allison Worldwide"
+    assert r.json()["shared"]["call_letters"] == ""  # Allison ≠ CRISPIN
+    assert r.json()["shared"]["buyer_company"] == "CRISPIN"
 
 
 def test_two_ticked_tabs_download_a_zip(client):

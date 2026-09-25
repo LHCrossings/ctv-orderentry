@@ -31,6 +31,15 @@ mismatch and would have failed the next time anyone validated them.
 3. A validator complaining about a field the template plainly has (`call_letters: ''` on a
    template that says CRTV) means the validator got a DIFFERENT object than the one on screen —
    look for the second lookup path before looking at the data.
+4. **Recurrence next day (Agency XML Export, 2026-09-25):** the agency-ingested BAAQMD XML
+   named the buyer "Allison Worldwide" while the proposal sheet's Agency cell said "Crispin
+   LLC". I treated the hand-made file as authoritative for the buyer and built a per-ADVERTISER
+   memory that would have carried "Allison" onto the next sheet reading "CRISPIN". Lee: the
+   agency for BAAQMD had CHANGED; the sheet's Agency cell IS the buyer. A hand-made artifact
+   records one moment; a field that names a PARTY (agency, customer, contact) must come from
+   the live source document every time, and any "remembered" value is keyed by that party and
+   supplies only its spelling/codes, never its identity. Put the value on the confirmation
+   page (Lee: "a field the AE sees before export") so a stale default is visible, not silent.
 
 ---
 
