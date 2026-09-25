@@ -59,14 +59,22 @@ _MARKET_MAP = [
 ]
 
 # Base languages used to normalise a line's language block for ROS mapping.
-_BASE_LANGUAGES = ["Cantonese", "Mandarin", "Filipino", "Vietnamese",
-                   "Korean", "Hmong", "Punjabi", "Japanese", "Hindi",
-                   "South Asian", "Chinese"]
+_BASE_LANGUAGES = [
+    "Cantonese",
+    "Mandarin",
+    "Filipino",
+    "Vietnamese",
+    "Korean",
+    "Hmong",
+    "Punjabi",
+    "Japanese",
+    "Hindi",
+    "South Asian",
+    "Chinese",
+]
 
 # Time range at the END of a daypart string, e.g. "M-F 7p-8p" → "7p-8p".
-_TIME_RE = re.compile(
-    r"(\d{1,2}(?::\d{2})?\s*[apAP]?\s*[-–]\s*\d{1,2}(?::\d{2})?\s*[apAP])"
-)
+_TIME_RE = re.compile(r"(\d{1,2}(?::\d{2})?\s*[apAP]?\s*[-–]\s*\d{1,2}(?::\d{2})?\s*[apAP])")
 
 
 def split_daypart(daypart: str) -> tuple[str, str]:
@@ -101,24 +109,82 @@ def _to_date(v) -> Optional[date]:
     return None
 
 
+def _is_num(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _xlsx_charges(tail: List[tuple], amount_col: Optional[int]) -> List["CrispinCharge"]:
+    """The production / translation money below the airtime footer, in either shape
+    Charmaine's template has used:
+
+      A. one row — `Translation costs ( :30s & :15s)` with the amount in the
+         Proposed Contract Amount column (REV1, net-quoting sheet);
+      B. a block — `Translation services: …` heading, Retail Value rows, then
+         `Discounted` <net> NET and <gross> GROSS rows (Winter 2026). The GROSS
+         figure is the one the agency wants (Lee 9/25); `Discounted` is the
+         fallback when no GROSS row exists.
+
+    A sheet carries at most ONE such charge; the same amount found twice (the
+    heading and a sentence both say "translation") collapses, two different
+    amounts refuse.
+    """
+    found: List[tuple] = []  # (description, amount)
+    for i, r in enumerate(tail):
+        texts = [(ci, str(c).strip()) for ci, c in enumerate(r) if isinstance(c, str) and c.strip()]
+        if not texts:
+            continue
+        label = texts[0][1]
+        low = label.lower()
+        if low.startswith("total") or not _CHARGE_RE.search(label):
+            continue
+        nums = {ci: float(c) for ci, c in enumerate(r) if _is_num(c)}
+        if amount_col is not None and amount_col in nums:  # shape A
+            found.append((label.split("(")[0].strip(" :"), nums[amount_col]))
+            continue
+        gross = disc = None  # shape B
+        for r2 in tail[i + 1 : i + 12]:
+            strs = [str(c).strip().lower() for c in r2 if isinstance(c, str) and str(c).strip()]
+            nums2 = [float(c) for c in r2 if _is_num(c)]
+            if not nums2:
+                continue
+            if "gross" in strs and gross is None:
+                gross = nums2[0]
+            elif strs and strs[0].startswith("discounted") and disc is None:
+                disc = nums2[0]
+        amt = gross if gross is not None else disc
+        if amt is not None:
+            found.append((label.split(":")[0].strip(" :"), amt))
+    amounts = {round(a, 2) for _, a in found}
+    if len(amounts) > 1:
+        raise ValueError(
+            "Crispin parser: more than one production/translation amount below the grid "
+            f"({sorted(amounts)}) — cannot tell which is the charge; refusing."
+        )
+    if not found:
+        return []
+    desc, amt = found[0]
+    return [CrispinCharge(description=desc, amount=round(amt, 2))] if amt > 0 else []
+
+
 # ─── Data model ──────────────────────────────────────────────────────────────
+
 
 @dataclass
 class CrispinLine:
-    language_block: str          # raw, e.g. "Cantonese News" or "Cantonese"
-    daypart: str                 # raw, e.g. "M-F 7p-8p" or "ROS"
-    unit_value: float            # standard rate card (informational)
-    rate: float                  # the billed rate (0 ⇒ bonus)
-    length_sec: int              # 30 / 15 from the Length column
-    week_dates: List[date]       # Monday of each flight week
-    week_spots: List[int]        # spots per week (parallel to week_dates)
+    language_block: str  # raw, e.g. "Cantonese News" or "Cantonese"
+    daypart: str  # raw, e.g. "M-F 7p-8p" or "ROS"
+    unit_value: float  # standard rate card (informational)
+    rate: float  # the billed rate (0 ⇒ bonus)
+    length_sec: int  # 30 / 15 from the Length column
+    week_dates: List[date]  # Monday of each flight week
+    week_spots: List[int]  # spots per week (parallel to week_dates)
     # ── PDF-IO only (the proposal has no per-line flight) ──
-    line_number: str = ""        # the IO's own LINE# ("006")
-    date_from: Optional[date] = None   # this line's flight start (DATES column)
-    date_to: Optional[date] = None     # this line's flight end
+    line_number: str = ""  # the IO's own LINE# ("006")
+    date_from: Optional[date] = None  # this line's flight start (DATES column)
+    date_to: Optional[date] = None  # this line's flight end
     total_spots_stated: Optional[int] = None  # the IO's own TOT, for reconciling
     # ── proposal workbook only ──
-    amount_stated: Optional[float] = None     # 'Proposed Contract Amount' cell (rate × spots)
+    amount_stated: Optional[float] = None  # 'Proposed Contract Amount' cell (rate × spots)
 
     @property
     def is_bonus(self) -> bool:
@@ -154,9 +220,10 @@ class CrispinCharge:
     Enters Etere as a CONTRATTISPESE row attached to an airtime line, never as a
     contract line of its own — see `crispin_automation._write_production_charges`.
     """
-    description: str             # as printed, e.g. "TRANSLATION COST"
-    amount: float                # IMPORTO (same gross/net basis as the rates)
-    line_number: str = ""        # the IO's own LINE#
+
+    description: str  # as printed, e.g. "TRANSLATION COST"
+    amount: float  # IMPORTO (same gross/net basis as the rates)
+    line_number: str = ""  # the IO's own LINE#
     date_from: Optional[date] = None
     date_to: Optional[date] = None
 
@@ -171,21 +238,21 @@ class CrispinOrder:
     market_label: str
     order_date: Optional[date]
     lines: List[CrispinLine] = field(default_factory=list)
-    rates_are_net: bool = False   # PDF IO quotes GROSS; proposal quotes net
+    rates_are_net: bool = False  # PDF IO quotes GROSS; proposal quotes net
     source_path: str = ""
     charges: List[CrispinCharge] = field(default_factory=list)
     # ── PDF-IO header fields (blank for the proposal) ──
-    source_format: str = "xlsx"   # 'xlsx' | 'pdf'
-    order_number: str = ""        # "212735" (leading zeros stripped)
-    estimate: str = ""            # "0001"
-    estimate_detail: str = ""     # "BAAQ 2026 TV SUMMERCAMPAIGN"
-    revision: str = ""            # "2"
-    client_code: str = ""         # "BAAQ"
-    station_code: str = ""        # "3131CA"
+    source_format: str = "xlsx"  # 'xlsx' | 'pdf'
+    order_number: str = ""  # "212735" (leading zeros stripped)
+    estimate: str = ""  # "0001"
+    estimate_detail: str = ""  # "BAAQ 2026 TV SUMMERCAMPAIGN"
+    revision: str = ""  # "2"
+    client_code: str = ""  # "BAAQ"
+    station_code: str = ""  # "3131CA"
     # ── proposal workbook only ──
-    title: str = ""               # the sheet banner, e.g. "Crossings TV:  BAAQMD"
-    subtitle: str = ""            # variant label under it, e.g. "NEW CREATIVE"
-    sheet_name: str = ""          # the tab this order was read from
+    title: str = ""  # the sheet banner, e.g. "Crossings TV:  BAAQMD"
+    subtitle: str = ""  # variant label under it, e.g. "NEW CREATIVE"
+    sheet_name: str = ""  # the tab this order was read from
 
     @property
     def paid_lines(self) -> List[CrispinLine]:
@@ -228,8 +295,16 @@ class CrispinOrder:
 
 # ─── Parser ──────────────────────────────────────────────────────────────────
 
-_HEADER_LABELS = {"agency", "advertiser", "contact", "email", "station",
-                  "languages", "payment terms", "revision"}
+_HEADER_LABELS = {
+    "agency",
+    "advertiser",
+    "contact",
+    "email",
+    "station",
+    "languages",
+    "payment terms",
+    "revision",
+}
 
 
 def _is_proposal_sheet(ws) -> bool:
@@ -278,7 +353,7 @@ def parse_crispin_xlsx(path: str, sheet_name: Optional[str] = None) -> CrispinOr
             # 'Revision ( revised the start date)' → key on the leading word
             key = next((k for k in _HEADER_LABELS if label.startswith(k)), None)
             if key and key not in hdr:
-                for c2 in r[i + 1:]:
+                for c2 in r[i + 1 :]:
                     if c2 is not None and str(c2).strip():
                         hdr[key] = str(c2).strip() if not isinstance(c2, (datetime, date)) else c2
                         break
@@ -329,7 +404,7 @@ def parse_crispin_xlsx(path: str, sheet_name: Optional[str] = None) -> CrispinOr
                     col["length"] = ci
                 elif cl.startswith("total spots"):
                     col["total_spots"] = ci
-                elif "proposed contract" in cl:      # 'GROSS Proposed Contract Amount' too
+                elif "proposed contract" in cl:  # 'GROSS Proposed Contract Amount' too
                     col["amount"] = ci
             # week columns = header cells that are real dates
             for ci, cval in enumerate(r):
@@ -374,7 +449,8 @@ def parse_crispin_xlsx(path: str, sheet_name: Optional[str] = None) -> CrispinOr
     lines: List[CrispinLine] = []
     footer_paid = footer_bonus = None
     in_totals = False
-    for r in rows[header_ri + 1:]:
+    tail_start = len(rows)
+    for ri, r in enumerate(rows[header_ri + 1 :], start=header_ri + 1):
         joined_l = " ".join(str(c).strip().lower() for c in r if c is not None)
         if "total paid" in joined_l:
             if "total_spots" in col and col["total_spots"] < len(r):
@@ -387,13 +463,16 @@ def parse_crispin_xlsx(path: str, sheet_name: Optional[str] = None) -> CrispinOr
             in_totals = True
             continue
         if in_totals:
+            tail_start = ri
             break  # past the airtime block — footers captured, stop
 
         lang_raw = r[col["lang"]] if col["lang"] < len(r) else None
         if lang_raw is None or not str(lang_raw).strip():
             continue
 
-        daypart = str(r[col["daypart"]]).strip() if col["daypart"] < len(r) and r[col["daypart"]] else ""
+        daypart = (
+            str(r[col["daypart"]]).strip() if col["daypart"] < len(r) and r[col["daypart"]] else ""
+        )
         # Airtime guard: a real line has a time range (paid) or "ROS" (bonus).
         if not (daypart.upper() == "ROS" or _TIME_RE.search(daypart)):
             continue
@@ -408,16 +487,18 @@ def parse_crispin_xlsx(path: str, sheet_name: Optional[str] = None) -> CrispinOr
         if "amount" in col and col["amount"] < len(r) and r[col["amount"]] not in (None, ""):
             amount_stated = _num(r[col["amount"]])
 
-        lines.append(CrispinLine(
-            language_block=str(lang_raw).strip(),
-            daypart=daypart,
-            unit_value=unit_value,
-            rate=rate,
-            length_sec=length_sec,
-            week_dates=list(week_dates),
-            week_spots=spots,
-            amount_stated=amount_stated,
-        ))
+        lines.append(
+            CrispinLine(
+                language_block=str(lang_raw).strip(),
+                daypart=daypart,
+                unit_value=unit_value,
+                rate=rate,
+                length_sec=length_sec,
+                week_dates=list(week_dates),
+                week_spots=spots,
+                amount_stated=amount_stated,
+            )
+        )
 
     if not lines:
         raise ValueError("Crispin parser: no airtime lines found")
@@ -451,6 +532,32 @@ def parse_crispin_xlsx(path: str, sheet_name: Optional[str] = None) -> CrispinOr
                 f"{ln.amount_stated:.2f} — refusing."
             )
 
+    # ── Production / translation charge below the grid, and the contract total ──
+    order.charges = _xlsx_charges(rows[tail_start:], col.get("amount"))
+    paid_total = round(sum(ln.rate * ln.total_spots for ln in lines), 2)
+    charge_total = round(sum(c.amount for c in order.charges), 2)
+    for r in rows[tail_start:]:
+        first = next(
+            (str(c).strip().lower() for c in r if isinstance(c, str) and str(c).strip()), ""
+        )
+        if (
+            first.startswith("total amount of contract")
+            and "amount" in col
+            and col["amount"] < len(r)
+            and _is_num(r[col["amount"]])
+        ):
+            stated = round(float(r[col["amount"]]), 2)
+            if (
+                abs(stated - paid_total) > 0.011
+                and abs(stated - (paid_total + charge_total)) > 0.011
+            ):
+                raise ValueError(
+                    f"Crispin parser: 'Total Amount of Contract' {stated:.2f} is neither the paid "
+                    f"airtime {paid_total:.2f} nor airtime + charge {paid_total + charge_total:.2f} "
+                    f"— refusing."
+                )
+            break
+
     # ── Reconcile against the footer (Brentan/SCWA totals lesson) ──
     paid_sum = sum(ln.total_spots for ln in order.paid_lines)
     bonus_sum = sum(ln.total_spots for ln in order.bonus_lines)
@@ -473,36 +580,58 @@ def parse_crispin_xlsx(path: str, sheet_name: Optional[str] = None) -> CrispinOr
 # only way to know which week a "3" belongs to is its x-position against the
 # day-number header — and the day-number header changes partway down page 3.
 
-_ROW_TOL = 2.0      # cluster words into rows on RAW top floats. Intra-row jitter
-                    # is ~0.5pt (28.6/28.8 twin title rows); row pitch is ~8.9pt.
-                    # Never round() first — that manufactures phantom rows.
-_COL_TOL = 8.0      # week-cell centre vs column centre. Column pitch is ~19.3pt,
-                    # so this sits well inside half-pitch and cannot cross columns.
-_BAND_PAD = 3.0     # a value sits at, or a hair right of, its header label's x0.
+_ROW_TOL = 2.0  # cluster words into rows on RAW top floats. Intra-row jitter
+# is ~0.5pt (28.6/28.8 twin title rows); row pitch is ~8.9pt.
+# Never round() first — that manufactures phantom rows.
+_COL_TOL = 8.0  # week-cell centre vs column centre. Column pitch is ~19.3pt,
+# so this sits well inside half-pitch and cannot cross columns.
+_BAND_PAD = 3.0  # a value sits at, or a hair right of, its header label's x0.
 _GRID_X_MIN = 290.0  # left edge of the week grid — text left of this is never a cell
 
-_MONTHS = {'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4, 'MAY': 5, 'JUN': 6,
-           'JUL': 7, 'AUG': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DEC': 12}
+_MONTHS = {
+    "JAN": 1,
+    "FEB": 2,
+    "MAR": 3,
+    "APR": 4,
+    "MAY": 5,
+    "JUN": 6,
+    "JUL": 7,
+    "AUG": 8,
+    "SEP": 9,
+    "OCT": 10,
+    "NOV": 11,
+    "DEC": 12,
+}
 
 # Column labels of the schedule grid, in print order. Mapping by label (never by
 # index) is the DART rule: the agency adding a column must be a no-op, and a
 # RENAMED column must fail loudly instead of falling back to a positional guess.
-_PDF_LABELS = ['LINE#', 'DAY(S)', 'TIME', 'DATES', 'PROGRAM', 'LEN', 'DP']
+_PDF_LABELS = ["LINE#", "DAY(S)", "TIME", "DATES", "PROGRAM", "LEN", "DP"]
 
-_DAYS_NORMAL = {'M-SU': 'M-Su', 'M-SA': 'M-Sa', 'M-F': 'M-F', 'SA-SU': 'Sa-Su',
-                'SA': 'Sa', 'SU': 'Su', 'M-TH': 'M-Th', 'SU-SA': 'Su-Sa'}
+_DAYS_NORMAL = {
+    "M-SU": "M-Su",
+    "M-SA": "M-Sa",
+    "M-F": "M-F",
+    "SA-SU": "Sa-Su",
+    "SA": "Sa",
+    "SU": "Su",
+    "M-TH": "M-Th",
+    "SU-SA": "Su-Sa",
+}
 
 # A grid row naming no language is NOT airtime. It is only accepted as a charge
 # when it also names a recognisable non-airtime cost; anything else raises,
 # because silently entering it either way would be wrong.
 _CHARGE_RE = re.compile(
-    r'\b(TRANSLATION|PRODUCTION|DUBBING|DUB|VOICE\s*-?\s*OVER|VOICEOVER|TALENT'
-    r'|POST|EDIT|CAPTION|SUBTITL\w*|FEE|COST|CHARGE)\b', re.IGNORECASE)
+    r"\b(TRANSLATION|PRODUCTION|DUBBING|DUB|VOICE\s*-?\s*OVER|VOICEOVER|TALENT"
+    r"|POST|EDIT|CAPTION|SUBTITL\w*|FEE|COST|CHARGE)\b",
+    re.IGNORECASE,
+)
 
 
 def _pdf_num(text: str) -> Optional[Decimal]:
     """'2447.06' / '12' / '23,529.94' → Decimal. Non-numeric → None."""
-    s = (text or '').replace(',', '').replace('$', '').strip()
+    s = (text or "").replace(",", "").replace("$", "").strip()
     if not s:
         return None
     try:
@@ -514,26 +643,26 @@ def _pdf_num(text: str) -> Optional[Decimal]:
 def _cluster_rows(words: List[dict]) -> List[Tuple[float, List[dict]]]:
     """Group words into visual rows on RAW `top`, ascending. See _ROW_TOL."""
     rows: List[Tuple[float, List[dict]]] = []
-    for w in sorted(words, key=lambda w: w['top']):
-        if rows and w['top'] - rows[-1][0] <= _ROW_TOL:
+    for w in sorted(words, key=lambda w: w["top"]):
+        if rows and w["top"] - rows[-1][0] <= _ROW_TOL:
             rows[-1][1].append(w)
         else:
-            rows.append((w['top'], [w]))
-    return [(top, sorted(ws, key=lambda w: w['x0'])) for top, ws in rows]
+            rows.append((w["top"], [w]))
+    return [(top, sorted(ws, key=lambda w: w["x0"])) for top, ws in rows]
 
 
 def _band_text(words: List[dict], lo: float, hi: float) -> str:
     """Join the words whose x0 falls in [lo, hi)."""
-    return ' '.join(w['text'] for w in words if lo <= w['x0'] < hi).strip()
+    return " ".join(w["text"] for w in words if lo <= w["x0"] < hi).strip()
 
 
 def _centre(w: dict) -> float:
-    return (w['x0'] + w['x1']) / 2.0
+    return (w["x0"] + w["x1"]) / 2.0
 
 
 def _parse_pdf_time(raw: str) -> Optional[str]:
     """'0600A' → '6:00a', '0100P' → '1:00p', '1200A' → '12:00a'."""
-    m = re.fullmatch(r'(\d{1,2})(\d{2})\s*([AP])', (raw or '').strip(), re.IGNORECASE)
+    m = re.fullmatch(r"(\d{1,2})(\d{2})\s*([AP])", (raw or "").strip(), re.IGNORECASE)
     if not m:
         return None
     return f"{int(m.group(1))}:{m.group(2)}{m.group(3).lower()}"
@@ -545,12 +674,13 @@ def _compact_range(t_from: str, t_to: str) -> str:
     Matches how Lee writes line descriptions in Etere ("Cantonese 7-8p"), and
     still parses back through EtereClient.parse_time_range.
     """
+
     def part(t: str) -> Tuple[str, str]:
-        m = re.fullmatch(r'(\d{1,2}):(\d{2})([ap])', t)
+        m = re.fullmatch(r"(\d{1,2}):(\d{2})([ap])", t)
         if not m:
-            return t, ''
+            return t, ""
         hh, mm, mer = m.group(1), m.group(2), m.group(3)
-        return (hh if mm == '00' else f"{hh}:{mm}"), mer
+        return (hh if mm == "00" else f"{hh}:{mm}"), mer
 
     a, mer_a = part(t_from)
     b, mer_b = part(t_to)
@@ -562,7 +692,7 @@ def _compact_range(t_from: str, t_to: str) -> str:
 def _parse_pdf_date(raw: str, anchor_year: int, anchor_month: int) -> Optional[date]:
     """'AUG10' → date(2026, 8, 10), rolling the year when the month wraps back
     past the estimate period's start month."""
-    m = re.fullmatch(r'([A-Z]{3})(\d{1,2})', (raw or '').strip().upper())
+    m = re.fullmatch(r"([A-Z]{3})(\d{1,2})", (raw or "").strip().upper())
     if not m or m.group(1) not in _MONTHS:
         return None
     month = _MONTHS[m.group(1)]
@@ -574,7 +704,7 @@ def _parse_pdf_date(raw: str, anchor_year: int, anchor_month: int) -> Optional[d
 
 
 def _pdf_days(raw: str) -> str:
-    return _DAYS_NORMAL.get((raw or '').strip().upper(), (raw or '').strip())
+    return _DAYS_NORMAL.get((raw or "").strip().upper(), (raw or "").strip())
 
 
 def parse_crispin_pdf(path: str) -> CrispinOrder:
@@ -584,35 +714,35 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
     from browser_automation.line_language import guess_language
 
     with pdfplumber.open(path) as pdf:
-        pages = [(_cluster_rows(pg.extract_words()), pg.extract_text() or '')
-                 for pg in pdf.pages]
+        pages = [(_cluster_rows(pg.extract_words()), pg.extract_text() or "") for pg in pdf.pages]
 
-    all_text = '\n'.join(t for _, t in pages)
+    all_text = "\n".join(t for _, t in pages)
 
     # ── Header fields ────────────────────────────────────────────────────────
-    station_code = ''
-    m = re.search(r'Brand Time Schedule\s*-\s*(\S+)', all_text)
+    station_code = ""
+    m = re.search(r"Brand Time Schedule\s*-\s*(\S+)", all_text)
     if m:
         station_code = m.group(1).strip()
 
-    m = re.search(r'PERIOD FROM\s+([A-Z]{3})(\d{1,2})/(\d{2})', all_text)
+    m = re.search(r"PERIOD FROM\s+([A-Z]{3})(\d{1,2})/(\d{2})", all_text)
     if not m:
         raise ValueError("Crispin PDF: no 'PERIOD FROM' line — not a Brand Time Schedule?")
     anchor_month = _MONTHS.get(m.group(1).upper(), 1)
     anchor_year = 2000 + int(m.group(3))
 
-    advertiser, client_code = '', ''
-    m = re.search(r'CLIENT\s+([A-Z0-9]+)\s+(.+?)\s*(?:Market\b|$)', all_text, re.MULTILINE)
+    advertiser, client_code = "", ""
+    m = re.search(r"CLIENT\s+([A-Z0-9]+)\s+(.+?)\s*(?:Market\b|$)", all_text, re.MULTILINE)
     if m:
         client_code = m.group(1).strip()
         advertiser = m.group(2).strip()
 
-    market_label = ''
-    m = re.search(r'\bMarket\s+([A-Z]{2,4})\s+([A-Z]{2})\s+(.+?)(?:\s+RTG\b|$)',
-                  all_text, re.MULTILINE)
+    market_label = ""
+    m = re.search(
+        r"\bMarket\s+([A-Z]{2,4})\s+([A-Z]{2})\s+(.+?)(?:\s+RTG\b|$)", all_text, re.MULTILINE
+    )
     if m:
         market_label = m.group(3).strip()
-    market_code = ''
+    market_code = ""
     for keys, code in _MARKET_MAP:
         if any(k in market_label.lower() for k in keys):
             market_code = code
@@ -623,66 +753,65 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
             f"rather than defaulting, so the spots cannot land on the wrong station."
         )
 
-    order_number = ''
-    m = re.search(r'Order#?\s*(\d+)', all_text)
+    order_number = ""
+    m = re.search(r"Order#?\s*(\d+)", all_text)
     if m:
-        order_number = m.group(1).lstrip('0') or '0'
+        order_number = m.group(1).lstrip("0") or "0"
 
-    estimate, estimate_detail = '', ''
-    m = re.search(r'ESTIMATE\s+(\d+)\s*(.*)', all_text)
+    estimate, estimate_detail = "", ""
+    m = re.search(r"ESTIMATE\s+(\d+)\s*(.*)", all_text)
     if m:
         estimate = m.group(1).strip()
         estimate_detail = m.group(2).strip()
 
-    revision = ''
-    m = re.search(r'REVISION:\s*(\S+)', all_text)
+    revision = ""
+    m = re.search(r"REVISION:\s*(\S+)", all_text)
     if m:
         revision = m.group(1).strip()
 
     # "CRISPIN AGENCY" — a single all-caps token, never a greedy run: the page
     # title ("Brand Time Schedule - 3131CA") shares this text line in extraction.
-    agency = 'Crispin LLC'
-    m = re.search(r'\b([A-Z][A-Z&.\-]{2,})\s+AGENCY\b', all_text)
+    agency = "Crispin LLC"
+    m = re.search(r"\b([A-Z][A-Z&.\-]{2,})\s+AGENCY\b", all_text)
     if m:
         agency = f"{m.group(1).title()} LLC"
 
     # ── Walk every page: column regimes, grid rows, summary rows ─────────────
     bands: Dict[str, Tuple[float, float]] = {}
     tot_x0: Optional[float] = None
-    regimes: List[dict] = []      # {'page','top','weeks': [(centre, date)]}
-    grid: Dict[str, dict] = {}    # LINE# → row record
+    regimes: List[dict] = []  # {'page','top','weeks': [(centre, date)]}
+    grid: Dict[str, dict] = {}  # LINE# → row record
     grid_order: List[str] = []
-    summaries: List[dict] = []    # per-regime PTS/WEEK reconciliation rows
+    summaries: List[dict] = []  # per-regime PTS/WEEK reconciliation rows
     grand: Optional[dict] = None
 
     for pi, (rows, _) in enumerate(pages):
         pending_months: Optional[List[dict]] = None
 
         for ri, (top, words) in enumerate(rows):
-            texts = [w['text'] for w in words]
+            texts = [w["text"] for w in words]
 
             # -- the grid's column-header row: learn the field bands once --
-            if 'LINE#' in texts and 'DAY(S)' in texts:
+            if "LINE#" in texts and "DAY(S)" in texts:
                 if not bands:
                     xs = {}
                     for w in words:
-                        if w['text'] in _PDF_LABELS or w['text'] == 'TOT':
-                            xs.setdefault(w['text'], w['x0'])
-                    missing = [lb for lb in _PDF_LABELS + ['TOT'] if lb not in xs]
+                        if w["text"] in _PDF_LABELS or w["text"] == "TOT":
+                            xs.setdefault(w["text"], w["x0"])
+                    missing = [lb for lb in _PDF_LABELS + ["TOT"] if lb not in xs]
                     if missing:
                         raise ValueError(
                             f"Crispin PDF: schedule header is missing column(s) {missing} — "
                             f"the layout changed; refusing to guess by position."
                         )
-                    tot_x0 = xs['TOT']
+                    tot_x0 = xs["TOT"]
                     edges = [(lb, xs[lb]) for lb in _PDF_LABELS]
                     for i, (lb, x) in enumerate(edges):
                         nxt = edges[i + 1][1] if i + 1 < len(edges) else _GRID_X_MIN
                         bands[lb] = (x - _BAND_PAD, nxt - _BAND_PAD)
 
             # -- month row of a column regime --
-            months = [w for w in words
-                      if w['x0'] >= _GRID_X_MIN and w['text'].upper() in _MONTHS]
+            months = [w for w in words if w["x0"] >= _GRID_X_MIN and w["text"].upper() in _MONTHS]
             if len(months) >= 5:
                 pending_months = months
                 # The month row may also BE the row above the main header; the day
@@ -690,10 +819,13 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
                 continue
 
             # -- day-number row: pairs with the pending month row --
-            days_hdr = [w for w in words
-                        if w['x0'] >= _GRID_X_MIN
-                        and re.fullmatch(r'\d{1,2}', w['text'])
-                        and (tot_x0 is None or w['x0'] < tot_x0 - _COL_TOL)]
+            days_hdr = [
+                w
+                for w in words
+                if w["x0"] >= _GRID_X_MIN
+                and re.fullmatch(r"\d{1,2}", w["text"])
+                and (tot_x0 is None or w["x0"] < tot_x0 - _COL_TOL)
+            ]
             if pending_months and len(days_hdr) >= 5:
                 if len(days_hdr) != len(pending_months):
                     raise ValueError(
@@ -703,15 +835,17 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
                 weeks: List[Tuple[float, date]] = []
                 prev_month = None
                 year = anchor_year
-                for mo_w, dy_w in zip(sorted(pending_months, key=lambda w: w['x0']),
-                                      sorted(days_hdr, key=lambda w: w['x0'])):
-                    month = _MONTHS[mo_w['text'].upper()]
+                for mo_w, dy_w in zip(
+                    sorted(pending_months, key=lambda w: w["x0"]),
+                    sorted(days_hdr, key=lambda w: w["x0"]),
+                ):
+                    month = _MONTHS[mo_w["text"].upper()]
                     if prev_month is None:
                         year = anchor_year if month >= anchor_month else anchor_year + 1
                     elif month < prev_month:
                         year += 1
                     prev_month = month
-                    weeks.append((_centre(dy_w), date(year, month, int(dy_w['text']))))
+                    weeks.append((_centre(dy_w), date(year, month, int(dy_w["text"]))))
                 for a, b in zip(weeks, weeks[1:]):
                     if (b[1] - a[1]).days != 7:
                         raise ValueError(
@@ -719,7 +853,7 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
                             f"{(b[1] - a[1]).days} days apart, expected 7 — the month/day "
                             f"header did not align."
                         )
-                regimes.append({'page': pi, 'top': top, 'weeks': weeks})
+                regimes.append({"page": pi, "top": top, "weeks": weeks})
                 pending_months = None
                 continue
 
@@ -728,17 +862,17 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
 
             def cell_map(ws: List[dict], regime: dict) -> Dict[date, int]:
                 """Week cells of one row, matched to columns by centre distance."""
-                out: Dict[date, int] = {d: 0 for _, d in regime['weeks']}
+                out: Dict[date, int] = {d: 0 for _, d in regime["weeks"]}
                 for w in ws:
-                    if w['x0'] < _GRID_X_MIN:
+                    if w["x0"] < _GRID_X_MIN:
                         continue
-                    if tot_x0 is not None and w['x0'] >= tot_x0 - _COL_TOL:
+                    if tot_x0 is not None and w["x0"] >= tot_x0 - _COL_TOL:
                         continue
-                    val = _pdf_num(w['text'])
+                    val = _pdf_num(w["text"])
                     if val is None or val != val.to_integral_value():
                         continue
                     cx, best = _centre(w), None
-                    for col_x, d in regime['weeks']:
+                    for col_x, d in regime["weeks"]:
                         dist = abs(cx - col_x)
                         if dist <= _COL_TOL and (best is None or dist < best[0]):
                             best = (dist, d)
@@ -751,12 +885,12 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
                 carrying a decimal point, so a shifted right margin can't swap them."""
                 spots = money = None
                 for w in ws:
-                    if tot_x0 is None or w['x0'] < tot_x0 - _COL_TOL:
+                    if tot_x0 is None or w["x0"] < tot_x0 - _COL_TOL:
                         continue
-                    val = _pdf_num(w['text'])
+                    val = _pdf_num(w["text"])
                     if val is None:
                         continue
-                    if '.' in w['text']:
+                    if "." in w["text"]:
                         if money is None:
                             money = val
                     elif spots is None:
@@ -765,7 +899,7 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
 
             def regime_for(page: int, y: float) -> dict:
                 for reg in reversed(regimes):
-                    if reg['page'] < page or (reg['page'] == page and reg['top'] < y):
+                    if reg["page"] < page or (reg["page"] == page and reg["top"] < y):
                         return reg
                 raise ValueError(
                     f"Crispin PDF p{page + 1}: a grid row at y={y:.0f} has no week-column "
@@ -773,25 +907,28 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
                 )
 
             # -- station summary rows (reconciliation targets) --
-            prog = _band_text(words, *bands['PROGRAM'])
+            prog = _band_text(words, *bands["PROGRAM"])
             if station_code and prog.split()[:1] == [station_code]:
                 rest = prog.split()[1:]
                 spots, money = tail(words)
-                if rest[:1] == ['TOT']:
-                    grand = {'spots': spots, 'money': money}
+                if rest[:1] == ["TOT"]:
+                    grand = {"spots": spots, "money": money}
                 else:
                     reg = regime_for(pi, top)
-                    summaries.append({
-                        'label': rest[0] if rest else '',
-                        'weeks': [d for _, d in reg['weeks']],
-                        'cells': cell_map(words, reg),
-                        'spots': spots, 'money': money,
-                    })
+                    summaries.append(
+                        {
+                            "label": rest[0] if rest else "",
+                            "weeks": [d for _, d in reg["weeks"]],
+                            "cells": cell_map(words, reg),
+                            "spots": spots,
+                            "money": money,
+                        }
+                    )
                 continue
 
             # -- a schedule line --
-            line_no = _band_text(words, *bands['LINE#'])
-            if not re.fullmatch(r'\d{3}', line_no):
+            line_no = _band_text(words, *bands["LINE#"])
+            if not re.fullmatch(r"\d{3}", line_no):
                 continue
 
             reg = regime_for(pi, top)
@@ -803,53 +940,62 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
                 )
 
             # The continuation row underneath carries the end time and end date.
-            end_time = end_date = ''
+            end_time = end_date = ""
             if ri + 1 < len(rows):
                 nxt = rows[ri + 1][1]
-                if not _band_text(nxt, *bands['LINE#']):
-                    end_time = _band_text(nxt, *bands['TIME'])
-                    end_date = _band_text(nxt, *bands['DATES'])
+                if not _band_text(nxt, *bands["LINE#"]):
+                    end_time = _band_text(nxt, *bands["TIME"])
+                    end_date = _band_text(nxt, *bands["DATES"])
 
-            t_from = _parse_pdf_time(_band_text(words, *bands['TIME']))
+            t_from = _parse_pdf_time(_band_text(words, *bands["TIME"]))
             t_to = _parse_pdf_time(end_time)
-            d_from = _parse_pdf_date(_band_text(words, *bands['DATES']),
-                                     anchor_year, anchor_month)
+            d_from = _parse_pdf_date(_band_text(words, *bands["DATES"]), anchor_year, anchor_month)
             d_to = _parse_pdf_date(end_date, anchor_year, anchor_month)
-            if d_from and d_to and d_to < d_from:      # flight crosses New Year
+            if d_from and d_to and d_to < d_from:  # flight crosses New Year
                 d_to = date(d_to.year + 1, d_to.month, d_to.day)
 
-            len_m = re.search(r'(\d+)', _band_text(words, *bands['LEN']))
+            len_m = re.search(r"(\d+)", _band_text(words, *bands["LEN"]))
             rec = {
-                'line_number': line_no,
-                'days': _pdf_days(_band_text(words, *bands['DAY(S)'])),
-                'time_from': t_from, 'time_to': t_to,
-                'date_from': d_from, 'date_to': d_to,
-                'program': prog,
-                'length_sec': int(len_m.group(1)) if len_m else 30,
-                'dp': _band_text(words, *bands['DP']),
-                'rate': money,
-                'stated_total': spots,
-                'cells': cell_map(words, reg),
+                "line_number": line_no,
+                "days": _pdf_days(_band_text(words, *bands["DAY(S)"])),
+                "time_from": t_from,
+                "time_to": t_to,
+                "date_from": d_from,
+                "date_to": d_to,
+                "program": prog,
+                "length_sec": int(len_m.group(1)) if len_m else 30,
+                "dp": _band_text(words, *bands["DP"]),
+                "rate": money,
+                "stated_total": spots,
+                "cells": cell_map(words, reg),
             }
 
-            if line_no in grid:                        # merge the other regime
+            if line_no in grid:  # merge the other regime
                 prev = grid[line_no]
-                for key in ('days', 'time_from', 'time_to', 'date_from', 'date_to',
-                            'program', 'length_sec', 'rate'):
+                for key in (
+                    "days",
+                    "time_from",
+                    "time_to",
+                    "date_from",
+                    "date_to",
+                    "program",
+                    "length_sec",
+                    "rate",
+                ):
                     if prev[key] != rec[key]:
                         raise ValueError(
                             f"Crispin PDF line {line_no}: {key} differs between column "
                             f"regimes ({prev[key]!r} vs {rec[key]!r}) — these are not the "
                             f"same line."
                         )
-                for d, v in rec['cells'].items():
-                    if d in prev['cells'] and prev['cells'][d] and prev['cells'][d] != v:
+                for d, v in rec["cells"].items():
+                    if d in prev["cells"] and prev["cells"][d] and prev["cells"][d] != v:
                         raise ValueError(
                             f"Crispin PDF line {line_no}: week {d} read twice with "
                             f"different values ({prev['cells'][d]} vs {v})."
                         )
-                    prev['cells'][d] = max(prev['cells'].get(d, 0), v)
-                prev['stated_total'] += spots
+                    prev["cells"][d] = max(prev["cells"].get(d, 0), v)
+                prev["stated_total"] += spots
             else:
                 grid[line_no] = rec
                 grid_order.append(line_no)
@@ -862,8 +1008,8 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
     # ── Reconcile against the IO's own arithmetic BEFORE trusting anything ───
     for no in grid_order:
         rec = grid[no]
-        got = sum(rec['cells'].values())
-        if got != rec['stated_total']:
+        got = sum(rec["cells"].values())
+        if got != rec["stated_total"]:
             raise ValueError(
                 f"Crispin PDF line {no} ({rec['program']}): week columns sum to {got} "
                 f"but the line's own TOT says {rec['stated_total']} — a cell was misread; "
@@ -871,38 +1017,38 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
             )
 
     for s in summaries:
-        for d in s['weeks']:
-            want = s['cells'].get(d, 0)
-            got = sum(rec['cells'].get(d, 0) for rec in grid.values())
+        for d in s["weeks"]:
+            want = s["cells"].get(d, 0)
+            got = sum(rec["cells"].get(d, 0) for rec in grid.values())
             if got != want:
                 raise ValueError(
                     f"Crispin PDF summary {s['label']}: week {d} sums to {got} across the "
                     f"lines but the PTS/WEEK row says {want}."
                 )
-        got_spots = sum(sum(rec['cells'].get(d, 0) for d in s['weeks'])
-                        for rec in grid.values())
-        if s['spots'] is not None and got_spots != s['spots']:
+        got_spots = sum(sum(rec["cells"].get(d, 0) for d in s["weeks"]) for rec in grid.values())
+        if s["spots"] is not None and got_spots != s["spots"]:
             raise ValueError(
                 f"Crispin PDF summary {s['label']}: {got_spots} spots across the lines "
                 f"but the summary says {s['spots']}."
             )
-        got_money = sum(rec['rate'] * sum(rec['cells'].get(d, 0) for d in s['weeks'])
-                        for rec in grid.values())
-        if s['money'] is not None and abs(got_money - s['money']) > Decimal('0.01'):
+        got_money = sum(
+            rec["rate"] * sum(rec["cells"].get(d, 0) for d in s["weeks"]) for rec in grid.values()
+        )
+        if s["money"] is not None and abs(got_money - s["money"]) > Decimal("0.01"):
             raise ValueError(
                 f"Crispin PDF summary {s['label']}: lines total ${got_money} but the "
                 f"summary says ${s['money']}."
             )
 
     if grand:
-        got_spots = sum(rec['stated_total'] for rec in grid.values())
-        if grand['spots'] is not None and got_spots != grand['spots']:
+        got_spots = sum(rec["stated_total"] for rec in grid.values())
+        if grand["spots"] is not None and got_spots != grand["spots"]:
             raise ValueError(
                 f"Crispin PDF: {got_spots} spots parsed but '{station_code} TOT' says "
                 f"{grand['spots']} — a line was dropped; refusing to enter."
             )
-        got_money = sum(rec['rate'] * rec['stated_total'] for rec in grid.values())
-        if grand['money'] is not None and abs(got_money - grand['money']) > Decimal('0.01'):
+        got_money = sum(rec["rate"] * rec["stated_total"] for rec in grid.values())
+        if grand["money"] is not None and abs(got_money - grand["money"]) > Decimal("0.01"):
             raise ValueError(
                 f"Crispin PDF: parsed total ${got_money} but '{station_code} TOT' says "
                 f"${grand['money']} — refusing to enter."
@@ -913,32 +1059,36 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
     charges: List[CrispinCharge] = []
     for no in grid_order:
         rec = grid[no]
-        if guess_language(rec['program']) is None:
-            if not _CHARGE_RE.search(rec['program']):
+        if guess_language(rec["program"]) is None:
+            if not _CHARGE_RE.search(rec["program"]):
                 raise ValueError(
                     f"Crispin PDF line {no}: program {rec['program']!r} names no language "
                     f"and no recognisable production cost — cannot tell whether it is "
                     f"airtime or a charge. Add it to _CHARGE_RE or fix the IO."
                 )
-            charges.append(CrispinCharge(
-                description=rec['program'],
-                amount=float(rec['rate'] * rec['stated_total']),
-                line_number=no,
-                date_from=rec['date_from'],
-                date_to=rec['date_to'],
-            ))
+            charges.append(
+                CrispinCharge(
+                    description=rec["program"],
+                    amount=float(rec["rate"] * rec["stated_total"]),
+                    line_number=no,
+                    date_from=rec["date_from"],
+                    date_to=rec["date_to"],
+                )
+            )
             continue
 
         # Keep only the week columns this line's own flight actually covers. A
         # line appears under one regime but is zero-padded across the other's 13
         # columns too, so without this every line reports the full 26-week grid.
         # A dropped column holding spots is a contradiction, not padding.
-        weeks = sorted(rec['cells'])
-        if rec['date_from'] and rec['date_to']:
-            keep = [d for d in weeks
-                    if d <= rec['date_to'] and d + timedelta(days=6) >= rec['date_from']]
-            stray = {d: rec['cells'][d] for d in weeks
-                     if d not in keep and rec['cells'][d]}
+        weeks = sorted(rec["cells"])
+        if rec["date_from"] and rec["date_to"]:
+            keep = [
+                d
+                for d in weeks
+                if d <= rec["date_to"] and d + timedelta(days=6) >= rec["date_from"]
+            ]
+            stray = {d: rec["cells"][d] for d in weeks if d not in keep and rec["cells"][d]}
             if stray:
                 raise ValueError(
                     f"Crispin PDF line {no}: {sum(stray.values())} spot(s) in week(s) "
@@ -947,10 +1097,10 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
                 )
             weeks = keep
 
-        is_bonus = rec['rate'] == 0
+        is_bonus = rec["rate"] == 0
         if is_bonus:
-            daypart = 'ROS'
-        elif rec['time_from'] and rec['time_to']:
+            daypart = "ROS"
+        elif rec["time_from"] and rec["time_to"]:
             daypart = f"{rec['days']} {_compact_range(rec['time_from'], rec['time_to'])}"
         else:
             raise ValueError(
@@ -958,19 +1108,21 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
                 f"({rec['time_from']!r}–{rec['time_to']!r})."
             )
 
-        lines.append(CrispinLine(
-            language_block=rec['program'],
-            daypart=daypart,
-            unit_value=0.0,
-            rate=float(rec['rate']),
-            length_sec=rec['length_sec'],
-            week_dates=weeks,
-            week_spots=[rec['cells'][d] for d in weeks],
-            line_number=no,
-            date_from=rec['date_from'],
-            date_to=rec['date_to'],
-            total_spots_stated=rec['stated_total'],
-        ))
+        lines.append(
+            CrispinLine(
+                language_block=rec["program"],
+                daypart=daypart,
+                unit_value=0.0,
+                rate=float(rec["rate"]),
+                length_sec=rec["length_sec"],
+                week_dates=weeks,
+                week_spots=[rec["cells"][d] for d in weeks],
+                line_number=no,
+                date_from=rec["date_from"],
+                date_to=rec["date_to"],
+                total_spots_stated=rec["stated_total"],
+            )
+        )
 
     if not lines:
         # A production-ONLY order takes the zero-spot carrier-line pattern
@@ -988,8 +1140,8 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
     return CrispinOrder(
         agency=agency,
         advertiser=advertiser,
-        contact='',
-        email='',
+        contact="",
+        email="",
         market_code=market_code,
         market_label=market_label,
         order_date=None,
@@ -999,7 +1151,7 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
         rates_are_net=False,
         source_path=path,
         charges=charges,
-        source_format='pdf',
+        source_format="pdf",
         order_number=order_number,
         estimate=estimate,
         estimate_detail=estimate_detail,
@@ -1012,5 +1164,6 @@ def parse_crispin_pdf(path: str) -> CrispinOrder:
 def parse_crispin(path: str) -> CrispinOrder:
     """Parse a Crispin order — the official Brand Time Schedule IO (.pdf) or the
     proposal workbook (.xlsx/.xlsm). One order shape either way."""
-    return parse_crispin_pdf(path) if str(path).lower().endswith('.pdf') \
-        else parse_crispin_xlsx(path)
+    return (
+        parse_crispin_pdf(path) if str(path).lower().endswith(".pdf") else parse_crispin_xlsx(path)
+    )

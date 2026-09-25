@@ -71,6 +71,7 @@
         .flight-line { font-size: 0.9rem; color: var(--text-secondary); margin: 0 0 12px; }
         .flight-line b { color: var(--text-primary); }
         .num { text-align: right; font-variant-numeric: tabular-nums; }
+        .charge-row td { font-style: italic; }
         .note { font-size: 0.85rem; color: var(--text-secondary); margin: 10px 0 0; }
         .sheet-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
         .sheet-head input[type=checkbox] { width: 18px; height: 18px; }
@@ -197,7 +198,7 @@
 
     function sheetCard(sh, i) {
         const rows = sh.lines.map(ln => `
-            <tr>
+            <tr${ln.is_charge ? ' class="charge-row"' : ''}>
                 <td>${esc(ln.program)}</td>
                 <td>${esc(ln.daypart_name)}</td>
                 <td>${ln.windows.map(w => esc(w.days) + ' ' + w.start + '–' + w.end).join('<br>')}</td>
@@ -219,7 +220,7 @@
                 <span class="sub">${esc(sh.subtitle || '')}</span>
             </div>
             <div class="sheet-body">
-                <p class="flight-line"><b>${esc(sh.market_label || '')}</b> &nbsp;·&nbsp; flight <b>${sh.flight_start}</b> to <b>${sh.flight_end}</b> &nbsp;·&nbsp; ${sh.lines.length} line(s) &nbsp;·&nbsp; paid <b>${money(sh.paid_total)}</b></p>
+                <p class="flight-line"><b>${esc(sh.market_label || '')}</b> &nbsp;·&nbsp; flight <b>${sh.flight_start}</b> to <b>${sh.flight_end}</b> &nbsp;·&nbsp; ${sh.lines.length} line(s) &nbsp;·&nbsp; airtime <b>${money(sh.paid_total)}</b>${sh.charge_total ? ` + production <b>${money(sh.charge_total)}</b>` : ''}</p>
                 <div class="form-grid-3">${fields}</div>
                 <div class="table-wrap">
                     <table>

@@ -83,6 +83,7 @@ def _lines_json(preview) -> list:
             "start": ln.start.isoformat(),
             "end": ln.end.isoformat(),
             "total_spots": sum(ln.weekly_spots),
+            "is_charge": ln.is_charge,
         }
         for ln in preview.lines
     ]
@@ -134,7 +135,16 @@ def build_agency_xml_router(templates: Jinja2Templates) -> APIRouter:
                         "flight_end": pv.flight_end.isoformat(),
                         "market_label": pv.market_label,
                         "paid_total": round(
-                            sum(ln.rate * sum(ln.weekly_spots) for ln in pv.lines), 2
+                            sum(
+                                ln.rate * sum(ln.weekly_spots)
+                                for ln in pv.lines
+                                if not ln.is_charge
+                            ),
+                            2,
+                        ),
+                        "charge_total": round(
+                            sum(ln.rate * sum(ln.weekly_spots) for ln in pv.lines if ln.is_charge),
+                            2,
                         ),
                         "notes": pv.notes,
                         "lines": _lines_json(pv),

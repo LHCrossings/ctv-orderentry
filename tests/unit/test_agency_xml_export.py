@@ -27,6 +27,7 @@ from browser_automation.parsers.crispin_parser import parse_crispin_xlsx
 
 FIX = Path(__file__).resolve().parents[1] / "fixtures" / "crispin"
 WORKBOOK = FIX / "proposal_baaqmd_2026_rev1.xlsm"
+WINTER = FIX / "proposal_baaqmd_2026_winter.xlsm"
 ORACLE = FIX / "baaqmd_2026_r1c_agency_ingested.xml"
 
 KURT_HEADER = dict(
@@ -55,9 +56,33 @@ def order():
     return parse_crispin_xlsx(str(WORKBOOK))
 
 
+def _without_charge_lines(root):
+    ns = {"p": ax.NS_PROPOSAL}
+    al = root.find("p:Proposal/p:AvailList", ns)
+    for line in al.findall("p:AvailLineWithDetailedPeriods", ns):
+        if line.findtext("p:DaypartName", namespaces=ns) == "PRODUCTION":
+            al.remove(line)
+    return root
+
+
 def test_reproduces_the_file_the_agency_ingested(order):
+    """Kurt's file had no production line (the agency typed TRANSLATION COST onto the IO
+    by hand); everything else must match tree-for-tree."""
     xml_bytes = ax.export_proposal(order, ax.ExportHeader(**KURT_HEADER))
-    assert _tree(ET.fromstring(xml_bytes)) == _tree(ET.parse(ORACLE).getroot())
+    root = ET.fromstring(xml_bytes)
+    ns = {"p": ax.NS_PROPOSAL}
+    charge = [
+        ln
+        for ln in root.findall(".//p:AvailLineWithDetailedPeriods", ns)
+        if ln.findtext("p:DaypartName", namespaces=ns) == "PRODUCTION"
+    ]
+    assert len(charge) == 1
+    assert charge[0].findtext("p:AvailName", namespaces=ns) == "Translation costs"
+    period = charge[0].find("p:Periods/p:DetailedPeriod", ns)
+    assert (period.get("startDate"), period.get("endDate")) == ("2026-07-27", "2026-08-02")
+    assert period.findtext("p:Rate", namespaces=ns) == "2080.00"
+    assert period.findtext("p:SpotsPerWeek", namespaces=ns) == "1"
+    assert _tree(_without_charge_lines(root)) == _tree(ET.parse(ORACLE).getroot())
     assert b'xmlns:tvb="http://www.AAAA.org/schemas/spotTV"' in xml_bytes
     assert xml_bytes.startswith(b'<?xml version="1.0" encoding="UTF-8"?>\n')
 
@@ -86,7 +111,7 @@ def test_missing_header_field_refuses(order):
         ax.export_proposal(order, h)
 
 
-def test_preview_lines_follow_sheet_order(order):
+def test_preview_lines_follow_sheet_order_then_the_charge(order):
     pv = ax.build_preview(order, ax.ExportHeader(**KURT_HEADER))
     assert [ln.program for ln in pv.lines] == [
         "Cantonese News",
@@ -97,6 +122,7 @@ def test_preview_lines_follow_sheet_order(order):
         "Mandarin",
         "Filipino",
         "Vietnamese",
+        "Translation costs",
     ]
     assert [ln.daypart_name for ln in pv.lines] == [
         "CHINESE",
@@ -107,9 +133,11 @@ def test_preview_lines_follow_sheet_order(order):
         "CHINESE",
         "FILIPINO",
         "VIETNAMESE",
+        "PRODUCTION",
     ]
-    assert [ln.rate for ln in pv.lines] == [120.0, 120.0, 100.0, 100.0, 0.0, 0.0, 0.0, 0.0]
-    assert [ln.length_sec for ln in pv.lines] == [30, 30, 30, 30, 15, 15, 15, 15]
+    assert [ln.rate for ln in pv.lines] == [120.0, 120.0, 100.0, 100.0, 0.0, 0.0, 0.0, 0.0, 2080.0]
+    assert [ln.length_sec for ln in pv.lines] == [30, 30, 30, 30, 15, 15, 15, 15, 15]
+    assert [ln.is_charge for ln in pv.lines] == [False] * 8 + [True]
     assert (pv.flight_start, pv.flight_end) == (date(2026, 7, 27), date(2026, 11, 1))
     assert pv.market_label == "San Francisco Bay Area - Xfinity Channel 3131 and KQTA 15.3"
 
@@ -163,12 +191,12 @@ def test_language_family():
 # ── Tampered workbooks must refuse, never export a wrong number ──────────────
 
 
-def _tampered(tmp_path, mutate):
+def _tampered(tmp_path, mutate, src=WORKBOOK, sheet="BAAQMD"):
     """Copy the workbook with its cached VALUES (openpyxl would otherwise save the
     formulas with no cached result, blanking every total) and mutate one cell."""
     dst = tmp_path / "proposal.xlsx"
-    wb = openpyxl.load_workbook(WORKBOOK, data_only=True)
-    mutate(wb["BAAQMD"])
+    wb = openpyxl.load_workbook(src, data_only=True)
+    mutate(wb[sheet])
     wb.save(dst)
     return str(dst)
 
@@ -203,8 +231,6 @@ def test_untouched_copy_still_parses(tmp_path):
 
 
 # ── Header memory + a two-tab workbook (Winter 2026, gross rates) ──────────────
-
-WINTER = FIX / "proposal_baaqmd_2026_winter.xlsm"
 
 
 def test_default_header_ignores_a_missing_memory_file(order, tmp_path):
@@ -245,6 +271,9 @@ def test_winter_workbook_has_two_proposal_tabs():
     new = parse_crispin_xlsx(str(WINTER), "new creative")
     reuse = parse_crispin_xlsx(str(WINTER), "REUSE")
     assert (new.subtitle, reuse.subtitle) == ("NEW CREATIVE", "RE-USE CREATIVE")
+    # the production money: GROSS discounted figure on the tab that has the block, none on REUSE
+    assert [(c.description, c.amount) for c in new.charges] == [("Translation services", 2941.18)]
+    assert reuse.charges == []
     # gross rates reconcile against the 'GROSS Proposed Contract Amount' column
     assert [ln.amount_stated for ln in new.lines][:4] == [6353.1, 6353.1, 3529.5, 5294.25]
     assert [ln.total_spots for ln in new.paid_lines] == [45, 45, 30, 45]
@@ -261,7 +290,25 @@ def test_winter_defaults_carry_the_tab_variant(tmp_path):
     pv = ax.build_preview(new, ax.ExportHeader(**{**KURT_HEADER, "proposal_id": h.proposal_id}))
     assert (pv.flight_start, pv.flight_end) == (date(2026, 11, 9), date(2027, 2, 21))
     assert [ln.rate for ln in pv.lines][:4] == [141.18, 141.18, 117.65, 117.65]
+    last = pv.lines[-1]
+    assert (last.program, last.rate, last.start, last.end) == (
+        "Translation services",
+        2941.18,
+        date(2026, 11, 9),
+        date(2026, 11, 15),
+    )
     assert ax.validate_proposal_xml(ax.build_proposal_xml(pv)) == []
+
+
+def test_two_different_charge_amounts_refuse(tmp_path):
+    def second_amount(ws):  # a second block with its own GROSS figure (rows 48-51 are merged)
+        ws["C55"] = "Production cost: dubbing"
+        ws["E56"] = 500
+        ws["F56"] = "GROSS"
+
+    path = _tampered(tmp_path, second_amount, src=WINTER, sheet="new creative")
+    with pytest.raises(ValueError, match="more than one production"):
+        parse_crispin_xlsx(path, "new creative")
 
 
 # ── The page ────────────────────────────────────────────────────────────────
@@ -310,7 +357,8 @@ def test_page_preview_and_download(client):
     assert [s["sheet"] for s in body["sheets"]] == ["BAAQMD"]
     sh = body["sheets"][0]
     assert sh["proposal_id"] == "BAAQMD-2026"
-    assert len(sh["lines"]) == 8
+    assert len(sh["lines"]) == 9
+    assert sh["lines"][8]["is_charge"] is True and sh["charge_total"] == 2080.0
     assert sh["lines"][4]["windows"] == [{"start": "06:00", "end": "24:00", "days": "MTWTFSS"}]
     assert sh["paid_total"] == 17820.0
 
@@ -330,7 +378,9 @@ def test_page_preview_and_download(client):
         )
     assert r.status_code == 200, r.text
     assert r.headers["content-disposition"] == 'attachment; filename="BAAQMD-2026-R1C.xml"'
-    assert _tree(ET.fromstring(r.content)) == _tree(ET.parse(ORACLE).getroot())
+    assert _tree(_without_charge_lines(ET.fromstring(r.content))) == _tree(
+        ET.parse(ORACLE).getroot()
+    )
 
     # the agency's spelling + station code are remembered for that agency's next sheet
     with WINTER.open("rb") as fh:
@@ -370,6 +420,9 @@ def test_two_ticked_tabs_download_a_zip(client):
     ns = {"p": ax.NS_PROPOSAL}
     assert root.find("p:Proposal", ns).get("uniqueIdentifier") == "BAAQMD-2026-RE-USE-CREATIVE"
     assert len(root.findall(".//p:AvailLineWithDetailedPeriods", ns)) == 8
+    with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
+        new_root = ET.fromstring(zf.read("BAAQMD-2026-NEW-CREATIVE.xml"))
+    assert len(new_root.findall(".//p:AvailLineWithDetailedPeriods", ns)) == 9
 
 
 def test_duplicate_proposal_ids_refuse(client):

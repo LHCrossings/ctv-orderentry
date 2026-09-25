@@ -20,6 +20,13 @@ BAAQMD 2026 R1C (Kurt + Charmaine, 2026-07-23, kept as
   * ONE DetailedPeriod per line spanning the line's weeks, with <Rate> only —
     the discounted rate (0.00 for bonus). The agency did not need SpotsPerWeek;
     `include_spots_per_week=True` adds them (schema-valid) if a buyer wants them.
+  * a production / translation charge (Lee 9/25: "I don't see any money for
+    production") rides as ONE MORE line, the way the agency's own IO carried it
+    (TRANSLATION COST, 1 unit, first flight week, :15, ROS): AvailName = the
+    sheet's label, DaypartName PRODUCTION, Rate = the GROSS discounted amount,
+    one DetailedPeriod over the first week with SpotsPerWeek 1 so the unit count
+    is explicit. The schema has no charge element; this is the only shape that
+    lands the money on the IO.
 
 The workbook is read by `crispin_parser.parse_crispin_xlsx` (header labels, not
 column indexes; spot and money totals reconciled against the sheet's own
@@ -160,6 +167,7 @@ class ExportLine:
     end: date
     weekly_spots: List[int]
     week_dates: List[date]
+    is_charge: bool = False
 
 
 @dataclass
@@ -342,17 +350,33 @@ def build_preview(order: CrispinOrder, header: Optional[ExportHeader] = None) ->
                 week_dates=list(ln.week_dates),
             )
         )
+    flight_start = min(ln.start for ln in lines)
+    flight_end = max(ln.end for ln in lines)
     notes: List[str] = []
-    if order.charges:
-        for ch in order.charges:
-            notes.append(
-                f"{ch.description}: ${ch.amount:,.2f} is not airtime and is not in the XML"
+    for ch in order.charges:
+        notes.append(
+            f"{ch.description}: ${ch.amount:,.2f} gross, carried as a one-unit line in the "
+            f"first flight week (the shape the agency's IO uses for production money)"
+        )
+        lines.append(
+            ExportLine(
+                program=ch.description,
+                daypart_name="PRODUCTION",
+                day_times=parse_daypart("ROS"),
+                length_sec=15,
+                rate=float(ch.amount),
+                start=flight_start,
+                end=flight_start + timedelta(days=6),
+                weekly_spots=[1],
+                week_dates=[flight_start],
+                is_charge=True,
             )
+        )
     return ExportPreview(
         header=header,
         lines=lines,
-        flight_start=min(ln.start for ln in lines),
-        flight_end=max(ln.end for ln in lines),
+        flight_start=flight_start,
+        flight_end=flight_end,
         market_label=" ".join((order.market_label or "").split()),
         notes=notes,
     )
@@ -465,7 +489,7 @@ def build_proposal_xml(preview: ExportPreview) -> bytes:
         _sub(awl, _q("AvailName"), line.program)
         _sub(awl, _q("SpotLength"), f"00:{line.length_sec // 60:02d}:{line.length_sec % 60:02d}")
         periods = _sub(awl, _q("Periods"))
-        if h.include_spots_per_week:
+        if h.include_spots_per_week or line.is_charge:
             for start, end, spots in _periods(line):
                 dp = _sub(
                     periods,
