@@ -27,12 +27,21 @@ _COVERAGE_TO_MARKET = {
 }
 
 
+# IW Group printed 'M/D/YY' through August 2026 and 'MM/DD/YYYY' from the September
+# LDA sheets on (Lee 9/28: three sheets parsed to zero rows, so the card assigned
+# nothing and every spot was assigned by hand). Accept both.
+_DATE = r'\d{1,2}/\d{1,2}/(?:\d{4}|\d{2})'
+_DATE_RANGE_RE = re.compile(rf'({_DATE})\s*-\s*({_DATE})')
+
+
 def _parse_date(date_str: str) -> Optional[str]:
-    """'M/D/YY' or 'MM/DD/YY' → 'YYYY-MM-DD'."""
-    m = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{2})$', date_str.strip())
+    """'M/D/YY', 'MM/DD/YY' or 'MM/DD/YYYY' → 'YYYY-MM-DD'."""
+    m = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{2}|\d{4})$', date_str.strip())
     if not m:
         return None
-    month, day, year = int(m.group(1)), int(m.group(2)), 2000 + int(m.group(3))
+    month, day, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    if year < 100:
+        year += 2000
     return f"{year:04d}-{month:02d}-{day:02d}"
 
 
@@ -67,7 +76,11 @@ def parse_lexus_traffic_pdf(pdf_bytes: bytes) -> LexusTrafficInstruction:
     """Parse a single IW Group Television Traffic Sheet PDF."""
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+    return parse_lexus_traffic_text(text)
 
+
+def parse_lexus_traffic_text(text: str) -> LexusTrafficInstruction:
+    """Parse the extracted text of a Television Traffic Sheet (testable without a PDF)."""
     advertiser_m = re.search(r'Advertiser:\s*(.+)', text)
     campaign_m   = re.search(r'Campaign:\s*(.+)', text)
     coverage_m   = re.search(r'Coverage Area:\s*(.+)', text)
@@ -126,7 +139,7 @@ def parse_lexus_traffic_pdf(pdf_bytes: bytes) -> LexusTrafficInstruction:
 
         # Date range follows the anchor
         after = stripped[anchor_m.end():]
-        date_m = re.search(r'(\d{1,2}/\d{1,2}/\d{2})\s*-\s*(\d{1,2}/\d{1,2}/\d{2})', after)
+        date_m = _DATE_RANGE_RE.search(after)
         if not date_m:
             continue
         date_from  = _parse_date(date_m.group(1))

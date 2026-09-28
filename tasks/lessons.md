@@ -2285,3 +2285,29 @@ the shape I had inferred. The inference was fine; presenting it as decided was t
 a preference, not a derivation — same family as the 9/24 "chosen values vs structural" lesson.
 List the candidates with a rendered example of each and let the user pick before it enters a
 plan; one question with previews costs less than one "no".
+
+---
+
+## A Parser With No Test Parses a Changed Layout to ZERO Rows — and Zero Rows Rendered as a Card Is a Silent Failure
+
+**Session:** Lee, Lexus September traffic on the 2610 contracts — "the parser assigned 0 spots per contract" (2026-09-28)
+
+**Rule:** IW Group's traffic sheets switched from `8/5/26` to `09/11/2026`. `lexus_traffic_parser`
+had no fixture and no test; its date regex silently rejected every ISCI row, the parse route
+returned `periods: []`, the card rendered with a contract search and an Assign button, and the
+toast said "Done — 0 periods assigned". Lee assigned 21 spots by hand and asked three days
+later why. I first read the batch-identical LASTUPDATEs as the tool's work and explained the
+per-flight design; he corrected me: the tool did nothing.
+
+**How to apply:**
+1. Every parser gets the real document as a fixture the day it ships, with the row count
+   pinned — a regex that matches nothing is indistinguishable from an empty document.
+2. A traffic sheet that parses to zero rows is an ERROR item (`items.append({... "error"})`),
+   never an empty card; the page already alerts on `i.error`.
+3. Dates accept 2- and 4-digit years (`_DATE`); a vendor can flip formats between months.
+4. Before explaining a "0 assigned" report as design, run the parser on the exact file and
+   count rows. The DB timestamps told me WHEN, not WHO — Etere's line-level assign also writes
+   a whole line's spots in one statement.
+5. Same day, same sheets: IW Group's file names and row labels disagree (`SFO_HINGLISH.pdf`
+   rows say "Vietnamese", `_ENG_`/`_VT_` in the title is the truth); the card routes by the
+   contract the user picks, so no misassignment, but tell the agency.

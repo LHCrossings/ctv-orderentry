@@ -9334,6 +9334,19 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
                     elif fmt == "lexus":
                         instr = parse_lexus_traffic_pdf(pdf_bytes)
+                        if not instr.periods:
+                            # A sheet with no ISCI rows is a layout change, not an
+                            # empty order (Lee 9/28: three sheets rendered as cards
+                            # that assigned 0 spots and nobody was told why).
+                            items.append(
+                                {
+                                    "filename": filename,
+                                    "format": "lexus",
+                                    "error": "no ISCI rows found — the sheet layout may "
+                                    "have changed; nothing to assign",
+                                }
+                            )
+                            continue
                         all_isci = list({s.isci for p in instr.periods for s in p.spots})
                         placeholders = ",".join(f"'{c}'" for c in all_isci) if all_isci else "''"
                         cur.execute(
