@@ -484,3 +484,19 @@ pass; Crispin reader gained a rate×spots == Proposed Contract Amount refusal. W
 memory per advertiser; both Winter XMLs written to Lee's !Orders folder for the joint test.
 Lee 9/25: the Discounted Rate Gross column is what the agency wants (120/100 grossed for 15%);
 buyer = the sheet's Agency cell (Crispin LLC — BAAQMD's agency changed), memory re-keyed by agency.
+
+## Polaris AAPI TV Schedule reader — Affordable Santa Clara (2026-09-28)
+Charmaine's new template (Media Name/Program/Days/Time Period/Daypart/Unit/week/# Spot/GROSS/NET/TOTAL)
+- [x] `parse_polaris_xlsx` → dispatcher on header row: old positional reader untouched, new label-mapped reader
+- [x] guards: line spots×gross == TOTAL GROSS COST; order == TOTAL GROSS BUDGET == Total row (spots+$); net ratio uniform; >1 week column refuses
+- [x] per-line spot length from Unit (`:30`) → `PolarisLine.duration_secs`, automation uses it
+- [x] market from the block's `DMA:` cell (SF→SFO, LA→LAX)
+- [x] gather defaults (Lee): code `<code_name> <yymmdd start>`, desc `<description_name> <yymmdd>-<yymmdd>`; length check 32/80
+- [x] separation tuple order fix (customer, order, event)
+- [x] fixtures tests/fixtures/polaris/ (April + Sept); April byte-identical old vs new; tamper tests refuse
+- [ ] ruff clean, commit, push, post_push.sh
+- [x] Total-row spot guard relaxed to a WARNING (sheet formula `=SUM(J11:J17)` counts 13 of 25; dollars reconcile 3 ways) — surfaced in gather + web bridge header
+- [x] Polaris customer lookup/upsert moved from the retired sqlite customers.db to dbo.CTV_Customers (CustomerRepository)
+
+### Review
+Reader dispatches on the header row; April fixture parses identical old vs new (10 lines / 26 spots / $4,100). Sept: 7 paid lines, 25 spots, $4,276, SFO, :30. Nine tamper tests refuse; no-op mutation parses equal. 925+ unit tests green. Live entry pending — Lee runs the gather (482, code `Polaris ASC 260929`).

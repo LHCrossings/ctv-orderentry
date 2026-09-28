@@ -8,8 +8,7 @@ Master market: NYC (standard default — Polaris is not WorldLink/DAL).
 Billing: agency (charge_to="Customer share indicating agency %", invoice_header="Agency").
 """
 
-import os
-import sqlite3
+from datetime import datetime
 from typing import Optional
 
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
@@ -102,7 +101,7 @@ def _create_polaris_contracts_direct(order: 'PolarisOrder', user_input: dict) ->
                     spots_per_week=ln.total_spots,
                     date_from=_parse_date(flight_start),
                     date_to=_parse_date(flight_end),
-                    duration=_secs_to_duration(30),
+                    duration=_secs_to_duration(ln.duration),
                     is_bonus=is_bonus,
                     booking_code=booking_code,
                     separation_intervals=separation,
@@ -145,31 +144,34 @@ _MARKET_SHORT = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _lookup_customer(name: str, db_path: str = CUSTOMER_DB_PATH) -> Optional[dict]:
-    """Case-insensitive lookup in customers.db; falls back to partial match."""
-    if not os.path.exists(db_path):
-        return None
+    """Look the advertiser up in the shared dbo.CTV_Customers table (the sqlite
+    customers.db this used to read is retired): exact Polaris record, then any
+    order type, then fuzzy."""
     try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT * FROM customers WHERE LOWER(customer_name) = LOWER(?)", (name,)
+        from src.data_access.repositories.customer_repository import CustomerRepository
+        from src.domain.enums import OrderType
+
+        repo = CustomerRepository(db_path)
+        cust = (
+            repo.find_by_name(name, OrderType.POLARIS)
+            or repo.find_by_name_any_type(name)
+            or repo.find_by_name_fuzzy(name, OrderType.POLARIS)
         )
-        row = cur.fetchone()
-        if row:
-            conn.close()
-            return dict(row)
-        cur.execute("SELECT * FROM customers")
-        name_lower = name.lower()
-        for row in cur.fetchall():
-            n = row["customer_name"].lower()
-            if n in name_lower or name_lower in n:
-                conn.close()
-                return dict(row)
-        conn.close()
     except Exception as exc:
         print(f"[CUSTOMER DB] ⚠ Lookup error: {exc}")
-    return None
+        return None
+    if cust is None:
+        return None
+    return {
+        "customer_id": cust.customer_id,
+        "customer_name": cust.customer_name,
+        "code_name": cust.code_name,
+        "description_name": cust.description_name,
+        "include_market_in_code": int(cust.include_market_in_code),
+        "separation_customer": cust.separation_customer,
+        "separation_order": cust.separation_order,
+        "separation_event": cust.separation_event,
+    }
 
 
 def _upsert_customer(
@@ -180,24 +182,56 @@ def _upsert_customer(
     include_market: bool,
     db_path: str = CUSTOMER_DB_PATH,
 ) -> None:
-    """Insert or replace Polaris customer record."""
+    """Save the Polaris customer record to dbo.CTV_Customers."""
     try:
-        conn = sqlite3.connect(db_path)
-        cur = conn.cursor()
-        cur.execute(
-            """INSERT OR REPLACE INTO customers
-               (customer_id, customer_name, order_type,
-                code_name, description_name, include_market_in_code,
-                billing_type,
-                separation_customer, separation_event, separation_order)
-               VALUES (?, ?, 'polaris', ?, ?, ?, 'agency', 15, 0, 0)""",
-            (customer_id, customer_name, code_name, description_name, int(include_market)),
+        from src.data_access.repositories.customer_repository import CustomerRepository
+        from src.domain.entities import Customer
+        from src.domain.enums import OrderType
+
+        CustomerRepository(db_path).save(
+            Customer(
+                customer_id=str(customer_id),
+                customer_name=customer_name,
+                order_type=OrderType.POLARIS,
+                billing_type="agency",
+                code_name=code_name,
+                description_name=description_name,
+                include_market_in_code=include_market,
+            )
         )
-        conn.commit()
-        conn.close()
         print(f"[CUSTOMER DB] ✓ Saved: {customer_name} → ID {customer_id}")
     except Exception as exc:
         print(f"[CUSTOMER DB] ✗ Save failed: {exc}")
+
+
+# Etere field widths (INFORMATION_SCHEMA, 2026-09-28)
+CODE_MAX = 32
+DESC_MAX = 80
+
+
+def _yymmdd(mdy: str) -> str:
+    return datetime.strptime(mdy, "%m/%d/%Y").strftime("%y%m%d")
+
+
+def _default_names(
+    code_name: str, description_name: str, start: str, end: str, market_suffix: str = ""
+) -> tuple[str, str]:
+    """Polaris buys arrive one week at a time, so the weekly start date keeps
+    every contract code unique (Lee 9/28, the shape of the six Prop C
+    contracts: 'Yes on Prop C 260526'). Description carries the whole flight."""
+    code = " ".join(p for p in (code_name, market_suffix, _yymmdd(start)) if p)
+    desc = f"{description_name} {_yymmdd(start)}-{_yymmdd(end)}".strip()
+    return code, desc
+
+
+def _prompt_within(label: str, default: str, limit: int) -> str:
+    """Bracket-default prompt that re-prompts until the value fits Etere's column."""
+    while True:
+        raw = input(f"  {label} [{default}]: ").strip()
+        value = raw or default
+        if len(value) <= limit:
+            return value
+        print(f"  ✗ {len(value)} characters — Etere allows {limit}. Shorten it.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -231,7 +265,9 @@ def gather_polaris_inputs(xlsx_path: str) -> Optional[dict]:
         tf, tt = ln.get_time_from_to()
         rate_label = "BONUS" if ln.is_bonus else f"${ln.rate}"
         print(f"    [{ln.market}]  {ln.days:<8s}  {ln.time_str:<15s}  "
-              f"{ln.program:<28s}  {rate_label}  ×{ln.total_spots}")
+              f"{ln.program:<28s}  :{ln.duration}  {rate_label}  ×{ln.total_spots}")
+    for w in getattr(order, "warnings", []):
+        print(f"  ⚠ {w}")
     print(f"{'─'*60}")
 
     # ── Flight date confirmation (political orders often arrive day-of) ────────
@@ -279,10 +315,10 @@ def gather_polaris_inputs(xlsx_path: str) -> Optional[dict]:
             print("[CANCELLED] No customer ID entered.")
             return None
         code_name = input(
-            "  Enter contract code prefix (e.g. 'POLARIS'): "
+            "  Enter contract code prefix (e.g. 'Polaris ASC'): "
         ).strip()
         description_name = input(
-            "  Enter description prefix (e.g. 'Polaris'): "
+            "  Enter description prefix (e.g. 'Affordable Santa Clara, Supporting Ferraris'): "
         ).strip()
         inc = input(
             "  Append market to contract code? (y/N): "
@@ -297,23 +333,23 @@ def gather_polaris_inputs(xlsx_path: str) -> Optional[dict]:
     contracts: dict[str, dict] = {}
     for market in order.markets:
         suffix = _MARKET_SHORT.get(market, market) if include_market else ""
-        default_code = f"{code_name}{suffix}" if code_name else market
-        default_desc = description_name if description_name else order.advertiser
+        default_code, default_desc = _default_names(
+            code_name or market, description_name or order.advertiser,
+            actual_start, actual_end, suffix,
+        )
 
         print(f"\n  Market: {market}")
-        code_in = input(f"  Contract code [{default_code}]: ").strip()
-        desc_in = input(f"  Contract description [{default_desc}]: ").strip()
         contracts[market] = {
-            "code":        code_in  if code_in  else default_code,
-            "description": desc_in  if desc_in  else default_desc,
+            "code":        _prompt_within("Contract code", default_code, CODE_MAX),
+            "description": _prompt_within("Contract description", default_desc, DESC_MAX),
         }
 
-    # ── Separation ────────────────────────────────────────────────────────────
+    # ── Separation: (customer, order, event) — the order the entry API takes ──
     if existing:
         sep_c = int(existing.get("separation_customer", 15) or 15)
-        sep_e = int(existing.get("separation_event",    0)  or 0)
         sep_o = int(existing.get("separation_order",    0)  or 0)
-        separation = (sep_c, sep_e, sep_o)
+        sep_e = int(existing.get("separation_event",    0)  or 0)
+        separation = (sep_c, sep_o, sep_e)
     else:
         separation = (15, 0, 0)
 

@@ -2268,3 +2268,20 @@ write (here: `rev-parse HEAD == pushed head`), not a proxy for it.
 3. When `git push` itself hangs: probe with `/dev/tcp/github.com/22`; if open, retry with
    `GIT_SSH_COMMAND="ssh -o ConnectTimeout=20 -o ServerAliveInterval=10"` — that is what
    got the WL push through after four plain attempts timed out.
+
+---
+
+## A Naming Convention Is the User's Call — Offer the Options, Don't Plan One In
+
+**Session:** Lee, Polaris / Affordable Santa Clara reader (2026-09-28)
+
+**Rule:** I put "code `<prefix> <yymmdd>`, description `<prefix> <dates>`" into the plan as a
+settled item because six Prop C contracts had that shape. Lee: "No, let's figure something
+else for default code and description." Asked with three concrete previews (house agency
+convention / weekly start date / stored template) he picked one in a single reply — and it was
+the shape I had inferred. The inference was fine; presenting it as decided was the mistake.
+
+**How to apply:** anything an operator TYPES per contract (code, description, R32 comment) is
+a preference, not a derivation — same family as the 9/24 "chosen values vs structural" lesson.
+List the candidates with a rendered example of each and let the user pick before it enters a
+plan; one question with previews costs less than one "no".

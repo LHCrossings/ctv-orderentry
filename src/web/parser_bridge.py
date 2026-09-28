@@ -449,8 +449,9 @@ def _normalize_order(order_obj) -> dict:
             ln["rate"] * ln["total_spots"] for ln in normalized_lines if not ln["is_bonus"]
         )
 
-    # Warnings
-    warnings = []
+    # Warnings — a parser's own findings first (Polaris: the sheet's Total-row spot
+    # formula skipping rows), then the generic checks
+    warnings = [str(w) for w in (getattr(order_obj, "warnings", None) or [])]
     if getattr(order_obj, "rates_are_net", False):
         warnings.append("Rates in this PDF are NET — gross-up required before entry.")
     if getattr(order_obj, "rate_missing", False):
