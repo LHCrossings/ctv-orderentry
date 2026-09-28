@@ -756,9 +756,17 @@ def apply_window(
                         int((brk_start + 120) * FPS),
                         "COMS",
                     )
+                    # A show with no commercial break in its grid block (Kingdom of God:
+                    # one 60:00 PRGS segment, Ashe 9/28) still takes its PI/PSA/ID at the
+                    # end. Book the filler under the show's own program segment — the
+                    # segment is bookkeeping only, and the trafficPalinse row is dropped.
+                    if not slots:
+                        prgs = _slots(cur, market, date, lo_f - int(3600 * FPS), hi_f, "PRGS")
+                        slots = [s for s in prgs if s["ora"] <= brk_start * FPS] or prgs
                     if not slots:
                         raise RuntimeError(
-                            f"no COMS segment in {hms(lo)}-{hms(hi)} for break {b.after_piece_idx}"
+                            f"no COMS or PRGS segment in {hms(lo)}-{hms(hi)} "
+                            f"for break {b.after_piece_idx}"
                         )
                     slot = min(slots, key=lambda s: abs(s["ora"] - brk_start * FPS))
                     ora = start_f[id(x)]

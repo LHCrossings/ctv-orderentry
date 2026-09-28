@@ -307,3 +307,22 @@ def test_seat_opens_a_gap_when_neighbours_are_dense():
 def test_seat_midpoints_when_room_exists():
     cur = _FakeCur({1: 1000, 2: 2000, 99: 5})
     assert fs._seat(cur, 1, "2026-09-04", 99, 1) == 1500 and cur.xo[2] == 2000
+
+
+def test_religious_open_takes_no_break_before_kingdom_of_god(monkeypatch):
+    # Ashe 9/28: KOG is a 10s RELIGIOUSOPEN + one 58:30 piece, no COMS break. All the
+    # fill (one :60 PI, one :10 PSA, the ID) goes after the show, never between the
+    # opener and the show.
+    rows = [
+        _row(1, H8, 10.5, "PGM", "F", "ReligiousOpen10E01"),
+        _row(2, H8 + 10.5, 3510, "PGM", "T", "KOG092726"),
+        _row(9, H9, 600, "PGM", "F", "NEXT"),
+    ]
+    inv = [
+        Filler(9001, "PI-900-060: New", 60.0, "PI", "PI-900", 0),
+        Filler(9002, "PSA-900-010: New", 10.0, "PSA", "PSA-900", 0),
+    ]
+    r = _plan(rows, inv, monkeypatch)
+    assert r["state"] == "ready" and r["ok"], r["notes"]
+    assert {e["break"] for e in r["edits"] if e["op"] == "insert"} == {1}
+    assert r["n_insert"] == 3

@@ -33,6 +33,9 @@ ID_MIN_AIR = 5.0
 ID_TARGET_MAX = 10.0
 FINAL_BREAK_MAX = 150.0  # 2:30 — Lee
 FINAL_BREAK_SPILL = 180.0  # ≥3:00 → spill PIs into interior breaks
+# Show openers that are not named BUMP_*_OPEN: the 10s religious-programming open that
+# precedes Kingdom of God (Ashe 9/28). No break belongs between an opener and its show.
+OPENER_CODE_PREFIXES = ("RELIGIOUSOPEN",)
 PI_RE = re.compile(r"^(PI|PSA)-(\d{3})-(\d{3})", re.I)
 
 
@@ -420,6 +423,8 @@ def plan(evs: list[Ev], inv: list[Filler], hour_end: float, market: int) -> tupl
     pieces = [e for e in kept if e.is_program]
 
     def _is_bump(p: Ev, kind: str) -> bool:
+        if kind == "OPEN" and (p.code or p.desc).upper().startswith(OPENER_CODE_PREFIXES):
+            return True
         return "BUMP" in p.desc.upper() and kind in p.desc.upper()
 
     breaks: list[Break] = []
