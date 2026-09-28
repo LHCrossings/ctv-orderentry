@@ -8,6 +8,7 @@ Master market: NYC (standard default — Polaris is not WorldLink/DAL).
 Billing: agency (charge_to="Customer share indicating agency %", invoice_header="Agency").
 """
 
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -180,9 +181,12 @@ def _upsert_customer(
     code_name: str,
     description_name: str,
     include_market: bool,
+    separation: tuple[int, int, int] = (15, 0, 0),
     db_path: str = CUSTOMER_DB_PATH,
 ) -> None:
-    """Save the Polaris customer record to dbo.CTV_Customers."""
+    """Save the Polaris customer record to dbo.CTV_Customers.  `separation`
+    is (customer, order, event) — the stored values on an update, so learning
+    a prefix never resets a tuned separation."""
     try:
         from src.data_access.repositories.customer_repository import CustomerRepository
         from src.domain.entities import Customer
@@ -194,12 +198,16 @@ def _upsert_customer(
                 customer_name=customer_name,
                 order_type=OrderType.POLARIS,
                 billing_type="agency",
+                separation_customer=int(separation[0]),
+                separation_order=int(separation[1]),
+                separation_event=int(separation[2]),
                 code_name=code_name,
                 description_name=description_name,
                 include_market_in_code=include_market,
             )
         )
-        print(f"[CUSTOMER DB] ✓ Saved: {customer_name} → ID {customer_id}")
+        print(f"[CUSTOMER DB] ✓ Saved: {customer_name} → ID {customer_id}  "
+              f"(code prefix '{code_name}', description prefix '{description_name}')")
     except Exception as exc:
         print(f"[CUSTOMER DB] ✗ Save failed: {exc}")
 
@@ -232,6 +240,24 @@ def _prompt_within(label: str, default: str, limit: int) -> str:
         if len(value) <= limit:
             return value
         print(f"  ✗ {len(value)} characters — Etere allows {limit}. Shorten it.")
+
+
+_CODE_TAIL = re.compile(r"\s+\d{6}$")
+_DESC_TAIL = re.compile(r"\s+\d{6}-\d{6}$")
+
+
+def _learn_prefixes(code: str, description: str, market_suffix: str = "") -> tuple[str, str]:
+    """Back out the customer's code/description prefixes from what the operator
+    typed at the contract prompts, so a hand-corrected name becomes the next
+    order's default (Lee 9/28: 482 was saved with blank prefixes and the
+    corrected names never reached the record).  Strips the `yymmdd` /
+    `yymmdd-yymmdd` tails `_default_names` adds and, when the market rides in
+    the code, its short suffix."""
+    code_prefix = _CODE_TAIL.sub("", code.strip())
+    if market_suffix and code_prefix.upper().endswith(" " + market_suffix.upper()):
+        code_prefix = code_prefix[: -len(market_suffix) - 1]
+    desc_prefix = _DESC_TAIL.sub("", description.strip())
+    return code_prefix.strip(), desc_prefix.strip()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -314,35 +340,48 @@ def gather_polaris_inputs(xlsx_path: str) -> Optional[dict]:
         if not customer_id:
             print("[CANCELLED] No customer ID entered.")
             return None
-        code_name = input(
-            "  Enter contract code prefix (e.g. 'Polaris ASC'): "
-        ).strip()
-        description_name = input(
-            "  Enter description prefix (e.g. 'Affordable Santa Clara, Supporting Ferraris'): "
-        ).strip()
-        inc = input(
-            "  Append market to contract code? (y/N): "
-        ).strip().lower()
-        include_market = inc in ("y", "yes")
-        _upsert_customer(
-            customer_id, order.advertiser,
-            code_name, description_name, include_market,
-        )
+        if include_market:
+            inc = input("  Append market to contract code? [Y/n]: ").strip().lower()
+            include_market = inc not in ("n", "no")
+        # Code/description prefixes are learned from the contract prompts below
+        # and saved with the record — never asked blind up front.
 
     # ── Per-market contract code / description ────────────────────────────────
+    # A record with no prefix yet gets a suggestion in the house shape
+    # (`Polaris <yymmdd>`, advertiser trimmed to fit); whatever the operator
+    # types is learned back into the record as the next default.
+    date_tail = len(f" {_yymmdd(actual_start)}-{_yymmdd(actual_end)}")
+    suggested_code = code_name or "Polaris"
+    suggested_desc = description_name or order.advertiser.strip()[: DESC_MAX - date_tail].rstrip(" ,")
     contracts: dict[str, dict] = {}
+    learned: Optional[tuple[str, str]] = None
     for market in order.markets:
         suffix = _MARKET_SHORT.get(market, market) if include_market else ""
         default_code, default_desc = _default_names(
-            code_name or market, description_name or order.advertiser,
-            actual_start, actual_end, suffix,
+            suggested_code, suggested_desc, actual_start, actual_end, suffix,
         )
 
         print(f"\n  Market: {market}")
-        contracts[market] = {
-            "code":        _prompt_within("Contract code", default_code, CODE_MAX),
-            "description": _prompt_within("Contract description", default_desc, DESC_MAX),
-        }
+        code = _prompt_within("Contract code", default_code, CODE_MAX)
+        desc = _prompt_within("Contract description", default_desc, DESC_MAX)
+        contracts[market] = {"code": code, "description": desc}
+        if learned is None:
+            learned = _learn_prefixes(code, desc, suffix)
+
+    if learned and learned != (code_name, description_name):
+        code_name, description_name = learned
+        if existing:
+            sep = (
+                int(existing.get("separation_customer", 15) or 15),
+                int(existing.get("separation_order", 0) or 0),
+                int(existing.get("separation_event", 0) or 0),
+            )
+        else:
+            sep = (15, 0, 0)
+        _upsert_customer(
+            customer_id, order.advertiser,
+            code_name, description_name, include_market, sep,
+        )
 
     # ── Separation: (customer, order, event) — the order the entry API takes ──
     if existing:

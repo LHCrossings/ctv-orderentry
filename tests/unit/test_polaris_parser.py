@@ -31,7 +31,7 @@ from browser_automation.parsers.polaris_parser import (  # noqa: E402
     parse_polaris_file,
     parse_polaris_xlsx,
 )
-from browser_automation.polaris_automation import _default_names  # noqa: E402
+from browser_automation.polaris_automation import _default_names, _learn_prefixes  # noqa: E402
 
 FIX = _root / "tests" / "fixtures" / "polaris"
 SEPT = str(FIX / "affordable-santa-clara-2026-09-29.xlsx")
@@ -217,6 +217,22 @@ def test_default_names_use_weekly_start_date():
     assert len(code) <= 32 and len(desc) <= 80
     code_m, _ = _default_names("Polaris ASC", "x", "9/29/2026", "10/5/2026", "SF")
     assert code_m == "Polaris ASC SF 260929"
+
+
+def test_learned_prefixes_round_trip_through_default_names():
+    """What the operator typed for 3132 (9/28) must come back as the next default."""
+    code_p, desc_p = _learn_prefixes("Polaris ASC 260929", "Affordable Santa Clara 260929-261005")
+    assert (code_p, desc_p) == ("Polaris ASC", "Affordable Santa Clara")
+    assert _default_names(code_p, desc_p, "10/6/2026", "10/12/2026") == (
+        "Polaris ASC 261006",
+        "Affordable Santa Clara 261006-261012",
+    )
+    # market suffix in the code is stripped too; a code with no tail is kept whole
+    assert _learn_prefixes("POLARIS SF 260429", "Yes on Prop C 260429-260504", "SF")[0] == "POLARIS"
+    assert _learn_prefixes("Polaris ASC", "Affordable Santa Clara") == (
+        "Polaris ASC",
+        "Affordable Santa Clara",
+    )
 
 
 # ── Web bridge ───────────────────────────────────────────────────────────────

@@ -2566,10 +2566,16 @@ class OrderProcessingService:
             else:
                 print("\n✗ Polaris order processing failed")
 
+            # The gather stores one {code, description} per market under
+            # "contracts"; report each gathered code so _enrich_results can
+            # resolve its Etere ID (the summary used to print "POLARIS").
             inp = order.order_input
-            code = inp.get("order_code") if isinstance(inp, dict) else None
+            gathered = inp.get("contracts", {}) if isinstance(inp, dict) else {}
+            codes = [c.get("code") for c in gathered.values() if c.get("code")] or [
+                str(contract_num)
+            ]
             contracts = (
-                [Contract(contract_number=code or "POLARIS", order_type=OrderType.POLARIS)]
+                [Contract(contract_number=c, order_type=OrderType.POLARIS) for c in codes]
                 if success
                 else []
             )

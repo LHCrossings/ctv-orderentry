@@ -500,3 +500,15 @@ Charmaine's new template (Media Name/Program/Days/Time Period/Daypart/Unit/week/
 
 ### Review
 Reader dispatches on the header row; April fixture parses identical old vs new (10 lines / 26 spots / $4,100). Sept: 7 paid lines, 25 spots, $4,276, SFO, :30. Nine tamper tests refuse; no-op mutation parses equal. 925+ unit tests green. Live entry pending — Lee runs the gather (482, code `Polaris ASC 260929`).
+
+## Polaris naming defaults learned from the contract prompts (2026-09-28)
+
+Lee's first live gather for Affordable Santa Clara (482) saved blank code/description prefixes
+(the new-customer prompts had no bracket default) and offered `SFO 260929` + the 130-char sheet
+name; he typed `Polaris ASC 260929` / `Affordable Santa Clara 260929-261005` by hand (3132).
+
+- [x] Drop the blind prefix prompts; suggest `Polaris <yymmdd>` / advertiser trimmed to 80 when the record has no prefix
+- [x] `_learn_prefixes`: strip the date tails (and market suffix) from what was typed, upsert onto the record with its stored separation
+- [x] Fix 482 in dbo.CTV_Customers: `Polaris ASC` / `Affordable Santa Clara` (read back)
+- [x] Handler reports the gathered codes (summary printed `Contract POLARIS`)
+- [x] Round-trip unit test; Polaris + service suites green (40 passed)
