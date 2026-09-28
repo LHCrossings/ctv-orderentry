@@ -1533,16 +1533,27 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 )
             )
 
-            wb = openpyxl.load_workbook(_io.BytesIO(book_bytes), keep_vba=True)
+            def _open(label: str, data: bytes, **kw):
+                # A workbook is a zip: a CRC/BadZipFile error means THIS upload is
+                # truncated or half-copied (Lee 9/28: the error named only
+                # 'xl/workbook.xml', not which of the 11 files it came from).
+                try:
+                    return openpyxl.load_workbook(_io.BytesIO(data), **kw)
+                except Exception as exc:
+                    raise ValueError(
+                        f"{label} is not a readable workbook ({exc}) — it is probably "
+                        f"truncated or still copying; re-save or re-copy it and try again "
+                        f"(uploaded {len(data):,} bytes)"
+                    ) from exc
+
+            wb = _open("Billing book", book_bytes, keep_vba=True)
             master_name = next((s for s in wb.sheetnames if s.upper() == "MASTER"), None)
             if master_name is None:
                 raise ValueError("Billing book has no 'MASTER' tab")
             master = wb[master_name]
 
             for fname, log_bytes in logs:
-                log_wb = openpyxl.load_workbook(
-                    _io.BytesIO(log_bytes), data_only=True, keep_vba=False
-                )
+                log_wb = _open(f"Log file {fname}", log_bytes, data_only=True, keep_vba=False)
                 tab_name = next(
                     (s for s in log_wb.sheetnames if s.upper() == "MASTER FOR BILLING"), None
                 )
