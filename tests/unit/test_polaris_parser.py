@@ -24,6 +24,7 @@ for p in [str(_root), str(_root / "src")]:
     if p not in sys.path:
         sys.path.insert(0, p)
 
+from browser_automation import polaris_automation  # noqa: E402
 from browser_automation.parsers import polaris_parser  # noqa: E402
 from browser_automation.parsers.polaris_parser import (  # noqa: E402
     _parse_positional_rows,
@@ -233,6 +234,35 @@ def test_learned_prefixes_round_trip_through_default_names():
         "Polaris ASC",
         "Affordable Santa Clara",
     )
+
+
+def test_direct_entry_puts_the_full_committee_name_in_the_header_note(sept, monkeypatch):
+    """Lee 9/28 (3132): description stays the short house name, the sheet's
+    130-char committee name rides in CONTRATTITESTATA.NOTE."""
+    from unittest.mock import MagicMock
+
+    import browser_automation.etere_direct_client as edc
+
+    client = MagicMock()
+    client.create_contract_header.return_value = 3132
+    monkeypatch.setattr(edc, "connect", lambda: MagicMock())
+    monkeypatch.setattr(edc, "EtereDirectClient", lambda *a, **k: client)
+
+    result = polaris_automation._create_polaris_contracts_direct(
+        sept,
+        {
+            "customer_id": "482",
+            "contracts": {"SFO": {"code": "Polaris ASC 260929",
+                                  "description": "Affordable Santa Clara 260929-261005"}},
+            "separation": (25, 0, 0),
+        },
+    )
+    assert result == "3132"
+    kw = client.create_contract_header.call_args.kwargs
+    assert kw["code"] == "Polaris ASC 260929"
+    assert kw["description"] == "Affordable Santa Clara 260929-261005"
+    assert kw["note"] == LONG_NAME
+    assert client.add_contract_line.call_count == len(sept.lines)
 
 
 # ── Web bridge ───────────────────────────────────────────────────────────────

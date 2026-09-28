@@ -77,6 +77,10 @@ def _create_polaris_contracts_direct(order: 'PolarisOrder', user_input: dict) ->
                 contract_type=1,
                 billing_type="agency",
                 allow_rename=True,
+                # The description keeps the short house name; the sheet's
+                # full committee name (130+ chars) goes in the header note
+                # (Lee 9/28, contract 3132).
+                note=order.advertiser.strip(),
             )
             if not contract_id:
                 print(f"[POLARIS DIRECT] ✗ Failed to create contract for {market}")

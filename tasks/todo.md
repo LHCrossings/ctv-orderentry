@@ -512,3 +512,4 @@ name; he typed `Polaris ASC 260929` / `Affordable Santa Clara 260929-261005` by 
 - [x] Fix 482 in dbo.CTV_Customers: `Polaris ASC` / `Affordable Santa Clara` (read back)
 - [x] Handler reports the gathered codes (summary printed `Contract POLARIS`)
 - [x] Round-trip unit test; Polaris + service suites green (40 passed)
+- [x] Header note = the sheet's full committee name (Lee typed it by hand on 3132 after the first save was lost); test pins the `note=` kwarg
