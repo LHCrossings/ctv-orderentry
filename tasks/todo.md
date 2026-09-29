@@ -525,4 +525,6 @@ them); HIATUS-marked assets are never touched. First sweep = assets marked expir
 - [ ] `scripts/purge_s3_media.py --sweep expired [--apply] [--limit N]` dry-run default; plan CSV to logs/
 - [x] unit tests: guards in SQL, literal formatting, only S3-confirmed keys leave the DB, DB failure rolls back, limit, dry run makes no calls
 - [x] ruff clean; dry run on live data (3,242 deletable / 3.43 TB; 611 dangling records, 3 size mismatches skipped) — [ ] reviewed by Lee; `--apply --limit 100` first, then the rest
+- [x] Control Room page `/traffic/s3-cleanup` (card on /traffic): scan → four categories, one action each (delete / remove dead reference / report-only), show-family groups with checkboxes, confirm(), streamed apply log, rescan. Live scan through the real route: 3,242 / 611 / 3 / 0, 73 groups.
+- [ ] Lee runs the first live delete from the page (one small group first)
 - [ ] later: `--sweep aged` (not-yet-expired programs last aired before a cutoff) + stamp DATA_SCAD like "mark as expired"

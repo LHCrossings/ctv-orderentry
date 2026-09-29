@@ -28,6 +28,7 @@ from web.routes.monitor_wall import build_monitor_wall_router
 from web.routes.orders import build_router
 from web.routes.programming import build_programming_router
 from web.routes.reports import build_reports_router
+from web.routes.s3_cleanup import build_s3_cleanup_router
 
 # ---------------------------------------------------------------------------
 # App factory
@@ -59,6 +60,7 @@ def create_app(config: ApplicationConfig | None = None) -> FastAPI:
     app.include_router(build_broadcast_health_router(templates))
     app.include_router(build_programming_router(templates))
     app.include_router(build_finish_router(templates))
+    app.include_router(build_s3_cleanup_router(templates))
     app.include_router(build_monitor_wall_router(templates))
 
     # Inject the global Broadcast Health indicator on every HTML page. Doing it

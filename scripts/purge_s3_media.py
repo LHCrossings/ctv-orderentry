@@ -74,7 +74,7 @@ def main() -> None:
     conn = connect()
 
     rows = smp.fetch_expired(conn, a.today)
-    listing = smp.list_bucket(s3, bucket)
+    listing = smp.probe_sizes(s3, bucket, (r.get("file_name") for r in rows))
     ok, bad = smp.check_rows(rows, listing)
     stamp = f"{dt.datetime.now():%Y%m%d-%H%M%S}"
     plan = ROOT / "logs" / "s3-purge" / f"s3-purge-plan-{a.sweep}-{stamp}.csv"

@@ -146,7 +146,7 @@ class FakeS3:
 
     def head_object(self, Bucket, Key):
         if Key in self.keys:
-            return {}
+            return {"ContentLength": 10}
         exc = Exception("404")
         exc.response = {"Error": {"Code": "404"}}
         raise exc
@@ -217,3 +217,11 @@ def test_short_form_types_never_eligible():
     assert set(smp.ELIGIBLE_TYPES) == {"PGM", "PGMX"}
     for t in ("COM", "PSA", "PER", "ID", "BAR", "BB", "INT", "AV", "PRO", "GEN", "FILM"):
         assert t not in smp.ELIGIBLE_TYPES
+
+
+def test_probe_sizes_heads_each_key_once_and_drops_missing():
+    s3 = FakeS3(["K1.mp4", "K2.mp4"])
+    assert smp.probe_sizes(s3, "b", ["K1.mp4", "K1.mp4", "K2.mp4", "K9.mp4", None], workers=2) == {
+        "K1.mp4": 10,
+        "K2.mp4": 10,
+    }

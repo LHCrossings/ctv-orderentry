@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>S3 Cleanup — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        .scan-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 1.25rem 1.5rem;
+            max-width: 720px;
+            margin: 0 auto 1.5rem;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .scan-card .scan-note { flex: 1; font-size: .85rem; color: var(--text-muted); min-width: 16rem; }
+        .btn-scan {
+            background: var(--nord10);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: .55rem 1.25rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .btn-scan:disabled { opacity: .5; cursor: not-allowed; }
+
+        #results { max-width: 1000px; margin: 0 auto; }
+
+        .info-banner {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: .65rem 1rem;
+            margin-bottom: 1rem;
+            font-size: .85rem;
+            color: var(--text-muted);
+        }
+        .info-banner strong { color: var(--text-primary); }
+
+        .cat {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            margin-bottom: 1.25rem;
+            overflow: hidden;
+        }
+        .cat-head {
+            display: flex;
+            align-items: baseline;
+            gap: 1rem;
+            flex-wrap: wrap;
+            padding: .85rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+        }
+        .cat-head h3 { margin: 0; font-size: 1rem; color: var(--text-primary); }
+        .cat-head .cat-sum { color: var(--text-muted); font-size: .85rem; }
+        .cat-head .cat-sum strong { color: var(--text-primary); }
+        .cat-head .cat-action { width: 100%; font-size: .82rem; color: var(--text-muted); }
+        .cat.delete .cat-head { border-left: 4px solid var(--nord11); }
+        .cat.dangling .cat-head { border-left: 4px solid var(--nord12); }
+        .cat.size_mismatch .cat-head, .cat.booked .cat-head { border-left: 4px solid var(--nord13); }
+        .cat-body { padding: .75rem 1rem; }
+        .cat-empty { color: var(--text-muted); font-size: .88rem; padding: .25rem 0; }
+
+        .fam {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: .5rem;
+            overflow: hidden;
+        }
+        .fam-head {
+            display: flex;
+            align-items: center;
+            gap: .9rem;
+            padding: .5rem .8rem;
+            flex-wrap: wrap;
+            cursor: pointer;
+        }
+        .fam-head input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; }
+        .fam-name { font-weight: 700; color: var(--nord10); min-width: 11rem; }
+        .fam-counts { color: var(--text-muted); font-size: .85rem; white-space: nowrap; }
+        .fam-counts strong { color: var(--text-primary); }
+        .fam-range { color: var(--text-muted); font-size: .82rem; flex: 1; }
+        .fam-toggle { color: var(--text-muted); font-size: .8rem; user-select: none; }
+
+        table.file-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: .8rem;
+            border-top: 1px solid var(--border-color);
+        }
+        .file-table th {
+            text-align: left;
+            padding: .4rem .75rem;
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: .72rem;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
+        .file-table td {
+            padding: .3rem .75rem;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+            white-space: nowrap;
+        }
+        .file-table tr:last-child td { border-bottom: none; }
+        .file-table td.num { text-align: right; }
+
+        .action-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: .6rem .9rem;
+            margin-top: .75rem;
+        }
+        .action-bar .sel-summary { font-size: .88rem; color: var(--text-muted); }
+        .action-bar .sel-summary strong { color: var(--text-primary); }
+        .btn-apply {
+            background: var(--nord11);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: .55rem 1.25rem;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .cat.dangling .btn-apply { background: var(--nord12); }
+        .btn-apply:disabled { opacity: .45; cursor: not-allowed; }
+        .btn-link {
+            background: none;
+            border: none;
+            color: var(--nord10);
+            font-size: .82rem;
+            cursor: pointer;
+            text-decoration: underline;
+            padding: 0;
+        }
+
+        .terminal {
+            background: var(--nord0);
+            color: var(--nord4);
+            border-radius: 8px;
+            padding: .9rem 1rem;
+            margin: 1rem auto;
+            max-width: 1000px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: .8rem;
+            max-height: 320px;
+            overflow: auto;
+            white-space: pre-wrap;
+        }
+        .terminal .t-info { color: var(--nord8); }
+        .terminal .t-warn { color: var(--nord13); }
+        .terminal .t-err { color: var(--nord11); }
+        .terminal .t-done { color: var(--nord14); font-weight: 700; }
+
+        #error-msg, #success-msg {
+            max-width: 1000px;
+            margin: 0 auto 1rem;
+            padding: .65rem 1rem;
+            border-radius: 8px;
+            font-size: .9rem;
+        }
+        #error-msg { background: rgba(191,97,106,.12); border: 1px solid var(--nord11); color: var(--nord11); }
+        #success-msg { background: rgba(163,190,140,.15); border: 1px solid var(--nord14); color: var(--text-primary); }
+        .spinner {
+            display: inline-block;
+            width: 12px; height: 12px;
+            border: 2px solid rgba(255,255,255,.4);
+            border-top-color: #fff;
+            border-radius: 50%;
+            margin-right: .5rem;
+            animation: spin .8s linear infinite;
+            vertical-align: -2px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="home-btn">🏠</a>
+            <div class="logo-icon">📡</div>
+            <div>
+                <h1>S3 <span>Cleanup</span></h1>
+                <div class="logo-sub">Control Room · Traffic</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="portal-intro">
+        <h2>S3 Cleanup</h2>
+        <p>Program assets marked <em>expired</em> in Etere that still hold a file in S3.
+           The same thing as Etere's "Delete on → AWS S3" workflow, in batches instead of one
+           Datamover job per file. Commercials, PSAs, PIs, station IDs, bumpers, opens and
+           anything marked HIATUS are never touched.</p>
+    </div>
+
+    <div class="scan-card">
+        <div class="scan-note">The scan reads Etere and checks each file in S3 without touching it
+            (about 40 seconds). Nothing is deleted until you pick groups and confirm.</div>
+        <button class="btn-scan" id="scanBtn" onclick="runScan()">Scan</button>
+    </div>
+
+    <div id="error-msg" style="display:none;"></div>
+    <div id="success-msg" style="display:none;"></div>
+    <div id="results" style="display:none;"></div>
+    <div id="terminal" class="terminal" style="display:none;"></div>
+</main>
+
+<script>
+let scanData = null;
+const CAT_BUTTON = {
+    delete:   (n, gb) => `Delete ${n} file${n === 1 ? '' : 's'} from S3 (${gb}) and remove references`,
+    dangling: (n)     => `Remove ${n} dead reference${n === 1 ? '' : 's'}`,
+};
+
+function gb(bytes) {
+    if (bytes >= 1e12) return (bytes / 1e12).toFixed(2) + ' TB';
+    if (bytes >= 1e9) return (bytes / 1e9).toFixed(1) + ' GB';
+    return (bytes / 1e6).toFixed(0) + ' MB';
+}
+function fmtDate(iso) {
+    if (!iso) return '—';
+    const [y, m, d] = iso.split('-').map(Number);
+    return `${m}/${d}/${String(y).slice(2)}`;
+}
+function escapeHtml(s) {
+    return (s || '').replace(/[&<>"']/g,
+        c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+async function runScan() {
+    const btn = document.getElementById('scanBtn');
+    const errDiv = document.getElementById('error-msg');
+    const resultsDiv = document.getElementById('results');
+    errDiv.style.display = 'none';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Scanning…';
+    try {
+        const resp = await fetch('/api/traffic/s3-cleanup/scan');
+        if (!resp.ok) throw new Error((await resp.json()).detail || `HTTP ${resp.status}`);
+        scanData = await resp.json();
+        render(scanData);
+    } catch (e) {
+        errDiv.textContent = 'Scan failed: ' + e.message;
+        errDiv.style.display = 'block';
+        resultsDiv.style.display = 'none';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Scan';
+    }
+}
+
+function render(data) {
+    const resultsDiv = document.getElementById('results');
+    const sf = data.short_form;
+    let html = `
+        <div class="info-banner">
+            <span>As of <strong>${fmtDate(data.as_of)}</strong></span>
+            <span><strong>${data.total}</strong> S3 files on expired program assets</span>
+            <span>Short-form kept by rule: <strong>${sf.count}</strong> files, ${gb(sf.bytes)}</span>
+        </div>`;
+
+    html += data.categories.map(cat => {
+        const groups = cat.groups;
+        let body;
+        if (!groups.length) {
+            body = `<div class="cat-empty">None.</div>`;
+        } else {
+            body = groups.map((g, i) => `
+                <div class="fam">
+                    <div class="fam-head" onclick="toggleDetail(event, '${cat.key}', ${i})">
+                        ${cat.actionable ? `<input type="checkbox" class="fam-check fam-check-${cat.key}" data-idx="${i}" checked onclick="event.stopPropagation()" onchange="updateBar('${cat.key}')" />` : ''}
+                        <span class="fam-name">${escapeHtml(g.family)}</span>
+                        <span class="fam-counts"><strong>${g.count}</strong> file${g.count === 1 ? '' : 's'} · <strong>${gb(g.bytes)}</strong></span>
+                        <span class="fam-range">expired ${fmtDate(g.expired_from)}${g.expired_to !== g.expired_from ? ' – ' + fmtDate(g.expired_to) : ''}</span>
+                        <span class="fam-toggle" id="toggle-${cat.key}-${i}">▸ files</span>
+                    </div>
+                    <div id="detail-${cat.key}-${i}" style="display:none;">
+                        <table class="file-table">
+                            <thead><tr><th>Code</th><th>File</th><th>Size</th><th>Expired</th><th>Last aired</th>${cat.actionable ? '' : '<th>Note</th>'}</tr></thead>
+                            <tbody>${g.files.map(f => `
+                                <tr>
+                                    <td>${escapeHtml(f.cod_progra)}</td>
+                                    <td>${escapeHtml(f.file_name || '')}</td>
+                                    <td class="num">${gb(f.size)}</td>
+                                    <td>${fmtDate(f.expired)}</td>
+                                    <td>${fmtDate(f.last_aired)}</td>
+                                    ${cat.actionable ? '' : `<td>${escapeHtml(f.problem)}</td>`}
+                                </tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>`).join('');
+            if (cat.actionable) {
+                body += `
+                <div class="action-bar">
+                    <span class="sel-summary" id="selSummary-${cat.key}"></span>
+                    <span>
+                        <button class="btn-link" onclick="setAll('${cat.key}', true)">select all</button> ·
+                        <button class="btn-link" onclick="setAll('${cat.key}', false)">none</button>
+                        <button class="btn-apply" id="applyBtn-${cat.key}" onclick="runApply('${cat.key}')" style="margin-left:1rem;"></button>
+                    </span>
+                </div>`;
+            }
+        }
+        return `
+            <div class="cat ${cat.key}">
+                <div class="cat-head">
+                    <h3>${escapeHtml(cat.label)}</h3>
+                    <span class="cat-sum"><strong>${cat.count}</strong> file${cat.count === 1 ? '' : 's'}${cat.bytes ? ` · <strong>${gb(cat.bytes)}</strong>` : ''}</span>
+                    <span class="cat-action">${escapeHtml(cat.action)}</span>
+                </div>
+                <div class="cat-body">${body}</div>
+            </div>`;
+    }).join('');
+
+    resultsDiv.innerHTML = html;
+    resultsDiv.style.display = 'block';
+    data.categories.filter(c => c.actionable && c.groups.length).forEach(c => updateBar(c.key));
+}
+
+function toggleDetail(ev, key, i) {
+    if (ev.target.tagName === 'INPUT') return;
+    const d = document.getElementById(`detail-${key}-${i}`);
+    const t = document.getElementById(`toggle-${key}-${i}`);
+    const open = d.style.display === 'none';
+    d.style.display = open ? 'block' : 'none';
+    t.textContent = open ? '▾ hide' : '▸ files';
+}
+
+function catByKey(key) { return scanData.categories.find(c => c.key === key); }
+
+function setAll(key, v) {
+    document.querySelectorAll(`.fam-check-${key}`).forEach(cb => { cb.checked = v; });
+    updateBar(key);
+}
+
+function selected(key) {
+    const cat = catByKey(key);
+    const ids = [], groups = [];
+    let bytes = 0;
+    document.querySelectorAll(`.fam-check-${key}:checked`).forEach(cb => {
+        const g = cat.groups[Number(cb.dataset.idx)];
+        ids.push(...g.ids); bytes += g.bytes; groups.push(g.family);
+    });
+    return { ids, bytes, groups };
+}
+
+function updateBar(key) {
+    const s = selected(key);
+    const el = document.getElementById(`selSummary-${key}`);
+    if (!el) return;
+    el.innerHTML = `<strong>${s.groups.length}</strong> group${s.groups.length === 1 ? '' : 's'} · <strong>${s.ids.length}</strong> files · <strong>${gb(s.bytes)}</strong>`;
+    const btn = document.getElementById(`applyBtn-${key}`);
+    btn.textContent = CAT_BUTTON[key](s.ids.length, gb(s.bytes));
+    btn.disabled = s.ids.length === 0;
+}
+
+async function runApply(key) {
+    const s = selected(key);
+    if (!s.ids.length) return;
+    const msg = key === 'delete'
+        ? `Delete ${s.ids.length} files (${gb(s.bytes)}) from S3 and remove their references from the Media Library?\n\nGroups: ${s.groups.join(', ')}\n\nThe bucket is not versioned: the files cannot be brought back. The Media Library rows are written to a restore file first.`
+        : `Remove ${s.ids.length} dead references from the Media Library?\n\nGroups: ${s.groups.join(', ')}\n\nNo file exists in S3 for these. The rows are written to a restore file first.`;
+    if (!confirm(msg)) return;
+
+    const term = document.getElementById('terminal');
+    const errDiv = document.getElementById('error-msg');
+    const okDiv = document.getElementById('success-msg');
+    errDiv.style.display = 'none'; okDiv.style.display = 'none';
+    term.innerHTML = ''; term.style.display = 'block';
+    document.querySelectorAll('.btn-apply, .btn-scan').forEach(b => b.disabled = true);
+    const addLine = (raw) => {
+        const div = document.createElement('div');
+        div.className = raw.includes('[DONE]') ? 't-done' : raw.includes('[WARN]') ? 't-warn'
+            : raw.includes('[ERROR]') ? 't-err' : raw.includes('[INFO]') ? 't-info' : 't-line';
+        div.textContent = raw;
+        term.appendChild(div);
+        term.scrollTop = term.scrollHeight;
+    };
+    let exitCode = null;
+    try {
+        const resp = await fetch('/api/traffic/s3-cleanup/apply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ category: key, ids: s.ids }),
+        });
+        if (!resp.ok) throw new Error((await resp.json()).detail || `HTTP ${resp.status}`);
+        const reader = resp.body.getReader();
+        const dec = new TextDecoder();
+        let buf = '';
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buf += dec.decode(value, { stream: true });
+            let i;
+            while ((i = buf.indexOf('\n')) >= 0) {
+                const line = buf.slice(0, i); buf = buf.slice(i + 1);
+                const m = line.match(/^\[EXIT:(\d+)\]$/);
+                if (m) { exitCode = Number(m[1]); continue; }
+                if (line) addLine(line);
+            }
+        }
+        if (exitCode === 0) {
+            okDiv.textContent = '✔ Done. Rescanning…';
+            okDiv.style.display = 'block';
+        } else {
+            errDiv.textContent = exitCode === null ? 'Connection lost before the run finished — rescan to see where it stopped.' : `Finished with warnings (exit ${exitCode}) — see the log.`;
+            errDiv.style.display = 'block';
+        }
+    } catch (e) {
+        errDiv.textContent = 'Apply failed: ' + e.message;
+        errDiv.style.display = 'block';
+    } finally {
+        document.querySelectorAll('.btn-scan').forEach(b => b.disabled = false);
+        await runScan();   // whatever was removed drops out; leftovers show up in their category
+    }
+}
+</script>
+
+</body>
+</html>
