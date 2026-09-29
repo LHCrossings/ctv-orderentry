@@ -72,6 +72,11 @@ def test_sql_literals():
     assert smp._lit(b"\x01\xff") == "0x01ff"
 
 
+def _ids(sql: str) -> list[int]:
+    a = sql.index("IN (") + 4
+    return [int(x) for x in sql[a : sql.index(")", a)].split(",")]
+
+
 class FakeCursor:
     def __init__(self, conn):
         self.conn = conn
@@ -83,19 +88,27 @@ class FakeCursor:
         self.conn.sql.append(sql)
         if sql.startswith("DELETE FROM"):
             table = sql.split()[2]
-            ids = [int(x) for x in sql[sql.index("(") + 1 : sql.index(")")].split(",")]
+            ids = _ids(sql)
             self.rowcount = sum(1 for i in ids if i in self.conn.fs[table])
             if self.conn.fail_on == table:
                 raise RuntimeError("boom")
             self.conn.pending.append((table, ids))
+        elif sql.startswith("UPDATE FILMATI SET DATA_SCAD"):
+            ids = _ids(sql)
+            hit = [i for i in ids if i in self.conn.unexpired]
+            self.rowcount = len(hit)
+            self.conn.pending.append(("__stamp__", hit))
+        elif sql.startswith("SELECT ID_FILMATI, DATA_SCAD"):
+            self._rows = [(i, None) for i in _ids(sql)]
+        elif sql.startswith("SELECT COUNT(*) FROM FILMATI"):
+            self._rows = [(sum(1 for i in _ids(sql) if i in self.conn.unexpired),)]
         elif sql.startswith("SELECT * FROM"):
             table = sql.split()[3]
             self.description = [("ID_METAFILE",), ("FILE_ID",)]
             self._rows = [(i, f"F{i}") for i in sorted(self.conn.fs[table])]
         elif sql.startswith("SELECT COUNT(*) FROM"):
             table = sql.split()[3]
-            ids = [int(x) for x in sql[sql.index("IN (") + 4 : sql.rindex(")")].split(",")]
-            self._rows = [(sum(1 for i in ids if i in self.conn.fs[table]),)]
+            self._rows = [(sum(1 for i in _ids(sql) if i in self.conn.fs[table]),)]
 
     def fetchall(self):
         return list(self._rows)
@@ -105,8 +118,11 @@ class FakeCursor:
 
 
 class FakeConn:
+    """Metafile ids ``ids``; their assets (100 + id) start NOT expired."""
+
     def __init__(self, ids, fail_on=None):
         self.fs = {t: set(ids) for t, _ in smp.FS_TABLES}
+        self.unexpired = {100 + i for i in ids}
         self.sql: list[str] = []
         self.pending: list[tuple[str, list[int]]] = []
         self.commits = 0
@@ -118,7 +134,10 @@ class FakeConn:
 
     def commit(self):
         for table, ids in self.pending:
-            self.fs[table] -= set(ids)
+            if table == "__stamp__":
+                self.unexpired -= set(ids)
+            else:
+                self.fs[table] -= set(ids)
         self.pending = []
         self.commits += 1
 
@@ -153,7 +172,10 @@ class FakeS3:
 
 
 def _rows(n):
-    return [_row(id_metafile=i, file_name=f"K{i}.mp4", size=10) for i in range(1, n + 1)]
+    return [
+        _row(id_metafile=i, id_filmati=100 + i, file_name=f"K{i}.mp4", size=10)
+        for i in range(1, n + 1)
+    ]
 
 
 def test_dry_run_touches_nothing(tmp_path):
@@ -175,7 +197,13 @@ def test_only_keys_s3_confirms_leave_the_db_and_restore_is_written_first(tmp_pat
     assert conn.fs["FS_METAFILE"] == {3}, "the refused key keeps its Media Library rows"
     assert conn.fs["smptemetadata"] == {3}
     assert conn.commits == 3 and conn.rollbacks == 0
+    assert res["expired_stamped"] == 4 and conn.unexpired == {103}, (
+        "every asset whose file left S3 is expired in the same transaction; the refused one is not"
+    )
     restore = Path(res["restore"]).read_text()
+    assert "UPDATE FILMATI SET DATA_SCAD = NULL WHERE ID_FILMATI = 101;" in restore, (
+        "old expiry dates restorable"
+    )
     assert "INSERT INTO FS_METAFILE (ID_METAFILE, FILE_ID) VALUES (3, N'F3');" in restore
     assert conn.sql.index(
         "SELECT * FROM FS_METAFILE WHERE ID_METAFILE IN (1,2,3,4,5)"
@@ -204,13 +232,50 @@ def test_limit_and_db_failure_rolls_back_and_stops(tmp_path):
     )
 
 
-def test_verify_reads_back_rows_and_objects():
+def test_verify_reads_back_rows_objects_and_expiry():
     conn, s3 = FakeConn([1, 2]), FakeS3(["K2.mp4"])
     v = smp.verify(conn, s3, "b", _rows(2), workers=2)
     assert v["fs_rows_left"]["FS_METAFILE"] == 2 and v["objects_left"] == ["K2.mp4"] and not v["ok"]
+    assert v["not_expired"] == 2
     conn.fs = {t: set() for t in conn.fs}
     s3.keys = set()
+    assert not smp.verify(conn, s3, "b", _rows(2), workers=2)["ok"], (
+        "an unexpired asset fails verify"
+    )
+    conn.unexpired = set()
     assert smp.verify(conn, s3, "b", _rows(2), workers=2)["ok"]
+
+
+def test_mark_expired_and_remove_references_stamp_the_asset(tmp_path):
+    conn = FakeConn([1, 2])
+    rows = [_row(id_metafile=None, id_filmati=101, file_name=None, size=0, data_scad=None)]
+    res = smp.mark_expired(conn, rows, apply=True, restore_dir=tmp_path, log=lambda s: None)
+    assert res["expired_stamped"] == 1 and conn.unexpired == {102}
+    assert (
+        "UPDATE FILMATI SET DATA_SCAD = NULL WHERE ID_FILMATI = 101;"
+        in Path(res["restore"]).read_text()
+    )
+    res = smp.remove_references(
+        conn, _rows(2)[1:], apply=True, restore_dir=tmp_path, log=lambda s: None
+    )
+    assert res["deleted_db"] == 1 and res["expired_stamped"] == 1
+    assert conn.fs["FS_METAFILE"] == {1} and conn.unexpired == set()
+
+
+def test_unexpired_sql_and_categorize():
+    sql = smp.unexpired_candidates_sql(dt.date(2026, 9, 29))
+    assert "ISNULL(c.s3_copies, 0) = 0" in sql and "f.NEWTYPE IN ('PGM', 'PGMX')" in sql
+    assert "f.DATA_SCAD >= '2026-09-30'" in sql, "not expired = no date or a future date"
+    assert "f.CREATIONDATE < '2026-09-22'" in sql, "a week of grace for ingest in progress"
+    assert "f.COD_PROGRA NOT LIKE '%HIATUS%'" in sql
+    rows = [
+        _row(id_metafile=None, id_filmati=7, other_copies=0),
+        _row(id_metafile=None, id_filmati=8, other_copies=2, future_rows=1),
+    ]
+    cats = smp.categorize_unexpired(rows)
+    assert [r["id_filmati"] for r in cats["unexpired"]] == [7] and [
+        r["id_filmati"] for r in cats["booked"]
+    ] == [8]
 
 
 def test_short_form_types_never_eligible():

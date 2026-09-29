@@ -58,7 +58,21 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    ap.add_argument("--sweep", choices=["expired"], default="expired")
+    ap.add_argument("--sweep", choices=["expired", "aged"], default="expired")
+    ap.add_argument(
+        "--from",
+        dest="d_from",
+        type=dt.date.fromisoformat,
+        default=None,
+        help="aged: last aired on/after",
+    )
+    ap.add_argument(
+        "--to",
+        dest="d_to",
+        type=dt.date.fromisoformat,
+        default=None,
+        help="aged: last aired on/before",
+    )
     ap.add_argument(
         "--apply", action="store_true", help="delete; without it only the plan is written"
     )
@@ -73,14 +87,28 @@ def main() -> None:
     s3 = _s3(cfg)
     conn = connect()
 
-    rows = smp.fetch_expired(conn, a.today)
-    listing = smp.probe_sizes(s3, bucket, (r.get("file_name") for r in rows))
-    ok, bad = smp.check_rows(rows, listing)
+    if a.sweep == "aged":
+        if not a.d_to:
+            sys.exit("--sweep aged needs --to YYYY-MM-DD (last aired on/before)")
+        rows = smp.fetch_aged(conn, a.today, a.d_from, a.d_to)
+        listing = smp.object_sizes(s3, bucket, (r.get("file_name") for r in rows))
+        cats = smp.categorize_aged(rows, listing)
+        ok = cats.pop("aged")
+        bad = [r for v in cats.values() for r in v]
+    else:
+        rows = smp.fetch_expired(conn, a.today)
+        listing = smp.object_sizes(s3, bucket, (r.get("file_name") for r in rows))
+        ok, bad = smp.check_rows(rows, listing)
     stamp = f"{dt.datetime.now():%Y%m%d-%H%M%S}"
     plan = ROOT / "logs" / "s3-purge" / f"s3-purge-plan-{a.sweep}-{stamp}.csv"
     smp.write_plan_csv(plan, ok, bad)
 
-    print(f"{a.sweep} sweep as of {a.today}: {len(rows)} S3 metafile(s) on expired program assets")
+    what = (
+        "expired program assets"
+        if a.sweep == "expired"
+        else f"not-expired program assets last aired {a.d_from or 'ever'}..{a.d_to}"
+    )
+    print(f"{a.sweep} sweep as of {a.today}: {len(rows)} S3 metafile(s) on {what}")
     print(f"  deletable: {len(ok)} file(s), {_gb(sum(int(r['size']) for r in ok))}")
     print(f"  skipped:   {len(bad)}")
     for r in bad[:20]:
@@ -100,7 +128,14 @@ def main() -> None:
         return
 
     res = smp.purge(
-        conn, s3, bucket, ok, apply=True, limit=a.limit, restore_dir=ROOT / "logs" / "s3-purge"
+        conn,
+        s3,
+        bucket,
+        ok,
+        apply=True,
+        limit=a.limit,
+        restore_dir=ROOT / "logs" / "s3-purge",
+        today=a.today,
     )
     conn.close()
     print(

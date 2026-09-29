@@ -21,6 +21,18 @@
             flex-wrap: wrap;
         }
         .scan-card .scan-note { flex: 1; font-size: .85rem; color: var(--text-muted); min-width: 16rem; }
+        .scan-card .range { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+        .scan-card .range label { font-size: .82rem; font-weight: 600; color: var(--text-primary); margin-right: .3rem; }
+        .scan-card .range input {
+            width: 7.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            padding: .4rem .6rem;
+            font-size: .88rem;
+        }
+        .cat.aged .cat-head { border-left: 4px solid var(--nord11); }
         .btn-scan {
             background: var(--nord10);
             color: #fff;
@@ -85,6 +97,8 @@
         .btn-sel:hover { border-color: var(--nord10); color: var(--nord10); }
         .cat.delete .cat-head { border-left: 4px solid var(--nord11); }
         .cat.dangling .cat-head { border-left: 4px solid var(--nord12); }
+        .cat.unexpired .cat-head { border-left: 4px solid var(--nord15); }
+        .cat.unexpired .btn-apply { background: var(--nord15); }
         .cat.size_mismatch .cat-head, .cat.booked .cat-head { border-left: 4px solid var(--nord13); }
         .cat-body { padding: .75rem 1rem; }
         .cat-empty { color: var(--text-muted); font-size: .88rem; padding: .25rem 0; }
@@ -232,12 +246,19 @@
         <p>Program assets marked <em>expired</em> in Etere that still hold a file in S3.
            The same thing as Etere's "Delete on → AWS S3" workflow, in batches instead of one
            Datamover job per file. Commercials, PSAs, PIs, station IDs, bumpers, opens and
-           anything marked HIATUS are never touched.</p>
+           anything marked HIATUS are never touched. Rule enforced on every action:
+           <strong>no file in S3 = expired in Etere</strong>.</p>
     </div>
 
     <div class="scan-card">
         <div class="scan-note">The scan reads Etere and checks each file in S3 without touching it
-            (about 40 seconds). Nothing is deleted until you pick groups and confirm.</div>
+            (about a minute). Nothing is deleted until you pick groups and confirm.</div>
+        <div class="range">
+            <label>Old programming last aired</label>
+            <input type="text" id="agedFrom" placeholder="from (any)" onblur="formatDateInput(this)" />
+            <span>–</span>
+            <input type="text" id="agedTo" placeholder="to" onblur="formatDateInput(this)" />
+        </div>
         <button class="btn-scan" id="scanBtn" onclick="runScan()">Scan</button>
     </div>
 
@@ -249,9 +270,19 @@
 
 <script>
 let scanData = null;
+(function initRange() {
+    const y = new Date().getFullYear() - 1;
+    document.getElementById('agedTo').value = `12/31/${y}`;
+})();
+function agedRange() {
+    return { aged_from: parseDateInput(document.getElementById('agedFrom').value),
+             aged_to: parseDateInput(document.getElementById('agedTo').value) };
+}
 const CAT_BUTTON = {
     delete:   (n, gb) => `Delete ${n} file${n === 1 ? '' : 's'} from S3 (${gb}) and remove references`,
+    aged:     (n, gb) => `Delete ${n} file${n === 1 ? '' : 's'} from S3 (${gb}), remove references, mark expired`,
     dangling: (n)     => `Remove ${n} dead reference${n === 1 ? '' : 's'}`,
+    unexpired: (n)    => `Mark ${n} asset${n === 1 ? '' : 's'} expired as of today`,
 };
 
 function gb(bytes) {
@@ -277,7 +308,12 @@ async function runScan() {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>Scanning…';
     try {
-        const resp = await fetch('/api/traffic/s3-cleanup/scan');
+        const rg = agedRange();
+        if (document.getElementById('agedTo').value && !rg.aged_to) throw new Error('the "to" date is not a date');
+        const qs = new URLSearchParams();
+        if (rg.aged_from) qs.set('aged_from', rg.aged_from);
+        if (rg.aged_to) qs.set('aged_to', rg.aged_to);
+        const resp = await fetch('/api/traffic/s3-cleanup/scan?' + qs.toString());
         if (!resp.ok) throw new Error((await resp.json()).detail || `HTTP ${resp.status}`);
         scanData = await resp.json();
         render(scanData);
@@ -298,6 +334,7 @@ function render(data) {
         <div class="info-banner">
             <span>As of <strong>${fmtDate(data.as_of)}</strong></span>
             <span><strong>${data.total}</strong> S3 files on expired program assets</span>
+            <span>Old programming range: <strong>${data.aged_range[1] ? (data.aged_range[0] ? fmtDate(data.aged_range[0]) : 'start') + ' – ' + fmtDate(data.aged_range[1]) : 'not scanned (set a "to" date)'}</strong></span>
             <span>Short-form kept by rule: <strong>${sf.count}</strong> files, ${gb(sf.bytes)}</span>
         </div>`;
 
@@ -313,20 +350,20 @@ function render(data) {
                         ${cat.actionable ? `<input type="checkbox" class="fam-check fam-check-${cat.key}" data-idx="${i}" checked onclick="event.stopPropagation()" onchange="updateBar('${cat.key}')" />` : ''}
                         <span class="fam-name">${escapeHtml(g.family)}</span>
                         <span class="fam-counts"><strong>${g.count}</strong> file${g.count === 1 ? '' : 's'} · <strong>${gb(g.bytes)}</strong></span>
-                        <span class="fam-range">expired ${fmtDate(g.expired_from)}${g.expired_to !== g.expired_from ? ' – ' + fmtDate(g.expired_to) : ''}</span>
+                        <span class="fam-range">${g.expired_from ? 'expired ' + fmtDate(g.expired_from) + (g.expired_to !== g.expired_from ? ' – ' + fmtDate(g.expired_to) : '') : 'not expired'}${g.aired_from ? ' · last aired ' + fmtDate(g.aired_from) + (g.aired_to !== g.aired_from ? ' – ' + fmtDate(g.aired_to) : '') : ''}</span>
                         <span class="fam-toggle" id="toggle-${cat.key}-${i}">▸ files</span>
                     </div>
                     <div id="detail-${cat.key}-${i}" style="display:none;">
                         <table class="file-table">
-                            <thead><tr><th>Code</th><th>File</th><th>Size</th><th>Expired</th><th>Last aired</th>${cat.actionable ? '' : '<th>Note</th>'}</tr></thead>
+                            <thead><tr><th>Code</th><th>File</th><th>Size</th><th>Expired</th><th>Last aired</th><th>Note</th></tr></thead>
                             <tbody>${g.files.map(f => `
                                 <tr>
                                     <td>${escapeHtml(f.cod_progra)}</td>
-                                    <td>${escapeHtml(f.file_name || '')}</td>
-                                    <td class="num">${gb(f.size)}</td>
+                                    <td>${escapeHtml(f.file_name || '—')}</td>
+                                    <td class="num">${f.size ? gb(f.size) : '—'}</td>
                                     <td>${fmtDate(f.expired)}</td>
                                     <td>${fmtDate(f.last_aired)}</td>
-                                    ${cat.actionable ? '' : `<td>${escapeHtml(f.problem)}</td>`}
+                                    <td>${escapeHtml(f.problem || '')}</td>
                                 </tr>`).join('')}
                             </tbody>
                         </table>
@@ -404,9 +441,11 @@ function updateBar(key) {
 async function runApply(key) {
     const s = selected(key);
     if (!s.ids.length) return;
-    const msg = key === 'delete'
-        ? `Delete ${s.ids.length} files (${gb(s.bytes)}) from S3 and remove their references from the Media Library?\n\nGroups: ${s.groups.join(', ')}\n\nThe bucket is not versioned: the files cannot be brought back. The Media Library rows are written to a restore file first.`
-        : `Remove ${s.ids.length} dead references from the Media Library?\n\nGroups: ${s.groups.join(', ')}\n\nNo file exists in S3 for these. The rows are written to a restore file first.`;
+    const msg = key === 'delete' || key === 'aged'
+        ? `Delete ${s.ids.length} files (${gb(s.bytes)}) from S3 and remove their references from the Media Library?${key === 'aged' ? ' These assets are NOT expired yet; they will be marked expired as of today.' : ''}\n\nGroups: ${s.groups.join(', ')}\n\nThe bucket is not versioned: the files cannot be brought back. The Media Library rows are written to a restore file first. Every asset is stamped expired as of today in the same transaction.`
+        : key === 'dangling'
+        ? `Remove ${s.ids.length} dead references from the Media Library?\n\nGroups: ${s.groups.join(', ')}\n\nNo file exists in S3 for these. The rows are written to a restore file first; every asset is stamped expired as of today.`
+        : `Mark ${s.ids.length} assets expired as of today?\n\nGroups: ${s.groups.join(', ')}\n\nThese program assets have no file in S3. This writes the expiry date only (what Etere's "mark as expired" does); the old dates go to a restore file first.`;
     if (!confirm(msg)) return;
 
     const term = document.getElementById('terminal');
@@ -428,7 +467,7 @@ async function runApply(key) {
         const resp = await fetch('/api/traffic/s3-cleanup/apply', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ category: key, ids: s.ids }),
+            body: JSON.stringify({ category: key, ids: s.ids, ...agedRange() }),
         });
         if (!resp.ok) throw new Error((await resp.json()).detail || `HTTP ${resp.status}`);
         const reader = resp.body.getReader();

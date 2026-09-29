@@ -67,7 +67,63 @@ def client(monkeypatch):
     monkeypatch.setattr(s3_cleanup, "_connect", lambda: Conn())
     monkeypatch.setattr(s3_cleanup, "_s3_client", lambda: (object(), "bucket"))
     monkeypatch.setattr(smp, "fetch_expired", lambda conn, today=None: [dict(r) for r in ROWS])
-    monkeypatch.setattr(smp, "probe_sizes", lambda s3, b, keys, workers=32: dict(SIZES))
+    monkeypatch.setattr(
+        smp,
+        "object_sizes",
+        lambda s3, b, keys, workers=32: dict(SIZES) | {"AVS010325A.mp4": 10, "AVS010425A.mp4": 10},
+    )
+    unexpired = [
+        _row(
+            7,
+            id_metafile=None,
+            id_filmati=107,
+            file_name=None,
+            size=0,
+            data_scad=None,
+            cod_progra="STUB-0101A",
+            other_copies=0,
+        ),
+        _row(
+            8,
+            id_metafile=None,
+            id_filmati=108,
+            file_name=None,
+            size=0,
+            data_scad=None,
+            cod_progra="STUB-0102A",
+            other_copies=1,
+            future_rows=1,
+        ),
+    ]
+    monkeypatch.setattr(
+        smp, "fetch_unexpired", lambda conn, today=None: [dict(r) for r in unexpired]
+    )
+    aged = [
+        _row(
+            21,
+            id_filmati=121,
+            cod_progra="AVS010325A",
+            file_name="AVS010325A.mp4",
+            data_scad=None,
+            last_aired=dt.datetime(2025, 1, 3),
+        ),
+        _row(
+            22,
+            id_filmati=122,
+            cod_progra="AVS010425A",
+            file_name="AVS010425A.mp4",
+            data_scad=None,
+            last_aired=dt.datetime(2025, 1, 4),
+            future_rows=1,
+        ),
+    ]
+    calls["aged_ranges"] = []
+
+    def fake_aged(conn, today, d_from, d_to):
+        calls["aged_ranges"].append((d_from, d_to))
+        return [dict(r) for r in aged]
+
+    monkeypatch.setattr(smp, "fetch_aged", fake_aged)
 
     def fake_purge(conn, s3, bucket, rows, *, apply, restore_dir, log, **kw):
         calls["purge"] = [r["id_metafile"] for r in rows]
@@ -75,21 +131,32 @@ def client(monkeypatch):
         return {
             "deleted_s3": len(rows),
             "deleted_db": len(rows),
+            "expired_stamped": 0,
             "bytes": 20,
             "s3_errors": [],
             "restore": "r.sql",
         }
 
-    def fake_remove(conn, rows, *, apply, restore_dir, log):
+    def fake_remove(conn, rows, *, apply, restore_dir, log, **kw):
         calls["remove"] = [r["id_metafile"] for r in rows]
-        return {"deleted_db": len(rows), "restore": "d.sql"}
+        return {"deleted_db": len(rows), "expired_stamped": 0, "restore": "d.sql"}
+
+    def fake_mark(conn, rows, *, apply, restore_dir, log, **kw):
+        calls["mark"] = [r["id_filmati"] for r in rows]
+        return {"expired_stamped": len(rows), "restore": "e.sql"}
 
     monkeypatch.setattr(smp, "purge", fake_purge)
     monkeypatch.setattr(smp, "remove_references", fake_remove)
+    monkeypatch.setattr(smp, "mark_expired", fake_mark)
     monkeypatch.setattr(
         smp,
         "verify",
-        lambda conn, s3, b, rows: {"ok": True, "fs_rows_left": {}, "objects_left": []},
+        lambda conn, s3, b, rows, **kw: {
+            "ok": True,
+            "fs_rows_left": {},
+            "objects_left": [],
+            "not_expired": 0,
+        },
     )
     app = FastAPI()
     app.include_router(
@@ -108,13 +175,20 @@ def test_page_and_scan_categories(client):
     cats = {c["key"]: c for c in data["categories"]}
     assert [c["key"] for c in data["categories"]] == [
         "delete",
+        "aged",
         "dangling",
+        "unexpired",
         "size_mismatch",
         "booked",
     ]
     assert cats["delete"]["count"] == 2 and cats["delete"]["actionable"]
     assert cats["dangling"]["count"] == 1 and cats["dangling"]["actionable"]
-    assert cats["booked"]["count"] == 1 and not cats["booked"]["actionable"]
+    assert cats["unexpired"]["count"] == 1 and cats["unexpired"]["actionable"]
+    assert cats["unexpired"]["groups"][0]["ids"] == [107]
+    assert cats["unexpired"]["groups"][0]["expired_from"] is None
+    assert cats["booked"]["count"] == 2 and not cats["booked"]["actionable"], (
+        "booked-ahead from both sweeps"
+    )
     assert cats["delete"]["groups"][0]["family"] == "DTV-SHOW" and cats["delete"]["groups"][0][
         "ids"
     ] == [1, 2]
@@ -130,11 +204,17 @@ def test_apply_acts_only_on_ids_still_in_the_category(client):
     assert r.status_code == 200
     lines = r.text.strip().splitlines()
     assert client.calls["purge"] == [1, 2]
-    assert "2 of 4 selected file(s) still in category 'delete'; 2 skipped" in lines[0]
+    assert "2 of 4 selected item(s) still in category 'delete'; 2 skipped" in lines[0]
     assert lines[-1] == "[EXIT:0]" and any("[DONE]" in ln for ln in lines)
 
     r = client.post("/api/traffic/s3-cleanup/apply", json={"category": "dangling", "ids": [3, 1]})
     assert client.calls["remove"] == [3]
+    assert r.text.strip().splitlines()[-1] == "[EXIT:0]"
+
+    r = client.post(
+        "/api/traffic/s3-cleanup/apply", json={"category": "unexpired", "ids": [107, 108]}
+    )
+    assert client.calls["mark"] == [107], "the booked-ahead asset is not stamped"
     assert r.text.strip().splitlines()[-1] == "[EXIT:0]"
 
 
@@ -176,4 +256,84 @@ def test_show_family_and_categorize():
         "dangling": [3],
         "size_mismatch": [5],
         "booked": [4],
+        "unexpired": [],
+        "aged": [],
+    }
+
+
+def test_scan_without_a_to_date_skips_old_programming(client):
+    data = client.get("/api/traffic/s3-cleanup/scan").json()
+    cats = {c["key"]: c for c in data["categories"]}
+    assert cats["aged"]["count"] == 0 and data["aged_range"] == [None, None]
+    assert client.calls["aged_ranges"] == []
+
+
+def test_scan_with_range_adds_old_programming_and_apply_stamps_it(client):
+    data = client.get("/api/traffic/s3-cleanup/scan?aged_from=2025-01-01&aged_to=2025-12-31").json()
+    cats = {c["key"]: c for c in data["categories"]}
+    assert client.calls["aged_ranges"] == [(dt.date(2025, 1, 1), dt.date(2025, 12, 31))]
+    assert data["aged_range"] == ["2025-01-01", "2025-12-31"]
+    g = cats["aged"]["groups"]
+    assert cats["aged"]["count"] == 1 and g[0]["family"] == "AVS" and g[0]["ids"] == [21]
+    assert g[0]["aired_from"] == "2025-01-03" and g[0]["expired_from"] is None
+    assert cats["booked"]["count"] == 3, "the booked-ahead AVS joins the report bucket"
+    assert any(
+        "not expired" in f["problem"] for grp in cats["booked"]["groups"] for f in grp["files"]
+    )
+    assert cats["delete"]["count"] == 2 and cats["dangling"]["count"] == 1, (
+        "the expired sweep is unchanged"
+    )
+
+    r = client.post(
+        "/api/traffic/s3-cleanup/apply",
+        json={"category": "aged", "ids": [21, 22], "aged_to": "2025-12-31"},
+    )
+    assert r.status_code == 200 and client.calls["purge"] == [21]
+    assert (
+        client.post(
+            "/api/traffic/s3-cleanup/apply", json={"category": "aged", "ids": [21]}
+        ).status_code
+        == 400
+    )
+    assert (
+        client.get(
+            "/api/traffic/s3-cleanup/scan?aged_from=2025-12-31&aged_to=2025-01-01"
+        ).status_code
+        == 400
+    )
+
+
+def test_aged_sql_and_categorize():
+    sql = smp.aged_candidates_sql(dt.date(2026, 9, 29), dt.date(2025, 1, 1), dt.date(2025, 6, 30))
+    assert "(f.DATA_SCAD IS NULL OR f.DATA_SCAD >= '2026-09-30')" in sql, "not expired only"
+    assert "COALESCE(air.last_aired, f.CREATIONDATE) < '2025-07-01'" in sql
+    assert "COALESCE(air.last_aired, f.CREATIONDATE) >= '2025-01-01'" in sql
+    open_sql = smp.aged_candidates_sql(dt.date(2026, 9, 29), None, dt.date(2025, 6, 30))
+    assert "COALESCE(air.last_aired, f.CREATIONDATE) >=" not in open_sql
+    assert "f.COD_PROGRA NOT LIKE '%HIATUS%'" in sql and "m.ID_METADEVICE = 6" in sql
+    rows = [_row(1), _row(2, file_name="X.mp4"), _row(3, future_rows=2)]
+    cats = smp.categorize_aged(rows, {"DTV-SHOW-0101A.mp4": 10, "DTV-SHOW-0103A.mp4": 10})
+    assert [r["id_metafile"] for r in cats["aged"]] == [1], (
+        "the clean rows are the action, never clobbered"
+    )
+    assert set(cats) == {"aged", "dangling", "size_mismatch", "booked"}
+    assert cats["dangling"][0]["problem"].endswith("asset not expired")
+    assert cats["booked"][0]["problem"].endswith("asset not expired")
+
+
+def test_object_sizes_switches_to_a_listing_for_many_keys(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(
+        smp,
+        "probe_sizes",
+        lambda s3, b, keys, workers=32: seen.setdefault("head", list(keys)) and {},
+    )
+    monkeypatch.setattr(
+        smp, "list_bucket", lambda s3, b: seen.setdefault("list", True) and {"K1": 1, "K2": 2}
+    )
+    assert smp.object_sizes(None, "b", ["K1", "K1", None]) == {} and seen == {"head": ["K1"]}
+    seen.clear()
+    monkeypatch.setattr(smp, "LISTING_THRESHOLD", 1)
+    assert smp.object_sizes(None, "b", ["K1", "K2", "K9"]) == {"K1": 1, "K2": 2} and seen == {
+        "list": True
     }
