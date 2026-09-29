@@ -70,6 +70,19 @@
         .cat-head .cat-sum { color: var(--text-muted); font-size: .85rem; }
         .cat-head .cat-sum strong { color: var(--text-primary); }
         .cat-head .cat-action { width: 100%; font-size: .82rem; color: var(--text-muted); }
+        .cat-head .cat-select { margin-left: auto; display: flex; gap: .4rem; }
+        .btn-sel {
+            background: var(--nord6);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: .3rem .7rem;
+            font-size: .8rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .btn-sel:hover { border-color: var(--nord10); color: var(--nord10); }
         .cat.delete .cat-head { border-left: 4px solid var(--nord11); }
         .cat.dangling .cat-head { border-left: 4px solid var(--nord12); }
         .cat.size_mismatch .cat-head, .cat.booked .cat-head { border-left: 4px solid var(--nord13); }
@@ -324,9 +337,9 @@ function render(data) {
                 <div class="action-bar">
                     <span class="sel-summary" id="selSummary-${cat.key}"></span>
                     <span>
-                        <button class="btn-link" onclick="setAll('${cat.key}', true)">select all</button> ·
-                        <button class="btn-link" onclick="setAll('${cat.key}', false)">none</button>
-                        <button class="btn-apply" id="applyBtn-${cat.key}" onclick="runApply('${cat.key}')" style="margin-left:1rem;"></button>
+                        <button class="btn-sel" onclick="setAll('${cat.key}', true)">Select all</button>
+                        <button class="btn-sel" onclick="setAll('${cat.key}', false)">Deselect all</button>
+                        <button class="btn-apply" id="applyBtn-${cat.key}" onclick="runApply('${cat.key}')" style="margin-left:.75rem;"></button>
                     </span>
                 </div>`;
             }
@@ -336,6 +349,10 @@ function render(data) {
                 <div class="cat-head">
                     <h3>${escapeHtml(cat.label)}</h3>
                     <span class="cat-sum"><strong>${cat.count}</strong> file${cat.count === 1 ? '' : 's'}${cat.bytes ? ` · <strong>${gb(cat.bytes)}</strong>` : ''}</span>
+                    ${cat.actionable && groups.length ? `<span class="cat-select">
+                        <button class="btn-sel" onclick="setAll('${cat.key}', true)">Select all</button>
+                        <button class="btn-sel" onclick="setAll('${cat.key}', false)">Deselect all</button>
+                    </span>` : ''}
                     <span class="cat-action">${escapeHtml(cat.action)}</span>
                 </div>
                 <div class="cat-body">${body}</div>
