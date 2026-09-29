@@ -20,22 +20,23 @@ from typing import Optional
 
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMER_DB_PATH
 from browser_automation.etere_client import EtereClient
-from browser_automation.parsers.eqc_parser import EQCLine, EQCOrder, parse_eqc_xlsx
+from browser_automation.parsers.eqc_parser import EQCOrder, parse_eqc_xlsx
 
-DEFAULT_CUSTOMER_ID = 20            # Emerald Queen Casino (ANAGRAF)
+DEFAULT_CUSTOMER_ID = 20  # Emerald Queen Casino (ANAGRAF)
 DEFAULT_CLIENT_NAME = "Emerald Queen Casino"
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
+
 def _fmt_mmddyyyy(d: date) -> str:
-    return d.strftime('%m/%d/%Y')
+    return d.strftime("%m/%d/%Y")
 
 
 def _parse_date(s) -> date:
     if isinstance(s, date):
         return s
-    for fmt in ('%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d'):
+    for fmt in ("%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d"):
         try:
             return datetime.strptime(str(s).strip(), fmt).date()
         except ValueError:
@@ -68,13 +69,15 @@ def _quarter_groups(week_dates: list[date]) -> list[dict]:
         start = min(starts)
         end = max(starts) + timedelta(days=6)
         yy = year % 100
-        out.append({
-            'cols':  cols,
-            'start': start,
-            'end':   end,
-            'code':  f"TH EQC {yy:02d}{start.month:02d}",
-            'desc':  f"{DEFAULT_CLIENT_NAME} {yy:02d}Q{q}",
-        })
+        out.append(
+            {
+                "cols": cols,
+                "start": start,
+                "end": end,
+                "code": f"TH EQC {yy:02d}{start.month:02d}",
+                "desc": f"{DEFAULT_CLIENT_NAME} {yy:02d}Q{q}",
+            }
+        )
     return out
 
 
@@ -84,37 +87,42 @@ def _lookup_customer(client_name: str):
 
         from src.data_access.repositories.customer_repository import CustomerRepository
         from src.domain.enums import OrderType
+
         if not os.path.exists(CUSTOMER_DB_PATH):
             return None
         repo = CustomerRepository(CUSTOMER_DB_PATH)
-        return (
-            repo.find_by_name(client_name, OrderType.EQC)
-            or repo.find_by_name_any_type(client_name)
+        return repo.find_by_name(client_name, OrderType.EQC) or repo.find_by_name_any_type(
+            client_name
         )
     except Exception as exc:
         print(f"[CUSTOMER] Warning: lookup failed: {exc}")
         return None
 
 
-def _upsert_customer(customer_id: str, client_name: str, separation: tuple, billing_type: str = 'agency') -> None:
+def _upsert_customer(
+    customer_id: str, client_name: str, separation: tuple, billing_type: str = "agency"
+) -> None:
     try:
         import os
 
         from src.data_access.repositories.customer_repository import CustomerRepository
         from src.domain.entities import Customer
         from src.domain.enums import OrderType
+
         if not os.path.exists(CUSTOMER_DB_PATH):
             return
         repo = CustomerRepository(CUSTOMER_DB_PATH)
-        repo.save(Customer(
-            customer_id=customer_id,
-            customer_name=client_name,
-            order_type=OrderType.EQC,
-            billing_type=billing_type,
-            separation_customer=separation[0],
-            separation_event=separation[1],
-            separation_order=separation[2],
-        ))
+        repo.save(
+            Customer(
+                customer_id=customer_id,
+                customer_name=client_name,
+                order_type=OrderType.EQC,
+                billing_type=billing_type,
+                separation_customer=separation[0],
+                separation_event=separation[1],
+                separation_order=separation[2],
+            )
+        )
         print(f"[CUSTOMER DB] ✓ Saved: {client_name} → ID {customer_id}")
     except Exception as exc:
         print(f"[CUSTOMER DB] Warning: could not save: {exc}")
@@ -133,7 +141,7 @@ def _confirm_start_date(order: EQCOrder) -> Optional[date]:
 
     print(f"\n  ⚠ This order starts {_f(earliest)} (today is {_f(date.today())}).")
     raw = input(f"  Confirm start date [{_f(earliest)}]: ").strip()
-    if raw and raw.lower() not in ('y', 'yes'):
+    if raw and raw.lower() not in ("y", "yes"):
         try:
             return _parse_date(raw)
         except ValueError:
@@ -142,6 +150,7 @@ def _confirm_start_date(order: EQCOrder) -> Optional[date]:
 
 
 # ─── Line builder (no DB — used by both the entry path and verification) ─────
+
 
 def build_quarter_lines(order: EQCOrder, quarter: dict, spot_duration: int = 30) -> list[dict]:
     """
@@ -155,32 +164,35 @@ def build_quarter_lines(order: EQCOrder, quarter: dict, spot_duration: int = 30)
         days = line.days
         time_raw = line.time_raw
         days, _ = EtereClient.check_sunday_6_7a_rule(days, time_raw)
-        time_from, time_to = EtereClient.parse_time_range(time_raw.replace('&', ';'))
+        time_from, time_to = EtereClient.parse_time_range(time_raw.replace("&", ";"))
         time_range = f"{time_from}-{time_to}"
 
-        for col in quarter['cols']:
+        for col in quarter["cols"]:
             spots = line.week_spots[col] if col < len(line.week_spots) else 0
             if spots <= 0:
                 continue
             wk_start = order.week_dates[col]
-            wk_end = wk_start + timedelta(days=6)   # Mon → Sun
-            specs.append({
-                'days':        days,
-                'time_range':  time_range,
-                'description': line.description,
-                'rate':        line.rate,
-                'total_spots': spots,
-                'spots_per_week': spots,
-                'date_from':   wk_start,
-                'date_to':     wk_end,
-                'duration':    str(spot_duration),
-                'is_bonus':    line.is_bonus,
-                'booking_code': 10 if line.is_bonus else 2,
-            })
+            wk_end = wk_start + timedelta(days=6)  # Mon → Sun
+            specs.append(
+                {
+                    "days": days,
+                    "time_range": time_range,
+                    "description": line.description,
+                    "rate": line.rate,
+                    "total_spots": spots,
+                    "spots_per_week": spots,
+                    "date_from": wk_start,
+                    "date_to": wk_end,
+                    "duration": str(spot_duration),
+                    "is_bonus": line.is_bonus,
+                    "booking_code": 10 if line.is_bonus else 2,
+                }
+            )
     return specs
 
 
 # ─── Input gather ─────────────────────────────────────────────────────────────
+
 
 def gather_eqc_inputs(xlsx_path: str) -> Optional[dict]:
     """
@@ -192,16 +204,22 @@ def gather_eqc_inputs(xlsx_path: str) -> Optional[dict]:
     order = parse_eqc_xlsx(xlsx_path)
     quarters = _quarter_groups(order.week_dates)
 
-    print(f"\n{'='*64}")
+    print(f"\n{'=' * 64}")
     print(f"Agency:   {order.agency}  (fixed — Etere agency ID {AGENCY_IDS['THMEDIA']})")
     print(f"Customer: {order.client}")
     print(f"Market:   {order.market_code}")
-    print(f"Weeks:    {', '.join(d.strftime('%m/%d') for d in order.week_dates)}")
+    print(
+        f"Weeks:    {', '.join(f'{d.month}/{d.day}/{d.year % 100:02d}' for d in order.week_dates)}"
+    )
+    for note in order.repairs:
+        print(f"  ⚠ sheet year corrected: {note}")
     print(f"Quarters: {', '.join(q['desc'].split()[-1] for q in quarters)}")
     for ln in order.lines:
         tag = "BNS" if ln.is_bonus else "   "
         rate = f"${ln.rate:.0f}" if ln.rate else "    "
-        print(f"  {tag} {ln.program.strip():28} {ln.days:6} {ln.time_raw:16} {rate}  {ln.week_spots}")
+        print(
+            f"  {tag} {ln.program.strip():28} {ln.days:6} {ln.time_raw:16} {rate}  {ln.week_spots}"
+        )
 
     # Start-date sanity check
     start_override = _confirm_start_date(order)
@@ -212,17 +230,23 @@ def gather_eqc_inputs(xlsx_path: str) -> Optional[dict]:
     # Customer (advertiser). EQC is a fixed single client; default to ID 20.
     cust = _lookup_customer(order.client)
     separation = (15, 0, 0)
-    billing_type = 'agency'
+    billing_type = "agency"
     if cust:
         customer_id = int(cust.customer_id)
-        billing_type = cust.billing_type or 'agency'
+        billing_type = cust.billing_type or "agency"
         separation = (cust.separation_customer, cust.separation_event, cust.separation_order)
-        print(f"\n[CUSTOMER] ✓ '{order.client}' in DB → ID {customer_id}, billing={billing_type}, sep {separation}")
+        print(
+            f"\n[CUSTOMER] ✓ '{order.client}' in DB → ID {customer_id}, billing={billing_type}, sep {separation}"
+        )
     else:
         raw_id = input(f"\n  Customer ID [{DEFAULT_CUSTOMER_ID}]: ").strip()
         customer_id = int(raw_id) if raw_id.isdigit() else DEFAULT_CUSTOMER_ID
-        save = input(f"  Save '{order.client}' (ID {customer_id}, {billing_type}) to DB? (y/n): ").strip().lower()
-        if save in ('y', 'yes'):
+        save = (
+            input(f"  Save '{order.client}' (ID {customer_id}, {billing_type}) to DB? (y/n): ")
+            .strip()
+            .lower()
+        )
+        if save in ("y", "yes"):
             _upsert_customer(str(customer_id), order.client, separation, billing_type)
 
     # Spot duration
@@ -233,31 +257,34 @@ def gather_eqc_inputs(xlsx_path: str) -> Optional[dict]:
     print()
     quarter_inputs: list[dict] = []
     for q in quarters:
-        qlabel = q['desc'].split()[-1]
+        qlabel = q["desc"].split()[-1]
         print(f"  ── {qlabel} ({_fmt_mmddyyyy(q['start'])} – {_fmt_mmddyyyy(q['end'])}) ──")
         raw = input(f"    Contract code [{q['code']}]: ").strip()
-        code = raw or q['code']
+        code = raw or q["code"]
         raw = input(f"    Description [{q['desc']}]: ").strip()
-        desc = raw or q['desc']
-        quarter_inputs.append({
-            'cols':  q['cols'],
-            'start': _fmt_mmddyyyy(q['start']),
-            'end':   _fmt_mmddyyyy(q['end']),
-            'code':  code,
-            'description': desc,
-        })
+        desc = raw or q["desc"]
+        quarter_inputs.append(
+            {
+                "cols": q["cols"],
+                "start": _fmt_mmddyyyy(q["start"]),
+                "end": _fmt_mmddyyyy(q["end"]),
+                "code": code,
+                "description": desc,
+            }
+        )
 
     return {
-        'customer_id':   customer_id,
-        'client':        order.client,
-        'billing_type':  billing_type,
-        'separation':    separation,
-        'spot_duration': spot_duration,
-        'quarters':      quarter_inputs,
+        "customer_id": customer_id,
+        "client": order.client,
+        "billing_type": billing_type,
+        "separation": separation,
+        "spot_duration": spot_duration,
+        "quarters": quarter_inputs,
     }
 
 
 # ─── Direct DB entry ───────────────────────────────────────────────────────────
+
 
 def _create_quarter_contract(order: EQCOrder, inputs: dict, quarter: dict) -> Optional[str]:
     """Enter one quarter as a single Etere contract. Returns the code or None."""
@@ -267,21 +294,21 @@ def _create_quarter_contract(order: EQCOrder, inputs: dict, quarter: dict) -> Op
         connect,
     )
 
-    customer_id = inputs.get('customer_id')
+    customer_id = inputs.get("customer_id")
     if customer_id is None:
         print("[EQC] ✗ No customer_id")
         return None
 
-    separation   = inputs.get('separation', (15, 0, 0))
-    billing_type = inputs.get('billing_type', 'agency')
-    spot_duration = inputs.get('spot_duration', 30)
-    code = quarter['code']
-    description = quarter['description']
-    start_d = _parse_date(quarter['start'])
-    end_d   = _parse_date(quarter['end'])
+    separation = inputs.get("separation", (15, 0, 0))
+    billing_type = inputs.get("billing_type", "agency")
+    spot_duration = inputs.get("spot_duration", 30)
+    code = quarter["code"]
+    description = quarter["description"]
+    start_d = _parse_date(quarter["start"])
+    end_d = _parse_date(quarter["end"])
 
     # Resolve the column subset for this quarter back into an order-like view
-    quarter_view = {'cols': quarter['cols']}
+    quarter_view = {"cols": quarter["cols"]}
     specs = build_quarter_lines(order, quarter_view, spot_duration)
     if not specs:
         print(f"[EQC] ✗ No lines for {code}")
@@ -297,7 +324,7 @@ def _create_quarter_contract(order: EQCOrder, inputs: dict, quarter: dict) -> Op
             code=code,
             description=description,
             customer_id=int(customer_id),
-            agency_id=AGENCY_IDS["THMEDIA"],   # fallback; ANAGRAF link wins
+            agency_id=AGENCY_IDS["THMEDIA"],  # fallback; ANAGRAF link wins
             lookup_customer_defaults=True,
             contract_date=start_d,
             contract_end_date=end_d,
@@ -327,6 +354,7 @@ def _create_quarter_contract(order: EQCOrder, inputs: dict, quarter: dict) -> Op
     except Exception as exc:
         print(f"[EQC] ✗ {exc}")
         import traceback
+
         traceback.print_exc()
         if conn:
             try:
@@ -344,7 +372,7 @@ def run_eqc_order(order: EQCOrder, inputs: dict) -> list[tuple[str, bool]]:
     Returns a list of (contract_code, success) tuples (one per quarter).
     """
     results: list[tuple[str, bool]] = []
-    for quarter in inputs.get('quarters', []):
+    for quarter in inputs.get("quarters", []):
         code = _create_quarter_contract(order, inputs, quarter)
-        results.append((quarter.get('code', 'TH EQC'), code is not None))
+        results.append((quarter.get("code", "TH EQC"), code is not None))
     return results

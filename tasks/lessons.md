@@ -4,6 +4,34 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Buyer's Date Cell Carries the Year It Was TYPED With — Validate Dates Against What They Must Be (Monday, Ascending, Inside the Season), Never Take the Cell as Truth
+
+**Session:** Lee, TH Media EQC 2026-2027 proposal — "it's detecting NEXT YEAR's months as 2026" (2026-09-29)
+
+**Rule:** The EQC reader took each week-column date cell verbatim. The buyer built the January-
+March columns by copying the October ones and changing month/day, so the cells said 01/11/2026 …
+03/22/2026 — a Sunday, nine months BEFORE the 12/21/2026 column beside them — while the title
+read "2026-2027 Flight schedule" and the month labels ran October→March. The gather offered a
+26Q1 contract dated 01/11/2026 with code TH EQC 2601; Lee caught it at the prompt. Every value in
+the sheet except the year digits said 2027.
+
+**How to apply:**
+1. A parsed date has PROPERTIES the domain fixes: a week-start is a Monday, columns ascend in
+   time, a season title bounds the years. Check them all (`repair_week_years`); a cell that
+   fails one is a typo, not data. Same family as "a missing time is never defaulted" and "map by
+   header label" — the sheet's own structure is the oracle for its cells.
+2. Repair only when the repair is DETERMINISTIC (roll a backwards date forward until it ascends)
+   and re-verify the result (still a Monday, inside the season); anything else raises with the
+   cell named. Print every repair in the gather (`⚠ sheet year corrected: …`) so the operator
+   sees the sheet was wrong, not just that the tool was right.
+3. Print dates with their YEAR in gather summaries (`1/11/27`, not `01/11`) — the `Weeks:` line
+   had the bug in plain sight and hid it by format.
+4. Commit the real workbook as the fixture the day the bug is found (`tests/fixtures/eqc/`), and
+   pair the repair test with a no-op test: a corrected copy of the same sheet parses identically
+   with zero repairs.
+
+---
+
 ## A Hand-Built Oracle Shows WHAT Was Done, Not WHICH Parts Are Policy — Ask Before Promoting a One-Off to a Default; and Two Lookups Over One Store Must Share One Key
 
 **Session:** Lee, Crispin/MMI production EDI invoice 2608-020 (2026-09-24)

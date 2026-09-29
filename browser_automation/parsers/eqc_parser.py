@@ -31,13 +31,13 @@ from typing import Optional
 # ─── Day normalization (shared idiom with tt_parser) ─────────────────────────
 
 _DAY_NORM = [
-    (re.compile(r'\bSun\b', re.IGNORECASE), 'Su'),
-    (re.compile(r'\bSat\b', re.IGNORECASE), 'Sa'),
-    (re.compile(r'\bMon\b', re.IGNORECASE), 'M'),
-    (re.compile(r'\bTue\b', re.IGNORECASE), 'T'),
-    (re.compile(r'\bWed\b', re.IGNORECASE), 'W'),
-    (re.compile(r'\bThu\b', re.IGNORECASE), 'R'),
-    (re.compile(r'\bFri\b', re.IGNORECASE), 'F'),
+    (re.compile(r"\bSun\b", re.IGNORECASE), "Su"),
+    (re.compile(r"\bSat\b", re.IGNORECASE), "Sa"),
+    (re.compile(r"\bMon\b", re.IGNORECASE), "M"),
+    (re.compile(r"\bTue\b", re.IGNORECASE), "T"),
+    (re.compile(r"\bWed\b", re.IGNORECASE), "W"),
+    (re.compile(r"\bThu\b", re.IGNORECASE), "R"),
+    (re.compile(r"\bFri\b", re.IGNORECASE), "F"),
 ]
 
 
@@ -45,9 +45,9 @@ def _normalize_days(s: str) -> str:
     """'M-Sun' → 'M-Su'; 'Sat & Sun' → 'Sa,Su'; 'M-F' → 'M-F'."""
     for pattern, repl in _DAY_NORM:
         s = pattern.sub(repl, s)
-    s = re.sub(r'\s*&\s*', ',', s)   # "Sa & Su" → "Sa,Su"
-    s = re.sub(r'\s+', '', s)        # drop residual spaces ("Sa - Su" never happens here)
-    return s.strip(' ,')
+    s = re.sub(r"\s*&\s*", ",", s)  # "Sa & Su" → "Sa,Su"
+    s = re.sub(r"\s+", "", s)  # drop residual spaces ("Sa - Su" never happens here)
+    return s.strip(" ,")
 
 
 def _split_schedule(schedule: str) -> tuple[str, str]:
@@ -62,11 +62,11 @@ def _split_schedule(schedule: str) -> tuple[str, str]:
     The time portion starts at the first time token (a digit run followed by an
     optional am/pm marker and a hyphen). Everything before it is the day part.
     """
-    schedule = (schedule or '').strip()
-    m = re.search(r'\d{1,2}(?::\d{2})?\s*[ap]?\s*[-–]', schedule)
+    schedule = (schedule or "").strip()
+    m = re.search(r"\d{1,2}(?::\d{2})?\s*[ap]?\s*[-–]", schedule)
     if m:
-        days_part = schedule[:m.start()].strip()
-        time_part = schedule[m.start():].strip()
+        days_part = schedule[: m.start()].strip()
+        time_part = schedule[m.start() :].strip()
     else:
         days_part, time_part = schedule, ""
     return _normalize_days(days_part), time_part
@@ -74,12 +74,13 @@ def _split_schedule(schedule: str) -> tuple[str, str]:
 
 # ─── Data classes ────────────────────────────────────────────────────────────
 
+
 @dataclass
 class EQCLine:
-    program: str               # e.g. "Shanghai Primetime News" or "Chinese" (bonus)
-    schedule: str              # raw SCHEDULE cell, e.g. "M-Sun 8p-9p"
-    rate: float                # per-spot GROSS rate (0.0 for bonus)
-    week_spots: list[int] = field(default_factory=list)   # one count per week-column
+    program: str  # e.g. "Shanghai Primetime News" or "Chinese" (bonus)
+    schedule: str  # raw SCHEDULE cell, e.g. "M-Sun 8p-9p"
+    rate: float  # per-spot GROSS rate (0.0 for bonus)
+    week_spots: list[int] = field(default_factory=list)  # one count per week-column
     week_dates: list[date] = field(default_factory=list)  # Monday of each week-column
     is_bonus: bool = False
 
@@ -106,13 +107,14 @@ class EQCLine:
 
 @dataclass
 class EQCOrder:
-    market_code: str                                  # "SEA"
+    market_code: str  # "SEA"
     lines: list[EQCLine] = field(default_factory=list)
     week_dates: list[date] = field(default_factory=list)
     order_date: Optional[date] = None
-    client: str = "Emerald Queen Casino"              # advertiser (ANAGRAF customer 20)
-    agency: str = "TH Media"                          # buyer (agency 19)
-    rates_are_net: bool = False                       # rates are GROSS
+    client: str = "Emerald Queen Casino"  # advertiser (ANAGRAF customer 20)
+    agency: str = "TH Media"  # buyer (agency 19)
+    rates_are_net: bool = False  # rates are GROSS
+    repairs: list[str] = field(default_factory=list)  # week-date years corrected from the sheet
 
     @property
     def markets(self) -> list[str]:
@@ -128,26 +130,76 @@ class EQCOrder:
 
     @property
     def flight_start(self) -> str:
-        return self.week_dates[0].strftime('%m/%d/%Y') if self.week_dates else ""
+        return self.week_dates[0].strftime("%m/%d/%Y") if self.week_dates else ""
 
     @property
     def flight_end(self) -> str:
         if not self.week_dates:
             return ""
-        return (self.week_dates[-1] + timedelta(days=6)).strftime('%m/%d/%Y')
+        return (self.week_dates[-1] + timedelta(days=6)).strftime("%m/%d/%Y")
+
+
+# ─── Week-date repair ────────────────────────────────────────────────────────
+_TITLE_SPAN_RE = re.compile(r"(20\d\d)\s*[-–/]\s*(20\d\d)")
+
+
+def _title_span(rows) -> Optional[tuple[int, int]]:
+    """The sheet title's season span ("2026-2027   Flight schedule"), if it has one."""
+    for row in rows[:8]:
+        for v in row:
+            m = _TITLE_SPAN_RE.search(str(v)) if isinstance(v, str) else None
+            if m:
+                a, b = int(m.group(1)), int(m.group(2))
+                return (a, b) if a <= b else (b, a)
+    return None
+
+
+def repair_week_years(
+    week_dates: list[date], span: Optional[tuple[int, int]] = None
+) -> tuple[list[date], list[str]]:
+    """The buyer's week cells carry the year they were typed with, and a season that
+    crosses New Year keeps the old one: the 2026-2027 proposal listed 01/11/2026 after
+    12/21/2026 (a Sunday, months in the past). Every week-start is a Monday and the
+    columns run left to right in time, so a date that steps backwards is rolled forward
+    a year until it is after its predecessor. The result must be a Monday and, when the
+    title names a season span, fall inside it — otherwise the sheet is refused rather
+    than guessed at. Returns (dates, repair notes)."""
+    out: list[date] = []
+    notes: list[str] = []
+    for d in week_dates:
+        fixed = d
+        if out and fixed <= out[-1]:
+            while fixed <= out[-1]:
+                fixed = fixed.replace(year=fixed.year + 1)
+            notes.append(
+                f"week column {d.strftime('%m/%d/%Y')} ({d.strftime('%A')}) comes after "
+                f"{out[-1].strftime('%m/%d/%Y')}; read as {fixed.strftime('%m/%d/%Y')}"
+            )
+        if fixed.weekday() != 0:
+            raise ValueError(
+                f"EQC week column {d.strftime('%m/%d/%Y')} is a {fixed.strftime('%A')}, not a Monday — "
+                "check the sheet's week dates before entering."
+            )
+        if span and not (span[0] <= fixed.year <= span[1]):
+            raise ValueError(
+                f"EQC week column {fixed.strftime('%m/%d/%Y')} falls outside the sheet's season "
+                f"{span[0]}-{span[1]} — check the sheet's week dates before entering."
+            )
+        out.append(fixed)
+    return out, notes
 
 
 # ─── Market detection ────────────────────────────────────────────────────────
 
 _MARKET_KEYWORDS: list[tuple[str, str]] = [
-    ("SEATTLE",        "SEA"),
-    ("SAN FRANCISCO",  "SFO"),
+    ("SEATTLE", "SEA"),
+    ("SAN FRANCISCO", "SFO"),
     ("CENTRAL VALLEY", "CVC"),
-    ("SACRAMENTO",     "CVC"),
-    ("LOS ANGELES",    "LAX"),
-    ("HOUSTON",        "HOU"),
-    ("WASHINGTON",     "WDC"),
-    ("NEW YORK",       "NYC"),
+    ("SACRAMENTO", "CVC"),
+    ("LOS ANGELES", "LAX"),
+    ("HOUSTON", "HOU"),
+    ("WASHINGTON", "WDC"),
+    ("NEW YORK", "NYC"),
 ]
 
 
@@ -161,13 +213,20 @@ def _detect_market(text: str) -> Optional[str]:
 
 # ─── Footer / skip labels ────────────────────────────────────────────────────
 
-_STOP_LABELS = frozenset({
-    'paid units', 'bonus units', 'total units (paid + bonus)',
-    'total units', 'gross', 'gross ',
-})
+_STOP_LABELS = frozenset(
+    {
+        "paid units",
+        "bonus units",
+        "total units (paid + bonus)",
+        "total units",
+        "gross",
+        "gross ",
+    }
+)
 
 
 # ─── Parser ──────────────────────────────────────────────────────────────────
+
 
 def parse_eqc_xlsx(path: str) -> EQCOrder:
     """
@@ -201,7 +260,7 @@ def parse_eqc_xlsx(path: str) -> EQCOrder:
                 market_code = mc
                 break
         for v in row:
-            if hasattr(v, 'year') and hasattr(v, 'month') and not hasattr(v, 'hour'):
+            if hasattr(v, "year") and hasattr(v, "month") and not hasattr(v, "hour"):
                 order_date = v  # a plain date, rare in header
 
     # ── Locate header row (B=PROGRAM, D=SCHEDULE) and week-date columns ───────
@@ -209,14 +268,14 @@ def parse_eqc_xlsx(path: str) -> EQCOrder:
     week_dates: list[date] = []
     week_cols: list[int] = []
     for i, row in enumerate(rows):
-        b = str(row[1] or '').strip().upper() if len(row) > 1 else ''
-        d = str(row[3] or '').strip().upper() if len(row) > 3 else ''
-        if b == 'PROGRAM' and 'SCHEDULE' in d:
+        b = str(row[1] or "").strip().upper() if len(row) > 1 else ""
+        d = str(row[3] or "").strip().upper() if len(row) > 3 else ""
+        if b == "PROGRAM" and "SCHEDULE" in d:
             header_idx = i
-            for col_idx in range(5, len(row)):       # E is rate (idx 4); dates start at F (idx 5)
+            for col_idx in range(5, len(row)):  # E is rate (idx 4); dates start at F (idx 5)
                 v = row[col_idx]
-                if hasattr(v, 'date'):               # datetime cell
-                    week_dates.append(v.date() if hasattr(v, 'hour') else v)
+                if hasattr(v, "date"):  # datetime cell
+                    week_dates.append(v.date() if hasattr(v, "hour") else v)
                     week_cols.append(col_idx)
             break
 
@@ -226,15 +285,20 @@ def parse_eqc_xlsx(path: str) -> EQCOrder:
             "Could not locate the EQC header row (B='PROGRAM', D='SCHEDULE') "
             "with week-date columns."
         )
+    try:
+        week_dates, repairs = repair_week_years(week_dates, _title_span(rows))
+    except ValueError:
+        wb.close()
+        raise
 
     # ── Parse program rows ───────────────────────────────────────────────────
     lines: list[EQCLine] = []
-    for row in rows[header_idx + 1:]:
-        program = str(row[1] or '').strip() if len(row) > 1 else ''
-        schedule = str(row[3] or '').strip() if len(row) > 3 else ''
+    for row in rows[header_idx + 1 :]:
+        program = str(row[1] or "").strip() if len(row) > 1 else ""
+        schedule = str(row[3] or "").strip() if len(row) > 3 else ""
         rate_cell = row[4] if len(row) > 4 else None
 
-        label_d = str(row[3] or '').strip().lower() if len(row) > 3 else ''
+        label_d = str(row[3] or "").strip().lower() if len(row) > 3 else ""
         if label_d in _STOP_LABELS:
             break  # reached the totals/GROSS footer block
 
@@ -247,14 +311,16 @@ def parse_eqc_xlsx(path: str) -> EQCOrder:
             for c in week_cols
         ]
 
-        lines.append(EQCLine(
-            program=program,
-            schedule=schedule,
-            rate=rate,
-            week_spots=week_spots,
-            week_dates=list(week_dates),
-            is_bonus=(rate == 0.0),
-        ))
+        lines.append(
+            EQCLine(
+                program=program,
+                schedule=schedule,
+                rate=rate,
+                week_spots=week_spots,
+                week_dates=list(week_dates),
+                is_bonus=(rate == 0.0),
+            )
+        )
 
     wb.close()
 
@@ -266,4 +332,5 @@ def parse_eqc_xlsx(path: str) -> EQCOrder:
         lines=lines,
         week_dates=week_dates,
         order_date=order_date,
+        repairs=repairs,
     )
