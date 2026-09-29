@@ -95,6 +95,17 @@
             white-space: nowrap;
         }
         .btn-sel:hover { border-color: var(--nord10); color: var(--nord10); }
+        .cat-sort { display: flex; align-items: center; gap: .25rem; font-size: .78rem; color: var(--text-muted); }
+        .cat-sort button {
+            background: none;
+            border: 1px solid transparent;
+            border-radius: 5px;
+            color: var(--text-muted);
+            font-size: .78rem;
+            padding: .2rem .5rem;
+            cursor: pointer;
+        }
+        .cat-sort button.on { background: var(--nord6); border-color: var(--border-color); color: var(--text-primary); font-weight: 600; }
         .cat.delete .cat-head { border-left: 4px solid var(--nord11); }
         .cat.dangling .cat-head { border-left: 4px solid var(--nord12); }
         .cat.unexpired .cat-head { border-left: 4px solid var(--nord15); }
@@ -270,6 +281,23 @@
 
 <script>
 let scanData = null;
+const sortState = {};   // category key -> 'size' | 'name' | 'files' (default size, largest first)
+const SORTS = {
+    size:  (a, b) => b.bytes - a.bytes || a.family.localeCompare(b.family),
+    name:  (a, b) => a.family.localeCompare(b.family),
+    files: (a, b) => b.count - a.count || a.family.localeCompare(b.family),
+};
+function sortedGroups(cat) {
+    return [...cat.groups].sort(SORTS[sortState[cat.key] || 'size']);
+}
+function setSort(key, mode) {
+    sortState[key] = mode;
+    const keep = new Set([...document.querySelectorAll(`.fam-check-${key}:checked`)]
+        .map(cb => cb.dataset.family));
+    render(scanData);
+    document.querySelectorAll(`.fam-check-${key}`).forEach(cb => { cb.checked = keep.has(cb.dataset.family); });
+    updateBar(key);
+}
 (function initRange() {
     const y = new Date().getFullYear() - 1;
     document.getElementById('agedTo').value = `12/31/${y}`;
@@ -339,7 +367,8 @@ function render(data) {
         </div>`;
 
     html += data.categories.map(cat => {
-        const groups = cat.groups;
+        const groups = sortedGroups(cat);
+        const mode = sortState[cat.key] || 'size';
         let body;
         if (!groups.length) {
             body = `<div class="cat-empty">None.</div>`;
@@ -347,7 +376,7 @@ function render(data) {
             body = groups.map((g, i) => `
                 <div class="fam">
                     <div class="fam-head" onclick="toggleDetail(event, '${cat.key}', ${i})">
-                        ${cat.actionable ? `<input type="checkbox" class="fam-check fam-check-${cat.key}" data-idx="${i}" checked onclick="event.stopPropagation()" onchange="updateBar('${cat.key}')" />` : ''}
+                        ${cat.actionable ? `<input type="checkbox" class="fam-check fam-check-${cat.key}" data-idx="${i}" data-family="${escapeHtml(g.family)}" checked onclick="event.stopPropagation()" onchange="updateBar('${cat.key}')" />` : ''}
                         <span class="fam-name">${escapeHtml(g.family)}</span>
                         <span class="fam-counts"><strong>${g.count}</strong> file${g.count === 1 ? '' : 's'} · <strong>${gb(g.bytes)}</strong></span>
                         <span class="fam-range">${g.expired_from ? 'expired ' + fmtDate(g.expired_from) + (g.expired_to !== g.expired_from ? ' – ' + fmtDate(g.expired_to) : '') : 'not expired'}${g.aired_from ? ' · last aired ' + fmtDate(g.aired_from) + (g.aired_to !== g.aired_from ? ' – ' + fmtDate(g.aired_to) : '') : ''}</span>
@@ -386,6 +415,9 @@ function render(data) {
                 <div class="cat-head">
                     <h3>${escapeHtml(cat.label)}</h3>
                     <span class="cat-sum"><strong>${cat.count}</strong> file${cat.count === 1 ? '' : 's'}${cat.bytes ? ` · <strong>${gb(cat.bytes)}</strong>` : ''}</span>
+                    ${groups.length > 1 ? `<span class="cat-sort">sort
+                        ${['size', 'name', 'files'].map(m => `<button class="${mode === m ? 'on' : ''}" onclick="setSort('${cat.key}', '${m}')">${m}</button>`).join('')}
+                    </span>` : ''}
                     ${cat.actionable && groups.length ? `<span class="cat-select">
                         <button class="btn-sel" onclick="setAll('${cat.key}', true)">Select all</button>
                         <button class="btn-sel" onclick="setAll('${cat.key}', false)">Deselect all</button>
@@ -419,10 +451,11 @@ function setAll(key, v) {
 
 function selected(key) {
     const cat = catByKey(key);
+    const sorted = sortedGroups(cat);
     const ids = [], groups = [];
     let bytes = 0;
     document.querySelectorAll(`.fam-check-${key}:checked`).forEach(cb => {
-        const g = cat.groups[Number(cb.dataset.idx)];
+        const g = sorted[Number(cb.dataset.idx)];
         ids.push(...g.ids); bytes += g.bytes; groups.push(g.family);
     });
     return { ids, bytes, groups };
