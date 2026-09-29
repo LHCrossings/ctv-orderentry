@@ -50,7 +50,14 @@ def _parse_range(d_from: str | None, d_to: str | None) -> tuple[dt.date | None, 
     return lo, hi
 
 
-def _apply_sync(category: str, ids: list[int], today: dt.date, log, aged_range=(None, None)) -> int:
+def _apply_sync(
+    category: str,
+    ids: list[int],
+    today: dt.date,
+    log,
+    aged_range=(None, None),
+    include_short_form: bool = False,
+) -> int:
     """Blocking body of the apply: re-scan the requested ids, act on those still in
     ``category``, verify from a fresh connection. Returns the exit code."""
     conn = _connect()
@@ -58,22 +65,33 @@ def _apply_sync(category: str, ids: list[int], today: dt.date, log, aged_range=(
         s3, bucket = _s3_client()
         wanted = set(ids)
         if category == "unexpired":
-            rows = [r for r in smp.fetch_unexpired(conn, today) if int(r["id_filmati"]) in wanted]
+            rows = [
+                r
+                for r in smp.fetch_unexpired(conn, today, include_short_form)
+                if int(r["id_filmati"]) in wanted
+            ]
             todo = smp.categorize_unexpired(rows)["unexpired"]
         elif category == "aged":
             lo, hi = aged_range
             rows = [
-                r for r in smp.fetch_aged(conn, today, lo, hi) if int(r["id_metafile"]) in wanted
+                r
+                for r in smp.fetch_aged(conn, today, lo, hi, include_short_form)
+                if int(r["id_metafile"]) in wanted
             ]
             sizes = smp.object_sizes(s3, bucket, (r.get("file_name") for r in rows))
             todo = smp.categorize_aged(rows, sizes)["aged"]
         else:
-            rows = [r for r in smp.fetch_expired(conn, today) if int(r["id_metafile"]) in wanted]
+            rows = [
+                r
+                for r in smp.fetch_expired(conn, today, include_short_form)
+                if int(r["id_metafile"]) in wanted
+            ]
             sizes = smp.object_sizes(s3, bucket, (r.get("file_name") for r in rows))
             todo = smp.categorize(rows, sizes)[category]
         skipped = len(wanted) - len(todo)
         log(
             f"[INFO] {len(todo)} of {len(wanted)} selected item(s) still in category '{category}'"
+            + (" (short-form INCLUDED)" if include_short_form else "")
             + (f"; {skipped} skipped (changed since the scan)" if skipped else "")
         )
         if not todo:
@@ -132,14 +150,27 @@ def build_s3_cleanup_router(templates: Jinja2Templates) -> APIRouter:
         return templates.TemplateResponse(request, "traffic/s3_cleanup.html")
 
     @router.get("/api/traffic/s3-cleanup/scan")
-    async def scan(aged_from: str | None = Query(None), aged_to: str | None = Query(None)):
+    async def scan(
+        aged_from: str | None = Query(None),
+        aged_to: str | None = Query(None),
+        short_form: str | None = Query(None),
+    ):
         lo, hi = _parse_range(aged_from, aged_to)
+        include_short_form = short_form in ("1", "true", "yes")
 
         def _run():
             conn = _connect()
             try:
                 s3, bucket = _s3_client()
-                return smp.scan(conn, s3, bucket, dt.date.today(), aged_from=lo, aged_to=hi)
+                return smp.scan(
+                    conn,
+                    s3,
+                    bucket,
+                    dt.date.today(),
+                    aged_from=lo,
+                    aged_to=hi,
+                    include_short_form=include_short_form,
+                )
             finally:
                 conn.close()
 
@@ -161,6 +192,7 @@ def build_s3_cleanup_router(templates: Jinja2Templates) -> APIRouter:
         if not ids:
             raise HTTPException(400, "no files selected")
         aged_range = _parse_range(payload.get("aged_from"), payload.get("aged_to"))
+        include_short_form = bool(payload.get("short_form"))
         if category == "aged" and not aged_range[1]:
             raise HTTPException(400, "the old-programming action needs its 'to' date")
 
@@ -169,7 +201,7 @@ def build_s3_cleanup_router(templates: Jinja2Templates) -> APIRouter:
 
         def worker():
             try:
-                code = _apply_sync(category, ids, today, q.put, aged_range)
+                code = _apply_sync(category, ids, today, q.put, aged_range, include_short_form)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("s3 cleanup apply failed")
                 q.put(f"[ERROR] {type(exc).__name__}: {exc}"[:600])

@@ -33,6 +33,15 @@
             font-size: .88rem;
         }
         .cat.aged .cat-head { border-left: 4px solid var(--nord11); }
+        .sf-toggle {
+            display: flex; align-items: center; gap: .45rem;
+            font-size: .82rem; color: var(--text-muted);
+            border: 1px solid var(--border-color); border-radius: 6px; padding: .35rem .6rem;
+            cursor: pointer; user-select: none;
+        }
+        .sf-toggle input { width: 15px; height: 15px; cursor: pointer; }
+        .sf-toggle.on { border-color: var(--nord11); color: var(--nord11); font-weight: 600; background: rgba(191,97,106,.08); }
+        .sf-flag { color: var(--nord11); font-weight: 700; }
         .btn-scan {
             background: var(--nord10);
             color: #fff;
@@ -270,6 +279,10 @@
             <span>–</span>
             <input type="text" id="agedTo" placeholder="to" onblur="formatDateInput(this)" />
         </div>
+        <label class="sf-toggle" id="sfLabel">
+            <input type="checkbox" id="shortForm" onchange="document.getElementById('sfLabel').classList.toggle('on', this.checked)" />
+            Include commercials, PSAs, PIs, IDs and other short-form
+        </label>
         <button class="btn-scan" id="scanBtn" onclick="runScan()">Scan</button>
     </div>
 
@@ -304,7 +317,8 @@ function setSort(key, mode) {
 })();
 function agedRange() {
     return { aged_from: parseDateInput(document.getElementById('agedFrom').value),
-             aged_to: parseDateInput(document.getElementById('agedTo').value) };
+             aged_to: parseDateInput(document.getElementById('agedTo').value),
+             short_form: document.getElementById('shortForm').checked };
 }
 const CAT_BUTTON = {
     delete:   (n, gb) => `Delete ${n} file${n === 1 ? '' : 's'} from S3 (${gb}) and remove references`,
@@ -341,6 +355,7 @@ async function runScan() {
         const qs = new URLSearchParams();
         if (rg.aged_from) qs.set('aged_from', rg.aged_from);
         if (rg.aged_to) qs.set('aged_to', rg.aged_to);
+        if (rg.short_form) qs.set('short_form', '1');
         const resp = await fetch('/api/traffic/s3-cleanup/scan?' + qs.toString());
         if (!resp.ok) throw new Error((await resp.json()).detail || `HTTP ${resp.status}`);
         scanData = await resp.json();
@@ -363,7 +378,9 @@ function render(data) {
             <span>As of <strong>${fmtDate(data.as_of)}</strong></span>
             <span><strong>${data.total}</strong> S3 files on expired program assets</span>
             <span>Old programming range: <strong>${data.aged_range[1] ? (data.aged_range[0] ? fmtDate(data.aged_range[0]) : 'start') + ' – ' + fmtDate(data.aged_range[1]) : 'not scanned (set a "to" date)'}</strong></span>
-            <span>Short-form kept by rule: <strong>${sf.count}</strong> files, ${gb(sf.bytes)}</span>
+            ${data.include_short_form
+                ? `<span class="sf-flag">⚠ Short-form INCLUDED in this scan (commercials, PSAs, PIs, IDs)</span>`
+                : `<span>Short-form kept by rule: <strong>${sf.count}</strong> files, ${gb(sf.bytes)}</span>`}
         </div>`;
 
     html += data.categories.map(cat => {
@@ -384,10 +401,11 @@ function render(data) {
                     </div>
                     <div id="detail-${cat.key}-${i}" style="display:none;">
                         <table class="file-table">
-                            <thead><tr><th>Code</th><th>File</th><th>Size</th><th>Expired</th><th>Last aired</th><th>Note</th></tr></thead>
+                            <thead><tr><th>Code</th><th>Type</th><th>File</th><th>Size</th><th>Expired</th><th>Last aired</th><th>Note</th></tr></thead>
                             <tbody>${g.files.map(f => `
                                 <tr>
                                     <td>${escapeHtml(f.cod_progra)}</td>
+                                    <td>${escapeHtml(f.newtype || '')}</td>
                                     <td>${escapeHtml(f.file_name || '—')}</td>
                                     <td class="num">${f.size ? gb(f.size) : '—'}</td>
                                     <td>${fmtDate(f.expired)}</td>
@@ -479,7 +497,8 @@ async function runApply(key) {
         : key === 'dangling'
         ? `Remove ${s.ids.length} dead references from the Media Library?\n\nGroups: ${s.groups.join(', ')}\n\nNo file exists in S3 for these. The rows are written to a restore file first; every asset is stamped expired as of today.`
         : `Mark ${s.ids.length} assets expired as of today?\n\nGroups: ${s.groups.join(', ')}\n\nThese program assets have no file in S3. This writes the expiry date only (what Etere's "mark as expired" does); the old dates go to a restore file first.`;
-    if (!confirm(msg)) return;
+    const sfNote = scanData.include_short_form ? '\n\n⚠ SHORT-FORM INCLUDED: this selection may contain commercials, PSAs, PIs or IDs.' : '';
+    if (!confirm(msg + sfNote)) return;
 
     const term = document.getElementById('terminal');
     const errDiv = document.getElementById('error-msg');

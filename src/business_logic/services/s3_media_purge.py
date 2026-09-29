@@ -46,14 +46,22 @@ FS_TABLES: tuple[tuple[str, str], ...] = (
 )
 
 
+def _types_clause(include_short_form: bool) -> str:
+    """Program assets only, unless the operator switched the short-form exception off for
+    this scan (Lee 9/29: "turn OFF the commercial exception at certain times", e.g. the
+    Fujisankei commercials that will never air again). HIATUS stays guarded either way."""
+    if include_short_form:
+        return "1 = 1"
+    return "f.NEWTYPE IN (" + ", ".join(f"'{t}'" for t in ELIGIBLE_TYPES) + ")"
+
+
 def _name_guard_sql(col: str) -> str:
     return " AND ".join(f"{col} NOT LIKE '%{w}%'" for w in NAME_GUARD)
 
 
-def expired_candidates_sql(today: dt.date) -> str:
+def expired_candidates_sql(today: dt.date, include_short_form: bool = False) -> str:
     """S3 metafiles of program assets Etere has marked expired, with the facts the
     guards need. One row per metafile (an asset can hold two S3 metafile records)."""
-    types = ", ".join(f"'{t}'" for t in ELIGIBLE_TYPES)
     return f"""
 WITH air AS (
     SELECT ID_FILMATI,
@@ -73,7 +81,7 @@ JOIN FILMATI f WITH (NOLOCK) ON f.ID_FILMATI = x.ID_FILMATI
 LEFT JOIN FS_FILE fl WITH (NOLOCK) ON fl.ID_METAFILE = m.ID_METAFILE
 LEFT JOIN air ON air.ID_FILMATI = f.ID_FILMATI
 WHERE m.ID_METADEVICE = {S3_DEVICE}
-  AND f.NEWTYPE IN ({types})
+  AND {_types_clause(include_short_form)}
   AND f.DATA_SCAD IS NOT NULL AND f.DATA_SCAD < '{today + dt.timedelta(days=1):%Y-%m-%d}'
   AND {_name_guard_sql("f.COD_PROGRA")}
   AND {_name_guard_sql("f.DESCRIZIO")}
@@ -86,10 +94,12 @@ def _rows(cur) -> list[dict]:
     return [dict(zip(names, r, strict=True)) for r in cur.fetchall()]
 
 
-def fetch_expired(conn, today: dt.date | None = None) -> list[dict]:
+def fetch_expired(
+    conn, today: dt.date | None = None, include_short_form: bool = False
+) -> list[dict]:
     today = today or dt.date.today()
     cur = conn.cursor()
-    cur.execute(expired_candidates_sql(today))
+    cur.execute(expired_candidates_sql(today, include_short_form))
     return _rows(cur)
 
 
@@ -494,6 +504,7 @@ def group_rows(rows: Iterable[dict]) -> list[dict]:
             {
                 "id_metafile": r.get("id_metafile"),
                 "id_filmati": int(r["id_filmati"]),
+                "newtype": r.get("newtype"),
                 "cod_progra": r.get("cod_progra"),
                 "file_name": r.get("file_name"),
                 "size": int(r.get("size") or 0),
@@ -532,15 +543,16 @@ def scan(
     log: Callable[[str], None] = lambda s: None,
     aged_from: dt.date | None = None,
     aged_to: dt.date | None = None,
+    include_short_form: bool = False,
 ) -> dict:
     """Everything the page needs: candidates by category, grouped by show family.
     The old-programming sweep runs only when ``aged_to`` is given."""
     today = today or dt.date.today()
-    rows = fetch_expired(conn, today)
-    log(f"{len(rows)} S3 metafile(s) on expired program assets")
+    rows = fetch_expired(conn, today, include_short_form)
+    log(f"{len(rows)} S3 metafile(s) on expired {'' if include_short_form else 'program '}assets")
     aged_rows: list[dict] = []
     if aged_to:
-        aged_rows = fetch_aged(conn, today, aged_from, aged_to)
+        aged_rows = fetch_aged(conn, today, aged_from, aged_to, include_short_form)
         log(
             f"{len(aged_rows)} S3 metafile(s) on not-expired program assets last aired "
             f"{aged_from or 'ever'} .. {aged_to}"
@@ -548,7 +560,7 @@ def scan(
     sizes = object_sizes(s3, bucket, (r.get("file_name") for r in rows + aged_rows))
     log(f"{len(sizes)} object(s) found in S3")
     cats = categorize(rows, sizes)
-    unexp = categorize_unexpired(fetch_unexpired(conn, today))
+    unexp = categorize_unexpired(fetch_unexpired(conn, today, include_short_form))
     log(f"{len(unexp['unexpired'])} program asset(s) with no S3 file are not expired")
     cats["unexpired"] = unexp["unexpired"]
     cats["booked"].extend(unexp["booked"])
@@ -562,6 +574,7 @@ def scan(
         r["size"] = 0  # no object exists; Etere's recorded size is not storage
     return {
         "as_of": today.isoformat(),
+        "include_short_form": include_short_form,
         "aged_range": [
             aged_from.isoformat() if aged_from else None,
             aged_to.isoformat() if aged_to else None,
@@ -682,10 +695,9 @@ def mark_expired(
     return result
 
 
-def unexpired_candidates_sql(today: dt.date) -> str:
+def unexpired_candidates_sql(today: dt.date, include_short_form: bool = False) -> str:
     """Program assets with NO S3 copy that are not expired: the invariant breakers. Assets
     created in the last 7 days are left alone (ingest in progress)."""
-    types = ", ".join(f"'{t}'" for t in ELIGIBLE_TYPES)
     return f"""
 WITH air AS (
     SELECT ID_FILMATI,
@@ -708,7 +720,7 @@ SELECT NULL AS id_metafile, f.ID_FILMATI AS id_filmati, f.COD_PROGRA AS cod_prog
 FROM FILMATI f WITH (NOLOCK)
 LEFT JOIN copies c ON c.ID_FILMATI = f.ID_FILMATI
 LEFT JOIN air ON air.ID_FILMATI = f.ID_FILMATI
-WHERE f.NEWTYPE IN ({types})
+WHERE {_types_clause(include_short_form)}
   AND ISNULL(c.s3_copies, 0) = 0
   AND (f.DATA_SCAD IS NULL OR f.DATA_SCAD >= '{today + dt.timedelta(days=1):%Y-%m-%d}')
   AND f.CREATIONDATE < '{today - dt.timedelta(days=7):%Y-%m-%d}'
@@ -718,10 +730,12 @@ ORDER BY f.CREATIONDATE, f.COD_PROGRA
 """
 
 
-def fetch_unexpired(conn, today: dt.date | None = None) -> list[dict]:
+def fetch_unexpired(
+    conn, today: dt.date | None = None, include_short_form: bool = False
+) -> list[dict]:
     today = today or dt.date.today()
     cur = conn.cursor()
-    cur.execute(unexpired_candidates_sql(today))
+    cur.execute(unexpired_candidates_sql(today, include_short_form))
     return _rows(cur)
 
 
@@ -743,11 +757,12 @@ def categorize_unexpired(rows: Iterable[dict]) -> dict[str, list[dict]]:
 
 
 # --------------------------------------------------------------------------- aged sweep
-def aged_candidates_sql(today: dt.date, d_from: dt.date | None, d_to: dt.date) -> str:
+def aged_candidates_sql(
+    today: dt.date, d_from: dt.date | None, d_to: dt.date, include_short_form: bool = False
+) -> str:
     """S3 metafiles of program assets that are NOT expired, whose last air date (or, never
     aired, upload date) falls in [d_from, d_to]. This is how Lee picked AVS Jan-Jun and
     NEWSTODAY Jan-Jul by hand on 9/27: a show and a stretch of air dates."""
-    types = ", ".join(f"'{t}'" for t in ELIGIBLE_TYPES)
     lo = f"AND COALESCE(air.last_aired, f.CREATIONDATE) >= '{d_from:%Y-%m-%d}'" if d_from else ""
     return f"""
 WITH air AS (
@@ -768,7 +783,7 @@ JOIN FILMATI f WITH (NOLOCK) ON f.ID_FILMATI = x.ID_FILMATI
 LEFT JOIN FS_FILE fl WITH (NOLOCK) ON fl.ID_METAFILE = m.ID_METAFILE
 LEFT JOIN air ON air.ID_FILMATI = f.ID_FILMATI
 WHERE m.ID_METADEVICE = {S3_DEVICE}
-  AND f.NEWTYPE IN ({types})
+  AND {_types_clause(include_short_form)}
   AND (f.DATA_SCAD IS NULL OR f.DATA_SCAD >= '{today + dt.timedelta(days=1):%Y-%m-%d}')
   AND COALESCE(air.last_aired, f.CREATIONDATE) < '{d_to + dt.timedelta(days=1):%Y-%m-%d}'
   {lo}
@@ -778,9 +793,11 @@ ORDER BY COALESCE(air.last_aired, f.CREATIONDATE), f.COD_PROGRA, m.ID_METAFILE
 """
 
 
-def fetch_aged(conn, today: dt.date, d_from: dt.date | None, d_to: dt.date) -> list[dict]:
+def fetch_aged(
+    conn, today: dt.date, d_from: dt.date | None, d_to: dt.date, include_short_form: bool = False
+) -> list[dict]:
     cur = conn.cursor()
-    cur.execute(aged_candidates_sql(today, d_from, d_to))
+    cur.execute(aged_candidates_sql(today, d_from, d_to, include_short_form))
     return _rows(cur)
 
 

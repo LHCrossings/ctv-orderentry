@@ -80,6 +80,11 @@ def main() -> None:
         "--limit", type=int, default=None, help="stop after N files (first batch trial)"
     )
     ap.add_argument("--today", type=dt.date.fromisoformat, default=dt.date.today())
+    ap.add_argument(
+        "--include-short-form",
+        action="store_true",
+        help="switch the commercial/PSA/PI/ID exception OFF for this run",
+    )
     a = ap.parse_args()
 
     cfg = _cfg()
@@ -90,13 +95,13 @@ def main() -> None:
     if a.sweep == "aged":
         if not a.d_to:
             sys.exit("--sweep aged needs --to YYYY-MM-DD (last aired on/before)")
-        rows = smp.fetch_aged(conn, a.today, a.d_from, a.d_to)
+        rows = smp.fetch_aged(conn, a.today, a.d_from, a.d_to, a.include_short_form)
         listing = smp.object_sizes(s3, bucket, (r.get("file_name") for r in rows))
         cats = smp.categorize_aged(rows, listing)
         ok = cats.pop("aged")
         bad = [r for v in cats.values() for r in v]
     else:
-        rows = smp.fetch_expired(conn, a.today)
+        rows = smp.fetch_expired(conn, a.today, a.include_short_form)
         listing = smp.object_sizes(s3, bucket, (r.get("file_name") for r in rows))
         ok, bad = smp.check_rows(rows, listing)
     stamp = f"{dt.datetime.now():%Y%m%d-%H%M%S}"

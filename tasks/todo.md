@@ -530,4 +530,5 @@ them); HIATUS-marked assets are never touched. First sweep = assets marked expir
 - [x] Date-ranged "old programming" category (Lee: "grab a specific time range … like AVS and NEWSTODAY"): not-expired program files last aired in [from, to] → delete + remove reference + mark expired. Live: to 12/31/2025 = 34,930 files / 24.3 TB in 348 groups; scan 48 s (bucket listing when > 4,000 keys).
 - [x] First live delete from the page (Lee, 9/28 21:45 PT): FCI (Fuji programming) 250 records / 311 GB; verified from outside — S3 keys gone, no S3 refs, all expired, zero orphan rows
 - [ ] Sort control per category (size default / name / files) — DONE 10acd9d+; keep
+- [x] Short-form switch on the scan card (Lee: "turn OFF the commercial exception at certain times"): off by default; on, every category includes COM/PSA/PER/ID/... for that scan and its deletes; HIATUS still guarded; red flag in banner + confirm
 - [ ] LATER (Lee): expire + delete the Fujisankei commercials (FUJICM*, ~314 COM files, small) — they will never air again. The page still excludes short-form by rule; needs an explicit per-client commercial path when he asks. Show Maija the page first.

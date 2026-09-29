@@ -66,7 +66,13 @@ def client(monkeypatch):
     calls = {}
     monkeypatch.setattr(s3_cleanup, "_connect", lambda: Conn())
     monkeypatch.setattr(s3_cleanup, "_s3_client", lambda: (object(), "bucket"))
-    monkeypatch.setattr(smp, "fetch_expired", lambda conn, today=None: [dict(r) for r in ROWS])
+    calls["flags"] = []
+
+    def fake_expired(conn, today=None, include_short_form=False):
+        calls["flags"].append(("expired", include_short_form))
+        return [dict(r) for r in ROWS]
+
+    monkeypatch.setattr(smp, "fetch_expired", fake_expired)
     monkeypatch.setattr(
         smp,
         "object_sizes",
@@ -96,7 +102,9 @@ def client(monkeypatch):
         ),
     ]
     monkeypatch.setattr(
-        smp, "fetch_unexpired", lambda conn, today=None: [dict(r) for r in unexpired]
+        smp,
+        "fetch_unexpired",
+        lambda conn, today=None, include_short_form=False: [dict(r) for r in unexpired],
     )
     aged = [
         _row(
@@ -119,8 +127,9 @@ def client(monkeypatch):
     ]
     calls["aged_ranges"] = []
 
-    def fake_aged(conn, today, d_from, d_to):
+    def fake_aged(conn, today, d_from, d_to, include_short_form=False):
         calls["aged_ranges"].append((d_from, d_to))
+        calls["flags"].append(("aged", include_short_form))
         return [dict(r) for r in aged]
 
     monkeypatch.setattr(smp, "fetch_aged", fake_aged)
@@ -337,3 +346,34 @@ def test_object_sizes_switches_to_a_listing_for_many_keys(monkeypatch):
     assert smp.object_sizes(None, "b", ["K1", "K2", "K9"]) == {"K1": 1, "K2": 2} and seen == {
         "list": True
     }
+
+
+def test_short_form_switch_flows_through_scan_and_apply(client):
+    data = client.get("/api/traffic/s3-cleanup/scan").json()
+    assert data["include_short_form"] is False and client.calls["flags"] == [("expired", False)]
+    client.calls["flags"].clear()
+    data = client.get("/api/traffic/s3-cleanup/scan?short_form=1&aged_to=2025-12-31").json()
+    assert data["include_short_form"] is True
+    assert client.calls["flags"] == [("expired", True), ("aged", True)]
+    client.calls["flags"].clear()
+    r = client.post(
+        "/api/traffic/s3-cleanup/apply", json={"category": "delete", "ids": [1], "short_form": True}
+    )
+    assert "short-form INCLUDED" in r.text and client.calls["flags"] == [("expired", True)]
+    client.calls["flags"].clear()
+    client.post("/api/traffic/s3-cleanup/apply", json={"category": "delete", "ids": [1]})
+    assert client.calls["flags"] == [("expired", False)], "off unless the page said so"
+
+
+def test_short_form_switch_drops_only_the_type_filter():
+    on = smp.expired_candidates_sql(dt.date(2026, 9, 29), include_short_form=True)
+    off = smp.expired_candidates_sql(dt.date(2026, 9, 29))
+    assert "f.NEWTYPE IN ('PGM', 'PGMX')" in off and "f.NEWTYPE IN" not in on
+    assert "1 = 1" in on
+    for sql in (on, off):
+        assert "f.COD_PROGRA NOT LIKE '%HIATUS%'" in sql, "HIATUS stays guarded either way"
+    assert "f.NEWTYPE IN" not in smp.aged_candidates_sql(
+        dt.date(2026, 9, 29), None, dt.date(2025, 12, 31), True
+    )
+    assert "f.NEWTYPE IN" not in smp.unexpired_candidates_sql(dt.date(2026, 9, 29), True)
+    assert "f.NEWTYPE IN ('PGM', 'PGMX')" in smp.unexpired_candidates_sql(dt.date(2026, 9, 29))
