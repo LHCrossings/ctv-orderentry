@@ -513,3 +513,16 @@ name; he typed `Polaris ASC 260929` / `Affordable Santa Clara 260929-261005` by 
 - [x] Handler reports the gathered codes (summary printed `Contract POLARIS`)
 - [x] Round-trip unit test; Polaris + service suites green (40 passed)
 - [x] Header note = the sheet's full committee name (Lee typed it by hand on 3132 after the first save was lost); test pins the `note=` kwarg
+
+## S3 media purge utility — expired program files (2026-09-29)
+
+Lee: Etere's "Delete on -> AWS S3" workflow runs one 3-second Datamover job per file (215 files
+= 10 min on 9/27); a batch utility should do the same thing fast. Scope: PROGRAM assets only
+(PGM/PGMX); commercials, PSAs, PIs, IDs, bumpers, religious opens stay forever (tiering handles
+them); HIATUS-marked assets are never touched. First sweep = assets marked expired (DATA_SCAD
+<= today, back to 2021) that still hold an S3 file: 3,856 files / 3.9 TB, mostly Da Ai TV series.
+- [x] `services/s3_media_purge.py`: candidate SQL (type + name guards, no future playlist rows), bucket size cross-check, restore SQL (FS_METAFILE/FS_XFILEFILM/FS_FILE/smptemetadata), batched DeleteObjects + one DB txn per batch, fresh-connection verify
+- [ ] `scripts/purge_s3_media.py --sweep expired [--apply] [--limit N]` dry-run default; plan CSV to logs/
+- [x] unit tests: guards in SQL, literal formatting, only S3-confirmed keys leave the DB, DB failure rolls back, limit, dry run makes no calls
+- [x] ruff clean; dry run on live data (3,242 deletable / 3.43 TB; 611 dangling records, 3 size mismatches skipped) — [ ] reviewed by Lee; `--apply --limit 100` first, then the rest
+- [ ] later: `--sweep aged` (not-yet-expired programs last aired before a cutoff) + stamp DATA_SCAD like "mark as expired"
