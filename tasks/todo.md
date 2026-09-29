@@ -528,4 +528,6 @@ them); HIATUS-marked assets are never touched. First sweep = assets marked expir
 - [x] Control Room page `/traffic/s3-cleanup` (card on /traffic): scan → four categories, one action each (delete / remove dead reference / report-only), show-family groups with checkboxes, confirm(), streamed apply log, rescan. Live scan through the real route: 3,242 / 611 / 3 / 0, 73 groups.
 - [x] Invariant "nothing in S3 = expired in Etere" (Lee): every delete / dead-reference removal stamps DATA_SCAD = today in the same transaction; verify checks it; new category "unexpired" (no S3 file, not expired → mark expired). 179 breakers found.
 - [x] Date-ranged "old programming" category (Lee: "grab a specific time range … like AVS and NEWSTODAY"): not-expired program files last aired in [from, to] → delete + remove reference + mark expired. Live: to 12/31/2025 = 34,930 files / 24.3 TB in 348 groups; scan 48 s (bucket listing when > 4,000 keys).
-- [ ] Lee runs the first live delete from the page (one small group first)
+- [x] First live delete from the page (Lee, 9/28 21:45 PT): FCI (Fuji programming) 250 records / 311 GB; verified from outside — S3 keys gone, no S3 refs, all expired, zero orphan rows
+- [ ] Sort control per category (size default / name / files) — DONE 10acd9d+; keep
+- [ ] LATER (Lee): expire + delete the Fujisankei commercials (FUJICM*, ~314 COM files, small) — they will never air again. The page still excludes short-form by rule; needs an explicit per-client commercial path when he asks. Show Maija the page first.
