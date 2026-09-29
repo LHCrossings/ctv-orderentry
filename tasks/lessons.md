@@ -29,6 +29,17 @@ the sheet except the year digits said 2027.
 4. Commit the real workbook as the fixture the day the bug is found (`tests/fixtures/eqc/`), and
    pair the repair test with a no-op test: a corrected copy of the same sheet parses identically
    with zero repairs.
+5. **Same sheet, twenty minutes later (Lee: "it only entered half the order ... There is a whole
+   second row"):** the reader `break`-ed at the first footer ("Paid Units"), and the season
+   proposal stacks a SECOND program table (Apr-Sep) below it. 26Q4 + 27Q1 entered; 27Q2 + 27Q3
+   were never read. A parser must walk EVERY header it can recognise (`_read_blocks`), never
+   stop at the first footer -- the SCWA "header is not always row 0" and SAGENT "read every
+   page" lessons, seen from the bottom of the sheet instead of the top. Reconcile each table
+   against ITS OWN footer (Paid Units / Bonus Units per column, Gross Amount) and raise; that
+   guard alone would not have caught this (each table footed on its own), so ALSO print what
+   was read in units the operator can compare with the sheet (`4 quarters ... 2 table(s)`), and
+   let a re-run skip quarters already in Etere (`_existing_contract` -> "Skip this quarter?
+   [Y/n]") so a partial entry is completed, not doubled.
 
 ---
 

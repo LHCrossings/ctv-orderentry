@@ -128,6 +128,29 @@ def _upsert_customer(
         print(f"[CUSTOMER DB] Warning: could not save: {exc}")
 
 
+def _existing_contract(code: str) -> Optional[int]:
+    """Etere contract id already carrying this code, or None. Lets a re-run after a partial
+    entry skip the quarters that are in (2026-09-29: 26Q4 + 27Q1 were entered before the
+    sheet's second table was read)."""
+    try:
+        from browser_automation.etere_direct_client import connect
+
+        conn = connect()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT TOP 1 ID_CONTRATTITESTATA FROM CONTRATTITESTATA WHERE COD_CONTRATTO = %s",
+                (code,),
+            )
+            row = cur.fetchone()
+            return int(row[0]) if row else None
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001 — a lookup failure must not block the gather
+        print(f"  (could not check Etere for '{code}': {exc})")
+        return None
+
+
 def _confirm_start_date(order: EQCOrder) -> Optional[date]:
     """Lesson #15: confirm the start date if the order starts tomorrow or earlier."""
     if not order.flight_start:
@@ -213,7 +236,9 @@ def gather_eqc_inputs(xlsx_path: str) -> Optional[dict]:
     )
     for note in order.repairs:
         print(f"  ⚠ sheet year corrected: {note}")
-    print(f"Quarters: {', '.join(q['desc'].split()[-1] for q in quarters)}")
+    print(
+        f"Quarters: {', '.join(q['desc'].split()[-1] for q in quarters)}  ({order.tables} table(s) in the sheet)"
+    )
     for ln in order.lines:
         tag = "BNS" if ln.is_bonus else "   "
         rate = f"${ln.rate:.0f}" if ln.rate else "    "
@@ -259,6 +284,18 @@ def gather_eqc_inputs(xlsx_path: str) -> Optional[dict]:
     for q in quarters:
         qlabel = q["desc"].split()[-1]
         print(f"  ── {qlabel} ({_fmt_mmddyyyy(q['start'])} – {_fmt_mmddyyyy(q['end'])}) ──")
+        existing = _existing_contract(q["code"])
+        if existing:
+            raw = (
+                input(
+                    f"    '{q['code']}' is already in Etere (ID {existing}). Skip this quarter? [Y/n]: "
+                )
+                .strip()
+                .lower()
+            )
+            if raw in ("", "y", "yes"):
+                print(f"    → skipping {qlabel}")
+                continue
         raw = input(f"    Contract code [{q['code']}]: ").strip()
         code = raw or q["code"]
         raw = input(f"    Description [{q['desc']}]: ").strip()

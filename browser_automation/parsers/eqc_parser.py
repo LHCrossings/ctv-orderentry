@@ -13,6 +13,9 @@ Layout (one sheet):
     footer rows: "Paid Units" / "Bonus Units" / "Total Units" / "GROSS" — stop there.
 
 IMPORTANT business rules (confirmed with the buyer):
+  * A season proposal stacks TWO tables (Oct–Mar, then Apr–Sep below the first
+    footer) — every PROGRAM/SCHEDULE header in the sheet is read (2026-09-29: the
+    2026-2027 sheet's second table was never entered).
   * Each date column is ONE week (Mon–Sun). EQC buys non-consecutive weeks
     (typically every other week), so weeks are NEVER consolidated — the
     automation emits one contract line per program per week-column.
@@ -115,6 +118,7 @@ class EQCOrder:
     agency: str = "TH Media"  # buyer (agency 19)
     rates_are_net: bool = False  # rates are GROSS
     repairs: list[str] = field(default_factory=list)  # week-date years corrected from the sheet
+    tables: int = 1  # program tables found in the sheet (a season proposal stacks two)
 
     @property
     def markets(self) -> list[str]:
@@ -227,17 +231,108 @@ _STOP_LABELS = frozenset(
 
 # ─── Parser ──────────────────────────────────────────────────────────────────
 
+_PAID_LABEL = "paid units"
+_BONUS_LABEL = "bonus units"
+_GROSS_LABEL = "gross amount"
+
+
+def _is_header(row) -> bool:
+    b = str(row[1] or "").strip().upper() if len(row) > 1 else ""
+    d = str(row[3] or "").strip().upper() if len(row) > 3 else ""
+    return b == "PROGRAM" and "SCHEDULE" in d
+
+
+def _week_columns(row) -> tuple[list[int], list[date]]:
+    cols, dates = [], []
+    for col_idx in range(5, len(row)):  # E is rate (idx 4); dates start at F (idx 5)
+        v = row[col_idx]
+        if hasattr(v, "date"):  # datetime cell
+            cols.append(col_idx)
+            dates.append(v.date() if hasattr(v, "hour") else v)
+    return cols, dates
+
+
+def _cell_int(row, c) -> int:
+    return int(row[c]) if (c < len(row) and isinstance(row[c], (int, float))) else 0
+
+
+def _read_blocks(rows) -> list[dict]:
+    """Every PROGRAM/SCHEDULE table in the sheet, in order. The 2026-2027 proposal has
+    two: October-March, then April-September below the first footer. Each block =
+    {header_idx, cols, dates, programs: [(program, schedule, rate, [spots per col])],
+    footer: {label: [cell per col]}}."""
+    blocks: list[dict] = []
+    i = 0
+    while i < len(rows):
+        if not _is_header(rows[i]):
+            i += 1
+            continue
+        cols, dates = _week_columns(rows[i])
+        block = {"header_idx": i, "cols": cols, "dates": dates, "programs": [], "footer": {}}
+        i += 1
+        while i < len(rows) and not _is_header(rows[i]):
+            row = rows[i]
+            program = str(row[1] or "").strip() if len(row) > 1 else ""
+            schedule = str(row[3] or "").strip() if len(row) > 3 else ""
+            label_d = schedule.lower()
+            if label_d in (_PAID_LABEL, _BONUS_LABEL, _GROSS_LABEL):
+                block["footer"][label_d] = [_cell_int(row, c) for c in cols]
+            elif program and schedule and label_d not in _STOP_LABELS:
+                rate_cell = row[4] if len(row) > 4 else None
+                rate = float(rate_cell) if isinstance(rate_cell, (int, float)) else 0.0
+                block["programs"].append(
+                    (program, schedule, rate, [_cell_int(row, c) for c in cols])
+                )
+            i += 1
+        if cols and block["programs"]:
+            blocks.append(block)
+    return blocks
+
+
+def _reconcile_block(n: int, block: dict) -> None:
+    """The sheet's own footer is the oracle: per week column, paid and bonus spot sums
+    must equal the Paid Units / Bonus Units rows, and rate x spots across the block must
+    equal the Gross Amount row (printed once per pair of columns). Raise on any miss —
+    a dropped row or a mis-read cell must refuse to enter, never enter short."""
+    footer = block["footer"]
+    paid = [0] * len(block["cols"])
+    bonus = [0] * len(block["cols"])
+    gross = 0.0
+    for _prog, _sched, rate, spots in block["programs"]:
+        for k, n_spots in enumerate(spots):
+            if rate:
+                paid[k] += n_spots
+                gross += rate * n_spots
+            else:
+                bonus[k] += n_spots
+    for label, ours in ((_PAID_LABEL, paid), (_BONUS_LABEL, bonus)):
+        if label in footer and footer[label] != ours:
+            raise ValueError(
+                f"EQC table {n}: {label} row {footer[label]} does not match the program rows "
+                f"{ours} — refusing to enter a sheet that does not foot."
+            )
+    if _GROSS_LABEL in footer:
+        sheet_gross = float(sum(footer[_GROSS_LABEL]))
+        if abs(sheet_gross - gross) > 0.01:
+            raise ValueError(
+                f"EQC table {n}: Gross Amount row totals ${sheet_gross:,.2f} but rate x spots is "
+                f"${gross:,.2f} — refusing to enter a sheet that does not foot."
+            )
+
 
 def parse_eqc_xlsx(path: str) -> EQCOrder:
     """
     Parse a TH Media / Emerald Queen Casino Crossings TV flight-schedule workbook.
 
-    Returns an EQCOrder with one EQCLine per program row (paid + bonus) and the
-    shared list of week-start dates.
+    Reads EVERY program table in the sheet (a season proposal stacks two: Oct-Mar and
+    Apr-Sep), repairs week-column years the buyer left behind, reconciles each table
+    against its own footer, and merges the same program across tables into one EQCLine
+    whose week_spots line up with the order's combined week_dates.
 
     Raises:
         RuntimeError: if openpyxl is not installed
-        ValueError: if the header/week-date row cannot be located
+        ValueError: if no header/week-date row is found, a week date is not a Monday /
+                    outside the title's season, or a table does not foot
     """
     try:
         import openpyxl
@@ -247,6 +342,7 @@ def parse_eqc_xlsx(path: str) -> EQCOrder:
     wb = openpyxl.load_workbook(str(path), data_only=True)
     ws = wb.active
     rows = list(ws.iter_rows(values_only=True))  # row[i] is 0-based: col B == index 1
+    wb.close()
 
     # ── Market (default SEA) ─────────────────────────────────────────────────
     market_code = "SEA"
@@ -263,67 +359,41 @@ def parse_eqc_xlsx(path: str) -> EQCOrder:
             if hasattr(v, "year") and hasattr(v, "month") and not hasattr(v, "hour"):
                 order_date = v  # a plain date, rare in header
 
-    # ── Locate header row (B=PROGRAM, D=SCHEDULE) and week-date columns ───────
-    header_idx: Optional[int] = None
-    week_dates: list[date] = []
-    week_cols: list[int] = []
-    for i, row in enumerate(rows):
-        b = str(row[1] or "").strip().upper() if len(row) > 1 else ""
-        d = str(row[3] or "").strip().upper() if len(row) > 3 else ""
-        if b == "PROGRAM" and "SCHEDULE" in d:
-            header_idx = i
-            for col_idx in range(5, len(row)):  # E is rate (idx 4); dates start at F (idx 5)
-                v = row[col_idx]
-                if hasattr(v, "date"):  # datetime cell
-                    week_dates.append(v.date() if hasattr(v, "hour") else v)
-                    week_cols.append(col_idx)
-            break
-
-    if header_idx is None or not week_cols:
-        wb.close()
+    blocks = _read_blocks(rows)
+    if not blocks:
         raise ValueError(
-            "Could not locate the EQC header row (B='PROGRAM', D='SCHEDULE') "
-            "with week-date columns."
+            "Could not locate the EQC header row (B='PROGRAM', D='SCHEDULE') with week-date columns."
         )
-    try:
-        week_dates, repairs = repair_week_years(week_dates, _title_span(rows))
-    except ValueError:
-        wb.close()
-        raise
+    for n, block in enumerate(blocks, 1):
+        _reconcile_block(n, block)
 
-    # ── Parse program rows ───────────────────────────────────────────────────
-    lines: list[EQCLine] = []
-    for row in rows[header_idx + 1 :]:
-        program = str(row[1] or "").strip() if len(row) > 1 else ""
-        schedule = str(row[3] or "").strip() if len(row) > 3 else ""
-        rate_cell = row[4] if len(row) > 4 else None
+    # ── Week dates: all tables in sheet order, years repaired as one sequence ──
+    raw_dates = [d for b in blocks for d in b["dates"]]
+    week_dates, repairs = repair_week_years(raw_dates, _title_span(rows))
 
-        label_d = str(row[3] or "").strip().lower() if len(row) > 3 else ""
-        if label_d in _STOP_LABELS:
-            break  # reached the totals/GROSS footer block
+    # ── Merge programs across tables: one line per (program, schedule, rate) ───
+    n_weeks = len(week_dates)
+    merged: dict[tuple[str, str, float], EQCLine] = {}
+    offset = 0
+    for block in blocks:
+        for program, schedule, rate, spots in block["programs"]:
+            key = (program.strip().lower(), _normalize_days(schedule).lower(), rate)
+            line = merged.get(key)
+            if line is None:
+                line = EQCLine(
+                    program=program,
+                    schedule=schedule,
+                    rate=rate,
+                    week_spots=[0] * n_weeks,
+                    week_dates=list(week_dates),
+                    is_bonus=(rate == 0.0),
+                )
+                merged[key] = line
+            for k, n_spots in enumerate(spots):
+                line.week_spots[offset + k] += n_spots
+        offset += len(block["cols"])
 
-        if not program or not schedule:
-            continue
-
-        rate = float(rate_cell) if isinstance(rate_cell, (int, float)) else 0.0
-        week_spots = [
-            int(row[c]) if (c < len(row) and isinstance(row[c], (int, float))) else 0
-            for c in week_cols
-        ]
-
-        lines.append(
-            EQCLine(
-                program=program,
-                schedule=schedule,
-                rate=rate,
-                week_spots=week_spots,
-                week_dates=list(week_dates),
-                is_bonus=(rate == 0.0),
-            )
-        )
-
-    wb.close()
-
+    lines = list(merged.values())
     if not lines:
         raise ValueError("No program rows found in EQC workbook.")
 
@@ -333,4 +403,5 @@ def parse_eqc_xlsx(path: str) -> EQCOrder:
         week_dates=week_dates,
         order_date=order_date,
         repairs=repairs,
+        tables=len(blocks),
     )
