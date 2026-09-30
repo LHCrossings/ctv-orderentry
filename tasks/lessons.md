@@ -4,6 +4,30 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Contract Line Has TWO Date Pairs — DATESTART/DATEEND Is What the Form Shows and the Scheduler Honours; a Hand Edit of DATA_INIZIO/DATA_FINE Alone Changes Nothing Visible
+
+**Session:** Lee, "the actual dates on the lines still don't look trimmed" (2026-09-30)
+
+**Rule:** My two trim scripts updated `CONTRATTIRIGHE.DATA_INIZIO/DATA_FINE`, verified them from
+a fresh connection, and reported "trimmed". The line form reads `DATESTART/DATEEND`. In 9,384
+recent lines the pairs are equal 98.5% of the time; where they differ (3068, trimmed by hand in
+the web form) DATESTART/DATEEND is the NARROWER pair and every placement sits inside IT, so it is
+the effective window and DATA_* is the original/week-boundary pair. The header has the same
+shape: `DATA_ACQUISIZIONE` tracks `DATA_INIZIO` (181 of 202). My readback verified the column I
+wrote, not the value the user sees — the 9/23 "read back what you meant to write" rule needs
+"…in the place the user reads it".
+
+**How to apply:**
+1. Before hand-editing an Etere column, list the table's columns of that type
+   (`INFORMATION_SCHEMA.COLUMNS … DATA_TYPE LIKE '%date%'`) and diff a row Etere itself edited
+   (here: any line whose form dates differ from its week dates) to learn which twin the UI uses.
+2. Line dates by hand = `DATA_INIZIO, DATESTART, DATA_FINE, DATEEND` together; header =
+   `DATA_INIZIO, DATA_TERMINE, DATA_ACQUISIZIONE`. All three scripts now do this.
+3. The verify for a UI-visible edit is the value in the column the UI reads, plus one look at
+   the page — "the DB says X" is not "Lee sees X".
+
+---
+
 ## An Added-Value Line Spans the PAID Days, Not the IO Flight — a Bonus Derived From an Untrimmed Window Airs Before the Order Is Allowed To
 
 **Session:** Lee, H/L Toyota SFO 4Q26 (3137-3139) — "we aren't allowed to air until 10/1" (2026-09-30)

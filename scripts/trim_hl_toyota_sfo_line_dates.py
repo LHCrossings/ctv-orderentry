@@ -96,8 +96,9 @@ def main():
                 f"UPDATE CONTRATTIRIGHE SET DATA_INIZIO='{ds}', DATA_FINE='{de}' WHERE ID_CONTRATTIRIGHE={r['lid']};"
             )
             cur.execute(
-                "UPDATE CONTRATTIRIGHE SET DATA_INIZIO=%s, DATA_FINE=%s WHERE ID_CONTRATTIRIGHE=%s",
-                (nf, nt, r["lid"]),
+                "UPDATE CONTRATTIRIGHE SET DATA_INIZIO=%s, DATESTART=%s, DATA_FINE=%s, DATEEND=%s"
+                " WHERE ID_CONTRATTIRIGHE=%s",  # both pairs: the form shows DATESTART/DATEEND
+                (nf, nf, nt, nt, r["lid"]),
             )
             assert cur.rowcount == 1
             changed += 1

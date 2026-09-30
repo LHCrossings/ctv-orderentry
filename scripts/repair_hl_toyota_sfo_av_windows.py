@@ -124,8 +124,9 @@ def main():
                 )
                 assert cur.rowcount == 1
             cur.execute(
-                "UPDATE CONTRATTIRIGHE SET DATA_INIZIO=%s, DATA_FINE=%s, N_PASSAGGI=%s WHERE ID_CONTRATTIRIGHE=%s",
-                (nf, nt, target, lid),
+                "UPDATE CONTRATTIRIGHE SET DATA_INIZIO=%s, DATESTART=%s, DATA_FINE=%s, DATEEND=%s, N_PASSAGGI=%s"
+                " WHERE ID_CONTRATTIRIGHE=%s",  # both pairs: the form shows DATESTART/DATEEND
+                (nf, nf, nt, nt, target, lid),
             )
             assert cur.rowcount == 1
             cur.execute(
