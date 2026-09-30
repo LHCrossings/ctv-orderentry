@@ -48,9 +48,18 @@ _MARKETS = ("CVC", "SFO", "LAX", "SEA", "HOU", "CMP", "WDC", "NYC", "MMT")
 _LABEL = "[HPSJ]"
 
 
+# House short forms on hand-entered lines (Lee 9/30: "short form makes it easier";
+# `Viet` is the only abbreviation the CVC contracts actually use — 2376 `HPSJ 2601`).
+_SHORT = {"Vietnamese": "Viet"}
+
+
 def _pretty(text: str) -> str:
-    """'FILIPINO' → 'Filipino', 'SOUTH ASIAN' → 'South Asian', mixed case kept."""
-    return text.title() if text.isupper() else text
+    """'FILIPINO' → 'Filipino', 'SOUTH ASIAN' → 'South Asian', 'Vietnamese News/Talk'
+    → 'Viet News/Talk'."""
+    out = text.title() if text.isupper() else text
+    for long, short in _SHORT.items():
+        out = re.sub(rf"\b{long}\b", short, out)
+    return out
 
 
 def _line_plan(order: HPSJOrder, start_from: date, flight_end_str: str) -> list[tuple]:
@@ -66,7 +75,7 @@ def _line_plan(order: HPSJOrder, start_from: date, flight_end_str: str) -> list[
             else:
                 days, time_raw = "M-Su", "6a-11:59p"
                 print(f"  [WARN] No ROS window for '{ln.base_language}' — using {days} {time_raw}")
-            desc = f"BNS {ln.base_language} ROS"
+            desc = f"BNS {_pretty(ln.base_language)} ROS"
         else:
             days, time_raw = daypart_union(ln.daypart)
             days, _ = EtereClient.check_sunday_6_7a_rule(days, time_raw)

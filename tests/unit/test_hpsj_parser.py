@@ -133,6 +133,26 @@ def test_line_aliases_use_the_union(order):
     assert order.lines[1].days == "M-Su"
 
 
+def test_line_plan_descriptions_use_house_short_forms(order):
+    from browser_automation.hpsj_automation import _line_plan
+
+    plan = _line_plan(order, date(2026, 10, 5), order.flight_end)
+    descs = [p[3] for p in plan]
+    assert descs[:4] == [
+        "M-Su 11a-12p Viet News/Talk",
+        "M-Su 10a-1p Viet Drama",
+        "M-Su 4p-7p Filipino",
+        "M-Su 1p-2p South Asian",
+    ]
+    assert descs[4:] == ["BNS Viet ROS", "BNS Filipino ROS", "BNS South Asian ROS"]
+    # the 10/26 hiatus splits every row: no range spans 10/19 → 11/2
+    for _ln, _d, _t, _desc, ranges, notes in plan:
+        assert not notes
+        for r in ranges:
+            assert not (r["date_from"] <= date(2026, 10, 26) <= r["date_to"])
+    assert sum(r["spots_per_week"] * r["weeks"] for p in plan for r in p[4]) == 290
+
+
 def test_detection_is_client_keyed():
     assert hp.is_hpsj_text("Advertiser Health Plan of San Joaquin\nMarket: Central Valley")
     assert not hp.is_hpsj_text("Advertiser San Joaquin County Registrar of Voters")
