@@ -4,6 +4,30 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## Deleting a Line Inside the Contract in the Etere App Is the Safe By-Hand Trim — Ghost Spots Come From OUR Code, Not From the App's Line Delete
+
+**Session:** Lee, Lexus R4 revisions on 2742/2747 (2026-09-30)
+
+**Rule:** I told Lee that deleting the placed October lines by hand would strand playlist rows
+and that only a script could avoid ghosts. Lee: "When I do that in Etere app, all safeguards are
+performed, everything is unscheduled and it is impossible to have ghost spots. Ghost spots only
+occur when we run the code you and I developed together." He is right: every ghost incident
+(WL `_unschedule_spots` 7/14, the 9/3 hiatus done with the bulk Unscheduler utility) came from
+a path that touched one table. The app's contract-line delete is Etere's own full unschedule.
+I generalised the 9/9 Unscheduler-utility lesson onto a different operation.
+
+**How to apply:**
+1. For a by-hand trim of unaired lines, the recommendation is "delete the lines in the contract
+   in the Etere app", not a repair script. Scripts are for what the app cannot do (re-attribute
+   placements, partial-week trims, bulk work across many contracts).
+2. Do not extend a lesson about tool X ("the Unscheduler utility leaves TPALINSE rows") to
+   tool Y ("any delete in Etere") without a reproduction on Y. Name the exact operation a
+   lesson covers when writing it.
+3. The ghost check stays mandatory after OUR write paths; after the operator's app delete it is
+   a courtesy check, and saying otherwise costs credibility.
+
+---
+
 ## A Contract Line Has TWO Date Pairs — DATESTART/DATEEND Is What the Form Shows and the Scheduler Honours; a Hand Edit of DATA_INIZIO/DATA_FINE Alone Changes Nothing Visible
 
 **Session:** Lee, "the actual dates on the lines still don't look trimmed" (2026-09-30)

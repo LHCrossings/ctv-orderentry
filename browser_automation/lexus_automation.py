@@ -841,8 +841,8 @@ def _execute_direct(user_input: dict) -> bool:
                 max_end = max(ln["end_date"] for ln in etere_lines)
                 cur = conn.cursor()
                 cur.execute(
-                    f"UPDATE CONTRATTITESTATA SET data_fine={client._ph} WHERE ID_CONTRATTO={client._ph}",
-                    (max_end, contract_id),
+                    f"UPDATE CONTRATTITESTATA SET DATA_TERMINE={client._ph} WHERE ID_CONTRATTITESTATA={client._ph} AND DATA_TERMINE < {client._ph}",
+                    (max_end, contract_id, max_end),
                 )
                 print(f"[{quarter_label}] Adding to existing contract #{contract_id}")
 

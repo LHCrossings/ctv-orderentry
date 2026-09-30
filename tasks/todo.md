@@ -592,7 +592,10 @@ Two revised Lexus orders received 9/30 for contracts already in Etere. Today's r
 existing contract; it never diffs against or trims the lines already entered, so a change to
 weeks already in Etere would double-book. Lee: revisit; first confirm the revisions carry the
 corrections the Melissa Check flagged on her last set (do not build a revision on a wrong IO).
-- [ ] Lee: verify the two revised IOs against the earlier Melissa Check warnings
+- [x] 9/30 R3 vs R4 cell diff (both estimates): Jan-Apr, Jun-Sep and the 9/28-9/30 week are identical;
+      only MAY differs — same per-line May totals and dollars, re-spread across weeks (R4 puts spots in
+      4/27-4/30 and 5/8-5/10, drops the 6/wk and 3/wk weeks). Etere 2579/2581 carry R3's May spread + June MG
+      lines; May has aired, so no entry impact. Melissa Check: 0 warnings on both R4 sheets.
 - [ ] then either (1) hand-trim superseded lines + run the additive path, or (2) build a diff-based
       Lexus revision (parse revised sheet → diff vs CONTRATTIRIGHE → unschedule superseded future
       weeks in both tables → add changed lines), reusing the WL revision engine where possible
