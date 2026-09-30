@@ -40,32 +40,44 @@ def prompt_add_av(has_bonus: bool) -> bool:
     return resp in ("y", "yes")
 
 
+def air_day_bounds(d_from: date, d_to: date, days: str) -> tuple[date, date] | None:
+    """Trim a line's window to the first and last date its day pattern can air.
+
+    A Sa-Su line dated from Monday 9/28 first airs Saturday 10/3; an M-F line
+    ending Sunday 11/1 last airs Friday 10/30. Returns None when no date in the
+    window matches the pattern. Lee 9/30: "trim to actual dates".
+    """
+    from browser_automation.etere_direct_client import _DAY_KEYS, parse_day_bits
+
+    bits = parse_day_bits(days)
+    on = [bits[k] for k in _DAY_KEYS]  # Monday..Sunday
+    if not any(on) or d_to < d_from:
+        return None
+    d = d_from
+    while d <= d_to and not on[d.weekday()]:
+        d += timedelta(days=1)
+    if d > d_to:
+        return None
+    e = d_to
+    while not on[e.weekday()]:
+        e -= timedelta(days=1)
+    return d, e
+
+
 def paid_span(ranges: list[tuple[date, date, str]]) -> tuple[date, date] | None:
     """First and last day on which a PAID line can actually air.
 
     ``ranges`` are the (date_from, date_to, days) triples of the paid lines as
-    entered. A line's window may start before its first eligible weekday (a Sa-Su
-    line dated from Monday 9/28 first airs Saturday 10/3), so walk each window and
-    keep only dates whose weekday the pattern includes. Returns None when no paid
-    day exists. Lee 9/30: the Added Value line runs from the first to the last
-    paid day, one spot per day — never across the IO's untrimmed flight.
+    entered. Returns None when no paid day exists. Lee 9/30: the Added Value
+    line runs from the first to the last paid day, one spot per day — never
+    across the IO's untrimmed flight.
     """
-    from browser_automation.etere_direct_client import _DAY_KEYS, parse_day_bits
-
     first = last = None
     for d_from, d_to, days in ranges:
-        bits = parse_day_bits(days)
-        on = [bits[k] for k in _DAY_KEYS]  # Monday..Sunday
-        if not any(on) or d_to < d_from:
+        b = air_day_bounds(d_from, d_to, days)
+        if not b:
             continue
-        d = d_from
-        while d <= d_to and not on[d.weekday()]:
-            d += timedelta(days=1)
-        if d > d_to:
-            continue
-        e = d_to
-        while not on[e.weekday()]:
-            e -= timedelta(days=1)
+        d, e = b
         first = d if first is None or d < first else first
         last = e if last is None or e > last else last
     return (first, last) if first else None

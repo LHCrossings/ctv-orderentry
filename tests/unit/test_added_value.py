@@ -17,11 +17,41 @@ for _p in (_root, _root / "browser_automation"):
 from browser_automation.added_value import (
     SPOT_CODE_AV,
     add_av_line,
+    air_day_bounds,
     av_total_spots,
     format_languages,
     paid_span,
     widest_window,
 )
+
+
+class TestAirDayBounds:
+    def test_sa_su_from_monday_starts_saturday(self):
+        assert air_day_bounds(date(2026, 9, 28), date(2026, 10, 18), "Sa-Su") == (
+            date(2026, 10, 3),
+            date(2026, 10, 18),
+        )
+
+    def test_m_f_ending_sunday_ends_friday(self):
+        assert air_day_bounds(date(2026, 10, 19), date(2026, 11, 1), "M-F") == (
+            date(2026, 10, 19),
+            date(2026, 10, 30),
+        )
+
+    def test_t_f_first_week(self):
+        assert air_day_bounds(date(2026, 11, 2), date(2026, 11, 8), "T-F") == (
+            date(2026, 11, 3),
+            date(2026, 11, 6),
+        )
+
+    def test_already_tight_is_unchanged(self):
+        assert air_day_bounds(date(2026, 10, 5), date(2026, 10, 9), "M-F") == (
+            date(2026, 10, 5),
+            date(2026, 10, 9),
+        )
+
+    def test_no_eligible_day(self):
+        assert air_day_bounds(date(2026, 9, 28), date(2026, 9, 30), "Sa-Su") is None
 
 
 class TestPaidSpan:

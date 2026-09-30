@@ -51,7 +51,13 @@ SEPARATION_INTERVALS = (25, 0, 0)
 SPOT_CODE_PAID = 2       # Paid Commercial
 SPOT_CODE_BONUS = 10     # BNS / Bonus Spot
 
-from browser_automation.added_value import add_av_line, paid_span, prompt_add_av, widest_window
+from browser_automation.added_value import (
+    add_av_line,
+    air_day_bounds,
+    paid_span,
+    prompt_add_av,
+    widest_window,
+)
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMERS_DB_PATH
 from browser_automation.customer_defaults import per_estimate_text as _per_estimate_text
 
@@ -226,6 +232,18 @@ def _execute_order(pdf_path: str, user_input: dict) -> list[str]:
                     date_to    = datetime.strptime(etere_line["end_date"],   "%m/%d/%Y").date()
                     time_range = f"{etere_line['time_from']}-{etere_line['time_to']}"
                     is_bonus   = etere_line["spot_code"] == SPOT_CODE_BONUS
+                    # Trim to the dates the day pattern can actually air (Lee 9/30).
+                    bounds = air_day_bounds(date_from, date_to, etere_line["days"])
+                    if not bounds:
+                        print(f"    ⚠ no {etere_line['days']} day in range — skipping")
+                        line_count -= 1
+                        continue
+                    if bounds != (date_from, date_to):
+                        print(
+                            f"    trimmed → {bounds[0].month}/{bounds[0].day}/{bounds[0]:%y}"
+                            f" - {bounds[1].month}/{bounds[1].day}/{bounds[1]:%y} ({etere_line['days']})"
+                        )
+                    date_from, date_to = bounds
 
                     line_id = client.add_contract_line(
                         contract_id=contract_id,

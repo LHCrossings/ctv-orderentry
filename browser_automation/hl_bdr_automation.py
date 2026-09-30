@@ -15,7 +15,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from browser_automation.added_value import add_av_line, paid_span, prompt_add_av, widest_window
+from browser_automation.added_value import (
+    add_av_line,
+    air_day_bounds,
+    paid_span,
+    prompt_add_av,
+    widest_window,
+)
 from browser_automation.customer_defaults import per_estimate_text as _per_estimate_text
 from browser_automation.etere_client import (
     EtereClient,  # check_sunday_6_7a_rule + parse_time_range utilities
@@ -391,6 +397,18 @@ def _add_bdr_line(
     for dr in date_ranges:
         date_from = datetime.strptime(dr["start_date"], "%m/%d/%Y").date()
         date_to   = datetime.strptime(dr["end_date"],   "%m/%d/%Y").date()
+        # Trim to the dates the pattern can actually air (Lee 9/30: a Sa-Su line
+        # in a week that opens Monday 9/28 is a 10/3 line, not a 9/28 line).
+        bounds = air_day_bounds(date_from, date_to, days)
+        if not bounds:
+            print(f"  [BDR] ⚠ {description} {dr['start_date']}–{dr['end_date']}: no {days} day in range, skipping")
+            continue
+        if bounds != (date_from, date_to):
+            print(
+                f"  [BDR]   trimmed {dr['start_date']}–{dr['end_date']} → "
+                f"{bounds[0].month}/{bounds[0].day}/{bounds[0]:%y}–{bounds[1].month}/{bounds[1].day}/{bounds[1]:%y} ({days})"
+            )
+        date_from, date_to = bounds
 
         line_id = client.add_contract_line(
             contract_id=contract_id,
