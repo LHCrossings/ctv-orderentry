@@ -15,7 +15,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from browser_automation.added_value import add_av_line, prompt_add_av, widest_window
+from browser_automation.added_value import add_av_line, paid_span, prompt_add_av, widest_window
+from browser_automation.customer_defaults import per_estimate_text as _per_estimate_text
 from browser_automation.etere_client import (
     EtereClient,  # check_sunday_6_7a_rule + parse_time_range utilities
 )
@@ -25,7 +26,6 @@ from browser_automation.etere_direct_client import (
     EtereDirectClient,
     connect,
 )
-from browser_automation.customer_defaults import per_estimate_text as _per_estimate_text
 from browser_automation.parsers.hl_bdr_parser import BDRLine, BDROrder, parse_bdr_pdf
 
 # ── Same constants as HL — BDR is the same agency ────────────────────────────
@@ -293,19 +293,28 @@ def _execute_order(pdf_path: str, user_input: dict) -> list[str]:
                 _save_customer_to_db(order.client, customer_id)
 
             line_count = 0
+            paid_ranges: list = []
             for line in order.lines:
-                line_count += _add_bdr_line(client, order, line, contract_id, separation)
+                line_count += _add_bdr_line(
+                    client, order, line, contract_id, separation, entered=paid_ranges
+                )
 
-            # Optional Added Value line (one spot/day across the flight)
-            if user_input.get("add_av") and order.lines:
+            # Optional Added Value line: one spot/day from the first to the last
+            # PAID day (not the IO flight — 3137's flight opened 9/28 while its
+            # first paid spot was Sat 10/3, and AV spots landed 9/30).
+            av_span = paid_span(paid_ranges) if user_input.get("add_av") else None
+            if user_input.get("add_av") and not av_span:
+                print("  [BDR] ⚠ Added Value skipped — no paid day to span")
+            if av_span and order.lines:
+                av_from, av_to = av_span
                 window = widest_window([ln.time for ln in order.lines])
                 duration_str = f"00:00:{order.lines[0].duration:02d}:00"
                 av_id = add_av_line(
                     client,
                     contract_id=contract_id,
                     market=order.market,
-                    date_from=flight_start,
-                    date_to=flight_end,
+                    date_from=av_from,
+                    date_to=av_to,
                     duration=duration_str,
                     separation=separation,
                     languages=[ln.language for ln in order.lines],
@@ -315,8 +324,9 @@ def _execute_order(pdf_path: str, user_input: dict) -> list[str]:
                     line_count += 1
                     print(
                         f"  [BDR] ✓ ADDED VALUE M-Su {window}"
-                        f"  {order.flight_start}–{order.flight_end}"
-                        f"  1/day={(flight_end - flight_start).days + 1} total → line_id={av_id}"
+                        f"  {av_from.month}/{av_from.day}/{av_from:%y}–{av_to.month}/{av_to.day}/{av_to:%y}"
+                        f" (paid span; flight {order.flight_start}–{order.flight_end})"
+                        f"  1/day={(av_to - av_from).days + 1} total → line_id={av_id}"
                     )
 
             print(f"\n{'='*60}")
@@ -338,10 +348,12 @@ def _add_bdr_line(
     line: BDRLine,
     contract_id: int,
     separation: tuple[int, int, int],
+    entered: list | None = None,
 ) -> int:
     """
     Add all Etere contract lines for one BDR schedule row.
-    Returns the number of lines added.
+    Returns the number of lines added; appends (date_from, date_to, days) of each
+    line written to ``entered`` when given (the Added Value span reads it).
     """
     from browser_automation.parsers.hl_parser import analyze_weekly_distribution
 
@@ -405,6 +417,8 @@ def _add_bdr_line(
         )
         if line_id > 0:
             count += 1
+            if entered is not None:
+                entered.append((date_from, date_to, days))
 
     return count
 

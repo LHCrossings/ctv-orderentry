@@ -4,6 +4,36 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## An Added-Value Line Spans the PAID Days, Not the IO Flight — a Bonus Derived From an Untrimmed Window Airs Before the Order Is Allowed To
+
+**Session:** Lee, H/L Toyota SFO 4Q26 (3137-3139) — "we aren't allowed to air until 10/1" (2026-09-30)
+
+**Rule:** The H/L Added Value line took `flight_start`/`flight_end` from the IO header and booked
+one spot per calendar day across it. October's IO opened Mon 9/28 with only a Sa-Su paid line
+that week (first paid airing Sat 10/3); December's opened 11/30 with no paid line until 12/7. The
+AV lines therefore placed 9/30, 10/1, 10/2 and 11/30-12/6 — days on which the traffic
+instructions forbid airing and no paid spot could have run. Lee: "I don't want any added value
+to place before the first paid spot can place, and none to place after the last paid spot can
+place." Fixed with `added_value.paid_span(ranges)` — first/last date inside the entered paid
+lines' windows whose weekday the line's pattern includes — fed by the ranges the automation
+actually wrote (`_add_bdr_line(entered=...)`, the hl_automation loop). Trims applied live:
+3137 AV 10/3-11/1 (30), 3138 11/3-12/6 (34), 3139 12/7-1/3 (28); header 3139 start 11/30 → 12/7.
+
+**How to apply:**
+1. A derived line (AV, bonus, billboard) takes its dates from the PAID lines as entered, never
+   from the order header — the header is the buyer's calendar, the lines are the airtime.
+2. "First day" is a weekday-aware walk: a Sa-Su line dated from Monday first airs Saturday; an
+   M-F line ending Sunday last airs Friday. Test the rule on the real contracts' line sets, ALL
+   of them — my first fixture listed two of 3137's four lines and got the wrong last day.
+3. Shrinking a placed line by hand = unschedule BOTH tables for the days outside the new window
+   (plus extras over max/day), then set DATA_INIZIO/DATA_FINE/N_PASSAGGI so placed == N, refresh
+   the header dates from MIN/MAX of the lines, run `check_ghost_spots`. Script:
+   `scripts/repair_hl_toyota_sfo_av_windows.py` (dry run / --apply, JSON backup in logs/).
+4. When the operator says "move them to 10/1" but states a rule that lands on 10/3, implement
+   the rule and show the resulting dates before writing — the rule is the durable instruction.
+
+---
+
 ## A Substring Match on an Identifier Picks the NEIGHBOUR — an Estimate/PO/Code Lookup Is Whole-Token, and a Tool Never Auto-Picks a Contract It Is Not Sure Of
 
 **Session:** Lee, Daviselen Toyota Oct traffic, estimate 1500 "says assigned, but did not" (2026-09-30)

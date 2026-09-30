@@ -549,3 +549,8 @@ Pechanga Filipino spots 10/01-10/25 and added 148842 to Pechanga's four line poo
       unassigned (sibling values), delete CONTRATTIFILMATI 633673-633676; dry-run then Lee's go
 - [ ] Lee re-drops Traffic-16005723.pdf after deploy → 3077 gets 148842 (14 Oct spots)
 - [x] lessons + memory
+
+## H/L Added Value spans the paid days (2026-09-30)
+
+- [x] `paid_span` in added_value.py; both H/L automations feed it the entered paid ranges; tests on 3137-3139 line sets
+- [x] live trim of AV lines 84880/84886/84892 (30/34/28 spots), header 3139 → 12/07; ghost check clean; backup logs/hl-toyota-sfo-av-trim-backup-20260930.json

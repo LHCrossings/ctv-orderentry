@@ -19,8 +19,62 @@ from browser_automation.added_value import (
     add_av_line,
     av_total_spots,
     format_languages,
+    paid_span,
     widest_window,
 )
+
+
+class TestPaidSpan:
+    """AV runs from the first to the last day a PAID line can air (Lee 9/30).
+
+    The three cases are the H/L Toyota SFO 4Q26 contracts 3137-3139 as entered
+    on 9/29, whose AV lines spanned the untrimmed flight instead.
+    """
+
+    def test_sa_su_line_dated_from_monday_first_airs_saturday(self):
+        # 3137 as entered: M-F 10/5-10/18 + 10/19-11/1, Sa-Su 9/28-10/18 + 10/19-11/1
+        # → AV 10/3-11/1, 30 spots (was 9/28-11/1, 35)
+        span = paid_span(
+            [
+                (date(2026, 10, 5), date(2026, 10, 18), "M-F"),
+                (date(2026, 10, 19), date(2026, 11, 1), "M-F"),
+                (date(2026, 9, 28), date(2026, 10, 18), "Sa-Su"),
+                (date(2026, 10, 19), date(2026, 11, 1), "Sa-Su"),
+            ]
+        )
+        assert span == (date(2026, 10, 3), date(2026, 11, 1))
+        assert av_total_spots(*span) == 30
+
+    def test_partial_first_week_and_weekday_tail(self):
+        # 3138: T-F 11/2-11/8, M-F 11/9-12/6, Sa-Su 11/2-12/6 → 11/3-12/6, 34 spots
+        span = paid_span(
+            [
+                (date(2026, 11, 2), date(2026, 11, 8), "T-F"),
+                (date(2026, 11, 9), date(2026, 12, 6), "M-F"),
+                (date(2026, 11, 2), date(2026, 12, 6), "Sa-Su"),
+            ]
+        )
+        assert span == (date(2026, 11, 3), date(2026, 12, 6))
+        assert av_total_spots(*span) == 34
+
+    def test_flight_week_with_no_paid_lines_is_dropped(self):
+        # 3139: flight opened 11/30, first paid line 12/7 → 12/7-1/3, 28 spots (was 35)
+        span = paid_span(
+            [
+                (date(2026, 12, 7), date(2027, 1, 3), "M-F"),
+                (date(2026, 12, 7), date(2027, 1, 3), "Sa-Su"),
+            ]
+        )
+        assert span == (date(2026, 12, 7), date(2027, 1, 3))
+        assert av_total_spots(*span) == 28
+
+    def test_weekday_only_line_ending_on_sunday_ends_friday(self):
+        span = paid_span([(date(2026, 11, 9), date(2026, 11, 15), "M-F")])
+        assert span == (date(2026, 11, 9), date(2026, 11, 13))
+
+    def test_range_with_no_eligible_day_is_ignored(self):
+        assert paid_span([(date(2026, 9, 28), date(2026, 9, 30), "Sa-Su")]) is None
+        assert paid_span([]) is None
 
 
 class TestAvTotalSpots:

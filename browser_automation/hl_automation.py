@@ -51,7 +51,7 @@ SEPARATION_INTERVALS = (25, 0, 0)
 SPOT_CODE_PAID = 2       # Paid Commercial
 SPOT_CODE_BONUS = 10     # BNS / Bonus Spot
 
-from browser_automation.added_value import add_av_line, prompt_add_av, widest_window
+from browser_automation.added_value import add_av_line, paid_span, prompt_add_av, widest_window
 from browser_automation.customer_defaults import DEFAULT_DB_PATH as CUSTOMERS_DB_PATH
 from browser_automation.customer_defaults import per_estimate_text as _per_estimate_text
 
@@ -211,6 +211,7 @@ def _execute_order(pdf_path: str, user_input: dict) -> list[str]:
 
             # ── Contract lines ───────────────────────────────────────────────
             line_count = 0
+            paid_ranges: list = []
             for line in estimate.lines:
                 etere_lines = _build_etere_lines(line, estimate, market_code)
                 duration_str = f"00:00:{line.duration:02d}:00"
@@ -249,20 +250,27 @@ def _execute_order(pdf_path: str, user_input: dict) -> list[str]:
                         break
 
                     print(f"    → line_id = {line_id}")
+                    if not is_bonus:
+                        paid_ranges.append((date_from, date_to, etere_line["days"]))
 
                 if not all_success:
                     break
 
-            # Optional Added Value line (one spot/day across the flight)
-            if all_success and add_av and estimate.lines:
+            # Optional Added Value line: one spot/day from the first to the last
+            # PAID day, never across the IO's untrimmed flight (Lee 9/30).
+            av_span = paid_span(paid_ranges) if (all_success and add_av) else None
+            if all_success and add_av and not av_span:
+                print("\n  [ADDED VALUE] skipped — no paid day to span")
+            if av_span and estimate.lines:
+                av_from, av_to = av_span
                 window = widest_window([ln.time for ln in estimate.lines])
                 duration_str = f"00:00:{estimate.lines[0].duration:02d}:00"
                 av_id = add_av_line(
                     client,
                     contract_id=contract_id,
                     market=market_code,
-                    date_from=flight_start,
-                    date_to=flight_end,
+                    date_from=av_from,
+                    date_to=av_to,
                     duration=duration_str,
                     separation=separation,
                     languages=[extract_language_from_program(ln.program) for ln in estimate.lines],
@@ -272,8 +280,9 @@ def _execute_order(pdf_path: str, user_input: dict) -> list[str]:
                     line_count += 1
                     print(
                         f"\n  [ADDED VALUE] M-Su {window}"
-                        f"  {estimate.flight_start}–{estimate.flight_end}"
-                        f"  1/day={(flight_end - flight_start).days + 1} total → line_id={av_id}"
+                        f"  {av_from.month}/{av_from.day}/{av_from:%y}–{av_to.month}/{av_to.day}/{av_to:%y}"
+                        f" (paid span; flight {estimate.flight_start}–{estimate.flight_end})"
+                        f"  1/day={(av_to - av_from).days + 1} total → line_id={av_id}"
                     )
 
             print(f"\n{'='*60}")
