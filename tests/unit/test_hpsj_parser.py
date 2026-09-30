@@ -107,6 +107,32 @@ def test_translation_is_a_charge_not_a_line(order):
     assert all("translation" not in ln.insertion.lower() for ln in order.lines)
 
 
+@pytest.mark.parametrize(
+    "daypart, expected",
+    [
+        ("M-SUN 11A-12P", ("M-Su", "11A-12P")),
+        ("M-SUN 10A-11A & 12P-1P", ("M-Su", "10A-11A; 12P-1P")),
+        ("M-F 4p-7pm/ Sat- Sun 4p-6p", ("M-Su", "4p-7p; 4p-6p")),
+        ("M-F 6a-7a", ("M-F", "6a-7a")),
+        ("Sat-Sun 4p-6p", ("Sa-Su", "4p-6p")),
+    ],
+)
+def test_daypart_union(daypart, expected):
+    assert hp.daypart_union(daypart) == expected
+
+
+def test_daypart_union_refuses_without_time_or_days():
+    with pytest.raises(ValueError):
+        hp.daypart_union("M-SUN")
+    with pytest.raises(ValueError):
+        hp.daypart_union("11A-12P")
+
+
+def test_line_aliases_use_the_union(order):
+    assert order.lines[2].days == "M-Su" and order.lines[2].time == "4p-7p; 4p-6p"
+    assert order.lines[1].days == "M-Su"
+
+
 def test_detection_is_client_keyed():
     assert hp.is_hpsj_text("Advertiser Health Plan of San Joaquin\nMarket: Central Valley")
     assert not hp.is_hpsj_text("Advertiser San Joaquin County Registrar of Voters")

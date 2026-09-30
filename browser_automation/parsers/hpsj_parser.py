@@ -70,6 +70,57 @@ def base_language(text: str) -> str:
     return " ".join((text or "").split())
 
 
+# ─── Daypart union (one Etere line per proposal row) ──────────────────────────
+
+_DAY_ORDER = ("lun", "mar", "mer", "gio", "ven", "sab", "dom")
+_DAY_TOKEN = {"lun": "M", "mar": "T", "mer": "W", "gio": "Th", "ven": "F", "sab": "Sa", "dom": "Su"}
+
+
+def _canonical_days(bits: dict) -> str:
+    on = [bits.get(k, False) for k in _DAY_ORDER]
+    if all(on):
+        return "M-Su"
+    if on == [True] * 5 + [False] * 2:
+        return "M-F"
+    if on == [True] * 6 + [False]:
+        return "M-Sa"
+    if on == [False] * 5 + [True] * 2:
+        return "Sa-Su"
+    return ",".join(_DAY_TOKEN[k] for k, v in zip(_DAY_ORDER, on) if v)
+
+
+def daypart_union(daypart: str) -> tuple[str, str]:
+    """'M-F 4p-7pm/ Sat- Sun 4p-6p' → ('M-Su', '4p-7pm; 4p-6p');
+    'M-SUN 10A-11A & 12P-1P' → ('M-Su', '10A-11A; 12P-1P').
+
+    Each '/'- or '&'-separated segment contributes its own day pattern (a
+    segment without one inherits the previous) and its time range; days are
+    OR-ed, times are joined with ';' so `EtereClient.parse_time_range` takes
+    the earliest start and latest end — ONE Etere line per proposal row (Lee).
+    """
+    from browser_automation.etere_direct_client import parse_day_bits
+    from browser_automation.ntooitive_automation import find_time_ranges
+
+    dp = re.sub(r"\s*-\s*", "-", " ".join((daypart or "").split()))
+    bits: dict = {k: False for k in _DAY_ORDER}
+    times: list[str] = []
+    for seg in re.split(r"\s*[/&]\s*", dp):
+        ranges = find_time_ranges(seg)
+        head = seg[: seg.find(ranges[0])].strip() if ranges else seg.strip()
+        if head:
+            seg_bits = parse_day_bits(head)
+            if not any(seg_bits.values()):
+                raise ValueError(f"HPSJ: unreadable day pattern {head!r} in {daypart!r}")
+            for k, v in seg_bits.items():
+                bits[k] = bits[k] or v
+        times.extend(ranges)
+    if not any(bits.values()):
+        raise ValueError(f"HPSJ: no day pattern in {daypart!r}")
+    if not times:
+        raise ValueError(f"HPSJ: no time range in {daypart!r}")
+    return _canonical_days(bits), "; ".join(times)
+
+
 # ─── Data model (bridge-compatible with the SJ County shape) ─────────────────
 
 
@@ -122,19 +173,11 @@ class HPSJLine:
 
     @property
     def days(self) -> str:
-        if self.is_bonus:
-            return "M-Su"
-        from browser_automation.ntooitive_automation import split_daypart_union
-
-        return split_daypart_union(self.daypart)[0]
+        return "M-Su" if self.is_bonus else daypart_union(self.daypart)[0]
 
     @property
     def time(self) -> str:
-        if self.is_bonus:
-            return "ROS"
-        from browser_automation.ntooitive_automation import split_daypart_union
-
-        return split_daypart_union(self.daypart)[1]
+        return "ROS" if self.is_bonus else daypart_union(self.daypart)[1]
 
 
 @dataclass
