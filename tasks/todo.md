@@ -532,3 +532,20 @@ them); HIATUS-marked assets are never touched. First sweep = assets marked expir
 - [ ] Sort control per category (size default / name / files) — DONE 10acd9d+; keep
 - [x] Short-form switch on the scan card (Lee: "turn OFF the commercial exception at certain times"): off by default; on, every category includes COM/PSA/PER/ID/... for that scan and its deletes; HIATUS still guarded; red flag in banner + confirm
 - [ ] LATER (Lee): expire + delete the Fujisankei commercials (FUJICM*, ~314 COM files, small) — they will never air again. The page still excludes short-form by rule; needs an explicit per-client commercial path when he asks. Show Maija the page first.
+
+## Daviselen traffic: estimate 1500 assigned to the wrong contract (2026-09-30)
+
+Lee dropped Traffic-16005720..23 (Toyota Oct, estimates 1500-1503). 1501-1503 assigned; 1500
+"said assigned" twice and 3077 stayed unassigned. Cause: `LIKE '%1500%'` + `ORDER BY DATA_INIZIO
+DESC` + `contracts[0]` picked **IG Pechanga 31500** (3133, starts 10/01) over Daviselen Toyota
+1500 (3077, starts 9/28). Both Assign runs wrote the Mandarin Toyota creative 148842 onto all 39
+Pechanga Filipino spots 10/01-10/25 and added 148842 to Pechanga's four line pools.
+
+- [x] `estimate_matches` / `pick_contract` in daviselen_traffic_parser.py (token-exact, prefer
+      agency 121, never auto-pick when ambiguous) + tests on the real 1500 fixture
+- [x] both Daviselen endpoints use it; HL/RPM estimate candidate lists filtered the same way
+- [x] card: no contract → list the token matches (or "no contract carries estimate N"), Assign stays off
+- [ ] repair 3133: 84746 x9 → 146119 (TM0701, its own line creative), 84747/84748/84749 x30 →
+      unassigned (sibling values), delete CONTRATTIFILMATI 633673-633676; dry-run then Lee's go
+- [ ] Lee re-drops Traffic-16005723.pdf after deploy → 3077 gets 148842 (14 Oct spots)
+- [ ] lessons + memory

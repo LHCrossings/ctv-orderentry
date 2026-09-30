@@ -4,6 +4,41 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Substring Match on an Identifier Picks the NEIGHBOUR — an Estimate/PO/Code Lookup Is Whole-Token, and a Tool Never Auto-Picks a Contract It Is Not Sure Of
+
+**Session:** Lee, Daviselen Toyota Oct traffic, estimate 1500 "says assigned, but did not" (2026-09-30)
+
+**Rule:** The Daviselen traffic card found its contract with `LIKE '%1500%' ORDER BY DATA_INIZIO
+DESC` and took `contracts[0]`. "IG Pechanga 31500" (starts 10/01) sorted ahead of "Daviselen
+Toyota 1500" (starts 9/28), the card printed the Pechanga code in green, said "assigned", and
+both runs wrote the Mandarin Toyota creative onto all 39 Pechanga Filipino spots for 10/01-10/25
+(and 148842 into Pechanga's four line pools) while Toyota 3077 stayed unassigned. Estimates
+1501-1503 worked only because no other code happened to contain those digits. One digit of
+overlap between two unrelated advertisers was the whole failure.
+
+**How to apply:**
+1. An identifier lookup (estimate, PO, contract code, ISCI) matches as a WHOLE TOKEN:
+   `(?<!\d)1500(?!\d)` (`estimate_matches`), never a bare substring. A substring LIKE is at most
+   a prefilter for the token test.
+2. A tool that WRITES against a contract names that contract only when the match is unique
+   (`pick_contract`: one token match, or one token match under the expected agency). Anything
+   else is "pick by hand" with the candidates listed — never `[0]` of an ordered list. The
+   Lexus/HL/RPM cards already made the operator tick a checkbox; Daviselen had drifted into
+   auto-pick because its early sheets had unique numbers.
+3. "It said assigned but nothing changed on my contract" means it changed on SOMEONE ELSE'S:
+   before re-running, query the target creative's placements by contract
+   (`TPALINSE.ID_FILMATI = <creative> GROUP BY contract`) — the wrong contract shows up in one
+   query, and the re-run doubles the damage otherwise.
+4. Repair state comes from the damaged lines' own evidence: the line description names the
+   creative (`[TM0701]`, Lee: "the description tells you what spot to run") and the untouched
+   sibling spots outside the assigned window carry the exact column values (COD_PROGRA, TITLE,
+   NEWTYPE, SUPPORTO, ASPECT, DURATION_P) to copy back. Script:
+   `scripts/repair_pechanga_3133_traffic.py` (dry run / `--apply`, fresh-connection verify).
+5. Fixture the real sheet the day the bug is found (`tests/fixtures/daviselen_traffic/`) — the
+   parser had no test, so its contract choice had never been pinned.
+
+---
+
 ## A Buyer's Date Cell Carries the Year It Was TYPED With — Validate Dates Against What They Must Be (Monday, Ascending, Inside the Season), Never Take the Cell as Truth
 
 **Session:** Lee, TH Media EQC 2026-2027 proposal — "it's detecting NEXT YEAR's months as 2026" (2026-09-29)

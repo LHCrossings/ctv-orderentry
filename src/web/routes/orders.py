@@ -8908,6 +8908,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             from browser_automation.etere_direct_client import connect as _db_connect
             from browser_automation.parsers.daviselen_traffic_parser import (
                 parse_daviselen_traffic_pdf,
+                pick_contract,
             )
 
             results = []
@@ -8920,14 +8921,18 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         results.append({"filename": filename, "error": "No estimate number found"})
                         continue
 
-                    # Find matching contract by estimate number
+                    # Find matching contract by estimate number. The substring
+                    # LIKE is only a prefilter — pick_contract keeps whole-number
+                    # matches and refuses to guess when they are not unique
+                    # (9/29: '%1500%' picked 'IG Pechanga 31500' over Toyota 1500).
                     term = f"%{instr.estimate}%"
                     cur.execute(
                         """
-                        SELECT TOP 5
+                        SELECT TOP 20
                             ct.ID_CONTRATTITESTATA AS id,
                             ct.COD_CONTRATTO       AS code,
                             ct.DESCRIZIONE         AS description,
+                            ct.AGENZIA             AS agency_id,
                             CONVERT(VARCHAR(10), ct.DATA_INIZIO,  101) AS date_start,
                             CONVERT(VARCHAR(10), ct.DATA_TERMINE, 101) AS date_end
                         FROM CONTRATTITESTATA ct
@@ -8937,9 +8942,11 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                     """,
                         (term, term),
                     )
-                    contracts = [dict(r) for r in cur.fetchall()]
+                    chosen, contracts = pick_contract(
+                        [dict(r) for r in cur.fetchall()], instr.estimate
+                    )
 
-                    contract_id = contracts[0]["id"] if contracts else None
+                    contract_id = chosen["id"] if chosen else None
 
                     # Resolve FILMATI for each ISCI code
                     isci_codes = [s.isci for s in instr.spots]
@@ -9026,7 +9033,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             "date_range": f"{instr.start_date}–{instr.end_date}",
                             "date_from_sql": instr.date_from_sql,
                             "date_to_sql": instr.date_to_sql,
-                            "contract": contracts[0] if contracts else None,
+                            "contract": chosen,
                             "contract_candidates": contracts,
                             "spots": spots_out,
                             "not_found": not_found,
@@ -9189,7 +9196,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
             from browser_automation.etere_direct_client import connect as _db_connect
             from browser_automation.parsers.daviselen_traffic_parser import (
+                estimate_matches,
                 parse_daviselen_traffic_pdf,
+                pick_contract,
             )
             from browser_automation.parsers.lexus_traffic_parser import (
                 parse_lexus_traffic_pdf,
@@ -9224,13 +9233,17 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             )
                             continue
 
+                        # Substring LIKE is only a prefilter — pick_contract keeps
+                        # whole-number matches and refuses to guess when they are
+                        # not unique (9/29: '%1500%' picked 'IG Pechanga 31500').
                         term = f"%{instr.estimate}%"
                         cur.execute(
                             """
-                            SELECT TOP 5
+                            SELECT TOP 20
                                 ct.ID_CONTRATTITESTATA AS id,
                                 ct.COD_CONTRATTO       AS code,
                                 ct.DESCRIZIONE         AS description,
+                                ct.AGENZIA             AS agency_id,
                                 CONVERT(VARCHAR(10), ct.DATA_INIZIO,  101) AS date_start,
                                 CONVERT(VARCHAR(10), ct.DATA_TERMINE, 101) AS date_end
                             FROM CONTRATTITESTATA ct
@@ -9240,8 +9253,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         """,
                             (term, term),
                         )
-                        contracts = [dict(r) for r in cur.fetchall()]
-                        contract_id = contracts[0]["id"] if contracts else None
+                        chosen, contracts = pick_contract(
+                            [dict(r) for r in cur.fetchall()], instr.estimate
+                        )
+                        contract_id = chosen["id"] if chosen else None
 
                         isci_codes = [s.isci for s in instr.spots]
                         placeholders = ",".join(f"'{c}'" for c in isci_codes)
@@ -9324,7 +9339,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 "date_range": f"{instr.start_date}–{instr.end_date}",
                                 "date_from_sql": instr.date_from_sql,
                                 "date_to_sql": instr.date_to_sql,
-                                "contract": contracts[0] if contracts else None,
+                                "contract": chosen,
                                 "contract_candidates": contracts,
                                 "spots": spots_out,
                                 "not_found": not_found,
@@ -9753,7 +9768,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         """,
                             (term, term),
                         )
-                        contracts_raw = [dict(r) for r in cur.fetchall()]
+                        contracts_raw = [
+                            dict(r) for r in cur.fetchall()
+                            if estimate_matches(instr.estimate, r["code"], r["description"])
+                        ]
 
                         # Per contract × dialect: count scheduled spots via language time windows
                         contracts_out = []
@@ -10117,7 +10135,10 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         """,
                             (term, term),
                         )
-                        contracts_raw = [dict(r) for r in cur.fetchall()]
+                        contracts_raw = [
+                            dict(r) for r in cur.fetchall()
+                            if estimate_matches(instr.estimate, r["code"], r["description"])
+                        ]
 
                         # For each contract × dialect, count scheduled spots using the
                         # language time windows — same engine as the manual assign page.

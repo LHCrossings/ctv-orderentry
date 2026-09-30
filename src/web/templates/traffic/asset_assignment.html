@@ -1603,10 +1603,17 @@
             if (r.error) {
                 return `<tr><td>${esc(r.filename)}</td><td colspan="6" style="color:var(--nord11);">${esc(r.error)}</td></tr>`;
             }
+            // The server only names a contract when exactly one carries the
+            // estimate as a whole number. Otherwise list what it saw so the
+            // operator can tell "none entered yet" from "two revisions match".
+            const cands = r.contract_candidates || [];
             const contractCell = r.contract
                 ? `<span style="color:var(--nord14);">${esc(r.contract.code)}</span><br>
                    <span style="font-size:0.78rem;color:var(--text-muted);">#${r.contract.id} · ${r.contract.date_start}–${r.contract.date_end}</span>`
-                : `<span style="color:var(--nord11);">Not found</span>`;
+                : cands.length
+                    ? `<span style="color:var(--nord11);">${cands.length} contracts carry estimate ${esc(r.estimate)} — pick by hand</span><br>
+                       <span style="font-size:0.78rem;color:var(--text-muted);">${cands.map(c => `${esc(c.code)} #${c.id}`).join('<br>')}</span>`
+                    : `<span style="color:var(--nord11);">No contract carries estimate ${esc(r.estimate)}</span>`;
 
             const spotsCell = r.spots.map(s => {
                 const icon = s.found ? '✓' : '✗';
