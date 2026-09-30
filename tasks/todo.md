@@ -545,7 +545,7 @@ Pechanga Filipino spots 10/01-10/25 and added 148842 to Pechanga's four line poo
       agency 121, never auto-pick when ambiguous) + tests on the real 1500 fixture
 - [x] both Daviselen endpoints use it; HL/RPM estimate candidate lists filtered the same way
 - [x] card: no contract → list the token matches (or "no contract carries estimate N"), Assign stays off
-- [ ] repair 3133: 84746 x9 → 146119 (TM0701, its own line creative), 84747/84748/84749 x30 →
+- [x] repair 3133 (applied 9/30, verified fresh connection; revert logs/pechanga-3133-traffic-repair-restore-20260930.sql): 84746 x9 → 146119 (TM0701, its own line creative), 84747/84748/84749 x30 →
       unassigned (sibling values), delete CONTRATTIFILMATI 633673-633676; dry-run then Lee's go
 - [ ] Lee re-drops Traffic-16005723.pdf after deploy → 3077 gets 148842 (14 Oct spots)
-- [ ] lessons + memory
+- [x] lessons + memory
