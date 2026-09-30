@@ -596,6 +596,8 @@ corrections the Melissa Check flagged on her last set (do not build a revision o
       only MAY differs — same per-line May totals and dollars, re-spread across weeks (R4 puts spots in
       4/27-4/30 and 5/8-5/10, drops the 6/wk and 3/wk weeks). Etere 2579/2581 carry R3's May spread + June MG
       lines; May has aired, so no entry impact. Melissa Check: 0 warnings on both R4 sheets.
-- [ ] then either (1) hand-trim superseded lines + run the additive path, or (2) build a diff-based
+- [x] DONE 9/30: Lee deleted the 10/1+ lines in the Etere app, ran the R4 sheets with cutoff 10/1 →
+      A on 2742/2747. Readback: every Oct-Dec line/week matches R4 (248 + 288 spots), all placed, 0 ghosts.
+- [ ] (was) either (1) hand-trim superseded lines + run the additive path, or (2) build a diff-based
       Lexus revision (parse revised sheet → diff vs CONTRATTIRIGHE → unschedule superseded future
       weeks in both tables → add changed lines), reusing the WL revision engine where possible
