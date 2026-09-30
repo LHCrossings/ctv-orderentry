@@ -17,6 +17,7 @@ Conventions (Lee 2026-09-30, oracle contract 2376 `HPSJ 2601`):
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from typing import Optional
 
