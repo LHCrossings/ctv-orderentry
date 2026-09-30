@@ -554,3 +554,33 @@ Pechanga Filipino spots 10/01-10/25 and added 148842 to Pechanga's four line poo
 
 - [x] `paid_span` in added_value.py; both H/L automations feed it the entered paid ranges; tests on 3137-3139 line sets
 - [x] live trim of AV lines 84880/84886/84892 (30/34/28 spots), header 3139 → 12/07; ghost check clean; backup logs/hl-toyota-sfo-av-trim-backup-20260930.json
+
+## HPSJ (Health Plan of San Joaquin) house-proposal parser (2026-09-30)
+
+Source: `Crossings TV Proposal_ HPSJ_DSNP_Revised.pdf` — 1-page "Crossings TV Media Proposal",
+week columns 10/5..11/30 (10/26 hiatus), 4 paid rows @ $35 (Unit Value $50 gross, Promo Unit
+Cost $35 = rate), 3 BONUS ROS rows, Translation Cost row ($600 value / $360 cost), footers
+Paid Units 204 / $14,240 / $7,500, Bonus Units 86, Discount 47%. AI fallback misread it.
+Oracle: contract 2376 `HPSJ 2601` / `Health Plan of San Joaquin 2601-2603`, ANAGRAF 414 direct
+0%, CVC, Calendar billing, lines `M-Sun 11a-12p Viet News/Talk`, `M-Sun 12p-1p Viet Drama`,
+`Vietnamese ROS`, WL prio 50. Closest code: sjcounty (xlsx) + scwa (PDF) — neither reads it.
+
+Plan (mirror sjcounty_parser/automation; PDF read by word coordinates, not extract_tables —
+the SOUTH ASIAN bonus row comes back with five week cells merged):
+- [x] `parsers/hpsj_parser.py`: header fields (Advertiser/Contact/Email/Phone/Market/DATE,
+      `Estimate- 10/5 THROUGH 12/7`), week headers by x-centre, rows → HPSJLine (language,
+      daypart, length, value, cost=rate, week_spots, units, total_value, total_cost, is_bonus),
+      Translation row → charge; reconcile per line (Σweeks==Units, Units×cost==Total Cost),
+      per week vs Paid Units / Bonus Units rows, grand totals; RAISE on any mismatch.
+      Detection client-keyed: "Health Plan of San Joaquin" (+ filename HPSJ). Fixture + tamper tests.
+- [x] `hpsj_automation.py`: gather (customer 414, market CVC, start date via line_planner,
+      code/description defaults, separation/billing from customers.db, upsert), create header
+      (direct, lookup_customer_defaults, CUSTOMERREF), lines via `_line_plan`/plan_ranges
+      (hiatus week splits ranges), bonus = ROS_SCHEDULES per language, translation → Production
+      box on first paid line + verify_production_charge, single transaction.
+- [x] Register: enums, detection service, order_scanner, orchestrator, order_processing_service,
+      parser_bridge (names/registry/direct/tested keys + normalizer), scan cache version bump.
+- [x] Decided 9/30 (Lee): union lines for both dual dayparts; `HPSJ 2610` / `... DSNP 2610-2612` / ref DSNP; Calendar; translation → Production box. Open decisions were: Viet Drama "10A-11A & 12P-1P" (two windows), Filipino
+      "M-F 4p-7p / Sa-Su 4p-6p" (union M-Su 4p-7p like SJ County?), code/description, Calendar
+      billing + separation, DSNP as Customer Order ref.
+- [x] Dry run 9/30: 20 lines, 290/290 spots, CENTROMEDIA 317, ref DSNP, production $360 on line 1 — rolled back. NEXT: Lee enters live via drag-drop/CLI.

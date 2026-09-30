@@ -155,6 +155,7 @@ class OrderProcessingService:
         OrderType.CRISPIN: "_process_crispin_order",
         OrderType.NTOOITIVE: "_process_ntooitive_order",
         OrderType.SJCOUNTY: "_process_sjcounty_order",
+        OrderType.HPSJ: "_process_hpsj_order",
         OrderType.POP: "_process_pop_order",
         OrderType.IWCCA: "_process_iwcca_order",
         OrderType.EQC: "_process_eqc_order",
@@ -203,6 +204,7 @@ class OrderProcessingService:
         OrderType.CRISPIN,
         OrderType.NTOOITIVE,
         OrderType.SJCOUNTY,
+        OrderType.HPSJ,
         OrderType.POP,
         OrderType.IWCCA,
         OrderType.EQC,
@@ -3181,6 +3183,42 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.SJCOUNTY,
+                error_message=error_detail,
+            )
+
+    def _process_hpsj_order(self, order: Order, shared_session=None) -> ProcessingResult:
+        """Process a Health Plan of San Joaquin proposal — one contract (CVC, direct)."""
+        inp = order.order_input if isinstance(order.order_input, dict) else {}
+        try:
+            from browser_automation.hpsj_automation import run_hpsj_order
+            from browser_automation.parsers.hpsj_parser import parse_hpsj
+
+            parsed = parse_hpsj(str(order.pdf_path))
+            results = run_hpsj_order(parsed, inp)  # list of (label, success)
+
+            contracts = [
+                Contract(contract_number=label, order_type=OrderType.HPSJ)
+                for label, ok in results
+                if ok
+            ]
+            if not contracts:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.HPSJ,
+                    error_message="HPSJ processing failed — check output above",
+                )
+            return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.HPSJ)
+
+        except Exception as exc:
+            import traceback
+
+            error_detail = f"HPSJ processing error: {exc}\n{traceback.format_exc()}"
+            print(f"\n✗ HPSJ processing failed: {exc}")
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.HPSJ,
                 error_message=error_detail,
             )
 

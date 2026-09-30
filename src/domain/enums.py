@@ -57,6 +57,7 @@ class OrderType(Enum):
     CRISPIN = "crispin"
     NTOOITIVE = "ntooitive"
     SJCOUNTY = "sjcounty"
+    HPSJ = "hpsj"  # Health Plan of San Joaquin — house Media Proposal PDF, direct 0%, CVC
     POP = "pop"  # Prince of Peace (Kwan Loong Oil) — house Sales Confirmation, direct 0%
     IWCCA = "iwcca"  # IW Group / Covered California — NET "TELEVISION ORDER" IO, agency 12 @ 15%
     AI_FALLBACK = "ai_fallback"

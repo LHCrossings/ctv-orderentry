@@ -170,6 +170,11 @@ class OrderDetectionService:
         if self._is_ntooitive(first_page_text):
             return OrderType.NTOOITIVE
 
+        # Health Plan of San Joaquin — house Media Proposal, client-keyed (must
+        # precede San Joaquin County: both texts contain "San Joaquin")
+        if self._is_hpsj(first_page_text):
+            return OrderType.HPSJ
+
         # San Joaquin County (Registrar of Voters) — the CLIENT is the definer
         if self._is_sjcounty(first_page_text):
             return OrderType.SJCOUNTY
@@ -249,6 +254,12 @@ class OrderDetectionService:
         if "3fold" in lower and "media plan" in lower:
             return True
         return "los rios community college" in lower and "media plan" in lower
+
+    def _is_hpsj(self, text: str) -> bool:
+        """Health Plan of San Joaquin house proposal — client-keyed."""
+        from browser_automation.parsers.hpsj_parser import is_hpsj_text
+
+        return is_hpsj_text(text)
 
     def _is_sjcounty(self, text: str) -> bool:
         """San Joaquin County (Registrar of Voters) proposal — keyed on the
@@ -1025,6 +1036,8 @@ def detect_from_filename(filename: str) -> OrderType:
         return OrderType.CRISPIN
     if "NTOOITIVE" in name_upper:
         return OrderType.NTOOITIVE
+    if "HPSJ" in name_upper or "HEALTH PLAN OF SAN JOAQUIN" in " ".join(name_upper.split()):
+        return OrderType.HPSJ
     if "SAN JOAQUIN COUNTY" in " ".join(name_upper.split()):
         return OrderType.SJCOUNTY
     if "PRINCE OF PEACE" in " ".join(name_upper.split()):
