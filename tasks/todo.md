@@ -584,3 +584,15 @@ the SOUTH ASIAN bonus row comes back with five week cells merged):
       "M-F 4p-7p / Sa-Su 4p-6p" (union M-Su 4p-7p like SJ County?), code/description, Calendar
       billing + separation, DSNP as Customer Order ref.
 - [x] Dry run 9/30: 20 lines, 290/290 spots, CENTROMEDIA 317, ref DSNP, production $360 on line 1 — rolled back. NEXT: Lee enters live via drag-drop/CLI.
+
+## Lexus revisions (IW Group / Melissa) — DEFERRED 2026-09-30, flights start 10/9
+
+Two revised Lexus orders received 9/30 for contracts already in Etere. Today's revision path
+(`lexus_automation`, filename `REVISED…`/`REVISION…`) only ADDS lines from a cutoff date to an
+existing contract; it never diffs against or trims the lines already entered, so a change to
+weeks already in Etere would double-book. Lee: revisit; first confirm the revisions carry the
+corrections the Melissa Check flagged on her last set (do not build a revision on a wrong IO).
+- [ ] Lee: verify the two revised IOs against the earlier Melissa Check warnings
+- [ ] then either (1) hand-trim superseded lines + run the additive path, or (2) build a diff-based
+      Lexus revision (parse revised sheet → diff vs CONTRATTIRIGHE → unschedule superseded future
+      weeks in both tables → add changed lines), reusing the WL revision engine where possible
