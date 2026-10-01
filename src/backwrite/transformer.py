@@ -64,6 +64,9 @@ _MARKET_NORMALISE: List[Tuple[str, str]] = [
     ("houston", "HOU"),
     ("chicago", "CMP"),
     ("minneapolis", "CMP"),
+    ("chi msp", "CMP"),  # Etere's own station name for market 2 (never renamed — it costs money)
+    ("chi-msp", "CMP"),
+    ("chi/msp", "CMP"),
     ("washington", "WDC"),
     ("new york", "NYC"),
     ("new jersey", "NYC"),
