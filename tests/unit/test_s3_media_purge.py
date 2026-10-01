@@ -290,3 +290,11 @@ def test_probe_sizes_heads_each_key_once_and_drops_missing():
         "K1.mp4": 10,
         "K2.mp4": 10,
     }
+
+
+def test_live_events_are_skipped_by_every_sweep():
+    # The Shop LC NDI feeds carry FILMATI.LIVE_ID and never have a file (Lee 10/1).
+    for sf in (False, True):
+        assert "ISNULL(f.LIVE_ID, '0') <> '0'" in smp._types_clause(sf)
+    assert "NOT ISNULL(f.LIVE_ID" in smp.unexpired_candidates_sql(dt.date(2026, 10, 1))
+    assert "NOT ISNULL(f.LIVE_ID" in smp.expired_candidates_sql(dt.date(2026, 10, 1))

@@ -368,7 +368,7 @@ def test_short_form_switch_drops_only_the_type_filter():
     on = smp.expired_candidates_sql(dt.date(2026, 9, 29), include_short_form=True)
     off = smp.expired_candidates_sql(dt.date(2026, 9, 29))
     assert "f.NEWTYPE IN ('PGM', 'PGMX')" in off and "f.NEWTYPE IN" not in on
-    assert "1 = 1" in on
+    assert "NOT ISNULL(f.LIVE_ID" in on, "live events stay guarded either way"
     for sql in (on, off):
         assert "f.COD_PROGRA NOT LIKE '%HIATUS%'" in sql, "HIATUS stays guarded either way"
     assert "f.NEWTYPE IN" not in smp.aged_candidates_sql(

@@ -49,10 +49,13 @@ FS_TABLES: tuple[tuple[str, str], ...] = (
 def _types_clause(include_short_form: bool) -> str:
     """Program assets only, unless the operator switched the short-form exception off for
     this scan (Lee 9/29: "turn OFF the commercial exception at certain times", e.g. the
-    Fujisankei commercials that will never air again). HIATUS stays guarded either way."""
+    Fujisankei commercials that will never air again). HIATUS stays guarded either way.
+    Live events (FILMATI.LIVE_ID set: the Shop LC NDI feeds) never have a file anywhere, so
+    they are skipped by every sweep (Lee 10/1)."""
+    live = "ISNULL(f.LIVE_ID, '0') <> '0'"
     if include_short_form:
-        return "1 = 1"
-    return "f.NEWTYPE IN (" + ", ".join(f"'{t}'" for t in ELIGIBLE_TYPES) + ")"
+        return f"NOT {live}"
+    return f"f.NEWTYPE IN ({', '.join(f"'{t}'" for t in ELIGIBLE_TYPES)}) AND NOT {live}"
 
 
 def _name_guard_sql(col: str) -> str:
