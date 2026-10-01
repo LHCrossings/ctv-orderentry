@@ -156,6 +156,7 @@ class OrderProcessingService:
         OrderType.NTOOITIVE: "_process_ntooitive_order",
         OrderType.SJCOUNTY: "_process_sjcounty_order",
         OrderType.HPSJ: "_process_hpsj_order",
+        OrderType.GAUGER: "_process_gauger_order",
         OrderType.POP: "_process_pop_order",
         OrderType.IWCCA: "_process_iwcca_order",
         OrderType.EQC: "_process_eqc_order",
@@ -205,6 +206,7 @@ class OrderProcessingService:
         OrderType.NTOOITIVE,
         OrderType.SJCOUNTY,
         OrderType.HPSJ,
+        OrderType.GAUGER,
         OrderType.POP,
         OrderType.IWCCA,
         OrderType.EQC,
@@ -3219,6 +3221,42 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.HPSJ,
+                error_message=error_detail,
+            )
+
+    def _process_gauger_order(self, order: Order, shared_session=None) -> ProcessingResult:
+        """Process a Gauger + Associates Broadcast Order — one contract (NET, grossed up)."""
+        inp = order.order_input if isinstance(order.order_input, dict) else {}
+        try:
+            from browser_automation.gauger_automation import run_gauger_order
+            from browser_automation.parsers.gauger_parser import parse_gauger
+
+            parsed = parse_gauger(str(order.pdf_path))
+            results = run_gauger_order(parsed, inp)  # list of (label, success)
+
+            contracts = [
+                Contract(contract_number=label, order_type=OrderType.GAUGER)
+                for label, ok in results
+                if ok
+            ]
+            if not contracts:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.GAUGER,
+                    error_message="Gauger processing failed — check output above",
+                )
+            return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.GAUGER)
+
+        except Exception as exc:
+            import traceback
+
+            error_detail = f"Gauger processing error: {exc}\n{traceback.format_exc()}"
+            print(f"\n✗ Gauger processing failed: {exc}")
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.GAUGER,
                 error_message=error_detail,
             )
 

@@ -601,3 +601,21 @@ corrections the Melissa Check flagged on her last set (do not build a revision o
 - [ ] (was) either (1) hand-trim superseded lines + run the additive path, or (2) build a diff-based
       Lexus revision (parse revised sheet → diff vs CONTRATTIRIGHE → unschedule superseded future
       weeks in both tables → add changed lines), reusing the WL revision engine where possible
+
+## Gauger + Associates parser — Shea Homes IO 90658 (2026-10-01)
+
+Agency "Broadcast Order" PDF (one page, NET rates). Oracle contract 823 `Gauger Shea 2304` (Apr 2023):
+net $102 → gross $120, $85 → $100 at Gauger's 15% (ANAGRAF 262; Shea Homes 263 linked), SFO, 15/0/0.
+Lee's choices (10/1): code `Gauger Shea 2610`, description `Shea Homes Opal-Emerald 2610`, customer ref
+`Order 90658`; one Etere line per IO row over the whole flight (Rotation, no week columns); the bonus
+row keeps its table window (`BNS M-Su 1p-4p Hindi/Punjabi`).
+- [x] `browser_automation/parsers/gauger_parser.py` — header fields by label, table by header x
+      positions, program names completed from the Desc block, reconcile line totals / paid spots /
+      TOTAL SPOTS / NET and raise
+- [x] `browser_automation/gauger_automation.py` — gather (customer 263 default, market from the IO,
+      code/desc/ref defaults above, gross-up preview), direct-DB entry with `--dry-run` rollback
+- [x] register: enums, detection (text "Broadcast Order" + "Gauger + Associates"), orchestrator,
+      processing service (+ direct-DB set), parser_bridge (display, registry, direct keys, NET normalizer),
+      AGENCY_IDS, scan cache v13
+- [x] tests: real IO fixture `tests/fixtures/gauger/`, tampering guards, normalizer
+- [x] dry run against the live DB, rolled back (10/1: 4 lines, gross $5,780.00, ref 'Order 90658', commission 15%); readback of IMPORTO / CUSTOMERREF / N_PASSAGGI

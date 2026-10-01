@@ -170,6 +170,10 @@ class OrderDetectionService:
         if self._is_ntooitive(first_page_text):
             return OrderType.NTOOITIVE
 
+        # Gauger + Associates "Broadcast Order" (NET IO, agency-keyed)
+        if self._is_gauger(first_page_text):
+            return OrderType.GAUGER
+
         # Health Plan of San Joaquin — house Media Proposal, client-keyed (must
         # precede San Joaquin County: both texts contain "San Joaquin")
         if self._is_hpsj(first_page_text):
@@ -254,6 +258,12 @@ class OrderDetectionService:
         if "3fold" in lower and "media plan" in lower:
             return True
         return "los rios community college" in lower and "media plan" in lower
+
+    def _is_gauger(self, text: str) -> bool:
+        """Gauger + Associates Broadcast Order — agency-keyed."""
+        from browser_automation.parsers.gauger_parser import is_gauger_text
+
+        return is_gauger_text(text)
 
     def _is_hpsj(self, text: str) -> bool:
         """Health Plan of San Joaquin house proposal — client-keyed."""
@@ -1036,6 +1046,8 @@ def detect_from_filename(filename: str) -> OrderType:
         return OrderType.CRISPIN
     if "NTOOITIVE" in name_upper:
         return OrderType.NTOOITIVE
+    if "GAUGER" in name_upper:
+        return OrderType.GAUGER
     if "HPSJ" in name_upper or "HEALTH PLAN OF SAN JOAQUIN" in " ".join(name_upper.split()):
         return OrderType.HPSJ
     if "SAN JOAQUIN COUNTY" in " ".join(name_upper.split()):

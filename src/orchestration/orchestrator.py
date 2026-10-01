@@ -168,6 +168,11 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
         "gather_sjcounty_inputs",
         "San Joaquin County",
     ),
+    OrderType.GAUGER: (
+        "browser_automation.gauger_automation",
+        "gather_gauger_inputs",
+        "Gauger + Associates",
+    ),
     OrderType.HPSJ: (
         "browser_automation.hpsj_automation",
         "gather_hpsj_inputs",

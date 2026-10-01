@@ -59,6 +59,7 @@ class OrderType(Enum):
     SJCOUNTY = "sjcounty"
     HPSJ = "hpsj"  # Health Plan of San Joaquin — house Media Proposal PDF, direct 0%, CVC
     POP = "pop"  # Prince of Peace (Kwan Loong Oil) — house Sales Confirmation, direct 0%
+    GAUGER = "gauger"  # Gauger + Associates — NET "Broadcast Order" PDF, agency 262 @ 15% (Shea Homes, SFO)
     IWCCA = "iwcca"  # IW Group / Covered California — NET "TELEVISION ORDER" IO, agency 12 @ 15%
     AI_FALLBACK = "ai_fallback"
     UNKNOWN = "unknown"
@@ -168,6 +169,7 @@ KNOWN_AGENCY_KEYWORDS: list[str] = [
     "mediasol",
     "pulsar advertising",
     "american community media",
+    "gauger + associates",
 ]
 """
 If ANY of these keywords appear in the PDF text (case-insensitive),
