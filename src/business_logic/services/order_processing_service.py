@@ -157,6 +157,7 @@ class OrderProcessingService:
         OrderType.SJCOUNTY: "_process_sjcounty_order",
         OrderType.HPSJ: "_process_hpsj_order",
         OrderType.GAUGER: "_process_gauger_order",
+        OrderType.ILLOTTERY: "_process_illottery_order",
         OrderType.POP: "_process_pop_order",
         OrderType.IWCCA: "_process_iwcca_order",
         OrderType.EQC: "_process_eqc_order",
@@ -207,6 +208,7 @@ class OrderProcessingService:
         OrderType.SJCOUNTY,
         OrderType.HPSJ,
         OrderType.GAUGER,
+        OrderType.ILLOTTERY,
         OrderType.POP,
         OrderType.IWCCA,
         OrderType.EQC,
@@ -3257,6 +3259,44 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.GAUGER,
+                error_message=error_detail,
+            )
+
+    def _process_illottery_order(self, order: Order, shared_session=None) -> ProcessingResult:
+        """Process an Illinois Lottery proposal — one contract (CMP, Flowers at 15%)."""
+        inp = order.order_input if isinstance(order.order_input, dict) else {}
+        try:
+            from browser_automation.illottery_automation import run_illottery_order
+            from browser_automation.parsers.illottery_parser import parse_illottery
+
+            parsed = parse_illottery(str(order.pdf_path))
+            results = run_illottery_order(parsed, inp)  # list of (label, success)
+
+            contracts = [
+                Contract(contract_number=label, order_type=OrderType.ILLOTTERY)
+                for label, ok in results
+                if ok
+            ]
+            if not contracts:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.ILLOTTERY,
+                    error_message="Illinois Lottery processing failed — check output above",
+                )
+            return ProcessingResult(
+                success=True, contracts=contracts, order_type=OrderType.ILLOTTERY
+            )
+
+        except Exception as exc:
+            import traceback
+
+            error_detail = f"Illinois Lottery processing error: {exc}\n{traceback.format_exc()}"
+            print(f"\n✗ Illinois Lottery processing failed: {exc}")
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.ILLOTTERY,
                 error_message=error_detail,
             )
 

@@ -170,6 +170,11 @@ class OrderDetectionService:
         if self._is_ntooitive(first_page_text):
             return OrderType.NTOOITIVE
 
+        # Illinois Lottery (Flowers Communications) house proposal — advertiser-keyed;
+        # must precede the Charmaine-template fallback
+        if self._is_illottery(first_page_text):
+            return OrderType.ILLOTTERY
+
         # Gauger + Associates "Broadcast Order" (NET IO, agency-keyed)
         if self._is_gauger(first_page_text):
             return OrderType.GAUGER
@@ -258,6 +263,12 @@ class OrderDetectionService:
         if "3fold" in lower and "media plan" in lower:
             return True
         return "los rios community college" in lower and "media plan" in lower
+
+    def _is_illottery(self, text: str) -> bool:
+        """Illinois Lottery house proposal — the advertiser is the definer."""
+        from browser_automation.parsers.illottery_parser import is_illottery_text
+
+        return is_illottery_text(text)
 
     def _is_gauger(self, text: str) -> bool:
         """Gauger + Associates Broadcast Order — agency-keyed."""
@@ -1046,6 +1057,8 @@ def detect_from_filename(filename: str) -> OrderType:
         return OrderType.CRISPIN
     if "NTOOITIVE" in name_upper:
         return OrderType.NTOOITIVE
+    if "ILLINOIS LOTTERY" in " ".join(name_upper.split()) or "ILLOTTERY" in name_upper:
+        return OrderType.ILLOTTERY
     if "GAUGER" in name_upper:
         return OrderType.GAUGER
     if "HPSJ" in name_upper or "HEALTH PLAN OF SAN JOAQUIN" in " ".join(name_upper.split()):

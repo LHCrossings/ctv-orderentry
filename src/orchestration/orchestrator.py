@@ -168,6 +168,11 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
         "gather_sjcounty_inputs",
         "San Joaquin County",
     ),
+    OrderType.ILLOTTERY: (
+        "browser_automation.illottery_automation",
+        "gather_illottery_inputs",
+        "Illinois Lottery / Flowers",
+    ),
     OrderType.GAUGER: (
         "browser_automation.gauger_automation",
         "gather_gauger_inputs",

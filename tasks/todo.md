@@ -619,3 +619,22 @@ row keeps its table window (`BNS M-Su 1p-4p Hindi/Punjabi`).
       AGENCY_IDS, scan cache v13
 - [x] tests: real IO fixture `tests/fixtures/gauger/`, tampering guards, normalizer
 - [x] dry run against the live DB, rolled back (10/1: 4 lines, gross $5,780.00, ref 'Order 90658', commission 15%); readback of IMPORTO / CUSTOMERREF / N_PASSAGGI
+
+## Illinois Lottery / Flowers Communications parser — FY'27 MCM Media Plan (2026-10-01)
+
+House "Crossings TV Proposal" PDF (one landscape page, 20 week columns 10/12/26-2/22/27, GROSS
+discounted rates, :15). Oracles: contracts 1541 `Flowers ILLot 2410` and 2151 `Flowers ILLot 2510`
+(customer 354 Illinois Lottery via agency 353 Flowers @15%, CMP, Broadcast 316, 15/0/0, every line
+Rotation, consolidated week ranges). Lee's choices (10/1): line names = days + time + sheet row
+with house short block names (Cantonese & Mandarin → Chinese), bonus `BNS <lang> ROS` on the house
+ROS windows; Rotation on every line; code `Flowers ILLot 2610`, description `Illinois Lottery
+2610-2702`, customer ref blank.
+- [x] `browser_automation/parsers/illottery_parser.py` — header by label, week columns by header
+      x (year from "Flight Estimate … 2027", Monday/ascending check), wrapped row names attach
+      downward, Discounted Rate = the rate, reconcile Units / Proposed per line and Total / Gross /
+      Net (= gross × 0.85) and raise
+- [x] `browser_automation/illottery_automation.py` — gather (always-ask start, customer 354,
+      CMP), consolidate_weeks + plan_ranges, Rotation, `--dry-run`
+- [x] register everywhere (enums, detection before the Charmaine fallback, orchestrator,
+      processing service, bridge normalizer GROSS, scan cache v14)
+- [x] tests on the real fixture + tampering; dry run rolled back (10/1: 46 lines, 1356 spots, $17,644.00, 15%)

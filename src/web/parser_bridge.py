@@ -63,6 +63,7 @@ _DISPLAY_NAMES = {
     "SJCOUNTY": "San Joaquin County",
     "HPSJ": "Health Plan of San Joaquin",
     "GAUGER": "Gauger + Associates",
+    "ILLOTTERY": "Illinois Lottery / Flowers",
     "POP": "POP",
     "IWCCA": "IW Group / Covered CA",
     "EQC": "EQC / TH Media",
@@ -120,6 +121,7 @@ _REGISTRY = {
     "SJCOUNTY": ("browser_automation.parsers.sjcounty_parser", "parse_sjcounty"),
     "HPSJ": ("browser_automation.parsers.hpsj_parser", "parse_hpsj"),
     "GAUGER": ("browser_automation.parsers.gauger_parser", "parse_gauger"),
+    "ILLOTTERY": ("browser_automation.parsers.illottery_parser", "parse_illottery"),
     "POP": ("browser_automation.parsers.pop_parser", "parse_pop"),
     "IWCCA": ("browser_automation.parsers.iwcca_parser", "parse_iwcca"),
     "EQC": ("browser_automation.parsers.eqc_parser", "parse_eqc_xlsx"),
@@ -745,6 +747,54 @@ def _normalize_gauger(order) -> dict:
     }
 
 
+def _normalize_illottery(order) -> dict:
+    """Illinois Lottery house proposal: GROSS Discounted Rates enter verbatim
+    (rates_are_net False); the sheet's Net is reconciliation only."""
+    from browser_automation.illottery_automation import line_description
+
+    market = _str(getattr(order, "market_code", ""))
+    weeks = list(getattr(order, "week_dates", []) or [])
+    start = _str(weeks[0]) if weeks else ""
+    end = _str(getattr(order, "flight_end", "")) if weeks else ""
+    lines = []
+    for ln in getattr(order, "lines", []) or []:
+        is_bonus = bool(getattr(ln, "is_bonus", False))
+        lines.append(
+            {
+                "description": line_description(ln),
+                "days": "",
+                "time": _str(getattr(ln, "daypart", "")),
+                "duration": _str(getattr(order, "length_sec", "")),
+                "weekly_spots": [int(x) for x in getattr(ln, "week_spots", []) or []],
+                "total_spots": _int(getattr(ln, "total_spots", 0)),
+                "rate": 0.0 if is_bonus else _float(getattr(ln, "rate", 0.0)),
+                "is_bonus": is_bonus,
+                "market": market,
+                "language": "",
+                "start_date": start,
+                "end_date": end,
+            }
+        )
+    total_spots = sum(ln["total_spots"] for ln in lines)
+    total_cost = sum(ln["rate"] * ln["total_spots"] for ln in lines if not ln["is_bonus"])
+    return {
+        "client": _str(getattr(order, "advertiser", "Illinois Lottery")),
+        "agency": _str(getattr(order, "agency", "Flowers Communications Group")),
+        "estimate_number": "",
+        "description": _str(getattr(order, "flight_estimate", "")),
+        "markets": [market] if market else [],
+        "flight_start": start,
+        "flight_end": end,
+        "buyer": _str(getattr(order, "contact", "")),
+        "total_spots": total_spots,
+        "total_cost": round(total_cost, 2),
+        "lines": lines,
+        "warnings": [],
+        "required_fields": [],
+        "rates_are_net": False,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -790,6 +840,7 @@ _DIRECT_DB_KEYS = {
     "SJCOUNTY",
     "HPSJ",
     "GAUGER",
+    "ILLOTTERY",
     "POP",
     "IWCCA",
     "EQC",
@@ -842,6 +893,7 @@ _DIRECT_DB_TESTED_KEYS = {
     "SJCOUNTY",
     "HPSJ",
     "GAUGER",
+    "ILLOTTERY",
     "POP",
     "IWCCA",
     "EQC",
@@ -1017,6 +1069,8 @@ def get_order_detail(file_path: Path, order_type: str) -> dict:
         result = _normalize_iwcca(raw)
     elif order_type == "GAUGER":
         result = _normalize_gauger(raw)
+    elif order_type == "ILLOTTERY":
+        result = _normalize_illottery(raw)
     elif order_type == "SAGENT":
         result = _normalize_sagent(raw)
     else:
