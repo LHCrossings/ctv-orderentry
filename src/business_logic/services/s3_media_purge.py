@@ -422,8 +422,10 @@ CATEGORIES: dict[str, tuple[str, str]] = {
         "Needs a look first; nothing is touched",
     ),
     "booked": (
-        "Expired, but still on a playlist today or later",
-        "Nothing is touched while a playlist row points at it",
+        "Booked on a playlist today or later (kept)",
+        "Nothing is touched while a playlist row points at the asset. Each row's note says why "
+        "it is here: an old show renamed and rebooked (not expired), an expired asset that was "
+        "rescheduled, or a booking with no file in S3",
     ),
 }
 ACTIONABLE = ("delete", "aged", "dangling", "unexpired")
@@ -557,8 +559,11 @@ def scan(
             f"{len(aged_rows)} S3 metafile(s) on not-expired program assets last aired "
             f"{aged_from or 'ever'} .. {aged_to}"
         )
-    sizes = object_sizes(s3, bucket, (r.get("file_name") for r in rows + aged_rows))
-    log(f"{len(sizes)} object(s) found in S3")
+    listing = list_bucket(s3, bucket)  # one listing: per-file sizes AND the bucket total
+    storage = {"bytes": sum(listing.values()), "objects": len(listing)}
+    log(f"{storage['objects']:,} object(s) in S3, {storage['bytes'] / 1e9:,.1f} GB")
+    sizes = {k: listing[k] for r in rows + aged_rows if (k := r.get("file_name")) in listing}
+    log(f"{len(sizes)} candidate object(s) found in S3")
     cats = categorize(rows, sizes)
     unexp = categorize_unexpired(fetch_unexpired(conn, today, include_short_form))
     log(f"{len(unexp['unexpired'])} program asset(s) with no S3 file are not expired")
@@ -580,6 +585,7 @@ def scan(
             aged_to.isoformat() if aged_to else None,
         ],
         "total": len(rows),
+        "storage": storage,
         "categories": [
             {
                 "key": k,

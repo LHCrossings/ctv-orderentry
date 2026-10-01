@@ -73,11 +73,9 @@ def client(monkeypatch):
         return [dict(r) for r in ROWS]
 
     monkeypatch.setattr(smp, "fetch_expired", fake_expired)
-    monkeypatch.setattr(
-        smp,
-        "object_sizes",
-        lambda s3, b, keys, workers=32: dict(SIZES) | {"AVS010325A.mp4": 10, "AVS010425A.mp4": 10},
-    )
+    listing = dict(SIZES) | {"AVS010325A.mp4": 10, "AVS010425A.mp4": 10, "OTHER.mp4": 1000}
+    monkeypatch.setattr(smp, "object_sizes", lambda s3, b, keys, workers=32: dict(listing))
+    monkeypatch.setattr(smp, "list_bucket", lambda s3, b: dict(listing))
     unexpired = [
         _row(
             7,
@@ -203,6 +201,7 @@ def test_page_and_scan_categories(client):
     ] == [1, 2]
     assert data["short_form"] == {"count": 5, "bytes": 123}
     assert data["total"] == 4
+    assert data["storage"] == {"bytes": 1050, "objects": 6}, "whole bucket, not just candidates"
 
 
 def test_apply_acts_only_on_ids_still_in_the_category(client):

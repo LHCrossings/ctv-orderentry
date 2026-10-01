@@ -56,6 +56,22 @@
 
         #results { max-width: 1000px; margin: 0 auto; }
 
+        .storage-card {
+            display: flex;
+            align-items: baseline;
+            gap: 1.25rem;
+            flex-wrap: wrap;
+            background: var(--nord0);
+            color: var(--nord4);
+            border-radius: 10px;
+            padding: 1rem 1.5rem;
+            margin-bottom: 1rem;
+        }
+        .storage-card .storage-label { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; opacity: .75; }
+        .storage-card .storage-total { font-size: 2.2rem; font-weight: 700; color: var(--nord8); line-height: 1; }
+        .storage-card .storage-meta { font-size: .85rem; opacity: .8; }
+        .storage-card .storage-delta { font-size: .95rem; font-weight: 600; color: var(--nord14); }
+        .storage-card .storage-delta.up { color: var(--nord12); }
         .info-banner {
             display: flex;
             align-items: center;
@@ -271,8 +287,8 @@
     </div>
 
     <div class="scan-card">
-        <div class="scan-note">The scan reads Etere and checks each file in S3 without touching it
-            (about a minute). Nothing is deleted until you pick groups and confirm.</div>
+        <div class="scan-note">The scan reads Etere and lists the whole S3 bucket without touching
+            a file (a minute or two). Nothing is deleted until you pick groups and confirm.</div>
         <div class="range">
             <label>Old programming last aired</label>
             <input type="text" id="agedFrom" placeholder="from (any)" onblur="formatDateInput(this)" />
@@ -294,6 +310,7 @@
 
 <script>
 let scanData = null;
+let lastStorage = null;   // bucket total from the previous scan in this tab, for the delta after a delete
 const sortState = {};   // category key -> 'size' | 'name' | 'files' (default size, largest first)
 const SORTS = {
     size:  (a, b) => b.bytes - a.bytes || a.family.localeCompare(b.family),
@@ -373,7 +390,21 @@ async function runScan() {
 function render(data) {
     const resultsDiv = document.getElementById('results');
     const sf = data.short_form;
-    let html = `
+    const st = data.storage || null;
+    let delta = '';
+    if (st && lastStorage && lastStorage.bytes !== st.bytes) {
+        const d = st.bytes - lastStorage.bytes;
+        delta = `<span class="storage-delta ${d > 0 ? 'up' : ''}">${d > 0 ? '▲ +' : '▼ −'}${gb(Math.abs(d))} since the previous scan</span>`;
+    }
+    if (st) lastStorage = { bytes: st.bytes, objects: st.objects };
+    let html = st ? `
+        <div class="storage-card">
+            <span class="storage-label">S3 storage in use</span>
+            <span class="storage-total">${gb(st.bytes)}</span>
+            <span class="storage-meta">${st.objects.toLocaleString()} files in the bucket · listed at scan time</span>
+            ${delta}
+        </div>` : '';
+    html += `
         <div class="info-banner">
             <span>As of <strong>${fmtDate(data.as_of)}</strong></span>
             <span><strong>${data.total}</strong> S3 files on expired program assets</span>
