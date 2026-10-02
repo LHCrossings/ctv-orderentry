@@ -68,6 +68,9 @@
             transition: border-color 0.15s, background 0.15s;
         }
         .result-row:hover, .result-row.selected { border-color: var(--nord10); background: #fff; }
+        /* Orders whose flight has ended fade back; hover or select brings them forward. */
+        .result-row.past { opacity: 0.5; filter: saturate(0.6); }
+        .result-row.past:hover, .result-row.past.selected { opacity: 1; filter: none; }
         .result-code { font-weight: 700; font-size: 0.95rem; color: var(--text-primary); }
         .result-desc { font-size: 0.85rem; color: var(--text-primary); margin-top: 2px; }
         .result-meta { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; }
@@ -199,6 +202,13 @@
         const [m, d, y] = s.split('/');
         return `${+m}/${+d}/${y.slice(-2)}`;
     }
+    function isPast(s) {            // flight end before today (local date)
+        if (!s) return false;
+        const [m, d, y] = s.split('/').map(Number);
+        const end = new Date(y, m - 1, d);
+        const now = new Date(); now.setHours(0, 0, 0, 0);
+        return end < now;
+    }
 
     // ── Search ───────────────────────────────────────────────────────────────
     let timer = null;
@@ -227,7 +237,7 @@
             ? `Orders on air or upcoming (${rows.length}${rows.length === 50 ? '+' : ''}) — newest first`
             : `${rows.length}${rows.length === 50 ? '+' : ''} matching order${rows.length === 1 ? '' : 's'} — click one for the details`;
         results.innerHTML = rows.map((r, i) => `
-            <div class="result-row${r.id === selectedId ? ' selected' : ''}" data-idx="${i}">
+            <div class="result-row${r.id === selectedId ? ' selected' : ''}${isPast(r.date_end) ? ' past' : ''}" data-idx="${i}">
                 <div>
                     <div class="result-code">${esc(r.code)}</div>
                     <div class="result-desc">${esc(r.description || '')}</div>
@@ -242,6 +252,11 @@
     }
 
     function chips(r) {
+        if (isPast(r.date_end)) {
+            const out = [`<span class="chip">Finished ${mdy(r.date_end)}</span>`];
+            if (r.ordered && r.scheduled < r.ordered) out.push(`<span class="chip warn">${r.scheduled} of ${r.ordered} ran</span>`);
+            return out.join('');
+        }
         const out = ['<span class="chip ok">Entered</span>'];
         if (!r.ordered) {
             out.push('<span class="chip">No spots ordered</span>');
