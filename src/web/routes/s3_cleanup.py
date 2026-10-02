@@ -107,6 +107,14 @@ def _apply_sync(
             + (f"; {skipped} skipped (changed since the scan)" if skipped else "")
         )
         if not todo:
+            if wanted:
+                # Every selected id was skipped: the page and the server disagree about what is
+                # in this category. A green "Done" here is how a no-op passed as a success.
+                log(
+                    f"[WARN] none of the {len(wanted)} selected item(s) are in category "
+                    f"'{category}' any more — nothing was changed; rescan and look again"
+                )
+                return 2
             log("[DONE] nothing to do")
             return 0
         if category in ("delete", "aged"):

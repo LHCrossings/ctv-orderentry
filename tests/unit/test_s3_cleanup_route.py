@@ -235,6 +235,12 @@ def test_apply_acts_only_on_ids_still_in_the_category(client):
     assert r.text.strip().splitlines()[-1] == "[EXIT:0]"
 
 
+def test_apply_with_every_id_skipped_is_a_warning_not_a_green_done(client):
+    r = client.post("/api/traffic/s3-cleanup/apply", json={"category": "dangling", "ids": [23]})
+    assert r.status_code == 200 and "remove" not in client.calls
+    assert "[WARN] none of the 1 selected item(s)" in r.text and "[EXIT:2]" in r.text
+
+
 def test_apply_refuses_bad_input(client):
     assert (
         client.post(

@@ -4,6 +4,34 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Bucket Fed by TWO Queries Must Be Re-Derived From BOTH at Apply Time — and a Guard That Skips 100% of the Selection Is a Failure, Not a Green "Done"
+
+**Session:** Maija, S3 Cleanup "Expired in Etere, no file in S3 … says not expired … remove did nothing" (2026-10-01)
+
+**Rule:** The scan filled the "dangling" category from two sweeps: the expired query AND, when an
+old-programming range was set, `categorize_aged`'s leftovers (not-yet-expired shows whose S3 object
+is gone). The apply's safety re-derivation ("act only on ids still in the category") re-ran the
+EXPIRED query only, so all 1,178 selected ids were "skipped (changed since the scan)", the run
+logged `[DONE] nothing to do`, exited 0, and the page showed a green ✔ Done. Three defects in one:
+the label lied ("Expired in Etere" over rows marked "not expired"), the apply and the scan drew
+from different sources, and a 100%-skip was reported as success. Separately, "Done. Rescanning…"
+never changed because the rescan re-rendered the list but nobody updated the banner.
+
+**How to apply:**
+1. When a category/bucket is filled from more than one query, the apply-time re-derivation must
+   run the SAME set of queries with the SAME parameters the scan used (here: pass the aged range
+   through). Grep every `cats[k].extend(...)` for a second producer before trusting a single
+   re-fetch.
+2. A skip guard that drops EVERY selected item is a disagreement between page and server, not a
+   clean no-op: exit non-zero with a `[WARN]` that names the count, so the banner turns amber.
+   "Nothing to do" is only a success when nothing was asked for.
+3. A section label must describe the rows' shared property, not the first producer's. If a row
+   can carry "not expired" under a heading that says "Expired", the heading is wrong.
+4. A status banner set BEFORE an async follow-up ("Rescanning…") needs a second write AFTER it
+   resolves; otherwise the UI reports a state that ended minutes ago.
+
+---
+
 ## Deleting a Line Inside the Contract in the Etere App Is the Safe By-Hand Trim — Ghost Spots Come From OUR Code, Not From the App's Line Delete
 
 **Session:** Lee, Lexus R4 revisions on 2742/2747 (2026-09-30)
