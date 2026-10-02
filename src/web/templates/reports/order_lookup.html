@@ -350,12 +350,38 @@
         document.getElementById('dLines').innerHTML = html + '</tbody></table>';
     }
 
+    // navigator.clipboard only exists on HTTPS or localhost; over plain HTTP on the
+    // server's hostname it is undefined, so fall back to select + execCommand('copy').
+    function copyText(text) {
+        if (navigator.clipboard && window.isSecureContext) {
+            return navigator.clipboard.writeText(text).then(() => true, () => copyLegacy(text));
+        }
+        return Promise.resolve(copyLegacy(text));
+    }
+    function copyLegacy(text) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed'; ta.style.top = '0'; ta.style.left = '0'; ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus(); ta.select(); ta.setSelectionRange(0, text.length);
+        let ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        document.body.removeChild(ta);
+        return ok;
+    }
     document.getElementById('copyBtn').addEventListener('click', async () => {
         if (!lastSummaryText) return;
-        try {
-            await navigator.clipboard.writeText(lastSummaryText);
-            const b = document.getElementById('copyBtn'); b.textContent = 'Copied'; setTimeout(() => b.textContent = 'Copy summary', 1500);
-        } catch (e) { alert('Could not copy — select the summary text and copy it by hand.'); }
+        const b = document.getElementById('copyBtn');
+        const ok = await copyText(lastSummaryText);
+        if (ok) {
+            b.textContent = 'Copied'; setTimeout(() => b.textContent = 'Copy summary', 1500);
+        } else {
+            // Last resort: highlight the summary so Ctrl+C copies it.
+            const range = document.createRange(); range.selectNodeContents(document.getElementById('dSummary'));
+            const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+            b.textContent = 'Press Ctrl+C'; setTimeout(() => b.textContent = 'Copy summary', 2500);
+        }
     });
 
     // ── Deep link: ?q=…&id=… ────────────────────────────────────────────────
