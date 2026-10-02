@@ -11,6 +11,12 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
+from business_logic.services.order_lookup import (
+    language_codes_for,
+    language_name,
+    summarize,
+)
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -27,6 +33,22 @@ def _week_start(d) -> date:
 def _fmt_week(ws: date) -> str:
     we = ws + timedelta(days=6)
     return f"{ws.strftime('%b')} {ws.day}–{we.strftime('%b')} {we.day}"
+
+
+def _mdy_key(s):
+    """Sort key for a CONVERT(..., 101) 'mm/dd/yyyy' string."""
+    m, d, y = s.split("/")
+    return (int(y), int(m), int(d))
+
+
+def _sql_min_date(*vals):
+    vals = [v for v in vals if v]
+    return min(vals, key=_mdy_key) if vals else None
+
+
+def _sql_max_date(*vals):
+    vals = [v for v in vals if v]
+    return max(vals, key=_mdy_key) if vals else None
 
 
 def _fetch_placements_sync(contract_id: int):
@@ -700,5 +722,256 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
             return JSONResponse(rows)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
+
+    # ── Order Lookup (AE self-service: is it in, is it scheduled, which creatives) ──
+
+    _LOOKUP_SELECT = """
+        SELECT ct.ID_CONTRATTITESTATA                        AS id,
+               ct.COD_CONTRATTO                              AS code,
+               ct.DESCRIZIONE                                AS description,
+               ISNULL(ct.CUSTOMERREF, '')                    AS customer_ref,
+               ISNULL(c.RAG_SOCIAL, '')                      AS customer,
+               ISNULL(a.RAG_SOCIAL, '')                      AS agency,
+               LTRIM(RTRIM(ISNULL(ae.Nome, '') + ' ' + ISNULL(ae.RAG_SOCIAL, ''))) AS ae,
+               CONVERT(VARCHAR(10), ct.DATA_INIZIO,       101) AS date_start,
+               CONVERT(VARCHAR(10), ct.DATA_TERMINE,      101) AS date_end,
+               CONVERT(VARCHAR(10), ct.DATA_ACQUISIZIONE, 101) AS entered_on,
+               ISNULL(CAST(ct.NOTE AS nvarchar(max)), '')    AS notes,
+               (SELECT ISNULL(SUM(r.N_PASSAGGI), 0) FROM CONTRATTIRIGHE r
+                 WHERE r.ID_CONTRATTITESTATA = ct.ID_CONTRATTITESTATA) AS ordered,
+               (SELECT COUNT(*) FROM trafficPalinse tp
+                 JOIN CONTRATTIRIGHE r ON r.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe
+                 JOIN TPALINSE t ON t.ID_TPALINSE = tp.id_tpalinse
+                 WHERE r.ID_CONTRATTITESTATA = ct.ID_CONTRATTITESTATA AND t.LIVELLO = 0) AS scheduled,
+               (SELECT COUNT(*) FROM trafficPalinse tp
+                 JOIN CONTRATTIRIGHE r ON r.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe
+                 JOIN TPALINSE t ON t.ID_TPALINSE = tp.id_tpalinse
+                 WHERE r.ID_CONTRATTITESTATA = ct.ID_CONTRATTITESTATA AND t.LIVELLO = 0
+                   AND t.ID_FILMATI > 0) AS with_creative
+        FROM CONTRATTITESTATA ct
+        LEFT JOIN ANAGRAF c  ON c.ID_ANAGRAF  = ct.COMMITTENTE
+        LEFT JOIN ANAGRAF a  ON a.ID_ANAGRAF  = ct.AGENZIA
+        LEFT JOIN ANAGRAF ae ON ae.ID_ANAGRAF = ct.AGENTE1
+    """
+
+    # One token must match ANY of these; every token must match (AND across tokens).
+    _LOOKUP_HAYSTACK = [
+        "UPPER(ct.COD_CONTRATTO)",
+        "UPPER(ct.DESCRIZIONE)",
+        "UPPER(ISNULL(ct.CUSTOMERREF, ''))",
+        "UPPER(ISNULL(CAST(ct.NOTE AS nvarchar(max)), ''))",
+        "UPPER(ISNULL(c.RAG_SOCIAL, ''))",
+        "UPPER(ISNULL(a.RAG_SOCIAL, ''))",
+        "UPPER(ISNULL(ae.RAG_SOCIAL, ''))",
+    ]
+
+    def _like_token(tok: str) -> str:
+        # Escape LIKE metacharacters so an estimate like "06-MD10" or "[x]" is literal.
+        tok = tok.replace("[", "[[]").replace("%", "[%]").replace("_", "[_]")
+        return f"%{tok.upper()}%"
+
+    def _lookup_where(q: str):
+        tokens = [t for t in q.replace(",", " ").split() if t]
+        if not tokens:
+            return "WHERE ct.DATA_TERMINE >= CAST(GETDATE() AS DATE)", ()
+        clauses, params = [], []
+        for tok in tokens:
+            like = _like_token(tok)
+            ors = [f"{col} LIKE %s" for col in _LOOKUP_HAYSTACK]
+            params.extend([like] * len(_LOOKUP_HAYSTACK))
+            ors.append(
+                "EXISTS (SELECT 1 FROM CONTRATTIRIGHE r2 WHERE r2.ID_CONTRATTITESTATA = ct.ID_CONTRATTITESTATA "
+                "AND UPPER(r2.DESCRIZIONE) LIKE %s)"
+            )
+            params.append(like)
+            if tok.isdigit():
+                ors.append("ct.ID_CONTRATTITESTATA = %s")
+                params.append(int(tok))
+            codes = sorted(language_codes_for(tok))
+            if codes:
+                # "vietnamese" is nowhere on an Admerasia contract; the entry-time
+                # language catalog is where that answer lives.
+                ors.append(
+                    "EXISTS (SELECT 1 FROM CTV_LineLanguage ll "
+                    "JOIN CONTRATTIRIGHE r3 ON r3.ID_CONTRATTIRIGHE = ll.ID_CONTRATTIRIGHE "
+                    "WHERE r3.ID_CONTRATTITESTATA = ct.ID_CONTRATTITESTATA AND ll.LANG IN ("
+                    + ", ".join(["%s"] * len(codes))
+                    + "))"
+                )
+                params.extend(codes)
+            clauses.append("(" + " OR ".join(ors) + ")")
+        return "WHERE " + " AND ".join(clauses), tuple(params)
+
+    def _lookup_languages(cur, contract_ids):
+        """{contract_id: [language name, ...]} from the entry-time catalog."""
+        ids = [int(i) for i in contract_ids]
+        if not ids:
+            return {}
+        cur.execute(
+            "SELECT r.ID_CONTRATTITESTATA AS cid, ll.LANG AS lang "
+            "FROM CTV_LineLanguage ll JOIN CONTRATTIRIGHE r ON r.ID_CONTRATTIRIGHE = ll.ID_CONTRATTIRIGHE "
+            "WHERE r.ID_CONTRATTITESTATA IN (" + ", ".join(["%s"] * len(ids)) + ") "
+            "GROUP BY r.ID_CONTRATTITESTATA, ll.LANG",
+            tuple(ids),
+        )
+        out: dict = {}
+        for r in cur.fetchall():
+            out.setdefault(r["cid"], set()).add(language_name(r["lang"]))
+        return {k: sorted(v) for k, v in out.items()}
+
+    @router.get("/reports/order-lookup", response_class=HTMLResponse)
+    async def order_lookup_page(request: Request):
+        return templates.TemplateResponse(request, "reports/order_lookup.html")
+
+    @router.get("/api/reports/order-lookup/search")
+    async def order_lookup_search(q: str = Query("")):
+        q = q.strip()
+        if 0 < len(q) < 2:
+            return JSONResponse({"query": q, "results": [], "mode": "search"})
+
+        def _run():
+            from browser_automation.etere_direct_client import connect as _db_connect
+
+            where, params = _lookup_where(q)
+            sql = _LOOKUP_SELECT.replace("SELECT ct.", "SELECT TOP 50 ct.", 1) + where
+            order = " ORDER BY "
+            if q.isdigit():  # an exact contract ID outranks codes that merely contain the digits
+                order += "CASE WHEN ct.ID_CONTRATTITESTATA = %s THEN 0 ELSE 1 END, "
+                params = params + (int(q),)
+            sql += order + "ct.DATA_INIZIO DESC, ct.ID_CONTRATTITESTATA DESC"
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                cur.execute(sql, params)
+                rows = cur.fetchall()
+                langs = _lookup_languages(cur, [r["id"] for r in rows])
+            for r in rows:
+                r["languages"] = langs.get(r["id"], [])
+            return rows
+
+        try:
+            rows = await asyncio.get_running_loop().run_in_executor(None, _run)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+        return JSONResponse({"query": q, "mode": "search" if q else "current", "results": rows})
+
+    @router.get("/api/reports/order-lookup/{contract_id}")
+    async def order_lookup_detail(contract_id: int):
+        def _run():
+            from browser_automation.etere_direct_client import connect as _db_connect
+
+            with _db_connect() as conn:
+                cur = conn.cursor(as_dict=True)
+                cur.execute(_LOOKUP_SELECT + " WHERE ct.ID_CONTRATTITESTATA = %s", (contract_id,))
+                hdr = cur.fetchone()
+                if not hdr:
+                    return None, [], []
+                cur.execute(
+                    """
+                    SELECT r.ID_CONTRATTIRIGHE AS id,
+                           r.DESCRIZIONE       AS description,
+                           r.COD_USER          AS market_id,
+                           CONVERT(VARCHAR(10), ISNULL(r.DATESTART, r.DATA_INIZIO), 101) AS date_start,
+                           CONVERT(VARCHAR(10), ISNULL(r.DATEEND,   r.DATA_FINE),   101) AS date_end,
+                           r.N_PASSAGGI        AS ordered,
+                           r.OMAGGIO           AS is_bonus,
+                           r.DURATA            AS durata,
+                           ll.LANG             AS language,
+                           ISNULL(x.scheduled, 0)       AS scheduled,
+                           ISNULL(x.with_creative, 0)   AS with_creative,
+                           ISNULL(x.aired, 0)           AS aired,
+                           CONVERT(VARCHAR(10), x.first_air, 101)        AS first_air,
+                           CONVERT(VARCHAR(10), x.last_air, 101)         AS last_air,
+                           CONVERT(VARCHAR(10), x.first_unassigned, 101) AS first_unassigned
+                    FROM CONTRATTIRIGHE r
+                    OUTER APPLY (
+                        SELECT COUNT(*) AS scheduled,
+                               SUM(CASE WHEN t.ID_FILMATI > 0 THEN 1 ELSE 0 END) AS with_creative,
+                               SUM(CASE WHEN t.STATUS IN ('Q', 'D') THEN 1 ELSE 0 END) AS aired,
+                               MIN(t.DATA) AS first_air,
+                               MAX(t.DATA) AS last_air,
+                               MIN(CASE WHEN t.ID_FILMATI > 0 THEN NULL ELSE t.DATA END) AS first_unassigned
+                        FROM trafficPalinse tp
+                        JOIN TPALINSE t ON t.ID_TPALINSE = tp.id_tpalinse
+                        WHERE tp.ID_ContrattiRighe = r.ID_CONTRATTIRIGHE AND t.LIVELLO = 0
+                    ) x
+                    LEFT JOIN CTV_LineLanguage ll ON ll.ID_CONTRATTIRIGHE = r.ID_CONTRATTIRIGHE
+                    WHERE r.ID_CONTRATTITESTATA = %s
+                    ORDER BY r.ID_CONTRATTIRIGHE
+                    """,
+                    (contract_id,),
+                )
+                lines = cur.fetchall()
+                cur.execute(
+                    """
+                    SELECT CASE WHEN t.ID_FILMATI > 0 THEN t.ID_FILMATI ELSE 0 END AS id,
+                           ISNULL(f.COD_PROGRA, '')  AS isci,
+                           ISNULL(f.DESCRIZIO, '')   AS title,
+                           ISNULL(f.DURATA, 0)       AS durata,
+                           t.COD_USER                AS market_id,
+                           COUNT(*)                  AS spots,
+                           SUM(CASE WHEN t.STATUS IN ('Q', 'D') THEN 1 ELSE 0 END) AS aired,
+                           CONVERT(VARCHAR(10), MIN(t.DATA), 101) AS first_air,
+                           CONVERT(VARCHAR(10), MAX(t.DATA), 101) AS last_air
+                    FROM trafficPalinse tp
+                    JOIN CONTRATTIRIGHE r ON r.ID_CONTRATTIRIGHE = tp.ID_ContrattiRighe
+                    JOIN TPALINSE t       ON t.ID_TPALINSE = tp.id_tpalinse
+                    LEFT JOIN FILMATI f   ON f.ID_FILMATI = t.ID_FILMATI AND t.ID_FILMATI > 0
+                    WHERE r.ID_CONTRATTITESTATA = %s AND t.LIVELLO = 0
+                    GROUP BY CASE WHEN t.ID_FILMATI > 0 THEN t.ID_FILMATI ELSE 0 END,
+                             f.COD_PROGRA, f.DESCRIZIO, f.DURATA, t.COD_USER
+                    """,
+                    (contract_id,),
+                )
+                return hdr, lines, cur.fetchall()
+
+        try:
+            hdr, lines, cre_rows = await asyncio.get_running_loop().run_in_executor(None, _run)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+        if hdr is None:
+            raise HTTPException(status_code=404, detail="Contract not found")
+
+        for ln in lines:
+            ln["market"] = MARKET_MAP.get(ln.pop("market_id"), "?")
+            ln["language_name"] = language_name(ln.get("language"))
+            ln["duration_sec"] = round(ln["durata"] / 30) if ln.get("durata") else 0
+            ln["is_bonus"] = bool(ln.get("is_bonus"))
+
+        # Fold the per-market creative rows into one row per creative.
+        creatives: dict = {}
+        for r in cre_rows:
+            c = creatives.setdefault(
+                r["id"],
+                {
+                    "id": r["id"],
+                    "isci": r["isci"],
+                    "title": r["title"],
+                    "duration_sec": round(r["durata"] / 30) if r.get("durata") else 0,
+                    "spots": 0,
+                    "aired": 0,
+                    "first_air": None,
+                    "last_air": None,
+                    "markets": set(),
+                    "assigned": r["id"] > 0,
+                },
+            )
+            c["spots"] += r["spots"]
+            c["aired"] += r["aired"] or 0
+            c["first_air"] = _sql_min_date(c["first_air"], r["first_air"])
+            c["last_air"] = _sql_max_date(c["last_air"], r["last_air"])
+            c["markets"].add(MARKET_MAP.get(r["market_id"], "?"))
+        creative_list = sorted(creatives.values(), key=lambda c: (not c["assigned"], c["isci"]))
+        for c in creative_list:
+            c["markets"] = sorted(c["markets"])
+
+        hdr["first_air"] = _sql_min_date(*[ln.get("first_air") for ln in lines]) if lines else None
+        hdr["last_air"] = _sql_max_date(*[ln.get("last_air") for ln in lines]) if lines else None
+        hdr["first_unassigned"] = (
+            _sql_min_date(*[ln.get("first_unassigned") for ln in lines]) if lines else None
+        )
+        summary = summarize(hdr, lines, [c for c in creative_list if c["assigned"]])
+        return JSONResponse(
+            {"header": hdr, "summary": summary, "lines": lines, "creatives": creative_list}
+        )
 
     return router

@@ -638,3 +638,20 @@ ROS windows; Rotation on every line; code `Flowers ILLot 2610`, description `Ill
 - [x] register everywhere (enums, detection before the Charmaine fallback, orchestrator,
       processing service, bridge normalizer GROSS, scan cache v14)
 - [x] tests on the real fixture + tampering; dry run rolled back (10/1: 46 lines, 1356 spots, $17,644.00, 15%)
+
+## Order Lookup card for the AEs (Charmaine) — /reports/order-lookup (2026-10-02)
+
+Lee: AEs email "is this order in? does it have spots assigned, which ones?" (Admerasia McD Monopoly
+10/1). One search box that covers code, description, customer ref, notes, client, agency and line
+descriptions (the campaign name "Monopoly" lives ONLY in the header notes; the Vietnamese cut is
+the "VT" suffix of the Admerasia estimate in CUSTOMERREF). After the search, state the facts in
+plain English, then list the creatives.
+- [x] `src/business_logic/services/order_lookup.py` — pure `summarize(hdr, lines, creatives, today)`
+      → sentences (entered / scheduled N of M / creatives assigned / aired so far)
+- [x] `reports.py`: `/reports/order-lookup` page, `/api/reports/order-lookup/search?q=` (tokenised
+      AND match over the haystack, TOP 50, per-hit counts), `/api/reports/order-lookup/{id}` detail
+- [x] `templates/reports/order_lookup.html` modelled on placement_by_week.html
+- [x] card on `reports.html`
+- [x] unit test for the summary sentences on the 3131 shape + partial/unassigned/finished shapes
+- [x] verify live against 3129-3131 (all scheduled, creatives assigned), 2146 (finished flight, 23 aired),
+      3133 (16 spots still need a creative) — plus language search via CTV_LineLanguage ("monopoly vietnamese")

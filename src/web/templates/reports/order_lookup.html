@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Order Lookup — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 1200px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px 28px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+            margin-bottom: 20px;
+        }
+        .tool-card h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 16px;
+        }
+
+        .input-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+        .field-group { display: flex; flex-direction: column; gap: 5px; }
+        .field-label {
+            font-size: 0.72rem; font-weight: 600; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.06em;
+        }
+        .field-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 11px 14px;
+            font-size: 1rem;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            color: var(--text-primary);
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .field-input:focus { border-color: var(--nord10); box-shadow: 0 0 0 3px rgba(94,129,172,0.15); }
+        .field-hint { font-size: 0.8rem; color: var(--text-muted); margin-top: 8px; }
+        .run-btn {
+            padding: 9px 20px; background: var(--nord10); color: white; border: none;
+            border-radius: 8px; font-size: 0.875rem; font-weight: 600; font-family: 'Inter', sans-serif;
+            cursor: pointer; transition: background 0.2s, transform 0.15s; white-space: nowrap; height: 42px;
+        }
+        .run-btn:hover:not(:disabled) { background: var(--nord9); transform: translateY(-1px); }
+        .run-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+        /* Results list */
+        .results-title { font-size: 0.8rem; color: var(--text-muted); margin: 18px 0 8px; }
+        .result-row {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 6px 18px;
+            padding: 12px 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            background: var(--bg-secondary);
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .result-row:hover, .result-row.selected { border-color: var(--nord10); background: #fff; }
+        .result-code { font-weight: 700; font-size: 0.95rem; color: var(--text-primary); }
+        .result-desc { font-size: 0.85rem; color: var(--text-primary); margin-top: 2px; }
+        .result-meta { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; }
+        .result-chips { display: flex; gap: 6px; align-items: flex-start; flex-wrap: wrap; justify-content: flex-end; }
+
+        .chip {
+            display: inline-block; padding: 3px 10px; border-radius: 999px;
+            font-size: 0.72rem; font-weight: 600; white-space: nowrap;
+            background: var(--bg-secondary); color: var(--text-muted); border: 1px solid var(--border-color);
+        }
+        .chip.ok   { background: #e5f2e9; color: #2e7d4f; border-color: #bfe0cb; }
+        .chip.warn { background: #fff4de; color: #9a6b00; border-color: #f3dfae; }
+        .chip.bad  { background: #fbe4e4; color: #a33a3a; border-color: #f1c4c4; }
+
+        /* Detail */
+        .detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+        .detail-code { font-weight: 700; font-size: 1.15rem; color: var(--text-primary); }
+        .detail-sub  { font-size: 0.85rem; color: var(--text-muted); margin-top: 3px; }
+        .summary {
+            margin-top: 16px; padding: 16px 20px;
+            background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px;
+            font-size: 1rem; line-height: 1.6; color: var(--text-primary);
+        }
+        .summary p { margin: 0 0 6px; }
+        .summary p:last-child { margin-bottom: 0; }
+        .notes {
+            margin-top: 12px; padding: 12px 16px; font-size: 0.85rem; white-space: pre-wrap;
+            color: var(--text-muted); background: var(--bg-secondary); border-radius: 8px;
+            border: 1px dashed var(--border-color);
+        }
+        .copy-btn {
+            background: transparent; border: 1px solid var(--border-color); color: var(--text-muted);
+            border-radius: 8px; padding: 6px 12px; font-size: 0.78rem; font-family: 'Inter', sans-serif;
+            cursor: pointer;
+        }
+        .copy-btn:hover { border-color: var(--nord10); color: var(--text-primary); }
+
+        .section-title { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 22px 0 10px; }
+        .table-scroll { overflow-x: auto; }
+        table.spot-table { border-collapse: collapse; width: 100%; font-size: 0.875rem; white-space: nowrap; }
+        table.spot-table th {
+            background: var(--nord10); color: #fff; font-weight: 600; padding: 9px 14px;
+            text-align: center; border: 1px solid rgba(255,255,255,0.15);
+        }
+        table.spot-table th.desc-col, table.spot-table td.desc-col { text-align: left; }
+        table.spot-table td { padding: 8px 14px; border: 1px solid var(--border-color); text-align: center; color: var(--text-primary); }
+        table.spot-table tr.even td { background: #f5f7fa; }
+        table.spot-table tr.odd  td { background: #fff; }
+        table.spot-table tr.bonus td { background: #fff8e1; font-style: italic; }
+        table.spot-table tr.unassigned td { background: #fbe4e4; }
+        table.spot-table td.zero { color: var(--text-muted); }
+        table.spot-table td.short { color: #a33a3a; font-weight: 700; }
+        .loading-msg { color: var(--text-muted); font-size: 0.9rem; padding: 8px 0; }
+        .empty-msg { color: var(--text-muted); font-size: 0.95rem; padding: 14px 0 4px; }
+    </style>
+</head>
+<body>
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="home-btn">🏠</a>
+            <div class="logo-icon">🔎</div>
+            <div>
+                <h1>Order <span>Lookup</span></h1>
+                <div class="logo-sub">Reports · Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+
+    <div class="tool-card">
+        <h2>Find an order</h2>
+        <div class="input-row">
+            <div class="field-group" style="flex:1; min-width: 320px;">
+                <label class="field-label">Search</label>
+                <input id="q" class="field-input" placeholder="McDonald's Monopoly, Admerasia, Vietnamese, estimate 06-MD10, PO number, contract code…" autocomplete="off" autofocus />
+            </div>
+            <button class="run-btn" id="searchBtn">Search</button>
+        </div>
+        <div class="field-hint">
+            Type anything you know about the order: advertiser, agency, campaign name, language, market,
+            estimate or PO number, or the Etere contract code. Every word has to match. Leave it empty to see the orders currently on air or upcoming.
+        </div>
+        <div id="resultsTitle" class="results-title"></div>
+        <div id="results"></div>
+    </div>
+
+    <div id="detailCard" class="tool-card" style="display:none;">
+        <div class="detail-head">
+            <div>
+                <div class="detail-code" id="dCode"></div>
+                <div class="detail-sub" id="dSub"></div>
+            </div>
+            <button class="copy-btn" id="copyBtn" title="Copy the summary to paste into an email">Copy summary</button>
+        </div>
+        <div id="dLoading" class="loading-msg" style="display:none;">Loading…</div>
+        <div id="dSummary" class="summary"></div>
+        <div id="dNotes" class="notes" style="display:none;"></div>
+
+        <div class="section-title">Creatives on the scheduled spots</div>
+        <div class="table-scroll"><div id="dCreatives"></div></div>
+
+        <div class="section-title">Lines</div>
+        <div class="table-scroll"><div id="dLines"></div></div>
+    </div>
+
+</main>
+
+<script>
+(function () {
+    const qInput   = document.getElementById('q');
+    const results  = document.getElementById('results');
+    const rTitle   = document.getElementById('resultsTitle');
+    const detail   = document.getElementById('detailCard');
+    let rows = [];
+    let selectedId = null;
+    let lastSummaryText = '';
+
+    function esc(s) {
+        return String(s ?? '')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function mdy(s) {               // '10/06/2026' → '10/6/26'
+        if (!s) return '?';
+        const [m, d, y] = s.split('/');
+        return `${+m}/${+d}/${y.slice(-2)}`;
+    }
+
+    // ── Search ───────────────────────────────────────────────────────────────
+    let timer = null;
+    qInput.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 400); });
+    qInput.addEventListener('keydown', e => { if (e.key === 'Enter') { clearTimeout(timer); search(); } });
+    document.getElementById('searchBtn').addEventListener('click', search);
+
+    async function search() {
+        const q = qInput.value.trim();
+        rTitle.textContent = 'Searching…';
+        results.innerHTML = '';
+        const url = new URL(location.href);
+        if (q) url.searchParams.set('q', q); else url.searchParams.delete('q');
+        history.replaceState(null, '', url);
+
+        const resp = await fetch(`/api/reports/order-lookup/search?q=${encodeURIComponent(q)}`);
+        if (!resp.ok) { rTitle.textContent = `Search failed (${resp.status}).`; return; }
+        const data = await resp.json();
+        rows = data.results || [];
+        if (!rows.length) {
+            rTitle.textContent = '';
+            results.innerHTML = `<div class="empty-msg">No order in Etere matches “${esc(q)}”. Try fewer words, or just the advertiser name.</div>`;
+            return;
+        }
+        rTitle.textContent = data.mode === 'current'
+            ? `Orders on air or upcoming (${rows.length}${rows.length === 50 ? '+' : ''}) — newest first`
+            : `${rows.length}${rows.length === 50 ? '+' : ''} matching order${rows.length === 1 ? '' : 's'} — click one for the details`;
+        results.innerHTML = rows.map((r, i) => `
+            <div class="result-row${r.id === selectedId ? ' selected' : ''}" data-idx="${i}">
+                <div>
+                    <div class="result-code">${esc(r.code)}</div>
+                    <div class="result-desc">${esc(r.description || '')}</div>
+                    <div class="result-meta">${esc(r.customer || '')}${r.agency ? ' · via ' + esc(r.agency) : ''}
+                        · ${mdy(r.date_start)} – ${mdy(r.date_end)}${r.languages && r.languages.length ? ' · ' + esc(r.languages.join(', ')) : ''}${r.customer_ref ? ' · ref ' + esc(r.customer_ref) : ''}</div>
+                </div>
+                <div class="result-chips">${chips(r)}</div>
+            </div>`).join('');
+        results.querySelectorAll('.result-row').forEach(el =>
+            el.addEventListener('click', () => openDetail(rows[+el.dataset.idx])));
+        if (rows.length === 1 && q) openDetail(rows[0]);
+    }
+
+    function chips(r) {
+        const out = ['<span class="chip ok">Entered</span>'];
+        if (!r.ordered) {
+            out.push('<span class="chip">No spots ordered</span>');
+        } else if (r.scheduled >= r.ordered) {
+            out.push(`<span class="chip ok">${r.scheduled} of ${r.ordered} scheduled</span>`);
+        } else if (r.scheduled === 0) {
+            out.push(`<span class="chip bad">Not scheduled yet</span>`);
+        } else {
+            out.push(`<span class="chip warn">${r.scheduled} of ${r.ordered} scheduled</span>`);
+        }
+        if (r.scheduled) {
+            if (r.with_creative >= r.scheduled) out.push('<span class="chip ok">Creatives assigned</span>');
+            else if (r.with_creative === 0)   out.push('<span class="chip bad">No creative yet</span>');
+            else out.push(`<span class="chip warn">${r.scheduled - r.with_creative} spots need a creative</span>`);
+        }
+        return out.join('');
+    }
+
+    // ── Detail ───────────────────────────────────────────────────────────────
+    async function openDetail(r) {
+        selectedId = r.id;
+        results.querySelectorAll('.result-row').forEach(el =>
+            el.classList.toggle('selected', rows[+el.dataset.idx].id === r.id));
+        const url = new URL(location.href); url.searchParams.set('id', r.id); history.replaceState(null, '', url);
+
+        detail.style.display = 'block';
+        document.getElementById('dCode').textContent = r.code;
+        document.getElementById('dSub').textContent = r.description || '';
+        document.getElementById('dLoading').style.display = 'block';
+        document.getElementById('dSummary').innerHTML = '';
+        document.getElementById('dNotes').style.display = 'none';
+        document.getElementById('dCreatives').innerHTML = '';
+        document.getElementById('dLines').innerHTML = '';
+        detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        const resp = await fetch(`/api/reports/order-lookup/${r.id}`);
+        document.getElementById('dLoading').style.display = 'none';
+        if (!resp.ok) { document.getElementById('dSummary').textContent = `Could not load this order (${resp.status}).`; return; }
+        render(await resp.json());
+    }
+
+    function render(d) {
+        const h = d.header, s = d.summary;
+        document.getElementById('dCode').textContent = h.code;
+        document.getElementById('dSub').textContent =
+            [h.description, h.customer ? `${h.customer}${h.agency ? ' via ' + h.agency : ''}` : '',
+             h.customer_ref ? `ref ${h.customer_ref}` : '', h.ae ? `AE ${h.ae}` : ''].filter(Boolean).join(' · ');
+
+        document.getElementById('dSummary').innerHTML = s.sentences.map(t => `<p>${esc(t)}</p>`).join('');
+        lastSummaryText = s.sentences.join(' ');
+
+        const notes = (h.notes || '').trim();
+        const n = document.getElementById('dNotes');
+        if (notes) { n.textContent = notes; n.style.display = 'block'; }
+
+        // Creatives
+        const cre = d.creatives || [];
+        if (!cre.length) {
+            document.getElementById('dCreatives').innerHTML = '<div class="empty-msg">No spots are scheduled yet, so nothing has a creative.</div>';
+        } else {
+            let html = '<table class="spot-table"><thead><tr><th class="desc-col">ISCI</th><th class="desc-col">Title</th><th>Length</th><th>Spots</th><th>Aired</th><th>First air</th><th>Last air</th><th>Market</th></tr></thead><tbody>';
+            cre.forEach((c, i) => {
+                const cls = c.assigned ? (i % 2 ? 'odd' : 'even') : 'unassigned';
+                html += `<tr class="${cls}">
+                    <td class="desc-col"><strong>${c.assigned ? esc(c.isci) : 'No creative assigned yet'}</strong></td>
+                    <td class="desc-col">${c.assigned ? esc(c.title) : 'these spots are scheduled but still need a creative'}</td>
+                    <td>${c.assigned ? ':' + c.duration_sec : ''}</td>
+                    <td>${c.spots}</td>
+                    <td class="${c.aired ? '' : 'zero'}">${c.aired || '—'}</td>
+                    <td>${mdy(c.first_air)}</td><td>${mdy(c.last_air)}</td>
+                    <td>${esc(c.markets.join(', '))}</td></tr>`;
+            });
+            document.getElementById('dCreatives').innerHTML = html + '</tbody></table>';
+        }
+
+        // Lines
+        const lines = d.lines || [];
+        let html = '<table class="spot-table"><thead><tr><th class="desc-col">Line</th><th>Market</th><th>Language</th><th>Length</th><th>Dates</th><th>Ordered</th><th>Scheduled</th><th>With creative</th><th>Aired</th></tr></thead><tbody>';
+        lines.forEach((l, i) => {
+            const cls = l.is_bonus ? 'bonus' : (i % 2 ? 'odd' : 'even');
+            const schedCls = l.scheduled < l.ordered ? 'short' : '';
+            const creCls   = l.scheduled && l.with_creative < l.scheduled ? 'short' : '';
+            html += `<tr class="${cls}">
+                <td class="desc-col">${esc(l.description)}${l.is_bonus ? ' (bonus)' : ''}</td>
+                <td>${esc(l.market)}</td><td>${esc(l.language_name || '')}</td><td>:${l.duration_sec}</td>
+                <td>${mdy(l.date_start)} – ${mdy(l.date_end)}</td>
+                <td>${l.ordered}</td><td class="${schedCls}">${l.scheduled}</td>
+                <td class="${creCls}">${l.with_creative}</td>
+                <td class="${l.aired ? '' : 'zero'}">${l.aired || '—'}</td></tr>`;
+        });
+        document.getElementById('dLines').innerHTML = html + '</tbody></table>';
+    }
+
+    document.getElementById('copyBtn').addEventListener('click', async () => {
+        if (!lastSummaryText) return;
+        try {
+            await navigator.clipboard.writeText(lastSummaryText);
+            const b = document.getElementById('copyBtn'); b.textContent = 'Copied'; setTimeout(() => b.textContent = 'Copy summary', 1500);
+        } catch (e) { alert('Could not copy — select the summary text and copy it by hand.'); }
+    });
+
+    // ── Deep link: ?q=…&id=… ────────────────────────────────────────────────
+    const params = new URLSearchParams(location.search);
+    if (params.get('q')) qInput.value = params.get('q');
+    search().then(() => {
+        const id = +params.get('id');
+        if (id) {
+            const hit = rows.find(r => r.id === id);
+            openDetail(hit || { id, code: `Contract ${id}`, description: '' });
+        }
+    });
+})();
+</script>
+</body>
+</html>
