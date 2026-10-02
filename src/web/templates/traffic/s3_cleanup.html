@@ -581,6 +581,7 @@ async function runApply(key) {
     } finally {
         document.querySelectorAll('.btn-scan').forEach(b => b.disabled = false);
         await runScan();   // whatever was removed drops out; leftovers show up in their category
+        if (exitCode === 0) okDiv.textContent = '✔ Done. The list below is the fresh scan.';
     }
 }
 </script>

@@ -122,6 +122,15 @@ def client(monkeypatch):
             last_aired=dt.datetime(2025, 1, 4),
             future_rows=1,
         ),
+        # not expired, S3 record present, object already gone (Maija's 10/1 "not expired" rows)
+        _row(
+            23,
+            id_filmati=123,
+            cod_progra="HMONG-ET-0105A",
+            file_name="HMONG-ET-0105A.mp4",
+            data_scad=None,
+            last_aired=dt.datetime(2025, 8, 9),
+        ),
     ]
     calls["aged_ranges"] = []
 
@@ -288,9 +297,11 @@ def test_scan_with_range_adds_old_programming_and_apply_stamps_it(client):
     assert any(
         "not expired" in f["problem"] for grp in cats["booked"]["groups"] for f in grp["files"]
     )
-    assert cats["delete"]["count"] == 2 and cats["dangling"]["count"] == 1, (
-        "the expired sweep is unchanged"
-    )
+    assert cats["delete"]["count"] == 2, "the expired sweep is unchanged"
+    dangling = {f["id_metafile"]: f for grp in cats["dangling"]["groups"] for f in grp["files"]}
+    assert set(dangling) == {3, 23}, "the aged dead reference joins the dangling bucket"
+    assert dangling[23]["problem"] == "object missing in S3; asset not expired"
+    assert dangling[23]["expired"] is None
 
     r = client.post(
         "/api/traffic/s3-cleanup/apply",
@@ -303,6 +314,18 @@ def test_scan_with_range_adds_old_programming_and_apply_stamps_it(client):
         ).status_code
         == 400
     )
+
+    # Removing dangling references acts on BOTH the expired and the aged dead references
+    # when the range is sent (what the page does); without the range only the expired one.
+    r = client.post(
+        "/api/traffic/s3-cleanup/apply",
+        json={"category": "dangling", "ids": [3, 23], "aged_to": "2025-12-31"},
+    )
+    assert r.status_code == 200 and client.calls["remove"] == [3, 23]
+    assert "2 of 2 selected item(s) still in category 'dangling'" in r.text
+    r = client.post("/api/traffic/s3-cleanup/apply", json={"category": "dangling", "ids": [3, 23]})
+    assert r.status_code == 200 and client.calls["remove"] == [3]
+    assert "1 skipped" in r.text
     assert (
         client.get(
             "/api/traffic/s3-cleanup/scan?aged_from=2025-12-31&aged_to=2025-01-01"

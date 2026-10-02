@@ -413,8 +413,10 @@ CATEGORIES: dict[str, tuple[str, str]] = {
         "Delete the S3 file, remove the reference and mark the asset expired as of today",
     ),
     "dangling": (
-        "Expired in Etere, no file in S3",
-        "Remove the dead reference from the Media Library (nothing to delete in S3)",
+        "Listed in Etere as an S3 copy, but the file is not in S3",
+        "Remove the dead reference from the Media Library and make sure the asset is expired "
+        "(nothing to delete in S3). Includes not-yet-expired shows from the old-programming "
+        "range whose file is already gone",
     ),
     "unexpired": (
         "No file in S3, but the asset is not expired",

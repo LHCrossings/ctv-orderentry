@@ -81,11 +81,23 @@ def _apply_sync(
             sizes = smp.object_sizes(s3, bucket, (r.get("file_name") for r in rows))
             todo = smp.categorize_aged(rows, sizes)["aged"]
         else:
+            # "dangling" holds dead S3 references from BOTH sweeps: expired assets and, when
+            # the page scanned an old-programming range, not-yet-expired ones whose object is
+            # already gone (Maija 10/1: 1,178 selected, 0 acted on, because only the expired
+            # query was re-run here). Re-derive from the same sources the scan used.
             rows = [
                 r
                 for r in smp.fetch_expired(conn, today, include_short_form)
                 if int(r["id_metafile"]) in wanted
             ]
+            lo, hi = aged_range
+            if hi:
+                seen = {int(r["id_metafile"]) for r in rows}
+                rows += [
+                    r
+                    for r in smp.fetch_aged(conn, today, lo, hi, include_short_form)
+                    if int(r["id_metafile"]) in wanted and int(r["id_metafile"]) not in seen
+                ]
             sizes = smp.object_sizes(s3, bucket, (r.get("file_name") for r in rows))
             todo = smp.categorize(rows, sizes)[category]
         skipped = len(wanted) - len(todo)
