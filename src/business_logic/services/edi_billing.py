@@ -39,6 +39,14 @@ _SUBTOTAL_RE = re.compile(r"COPY LIST Subtotals\s+(\d+)\s+\$\s*([\d,]+\.?\d*)")
 # where the 1 is the charge line, not a spot.
 _PROD_SUBTOTAL_RE = re.compile(r"^Subtotals\s+\d+\s+\$\s*(\d[\d, ]*\.\d{2})", re.MULTILINE)
 _PRODUCTION_ONLY_RE = re.compile(r"charges are for production only", re.IGNORECASE)
+# Not every production affidavit carries that sentence (BVK 2609-012 says only
+# "Production Charges"); the Estimate field "PRODUCTION CHARGES EST 4828" and the
+# single PRD row "Sep-26 Est 4828 Production Charges 1 PRD 4828-PRD $ 3,176.47" are
+# the document's own markers and also carry the estimate number.
+_PRODUCTION_EST_RE = re.compile(r"PRODUCTION\s+CHARGES\s+EST\.?\s+(\S+)", re.IGNORECASE)
+_PRODUCTION_ROW_RE = re.compile(
+    r"^\S+\s+Est\.?\s+(\S+)\s+Production\s+Charges\s+\d+\s+PRD\b", re.IGNORECASE | re.MULTILINE
+)
 # Affidavit summary block: "Agency Commission 15% $ 988.24" / "Net Amount Due $ 5,600.00".
 # The net is what we actually bill (QuickBooks invoice) — the EDI R34 must land on it.
 # The renderer sometimes drops a space into the figure ("$ 3 ,803.75",
@@ -85,6 +93,8 @@ class AffidavitData:
     # Production-only invoice (no airtime): "The above charges are for production
     # only" in the COMMENTS box. Carried as ONE synthetic R51 — see production_invoice().
     is_production: bool = False
+    # Estimate number printed on a production affidavit ("PRODUCTION CHARGES EST 4828").
+    estimate_code: str = ""
     warnings: list[str] = field(default_factory=list)
 
 
@@ -142,7 +152,10 @@ def parse_affidavit(pdf_bytes: bytes, source: str = "") -> AffidavitData:
                     if rate > 0:
                         row_gross += cnt * rate
         out.total_spots = total_spots if total_spots is not None else row_spots
-        if _PRODUCTION_ONLY_RE.search(full_text):
+        prod_est = _PRODUCTION_EST_RE.search(full_text) or _PRODUCTION_ROW_RE.search(full_text)
+        if prod_est:
+            out.estimate_code = prod_est.group(1).rstrip(",.:")
+        if prod_est or _PRODUCTION_ONLY_RE.search(full_text):
             out.is_production = True
             out.total_spots = 0
             if gross_amount is None and (pm := _PROD_SUBTOTAL_RE.search(full_text)):
@@ -523,8 +536,12 @@ PRODUCTION_COMMENT_BOTTOM = "PRODUCTION CHARGES"
 
 def estimate_from_customer_ref(customer_ref: str) -> str:
     """'Order 212735, Est 0001' → '0001'; '' when the ref names no estimate."""
-    m = re.search(r"\bEst\.?\s+(\S+)", customer_ref or "", re.IGNORECASE)
-    return m.group(1).rstrip(",.:") if m else ""
+    ref = (customer_ref or "").strip()
+    m = re.search(r"\bEst\.?\s+(\S+)", ref, re.IGNORECASE)
+    if m:
+        return m.group(1).rstrip(",.:")
+    # A bare reference ("4807", BVK's convention) IS the estimate number.
+    return ref if re.fullmatch(r"[\w-]+", ref) else ""
 
 
 def production_invoice(inv: dict, a: AffidavitData, estimate: str = "") -> tuple[dict, list[dict]]:
@@ -550,7 +567,10 @@ def production_invoice(inv: dict, a: AffidavitData, estimate: str = "") -> tuple
 
     # The estimate number goes in verbatim — Lee (2026-09-24): never append PRD or
     # PRODUCTION to it; the May 2026 BVK "4807PRD" was a one-off.
-    est = (estimate or "").strip()
+    # The affidavit's own estimate wins over the contract's CUSTOMERREF: the affidavit
+    # is this invoice's document (BVK 2609-012 names contract 2738 / ref 4807 but bills
+    # estimate 4828). An operator edit already on the page still beats both.
+    est = (a.estimate_code or estimate or "").strip()
     if not inv.get("estimate_code"):
         inv["estimate_code"] = est
     # R32 (top comment) is left for the operator — Lee types any suffix/label there.

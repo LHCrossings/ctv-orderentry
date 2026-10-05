@@ -287,6 +287,43 @@ def test_parse_affidavit_production_only_2608_020(real_pdfplumber):
     assert a.net_amount == 2080.00
 
 
+def test_parse_affidavit_production_bvk_2609_012(real_pdfplumber):
+    """BVK's production affidavit carries no 'charges are for production only'
+    sentence — only 'PRODUCTION CHARGES EST 4828' and one PRD row. It must still be
+    flagged, and the estimate comes from the affidavit itself."""
+    a = parse_affidavit((_FIXTURES / "2609-012_affidavit.pdf").read_bytes(), source="fixture")
+    assert a.is_production is True
+    assert a.invoice_id == "2609-012"
+    assert a.contract_no == "2738"
+    assert a.estimate_code == "4828"
+    assert a.total_spots == 0
+    assert a.gross_amount == 3176.47
+    assert a.commission_amount == 476.47
+    assert a.net_amount == 2700.00
+
+
+def test_production_invoice_prefers_affidavit_estimate(real_pdfplumber):
+    """The contract named on the affidavit (2738) carries CUSTOMERREF 4807; the
+    affidavit bills estimate 4828 — the affidavit wins. An operator edit beats both."""
+    a = parse_affidavit((_FIXTURES / "2609-012_affidavit.pdf").read_bytes(), source="fixture")
+    inv, spots = production_invoice({"broadcast_month": "2609"}, a, "4807")
+    assert inv["estimate_code"] == "4828"
+    assert inv["gross_cents"] == 317647 and inv["net_cents"] == 270000
+    assert inv["agency_commission"] is True
+    assert spots == [
+        {
+            "run_date": "260920",
+            "time_hhmm": "1200",
+            "duration": 30,
+            "copy_id": "PRODUCTION",
+            "rate_cents": 317647,
+            "market": "CVC",
+        }
+    ]
+    inv2, _ = production_invoice({"broadcast_month": "2609", "estimate_code": "X1"}, a, "4807")
+    assert inv2["estimate_code"] == "X1"
+
+
 def test_airtime_affidavit_is_not_production(real_pdfplumber):
     a = parse_affidavit((_FIXTURES / "2608-019_affidavit.pdf").read_bytes(), source="fixture")
     assert a.is_production is False
@@ -297,6 +334,7 @@ def test_estimate_from_customer_ref():
     assert estimate_from_customer_ref("Est. 4807") == "4807"
     assert estimate_from_customer_ref("") == ""
     assert estimate_from_customer_ref("PO 12345") == ""
+    assert estimate_from_customer_ref("4807") == "4807"  # BVK: a bare ref is the estimate
 
 
 def _strip_pad(line: str) -> str:

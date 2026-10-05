@@ -220,6 +220,14 @@ mismatch and would have failed the next time anyone validated them.
    the live source document every time, and any "remembered" value is keyed by that party and
    supplies only its spelling/codes, never its identity. Put the value on the confirmation
    page (Lee: "a field the AE sees before export") so a stale default is visible, not silent.
+5. **Recurrence (BVK production invoice 2609-012, 2026-10-05):** `is_production` was keyed
+   on the ONE sentence the May oracle carried ("charges are for production only"). The
+   September BVK affidavit said only "Production Charges", so the page showed an airtime
+   invoice with 0 spots and $0 gross. A detector built from a single hand-made oracle must
+   key on the document's STRUCTURAL markers (the `PRODUCTION CHARGES EST <n>` Estimate field,
+   the lone `PRD` row), not on boilerplate prose that the author may drop next time; and the
+   estimate those markers carry beats the contract's CUSTOMERREF (the affidavit named
+   contract 2738 / ref 4807 while billing estimate 4828). Fixture: `tests/fixtures/edi/2609-012_affidavit.pdf`.
 
 ---
 
