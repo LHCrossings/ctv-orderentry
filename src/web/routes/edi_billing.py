@@ -406,20 +406,22 @@ def build_edi_billing_router(jinja: Jinja2Templates) -> APIRouter:
         inv = body.get("invoice_fields", {})
         csv_fn = body.get("csv_filename", "")
         spots = []
-        if csv_fn and Path(csv_fn).name == csv_fn and (INCOMING / csv_fn).exists():
+        # The affidavit decides what the invoice IS; a stray post-log beside a
+        # production affidavit (fetched for its contract's airtime) is ignored here
+        # exactly as the scan ignores it.
+        a, cust = await asyncio.to_thread(_production_pair, str(inv.get("invoice_number", "")))
+        if a:
+            try:
+                inv, spots = production_invoice(
+                    inv, a, _production_estimate(cust, {}, a.contract_no)
+                )
+            except ValueError as e:
+                return {
+                    "issues": [{"field": "gross", "level": "error", "message": str(e)}],
+                    "has_errors": True,
+                }
+        elif csv_fn and Path(csv_fn).name == csv_fn and (INCOMING / csv_fn).exists():
             spots = parse_postlog_csv((INCOMING / csv_fn).read_bytes(), csv_fn).spots
-        elif not csv_fn:
-            a, cust = await asyncio.to_thread(_production_pair, str(inv.get("invoice_number", "")))
-            if a:
-                try:
-                    inv, spots = production_invoice(
-                        inv, a, _production_estimate(cust, {}, a.contract_no)
-                    )
-                except ValueError as e:
-                    return {
-                        "issues": [{"field": "gross", "level": "error", "message": str(e)}],
-                        "has_errors": True,
-                    }
         issues = validate_invoice(tmpl, inv, spots)
         return {"issues": issues, "has_errors": any(i["level"] == "error" for i in issues)}
 
@@ -458,10 +460,13 @@ def build_edi_billing_router(jinja: Jinja2Templates) -> APIRouter:
                 refused.append({"row": label, "reason": f"template not found: {tmpl_nm}"})
                 continue
 
-            if not csv_fn:
-                # Production-only invoice: no post-log exists. Everything that
-                # decides money comes from the affidavit on disk, not the browser.
-                a, cust = _production_pair(str(inv.get("invoice_number", "")))
+            # Production-only invoice: everything that decides money comes from the
+            # affidavit on disk, not the browser. Decided BEFORE looking at the CSV: a
+            # post-log fetched beside a production affidavit (BVK 2609-012, 2026-10-05)
+            # is the contract's airtime, which the scan already ignores with a warning,
+            # and reconciling against it blocked the export with "0 vs 240 spots".
+            a, cust = _production_pair(str(inv.get("invoice_number", "")))
+            if a or not csv_fn:
                 if not a:
                     refused.append(
                         {
