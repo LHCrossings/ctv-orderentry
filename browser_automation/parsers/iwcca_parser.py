@@ -42,7 +42,6 @@ from typing import Dict, List, Optional, Tuple
 
 _ROW_TOL = 2.0  # cluster words into rows on raw `top`; row pitch here is ~12pt
 _COL_TOL = 8.0  # week-cell centre vs header day-number centre; pitch is 24pt
-_TAIL_PAD = 14.0  # right of the last week column: Total Spots / Cost/Spot / Total Net
 
 _MONTHS = {
     "JAN": 1,
@@ -123,6 +122,23 @@ def _cluster_rows(words: List[dict]) -> List[Tuple[float, List[dict]]]:
         else:
             rows.append((w["top"], [w]))
     return [(top, sorted(ws, key=lambda w: w["x0"])) for top, ws in rows]
+
+
+def _split_glued_day(ws: List[dict]) -> List[dict]:
+    """A 13-column grid (12-week flight, 2026-10-06 IOs) prints its last day number
+    flush against the 'Total Spots' header, so pdfplumber emits one word '04Spots'.
+    Split it back into '04' + 'Spots' with proportional x-extents."""
+    out: List[dict] = []
+    for w in ws:
+        m = re.fullmatch(r"(\d{2})(Spots)", w["text"])
+        if not m:
+            out.append(w)
+            continue
+        cw = (w["x1"] - w["x0"]) / len(w["text"])
+        split = w["x0"] + cw * 2
+        out.append({**w, "text": m.group(1), "x1": split})
+        out.append({**w, "text": m.group(2), "x0": split})
+    return out
 
 
 def broadcast_month(week_start: date) -> Tuple[int, int]:
@@ -318,6 +334,7 @@ def parse_iwcca(path: str) -> IWCCAOrder:
     day_hdr: Optional[Tuple[float, List[dict]]] = None
     month_hdr: Optional[List[dict]] = None
     for idx, (top, ws) in enumerate(rows):
+        ws = _split_glued_day(ws)
         nums = [w for w in ws if re.fullmatch(r"\d{2}", w["text"])]
         if len(nums) >= 6 and any(w["text"] == "Spots" for w in ws):
             day_hdr = (top, nums)
@@ -376,10 +393,12 @@ def parse_iwcca(path: str) -> IWCCAOrder:
         return out
 
     def tail(ws: List[dict]) -> List[float]:
-        """Numeric tokens right of the week grid, in print order."""
+        """Numeric tokens right of the week grid, in print order. The band the
+        grid does not claim (centre > grid_hi) is the tail — one boundary, so a
+        13th week column cannot push Total Spots into no-man's-land (10/6 IOs)."""
         vals: List[float] = []
         for w in ws:
-            if w["x0"] < grid_hi + _TAIL_PAD - _COL_TOL:
+            if _centre(w) <= grid_hi:
                 continue
             v = _num(w["text"])
             if v is not None:

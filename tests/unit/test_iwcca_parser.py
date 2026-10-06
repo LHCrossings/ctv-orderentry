@@ -145,6 +145,62 @@ def test_detection_is_client_keyed(raw):
     assert language_from_filename("something.pdf") == ""
 
 
+def test_thirteen_column_15s_orders():
+    """10/6 Brand Education IOs: 12-week flight 10/12/26-1/3/27 printed as 13 week
+    columns (the last, Jan 04, is blank and glued to 'Spots' → '04Spots'), year
+    rollover in the month row, Total Spots pushed to within a few points of the
+    grid. Each parses, reconciles, and the Filipino file names no language."""
+    c = parse_iwcca(str(FIX / "cca_35448_chinese_15.pdf"))
+    assert (c.order_no, c.language, c.flight_start, c.flight_end) == (
+        "35448",
+        "Chinese",
+        "10/12/2026",
+        "01/03/2027",
+    )
+    assert len(c.week_start_dates) == 13 and c.week_start_dates[-1] == "01/04/2027"
+    assert c.monthly[-1][0] == (2027, 1)  # JAN '27 broadcast month reconciled
+    assert all(ln.length_sec == 15 for ln in c.lines)
+    assert [ln.total_spots for ln in c.lines] == [105, 87, 76, 60]
+    assert c.lines[0].weekly_spots == [12, 12, 11, 0, 10, 10, 10, 0, 10, 10, 10, 10, 0]
+    assert (c.total_spots, c.total_cost) == (328, 6335.0)
+
+    v = parse_iwcca(str(FIX / "cca_35458_vietnamese_15.pdf"))
+    assert (v.order_no, v.language, v.total_spots, v.total_cost) == (
+        "35458",
+        "Vietnamese",
+        284,
+        3080.0,
+    )
+
+    t = parse_iwcca(str(FIX / "cca_35462_nolang_15.pdf"))  # language only in the 'Tagalog' line
+    assert language_from_filename(str(FIX / "cca_35462_nolang_15.pdf")) == ""
+    assert (t.order_no, t.language, t.total_spots, t.total_cost) == (
+        "35462",
+        "Filipino",
+        100,
+        1250.0,
+    )
+    assert [ln.description for ln in t.lines] == [
+        "M-F 4p-7p Filipino :15",
+        "BNS M-F 4p-7p Filipino :15",
+    ]
+
+    from browser_automation.iwcca_automation import default_code_desc
+
+    assert default_code_desc(c, "2610") == (
+        "IW CCA 2610 35448",
+        "Covered CA Brand Awareness 2610 CHI 15",
+    )
+    assert default_code_desc(v, "2610") == (
+        "IW CCA 2610 35458",
+        "Covered CA Brand Awareness 2610 VIE 15",
+    )
+    assert default_code_desc(t, "2610") == (
+        "IW CCA 2610 35462",
+        "Covered CA Brand Awareness 2610 TAG 15",
+    )
+
+
 def test_default_code_and_description(chinese):
     """Lee, 2026-10-06: the code carries the OrderNo (a :15 and a :30 order for the
     same month/language must not collide); the description names CHI/VIE/TAG + length.
