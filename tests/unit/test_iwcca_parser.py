@@ -201,6 +201,43 @@ def test_thirteen_column_15s_orders():
     )
 
 
+def test_notes_follow_lees_hand_made_shape(chinese):
+    """3101-3103 notes (Lee, by hand): campaign / IO description completed with the
+    language / Work Order / Standard Agreement, one per line. The IO cuts the
+    Description at 40 chars, so the tail is rebuilt from the campaign segment +
+    language."""
+    from browser_automation.iwcca_automation import build_notes, complete_description
+
+    cd = complete_description
+    assert cd("Crossings TV - Y26-27 Brand Awareness Ch", chinese.campaign, "Chinese") == (
+        "Crossings TV - Y26-27 Brand Awareness Chinese"
+    )
+    assert cd("KBTV (Crossings TV) - Y26-27 Brand Aware", chinese.campaign, "Vietnamese") == (
+        "KBTV (Crossings TV) - Y26-27 Brand Awareness Vietnamese"
+    )
+    edu = "FY26-27 Covered California Branding - Education"
+    assert cd("KBTV (Crossings TV) - Y26-27 Brand Educa", edu, "Filipino") == (
+        "KBTV (Crossings TV) - Y26-27 Brand Education Filipino"
+    )
+    # already complete → unchanged; no recognisable tail → language appended
+    assert cd("Crossings TV - Y26-27 Brand Education Chinese", edu, "Chinese") == (
+        "Crossings TV - Y26-27 Brand Education Chinese"
+    )
+    assert cd("Something else entirely", edu, "Chinese") == "Something else entirely Chinese"
+
+    c15 = parse_iwcca(str(FIX / "cca_35448_chinese_15.pdf"))
+    line2 = cd(c15.description_io, c15.campaign, c15.language)
+    assert build_notes(c15, line2, "26053", "24-C-034") == (
+        "FY26-27 Covered California Branding - Education\n"
+        "Crossings TV - Y26-27 Brand Education Chinese\n"
+        "Work Order 26053\n"
+        "Standard Agreement 24-C-034"
+    )
+    assert build_notes(c15, line2, "", "") == (
+        "FY26-27 Covered California Branding - Education\nCrossings TV - Y26-27 Brand Education Chinese"
+    )
+
+
 def test_default_code_and_description(chinese):
     """Lee, 2026-10-06: the code carries the OrderNo (a :15 and a :30 order for the
     same month/language must not collide); the description names CHI/VIE/TAG + length.

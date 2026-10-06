@@ -12,7 +12,12 @@ contracts 2167/2168):
     IOs do not reliably say which market they are for.
   * AV lines enter as BNS (booking code 10), never as AV.
   * separation (15, 0, 0).
-  * OrderNo → Customer Order Ref; IO Campaign + Description → contract notes.
+  * OrderNo → Customer Order Ref. Contract notes = four lines the way Lee wrote
+    3101-3103 by hand (2026-10-06): the IO Campaign; the IO Description with its
+    40-char truncation completed ("… Brand Education Ch" → "… Brand Education
+    Chinese"); "Work Order <n>"; "Standard Agreement <x>" — the last two are not
+    on the IO, so the gather prompts with the values from the newest IW CCA
+    contract's note as defaults.
   * contract code 'IW CCA <yymm> <OrderNo>' and description
     'Covered CA Brand Awareness <yymm> <CHI|VIE|TAG> <len>' (Lee, 2026-10-06: the
     OrderNo keeps a :15 and a :30 order for the same month/language from colliding;
@@ -69,6 +74,62 @@ def default_code_desc(
         f"{code_prefix} {yymm} {order.order_no}",
         f"{desc_prefix} {yymm} {lang} {lengths}".rstrip(),
     )
+
+
+def complete_description(desc: str, campaign: str, language: str) -> str:
+    """The IO prints its Description cut at 40 chars ("Crossings TV - Y26-27 Brand
+    Education Ch"). The missing tail is the campaign's last segment plus the
+    language ("Education Chinese"): find the word-aligned suffix of the printed text
+    that is a prefix of that tail and complete it. No such suffix → append the
+    language. Already complete → unchanged."""
+    desc = desc.strip()
+    seg = campaign.rsplit(" - ", 1)[-1].strip() if campaign else ""
+    tail = " ".join(x for x in (seg, language) if x)
+    if not tail:
+        return desc
+    for i in range(len(desc)):
+        if i and desc[i - 1] != " ":
+            continue
+        if tail.startswith(desc[i:]):
+            return desc[:i] + tail
+    return f"{desc} {language}".strip() if language and not desc.endswith(language) else desc
+
+
+def build_notes(order: IWCCAOrder, desc_line: str, work_order: str, agreement: str) -> str:
+    lines = [
+        order.campaign,
+        desc_line,
+        f"Work Order {work_order}" if work_order else "",
+        f"Standard Agreement {agreement}" if agreement else "",
+    ]
+    return "\n".join(ln.strip() for ln in lines if ln and ln.strip())
+
+
+def _last_note_refs() -> tuple[str, str]:
+    """(work order, standard agreement) from the newest IW CCA contract's note, or
+    ('', '') — remembered spellings only, shown at the prompt, never written silently."""
+    import re
+
+    try:
+        from browser_automation.etere_direct_client import connect
+
+        conn = connect()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT TOP 1 NOTE FROM CONTRATTITESTATA WHERE COD_CONTRATTO LIKE %s "
+                "ORDER BY ID_CONTRATTITESTATA DESC",
+                (f"{DEFAULT_CODE_PREFIX}%",),
+            )
+            row = cur.fetchone()
+        finally:
+            conn.close()
+        note = (row[0] if row else "") or ""
+        wo = re.search(r"Work Order\s+(\S+)", note)
+        ag = re.search(r"Standard Agreement\s+(\S+)", note)
+        return (wo.group(1) if wo else "", ag.group(1) if ag else "")
+    except Exception:
+        return ("", "")
 
 
 def gross_rate(net: float, fee_pct: float) -> float:
@@ -325,7 +386,18 @@ def gather_iwcca_inputs(source_path: str) -> Optional[dict]:
     contract_code = raw or default_code
     raw = input(f"  Description [{default_desc}]: ").strip()
     description = raw or default_desc
-    print(f"  Customer Order Ref: {order.order_no}   Notes: {order.notes}")
+    print(f"  Customer Order Ref: {order.order_no}")
+    desc_default = complete_description(order.description_io, order.campaign, order.language)
+    wo_default, ag_default = _last_note_refs()
+    print(f"  Notes line 1: {order.campaign}")
+    raw = input(f"  Notes line 2 [{desc_default}]: ").strip()
+    desc_line = raw or desc_default
+    raw = input(f"  Work Order [{wo_default or 'none'}]: ").strip()
+    work_order = "" if raw.lower() == "none" else (raw or wo_default)
+    raw = input(f"  Standard Agreement [{ag_default or 'none'}]: ").strip()
+    agreement = "" if raw.lower() == "none" else (raw or ag_default)
+    notes = build_notes(order, desc_line, work_order, agreement)
+    print("  Notes:\n    " + notes.replace("\n", "\n    "))
 
     _upsert_customer_db(
         cust_name,
@@ -342,6 +414,7 @@ def gather_iwcca_inputs(source_path: str) -> Optional[dict]:
         "separation": separation,
         "contract_code": contract_code,
         "description": description,
+        "notes": notes,
         "start_date_override": fmt_mmddyyyy(start_override),
         "market": market_code,
         "agency_fee_pct": fee_pct,
@@ -395,13 +468,13 @@ def _create_iwcca_contract(order: IWCCAOrder, inputs: dict) -> Optional[str]:
             contract_end_date=flight_end_d,
             contract_type=1,
             billing_type=billing_type,
-            note=order.notes,
+            note=inputs.get("notes") or order.notes,
             customer_order_ref=order.order_no,
             allow_rename=True,
         )
         print(
             f"[IWCCA] ✓ Contract header: ID={contract_id}  code='{contract_code}'  "
-            f"ref={order.order_no}  notes='{order.notes[:60]}'"
+            f"ref={order.order_no}  notes='{(inputs.get('notes') or order.notes)[:60]}'"
         )
 
         line_count = 0
