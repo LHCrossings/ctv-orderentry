@@ -20,8 +20,8 @@ from zoneinfo import ZoneInfo
 
 FPS = 29.97
 
-# Stirlitz stationName → (Etere market code, COD_USER, zone). MMT's playlist runs on Central
-# time (its 10/5 freezes lined up with Houston/Chicago, not New York/DC).
+# Stirlitz stationName → (Etere market code, COD_USER, zone). MMT is Central time (Lee,
+# 2026-10-06; its 10/5 freezes lined up with Houston/Chicago, not New York/DC).
 STATIONS: dict[str, tuple[str, int, str]] = {
     "New York": ("NYC", 1, "America/New_York"),
     "Chicago Minneapolis": ("CMP", 2, "America/Chicago"),

@@ -8,7 +8,7 @@ _PT = ZoneInfo("America/Los_Angeles")
 MARKET_TZ = {
     "NYC": ZoneInfo("America/New_York"),
     "WDC": ZoneInfo("America/New_York"),
-    "MMT": ZoneInfo("America/New_York"),
+    "MMT": ZoneInfo("America/Chicago"),  # Lee 2026-10-06: MMT runs on Central (was wrongly Eastern)
     "CMP": ZoneInfo("America/Chicago"),
     "HOU": ZoneInfo("America/Chicago"),
     "DAL": ZoneInfo("America/Chicago"),
