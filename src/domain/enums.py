@@ -58,6 +58,7 @@ class OrderType(Enum):
     NTOOITIVE = "ntooitive"
     SJCOUNTY = "sjcounty"
     HPSJ = "hpsj"  # Health Plan of San Joaquin — house Media Proposal PDF, direct 0%, CVC
+    CAFOB = "cafob"  # CA Alliance of Family Owned Businesses PAC — SF house proposal via Matson Media, GROSS, SFO
     POP = "pop"  # Prince of Peace (Kwan Loong Oil) — house Sales Confirmation, direct 0%
     ILLOTTERY = "illottery"  # Illinois Lottery via Flowers Communications — house proposal PDF, GROSS, agency 353 @ 15%, CMP
     GAUGER = "gauger"  # Gauger + Associates — NET "Broadcast Order" PDF, agency 262 @ 15% (Shea Homes, SFO)

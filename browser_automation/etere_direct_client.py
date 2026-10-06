@@ -232,6 +232,7 @@ AGENCY_IDS: dict[str, int] = {
     "THMEDIA": 19,  # TH Media (Emerald Queen Casino)
     "FLOWERS": 353,  # Flowers Communications Group (Illinois Lottery 354; Commissione 15%)
     "GAUGER": 262,  # Gauger + Associates (Shea Homes 263; Commissione 15%)
+    "MATSON": 483,  # Matson Media LLC (CA Alliance of Family Owned Businesses PAC 484; 0%; the sheet prints "National Media")
     "IW": 12,  # IW Group, Inc. (Covered California; Commissione 15%). ANAGRAF 13 is the Lexus Dealer Association (client), not IW.
 }
 

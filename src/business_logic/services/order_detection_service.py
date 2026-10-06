@@ -184,6 +184,10 @@ class OrderDetectionService:
         if self._is_hpsj(first_page_text):
             return OrderType.HPSJ
 
+        # CA Alliance of Family Owned Businesses PAC — SF house proposal, client-keyed
+        if self._is_cafob(first_page_text):
+            return OrderType.CAFOB
+
         # San Joaquin County (Registrar of Voters) — the CLIENT is the definer
         if self._is_sjcounty(first_page_text):
             return OrderType.SJCOUNTY
@@ -275,6 +279,12 @@ class OrderDetectionService:
         from browser_automation.parsers.gauger_parser import is_gauger_text
 
         return is_gauger_text(text)
+
+    def _is_cafob(self, text: str) -> bool:
+        """CA Alliance of Family Owned Businesses PAC house proposal — client-keyed."""
+        from browser_automation.parsers.cafob_parser import is_cafob_text
+
+        return is_cafob_text(text)
 
     def _is_hpsj(self, text: str) -> bool:
         """Health Plan of San Joaquin house proposal — client-keyed."""
@@ -1063,6 +1073,8 @@ def detect_from_filename(filename: str) -> OrderType:
         return OrderType.GAUGER
     if "HPSJ" in name_upper or "HEALTH PLAN OF SAN JOAQUIN" in " ".join(name_upper.split()):
         return OrderType.HPSJ
+    if "FAMILY OWNED BUSINESSES" in " ".join(name_upper.split()) or "CAFOB" in name_upper:
+        return OrderType.CAFOB
     if "SAN JOAQUIN COUNTY" in " ".join(name_upper.split()):
         return OrderType.SJCOUNTY
     if "PRINCE OF PEACE" in " ".join(name_upper.split()):

@@ -156,6 +156,7 @@ class OrderProcessingService:
         OrderType.NTOOITIVE: "_process_ntooitive_order",
         OrderType.SJCOUNTY: "_process_sjcounty_order",
         OrderType.HPSJ: "_process_hpsj_order",
+        OrderType.CAFOB: "_process_cafob_order",
         OrderType.GAUGER: "_process_gauger_order",
         OrderType.ILLOTTERY: "_process_illottery_order",
         OrderType.POP: "_process_pop_order",
@@ -207,6 +208,7 @@ class OrderProcessingService:
         OrderType.NTOOITIVE,
         OrderType.SJCOUNTY,
         OrderType.HPSJ,
+        OrderType.CAFOB,
         OrderType.GAUGER,
         OrderType.ILLOTTERY,
         OrderType.POP,
@@ -3223,6 +3225,42 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.HPSJ,
+                error_message=error_detail,
+            )
+
+    def _process_cafob_order(self, order: Order, shared_session=None) -> ProcessingResult:
+        """Process a CA Alliance of Family Owned Businesses PAC proposal — one contract (SFO, Matson Media)."""
+        inp = order.order_input if isinstance(order.order_input, dict) else {}
+        try:
+            from browser_automation.cafob_automation import run_cafob_order
+            from browser_automation.parsers.cafob_parser import parse_cafob
+
+            parsed = parse_cafob(str(order.pdf_path))
+            results = run_cafob_order(parsed, inp)  # list of (label, success)
+
+            contracts = [
+                Contract(contract_number=label, order_type=OrderType.CAFOB)
+                for label, ok in results
+                if ok
+            ]
+            if not contracts:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.CAFOB,
+                    error_message="CAFOB processing failed — check output above",
+                )
+            return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.CAFOB)
+
+        except Exception as exc:
+            import traceback
+
+            error_detail = f"CAFOB processing error: {exc}\n{traceback.format_exc()}"
+            print(f"\n✗ CAFOB processing failed: {exc}")
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.CAFOB,
                 error_message=error_detail,
             )
 

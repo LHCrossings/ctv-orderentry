@@ -183,6 +183,11 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
         "gather_hpsj_inputs",
         "Health Plan of San Joaquin",
     ),
+    OrderType.CAFOB: (
+        "browser_automation.cafob_automation",
+        "gather_cafob_inputs",
+        "CA Alliance of Family Owned Businesses PAC",
+    ),
     OrderType.POP: (
         "browser_automation.pop_automation",
         "gather_pop_inputs",
