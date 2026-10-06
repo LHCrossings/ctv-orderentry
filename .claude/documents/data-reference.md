@@ -214,7 +214,10 @@ Map to CONTRATTIRIGHE columns (direct DB):
 | TCAA contracts               | `(10, 0, 0)`| Contract specifies 10 min          |
 | Billboard spots              | `(0, 0, 0)` | Airs first in break — no separation|
 
-Override from customer DB fields (`separation_customer`, etc.) when present.
+Override from customer DB fields (`separation_customer`, `separation_order`, `separation_event` on
+`dbo.CTV_Customers`) when present — the columns are literal and the tuple is `(customer, order, event)`
+everywhere since 2026-10-06 (the old `(customer, event, order)` reader mirrored the since-fixed Etere web
+form swap; `tests/unit/test_separation_columns.py` refuses a swapped reader or writer).
 
 ---
 

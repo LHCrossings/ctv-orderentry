@@ -79,8 +79,8 @@ def _upsert_customer(customer_id: int, customer_name: str = "Fight the Bite") ->
             billing_type="client",
             default_market=FTB_MARKET,
             separation_customer=FTB_SEPARATION[0],
-            separation_event=FTB_SEPARATION[1],
-            separation_order=FTB_SEPARATION[2],
+            separation_order=FTB_SEPARATION[1],
+            separation_event=FTB_SEPARATION[2],
         ))
         print(f"[CUSTOMER DB] ✓ Saved: {customer_name} → ID {customer_id}")
     except Exception as exc:

@@ -161,8 +161,8 @@ def _upsert_customer_db(
                 code_name=code_name,
                 description_name=description_name,
                 separation_customer=separation[0],
-                separation_event=separation[1],
-                separation_order=separation[2],
+                separation_order=separation[1],
+                separation_event=separation[2],
                 default_market=DEFAULT_MARKET,
             )
         )
@@ -272,7 +272,7 @@ def gather_hpsj_inputs(source_path: str) -> Optional[dict]:
     cust = _lookup_customer_db(customer_id)
     if cust:
         billing_type = cust.billing_type or billing_type
-        separation = (cust.separation_customer, cust.separation_event, cust.separation_order)
+        separation = (cust.separation_customer, cust.separation_order, cust.separation_event)
 
     code_prefix = (
         cust.code_name if cust and getattr(cust, "code_name", "") else ""

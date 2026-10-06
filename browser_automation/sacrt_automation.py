@@ -99,8 +99,8 @@ def _upsert_customer(customer_id: str, client_name: str, separation: tuple, bill
             order_type=OrderType.SACRT,
             billing_type=billing_type,
             separation_customer=separation[0],
-            separation_event=separation[1],
-            separation_order=separation[2],
+            separation_order=separation[1],
+            separation_event=separation[2],
         ))
         print(f"[CUSTOMER DB] ✓ Saved: {client_name} → ID {customer_id}")
     except Exception as exc:
@@ -166,7 +166,7 @@ def gather_sacrt_inputs(pdf_path: str) -> Optional[dict]:
         customer_id = int(cust.customer_id) if str(cust.customer_id).isdigit() else DEFAULT_CUSTOMER_ID
         billing_type = cust.billing_type or 'direct'
         s0 = 25 if cust.separation_customer == 30 else cust.separation_customer
-        separation = (s0, cust.separation_event, cust.separation_order)
+        separation = (s0, cust.separation_order, cust.separation_event)
         print(f"[CUSTOMER] ✓ '{client}' in DB → ID {customer_id}, billing={billing_type}, sep {separation}")
     else:
         print(f"[CUSTOMER] '{client}' not in customers.db — defaulting to ANAGRAF ID {DEFAULT_CUSTOMER_ID}.")

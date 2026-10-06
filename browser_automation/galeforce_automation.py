@@ -242,8 +242,8 @@ def _save_new_customer(
             default_market="LAX",
             billing_type="agency",
             separation_customer=GALEFORCE_SEPARATION[0],
-            separation_event=GALEFORCE_SEPARATION[1],
-            separation_order=GALEFORCE_SEPARATION[2],
+            separation_order=GALEFORCE_SEPARATION[1],
+            separation_event=GALEFORCE_SEPARATION[2],
         )
         repo.save(customer)
         print(f"[CUSTOMER DB] ✓ Saved: {customer_name} → ID {customer_id}")

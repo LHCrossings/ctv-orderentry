@@ -285,7 +285,7 @@ def gather_crispin_inputs(source_path: str) -> Optional[dict]:
     cust = _lookup_customer_db(order.advertiser)
     if cust:
         billing_type = cust.billing_type or 'agency'
-        separation = (cust.separation_customer, cust.separation_event, cust.separation_order)
+        separation = (cust.separation_customer, cust.separation_order, cust.separation_event)
 
     # ── Contract code + description (Lee-given defaults) ──
     start_yymm = _broadcast_yymm(start_override)

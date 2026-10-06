@@ -75,8 +75,8 @@ def _save_customer(customer_id: str, client_name: str) -> None:
             order_type=OrderType.THREEOLIVES,
             billing_type='agency',
             separation_customer=THREEOLIVES_SEPARATION[0],
-            separation_event=THREEOLIVES_SEPARATION[1],
-            separation_order=THREEOLIVES_SEPARATION[2],
+            separation_order=THREEOLIVES_SEPARATION[1],
+            separation_event=THREEOLIVES_SEPARATION[2],
         ))
         print(f"[CUSTOMER DB] ✓ Saved: {client_name} → ID {customer_id}")
     except Exception as exc:
@@ -317,7 +317,7 @@ def gather_threeolives_inputs(file_path: str) -> Optional[dict]:
     # ── Separation ────────────────────────────────────────────────────────────
     print('[3/3] Spot Separation')
     print('-' * 70)
-    print(f'Default: {separation[0]} min customer / {separation[1]} event / {separation[2]} order')
+    print(f'Default: {separation[0]} min customer / {separation[1]} order / {separation[2]} event')
     use_def = input('Use default? (y/n): ').strip().lower()
     if use_def != 'y':
         try:

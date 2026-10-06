@@ -2499,3 +2499,31 @@ per-flight design; he corrected me: the tool did nothing.
 5. Same day, same sheets: IW Group's file names and row labels disagree (`SFO_HINGLISH.pdf`
    rows say "Vietnamese", `_ENG_`/`_VT_` in the title is the truth); the card routes by the
    contract the user picks, so no misassignment, but tell the agency.
+
+---
+
+## A Column Named `separation_event` Held the ORDER Interval — a Tuple Convention Inherited From a Vendor Bug Outlives the Bug; Make Columns Literal and Pin It Structurally
+
+**Session:** Lee, IW CCA separation 10/15/0 (2026-10-06)
+
+**Rule:** Twenty-six gathers read the customer row as `(separation_customer, separation_event,
+separation_order)` and every writer stored `separation_event=sep[1]`, while `add_contract_line`,
+the orchestrator prompt, the Customers page, WorldLink, Admerasia and Polaris all treat the tuple
+as `(customer, ORDER, event)`. The two conventions cancelled inside one gather, so lines entered
+correctly for a year — but the Customers page showed Covered CA as 10/0/15 for an order interval
+of 15, and the one row I wrote by hand that morning was swapped. Lee: the old Etere web line form
+had Order and Event swapped; the (customer, event, order) tuple was built to match that bug, Etere
+fixed the form, and we now bypass it entirely — the columns must mean what they say.
+
+**How to apply:**
+1. One tuple order everywhere: `(customer, order, event)`; a column named X holds X. The
+   `Customer.get_separation_intervals()` docstring and `tests/unit/test_separation_columns.py`
+   (regex over every `*_automation.py` for a swapped reader/writer, plus a self-test that the
+   regexes catch the old shape) pin it; the test found a trailing-comma site my sweep missed.
+2. Before flipping a column's meaning, use the customer's own Etere lines as the oracle
+   (`INTERVALLO` = order, `INTERV_CONTRATTO` = event, 17982 frames = 10 min) to decide which rows
+   were written by the swapped path. Here: only Covered CA 386 needed swapping; the WorldLink,
+   Admerasia and opAD rows were already literal; RPM Muckleshoot's table (order 15) disagrees with
+   its placed lines (event 15) and was left for Lee to call.
+3. A mechanical sweep over N files is verified by the structural test, not by the diff summary —
+   `uniq -c` on the changed lines showed 31 clean swaps and still hid the 32nd.

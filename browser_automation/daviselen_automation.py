@@ -99,8 +99,8 @@ def lookup_customer(
                     'market': customer.default_market,
                     'separation': (
                         customer.separation_customer,
-                        customer.separation_event,
-                        customer.separation_order
+                        customer.separation_order,
+                        customer.separation_event
                     ),
                     'billing_type': customer.billing_type,
                 }
@@ -115,8 +115,8 @@ def lookup_customer(
                     'market': customer.default_market,
                     'separation': (
                         customer.separation_customer,
-                        customer.separation_event,
-                        customer.separation_order
+                        customer.separation_order,
+                        customer.separation_event
                     ),
                     'billing_type': customer.billing_type,
                 }
@@ -196,8 +196,8 @@ def save_new_customer(
             default_market=market,
             billing_type='agency',  # All Daviselen = agency
             separation_customer=separation[0],
-            separation_event=separation[1],
-            separation_order=separation[2],
+            separation_order=separation[1],
+            separation_event=separation[2],
         )
         
         repo.save(customer)

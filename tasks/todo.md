@@ -655,3 +655,18 @@ plain English, then list the creatives.
 - [x] unit test for the summary sentences on the 3131 shape + partial/unassigned/finished shapes
 - [x] verify live against 3129-3131 (all scheduled, creatives assigned), 2146 (finished flight, 23 aired),
       3133 (16 spots still need a creative) — plus language search via CTV_LineLanguage ("monopoly vietnamese")
+
+## Separation columns: literal everywhere (2026-10-06)
+
+Lee: "we need to get that cleaned up and correct" — the (customer, event, order) tuple convention
+is a relic of the old Etere web form that had Order/Event swapped (since fixed); we bypass the web
+form now, so columns must mean what they say.
+
+- [x] Canonical tuple = (customer, order, event) — what `add_contract_line(separation_intervals=)`,
+      the orchestrator prompt and data-reference already say. `Customer.get_separation_intervals()` too.
+- [x] Every automation reads `(sc, cust.separation_order, cust.separation_event)` and writes
+      `separation_order=sep[1], separation_event=sep[2]`; constants' comments say (customer, order, event).
+- [x] Structural test: no `separation_event=…[1]`, no `separation_event, …separation_order)` reader left.
+- [x] CTV_Customers data: rows with event≠order written by a swapped writer get the two columns swapped,
+      using the customer's own Etere lines (INTERVALLO=order, INTERV_CONTRATTO=event) as the oracle.
+- [x] Lessons + data-reference + memory updated.

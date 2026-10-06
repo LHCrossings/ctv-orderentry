@@ -277,7 +277,7 @@ def gather_dart_inputs(xlsx_path: str) -> Optional[dict]:
         sep_c = int(existing.get("separation_customer", 15) or 15)
         sep_e = int(existing.get("separation_event", 0) or 0)
         sep_o = int(existing.get("separation_order", 0) or 0)
-        separation = (sep_c, sep_e, sep_o)
+        separation = (sep_c, sep_o, sep_e)
 
     return {
         "order": order,

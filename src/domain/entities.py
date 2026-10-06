@@ -206,4 +206,7 @@ class Customer:
 
     def get_separation_intervals(self) -> tuple[int, int, int]:
         """Get separation intervals as a tuple for etere_client."""
-        return (self.separation_customer, self.separation_event, self.separation_order)
+        # (customer, order, event) — the order add_contract_line(separation_intervals=) takes.
+        # Columns are literal since 2026-10-06; the old (customer, event, order) tuple was a relic
+        # of the Etere web form that had Order/Event swapped.
+        return (self.separation_customer, self.separation_order, self.separation_event)

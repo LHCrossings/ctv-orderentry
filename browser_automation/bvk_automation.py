@@ -178,8 +178,8 @@ def _save_customer(customer_id: str, client_name: str, separation: tuple) -> Non
             order_type=OrderType.BVK,
             billing_type="agency",
             separation_customer=separation[0],
-            separation_event=separation[1],
-            separation_order=separation[2],
+            separation_order=separation[1],
+            separation_event=separation[2],
         )
         repo.save(customer)
         print(f"[CUSTOMER DB] ✓ Saved: {client_name} → ID {customer_id}")

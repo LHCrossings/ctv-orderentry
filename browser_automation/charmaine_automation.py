@@ -485,7 +485,7 @@ def collect_user_input(order: CharmaineOrder) -> dict:
             sep_c = customer_info.get('separation_customer', 15)
             sep_e = customer_info.get('separation_event', 0)
             sep_o = customer_info.get('separation_order', 0)
-            separation = (sep_c, sep_e, sep_o)
+            separation = (sep_c, sep_o, sep_e)
     
     if customer_id is None:
         print(f"\n[CUSTOMER] New client: '{order.advertiser}'")
@@ -525,8 +525,8 @@ def collect_user_input(order: CharmaineOrder) -> dict:
                 default_market=order.market if order.market != "UNKNOWN" else None,
                 billing_type=order_type.value,
                 separation_customer=separation[0],
-                separation_event=separation[1],
-                separation_order=separation[2],
+                separation_order=separation[1],
+                separation_event=separation[2],
             )
     
     # ═══════════════════════════════════════════════════════════════

@@ -52,8 +52,8 @@ def _lookup_customer(advertiser: str) -> Optional[dict]:
         if row:
             sep = (
                 row['separation_customer'] or 15,
-                row['separation_event']    or 0,
                 row['separation_order']    or 0,
+                row['separation_event']    or 0,
             )
             return {
                 'customer_id':   row['customer_id'],

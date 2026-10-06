@@ -229,8 +229,8 @@ def _upsert_customer_db(name: str, customer_id: int, code_name: str,
             code_name=code_name,
             description_name=description_name,
             separation_customer=separation[0],
-            separation_event=separation[1],
-            separation_order=separation[2],
+            separation_order=separation[1],
+            separation_event=separation[2],
         ))
     except Exception as exc:
         print(f"[CUSTOMER] customers.db upsert failed (non-fatal): {exc}")
@@ -357,8 +357,8 @@ def gather_ntooitive_inputs(source_path: str) -> Optional[dict]:
         resolved['name'] if resolved else "")
     if cust:
         billing_type = cust.billing_type or 'agency'
-        separation = (cust.separation_customer, cust.separation_event,
-                      cust.separation_order)
+        separation = (cust.separation_customer, cust.separation_order,
+                      cust.separation_event)
 
     # ── Contract code + description (prior-contract conventions) ──
     default_code, default_desc, short, desc_prefix = _default_code_desc(

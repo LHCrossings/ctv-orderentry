@@ -85,8 +85,8 @@ def _upsert_customer() -> None:
             billing_type='client',
             default_market=RWNY_MARKET,
             separation_customer=RWNY_SEPARATION[0],
-            separation_event=RWNY_SEPARATION[1],
-            separation_order=RWNY_SEPARATION[2],
+            separation_order=RWNY_SEPARATION[1],
+            separation_event=RWNY_SEPARATION[2],
         ))
         print(f'[CUSTOMER DB] ✓ Saved: Resorts World New York → ID {RWNY_CUSTOMER_ID}')
     except Exception as exc:

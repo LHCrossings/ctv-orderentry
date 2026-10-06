@@ -31,7 +31,7 @@ from browser_automation.etere_client import EtereClient
 CUSTOMER_ID = 75            # TCAA Toyota
 DEFAULT_MARKET = "SEA"
 DEFAULT_DURATION_SEC = 25   # All Toyota AV spots are :25s
-DEFAULT_SEPARATION = (10, 0, 0)  # TCAA standard: 10-min customer, 0 event, 0 order
+DEFAULT_SEPARATION = (10, 0, 0)  # TCAA standard: 10-min customer, 0 order, 0 event
 CONTRACT_NOTES = "May AAPI Heritage Month Sponsorship"
 
 

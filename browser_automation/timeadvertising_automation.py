@@ -84,8 +84,8 @@ def _save_new_customer(
             default_market=default_market,
             billing_type="agency",
             separation_customer=TIMEADVERTISING_SEPARATION[0],
-            separation_event=TIMEADVERTISING_SEPARATION[1],
-            separation_order=TIMEADVERTISING_SEPARATION[2],
+            separation_order=TIMEADVERTISING_SEPARATION[1],
+            separation_event=TIMEADVERTISING_SEPARATION[2],
         )
         repo.save(customer)
         print(f"[CUSTOMER DB] ✓ Saved: {customer_name} → ID {customer_id}")

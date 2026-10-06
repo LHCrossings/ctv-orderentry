@@ -104,8 +104,8 @@ def _upsert_customer(customer_id: int, advertiser: str, market: str) -> None:
             billing_type="client",
             default_market=market,
             separation_customer=SIERRA_SEPARATION[0],
-            separation_event=SIERRA_SEPARATION[1],
-            separation_order=SIERRA_SEPARATION[2],
+            separation_order=SIERRA_SEPARATION[1],
+            separation_event=SIERRA_SEPARATION[2],
         ))
         print(f"[CUSTOMER DB] ✓ Saved: {advertiser} → ID {customer_id}")
     except Exception as exc:

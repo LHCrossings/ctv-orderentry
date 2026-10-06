@@ -119,8 +119,8 @@ def _upsert_customer(
                 order_type=OrderType.EQC,
                 billing_type=billing_type,
                 separation_customer=separation[0],
-                separation_event=separation[1],
-                separation_order=separation[2],
+                separation_order=separation[1],
+                separation_event=separation[2],
             )
         )
         print(f"[CUSTOMER DB] ✓ Saved: {client_name} → ID {customer_id}")
@@ -259,7 +259,7 @@ def gather_eqc_inputs(xlsx_path: str) -> Optional[dict]:
     if cust:
         customer_id = int(cust.customer_id)
         billing_type = cust.billing_type or "agency"
-        separation = (cust.separation_customer, cust.separation_event, cust.separation_order)
+        separation = (cust.separation_customer, cust.separation_order, cust.separation_event)
         print(
             f"\n[CUSTOMER] ✓ '{order.client}' in DB → ID {customer_id}, billing={billing_type}, sep {separation}"
         )
