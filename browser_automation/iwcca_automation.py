@@ -11,7 +11,7 @@ contracts 2167/2168):
   * market is PROMPTED (default CVC; "KBTV" on the IO also means CVC) — Lee: the
     IOs do not reliably say which market they are for.
   * AV lines enter as BNS (booking code 10), never as AV.
-  * separation (15, 0, 0).
+  * separation (10, 15, 0) = customer 10 / order 15 / event 0 (Lee, 2026-10-06; 15,0,0 before).
   * OrderNo → Customer Order Ref. Contract notes = four lines the way Lee wrote
     3101-3103 by hand (2026-10-06): the IO Campaign; the IO Description with its
     40-char truncation completed ("… Brand Education Ch" → "… Brand Education
@@ -45,7 +45,7 @@ from browser_automation.parsers.iwcca_parser import IWCCAOrder, parse_iwcca
 DEFAULT_CUSTOMER_ID = 386
 DEFAULT_CODE_PREFIX = "IW CCA"
 DEFAULT_DESC_PREFIX = "Covered CA Brand Awareness"
-DEFAULT_SEPARATION = (15, 0, 0)
+DEFAULT_SEPARATION = (10, 15, 0)  # customer, order, event (Lee, 2026-10-06; was 15,0,0)
 DEFAULT_MARKET = "CVC"
 DEFAULT_AGENCY_FEE = 15.0
 ROTATION = 1
