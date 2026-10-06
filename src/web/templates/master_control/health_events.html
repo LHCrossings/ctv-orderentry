@@ -18,6 +18,7 @@
         .he-table td.when { white-space: nowrap; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
         .he-pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.74rem; font-weight: 600; color: var(--nord6); white-space: nowrap; }
         .he-pill.offair, .he-pill.feed_lost { background: var(--nord11); }
+        .he-pill.content { background: var(--nord12); color: var(--nord0); }
         .he-pill.onair, .he-pill.feed_back, .he-pill.media_clear, .he-pill.bindings_clear, .he-pill.ghosts_clear { background: var(--nord14); color: var(--nord0); }
         .he-pill.media, .he-pill.ghosts, .he-pill.bindings { background: var(--nord13); color: var(--nord0); }
         .he-pill.media_ack { background: var(--nord9); color: var(--nord0); }
@@ -57,7 +58,8 @@
     <div id="heBody"></div>
     <p class="he-note">
         Every change of the on-air dot in the page header is recorded here: a station going off air (Stirlitz video
-        freeze / black / no data) and coming back, a bad media file or ghost spots found by the nightly <a href="/master-control/media-check">Media Check</a>
+        freeze / black / no data) and coming back — a <b>content freeze</b> is a freeze whose on-air row is a program piece
+        (a still picture inside the file, audio running: the 10/5 NEWSTODAY rights slate), shown orange instead of red — a bad media file or ghost spots found by the nightly <a href="/master-control/media-check">Media Check</a>
         and cleared, the Stirlitz feed dropping out, and Control Room server restarts. Times are the server's clock
         (Pacific). Recording started 2026-09-09; the dot itself keeps no memory, so nothing before that exists.
     </p>
@@ -74,7 +76,12 @@
     function pad(n) { return (n < 10 ? '0' : '') + n; }
     function describe(e) {
         switch (e.kind) {
-            case 'offair': return '<b>' + esc(e.station) + '</b> off air' + (e.titles && e.titles.length ? ' — ' + esc(e.titles.join(', ')) : '');
+            case 'offair':
+                if (e.content) {
+                    const off = e.offset != null ? ' at ' + Math.floor(e.offset / 60) + ':' + ('0' + (e.offset % 60)).slice(-2) : '';
+                    return '<b>' + esc(e.station) + '</b> content freeze — still picture inside <b>' + esc(e.program || '?') + '</b>' + (e.part ? ' part ' + e.part : '') + off + ' (audio running; the file, not the chain)';
+                }
+                return '<b>' + esc(e.station) + '</b> off air' + (e.titles && e.titles.length ? ' — ' + esc(e.titles.join(', ')) : '');
             case 'onair': return '<b>' + esc(e.station) + '</b> back on air';
             case 'media': return '<b>' + esc(e.code) + '</b> flagged ' + esc(e.detail || '') + (e.first ? ' — first airs ' + esc(e.first) : '');
             case 'media_clear': return '<b>' + esc(e.code) + '</b> no longer flagged';
@@ -103,7 +110,8 @@
             const dayKey = isNaN(t) ? e.at.slice(0, 10) : t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate());
             if (dayKey !== day) { day = dayKey; html += '<tr class="he-day"><td colspan="3">' + esc(dayKey) + '</td></tr>'; }
             const when = isNaN(t) ? e.at : pad(t.getHours()) + ':' + pad(t.getMinutes()) + ':' + pad(t.getSeconds());
-            html += '<tr><td class="when">' + esc(when) + '</td><td><span class="he-pill ' + esc(e.kind) + '">' + esc(LABEL[e.kind] || e.kind) + '</span></td><td>' + describe(e) + '</td></tr>';
+            const pill = (e.kind === 'offair' && e.content) ? ['content', 'content freeze'] : [e.kind, LABEL[e.kind] || e.kind];
+            html += '<tr><td class="when">' + esc(when) + '</td><td><span class="he-pill ' + esc(pill[0]) + '">' + esc(pill[1]) + '</span></td><td>' + describe(e) + '</td></tr>';
         });
         body.innerHTML = html + '</table>';
     }

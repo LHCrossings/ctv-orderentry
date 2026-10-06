@@ -139,7 +139,56 @@ def _fetch_alarms() -> dict:
             "offair": [],
             "counts": {"stations": 0, "offair": 0},
         }
-    return _summarize(raw)
+    return _annotate_content(_summarize(raw))
+
+
+# Content freeze (2026-10-05 NEWSTODAY rights slate; Lee 10/6): a freeze alarm whose on-air
+# playlist row is a program piece is the FILE, not the chain. Classified once per
+# (station, alarm start) and remembered, so the 5 s poll costs one small query per new alarm.
+_content_cache: dict[tuple, dict | None] = {}
+
+
+def _annotate_content(data: dict) -> dict:
+    from business_logic.services.content_freeze import classify, is_freeze
+
+    offair = data.get("offair") or []
+    if not offair:
+        return data
+    conn = None
+    try:
+        for st in offair:
+            if not is_freeze(st.get("titles")) or not st.get("since"):
+                st["content"] = False
+                continue
+            key = (st.get("stationId"), st.get("since"))
+            if key not in _content_cache:
+                if conn is None:
+                    from browser_automation.etere_direct_client import connect
+
+                    conn = connect()
+                _content_cache[key] = classify(conn, st.get("stationName") or "", st["since"])
+                if len(_content_cache) > 500:
+                    for k in list(_content_cache)[:250]:
+                        _content_cache.pop(k, None)
+            detail = _content_cache[key]
+            st["content"] = bool(detail)
+            if detail:
+                st["program"] = detail["program"]
+                st["part"] = detail["part"]
+                st["offset"] = detail["offset"]
+    except Exception:  # noqa: BLE001 — an unreachable DB leaves the alarm plain red
+        for st in offair:
+            st.setdefault("content", False)
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:  # noqa: BLE001
+                pass
+    if offair and all(st.get("content") for st in offair):
+        data["state"] = "content"
+    data["counts"]["content"] = sum(1 for st in offair if st.get("content"))
+    return data
 
 
 async def _get_status() -> dict:

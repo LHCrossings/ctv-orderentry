@@ -42,6 +42,10 @@
       ".bh-indicator.offair{color:var(--nord11,#bf616a);}" +
       ".bh-indicator.media .bh-dot{background:var(--nord13,#ebcb8b);animation:bh-pulse 1.6s infinite;}" +
       ".bh-indicator.media{color:var(--nord13,#ebcb8b);}" +
+      ".bh-indicator.content .bh-dot{background:var(--nord12,#d08770);animation:bh-pulse 1.1s infinite;}" +
+      ".bh-indicator.content{color:var(--nord12,#d08770);}" +
+      ".bh-toast.content{background:var(--nord12,#d08770);color:var(--nord0,#2e3440);}" +
+      ".bh-toast.content .bh-toast-x{color:var(--nord0,#2e3440);}" +
       ".bh-toast.media{background:var(--nord13,#ebcb8b);color:var(--nord0,#2e3440);}" +
       ".bh-toast.media .bh-toast-x{color:var(--nord0,#2e3440);}" +
       "@keyframes bh-pulse{0%,100%{opacity:1}50%{opacity:.3}}" +
@@ -99,13 +103,20 @@
     return w;
   }
 
+  function contentNote(station) {
+    return station.program + (station.part ? " part " + station.part : "") +
+      (station.offset != null ? " at " + Math.floor(station.offset / 60) + ":" + ("0" + (station.offset % 60)).slice(-2) : "");
+  }
+
   function showToast(station) {
     var t = document.createElement("div");
-    t.className = "bh-toast";
+    t.className = "bh-toast" + (station.content ? " content" : "");
     var titles = (station.titles || []).join(", ");
-    t.innerHTML =
-      '<div><b>⚠ ' + esc(station.stationName) + " is off air</b>" +
-      (titles ? "<small>" + esc(titles) + "</small>" : "") + "</div>";
+    t.innerHTML = station.content
+      ? '<div><b>▮ ' + esc(station.stationName) + " — content freeze</b><small>still picture inside " +
+        esc(contentNote(station)) + " (audio running) — check the file, not the chain</small></div>"
+      : '<div><b>⚠ ' + esc(station.stationName) + " is off air</b>" +
+        (titles ? "<small>" + esc(titles) + "</small>" : "") + "</div>";
     var x = document.createElement("button");
     x.className = "bh-toast-x";
     x.textContent = "×";
@@ -188,13 +199,22 @@
       el.title = "Broadcast health unavailable" + (data && data.error ? " — " + data.error : "");
       return;
     }
-    if (data.state === "offair" && offair.length) {
-      el.className = "bh-indicator offair";
+    if ((data.state === "offair" || data.state === "content") && offair.length) {
+      // "content": every alarming station is a freeze whose on-air row is a program piece —
+      // a still inside the file (10/5 NEWSTODAY rights slate), not the playout chain. Orange,
+      // not red; one real off-air station anywhere keeps the dot red.
+      var isContent = data.state === "content";
+      el.className = "bh-indicator " + (isContent ? "content" : "offair");
       el.href = MULTIVIEWER_URL;
-      var names = offair.map(function (s) { return s.stationName; }).join(", ");
-      el.querySelector(".bh-label").textContent =
-        offair.length + " off air";
-      el.title = "OFF AIR: " + names + " — click to open the multiviewer";
+      var names = offair.map(function (s) {
+        return s.stationName + (s.content ? " (" + contentNote(s) + ")" : "");
+      }).join(", ");
+      var nContent = offair.filter(function (s) { return s.content; }).length;
+      el.querySelector(".bh-label").textContent = isContent
+        ? offair.length + " content freeze"
+        : (offair.length - nContent) + " off air" + (nContent ? " · " + nContent + " content freeze" : "");
+      el.title = (isContent ? "CONTENT FREEZE (still picture inside the program, audio running): " : "OFF AIR: ") +
+        names + " — click to open the multiviewer";
       // Toast only for stations not already alerted this session.
       var seen = alerted();
       var current = new Set();

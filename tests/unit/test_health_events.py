@@ -119,3 +119,16 @@ def test_binding_mismatches_log_like_ghosts():
     assert diff_events(bad, dict(_snap(), bindings=4), AT) == [], "count changes are not events"
     ev = diff_events(bad, clean, AT)
     assert _kinds(ev) == ["bindings_clear"] and ev[0]["count"] == 258
+
+
+def test_content_freeze_rides_on_the_offair_event():
+    """10/5: a freeze whose on-air row is a program piece logs as offair with content=True
+    and names the program; a plain freeze carries no content fields."""
+    cur = _snap(offair=[("1", "NYC"), ("8", "WDC")])
+    cur["offair"][0].update(content=True, program="NEWSTODAY100526", part=4, offset=122)
+    cur["offair"][1]["content"] = False
+    ev = diff_events(None, cur, AT)
+    nyc = [e for e in ev if e["kind"] == "offair" and e["station"] == "NYC"][0]
+    wdc = [e for e in ev if e["kind"] == "offair" and e["station"] == "WDC"][0]
+    assert nyc["content"] is True and nyc["program"] == "NEWSTODAY100526" and nyc["part"] == 4
+    assert "content" not in wdc and "program" not in wdc

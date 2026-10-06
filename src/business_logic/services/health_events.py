@@ -29,7 +29,8 @@ def diff_events(prev: dict | None, cur: dict, at: str | None = None) -> list[dic
     """Transitions from `prev` to `cur`. `prev is None` = first snapshot after a server
     start: log the start itself plus whatever is already active, never a recovery.
 
-    Event kinds: start, feed_lost, feed_back, offair, onair, media, media_clear,
+    Event kinds: start, feed_lost, feed_back, offair (content=True when the freeze is a
+    still inside the program on air — program/part/offset name it), onair, media, media_clear,
     ghosts, ghosts_clear (ghost-spot count went from 0 to n / back to 0),
     bindings, bindings_clear (rows bound to a missing playout file, same shape).
     """
@@ -58,11 +59,21 @@ def diff_events(prev: dict | None, cur: dict, at: str | None = None) -> list[dic
 
     for sid, s in c_off.items():
         if sid not in p_off:
+            fields = {}
+            if s.get("content"):
+                # a still picture inside the program file, not the playout chain (10/5)
+                fields = {
+                    "content": True,
+                    "program": s.get("program"),
+                    "part": s.get("part"),
+                    "offset": s.get("offset"),
+                }
             add(
                 "offair",
                 station=s.get("stationName") or sid,
                 titles=list(s.get("titles") or []),
                 since=s.get("since"),
+                **fields,
             )
     if prev is not None and not c_unreach:
         # While the feed is unreachable `offair` is empty for lack of data, not recovery.
