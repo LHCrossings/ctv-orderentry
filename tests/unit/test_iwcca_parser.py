@@ -145,6 +145,39 @@ def test_detection_is_client_keyed(raw):
     assert language_from_filename("something.pdf") == ""
 
 
+def test_default_code_and_description(chinese):
+    """Lee, 2026-10-06: the code carries the OrderNo (a :15 and a :30 order for the
+    same month/language must not collide); the description names CHI/VIE/TAG + length.
+    Oracle: contracts 3101-3103 renamed by hand to exactly these strings."""
+    from browser_automation.iwcca_automation import default_code_desc
+
+    assert default_code_desc(chinese, "2610") == (
+        "IW CCA 2610 35382",
+        "Covered CA Brand Awareness 2610 CHI 30",
+    )
+    v, t = parse_iwcca(str(VIET)), parse_iwcca(str(FILIPINO))
+    assert default_code_desc(v, "2610") == (
+        "IW CCA 2610 35393",
+        "Covered CA Brand Awareness 2610 VIE 30",
+    )
+    assert default_code_desc(t, "2610") == (
+        "IW CCA 2610 35397",
+        "Covered CA Brand Awareness 2610 TAG 30",
+    )
+    # a :15 order of the same month gets its own code and a :15 description
+    fifteen = copy.deepcopy(chinese)
+    fifteen.order_no = "35410"
+    for ln in fifteen.lines:
+        ln.length_sec = 15
+    assert default_code_desc(fifteen, "2610") == (
+        "IW CCA 2610 35410",
+        "Covered CA Brand Awareness 2610 CHI 15",
+    )
+    # mixed lengths are listed, never silently reduced to one
+    fifteen.lines[0].length_sec = 30
+    assert default_code_desc(fifteen, "2610")[1] == "Covered CA Brand Awareness 2610 CHI 15/30"
+
+
 def test_broadcast_month():
     assert broadcast_month(date(2026, 10, 26)) == (2026, 11)  # week holds Nov 1
     assert broadcast_month(date(2026, 10, 19)) == (2026, 10)

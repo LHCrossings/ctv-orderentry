@@ -13,8 +13,10 @@ contracts 2167/2168):
   * AV lines enter as BNS (booking code 10), never as AV.
   * separation (15, 0, 0).
   * OrderNo → Customer Order Ref; IO Campaign + Description → contract notes.
-  * contract code 'IW CCA <yymm> <C|V|T>' (Chinese / Viet / Filipino), description
-    'Covered CA Brand Awareness <yymm> <Chinese|Viet|Filipino>'.
+  * contract code 'IW CCA <yymm> <OrderNo>' and description
+    'Covered CA Brand Awareness <yymm> <CHI|VIE|TAG> <len>' (Lee, 2026-10-06: the
+    OrderNo keeps a :15 and a :30 order for the same month/language from colliding;
+    the description names the language code and the spot length).
   * paid lines Rotation like the 2510 oracle; equal consecutive weeks consolidate.
 """
 
@@ -43,8 +45,30 @@ DEFAULT_MARKET = "CVC"
 DEFAULT_AGENCY_FEE = 15.0
 ROTATION = 1
 _MARKETS = ("CVC", "SFO", "LAX", "SEA", "HOU", "CMP", "WDC", "NYC", "MMT", "DAL")
-_CODE_LETTER = {"Chinese": "C", "Vietnamese": "V", "Filipino": "T", "Korean": "K", "Hmong": "H"}
-_DESC_LANG = {"Vietnamese": "Viet"}
+_DESC_LANG = {
+    "Chinese": "CHI",
+    "Vietnamese": "VIE",
+    "Filipino": "TAG",
+    "Korean": "KOR",
+    "Hmong": "HMG",
+}
+
+
+def default_code_desc(
+    order: IWCCAOrder,
+    yymm: str,
+    code_prefix: str = DEFAULT_CODE_PREFIX,
+    desc_prefix: str = DEFAULT_DESC_PREFIX,
+) -> tuple[str, str]:
+    """Bracket defaults: code '<prefix> <yymm> <OrderNo>', description
+    '<prefix> <yymm> <CHI|VIE|TAG> <len>' where <len> is the lines' spot length
+    ('15/30' if an IO mixes lengths)."""
+    lang = _DESC_LANG.get(order.language, (order.language[:3] or "XXX").upper())
+    lengths = "/".join(str(n) for n in sorted({ln.length_sec for ln in order.lines}))
+    return (
+        f"{code_prefix} {yymm} {order.order_no}",
+        f"{desc_prefix} {yymm} {lang} {lengths}".rstrip(),
+    )
 
 
 def gross_rate(net: float, fee_pct: float) -> float:
@@ -289,15 +313,13 @@ def gather_iwcca_inputs(source_path: str) -> Optional[dict]:
 
     # ── Code + description (bracket defaults) ──
     yymm = broadcast_yymm(start_override)
-    letter = _CODE_LETTER.get(order.language, (order.language[:1] or "X").upper())
     code_prefix = (
         cust.code_name if cust and getattr(cust, "code_name", "") else ""
     ) or DEFAULT_CODE_PREFIX
     desc_prefix = (
         cust.description_name if cust and getattr(cust, "description_name", "") else ""
     ) or DEFAULT_DESC_PREFIX
-    default_code = f"{code_prefix} {yymm} {letter}"
-    default_desc = f"{desc_prefix} {yymm} {_DESC_LANG.get(order.language, order.language)}"
+    default_code, default_desc = default_code_desc(order, yymm, code_prefix, desc_prefix)
     print()
     raw = input(f"  Contract code [{default_code}]: ").strip()
     contract_code = raw or default_code
@@ -339,8 +361,14 @@ def _create_iwcca_contract(order: IWCCAOrder, inputs: dict) -> Optional[str]:
         return None
     separation = tuple(inputs.get("separation", DEFAULT_SEPARATION))
     billing_type = inputs.get("billing_type", "agency")
-    contract_code = inputs.get("contract_code") or f"{DEFAULT_CODE_PREFIX} {order.order_no}"
-    description = inputs.get("description") or order.campaign
+    contract_code = (
+        inputs.get("contract_code")
+        or default_code_desc(order, broadcast_yymm(parse_date(order.flight_start)))[0]
+    )
+    description = (
+        inputs.get("description")
+        or default_code_desc(order, broadcast_yymm(parse_date(order.flight_start)))[1]
+    )
     market_code = inputs.get("market") or order.market_hint or DEFAULT_MARKET
     fee_pct = float(inputs.get("agency_fee_pct", DEFAULT_AGENCY_FEE))
     dry_run = bool(inputs.get("dry_run"))
@@ -433,5 +461,8 @@ def _create_iwcca_contract(order: IWCCAOrder, inputs: dict) -> Optional[str]:
 def run_iwcca_order(order: IWCCAOrder, inputs: dict) -> list[tuple[str, bool]]:
     """One contract per IO. Returns [(contract_code, success)]."""
     code = _create_iwcca_contract(order, inputs)
-    label = inputs.get("contract_code") or f"{DEFAULT_CODE_PREFIX} {order.order_no}"
+    label = (
+        inputs.get("contract_code")
+        or default_code_desc(order, broadcast_yymm(parse_date(order.flight_start)))[0]
+    )
     return [(label, code is not None)]
