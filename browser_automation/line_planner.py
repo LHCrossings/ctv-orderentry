@@ -64,7 +64,9 @@ def plan_ranges(consolidated: list[dict], days: str,
     Returns (ranges, notes) where each range carries an explicit `max_daily`,
     and `notes` records any spots the new start date makes undeliverable.
     A truncated first week whose cap differs from the full weeks is split into
-    its own range (→ its own Etere line).
+    its own range (→ its own Etere line). The same rule applies to a truncated
+    LAST week (a flight that ends mid-week: San Mateo's "10/5 through 11/2" puts
+    a whole week's 2 spots on one Monday, which needs 2/day, not the pattern's 1).
     """
     from math import ceil
 
@@ -126,7 +128,50 @@ def plan_ranges(consolidated: list[dict], days: str,
                 f"short week: {p_active} of {full_active} day(s) → {mdr_partial}/day")
             add(w0 + timedelta(days=7), r_end, spw, weeks - 1, mdr_full)
 
+    # Second pass: a truncated LAST week (the flight ends before its Sunday).
+    for i in range(len(out)):
+        _split_short_last_week(out, i, days, day_bits, full_active, notes)
+    out = [r for r in out if r['weeks'] > 0]
     return out, notes
+
+
+def _split_short_last_week(out: list[dict], i: int, days: str, day_bits: dict,
+                           full_active: int, notes: list[str]) -> None:
+    """Give a range whose final week is cut short the cap that week needs.
+
+    Mirrors the short-first-week rule: when the truncated last week needs a
+    higher max-per-day than the full weeks ahead of it, it becomes its own
+    range (→ its own Etere line); a one-week range just takes the higher cap.
+    A last week with none of the line's days left is dropped with a note.
+    """
+    from math import ceil
+
+    rng = out[i]
+    r_end = rng['date_to']
+    mon_last = r_end - timedelta(days=r_end.weekday())
+    if r_end >= mon_last + timedelta(days=6) or rng['weeks'] < 1:
+        return                                    # ends on its Sunday — nothing to do
+    spw = rng['spots_per_week']
+    last_from = max(mon_last, rng['date_from'])
+    p_active = active_days(last_from, r_end, day_bits)
+    if p_active == 0:
+        notes.append(f"{spw} spot(s) dropped: no {days} day left in the week of "
+                     f"{mon_last.month}/{mon_last.day} on or before {r_end.month}/{r_end.day}")
+        rng['weeks'] -= 1
+        rng['date_to'] = mon_last - timedelta(days=1)
+        return
+    cap = max(1, ceil(spw / p_active))
+    if cap <= rng['max_daily']:
+        return
+    tag = f"short last week: {p_active} of {full_active} day(s) → {cap}/day"
+    if rng['weeks'] == 1:
+        rng['max_daily'] = cap
+        rng['tag'] = rng['tag'] or tag
+        return
+    rng['weeks'] -= 1
+    rng['date_to'] = mon_last - timedelta(days=1)
+    out.insert(i + 1, {'date_from': mon_last, 'date_to': r_end, 'spots_per_week': spw,
+                       'weeks': 1, 'max_daily': cap, 'tag': tag})
 
 
 class WeekCol:

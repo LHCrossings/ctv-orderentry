@@ -670,3 +670,35 @@ form now, so columns must mean what they say.
 - [x] CTV_Customers data: rows with event≠order written by a swapped writer get the two columns swapped,
       using the customer's own Etere lines (INTERVALLO=order, INTERV_CONTRATTO=event) as the oracle.
 - [x] Lessons + data-reference + memory updated.
+
+## CAFOB parser (2026-10-06)
+
+- [x] Parser `cafob_parser.py` (table by header label, year inference, 3-way reconcile) + fixture + 12 tests
+- [x] Automation `cafob_automation.py` (house rules: consolidate, :30, sep cap 25, Priority, Matson 483)
+- [x] 7 registration points + scan cache v15; dry run 7 lines / 41 spots rolled back; deployed aa80302
+- [x] 3155 header: P_AGENZIA 15 (via Lee's code edit), COD_USER 7 → 1 by UPDATE 10/6
+
+## San Mateo County Voters parser (2026-10-07)
+
+Lee: direct client of Charmaine's, already in Etere (ANAGRAF 196 "County of San Mateo", direct 0%,
+Broadcast 316, SFO, sep 25/0/0); order carries an Editing (production) cost; it is LATE (10/5 flight,
+entered 10/7+) so the start date is always asked and the short weeks get their own caps.
+Oracle: contract 2700 `San Mateo 2605` / `San Mateo County Voters 2605-2606` (May 2026, same layout).
+
+- [x] `parsers/sanmateo_parser.py` — "Media Campaign" house layout by word coordinates (Insertion /
+      Time / Cost / week cols / Units / Airtime total), wrapped insertion+time rows, `ROS Bonus` rows,
+      footer Paid / Bonuses / Airtime cost / <charge rows> / Total Amount; 3-way reconcile, raise.
+      Year from the filename or the Monday rule (no DATE on the sheet).
+- [x] `line_planner.plan_ranges`: a truncated LAST week (flight ends mid-week: 11/2 is one Monday
+      holding 2 spots) gets its own cap/line, same rule as the short first week.
+- [x] `sanmateo_automation.py` — gather (market [SFO], start date always asked, plan preview,
+      customer [196], code `San Mateo <yymm>`, desc `San Mateo County Voters <yymm>-<yymm>`, ref = title),
+      direct-DB entry with Editing → Production box on the first paid line (verified), `--dry-run`.
+- [x] 7 registration points (enum, detection text+filename, orchestrator, processing service, bridge
+      names/registry/direct/tested, scan cache v16).
+- [x] Fixture `tests/fixtures/sanmateo/` + tests (shape, totals, charge, plan for a 10/8 start, tampering).
+- [x] Dry run against Etere (rolled back), ruff, full unit suite, commit, push (hook deploys).
+
+Review: dry run (10/8 start) → 24 lines, 120/120 spots, Production $375 on line 1 (CONTRATTISPESE verified),
+CENTROMEDIA 316, agency 0%, rolled back. 31 new tests; crispin/ntooitive/hpsj planner tests unchanged.
+Open: Lee to confirm code `San Mateo 2610` / desc `San Mateo County Voters 2610-2611` at the gather prompt.

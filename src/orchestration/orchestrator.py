@@ -183,6 +183,11 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
         "gather_hpsj_inputs",
         "Health Plan of San Joaquin",
     ),
+    OrderType.SANMATEO: (
+        "browser_automation.sanmateo_automation",
+        "gather_sanmateo_inputs",
+        "San Mateo County Voters",
+    ),
     OrderType.CAFOB: (
         "browser_automation.cafob_automation",
         "gather_cafob_inputs",

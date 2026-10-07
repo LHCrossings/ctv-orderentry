@@ -184,6 +184,11 @@ class OrderDetectionService:
         if self._is_hpsj(first_page_text):
             return OrderType.HPSJ
 
+        # San Mateo County Voters — Charmaine's house Media Campaign, client-keyed
+        # ("San Mateo County Voters", never the SMC Environmental Health agency order)
+        if self._is_sanmateo(first_page_text):
+            return OrderType.SANMATEO
+
         # CA Alliance of Family Owned Businesses PAC — SF house proposal, client-keyed
         if self._is_cafob(first_page_text):
             return OrderType.CAFOB
@@ -291,6 +296,12 @@ class OrderDetectionService:
         from browser_automation.parsers.hpsj_parser import is_hpsj_text
 
         return is_hpsj_text(text)
+
+    def _is_sanmateo(self, text: str) -> bool:
+        """San Mateo County Voters house proposal — client-keyed."""
+        from browser_automation.parsers.sanmateo_parser import is_sanmateo_text
+
+        return is_sanmateo_text(text)
 
     def _is_sjcounty(self, text: str) -> bool:
         """San Joaquin County (Registrar of Voters) proposal — keyed on the
@@ -1073,6 +1084,8 @@ def detect_from_filename(filename: str) -> OrderType:
         return OrderType.GAUGER
     if "HPSJ" in name_upper or "HEALTH PLAN OF SAN JOAQUIN" in " ".join(name_upper.split()):
         return OrderType.HPSJ
+    if "SAN MATEO COUNTY VOTER" in " ".join(name_upper.split()):
+        return OrderType.SANMATEO
     if "FAMILY OWNED BUSINESSES" in " ".join(name_upper.split()) or "CAFOB" in name_upper:
         return OrderType.CAFOB
     if "SAN JOAQUIN COUNTY" in " ".join(name_upper.split()):

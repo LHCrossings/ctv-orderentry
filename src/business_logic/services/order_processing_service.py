@@ -156,6 +156,7 @@ class OrderProcessingService:
         OrderType.NTOOITIVE: "_process_ntooitive_order",
         OrderType.SJCOUNTY: "_process_sjcounty_order",
         OrderType.HPSJ: "_process_hpsj_order",
+        OrderType.SANMATEO: "_process_sanmateo_order",
         OrderType.CAFOB: "_process_cafob_order",
         OrderType.GAUGER: "_process_gauger_order",
         OrderType.ILLOTTERY: "_process_illottery_order",
@@ -208,6 +209,7 @@ class OrderProcessingService:
         OrderType.NTOOITIVE,
         OrderType.SJCOUNTY,
         OrderType.HPSJ,
+        OrderType.SANMATEO,
         OrderType.CAFOB,
         OrderType.GAUGER,
         OrderType.ILLOTTERY,
@@ -3225,6 +3227,44 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.HPSJ,
+                error_message=error_detail,
+            )
+
+    def _process_sanmateo_order(self, order: Order, shared_session=None) -> ProcessingResult:
+        """Process a San Mateo County Voters proposal — one contract (SFO, direct)."""
+        inp = order.order_input if isinstance(order.order_input, dict) else {}
+        try:
+            from browser_automation.parsers.sanmateo_parser import parse_sanmateo
+            from browser_automation.sanmateo_automation import run_sanmateo_order
+
+            parsed = parse_sanmateo(str(order.pdf_path))
+            results = run_sanmateo_order(parsed, inp)  # list of (label, success)
+
+            contracts = [
+                Contract(contract_number=label, order_type=OrderType.SANMATEO)
+                for label, ok in results
+                if ok
+            ]
+            if not contracts:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.SANMATEO,
+                    error_message="San Mateo processing failed — check output above",
+                )
+            return ProcessingResult(
+                success=True, contracts=contracts, order_type=OrderType.SANMATEO
+            )
+
+        except Exception as exc:
+            import traceback
+
+            error_detail = f"San Mateo processing error: {exc}\n{traceback.format_exc()}"
+            print(f"\n✗ San Mateo processing failed: {exc}")
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.SANMATEO,
                 error_message=error_detail,
             )
 
