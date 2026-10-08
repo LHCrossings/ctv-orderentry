@@ -23,6 +23,9 @@
         .scan-card .scan-note { flex: 1; font-size: .85rem; color: var(--text-muted); min-width: 16rem; }
         .scan-card .range { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
         .scan-card .range label { font-size: .82rem; font-weight: 600; color: var(--text-primary); margin-right: .3rem; }
+        .scan-card .range input.show-filter { width: 13rem; }
+        .scan-card .range .filter-clear { background: transparent; border: 0; color: var(--text-muted); cursor: pointer; font-size: 1rem; padding: 0 .2rem; }
+        .cat-sum .filter-hit { color: var(--nord10); }
         .scan-card .range input {
             width: 7.5rem;
             background: var(--bg-secondary);
@@ -295,6 +298,11 @@
             <span>–</span>
             <input type="text" id="agedTo" placeholder="to" onblur="formatDateInput(this)" />
         </div>
+        <div class="range">
+            <label for="showFilter">Show</label>
+            <input type="text" id="showFilter" class="show-filter" placeholder="e.g. BIG — only matching groups" oninput="onFilter()" />
+            <button type="button" class="filter-clear" title="Clear" onclick="document.getElementById('showFilter').value=''; onFilter();">✕</button>
+        </div>
         <label class="sf-toggle" id="sfLabel">
             <input type="checkbox" id="shortForm" onchange="document.getElementById('sfLabel').classList.toggle('on', this.checked)" />
             Include commercials, PSAs, PIs, IDs and other short-form
@@ -317,8 +325,37 @@ const SORTS = {
     name:  (a, b) => a.family.localeCompare(b.family),
     files: (a, b) => b.count - a.count || a.family.localeCompare(b.family),
 };
+// Show filter (Maija 10/8): "get rid of everything related to one show" — a group stays
+// listed when its family name or any file's code/file name contains the text (case-
+// insensitive). Everything downstream (sort, checkboxes, Select all, Apply) reads
+// sortedGroups(), so only the listed groups can be selected or acted on.
+function filterRaw() { return (document.getElementById('showFilter')?.value || '').trim(); }
+function filterText() { return filterRaw().toLowerCase(); }
+function groupMatches(g, q) {
+    if (!q) return true;
+    if (g.family.toLowerCase().includes(q)) return true;
+    return g.files.some(f => (f.cod_progra || '').toLowerCase().includes(q) || (f.file_name || '').toLowerCase().includes(q));
+}
 function sortedGroups(cat) {
-    return [...cat.groups].sort(SORTS[sortState[cat.key] || 'size']);
+    const q = filterText();
+    return cat.groups.filter(g => groupMatches(g, q)).sort(SORTS[sortState[cat.key] || 'size']);
+}
+let filterTimer = null;
+function onFilter() {
+    if (!scanData) return;
+    clearTimeout(filterTimer);
+    filterTimer = setTimeout(() => {
+        // a group that was listed and unticked stays unticked; a newly revealed group starts ticked
+        const unticked = {};
+        scanData.categories.forEach(c => {
+            unticked[c.key] = new Set([...document.querySelectorAll(`.fam-check-${c.key}:not(:checked)`)].map(cb => cb.dataset.family));
+        });
+        render(scanData);
+        scanData.categories.filter(c => c.actionable).forEach(c => {
+            document.querySelectorAll(`.fam-check-${c.key}`).forEach(cb => { if (unticked[c.key].has(cb.dataset.family)) cb.checked = false; });
+            updateBar(c.key);
+        });
+    }, 150);
 }
 function setSort(key, mode) {
     sortState[key] = mode;
@@ -418,8 +455,9 @@ function render(data) {
         const groups = sortedGroups(cat);
         const mode = sortState[cat.key] || 'size';
         let body;
+        const q = filterText();
         if (!groups.length) {
-            body = `<div class="cat-empty">None.</div>`;
+            body = `<div class="cat-empty">${q && cat.groups.length ? `No groups match “${escapeHtml(filterRaw())}”.` : 'None.'}</div>`;
         } else {
             body = groups.map((g, i) => `
                 <div class="fam">
@@ -463,7 +501,7 @@ function render(data) {
             <div class="cat ${cat.key}">
                 <div class="cat-head">
                     <h3>${escapeHtml(cat.label)}</h3>
-                    <span class="cat-sum"><strong>${cat.count}</strong> file${cat.count === 1 ? '' : 's'}${cat.bytes ? ` · <strong>${gb(cat.bytes)}</strong>` : ''}</span>
+                    <span class="cat-sum"><strong>${cat.count}</strong> file${cat.count === 1 ? '' : 's'}${cat.bytes ? ` · <strong>${gb(cat.bytes)}</strong>` : ''}${q ? ` · <span class="filter-hit">${groups.length} of ${cat.groups.length} groups match “${escapeHtml(filterRaw())}”</span>` : ''}</span>
                     ${groups.length > 1 ? `<span class="cat-sort">sort
                         ${['size', 'name', 'files'].map(m => `<button class="${mode === m ? 'on' : ''}" onclick="setSort('${cat.key}', '${m}')">${m}</button>`).join('')}
                     </span>` : ''}
