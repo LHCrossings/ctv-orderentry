@@ -754,6 +754,53 @@ def _bo_build_breaks(annotated: list, to_frames: int) -> tuple[list, bool]:
         foreign = [
             s for s in block if s.get("intended_ora") is not None and s["intended_ora"] >= to_frames
         ]
+        foreign_ids = {s["id"] for s in foreign}
+        own = [s for s in block if s["id"] not in foreign_ids]
+        # Show-by-show Finish (Lee 10/8): when the next show is not placed yet, this
+        # show's own spots still get ordered; only the absorbed spots stay put. That
+        # needs the absorbed spots to already sit at the TAIL (EE pulled them up
+        # behind ours) — if one is interleaved among ours, ordering ours would move
+        # it, so the whole break stays frozen as before.
+        split = window_has_pgm and foreign and own and block[len(own) :] == foreign
+        if split:
+            own_opt = _bo_optimize(own)
+            cur_pos = block[0]["ora"]
+            opt_timed = []
+            for s in own_opt:
+                opt_timed.append({**s, "new_ora": cur_pos, "new_time": _bo_frames_to_time(cur_pos)})
+                cur_pos += s["duration"]
+            # the tail is identity: new_ora == live ORA, never written
+            opt_timed += [
+                {**s, "new_ora": s["ora"], "new_time": s["time"], "foreign": True} for s in foreign
+            ]
+            own_ids = [s["id"] for s in own]
+            pri_viol = own_ids != [s["id"] for s in own_opt]
+            pi_keys = [_pi_product_key(s["title"]) for s in own if s["label"] == "PI"]
+            breaks.append(
+                {
+                    "current": block,
+                    "optimized": opt_timed,
+                    "violation": pri_viol or len(pi_keys) != len(set(pi_keys)),
+                    "ordering_violation": pri_viol or len(pi_keys) != len(set(pi_keys)),
+                    "bookend_warning": sum(1 for s in own if s["label"] == "BOOKEND") % 2 != 0,
+                    "changed": pri_viol,
+                    "pi_unresolvable": False,
+                    "programming_missing": True,
+                    "pm_reason": "absorbed",
+                    "own_count": len(own),
+                    "foreign_spots": [
+                        {
+                            "id": s["id"],
+                            "title": s["title"],
+                            "label": s["label"],
+                            "time": s["time"],
+                            "intended_time": s.get("intended_time"),
+                        }
+                        for s in foreign
+                    ],
+                }
+            )
+            continue
         if not window_has_pgm or foreign:
             breaks.append(
                 {
@@ -766,6 +813,7 @@ def _bo_build_breaks(annotated: list, to_frames: int) -> tuple[list, bool]:
                     "pi_unresolvable": False,
                     "programming_missing": True,
                     "pm_reason": "window" if not window_has_pgm else "absorbed",
+                    "own_count": 0,  # frozen: nothing in this break is ordered
                     "foreign_spots": [
                         {
                             "id": s["id"],
@@ -851,13 +899,17 @@ def _bo_resolve_pi_duplicates(cur, breaks: list) -> None:
     'changed' / 'violation' / 'pi_unresolvable' flags."""
 
     def _pi_keys(brk):
-        return [_pi_product_key(s["title"]) for s in brk["optimized"] if s["label"] == "PI"]
+        return [
+            _pi_product_key(s["title"])
+            for s in brk["optimized"]
+            if s["label"] == "PI" and not s.get("foreign")
+        ]
 
     for brk in breaks:
         # A break waiting on programming holds spots scrunched in from other
         # shows — duplicate PIs across it are an artifact, and a creative
         # swap would be a real write into a phantom break. Leave it alone.
-        if brk.get("programming_missing"):
+        if brk.get("programming_missing") and not brk.get("own_count"):
             continue
         keys = _pi_keys(brk)
         if len(keys) == len(set(keys)):
@@ -870,7 +922,7 @@ def _bo_resolve_pi_duplicates(cur, breaks: list) -> None:
         seen: set = set()
         dup_indices: list = []
         for j, s in enumerate(brk["optimized"]):
-            if s["label"] != "PI":
+            if s["label"] != "PI" or s.get("foreign"):
                 continue
             k = _pi_product_key(s["title"])
             if k in seen:
@@ -984,7 +1036,7 @@ def _bo_fetch_sep_context(cur, market_id: int, date: str, from_frames: int, to_f
     return [dict(r) for r in cur.fetchall()]
 
 
-def _bo_check_separation(breaks: list, sep_spots: list) -> None:
+def _bo_check_separation(breaks: list, sep_spots: list, to_frames: int | None = None) -> None:
     """
     For each COM/BNS spot inside a break, check two separation rules:
       - Customer separation (Interv_Committente): gap between any two spots for
@@ -999,9 +1051,14 @@ def _bo_check_separation(breaks: list, sep_spots: list) -> None:
     by_cust: dict = defaultdict(list)
     by_contract: dict = defaultdict(list)
     id_to_meta: dict = {}
+    # Absorbed next-show spots sit here only until that show is placed; a gap
+    # between one of them and anything else is an artifact, never a violation.
+    foreign_all = {f["id"] for b in breaks for f in b.get("foreign_spots", [])}
 
     for s in sep_spots:
         sid = s["ID_TPALINSE"]
+        if sid in foreign_all:
+            continue
         cid = s.get("COMMITTENTE")
         ctr_id = s.get("contract_id")
         cust_sep = int(s.get("cust_sep") or 0)
@@ -1045,10 +1102,15 @@ def _bo_check_separation(breaks: list, sep_spots: list) -> None:
         spot_is_bookend=False,
         spot_is_billboard=False,
         spot_ctr_id=None,
+        cutoff=None,
     ):
         sid = spot["id"]
         for other in group_list:
             if other["id"] == sid:
+                continue
+            # Split break: the next show is not placed, so everything past the
+            # window end sits at a compacted (artifact) position — skip it.
+            if cutoff is not None and other["ora"] >= cutoff:
                 continue
             # Bookend pairs intentionally share a break — not a separation violation
             if spot_is_bookend and other.get("is_bookend"):
@@ -1087,12 +1149,14 @@ def _bo_check_separation(breaks: list, sep_spots: list) -> None:
         # Gaps between these spots are an artifact of the day-of EE
         # compaction (programming not placed yet) — the real gaps return
         # when programming is inserted, so separation math is meaningless.
-        if brk.get("programming_missing"):
+        if brk.get("programming_missing") and not brk.get("own_count"):
             brk["sep_violations"] = []
             continue
         violations = []
         seen_pairs: set = set()
-        for spot in brk["current"]:
+        own_n = brk.get("own_count") or len(brk["current"])
+        cutoff = to_frames if brk.get("programming_missing") else None
+        for spot in brk["current"][:own_n]:
             sid = spot["id"]
             meta = id_to_meta.get(sid)
             if not meta:
@@ -1110,6 +1174,7 @@ def _bo_check_separation(breaks: list, sep_spots: list) -> None:
                     is_be,
                     is_bb,
                     ctr,
+                    cutoff,
                 )
             if meta["order_sep"] > 0 and ctr is not None:
                 _check_group(
@@ -1121,6 +1186,7 @@ def _bo_check_separation(breaks: list, sep_spots: list) -> None:
                     is_be,
                     is_bb,
                     ctr,
+                    cutoff,
                 )
         brk["sep_violations"] = violations
         if violations:
@@ -1193,7 +1259,7 @@ def _bo_process_market(
 
     _bo_resolve_pi_duplicates(cur, breaks)
     _bo_check_separation(
-        breaks, _bo_fetch_sep_context(cur, market_id, date, from_frames, to_frames)
+        breaks, _bo_fetch_sep_context(cur, market_id, date, from_frames, to_frames), to_frames
     )
     return breaks, window_has_pgm
 
@@ -1203,13 +1269,14 @@ def bo_apply_market(conn, market_id: int, date: str, from_frames: int, to_frames
     XORDER (same-multiset) for every changed break. Does NOT commit — the caller
     owns the transaction (bulk-apply commits per market; Fill & Finish runs this
     inside its own transaction after inserting PIs/PSAs/ID, Lee 2026-08-28).
-    Flagged breaks (programming_missing) are never written."""
+    A fully frozen break (programming_missing, own_count 0) is never written; a split
+    break writes only this show's own spots — its absorbed tail (`foreign`) never moves."""
     cur = conn.cursor(as_dict=True)
     breaks, _prog_placed = _bo_process_market(cur, market_id, date, from_frames, to_frames)
-    changed_breaks = [b for b in breaks if b["changed"] and not b.get("programming_missing")]
+    changed_breaks = [b for b in breaks if b["changed"]]
     all_updates = []
     for brk in changed_breaks:
-        all_updates.extend(brk["optimized"])
+        all_updates.extend(u for u in brk["optimized"] if not u.get("foreign"))
     out = {
         "breaks_total": len(breaks),
         "breaks_changed": len(changed_breaks),
@@ -9769,7 +9836,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             (term, term),
                         )
                         contracts_raw = [
-                            dict(r) for r in cur.fetchall()
+                            dict(r)
+                            for r in cur.fetchall()
                             if estimate_matches(instr.estimate, r["code"], r["description"])
                         ]
 
@@ -10136,7 +10204,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                             (term, term),
                         )
                         contracts_raw = [
-                            dict(r) for r in cur.fetchall()
+                            dict(r)
+                            for r in cur.fetchall()
                             if estimate_matches(instr.estimate, r["code"], r["description"])
                         ]
 

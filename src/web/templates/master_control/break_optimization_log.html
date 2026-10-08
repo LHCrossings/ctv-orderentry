@@ -572,10 +572,10 @@ function renderBreak(brk, pi, bi) {
                     : brk.violation ? 'has-violation' : '';
     const pmHtml = brk.programming_missing ? `
         <div class="pm-panel">
-            <div class="pm-panel-title">⏳ Waiting on programming — separation &amp; order checks suspended</div>
+            <div class="pm-panel-title">${brk.own_count ? "⏳ Next show not placed — its spots ride at the tail; this show's spots are still checked and ordered" : "⏳ Waiting on programming — separation &amp; order checks suspended"}</div>
             <div class="pm-note">${brk.pm_reason === 'window'
                 ? "No programming is placed in this show's window yet, so Executive Editor's day-of compaction has parked these spots here without real break positions. Checks and Apply Fix come back once the programming is inserted."
-                : "Programming after this show isn't placed yet, so Executive Editor's day-of compaction pulled later spots up into this break. Applying a fix would optimize other programming's commercials into this show — Apply Fix is disabled until the programming is inserted."}</div>
+                : (brk.own_count ? "Programming after this show isn't placed yet, so Executive Editor pulled the next show's spots up behind this break. They stay exactly where they are and move into their own breaks when that show is placed; only this show's spots above the line are ordered." : "Programming after this show isn't placed yet, so Executive Editor's day-of compaction pulled later spots up into this break and one of them sits among this show's spots. Apply Fix stays off until that show is placed.")}</div>
             ${(brk.foreign_spots || []).map(f => `<div class="pm-row">
                 <span class="pm-spot">${esc(f.title)}</span>
                 <span class="pm-at">now @${esc(f.time)}</span>
@@ -613,7 +613,7 @@ function renderBreak(brk, pi, bi) {
             ${badgeHtml}
             <span class="break-spacer"></span>
             <span class="apply-done" id="done-${pi}-${bi}" style="display:none">✓ Applied</span>
-            ${brk.programming_missing ? '' : `<button class="apply-btn" id="apply-${pi}-${bi}" ${applyDisabled} onclick="applyBreak(${pi},${bi})">Apply Fix</button>`}
+            ${(brk.programming_missing && !brk.own_count) ? '' : `<button class="apply-btn" id="apply-${pi}-${bi}" ${applyDisabled} onclick="applyBreak(${pi},${bi})">Apply Fix</button>`}
         </div>
         <div class="break-body">
             <div>
@@ -633,7 +633,7 @@ function renderBreak(brk, pi, bi) {
 }
 
 function updateMap(brk) {
-    return brk.optimized.map(s => ({
+    return brk.optimized.filter(s => !s.foreign).map(s => ({
         id_tpalinse: s.id, new_ora: s.new_ora,
         replace_filmati_id: s.replace_filmati_id,
         replace_cod_progra: s.replace_cod_progra,
@@ -676,7 +676,7 @@ async function applyBreak(pi, bi) {
 
 async function applyProgram(pi) {
     const breaks = progBreaks[pi] || [];
-    const changedIdx = breaks.map((b, bi) => (b.changed && !b.programming_missing) ? bi : -1).filter(bi => bi >= 0);
+    const changedIdx = breaks.map((b, bi) => (b.changed && (!b.programming_missing || b.own_count)) ? bi : -1).filter(bi => bi >= 0);
     if (!changedIdx.length) return;
     const allUpdates = changedIdx.flatMap(bi => updateMap(breaks[bi]));
 
