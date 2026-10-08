@@ -4,6 +4,37 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Guard Written for One Workflow Freezes the Next One — When the Operating Pattern Changes, Re-Read Every "Never Touch" Rule Against It
+
+**Session:** Lee, Maija/Ashe "Fill & Finish doesn't move the spot in the final break" (2026-10-08)
+
+**Rule:** The 8/12 Break Optimization guard froze any break holding spots booked for a later
+window ("never optimize another show's commercials into this show"). It was right for the
+August workflow, where programming was placed for the whole day before Optimize ran. The team
+now runs Finish show by show, so the next show is usually NOT placed and EE has pulled its
+spots up behind this show's final break — every final break trips the guard, this show's own
+misordered spots are never fixed, and Optimize reports "0 need reordering" because the checks
+were switched off, not because they passed. Ashe moved the spots by hand for weeks. The data
+needed for the right split was already on every row (`trafficPalinse.offset`, the booked
+break): own = booked inside the window or unbooked fill, foreign = booked at/after the end.
+
+**How to apply:**
+1. A guard that says "do nothing to X" encodes an assumption about what else is true when X
+   occurs. When the team changes HOW they operate (whole day → show by show), grep the
+   guards (`programming_missing`, `unplaced`, "suspended") and ask which assumption moved.
+2. Prefer splitting over freezing: act on the part you own (order this show's spots, keep
+   total length so the tail does not move), leave the part you do not (identity, never
+   written), and show both on the page. Freeze only the case you cannot split safely (a
+   foreign spot interleaved among ours).
+3. A suppressed check must not display as a pass. "0 need reordering" with checks suspended
+   is the same lie as the 10/1 "nothing to do" on a 100% skip.
+4. Artifact filters come in pairs: excluding the tail from separation was half the fix; the
+   same compacted positions exist PAST the window end (SEA 12:58 vs 13:07), so the cutoff
+   must apply to the comparison set too. Validate on the live day across all markets
+   (`scratchpad bo_scan.py` pattern), not on the one screenshot.
+
+---
+
 ## A Bucket Fed by TWO Queries Must Be Re-Derived From BOTH at Apply Time — and a Guard That Skips 100% of the Selection Is a Failure, Not a Green "Done"
 
 **Session:** Maija, S3 Cleanup "Expired in Etere, no file in S3 … says not expired … remove did nothing" (2026-10-01)
