@@ -51,6 +51,8 @@
         .mkt-pill { background: transparent; border: 1px solid var(--border-color); border-radius: 20px; padding: 6px 14px; font-size: 0.82rem; font-weight: 600; color: var(--text-muted); cursor: pointer; transition: all 0.15s; font-family: inherit; }
         .mkt-pill:hover:not(.active) { border-color: var(--nord10); color: var(--nord10); }
         .mkt-pill.active { background: var(--nord10); border-color: var(--nord10); color: var(--nord6); }
+        .zone-pill { padding: 6px 18px; }
+        .zone-pill.active { background: var(--nord9); border-color: var(--nord9); }
 
         .selection-note { margin-top: 18px; font-size: 0.88rem; color: var(--text-muted); }
         .selection-note b { color: var(--nord10); }
@@ -163,6 +165,14 @@
 
         <div class="market-section">
             <div class="market-group">
+                <div class="market-group-label">Crossings TV zones</div>
+                <div class="pill-group">
+                    <!-- Maija 10/8: the team splits a day East/Central vs Pacific (+DAL); one click per zone -->
+                    <button type="button" class="mkt-pill zone-pill" data-zone="East/Central" data-codusers="1,8,2,3,9">East/Central Markets</button>
+                    <button type="button" class="mkt-pill zone-pill" data-zone="Pacific" data-codusers="4,5,6,7">Pacific Markets</button>
+                </div>
+            </div>
+            <div class="market-group">
                 <div class="market-group-label">Crossings TV markets</div>
                 <div class="pill-group">
                     <button type="button" class="mkt-pill" data-coduser="1" data-code="NYC">NYC</button>
@@ -185,7 +195,7 @@
         </div>
 
         <div class="selection-note" id="selectionNote">Select a network to apply to all its markets, or click a single market to focus it.</div>
-        <div class="selection-hint">Network button = all markets for that network. Click pills to toggle individual markets — select as many as you like.</div>
+        <div class="selection-hint">Network button = all markets for that network. Zone button = that zone's markets. Click pills to toggle individual markets — select as many as you like.</div>
     </div>
 
     <div class="tool-card">
@@ -281,14 +291,23 @@
 
     const noteEl = document.getElementById('selectionNote');
     const codeOf = {};
-    document.querySelectorAll('.mkt-pill').forEach(function (p) {
+    document.querySelectorAll('.mkt-pill:not(.zone-pill)').forEach(function (p) {
         codeOf[parseInt(p.dataset.coduser, 10)] = p.dataset.code;
     });
+    function zoneCodUsers(btn) {
+        return btn.dataset.codusers.split(',').map(function (x) { return parseInt(x, 10); });
+    }
+    function sameSet(a, b) {
+        return a.length === b.length && a.every(function (cu) { return b.indexOf(cu) !== -1; });
+    }
 
     function render() {
-        document.querySelectorAll('.mkt-pill').forEach(function (p) {
+        document.querySelectorAll('.mkt-pill:not(.zone-pill)').forEach(function (p) {
             const cu = parseInt(p.dataset.coduser, 10);
             p.classList.toggle('active', state.codUsers.indexOf(cu) !== -1);
+        });
+        document.querySelectorAll('.zone-pill').forEach(function (z) {
+            z.classList.toggle('active', sameSet(zoneCodUsers(z), state.codUsers));
         });
         document.querySelectorAll('.network-btn').forEach(function (b) {
             const full = NET_CODUSERS[b.dataset.network];
@@ -321,7 +340,19 @@
         });
     });
 
-    document.querySelectorAll('.mkt-pill').forEach(function (pill) {
+    // A zone replaces the selection with its markets (like a network card, not a toggle);
+    // the per-market pills still add/remove single markets from there.
+    document.querySelectorAll('.zone-pill').forEach(function (z) {
+        z.addEventListener('click', function () {
+            state.codUsers = zoneCodUsers(z);
+            state.network = NET_OF[state.codUsers[0]];
+            state.mode = 'market';
+            render();
+            loadGrid();
+        });
+    });
+
+    document.querySelectorAll('.mkt-pill:not(.zone-pill)').forEach(function (pill) {
         pill.addEventListener('click', function () {
             const cu = parseInt(pill.dataset.coduser, 10);
             const i = state.codUsers.indexOf(cu);
