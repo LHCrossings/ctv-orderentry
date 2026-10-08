@@ -18,11 +18,14 @@ Restore SQL is written before anything is touched. Live-proven 2026-08-28 (LAX/C
 from __future__ import annotations
 
 import os
+import random
+import time
 from datetime import datetime
 
 from src.business_logic.services.daily_programming_run import (
     _durata,
     _insert_event,
+    _is_deadlock,
     _slots,
     _sync_checksums,
 )
@@ -578,7 +581,12 @@ def apply_window(
         except Exception as exc:  # noqa: BLE001 — ordering must never break a finished hour
             conn.rollback()
             log(f"ROLLED BACK: break optimization failed: {exc}")
-            return {**_public(r), "status": "error", "message": f"break optimization: {exc}"}
+            return {
+                **_public(r),
+                "status": "error",
+                "message": f"break optimization: {exc}",
+                "deadlock": _is_deadlock(exc),
+            }
         log(
             f"  break optimization: {bo.get('breaks_changed', 0)} of {bo.get('breaks_total', 0)} "
             f"breaks reordered, {bo.get('spots_updated', 0)} spots"
@@ -925,7 +933,65 @@ def apply_window(
     except Exception as exc:  # noqa: BLE001 — anything wrong → the hour is untouched
         conn.rollback()
         log(f"ROLLED BACK: {exc}")
-        return {**_public(r), "status": "error", "message": str(exc), "restore": rpath}
+        return {
+            **_public(r),
+            "status": "error",
+            "message": str(exc),
+            "restore": rpath,
+            "deadlock": _is_deadlock(exc),
+        }
+
+
+DEADLOCK_ATTEMPTS = 3
+
+
+def apply_window_retrying(
+    connect,
+    market: int,
+    date: str,
+    lo: float,
+    hi: float,
+    apply: bool,
+    log=print,
+    refill: bool = False,
+    attempts: int = DEADLOCK_ATTEMPTS,
+    sleep=time.sleep,
+) -> dict:
+    """`apply_window` on a fresh connection per attempt, retried when SQL Server picks us
+    as the 1205 deadlock victim (Lee 10/8: the Finish button showed the raw 1205 to the
+    team; a deadlock is a timing collision with the scheduler, Exec Editor or another
+    Finish, and every market lives in the same TPALINSE/trafficPalinse tables).
+
+    A victim's transaction is rolled back by the server and apply_window rolls back on
+    its own error path, so each attempt starts from the untouched hour. The delay is
+    jittered (same reason as Daily Programming's retry: fixed delays re-collide in
+    lockstep). No Python lock around the write — see InsertLeftNoRow in
+    daily_programming_run for why that hangs. A 1205 can surface two ways: raised from
+    the explode step before the transaction, or swallowed into a `status: error` dict
+    with `deadlock: True` by apply_window's own except — both retry."""
+    for attempt in range(1, attempts + 1):
+        try:
+            with connect() as conn:
+                r = apply_window(conn, market, date, lo, hi, apply, log=log, refill=refill)
+        except Exception as exc:  # noqa: BLE001 — only a deadlock is retried; the rest propagates
+            if not _is_deadlock(exc) or attempt == attempts:
+                raise
+            r = {"status": "error", "message": str(exc), "deadlock": True}
+        if not (r.get("status") == "error" and r.get("deadlock")):
+            if attempt > 1:
+                r["attempts"] = attempt
+            return r
+        if attempt == attempts:
+            r["attempts"] = attempt
+            r["message"] = (
+                f"deadlocked with another Etere process {attempts} times in a row "
+                f"(SQL Server 1205); nothing was written — click Finish again in a moment"
+            )
+            return r
+        delay = attempt + random.uniform(0.1, 1.5)
+        log(f"  deadlock victim (1205) on attempt {attempt}/{attempts}; retrying in {delay:.1f}s")
+        sleep(delay)
+    raise AssertionError("unreachable")
 
 
 def _bo_apply(conn, market: int, date: str, lo_f: int, hi_f: int) -> dict:

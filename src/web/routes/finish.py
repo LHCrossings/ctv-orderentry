@@ -135,13 +135,12 @@ def build_finish_router(templates: Jinja2Templates) -> APIRouter:
 
         def _run():
             from browser_automation.etere_direct_client import connect
-            from src.business_logic.services.finish_service import apply_window
+            from src.business_logic.services.finish_service import apply_window_retrying
 
             log: list[str] = []
-            with connect() as conn:
-                r = apply_window(
-                    conn, mid, body.date, body.lo, body.hi, True, log=log.append, refill=body.refill
-                )
+            r = apply_window_retrying(
+                connect, mid, body.date, body.lo, body.hi, True, log=log.append, refill=body.refill
+            )
             r["log"] = log
             return r
 

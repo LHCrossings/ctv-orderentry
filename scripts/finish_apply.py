@@ -1,4 +1,4 @@
-"""Fill & Finish CLI — thin wrapper around finish_service.apply_window().
+"""Fill & Finish CLI — thin wrapper around finish_service.apply_window_retrying().
 
 uv run python3 scripts/finish_apply.py --market 6 --date 2026-08-28 --hour 8          # dry run (rollback)
 uv run python3 scripts/finish_apply.py --market 6 --date 2026-08-28 --hour 8 --apply
@@ -9,7 +9,7 @@ import sys
 
 sys.path.insert(0, ".")
 from browser_automation.etere_direct_client import connect  # noqa: E402
-from src.business_logic.services.finish_service import apply_window  # noqa: E402
+from src.business_logic.services.finish_service import apply_window_retrying  # noqa: E402
 
 
 def main():
@@ -24,7 +24,9 @@ def main():
     )
     a = ap.parse_args()
     lo = a.hour * 3600.0
-    r = apply_window(connect(), a.market, a.date, lo, lo + a.minutes * 60, a.apply, refill=a.refill)
+    r = apply_window_retrying(
+        connect, a.market, a.date, lo, lo + a.minutes * 60, a.apply, refill=a.refill
+    )
     print(f"\n{r['status'].upper()}" + (f": {r['message']}" if r.get("message") else ""))
     return 0 if r["status"] in ("applied", "dry-run", "finished") else 1
 
