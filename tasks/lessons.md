@@ -251,7 +251,14 @@ mismatch and would have failed the next time anyone validated them.
    the live source document every time, and any "remembered" value is keyed by that party and
    supplies only its spelling/codes, never its identity. Put the value on the confirmation
    page (Lee: "a field the AE sees before export") so a stale default is visible, not silent.
-5. **Recurrence (BVK production invoice 2609-012, 2026-10-05):** `is_production` was keyed
+5. **Recurrence (SacRT 2945 separation, 2026-10-09):** Lee set paid 25 / Hmong paid 15 /
+   bonus 15 on one shortened flight and remarked "I kind of usually do that anyway." I saved
+   it to memory as a standing rule; one minute later: "Let's not make that bonus rule
+   concrete just yet. That's just mentally what I do if normal customer separation doesn't
+   allow all spots to fit." A remark that a choice is HABITUAL is still a chosen value, not
+   policy — record it as the fallback he reaches for under a named condition (spots do not
+   fit), and ask before promoting it to a default the tooling applies unasked.
+6. **Recurrence (BVK production invoice 2609-012, 2026-10-05):** `is_production` was keyed
    on the ONE sentence the May oracle carried ("charges are for production only"). The
    September BVK affidavit said only "Production Charges", so the page showed an airtime
    invoice with 0 spots and $0 gross. A detector built from a single hand-made oracle must
