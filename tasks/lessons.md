@@ -4,6 +4,34 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A "Copy of the Source Line" Copied Its SCHEDULED Status — ROWSTATUS 1 Means "Done", and the Scheduler Skips It; Read the Notes Before Diffing Columns
+
+**Session:** Lee, Lexus make-good — "I see the new MG lines for 208 and 210, but nothing for estimate 202" … "we have gone over what the different status numbers mean before. It should be in notes" (2026-10-09)
+
+**Rule:** The make-good script built each MG line as a column-for-column copy of its source and
+passed the source's `ROWSTATUS` through. The 2740 (NYC) sources were fully placed, so they sat at
+1 = Scheduled; the SFO sources were 0. The five NYC copies and the moved NYC line inherited 1 and
+the traffic engine skipped them — invisible in Lee's scheduler while the SFO ones showed. The
+lifecycle (0 Ready / 1 Scheduled / 2 Change Data / 15 locked) was already in memory
+(`project_direct_client_status`, source-confirmed 5/22) and the archive; I profiled the column
+from scratch instead of reading it, and reported "1 is normal" from a distribution that was
+dominated by lines that are done. Second copy defect in the same diff: `add_contract_line`
+stamps the client's default Nielsen target (0001 Gambling - Casinos), so the NYC copies lost
+the source's 0013 Auto - Import Autos; my column diff listed only the columns I thought of.
+
+**How to apply:**
+1. A line's `ROWSTATUS` is a STATE, not a property: a line that must still place is 0, full
+   stop. Any script that creates, moves, re-dates or re-counts a line sets 0 explicitly and
+   asserts it on readback (the make-good script now does; the WL revision already did).
+2. When a value has a documented lifecycle, grep the notes (`grep -rn ROWSTATUS memory/ tasks/`)
+   BEFORE profiling the database — a distribution tells you what is common, not what it means.
+3. A "copy" diff is `SELECT *` minus the fields you intend to change, never a hand-picked list;
+   the hand-picked list is exactly where the forgotten column hides (Nielsen here, SUPPORTO 9/1).
+4. Repair done 10/9: ROWSTATUS 0 + source Nielsen on 76413, 85676-85680; a line-level query
+   "N_PASSAGGI > placed AND ROWSTATUS = 1" across the three contracts returns 0.
+
+---
+
 ## A Control Room Utility Named "Delete Spots" Deleted ONE Table — and the Ghost Guard Could Not See the Rows It Left (third appearance of the 7/14 lesson)
 
 **Session:** Lee, Lexus 2740/2742/2747 weekend pull — "I used the delete spots utility … I see that it made orphaned records" (2026-10-09)

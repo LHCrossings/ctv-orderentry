@@ -95,12 +95,12 @@ def load_lines(cur) -> dict[int, dict]:
     cur.execute(
         f"SELECT ID_CONTRATTIRIGHE, ID_CONTRATTITESTATA, DESCRIZIONE, COD_USER, DATA_INIZIO, DATA_FINE, DATESTART, DATEEND, "
         f"N_PASSAGGI, PASSAGGI_SETTIMANALI, PASSAGGI_GIORNALIERI, IMPORTO, DURATA, ID_BOOKINGCODE, PRENOTAZIONE, PRIORITA, "
-        f"PrioritaWhiteList, ROWSTATUS, ORA_INIZIO, ORA_FINE, Interv_Committente, INTERVALLO, INTERV_CONTRATTO, {','.join(DAY_COLS)} "
+        f"PrioritaWhiteList, ROWSTATUS, ORA_INIZIO, ORA_FINE, Interv_Committente, INTERVALLO, INTERV_CONTRATTO, NIELSEN, ID_NIELSEN, {','.join(DAY_COLS)} "
         f"FROM CONTRATTIRIGHE WHERE ID_CONTRATTITESTATA IN ({CT_IDS}) ORDER BY ID_CONTRATTIRIGHE"
     )
     keys = [
         "id", "ct", "desc", "mkt", "s", "e", "fs", "fe", "n", "wk", "cap", "rate", "dur", "bk", "pren", "pri", "pwl",
-        "rs", "lo", "hi", "ic", "io", "ie",
+        "rs", "lo", "hi", "ic", "io", "ie", "nielsen", "id_nielsen",
     ]  # fmt: skip
     out = {}
     for row in cur.fetchall():
@@ -209,8 +209,9 @@ def main(apply: bool, rehearse: bool = False):
     touched = {}  # lid -> (expected n, expected desc, expected start, expected end, total)
     for r in moves:
         desc = "MG " + r["desc"]
+        # ROWSTATUS 0 = Ready: a moved line was fully placed (1) and the scheduler skips 1
         cur.execute(
-            "UPDATE CONTRATTIRIGHE SET DESCRIZIONE=%s, DATA_INIZIO=%s, DATESTART=%s, DATA_FINE=%s, DATEEND=%s "
+            "UPDATE CONTRATTIRIGHE SET DESCRIZIONE=%s, DATA_INIZIO=%s, DATESTART=%s, DATA_FINE=%s, DATEEND=%s, ROWSTATUS=0 "
             "WHERE ID_CONTRATTIRIGHE=%s",
             (desc, MG_FROM, MG_FROM, MG_TO, MG_TO, r["id"]),
         )
@@ -264,9 +265,16 @@ def main(apply: bool, rehearse: bool = False):
             scheduling_type=int(r["pren"]),
             priority=int(r["pri"]),
             whitelist_priority=int(r["pwl"]),
-            row_status=int(r["rs"]),
+            row_status=0,  # Ready — never copy the source's 1 (= fully scheduled, scheduler skips it)
         )
         assert new_id and new_id > 0, f"add_contract_line failed for MG of {r['id']}"
+        # add_contract_line stamps the client's default Nielsen target; the copy must carry the source's
+        cur.execute(
+            "UPDATE CONTRATTIRIGHE SET NIELSEN=(SELECT NIELSEN FROM CONTRATTIRIGHE WHERE ID_CONTRATTIRIGHE=%s), "
+            "ID_NIELSEN=(SELECT ID_NIELSEN FROM CONTRATTIRIGHE WHERE ID_CONTRATTIRIGHE=%s) WHERE ID_CONTRATTIRIGHE=%s",
+            (r["id"], r["id"], new_id),
+        )
+        assert cur.rowcount == 1
         new_ids.append((new_id, r))
         mg_total = removed * float(r["rate"])
         write_cig(cur, new_id, mg_total, mg_days)
@@ -297,7 +305,6 @@ def main(apply: bool, rehearse: bool = False):
             "pren",
             "pri",
             "pwl",
-            "rs",
             "lo",
             "hi",
             "ic",
@@ -305,8 +312,13 @@ def main(apply: bool, rehearse: bool = False):
             "ie",
             "bits",
             "cap",
+            "nielsen",
+            "id_nielsen",
         ]
         diffs = {k: (src[k], a[k]) for k in same if norm(k, src[k]) != norm(k, a[k])}
+        assert int(a["rs"]) == 0, (
+            f"MG line {new_id} ROWSTATUS {a['rs']} — must be 0 (Ready) or the scheduler skips it"
+        )
         assert not diffs, f"MG line {new_id} differs from source {src['id']}: {diffs}"
         cur.execute("SELECT COUNT(*) FROM contrattifasce WHERE id_contrattirighe=%s", (new_id,))
         nb = cur.fetchone()[0]

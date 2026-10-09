@@ -508,7 +508,7 @@ decimal strings.
 | 44 | `prioritawl` | Whitelist priority |
 | 45 | `rulesIgnoreInsert ? 1 : 0` | Bypass separation rules on insert |
 | 46 | `rulesIgnoreInsertLog ? 1 : 0` | Skip rule violation log |
-| 47 | `rowStatus` | Row status |
+| 47 | `rowStatus` | Row status — **0 = Ready** (scheduler picks it up), **1 = Scheduled** (fully placed; the traffic engine SKIPS it, so never copy 1 onto a line that still has spots to place), **2 = Change Data** (awaiting re-approval), 15 = locked by the traffic engine |
 | 48 | `scMiddle ? 1 : 0` | Top-middle-bottom flag (`controllamiddle`) |
 | 49 | `selectedADInsertion` | AD insertion mode |
 | 50 | `accountId` | Account ID |
