@@ -702,3 +702,16 @@ Oracle: contract 2700 `San Mateo 2605` / `San Mateo County Voters 2605-2606` (Ma
 Review: dry run (10/8 start) → 24 lines, 120/120 spots, Production $375 on line 1 (CONTRATTISPESE verified),
 CENTROMEDIA 316, agency 0%, rolled back. 31 new tests; crispin/ntooitive/hpsj planner tests unchanged.
 Open: Lee to confirm code `San Mateo 2610` / desc `San Mateo County Voters 2610-2611` at the gather prompt.
+
+## SacRT 2608 (2945) revision — 10/10 start + production charge (2026-10-09)
+
+- [x] Read both PDFs (airtime 8/3-10/30 $4,988 NET, 12 lines; PROD $1,220 NET) and contract 2945 (0 placed, no blacklist, no charges)
+- [x] `scripts/repair_sacrt_2945_revision.py` — dry run (rollback) then `--apply`, modeled on the Shea 3150 start-move script
+- [x] Lines: DATA_INIZIO + DATESTART -> 10/10, end 10/30 kept; caps M-F paid 1->2/day, Hmong Sa-Su 1->3/day, bonus 1/day
+- [x] ContrattiImportiGiornalieri re-spread 10/10-10/30 (81 rows, $4,988.00)
+- [x] CONTRATTISPESE 'Production' $1,220 on line 80697 dated 10/10, PRINTDETAIL=1 (shape of charges 188-203)
+- [x] Header 10/10-10/30, LISTINO/LISTINOORIGINALE/SCONTATO 4,988 -> 6,208; verified from a fresh connection
+- Restore: `logs/sacrt-2945-revision-restore-20261009.sql`
+
+### Review
+Nothing was placed, so no unschedule or ghost check was needed. The charge date follows the SP convention (first paid line's flight start) rather than the 20th; both land in October for the Calendar header.
