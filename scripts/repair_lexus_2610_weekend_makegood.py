@@ -112,6 +112,36 @@ def load_lines(cur) -> dict[int, dict]:
     return out
 
 
+_DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+
+def expected_blocks(cur, lid: int) -> set[int]:
+    """Block ids Etere's loadBlock() would attach for the line's CURRENT dates, days and window."""
+    cur.execute(
+        f"SELECT COD_USER, DATA_INIZIO, DATA_FINE, ORA_INIZIO, ORA_FINE, {','.join(DAY_COLS)} "
+        "FROM CONTRATTIRIGHE WHERE ID_CONTRATTIRIGHE=%s",
+        (lid,),
+    )
+    row = cur.fetchone()
+    days = ",".join(f"'{_DAY_NAMES[i]}'" for i, b in enumerate(row[5:12]) if b)
+    cur.execute(
+        "SELECT DISTINCT tb.id_trafficblock FROM Traffic_Calendar tc "
+        "JOIN traffic_scheduleblock ts ON ts.id_trafficschedule=tc.id_trafficschedule "
+        "JOIN traffic_block tb ON tb.id_trafficblock=ts.id_trafficblock "
+        "JOIN traffic_segment seg ON seg.ID_TrafficBlock=tb.id_trafficblock "
+        "WHERE tc.Date BETWEEN %s AND %s AND tc.Level=0 AND tb.cod_user=%s AND tb.expired=0 AND seg.visible=1 "
+        f"AND seg.Type='COMS' AND DATENAME(WEEKDAY, tc.Date) IN ({days}) "
+        "AND (ts.Offset+seg.Offset) >= %s AND (ts.Offset+seg.Offset) < %s",
+        (row[1], row[2], row[0], row[3], row[4]),
+    )
+    return {r[0] for r in cur.fetchall()}
+
+
+def attached_blocks(cur, lid: int) -> set[int]:
+    cur.execute("SELECT id_fasce FROM contrattifasce WHERE id_contrattirighe=%s", (lid,))
+    return {r[0] for r in cur.fetchall()}
+
+
 def write_cig(cur, lid: int, total: float, days: list[date]):
     cur.execute("DELETE FROM ContrattiImportiGiornalieri WHERE ID_ContrattiRighe=%s", (lid,))
     if total == 0 or not days:
@@ -216,6 +246,11 @@ def main(apply: bool, rehearse: bool = False):
             (desc, MG_FROM, MG_FROM, MG_TO, MG_TO, r["id"]),
         )
         assert cur.rowcount == 1
+        # the SP loaded this line's blocks for its ORIGINAL dates/days (a Fri-only window loads only the
+        # Friday block id); re-run Etere's block load for the new window, then prove the set is complete
+        client.assign_blocks_for_existing_line(r["id"])
+        missing = expected_blocks(cur, r["id"]) - attached_blocks(cur, r["id"])
+        assert not missing, f"moved line {r['id']} still missing blocks {sorted(missing)}"
         total = int(r["n"]) * float(r["rate"])
         write_cig(cur, r["id"], total, active_dates(MG_FROM, MG_TO, r["bits"]))
         touched[r["id"]] = (int(r["n"]), desc, MG_FROM, MG_TO, total)
@@ -320,9 +355,8 @@ def main(apply: bool, rehearse: bool = False):
             f"MG line {new_id} ROWSTATUS {a['rs']} — must be 0 (Ready) or the scheduler skips it"
         )
         assert not diffs, f"MG line {new_id} differs from source {src['id']}: {diffs}"
-        cur.execute("SELECT COUNT(*) FROM contrattifasce WHERE id_contrattirighe=%s", (new_id,))
-        nb = cur.fetchone()[0]
-        assert nb > 0, f"MG line {new_id} got no blocks"
+        missing = expected_blocks(cur, new_id) - attached_blocks(cur, new_id)
+        assert not missing, f"MG line {new_id} missing blocks {sorted(missing)}"
 
     # restore part 2: the MG lines (ids exist only on --apply)
     for new_id, _ in new_ids:

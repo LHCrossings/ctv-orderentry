@@ -29,6 +29,14 @@ the source's 0013 Auto - Import Autos; my column diff listed only the columns I 
    the hand-picked list is exactly where the forgotten column hides (Nielsen here, SUPPORTO 9/1).
 4. Repair done 10/9: ROWSTATUS 0 + source Nielsen on 76413, 85676-85680; a line-level query
    "N_PASSAGGI > placed AND ROWSTATUS = 1" across the three contracts returns 0.
+5. Same afternoon, third copy defect (Lee: "can you refresh the program blocks for those new
+   lines?"): a MOVED line keeps the `contrattifasce` rows the SP loaded for its ORIGINAL dates —
+   a Fri-only 10/9-10/11 window had loaded the Friday block id only, so after the move to
+   10/12-10/18 the Vt Variety 11:30 line and the 2:1 bonus line on 2747 were missing the four
+   Mon-Thu block ids (the SFO Vietnamese noon shows are a different block per weekday). Any
+   re-date of a line is followed by `assign_blocks_for_existing_line` AND a diff of attached vs
+   expected (Etere's loadBlock query over the NEW dates/days/window); "fasce > 0" is not a check.
+   The make-good script now does both; refreshed 85111 (1 -> 5) and 85135 (8 -> 12) by hand.
 
 ---
 
