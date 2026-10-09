@@ -2432,6 +2432,51 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
+    @router.get("/scripts/blacklist-spots", response_class=HTMLResponse)
+    async def blacklist_spots_page(request: Request):
+        return templates.TemplateResponse(request, "scripts/blacklist_spots.html")
+
+    @router.get("/api/scripts/blacklist-spots")
+    async def run_blacklist_spots(
+        contract_id: int = Query(..., gt=0),
+        date_from: str = Query(...),
+        date_to: str = Query(...),
+        confirm: str = Query("0"),
+    ):
+        """Same shape as delete-spots, but the script sends the spots to the Etere blacklist
+        (both tables removed + Traffic_ScheduleList) instead of deleting the contract side only."""
+        project_root = Path(__file__).parent.parent.parent.parent
+        script_path = project_root / "scripts" / "blacklist_scheduled_spots.py"
+
+        python_exe = project_root / ".venv" / "Scripts" / "python.exe"
+        if not python_exe.exists():
+            python_exe = project_root / ".venv" / "bin" / "python"
+        if not python_exe.exists():
+            python_exe = Path(sys.executable)
+
+        args = [str(python_exe), "-u", str(script_path), str(contract_id), date_from, date_to]
+        if confirm == "1":
+            args.append("--confirm")
+
+        async def event_stream():
+            process = await asyncio.create_subprocess_exec(
+                *args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                cwd=str(project_root),
+            )
+            async for line in process.stdout:
+                text = line.decode(errors="replace").rstrip()
+                yield f"data: {text}\n\n"
+            await process.wait()
+            yield f"data: [EXIT:{process.returncode}]\n\n"
+
+        return StreamingResponse(
+            event_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
     @router.get("/scripts/unschedule", response_class=HTMLResponse)
     async def unschedule_page(request: Request):
         return templates.TemplateResponse(request, "scripts/unschedule.html")

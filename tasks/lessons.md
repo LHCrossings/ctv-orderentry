@@ -4,6 +4,45 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Control Room Utility Named "Delete Spots" Deleted ONE Table — and the Ghost Guard Could Not See the Rows It Left (third appearance of the 7/14 lesson)
+
+**Session:** Lee, Lexus 2740/2742/2747 weekend pull — "I used the delete spots utility … I see that it made orphaned records" (2026-10-09)
+
+**Rule:** `/scripts/delete-spots` (`scripts/delete_scheduled_spots.py`, 2026-06) deletes
+`trafficPalinse` only. It predates the 7/14 ghost lesson and was never swept when that lesson
+was written, so Lee's by-hand pull of 28 Lexus spots left 28 Idle `COMS` rows in the NYC/SFO
+playlists for 10/9-10/11, the first due to air at 11:09. `check_ghost_spots.py` then reported
+"Playlist clean" because `GHOST_WHERE` required `NEWTYPE = 'COM' AND ID_FILMATI > 0` — the
+Lexus rows had no copy yet (`COMS`, `ID_FILMATI = -1`). Two guards, both blind to the same rows:
+the tool that made them and the scan that was supposed to catch them. Found only because Lee
+looked at the contract himself.
+
+**How to apply:**
+1. When a lesson says "every X must do Y" (7/14: every unschedule removes BOTH tables), grep the
+   whole tree for every X the day the lesson is written — `grep -rn "DELETE FROM trafficPalinse"`
+   would have listed this script in June. A lesson applied to the path that broke is not applied.
+2. A ghost predicate keys on the row's ROLE (contract spot types COM/COMS/BNS/AV, LIVELLO 0, no
+   trafficPalinse), never on an attribute the row may legitimately lack (a creative). Validate
+   the predicate against the live profile: today every future contract-type row is backed, so
+   the wider predicate flags nothing extra and would have flagged all 28.
+3. The by-hand pull Lee actually wanted is a BLACKLIST (off both tables + `Traffic_ScheduleList`
+   PassageMiss, so ordered = placed + blacklisted). That is now `/scripts/blacklist-spots`
+   (`scripts/blacklist_scheduled_spots.py`: preview, refuses aired spots, backup .sql of every
+   row, one transaction, in-txn verify, fresh-connection accounting readback, `--rehearse`).
+   Lee kept delete-spots as is ("we need it for some function") — its one-table delete is
+   flagged to him, not changed unasked.
+4. Cleanup recipe (same as 9/9): pin the exact ids, assert each matches the ghost signature
+   (LIVELLO 0, STATUS I, no copy, no trafficPalinse), back up as INSERTs with IDENTITY_INSERT,
+   DELETE, re-count from a fresh connection. `logs/lexus-2610-ghosts-restore-20261009.sql`.
+5. Make-good convention (Lee): a line that is MOVED or ADDED for a make-good gets `MG ` in front
+   of its description; a line that is only trimmed keeps its description. Script pattern:
+   `scripts/repair_lexus_2610_weekend_makegood.py` (move whole-weekend lines; trim spanning
+   lines + add an MG copy via `add_contract_line` on one `autocommit=False` connection; rebuild
+   day revenue; assert the MG copy equals its source column-for-column, separation compared in
+   minutes because the old web form wrote 44956 frames where we write 44955).
+
+---
+
 ## A Guard Written for One Workflow Freezes the Next One — When the Operating Pattern Changes, Re-Read Every "Never Touch" Rule Against It
 
 **Session:** Lee, Maija/Ashe "Fill & Finish doesn't move the spot in the final break" (2026-10-08)

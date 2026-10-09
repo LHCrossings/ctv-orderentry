@@ -35,8 +35,13 @@ def test_summarize_empty():
 
 
 def test_ghost_where_excludes_fillers_and_soft_deleted_rows():
-    # PER/PSA fillers legitimately have no trafficPalinse; only COM rows are ghosts.
-    assert "NEWTYPE = 'COM'" in GHOST_WHERE
+    # PER/PSA fillers legitimately have no trafficPalinse; every contract spot type is a ghost
+    # candidate, with or without a creative (2026-10-09: 28 'COMS' rows at ID_FILMATI=-1 were
+    # invisible to the old "'COM' AND ID_FILMATI > 0" predicate while they sat in the playlist).
+    for t in ("'COM'", "'COMS'", "'BNS'", "'AV'"):
+        assert t in GHOST_WHERE
+    assert "ID_FILMATI" not in GHOST_WHERE
+    assert "PER" not in GHOST_WHERE and "PSA" not in GHOST_WHERE
     assert "LIVELLO = 0" in GHOST_WHERE
     assert "tp.id_trafficPalinse IS NULL" in GHOST_WHERE
 

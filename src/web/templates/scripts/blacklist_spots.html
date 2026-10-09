@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Send Spots to Black List — Control Room</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/css/_variables.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <style>
+        main { max-width: 720px; }
+
+        .tool-card {
+            background: var(--nord6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 1px 4px var(--shadow-color);
+        }
+
+        .tool-card h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+
+        .tool-card > p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .field-group.contract { flex: 0 0 140px; }
+        .field-group.date     { flex: 0 0 140px; }
+
+        .field-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .field-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 0.95rem;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            color: var(--text-primary);
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            width: 100%;
+        }
+
+        .field-input:focus {
+            border-color: var(--nord10);
+            box-shadow: 0 0 0 3px rgba(94,129,172,0.15);
+        }
+
+        .btn-row {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .run-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.15s;
+            white-space: nowrap;
+            height: 42px;
+        }
+
+        .btn-preview {
+            background: var(--nord10);
+            color: white;
+        }
+
+        .btn-preview:hover:not(:disabled) {
+            background: var(--nord9);
+            transform: translateY(-1px);
+        }
+
+        .btn-delete {
+            background: var(--nord11);
+            color: white;
+        }
+
+        .btn-delete:hover:not(:disabled) {
+            background: #b34040;
+            transform: translateY(-1px);
+        }
+
+        .run-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .terminal {
+            background: var(--nord0);
+            border: 1px solid var(--nord1);
+            border-radius: 10px;
+            padding: 16px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.82rem;
+            line-height: 1.7;
+            min-height: 160px;
+            max-height: 440px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .terminal.visible { display: block; }
+
+        .t-line { color: var(--nord4); }
+        .t-info  { color: var(--nord8); }
+        .t-done  { color: var(--nord14); font-weight: 600; }
+        .t-err   { color: var(--nord11); }
+        .t-warn  { color: var(--nord13); }
+        .t-cursor {
+            display: inline-block;
+            width: 8px;
+            height: 14px;
+            background: var(--nord8);
+            animation: blink 1s step-end infinite;
+            vertical-align: middle;
+            margin-left: 2px;
+        }
+
+        @keyframes blink { 50% { opacity: 0; } }
+
+        .search-wrap { position: relative; flex: 1; max-width: 340px; }
+        .search-dropdown {
+            position: absolute; top: 100%; left: 0; z-index: 200;
+            background: var(--nord6); border: 1px solid var(--border-color);
+            border-radius: 8px; box-shadow: 0 4px 16px var(--shadow-color);
+            min-width: 360px; max-height: 280px; overflow-y: auto;
+        }
+        .dropdown-item { padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border-color); }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover { background: var(--bg-secondary); }
+        .dropdown-code { font-weight: 700; font-size: 0.88rem; color: var(--text-primary); }
+        .dropdown-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 1px; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <div class="logo">
+            <a href="/" class="home-btn">🏠</a>
+            <div class="logo-icon">⛔</div>
+            <div>
+                <h1>Send Spots to <span>Black List</span></h1>
+                <div class="logo-sub">Scripts · Control Room</div>
+            </div>
+        </div>
+        <span class="header-badge">CTV · Internal</span>
+    </div>
+</header>
+
+<main>
+    <div class="tool-card">
+        <h2>Blacklist by Date Range</h2>
+        <p>Sends every scheduled spot of a contract within the date range to the Etere blacklist: the spot comes off the contract <em>and</em> the playlist, and the line's blacklist count (PassageMiss) goes up so ordered = placed + blacklisted still holds. Spots that already aired are refused. Preview first, then blacklist.</p>
+
+        <div class="input-row">
+            <div class="field-group search-wrap">
+                <label class="field-label">Contract</label>
+                <input class="field-input" id="contractSearch" placeholder="Search by code, name, or ID…" autocomplete="off" />
+                <div id="contractDropdown" class="search-dropdown" style="display:none;"></div>
+            </div>
+            <div class="field-group date">
+                <label class="field-label" for="dateFrom">From Date</label>
+                <input id="dateFrom" class="field-input" type="text" placeholder="MM/DD/YYYY" onblur="formatDateInput(this)" />
+            </div>
+            <div class="field-group date">
+                <label class="field-label" for="dateTo">To Date</label>
+                <input id="dateTo" class="field-input" type="text" placeholder="MM/DD/YYYY" onblur="formatDateInput(this)" />
+            </div>
+            <div class="btn-row">
+                <button id="previewBtn" class="run-btn btn-preview" onclick="runScript(false)">&#128269; Preview</button>
+                <button id="deleteBtn" class="run-btn btn-delete" onclick="runScript(true)">&#9940; Blacklist</button>
+            </div>
+        </div>
+
+        <div id="terminal" class="terminal"></div>
+    </div>
+</main>
+
+<script>
+let selectedContractId = null;
+const contractSearchEl = document.getElementById('contractSearch');
+const contractDropdown = document.getElementById('contractDropdown');
+let _cTimer = null;
+
+contractSearchEl.addEventListener('input', () => {
+    selectedContractId = null;
+    if (!contractSearchEl.value.trim()) { contractDropdown.style.display = 'none'; return; }
+    clearTimeout(_cTimer);
+    _cTimer = setTimeout(searchContracts, 350);
+});
+contractSearchEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { clearTimeout(_cTimer); searchContracts(); }
+});
+document.addEventListener('click', e => {
+    if (!e.target.closest('.search-wrap')) contractDropdown.style.display = 'none';
+});
+
+async function searchContracts() {
+    const q = contractSearchEl.value.trim();
+    if (!q) return;
+    const resp = await fetch(`/api/traffic/contract-search?q=${encodeURIComponent(q)}`);
+    const rows = await resp.json();
+    contractDropdown.innerHTML = rows.length
+        ? rows.map(r => `
+            <div class="dropdown-item" data-id="${r.id}" data-code="${escHtml(r.code||'')}">
+                <div class="dropdown-code">${escHtml(r.code)}</div>
+                <div class="dropdown-desc">${escHtml(r.description||'')} &nbsp;·&nbsp; ${r.date_start} – ${r.date_end}</div>
+            </div>`).join('')
+        : '<div class="dropdown-item"><span class="dropdown-desc">No contracts found.</span></div>';
+    contractDropdown.style.display = 'block';
+}
+
+contractDropdown.addEventListener('click', e => {
+    const item = e.target.closest('.dropdown-item[data-id]');
+    if (!item) return;
+    selectedContractId = parseInt(item.dataset.id);
+    contractSearchEl.value = item.dataset.code;
+    contractDropdown.style.display = 'none';
+});
+
+function escHtml(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function getInputs() {
+    const dateFrom = document.getElementById('dateFrom').value.trim();
+    const dateTo   = document.getElementById('dateTo').value.trim();
+    if (!selectedContractId) {
+        contractSearchEl.focus();
+        return null;
+    }
+    if (!dateFrom || !dateTo) {
+        document.getElementById(dateFrom ? 'dateTo' : 'dateFrom').focus();
+        return null;
+    }
+    return { contractId: selectedContractId, dateFrom, dateTo };
+}
+
+function runScript(confirm) {
+    const inputs = getInputs();
+    if (!inputs) return;
+
+    const terminal   = document.getElementById('terminal');
+    const previewBtn = document.getElementById('previewBtn');
+    const deleteBtn  = document.getElementById('deleteBtn');
+
+    terminal.innerHTML = '';
+    terminal.classList.add('visible');
+    previewBtn.disabled = true;
+    deleteBtn.disabled  = true;
+
+    const cursor = document.createElement('span');
+    cursor.className = 't-cursor';
+    terminal.appendChild(cursor);
+
+    const params = new URLSearchParams({
+        contract_id: inputs.contractId,
+        date_from:   inputs.dateFrom,
+        date_to:     inputs.dateTo,
+        confirm:     confirm ? '1' : '0',
+    });
+
+    const evtSource = new EventSource(`/api/scripts/blacklist-spots?${params}`);
+
+    evtSource.onmessage = (e) => {
+        const raw = e.data;
+        if (terminal.contains(cursor)) terminal.removeChild(cursor);
+
+        const div = document.createElement('div');
+
+        if (raw.startsWith('[EXIT:')) {
+            const code = parseInt(raw.match(/\d+/)[0]);
+            div.className = code === 0 ? 't-done' : 't-err';
+            div.textContent = code === 0 ? '✓ Completed.' : `✗ Exited with code ${code}.`;
+            terminal.appendChild(div);
+            evtSource.close();
+            previewBtn.disabled = false;
+            deleteBtn.disabled  = false;
+            terminal.scrollTop = terminal.scrollHeight;
+            return;
+        }
+
+        if (raw.includes('[DONE]'))       div.className = 't-done';
+        else if (raw.includes('[INFO]'))  div.className = 't-info';
+        else if (raw.includes('[WARN]'))  div.className = 't-warn';
+        else if (raw.includes('Error') || raw.includes('error')) div.className = 't-err';
+        else                              div.className = 't-line';
+
+        div.textContent = raw;
+        terminal.appendChild(div);
+        terminal.appendChild(cursor);
+        terminal.scrollTop = terminal.scrollHeight;
+    };
+
+    evtSource.onerror = () => {
+        if (terminal.contains(cursor)) terminal.removeChild(cursor);
+        const div = document.createElement('div');
+        div.className = 't-err';
+        div.textContent = '✗ Connection lost or server error.';
+        terminal.appendChild(div);
+        evtSource.close();
+        previewBtn.disabled = false;
+        deleteBtn.disabled  = false;
+    };
+}
+</script>
+
+</body>
+</html>

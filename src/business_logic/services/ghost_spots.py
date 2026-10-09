@@ -11,7 +11,7 @@ automation's `_unschedule_spots` (fixed 2026-07-14).
 Shared by `scripts/check_ghost_spots.py` (CLI) and the Broadcast Health nightly scan,
 which shows the count in the site header next to the media-file findings. PER/PSA rows
 without trafficPalinse are the daily filler mechanism and are excluded by design
-(NEWTYPE = 'COM' only).
+(contract spot types only: COM/COMS/BNS/AV, creative or not).
 """
 
 from __future__ import annotations
@@ -34,8 +34,12 @@ MARKETS = {
 }
 MAX_ROWS = 400  # rows carried in the payload; the count is always complete
 
+# Any contract spot type counts, with or without a creative: the 2026-10-09 Lexus pull left 28
+# ghosts that were NEWTYPE 'COMS' with ID_FILMATI = -1 (placed, no copy yet) and the old
+# predicate ("'COM' with a creative") reported the playlist clean. PER/PSA/ID fillers never
+# have trafficPalinse by design and stay excluded.
 GHOST_WHERE = (
-    "t.LIVELLO = 0 AND t.NEWTYPE = 'COM' AND t.ID_FILMATI > 0 AND tp.id_trafficPalinse IS NULL"
+    "t.LIVELLO = 0 AND t.NEWTYPE IN ('COM','COMS','BNS','AV') AND tp.id_trafficPalinse IS NULL"
 )
 
 

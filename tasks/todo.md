@@ -717,3 +717,13 @@ Open: Lee to confirm code `San Mateo 2610` / desc `San Mateo County Voters 2610-
 Nothing was placed, so no unschedule or ghost check was needed. The charge date follows the SP convention (first paid line's flight start) rather than the 20th; both land in October for the Calendar header.
 - [x] Separation (Lee 10/9, same session): paid 60 -> 25/0/0, Hmong paid + all six bonus lines -> 15/0/0; `scripts/repair_sacrt_2945_separation.py`, restore `logs/sacrt-2945-separation-restore-20261009.sql`; break-capacity test showed Hmong Sa-Su 6-8p needs all 4 breaks that 25 min allows
 - [x] :15 conversion (Lee 10/9, same session; client delivered :15s, plan footnote converts each :30 to two :15s): `scripts/repair_sacrt_2945_to_15s.py` — DURATA 450, 158 -> 316 spots, paid $43 -> $21.50, caps x2 (Hmong BNS 1 -> 3), separation 15/0/0 everywhere, Hmong 5/0/0; airtime $4,988 / header $6,208 / day revenue unchanged; Lee unscheduled in the app first; ghost check clean; restore `logs/sacrt-2945-to15s-restore-20261009.sql`
+
+## Lexus 26Q4 weekend pull + make-good, blacklist utility (2026-10-09)
+
+- [x] Melissa (IW Group): remove Fri 10/9 - Sun 10/11 on IW Lexus 202 NYC 2740 / 208 SFO 2742 / 210 SFO 2747, make good 10/12-10/18 (28 spots, Idle, no copy)
+- [x] Lee pulled the weekend with /scripts/delete-spots -> 28 ghost playlist rows (trafficPalinse-only delete); check_ghost_spots said clean (predicate needed 'COM' + a creative). Ghosts deleted with backup `logs/lexus-2610-ghosts-restore-20261009.sql`, verified 0 from a fresh connection
+- [x] `scripts/repair_lexus_2610_weekend_makegood.py` --apply: 9 whole-weekend lines MOVED to 10/12-10/18 ("MG " prefix), 12 spanning lines TRIMMED (start 10/12, N_PASSAGGI - removed) + 12 "MG " copies added via add_contract_line (85676-85687), day revenue rebuilt; money/headers unchanged; restore `logs/lexus-2610-weekend-makegood-restore-20261009.sql`
+- [x] GHOST_WHERE widened to COM/COMS/BNS/AV regardless of ID_FILMATI (test updated)
+- [x] New Control Room card /scripts/blacklist-spots (`scripts/blacklist_scheduled_spots.py`): same inputs as delete-spots, removes both tables + Traffic_ScheduleList insert/PassageMiss, refuses aired spots, backup .sql, in-txn verify, accounting readback; rehearsed with rollback on 2945 10/10
+- [ ] delete-spots still deletes trafficPalinse only (Lee: keep for now) — flagged
+- Note: Lee renamed contract 2945's code to `SacRT 2610`
