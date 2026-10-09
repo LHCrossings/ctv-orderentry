@@ -715,3 +715,4 @@ Open: Lee to confirm code `San Mateo 2610` / desc `San Mateo County Voters 2610-
 
 ### Review
 Nothing was placed, so no unschedule or ghost check was needed. The charge date follows the SP convention (first paid line's flight start) rather than the 20th; both land in October for the Calendar header.
+- [x] Separation (Lee 10/9, same session): paid 60 -> 25/0/0, Hmong paid + all six bonus lines -> 15/0/0; `scripts/repair_sacrt_2945_separation.py`, restore `logs/sacrt-2945-separation-restore-20261009.sql`; break-capacity test showed Hmong Sa-Su 6-8p needs all 4 breaks that 25 min allows
