@@ -29,8 +29,8 @@ looked at the contract himself.
    PassageMiss, so ordered = placed + blacklisted). That is now `/scripts/blacklist-spots`
    (`scripts/blacklist_scheduled_spots.py`: preview, refuses aired spots, backup .sql of every
    row, one transaction, in-txn verify, fresh-connection accounting readback, `--rehearse`).
-   Lee kept delete-spots as is ("we need it for some function") — its one-table delete is
-   flagged to him, not changed unasked.
+   delete-spots itself now removes both tables too (Lee: "Let's fix it"), with the same backup,
+   aired refusal and in-txn verify; the two cards differ only in the blacklist accounting.
 4. Cleanup recipe (same as 9/9): pin the exact ids, assert each matches the ghost signature
    (LIVELLO 0, STATUS I, no copy, no trafficPalinse), back up as INSERTs with IDENTITY_INSERT,
    DELETE, re-count from a fresh connection. `logs/lexus-2610-ghosts-restore-20261009.sql`.
