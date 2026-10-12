@@ -581,6 +581,106 @@ def _pi_filler_supporto(cur, filmati_id, fallback_desc: str = "") -> str:
 # directly testable — the router factory below is 5k lines of closure) ───
 
 
+# ── Bookend pair assignment helpers ──────────────────────────────────────────
+# A bookend contract can carry several languages (Imprenta PG&E 26Q4: a Cantonese
+# bookend line, two Mandarin bookend lines and a Chinese ROS bonus line whose
+# breaks fall in either window). Each language needs its own creative pair, so
+# the assigner scopes breaks by the language that AIRS at the break's
+# (weekday, ORA) — the day-aware window table, never the line description
+# (Lee 2026-10-12; same rule as the Admerasia colour→creative traffic).
+_BOOKEND_BREAK_THRESHOLD = 18000  # frames ≈ 600 s: spans any break, never two
+_BOOKEND_UNCLASSIFIED = "Unclassified"
+
+
+def _bookend_break_language(brk: list) -> str:
+    """Language airing at the break's top spot; "Unclassified" when the window
+    table names none or more than one (the caller must not guess)."""
+    from browser_automation.language_windows import classify_language_frames
+
+    top = brk[0]
+    data = top["data"]
+    weekday = (
+        data.strftime("%A")
+        if hasattr(data, "strftime")
+        else (datetime.strptime(str(data)[:10], "%Y-%m-%d").strftime("%A"))
+    )
+    langs = classify_language_frames(weekday, top["ora"], top.get("market"))
+    return langs[0] if len(langs) == 1 else _BOOKEND_UNCLASSIFIED
+
+
+def _bookend_breaks(rows: list, language: str = "") -> tuple[list, list]:
+    """Group scheduled bookend spots into breaks, keeping one language if asked.
+
+    `rows` are the contract's TPALINSE rows ordered by (DATA, ORA) with keys
+    data / ora / market / line_id / tp_id. Two spots on the same date within
+    `_BOOKEND_BREAK_THRESHOLD` frames are one break (top first, bottom second).
+
+    Returns (breaks, bad): each break is {"language", "rows": (top, bottom)};
+    `bad` lists (ordinal, date, size) for any kept break that is not exactly two
+    spots — a pair cannot be written onto a 1- or 3-spot break, so the caller
+    refuses. A bad break in another language does not block this one.
+    """
+    if not rows:
+        return [], []
+    groups: list[list] = [[rows[0]]]
+    for row in rows[1:]:
+        prev = groups[-1][-1]
+        same_date = str(row["data"])[:10] == str(prev["data"])[:10]
+        if same_date and (row["ora"] - prev["ora"]) <= _BOOKEND_BREAK_THRESHOLD:
+            groups[-1].append(row)
+        else:
+            groups.append([row])
+    breaks = [{"language": _bookend_break_language(g), "rows": tuple(g)} for g in groups]
+    if language:
+        breaks = [b for b in breaks if b["language"] == language]
+    bad = [
+        (i + 1, b["rows"][0]["data"], len(b["rows"]))
+        for i, b in enumerate(breaks)
+        if len(b["rows"]) != 2
+    ]
+    return breaks, bad
+
+
+def _bookend_language_summary(breaks: list) -> list:
+    """Per-language break/spot counts and the lines they come from (page data)."""
+    by_lang: dict = {}
+    for b in breaks:
+        entry = by_lang.setdefault(
+            b["language"],
+            {"language": b["language"], "break_count": 0, "spot_count": 0, "lines": {}},
+        )
+        entry["break_count"] += 1
+        entry["spot_count"] += len(b["rows"])
+        for r in b["rows"]:
+            ln = entry["lines"].setdefault(
+                r["line_id"],
+                {"line_id": r["line_id"], "description": r.get("line_desc") or "", "spot_count": 0},
+            )
+            ln["spot_count"] += 1
+    out = []
+    for lang in sorted(by_lang, key=lambda k: (k == _BOOKEND_UNCLASSIFIED, k)):
+        e = by_lang[lang]
+        e["lines"] = sorted(e["lines"].values(), key=lambda x: x["line_id"])
+        out.append(e)
+    return out
+
+
+_BOOKEND_ROWS_SQL = """
+    SELECT tpa.id_contrattirighe AS line_id,
+           cr.DESCRIZIONE        AS line_desc,
+           cr.COD_USER           AS market,
+           tp.ID_TPALINSE        AS tp_id,
+           tp.DATA               AS data,
+           tp.ORA                AS ora,
+           cr.ID_BOOKINGCODE     AS booking_code
+    FROM TPALINSE tp
+    JOIN trafficPalinse tpa ON tpa.id_tpalinse      = tp.ID_TPALINSE
+    JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
+    WHERE cr.ID_CONTRATTITESTATA = {contract_id} {dc}
+    ORDER BY tp.DATA, tp.ORA
+"""
+
+
 def _bo_classify(
     newtype: str,
     capo,
@@ -8265,20 +8365,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                 if date_to and _re2.match(r"^\d{4}-\d{2}-\d{2}$", date_to):
                     dc += f" AND tp.DATA <= '{date_to}'"
 
-                cur.execute(f"""
-                    SELECT COUNT(*) AS cnt
-                    FROM TPALINSE tp
-                    JOIN trafficPalinse tpa ON tpa.id_tpalinse      = tp.ID_TPALINSE
-                    JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
-                    WHERE cr.ID_CONTRATTITESTATA = {contract_id} {dc}
-                """)
-                cnt = cur.fetchone()["cnt"]
+                cur.execute(_BOOKEND_ROWS_SQL.format(contract_id=contract_id, dc=dc))
+                rows = cur.fetchall()
+                breaks, bad = _bookend_breaks(rows)
 
                 return {
                     "header": dict(hdr),
-                    "total_spots": cnt,
-                    "break_count": cnt // 2,
-                    "odd_warning": cnt % 2 != 0,
+                    "total_spots": len(rows),
+                    "break_count": len(breaks),
+                    "odd_warning": len(rows) % 2 != 0 or bool(bad),
+                    "languages": _bookend_language_summary(breaks),
                 }
 
         result = await asyncio.get_running_loop().run_in_executor(None, _run)
@@ -8290,6 +8386,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
     async def bookend_pairs_assign(contract_id: int, body: dict = Body(...)):
         date_from = body.get("date_from", "")
         date_to = body.get("date_to", "")
+        language = (body.get("language") or "").strip()
         pairs = body.get("pairs", [])
 
         if not pairs:
@@ -8319,18 +8416,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
 
             with _db_connect() as conn:
                 cur = conn.cursor(as_dict=True)
-                cur.execute(f"""
-                    SELECT tpa.id_contrattirighe AS line_id,
-                           tp.ID_TPALINSE        AS tp_id,
-                           tp.DATA               AS data,
-                           tp.ORA                AS ora,
-                           cr.ID_BOOKINGCODE     AS booking_code
-                    FROM TPALINSE tp
-                    JOIN trafficPalinse tpa ON tpa.id_tpalinse      = tp.ID_TPALINSE
-                    JOIN CONTRATTIRIGHE cr  ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
-                    WHERE cr.ID_CONTRATTITESTATA = {contract_id} {dc}
-                    ORDER BY tp.DATA, tp.ORA
-                """)
+                cur.execute(_BOOKEND_ROWS_SQL.format(contract_id=contract_id, dc=dc))
                 all_rows = cur.fetchall()
                 cur.execute("SELECT id_bookingcode, code FROM trf_bookingcode")
                 bookingcode_to_newtype = {r["id_bookingcode"]: r["code"] for r in cur.fetchall()}
@@ -8338,24 +8424,13 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             if not all_rows:
                 raise ValueError("No scheduled spots found in the selected date range")
 
-            # Group into break pairs by ORA proximity.
-            # Top-of-break (A) has lower ORA, bottom-of-break (B) has higher ORA.
-            # Threshold: 18000 frames ≈ 600 sec at 30fps (safely spans any break size)
-            BREAK_THRESHOLD = 18000
-            breaks: list[tuple] = []
-            current: list = [all_rows[0]]
-            for row in all_rows[1:]:
-                prev = current[-1]
-                same_date = str(row["data"])[:10] == str(prev["data"])[:10]
-                close_enough = (row["ora"] - prev["ora"]) <= BREAK_THRESHOLD
-                if same_date and close_enough:
-                    current.append(row)
-                else:
-                    breaks.append(tuple(current))
-                    current = [row]
-            breaks.append(tuple(current))
-
-            bad = [(i + 1, b[0]["data"], len(b)) for i, b in enumerate(breaks) if len(b) != 2]
+            # Group into break pairs by ORA proximity (top = lower ORA, bottom =
+            # higher), then keep only the breaks airing in the chosen language.
+            breaks, bad = _bookend_breaks(all_rows, language)
+            if not breaks:
+                raise ValueError(
+                    f"No scheduled {language} bookend breaks in the selected date range"
+                )
             if bad:
                 detail = "; ".join(f"break {n} on {d}: {c} spot(s)" for n, d, c in bad[:5])
                 raise ValueError(
@@ -8412,8 +8487,9 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         filmati_aspect_map[fid] = _VS_ASPECT.get(r["VIDEOSTANDARD"], "H")
                         filmati_duration_map[fid] = r["DUR"] or 0
 
-                all_line_ids = list({r["line_id"] for r in all_rows})
-                line_ids_str = ",".join(str(lid) for lid in all_line_ids)
+                # Only the lines whose breaks are being assigned get rotation
+                # percentages; the other language's lines keep their own pairs.
+                all_line_ids = list({r["line_id"] for b in breaks for r in b["rows"]})
                 cur.execute(
                     f"SELECT DISTINCT ID_FILMATI FROM CONTRATTIFILMATI"
                     f" WHERE ID_CONTRATTIRIGHE IN ("
@@ -8427,7 +8503,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             tp_newtype_map: dict = {}
             line_tp_map: dict = defaultdict(list)
             for k, brk in enumerate(breaks):
-                top_row, bot_row = brk[0], brk[1]
+                top_row, bot_row = brk["rows"]
                 pair_idx = rotation_list[k]
                 a_filmati = pairs[pair_idx]["a_id"]
                 b_filmati = pairs[pair_idx]["b_id"]
@@ -8510,11 +8586,16 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                                 (perc, line_id, filmati_id),
                             )
                     if all_filmati_ids:
+                        # MaterialAddToAssetListC pools the pair on EVERY line of
+                        # the contract; drop the 0% copies so a Mandarin pair
+                        # does not sit in the Cantonese line's rotation pool.
                         cur.execute(
                             f"DELETE FROM CONTRATTIFILMATI"
                             f" WHERE ID_FILMATI IN ({fid_str})"
                             f" AND PERCROTATION = 0"
-                            f" AND ID_CONTRATTIRIGHE IN ({line_ids_str})"
+                            f" AND ID_CONTRATTIRIGHE IN ("
+                            f"   SELECT ID_CONTRATTIRIGHE FROM CONTRATTIRIGHE"
+                            f"   WHERE ID_CONTRATTITESTATA = {contract_id})"
                         )
                     conn.commit()
 
@@ -8540,6 +8621,7 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             return {
                 "ok": True,
                 "breaks_assigned": n_breaks,
+                "language": language,
                 "spots_updated": spots_updated,
                 "needs_airchecks": needs_airchecks,
                 "aircheck": aircheck,

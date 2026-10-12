@@ -781,3 +781,16 @@ Plan:
 - [x] Sheet1 pivot sorted "Month Year" strings alphabetically (August above July)
 - [x] Both key on the broadcast-month date now; labels derived at write time; `tests/unit/test_backwrite_monthly_order.py`
 - [x] Verified on the live 3173 workbook: SC December, January; pivot December 2026, January 2027
+
+## Bookend pairs: per-language scope (2026-10-12)
+
+Lee: Imprenta PGE TS 26Q4 (3167) has Cantonese + Mandarin bookend lines and a Chinese
+ROS bonus line; the bookend utility assigned one pair set contract-wide.
+
+- [x] `_bookend_breaks(rows, language)` stamps each break with the language airing at its
+      (weekday, ORA) via `classify_language_frames`; filter keeps one language
+- [x] load endpoint returns `languages` (break/spot counts + lines); page gets a Language select
+- [x] assign endpoint takes `language`; PERCROTATION only on the scoped lines; 0% pool copies
+      dropped contract-wide
+- [x] tests/unit/test_bookend_pairs_language.py; live check 3167: Cantonese 21 / Mandarin 39, 0 bad
+- [ ] Lee assigns the two pairs on /traffic/bookend-pairs (Cantonese, then Mandarin)

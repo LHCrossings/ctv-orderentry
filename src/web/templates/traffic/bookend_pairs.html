@@ -228,6 +228,10 @@
 
         .sep { color: var(--text-muted); font-weight: 700; }
 
+        .lang-summary { flex-basis: 100%; display: flex; flex-direction: column; gap: 3px; font-size: 0.8rem; color: var(--text-muted); }
+        .lang-summary .lang-name { font-weight: 700; color: var(--text-primary); }
+        .lang-summary .lang-line { color: var(--text-muted); }
+
         .warn-badge {
             display: inline-block;
             background: rgba(235,203,139,.2);
@@ -301,6 +305,12 @@
                 <input class="field-input" id="dateTo" type="date" onchange="refreshBreakCount()" />
             </div>
             <div class="field-group">
+                <label class="field-label">Language</label>
+                <select class="field-input" id="langSelect" onchange="renderCounts()">
+                    <option value="">All languages</option>
+                </select>
+            </div>
+            <div class="field-group">
                 <label class="field-label">Spot Prefix</label>
                 <input class="field-input" id="spotPrefix" placeholder="BVFL" style="width:90px;text-transform:uppercase"
                        oninput="this.value=this.value.toUpperCase()" />
@@ -320,6 +330,7 @@
                 <div class="banner-label" id="bannerBreaksLabel">Bookends</div>
             </div>
             <div id="oddWarning"></div>
+            <div class="lang-summary" id="langSummary"></div>
         </div>
 
         <!-- Step 2: Pair builder -->
@@ -417,14 +428,7 @@ async function loadContract() {
 
         document.getElementById('bannerCode').textContent   = contractData.header.code;
         document.getElementById('bannerDesc').textContent   = contractData.header.description || '';
-        document.getElementById('bannerBreaks').textContent = contractData.break_count;
-        document.getElementById('bannerBreaksLabel').textContent =
-            `Bookends × 2 = ${contractData.total_spots} spots`;
-
-        const warn = document.getElementById('oddWarning');
-        warn.innerHTML = contractData.odd_warning
-            ? '<span class="warn-badge">Odd spot count — check schedule</span>'
-            : '';
+        renderCounts();
 
         if (!document.getElementById('pairList').children.length) {
             pairCount = 0;
@@ -447,13 +451,45 @@ async function refreshBreakCount() {
     if (dateTo)   params.set('date_to',   dateTo);
     const resp = await fetch(`/api/traffic/bookend-pairs/${selectedContractId}?${params}`);
     if (!resp.ok) return;
-    const data = await resp.json();
-    document.getElementById('bannerBreaks').textContent = data.break_count;
+    contractData = await resp.json();
+    renderCounts();
+}
+
+// Language selector + banner counts. A multi-language bookend contract
+// (Imprenta PG&E: Cantonese + Mandarin lines, Chinese ROS bonus) gets one pair
+// per language; the server classifies each break by the language airing at its
+// day/time, and the selection scopes both the count shown and the Apply.
+function selectedLanguage() {
+    return document.getElementById('langSelect').value;
+}
+
+function selectedLanguageEntry() {
+    const lang = selectedLanguage();
+    return (contractData?.languages || []).find(l => l.language === lang) || null;
+}
+
+function renderCounts() {
+    if (!contractData) return;
+    const sel  = document.getElementById('langSelect');
+    const keep = sel.value;
+    const langs = contractData.languages || [];
+    sel.innerHTML = '<option value="">All languages</option>' + langs.map(l =>
+        `<option value="${escHtml(l.language)}">${escHtml(l.language)} (${l.break_count})</option>`).join('');
+    sel.value = langs.some(l => l.language === keep) ? keep : '';
+
+    const entry = selectedLanguageEntry();
+    const breaks = entry ? entry.break_count : contractData.break_count;
+    const spots  = entry ? entry.spot_count  : contractData.total_spots;
+    document.getElementById('bannerBreaks').textContent = breaks;
     document.getElementById('bannerBreaksLabel').textContent =
-        `Breaks × 2 = ${data.total_spots} spots`;
-    contractData = data;
-    document.getElementById('oddWarning').innerHTML = data.odd_warning
+        `${entry ? entry.language + ' ' : ''}Bookends × 2 = ${spots} spots`;
+    document.getElementById('oddWarning').innerHTML = contractData.odd_warning
         ? '<span class="warn-badge">Odd spot count — check schedule</span>' : '';
+
+    document.getElementById('langSummary').innerHTML = langs.map(l => `
+        <div><span class="lang-name">${escHtml(l.language)}</span> · ${l.break_count} bookend(s) ·
+            <span class="lang-line">${l.lines.map(x => `${escHtml(x.description)} (${x.spot_count})`).join(' · ')}</span></div>`
+    ).join('');
 }
 
 function addPair() {
@@ -596,8 +632,11 @@ async function applyPairs() {
     const total = pairs.reduce((s, p) => s + p.pct, 0);
     if (Math.abs(total - 100) > 0.01) { alert('Percentages must sum to 100%.'); return; }
 
-    const bookendCount = contractData?.break_count || 0;
-    if (!confirm(`Assign ${pairs.length} rotation pair(s) across ${bookendCount} bookend(s) for contract ${id}?`)) return;
+    const language = selectedLanguage();
+    const entry = selectedLanguageEntry();
+    const bookendCount = entry ? entry.break_count : (contractData?.break_count || 0);
+    const scope = language ? `${bookendCount} ${language} bookend(s)` : `all ${bookendCount} bookend(s)`;
+    if (!confirm(`Assign ${pairs.length} rotation pair(s) across ${scope} for contract ${id}?`)) return;
 
     const btn    = document.getElementById('applyBtn');
     const status = document.getElementById('statusMsg');
@@ -610,12 +649,12 @@ async function applyPairs() {
         const resp = await fetch(`/api/traffic/bookend-pairs/${id}/assign`, {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ date_from: dateFrom, date_to: dateTo, pairs }),
+            body:    JSON.stringify({ date_from: dateFrom, date_to: dateTo, pairs, language }),
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.detail || resp.statusText);
         status.className = 'status-msg ok';
-        status.textContent = `Done — ${data.breaks_assigned} bookend(s), ${data.spots_updated} spot(s) assigned.`;
+        status.textContent = `Done — ${data.breaks_assigned} ${language ? language + ' ' : ''}bookend(s), ${data.spots_updated} spot(s) assigned.`;
     } catch (e) {
         status.className = 'status-msg err';
         status.textContent = e.message;
