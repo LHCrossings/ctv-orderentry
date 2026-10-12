@@ -794,3 +794,10 @@ ROS bonus line; the bookend utility assigned one pair set contract-wide.
       dropped contract-wide
 - [x] tests/unit/test_bookend_pairs_language.py; live check 3167: Cantonese 21 / Mandarin 39, 0 bad
 - [ ] Lee assigns the two pairs on /traffic/bookend-pairs (Cantonese, then Mandarin)
+
+## MediaLive bitrate drop, every output -1 Mbps (2026-10-12, Lee "see if anyone notices")
+- [x] NYC, LAX: 6→5 Mbps, GOP 15→30, refs 3, B-ref on, look-ahead high (Main profile kept)
+- [x] SFO 8→7 + Tower 4→3, CVC/CMP/SEA/HOU/MMT/WDC 8→7, all with refs 3 / B-ref / LA high, GOP 90 kept
+- [x] Each channel stopped ~55 s, RUNNING 20-30 s after start; readback exact, no other encoder drift; restore files logs/medialive-*-20261012.json
+- [ ] Verify the egress drop on the October bill (USW2-DataTransfer-Out-Bytes, Sep = 53,136 GB / $4,531; expect ~5.3 TB/mo less ≈ $430/mo)
+- [ ] Watch for distributor/viewer complaints for two weeks; Charter NYC/LAX and Comcast x2 pulls
