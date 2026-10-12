@@ -773,6 +773,5 @@ Plan:
 ### Review (2026-10-12, entered)
 - [x] Parser + automation + 7-file registration + 20 tests (fixture `tests/fixtures/vida/`); full unit suite 1,162 green
 - [x] Rehearsed with rollback (3 contracts), then LIVE: **3172 Vida PSE 2610** (9 lines, 195 spots, $6,000 + Production $1,000 on line 85788), **3173 Vida PSE 2612** (7 lines, 238, $7,000, note on lines), **3174 Vida PSE 2703** (8 lines, 239, $7,000, note on lines). Customer 344 / agency 260 / P_AGENZIA 0 / SEA / separation 5-0-0 / ROWSTATUS 0 / blocks on every line; 0 placed at readback
-- [x] Mishap: entry ran with CENTROMEDIA 316 after a failed Calendar patch; hand-set to 317, Lee: "I want broadcast" → back to 316 (verified). Lee is asking Charmaine; billing type stays whatever she says — flip by hand if Calendar
+- [x] Mishap: entry ran with CENTROMEDIA 316 after a failed Calendar patch; hand-set to 317, Lee: "I want broadcast" → back to 316 (verified). Charmaine confirmed Broadcast 10/12 — CLOSED
 - [ ] Traffic: PUGET30V03 "Puget Flex 1008 VIE" (151183) for 2610 once scheduled; December/March creative unknown — line notes on 3173/3174 say so
-- [ ] If Charmaine says Calendar: UPDATE CENTROMEDIA=317 on 3172-3174 and add a gather prompt (Broadcast/Calendar, precedent shown) to vida_automation
