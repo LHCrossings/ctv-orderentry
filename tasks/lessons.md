@@ -4,6 +4,38 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Production Write Ran After a Failed Edit — Every Step Before a Live Write Is Chained, and a Heredoc Is Not a Chain Link
+
+**Session:** Lee, Vida / Puget Sound Energy first entry — "why are you putting it on Calendar billing?" (2026-10-12)
+
+**Rule:** The entry command was one Bash call: a Python heredoc that patched the automation
+(add `media_center_id=317`), then `ruff && pytest && git commit && push && deploy`, then the LIVE
+entry. The patch's `assert old in s` failed because `ruff format` had rewrapped the line a step
+earlier; the heredoc's exit status did not stop the chain (the `&&` chain started on the NEXT
+line), `git commit` found nothing to commit and the `&&` chain died there — but the entry was a
+separate statement after an `echo`, so it ran anyway, with the unpatched code. Three contracts
+entered with a value I had just said I would change. Second defect in the same minute: the value
+itself was an inference (two 2024 PSE contracts were Calendar; the flights are calendar months)
+that I had put into the plan as settled; Lee wanted Broadcast and asked why.
+
+**How to apply:**
+1. A live write is the LAST statement of a chain whose every link is `&&`, including the edit
+   step: run the patch as `python3 script.py && ...`, never as a heredoc followed by a newline.
+   Better: never bundle an edit with a production write at all — edit, test, commit in one call,
+   read the result, THEN write in a separate call.
+2. An `assert old in s` edit right after `ruff format` is a known trap: format first, then read
+   the exact text, then edit (or use the Edit tool on the current file).
+3. Billing type (CENTROMEDIA Broadcast/Calendar) at ENTRY is a choice the operator makes per
+   client, not a derivation from the flight shape or a prior contract. Offer it as an option with
+   the precedent named, like the code/description previews — the 9/28 "naming convention is the
+   user's call" lesson, applied to billing. The 9/3 lesson ("billing type comes from Etere, not
+   the operator") is about BACKWRITE reading the contract, not about entry choosing it.
+4. Readback after the live write (fresh connection: headers, line counts/spots/money, separation
+   frames, CONTRATTISPESE, blocks per line) caught nothing wrong — because the wrong value was
+   the one I had verified against. A readback checks the write, not the decision.
+
+---
+
 ## A "Copy of the Source Line" Copied Its SCHEDULED Status — ROWSTATUS 1 Means "Done", and the Scheduler Skips It; Read the Notes Before Diffing Columns
 
 **Session:** Lee, Lexus make-good — "I see the new MG lines for 208 and 210, but nothing for estimate 202" … "we have gone over what the different status numbers mean before. It should be in notes" (2026-10-09)
