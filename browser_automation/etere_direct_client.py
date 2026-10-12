@@ -233,6 +233,7 @@ AGENCY_IDS: dict[str, int] = {
     "FLOWERS": 353,  # Flowers Communications Group (Illinois Lottery 354; Commissione 15%)
     "GAUGER": 262,  # Gauger + Associates (Shea Homes 263; Commissione 15%)
     "MATSON": 483,  # Matson Media LLC (CA Alliance of Family Owned Businesses PAC 484; 0%; the sheet prints "National Media")
+    "VIDA": 260,  # The Vida Agency (Puget Sound Energy 344; ANAGRAF says 15% but PSE contracts carry 0% — passed explicitly)
     "IW": 12,  # IW Group, Inc. (Covered California; Commissione 15%). ANAGRAF 13 is the Lexus Dealer Association (client), not IW.
 }
 

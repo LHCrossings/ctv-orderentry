@@ -157,6 +157,7 @@ class OrderProcessingService:
         OrderType.SJCOUNTY: "_process_sjcounty_order",
         OrderType.HPSJ: "_process_hpsj_order",
         OrderType.SANMATEO: "_process_sanmateo_order",
+        OrderType.VIDA: "_process_vida_order",
         OrderType.CAFOB: "_process_cafob_order",
         OrderType.GAUGER: "_process_gauger_order",
         OrderType.ILLOTTERY: "_process_illottery_order",
@@ -210,6 +211,7 @@ class OrderProcessingService:
         OrderType.SJCOUNTY,
         OrderType.HPSJ,
         OrderType.SANMATEO,
+        OrderType.VIDA,
         OrderType.CAFOB,
         OrderType.GAUGER,
         OrderType.ILLOTTERY,
@@ -3490,6 +3492,42 @@ class OrderProcessingService:
                 success=False,
                 contracts=[],
                 order_type=OrderType.NTOOITIVE,
+                error_message=error_detail,
+            )
+
+    def _process_vida_order(self, order: Order, shared_session=None) -> ProcessingResult:
+        """Process a Vida Agency / Puget Sound Energy proposal — one contract per flight."""
+        inp = order.order_input if isinstance(order.order_input, dict) else {}
+        try:
+            from browser_automation.parsers.vida_parser import parse_vida
+            from browser_automation.vida_automation import run_vida_order
+
+            parsed = parse_vida(str(order.pdf_path))
+            results = run_vida_order(parsed, inp)  # list of (code, success)
+
+            contracts = [
+                Contract(contract_number=code, order_type=OrderType.VIDA)
+                for code, ok in results
+                if ok
+            ]
+            if not contracts:
+                return ProcessingResult(
+                    success=False,
+                    contracts=[],
+                    order_type=OrderType.VIDA,
+                    error_message="Vida processing failed — check output above",
+                )
+            return ProcessingResult(success=True, contracts=contracts, order_type=OrderType.VIDA)
+
+        except Exception as exc:
+            import traceback
+
+            error_detail = f"Vida processing error: {exc}\n{traceback.format_exc()}"
+            print(f"\n✗ Vida processing failed: {exc}")
+            return ProcessingResult(
+                success=False,
+                contracts=[],
+                order_type=OrderType.VIDA,
                 error_message=error_detail,
             )
 

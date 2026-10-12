@@ -64,6 +64,7 @@ class OrderType(Enum):
     ILLOTTERY = "illottery"  # Illinois Lottery via Flowers Communications — house proposal PDF, GROSS, agency 353 @ 15%, CMP
     GAUGER = "gauger"  # Gauger + Associates — NET "Broadcast Order" PDF, agency 262 @ 15% (Shea Homes, SFO)
     IWCCA = "iwcca"  # IW Group / Covered California — NET "TELEVISION ORDER" IO, agency 12 @ 15%
+    VIDA = "vida"  # The Vida Agency / Puget Sound Energy — house proposal PDF, NET, agency 260 @ 0%, SEA
     AI_FALLBACK = "ai_fallback"
     UNKNOWN = "unknown"
 
@@ -165,6 +166,7 @@ KNOWN_AGENCY_KEYWORDS: list[str] = [
     "galeforce",
     "galeforcemedia",
     "ntooitive",
+    "the vida agency",
     "time advertising",
     "3olivesmedia",
     "bvk",

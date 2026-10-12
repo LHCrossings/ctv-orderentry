@@ -727,3 +727,45 @@ Nothing was placed, so no unschedule or ghost check was needed. The charge date 
 - [x] New Control Room card /scripts/blacklist-spots (`scripts/blacklist_scheduled_spots.py`): same inputs as delete-spots, removes both tables + Traffic_ScheduleList insert/PassageMiss, refuses aired spots, backup .sql, in-txn verify, accounting readback; rehearsed with rollback on 2945 10/10
 - [ ] delete-spots still deletes trafficPalinse only (Lee: keep for now) — flagged
 - Note: Lee renamed contract 2945's code to `SacRT 2610`
+
+## Vida Agency / Puget Sound Energy "Flex" parser + late-start entry (2026-10-12)
+
+Source: `/mnt/c/Work Temp/!New/!Orders/Crossings TV Media Proposal_ The Vida Agency_Puget Sound Flex _Revised.pdf`
+(Charmaine "Crossings TV Media Proposal" template, 2 pages, SEA, :30, NET rates). AE note: Tuesday 10/13 start,
+NO agency commission, creative PUGET30V03 "Puget Flex 1008 VIE" (FILMATI 151183), enter the whole order, December
+traffic unknown → note to check in late Nov.
+
+Facts gathered:
+- ANAGRAF: The Vida Agency = 260 (Commissione 15, FlagAgent 2); Puget Sound Energy = 344 (AGENZIA 260, Commissione 0).
+  Precedent contracts 1476 `Vida PSE 2410` / 1589 `Vida PSE 2411`: P_AGENZIA 0.00, CENTROMEDIA 317 Calendar,
+  desc `Puget Sound Energy - <campaign> <yymm>`, lines `M-Su 11a-12n Viet` / `M-Su 12n-1p Viet` / `BONUS M-Su Viet ROS`,
+  SEA (5), Rotation, separation 5/0/0, rate = net.
+- Order: p1 "October & December" (weeks 12-Oct..2-Nov = flight 10/12-11/8; 30-Nov..28-Dec = flight 12/1-12/31),
+  p2 "March 2027" (1-Mar..29-Mar, flight 3/1-3/31). Lines: Viet News/Variety M-Su 11a-12p $40; Viet Drama M-Su
+  10a-11a/12p-1p $40 (dual daypart); Bonus Viet ROS $0 (value $40). Production p1: Value $1,950, Net Amt $1,000;
+  Net amount $14,000 = airtime 13,000 + 1,000. p2 airtime 7,000. Page-2 row names WRAP onto their own line; money
+  prints with stray spaces (`$ 4 0.00`, `$ 1 ,000.00`).
+- `create_contract_header(agency_pct=0.0)` is honoured over the ANAGRAF lookup (etere_direct_client.py:672);
+  `media_center_id` kwarg exists. Vietnamese CTV window (language_windows.py:58) = M-Su 10:00-13:00.
+
+Plan:
+- [ ] `browser_automation/parsers/vida_parser.py`: `parse_vida(path)` → `VidaOrder` (per-page tables → flights by
+      header date ranges; week columns by header label; wrapped row names; `_money()` tolerant of spaces, None on
+      unreadable; `rates_are_net=True`). Reconcile and RAISE: rate×units == Value per line; Σ week cells == Total
+      Units; PAID/BONUSES rows per column; Σ Net Amt (+ production net) == Net amount. Flight = contract unit.
+- [ ] `browser_automation/vida_automation.py` (clone of ntooitive_automation): gather (customer 344 / agency 260,
+      commission 0 explicit, billing from ANAGRAF/precedent Calendar, separation default 5/0/0 from precedent,
+      code/desc previews per flight, start date ALWAYS asked — default Tue 10/13 for flight 1, 12/1 for flight 2,
+      3/1 for flight 3), `line_planner.plan_ranges` per flight (short first week own cap, short last week),
+      production on the first paid line of contract 1 + `verify_production_charge`, CTV_Customers upsert,
+      December note on contract 2 (line note ≤399 chars: "check traffic/creative for December").
+- [ ] Registration (7 files): OrderType.VIDA; service handler + `_DIRECT_DB_ORDER_TYPES`; bridge `_REGISTRY` /
+      `_DIRECT_DB_KEYS` / `_DIRECT_DB_TESTED_KEYS`; orchestrator `_INPUT_GATHERERS`; detection
+      ("Crossings TV Media Proposal" + "The Vida Agency", BEFORE the Charmaine fallback) + filename rule +
+      `_SCAN_CACHE_VERSION` bump; charmaine exclusions; `AGENCY_IDS["VIDA"]=260`.
+- [ ] Tests: fixture `tests/fixtures/vida/` (this PDF); pin 3 flights / 3 lines each / unit totals 325+108, 175+64;
+      tamper tests (dropped cell, blanked rate, slid column) refuse; line-plan tests for Tue 10/13, Tue 12/1, short
+      last week 3/29-3/31; structural test that the handler imports the bridge's parser.
+- [ ] Live entry (Lee's go-ahead given: "put the entire order"): run the gather, show the per-flight plan, enter 3
+      contracts, read back lines/production from a fresh connection, run language-window check.
+- [ ] Memory: project_vida_parser.md; reminder for December creative.

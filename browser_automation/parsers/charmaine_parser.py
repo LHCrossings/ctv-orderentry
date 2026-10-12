@@ -763,7 +763,7 @@ def _parse_page(
                     _skip_names = [
                         "worldlink", "tatari", "tcaa", "daviselen", "misfit",
                         "igraphix", "admerasia", "opad", "rpm", "sagent",
-                        "galeforce", "ntooitive",
+                        "galeforce", "ntooitive", "the vida agency",
                     ]
                     if part_clean.lower() in _skip_names:
                         continue

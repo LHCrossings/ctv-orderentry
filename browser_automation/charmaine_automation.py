@@ -52,7 +52,7 @@ KNOWN_AGENCIES = [
     "worldlink", "tatari", "tcaa", "daviselen", "misfit",
     "igraphix", "admerasia", "opad", "rpm", "h&l partners",
     "impact marketing", "sagent", "galeforce", "galeforcemedia",
-    "ntooitive",
+    "ntooitive", "the vida agency",
 ]
 
 

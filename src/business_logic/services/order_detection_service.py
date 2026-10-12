@@ -170,6 +170,11 @@ class OrderDetectionService:
         if self._is_ntooitive(first_page_text):
             return OrderType.NTOOITIVE
 
+        # The Vida Agency (Puget Sound Energy) — house "Flight schedule" proposal sent
+        # by the agency; agency-keyed, must precede the Charmaine-template fallback
+        if self._is_vida(first_page_text):
+            return OrderType.VIDA
+
         # Illinois Lottery (Flowers Communications) house proposal — advertiser-keyed;
         # must precede the Charmaine-template fallback
         if self._is_illottery(first_page_text):
@@ -321,6 +326,12 @@ class OrderDetectionService:
         from browser_automation.parsers.iwcca_parser import is_iwcca_text
 
         return is_iwcca_text(text)
+
+    def _is_vida(self, text: str) -> bool:
+        """The Vida Agency proposal: "Agency The Vida Agency" on a "Flight schedule" page."""
+        from browser_automation.parsers.vida_parser import is_vida_text
+
+        return is_vida_text(text)
 
     def _is_ntooitive(self, text: str) -> bool:
         """
@@ -1078,6 +1089,8 @@ def detect_from_filename(filename: str) -> OrderType:
         return OrderType.CRISPIN
     if "NTOOITIVE" in name_upper:
         return OrderType.NTOOITIVE
+    if "VIDA AGENCY" in name_upper or "VIDA_AGENCY" in name_upper:
+        return OrderType.VIDA
     if "ILLINOIS LOTTERY" in " ".join(name_upper.split()) or "ILLOTTERY" in name_upper:
         return OrderType.ILLOTTERY
     if "GAUGER" in name_upper:

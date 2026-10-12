@@ -163,6 +163,11 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
         "gather_ntooitive_inputs",
         "Ntooitive / L.A. Care",
     ),
+    OrderType.VIDA: (
+        "browser_automation.vida_automation",
+        "gather_vida_inputs",
+        "The Vida Agency / Puget Sound Energy",
+    ),
     OrderType.SJCOUNTY: (
         "browser_automation.sjcounty_automation",
         "gather_sjcounty_inputs",
