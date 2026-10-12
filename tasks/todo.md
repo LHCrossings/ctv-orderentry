@@ -775,3 +775,9 @@ Plan:
 - [x] Rehearsed with rollback (3 contracts), then LIVE: **3172 Vida PSE 2610** (9 lines, 195 spots, $6,000 + Production $1,000 on line 85788), **3173 Vida PSE 2612** (7 lines, 238, $7,000, note on lines), **3174 Vida PSE 2703** (8 lines, 239, $7,000, note on lines). Customer 344 / agency 260 / P_AGENZIA 0 / SEA / separation 5-0-0 / ROWSTATUS 0 / blocks on every line; 0 placed at readback
 - [x] Mishap: entry ran with CENTROMEDIA 316 after a failed Calendar patch; hand-set to 317, Lee: "I want broadcast" → back to 316 (verified). Charmaine confirmed Broadcast 10/12 — CLOSED
 - [ ] Traffic: PUGET30V03 "Puget Flex 1008 VIE" (151183) for 2610 once scheduled; December/March creative unknown — line notes on 3173/3174 say so
+
+## Backwrite monthly breakdown chronological across a year boundary (2026-10-12)
+- [x] SC breakdown keyed months by NAME, sorted by calendar position → January above December on 3173 (Lee)
+- [x] Sheet1 pivot sorted "Month Year" strings alphabetically (August above July)
+- [x] Both key on the broadcast-month date now; labels derived at write time; `tests/unit/test_backwrite_monthly_order.py`
+- [x] Verified on the live 3173 workbook: SC December, January; pivot December 2026, January 2027

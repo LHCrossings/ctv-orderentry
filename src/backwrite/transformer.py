@@ -453,6 +453,25 @@ def _apply_snapshot(ws, snapshot_pair, new_row: int, ref_row: int) -> None:
         )
 
 
+def _month_sort_key(key) -> tuple:
+    """Chronological sort key for a monthly-total key.
+
+    Keys are broadcast-month dates; a bare month name (legacy callers) sorts by
+    calendar position inside one notional year.
+    """
+    if isinstance(key, (date, datetime)):
+        return (key.year, key.month)
+    month_order = {m: i for i, m in enumerate(calendar.month_name) if m}
+    return (0, month_order.get(str(key), 99))
+
+
+def _month_label(key) -> str:
+    """Month name shown in the Sales Confirmation breakdown ('December')."""
+    if isinstance(key, (date, datetime)):
+        return key.strftime("%B")
+    return str(key)
+
+
 def _fill_monthly_breakdown(
     ws,
     monthly_gross: dict,
@@ -508,9 +527,10 @@ def _fill_monthly_breakdown(
     if not data_rows:
         return
 
-    # Sort months in calendar order
-    month_order = {m: i for i, m in enumerate(calendar.month_name) if m}
-    sorted_months = sorted(monthly_gross.keys(), key=lambda m: month_order.get(m, 99))
+    # Chronological order: keys are broadcast-month dates, so an order that
+    # crosses a calendar year lists December before January. (Month-NAME keys
+    # sorted by calendar position put January first — Lee, 10/12/2026.)
+    sorted_months = sorted(monthly_gross.keys(), key=_month_sort_key)
     n_needed = len(sorted_months)
     n_existing = len(data_rows)
     ref_snap = _snapshot_row(ws, data_rows[0])
@@ -529,7 +549,7 @@ def _fill_monthly_breakdown(
     for i, month_name_str in enumerate(sorted_months):
         rn = data_rows[i]
         if month_col:
-            ws.cell(row=rn, column=month_col).value = month_name_str
+            ws.cell(row=rn, column=month_col).value = _month_label(month_name_str)
         if gross_col:
             # Full precision — no rounding (rounding here drifts from the run sheet)
             ws.cell(row=rn, column=gross_col).value = monthly_gross[month_name_str]
@@ -882,10 +902,11 @@ def _fill_pivot(ws, run_rows: List[dict]) -> None:
     for rr in run_rows:
         m = rr.get("month")
         if isinstance(m, datetime):
-            key = m.strftime("%B %Y")
+            key = m.date()
             monthly_gross[key] += rr.get("gross_rate", 0) or 0
             monthly_net[key] += rr.get("station_net", 0) or 0
 
+    # Chronological, not alphabetical ("August 2026" must not precede "July 2026")
     months = sorted(monthly_gross)
     if not months:
         return
@@ -933,7 +954,7 @@ def _fill_pivot(ws, run_rows: List[dict]) -> None:
         for cell in cells:
             col = cell.column - 1
             if col == month_col:
-                cell.value = month_name
+                cell.value = month_name.strftime("%B %Y")
             elif col == gross_col:
                 cell.value = round(monthly_gross[month_name], 2)
             elif col == net_col:
@@ -1578,7 +1599,9 @@ def generate_excel(
     for rr in run_rows:
         m = rr.get("month")
         if isinstance(m, datetime):
-            _mg[m.strftime("%B")] += rr.get("gross_rate", 0) or 0
+            # Key on the broadcast-month DATE so Dec-26 and Jan-27 sort and
+            # label correctly; the label is derived at write time.
+            _mg[m.date()] += rr.get("gross_rate", 0) or 0
     # Full precision — the Sales Confirmation breakdown writes gross as-is and
     # derives net + totals with Excel formulas, so nothing rounds until display.
     monthly_gross = {k: v for k, v in _mg.items()}
