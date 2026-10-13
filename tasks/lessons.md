@@ -4,6 +4,50 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Retry Was Wrapped Around a 1205 Whose Partner Was Never Looked Up — SQL Server Keeps Every Deadlock Graph; Read It Before Naming the Actor (98% Were Our Own Watermark SELECT)
+
+**Session:** Maija, "wait time seems longer … Ashe got this new error after the long wait" (2026-10-13)
+
+**Rule:** The 10/8 Finish fix retried a 1205 three times on the assumption that the partner was
+"the scheduler, Exec Editor or another Finish". Nobody had read a deadlock graph. The
+`system_health` extended-event ring (readable after `GRANT VIEW SERVER STATE TO [etere_app]`,
+granted by Lee 10/13; `scripts/deadlock_report.py`) held 16,286 graphs since 7/10: 98% were
+`_insert_event`'s two watermark SELECTs (9/14 identity fix) — the identity read seeks
+`TPALINSE#ID_FILMATI2 (ID_FILMATI, DATA, LIVELLO, COD_USER)`, walks the keys the sibling market
+threads just inserted for the same asset, waits on their X locks, and two threads waiting on
+each other's uncommitted row is the cycle. A Daily Programming run deadlocked 200-500 times
+with itself (each one a full-market rollback and retry; runs of 10-27 minutes), and any Finish
+that ran during one was drawn in: Ashe's SEA 10/11 Finish from the Bee was the victim seven
+times in 70 s on Saturday 06:26 PT while the Jumpbox ran DP for 10/13-10/14 East/Central —
+two shows, three attempts each, exactly the screenshot. The retry's 1-3 s delays cannot
+outlast a storm we generate ourselves. Lee's "one show, one market at a time, never an issue"
+is the control: with one writer there is nothing to cycle with. The zone buttons (10/7) made
+two-host, two-zone concurrent DP the normal workflow, so the storm got louder the same week
+the retry shipped.
+
+**How to apply:**
+1. Before writing "X deadlocks with Y", run `scripts/deadlock_report.py --grep <stmt>`; the
+   graph names the partner's statement, host, program and wait. A retry built without it is
+   a guess with a sleep in it (same family as 9/15 "Etere rewrote it" and 8/27 "probe before
+   stating").
+2. A read that wants only its OWN session's row (identity after insert, a watermark that
+   only has to be older than the insert) reads `WITH (NOLOCK)`; the shared index path is
+   where sibling transactions' uncommitted keys live. Pinned by
+   `test_watermark_reads_never_wait_on_other_markets_uncommitted_rows`.
+3. Verify a contention fix on the next REAL runs, not a harness: `deadlock_report.py
+   --since <deploy date>` — a DP run should show near zero graphs (the 94 SP-vs-SP cycles
+   since July are the residue the retries still cover). The classifier refused a 5-thread
+   rolled-back reproduction on production; the graphs were the better evidence anyway.
+4. Timing a Finish from Lee's laptop (KL → Oregon RTT) measures the network, not the tool:
+   110 s with the session idle at every sample. Measure from the Bee/Jumpbox.
+5. Etere's own `EtereSch.exe` opens `begin tran schedulechange; update tpalinse … set
+   type=type where data=… and cod_user=…` — an X lock on every live row of a market-day —
+   for seconds at a time; 46 graphs since July had it as a party, and our Finish mostly WON
+   those (the scheduler was the victim). Not the cause here, but it is why a Finish can
+   block for a few seconds with nothing of ours running.
+
+---
+
 ## A Production Write Ran After a Failed Edit — Every Step Before a Live Write Is Chained, and a Heredoc Is Not a Chain Link
 
 **Session:** Lee, Vida / Puget Sound Energy first entry — "why are you putting it on Calendar billing?" (2026-10-12)

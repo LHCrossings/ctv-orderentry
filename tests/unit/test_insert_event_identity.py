@@ -114,3 +114,16 @@ def test_every_per_market_except_block_tags_retryable():
     src = inspect.getsource(dpr)
     assert '"_deadlock": _is_deadlock(exc)' not in src
     assert src.count('"_deadlock": _is_retryable(exc)') >= 5
+
+
+def test_watermark_reads_never_wait_on_other_markets_uncommitted_rows():
+    """98% of every SQL Server 1205 in this database (16,286 graphs, 7/10-10/13) was one
+    of _insert_event's two SELECTs waiting on a sibling market thread's uncommitted row
+    in TPALINSE#ID_FILMATI2. They read dirty on purpose: the row wanted is this session's
+    own, and the watermark only has to be older than the insert that follows it."""
+    cur = _Cur(before=15750508, found=15758610)
+    _insert_event(cur, 10, "2026-09-12", 1, 2, 3, 2793520, 139940, 1798)
+    reads = [sql for sql, _ in cur.executed if sql.startswith("SELECT")]
+    assert len(reads) == 2
+    for sql in reads:
+        assert "FROM TPALINSE WITH (NOLOCK)" in sql, sql

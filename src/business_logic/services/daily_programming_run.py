@@ -317,9 +317,19 @@ def _insert_event(cur, cod_user, d, sched, block, seg, ora, filmati, duration):
     ghost, Finish seated the ghost, and the real new row stayed where Etere had dropped it
     (behind the Station ID) — caught by the post-write verify, so the hour rolled back
     with "content still sits behind the Station ID". Every placement path shares this
-    helper, so Daily Programming's re-place-after-delete had the same exposure."""
+    helper, so Daily Programming's re-place-after-delete had the same exposure.
+
+    Both reads are NOLOCK (2026-10-13). SQL Server's own deadlock log (system_health,
+    16,286 graphs since July) showed 98% of every 1205 in this database was one of these
+    two SELECTs: the identity read seeks TPALINSE#ID_FILMATI2 (ID_FILMATI, DATA, LIVELLO,
+    COD_USER), so it walks the keys the OTHER market threads just inserted for the same
+    asset, waits on their X locks, and two threads waiting on each other's uncommitted
+    row is the cycle. Ashe's Finish on SEA 10/11 lost that coin flip seven times in 70 s
+    against a Daily Programming run on the Jumpbox. Reading dirty is safe here: the row
+    we want is our own (always visible to this session), and `before` only has to be
+    older than our insert — any id that existed, committed or not, qualifies."""
     cur.execute(
-        "SELECT ISNULL(MAX(ID_TPALINSE), 0) FROM TPALINSE WHERE COD_USER=%s AND DATA=%s",
+        "SELECT ISNULL(MAX(ID_TPALINSE), 0) FROM TPALINSE WITH (NOLOCK) WHERE COD_USER=%s AND DATA=%s",
         (cod_user, d),
     )
     before = cur.fetchone()[0]
@@ -328,7 +338,7 @@ def _insert_event(cur, cod_user, d, sched, block, seg, ora, filmati, duration):
     )
     late_error = _drain_results(cur)
     cur.execute(
-        "SELECT MAX(id_tpalinse) FROM TPALINSE WHERE COD_USER=%s AND DATA=%s AND ID_FILMATI=%s"
+        "SELECT MAX(id_tpalinse) FROM TPALINSE WITH (NOLOCK) WHERE COD_USER=%s AND DATA=%s AND ID_FILMATI=%s"
         " AND ORA=%s AND PART=0 AND LIVELLO=0 AND ID_TPALINSE>%s",
         (cod_user, d, filmati, ora, before),
     )

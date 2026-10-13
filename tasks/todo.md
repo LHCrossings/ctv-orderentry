@@ -801,3 +801,13 @@ ROS bonus line; the bookend utility assigned one pair set contract-wide.
 - [x] Each channel stopped ~55 s, RUNNING 20-30 s after start; readback exact, no other encoder drift; restore files logs/medialive-*-20261012.json
 - [ ] Verify the egress drop on the October bill (USW2-DataTransfer-Out-Bytes, Sep = 53,136 GB / $4,531; expect ~5.3 TB/mo less ≈ $430/mo)
 - [ ] Watch for distributor/viewer complaints for two weeks; Charter NYC/LAX and Comcast x2 pulls
+
+## Finish/DP deadlock storm — Maija "wait time longer", Ashe 3×1205 on SEA 10/11 (2026-10-13)
+
+- [x] Lee granted VIEW SERVER STATE to etere_app; read 16,286 system_health deadlock graphs since 7/10
+- [x] Root cause: `_insert_event` watermark SELECTs seek TPALINSE#ID_FILMATI2 across sibling markets' uncommitted rows (98% of all 1205s); Saturday 06:26 PT SEA 10/11 Finish (Bee) vs Jumpbox DP 10/13-10/14 E/C = 7 victims in 70 s
+- [x] Fix: both watermark reads `WITH (NOLOCK)` + structural test; `scripts/deadlock_report.py`
+- [x] 1173 unit tests green; ruff clean
+- [ ] Verify on the next real DP runs: `uv run python3 scripts/deadlock_report.py --since 2026-10-14` should show near-zero graphs per run
+- [ ] Reply to Maija (draft in the session summary)
+- [ ] If residual Finish 1205s persist after the fix, lengthen `apply_window_retrying` delays (2/4/8 s) — not before
