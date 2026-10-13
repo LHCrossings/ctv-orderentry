@@ -2716,3 +2716,24 @@ fixed the form, and we now bypass it entirely — the columns must mean what the
    its placed lines (event 15) and was left for Lee to call.
 3. A mechanical sweep over N files is verified by the structural test, not by the diff summary —
    `uniq -c` on the changed lines showed 31 clean swaps and still hid the 32nd.
+
+---
+
+## A Rule Stated in Prose Has More Than One Rendering — Ask the User to Rewrite the Example List, Not to Confirm Mine
+
+**Session:** Lee, Lexus spot renaming (2026-10-13)
+
+**Rule:** Lee described his serial rule in a paragraph ("same name in the title gets the same
+number … add -NY or -SF"). I rendered it twice, each time as "one serial per title across
+markets", and asked him to confirm three edge cases. He instead rewrote the twelve lines
+himself, and the rule was "one serial per title AND agency tag" (LEA-4 vs LWA-5 differ, the
+:15/:30/V cuts under one tag share). Every September row in the pool already followed that
+rule; I had read July's odd batch as the precedent.
+
+**How to apply:**
+1. When a user states a naming or grouping rule in prose, hand back the concrete list and
+   invite them to EDIT it, rather than asking yes/no questions about my paraphrase — their
+   edits encode the rule exactly, in one round.
+2. Before calling a pattern "the precedent", test it against EVERY prior batch; the rule
+   that fits all of them (Sept and SSE here) beats the one that fits the first batch seen.
+3. Record the final rendering (the user's own list) in memory, not my reading of it.
