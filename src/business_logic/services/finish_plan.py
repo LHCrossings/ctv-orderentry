@@ -255,13 +255,23 @@ def day_programs(rows: list[tuple]) -> list[dict]:
 
 
 def load_inventory(cur, market: int, date: str) -> list[Filler]:
+    """Every live PI/PSA with its last-aired time in this market over the past 14 days.
+
+    Both tables read WITH (NOLOCK) on purpose (Maija 10/13, WDC 10/13 07:51 PT): the query
+    walks every PI/PSA FILMATI row and, per row, seeks TPALINSE#ID_FILMATI2. A Daily
+    Programming thread that has just inserted that PI's fill rows and is now running
+    _apply_filmati_sync's UPDATE FILMATI holds X on those keys and wants X on the FILMATI
+    row this scan is reading — SQL Server picked this read as the 1205 victim three times
+    in fifteen minutes. The ranking only has to be approximately right (an uncommitted
+    placement counted as aired merely moves that PI down the rotation), so it never waits."""
     cur.execute(
         """
         SELECT f.ID_FILMATI, f.DESCRIZIO, f.DURATA,
-               ISNULL((SELECT MAX(CAST(t.DATA AS float) * 86400 + t.ORA / 29.97) FROM TPALINSE t
+               ISNULL((SELECT MAX(CAST(t.DATA AS float) * 86400 + t.ORA / 29.97)
+                       FROM TPALINSE t WITH (NOLOCK)
                        WHERE t.ID_FILMATI = f.ID_FILMATI AND t.COD_USER = %s AND t.LIVELLO = 0
                          AND t.DATA BETWEEN DATEADD(day,-14,%s) AND %s), 0)
-        FROM FILMATI f
+        FROM FILMATI f WITH (NOLOCK)
         WHERE (f.DESCRIZIO LIKE 'PI-%%' OR f.DESCRIZIO LIKE 'PSA-%%') AND f.DESCRIZIO NOT LIKE 'DO NOT%%'
           AND (f.DATA_SCAD IS NULL OR f.DATA_SCAD > GETDATE()) AND f.DURATA < 29.97*120
         """,

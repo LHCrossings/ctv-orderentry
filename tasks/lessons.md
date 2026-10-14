@@ -4,6 +4,36 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## The Second Finish Victim Was a READ With No Retry — a Guard Added to the Write Path Is Not Added to the Page That Loads Before It
+
+**Session:** Maija forwarded a 1205 on the Fill & Finish WDC 10/13 day list (2026-10-14)
+
+**Rule:** The 10/8 retry covered `apply_window`; the 10/13 NOLOCK covered `_insert_event`'s
+watermark reads. The day list (`/finish/day` → `list_programs` → `plan_window` →
+`load_inventory`) had neither, and the graph for spid 132 (07:51:27 PT, the Bee) shows it as
+victim: the PI/PSA inventory scan held S on FILMATI row 115084 (Ship of Mercy) while its
+last-aired subquery seeked `TPALINSE#ID_FILMATI2` into a Daily Programming thread's
+uncommitted fill rows for the same PI, and that thread's `_apply_filmati_sync` UPDATE FILMATI
+wanted X on the row. Same cycle three times in fifteen minutes (07:46, 07:51, 08:01) while
+someone ran DP for 10/13 from the Bee at 07:44. The watermark fix held — zero
+`SELECT MAX(id_tpalinse)` victims on 10/13 against ~20/day before — and the SP-vs-SP
+residue (150 on 10/13, 122 on 10/7, 190 on 10/9) is the retries' job, not new.
+
+**How to apply:**
+1. When a 1205 lesson lands on one statement, list every other read the same page runs
+   BEFORE the user can click (`grep -n "cur.execute" finish_plan.py finish_service.py`) and
+   ask of each: does it need other sessions' uncommitted rows? A ranking, a watermark, an
+   inventory never does → `WITH (NOLOCK)`; a window read that the write will act on does.
+2. A read-only endpoint retries a 1205 the same as a write (`read_retrying` in
+   `routes/finish.py`, applied to day + plan); the only state is the request itself.
+3. The graph query is `scripts/deadlock_report.py --since <day>`; to pin a screenshot, grep
+   the raw XML for the Process ID the error names (`spid="132"`) — the inputbuf is the
+   exact statement, COD_USER and date included, so it is the incident, not a lookalike.
+4. Verify on the next DP morning: `deadlock_report.py --since <deploy day>` should list no
+   `SELECT f.ID_FILMATI` victims.
+
+---
+
 ## A Retry Was Wrapped Around a 1205 Whose Partner Was Never Looked Up — SQL Server Keeps Every Deadlock Graph; Read It Before Naming the Actor (98% Were Our Own Watermark SELECT)
 
 **Session:** Maija, "wait time seems longer … Ashe got this new error after the long wait" (2026-10-13)

@@ -12,6 +12,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import logging.handlers
+import random
+import time
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -79,6 +81,36 @@ class FinishApplyBody(BaseModel):
     refill: bool = False  # strip existing PI/PSA/ID and fill from scratch (Lee 9/1)
 
 
+READ_RETRY_ATTEMPTS = 3
+
+
+def read_retrying(what: str, fn, attempts: int = READ_RETRY_ATTEMPTS, sleep=time.sleep):
+    """Run a read-only unit of work, retrying when SQL Server makes it the 1205 victim.
+
+    The day list and the plan preview hold no transaction state, so a fresh attempt is
+    exactly the original request. Finish writes retry inside apply_window_retrying; the
+    reads had nothing (Maija 10/13: the WDC day list showed the raw OperationalError 1205
+    because the filler inventory read lost to a Daily Programming thread). Anything that is
+    not a 1205 propagates on the first attempt."""
+    from src.business_logic.services.daily_programming_run import _is_deadlock
+
+    for attempt in range(1, attempts + 1):
+        try:
+            return fn()
+        except Exception as exc:  # noqa: BLE001 — only a deadlock is retried; the rest propagates
+            if not _is_deadlock(exc) or attempt == attempts:
+                raise
+            delay = 0.5 * attempt + random.uniform(0.1, 0.9)
+            logger.warning(
+                "fill & finish %s: deadlock victim (1205) on read attempt %d/%d; retrying in %.1fs",
+                what,
+                attempt,
+                attempts,
+                delay,
+            )
+            sleep(delay)
+
+
 def _market_id(code: str) -> int:
     mid = MARKET_IDS.get((code or "").upper())
     if not mid:
@@ -101,8 +133,11 @@ def build_finish_router(templates: Jinja2Templates) -> APIRouter:
             from browser_automation.etere_direct_client import connect
             from src.business_logic.services.finish_service import list_programs
 
-            with connect() as conn:
-                return list_programs(conn.cursor(), mid, date)
+            def _read():
+                with connect() as conn:
+                    return list_programs(conn.cursor(), mid, date)
+
+            return read_retrying(f"day {market} {date}", _read)
 
         programs = await run_json(f"day {market} {date}", _run)
         if isinstance(programs, JSONResponse):
@@ -123,8 +158,11 @@ def build_finish_router(templates: Jinja2Templates) -> APIRouter:
             from browser_automation.etere_direct_client import connect
             from src.business_logic.services.finish_service import plan_window
 
-            with connect() as conn:
-                r = plan_window(conn.cursor(), mid, date, lo, hi, refill=refill)
+            def _read():
+                with connect() as conn:
+                    return plan_window(conn.cursor(), mid, date, lo, hi, refill=refill)
+
+            r = read_retrying(f"plan {market} {date} {lo}-{hi}", _read)
             return {k: v for k, v in r.items() if not k.startswith("_")}
 
         return await run_json(f"plan {market} {date} {lo}-{hi}", _run)
