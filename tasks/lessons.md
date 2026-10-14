@@ -4,6 +4,31 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Table Whose Comment Says "Mirrors X" Was Fixed Only at X — Pin Every Mirror With a Test the Day the First One Is Written
+
+**Session:** Lee, "I just set up a recording for 2359 MMT time, and it was an hour early … I thought we fixed that" (2026-10-14)
+
+**Rule:** The 10/6 fix moved MMT to Central in `airchecks.py` `MARKET_TZ` (the auto-schedule
+path) and nothing else. The manual form on `/airchecks` converts the typed market-local time
+with its own JavaScript `MARKET_TZS`, whose comment says it mirrors the server table; it stayed
+on Eastern, so Lee's 23:59 MMT ShopLC capture booked at 20:59 PT and had already run as
+"complete" by the time he reported it (rebooked by hand at 21:59 PT, capture 8d723a78). The
+8/13 memory note named both tables in one sentence; the 10/6 commit touched one.
+
+**How to apply:**
+1. When a value lives in two places and one is labelled a mirror, the fix is a test that reads
+   both and asserts equality (`test_airchecks_market_tz_mirror.py` regexes the template's
+   table against `MARKET_TZ`), written the day the first mirror exists. A comment is not a
+   constraint. Same family as the DP client/server airing grouping (7/29) and the
+   `language_windows` two-mirror drift.
+2. Before saying "fixed" for a table change, grep the repo for every other spelling of the
+   table's keys (`grep -rn "America/New_York"` here listed the template in one line).
+3. A capture the agent has already run cannot be edited (400 "only scheduled or pending");
+   rebook a new one at the right instant, and re-create rather than PATCH when the note
+   is wrong, because the subfolder is derived from the note at creation only.
+
+---
+
 ## The Second Finish Victim Was a READ With No Retry — a Guard Added to the Write Path Is Not Added to the Page That Loads Before It
 
 **Session:** Maija forwarded a 1205 on the Fill & Finish WDC 10/13 day list (2026-10-14)

@@ -406,8 +406,9 @@ let pollTimer = null;
 // machine-local clock. Agent-stored start_time strings are naive Datamover-local
 // (Pacific — the agent itself assumes this in _filename_ts).
 const MARKET_TZS = {
-    NYC: 'America/New_York',    WDC: 'America/New_York', MMT: 'America/New_York',
+    NYC: 'America/New_York',    WDC: 'America/New_York',
     CMP: 'America/Chicago',     HOU: 'America/Chicago',  DAL: 'America/Chicago',
+    MMT: 'America/Chicago',  // Lee 10/6 + 10/14: Central; this mirror missed the 10/6 fix
     SFO: 'America/Los_Angeles', SEA: 'America/Los_Angeles',
     LAX: 'America/Los_Angeles', CVC: 'America/Los_Angeles',
 };
