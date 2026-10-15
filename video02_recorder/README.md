@@ -4,9 +4,16 @@
 `PhoenixSrtRecorder` (SYSTEM, at startup, restart on failure, no time limit).
 Phoenix's listener accepts only ONE caller. VIDEO-02 is that caller and the
 Datavideo must NOT dial the Phoenix URL again or the recorder is locked out.
-For now the recorder also relays the untouched TS to the Datavideo as
-`udp://10.1.50.98:6005` (its input is `udp://@:6005`) so EDIT-02 Memory records
-in parallel; the Datavideo is to be retired later (Lee, 2026-10-15).
+
+Two ffmpeg processes: the **relay** holds the SRT connection and forwards the
+payload as opaque 1316-byte blocks (`-f rawvideo -video_size 1316x1`, byte-exact,
+verified by MD5) to the Datavideo (`udp://10.1.50.98:6005`, its input is
+`udp://@:6005`) and to loopback port 6010; the **recorder** reads loopback 6010
+and segments. Any ffmpeg remux of the relay (parsed or `+noparse`) left the
+Datavideo's Pi hardware decoder frozen or black: Phoenix sends one PES per
+field with no PTS on the second field, and ffmpeg's parser invents one.
+EDIT-02 Memory records in parallel from the Datavideo's SDI for now; the
+Datavideo is to be retired later (Lee, 2026-10-15).
 It writes hourly, clock-aligned files to
 `C:\PhoenixSRT\rec\Phoenix_YYYYMMDD_HHMM.mp4` (recorded as .ts, remuxed to .mp4
 once the hour closes). 1080i 29.97 H.264 + AAC LC + AC-3 (two audio tracks), about 2.5 GB per hour.

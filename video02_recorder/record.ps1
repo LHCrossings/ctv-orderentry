@@ -1,26 +1,29 @@
 # Phoenix TV SRT recorder - runs 24/7 on VIDEO-02 (Sacramento office) as the
 # Scheduled Task "PhoenixSrtRecorder" (SYSTEM, at startup, restart on failure).
 #
-# ffmpeg dials Phoenix's SRT listener (single-caller; VIDEO-02 is the only client)
-# and copies the transport stream to hourly .ts segments aligned to the wall clock. A .ts is readable up to the last byte written, so a crash or power
-# loss costs nothing already on disk. Once a segment is closed it is remuxed
+# Phoenix's SRT listener accepts ONE caller (verified 2026-10-14), so one ffmpeg ("relay")
+# holds that connection and forwards the SRT payload UNTOUCHED - opaque 1316-byte blocks,
+# seven TS packets each, no demux, no remux - to (a) the Datavideo decoder on the office LAN
+# (its input is udp://@:6005; it feeds SDI -> EDIT-02 Etere Memory, to be retired later) and
+# (b) a loopback port. A second ffmpeg ("recorder") reads the loopback port and writes hourly
+# .ts segments aligned to the wall clock; a .ts is readable up to the last byte written, so a
+# crash or power loss costs nothing already on disk. Once a segment is closed it is remuxed
 # (-c copy) to a standard .mp4 and the .ts is deleted.
 #
-# Retention: keep KEEP_HOURS of recordings, and delete oldest-first whenever
-# C: has less than MIN_FREE_GB free. Never touches the segment being written.
+# Why not one ffmpeg with two outputs: ffmpeg's remux splits each interlaced frame into two
+# field packets and invents the second field's PTS (Phoenix sends it without one); desktop
+# decoders cope, the Datavideo's Pi hardware decoder froze / went black (10/15). The relay
+# therefore never parses the stream; only the recording path does, offline-safe.
 #
+# Retention: keep KEEP_HOURS of recordings, and delete oldest-first whenever C: has less than
+# MIN_FREE_GB free. Never touches the segment being written.
 # The stream carries two audio tracks (AAC LC + AC-3); both are kept.
-# Status: $Root\status.json rewritten every loop (pid, current file, free GB).
-# Logs:   $Root\logs\recorder_YYYYMMDD.log and ffmpeg_YYYYMMDD_HHMMSS.log
+# Status: $Root\status.json rewritten every loop. Logs: $Root\logs\
 
 $Root       = "C:\PhoenixSRT"
 $Src        = "srt://47.181.223.221:6005?mode=caller&latency=2000000"   # latency in microseconds (2 s)
-# Phoenix's listener accepts ONE caller (verified 2026-10-14: refused while the Datavideo was
-# connected, accepted on the first try once it was moved off). VIDEO-02 is that one caller;
-# for now (Lee, 10/15) the untouched TS is also relayed over the Comcast subnet to the Datavideo
-# decoder (10.1.50.98, input set to udp://@:6005) so EDIT-02 Memory keeps recording in parallel;
-# the Datavideo is to be retired later. Empty string = no relay.
-$Relay      = "udp://10.1.50.98:6005?pkt_size=1316"
+$RelayTarget = "udp://10.1.50.98:6005?pkt_size=1316"  # Datavideo (Comcast subnet). "" = no relay
+$LoopPort   = 6010                                     # loopback hand-off relay -> recorder
 $RecDir     = "$Root\rec"
 $LogDir     = "$Root\logs"
 $FFmpeg     = "$Root\bin\ffmpeg.exe"
@@ -38,28 +41,39 @@ function Log($msg) {
     Add-Content -Path ("$LogDir\recorder_{0:yyyyMMdd}.log" -f (Get-Date)) -Value $line
 }
 
+function Start-Relay {
+    # Opaque pass-through: the SRT payload is read as 1316-byte "frames" and written verbatim,
+    # one UDP datagram per block, to every target. Nothing is parsed.
+    $ffLog = "$LogDir\relay_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date)
+    $args = @(
+        "-hide_banner", "-loglevel", "warning", "-nostdin",
+        "-f", "rawvideo", "-pixel_format", "gray", "-video_size", "1316x1",
+        "-i", $Src,
+        "-map", "0", "-c", "copy", "-f", "rawvideo", "-flush_packets", "1", "udp://127.0.0.1:${LoopPort}?pkt_size=1316"
+    )
+    if ($RelayTarget) { $args += @("-map", "0", "-c", "copy", "-f", "rawvideo", "-flush_packets", "1", $RelayTarget) }
+    $p = Start-Process -FilePath $FFmpeg -ArgumentList $args -NoNewWindow -PassThru -RedirectStandardError $ffLog
+    Log "relay started pid=$($p.Id) log=$ffLog"
+    return $p
+}
+
 function Start-Recorder {
     $ffLog = "$LogDir\ffmpeg_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date)
     $pattern = "$RecDir\${Prefix}_%Y%m%d_%H%M.ts"
-    # +noparse+nofillin: pass Phoenix's PES packets through as sent (ffmpeg's h264 parser
-    # otherwise splits each interlaced frame into two field packets with invented timestamps,
-    # which froze the Datavideo's hardware decoder on the relay, 10/15). -copyinkf keeps the
-    # packets before the first keyframe so a mid-GOP join does not stall the copy.
     $args = @(
         "-hide_banner", "-loglevel", "warning", "-nostdin",
-        "-fflags", "+noparse+nofillin",
-        "-i", $Src,
-        "-map", "0", "-c", "copy", "-copyinkf",
+        "-i", "udp://127.0.0.1:${LoopPort}?fifo_size=1000000&overrun_nonfatal=1",
+        "-map", "0", "-c", "copy",
         "-f", "segment", "-segment_time", "$SegSeconds", "-segment_atclocktime", "1",
         "-reset_timestamps", "1", "-strftime", "1", "-segment_format", "mpegts",
         $pattern
     )
-    if ($Relay) { $args += @("-map", "0", "-c", "copy", "-copyinkf", "-f", "mpegts", $Relay) }
-    $p = Start-Process -FilePath $FFmpeg -ArgumentList $args -NoNewWindow -PassThru `
-         -RedirectStandardError $ffLog
-    Log "ffmpeg started pid=$($p.Id) log=$ffLog"
+    $p = Start-Process -FilePath $FFmpeg -ArgumentList $args -NoNewWindow -PassThru -RedirectStandardError $ffLog
+    Log "recorder started pid=$($p.Id) log=$ffLog"
     return $p
 }
+
+function Stop-Proc($p) { if ($p -and -not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } }
 
 function Current-Segment {
     Get-ChildItem $RecDir -Filter "${Prefix}_*.ts" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
@@ -101,48 +115,47 @@ function Sweep {
     Get-ChildItem $LogDir -Filter "*.log" | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) } | Remove-Item -Force
 }
 
-function Write-Status($proc) {
+function Write-Status($relayProc, $recProc) {
     $cur = Current-Segment
     $st = [ordered]@{
-        updated      = (Get-Date).ToString("s")
-        ffmpeg_pid   = if ($proc -and -not $proc.HasExited) { $proc.Id } else { $null }
-        recording    = [bool]($proc -and -not $proc.HasExited)
-        current_file = if ($cur) { $cur.Name } else { $null }
-        current_mb   = if ($cur) { [math]::Round($cur.Length / 1MB, 1) } else { 0 }
+        updated       = (Get-Date).ToString("s")
+        relay_pid     = if ($relayProc -and -not $relayProc.HasExited) { $relayProc.Id } else { $null }
+        recorder_pid  = if ($recProc -and -not $recProc.HasExited) { $recProc.Id } else { $null }
+        recording     = [bool]($relayProc -and -not $relayProc.HasExited -and $recProc -and -not $recProc.HasExited)
+        current_file  = if ($cur) { $cur.Name } else { $null }
+        current_mb    = if ($cur) { [math]::Round($cur.Length / 1MB, 1) } else { 0 }
         current_age_s = if ($cur) { [int]((Get-Date) - $cur.LastWriteTime).TotalSeconds } else { $null }
-        free_gb      = [math]::Round((Get-Volume -DriveLetter C).SizeRemaining / 1GB, 1)
-        files        = (Get-ChildItem $RecDir -Filter "${Prefix}_*" | Measure-Object).Count
-        source       = $Src
+        free_gb       = [math]::Round((Get-Volume -DriveLetter C).SizeRemaining / 1GB, 1)
+        files         = (Get-ChildItem $RecDir -Filter "${Prefix}_*" | Measure-Object).Count
+        source        = $Src
+        relay_target  = $RelayTarget
     }
     ($st | ConvertTo-Json) | Set-Content "$Root\status.json" -Encoding UTF8
 }
 
-Log "recorder loop starting (keep ${KeepHours}h, min free ${MinFreeGB} GB)"
-$proc = Start-Recorder
+Log "loop starting (keep ${KeepHours}h, min free ${MinFreeGB} GB, relay=$RelayTarget)"
+$recProc = Start-Recorder      # listener first, so the relay's first datagrams land
+Start-Sleep -Seconds 2
+$relayProc = Start-Relay
 $lastSize = -1; $stall = 0
 while ($true) {
     Start-Sleep -Seconds $LoopSleep
     try {
-        if ($proc.HasExited) {
-            Log "ffmpeg exited code=$($proc.ExitCode); restarting in 5 s"
-            Start-Sleep -Seconds 5
-            $proc = Start-Recorder; $lastSize = -1; $stall = 0
-        } else {
-            # Stall guard: a live SRT that stops delivering leaves ffmpeg running with a frozen file.
-            $cur = Current-Segment
-            $size = if ($cur) { $cur.Length } else { 0 }
-            if ($size -eq $lastSize) { $stall++ } else { $stall = 0 }
-            $lastSize = $size
-            if ($stall -ge 3) {
-                Log "no bytes written for $($stall * $LoopSleep) s; killing ffmpeg pid=$($proc.Id)"
-                Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-                Start-Sleep -Seconds 5
-                $proc = Start-Recorder; $lastSize = -1; $stall = 0
-            }
+        if ($recProc.HasExited)   { Log "recorder exited code=$($recProc.ExitCode); restarting"; $recProc = Start-Recorder; $lastSize = -1; $stall = 0 }
+        if ($relayProc.HasExited) { Log "relay exited code=$($relayProc.ExitCode); restarting in 5 s"; Start-Sleep -Seconds 5; $relayProc = Start-Relay; $lastSize = -1; $stall = 0 }
+        # Stall guard: an SRT that stops delivering leaves both processes alive with a frozen file.
+        $cur = Current-Segment
+        $size = if ($cur) { $cur.Length } else { 0 }
+        if ($size -eq $lastSize) { $stall++ } else { $stall = 0 }
+        $lastSize = $size
+        if ($stall -ge 3) {
+            Log "no bytes written for $($stall * $LoopSleep) s; restarting relay pid=$($relayProc.Id) and recorder pid=$($recProc.Id)"
+            Stop-Proc $relayProc; Stop-Proc $recProc; Start-Sleep -Seconds 5
+            $recProc = Start-Recorder; Start-Sleep -Seconds 2; $relayProc = Start-Relay; $lastSize = -1; $stall = 0
         }
         Remux-Closed
         Sweep
-        Write-Status $proc
+        Write-Status $relayProc $recProc
     } catch {
         Log "loop error: $($_.Exception.Message)"
     }
