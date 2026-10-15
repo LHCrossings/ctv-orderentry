@@ -843,4 +843,4 @@ planning make-goods.
 - [x] Handler passed `user_input=` to `process_opad_order(pre_gathered_inputs=)`; Intertrend had the same drift → both fixed, pinned by `tests/unit/test_handler_kwargs_match_automations.py` (signature sweep over every `_process_*_order` call)
 - [x] Parser: client regex stops at `Estimate:` (was "NYS Department of Health Estimate: 3180"); day pattern by shape — the 12/14 rows say "M-Tu", parsed as "M"; fixture + 6 tests, foots 175 / $5,625
 - [x] Gather defaults from the customer's prior opAD contracts: customer 44, code `opAD NYDOH 3180`, description `NYS Dept of Health Est 3180` (Lee typed `… OE 4Q26 Est 3180`; the PDF Description line prints above the prompt); typed values saved to customers.db
-- [ ] Lee re-runs the NYSDOH 3180 entry from the queue
+- [x] Lee entered 3178 `opAD NYDOH 3180` 10/15; NOTE = the IO Description line (writer fixed a84183fa)
