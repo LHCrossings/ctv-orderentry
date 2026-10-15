@@ -830,7 +830,7 @@ planning make-goods.
 - [x] Tests + fixture `tests/fixtures/snoqualmie/`; ruff; full unit suite
 - [x] Fit check: SEA break capacity + separation vs the week-1 plan for a 10/15 / 10/16 start
 - [x] Rehearsed with rollback: 40 lines, production $570 on the first paid line, CENTROMEDIA 316, ref 'Entertainment 2026' — nothing persisted (fresh-connection check)
-- [ ] LIVE entry (Lee): `PYTHONPATH=browser_automation:. uv run python3 -m browser_automation.snoqualmie_automation '<pdf>'` or drag-drop; pick the start date
+- [x] LIVE entry (Lee 10/15): **3177 `Snoqualmie Casino 2610-2611`**, 40 lines, 318 spots, Production $570 on 85897, CENTROMEDIA 316, catalog V/K/T/M/MC complete; "Viet" alias added to guess_language (b9c75ec3)
 - [ ] Make-goods for week 1 if Lee starts 10/15: fit check says ~10 spots short at 15-min separation (Korean 8-10a over-subscribed, Viet 11a-1p breaks already full); Monday 10/19 fits everything but drops week 1 (53 paid + 28 bonus)
 
 ### Review
