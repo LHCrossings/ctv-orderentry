@@ -2,9 +2,11 @@
 
 `record.ps1` runs on VIDEO-02 (`C:\PhoenixSRT\record.ps1`) as the Scheduled Task
 `PhoenixSrtRecorder` (SYSTEM, at startup, restart on failure, no time limit).
-Phoenix's listener accepts only ONE caller. VIDEO-02 is that caller; the old
-Datavideo -> SDI -> EDIT-02 Etere Memory chain is retired (Lee, 2026-10-14) and the
+Phoenix's listener accepts only ONE caller. VIDEO-02 is that caller and the
 Datavideo must NOT dial the Phoenix URL again or the recorder is locked out.
+For now the recorder also relays the untouched TS to the Datavideo as
+`udp://10.1.50.98:6005` (its input is `udp://@:6005`) so EDIT-02 Memory records
+in parallel; the Datavideo is to be retired later (Lee, 2026-10-15).
 It writes hourly, clock-aligned files to
 `C:\PhoenixSRT\rec\Phoenix_YYYYMMDD_HHMM.mp4` (recorded as .ts, remuxed to .mp4
 once the hour closes). 1080i 29.97 H.264 + AAC LC + AC-3 (two audio tracks), about 2.5 GB per hour.

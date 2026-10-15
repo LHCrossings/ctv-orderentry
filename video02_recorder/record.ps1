@@ -17,9 +17,10 @@ $Root       = "C:\PhoenixSRT"
 $Src        = "srt://47.181.223.221:6005?mode=caller&latency=2000000"   # latency in microseconds (2 s)
 # Phoenix's listener accepts ONE caller (verified 2026-10-14: refused while the Datavideo was
 # connected, accepted on the first try once it was moved off). VIDEO-02 is that one caller;
-# the Datavideo -> SDI -> EDIT-02 Memory chain is retired (Lee, 10/14). Optional LAN relay of
-# the untouched TS (e.g. "udp://10.1.50.98:6005?pkt_size=1316"); empty = none.
-$Relay      = ""
+# for now (Lee, 10/15) the untouched TS is also relayed over the Comcast subnet to the Datavideo
+# decoder (10.1.50.98, input set to udp://@:6005) so EDIT-02 Memory keeps recording in parallel;
+# the Datavideo is to be retired later. Empty string = no relay.
+$Relay      = "udp://10.1.50.98:6005?pkt_size=1316"
 $RecDir     = "$Root\rec"
 $LogDir     = "$Root\logs"
 $FFmpeg     = "$Root\bin\ffmpeg.exe"
