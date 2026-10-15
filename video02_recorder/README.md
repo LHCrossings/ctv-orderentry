@@ -12,20 +12,46 @@ verified by MD5) to the Datavideo (`udp://10.1.50.98:6005`, its input is
 and segments. Any ffmpeg remux of the relay (parsed or `+noparse`) left the
 Datavideo's Pi hardware decoder frozen or black: Phoenix sends one PES per
 field with no PTS on the second field, and ffmpeg's parser invents one.
-EDIT-02 Memory records in parallel from the Datavideo's SDI for now; the
-Datavideo is to be retired later (Lee, 2026-10-15).
+EDIT-02 Memory records in parallel from the Datavideo's SDI for now, but its
+recordings off the relay stutter and EDIT-02 is being retired (Lee, 10/15): the
+VIDEO-02 files are the product.
 It writes hourly, clock-aligned files to
 `C:\PhoenixSRT\rec\Phoenix_YYYYMMDD_HHMM.mp4` (recorded as .ts, remuxed to .mp4
-once the hour closes). 1080i 29.97 H.264 + AAC LC (the AC-3 track is dropped at remux, one audio track like Memory's export) + a tmcd timecode track from the segment start; about 2.5 GB per hour.
+once the hour closes). 1080i 29.97 H.264 + ONE audio track like Memory's export
+(the AAC LC; when the AAC frames are damaged and mp4 refuses them, the AC-3 track
+instead, logged as `audio: ac3 copy`) + a tmcd timecode track from the segment
+start; about 2.5 GB per hour.
+
+**Archive to the NAS.** `archive.ps1` runs as the Scheduled Task `PhoenixSrtArchive`
+in the logged-on `CROSSINGSTV\video` session (trigger: at that user's logon) and
+copies every finished `.mp4` to `\\192.168.50.29\V Drive\Programming\Phoenix SRT`
+(V: on VIDEO-02; ~100 MB/s). Copy to `.part`, rename, size check; a file whose
+NAS copy already has the same size is skipped; nothing is ever deleted on the NAS.
+It cannot run as SYSTEM: the NAS rejects the computer account and Windows then
+blocks the guest fallback. So nothing is archived while nobody is logged on
+(after a reboot, until someone logs in); the recorder keeps recording and the
+72 h local retention gives the archive time to catch up. Status:
+`C:\PhoenixSRT\archive_status.json`; log `C:\PhoenixSRT\logs\archive_YYYYMMDD.log`.
+
+**Packet loss.** SRT drops any packet it cannot recover inside its latency window
+(relay log: `RCV-DROPPED n packet(s) ... ++SUPPRESSED: k`). The recorder is a
+remux, so its `.ts` carries fresh continuity counters and loss is invisible there;
+count it in the relay log and in the recorder log's `Packet corrupt` lines. With
+2 s the 10/15 03:53-04:55 window lost 269 packets in three episodes and every
+hour's AAC track broke (mp4 refuses a damaged ADTS frame; re-encoding fails on the
+same frames; the AC-3 survived). Latency is 8 s since 05:56 10/15; delay is
+irrelevant for a recording.
 
 Retention: 72 hours (three days, Lee 10/15), and oldest-first below 80 GB free on C:. At 5.6 Mbps that is ~180 GB, which fits the 465 GB C: with the floor.
 Status: `C:\PhoenixSRT\status.json`. Logs: `C:\PhoenixSRT\logs\`.
 
 VIDEO-02 is SSM hybrid node `mi-02adb6308ecd7a523` (us-west-2, profile `crossings`).
 
-Deploy a change: copy this file to `C:\PhoenixSRT\record.ps1` via SSM
-`AWS-RunPowerShellScript`, then
-`Stop-ScheduledTask PhoenixSrtRecorder; Stop-Process -Name ffmpeg; Start-ScheduledTask PhoenixSrtRecorder`.
+Deploy a change: copy the script to `C:\PhoenixSRT\` via SSM
+`AWS-RunPowerShellScript` as a plain-text here-string (a base64 blob trips the
+secret classifier), then
+`Stop-ScheduledTask PhoenixSrtRecorder; Stop-Process -Name ffmpeg; Start-ScheduledTask PhoenixSrtRecorder`
+(for archive.ps1: `Stop-ScheduledTask PhoenixSrtArchive; Start-ScheduledTask PhoenixSrtArchive`).
 
 Register the task (once):
 ```powershell
@@ -34,6 +60,13 @@ $t = New-ScheduledTaskTrigger -AtStartup
 $s = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -DontStopIfGoingOnBatteries -AllowStartIfOnBatteries
 Register-ScheduledTask -TaskName PhoenixSrtRecorder -Action $a -Trigger $t -Settings $s -User SYSTEM -RunLevel Highest -Force
 Start-ScheduledTask PhoenixSrtRecorder
+
+# archive task, in the video user's session (no stored password; see above)
+$a = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\PhoenixSRT\archive.ps1"
+$t = New-ScheduledTaskTrigger -AtLogOn -User 'CROSSINGSTV\video'
+$pr = New-ScheduledTaskPrincipal -UserId 'CROSSINGSTV\video' -LogonType Interactive
+Register-ScheduledTask -TaskName PhoenixSrtArchive -Action $a -Trigger $t -Settings $s -Principal $pr -Force
+Start-ScheduledTask PhoenixSrtArchive
 ```
 
 Timecode note: the tmcd start is written drop-frame (`HH:MM:SS;00`). At 59.94 DF the first

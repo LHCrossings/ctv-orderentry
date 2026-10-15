@@ -17,11 +17,12 @@
 #
 # Retention: keep KEEP_HOURS of recordings, and delete oldest-first whenever C: has less than
 # MIN_FREE_GB free. Never touches the segment being written.
-# The stream carries two audio tracks (AAC LC + AC-3); the .ts keeps both, the .mp4 keeps the AAC only.
+# The stream carries two audio tracks (AAC LC + AC-3); the .ts keeps both, the .mp4 keeps ONE: the
+# AAC, or the AC-3 when the AAC frames are damaged (see Remux-Closed).
 # Status: $Root\status.json rewritten every loop. Logs: $Root\logs\
 
 $Root       = "C:\PhoenixSRT"
-$Src        = "srt://47.181.223.221:6005?mode=caller&latency=2000000"   # latency in microseconds (2 s)
+$Src        = "srt://47.181.223.221:6005?mode=caller&latency=8000000"   # latency in microseconds (8 s): a packet SRT cannot recover inside this window is DROPPED (relay log "RCV-DROPPED"); 2 s lost 269 packets in three episodes on 10/15 03:53-04:55 and every hour's AAC broke. Delay is irrelevant for a recording.
 $RelayTarget = "udp://10.1.50.98:6005?pkt_size=1316"  # Datavideo (Comcast subnet). "" = no relay
 $LoopPort   = 6010                                     # loopback hand-off relay -> recorder
 $RecDir     = "$Root\rec"
@@ -35,6 +36,7 @@ $LoopSleep  = 60
 $Prefix     = "Phoenix"
 
 New-Item -ItemType Directory -Force -Path $RecDir, $LogDir | Out-Null
+$script:RemuxRetryAt = @{}   # segment name -> next remux attempt after an all-modes failure
 
 function Log($msg) {
     $line = "{0:yyyy-MM-dd HH:mm:ss} {1}" -f (Get-Date), $msg
@@ -86,20 +88,39 @@ function Remux-Closed {
         $mp4 = [IO.Path]::ChangeExtension($ts.FullName, ".mp4")
         $tmp = "$mp4.part"
         if ($ts.Length -lt 1MB) { Log "discard tiny segment $($ts.Name) ($($ts.Length) B)"; Remove-Item $ts.FullName -Force; continue }
-        # Like EDIT-02 Memory's export (Lee 10/15): video + ONE audio track (the AAC; the AC-3 is dropped)
-        # and a tmcd timecode track from the segment's start time (the .ts creation time, drop-frame).
+        # A segment whose remux failed in every mode is retried once an hour, not every loop.
+        if ($script:RemuxRetryAt.ContainsKey($ts.Name) -and (Get-Date) -lt $script:RemuxRetryAt[$ts.Name]) { continue }
+        # Like EDIT-02 Memory's export (Lee 10/15): video + ONE audio track and a tmcd timecode
+        # track from the segment's start time (the .ts creation time, drop-frame).
+        # Audio: the AAC track copied. When its ADTS frames are damaged (packet loss upstream;
+        # every hour from 03:00 on 10/15 had ~60 broken AAC frames and mp4 refuses the track,
+        # re-encoding fails on the same frames), fall back to the AC-3 track copied, which
+        # carries the same programme audio and survived the same hours intact.
         $tc = $ts.CreationTime.ToString("HH:mm:ss") + ";00"
-        $aac = (& $FFprobe -v error -select_streams a -show_entries stream=index,codec_name -of csv=p=0 $ts.FullName) -split "`r?`n" | Where-Object { $_ -match ',aac' } | Select-Object -First 1
-        $amap = if ($aac) { "0:" + ($aac -split ',')[0] } else { "0:a:0?" }
-        & $FFmpeg -hide_banner -loglevel error -nostdin -i $ts.FullName -map 0:v:0 -map $amap -c copy -timecode $tc -movflags +faststart -f mp4 -y $tmp 2>> "$LogDir\remux_errors.log"
-        if ($LASTEXITCODE -eq 0 -and (Test-Path $tmp)) {
-            $dur = & $FFprobe -v error -show_entries format=duration -of csv=p=0 $tmp
-            Move-Item $tmp $mp4 -Force
-            Remove-Item $ts.FullName -Force
-            Log ("remuxed {0} -> {1} ({2:N0} MB, {3} s)" -f $ts.Name, (Split-Path $mp4 -Leaf), ((Get-Item $mp4).Length/1MB), $dur)
-        } else {
-            Log "remux FAILED for $($ts.Name) (exit $LASTEXITCODE); .ts kept"
+        $streams = (& $FFprobe -v error -select_streams a -show_entries stream=index,codec_name -of csv=p=0 $ts.FullName) -split "`r?`n"
+        $aac = $streams | Where-Object { $_ -match ',aac' } | Select-Object -First 1
+        $ac3 = $streams | Where-Object { $_ -match ',ac3' } | Select-Object -First 1
+        $modes = @()
+        if ($aac) { $modes += @{ label = "aac copy"; map = "0:" + ($aac -split ',')[0] } }
+        if ($ac3) { $modes += @{ label = "ac3 copy (aac damaged)"; map = "0:" + ($ac3 -split ',')[0] } }
+        if (-not $modes) { $modes += @{ label = "first audio"; map = "0:a:0?" } }
+        $ok = $false
+        foreach ($m in $modes) {
+            & $FFmpeg -hide_banner -loglevel error -nostdin -i $ts.FullName -map 0:v:0 -map $m.map -c copy -timecode $tc -movflags +faststart -f mp4 -y $tmp 2>> "$LogDir\remux_errors.log"
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $tmp)) {
+                $dur = & $FFprobe -v error -show_entries format=duration -of csv=p=0 $tmp
+                Move-Item $tmp $mp4 -Force
+                Remove-Item $ts.FullName -Force
+                $script:RemuxRetryAt.Remove($ts.Name)
+                Log ("remuxed {0} -> {1} ({2:N0} MB, {3} s, audio: {4})" -f $ts.Name, (Split-Path $mp4 -Leaf), ((Get-Item $mp4).Length/1MB), $dur, $m.label)
+                $ok = $true; break
+            }
+            Add-Content "$LogDir\remux_errors.log" ("--- {0} {1}: exit {2} ---" -f $ts.Name, $m.label, $LASTEXITCODE)
             if (Test-Path $tmp) { Remove-Item $tmp -Force }
+        }
+        if (-not $ok) {
+            $script:RemuxRetryAt[$ts.Name] = (Get-Date).AddHours(1)
+            Log "remux FAILED for $($ts.Name) in every audio mode; .ts kept, retry in 1 h (see remux_errors.log)"
         }
     }
 }

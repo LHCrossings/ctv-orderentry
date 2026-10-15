@@ -2846,6 +2846,37 @@ the first try.
    client off and retry, not to try more source addresses (two egress lines, 30 attempts, all
    wasted).
 
+## A Recorder That Remuxes Erases the Evidence of Loss — Measure Packet Loss Where It Happens (the SRT log), Not in the File It Produced; and a 0-Byte Warning Log at Deploy Time Proves Nothing
+
+**Session:** Lee, "why on video02 are the files still showing as .ts" (2026-10-15)
+
+**Rule:** Every hour since 03:00 stayed `.ts` because the mp4 muxer refused the AAC track (damaged ADTS
+frames). I spent three runs testing remux flags on the file, then counted transport-stream continuity
+errors in the `.ts` and got ZERO for three damaged hours — the recorder is `-c copy` mpegts -> mpegts,
+so it writes fresh continuity counters and the lost packets leave no trace in its output. The loss was
+in the relay's own stderr all along (`SRT ... RCV-DROPPED n packet(s) ... ++SUPPRESSED: k`, 269 packets
+in three episodes), a log I had looked at once when it was 0 bytes at 05:28 and then treated as "no
+errors". The v3 remux was verified at 02:33 on an hour recorded before the loss began (03:53); the
+verification was honest and still told nothing about the failure mode that arrived ninety minutes later.
+Lee's observation ("Memory's recordings off the relay all stutter") pointed at the relay, not the remux,
+and arrived before I had the data.
+
+**How to apply:**
+1. When a file produced by a copy/remux stage looks damaged, measure at the INPUT of that stage: the
+   receiver's own counters (SRT RCV-DROPPED, the demuxer's `Packet corrupt` warnings), never a scan of
+   the output file — a remux normalises exactly the fields a loss would show in.
+2. A warning-level log that is empty at deploy time is "nothing has gone wrong YET". Re-read every
+   process's stderr when the first symptom appears, before testing fixes on the symptom.
+3. The user's symptom from a SECOND consumer of the same stream (the Datavideo stuttering) is the
+   discriminator between "my remux is wrong" and "the input is damaged" — ask for / use it first.
+4. A transport fix (SRT latency 2 s -> 8 s) and a tolerance fix (AAC copy -> AC-3 fallback, hourly
+   retry instead of every-minute) ship together, in one restart; the fallback must LOG which path it
+   took (`audio: ac3 copy`) so the transport problem stays visible after the files look fine.
+5. The auto-mode classifier refuses to pass a password through SSM, and refuses a base64 script blob
+   as a secret: send scripts as plain-text here-strings, and design the integration without a stored
+   credential (a task in the user's session) when the user offers one in chat; document the
+   credential route for the user to run by hand.
+
 ## A Relay That "Copies" Through a Demuxer Is Not a Copy — Pass Bytes, Not Packets, to a Decoder You Do Not Control; and Exercise the RESTART Path Before Calling a Supervisor Done
 
 **Session:** Lee, Phoenix SRT relay to the Datavideo — black, then frozen, then black (2026-10-15)
