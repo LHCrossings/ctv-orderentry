@@ -11,7 +11,7 @@ It writes hourly, clock-aligned files to
 `C:\PhoenixSRT\rec\Phoenix_YYYYMMDD_HHMM.mp4` (recorded as .ts, remuxed to .mp4
 once the hour closes). 1080i 29.97 H.264 + AAC LC + AC-3 (two audio tracks), about 2.5 GB per hour.
 
-Retention: 72 hours, and oldest-first below 80 GB free on C:.
+Retention: 120 hours (five days, Lee 10/15), and oldest-first below 80 GB free on C:. At 5.6 Mbps that is ~300 GB; the 465 GB C: holds ~4 days before the floor governs, so a second drive or a NAS copy tier is needed for a true five days.
 Status: `C:\PhoenixSRT\status.json`. Logs: `C:\PhoenixSRT\logs\`.
 
 VIDEO-02 is SSM hybrid node `mi-02adb6308ecd7a523` (us-west-2, profile `crossings`).
