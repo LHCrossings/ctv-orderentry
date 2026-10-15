@@ -860,11 +860,14 @@ SSM hybrid node `mi-02adb6308ecd7a523` (activation sacramento-office-video02-pho
 
 - [x] Enroll VIDEO-02 in SSM
 - [x] Read-only inventory
-- [ ] Install ffmpeg + nssm to C:\PhoenixSRT\bin; Defender exclusion on C:\PhoenixSRT\rec
-- [ ] Probe: ffprobe + 60 s `-c copy` while Lee watches the Datavideo Stats page (listener must accept 2 callers)
-- [ ] Recorder: PowerShell loop around ffmpeg (segment muxer, hourly, fragmented MP4, strftime names),
-      auto-restart on SRT drop, log to C:\PhoenixSRT\logs
-- [ ] Retention sweep: keep 72 h, and oldest-first when C: free < 80 GB
-- [ ] nssm service PhoenixSrtRecorder, auto start, verify it survives a reboot
-- [ ] Run in parallel with Memory for a week; compare a show; then Memory becomes backup
-- [ ] Memory note + lessons
+- [x] Install ffmpeg 9.0.2 (nssm.cc was 503 → Scheduled Task instead); Defender exclusion on rec
+- [x] Probe: REFUSED while the Datavideo held the slot (same public IP, no passphrase, both ISPs);
+      connected first try once Lee pointed the Datavideo at NYC → Phoenix's listener is SINGLE-CALLER
+- [x] Recorder live 00:22 PT: hourly clock-aligned .ts → .mp4 remux (first remux OK 00:36), stall guard,
+      status.json; Scheduled Task PhoenixSrtRecorder (SYSTEM, at startup, restart 999x)
+- [x] Retention 72 h (Lee: 5 days → 3 days), floor 80 GB free
+- [x] UDP relay to the Datavideo (10.1.50.98:6005) so Memory records in parallel for now (Lee 10/15)
+- [x] Memory note + lesson
+- [ ] Lee: set the Datavideo input to udp://@:6005 (it is on NYC until then)
+- [ ] Verify 01:00 PT hour rollover; reboot test of the startup task; compare a Memory file vs ours
+      (Lee copies one to C:\PhoenixSRT\compare); AT&T-vs-Comcast egress preference
