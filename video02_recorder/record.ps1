@@ -41,15 +41,20 @@ function Log($msg) {
 function Start-Recorder {
     $ffLog = "$LogDir\ffmpeg_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date)
     $pattern = "$RecDir\${Prefix}_%Y%m%d_%H%M.ts"
+    # +noparse+nofillin: pass Phoenix's PES packets through as sent (ffmpeg's h264 parser
+    # otherwise splits each interlaced frame into two field packets with invented timestamps,
+    # which froze the Datavideo's hardware decoder on the relay, 10/15). -copyinkf keeps the
+    # packets before the first keyframe so a mid-GOP join does not stall the copy.
     $args = @(
         "-hide_banner", "-loglevel", "warning", "-nostdin",
+        "-fflags", "+noparse+nofillin",
         "-i", $Src,
-        "-map", "0", "-c", "copy",
+        "-map", "0", "-c", "copy", "-copyinkf",
         "-f", "segment", "-segment_time", "$SegSeconds", "-segment_atclocktime", "1",
         "-reset_timestamps", "1", "-strftime", "1", "-segment_format", "mpegts",
         $pattern
     )
-    if ($Relay) { $args += @("-map", "0", "-c", "copy", "-f", "mpegts", $Relay) }
+    if ($Relay) { $args += @("-map", "0", "-c", "copy", "-copyinkf", "-f", "mpegts", $Relay) }
     $p = Start-Process -FilePath $FFmpeg -ArgumentList $args -NoNewWindow -PassThru `
          -RedirectStandardError $ffLog
     Log "ffmpeg started pid=$($p.Id) log=$ffLog"
