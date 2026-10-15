@@ -17,7 +17,7 @@
 #
 # Retention: keep KEEP_HOURS of recordings, and delete oldest-first whenever C: has less than
 # MIN_FREE_GB free. Never touches the segment being written.
-# The stream carries two audio tracks (AAC LC + AC-3); both are kept.
+# The stream carries two audio tracks (AAC LC + AC-3); the .ts keeps both, the .mp4 keeps the AAC only.
 # Status: $Root\status.json rewritten every loop. Logs: $Root\logs\
 
 $Root       = "C:\PhoenixSRT"
@@ -86,7 +86,12 @@ function Remux-Closed {
         $mp4 = [IO.Path]::ChangeExtension($ts.FullName, ".mp4")
         $tmp = "$mp4.part"
         if ($ts.Length -lt 1MB) { Log "discard tiny segment $($ts.Name) ($($ts.Length) B)"; Remove-Item $ts.FullName -Force; continue }
-        & $FFmpeg -hide_banner -loglevel error -nostdin -i $ts.FullName -map 0 -c copy -movflags +faststart -f mp4 -y $tmp 2>> "$LogDir\remux_errors.log"
+        # Like EDIT-02 Memory's export (Lee 10/15): video + ONE audio track (the AAC; the AC-3 is dropped)
+        # and a tmcd timecode track from the segment's start time (the .ts creation time, drop-frame).
+        $tc = $ts.CreationTime.ToString("HH:mm:ss") + ";00"
+        $aac = (& $FFprobe -v error -select_streams a -show_entries stream=index,codec_name -of csv=p=0 $ts.FullName) -split "`r?`n" | Where-Object { $_ -match ',aac' } | Select-Object -First 1
+        $amap = if ($aac) { "0:" + ($aac -split ',')[0] } else { "0:a:0?" }
+        & $FFmpeg -hide_banner -loglevel error -nostdin -i $ts.FullName -map 0:v:0 -map $amap -c copy -timecode $tc -movflags +faststart -f mp4 -y $tmp 2>> "$LogDir\remux_errors.log"
         if ($LASTEXITCODE -eq 0 -and (Test-Path $tmp)) {
             $dur = & $FFprobe -v error -show_entries format=duration -of csv=p=0 $tmp
             Move-Item $tmp $mp4 -Force

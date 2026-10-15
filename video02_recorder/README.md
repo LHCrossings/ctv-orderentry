@@ -16,7 +16,7 @@ EDIT-02 Memory records in parallel from the Datavideo's SDI for now; the
 Datavideo is to be retired later (Lee, 2026-10-15).
 It writes hourly, clock-aligned files to
 `C:\PhoenixSRT\rec\Phoenix_YYYYMMDD_HHMM.mp4` (recorded as .ts, remuxed to .mp4
-once the hour closes). 1080i 29.97 H.264 + AAC LC + AC-3 (two audio tracks), about 2.5 GB per hour.
+once the hour closes). 1080i 29.97 H.264 + AAC LC (the AC-3 track is dropped at remux, one audio track like Memory's export) + a tmcd timecode track from the segment start; about 2.5 GB per hour.
 
 Retention: 72 hours (three days, Lee 10/15), and oldest-first below 80 GB free on C:. At 5.6 Mbps that is ~180 GB, which fits the 465 GB C: with the floor.
 Status: `C:\PhoenixSRT\status.json`. Logs: `C:\PhoenixSRT\logs\`.
