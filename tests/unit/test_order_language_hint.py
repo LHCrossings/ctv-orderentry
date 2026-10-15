@@ -80,3 +80,13 @@ def test_description_guess_takes_precedence_over_the_order_language():
     assert guess_language("M-F 8-9p Mandarin") or order_guess == "M"
     # ...and a daypart-only description falls through to the order language.
     assert (guess_language("W 11:30a-12:00p") or "V") == "V"
+
+
+def test_viet_short_form_guesses_vietnamese():
+    """Lee 10/15: the Snoqualmie catalog prompt showed '[?]' on 'M-F 11a-12p Viet
+    News/Variety' — 'Viet' is the house short form in line names."""
+    from browser_automation.line_language import guess_language
+
+    assert guess_language("M-F 11a-12p Viet News/Variety") == "V"
+    assert guess_language("BNS M-Su Viet ROS") == "V"
+    assert guess_language("M-Su Vietnamese") == "V"

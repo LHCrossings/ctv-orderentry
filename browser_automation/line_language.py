@@ -27,7 +27,7 @@ _KEYWORD_GUESSES = [
     (r'\bmandarin\b.*\bcantonese\b|\bcantonese\b.*\bmandarin\b|\bchinese\b', 'M/C'),
     (r'\bmandarin\b', 'M'),
     (r'\bcantonese\b', 'C'),
-    (r'\bvietnamese\b', 'V'),
+    (r'\bvietnamese\b|\bviet\b', 'V'),  # 'Viet' is the house short form in line names
     (r'\bfilipino\b|\btagalog\b', 'T'),
     (r'\bkorean\b', 'K'),
     (r'\bjapanese\b', 'J'),
