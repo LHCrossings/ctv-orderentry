@@ -866,8 +866,11 @@ SSM hybrid node `mi-02adb6308ecd7a523` (activation sacramento-office-video02-pho
 - [x] Recorder live 00:22 PT: hourly clock-aligned .ts → .mp4 remux (first remux OK 00:36), stall guard,
       status.json; Scheduled Task PhoenixSrtRecorder (SYSTEM, at startup, restart 999x)
 - [x] Retention 72 h (Lee: 5 days → 3 days), floor 80 GB free
-- [x] UDP relay to the Datavideo (10.1.50.98:6005) so Memory records in parallel for now (Lee 10/15)
+- [x] UDP relay to the Datavideo (10.1.50.98:6005) so Memory records in parallel for now (Lee 10/15):
+      any ffmpeg remux froze/blacked the Pi decoder → v2 = byte-exact relay ffmpeg + recorder ffmpeg on
+      loopback 6010 (02:04 PT); picture confirmed 02:08
+- [x] Memory export vs ours compared (Memory = re-encode at 6 Mbps, one AAC; ours = original + 2 audio)
 - [x] Memory note + lesson
-- [ ] Lee: set the Datavideo input to udp://@:6005 (it is on NYC until then)
+- [x] Datavideo input = udp://@:6005
 - [ ] Verify 01:00 PT hour rollover; reboot test of the startup task; compare a Memory file vs ours
       (Lee copies one to C:\PhoenixSRT\compare); AT&T-vs-Comcast egress preference
