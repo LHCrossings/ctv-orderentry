@@ -120,3 +120,12 @@ def test_precedent_naming_defaults(monkeypatch):
     assert prec["recent"][0] == ("opAD NYDOH 2824", "NYDOH OE 1Q26 Est 2824")
     assert oa._precedent(customer_id=22)["short"] == "NYDHMH"
     assert oa._precedent(client="Totally Unrelated Advertiser") is None
+
+
+def test_contract_note_is_the_io_description_line():
+    """Lee 10/15: CONTRATTITESTATA.NOTE carries the IO's Description line
+    ("NYSOH Open Enrollment 4q26 TV"), never the typed contract description
+    with its estimate number (2824 had that; 2823, 2321, 2320 and 3178 did not)."""
+    src = (_root / "browser_automation" / "opad_automation.py").read_text()
+    assert "note=order.description," in src
+    assert "note=description," not in src

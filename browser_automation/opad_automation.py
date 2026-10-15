@@ -104,7 +104,7 @@ def _create_opad_contract_direct(pdf_path: str, user_input) -> bool:
             contract_end_date=_parse_date(order.flight_end),
             contract_type=1,
             billing_type="agency",
-            note=description,
+            note=order.description,  # the IO's Description line (Lee 10/15), never the typed contract description
             customer_order_ref=order.estimate_number,
             allow_rename=True,
         )
