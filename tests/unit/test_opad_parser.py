@@ -129,3 +129,15 @@ def test_contract_note_is_the_io_description_line():
     src = (_root / "browser_automation" / "opad_automation.py").read_text()
     assert "note=order.description," in src
     assert "note=description," not in src
+
+
+def test_bonus_lines_carry_the_bns_prefix(order):
+    """Lee 10/15: 3178's GOODWILL bonus lines entered as 'M-Su 7p-12a' — the house
+    convention is a 'BNS ' prefix (2351: 'BNS M-Su 7p-12a Chinese ROS')."""
+    import browser_automation.opad_automation as oa
+
+    descs = {ln.is_bonus(): [el["description"] for el in oa._build_etere_lines(ln, order)] for ln in order.lines}
+    assert all(d.startswith("BNS ") for d in descs[True])
+    assert not any(d.startswith("BNS ") for d in descs[False])
+    bonus = [ln for ln in order.lines if ln.is_bonus()][0]
+    assert oa._build_etere_lines(bonus, order)[0]["description"] == "BNS M-Su 7p-12a"

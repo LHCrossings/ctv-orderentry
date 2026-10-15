@@ -300,6 +300,8 @@ def _build_etere_lines(line: OpADLine, order: OpADOrder) -> list[dict]:
     time_fmt = format_time_for_description(line.time)
     lang_suffix = f" {line.language}" if line.language else ""
     description = f"{line.days} {time_fmt}{lang_suffix}"
+    if line.is_bonus():
+        description = f"BNS {description}"  # house convention (2351 'BNS M-Su 7p-12a Chinese ROS'; Lee 10/15)
 
     # Parse time range using EtereClient universal parser
     time_from, time_to = EtereClient.parse_time_range(line.time)
