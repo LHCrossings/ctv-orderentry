@@ -2845,3 +2845,28 @@ the first try.
    the single-caller signature for an SRT listener; the discriminator is to move the existing
    client off and retry, not to try more source addresses (two egress lines, 30 attempts, all
    wasted).
+
+## A Relay That "Copies" Through a Demuxer Is Not a Copy — Pass Bytes, Not Packets, to a Decoder You Do Not Control; and Exercise the RESTART Path Before Calling a Supervisor Done
+
+**Session:** Lee, Phoenix SRT relay to the Datavideo — black, then frozen, then black (2026-10-15)
+
+**Rule:** `ffmpeg -c copy` from SRT to UDP still demuxes and remuxes: the h264 parser split each
+interlaced frame into two field packets and invented a PTS for the second (Phoenix sends it with
+none), and the Datavideo's Pi hardware decoder froze on it while every desktop decoder shrugged.
+Two more remux variants (`+noparse+nofillin`) only changed the failure mode. The fix that worked
+first time was to stop interpreting the stream at all: read the SRT payload as opaque 1316-byte
+blocks (`-f rawvideo -video_size 1316x1`) and write them verbatim (MD5-identical on a 93 MB file).
+Second defect in the same script, caught only by reading status.json: PowerShell variables are
+case-insensitive, so `$relay = Start-Relay` overwrote `$Relay` (the URL) and the first automatic
+relay restart would have launched ffmpeg with a Process object as its UDP target. First start was
+fine; the supervisor's whole purpose is the second start.
+
+**How to apply:**
+1. When a downstream device decoded the ORIGINAL stream fine, the relay must deliver the original
+   bytes; prove it with a hash of a pass-through, not with "ffprobe says it's valid". Offline tests
+   on files that already went through the suspect remux prove nothing (my "noparse" test did).
+2. A supervisor script is tested by killing its child and watching it come back, in a scratch run,
+   before it goes live. In PowerShell never reuse a name across cases (`$Relay`/`$relay`).
+3. When the user says "picture is black" → "frozen" → "black", stop iterating muxer flags: three
+   different failure shapes from one decoder is the signature of "the stream is wrong for it", and
+   the byte-exact path is one experiment, not ten.
