@@ -1247,7 +1247,7 @@ class OrderProcessingService:
                 )
 
             success = process_intertrend_order(
-                pdf_path=str(order.pdf_path), user_input=order.order_input
+                pdf_path=str(order.pdf_path), pre_gathered_inputs=order.order_input
             )
 
             inp = order.order_input
@@ -2231,7 +2231,9 @@ class OrderProcessingService:
                     error_message="Order inputs not collected",
                 )
 
-            success = process_opad_order(pdf_path=str(order.pdf_path), user_input=order.order_input)
+            success = process_opad_order(
+                pdf_path=str(order.pdf_path), pre_gathered_inputs=order.order_input
+            )
 
             inp = order.order_input
             code = inp.get("order_code") if isinstance(inp, dict) else None

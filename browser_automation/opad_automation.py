@@ -16,7 +16,6 @@ opAD Business Rules:
 - Sunday 6-7a paid programming rule applies
 """
 
-import sqlite3
 from typing import Optional
 
 from etere_client import EtereClient
@@ -162,29 +161,90 @@ def _create_opad_contract_direct(pdf_path: str, user_input) -> bool:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def gather_opad_inputs(pdf_path: str) -> Optional[dict]:
-    """Collect all opAD inputs upfront before processing begins."""
+    """Collect all opAD inputs upfront before processing begins.
+
+    Defaults come from the customer's OWN prior opAD contracts in Etere (Lee,
+    NYSDOH 3180, 2026-10-15): code `opAD NYDOH 3180` keeps the short name of the
+    last code, description `NYS Dept of Health Est 3180` keeps the prefix most of
+    the prior descriptions share. The PDF's own Description line is printed above
+    the prompt so a campaign tag ("OE 4Q26") is one edit away, never guessed.
+    """
+    from browser_automation.customer_defaults import prompt_customer_id
+
     try:
         order = parse_opad_pdf(pdf_path)
     except Exception as e:
         print(f"[OPAD] ✗ Failed to parse PDF: {e}")
         return None
 
-    # Build readable defaults
-    client_short = (order.client or "").replace("NYS ", "NY ").strip()[:20]
-    default_code = f"opAD {client_short} {order.estimate_number}".strip()
-    default_desc = order.description or f"{order.client} Est {order.estimate_number}"
+    est = order.estimate_number
+    print(f"\n  Client:      {order.client}")
+    print(f"  Estimate:    {est}   Flight {order.flight_start}–{order.flight_end}   {order.market}")
+    print(f"  Description: {order.description or '(none)'}   Product: {order.product or '(none)'}")
+    print(
+        f"  Lines:       {len(order.lines)}  "
+        f"{sum(ln.total_spots for ln in order.lines)} spots  "
+        f"${sum(ln.total_cost for ln in order.lines):,.2f} gross"
+    )
 
-    # Customer ID (DB lookup → prompt if not found)
-    customer_id, _ = _resolve_customer_id(pdf_path)
+    # Customer: customers.db, else the customer the prior opAD contracts name
+    cust = _lookup_customer_db(order.client)
+    known_id = int(cust.customer_id) if cust and str(cust.customer_id).isdigit() else None
+    prec = _precedent(customer_id=known_id, client=order.client)
+    default_id = str(known_id or (prec["customer_id"] if prec else "") or "")
+    if cust:
+        print(f"[CUSTOMER DB] ✓ {order.client} → ID {cust.customer_id}")
+    elif prec:
+        print(
+            f"[CUSTOMER] Not in customers.db; prior opAD contracts name "
+            f"'{prec['customer_name']}' → ID {prec['customer_id']}"
+        )
+    else:
+        print(f"[CUSTOMER] Not found in database or prior opAD contracts: {order.client}")
+    customer_id = prompt_customer_id(str(default_id))
+    if customer_id is None:
+        print("  ✗ No customer ID — aborting")
+        return None
+    customer_id = int(customer_id)
+    if prec and prec["customer_id"] != customer_id:
+        prec = _precedent(customer_id=customer_id) or prec
 
-    order_code  = input(f"  Enter order code (default: {default_code}): ").strip() or default_code
-    description = input(f"  Enter description (default: {default_desc}): ").strip() or default_desc
+    # Etere's own contracts outrank the stored defaults (they ARE what was typed on
+    # real entries); the stored values only carry a customer with no history yet.
+    short = (prec["short"] if prec else "") or (cust.code_name if cust and cust.code_name else "")
+    short = short or (order.client.split()[0] if order.client else "CLIENT")
+    desc_prefix = (prec["desc_prefix"] if prec else "") or (
+        cust.description_name if cust and cust.description_name else ""
+    )
+    desc_prefix = desc_prefix or order.client
+    default_code = f"opAD {short} {est}"
+    default_desc = f"{desc_prefix} Est {est}"
+    if prec:
+        print("  Prior opAD contracts for this customer:")
+        for code, desc in prec["recent"]:
+            print(f"    {code:<24} {desc}")
+    print(f"  PDF description: {order.description or '(none)'}")
+
+    order_code = input(f"  Contract code [{default_code}]: ").strip() or default_code
+    description = input(f"  Description [{default_desc}]: ").strip() or default_desc
+
+    separation = SEPARATION_INTERVALS
+    if cust:
+        separation = (cust.separation_customer, cust.separation_order, cust.separation_event)
+    # Remember what was TYPED (the operator's convention), not the guess.
+    import re
+
+    m = re.match(r"(?i)opAD\s+(.+?)\s+\S+$", order_code)
+    typed_short = m.group(1) if m else short
+    typed_prefix = re.sub(r"\s*\bEst\b.*$", "", description).strip() or desc_prefix
+    _save_customer_to_db(order.client, customer_id, code_name=typed_short,
+                         description_name=typed_prefix, separation=separation)
 
     return {
         'customer_id': customer_id,
         'order_code':  order_code,
         'description': description,
-        'separation':  SEPARATION_INTERVALS,
+        'separation':  separation,
     }
 
 
@@ -272,57 +332,100 @@ def _build_etere_lines(line: OpADLine, order: OpADOrder) -> list[dict]:
 # CUSTOMER RESOLUTION
 # ═══════════════════════════════════════════════════════════════════════════════
 
+_STOP = {"of", "the", "and", "state", "department", "dept", "inc", "llc", "co"}
+
+
+def _tokens(name: str) -> set[str]:
+    import re
+
+    return {t for t in re.split(r"[^a-z0-9]+", (name or "").lower()) if t} - _STOP
+
+
+def _lookup_customer_db(client_name: str):
+    """customers.db row for this client (opAD first, then any order type)."""
+    try:
+        from src.data_access.repositories.customer_repository import CustomerRepository
+        from src.domain.enums import OrderType
+
+        if not CUSTOMERS_DB_PATH.exists() or not client_name:
+            return None
+        repo = CustomerRepository(CUSTOMERS_DB_PATH)
+        return repo.find_by_name(client_name, OrderType.OPAD) or repo.find_by_name_any_type(client_name)
+    except Exception as exc:
+        print(f"[CUSTOMER DB] ⚠ Lookup failed: {exc}")
+        return None
+
+
+def _precedent(customer_id: Optional[int] = None, client: str = "") -> Optional[dict]:
+    """The customer's prior opAD contracts in Etere → naming defaults.
+
+    Picks the customer by id, else the opAD customer whose ANAGRAF name shares
+    the most words with the PDF's client ('NYS Department of Health' → 'NY State
+    Department of Health', 44). Returns the short name of the latest code
+    ('opAD NYDOH 2824' → 'NYDOH'), the description prefix most of the prior
+    descriptions share once their 'Est N…' tail is removed ('NYS Dept of
+    Health'), and the three latest (code, description) pairs for display.
+    """
+    import re
+    from collections import Counter
+
+    try:
+        from browser_automation.etere_direct_client import connect
+
+        conn = connect()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT t.COMMITTENTE, a.RAG_SOCIAL, t.COD_CONTRATTO, t.DESCRIZIONE "
+            "FROM CONTRATTITESTATA t JOIN ANAGRAF a ON a.ID_ANAGRAF = t.COMMITTENTE "
+            "WHERE t.COD_CONTRATTO LIKE 'opAD %' ORDER BY t.DATA_INIZIO DESC, t.ID_CONTRATTITESTATA DESC"
+        )
+        rows = [(int(r[0]), str(r[1]).strip(), str(r[2]).strip(), str(r[3] or "").strip()) for r in cur.fetchall()]
+        conn.close()
+    except Exception as exc:
+        print(f"[CUSTOMER] Etere precedent lookup failed: {exc}")
+        return None
+    if not rows:
+        return None
+    if customer_id is None:
+        want = _tokens(client)
+        scores = Counter()
+        for cid, name, _c, _d in rows:
+            scores[cid] = max(scores.get(cid, 0), len(want & _tokens(name)))
+        best, score = scores.most_common(1)[0]
+        if score == 0:
+            return None
+        customer_id = best
+    mine = [r for r in rows if r[0] == customer_id]
+    if not mine:
+        return None
+    latest_code = mine[0][2]
+    m = re.match(r"opAD\s+(.+?)\s+\S+$", latest_code)
+    short = m.group(1) if m else ""
+    prefixes = [re.sub(r"\s*\bEst\b.*$", "", d).strip() for _c, _n, _code, d in [(0, 0, 0, r[3]) for r in mine]]
+    prefixes = [p for p in prefixes if p]
+    desc_prefix = Counter(prefixes).most_common(1)[0][0] if prefixes else ""
+    return {
+        "customer_id": customer_id,
+        "customer_name": mine[0][1],
+        "short": short,
+        "desc_prefix": desc_prefix,
+        "recent": [(r[2], r[3]) for r in mine[:3]],
+    }
+
+
 def _resolve_customer_id(pdf_path: str) -> tuple[Optional[int], None]:
-    """
-    Resolve customer ID from database based on parsed client name.
-    Falls back to manual entry if not found.
-
-    Args:
-        pdf_path: Path to the opAD PDF (parsed to get client name)
-
-    Returns:
-        Tuple of (customer_id, None) - second element for backward compat
-    """
+    """Customer ID for a run that skipped the gather (customers.db, else the
+    opAD precedent, else a manual prompt). Returns (id, None) for back-compat."""
     try:
-        order = parse_opad_pdf(pdf_path)
-        client_name = order.client
+        client_name = parse_opad_pdf(pdf_path).client
     except Exception:
-        client_name = None
-
-    if not client_name:
-        return _manual_customer_entry(), None
-
-    # Try database lookup
-    try:
-        db_path = CUSTOMERS_DB_PATH
-        if db_path.exists():
-            import sqlite3
-            with sqlite3.connect(str(db_path)) as conn:
-                # Exact match
-                cursor = conn.execute(
-                    "SELECT customer_id FROM customers WHERE customer_name = ? AND order_type = ?",
-                    (client_name, "opad"),
-                )
-                row = cursor.fetchone()
-                if row:
-                    cust_id = int(row[0])
-                    print(f"[CUSTOMER DB] ✓ Found: {client_name} → ID {cust_id}")
-                    return cust_id, None
-
-                # Fuzzy: check containment
-                cursor = conn.execute(
-                    "SELECT customer_name, customer_id FROM customers WHERE order_type = ?",
-                    ("opad",),
-                )
-                for db_name, db_id in cursor.fetchall():
-                    if (db_name.lower() in client_name.lower()
-                            or client_name.lower() in db_name.lower()):
-                        cust_id = int(db_id)
-                        print(f"[CUSTOMER DB] ✓ Fuzzy match: {client_name} ≈ {db_name} → ID {cust_id}")
-                        return cust_id, None
-    except Exception as e:
-        print(f"[CUSTOMER DB] ⚠ Lookup failed: {e}")
-
+        client_name = ""
+    cust = _lookup_customer_db(client_name)
+    if cust and str(cust.customer_id).isdigit():
+        return int(cust.customer_id), None
+    prec = _precedent(client=client_name)
+    if prec:
+        return prec["customer_id"], None
     print(f"[CUSTOMER] Not found in database: {client_name}")
     return _manual_customer_entry(), None
 
@@ -343,30 +446,37 @@ def _manual_customer_entry() -> Optional[int]:
 # CUSTOMER DATABASE (Self-Learning)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _save_customer_to_db(client_name: str, customer_id: int) -> None:
-    """
-    Save customer to database on first discovery.
-    Uses INSERT OR IGNORE so it's safe to call every time.
-    Non-fatal: if DB write fails, order processing continues.
-    """
+def _save_customer_to_db(
+    client_name: str,
+    customer_id: int,
+    code_name: str = "",
+    description_name: str = "",
+    separation: tuple = SEPARATION_INTERVALS,
+) -> None:
+    """Upsert the customer (id + naming defaults) in customers.db. Non-fatal."""
     try:
-        db_path = CUSTOMERS_DB_PATH
-        if not db_path.exists():
-            print(f"[CUSTOMER DB] ⚠ Database not found at {db_path}")
-            return
+        from src.data_access.repositories.customer_repository import CustomerRepository
+        from src.domain.entities import Customer
+        from src.domain.enums import OrderType
 
-        with sqlite3.connect(str(db_path)) as conn:
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO customers (customer_name, customer_id, order_type)
-                VALUES (?, ?, ?)
-                """,
-                (client_name, customer_id, AGENCY_NAME),
+        if not CUSTOMERS_DB_PATH.exists():
+            print(f"[CUSTOMER DB] ⚠ Database not found at {CUSTOMERS_DB_PATH}")
+            return
+        CustomerRepository(CUSTOMERS_DB_PATH).save(
+            Customer(
+                customer_id=str(customer_id),
+                customer_name=client_name,
+                order_type=OrderType.OPAD,
+                billing_type="agency",
+                code_name=code_name,
+                description_name=description_name,
+                separation_customer=separation[0],
+                separation_order=separation[1],
+                separation_event=separation[2],
+                default_market=DEFAULT_MARKET,
             )
-            if conn.total_changes > 0:
-                print(f"[CUSTOMER DB] ✓ Saved new customer: {client_name} (ID: {customer_id})")
-            else:
-                print(f"[CUSTOMER DB] ℹ Customer already known: {client_name}")
+        )
+        print(f"[CUSTOMER DB] ✓ Saved {client_name} (ID {customer_id}, code '{code_name}')")
     except Exception as e:
         print(f"[CUSTOMER DB] ⚠ Could not save customer (non-fatal): {e}")
 

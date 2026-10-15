@@ -11,6 +11,11 @@ from typing import Dict, List, Optional
 
 import pdfplumber
 
+# A day pattern by SHAPE (token or token-token), never a list of the patterns seen so
+# far: 'M-Tu' was not in the old list and matched as 'M' (NYSDOH 3180, 2026-10-15).
+_DAY_TOKEN = r'(?:M|Tu|W|Th|F|Sa|Su)'
+_DAY_PAT = rf'{_DAY_TOKEN}(?:-{_DAY_TOKEN})?'
+
 
 @dataclass
 class OpADLine:
@@ -90,7 +95,7 @@ def _extract_header(text: str) -> Dict[str, str]:
     header = {}
     
     # Extract client
-    client_match = re.search(r'Client:\s*(.+?)(?:\n|Media:)', text)
+    client_match = re.search(r'Client:\s*(.+?)(?:\s*\n|\s+Media:|\s+Estimate:)', text)
     if client_match:
         header['client'] = client_match.group(1).strip()
     else:
@@ -214,7 +219,7 @@ def _extract_lines_from_page(text: str, num_weeks: int) -> List[OpADLine]:
             continue
         
         # Check if this line starts with a station or day pattern
-        if re.match(r'^(CROSSINGS TV|M-Su|M-F|M-Sa|Sa-Su|M-Th|Tu-F|M|Tu|W|Th|F|Sa|Su)\b', line.strip()):
+        if re.match(rf'^(CROSSINGS TV|{_DAY_PAT})\b', line.strip()):
             line_obj, next_idx = _parse_line_entry(text_lines, i, num_weeks, current_language)
             if line_obj:
                 lines.append(line_obj)
@@ -255,7 +260,7 @@ def _parse_line_entry(text_lines: List[str], start_index: int, num_weeks: int, c
         station = "CROSSINGS TV"
         
         # Days pattern: M-Su, M-F, M-Sa, Sa-Su, or single days (M, Tu, W, Th, F, Sa, Su)
-        days_match = re.search(r'(M-Su|M-F|M-Sa|Sa-Su|M-Th|Tu-F|Tu|Th|Su|Sa|M|W|F)\b', line)
+        days_match = re.search(rf'(?<![A-Za-z])({_DAY_PAT})\b', line)
         if not days_match:
             return None, start_index + 1
         
@@ -283,7 +288,7 @@ def _parse_line_entry(text_lines: List[str], start_index: int, num_weeks: int, c
                 next_line = text_lines[next_idx].strip()
                 
                 # Check if next line is a program continuation (not a new line or language)
-                is_new_line = re.match(r'^(CROSSINGS TV|M-Su|M-F|M-Sa|Sa-Su|M-Th|Tu-F|M|Tu|W|Th|F|Sa|Su)\b', next_line)
+                is_new_line = re.match(rf'^(CROSSINGS TV|{_DAY_PAT})\b', next_line)
                 is_language = next_line in ['MANDARIN', 'CANTONESE', 'KOREAN', 'VIETNAMESE', 'FILIPINO', 'SOUTH ASIAN', 'PUNJABI', 'HMONG']
                 
                 if not is_new_line and not is_language:

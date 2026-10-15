@@ -992,7 +992,7 @@ class OrderDetectionService:
 
     def _extract_opad_client(self, text: str) -> str | None:
         """Extract client from opAD order - look for 'Client:' field."""
-        match = re.search(r"Client:\s*([^\n]+)", text)
+        match = re.search(r"Client:\s*([^\n]+?)(?:\s+Estimate:|\s+Media:|\s*$)", text, re.M)
         return match.group(1).strip() if match else None
 
     def _extract_hl_client(self, text: str) -> str | None:

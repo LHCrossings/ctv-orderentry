@@ -4,6 +4,33 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Renamed Parameter Was Fixed at ONE Handler — Every Handler→Automation Call Is Pinned by One Signature Sweep, Not by the Next Operator's Crash
+
+**Session:** Lee, opAD NYSDOH 3180 — "process_opad_order() got an unexpected keyword argument 'user_input'" (2026-10-15)
+
+**Rule:** The direct-DB conversion renamed the automations' `user_input` to `pre_gathered_inputs`;
+the 6/26 Impact lesson fixed the one handler that crashed and noted the AST sweep that found it.
+opAD and Intertrend kept passing `user_input=` for four months, so Lee answered every gather
+prompt (customer 44, code, description, separation) and entry died on a TypeError with nothing
+written. Same family as "a lesson applied to one parser is not applied" and "a gather that
+succeeds is not evidence the handler agrees" (Crispin 8/10). The same run showed two more
+list-not-shape defects: the client regex ran to end of line ("NYS Department of Health
+Estimate: 3180", so customers.db never matched and the default code was "opAD NY Department of
+Hea 3180"), and the day regex was the list of patterns seen so far, so the IO's "M-Tu" rows
+parsed as "M" (four lines would have aired Monday only).
+
+**How to apply:**
+1. `tests/unit/test_handler_kwargs_match_automations.py` reads every `_process_*_order` call
+   site against `inspect.signature` of the imported automation; it fails on any keyword the
+   callee lacks (self-tested on the `user_input=` shape). A parameter rename is done when that
+   test is green, not when the one crashing handler is patched.
+2. A field regex ends at the NEXT label on the line (`Estimate:`, `Media:`) or end of line —
+   never at `\n` alone; a token regex matches the SHAPE (`token(-token)?`), never a list.
+3. Naming defaults come from the customer's OWN prior contracts in Etere (`_precedent`: short
+   name of the latest code, the description prefix most prior descriptions share, the three
+   latest pairs printed above the prompt) and the PDF's own Description line is printed so a
+   campaign tag is one edit, never a guess. Fixture: `tests/fixtures/opad/nysdoh_nysoh_3180.pdf`.
+
 ## A Table Whose Comment Says "Mirrors X" Was Fixed Only at X — Pin Every Mirror With a Test the Day the First One Is Written
 
 **Session:** Lee, "I just set up a recording for 2359 MMT time, and it was an hour early … I thought we fixed that" (2026-10-14)
