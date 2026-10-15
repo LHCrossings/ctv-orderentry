@@ -844,3 +844,27 @@ planning make-goods.
 - [x] Parser: client regex stops at `Estimate:` (was "NYS Department of Health Estimate: 3180"); day pattern by shape — the 12/14 rows say "M-Tu", parsed as "M"; fixture + 6 tests, foots 175 / $5,625
 - [x] Gather defaults from the customer's prior opAD contracts: customer 44, code `opAD NYDOH 3180`, description `NYS Dept of Health Est 3180` (Lee typed `… OE 4Q26 Est 3180`; the PDF Description line prints above the prompt); typed values saved to customers.db
 - [x] Lee entered 3178 `opAD NYDOH 3180` 10/15; NOTE = the IO Description line (writer fixed a84183fa)
+
+## Phoenix TV SRT recorder on VIDEO-02 (2026-10-14)
+
+Goal: record Phoenix TV's SRT feed directly with ffmpeg on the Sacramento office PC VIDEO-02,
+replacing the Datavideo -> SDI -> DeckLink -> Etere Memory chain on EDIT-02 (which stays as backup).
+
+Facts (Datavideo Stats page 10/14): Datavideo is the CALLER to `srt://47.181.223.221:6005?mode=caller`,
+no stream id; 1920x1080i 29.97 H.264 + AAC stereo, ~6 Mbps, RTT 28 ms, 0% loss. Native house format,
+so `-c copy` needs no conversion. ffmpeg can be a second caller in parallel.
+
+VIDEO-02: Win10 Ent 19045, 2x Xeon E5620, 16 GB, one WD 500 GB HDD (325 GB free), power plan never
+sleeps, NICs AT&T 192.168.50.111 (default gw) + Comcast 10.1.50.26, Tailscale 100.90.230.98.
+SSM hybrid node `mi-02adb6308ecd7a523` (activation sacramento-office-video02-phoenix-recorder, 10/14).
+
+- [x] Enroll VIDEO-02 in SSM
+- [x] Read-only inventory
+- [ ] Install ffmpeg + nssm to C:\PhoenixSRT\bin; Defender exclusion on C:\PhoenixSRT\rec
+- [ ] Probe: ffprobe + 60 s `-c copy` while Lee watches the Datavideo Stats page (listener must accept 2 callers)
+- [ ] Recorder: PowerShell loop around ffmpeg (segment muxer, hourly, fragmented MP4, strftime names),
+      auto-restart on SRT drop, log to C:\PhoenixSRT\logs
+- [ ] Retention sweep: keep 72 h, and oldest-first when C: free < 80 GB
+- [ ] nssm service PhoenixSrtRecorder, auto start, verify it survives a reboot
+- [ ] Run in parallel with Memory for a week; compare a show; then Memory becomes backup
+- [ ] Memory note + lessons
