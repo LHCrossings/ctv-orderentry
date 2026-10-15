@@ -2819,3 +2819,29 @@ rule; I had read July's odd batch as the precedent.
 2. Before calling a pattern "the precedent", test it against EVERY prior batch; the rule
    that fits all of them (Sept and SSE here) beats the one that fits the first batch seen.
 3. Record the final rendering (the user's own list) in memory, not my reading of it.
+
+## "Replace X With Y" Means X Leaves — Do Not Design Y Around Keeping X Alive, and Let the User Free a Shared Resource Their Own Way
+
+**Session:** Lee, Phoenix TV SRT recorder on VIDEO-02 (2026-10-14)
+
+**Rule:** Lee asked to record Phoenix's SRT feed with ffmpeg "instead of" the Datavideo -> SDI ->
+Etere Memory chain. From my first reply I kept the old chain in the plan as the backup, and when
+Phoenix's listener turned out to accept one caller I designed VIDEO-02 to relay the stream back to
+the Datavideo so Memory could keep running. Lee: "no no no … I don't want the datavideo in play
+anymore." A replacement is a replacement; preserving the old path was my assumption, never his
+request, and it cost a round of design he had to veto. Second defect the same hour: my "pause the
+Datavideo" test was a 3-minute retry loop that depended on Lee unplugging a cable at the same
+moment; he was reading my other request and never did, so the loop proved nothing. His own method
+(point the Datavideo at our NYC Haivision feed) freed the slot cleanly and VIDEO-02 connected on
+the first try.
+
+**How to apply:**
+1. When the user says "do it with Y instead", ask in one line whether X stays as a fallback
+   BEFORE building anything that keeps X fed. Default to X leaving.
+2. A test that needs the user to act at the same instant as a timed command is a coordination
+   bug, not a test. Either make the user's step the whole gate ("tell me when it is off, then I
+   run") or find a way to put the resource in a known state that does not need timing.
+3. "Connection refused in 3 s from the same public IP as the working client, no passphrase" is
+   the single-caller signature for an SRT listener; the discriminator is to move the existing
+   client off and retry, not to try more source addresses (two egress lines, 30 attempts, all
+   wasted).
