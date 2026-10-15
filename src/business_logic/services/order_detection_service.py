@@ -175,6 +175,11 @@ class OrderDetectionService:
         if self._is_vida(first_page_text):
             return OrderType.VIDA
 
+        # Snoqualmie Casino & Hotel — house "Crossings TV Media Proposal", client-keyed;
+        # must precede the Charmaine-template fallback
+        if self._is_snoqualmie(first_page_text):
+            return OrderType.SNOQUALMIE
+
         # Illinois Lottery (Flowers Communications) house proposal — advertiser-keyed;
         # must precede the Charmaine-template fallback
         if self._is_illottery(first_page_text):
@@ -326,6 +331,12 @@ class OrderDetectionService:
         from browser_automation.parsers.iwcca_parser import is_iwcca_text
 
         return is_iwcca_text(text)
+
+    def _is_snoqualmie(self, text: str) -> bool:
+        """Snoqualmie Casino proposal: the client's name on a 'Crossings TV Media Proposal' page."""
+        from browser_automation.parsers.snoqualmie_parser import is_snoqualmie_text
+
+        return is_snoqualmie_text(text)
 
     def _is_vida(self, text: str) -> bool:
         """The Vida Agency proposal: "Agency The Vida Agency" on a "Flight schedule" page."""
@@ -1091,6 +1102,8 @@ def detect_from_filename(filename: str) -> OrderType:
         return OrderType.NTOOITIVE
     if "VIDA AGENCY" in name_upper or "VIDA_AGENCY" in name_upper:
         return OrderType.VIDA
+    if "SNOQUALMIE" in name_upper:
+        return OrderType.SNOQUALMIE
     if "ILLINOIS LOTTERY" in " ".join(name_upper.split()) or "ILLOTTERY" in name_upper:
         return OrderType.ILLOTTERY
     if "GAUGER" in name_upper:

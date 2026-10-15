@@ -811,3 +811,30 @@ ROS bonus line; the bookend utility assigned one pair set contract-wide.
 - [ ] Verify on the next real DP runs: `uv run python3 scripts/deadlock_report.py --since 2026-10-14` should show near-zero graphs per run
 - [ ] Reply to Maija (draft in the session summary)
 - [ ] If residual Finish 1205s persist after the fix, lengthen `apply_window_retrying` delays (2/4/8 s) — not before
+
+## Snoqualmie Casino parser — Entertainment :15 proposal, late start (2026-10-15)
+
+Lee: new parser for the house "2026 Crossings TV Media Proposal" (Snoqualmie Casino & Hotel,
+SEA, 10/12-11/11, PROMO rates, two Subtitle charges → ONE production amount); late order →
+"what date should this order start" + line_planner; check whether week 1 can fit before
+planning make-goods.
+
+- [x] `browser_automation/parsers/snoqualmie_parser.py` — text reader (Vida family): header
+      labels, week columns by label, rows `<name> $NET $PROMO cells total $VALUE $NET`,
+      Paid/Bonus/Total footer, Subtitle charge rows, Final cost, traffic notes; reconcile and raise
+- [x] `browser_automation/snoqualmie_automation.py` — direct customer 417, 0%, no agency,
+      Broadcast; start date always asked; plan_ranges; production = Σ subtitle net on the first
+      paid line; traffic notes → line note; code `Snoqualmie <yymm>` (precedent 2422)
+- [x] Registration: enums, detection (+filename), orchestrator, processing service (+direct-DB),
+      parser_bridge (display, registry, 2 key lists), scan cache v18
+- [x] Tests + fixture `tests/fixtures/snoqualmie/`; ruff; full unit suite
+- [x] Fit check: SEA break capacity + separation vs the week-1 plan for a 10/15 / 10/16 start
+- [x] Rehearsed with rollback: 40 lines, production $570 on the first paid line, CENTROMEDIA 316, ref 'Entertainment 2026' — nothing persisted (fresh-connection check)
+- [ ] LIVE entry (Lee): `PYTHONPATH=browser_automation:. uv run python3 -m browser_automation.snoqualmie_automation '<pdf>'` or drag-drop; pick the start date
+- [ ] Make-goods for week 1 if Lee starts 10/15: fit check says ~10 spots short at 15-min separation (Korean 8-10a over-subscribed, Viet 11a-1p breaks already full); Monday 10/19 fits everything but drops week 1 (53 paid + 28 bonus)
+
+### Review
+- Parser: text reader (Vida family), 23 tests, fixture `tests/fixtures/snoqualmie/`; PROMO rate entered, NET column = value rate; Final cost reconciled both ways; charge rows kept, combined at entry
+- Automation: direct 417, agency none, 0%, Broadcast/Calendar prompted from the sheet's Billing Cycle, start date always asked, line_planner splits the short first week (4/day Chinese 7p-9p, 5/day Filipino 4p-7p on Thu+Fri), traffic notes → line note
+- Full unit suite 1,203 green; ruff clean
+

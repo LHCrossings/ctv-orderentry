@@ -65,6 +65,7 @@ class OrderType(Enum):
     GAUGER = "gauger"  # Gauger + Associates — NET "Broadcast Order" PDF, agency 262 @ 15% (Shea Homes, SFO)
     IWCCA = "iwcca"  # IW Group / Covered California — NET "TELEVISION ORDER" IO, agency 12 @ 15%
     VIDA = "vida"  # The Vida Agency / Puget Sound Energy — house proposal PDF, NET, agency 260 @ 0%, SEA
+    SNOQUALMIE = "snoqualmie"  # Snoqualmie Casino & Hotel — house proposal PDF, PROMO rates, direct 417 @ 0%, SEA
     AI_FALLBACK = "ai_fallback"
     UNKNOWN = "unknown"
 
@@ -167,6 +168,7 @@ KNOWN_AGENCY_KEYWORDS: list[str] = [
     "galeforcemedia",
     "ntooitive",
     "the vida agency",
+    "snoqualmie",
     "time advertising",
     "3olivesmedia",
     "bvk",
