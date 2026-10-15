@@ -35,3 +35,9 @@ $s = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSp
 Register-ScheduledTask -TaskName PhoenixSrtRecorder -Action $a -Trigger $t -Settings $s -User SYSTEM -RunLevel Highest -Force
 Start-ScheduledTask PhoenixSrtRecorder
 ```
+
+Timecode note: the tmcd start is written drop-frame (`HH:MM:SS;00`). At 59.94 DF the first
+four frames of any minute not divisible by 10 are dropped, so a segment that started at e.g.
+00:53:00 reads 00:52:59;56 (two frames early). Clock-aligned hours start at :00:00 and are
+exact; only restart partials are affected. Switch to non-drop (`HH:MM:SS:00`) at the next
+script touch if that matters to the editors.
