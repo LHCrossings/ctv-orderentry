@@ -182,7 +182,22 @@ while ($true) {
     Start-Sleep -Seconds $LoopSleep
     try {
         if ($recProc.HasExited)   { Log "recorder exited code=$($recProc.ExitCode); restarting"; $recProc = Start-Recorder; $lastSize = -1; $stall = 0 }
-        if ($relayProc.HasExited) { Log "relay exited code=$($relayProc.ExitCode); restarting in 5 s"; Start-Sleep -Seconds 5; $relayProc = Start-Relay; $lastSize = -1; $stall = 0 }
+        if ($relayProc.HasExited) {
+            # Phoenix's SRT session breaks a few times a day (10/15: 11:54, 11:59, 16:35, 16:37,
+            # 17:34, 20:34; the stream's own clock jumps forward minutes at each, i.e. a restart
+            # or source switch on their side, never packet loss here). Their listener takes ONE
+            # caller and can still hold our dead session for a minute, so the first reconnect
+            # may be refused: retry every 5 s instead of once per loop.
+            Log "relay exited code=$($relayProc.ExitCode); reconnecting"
+            for ($try = 1; $try -le 6; $try++) {
+                Start-Sleep -Seconds 5
+                $relayProc = Start-Relay
+                Start-Sleep -Seconds 5
+                if (-not $relayProc.HasExited) { break }
+                Log "relay exited again code=$($relayProc.ExitCode) (attempt $try of 6; Phoenix's single caller slot may still hold our dead session)"
+            }
+            $lastSize = -1; $stall = 0
+        }
         # Stall guard: an SRT that stops delivering leaves both processes alive with a frozen file.
         $cur = Current-Segment
         $size = if ($cur) { $cur.Length } else { 0 }
