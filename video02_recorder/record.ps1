@@ -23,7 +23,7 @@
 
 $Root       = "C:\PhoenixSRT"
 $Src        = "srt://47.181.223.221:6005?mode=caller&latency=8000000"   # latency in microseconds (8 s): a packet SRT cannot recover inside this window is DROPPED (relay log "RCV-DROPPED"); 2 s lost 269 packets in three episodes on 10/15 03:53-04:55 and every hour's AAC broke. Delay is irrelevant for a recording.
-$RelayTarget = "udp://10.1.50.98:6005?pkt_size=1316"  # Datavideo (Comcast subnet). "" = no relay
+$RelayTarget = ""   # was udp://10.1.50.98:6005?pkt_size=1316 (Datavideo); off since 21:30 PT 10/15 (Lee 10/16: no longer needed). "" = no relay
 $LoopPort   = 6010                                     # loopback hand-off relay -> recorder
 $RecDir     = "$Root\rec"
 $LogDir     = "$Root\logs"
