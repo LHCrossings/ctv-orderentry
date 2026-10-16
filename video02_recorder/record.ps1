@@ -26,6 +26,7 @@ $Src        = "srt://47.181.223.221:6005?mode=caller&latency=8000000"   # latenc
 $RelayTarget = ""   # was udp://10.1.50.98:6005?pkt_size=1316 (Datavideo); off since 21:30 PT 10/15 (Lee 10/16: no longer needed). "" = no relay
 $LoopPort   = 6010                                     # loopback hand-off relay -> recorder
 $MonitorTarget = "udp://127.0.0.1:6011?pkt_size=1316" # live-view tap: VLC on VIDEO-02 opens udp://@127.0.0.1:6011 ("Phoenix Live View" desktop shortcut). The relay fires it whether or not anyone listens; the recorder never sees this leg. "" = none
+$ThumbTarget = "udp://127.0.0.1:6012?pkt_size=1316"   # confidence-monitor tap: thumb.ps1 grabs one frame a minute from it and serves it on :8081 for the Control Room (Maija 10/16). "" = none
 $RecDir     = "$Root\rec"
 $LogDir     = "$Root\logs"
 $FFmpeg     = "$Root\bin\ffmpeg.exe"
@@ -56,6 +57,7 @@ function Start-Relay {
     )
     if ($RelayTarget) { $args += @("-map", "0", "-c", "copy", "-f", "rawvideo", "-flush_packets", "1", $RelayTarget) }
     if ($MonitorTarget) { $args += @("-map", "0", "-c", "copy", "-f", "rawvideo", "-flush_packets", "1", $MonitorTarget) }
+    if ($ThumbTarget) { $args += @("-map", "0", "-c", "copy", "-f", "rawvideo", "-flush_packets", "1", $ThumbTarget) }
     $p = Start-Process -FilePath $FFmpeg -ArgumentList $args -NoNewWindow -PassThru -RedirectStandardError $ffLog
     Log "relay started pid=$($p.Id) log=$ffLog"
     return $p
@@ -166,6 +168,7 @@ function Write-Status($relayProc, $recProc) {
         source        = $Src
         relay_target  = $RelayTarget
         monitor_target = $MonitorTarget
+        thumb_target  = $ThumbTarget
     }
     ($st | ConvertTo-Json) | Set-Content "$Root\status.json" -Encoding UTF8
 }

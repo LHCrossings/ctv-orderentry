@@ -30,6 +30,10 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 
 STIRLITZ_HOST = os.environ.get("STIRLITZ_HOST", "http://34.208.18.64").rstrip("/")
+# Phoenix TV confidence monitor: VIDEO-02 (Tailscale) serves one frame a minute from
+# the recorder's loopback tap (video02_recorder/thumb.ps1).
+PHOENIX_THUMB_HOST = os.environ.get("PHOENIX_THUMB_HOST", "http://100.90.230.98:8081").rstrip("/")
+PHOENIX_THUMB_TIMEOUT = 5
 DEFAULT_SCREEN = "0.0"
 _SCREEN_RE = re.compile(r"^[A-Za-z0-9._-]{1,40}$")
 _TIMEOUT = 6.0
@@ -136,6 +140,39 @@ def build_monitor_wall_router(templates: Jinja2Templates) -> APIRouter:
         except Exception as exc:  # noqa: BLE001 - surface device errors to the page
             return JSONResponse({"error": f"multiviewer: {exc}"}, status_code=502)
         return Response(body, media_type=ctype, headers={"Cache-Control": "no-store"})
+
+    @router.get("/api/master-control/phoenix/thumb")
+    async def phoenix_thumb():
+        def _get():
+            with urllib.request.urlopen(
+                f"{PHOENIX_THUMB_HOST}/live.jpg", timeout=PHOENIX_THUMB_TIMEOUT
+            ) as r:
+                return r.read(), r.headers.get("X-Captured", "")
+
+        try:
+            body, captured = await asyncio.to_thread(_get)
+        except Exception as exc:  # noqa: BLE001 - the page shows the reason
+            return JSONResponse({"error": f"VIDEO-02: {exc}"}, status_code=502)
+        return Response(
+            body,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "no-store", "X-Captured": captured},
+        )
+
+    @router.get("/api/master-control/phoenix/status")
+    async def phoenix_status():
+        def _get():
+            with urllib.request.urlopen(
+                f"{PHOENIX_THUMB_HOST}/live.json", timeout=PHOENIX_THUMB_TIMEOUT
+            ) as r:
+                return json.loads(r.read().decode("utf-8", "replace"))
+
+        try:
+            meta = await asyncio.to_thread(_get)
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse({"reachable": False, "error": f"VIDEO-02: {exc}"}, status_code=502)
+        meta["reachable"] = True
+        return meta
 
     @router.get("/api/master-control/monitor-wall/screens")
     async def monitor_wall_screens():

@@ -48,6 +48,15 @@ VLC is a separate process on a separate port: opening or closing it cannot touch
 the recorder. Software decode (no GPU) uses about one core while it is open.
 One viewer at a time (unicast port).
 
+**Confidence monitor (Maija 10/16).** `thumb.ps1` (Scheduled Task `PhoenixSrtThumb`,
+SYSTEM) reads a third loopback tap (`udp://127.0.0.1:6012`, `$ThumbTarget`), grabs one
+deinterlaced 640 px JPEG a minute and serves it on `http://100.90.230.98:8081/live.jpg`
+(+ `/live.json` with the capture time). The Control Room Monitor Wall shows it in a
+"Phoenix TV feed" panel via the app's `/api/master-control/phoenix/thumb` proxy, with
+the frame's age; amber past 3 minutes, red when VIDEO-02 does not answer. Firewall
+rule "Phoenix SRT thumbnail 8081": TCP 8081 from 100.64.0.0/10, 192.168.50.0/24,
+10.1.50.0/24. Separate process, separate port: it cannot touch the recorder.
+
 **Packet loss.** SRT drops any packet it cannot recover inside its latency window
 (relay log: `RCV-DROPPED n packet(s) ... ++SUPPRESSED: k`). The recorder is a
 remux, so its `.ts` carries fresh continuity counters and loss is invisible there;

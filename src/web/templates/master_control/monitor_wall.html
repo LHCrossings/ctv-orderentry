@@ -16,8 +16,16 @@
         .wall-bar .spacer { flex: 1; }
         .wall-bar .stale { color: var(--nord13); }
         .wall-bar .err { color: var(--nord11); }
-        .wall-frame { flex: 1; display: flex; align-items: center; justify-content: center; }
+        .wall-body { flex: 1; display: flex; flex-wrap: wrap; align-items: stretch; }
+        .wall-frame { flex: 1 1 640px; display: flex; align-items: center; justify-content: center; }
         .wall-frame img { max-width: 100%; max-height: calc(100vh - 100px); width: 100%; object-fit: contain; display: block; background: #000; }
+        /* Phoenix TV confidence monitor: one frame a minute off the VIDEO-02 recorder tap */
+        .phoenix { flex: 0 0 340px; display: flex; flex-direction: column; gap: 6px; padding: 10px; background: var(--nord1); color: var(--nord4); font-size: 0.8rem; }
+        .phoenix h2 { margin: 0; font-size: 0.85rem; font-weight: 600; color: var(--nord6); }
+        .phoenix img { width: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: #000; display: block; }
+        .phoenix .sub { color: var(--nord4); opacity: 0.8; }
+        .phoenix .stale { color: var(--nord13); }
+        .phoenix .err { color: var(--nord11); }
     </style>
 </head>
 <body>
@@ -44,8 +52,16 @@
         <a href="#" id="wallFull">full screen</a>
         <a href="{{ stirlitz_url }}" target="_blank" rel="noopener">open the Stirlitz page ↗</a>
     </div>
-    <div class="wall-frame">
-        <img id="wall" alt="Monitor wall" />
+    <div class="wall-body">
+        <div class="wall-frame">
+            <img id="wall" alt="Monitor wall" />
+        </div>
+        <aside class="phoenix">
+            <h2>Phoenix TV feed <span class="sub">· VIDEO-02 recorder tap</span></h2>
+            <img id="phoenixImg" alt="Phoenix TV feed, latest frame" />
+            <span id="phoenixStatus">loading…</span>
+            <span class="sub">One frame a minute from the SRT feed as recorded. A "Daily Talk" picture here means Phoenix fell back to its default programming: tell Phoenix, nothing on our side can switch it.</span>
+        </aside>
     </div>
 </main>
 
@@ -80,6 +96,40 @@
         next.src = '/api/master-control/monitor-wall/frame?screen=' + encodeURIComponent(SCREEN) + '&t=' + Date.now();
     }
     document.addEventListener('visibilitychange', function () { if (!document.hidden && !timer) tick(); });
+
+    // Phoenix confidence monitor: refresh the frame every 30 s (VIDEO-02 grabs one a minute).
+    const pImg = document.getElementById('phoenixImg');
+    const pStatus = document.getElementById('phoenixStatus');
+    function ageText(iso) {
+        const t = Date.parse(iso); if (isNaN(t)) return '';
+        const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+        return s < 90 ? s + ' s ago' : Math.round(s / 60) + ' min ago';
+    }
+    async function phoenixTick() {
+        if (!document.hidden) {
+            try {
+                const r = await fetch('/api/master-control/phoenix/status', { cache: 'no-store' });
+                const d = await r.json();
+                if (!r.ok || !d.reachable) {
+                    pStatus.textContent = 'VIDEO-02 not answering' + (d.error ? ' · ' + d.error : '');
+                    pStatus.className = 'err';
+                } else {
+                    const age = d.captured ? (Date.now() - Date.parse(d.captured)) / 1000 : Infinity;
+                    pStatus.textContent = (d.ok ? 'frame captured ' : 'last good frame ') + (d.captured ? ageText(d.captured) : 'never') + (d.ok ? '' : ' · ' + (d.error || 'grab failing'));
+                    pStatus.className = (!d.ok || age > 180) ? 'stale' : '';
+                    if (d.captured) {
+                        const next = new Image();
+                        next.onload = function () { pImg.src = next.src; };
+                        next.src = '/api/master-control/phoenix/thumb?t=' + Date.now();
+                    }
+                }
+            } catch (e) {
+                pStatus.textContent = 'VIDEO-02 not answering'; pStatus.className = 'err';
+            }
+        }
+        setTimeout(phoenixTick, 30000);
+    }
+    phoenixTick();
     document.getElementById('wallFull').addEventListener('click', function (e) {
         e.preventDefault();
         const el = document.querySelector('.wall-frame');
