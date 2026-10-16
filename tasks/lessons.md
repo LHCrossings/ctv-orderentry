@@ -2922,3 +2922,28 @@ form with it; no MG line had been written that way yet (zero-window lines since 
    click from a wrong line. Check what the Apply/Save body carries before calling it cosmetic.
 3. `tests/unit/test_make_goods_time_columns.py` pins the COALESCE on the F pair and refuses a
    raw `cr.ORA_FINE` in the select list.
+
+## A Liveness Rule Keyed on Elapsed Time Fires During the Very Gap It Should Survive — "Closed" Is a Structural Fact (Next Segment Exists / Process Dead), Never a Timestamp Age
+
+**Session:** Lee, Phoenix SRT team feedback (2026-10-16); found while probing the NAS for day folders
+
+**Rule:** `record.ps1` treated a `.ts` "not written to for 90 s" as a closed hour and remuxed it.
+The relay dropped seven times on 10/15; each reconnect paused writes for more than 90 s, so the
+live hour was remuxed at 38 and 40 minutes, copied to the NAS under the full hour's name, and
+replaced an hour later by the real remux (the log shows `Phoenix_20261015_1600.mp4` archived three
+times at 1,410 / 1,457 / 2,219 MB). An editor pulling the file in between got a partial hour that
+looked complete. Nobody reported it; it was in plain sight in a log I read for another reason.
+
+**How to apply:**
+1. A "finished / closed / done" test keys on a fact that cannot be true while the thing is still
+   live: the muxer opened the NEXT file (clock-named, so the newest name is the live one), or the
+   writing process has exited. Elapsed time since the last write is a stall signal, not a close
+   signal; the stall guard already owns it.
+2. When a vendor connection reconnects, every rule that keys on "quiet for N seconds" fires at
+   once; grep the loop for `AddSeconds(-` / `AddMinutes(-` after any reconnect incident.
+3. Read the archive/copy log for the same name appearing twice at different sizes; that is the
+   signature of a partial that was later replaced, and the window between the two lines is
+   when a consumer could have taken the bad copy.
+4. Verify the fix on the restart you have to do anyway: after the swap the old hour's segment
+   must remux within one loop and the new segment must stay untouched (2100 -> mp4 in 69 s,
+   2120.ts live), which exercises both branches of the new rule.

@@ -78,13 +78,20 @@ function Start-Recorder {
 function Stop-Proc($p) { if ($p -and -not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } }
 
 function Current-Segment {
-    Get-ChildItem $RecDir -Filter "${Prefix}_*.ts" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    # Segment names are the clock (Phoenix_YYYYMMDD_HHMM), so the newest NAME is the live file.
+    Get-ChildItem $RecDir -Filter "${Prefix}_*.ts" -File | Sort-Object Name -Descending | Select-Object -First 1
 }
 
-function Remux-Closed {
-    # Any .ts not written to for 90 s is closed (ffmpeg writes every second).
-    $cut = (Get-Date).AddSeconds(-90)
-    foreach ($ts in Get-ChildItem $RecDir -Filter "${Prefix}_*.ts" | Where-Object { $_.LastWriteTime -lt $cut }) {
+function Remux-Closed($recProc) {
+    # A segment is closed when the muxer has opened a NEWER one, or the recorder is not
+    # running. Never by elapsed time: on 10/15 every relay reconnect (16:36, 17:35, 20:34)
+    # paused writes for over 90 s and the old "not written for 90 s" rule remuxed the LIVE
+    # hour at 38 and 40 minutes, each copy replacing the last on the NAS, so an editor
+    # pulling in between got a partial hour named like a full one.
+    $all = @(Get-ChildItem $RecDir -Filter "${Prefix}_*.ts" -File | Sort-Object Name)
+    if (-not $all) { return }
+    $live = if ($recProc -and -not $recProc.HasExited) { $all[-1].FullName } else { $null }
+    foreach ($ts in $all | Where-Object { $_.FullName -ne $live }) {
         $mp4 = [IO.Path]::ChangeExtension($ts.FullName, ".mp4")
         $tmp = "$mp4.part"
         if ($ts.Length -lt 1MB) { Log "discard tiny segment $($ts.Name) ($($ts.Length) B)"; Remove-Item $ts.FullName -Force; continue }
@@ -110,7 +117,8 @@ function Remux-Closed {
             if ($LASTEXITCODE -eq 0 -and (Test-Path $tmp)) {
                 $dur = & $FFprobe -v error -show_entries format=duration -of csv=p=0 $tmp
                 Move-Item $tmp $mp4 -Force
-                Remove-Item $ts.FullName -Force
+                try { Remove-Item $ts.FullName -Force -ErrorAction Stop }
+                catch { Log "could not delete $($ts.Name) after remux: $($_.Exception.Message)" }
                 $script:RemuxRetryAt.Remove($ts.Name)
                 Log ("remuxed {0} -> {1} ({2:N0} MB, {3} s, audio: {4})" -f $ts.Name, (Split-Path $mp4 -Leaf), ((Get-Item $mp4).Length/1MB), $dur, $m.label)
                 $ok = $true; break
@@ -179,7 +187,7 @@ while ($true) {
             Stop-Proc $relayProc; Stop-Proc $recProc; Start-Sleep -Seconds 5
             $recProc = Start-Recorder; Start-Sleep -Seconds 2; $relayProc = Start-Relay; $lastSize = -1; $stall = 0
         }
-        Remux-Closed
+        Remux-Closed $recProc
         Sweep
         Write-Status $relayProc $recProc
     } catch {

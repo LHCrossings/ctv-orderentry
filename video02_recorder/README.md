@@ -17,16 +17,23 @@ recordings off the relay stutter and EDIT-02 is being retired (Lee, 10/15): the
 VIDEO-02 files are the product.
 It writes hourly, clock-aligned files to
 `C:\PhoenixSRT\rec\Phoenix_YYYYMMDD_HHMM.mp4` (recorded as .ts, remuxed to .mp4
-once the hour closes). 1080i 29.97 H.264 + ONE audio track like Memory's export
+once the hour closes; a segment is closed when a NEWER segment exists or the
+recorder is not running, never by elapsed time: the 10/15 "not written for 90 s"
+rule fired during every relay reconnect and remuxed the live hour at 38 and 40
+minutes, so the NAS briefly held partial hours named like full ones). 1080i 29.97 H.264 + ONE audio track like Memory's export
 (the AAC LC; when the AAC frames are damaged and mp4 refuses them, the AC-3 track
 instead, logged as `audio: ac3 copy`) + a tmcd timecode track from the segment
 start; about 2.5 GB per hour.
 
 **Archive to the NAS.** `archive.ps1` runs as the Scheduled Task `PhoenixSrtArchive`
 in the logged-on `CROSSINGSTV\video` session (trigger: at that user's logon) and
-copies every finished `.mp4` to `\\192.168.50.29\V Drive\Programming\Phoenix SRT`
-(V: on VIDEO-02; ~100 MB/s). Copy to `.part`, rename, size check; a file whose
-NAS copy already has the same size is skipped; nothing is ever deleted on the NAS.
+copies every finished `.mp4` to `\\192.168.50.29\V Drive\Programming\Phoenix SRT\YYYY-MM-DD\`
+(V: on VIDEO-02; ~100 MB/s), one folder per recording day taken from the file
+name (team request 10/16). Copy to `.part`, rename, size check; a file whose NAS
+copy already has the same size is skipped. NAS retention is 5 days (Lee 10/16,
+`$NasKeepDays`): a day folder dated before today - 5 has its `Phoenix_*.mp4`
+deleted and is removed once empty; nothing else on the NAS is touched. Files
+archived flat before 10/16 were moved into `2026-10-15\` on the first pass.
 It cannot run as SYSTEM: the NAS rejects the computer account and Windows then
 blocks the guest fallback. So nothing is archived while nobody is logged on
 (after a reboot, until someone logs in); the recorder keeps recording and the
@@ -42,7 +49,7 @@ hour's AAC track broke (mp4 refuses a damaged ADTS frame; re-encoding fails on t
 same frames; the AC-3 survived). Latency is 8 s since 05:56 10/15; delay is
 irrelevant for a recording.
 
-Retention: 72 hours (three days, Lee 10/15), and oldest-first below 80 GB free on C:. At 5.6 Mbps that is ~180 GB, which fits the 465 GB C: with the floor.
+Local retention: 72 hours (three days, Lee 10/15 and again 10/16; the NAS keeps five), and oldest-first below 80 GB free on C:. At 5.6 Mbps that is ~180 GB, which fits the 465 GB C: with the floor.
 Status: `C:\PhoenixSRT\status.json`. Logs: `C:\PhoenixSRT\logs\`.
 
 VIDEO-02 is SSM hybrid node `mi-02adb6308ecd7a523` (us-west-2, profile `crossings`).
