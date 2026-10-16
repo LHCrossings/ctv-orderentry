@@ -2901,3 +2901,24 @@ fine; the supervisor's whole purpose is the second start.
 3. When the user says "picture is black" → "frozen" → "black", stop iterating muxer flags: three
    different failure shapes from one decoder is the signature of "the stream is wrong for it", and
    the byte-exact path is one experiment, not ten.
+
+## A Column With a Twin Was Read Raw on ONE Page — `ORA_FINE` Can Hold the Start Again; the Form Shows `ORA_FINEF`
+
+**Session:** Lee, Make Goods "times showing 19:00 - 19:00, that's not how the lines are in the contract" (2026-10-16)
+
+**Rule:** `CONTRATTIRIGHE` has two time pairs, like the DATESTART/DATEEND twin of 9/30:
+`ORA_INIZIOF/ORA_FINEF` is what the line form shows and `loadBlock()` uses; `ORA_FINE` holds
+the start again on ~5% of lines (292 of 5,544 recent; 3179 lines 86100/86104/86105). The
+direct client had the note since the block loader was written, and every other consumer
+(traffic filters, backwrite, line catalog) reads `COALESCE(ORA_FINEF, ORA_FINE)`. The Make Goods
+query alone read raw `ORA_FINE`, so the page showed a zero-width window AND prefilled the Apply
+form with it; no MG line had been written that way yet (zero-window lines since id 70000: 0).
+
+**How to apply:**
+1. When a table has a `<col>` / `<col>F` (or `DATA_*` / `DATE*`) twin, grep every reader of the
+   raw name the day the twin is learned: `grep -n "cr\.ORA_FINE\b" src/ | grep -v COALESCE`
+   listed this page in one line. A note in the client is not applied to its consumers.
+2. A page that PREFILLS a write form from a read is a write path: the display bug is one
+   click from a wrong line. Check what the Apply/Save body carries before calling it cosmetic.
+3. `tests/unit/test_make_goods_time_columns.py` pins the COALESCE on the F pair and refuses a
+   raw `cr.ORA_FINE` in the select list.

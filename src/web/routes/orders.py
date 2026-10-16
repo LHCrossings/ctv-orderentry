@@ -12504,8 +12504,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         cr.N_PASSAGGI               AS ordered,
                         cr.IMPORTO,
                         cr.ID_BOOKINGCODE,
-                        cr.ORA_INIZIO,
-                        cr.ORA_FINE,
+                        COALESCE(cr.ORA_INIZIOF, cr.ORA_INIZIO) AS time_from_frames,
+                        COALESCE(cr.ORA_FINEF,   cr.ORA_FINE)   AS time_to_frames,
                         SUM(tsl.PassageMiss)        AS missed
                     FROM Traffic_ScheduleList tsl
                     JOIN CONTRATTIRIGHE cr
@@ -12524,7 +12524,8 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
                         ct.DESCRIZIONE, ct.P_AGENZIA, a.RAG_SOCIAL, ag.RAG_SOCIAL,
                         cr.ID_CONTRATTIRIGHE, cr.COD_USER, cr.DESCRIZIONE,
                         cr.DATA_INIZIO, cr.DATA_FINE, cr.N_PASSAGGI,
-                        cr.IMPORTO, cr.ID_BOOKINGCODE, cr.ORA_INIZIO, cr.ORA_FINE
+                        cr.IMPORTO, cr.ID_BOOKINGCODE,
+                        cr.ORA_INIZIO, cr.ORA_FINE, cr.ORA_INIZIOF, cr.ORA_FINEF
                     ORDER BY a.RAG_SOCIAL, ct.COD_CONTRATTO, cr.COD_USER, cr.DATA_INIZIO
                 """,
                     [date_to, date_from],
