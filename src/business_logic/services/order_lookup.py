@@ -9,7 +9,7 @@ AE reads at the top of /reports/order-lookup. Pure function; no DB access.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Iterable, Optional
 
 # CTV_LineLanguage codes (browser_automation/line_language.LANGUAGE_CODES) → what the AE calls them.
@@ -109,7 +109,90 @@ def _join(items: Iterable[str], limit: int = 4) -> str:
     return ", ".join(items[:-1]) + " and " + items[-1]
 
 
-def summarize(hdr: dict, lines: list, creatives: list, today: Optional[date] = None) -> dict:
+AIRCHECK_MATCH_MINUTES = 10
+_AIRCHECK_UPCOMING = {"scheduled", "pending"}
+
+
+def match_airchecks(
+    spots: list, captures: list, tolerance_minutes: int = AIRCHECK_MATCH_MINUTES
+) -> list:
+    """Pair the recorder agent's captures with a contract's placed spots.
+
+    spots:    {isci_code, network, capture_start (naive PT ISO), air_datetime_local}
+    captures: agent rows {id, isci_code, network, start_time (naive PT ISO), status, ...}
+    A capture matches when ISCI and market agree and it starts within
+    `tolerance_minutes` of the spot's capture window. Returns one entry per
+    matched capture (a spot may match at most one capture), sorted by start.
+    """
+    by_key: dict = {}
+    for sp in spots:
+        try:
+            t = datetime.fromisoformat(str(sp.get("capture_start"))[:19])
+        except (TypeError, ValueError):
+            continue
+        key = (str(sp.get("isci_code") or "").strip().upper(), str(sp.get("network") or ""))
+        by_key.setdefault(key, []).append((t, sp))
+
+    tol = timedelta(minutes=tolerance_minutes)
+    out = []
+    for cap in captures:
+        key = (str(cap.get("isci_code") or "").strip().upper(), str(cap.get("network") or ""))
+        try:
+            start = datetime.fromisoformat(str(cap.get("start_time"))[:19])
+        except (TypeError, ValueError):
+            continue
+        best = None
+        for t, sp in by_key.get(key, ()):
+            delta = abs(start - t)
+            if delta <= tol and (best is None or delta < best[0]):
+                best = (delta, sp)
+        if best is None:
+            continue
+        out.append(
+            {
+                "id": cap.get("id"),
+                "isci": key[0],
+                "network": key[1],
+                "status": str(cap.get("status") or "").lower(),
+                "start_time": start.isoformat(),
+                "air_local": best[1].get("air_datetime_local") or "",
+            }
+        )
+    out.sort(key=lambda c: c["start_time"])
+    return out
+
+
+def airchecks_sentence(airchecks: list) -> Optional[str]:
+    """One sentence on the contract's air checks, or None when it has none."""
+    if not airchecks:
+        return None
+    upcoming = [c for c in airchecks if c.get("status") in _AIRCHECK_UPCOMING]
+    done = [c for c in airchecks if c.get("status") == "complete"]
+    failed = [c for c in airchecks if c.get("status") == "error"]
+    parts = []
+    if upcoming:
+        nxt = upcoming[0]
+        where = f" (next {nxt['air_local']} on {nxt['network']})" if nxt.get("air_local") else ""
+        parts.append(
+            f"{len(upcoming)} {_plural(len(upcoming), 'is', 'are')} scheduled to record{where}"
+        )
+    if done:
+        parts.append(f"{len(done)} {_plural(len(done), 'has', 'have')} been recorded")
+    if failed:
+        parts.append(f"{len(failed)} failed to record")
+    if not parts:
+        return None
+    n = len(airchecks)
+    return f"Air checks: {n} {_plural(n, 'capture is', 'captures are')} booked on the recorder; {'; '.join(parts)}."
+
+
+def summarize(
+    hdr: dict,
+    lines: list,
+    creatives: list,
+    today: Optional[date] = None,
+    airchecks: Optional[list] = None,
+) -> dict:
     """
     hdr:   id, code, description, customer, agency, ae, date_start, date_end,
            entered_on, first_air, last_air, first_unassigned
@@ -234,8 +317,14 @@ def summarize(hdr: dict, lines: list, creatives: list, today: Optional[date] = N
                 s += f"; the last is scheduled for {fmt_day(last_air)}"
             sentences.append(s + ".")
 
+    # 5. Air checks booked on the recorder?
+    ac = airchecks_sentence(airchecks or [])
+    if ac:
+        sentences.append(ac)
+
     return {
         "sentences": sentences,
+        "airchecks": len(airchecks or []),
         "scheduled_state": scheduled_state,
         "creative_state": creative_state,
         "ordered": ordered,

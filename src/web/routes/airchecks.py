@@ -40,11 +40,23 @@ PRE_ROLL_SECS = 20
 POST_ROLL_SECS = 30
 
 
-def _fetch_etere_spots(contract_id: int) -> list[dict]:
+def _fetch_etere_spots(
+    contract_id: int, *, upcoming_only: bool = True, first_only: bool = True
+) -> list[dict]:
+    """The aircheck spot set for a contract: one row per (ISCI, market) first
+    airing, future only (the capture set). `upcoming_only=False` keeps aired
+    spots and `first_only=False` keeps every airing (the Order Lookup match set).
+    """
     from browser_automation.etere_direct_client import connect as _db_connect
 
-    sql = (
+    upcoming_filter = (
         """
+              AND DATEADD(MILLISECOND, dbo.tcFrames2Msec(dbo.getVideoStandard(tp.COD_USER), tp.ORA) %% 86400000,
+                          CAST(tp.DATA AS DATETIME)) >= DATEADD(MINUTE, 10, GETDATE())"""
+        if upcoming_only
+        else ""
+    )
+    sql = """
         WITH ranked AS (
             SELECT
                 f.COD_PROGRA   AS isci_code,
@@ -65,20 +77,16 @@ def _fetch_etere_spots(contract_id: int) -> list[dict]:
             JOIN FILMATI f           ON f.ID_FILMATI          = tp.ID_FILMATI
             JOIN CONTRATTITESTATA ct ON ct.ID_CONTRATTITESTATA = cr.ID_CONTRATTITESTATA
             LEFT JOIN ANAGRAF a      ON a.ID_ANAGRAF           = ct.COMMITTENTE
-            WHERE cr.ID_CONTRATTITESTATA = %d
-              AND DATEADD(MILLISECOND, dbo.tcFrames2Msec(dbo.getVideoStandard(tp.COD_USER), tp.ORA) %% 86400000,
-                          CAST(tp.DATA AS DATETIME)) >= DATEADD(MINUTE, 10, GETDATE())
+            WHERE cr.ID_CONTRATTITESTATA = %d%s
               AND f.COD_PROGRA IS NOT NULL
               AND f.COD_PROGRA != ''
               AND tp.NEWTYPE = 'COM'
         )
         SELECT isci_code, market_id, air_date, air_ora, air_ms, duration_frames, customer_ref, client_name
         FROM ranked
-        WHERE rn = 1
+        WHERE %s
         ORDER BY isci_code, market_id
-    """
-        % contract_id
-    )
+    """ % (contract_id, upcoming_filter, "rn = 1" if first_only else "1 = 1")
 
     results = []
     with _db_connect() as conn:
@@ -148,6 +156,34 @@ def _fetch_agent_status() -> dict:
         }
     except Exception:
         return {"complete": 0, "scheduled": 0, "unreachable": True}
+
+
+def captures_for_contract(contract_id: int) -> dict:
+    """Agent captures that belong to this contract, for the Order Lookup summary.
+
+    Captures carry no contract id, so a capture is this contract's when it has
+    the same ISCI and market as one of the contract's placed spots and starts
+    within a few minutes of that spot's capture window (the same key the
+    auto-scheduler dedupes on, loosened for hand-booked captures). Never raises:
+    {captures: [...], unreachable: bool}.
+    """
+    import json as _json
+    import urllib.request
+
+    from business_logic.services.order_lookup import match_airchecks
+
+    try:
+        spots = _fetch_etere_spots(int(contract_id), upcoming_only=False, first_only=False)
+    except Exception as exc:  # noqa: BLE001 - a lookup must not fail on the agent
+        return {"captures": [], "unreachable": False, "error": str(exc)}
+    if not spots:
+        return {"captures": [], "unreachable": False}
+    try:
+        with urllib.request.urlopen(f"{AGENT_URL}/captures", timeout=3) as resp:
+            captures = _json.loads(resp.read())
+    except Exception:
+        return {"captures": [], "unreachable": True}
+    return {"captures": match_airchecks(spots, captures), "unreachable": False}
 
 
 def schedule_airchecks_for_contract(contract_id: int) -> dict:

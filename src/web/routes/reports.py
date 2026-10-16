@@ -969,9 +969,29 @@ def build_reports_router(templates: Jinja2Templates) -> APIRouter:
         hdr["first_unassigned"] = (
             _sql_min_date(*[ln.get("first_unassigned") for ln in lines]) if lines else None
         )
-        summary = summarize(hdr, lines, [c for c in creative_list if c["assigned"]])
+        # Air checks live on the Datamover recorder agent, not in Etere.
+        from src.web.routes.airchecks import captures_for_contract
+
+        try:
+            airchecks = await asyncio.get_running_loop().run_in_executor(
+                None, captures_for_contract, contract_id
+            )
+        except Exception:  # noqa: BLE001 - never block the lookup on the recorder
+            airchecks = {"captures": [], "unreachable": True}
+        summary = summarize(
+            hdr,
+            lines,
+            [c for c in creative_list if c["assigned"]],
+            airchecks=airchecks.get("captures") or [],
+        )
         return JSONResponse(
-            {"header": hdr, "summary": summary, "lines": lines, "creatives": creative_list}
+            {
+                "header": hdr,
+                "summary": summary,
+                "lines": lines,
+                "creatives": creative_list,
+                "airchecks": airchecks,
+            }
         )
 
     return router

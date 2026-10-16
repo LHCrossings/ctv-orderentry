@@ -135,3 +135,107 @@ def test_language_search_words():
     assert language_codes_for("filipino") == {"T"} and language_codes_for("tagalog") == {"T"}
     assert language_codes_for("mcd") == set()  # an advertiser word is not a language
     assert language_codes_for("sf") == set()  # too short
+
+
+# --- Air checks (recorder captures matched to the contract's spots) ---------
+
+from business_logic.services.order_lookup import airchecks_sentence, match_airchecks  # noqa: E402
+
+
+def _spot(isci, network, start, local):
+    return {
+        "isci_code": isci,
+        "network": network,
+        "capture_start": start,
+        "air_datetime_local": local,
+    }
+
+
+def _cap(isci, network, start, status, cid="c1"):
+    return {"id": cid, "isci_code": isci, "network": network, "start_time": start, "status": status}
+
+
+def test_match_airchecks_by_isci_market_and_time():
+    spots = [
+        _spot("TYIW26TL773H", "SFO", "2026-10-17T15:09:40", "10/17 at 3:10:00PM PDT"),
+        _spot("TYIW26TL773H", "LAX", "2026-10-17T15:09:40", "10/17 at 3:10:00PM PDT"),
+    ]
+    caps = [
+        _cap(
+            "tyiw26tl773h", "SFO", "2026-10-17T15:09:40", "scheduled", "a"
+        ),  # exact, case-insensitive
+        _cap(
+            "TYIW26TL773H", "SFO", "2026-10-17T15:04:00", "complete", "b"
+        ),  # hand-booked, 5 min early
+        _cap(
+            "TYIW26TL773H", "SFO", "2026-10-17T18:00:00", "scheduled", "c"
+        ),  # same ISCI, wrong time
+        _cap(
+            "TYIW26TL773H", "SEA", "2026-10-17T15:09:40", "scheduled", "d"
+        ),  # market not on the contract
+        _cap("OTHER", "SFO", "2026-10-17T15:09:40", "scheduled", "e"),  # not our creative
+    ]
+    got = match_airchecks(spots, caps)
+    assert [c["id"] for c in got] == ["b", "a"]
+    assert got[1]["air_local"] == "10/17 at 3:10:00PM PDT" and got[1]["network"] == "SFO"
+
+
+def test_match_airchecks_tolerates_bad_rows():
+    assert (
+        match_airchecks([_spot("A", "SFO", None, "")], [_cap("A", "SFO", "garbage", "scheduled")])
+        == []
+    )
+
+
+def test_airchecks_sentence_counts_states_and_names_the_next():
+    acs = [
+        {
+            "status": "complete",
+            "network": "SEA",
+            "start_time": "2026-10-15T06:16:49",
+            "air_local": "10/15 at 6:17:09AM PDT",
+        },
+        {
+            "status": "scheduled",
+            "network": "SFO",
+            "start_time": "2026-10-17T15:09:40",
+            "air_local": "10/17 at 3:10:00PM PDT",
+        },
+        {
+            "status": "pending",
+            "network": "SFO",
+            "start_time": "2026-10-18T15:09:40",
+            "air_local": "10/18 at 3:10:00PM PDT",
+        },
+        {
+            "status": "error",
+            "network": "SFO",
+            "start_time": "2026-10-14T15:09:40",
+            "air_local": "10/14 at 3:10:00PM PDT",
+        },
+    ]
+    s = airchecks_sentence(acs)
+    assert s == (
+        "Air checks: 4 captures are booked on the recorder; "
+        "2 are scheduled to record (next 10/17 at 3:10:00PM PDT on SFO); "
+        "1 has been recorded; 1 failed to record."
+    )
+
+
+def test_summary_mentions_airchecks_only_when_present():
+    lines = [_line(8, 8, 8)]
+    base = summarize(_hdr(), lines, [{"isci": "A"}], today=TODAY)
+    assert base["airchecks"] == 0 and not any("Air checks" in t for t in base["sentences"])
+    acs = [
+        {
+            "status": "scheduled",
+            "network": "SFO",
+            "start_time": "2026-10-17T15:09:40",
+            "air_local": "10/17 at 3:10:00PM PDT",
+        }
+    ]
+    s = summarize(_hdr(), lines, [{"isci": "A"}], today=TODAY, airchecks=acs)
+    assert s["airchecks"] == 1
+    assert s["sentences"][-1] == (
+        "Air checks: 1 capture is booked on the recorder; 1 is scheduled to record (next 10/17 at 3:10:00PM PDT on SFO)."
+    )
