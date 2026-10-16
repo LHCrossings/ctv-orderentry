@@ -25,6 +25,7 @@ $Root       = "C:\PhoenixSRT"
 $Src        = "srt://47.181.223.221:6005?mode=caller&latency=8000000"   # latency in microseconds (8 s): a packet SRT cannot recover inside this window is DROPPED (relay log "RCV-DROPPED"); 2 s lost 269 packets in three episodes on 10/15 03:53-04:55 and every hour's AAC broke. Delay is irrelevant for a recording.
 $RelayTarget = ""   # was udp://10.1.50.98:6005?pkt_size=1316 (Datavideo); off since 21:30 PT 10/15 (Lee 10/16: no longer needed). "" = no relay
 $LoopPort   = 6010                                     # loopback hand-off relay -> recorder
+$MonitorTarget = "udp://127.0.0.1:6011?pkt_size=1316" # live-view tap: VLC on VIDEO-02 opens udp://@127.0.0.1:6011 ("Phoenix Live View" desktop shortcut). The relay fires it whether or not anyone listens; the recorder never sees this leg. "" = none
 $RecDir     = "$Root\rec"
 $LogDir     = "$Root\logs"
 $FFmpeg     = "$Root\bin\ffmpeg.exe"
@@ -54,6 +55,7 @@ function Start-Relay {
         "-map", "0", "-c", "copy", "-f", "rawvideo", "-flush_packets", "1", "udp://127.0.0.1:${LoopPort}?pkt_size=1316"
     )
     if ($RelayTarget) { $args += @("-map", "0", "-c", "copy", "-f", "rawvideo", "-flush_packets", "1", $RelayTarget) }
+    if ($MonitorTarget) { $args += @("-map", "0", "-c", "copy", "-f", "rawvideo", "-flush_packets", "1", $MonitorTarget) }
     $p = Start-Process -FilePath $FFmpeg -ArgumentList $args -NoNewWindow -PassThru -RedirectStandardError $ffLog
     Log "relay started pid=$($p.Id) log=$ffLog"
     return $p
@@ -163,6 +165,7 @@ function Write-Status($relayProc, $recProc) {
         files         = (Get-ChildItem $RecDir -Filter "${Prefix}_*" | Measure-Object).Count
         source        = $Src
         relay_target  = $RelayTarget
+        monitor_target = $MonitorTarget
     }
     ($st | ConvertTo-Json) | Set-Content "$Root\status.json" -Encoding UTF8
 }

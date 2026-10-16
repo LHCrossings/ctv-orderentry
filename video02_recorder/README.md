@@ -40,6 +40,14 @@ blocks the guest fallback. So nothing is archived while nobody is logged on
 72 h local retention gives the archive time to catch up. Status:
 `C:\PhoenixSRT\archive_status.json`; log `C:\PhoenixSRT\logs\archive_YYYYMMDD.log`.
 
+**Live view (team 10/16).** The relay also writes the raw bytes to loopback
+`udp://127.0.0.1:6011` (`$MonitorTarget`). The "Phoenix Live View" shortcut on the
+VIDEO-02 desktop opens VLC on `udp://@127.0.0.1:6011`, a second or two behind air,
+to check that Phoenix is sending programming and not its Daily Talk fallback.
+VLC is a separate process on a separate port: opening or closing it cannot touch
+the recorder. Software decode (no GPU) uses about one core while it is open.
+One viewer at a time (unicast port).
+
 **Packet loss.** SRT drops any packet it cannot recover inside its latency window
 (relay log: `RCV-DROPPED n packet(s) ... ++SUPPRESSED: k`). The recorder is a
 remux, so its `.ts` carries fresh continuity counters and loss is invisible there;
