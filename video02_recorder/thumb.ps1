@@ -30,10 +30,17 @@ $script:meta = @{ captured = $null; ok = $false; error = "no frame yet"; elapsed
 
 function Grab {
     $tmp = "$Jpg.part"
+    $errFile = "$LogDir\thumb_ffmpeg_err.txt"
     $sw = [Diagnostics.Stopwatch]::StartNew()
-    $err = & $FFmpeg -hide_banner -loglevel error -nostdin -timeout 8000000 -i $Src `
-        -frames:v 1 -vf "yadif=0:-1:0,scale=640:-1" -q:v 4 -y $tmp 2>&1 | Out-String
-    $ok = ($LASTEXITCODE -eq 0) -and (Test-Path $tmp) -and ((Get-Item $tmp).Length -gt 1000)
+    # Start-Process, never the call operator: PowerShell wraps a native command's stderr
+    # (ffmpeg's harmless mid-GOP "no frame" warnings) into error records and the result
+    # check fails (10/15 22:00, every grab "failed" while the tap was fine).
+    $p = Start-Process -FilePath $FFmpeg -ArgumentList @(
+        "-hide_banner", "-loglevel", "error", "-nostdin", "-timeout", "8000000", "-i", $Src,
+        "-frames:v", "1", "-vf", "yadif=0:-1:0,scale=640:-1", "-q:v", "4",
+        "-f", "image2", "-update", "1", "-y", $tmp   # explicit muxer: the .part name has no image extension
+    ) -NoNewWindow -PassThru -RedirectStandardError $errFile -Wait
+    $ok = ($p.ExitCode -eq 0) -and (Test-Path $tmp) -and ((Get-Item $tmp).Length -gt 1000)
     if ($ok) {
         Move-Item $tmp $Jpg -Force
         $script:meta = @{
@@ -45,8 +52,8 @@ function Grab {
         }
     } else {
         Remove-Item $tmp -Force -ErrorAction SilentlyContinue
-        $reason = (($err -split "`r?`n") | Where-Object { $_ -match "Error|error" } | Select-Object -First 1)
-        if (-not $reason) { $reason = "ffmpeg exit $LASTEXITCODE" }
+        $reason = (Get-Content $errFile -ErrorAction SilentlyContinue | Where-Object { $_ -match "rror" } | Select-Object -Last 1)
+        if (-not $reason) { $reason = "ffmpeg exit $($p.ExitCode)" }
         $script:meta.ok = $false
         $script:meta.error = ("{0} (no new frame since {1})" -f $reason.Trim(), $script:meta.captured)
         $script:meta.elapsed_s = [math]::Round($sw.Elapsed.TotalSeconds, 1)

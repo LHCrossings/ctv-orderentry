@@ -2947,3 +2947,26 @@ looked complete. Nobody reported it; it was in plain sight in a log I read for a
 4. Verify the fix on the restart you have to do anyway: after the swap the old hour's segment
    must remux within one loop and the new segment must stay untouched (2100 -> mp4 in 69 s,
    2120.ts live), which exercises both branches of the new rule.
+
+## A PowerShell Wrapper Around a Native Command Is Tested on the REAL Stream — `&` + `2>&1` Turns Harmless stderr Into "Failure", and `$args` Is Not Yours to Name
+
+**Session:** Lee / Maija, Phoenix confidence monitor first frame (2026-10-16)
+
+**Rule:** `thumb.ps1` called ffmpeg with the call operator and `2>&1 | Out-String`; ffmpeg's
+harmless mid-GOP "no frame!" lines came back as PowerShell error records, the one-line reason
+regex matched the "+ $err = & $FFmpeg -loglevel error ..." position line, and every grab was
+reported failed for twenty minutes while the tap was fine (and the output name `live.jpg.part`
+gave ffmpeg no format to guess). My test harness then used `$args` as a parameter name, which
+PowerShell reserves, so three tests ran with an empty argument list and printed "exit after
+0 s". Same family as the 10/15 `$Relay`/`$relay` case-insensitivity trap.
+
+**How to apply:**
+1. Run a native tool from PowerShell with `Start-Process -PassThru -Wait -RedirectStandardError
+   <file>` and judge by `$p.ExitCode` + the output file's size; read the stderr file for the
+   reason. Never parse `2>&1` of a tool that writes warnings to stderr.
+2. Give ffmpeg an explicit muxer (`-f image2 -update 1`) whenever the output name does not end
+   in a media extension (temp `.part` files).
+3. Never name a PowerShell parameter or variable `$args`, `$input`, `$error`, `$matches`, or
+   any other automatic variable; a wrong name here fails silently with "0 s" runs.
+4. The grab could only be tested once the tap existed; stage the service early, but the
+   first REAL frame is the acceptance test. Look at the picture.
