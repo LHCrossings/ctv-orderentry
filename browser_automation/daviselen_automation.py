@@ -59,6 +59,7 @@ from browser_automation.parsers.daviselen_parser import (
     DaviselenOrder,
     analyze_weekly_distribution,
     format_time_for_description,
+    get_default_customer_order_ref,
     get_default_notes,
     parse_daviselen_pdf,
 )
@@ -348,8 +349,8 @@ def gather_daviselen_inputs(pdf_path: str) -> dict:
     client_upper = order.client.upper()
     estimate = order.estimate_number
     
-    # Customer Order Ref format: "Order 23924, Est 46"
-    customer_order_ref = f"Order {order.order_number}, Est {estimate}"
+    # Customer Order Ref "Est 74, Order 32064" — one producer: the parser helper
+    customer_order_ref = get_default_customer_order_ref(order)
     
     # Generate smart defaults based on client
     if customer:
@@ -483,6 +484,7 @@ def _create_daviselen_contract_direct(order: "DaviselenOrder", user_input: dict)
             contract_end_date=_parse_date(order.flight_end),
             billing_type="agency",
             note=user_input["notes"],
+            customer_order_ref=user_input.get("customer_order_ref", ""),
             allow_rename=True,
         )
         print(f"[DAVISELEN DIRECT] ✓ Contract ID={contract_id}")

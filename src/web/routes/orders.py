@@ -3773,6 +3773,14 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             m_tok = _re.search(r"(\d+[A-Z]{2}\s+\d{4})\s*$", hdr_code)
             if m_tok:
                 estimate_run = m_tok.group(1)
+        # Daviselen convention (Lee 10/16): front estimate = the whole Customer Order
+        # Ref ("Est 74, Order 32064"); run-sheet estimate = the estimate number alone.
+        from backwrite.eterebridge_runner import daviselen_estimates, is_daviselen
+
+        if is_daviselen(m.get("order_type"), hdr_code):
+            front, run = daviselen_estimates((header_info or {}).get("customer_ref", ""), hdr_code)
+            estimate = front or estimate
+            estimate_run = run or estimate_run
 
         return JSONResponse(
             content={

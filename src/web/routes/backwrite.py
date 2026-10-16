@@ -364,6 +364,14 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
         if not estimate_hint:
             est_match = re.search(r"(\d{4,})", header.description)
             estimate_hint = est_match.group(1) if est_match else ""
+        # Daviselen (Lee 10/16): front page = the whole Customer Order Ref, run sheet =
+        # the estimate number alone.
+        estimate_run_hint = ""
+        from backwrite.eterebridge_runner import daviselen_estimates, is_daviselen
+
+        if is_daviselen(None, header.contract_code):
+            front, estimate_run_hint = daviselen_estimates(estimate_hint, header.contract_code)
+            estimate_hint = front or estimate_hint
         unique_rates = sorted(set(s.gross_rate for s in spots if s.gross_rate > 0))
 
         language_counts: dict = {}
@@ -402,6 +410,7 @@ def build_backwrite_router(templates: Jinja2Templates) -> APIRouter:
                     "end": max(s.air_date for s in spots).strftime("%m/%d/%Y"),
                 },
                 "estimate_hint": estimate_hint,
+                "estimate_run_hint": estimate_run_hint,
                 "unique_rates": unique_rates,
                 "language_counts": language_counts,
                 "language_details": language_details,

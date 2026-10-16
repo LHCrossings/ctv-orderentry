@@ -14,6 +14,7 @@ import csv
 import io
 import logging
 import os
+import re
 import sys
 import tempfile
 from copy import copy
@@ -121,6 +122,31 @@ def get_language_options() -> list:
     if not _AVAILABLE:
         return ["E", "C", "M", "M/C", "V", "T", "K", "J", "SA", "Hm", "L"]
     return list(_eb_app_config.language_options)
+
+
+_EST_TOKEN = re.compile(r"\bEst\.?\s*#?\s*([A-Za-z0-9-]+)", re.IGNORECASE)
+
+
+def is_daviselen(order_type: str | None, code: str | None) -> bool:
+    return (order_type or "").strip().lower() == "daviselen" or (
+        code or ""
+    ).strip().lower().startswith("daviselen")
+
+
+def daviselen_estimates(customer_ref: str | None, code: str | None) -> tuple[str, str]:
+    """(front-page estimate, run-sheet estimate) for a Daviselen contract (Lee 10/16).
+
+    Front page = the whole Customer Order Ref as entered ("Est 74, Order 32064").
+    Run sheet = the estimate number alone: the token after "Est" in that ref, else the
+    trailing number of the contract code ("Daviselen McD 74" -> "74"), else "".
+    """
+    ref = (customer_ref or "").strip()
+    m = _EST_TOKEN.search(ref)
+    run = m.group(1) if m else ""
+    if not run:
+        m2 = re.search(r"(\d+)\s*$", code or "")
+        run = m2.group(1) if m2 else ""
+    return ref, run
 
 
 def get_customer_order_ref(contract_id: int) -> str:

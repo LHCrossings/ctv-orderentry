@@ -984,7 +984,9 @@ def get_default_customer_order_ref(order: DaviselenOrder) -> str:
     """
     Generate default Customer Order Ref for ALL Daviselen orders.
     
-    Format: "Order <order_number>, Est <estimate_number>"
+    Format: "Est <estimate_number>, Order <order_number>" (Lee 10/16: his own convention on the
+    hand-entered contracts; the whole text goes on the sales confirmation front page, the
+    estimate number alone on the run sheet)
     
     Args:
         order: DaviselenOrder object
@@ -994,9 +996,9 @@ def get_default_customer_order_ref(order: DaviselenOrder) -> str:
         
     Example:
         >>> get_default_customer_order_ref(order)
-        "Order 23475, Est 1295"
+        "Est 1295, Order 23475"
     """
-    return f"Order {order.order_number}, Est {order.estimate_number}"
+    return f"Est {order.estimate_number}, Order {order.order_number}"
 
 
 def get_default_notes(order: DaviselenOrder) -> str:
