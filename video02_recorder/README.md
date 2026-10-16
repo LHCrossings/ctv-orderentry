@@ -56,6 +56,9 @@ deinterlaced 640 px JPEG a minute and serves it on `http://100.90.230.98:8081/li
 the frame's age; amber past 3 minutes, red when VIDEO-02 does not answer. Firewall
 rule "Phoenix SRT thumbnail 8081": TCP 8081 from 100.64.0.0/10, 192.168.50.0/24,
 10.1.50.0/24. Separate process, separate port: it cannot touch the recorder.
+Every grab is also kept for 24 h in `C:\PhoenixSRT\frames\Phoenix_YYYYMMDD_HHMMSS.jpg`
+(Lee 10/16; ~65 MB), listed at `/frames/` and served at `/frames/<name>`, so a Daily
+Talk fallback can be matched against the relay's break times after the fact.
 
 **Packet loss.** SRT drops any packet it cannot recover inside its latency window
 (relay log: `RCV-DROPPED n packet(s) ... ++SUPPRESSED: k`). The recorder is a

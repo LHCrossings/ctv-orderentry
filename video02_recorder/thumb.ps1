@@ -7,6 +7,8 @@
 # Scheduled Task "PhoenixSrtThumb" (SYSTEM, at startup, restart on failure).
 # GET http://100.90.230.98:8081/live.jpg   the latest frame (640 px wide, deinterlaced)
 # GET http://100.90.230.98:8081/live.json  {captured, ok, error, elapsed_s, size}
+# GET http://100.90.230.98:8081/frames/     the last 24 h of grabs (JSON list, oldest first)
+# GET http://100.90.230.98:8081/frames/Phoenix_YYYYMMDD_HHMMSS.jpg   one archived frame
 # Firewall: TCP 8081 from the tailnet (100.64.0.0/10) and the office LANs only.
 # Log: C:\PhoenixSRT\logs\thumb_YYYYMMDD.log
 
@@ -18,8 +20,10 @@ $Jpg    = "$Root\live.jpg"
 $Meta   = "$Root\live.json"
 $Port   = 8081
 $Every  = 60
+$Frames = "$Root\frames"      # 24 h archive of every grab (Lee 10/16: "we may need them"); ~65 MB
+$KeepH  = 24
 
-New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+New-Item -ItemType Directory -Force -Path $LogDir, $Frames | Out-Null
 
 function Log($msg) {
     $line = "{0:yyyy-MM-dd HH:mm:ss} {1}" -f (Get-Date), $msg
@@ -43,6 +47,8 @@ function Grab {
     $ok = ($p.ExitCode -eq 0) -and (Test-Path $tmp) -and ((Get-Item $tmp).Length -gt 1000)
     if ($ok) {
         Move-Item $tmp $Jpg -Force
+        Copy-Item $Jpg (Join-Path $Frames ("Phoenix_{0:yyyyMMdd_HHmmss}.jpg" -f (Get-Date))) -Force
+        Get-ChildItem $Frames -Filter "Phoenix_*.jpg" | Where-Object { $_.LastWriteTime -lt (Get-Date).AddHours(-$KeepH) } | Remove-Item -Force
         $script:meta = @{
             captured  = (Get-Date).ToString("o")   # with the UTC offset, so any browser computes the age
             ok        = $true
@@ -74,6 +80,14 @@ function Serve($ctx) {
         } elseif ($req.Url.AbsolutePath -eq "/live.json") {
             $bytes = [Text.Encoding]::UTF8.GetBytes(($script:meta | ConvertTo-Json -Compress))
             $res.ContentType = "application/json"
+        } elseif ($req.Url.AbsolutePath -eq "/frames/") {
+            # the archive, oldest first: ["Phoenix_20261015_220801.jpg", ...]
+            $names = @(Get-ChildItem $Frames -Filter "Phoenix_*.jpg" | Sort-Object Name | ForEach-Object { $_.Name })
+            $bytes = [Text.Encoding]::UTF8.GetBytes((ConvertTo-Json @($names) -Compress))
+            $res.ContentType = "application/json"
+        } elseif ($req.Url.AbsolutePath -match '^/frames/(Phoenix_\d{8}_\d{6}\.jpg)$' -and (Test-Path (Join-Path $Frames $Matches[1]))) {
+            $bytes = [IO.File]::ReadAllBytes((Join-Path $Frames $Matches[1]))
+            $res.ContentType = "image/jpeg"
         } else {
             $res.StatusCode = 404
             $bytes = [Text.Encoding]::UTF8.GetBytes("not found")
