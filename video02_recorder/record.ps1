@@ -17,8 +17,11 @@
 #
 # Retention: keep KEEP_HOURS of recordings, and delete oldest-first whenever C: has less than
 # MIN_FREE_GB free. Never touches the segment being written.
-# The stream carries two audio tracks (AAC LC + AC-3); the .ts keeps both, the .mp4 keeps ONE: the
-# AAC, or the AC-3 when the AAC frames are damaged (see Remux-Closed).
+# The stream carries two audio tracks: AAC LC (the programme audio) and an AC-3 track that is
+# DIGITAL SILENCE (-91 dB over whole hours, measured 10/17). The .ts keeps both; the .mp4 keeps
+# ONE AAC track: Phoenix's AAC copied, or re-encoded with decoder errors ignored when a frame
+# is damaged (see Remux-Closed). The AC-3 is never used: 15 hours of 10/16-10/17 were written
+# with it as the "fallback" and every one of them is silent (Maija 10/17).
 # Status: $Root\status.json rewritten every loop. Logs: $Root\logs\
 
 $Root       = "C:\PhoenixSRT"
@@ -68,6 +71,7 @@ function Start-Recorder {
     $pattern = "$RecDir\${Prefix}_%Y%m%d_%H%M.ts"
     $args = @(
         "-hide_banner", "-loglevel", "warning", "-nostdin",
+        "-fflags", "+discardcorrupt",   # a Phoenix reconnect joins the stream mid-frame; the continuity jump flags that torn PES corrupt and this drops it here instead of writing a broken AAC frame into the .ts (10/17)
         "-i", "udp://127.0.0.1:${LoopPort}?fifo_size=1000000&overrun_nonfatal=1",
         "-map", "0", "-c", "copy",
         "-f", "segment", "-segment_time", "$SegSeconds", "-segment_atclocktime", "1",
@@ -103,22 +107,34 @@ function Remux-Closed($recProc) {
         if ($script:RemuxRetryAt.ContainsKey($ts.Name) -and (Get-Date) -lt $script:RemuxRetryAt[$ts.Name]) { continue }
         # Like EDIT-02 Memory's export (Lee 10/15): video + ONE audio track and a tmcd timecode
         # track from the segment's start time (the .ts creation time, drop-frame).
-        # Audio: the AAC track copied. When its ADTS frames are damaged (packet loss upstream;
-        # every hour from 03:00 on 10/15 had ~60 broken AAC frames and mp4 refuses the track,
-        # re-encoding fails on the same frames), fall back to the AC-3 track copied, which
-        # carries the same programme audio and survived the same hours intact.
+        # Audio: the AAC track copied. When one ADTS frame is damaged the mp4 muxer refuses the
+        # whole track (every Phoenix reconnect tears the frame at the cut: 14 of 24 hours on
+        # 10/16, with ZERO SRT packet loss since latency went to 8 s). Fallback: decode that AAC
+        # with errors ignored (one torn frame = one lost 21 ms frame) and re-encode it to AAC
+        # 256k (~4 min per hour on this Xeon, mostly the 2.3 GB copy). NEVER the AC-3 track:
+        # it is digital silence end to end (-91 dB measured 10/17 on three hours and the live
+        # stream), which is why the 10/15 "ac3 copy" fallback produced Maija's silent hours.
         $tc = $ts.CreationTime.ToString("HH:mm:ss") + ";00"
         $streams = (& $FFprobe -v error -select_streams a -show_entries stream=index,codec_name -of csv=p=0 $ts.FullName) -split "`r?`n"
         $aac = $streams | Where-Object { $_ -match ',aac' } | Select-Object -First 1
-        $ac3 = $streams | Where-Object { $_ -match ',ac3' } | Select-Object -First 1
+        $enc = @("-c:a", "aac", "-b:a", "256k", "-ar", "48000", "-ac", "2")
         $modes = @()
-        if ($aac) { $modes += @{ label = "aac copy"; map = "0:" + ($aac -split ',')[0] } }
-        if ($ac3) { $modes += @{ label = "ac3 copy (aac damaged)"; map = "0:" + ($ac3 -split ',')[0] } }
-        if (-not $modes) { $modes += @{ label = "first audio"; map = "0:a:0?" } }
+        # pre = input options (before -i); args = stream selection + audio codec (after -map 0:v:0)
+        if ($aac) {
+            $modes += @{ label = "aac copy"; pre = @(); args = @("-map", ("0:" + ($aac -split ',')[0]), "-c:a", "copy") }
+            $modes += @{ label = "aac re-encoded, damaged frames dropped"; pre = @("-err_detect", "ignore_err"); args = @("-map", ("0:" + ($aac -split ',')[0])) + $enc }
+        } else {
+            $modes += @{ label = "first audio -> aac (no AAC track found)"; pre = @("-err_detect", "ignore_err"); args = @("-map", "0:a:0?") + $enc }
+        }
         $ok = $false
         foreach ($m in $modes) {
-            & $FFmpeg -hide_banner -loglevel error -nostdin -i $ts.FullName -map 0:v:0 -map $m.map -c copy -timecode $tc -movflags +faststart -f mp4 -y $tmp 2>> "$LogDir\remux_errors.log"
-            if ($LASTEXITCODE -eq 0 -and (Test-Path $tmp)) {
+            $ffArgs = @("-hide_banner", "-loglevel", "error", "-nostdin") + $m.pre + @("-i", $ts.FullName, "-map", "0:v:0") + $m.args + @("-c:v", "copy", "-timecode", $tc, "-movflags", "+faststart", "-f", "mp4", "-y", $tmp)
+            # Start-Process, never `&` + 2>&1: ffmpeg's stderr warnings would become PowerShell errors (thumb.ps1 lesson 10/16).
+            $errFile = "$LogDir\remux_last_stderr.txt"
+            $proc = Start-Process -FilePath $FFmpeg -ArgumentList $ffArgs -NoNewWindow -PassThru -Wait -RedirectStandardError $errFile
+            $code = $proc.ExitCode
+            if (Test-Path $errFile) { Add-Content "$LogDir\remux_errors.log" ("--- {0} {1} ---" -f $ts.Name, $m.label); Get-Content $errFile | Add-Content "$LogDir\remux_errors.log" }
+            if ($code -eq 0 -and (Test-Path $tmp)) {
                 $dur = & $FFprobe -v error -show_entries format=duration -of csv=p=0 $tmp
                 Move-Item $tmp $mp4 -Force
                 try { Remove-Item $ts.FullName -Force -ErrorAction Stop }
@@ -127,7 +143,7 @@ function Remux-Closed($recProc) {
                 Log ("remuxed {0} -> {1} ({2:N0} MB, {3} s, audio: {4})" -f $ts.Name, (Split-Path $mp4 -Leaf), ((Get-Item $mp4).Length/1MB), $dur, $m.label)
                 $ok = $true; break
             }
-            Add-Content "$LogDir\remux_errors.log" ("--- {0} {1}: exit {2} ---" -f $ts.Name, $m.label, $LASTEXITCODE)
+            Add-Content "$LogDir\remux_errors.log" ("--- {0} {1}: exit {2} ---" -f $ts.Name, $m.label, $code)
             if (Test-Path $tmp) { Remove-Item $tmp -Force }
         }
         if (-not $ok) {

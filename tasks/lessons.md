@@ -2948,6 +2948,36 @@ looked complete. Nobody reported it; it was in plain sight in a log I read for a
    must remux within one loop and the new segment must stay untouched (2100 -> mp4 in 69 s,
    2120.ts live), which exercises both branches of the new rule.
 
+## A Fallback Track Was Verified by Exit Code, Never by LISTENING — the AC-3 "Backup" Was Digital Silence, and 15 Hours Shipped Mute
+
+**Session:** Lee / Maija, "no audio on most of the recordings from Phoenix TV" (2026-10-17)
+
+**Rule:** On 10/15 the mp4 remux fell back to copying the stream's AC-3 track whenever the AAC
+had a damaged frame, on the strength of "the AC-3 copied clean" (ffmpeg exit 0, full duration).
+Nobody measured it. The AC-3 is -91 dB end to end (three whole hours and the live stream),
+so every hour that took the fallback was silent: 14 of 24 on 10/16, every other hour on
+10/17. The damage itself had moved: zero SRT packet loss since 8 s latency, but each of
+Phoenix's ~10 reconnects a day joins the stream mid-frame, one torn ADTS frame makes mp4
+refuse the whole AAC track, and the "ac3 copy" path took over. Same family as 9/14 ("validate
+a rule against the AIRED oracle") and 10/15 ("a 0-byte warning log proves nothing"): a
+success message on a write is not the thing the consumer needs. The source .ts for those 15
+hours was deleted after the remux, so the audio is unrecoverable.
+
+**How to apply:**
+1. A media fallback is verified by the PROPERTY the consumer needs: run `volumedetect` (or
+   look at the picture) on the fallback's output before calling it a fallback. "Copies clean"
+   and "full duration" are container facts; silence satisfies both.
+2. When a fix keeps a damaged primary and a fallback, log which path each hour took AND keep
+   the fallback's output distinguishable at a glance (the `audio:` label in the recorder log
+   was the only thing that made the 10/17 diagnosis a one-query job). Better: re-derive the
+   good track (decode the damaged AAC with errors ignored, re-encode) rather than switch to
+   a track whose content was never checked.
+3. Reproduce the damage before testing a repair: a .ts spliced at two 188-byte boundaries
+   reproduced "aac copy refuses the hour" exactly, and showed the re-encode keeps sound
+   across the join, in one SSM command. Testing remux flags on undamaged files proves nothing.
+4. Never name a PowerShell function parameter `$args` (third time: thumb.ps1 10/16, the
+   damaged-sample test harness 10/17 ran every ffmpeg with an empty argument list).
+
 ## A PowerShell Wrapper Around a Native Command Is Tested on the REAL Stream — `&` + `2>&1` Turns Harmless stderr Into "Failure", and `$args` Is Not Yours to Name
 
 **Session:** Lee / Maija, Phoenix confidence monitor first frame (2026-10-16)

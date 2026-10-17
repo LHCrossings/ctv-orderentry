@@ -21,9 +21,13 @@ once the hour closes; a segment is closed when a NEWER segment exists or the
 recorder is not running, never by elapsed time: the 10/15 "not written for 90 s"
 rule fired during every relay reconnect and remuxed the live hour at 38 and 40
 minutes, so the NAS briefly held partial hours named like full ones). 1080i 29.97 H.264 + ONE audio track like Memory's export
-(the AAC LC; when the AAC frames are damaged and mp4 refuses them, the AC-3 track
-instead, logged as `audio: ac3 copy`) + a tmcd timecode track from the segment
-start; about 2.5 GB per hour.
+(Phoenix's AAC LC copied, logged `audio: aac copy`; when one of its ADTS frames is
+damaged and mp4 refuses the track, the same AAC decoded with errors ignored and
+re-encoded at 256k, logged `audio: aac re-encoded, damaged frames dropped`, about
+4 min per hour) + a tmcd timecode track from the segment start; about 2.5 GB per
+hour. **The stream's second audio track (AC-3) is digital silence** (-91 dB over
+whole hours, measured 10/17) and is never used: the 10/15-10/17 "ac3 copy"
+fallback wrote 15 silent hours, which is what Maija reported on 10/17.
 
 **Archive to the NAS.** `archive.ps1` runs as the Scheduled Task `PhoenixSrtArchive`
 in the logged-on `CROSSINGSTV\video` session (trigger: at that user's logon) and
@@ -65,9 +69,18 @@ Talk fallback can be matched against the relay's break times after the fact.
 remux, so its `.ts` carries fresh continuity counters and loss is invisible there;
 count it in the relay log and in the recorder log's `Packet corrupt` lines. With
 2 s the 10/15 03:53-04:55 window lost 269 packets in three episodes and every
-hour's AAC track broke (mp4 refuses a damaged ADTS frame; re-encoding fails on the
-same frames; the AC-3 survived). Latency is 8 s since 05:56 10/15; delay is
-irrelevant for a recording.
+hour's AAC track broke (mp4 refuses a damaged ADTS frame). Latency is 8 s since
+05:56 10/15 and no packet has been dropped since; delay is irrelevant for a
+recording.
+
+**Reconnects tear one frame.** Phoenix's SRT session breaks several times a day
+(10/16: ten times) and every reconnect joins the stream mid-frame, so the hour's
+`.ts` holds one torn AAC frame and `aac copy` refuses the whole track. Two layers
+handle it: the recorder reads its loopback input with `-fflags +discardcorrupt`
+(the continuity jump at the join flags the torn PES corrupt and it is dropped
+before it reaches the `.ts`), and the remux falls back to re-encoding the AAC with
+decoder errors ignored (verified on a deliberately spliced sample: `aac copy`
+fails, the re-encode keeps the full duration with sound across the join).
 
 Local retention: 72 hours (three days, Lee 10/15 and again 10/16; the NAS keeps five), and oldest-first below 80 GB free on C:. At 5.6 Mbps that is ~180 GB, which fits the 465 GB C: with the floor.
 Status: `C:\PhoenixSRT\status.json`. Logs: `C:\PhoenixSRT\logs\`.
