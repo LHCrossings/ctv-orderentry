@@ -44,6 +44,7 @@
         .prg-name { font-weight: 600; font-size: 0.88rem; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .prg-code { font-weight: 400; font-size: 0.72rem; color: var(--nord4); opacity: 0.7; margin-left: 10px; font-family: monospace; }
         .prg-lang { font-size: 0.72rem; background: rgba(136,192,208,0.18); color: var(--nord8); padding: 2px 8px; border-radius: 10px; font-weight: 700; flex-shrink: 0; }
+        .prg-filler { font-size: 0.74rem; max-width: 300px; background: var(--nord1); color: var(--nord4); border: 1px solid var(--nord3); border-radius: 4px; padding: 2px 4px; flex-shrink: 1; min-width: 0; }
         .prg-stat { font-size: 0.72rem; color: var(--nord4); flex-shrink: 0; white-space: nowrap; }
         .prg-stat.warn { color: var(--nord13); font-weight: 700; }
         .prg-stat.bad { color: var(--nord11); font-weight: 700; }
@@ -160,7 +161,43 @@ let batchNote = null;           // {cls, text} shown in the day's header after a
 let currentMarket = null;
 // a show gets a Finish button (and a tick box) in exactly these states: to fill, a filled
 // show that still carries triangles (Refill), or an over-full hour to strip (Lee 9/4)
-const canFinish = p => p.state === 'ready' || isRefill(p) || (p.state === 'overrun' && p.strip_only);
+const canFinish = p => p.state === 'ready' || isRefill(p) || (p.state === 'overrun' && p.strip_only) || (p.state === 'needs_filler' && fillersFor(p).length > 0);
+// Add-a-filler (Lee 10/19): a show whose open time exceeds what PIs can cover lists its
+// language fillers, least recently aired first; the pick (default = the first) is added
+// after the show and the hour is finished in the same write. p.lo -> [fid, ...]
+const chosenFillers = {};
+function fillersFor(p) {
+    if (!(p.lo in chosenFillers)) {
+        chosenFillers[p.lo] = (p.state === 'needs_filler' && p.filler_options && p.filler_options.length) ? [p.filler_options[0].fid] : [];
+    }
+    return chosenFillers[p.lo];
+}
+function fillerLabel(o) { return `${o.code} · ${mmss(o.dur).replace(/\.\d+$/, '')} · ${o.last_aired ? 'last aired ' + o.last_aired : 'never aired'}`; }
+function fillerSelect(pi, options, picked, onchange, first) {
+    let h = `<select class="prg-filler" onclick="event.stopPropagation()" onchange="event.stopPropagation();${onchange}">`;
+    if (first) h += `<option value="">${esc(first)}</option>`;
+    options.forEach(o => { h += `<option value="${o.fid}" ${o.fid === picked ? 'selected' : ''}>${esc(fillerLabel(o))}</option>`; });
+    return h + '</select>';
+}
+function pickFiller(pi, fid) {           // header dropdown: replaces the first pick
+    const p = programs[pi]; if (!p || !fid) return;
+    chosenFillers[p.lo] = [parseInt(fid, 10)];
+    delete plans[pi];
+    const block = byId(`prg-${pi}`);
+    if (block && !block.classList.contains('collapsed')) loadPlan(pi);
+}
+function addFiller(pi, fid) {            // plan body: a second filler when one is not enough
+    const p = programs[pi]; if (!p || !fid) return;
+    fillersFor(p).push(parseInt(fid, 10));
+    delete plans[pi];
+    loadPlan(pi);
+}
+function resetFillers(pi) {
+    const p = programs[pi]; if (!p) return;
+    delete chosenFillers[p.lo];
+    delete plans[pi];
+    loadPlan(pi);
+}
 const byId = id => document.getElementById(id);
 const indexOfLo = lo => programs.findIndex(q => q.lo === lo);
 
@@ -218,7 +255,7 @@ async function _loadPrograms() {
 // A filled show that still carries yellow triangles is redone from scratch: strip its
 // PI/PSA/ID rows and let Finish fill again (Lee 9/1 — what he did by hand on CVC 10:00).
 function isRefill(p) { return p.state === 'finished' && p.triangles > 0; }
-function btnLabelFor(p) { return isRefill(p) ? 'Refill' : (p.state === 'overrun' ? 'Strip fill' : 'Finish'); }
+function btnLabelFor(p) { return isRefill(p) ? 'Refill' : (p.state === 'overrun' ? 'Strip fill' : (p.state === 'needs_filler' ? 'Add filler + Finish' : 'Finish')); }
 
 // Derived state → header badge. Never a stored flag: EE edits stay honest.
 function statFor(p) {
@@ -228,6 +265,7 @@ function statFor(p) {
             : { cls: 'done', text: `✓ finished · ID airs ${p.id_airs != null ? p.id_airs.toFixed(1) : '?'}s` };
         case 'ready':    return { cls: 'warn', text: `${p.n_swap ? p.n_swap + ' filler swap · ' : ''}${p.n_delete} remove · ${p.n_insert} add · ID would air ${p.id_airs != null ? p.id_airs.toFixed(1) : '?'}s` };
         case 'unplaced': return { cls: 'bad',  text: `programming not placed · ${p.error || (Math.round((p.remainder || 0) / 60) + ' min open')}` };
+        case 'needs_filler': return { cls: 'warn', text: p.error || 'too much open time for PIs · add a filler after the show' };
         case 'overrun': {
             const over = mmss(-(p.hard_remainder != null ? p.hard_remainder : (p.remainder || 0))).replace(/\.\d+$/, '');
             return p.strip_only
@@ -274,6 +312,7 @@ function renderPrograms(data) {
     <span class="prg-time">${hm(p.lo_hms)}&nbsp;–&nbsp;${hm(p.hi_hms)}</span>
     <span class="prg-name">${esc(p.title || p.code || '?')}${p.code && p.title ? `<span class="prg-code">${esc(p.code)}</span>` : ''}</span>
     ${p.language ? `<span class="prg-lang">${esc(p.language)}</span>` : ''}
+    ${p.state === 'needs_filler' && p.filler_options && p.filler_options.length ? fillerSelect(pi, p.filler_options, fillersFor(p)[0], `pickFiller(${pi}, this.value)`, '') : ''}
     <button class="expand-btn prg-refresh" title="Re-read this show from Etere"
             onclick="event.stopPropagation();refreshProgram(${pi})">↻ Refresh</button>
     <button class="prg-apply-btn" id="prg-apply-${pi}" style="display:${fin || inflight.has(p.lo) ? '' : 'none'}" ${inflight.has(p.lo) ? 'disabled' : ''}
@@ -312,7 +351,7 @@ async function loadPlan(pi) {
     const body = byId(`prg-body-${pi}`);
     if (!p || !body) return;
     try {
-        const resp = await fetch(`/api/master-control/finish/plan?date=${encodeURIComponent(currentDate)}&market=${encodeURIComponent(selectedMarket)}&lo=${p.lo}&hi=${p.hi}&refill=${isRefill(p) ? 1 : 0}`);
+        const resp = await fetch(`/api/master-control/finish/plan?date=${encodeURIComponent(currentDate)}&market=${encodeURIComponent(selectedMarket)}&lo=${p.lo}&hi=${p.hi}&refill=${isRefill(p) ? 1 : 0}&filler=${fillersFor(p).join(',')}&language=${encodeURIComponent(p.language || '')}`);
         const plan = await parseJson(resp);
         if (!resp.ok) throw new Error(plan.message || plan.detail || resp.statusText);
         plans[pi] = plan;
@@ -324,7 +363,18 @@ async function loadPlan(pi) {
 
 function renderPlan(p, plan) {
     if (plan.error && !plan.timeline?.length) return `<div class="prg-note">${esc(plan.error)}</div>`;
-    let html = '<ul class="plan-notes">';
+    const pi = indexOfLo(p.lo);
+    let html = '';
+    if (plan.state === 'needs_filler') {
+        // still too much open time (with the fillers chosen so far): offer another, or start over
+        html += `<div class="prg-note">${esc(plan.error || '')}<br>` +
+            (plan.filler_options && plan.filler_options.length
+                ? fillerSelect(pi, plan.filler_options, null, `addFiller(${pi}, this.value)`, (plan.fillers && plan.fillers.length) ? 'add another filler…' : 'add a filler…')
+                : 'no filler fits the open time') +
+            ((plan.fillers && plan.fillers.length) ? ` <button class="expand-btn" onclick="resetFillers(${pi})">start over</button>` : '') +
+            '</div>';
+    }
+    html += '<ul class="plan-notes">';
     (plan.notes || []).forEach(n => { html += `<li class="${n.startsWith('⚠') ? 'bad' : ''}">${esc(n)}</li>`; });
     html += '</ul>';
     const dels = (plan.edits || []).filter(e => e.op === 'delete');
@@ -335,7 +385,7 @@ function renderPlan(p, plan) {
     });
     (plan.timeline || []).forEach(it => {
         const cls = it.tag === 'pgm' ? 'pgm' : it.tag === 'new' ? 'new' : (it.tag === 'move' || it.tag === 'swap') ? 'move' : it.tag === 'keep' ? 'keep' : 'paid';
-        const label = it.tag === 'new' ? 'add · ' : it.tag === 'move' ? 'moved here · ' : it.tag === 'swap' ? 'filler swapped in · ' : '';
+        const label = it.tag === 'new' ? (it.type === 'PGM' ? 'add filler · ' : 'add · ') : it.tag === 'move' ? 'moved here · ' : it.tag === 'swap' ? 'filler swapped in · ' : '';
         html += `<tr class="${cls}"><td class="t">${esc(it.time)}</td><td class="d">${mmss(it.dur)}</td><td class="k">${esc(it.type)}</td><td class="n">${label}${esc(it.desc)}</td></tr>`;
         if (it.break_end) html += `<tr class="brk"><td colspan="4">break ${it.break} · ${mmss(it.break_len)}</td></tr>`;
     });
@@ -358,7 +408,9 @@ function togglePick(lo, on) {
 
 function summaryFor(p) {
     const plan = plans[indexOfLo(p.lo)];
-    return (plan ? `${plan.n_delete} remove, ${plan.n_insert} add; ends ${plan.planned_end_hms}` : `${p.n_delete} remove, ${p.n_insert} add`)
+    const fl = fillersFor(p);
+    return (fl.length ? `${fl.length} filler after the show (${fl.map(fid => { const o = (p.filler_options || []).concat((plan && plan.filler_options) || []).find(x => x.fid === fid); return o ? o.code : fid; }).join(', ')}); ` : '')
+        + (plan ? `${plan.n_delete} remove, ${plan.n_insert} add; ends ${plan.planned_end_hms}` : `${p.n_delete} remove, ${p.n_insert} add`)
         + (p.triangles ? `; explode ${p.triangles} yellow triangle${p.triangles === 1 ? '' : 's'}` : '');
 }
 
@@ -371,7 +423,7 @@ async function applyOne(p) {
     try {
         const resp = await fetch('/api/master-control/finish/apply', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ market: selectedMarket, date: currentDate, lo: p.lo, hi: p.hi, refill: isRefill(p) }),
+            body: JSON.stringify({ market: selectedMarket, date: currentDate, lo: p.lo, hi: p.hi, refill: isRefill(p), fillers: fillersFor(p), language: p.language || '' }),
         });
         return await parseJson(resp);
     } catch (e) {
@@ -403,6 +455,7 @@ async function finishProgram(pi) {
     const r = await applyOne(p);
     if (isDone(r)) {
         selected.delete(p.lo);
+        delete chosenFillers[p.lo];
         forceOpen.add(p.lo);
         const y = window.scrollY;
         await loadPrograms();

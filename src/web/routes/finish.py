@@ -79,6 +79,8 @@ class FinishApplyBody(BaseModel):
     lo: float
     hi: float
     refill: bool = False  # strip existing PI/PSA/ID and fill from scratch (Lee 9/1)
+    fillers: list[int] = []  # language filler FILMATI ids to add after the show (Lee 10/19)
+    language: str = ""  # the grid's language word for the show — picks the filler pool
 
 
 READ_RETRY_ATTEMPTS = 3
@@ -151,8 +153,11 @@ def build_finish_router(templates: Jinja2Templates) -> APIRouter:
         lo: float = Query(...),
         hi: float = Query(...),
         refill: bool = Query(False),
+        filler: str = Query(""),  # comma-separated FILMATI ids to add after the show
+        language: str = Query(""),
     ):
         mid = _market_id(market)
+        fillers = [int(x) for x in filler.split(",") if x.strip()]
 
         def _run():
             from browser_automation.etere_direct_client import connect
@@ -160,7 +165,16 @@ def build_finish_router(templates: Jinja2Templates) -> APIRouter:
 
             def _read():
                 with connect() as conn:
-                    return plan_window(conn.cursor(), mid, date, lo, hi, refill=refill)
+                    return plan_window(
+                        conn.cursor(),
+                        mid,
+                        date,
+                        lo,
+                        hi,
+                        refill=refill,
+                        language=language,
+                        fillers=fillers,
+                    )
 
             r = read_retrying(f"plan {market} {date} {lo}-{hi}", _read)
             return {k: v for k, v in r.items() if not k.startswith("_")}
@@ -177,7 +191,16 @@ def build_finish_router(templates: Jinja2Templates) -> APIRouter:
 
             log: list[str] = []
             r = apply_window_retrying(
-                connect, mid, body.date, body.lo, body.hi, True, log=log.append, refill=body.refill
+                connect,
+                mid,
+                body.date,
+                body.lo,
+                body.hi,
+                True,
+                log=log.append,
+                refill=body.refill,
+                fillers=body.fillers,
+                language=body.language,
             )
             r["log"] = log
             return r

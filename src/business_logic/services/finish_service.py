@@ -36,6 +36,8 @@ from src.business_logic.services.finish_plan import (
     Ev,
     Filler,
     accepted_id_assets,
+    filler_options,
+    filler_piece,
     filler_swaps,
     hms,
     load_day,
@@ -169,7 +171,15 @@ def _item_dict(it, start: float, tag: str) -> dict:
 
 
 def plan_window(
-    cur, market: int, date: str, lo: float, hi: float, rows=None, refill: bool = False
+    cur,
+    market: int,
+    date: str,
+    lo: float,
+    hi: float,
+    rows=None,
+    refill: bool = False,
+    language: str = "",
+    fillers=(),
 ) -> dict:
     """Read-only: the packed timeline Finish would produce, plus the edit list.
     `finished` is DERIVED: nothing to delete/insert except re-placing the ID that is
@@ -178,7 +188,12 @@ def plan_window(
     `refill` (Lee 9/1): strip every existing PI/PSA/ID the window holds and plan the
     fill from scratch — what Lee did by hand on CVC 9/2 10:00 (delete the PIs and the
     ID, click Finish) to get a show with no yellow triangles. Paid spots and programs
-    are never touched; the pre-strip remainder still decides "unplaced"."""
+    are never touched; the pre-strip remainder still decides "unplaced".
+
+    `language` (the grid's word for the show) picks the filler pool; `fillers` are
+    FILMATI ids the operator chose to add after the show (Lee 10/19) when the open time
+    exceeds what PIs can cover — state `needs_filler` lists `filler_options`, least
+    recently aired first."""
     rows = rows if rows is not None else load_day(cur, market, date)
     evs_all = window_from_day(rows, lo, hi)
     # Overage (Lee 9/4): a long show (Korean News runs past 50:00 some days) plus its
@@ -221,6 +236,17 @@ def plan_window(
         )
     evs = [swapped.get(id(e), e) for e in evs]
     evs_planned = [swapped.get(id(e), e) for e in evs_all]
+    # Add-a-filler (Lee 10/19): each chosen language filler becomes a program piece after
+    # the show (and after whatever already sits in that final break), in pick order.
+    added: list[Ev] = []
+    for n, fid in enumerate(fillers or ()):
+        fe = filler_piece(cur, evs, int(fid), ref=-(n + 1))
+        if fe is None:
+            raise ValueError(f"filler {fid} is not a usable language filler program")
+        for lst in (evs, evs_planned):
+            pos = max((i + 1 for i, e in enumerate(lst) if e.ora <= fe.ora), default=len(lst))
+            lst.insert(pos, fe)
+        added.append(fe)
     # Is the window's end a fixed (F) event? If the next show simply FOLLOWS (a
     # half-hour boundary with no F anchor), there is nothing to finish here: the
     # hour's ID belongs to the window that ends at the F event.
@@ -235,6 +261,8 @@ def plan_window(
     hi_fixed = hi_fixed or assume_fixed
     inv = load_inventory(cur, market, date)
     breaks, notes = plan(evs, inv, hi, market)
+    for fe in added:
+        notes.insert(0, f"filler {fe.code} ({mmss(fe.dur)}) added after the show")
     if auto_refill:
         notes.insert(
             0,
@@ -307,14 +335,20 @@ def plan_window(
     )
     inserts = [(b, x) for b in breaks for x in b.items if isinstance(x, Filler)]
     cannot = any(n.startswith("⚠") for n in notes)
-    id_only = not deletes and not inserts and not moves and not swaps  # nothing to write
+    id_only = (
+        not deletes and not inserts and not moves and not swaps and not added
+    )  # nothing to write
     finished = id_only and not cannot
 
     timeline, edits = [], []
     swapped_ids = {e.id for e in swapped.values()}
     t = pieces[0].ora
     for i, p in enumerate(pieces):
-        timeline.append(_item_dict(p, t, "swap" if p.id in swapped_ids else "pgm"))
+        if p.id < 0:  # an added filler: not on the playlist yet
+            timeline.append(_item_dict(p, t, "new"))
+            edits.append({"op": "insert", **_item_dict(p, t, "new"), "break": None})
+        else:
+            timeline.append(_item_dict(p, t, "swap" if p.id in swapped_ids else "pgm"))
         t += p.dur
         b = next((x for x in breaks if x.after_piece_idx == i), None)
         if not b:
@@ -350,6 +384,11 @@ def plan_window(
     # The precondition "all programming placed" is read from the piece catalog: every
     # letter the library holds for each show in the window is on the playlist.
     missing = missing_pieces(cur, evs)
+    # Catalog complete but far more open time than PIs can cover: offer the show's
+    # language fillers (least recently aired first) instead of refusing (Lee 10/19).
+    filler_opts: list[dict] = []
+    if not missing and rem_s > UNPLACED_SECONDS:
+        filler_opts = filler_options(cur, market, language, rem_s - ID_MIN_AIR)
     # Program + paid alone spill past the top: Finish still strips every PI/PSA/ID so
     # the paid spots get the room (Lee 9/4: "remove all PI and PSA spots to allow for
     # programs and commercials to be aired"), writes that, and reports what is still
@@ -368,7 +407,9 @@ def plan_window(
             "na"  # a single fixed event with no breaks (overnight live feed) — nothing to finish
         )
     elif missing or rem_s > UNPLACED_SECONDS:
-        state = "unplaced"  # the precondition (all programming placed) is not met
+        # the precondition (all programming placed) is not met — or the show simply leaves
+        # more open time than PIs can cover, and a filler after the show is the cure
+        state = "needs_filler" if (not missing and filler_opts) else "unplaced"
     elif hard_rem < 0:
         state = "overrun"  # program + paid spill even with zero fill — a programming problem
     elif not hi_fixed:
@@ -383,11 +424,17 @@ def plan_window(
         (float(n.split("airs ")[1].split("s")[0]) for n in notes if "ID" in n and "airs" in n), None
     )
     error = None
-    if state == "unplaced":
+    if state == "needs_filler":
+        error = (
+            f"{mmss(rem_s).split('.')[0]} open — more than PIs can cover; "
+            f"add a {language or 'language'} filler after the show"
+        )
+    elif state == "unplaced":
         error = (
             "pieces not placed: " + "; ".join(f"{b} {', '.join(m)}" for b, m in missing.items())
             if missing
             else f"{mmss(rem_s).split('.')[0]} open — more than fill can cover, check programming"
+            + (f" (no filler pool for {language})" if language else "")
         )
     elif state == "overrun" and not strip_only:
         error = (
@@ -416,8 +463,12 @@ def plan_window(
         "id_airs": id_airs,
         "n_delete": len(deletes),
         "n_move": len(moves),
-        "n_insert": len(inserts),
+        "n_insert": len(inserts) + len(added),
         "n_swap": len(swaps),
+        "language": language,
+        "filler_options": filler_opts,
+        "fillers": [{"fid": fe.filmati, "code": fe.code, "dur": fe.dur} for fe in added],
+        "_added": added,
         "missing_pieces": missing,
         "_breaks": breaks,
         "_evs": evs,
@@ -498,7 +549,9 @@ def list_programs(cur, market: int, date: str) -> list[dict]:
     tri = _triangle_oras(cur, market, date)
     out = []
     for p in day_windows(market, date, rows):
-        r = plan_window(cur, market, date, p["lo"], p["hi"], rows=rows)
+        r = plan_window(
+            cur, market, date, p["lo"], p["hi"], rows=rows, language=p.get("language", "")
+        )
         evs = window_from_day(rows, p["lo"], p["hi"])
         code = next((e.desc for e in evs if e.is_program and "BUMP" not in e.desc.upper()), "")
         lo_f, hi_f = int(p["lo"] * FPS), int(p["hi"] * FPS)
@@ -525,6 +578,7 @@ def list_programs(cur, market: int, date: str) -> list[dict]:
                 "overrun": r.get("overrun"),
                 "id_airs": r.get("id_airs"),
                 "error": r.get("error"),
+                "filler_options": r.get("filler_options", []),
             }
         )
     return out
@@ -539,16 +593,19 @@ def apply_window(
     apply: bool,
     log=print,
     refill: bool = False,
+    fillers=(),
+    language: str = "",
 ) -> dict:
     """Plan + write one window. `apply=False` does everything and rolls back.
-    `refill`: strip the existing PI/PSA/ID rows first and fill from scratch."""
+    `refill`: strip the existing PI/PSA/ID rows first and fill from scratch.
+    `fillers`: language filler FILMATI ids to add after the show (Lee 10/19)."""
     cur = conn.cursor()
     lo_f, hi_f = int(lo * FPS), int(hi * FPS)
     # Explode first: the planner reads DURATION, so it must see the conformed rows.
     # Rolled back with everything else if the plan cannot land or apply=False.
     xp = _explode_window(cur, market, date, lo_f, hi_f)
     log(f"  exploded (yellow triangles): {xp['timecodes']} timecodes, {xp['checksums']} checksums")
-    r = plan_window(cur, market, date, lo, hi, refill=refill)
+    r = plan_window(cur, market, date, lo, hi, refill=refill, language=language, fillers=fillers)
     for n in r.get("notes", []):
         log(f"  • {n}")
     if not r["ok"]:
@@ -610,6 +667,65 @@ def apply_window(
         r["_swaps"],
     )
     pieces = [e for e in evs if e.is_program]
+    # Added fillers become real TPALINSE rows here, before anything reads their ids: each
+    # is inserted under the show's PRGS segment (bookkeeping only; playout is ORA/XORDER),
+    # conformed the way Explode would (in/out + DURATION, so no yellow triangle), and the
+    # synthetic piece takes the new id so seating and re-timing treat it as any piece.
+    filler_ids: list[int] = []
+    filler_binding: dict[int, str] = {}
+    try:
+        for fe in r["_added"]:
+            prgs = _slots(cur, market, date, lo_f - int(3600 * FPS), hi_f, "PRGS")
+            slots = [s for s in prgs if s["ora"] <= fe.ora * FPS] or prgs
+            if not slots:
+                raise RuntimeError(f"no PRGS segment in {hms(lo)}-{hms(hi)} for filler {fe.code}")
+            slot = min(slots, key=lambda s: abs(s["ora"] - fe.ora * FPS))
+            cur.execute(
+                "SELECT POS_INI, POS_FIN, DURATA FROM FILMATI WHERE ID_FILMATI=%s", (fe.filmati,)
+            )
+            pos_ini, pos_fin, durata = cur.fetchone()
+            if pos_fin and pos_ini is not None and pos_fin > pos_ini:
+                ti, to, frames = int(pos_ini), int(pos_fin), int(pos_fin - pos_ini + 1)
+            else:
+                frames = int(durata or 0)
+                ti, to = 0, frames - 1
+            if abs(frames / FPS - fe.dur) > 0.5:
+                raise RuntimeError(f"filler {fe.code} changed length since the plan was made")
+            nid = _insert_event(
+                cur,
+                market,
+                date,
+                slot["sched"],
+                slot["block"],
+                slot["seg"],
+                int(round(fe.ora * FPS)),
+                fe.filmati,
+                _durata(cur, fe.filmati),
+            )
+            cur.execute("EXEC sch_UpdateSupportAndProperties %s,%s,1", (nid, fe.filmati))
+            cur.execute(
+                "UPDATE TPALINSE SET DURATION=%s, TIMECODE_I=%s, TIMECODE_O=%s, EVENT_TYPE='T',"
+                " NOTE='CTV_FINISH' WHERE ID_TPALINSE=%s",
+                (frames, ti, to, nid),
+            )
+            cur.execute(
+                "DELETE FROM trafficPalinse WHERE id_tpalinse=%s AND ID_ContrattiRighe=0", (nid,)
+            )
+            filler_binding[nid] = _supporto(cur, fe.filmati)
+            fe.id = nid
+            filler_ids.append(nid)
+            log(
+                f"  ADD  {hms(fe.ora)} PGM  {fe.code} ({mmss(fe.dur)}) after the show  (new id {nid})"
+            )
+    except Exception as exc:  # noqa: BLE001 — a failed filler insert must leave the hour untouched
+        conn.rollback()
+        log(f"ROLLED BACK: filler insert failed: {exc}")
+        return {
+            **_public(r),
+            "status": "error",
+            "message": f"filler insert: {exc}",
+            "deadlock": _is_deadlock(exc),
+        }
     # every existing row the plan seats and re-times, in plan order
     planned_rows = list(pieces) + [x for b in breaks for x in b.items if isinstance(x, Ev)]
     # id(piece | item) -> planned start, chained from the F anchor. Chained in whole
@@ -667,6 +783,8 @@ def apply_window(
                 f" WHERE ID_TPALINSE={old.id};\n"
                 f"-- then EXEC sch_UpdateSupportAndProperties {old.id},{fid0},1 and re-sync SCHEDULE_CHECKSUM\n"
             )
+        for nid in filler_ids:
+            fh.write(f"UPDATE TPALINSE SET LIVELLO=666 WHERE ID_TPALINSE={nid}; -- added filler\n")
         fh.write("-- inserted rows are appended after the run; undo them with LIVELLO=666\n")
         fh.write("-- then EXEC sch_rebuildStartTimeSchedule for the day to re-time the hour\n")
     log(f"  restore SQL: {rpath}")
@@ -694,7 +812,7 @@ def apply_window(
                 raise RuntimeError(f"delete of {e.id} touched {cur.rowcount} rows")
             cur.execute("DELETE FROM trafficPalinse WHERE id_tpalinse=%s", (e.id,))
 
-        binding: dict[int, str] = {}
+        binding: dict[int, str] = dict(filler_binding)
         # Filler swap: the row keeps its identity (id, XORDER, block booking), only the
         # asset changes — Daily Programming's replace_piece recipe, plus Explode's in/out
         # + DURATION so the swapped row carries no yellow triangle.
@@ -734,7 +852,9 @@ def apply_window(
             binding[old.id] = _supporto(cur, new.filmati)
             swapped_ids.append(old.id)
 
-        new_ids: list[int] = []
+        new_ids: list[int] = list(
+            filler_ids
+        )  # added fillers count as new rows in every check below
         # The grid's COMS segments sit at NOMINAL offsets (NYC evening: :14, :25:30,
         # :29) while a real break lands wherever the piece ends (19:07:23) — a ±120s
         # search failed on most blocks (Maija 9/1). The segment only decides which
@@ -956,6 +1076,8 @@ def apply_window_retrying(
     refill: bool = False,
     attempts: int = DEADLOCK_ATTEMPTS,
     sleep=time.sleep,
+    fillers=(),
+    language: str = "",
 ) -> dict:
     """`apply_window` on a fresh connection per attempt, retried when SQL Server picks us
     as the 1205 deadlock victim (Lee 10/8: the Finish button showed the raw 1205 to the
@@ -972,7 +1094,18 @@ def apply_window_retrying(
     for attempt in range(1, attempts + 1):
         try:
             with connect() as conn:
-                r = apply_window(conn, market, date, lo, hi, apply, log=log, refill=refill)
+                r = apply_window(
+                    conn,
+                    market,
+                    date,
+                    lo,
+                    hi,
+                    apply,
+                    log=log,
+                    refill=refill,
+                    fillers=fillers,
+                    language=language,
+                )
         except Exception as exc:  # noqa: BLE001 — only a deadlock is retried; the rest propagates
             if not _is_deadlock(exc) or attempt == attempts:
                 raise

@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 
 from browser_automation.etere_direct_client import connect
 
-from .filler_rotation import FILLER_CODE_PREFIXES, POOL_PATTERNS, active_pool
+from .filler_rotation import FILLER_CODE_PREFIXES, POOL_PATTERNS, active_pool, pool_for_language
 
 FPS = 29.97
 ID_ASSET = {4: 67911, 7: 67909, 10: 83129}  # OTA markets; everyone else generic
@@ -419,6 +419,84 @@ def filler_swaps(cur, evs: list[Ev], hour_end: float) -> list[tuple[Ev, dict]]:
         if hard >= ID_MIN_AIR:
             break
     return swaps
+
+
+def _iso_day(v) -> str | None:
+    if v is None:
+        return None
+    return v.strftime("%Y-%m-%d") if hasattr(v, "strftime") else str(v)[:10]
+
+
+def filler_options(cur, market: int, language: str, room_s: float) -> list[dict]:
+    """Language filler programs that fit in `room_s`, least recently aired in this market
+    first (never aired ahead of everything), for the "add a filler after the show" prompt
+    (Maija 10/19: Korean Drama Saturday leaves 28 min, If You're Hired 27 min, and the whole
+    PI/PSA pool is 24 min long). Lee 10/19: default = least recently aired, the operator may
+    pick another; the filler always lands after the show. Rotation is judged on this
+    market's own playlist (scheduled counts as aired), not on Daily Programming's
+    chat.kfiller_rotation cycle. [{fid, code, dur, last_aired}]; dur = Explode's placed
+    length in seconds, last_aired an ISO date or None."""
+    key = pool_for_language(language)
+    if key is None:
+        return []
+    fits = [
+        c
+        for c in active_pool(cur, POOL_PATTERNS[key])
+        if c["frames"] and c["frames"] / FPS <= room_s
+    ]
+    if not fits:
+        return []
+    ids_csv = ",".join(str(int(c["fid"])) for c in fits)
+    cur.execute(
+        f"""SELECT ID_FILMATI, MAX(DATA) FROM TPALINSE WITH (NOLOCK)
+            WHERE ID_FILMATI IN ({ids_csv}) AND COD_USER=%s AND LIVELLO=0 GROUP BY ID_FILMATI""",
+        (market,),
+    )
+    last = {int(r[0]): _iso_day(r[1]) for r in cur.fetchall()}
+    out = [
+        {
+            "fid": int(c["fid"]),
+            "code": c["code"],
+            "dur": c["frames"] / FPS,
+            "last_aired": last.get(int(c["fid"])),
+        }
+        for c in fits
+    ]
+    out.sort(
+        key=lambda o: (o["last_aired"] is not None, o["last_aired"] or "", -o["dur"], o["code"])
+    )
+    return out
+
+
+def filler_piece(cur, evs: list[Ev], fid: int, ref: int = -1) -> Ev | None:
+    """A synthetic program Ev for language filler `fid`, placed AFTER the show: behind the
+    last program piece and behind every row already sitting in that final break, so the
+    existing final-break spots keep their break and the hour's end fill (PIs, PSA, ID) goes
+    after the filler, the shape Daily Programming writes for the Sunday Korean drama block.
+    `ref` is a negative placeholder id until apply_window inserts the row. Length is
+    Explode's placed length. None when the asset is not a usable language filler."""
+    cur.execute(
+        "SELECT RTRIM(COD_PROGRA), POS_INI, POS_FIN, LIVE_ID, DURATA FROM FILMATI WITH(NOLOCK)"
+        " WHERE ID_FILMATI=%s AND NEWTYPE='PGM'",
+        (fid,),
+    )
+    row = cur.fetchone()
+    if not row or row[3] is not None:
+        return None
+    code, pos_ini, pos_fin, _live, durata = row
+    if pos_fin and pos_ini is not None and pos_fin > pos_ini:
+        frames = int(pos_fin - pos_ini + 1)
+    else:
+        frames = int(durata or 0)
+    if frames <= 0 or not (code or "").upper().startswith(FILLER_CODE_PREFIXES):
+        return None
+    pieces = [e for e in evs if e.is_program]
+    if not pieces:
+        return None
+    last = pieces[-1]
+    tail = [e for e in evs if not e.is_program and e.ora >= last.end - 0.5]
+    ora = max([last.end] + [e.end for e in tail])
+    return Ev(ref, ora, frames / FPS, "PGM", "T", int(fid), code, None, None, code)
 
 
 def plan(evs: list[Ev], inv: list[Filler], hour_end: float, market: int) -> tuple[list, list[str]]:

@@ -874,3 +874,18 @@ SSM hybrid node `mi-02adb6308ecd7a523` (activation sacramento-office-video02-pho
 - [x] Datavideo input = udp://@:6005
 - [ ] Verify 01:00 PT hour rollover; reboot test of the startup task; compare a Memory file vs ours
       (Lee copies one to C:\PhoenixSRT\compare); AT&T-vs-Comcast egress preference
+
+## Finish: ask for a filler when the open time exceeds what PIs can cover (2026-10-19)
+Maija 10/19: Korean Drama Saturday (3 episodes, 28 min open) and If You're Hired (54 min in 90) refuse with
+"more than fill can cover". Lee: ask for fillers, default least recently aired (changeable), always after the show.
+- [x] plan_window: state `needs_filler` (catalog complete, remainder > 20 min) + `filler_options` (language pool, fits, last aired per market, LRA first)
+- [x] plan_window/apply_window: `fillers=[fid]` insert each filler as a PGM piece after the show (behind the final break's spots), then the normal fill
+- [x] routes/finish.py: `filler` (csv) + `language` on plan, `fillers` + `language` on apply
+- [x] finish.html: header dropdown (LRA default) + "Add filler + Finish"; plan body offers a second filler when one is not enough
+- [x] tests: option ranking, synthetic piece, state machine, route body, template pin (1239 unit tests green)
+- [x] rehearsal: NYC 10/17 08:00 with the hand PIs soft-deleted in the same transaction -> 28:18 open, 57 options, K-FILLER25-009 (LRA, 6/11) -> ready 16:43, 18 PIs + ID, rollback verified from a fresh connection
+
+Review: the 20-minute backstop stays; it now routes to `needs_filler` when the catalog is complete and the language has a pool
+(Korean, Chinese/Mandarin/Cantonese, Filipino). Vietnamese has VIETFILLER assets but no pool in filler_rotation: a Vietnamese
+show over 20 min still reads "no filler pool for Vietnamese" (follow-up if it ever happens). Rotation = last aired in the same
+market's playlist, not DP's kfiller_rotation cycle table.

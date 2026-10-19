@@ -38,7 +38,7 @@ def _run(monkeypatch, outcomes, attempts=3):
     calls, slept, log = [], [], []
     it = iter(outcomes)
 
-    def fake_apply(conn, market, date, lo, hi, apply, log=print, refill=False):
+    def fake_apply(conn, market, date, lo, hi, apply, log=print, refill=False, **kw):
         calls.append("apply")
         o = next(it)
         if isinstance(o, Exception):
@@ -102,12 +102,14 @@ def test_success_first_time_carries_no_attempts_key(monkeypatch):
 
 
 def test_apply_window_error_dicts_carry_the_deadlock_flag():
-    """The wrapper keys on `deadlock`; both of apply_window's except paths must set it."""
+    """The wrapper keys on `deadlock`; every one of apply_window's except paths must set it
+    (BO after an id-only hour, the added-filler insert, the main write)."""
     import inspect
 
     src = inspect.getsource(fs.apply_window)
-    assert src.count('"status": "error"') == 2
-    assert src.count('"deadlock": _is_deadlock(exc)') == 2
+    n = src.count('"status": "error"')
+    assert n == 3
+    assert src.count('"deadlock": _is_deadlock(exc)') == n
 
 
 def test_route_and_cli_use_the_retrying_entry_point():

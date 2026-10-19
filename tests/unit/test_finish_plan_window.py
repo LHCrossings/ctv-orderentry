@@ -326,3 +326,151 @@ def test_religious_open_takes_no_break_before_kingdom_of_god(monkeypatch):
     assert r["state"] == "ready" and r["ok"], r["notes"]
     assert {e["break"] for e in r["edits"] if e["op"] == "insert"} == {1}
     assert r["n_insert"] == 3
+
+
+# ── add-a-filler (Maija 10/19: Korean Drama Saturday 28 min open; Lee: ask for fillers) ──
+H10 = 10 * 3600.0
+
+
+def _saturday_block():
+    """Three dramas back to back, 84 min of program in a 2 h block, 5 min of paid: ~31 min open."""
+    rows = [_row(1, H8, 1680, "PGM", "F", "DRAMA-A")]
+    rows.append(_row(2, H8 + 1680, 60, "COM", "T", "PAID60", line=1))
+    rows.append(_row(3, H8 + 1740, 1680, "PGM", "T", "DRAMA-B"))
+    rows.append(_row(4, H8 + 3420, 120, "COM", "T", "PAID120", line=2))
+    rows.append(_row(5, H8 + 3540, 1680, "PGM", "T", "DRAMA-C"))
+    rows.append(_row(6, H8 + 5220, 120, "COM", "T", "PAID120B", line=3))  # final break, ends 09:29
+    rows.append(_row(9, H10, 600, "PGM", "F", "NEXT"))
+    return rows
+
+
+_OPTS = [
+    {"fid": 5001, "code": "K-FILLER25-007", "dur": 633.0, "last_aired": None},
+    {"fid": 5002, "code": "K-FILLER25-013", "dur": 1416.0, "last_aired": "2026-10-11"},
+]
+
+
+def test_too_much_open_time_asks_for_a_filler_instead_of_refusing(monkeypatch):
+    monkeypatch.setattr(fs, "load_inventory", lambda cur, market, date: [])
+    seen = {}
+
+    def opts(cur, market, language, room):
+        seen.update(market=market, language=language, room=room)
+        return _OPTS
+
+    monkeypatch.setattr(fs, "filler_options", opts)
+    r = fs.plan_window(None, 1, "2026-10-17", H8, H10, rows=_saturday_block(), language="Korean")
+    assert r["state"] == "needs_filler" and not r["ok"]
+    assert r["filler_options"] == _OPTS and r["fillers"] == []
+    assert "add a Korean filler after the show" in r["error"]
+    assert seen["language"] == "Korean" and seen["market"] == 1
+    assert abs(seen["room"] - (r["remainder"] - fs.ID_MIN_AIR)) < 1e-6
+
+
+def test_no_pool_for_the_language_keeps_the_old_refusal(monkeypatch):
+    monkeypatch.setattr(fs, "load_inventory", lambda cur, market, date: [])
+    monkeypatch.setattr(fs, "filler_options", lambda cur, market, language, room: [])
+    r = fs.plan_window(
+        None, 1, "2026-10-17", H8, H10, rows=_saturday_block(), language="Vietnamese"
+    )
+    assert r["state"] == "unplaced" and "no filler pool for Vietnamese" in r["error"]
+
+
+def test_chosen_filler_lands_after_the_show_and_the_hour_plans(monkeypatch):
+    inv = [
+        Filler(9000 + i, f"PI-{900 + i}-060: Filler {i}", 60.0, "PI", f"PI-{900 + i}", i)
+        for i in range(40)
+    ]
+    monkeypatch.setattr(fs, "load_inventory", lambda cur, market, date: inv)
+    monkeypatch.setattr(fs, "filler_options", lambda cur, market, language, room: _OPTS)
+
+    def piece(cur, evs, fid, ref=-1):
+        last = [e for e in evs if e.is_program][-1]
+        tail = [e for e in evs if not e.is_program and e.ora >= last.end - 0.5]
+        ora = max([last.end] + [e.end for e in tail])
+        return fs.Ev(
+            ref, ora, 1416.0, "PGM", "T", fid, "K-FILLER25-013", None, None, "K-FILLER25-013"
+        )
+
+    monkeypatch.setattr(fs, "filler_piece", piece)
+    r = fs.plan_window(
+        None, 1, "2026-10-17", H8, H10, rows=_saturday_block(), language="Korean", fillers=[5002]
+    )
+    assert r["state"] == "ready" and r["ok"], r["error"]
+    assert r["fillers"] == [{"fid": 5002, "code": "K-FILLER25-013", "dur": 1416.0}]
+    assert r["notes"][0].startswith("filler K-FILLER25-013 (23:36")
+    tl = r["timeline"]
+    i_c = next(i for i, it in enumerate(tl) if it["desc"] == "DRAMA-C")
+    i_paid = next(i for i, it in enumerate(tl) if it["desc"] == "PAID120B")
+    i_f = next(i for i, it in enumerate(tl) if it["desc"] == "K-FILLER25-013")
+    assert i_c < i_paid < i_f, (
+        "the filler goes after the show AND after the spots already in its final break"
+    )
+    assert tl[i_f]["tag"] == "new" and tl[i_f]["type"] == "PGM"
+    assert any(e["op"] == "insert" and e["type"] == "PGM" for e in r["edits"])
+    assert r["n_insert"] >= 2 and r["_added"][0].id == -1  # the filler plus the ID at least
+    assert not r["finished"]
+
+
+def test_unknown_filler_id_is_refused_before_anything_is_planned(monkeypatch):
+    monkeypatch.setattr(fs, "load_inventory", lambda cur, market, date: [])
+    monkeypatch.setattr(fs, "filler_piece", lambda cur, evs, fid, ref=-1: None)
+    import pytest
+
+    with pytest.raises(ValueError, match="not a usable language filler"):
+        fs.plan_window(None, 1, "2026-10-17", H8, H10, rows=_saturday_block(), fillers=[42])
+
+
+class _FillerCur:
+    """FILMATI row for filler_piece, or the last-aired aggregate for filler_options."""
+
+    def __init__(self, filmati=None, last=()):
+        self.filmati, self.last = filmati, list(last)
+
+    def execute(self, sql, params=None):
+        self.sql = sql
+
+    def fetchone(self):
+        return self.filmati
+
+    def fetchall(self):
+        return self.last
+
+
+def test_filler_piece_sits_behind_the_last_piece_and_its_break():
+    from business_logic.services import finish_plan as fp
+
+    evs = window_from_day(_saturday_block(), H8, H10)
+    cur = _FillerCur(filmati=("K-FILLER25-013", 100, 100 + 42442, None, 42443))  # 23:36 at 29.97
+    fe = fp.filler_piece(cur, evs, 5002, ref=-1)
+    assert fe is not None and fe.is_program and fe.is_filler and fe.id == -1
+    last_paid_end = H8 + 5220 + 120
+    assert abs(fe.ora - last_paid_end) < 0.05 and abs(fe.dur - 42443 / FPS) < 1e-6  # frame rounding
+    # a plain show piece is never accepted as a filler; nor a live event
+    assert (
+        fp.filler_piece(
+            _FillerCur(filmati=("KD-FAMILYREGISTER011-1012A", 0, 100, None, 101)), evs, 7
+        )
+        is None
+    )
+    assert fp.filler_piece(_FillerCur(filmati=("K-FILLER25-001", 0, 100, 77, 101)), evs, 8) is None
+
+
+def test_filler_options_least_recently_aired_first_and_only_those_that_fit(monkeypatch):
+    import datetime as dt
+
+    from business_logic.services import finish_plan as fp
+
+    pool = [
+        {"fid": 1, "code": "K-FILLER25-001", "durata": 1, "frames": int(600 * FPS)},
+        {"fid": 2, "code": "K-FILLER25-002", "durata": 1, "frames": int(900 * FPS)},
+        {"fid": 3, "code": "K-FILLER25-003", "durata": 1, "frames": int(1500 * FPS)},  # too long
+        {"fid": 4, "code": "K-FILLER25-004", "durata": 1, "frames": int(300 * FPS)},
+    ]
+    monkeypatch.setattr(fp, "active_pool", lambda cur, patterns: pool)
+    cur = _FillerCur(last=[(1, dt.datetime(2026, 10, 11)), (2, dt.datetime(2026, 9, 2))])
+    out = fp.filler_options(cur, 1, "Korean", 1200.0)
+    assert [o["fid"] for o in out] == [4, 2, 1]  # never aired, then oldest, then newest
+    assert out[0]["last_aired"] is None and out[1]["last_aired"] == "2026-09-02"
+    assert "COD_USER=%s" in cur.sql and "IN (1,2,4)" in cur.sql
+    assert fp.filler_options(cur, 1, "Klingon", 1200.0) == []

@@ -45,3 +45,22 @@ def test_run_json_lets_http_exceptions_through():
         assert exc.status_code == 400
     else:
         raise AssertionError("HTTPException must propagate unchanged")
+
+
+def test_apply_body_carries_fillers_and_language_with_safe_defaults():
+    b = finish.FinishApplyBody(market="NYC", date="2026-10-17", lo=28800, hi=36000)
+    assert b.fillers == [] and b.language == ""
+    b = finish.FinishApplyBody(
+        market="NYC", date="2026-10-17", lo=28800, hi=36000, fillers=[5002], language="Korean"
+    )
+    assert b.fillers == [5002] and b.language == "Korean"
+
+
+def test_page_offers_the_filler_pick_and_sends_it_with_plan_and_apply():
+    page = (
+        Path(__file__).resolve().parents[2] / "src/web/templates/master_control/finish.html"
+    ).read_text()
+    assert "case 'needs_filler'" in page
+    assert "&filler=${fillersFor(p).join(',')}" in page
+    assert "fillers: fillersFor(p), language: p.language" in page
+    assert "Add filler + Finish" in page
