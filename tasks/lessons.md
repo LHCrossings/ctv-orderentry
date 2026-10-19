@@ -2901,6 +2901,16 @@ fine; the supervisor's whole purpose is the second start.
 3. When the user says "picture is black" → "frozen" → "black", stop iterating muxer flags: three
    different failure shapes from one decoder is the signature of "the stream is wrong for it", and
    the byte-exact path is one experiment, not ten.
+4. **Recurrence (thumb.ps1, 2026-10-18):** `$Meta` (the live.json path) and `$script:meta` (the
+   status hashtable) were ONE variable, so every status write since 10/15 landed in
+   `C:\Windows\System32\System.Collections.Hashtable`; nobody noticed because the HTTP side
+   serves the in-memory copy. Found only because the audio-meter deploy printed "live.json" and
+   got nothing. The 10/15 lesson was written the same night the file was; a rule in prose did
+   not reach it. Now pinned: `tests/unit/test_video02_ps1_names.py` reads every recorder
+   script and fails on two spellings of one name (case-folded), and on an automatic variable
+   used as a parameter. Second trap the same deploy: PowerShell 5.1's
+   `ConvertTo-Json -InputObject @($list)` fails with "Argument types do not match"; pass the
+   List itself (`-InputObject $list`), which also keeps a one-element list a JSON array.
 
 ## A Column With a Twin Was Read Raw on ONE Page — `ORA_FINE` Can Hold the Start Again; the Form Shows `ORA_FINEF`
 

@@ -27,7 +27,7 @@ $LogDir = "$Root\logs"
 $FFmpeg = "$Root\bin\ffmpeg.exe"
 $Src    = "udp://127.0.0.1:6012?timeout=8000000&fifo_size=1000000&overrun_nonfatal=1"
 $Jpg    = "$Root\live.jpg"
-$Meta   = "$Root\live.json"
+$MetaFile = "$Root\live.json"   # not $Meta: PowerShell names are case-insensitive, $script:meta below would be the same variable (10/18: live.json landed in System32 as "System.Collections.Hashtable")
 $Port   = 8081
 $Every  = 60
 $Frames = "$Root\frames"      # 24 h archive of every grab (Lee 10/16: "we may need them"); ~65 MB
@@ -91,8 +91,9 @@ function Save-Level($when, $audio) {
     $script:levels.Add(@{ t = $when; l = $audio.L.rms; lp = $audio.L.peak; r = $audio.R.rms; rp = $audio.R.peak })
     $cut = (Get-Date).AddHours(-$KeepH)
     while ($script:levels.Count -gt 0 -and ([datetime]::Parse($script:levels[0].t) -lt $cut)) { $script:levels.RemoveAt(0) }
-    # -InputObject keeps a one-element list an array (ConvertTo-Json @($x) unwraps it)
-    (ConvertTo-Json -InputObject @($script:levels) -Compress) | Set-Content $LevelsFile -Encoding UTF8
+    # -InputObject with the List itself: it stays a JSON array at one element, and @(list) makes
+    # PowerShell 5.1 fail with "Argument types do not match" (reproduced 10/18)
+    (ConvertTo-Json -InputObject $script:levels -Compress) | Set-Content $LevelsFile -Encoding UTF8
 }
 
 function Grab {
@@ -142,7 +143,7 @@ function Grab {
         $script:meta.elapsed_s = [math]::Round($sw.Elapsed.TotalSeconds, 1)
         Log "grab failed: $($script:meta.error)"
     }
-    ($script:meta | ConvertTo-Json -Compress -Depth 4) | Set-Content $Meta -Encoding UTF8
+    ($script:meta | ConvertTo-Json -Compress -Depth 4) | Set-Content $MetaFile -Encoding UTF8
 }
 
 function Serve($ctx) {
@@ -158,12 +159,12 @@ function Serve($ctx) {
             $bytes = [Text.Encoding]::UTF8.GetBytes(($script:meta | ConvertTo-Json -Compress -Depth 4))
             $res.ContentType = "application/json"
         } elseif ($req.Url.AbsolutePath -eq "/levels.json") {
-            $bytes = [Text.Encoding]::UTF8.GetBytes((ConvertTo-Json -InputObject @($script:levels) -Compress))
+            $bytes = [Text.Encoding]::UTF8.GetBytes((ConvertTo-Json -InputObject $script:levels -Compress))
             $res.ContentType = "application/json"
         } elseif ($req.Url.AbsolutePath -eq "/frames/") {
             # the archive, oldest first: ["Phoenix_20261015_220801.jpg", ...]
             $names = @(Get-ChildItem $Frames -Filter "Phoenix_*.jpg" | Sort-Object Name | ForEach-Object { $_.Name })
-            $bytes = [Text.Encoding]::UTF8.GetBytes((ConvertTo-Json -InputObject @($names) -Compress))
+            $bytes = [Text.Encoding]::UTF8.GetBytes((ConvertTo-Json @($names) -Compress))
             $res.ContentType = "application/json"
         } elseif ($req.Url.AbsolutePath -match '^/frames/(Phoenix_\d{8}_\d{6}\.jpg)$' -and (Test-Path (Join-Path $Frames $Matches[1]))) {
             $bytes = [IO.File]::ReadAllBytes((Join-Path $Frames $Matches[1]))
