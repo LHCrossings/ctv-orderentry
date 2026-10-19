@@ -115,6 +115,12 @@ def fetch_frame(screen: str = DEFAULT_SCREEN) -> tuple[bytes, str]:
     return body, ("image/jpeg" if "jp" in ctype.lower() else ctype.split(";")[0])
 
 
+def _phoenix_json(name: str):
+    """One JSON document from VIDEO-02's thumb server (live.json or levels.json)."""
+    with urllib.request.urlopen(f"{PHOENIX_THUMB_HOST}/{name}", timeout=PHOENIX_THUMB_TIMEOUT) as r:
+        return json.loads(r.read().decode("utf-8", "replace"))
+
+
 def fetch_screens() -> list[str]:
     body, _ = _get("/live/screens")
     return sorted(json.loads(body.decode("utf-8", "replace") or "{}").keys())
@@ -161,18 +167,23 @@ def build_monitor_wall_router(templates: Jinja2Templates) -> APIRouter:
 
     @router.get("/api/master-control/phoenix/status")
     async def phoenix_status():
-        def _get():
-            with urllib.request.urlopen(
-                f"{PHOENIX_THUMB_HOST}/live.json", timeout=PHOENIX_THUMB_TIMEOUT
-            ) as r:
-                return json.loads(r.read().decode("utf-8", "replace"))
-
+        # live.json carries `audio`: RMS/peak per channel (dBFS) of the AAC track over the
+        # 3 s the frame came from, measured on VIDEO-02 before the recorder (thumb.ps1).
         try:
-            meta = await asyncio.to_thread(_get)
+            meta = await asyncio.to_thread(_phoenix_json, "live.json")
         except Exception as exc:  # noqa: BLE001
             return JSONResponse({"reachable": False, "error": f"VIDEO-02: {exc}"}, status_code=502)
         meta["reachable"] = True
         return meta
+
+    @router.get("/api/master-control/phoenix/levels")
+    async def phoenix_levels():
+        """24 h of audio readings, one a minute, oldest first: [{t, l, lp, r, rp}] in dBFS."""
+        try:
+            rows = await asyncio.to_thread(_phoenix_json, "levels.json")
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse({"error": f"VIDEO-02: {exc}", "levels": []}, status_code=502)
+        return {"levels": rows if isinstance(rows, list) else []}
 
     @router.get("/api/master-control/monitor-wall/screens")
     async def monitor_wall_screens():

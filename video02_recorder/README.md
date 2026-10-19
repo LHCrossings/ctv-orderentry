@@ -64,6 +64,15 @@ Every grab is also kept for 24 h in `C:\PhoenixSRT\frames\Phoenix_YYYYMMDD_HHMMS
 (Lee 10/16; ~65 MB), listed at `/frames/` and served at `/frames/<name>`, so a Daily
 Talk fallback can be matched against the relay's break times after the fact.
 
+**Audio meter (Maija 10/19).** The same ffmpeg call in `thumb.ps1` measures 3 s of the AAC
+track (`-map 0:a:0?`, never the silent AC-3) with `astats`: RMS and peak per channel in dBFS.
+`live.json` carries them as `audio`; `levels.json` keeps 24 h of readings (one a minute,
+reloaded on restart). The Monitor Wall panel draws an L/R meter (-60..0 dBFS, zones at -20
+and -9), says NO AUDIO when both channels sit at or below -60 dBFS, and shows a 24 h strip
+with red marks for silent minutes (`/api/master-control/phoenix/levels`). The tap sits before
+the recorder: silence on the meter is Phoenix's or the SRT path's; sound on the meter with a
+mute mp4 is ours. The thumb log gets one line when the feed goes silent and one when it comes back.
+
 **Packet loss.** SRT drops any packet it cannot recover inside its latency window
 (relay log: `RCV-DROPPED n packet(s) ... ++SUPPRESSED: k`). The recorder is a
 remux, so its `.ts` carries fresh continuity counters and loss is invisible there;

@@ -26,6 +26,23 @@
         .phoenix .sub { color: var(--nord4); opacity: 0.8; }
         .phoenix .stale { color: var(--nord13); }
         .phoenix .err { color: var(--nord11); }
+        .phoenix .ok { color: var(--nord14); }
+        /* audio meter: RMS bar + peak tick per channel, -60..0 dBFS, zones green / yellow (-20) / red (-9) */
+        .phoenix .meter { display: flex; flex-direction: column; gap: 4px; }
+        .phoenix .bar { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+        .phoenix .bar .lbl { width: 1em; color: var(--nord6); font-weight: 600; }
+        .phoenix .track { position: relative; flex: 1; height: 10px; border-radius: 2px; overflow: hidden;
+            background: linear-gradient(to right, var(--nord14) 0 66.7%, var(--nord13) 66.7% 85%, var(--nord11) 85% 100%); }
+        .phoenix .track .mask { position: absolute; top: 0; bottom: 0; right: 0; background: var(--nord0); }
+        .phoenix .track .pk { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--nord6); }
+        .phoenix .bar .val { width: 7.5em; text-align: right; font-size: 0.72rem; }
+        .phoenix .scale { display: flex; justify-content: space-between; margin: -2px calc(7.5em + 6px) 0 calc(1em + 6px); font-size: 0.6rem; opacity: 0.7; }
+        /* 24 h strip: one reading a minute; red marks = silent minutes */
+        .phoenix .levels { width: 100%; height: 36px; display: block; background: var(--nord0); }
+        .phoenix .levels .grid { stroke: var(--nord3); stroke-width: 1; stroke-dasharray: 6 6; vector-effect: non-scaling-stroke; }
+        .phoenix .levels .line { stroke: var(--nord14); stroke-width: 1.5; fill: none; vector-effect: non-scaling-stroke; }
+        .phoenix .levels .mute { fill: var(--nord11); }
+        .phoenix .axis { display: flex; justify-content: space-between; font-size: 0.6rem; opacity: 0.7; margin-top: -4px; }
     </style>
 </head>
 <body>
@@ -60,7 +77,16 @@
             <h2>Phoenix TV feed <span class="sub">· VIDEO-02 recorder tap</span></h2>
             <img id="phoenixImg" alt="Phoenix TV feed, latest frame" />
             <span id="phoenixStatus">loading…</span>
+            <div class="meter" id="phoenixMeter" aria-label="Audio level at the time of the frame">
+                <div class="bar"><span class="lbl">L</span><div class="track"><div class="mask" id="pmL" style="width:100%"></div><div class="pk" id="pkL" style="display:none"></div></div><span class="val" id="pvL">—</span></div>
+                <div class="bar"><span class="lbl">R</span><div class="track"><div class="mask" id="pmR" style="width:100%"></div><div class="pk" id="pkR" style="display:none"></div></div><span class="val" id="pvR">—</span></div>
+                <div class="scale"><span>-60</span><span>-40</span><span>-20</span><span>0 dBFS</span></div>
+            </div>
+            <span id="phoenixAudio" class="sub">audio: waiting for a reading</span>
+            <svg id="phoenixLevels" class="levels" viewBox="0 0 1440 36" preserveAspectRatio="none" aria-label="Audio level over the last 24 hours"></svg>
+            <div class="axis"><span>24 h ago</span><span>audio level, one reading a minute</span><span>now</span></div>
             <span class="sub">One frame a minute from the SRT feed as recorded. A "Daily Talk" picture here means Phoenix fell back to its default programming: tell Phoenix, nothing on our side can switch it.</span>
+            <span class="sub">Meter: RMS (bar) and peak (tick) of the sound in the 3 s the frame came from, measured before the recorder. No sound here means Phoenix sent none. Sound here with a mute recording is our recorder. Strip: the last 24 h, red marks where the feed was silent.</span>
         </aside>
     </div>
 </main>
@@ -105,6 +131,70 @@
         const s = Math.max(0, Math.round((Date.now() - t) / 1000));
         return s < 90 ? s + ' s ago' : Math.round(s / 60) + ' min ago';
     }
+    // Audio meter: VIDEO-02 measures 3 s of the AAC track with each grab (RMS + peak per
+    // channel, dBFS). Both channels at or below SILENT_DB = the feed carried no sound.
+    const SILENT_DB = -60;
+    const pAudio = document.getElementById('phoenixAudio');
+    function pct(db) { return Math.max(0, Math.min(100, (db - SILENT_DB) / -SILENT_DB * 100)); }
+    function setBar(ch, lv) {
+        const mask = document.getElementById('pm' + ch), pk = document.getElementById('pk' + ch), val = document.getElementById('pv' + ch);
+        if (!lv) { mask.style.width = '100%'; pk.style.display = 'none'; val.textContent = '—'; return; }
+        mask.style.width = (100 - pct(lv.rms)) + '%';
+        pk.style.display = lv.peak > SILENT_DB ? '' : 'none';
+        pk.style.left = 'calc(' + pct(lv.peak).toFixed(1) + '% - 1px)';
+        val.textContent = lv.rms <= SILENT_DB ? 'silent' : lv.rms.toFixed(1) + ' / ' + lv.peak.toFixed(1);
+    }
+    function renderAudio(a) {
+        if (!a || a.track !== 'aac') {
+            setBar('L', null); setBar('R', null);
+            pAudio.textContent = 'audio: not measured' + (a && a.error ? ' · ' + a.error : '');
+            pAudio.className = 'stale';
+            return;
+        }
+        setBar('L', a.L); setBar('R', a.R);
+        if (a.silent) {
+            pAudio.textContent = 'NO AUDIO in the feed: both channels at or below ' + SILENT_DB + ' dBFS';
+            pAudio.className = 'err';
+        } else if (a.L.rms <= SILENT_DB || a.R.rms <= SILENT_DB) {
+            pAudio.textContent = 'audio: one channel silent (' + (a.L.rms <= SILENT_DB ? 'L' : 'R') + ')';
+            pAudio.className = 'stale';
+        } else {
+            pAudio.textContent = 'audio OK · RMS / peak in dBFS over ' + (a.window_s || 3) + ' s';
+            pAudio.className = 'ok';
+        }
+    }
+    const svgNS = 'http://www.w3.org/2000/svg';
+    function svgEl(tag, attrs) { const e = document.createElementNS(svgNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; }
+    function renderLevels(rows) {
+        const svg = document.getElementById('phoenixLevels');
+        while (svg.firstChild) svg.removeChild(svg.firstChild);
+        const W = 1440, H = 36, now = Date.now(), span = 24 * 3600 * 1000;
+        const y = db => H - 2 - Math.max(0, Math.min(1, (db - SILENT_DB) / -SILENT_DB)) * (H - 4);
+        svg.appendChild(svgEl('line', { class: 'grid', x1: 0, x2: W, y1: y(-20), y2: y(-20) }));
+        let d = '', pen = false;
+        rows.forEach(r => {
+            const t = Date.parse(r.t); if (isNaN(t) || now - t > span) return;
+            const x = (1 - (now - t) / span) * W;
+            const db = Math.max(r.l, r.r);
+            if (db <= SILENT_DB) {
+                svg.appendChild(svgEl('rect', { class: 'mute', x: (x - 1).toFixed(1), y: H - 6, width: 2, height: 6 }));
+                pen = false; return;
+            }
+            d += (pen ? ' L' : ' M') + x.toFixed(1) + ' ' + y(db).toFixed(1); pen = true;
+        });
+        if (d) svg.appendChild(svgEl('path', { class: 'line', d: d }));
+    }
+    async function levelsTick() {
+        if (!document.hidden) {
+            try {
+                const r = await fetch('/api/master-control/phoenix/levels', { cache: 'no-store' });
+                const d = await r.json();
+                if (r.ok) renderLevels(d.levels || []);
+            } catch (e) { /* the status line already says VIDEO-02 is not answering */ }
+        }
+        setTimeout(levelsTick, 300000);   // the strip moves one pixel per minute; 5 min is plenty
+    }
+    levelsTick();
     async function phoenixTick() {
         if (!document.hidden) {
             try {
@@ -114,6 +204,7 @@
                     pStatus.textContent = 'VIDEO-02 not answering' + (d.error ? ' · ' + d.error : '');
                     pStatus.className = 'err';
                 } else {
+                    renderAudio(d.audio);
                     const age = d.captured ? (Date.now() - Date.parse(d.captured)) / 1000 : Infinity;
                     pStatus.textContent = (d.ok ? 'frame captured ' : 'last good frame ') + (d.captured ? ageText(d.captured) : 'never') + (d.ok ? '' : ' · ' + (d.error || 'grab failing'));
                     pStatus.className = (!d.ok || age > 180) ? 'stale' : '';
