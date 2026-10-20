@@ -755,6 +755,66 @@ def _normalize_gauger(order) -> dict:
     }
 
 
+def _normalize_net_weekly(order, *, agency: str) -> dict:
+    """Imprenta and Lexus (IW Group): the sheet quotes NET per spot and the parser
+    stores it as ``rate_net`` / ``rate_gross`` with ``spots_by_week`` per line —
+    none of the names the generic ``_normalize_line`` looks for, so every line
+    normalized to $0 and 0 spots and the one-click backwrite built a $0 Sales
+    Confirmation against a $7.5k run sheet (PG&E Wildfire Safety Q4-2026).
+
+    Feed the backwrite the NET rate + ``rates_are_net`` (it grosses up at full
+    precision, the iGraphix rule); the parser's rounded ``rate_gross`` is what
+    entry wrote to Etere and must never be re-grossed."""
+    lines = []
+    for ln in getattr(order, "lines", []) or []:
+        is_bonus = bool(getattr(ln, "is_bonus", False))
+        weekly = [_int(x) for x in (getattr(ln, "spots_by_week", None) or [])]
+        ranges = list(getattr(ln, "week_date_ranges", None) or [])
+        # Only the weeks that carry spots bound the line's flight.
+        active = [r for r, n in zip(ranges, weekly) if n] or ranges
+        lines.append(
+            {
+                "description": _str(getattr(ln, "program", "")),
+                "days": _str(getattr(ln, "days", "")),
+                "time": _str(getattr(ln, "time", "")),
+                "duration": _str(getattr(ln, "duration", "")),
+                "weekly_spots": weekly,
+                "total_spots": sum(weekly),
+                "rate": 0.0 if is_bonus else _float(getattr(ln, "rate_net", 0.0)),
+                "is_bonus": is_bonus,
+                "market": _str(getattr(ln, "market", "")),
+                "language": _str(getattr(ln, "language", "")),
+                "start_date": _str(active[0][0]) if active else "",
+                "end_date": _str(active[-1][1]) if active else "",
+                "line_number": 0,
+            }
+        )
+    total_spots = sum(ln["total_spots"] for ln in lines)
+    total_cost = sum(ln["rate"] * ln["total_spots"] for ln in lines if not ln["is_bonus"])
+    start = getattr(order, "flight_start", None)
+    end = getattr(order, "flight_end", None)
+    markets = sorted({ln["market"] for ln in lines if ln["market"]})
+    primary = _str(getattr(order, "market", ""))
+    if primary and primary not in markets:
+        markets.append(primary)
+    return {
+        "client": _str(getattr(order, "client", "")),
+        "agency": agency,
+        "estimate_number": _str(getattr(order, "estimate", "")),
+        "description": _str(getattr(order, "campaign", "")),
+        "markets": markets,
+        "flight_start": _str(start) if start else "",
+        "flight_end": _str(end) if end else "",
+        "buyer": "",
+        "total_spots": total_spots,
+        "total_cost": round(total_cost, 2),
+        "lines": lines,
+        "warnings": ["Rates in this IO are NET — entry grosses up by the agency commission."],
+        "required_fields": [],
+        "rates_are_net": True,
+    }
+
+
 def _normalize_illottery(order) -> dict:
     """Illinois Lottery house proposal: GROSS Discounted Rates enter verbatim
     (rates_are_net False); the sheet's Net is reconciliation only."""
@@ -1087,6 +1147,10 @@ def get_order_detail(file_path: Path, order_type: str) -> dict:
         result = _normalize_gauger(raw)
     elif order_type == "ILLOTTERY":
         result = _normalize_illottery(raw)
+    elif order_type == "IMPRENTA":
+        result = _normalize_net_weekly(raw, agency="Imprenta")
+    elif order_type == "LEXUS":
+        result = _normalize_net_weekly(raw, agency="IW Group")
     elif order_type == "SAGENT":
         result = _normalize_sagent(raw)
     else:

@@ -526,6 +526,22 @@ def get_language_counts(csv_bytes: bytes) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def placed_row_rate(line_rate, is_top, is_bottom):
+    """The gross each PLACED row bills.
+
+    A bookend line (Top AND Bottom) is entered as N pairs at the PAIR rate
+    (Imprenta: 32 IO spots at $50 net -> 16 pairs at $117.64) and Etere places
+    two rows per pair, so a row at the line rate bills the pair twice. Etere's
+    own accounting (ContrattiImportiGiornalieri) is N x IMPORTO, and Lee's
+    billing tabs carry each aired half at IMPORTO/2 (PGE WSQ3 58.82, TSQ3
+    29.41) - one row, one half. Top-only (billboard) and Bottom-only lines
+    place one row per spot and keep the line rate."""
+    rate = line_rate or 0
+    if is_top and is_bottom:
+        return rate / 2
+    return rate
+
+
 def build_placement_csv_from_db(
     contract_id: int,
     date_from: str = None,
@@ -624,6 +640,8 @@ def build_placement_csv_from_db(
                    cr.DESCRIZIONE               AS line_desc,
                    ISNULL(f.DURATA, cr.DURATA)  AS dur_frames,
                    cr.IMPORTO                   AS gross_rate,
+                   cr.CONTROLLACAPOFILA         AS is_top,
+                   cr.CONTROLLAFINEFILA         AS is_bottom,
                    cr.COD_USER                  AS market_id,
                    cr.ORA_INIZIOF               AS daypart_start,
                    cr.ORA_FINEF                 AS daypart_end,
@@ -722,7 +740,7 @@ def build_placement_csv_from_db(
                 s["line_id"],
                 1 if isci_only else 4,  # Textbox14 → # column (1 for WorldLink)
                 dur_sec,
-                s["gross_rate"] or 0,
+                placed_row_rate(s["gross_rate"], s["is_top"], s["is_bottom"]),
                 market_name,
                 date_str,
                 _frames_to_hhmmss(airtime_frames),  # airtimep = actual airtime HH:MM:SS

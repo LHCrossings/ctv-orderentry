@@ -4,6 +4,41 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Parser's Line Fields Were Never Read by the Bridge, So the Backwrite Built a $0 Confirmation — and a Bookend Row at the LINE Rate Bills the Pair Twice
+
+**Session:** Lee, Imprenta PGE WS 26Q4 (3185) one-click backwrite: "Gross: run sheet $7,528.96 vs SC lines $0.00" (2026-10-20)
+
+**Rule:** Two defects behind one popup. (1) `ImprentaLine` (and `LexusLine`) store money as
+`rate_net`/`rate_gross` and spots as `spots_by_week`; the generic `_normalize_line` reads
+`rate|gross_rate|net_rate|…` and `weekly_spots|total_spots|…`, so every Imprenta manifest since
+the one-click pipeline shipped (April) carried its lines at $0 / 0 spots, and the SC tab summed
+$0 against the run sheet. TS 26Q4 (3167) had the same manifest and was archived to Used/ by
+hand. (2) The run sheet was ALSO wrong: a bookend line is entered as N pairs at the pair rate
+(16 x $117.64 for 32 IO spots at $50 net) and Etere places two rows per pair, so the placement
+CSV's row-at-line-rate billed $7,528.96 for a $3,764.48 order. Etere's own
+`ContrattiImportiGiornalieri` is N x IMPORTO, and Lee's billed PGE tabs carry each aired half
+at IMPORTO/2 (WSQ3 $58.82, TSQ3 $29.41) — he had been halving by hand every month. I first
+read "PGE" as Puget Sound Energy from the previous week's Vida work and spent minutes in the
+wrong parser; Lee: "I have no idea where you got puget sound out of all of this."
+
+**How to apply:**
+1. A parser with its own field names needs its own normalizer, and the registry is swept
+   structurally: `tests/unit/test_parser_bridge_line_fields.py` fails any registered parser
+   whose line dataclass has a money/spot field under a name the generic normalizer cannot
+   read (TCAA_AV has no money field at all and passes). Imprenta/Lexus now go through
+   `_normalize_net_weekly` (NET rate + `rates_are_net`, the iGraphix rule).
+2. A manifest whose IO detail has lines but no money and no spots is a normalizer miss, not
+   an order: `awaiting_backwrite_generate` re-parses the IO from Entered/ and rewrites the
+   manifest (`_refresh_manifest_io_detail`), so the fix reaches an already-entered order on
+   the retry without re-entry.
+3. The gross a PLACED row bills depends on the line's placement shape: Top AND Bottom =
+   half the line rate per row (`placed_row_rate`); Top-only, Bottom-only and rotation keep
+   it. Verify a run sheet against Etere's N x IMPORTO (CIG), never against itself.
+4. Before touching a parser, read the client name off the PDF the user named, not off the
+   last order in memory; one `ls` of `!Orders` would have settled it.
+5. Rehearsal that proved it: `build_placement_csv_from_db(3185)` + the fixed bridge detail
+   through `generate_excel` reconciles at $3,764.71 / $3,200.00 on all three totals.
+
 ## A Renamed Parameter Was Fixed at ONE Handler — Every Handler→Automation Call Is Pinned by One Signature Sweep, Not by the Next Operator's Crash
 
 **Session:** Lee, opAD NYSDOH 3180 — "process_opad_order() got an unexpected keyword argument 'user_input'" (2026-10-15)

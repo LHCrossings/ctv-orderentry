@@ -62,6 +62,36 @@ _etere_session_state: dict = {"session": None, "born_at": 0.0}
 _ETERE_SESSION_TTL = 20 * 60  # seconds
 
 
+def _io_detail_is_blank(detail) -> bool:
+    """True when the detail has lines but none carries money or spots — the
+    signature of a parser whose line fields the bridge never read."""
+    lines = (detail or {}).get("lines") or []
+    if not lines:
+        return False
+    return all(
+        not float(ln.get("rate") or 0) and not int(ln.get("total_spots") or 0) for ln in lines
+    )
+
+
+def _refresh_manifest_io_detail(m: dict, mf: Path, entered_dir: Path):
+    """Re-parse the manifest's IO through the current bridge and write the
+    result back into the manifest. Returns the new detail, or None when the
+    IO is gone or the re-parse is no better than what the manifest holds."""
+    from business_logic.services.backwrite_manifest import _jsonable, _parse_io_detail
+
+    io_path = entered_dir / (m.get("io_filename") or mf.name[: -len(".manifest.json")])
+    if not io_path.exists():
+        return None
+    detail = _parse_io_detail(io_path, str(m.get("order_type") or ""))
+    if detail.get("error") or _io_detail_is_blank(detail):
+        return None
+    m["io_detail"] = detail
+    m["rates_are_net"] = bool(detail.get("rates_are_net", False))
+    m["io_parse_error"] = False
+    mf.write_text(json.dumps(m, indent=2, default=_jsonable), encoding="utf-8")
+    return detail
+
+
 def _io_detail_for_contract(manifest: dict, idx: int):
     """The manifest's IO-detail slice for ONE of its contracts.
 
@@ -3969,6 +3999,17 @@ def build_router(config: ApplicationConfig, templates: Jinja2Templates) -> APIRo
             # detail has empty top-level lines, so reconcile/gross-up would
             # silently no-op against it (the Sac County Voters failure).
             io_detail = _io_detail_for_contract(m, idx)
+            # A detail whose every line is $0 AND 0 spots is a normalizer miss,
+            # not an order (Imprenta/Lexus stored rate_net/spots_by_week under
+            # names the bridge did not read, so PG&E 26Q4 backwrote a $0 SC
+            # against a $7.5k run sheet). Re-derive from the IO still sitting
+            # in Entered/ and persist it, so the retry uses the fixed bridge
+            # without re-entering the order.
+            if _io_detail_is_blank(io_detail):
+                refreshed = _refresh_manifest_io_detail(m, mf, entered_dir)
+                if refreshed is not None:
+                    io_detail = _io_detail_for_contract(m, idx)
+                    print(f"[backwrite] {filename}: IO detail re-derived from the IO file")
             # Old multi-order manifests predate the roll-up fix and stored
             # rates_are_net=False at the top level — trust the sub_order too.
             rates_net = bool(m.get("rates_are_net")) or bool((io_detail or {}).get("rates_are_net"))
