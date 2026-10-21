@@ -889,3 +889,35 @@ Review: the 20-minute backstop stays; it now routes to `needs_filler` when the c
 (Korean, Chinese/Mandarin/Cantonese, Filipino). Vietnamese has VIETFILLER assets but no pool in filler_rotation: a Vietnamese
 show over 20 min still reads "no filler pool for Vietnamese" (follow-up if it ever happens). Rotation = last aired in the same
 market's playlist, not DP's kfiller_rotation cycle table.
+
+## Viewpoint Ads / Mayor Lurie Proposition parser (2026-10-21)
+
+Lee: political SF order via Viewpoint Ads (Charmaine), client name TBD — Etere customer 487
+"Mayor Lurie Proposition" (agency 486 Viewpoint Ads, 15%, Broadcast) created ahead of time.
+Two proposals (Option 1 $30,340 / 169 spots, Option 2 $21,266 / 115 spots), flight 10/23
+through 11/3 "ends at 7am", no week columns, GROSS rates, net = ×0.85. Prime the parser so
+Maija can enter whichever option arrives while Lee is asleep.
+
+- [x] `browser_automation/parsers/viewpoint_parser.py` — text-level reader, days-token row
+      regex, wrapped program words, truncated "Entertainm", market from the station cell,
+      year from PDF metadata, cutoff-aware line ends, reconciliation (row rate×units, Σ units /
+      gross / net vs TOTAL row and the budget lines, consistent net ratio) → refuse
+- [x] `browser_automation/viewpoint_automation.py` — gather (market, ANAGRAF 487 + agency 486
+      check, billing, start date always asked, code/desc defaults by Polaris political shape,
+      learned prefixes → customers.db), plan (Rotation, max/day from active days in the window),
+      direct-DB entry with header readback (P_AGENZIA == sheet %, AGENZIA, CENTROMEDIA), --dry-run
+- [x] registrations: enums, detection (agency text + VIEWPOINT filename, before the Charmaine
+      fallback), orchestrator, processing service (+ direct keys), parser_bridge (display,
+      registry, direct + tested keys), scan cache v19
+- [x] fixtures `tests/fixtures/viewpoint/` + `tests/unit/test_viewpoint_parser.py`
+- [x] dry run both options against Etere (rolled back), ruff, full unit suite, commit, push, deploy
+- [x] memory + lessons
+
+Review (2026-10-21): both options parse and foot (Option 1: 10 lines / 169 / $30,340.00 / $25,789.00;
+Option 2: 10 lines / 115 / $21,266.00 / $18,076.10). Dry runs against Etere in a rolled-back
+transaction wrote 10 Rotation lines each with AGENZIA 486 @ 15.00 and CENTROMEDIA 316; the
+election-day cutoff keeps only the two 6a-7a lines on 11/3. Detection returns VIEWPOINT from
+text and filename, the web preview carries the lines with real money, the orchestrator's
+language-window check finds no issues, 1323 unit tests pass. Open for Lee: the default code /
+description shape (`Viewpoint Lurie 261023` / `Mayor Lurie Proposition 261023-261103`) and the
+separation default (house 15/0/0 vs the sheet's "no separation requirement" vs Polaris's 25).

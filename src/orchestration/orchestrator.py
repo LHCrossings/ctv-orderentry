@@ -173,6 +173,11 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
         "gather_snoqualmie_inputs",
         "Snoqualmie Casino",
     ),
+    OrderType.VIEWPOINT: (
+        "browser_automation.viewpoint_automation",
+        "gather_viewpoint_inputs",
+        "Viewpoint Ads",
+    ),
     OrderType.SJCOUNTY: (
         "browser_automation.sjcounty_automation",
         "gather_sjcounty_inputs",

@@ -66,6 +66,7 @@ class OrderType(Enum):
     IWCCA = "iwcca"  # IW Group / Covered California — NET "TELEVISION ORDER" IO, agency 12 @ 15%
     VIDA = "vida"  # The Vida Agency / Puget Sound Energy — house proposal PDF, NET, agency 260 @ 0%, SEA
     SNOQUALMIE = "snoqualmie"  # Snoqualmie Casino & Hotel — house proposal PDF, PROMO rates, direct 417 @ 0%, SEA
+    VIEWPOINT = "viewpoint"  # Viewpoint Ads — Charmaine's political option sheet, GROSS, agency 486 @ 15%, SFO
     AI_FALLBACK = "ai_fallback"
     UNKNOWN = "unknown"
 
@@ -169,6 +170,7 @@ KNOWN_AGENCY_KEYWORDS: list[str] = [
     "ntooitive",
     "the vida agency",
     "snoqualmie",
+    "viewpoint ads",
     "time advertising",
     "3olivesmedia",
     "bvk",

@@ -175,6 +175,11 @@ class OrderDetectionService:
         if self._is_vida(first_page_text):
             return OrderType.VIDA
 
+        # Viewpoint Ads — Charmaine's political option sheet ("AGENCY Viewpoint Ads");
+        # agency-keyed, must precede the Charmaine-template fallback
+        if self._is_viewpoint(first_page_text):
+            return OrderType.VIEWPOINT
+
         # Snoqualmie Casino & Hotel — house "Crossings TV Media Proposal", client-keyed;
         # must precede the Charmaine-template fallback
         if self._is_snoqualmie(first_page_text):
@@ -337,6 +342,12 @@ class OrderDetectionService:
         from browser_automation.parsers.snoqualmie_parser import is_snoqualmie_text
 
         return is_snoqualmie_text(text)
+
+    def _is_viewpoint(self, text: str) -> bool:
+        """Viewpoint Ads option sheet: "AGENCY Viewpoint Ads" + "PREPARED BY" + the GROSS grid."""
+        from browser_automation.parsers.viewpoint_parser import is_viewpoint_text
+
+        return is_viewpoint_text(text)
 
     def _is_vida(self, text: str) -> bool:
         """The Vida Agency proposal: "Agency The Vida Agency" on a "Flight schedule" page."""
@@ -1104,6 +1115,8 @@ def detect_from_filename(filename: str) -> OrderType:
         return OrderType.VIDA
     if "SNOQUALMIE" in name_upper:
         return OrderType.SNOQUALMIE
+    if "VIEWPOINT" in name_upper:
+        return OrderType.VIEWPOINT
     if "ILLINOIS LOTTERY" in " ".join(name_upper.split()) or "ILLOTTERY" in name_upper:
         return OrderType.ILLOTTERY
     if "GAUGER" in name_upper:
