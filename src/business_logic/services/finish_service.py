@@ -22,6 +22,7 @@ import random
 import time
 from datetime import datetime
 
+from src.business_logic.services.campaign_psa import campaign_fids, campaign_psa_for
 from src.business_logic.services.daily_programming_run import (
     _durata,
     _insert_event,
@@ -260,7 +261,13 @@ def plan_window(
     assume_fixed = not hi_fixed and not next_placed
     hi_fixed = hi_fixed or assume_fixed
     inv = load_inventory(cur, market, date)
-    breaks, notes = plan(evs, inv, hi, market)
+    # Campaign PSA (Lee 10/21): one per show through the fill path, language from the
+    # show, market-day cap and spacing judged on the live playlist (campaign_psa.py).
+    camp, camp_note = campaign_psa_for(cur, market, date, lo, hi, language, evs)
+    protected = campaign_fids(cur, date) if camp_note else set()
+    breaks, notes = plan(evs, inv, hi, market, campaign=camp, protected=protected)
+    if camp_note and camp is None:
+        notes.append(camp_note)
     for fe in added:
         notes.insert(0, f"filler {fe.code} ({mmss(fe.dur)}) added after the show")
     if auto_refill:
@@ -466,6 +473,7 @@ def plan_window(
         "n_insert": len(inserts) + len(added),
         "n_swap": len(swaps),
         "language": language,
+        "campaign_psa": camp.filmati if camp else None,
         "filler_options": filler_opts,
         "fillers": [{"fid": fe.filmati, "code": fe.code, "dur": fe.dur} for fe in added],
         "_added": added,

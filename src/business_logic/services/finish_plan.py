@@ -499,11 +499,22 @@ def filler_piece(cur, evs: list[Ev], fid: int, ref: int = -1) -> Ev | None:
     return Ev(ref, ora, frames / FPS, "PGM", "T", int(fid), code, None, None, code)
 
 
-def plan(evs: list[Ev], inv: list[Filler], hour_end: float, market: int) -> tuple[list, list[str]]:
+def plan(
+    evs: list[Ev],
+    inv: list[Filler],
+    hour_end: float,
+    market: int,
+    campaign: Filler | None = None,
+    protected: frozenset[int] | set[int] = frozenset(),
+) -> tuple[list, list[str]]:
     """Fix it or finish it (Lee 8/28): existing fill stays as given; remove only
     what the end game needs (spill-over first, final break next, then the
     longest interior break), move a PI only when the final break would be the
-    longest, then add PI → PSA → ID. Existing ID rows are re-placed (same asset)."""
+    longest, then add PI → PSA → ID. Existing ID rows are re-placed (same asset).
+
+    `campaign` (Lee 10/21, campaign_psa.py): a campaign PSA to seat first, in the
+    shortest interior break, ahead of the PI fill. `protected` are the campaign's
+    asset ids: the FIX phase removes other fill before one of these."""
     notes: list[str] = []
     old_ids = [e for e in evs if e.newtype == "ID"]
     # NOOPs are Etere/EE gap-fillers, i.e. empty time — never content (MMT bare test 8/28)
@@ -558,6 +569,10 @@ def plan(evs: list[Ev], inv: list[Filler], hour_end: float, market: int) -> tupl
                     cands.append((b, x, order, -pos))
         if not cands:
             return None, None
+        # A campaign PSA is the last fill to give way (Lee 10/21).
+        others = [c for c in cands if c[1].filmati not in protected]
+        if others:
+            cands = others
         enough = [c for c in cands if c[1].dur >= need]
         if enough:
             b, x, *_ = min(enough, key=lambda c: (c[1].dur, c[2], c[3]))
@@ -606,6 +621,20 @@ def plan(evs: list[Ev], inv: list[Filler], hour_end: float, market: int) -> tupl
                 used.add(f.filmati)
                 return f
         return None
+
+    # ── CAMPAIGN phase (Lee 10/21): one campaign PSA per show, ahead of the PI fill,
+    # in the shortest interior break so it sits inside the show, not in the end game ──
+    if campaign is not None:
+        if R - ID_MIN_AIR >= campaign.dur:
+            target = min(interior, key=lambda b: b.length) if interior else final
+            target.items.append(campaign)
+            used.add(campaign.filmati)
+            R -= campaign.dur
+            notes.append(
+                f"campaign PSA {campaign.desc[:28]} ({mmss(campaign.dur)}) → break {target.after_piece_idx}"
+            )
+        else:
+            notes.append(f"campaign PSA skipped: only {mmss(R)} open")
 
     # ── FINISH phase: PIs for evenness; final break ≤ 2:30 and never the longest ──
     while R - ID_MIN_AIR >= 30.0:

@@ -921,3 +921,26 @@ text and filename, the web preview carries the lines with real money, the orches
 language-window check finds no issues, 1323 unit tests pass. Open for Lee: the default code /
 description shape (`Viewpoint Lurie 261023` / `Mayor Lurie Proposition 261023-261103`) and the
 separation default (house 15/0/0 vs the sheet's "no separation requirement" vs Polaris's 25).
+
+## Campaign PSA fill rule (2026-10-21)
+
+Lee: three :30 PSAs (English, Chinese simplified, Vietnamese), 10/30/2026-10/30/2027, all markets
+incl. DAL, 5-10x/day in any programming. Decision: FILL path (Finish / Daily Programming priority
+filler), not an order. Cap 8 per market-day, one per show, prefer ~2 h apart, LRA per market.
+Chinese → Mandarin shows, Vietnamese → Vietnamese shows, English elsewhere.
+
+- [x] map where Finish and Daily Programming choose PI/PSA fillers (one function or two)
+- [x] campaign table (asset ids, language, flight) + selection rule ahead of the normal rotation
+- [x] cap / spacing / one-per-show / LRA; DAL language windows; inactive outside the flight
+- [x] tests (planner on a real day in a rolled-back txn; mirror test if two pickers)
+- [x] aired-count report `scripts/campaign_psa_report.py`; the Finish plan lists the row as a PSA insert with the campaign note
+- [ ] WAITING: asset names from Maija; Cantonese shows → English or Chinese?
+
+Review (2026-10-21): general PI/PSA fill is Finish's `plan()` only (Daily Programming fills the
+Marketplace / weekend drama with specific assets, untouched). `campaign_psa.py` holds the campaign
+(flight, cap 8, gap 2 h, creatives by COD_PROGRA per language — EMPTY until Maija's files land) and
+the rule; `plan()` gets a CAMPAIGN phase ahead of the PI fill (shortest interior break) and treats
+the campaign rows as the last fill to remove; `plan_window` passes the pick and the reason note.
+Read-only rehearsal with stand-in PIs on SFO/DAL 10/20: fresh windows seat it, finished hours stay
+finished (idempotent), the language falls back to the day-aware windows when the grid word is empty
+(19:30 Cantonese → English, DAL 05:30 → English). Unit: 19 new tests, suite 1,347.
