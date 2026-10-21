@@ -27,9 +27,10 @@ Clara 260929-261005`): code `<code prefix> <yymmdd start>`, description
 when present (learned from what the operator types) else `Viewpoint Lurie` /
 the sheet's advertiser.
 
-Separation: the customer DB row when present, else the house 15/0/0. Option 1
-prints "*Note: No separation requirement" and the 2198 precedent carried 25;
-both are shown at the orchestrator's separation prompt, the operator decides.
+Separation: the customer DB row when present, else 3/0/0 (Lee 10/21: the client
+wants the maximum number of spots and separation is not an issue; Option 1 prints
+"*Note: No separation requirement"). The orchestrator's separation prompt still
+shows it; the Polaris political precedent of 25 is printed for contrast.
 """
 
 from __future__ import annotations
@@ -57,7 +58,11 @@ from browser_automation.parsers.viewpoint_parser import (
 AGENCY_ID = 486  # ANAGRAF: Viewpoint Ads (15%)
 DEFAULT_CUSTOMER_ID = 487  # ANAGRAF: Mayor Lurie Proposition (AGENZIA 486) — Lee 10/21
 DEFAULT_MARKET = "SFO"
-DEFAULT_SEPARATION = (15, 0, 0)  # customer, order, event
+DEFAULT_SEPARATION = (
+    3,
+    0,
+    0,
+)  # customer, order, event — Lee 10/21: "max number of spots, separation not an issue"
 PRECEDENT_SEPARATION = (25, 0, 0)  # Polaris political lines (2198 Yes on 50, 3132 ASC)
 DEFAULT_CODE_PREFIX = "Viewpoint Lurie"
 SCHEDULING_ROTATION = 1
