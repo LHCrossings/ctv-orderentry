@@ -330,3 +330,95 @@ def test_default_code_description_and_note(opt1):
         "Option 1 proposal; advertiser printed as TBD (Mayor Lurie Proposition); "
         "flight ends 07:00 on 11/03/2026; Note: No separation requirement"
     )
+
+
+# ── The Excel version of the sheet (one dispatcher, two readers) ─────────────
+
+XLSX = str(
+    FIX / "viewpoint_lurie_sf_option2_label.xlsx"
+)  # labelled OPTION 2, carries Option 1's grid
+
+
+@pytest.fixture(scope="module")
+def xl():
+    return parse_viewpoint(XLSX)
+
+
+def _lines(o):
+    return [
+        (
+            ln.days,
+            ln.time_text,
+            ln.program,
+            ln.rate,
+            ln.total_spots,
+            ln.gross_total,
+            ln.net_total,
+            ln.flight_end,
+        )
+        for ln in o.lines
+    ]
+
+
+def test_xlsx_parses_like_the_pdf(xl, opt1):
+    assert xl.option == "Option 2"  # the workbook's own label — its grid is Option 1's
+    assert _lines(xl) == _lines(opt1)
+    assert (xl.start, xl.end, xl.end_cutoff) == (opt1.start, opt1.end, "07:00")
+    assert (xl.gross_budget, xl.net_budget) == (30340.0, 25789.0)
+    assert xl.market_code == "SFO" and xl.billing == "Broadcast month"
+    assert xl.advertiser == "Mayor Lurie Proposition" and xl.advertiser_tbd
+    assert xl.notes == ["*Note: No separation requirement"]
+    assert xl.year_source.startswith("the workbook's modified date 10/20/2026")
+    assert xl.warnings == []
+
+
+def test_xlsx_detected_by_content_and_filename():
+    from pathlib import Path
+
+    from business_logic.services.order_detection_service import detect_from_filename
+    from domain.enums import OrderType  # the scanner's own import path (src on sys.path)
+    from orchestration.order_scanner import _detect_xlsx_content
+
+    assert _detect_xlsx_content(Path(XLSX)) == OrderType.VIEWPOINT
+    assert (
+        detect_from_filename("Viewpoint Ad_ Mayor Lurie Proposition TBD_ SF_Option 2.xlsx")
+        == OrderType.VIEWPOINT
+    )
+
+
+def _mutated_workbook(tmp_path, mutate, values_only=False):
+    """Save a mutated copy. openpyxl never writes cached formula values, so a
+    copy saved with formulas reads as 'uncached'; `values_only` freezes every
+    formula at its cached value first (what Excel's own save would carry)."""
+    import openpyxl
+
+    wb = openpyxl.load_workbook(XLSX, data_only=values_only)
+    mutate(wb["Crossings TV"])
+    out = tmp_path / "mut.xlsx"
+    wb.save(out)
+    return str(out)
+
+
+def test_xlsx_renamed_unit_column_refuses(tmp_path):
+    def mut(ws):
+        ws["H15"] = "Spots"
+
+    with pytest.raises(ViewpointParseError, match="lacks the units column"):
+        parse_viewpoint(_mutated_workbook(tmp_path, mut))
+
+
+def test_xlsx_uncached_formula_refuses(tmp_path):
+    # Saving through openpyxl drops the cached value of a formula cell.
+    def mut(ws):
+        ws["I16"] = "=G16*H16"
+
+    with pytest.raises(ViewpointParseError, match="no cached value"):
+        parse_viewpoint(_mutated_workbook(tmp_path, mut))
+
+
+def test_xlsx_changed_unit_refuses_against_cached_totals(tmp_path):
+    def mut(ws):
+        ws["H16"] = 25  # GROSS/NET/TOTAL keep their cached values → rate × units ≠ GROSS
+
+    with pytest.raises(ViewpointParseError, match="!= GROSS"):
+        parse_viewpoint(_mutated_workbook(tmp_path, mut, values_only=True))

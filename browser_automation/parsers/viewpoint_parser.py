@@ -51,6 +51,15 @@ would otherwise sit more than half a year in the past. "ends at 7am" is kept as
 `end_cutoff` so a line whose window ends after the cutoff stops the day before
 (election-day morning news is the only line that airs on the last day).
 
+The same sheet arrives as the Excel workbook it was printed from ("Crossings
+TV" tab: label/value pairs in C/D, the grid under a DAYS/Time/Programming/Gross
+Rate/Unit/GROSS/NET header row, formulas for GROSS, NET and the TOTAL row).
+`parse_viewpoint` routes on extension (the Crispin / Wallrich dispatcher rule);
+the xlsx reader maps columns by HEADER LABEL and renders the workbook into the
+PDF's own text lines so ONE reader and ONE set of guards serve both formats. The
+workbook's cached formula values are what is reconciled — a cell with no cached
+value refuses rather than recomputing the money.
+
 Reconciliation is the document's own arithmetic and RAISES on any mismatch:
 per row rate × units == GROSS and NET / GROSS matches every other row; Σ units,
 Σ GROSS and Σ NET against the TOTAL row and the TOTAL GROSS / NET BUDGET lines.
@@ -653,7 +662,159 @@ def _pdf_base_date(pdf) -> tuple[Optional[date], str]:
     return d, f"the PDF's creation date {d.month}/{d.day}/{d.year}"
 
 
+# ─── Excel workbook → the PDF's text lines ───────────────────────────────────
+
+# header label (upper, whitespace-collapsed) → column role
+_XLSX_COLUMNS = {
+    "DAYS": "days",
+    "TIME": "time",
+    "PROGRAMMING": "program",
+    "GROSS RATE": "rate",
+    "UNIT": "units",
+    "GROSS": "gross",
+    "NET": "net",
+}
+_XLSX_REQUIRED = ("days", "time", "program", "rate", "units", "gross", "net")
+
+
+def _cell_text(v) -> str:
+    if v is None:
+        return ""
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    return " ".join(str(v).split())
+
+
+def _cell_num(v, what: str, coord: str) -> float:
+    """A money/unit cell → float. None means the formula has no cached value
+    (the workbook was never calculated by Excel) — refuse, never recompute."""
+    if v is None or (isinstance(v, str) and not v.strip()):
+        raise ViewpointParseError(
+            f"Viewpoint parser: {what} cell {coord} is empty (a formula with no cached "
+            "value?) — open the workbook in Excel and save it, then retry"
+        )
+    if isinstance(v, (int, float)):
+        return float(v)
+    txt = str(v).replace("$", "").replace(",", "").strip()
+    try:
+        return float(txt)
+    except ValueError:
+        raise ViewpointParseError(
+            f"Viewpoint parser: {what} cell {coord} holds {v!r}, not a number"
+        ) from None
+
+
+def _xlsx_column_map(ws) -> tuple[int, dict]:
+    """(header row index, {role: column index}) — columns by LABEL, never by
+    position; a renamed or missing column refuses (DART lesson)."""
+    for row in ws.iter_rows(min_row=1, max_row=40):
+        labels = {c.column: _cell_text(c.value).upper() for c in row if _cell_text(c.value)}
+        if any("DAYS" in v for v in labels.values()) and any(
+            v.startswith("GROSS") for v in labels.values()
+        ):
+            roles: dict = {}
+            for col, label in labels.items():
+                for key, role in _XLSX_COLUMNS.items():
+                    if role in roles:
+                        continue
+                    if (key == "GROSS" and label == "GROSS") or (
+                        key != "GROSS" and label.startswith(key)
+                    ):
+                        roles[role] = col
+                        break
+            missing = [r for r in _XLSX_REQUIRED if r not in roles]
+            if missing:
+                raise ViewpointParseError(
+                    f"Viewpoint parser: workbook header row {row[0].row} lacks the "
+                    f"{', '.join(missing)} column(s): {sorted(labels.values())}"
+                )
+            return row[0].row, roles
+    raise ViewpointParseError(
+        "Viewpoint parser: no 'DAYS ... Gross Rate ... Unit GROSS NET' header row in the workbook"
+    )
+
+
+def render_viewpoint_xlsx_text(ws) -> str:
+    """Render the proposal worksheet into the lines the PDF prints, so
+    `parse_viewpoint_text` reads both formats with one set of guards."""
+    hdr_row, cols = _xlsx_column_map(ws)
+    mapped = set(cols.values())
+    out: List[str] = []
+    for row in ws.iter_rows(min_row=1, max_row=hdr_row):
+        parts = [c.value for c in row if _cell_text(c.value)]
+        is_budget = any(isinstance(v, str) and "BUDGET" in v.upper() for v in parts)
+        txt = " ".join(
+            f"${v:,.2f}" if is_budget and isinstance(v, (int, float)) else _cell_text(v)
+            for v in parts
+        )
+        if txt:
+            out.append(txt)
+    # The header line must carry ':30s' and the DAYS/GROSS/NET labels — it does, verbatim.
+    by_col = lambda row: {c.column: c for c in row}  # noqa: E731
+    for row in ws.iter_rows(min_row=hdr_row + 1):
+        cells = by_col(row)
+        vals = {role: cells[col].value if col in cells else None for role, col in cols.items()}
+        texts = {role: _cell_text(v) for role, v in vals.items()}
+        extra = " ".join(
+            t for t in (_cell_text(c.value) for c in row if c.column not in mapped) if t
+        )
+        if any(t.upper().startswith("TOTAL") for t in list(texts.values()) + extra.split("|")):
+            coord = lambda role: cells[cols[role]].coordinate  # noqa: E731
+            out.append(
+                f"TOTAL {int(_cell_num(vals['units'], 'TOTAL units', coord('units')))} "
+                f"${_cell_num(vals['gross'], 'TOTAL gross', coord('gross')):,.2f} "
+                f"${_cell_num(vals['net'], 'TOTAL net', coord('net')):,.2f}"
+            )
+            break
+        if not any(texts.values()):
+            if extra:
+                out.append(extra)  # a market-cell fragment / wrapped text on its own row
+            continue
+        if extra:
+            out.append(extra)  # the merged market cell shares the first data row
+        coord = lambda role: cells[cols[role]].coordinate  # noqa: E731
+        out.append(
+            f"{texts['days']} {texts['time']} {texts['program']} "
+            f"${_cell_num(vals['rate'], 'rate', coord('rate')):,.2f} "
+            f"{int(_cell_num(vals['units'], 'Unit', coord('units')))} "
+            f"${_cell_num(vals['gross'], 'GROSS', coord('gross')):,.2f} "
+            f"${_cell_num(vals['net'], 'NET', coord('net')):,.2f}"
+        )
+    return "\n".join(out)
+
+
+def _xlsx_sheet(wb):
+    """The proposal tab: named 'Crossings TV' when present, else the first sheet."""
+    for ws in wb.worksheets:
+        if "crossings" in ws.title.lower():
+            return ws
+    return wb.worksheets[0]
+
+
+def parse_viewpoint_xlsx(path: str) -> ViewpointOrder:
+    """Parse the Excel version of the option sheet."""
+    import openpyxl
+
+    wb = openpyxl.load_workbook(path, data_only=True)
+    try:
+        ws = _xlsx_sheet(wb)
+        text = render_viewpoint_xlsx_text(ws)
+        stamp = wb.properties.modified or wb.properties.created
+    finally:
+        wb.close()
+    base = stamp.date() if stamp else None
+    label = f"the workbook's modified date {base.month}/{base.day}/{base.year}" if base else ""
+    return parse_viewpoint_text(text, source_path=path, base_date=base, year_source=label)
+
+
 def parse_viewpoint(path: str) -> ViewpointOrder:
+    """Parse a Viewpoint option sheet, routing on extension (PDF or Excel)."""
+    if str(path).lower().endswith((".xlsx", ".xlsm")):
+        return parse_viewpoint_xlsx(path)
+    return parse_viewpoint_pdf(path)
+
+
+def parse_viewpoint_pdf(path: str) -> ViewpointOrder:
     """Parse a Viewpoint proposal PDF (every page's text, concatenated)."""
     import pdfplumber
 
