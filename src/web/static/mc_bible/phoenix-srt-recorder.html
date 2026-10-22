@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Phoenix TV Recorder (VIDEO-02)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #f0efe9;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #141413;
+    padding: 28px 24px 48px;
+    line-height: 1.5;
+  }
+  .page-title { text-align: center; font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+  .page-sub { text-align: center; font-size: 11px; color: rgba(61,61,58,0.55); margin-bottom: 26px; letter-spacing: 0.02em; }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  .card {
+    background: #ffffff;
+    border-radius: 14px;
+    border: 1px solid rgba(31,30,29,0.1);
+    padding: 20px 24px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+  }
+  h2 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(61,61,58,0.6); margin-bottom: 12px; }
+  h3 { font-size: 13px; font-weight: 600; margin: 14px 0 6px; }
+  p, li { font-size: 13px; }
+  p { margin-bottom: 8px; }
+  ul, ol { padding-left: 22px; margin-bottom: 8px; }
+  li { margin-bottom: 4px; }
+  code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; background: #f1efe8; border: 1px solid rgba(31,30,29,0.1); border-radius: 4px; padding: 1px 5px; white-space: nowrap; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin: 6px 0 4px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid rgba(31,30,29,0.1); vertical-align: top; }
+  th { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(61,61,58,0.55); font-weight: 700; }
+  td:first-child { white-space: nowrap; font-weight: 600; width: 32%; }
+
+  /* signal path */
+  .flow { display: flex; align-items: stretch; flex-wrap: wrap; gap: 8px; margin: 10px 0 6px; }
+  .node {
+    flex: 1 1 150px;
+    border-radius: 9px;
+    border: 1px solid rgba(31,30,29,0.12);
+    padding: 10px 12px;
+    font-size: 12px;
+    background: #f7f6f1;
+  }
+  .node b { display: block; font-size: 12.5px; margin-bottom: 3px; }
+  .node small { color: rgba(61,61,58,0.6); font-size: 11px; display: block; line-height: 1.4; }
+  .c-blue   { background: rgb(232,240,250); border-color: rgb(24,95,165); }
+  .c-teal   { background: rgb(226,243,240); border-color: rgb(26,120,110); }
+  .c-purple { background: rgb(238,234,250); border-color: rgb(96,66,170); }
+  .c-coral  { background: rgb(250,236,231); border-color: rgb(153,60,29); }
+  .c-gray   { background: rgb(241,239,232); border-color: rgb(95,94,90); }
+  .branch { font-size: 11px; color: rgba(61,61,58,0.6); margin: 2px 0 0 4px; }
+
+  .rule {
+    border-left: 4px solid rgb(153,60,29);
+    background: rgb(250,236,231);
+    border-radius: 0 8px 8px 0;
+    padding: 10px 14px;
+    margin: 10px 0;
+    font-size: 13px;
+  }
+  .rule b { color: rgb(153,60,29); }
+  .ok { color: rgb(26,120,110); font-weight: 600; }
+  .warn { color: rgb(176,120,0); font-weight: 600; }
+  .bad { color: rgb(153,60,29); font-weight: 600; }
+  .foot { text-align: center; font-size: 11px; color: rgba(61,61,58,0.5); margin-top: 18px; }
+</style>
+</head>
+<body>
+
+<div class="page-title">Phoenix TV Recorder on VIDEO-02</div>
+<div class="page-sub">Sacramento office · live since 14 Oct 2026 · owner: Lee Hudson</div>
+
+<div class="wrap">
+
+<div class="card">
+  <h2>What it does</h2>
+  <p>VIDEO-02 is a PC in the Sacramento office. It receives the Phoenix TV North America feed over SRT and records it to disk, one file per hour.</p>
+  <p>The recorder replaces the old chain (Datavideo decoder → SDI → DeckLink → Etere Memory on EDIT-02). The VIDEO-02 files are the product. EDIT-02 is being retired.</p>
+  <p>The recorder runs by itself. It starts when VIDEO-02 boots, restarts if it fails, and needs nobody to be logged on.</p>
+</div>
+
+<div class="card">
+  <h2>Signal path</h2>
+  <div class="flow">
+    <div class="node c-blue"><b>Phoenix TV</b><small>SRT listener<br><code>47.181.223.221:6005</code></small></div>
+    <div class="node c-purple"><b>VIDEO-02 relay</b><small>Holds the one SRT connection. Copies the bytes unchanged to four local ports.</small></div>
+    <div class="node c-teal"><b>Recorder</b><small>Writes hourly files to <code>C:\PhoenixSRT\rec</code></small></div>
+    <div class="node c-teal"><b>Archive</b><small>Copies finished hours to the NAS V drive</small></div>
+  </div>
+  <div class="branch">Also from the relay: → <b>Live View</b> (VLC on VIDEO-02) · → <b>Confidence monitor</b> (thumbnail + audio meter on the Control Room Monitor Wall) · → <b>Datavideo</b> (SDI out, legacy, for EDIT-02 Memory until it is retired)</div>
+
+  <div class="rule"><b>One caller only.</b> Phoenix's SRT listener accepts one connection at a time. VIDEO-02 is that caller. Do not point the Datavideo (or any other device) at the Phoenix SRT address. If something else takes the slot, the recorder is locked out and records nothing.</div>
+</div>
+
+<div class="card">
+  <h2>Where the recordings are</h2>
+  <table>
+    <tr><th>Item</th><th>Value</th></tr>
+    <tr><td>Local folder (VIDEO-02)</td><td><code>C:\PhoenixSRT\rec\</code></td></tr>
+    <tr><td>NAS folder</td><td><code>\\192.168.50.29\V Drive\Programming\Phoenix SRT\YYYY-MM-DD\</code> (V: on VIDEO-02), one folder per recording day</td></tr>
+    <tr><td>File name</td><td><code>Phoenix_YYYYMMDD_HHMM.mp4</code>, for example <code>Phoenix_20261022_1400.mp4</code> is the hour that started at 14:00</td></tr>
+    <tr><td>One file covers</td><td>One clock hour (14:00:00 to 14:59:59). An hour that started mid-way (after a reboot) is shorter.</td></tr>
+    <tr><td>Format</td><td>1080i 29.97, H.264, one AAC stereo audio track, timecode track from the segment start. About 2.5 GB per hour.</td></tr>
+    <tr><td>Local retention</td><td>72 hours, and the recorder keeps at least 80 GB free on C:</td></tr>
+    <tr><td>NAS retention</td><td>5 days. Older day folders are removed automatically.</td></tr>
+    <tr><td>When a file appears</td><td>Locally a few minutes after the hour ends. On the NAS shortly after that, if the <code>video</code> user is logged on (see below).</td></tr>
+  </table>
+  <h3>The NAS copy needs a logged-on user</h3>
+  <p>The archive task runs in the <code>CROSSINGSTV\video</code> desktop session on VIDEO-02. The NAS does not accept the computer account. After a reboot, nothing is copied to the NAS until someone logs on as <code>video</code>. The recorder keeps recording in the meantime, and the 72-hour local copy gives the archive time to catch up.</p>
+</div>
+
+<div class="card">
+  <h2>How to check the feed</h2>
+  <h3>Control Room Monitor Wall</h3>
+  <p>The "Phoenix TV feed" panel shows a still frame of the feed, taken once a minute, and an L/R audio meter.</p>
+  <ul>
+    <li><span class="ok">Normal:</span> the frame updates every minute and the meter moves.</li>
+    <li><span class="warn">Amber:</span> the frame is more than 3 minutes old. The thumbnail task on VIDEO-02 is behind or stopped.</li>
+    <li><span class="bad">Red:</span> VIDEO-02 does not answer. The PC is off, or the network to it is down.</li>
+    <li><span class="bad">NO AUDIO:</span> both channels sit at or below -60 dBFS. The 24-hour strip under the meter marks silent minutes in red.</li>
+  </ul>
+  <p>The meter and frame are taken before the recorder. Silence on the meter means Phoenix (or the SRT path) is silent. Sound on the meter with a mute file means the problem is on our side.</p>
+  <h3>Live View on VIDEO-02</h3>
+  <p>Double-click the "Phoenix Live View" shortcut on the VIDEO-02 desktop. VLC opens the feed a second or two behind air. Use it to confirm Phoenix is sending programming and not its "Daily Talk" fallback. Only one Live View can be open at a time. Opening or closing it does not affect the recorder.</p>
+  <h3>Frames from the last 24 hours</h3>
+  <p>Every minute's thumbnail is kept for 24 hours at <code>http://100.90.230.98:8081/frames/</code>. Use this to find when a fallback or a black picture started.</p>
+</div>
+
+<div class="card">
+  <h2>Things that are normal</h2>
+  <ul>
+    <li><b>Reconnects.</b> Phoenix's SRT session drops several times a day. The relay reconnects within seconds. The recorder repairs the join, so the hour file is complete.</li>
+    <li><b>A few minutes of re-encoded audio.</b> When a reconnect damages an audio frame, the recorder re-encodes that hour's audio instead of copying it. Picture is unaffected. The log line reads <code>audio: aac re-encoded</code>.</li>
+    <li><b>Second audio track in the source is silent.</b> Phoenix sends an AC-3 track that carries digital silence. The recorder never uses it.</li>
+    <li><b>The file for the current hour is a <code>.ts</code>.</b> It becomes <code>.mp4</code> after the hour closes. Do not copy the <code>.ts</code> while it is being written.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>If something is wrong</h2>
+  <table>
+    <tr><th>Symptom</th><th>Likely cause</th><th>What to do</th></tr>
+    <tr><td>Monitor Wall panel is red</td><td>VIDEO-02 is off or unreachable</td><td>Check that VIDEO-02 is powered on and on the network. Then tell Lee.</td></tr>
+    <tr><td>No new hour file for over 2 hours</td><td>Recorder task stopped, or Phoenix's slot is taken by another device</td><td>On VIDEO-02 open <code>C:\PhoenixSRT\status.json</code> and the newest log in <code>C:\PhoenixSRT\logs\</code>. Tell Lee.</td></tr>
+    <tr><td>NAS day folder is empty or behind</td><td>Nobody is logged on as <code>video</code> on VIDEO-02</td><td>Log on to VIDEO-02 as <code>CROSSINGSTV\video</code>. The archive catches up on its own.</td></tr>
+    <tr><td>Feed shows "Daily Talk" or a slate</td><td>Phoenix is sending its fallback</td><td>This is on Phoenix's side. Note the time (the 24-hour frames help) and tell Lee.</td></tr>
+    <tr><td>Datavideo picture black or frozen</td><td>Relay path to the Datavideo</td><td>The VIDEO-02 files are not affected. Tell Lee.</td></tr>
+    <tr><td>Panel is amber but Live View looks fine</td><td>Thumbnail task is behind</td><td>Not urgent. Tell Lee if it stays amber for more than 15 minutes.</td></tr>
+  </table>
+  <p>Do not restart the Windows scheduled tasks or ffmpeg by hand unless Lee asks. A wrong restart can drop the Phoenix SRT slot.</p>
+</div>
+
+<div class="card">
+  <h2>Key facts</h2>
+  <table>
+    <tr><th>Item</th><th>Value</th></tr>
+    <tr><td>Machine</td><td>VIDEO-02, Windows 10, Sacramento office. Tailscale <code>100.90.230.98</code>. Office LAN <code>192.168.50.111</code> (AT&amp;T) and <code>10.1.50.26</code> (Comcast).</td></tr>
+    <tr><td>Source</td><td>Phoenix TV NA SRT listener <code>srt://47.181.223.221:6005</code>, VIDEO-02 is the caller. 1080i 29.97 H.264 + AAC, about 6 Mbps.</td></tr>
+    <tr><td>Windows tasks</td><td><code>PhoenixSrtRecorder</code> (relay + recorder, SYSTEM, at startup) · <code>PhoenixSrtArchive</code> (NAS copy, runs as <code>video</code> at logon) · <code>PhoenixSrtThumb</code> (thumbnail + audio meter, SYSTEM)</td></tr>
+    <tr><td>Status files</td><td><code>C:\PhoenixSRT\status.json</code> · <code>C:\PhoenixSRT\archive_status.json</code> · logs in <code>C:\PhoenixSRT\logs\</code></td></tr>
+    <tr><td>Monitor endpoints</td><td><code>http://100.90.230.98:8081/live.jpg</code> · <code>/live.json</code> · <code>/frames/</code> (Control Room proxies these on the Monitor Wall)</td></tr>
+    <tr><td>Datavideo (legacy)</td><td>Receives a byte-exact UDP copy at <code>10.1.50.98:6005</code> for EDIT-02 Memory. Its input must stay <code>udp://@:6005</code>.</td></tr>
+    <tr><td>Remote admin</td><td>AWS Systems Manager hybrid node <code>mi-02adb6308ecd7a523</code> (us-west-2)</td></tr>
+    <tr><td>Engineering detail</td><td>Control Room repo, <code>video02_recorder/README.md</code> and the three <code>.ps1</code> scripts</td></tr>
+  </table>
+</div>
+
+<div class="foot">Phoenix TV Recorder · Control Room MC Bible · last updated 22 Oct 2026</div>
+</div>
+
+</body>
+</html>
