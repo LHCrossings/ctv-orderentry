@@ -90,7 +90,7 @@ def _show():
     [
         ("Mandarin", "chinese"),
         ("Chinese", "chinese"),
-        ("Cantonese", "english"),  # simplified text does not suit a traditional-text audience
+        ("Cantonese", "chinese"),  # Lee 10/22: both Chinese audiences get the simplified cut
         ("Vietnamese", "vietnamese"),
         ("Korean", "english"),
         ("Filipino", "english"),
@@ -104,7 +104,7 @@ def test_creative_language_from_the_grid_word(word, want):
 def test_creative_language_falls_back_to_the_language_windows():
     # SFO Monday 20:30 is Mandarin; DAL (10) Monday 17:30 is Cantonese; SFO Monday 11:00 Vietnamese
     assert cp.creative_language("", 4, "2026-11-02", H20 + 1800) == "chinese"
-    assert cp.creative_language("", 10, "2026-11-02", 17.5 * 3600) == "english"
+    assert cp.creative_language("", 10, "2026-11-02", 17.5 * 3600) == "chinese"
     assert cp.creative_language("", 4, "2026-11-02", 11 * 3600.0) == "vietnamese"
 
 
@@ -112,19 +112,21 @@ def test_creative_language_falls_back_to_the_language_windows():
 
 
 def test_picks_the_language_creative_and_counts_the_day():
-    f, note = cp.campaign_psa_for(FakeCur(), 4, "2026-11-02", H20, H21, "Mandarin", _show())
-    assert f is not None and f.filmati == ZH and f.kind == "PSA" and abs(f.dur - 30.0) < 0.1
+    fs, note = cp.campaign_psa_for(FakeCur(), 4, "2026-11-02", H20, H21, "Mandarin", _show())
+    assert len(fs) == 1
+    f = fs[0]
+    assert f.filmati == ZH and f.kind == "PSA" and abs(f.dur - 30.0) < 0.1
     assert f.campaign == "CAMPAIGN T"
-    assert note == "campaign PSA: chinese creative PSA-ZH (1 of 8 today)"
+    assert note == "campaign PSA: chinese PSA-ZH by last aired (1 of 8 today)"
 
 
 def test_inert_outside_the_flight():
     assert cp.campaign_psa_for(FakeCur(), 4, "2026-10-29", H20, H21, "Mandarin", _show()) == (
-        None,
+        [],
         "",
     )
     assert cp.campaign_psa_for(FakeCur(), 4, "2027-10-31", H20, H21, "Mandarin", _show()) == (
-        None,
+        [],
         "",
     )
 
@@ -133,34 +135,34 @@ def test_no_creatives_yet_says_so(monkeypatch):
     empty = cp.Campaign("E", date(2026, 10, 30), date(2027, 10, 30), {"english": ()})
     monkeypatch.setattr(cp, "CAMPAIGNS", (empty,))
     f, note = cp.campaign_psa_for(FakeCur(), 4, "2026-11-02", H20, H21, "Korean", _show())
-    assert f is None and "no creatives ingested yet" in note
+    assert f == [] and "no creatives ingested yet" in note
 
 
 def test_one_per_show():
     evs = _show() + [Ev(9, H20 + 1530, 30.0, "PSA", "T", ZH, "PSA-901-030: Campaign ZH", None)]
     f, note = cp.campaign_psa_for(FakeCur(), 4, "2026-11-02", H20, H21, "Mandarin", evs)
-    assert f is None and note == "campaign PSA already in this show"
+    assert f == [] and note == "campaign PSA already in this show"
 
 
 def test_market_day_cap_counts_every_creative_outside_the_window():
     placed = [(EN, 7 * 3600.0 + i * 1800) for i in range(8)]  # eight English ones earlier today
     f, note = cp.campaign_psa_for(FakeCur(placed), 4, "2026-11-02", H20, H21, "Mandarin", _show())
-    assert f is None and "cap 8 reached" in note
+    assert f == [] and "cap 8 reached" in note
     # a row inside THIS window (a refill re-plan) is not counted against the cap
     inside = placed[:7] + [(ZH, H20 + 1530)]
     f, _ = cp.campaign_psa_for(FakeCur(inside), 4, "2026-11-02", H20, H21, "Mandarin", _show())
-    assert f is not None
+    assert f
 
 
 def test_spacing_is_preferred_not_required():
     f, note = cp.campaign_psa_for(
         FakeCur([(EN, H20 - 3600)]), 4, "2026-11-02", H20, H21, "Mandarin", _show()
     )
-    assert f is None and "spacing" in note
+    assert f == [] and "spacing" in note
     f, _ = cp.campaign_psa_for(
         FakeCur([(EN, H20 - 7300)]), 4, "2026-11-02", H20, H21, "Mandarin", _show()
     )
-    assert f is not None  # more than 2 h ago: fine
+    assert f  # more than 2 h ago: fine
 
 
 def test_least_recently_aired_creative_wins_when_a_language_has_two(monkeypatch):
@@ -171,7 +173,18 @@ def test_least_recently_aired_creative_wins_when_a_language_has_two(monkeypatch)
     f, _ = cp.campaign_psa_for(
         FakeCur(last={EN: 5.0, VI: 1.0}), 4, "2026-11-02", H20, H21, "Korean", _show()
     )
-    assert f.filmati == VI
+    assert [x.filmati for x in f] == [VI, EN]
+
+
+def test_the_real_campaign_names_three_cuts_per_language(monkeypatch):
+    monkeypatch.undo()  # the autouse fixture swaps in the test campaign; read the real one
+    camp = cp.CAMPAIGNS[0]
+    assert camp.start == date(2026, 10, 30) and camp.end == date(2027, 10, 30)
+    for lang in ("english", "chinese", "vietnamese"):
+        assert len(camp.creatives[lang]) == 3, lang
+    codes = [c for lst in camp.creatives.values() for c in lst]
+    assert len(set(codes)) == 9
+    assert all(c.startswith("ICE") for c in codes)
 
 
 # ── the planner seats it ahead of the PI fill, inside the show ────────────────
@@ -203,6 +216,26 @@ def test_planner_seats_the_campaign_in_the_shortest_interior_break():
     assert any(n.startswith("campaign PSA PSA-901-030") for n in notes)
     # the PIs still fill the rest and the ID lands
     assert any(isinstance(x, Filler) and x.kind == "ID" for x in breaks[-1].items)
+
+
+def test_planner_takes_the_first_candidate_that_fits_the_open_time():
+    # Lee 10/22: the cuts run 1:00-2:10; the LRA 2:10 does not fit a 1:40 hole, the :60 does
+    show = [
+        _pgm(1, H20, 1700.0, "SHOW A"),
+        _paid(2, H20 + 1700, 30.0),
+        _pgm(3, H20 + 1730, 1670.0, "SHOW B"),
+        _paid(4, H20 + 3400, 100.0),  # ends 20:58:20 → 100 s open
+    ]
+    long = Filler(ZH, "ICE130M03: Public Encounter CHI", 130.4, "PSA", "CAMPAIGN T", 0.0)
+    short = Filler(ZH + 1, "ICE60M01:Family Prep CHI", 60.1, "PSA", "CAMPAIGN T", 1.0)
+    breaks, notes = plan(show, _inv(), H21, 4, campaign=[long, short])
+    assert any(x is short for b in breaks for x in b.items)
+    assert not any(x is long for b in breaks for x in b.items)
+    assert any(n.startswith("campaign PSA ICE60M01") for n in notes)
+    # nothing fits → skipped, naming the shortest cut
+    breaks, notes = plan(show, _inv(), H21, 4, campaign=[long])
+    assert not any(x is long for b in breaks for x in b.items)
+    assert any(n.startswith("campaign PSA skipped") and "2:10" in n for n in notes)
 
 
 def test_planner_skips_the_campaign_when_the_show_has_no_room():

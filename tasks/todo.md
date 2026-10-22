@@ -934,7 +934,9 @@ Chinese → Mandarin shows, Vietnamese → Vietnamese shows, English elsewhere.
 - [x] cap / spacing / one-per-show / LRA; DAL language windows; inactive outside the flight
 - [x] tests (planner on a real day in a rolled-back txn; mirror test if two pickers)
 - [x] aired-count report `scripts/campaign_psa_report.py`; the Finish plan lists the row as a PSA insert with the campaign note
-- [ ] WAITING: asset names from Maija; Cantonese shows → English or Chinese?
+- [x] asset names from Maija (10/22): nine cuts ICE{60,102,81}E / ICE{60,125,130}M / ICE{60,105,81}V,
+      1:00-2:10 each, FILMATI 152006-152014; Cantonese shows → the Chinese "M" cut (Lee 10/22)
+- [x] planner takes the least recently aired cut of the language that FITS the open time
 
 Review (2026-10-21): general PI/PSA fill is Finish's `plan()` only (Daily Programming fills the
 Marketplace / weekend drama with specific assets, untouched). `campaign_psa.py` holds the campaign

@@ -266,8 +266,12 @@ def plan_window(
     camp, camp_note = campaign_psa_for(cur, market, date, lo, hi, language, evs)
     protected = campaign_fids(cur, date) if camp_note else set()
     breaks, notes = plan(evs, inv, hi, market, campaign=camp, protected=protected)
-    if camp_note and camp is None:
+    if camp_note and not camp:
         notes.append(camp_note)
+    camp_seated = next(
+        (x.filmati for b in breaks for x in b.items if isinstance(x, Filler) and x in camp),
+        None,
+    )
     for fe in added:
         notes.insert(0, f"filler {fe.code} ({mmss(fe.dur)}) added after the show")
     if auto_refill:
@@ -473,7 +477,7 @@ def plan_window(
         "n_insert": len(inserts) + len(added),
         "n_swap": len(swaps),
         "language": language,
-        "campaign_psa": camp.filmati if camp else None,
+        "campaign_psa": camp_seated,
         "filler_options": filler_opts,
         "fillers": [{"fid": fe.filmati, "code": fe.code, "dur": fe.dur} for fe in added],
         "_added": added,

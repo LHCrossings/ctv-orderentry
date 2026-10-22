@@ -504,7 +504,7 @@ def plan(
     inv: list[Filler],
     hour_end: float,
     market: int,
-    campaign: Filler | None = None,
+    campaign: Filler | list[Filler] | None = None,
     protected: frozenset[int] | set[int] = frozenset(),
 ) -> tuple[list, list[str]]:
     """Fix it or finish it (Lee 8/28): existing fill stays as given; remove only
@@ -512,8 +512,9 @@ def plan(
     longest interior break), move a PI only when the final break would be the
     longest, then add PI → PSA → ID. Existing ID rows are re-placed (same asset).
 
-    `campaign` (Lee 10/21, campaign_psa.py): a campaign PSA to seat first, in the
-    shortest interior break, ahead of the PI fill. `protected` are the campaign's
+    `campaign` (Lee 10/21, campaign_psa.py): the campaign PSA candidates, least
+    recently aired first; the first that fits the open time is seated in the
+    shortest interior break, ahead of the PI fill (the cuts run 1:00 to 2:10). `protected` are the campaign's
     asset ids: the FIX phase removes other fill before one of these."""
     notes: list[str] = []
     old_ids = [e for e in evs if e.newtype == "ID"]
@@ -624,17 +625,22 @@ def plan(
 
     # ── CAMPAIGN phase (Lee 10/21): one campaign PSA per show, ahead of the PI fill,
     # in the shortest interior break so it sits inside the show, not in the end game ──
-    if campaign is not None:
-        if R - ID_MIN_AIR >= campaign.dur:
+    cands = [campaign] if isinstance(campaign, Filler) else list(campaign or [])
+    if cands:
+        pick = next((c for c in cands if R - ID_MIN_AIR >= c.dur), None)
+        if pick is not None:
             target = min(interior, key=lambda b: b.length) if interior else final
-            target.items.append(campaign)
-            used.add(campaign.filmati)
-            R -= campaign.dur
+            target.items.append(pick)
+            used.add(pick.filmati)
+            R -= pick.dur
             notes.append(
-                f"campaign PSA {campaign.desc[:28]} ({mmss(campaign.dur)}) → break {target.after_piece_idx}"
+                f"campaign PSA {pick.desc[:28]} ({mmss(pick.dur)}) → break {target.after_piece_idx}"
             )
         else:
-            notes.append(f"campaign PSA skipped: only {mmss(R)} open")
+            shortest = min(c.dur for c in cands)
+            notes.append(
+                f"campaign PSA skipped: only {mmss(R)} open, shortest cut {mmss(shortest)}"
+            )
 
     # ── FINISH phase: PIs for evenness; final break ≤ 2:30 and never the longest ──
     while R - ID_MIN_AIR >= 30.0:

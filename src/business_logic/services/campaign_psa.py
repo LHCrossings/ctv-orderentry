@@ -1,8 +1,11 @@
 """Campaign PSAs — a message that must get steady exposure through the FILL path.
 
-Lee 2026-10-21: three :30 PSAs (English, Chinese in SIMPLIFIED text, Vietnamese)
-run on every network incl. DAL from 10/30/2026 to 10/30/2027, 5-10 times a day,
-in any programming. They are typed PSA in the library (purple in EE, deletable)
+Lee 2026-10-21: one message in three languages (English, Chinese in SIMPLIFIED
+text, Vietnamese) runs on every network incl. DAL from 10/30/2026 to 10/30/2027,
+5-10 times a day, in any programming. Maija ingested nine cuts on 10/21 (Lee
+10/22): three messages per language, 1:00 to 2:10 long (ICE60E01 ... ICE130M03),
+so a show takes the least recently aired cut of its language that FITS its open
+time; the planner walks the candidates in that order. They are typed PSA in the library (purple in EE, deletable)
 but must not be left to the ordinary PI/PSA rotation, which only draws :15/:10
 PSAs for the end game and gives no language or frequency guarantee. They are
 NOT entered as an order either: Etere places a line's whole flight at entry and
@@ -12,17 +15,16 @@ Fill is placed after paid scheduling into open time only, and Finish strips
 fill when an hour overruns, so a campaign PSA can never displace a paid spot.
 Finish's planner seats ONE campaign PSA per show, ahead of the PI fill:
 
-- language from the SHOW: Chinese creative in Mandarin programming (the text is
-  simplified; Cantonese viewers prefer traditional), Vietnamese in Vietnamese
+- language from the SHOW: Chinese creative in Mandarin AND Cantonese programming
+  (Lee 10/22: both get the simplified "M" cut), Vietnamese in Vietnamese
   programming, English everywhere else (Korean, Filipino, South Asian, Hmong,
-  Japanese, and Cantonese until Lee says otherwise). The grid's language word
-  decides; when a window carries none, the day-aware language windows do
-  (`classify_language`, DAL has its own table).
+  Japanese). The grid's language word decides; when a window carries none, the
+  day-aware language windows do (`classify_language`, DAL has its own table).
 - cap per market-day (`cap_per_day`, 8 — "5-10x per day, any more is overkill"),
   counting every creative of the campaign; prefer a gap of `min_gap_s` (2 h)
   from the previous / next one (Lee: "no specific separation REQUIRED, but you
   can prefer it"); least recently aired creative first when a language has more
-  than one.
+  than one, the planner taking the first of them that fits the show's open time.
 - active only between `start` and `end`; outside the flight the rule is inert.
 
 Creatives are named by COD_PROGRA (or `#<ID_FILMATI>`) in `CAMPAIGNS` and resolved
@@ -49,18 +51,23 @@ class Campaign:
     min_gap_s: float = 2 * 3600.0
 
 
-# Lee 10/21: asset names to come from Maija once the three files are ingested.
+# Lee 10/22: Maija's nine cuts (FILMATI 152006-152014, S3 copies all ~38.4 kB/frame; the
+# two Family Prep files on disk are named ICE30M01 / ICE30V01 but are full :60s — 69.0 MB).
 CAMPAIGNS: tuple[Campaign, ...] = (
     Campaign(
         name="PSA 2026-27",
         start=date(2026, 10, 30),
         end=date(2027, 10, 30),
-        creatives={"english": (), "chinese": (), "vietnamese": ()},
+        creatives={
+            "english": ("ICE60E01", "ICE102E02", "ICE81E03"),
+            "chinese": ("ICE60M01", "ICE125M02", "ICE130M03"),
+            "vietnamese": ("ICE60V01", "ICE105V02", "ICE81V03"),
+        },
     ),
 )
 
 _LANG_WORDS = {
-    "chinese": ("mandarin", "chinese", "simplified"),
+    "chinese": ("mandarin", "cantonese", "chinese", "simplified"),
     "vietnamese": ("vietnamese", "viet"),
 }
 
@@ -70,7 +77,7 @@ def creative_language(language: str, market: int, date_s: str, lo: float) -> str
 
     `language` is the grid's word for the show ("Mandarin", "Cantonese", "Korean",
     ""); an empty word falls back to the language windows at the window's start.
-    Cantonese → english (simplified text does not suit a traditional-text audience)."""
+    Mandarin and Cantonese both take the simplified-text Chinese cut (Lee 10/22)."""
     word = (language or "").strip().lower()
     if not word:
         from browser_automation.language_windows import classify_language
@@ -158,47 +165,53 @@ def _last_aired(cur, market: int, date_s: str, fids: list[int]) -> dict[int, flo
 
 def campaign_psa_for(
     cur, market: int, date_s: str, lo: float, hi: float, language: str, evs: list[Ev]
-) -> tuple[Filler | None, str]:
-    """The campaign PSA Finish should seat in this window, or None — with the reason.
+) -> tuple[list[Filler], str]:
+    """The campaign PSA candidates Finish should seat in this window, least recently
+    aired first (the planner takes the first that fits the open time), or [] with
+    the reason.
 
     One per show; the market-day cap counts every creative of the campaign outside
     this window; a creative within `min_gap_s` before or after the window skips
     this show (spacing is preferred, not required)."""
     camp = active_campaign(date_s)
     if camp is None:
-        return None, ""
+        return [], ""
     creatives = resolve_creatives(cur, camp)
     all_fids = {cr["fid"] for lst in creatives.values() for cr in lst}
     if not all_fids:
-        return None, f"campaign PSA ({camp.name}): no creatives ingested yet"
+        return [], f"campaign PSA ({camp.name}): no creatives ingested yet"
     lang = creative_language(language, market, date_s, lo)
     cands = creatives.get(lang) or []
     if not cands:
-        return None, f"campaign PSA ({camp.name}): no {lang} creative"
+        return [], f"campaign PSA ({camp.name}): no {lang} creative"
     if any(e.filmati in all_fids for e in evs):
-        return None, "campaign PSA already in this show"
+        return [], "campaign PSA already in this show"
     placed = _placed_today(cur, market, date_s, all_fids)
     outside = [(f, o) for f, o in placed if not (lo - 0.5 <= o < hi - 0.5)]
     if len(outside) >= camp.cap_per_day:
-        return None, f"campaign PSA: market-day cap {camp.cap_per_day} reached"
+        return [], f"campaign PSA: market-day cap {camp.cap_per_day} reached"
     near = [
         o for _f, o in outside if lo - camp.min_gap_s <= o < lo or hi <= o < hi + camp.min_gap_s
     ]
     if near:
         return (
-            None,
+            [],
             f"campaign PSA: one within {int(camp.min_gap_s // 60)} min of this show, skipped for spacing",
         )
     last = _last_aired(cur, market, date_s, [c["fid"] for c in cands])
-    pick = min(cands, key=lambda c: (last.get(c["fid"], 0.0), c["code"]))
+    order = sorted(cands, key=lambda c: (last.get(c["fid"], 0.0), c["code"]))
     return (
-        Filler(
-            pick["fid"],
-            pick["desc"] or pick["code"],
-            pick["frames"] / FPS,
-            "PSA",
-            f"CAMPAIGN {camp.name}",
-            last.get(pick["fid"], 0.0),
-        ),
-        f"campaign PSA: {lang} creative {pick['code']} ({len(outside) + 1} of {camp.cap_per_day} today)",
+        [
+            Filler(
+                c["fid"],
+                c["desc"] or c["code"],
+                c["frames"] / FPS,
+                "PSA",
+                f"CAMPAIGN {camp.name}",
+                last.get(c["fid"], 0.0),
+            )
+            for c in order
+        ],
+        f"campaign PSA: {lang} {' › '.join(c['code'] for c in order)} by last aired"
+        f" ({len(outside) + 1} of {camp.cap_per_day} today)",
     )
