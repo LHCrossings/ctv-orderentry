@@ -51,7 +51,7 @@ def _fetch_etere_spots(
 
     upcoming_filter = (
         """
-              AND DATEADD(MILLISECOND, dbo.tcFrames2Msec(dbo.getVideoStandard(tp.COD_USER), tp.ORA) %% 86400000,
+              AND DATEADD(MILLISECOND, dbo.tcFrames2Msec(dbo.getVideoStandard(tp.COD_USER), tp.ORA) % 86400000,
                           CAST(tp.DATA AS DATETIME)) >= DATEADD(MINUTE, 10, GETDATE())"""
         if upcoming_only
         else ""
