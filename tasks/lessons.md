@@ -4,6 +4,27 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A `%%` Escape Only Survives the Formatting Pass It Was Written For — Move It Into a Fragment Interpolated as a VALUE and It Reaches SQL Server Verbatim
+
+**Session:** Lee, "why won't traffic assign?" on 3189/3190 (2026-10-23)
+
+**Rule:** The aircheck spot query is a Python `%`-formatted template executed with NO params. On
+10/16 the `upcoming_only` filter (with `tp.ORA %% 86400000`) was moved out of the template into a
+fragment passed through `%s`; values are not re-formatted, so the doubled percent reached SQL
+Server and every auto-aircheck since reported `Incorrect syntax near '86400000'`. The traffic
+assign itself succeeded; only the capture booking was skipped, and the page's green "Assigned"
+plus an amber warning read as "traffic won't assign". No test rendered the SQL.
+
+**How to apply:**
+1. When refactoring a string into a fragment, re-check every escape in it against the pass it will
+   now go through (`%%` → `%` only once, and only in the template, never in a value).
+2. A query built by string formatting gets a test that renders it and asserts the exact text
+   (`test_airchecks_upcoming_filter_sql.py`: no `%%`, a single modulo, the contract id in place).
+3. Diagnose "won't assign" by reading the DB first: `TPALINSE.ID_FILMATI` on the contract's
+   placements and `CONTRATTIFILMATI` were already right; the warning named the actual failing step.
+4. After the fix, run `schedule_airchecks_for_contract(id)` by hand for the contracts that
+   were assigned while it was broken (dedup makes it safe); 3189 and 3190 booked 2 each.
+
 ## A Parser's Line Fields Were Never Read by the Bridge, So the Backwrite Built a $0 Confirmation — and a Bookend Row at the LINE Rate Bills the Pair Twice
 
 **Session:** Lee, Imprenta PGE WS 26Q4 (3185) one-click backwrite: "Gross: run sheet $7,528.96 vs SC lines $0.00" (2026-10-20)
