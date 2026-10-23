@@ -68,3 +68,25 @@ def test_titles_and_notes_rows_are_not_spots(instr):
     assert titles["SHCJM2CCFH"] == "James Story (JM) :120"
     # the "Please provide 30 minute seperation" / spotbox rows carry no ISCI
     assert len(instr.spots) == 4
+
+
+from browser_automation.parsers.directdonor_traffic_parser import _search_suggestion  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    "advertiser, word",
+    [
+        # Every WL Direct advertiser in Etere, described "WL Direct <word> <dur> <order#>"
+        ("American Heart Association", "American"),
+        ("Covenant House", "Covenant"),
+        ("Feeding America", "Feeding"),
+        ("Make A Wish", "Make"),
+        ("Make-A-Wish", "Make"),  # the sheet hyphenates what the IO spaces (Lee 10/23)
+        ("Save the Children", "Save"),
+        ("Shriners Hospitals for Children", "Shriners"),
+        ("St. Jude Children's Research Hospital", "St. Jude"),
+        ("Wounded Warrior Project", "Wounded"),
+    ],
+)
+def test_contract_search_word_is_the_advertisers_first_word(advertiser, word):
+    assert _search_suggestion(advertiser) == word

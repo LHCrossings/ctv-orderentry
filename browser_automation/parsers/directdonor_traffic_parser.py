@@ -40,25 +40,23 @@ class DirectDonorPeriod:
     spots: List[DirectDonorSpot] = field(default_factory=list)
 
 
+# Every WL Direct contract is described "WL Direct <first word of the advertiser>
+# <dur> <order#>" (worldlink_parser: advertiser.split()[0]), so the candidate search
+# uses that word. The sheet may hyphenate what the IO spaces ("Make-A-Wish" vs
+# "Make A Wish", Lee 2026-10-23), so the word ends at a space OR a hyphen. Only an
+# advertiser whose first token is not the IO's word needs an entry here.
 _SEARCH_OVERRIDES: dict = {
-    "americanheart": "American",
-    "covenant": "Covenant",
-    "shriners": "Shriners",
-    "savethechildren": "Save",
-    "feedingamerica": "Feeding",
-    "save": "Save",
-    "feeding": "Feeding",
     "stjude": "St. Jude",
-    "wounded": "Wounded",
 }
 
 
 def _search_suggestion(advertiser: str) -> str:
-    key = advertiser.lower().replace(" ", "")
+    key = re.sub(r"[^a-z]", "", advertiser.lower())
     for prefix, suggestion in _SEARCH_OVERRIDES.items():
         if key.startswith(prefix):
             return suggestion
-    return advertiser
+    first = re.split(r"[\s\-]+", advertiser.strip())[0] if advertiser.strip() else ""
+    return first or advertiser
 
 
 def _parse_flight_date(s: str) -> Optional[str]:
