@@ -4,6 +4,31 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Column Named "Month" Held the AIR DATE on Half the Contracts — a Label Hid It; Changing the Key to the Raw Value Exposed It. Normalise a Key to What Its Name Says Before Grouping On It
+
+**Session:** Lee, Resorts World one-click backwrite "backwrites the monthly amounts horribly" (2026-10-24)
+
+**Rule:** EtereBridge's `Month` column is the broadcast-month date (the 1st) for Broadcast
+contracts and the raw AIR DATE for Calendar contracts; its own workbook formats the cell
+mmm-yy, so the two shapes were indistinguishable on screen. For years the breakdown keyed on
+`strftime("%B")`, which collapsed the day for free. The 10/12 chronological-sort fix keyed on
+`m.date()` ("the broadcast-month date") and was tested on rows that were already the 1st, so
+every Calendar contract since then listed one row per air date (RWNY: 70 rows, $0 rows for
+bonus-only days) while Broadcast contracts stayed correct. Same family as 9/30 DATESTART vs
+DATA_INIZIO and 10/16 ORA_FINE vs ORA_FINEF: a column's name is not its contents; read a row
+from each PRODUCER (here Broadcast and Calendar) before keying on it.
+
+**How to apply:**
+1. A grouping key is derived by one helper that enforces the key's definition
+   (`_month_key` = first of the month), never the column value as-is; both aggregation
+   sites (SC breakdown in `generate_excel`, Sheet1 pivot in `_fill_pivot`) use it.
+2. When changing a key from a label to a raw value, list every producer of that value and
+   fixture a row from each; the 10/12 test used hand-written 1st-of-month rows and so could
+   not see the Calendar shape. `test_calendar_rows_carrying_air_dates_collapse_to_one_row_per_month`
+   now carries air-date rows.
+3. Diagnostic signature: a per-month table with more rows than months, repeated month
+   labels, and `$-` rows (days that aired only bonus spots).
+
 ## A `%%` Escape Only Survives the Formatting Pass It Was Written For — Move It Into a Fragment Interpolated as a VALUE and It Reaches SQL Server Verbatim
 
 **Session:** Lee, "why won't traffic assign?" on 3189/3190 (2026-10-23)

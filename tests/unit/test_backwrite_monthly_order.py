@@ -90,3 +90,56 @@ def test_pivot_sorts_by_date_not_by_name():
     ]
     assert [ws.cell(r, 2).value for r in range(1, 5)] == [4.0, 2.0, 3.0, 1.0]
     assert ws.cell(5, 1).value == "Grand Total" and ws.cell(5, 2).value == 10.0
+
+
+def _sc_sheet_one_row():
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["", "line 1"])
+    ws.append(["Month", "Gross", "Net"])
+    ws.append(["July", 1, 1])
+    ws.append(["Total", 1, 1])
+    return ws
+
+
+def test_calendar_rows_carrying_air_dates_collapse_to_one_row_per_month():
+    """EtereBridge's Month column is the raw AIR DATE on Calendar contracts; the
+    breakdown must still show one row per month (RWNY, Lee 2026-10-24: 70 rows
+    reading 'October $500 / October $600 / ...')."""
+    from backwrite.transformer import _month_key, generate_excel  # noqa: F401
+
+    rows = [
+        {"month": datetime(2026, 10, 27), "gross_rate": 500.0, "station_net": 500.0},
+        {"month": datetime(2026, 10, 28), "gross_rate": 600.0, "station_net": 600.0},
+        {"month": datetime(2026, 11, 2), "gross_rate": 100.0, "station_net": 100.0},
+        {"month": datetime(2026, 11, 3), "gross_rate": 0.0, "station_net": 0.0},
+        {"month": datetime(2026, 12, 30), "gross_rate": 200.0, "station_net": 200.0},
+    ]
+    assert _month_key(datetime(2026, 10, 27)) == date(2026, 10, 1)
+    assert _month_key(date(2026, 10, 1)) == date(2026, 10, 1)
+
+    # Pivot (Sheet1) path
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["<month>", "Gross", "Net"])
+    ws.append(["Grand Total", 0, 0])
+    _fill_pivot(ws, rows)
+    assert [ws.cell(r, 1).value for r in range(1, 4)] == [
+        "October 2026",
+        "November 2026",
+        "December 2026",
+    ]
+    assert [ws.cell(r, 2).value for r in range(1, 4)] == [1100.0, 100.0, 200.0]
+    assert ws.cell(4, 1).value == "Grand Total"
+
+    # Sales Confirmation breakdown path: aggregate the way generate_excel does
+    from collections import defaultdict
+
+    mg: dict = defaultdict(float)
+    for rr in rows:
+        mg[_month_key(rr["month"])] += rr["gross_rate"]
+    assert set(mg) == {date(2026, 10, 1), date(2026, 11, 1), date(2026, 12, 1)}
+    sc = _sc_sheet_one_row()
+    _fill_monthly_breakdown(sc, dict(mg), {}, last_line_row=1, agency_fee=0.0)
+    assert _month_column(sc, 3) == ["October", "November", "December"]
+    assert [sc.cell(r, 2).value for r in (3, 4, 5)] == [1100.0, 100.0, 200.0]

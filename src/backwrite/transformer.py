@@ -465,6 +465,17 @@ def _month_sort_key(key) -> tuple:
     return (0, month_order.get(str(key), 99))
 
 
+def _month_key(m) -> date:
+    """Monthly-total key for a run row's ``month`` value: the FIRST of its month.
+
+    EtereBridge's Month column is the broadcast-month date (already the 1st) for
+    Broadcast contracts but the raw AIR DATE for Calendar contracts (its own
+    workbook only formats it mmm-yy). Keying on the value as-is gave a Calendar
+    contract one breakdown row per air date (RWNY 10/24/2026).
+    """
+    return date(m.year, m.month, 1)
+
+
 def _month_label(key) -> str:
     """Month name shown in the Sales Confirmation breakdown ('December')."""
     if isinstance(key, (date, datetime)):
@@ -902,7 +913,7 @@ def _fill_pivot(ws, run_rows: List[dict]) -> None:
     for rr in run_rows:
         m = rr.get("month")
         if isinstance(m, datetime):
-            key = m.date()
+            key = _month_key(m)
             monthly_gross[key] += rr.get("gross_rate", 0) or 0
             monthly_net[key] += rr.get("station_net", 0) or 0
 
@@ -1599,9 +1610,10 @@ def generate_excel(
     for rr in run_rows:
         m = rr.get("month")
         if isinstance(m, datetime):
-            # Key on the broadcast-month DATE so Dec-26 and Jan-27 sort and
-            # label correctly; the label is derived at write time.
-            _mg[m.date()] += rr.get("gross_rate", 0) or 0
+            # Key on the first of the month so Dec-26 and Jan-27 sort and
+            # label correctly; the label is derived at write time. Calendar
+            # rows carry the air date here, so never key on the value as-is.
+            _mg[_month_key(m)] += rr.get("gross_rate", 0) or 0
     # Full precision — the Sales Confirmation breakdown writes gross as-is and
     # derives net + totals with Excel formulas, so nothing rounds until display.
     monthly_gross = {k: v for k, v in _mg.items()}
