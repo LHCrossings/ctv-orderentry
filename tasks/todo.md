@@ -957,7 +957,7 @@ MEDIA: SOS", Dana Levine). The IO carries the campaign name, flight, per-market 
 and the $2,000 total but NO dayparts or rates; the proposal carries the lines (3 market grids with
 their own Paid/Bonus footers + a Summary of investment). Both detect UNKNOWN today.
 
-- [ ] `browser_automation/parsers/cbm_parser.py` — `parse_cbm(path)` accepts EITHER file and finds
+- [x] `browser_automation/parsers/cbm_parser.py` — `parse_cbm(path)` accepts EITHER file (Lee: proposal is the order, IO optional) and finds
       the companion in the same folder (IO: "CBM Representative"/"1809 S Street"/"Insertion Order:";
       proposal: "Crossings TV Media Proposal" + "Summary of investment" + same markets/total).
       IO reader: date, Insertion Order name, flight per market row, `N (P+B)` counts, TOTAL, length
@@ -966,16 +966,24 @@ their own Paid/Bonus footers + a Summary of investment). Both detect UNKNOWN tod
       (Monday nearest the IO flight start). Reconcile: per line weeks = Total Units and rate×units
       = NET; per grid Paid/Bonus footers; summary row per market; IO per-market `(P+B)` and TOTAL
       vs proposal → refuse on any mismatch.
-- [ ] `browser_automation/cbm_automation.py` — gather (customer 404 default via prompt_customer_id,
+- [x] `browser_automation/cbm_automation.py` — gather (customer 404 default via prompt_customer_id,
       ANAGRAF readback, markets from the proposal confirmed, start date always asked,
       code/description defaults per Lee's pick, CUSTOMERREF = IO campaign name, separation
       15/0/0 from CTV_Customers or default), one contract, lines per market section via
       consolidate_weeks + plan_ranges, BNS lines on the language ROS window, Production none,
       `--dry-run` rolls back with header + line readback; both files move to Entered/.
-- [ ] registrations: enums, detection (IO text + proposal-with-companion; filename `SOS_`/`CBM`),
+- [x] registrations: enums, detection (IO text + proposal-with-companion; filename `SOS_`/`CBM`),
       orchestrator, processing service (+ direct keys), parser_bridge (display, registry, direct +
       tested keys), scan cache v21, CTV_Customers row for 404
-- [ ] fixtures `tests/fixtures/cbm/` (both PDFs) + `tests/unit/test_cbm_parser.py` (header, lines,
+- [x] fixtures `tests/fixtures/cbm/` (both PDFs) + `tests/unit/test_cbm_parser.py` (header, lines,
       companion lookup both directions, tampering guards, automation defaults/plan)
-- [ ] dry run against Etere (rolled back), ruff, unit suite, commit, push, deploy
-- [ ] memory + lessons
+- [x] dry run against Etere (rolled back), ruff, unit suite, commit, push, deploy
+- [x] memory + lessons
+
+Review (2026-10-26, fea795ae): Lee's picks at the prompt — proposal only (IO optional, reconciled when
+present), `CBM 2611` / `CA Black Media - SOS Vote Education C3 2611` (fitted: the header SP keeps 50 of
+DESCRIZIONE's 80 chars, the first dry run wrote 51 and read back 50), ACM-2881 line names with the bonus
+on the South Asian 1p-4p window, 15/0/0. Dry runs through both files (rolled back): 15 lines / 40 spots /
+$2,000, header 316 / agency 0 / 0% / NYC / INVOICEMODE 0, week 2 on Monday 11/2 at 2/day. Detection
+returns CBM for both texts and filenames; preview carries 9 lines with NET money; language-window
+check clean; 21 tests + suite 1384; deployed, Jumpbox UP. First live entry pending Lee.
