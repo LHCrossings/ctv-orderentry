@@ -53,12 +53,25 @@ def main() -> int:
         default=317,
         help="317 Calendar (Lee: October money), 316 Broadcast",
     )
-    ap.add_argument("--market", default="LAX")  # Lee 10/26: California client → Los Angeles
-    ap.add_argument("--code", default="ACM PROD 2610")  # Lee: PROD tags a production/services contract
+    ap.add_argument(
+        "--market",
+        default=None,
+        help="station for the lines; asked when omitted (Lee 10/26: any client can be for any market)",
+    )
+    ap.add_argument(
+        "--code", default="ACM PROD 2610"
+    )  # Lee: PROD tags a production/services contract
     ap.add_argument("--desc", default="ACM Subtitling & Proofing 2610")
     a = ap.parse_args()
     assert abs(sum(v for _, v in ITEMS) - TOTAL) < 0.005, "items do not sum to the email total"
     d: date = parse_date(a.date)
+    markets = ("NYC", "CMP", "HOU", "SFO", "SEA", "LAX", "CVC", "WDC", "MMT", "DAL")
+    market = (a.market or "").upper()
+    while market not in markets:
+        raw = input("  Which market should this money be applied to? [LAX]: ").strip().upper()
+        market = raw or "LAX"
+        if market not in markets:
+            print(f"    ✗ {market!r} is not one of {', '.join(markets)}")
 
     conn = connect()
     try:
@@ -82,7 +95,7 @@ def main() -> int:
         print(f"header {cid} {a.code!r} {a.desc!r} {d}")
         for desc, amount in ITEMS:
             lid = client.add_contract_line(
-                market=a.market,
+                market=market,
                 days="M-Su",
                 time_range="06:00-06:01",
                 description=desc,

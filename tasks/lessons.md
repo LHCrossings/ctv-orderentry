@@ -4,6 +4,26 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## The Market a Non-Airtime Contract's Money Lands In Is the Operator's Call Every Time — Ask, Never Infer It From the Client
+
+**Session:** Lee, ACM services contract 3211 (2026-10-26) — "it's good to ask which market should the money be applied to, since any client can be for any market"
+
+**Rule:** I entered six hidden production/services lines on NYC because nothing in the email named
+a market and NYC is the master station; Lee had to ask for a move to LAX ("it's a California
+client"), and I then wrote LAX into the script as the default — a second inference. A station is
+where revenue is reported; for money with no airtime nothing in the document decides it, and the
+client's home does not either (any client can buy any market). Same family as the 9/28 "naming
+convention is the user's call" and 10/12 "billing type at entry is a choice" lessons.
+
+**How to apply:**
+1. Any entry whose market is not stated BY THE DOCUMENT (services, production, make-goods moved
+   between stations, $0 event contracts) prompts `Which market should this money be applied to?
+   [<precedent>]` before the dry run; the bracket default is the last answer, never a derivation.
+2. Do not silently fall back to the master market (NYC) for a line's station — the header's
+   station is NYC by convention, the lines' station is a decision.
+3. When the user corrects a value, do not bake the corrected value in as the new default without
+   asking whether it is a rule; here it was a one-off.
+
 ## A Prompt Default Described From the Flow I Tested Is Not the Default of the Flow the User Chose — Run the Gather the Way the User Said They Would Use It Before Describing What It Offers
 
 **Session:** Lee, California Black Media 3208 — "This isn't what was offered me" (2026-10-26)
