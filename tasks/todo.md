@@ -987,3 +987,15 @@ on the South Asian 1p-4p window, 15/0/0. Dry runs through both files (rolled bac
 $2,000, header 316 / agency 0 / 0% / NYC / INVOICEMODE 0, week 2 on Monday 11/2 at 2/day. Detection
 returns CBM for both texts and filenames; preview carries 9 lines with NET money; language-window
 check clean; 21 tests + suite 1384; deployed, Jumpbox UP. First live entry pending Lee.
+
+## ACM October services money — contract 3211 (2026-10-26)
+
+Lee pasted ACM's email ($1,560 subtitling + proofing, "add to October billing", no airtime, agency
+and client = American Community Media at 0%). Entered as six hidden line listings (2203's
+production-line shape; reference only, CBM is not a party), Calendar 317 dated 10/26 so it books
+as October (Lee's call), after a rolled-back dry run and his go-ahead.
+
+- [x] `add_contract_line(hide_from_scheduler=)` — the SP flag was hardcoded off
+- [x] `scripts/enter_acm_services_2610.py` — dry run default, readback (header, lines, hide, 0 placed, CIG) before commit
+- [x] live: 3211 `ACM 2610`, fresh-connection readback 6 lines / $1,560 / hide 1 / 0 placed / CIG 10/26 $1,560
+- [x] commit, push, deploy; memory `project_services_only_contracts.md`
