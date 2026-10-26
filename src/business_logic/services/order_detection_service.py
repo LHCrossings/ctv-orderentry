@@ -194,6 +194,11 @@ class OrderDetectionService:
         if self._is_gauger(first_page_text):
             return OrderType.GAUGER
 
+        # California Black Media — Charmaine's SOS proposal ("AMERICAN COMMUNITY
+        # MEDIA: SOS") or CBM's own Docusign Insertion Order
+        if self._is_cbm(first_page_text):
+            return OrderType.CBM
+
         # Health Plan of San Joaquin — house Media Proposal, client-keyed (must
         # precede San Joaquin County: both texts contain "San Joaquin")
         if self._is_hpsj(first_page_text):
@@ -305,6 +310,12 @@ class OrderDetectionService:
         from browser_automation.parsers.cafob_parser import is_cafob_text
 
         return is_cafob_text(text)
+
+    def _is_cbm(self, text: str) -> bool:
+        """California Black Media SOS proposal / Insertion Order."""
+        from browser_automation.parsers.cbm_parser import is_cbm_text
+
+        return is_cbm_text(text)
 
     def _is_hpsj(self, text: str) -> bool:
         """Health Plan of San Joaquin house proposal — client-keyed."""
@@ -1125,6 +1136,13 @@ def detect_from_filename(filename: str) -> OrderType:
         return OrderType.HPSJ
     if "SAN MATEO COUNTY VOTER" in " ".join(name_upper.split()):
         return OrderType.SANMATEO
+    # CBM sends "SOS_C3_IO_Crossings_TV.docx.pdf" + "Crossings TV ACoM_ SOS 2026.pdf"
+    if (
+        "CBM" in name_upper
+        or "BLACK MEDIA" in name_upper
+        or ("SOS" in name_upper and ("ACOM" in name_upper or "_IO_" in name_upper))
+    ):
+        return OrderType.CBM
     if "FAMILY OWNED BUSINESSES" in " ".join(name_upper.split()) or "CAFOB" in name_upper:
         return OrderType.CAFOB
     if "SAN JOAQUIN COUNTY" in " ".join(name_upper.split()):

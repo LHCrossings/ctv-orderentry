@@ -208,6 +208,11 @@ _INPUT_GATHERERS: dict[OrderType, tuple[str, str, str]] = {
         "gather_cafob_inputs",
         "CA Alliance of Family Owned Businesses PAC",
     ),
+    OrderType.CBM: (
+        "browser_automation.cbm_automation",
+        "gather_cbm_inputs",
+        "California Black Media",
+    ),
     OrderType.POP: (
         "browser_automation.pop_automation",
         "gather_pop_inputs",

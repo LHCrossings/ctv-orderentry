@@ -946,3 +946,36 @@ the campaign rows as the last fill to remove; `plan_window` passes the pick and 
 Read-only rehearsal with stand-in PIs on SFO/DAL 10/20: fresh windows seat it, finished hours stay
 finished (idempotent), the language falls back to the day-aware windows when the grid word is empty
 (19:30 Cantonese → English, DAL 05:30 → English). Unit: 19 new tests, suite 1,347.
+
+## California Black Media (CBM) parser — SOS Vote Education Campaign 3 (2026-10-26)
+
+Lee: new parser for California Black Media; precedent contract 2203 `CBM 2511` (customer ANAGRAF 404
+direct 0%, Broadcast 316, LAX/SFO/CVC, 15/0/0, Rotation). Two documents arrive together: the CBM
+Advertising Insertion Order (`SOS_C3_IO_Crossings_TV.docx.pdf`, Docusign) and Charmaine's house
+"Crossings TV Media Proposal" (`Crossings TV ACoM_ SOS 2026.pdf`, Agency "AMERICAN COMMUNITY
+MEDIA: SOS", Dana Levine). The IO carries the campaign name, flight, per-market paid+bonus counts
+and the $2,000 total but NO dayparts or rates; the proposal carries the lines (3 market grids with
+their own Paid/Bonus footers + a Summary of investment). Both detect UNKNOWN today.
+
+- [ ] `browser_automation/parsers/cbm_parser.py` — `parse_cbm(path)` accepts EITHER file and finds
+      the companion in the same folder (IO: "CBM Representative"/"1809 S Street"/"Insertion Order:";
+      proposal: "Crossings TV Media Proposal" + "Summary of investment" + same markets/total).
+      IO reader: date, Insertion Order name, flight per market row, `N (P+B)` counts, TOTAL, length
+      (`40 × :30`), language. Proposal reader: extract_tables (header, 3 market grids, summary);
+      money cells with split digits (`$ 7 14.00`); week headers `26-Oct` with year inferred
+      (Monday nearest the IO flight start). Reconcile: per line weeks = Total Units and rate×units
+      = NET; per grid Paid/Bonus footers; summary row per market; IO per-market `(P+B)` and TOTAL
+      vs proposal → refuse on any mismatch.
+- [ ] `browser_automation/cbm_automation.py` — gather (customer 404 default via prompt_customer_id,
+      ANAGRAF readback, markets from the proposal confirmed, start date always asked,
+      code/description defaults per Lee's pick, CUSTOMERREF = IO campaign name, separation
+      15/0/0 from CTV_Customers or default), one contract, lines per market section via
+      consolidate_weeks + plan_ranges, BNS lines on the language ROS window, Production none,
+      `--dry-run` rolls back with header + line readback; both files move to Entered/.
+- [ ] registrations: enums, detection (IO text + proposal-with-companion; filename `SOS_`/`CBM`),
+      orchestrator, processing service (+ direct keys), parser_bridge (display, registry, direct +
+      tested keys), scan cache v21, CTV_Customers row for 404
+- [ ] fixtures `tests/fixtures/cbm/` (both PDFs) + `tests/unit/test_cbm_parser.py` (header, lines,
+      companion lookup both directions, tampering guards, automation defaults/plan)
+- [ ] dry run against Etere (rolled back), ruff, unit suite, commit, push, deploy
+- [ ] memory + lessons

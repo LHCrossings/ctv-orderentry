@@ -1,0 +1,752 @@
+"""California Black Media (CBM) — SOS campaign house-proposal parser.
+
+The buyer (Dana Levine) sends two documents for each Secretary of State campaign:
+
+  * Charmaine's "Crossings TV Media Proposal" (agency line
+    ``AMERICAN COMMUNITY MEDIA: SOS``): a key/value header, one grid per market
+    (``California-Los Angeles Spectrum 1519`` …) with its own Paid/Bonus footers,
+    and a ``Summary of investment`` table — this is the ORDER (Lee, 2026-10-26:
+    "proposal only"), the only document that carries dayparts and rates;
+  * CBM's Docusign "Advertising Insertion Order" — campaign name, flight, the
+    per-market ``17 (11+6)`` counts and the total. It carries no lines, so it is
+    OPTIONAL: when it sits beside the proposal it supplies the campaign name,
+    the flight end and the spot length, and its counts must reconcile.
+
+Rates are NET; the customer is California Black Media (ANAGRAF 404, direct, 0%),
+precedent contract 2203 ``CBM 2511``. Week headers (``26-Oct``) carry no year:
+the IO's flight pins it, else the Monday nearest today (CAFOB's ``infer_year``).
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from datetime import date, timedelta
+from pathlib import Path
+from typing import List, Optional
+
+import pdfplumber
+
+from browser_automation.parsers.acm_parser import _split_daypart
+from browser_automation.parsers.cafob_parser import infer_year
+
+CLIENT_NAME = "California Black Media"
+DEFAULT_CUSTOMER_ID = 404
+
+_MONTHS = {
+    m: i
+    for i, m in enumerate(
+        ("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"), 1
+    )
+}
+_LANGUAGES = (
+    ("VIETNAMESE", "Vietnamese"),
+    ("VIET", "Vietnamese"),
+    ("MANDARIN", "Mandarin"),
+    ("CANTONESE", "Cantonese"),
+    ("CHINESE", "Chinese"),
+    ("FILIPINO", "Filipino"),
+    ("TAGALOG", "Filipino"),
+    ("KOREAN", "Korean"),
+    ("HMONG", "Hmong"),
+    ("JAPANESE", "Japanese"),
+    ("SOUTH ASIAN", "South Asian"),
+    ("PUNJABI", "Punjabi"),
+    ("HINDI", "Hindi"),
+)
+_MARKET_HINTS = (
+    ("SAN FRANCISCO", "SFO"),
+    ("SF BAY", "SFO"),
+    ("SACRAMENTO", "CVC"),
+    ("CENTRAL VALLEY", "CVC"),
+    ("LOS ANGELES", "LAX"),
+    ("SEATTLE", "SEA"),
+    ("HOUSTON", "HOU"),
+    ("CHICAGO", "CMP"),
+    ("MINNEAPOLIS", "CMP"),
+    ("WASHINGTON", "WDC"),
+    ("NEW YORK", "NYC"),
+    ("DALLAS", "DAL"),
+)
+_AGENCY_RE = re.compile(r"Agency\s*:\s*(.+?)\s*:\s*(\S.*)")
+
+
+class CBMParseError(ValueError):
+    pass
+
+
+# ─── detection ───────────────────────────────────────────────────────────────
+
+
+def _up(text: str) -> str:
+    return " ".join((text or "").split()).upper()
+
+
+def is_cbm_proposal_text(text: str) -> bool:
+    """Charmaine's proposal for the SOS campaign: agency 'AMERICAN COMMUNITY MEDIA: SOS'."""
+    up = _up(text)
+    return "CROSSINGS TV MEDIA PROPOSAL" in up and bool(
+        re.search(r"AGENCY:\s*AMERICAN COMMUNITY MEDIA\s*:\s*SOS\b", up)
+    )
+
+
+def is_cbm_io_text(text: str) -> bool:
+    """CBM's own Insertion Order (Docusign): the CBM representative signs it."""
+    up = _up(text)
+    return "INSERTION ORDER" in up and (
+        "CBM REPRESENTATIVE" in up or "CALIFORNIA BLACK MEDIA" in up
+    )
+
+
+def is_cbm_text(text: str) -> bool:
+    return is_cbm_proposal_text(text) or is_cbm_io_text(text)
+
+
+# ─── helpers ─────────────────────────────────────────────────────────────────
+
+
+def _norm(s) -> str:
+    return " ".join(str(s or "").replace("\n", " ").split())
+
+
+def _money(cell: str) -> Optional[float]:
+    """'$ 7 14.00' → 714.0 (the sheet splits digits); '$ -' → 0.0; unreadable → None."""
+    s = re.sub(r"[\s$,]", "", str(cell or ""))
+    if s == "-":
+        return 0.0
+    if not re.fullmatch(r"-?\d+(\.\d+)?", s):
+        return None
+    return float(s)
+
+
+def _int(cell: str) -> Optional[int]:
+    s = _norm(cell).replace(",", "")
+    return int(s) if re.fullmatch(r"\d+", s) else None
+
+
+def _field(text: str, label: str) -> str:
+    m = re.search(rf"{re.escape(label)}\s*:?\s*(.*)", text)
+    return _norm(m.group(1)) if m else ""
+
+
+def market_of(text: str) -> str:
+    up = _norm(text).upper()
+    for key, code in _MARKET_HINTS:
+        if key in up:
+            return code
+    return ""
+
+
+def language_of(block: str) -> tuple[str, str]:
+    """'Hindi News/Talk' → ('Hindi', 'News/Talk')."""
+    up = _norm(block).upper()
+    for key, lang in _LANGUAGES:
+        if up.startswith(key):
+            return lang, _norm(block)[len(key) :].strip(" -:/")
+    return "", _norm(block)
+
+
+def _mdy(s: str) -> date:
+    m, d, y = (int(x) for x in s.split("/"))
+    return date(y + 2000 if y < 100 else y, m, d)
+
+
+def _week_header(
+    cell: str, prev: Optional[date], year_hint: Optional[int], today
+) -> Optional[date]:
+    m = re.fullmatch(r"(\d{1,2})-([A-Za-z]{3})", _norm(cell))
+    if not m:
+        return None
+    day, mon = int(m.group(1)), _MONTHS.get(m.group(2).upper())
+    if not mon:
+        return None
+    if prev is not None:
+        return date(prev.year + (1 if mon < prev.month else 0), mon, day)
+    if year_hint:
+        return date(year_hint, mon, day)
+    return date(infer_year(mon, day, today), mon, day)
+
+
+# ─── model ───────────────────────────────────────────────────────────────────
+
+
+@dataclass
+class CBMInsertionOrder:
+    """CBM's Advertising Insertion Order — campaign, flight, counts, total (no lines)."""
+
+    io_date: str  # MM/DD/YYYY
+    campaign: str  # 'SOS Vote Education Campaign 3'
+    flight_start: date
+    flight_end: date
+    length_sec: Optional[int]
+    language: str
+    market_counts: dict  # {'LAX': (paid, bonus)}
+    total: float
+    source_path: str = ""
+
+    @property
+    def total_spots(self) -> int:
+        return sum(p + b for p, b in self.market_counts.values())
+
+
+@dataclass
+class CBMLine:
+    market: str
+    language_block: str  # 'Hindi News/Talk'
+    daypart: str  # 'M-F 1p-2p' / 'ROS'
+    net_rate: float
+    weekly_spots: List[int]
+    total_spots: int
+    net_total: float
+    language: str
+    program: str
+    is_bonus: bool = False
+    length_sec: int = 30
+
+    @property
+    def rate(self) -> float:
+        return 0.0 if self.is_bonus else self.net_rate
+
+    @property
+    def days(self) -> str:
+        if self.is_bonus:
+            return _ros(self.language)["days"]
+        return _split_daypart(self.daypart)[0]
+
+    @property
+    def time(self) -> str:
+        if self.is_bonus:
+            return _ros(self.language)["time"]
+        return _split_daypart(self.daypart)[1]
+
+    @property
+    def duration(self) -> str:
+        return str(self.length_sec)
+
+    @property
+    def description(self) -> str:
+        """ACM 2881 shape (Lee 10/26): block + daypart; bonus 'BNS <language> ROS'."""
+        if self.is_bonus:
+            return f"BNS {self.language} ROS"
+        return f"{self.language_block} {self.daypart}"[:60]
+
+
+def _ros(language: str) -> dict:
+    from browser_automation.ros_definitions import ROS_SCHEDULES
+
+    return (
+        ROS_SCHEDULES.get(language)
+        or ROS_SCHEDULES.get("South Asian")
+        or {
+            "days": "M-Su",
+            "time": "6a-11:59p",
+        }
+    )
+
+
+@dataclass
+class CBMMarketSection:
+    market: str
+    banner: str  # 'California-Los Angeles Spectrum 1519'
+    lines: List[CBMLine] = field(default_factory=list)
+    paid_units: int = 0
+    paid_net: float = 0.0
+    bonus_units: int = 0
+
+    @property
+    def paid_lines(self) -> List[CBMLine]:
+        return [ln for ln in self.lines if not ln.is_bonus]
+
+    @property
+    def bonus_lines(self) -> List[CBMLine]:
+        return [ln for ln in self.lines if ln.is_bonus]
+
+
+@dataclass
+class CBMOrder:
+    agency_label: str  # 'AMERICAN COMMUNITY MEDIA'
+    campaign_tag: str  # 'SOS' — the word after the agency on the sheet
+    contact: str
+    email: str
+    billing_cycle: str
+    market_text: str  # 'LA, SF, CVC'
+    week_dates: List[date]
+    sections: List[CBMMarketSection]
+    total_units: int
+    total_paid_units: int
+    total_bonus_units: int
+    total_net: float
+    source_path: str = ""
+    io: Optional[CBMInsertionOrder] = None
+    companion_path: str = ""  # the other document of the pair, when found
+    rates_are_net: bool = True
+
+    @property
+    def client(self) -> str:
+        return CLIENT_NAME
+
+    @property
+    def agency(self) -> str:
+        return self.agency_label
+
+    @property
+    def campaign_name(self) -> str:
+        return self.io.campaign if self.io else self.campaign_tag
+
+    @property
+    def length_sec(self) -> int:
+        return (self.io.length_sec if self.io and self.io.length_sec else None) or 30
+
+    @property
+    def markets(self) -> List[str]:
+        return [s.market for s in self.sections]
+
+    @property
+    def market_code(self) -> str:
+        return self.sections[0].market if len(self.sections) == 1 else ""
+
+    @property
+    def lines(self) -> List[CBMLine]:
+        return [ln for s in self.sections for ln in s.lines]
+
+    @property
+    def paid_lines(self) -> List[CBMLine]:
+        return [ln for ln in self.lines if not ln.is_bonus]
+
+    @property
+    def flight_start(self) -> str:
+        d = self.io.flight_start if self.io else self.week_dates[0]
+        return f"{d.month:02d}/{d.day:02d}/{d.year}"
+
+    @property
+    def flight_end(self) -> str:
+        d = self.io.flight_end if self.io else self.week_dates[-1] + timedelta(days=6)
+        return f"{d.month:02d}/{d.day:02d}/{d.year}"
+
+    @property
+    def estimate_number(self) -> str:
+        return ""
+
+    @property
+    def description(self) -> str:
+        return f"{self.client} - {self.campaign_name} {self.flight_start}-{self.flight_end}"
+
+    @property
+    def total_spots(self) -> int:
+        return sum(ln.total_spots for ln in self.lines)
+
+    @property
+    def total_cost(self) -> float:
+        return round(sum(ln.net_total for ln in self.paid_lines), 2)
+
+
+# ─── the IO ──────────────────────────────────────────────────────────────────
+
+_RUN_DATE = re.compile(r"(\d{1,2}/\d{1,2}/\d{2,4})\s*-\s*(\d{1,2}/\d{1,2}/\d{2,4})")
+_MARKET_COUNT = re.compile(
+    r"(Los Angeles|San Francisco|Central Valley|Sacramento|Seattle|Houston|Chicago|"
+    r"Minneapolis|Washington|New York|Dallas)\s+(\d+)\s*\((\d+)\s*\+\s*(\d+)\)",
+    re.IGNORECASE,
+)
+
+
+def parse_cbm_io_text(text: str, source_path: str = "") -> CBMInsertionOrder:
+    flat = _norm(text)
+    if not is_cbm_io_text(flat):
+        raise CBMParseError("not a California Black Media Insertion Order")
+    m = re.search(r"Insertion Order:\s*(.+?)\s+Parent Company", flat)
+    campaign = _norm(m.group(1)) if m else ""
+    if not campaign:
+        raise CBMParseError("IO: 'Insertion Order: <campaign>' not found")
+    m = re.search(r"Date:\s*(\d{1,2}/\d{1,2}/\d{4})", flat)
+    io_date = _mdy(m.group(1)) if m else None
+    runs = [(_mdy(a), _mdy(b)) for a, b in _RUN_DATE.findall(flat.split("ADDED VALUE")[0])]
+    runs = [(a, b) for a, b in runs if a <= b]
+    if not runs:
+        raise CBMParseError("IO: no run dates (m/d/yy-m/d/yy) found")
+    m = re.search(r"(\d+)\s*[×x]\s*:(\d{2,3})\b", flat)
+    length_sec = int(m.group(2)) if m else None
+    m = re.search(r"TOTAL:\s*\$\s*([\d,]+\.\d{2})", flat)
+    if not m:
+        raise CBMParseError("IO: 'TOTAL: $' not found")
+    total = _money(m.group(1))
+    counts = {}
+    for name, both, paid, bonus in _MARKET_COUNT.findall(flat):
+        code = market_of(name)
+        if int(both) != int(paid) + int(bonus):
+            raise CBMParseError(f"IO: {name} {both} ≠ {paid}+{bonus}")
+        if code in counts:
+            raise CBMParseError(f"IO: market {name} listed twice")
+        counts[code] = (int(paid), int(bonus))
+    if not counts:
+        raise CBMParseError("IO: no per-market 'N (paid+bonus)' counts found")
+    lang = ""
+    for key, name in _LANGUAGES:
+        if re.search(rf"\b{key}\b", flat.upper()):
+            lang = name
+            break
+    return CBMInsertionOrder(
+        io_date=f"{io_date.month:02d}/{io_date.day:02d}/{io_date.year}" if io_date else "",
+        campaign=campaign,
+        flight_start=min(a for a, _ in runs),
+        flight_end=max(b for _, b in runs),
+        length_sec=length_sec,
+        language=lang,
+        market_counts=counts,
+        total=total or 0.0,
+        source_path=source_path,
+    )
+
+
+def parse_cbm_io(path: str) -> CBMInsertionOrder:
+    with pdfplumber.open(path) as pdf:
+        text = "\n".join(pg.extract_text() or "" for pg in pdf.pages)
+    return parse_cbm_io_text(text, str(path))
+
+
+# ─── the proposal ────────────────────────────────────────────────────────────
+
+
+def _col(header: List[str], label: str, nth: int = 0) -> int:
+    hits = [i for i, c in enumerate(header) if label.lower() in c.lower()]
+    if len(hits) <= nth:
+        raise CBMParseError(f"column {label!r} missing from the grid header: {header}")
+    return hits[nth]
+
+
+def _parse_grid(
+    table: List[List[str]], hdr_i: int, year_hint: Optional[int], today
+) -> tuple[CBMMarketSection, List[date]]:
+    banner = next((_norm(r[0]) for r in table[:hdr_i] if _norm(r[0])), "")
+    if not banner:
+        raise CBMParseError("market grid has no 'California-<market>' banner row")
+    market = market_of(banner)
+    if not market:
+        raise CBMParseError(f"market not recognised in banner {banner!r}")
+    header = [_norm(c) for c in table[hdr_i]]
+    c_lang, c_dp, c_rate, c_units, c_total = (
+        _col(header, "Language Block"),
+        _col(header, "Day Part"),
+        _col(header, "NET", 0),
+        _col(header, "Total Unit"),
+        _col(header, "NET", 1),
+    )
+    weeks: List[tuple[int, date]] = []
+    prev = None
+    for i, c in enumerate(header):
+        d = _week_header(c, prev, year_hint, today)
+        if d is not None:
+            weeks.append((i, d))
+            prev = d
+    if not weeks:
+        raise CBMParseError(f"{banner}: no week columns ('26-Oct') in the grid header")
+    week_dates = [d for _, d in weeks]
+
+    section = CBMMarketSection(market=market, banner=banner)
+    paid_row = bonus_row = None
+    for row in table[hdr_i + 1 :]:
+        cells = [_norm(c) for c in row]
+        if not any(cells):
+            continue
+        label = cells[c_lang].upper()
+        if label == "PAID":
+            paid_row = cells
+            continue
+        if label == "BONUS":
+            bonus_row = cells
+            continue
+        block, dp = cells[c_lang], cells[c_dp]
+        if not block or not dp:
+            raise CBMParseError(f"{banner}: row with blank language/daypart: {cells}")
+        spots = []
+        for ci, _d in weeks:
+            v = _int(cells[ci]) if cells[ci] else 0
+            if v is None:
+                raise CBMParseError(f"{banner} {block}: unreadable week cell {cells[ci]!r}")
+            spots.append(v)
+        units = _int(cells[c_units])
+        rate = _money(cells[c_rate])
+        net = _money(cells[c_total])
+        if units is None or rate is None or net is None:
+            raise CBMParseError(
+                f"{banner} {block}: unreadable units/rate/net "
+                f"{cells[c_units]!r} {cells[c_rate]!r} {cells[c_total]!r}"
+            )
+        if sum(spots) != units:
+            raise CBMParseError(
+                f"{banner} {block}: week cells sum to {sum(spots)}, Total Units says {units}"
+            )
+        is_bonus = dp.upper() == "ROS" or block.upper().startswith(("BNS", "BONUS"))
+        if is_bonus and rate != 0:
+            raise CBMParseError(f"{banner} {block}: a ROS/bonus row with a rate {rate}")
+        if not is_bonus and rate == 0:
+            raise CBMParseError(f"{banner} {block}: a paid row with no rate")
+        if abs(rate * units - net) > 0.005:
+            raise CBMParseError(
+                f"{banner} {block}: {rate} × {units} = {rate * units:.2f} ≠ NET {net:.2f}"
+            )
+        lang, program = language_of(block)
+        if not lang:
+            raise CBMParseError(f"{banner} {block}: no language word recognised")
+        section.lines.append(
+            CBMLine(
+                market=market,
+                language_block=block,
+                daypart=dp,
+                net_rate=rate,
+                weekly_spots=spots,
+                total_spots=units,
+                net_total=net,
+                language=lang,
+                program=program,
+                is_bonus=is_bonus,
+            )
+        )
+    if not section.lines:
+        raise CBMParseError(f"{banner}: no airtime rows")
+    if paid_row is None or bonus_row is None:
+        raise CBMParseError(f"{banner}: Paid/Bonus footer rows not found")
+
+    # ── the grid's own footers ──
+    for name, footer, rows in (
+        ("Paid", paid_row, section.paid_lines),
+        ("Bonus", bonus_row, section.bonus_lines),
+    ):
+        for k, (ci, d) in enumerate(weeks):
+            want = _int(footer[ci]) if footer[ci] else 0
+            got = sum(ln.weekly_spots[k] for ln in rows)
+            if want != got:
+                raise CBMParseError(
+                    f"{banner} {name} week {d}: lines give {got}, footer says {want}"
+                )
+        units = _int(footer[c_units])
+        if units is None or units != sum(ln.total_spots for ln in rows):
+            raise CBMParseError(
+                f"{banner} {name} units {footer[c_units]!r} ≠ lines {sum(ln.total_spots for ln in rows)}"
+            )
+    paid_net = _money(paid_row[c_total])
+    if paid_net is None or abs(paid_net - sum(ln.net_total for ln in section.paid_lines)) > 0.005:
+        raise CBMParseError(
+            f"{banner} Paid NET {paid_row[c_total]!r} ≠ lines {sum(ln.net_total for ln in section.paid_lines):.2f}"
+        )
+    section.paid_units = sum(ln.total_spots for ln in section.paid_lines)
+    section.bonus_units = sum(ln.total_spots for ln in section.bonus_lines)
+    section.paid_net = paid_net
+    return section, week_dates
+
+
+def _parse_summary(table: List[List[str]]) -> dict:
+    """{'LAX': (paid, bonus, both, net), 'TOTAL': (...)} from 'Summary of investment'."""
+    hdr_i = next(i for i, r in enumerate(table) if any("Paid+Bonus" in _norm(c) for c in r))
+    header = [_norm(c) for c in table[hdr_i]]
+    c_mkt, c_paid, c_bonus, c_both, c_net = (
+        _col(header, "Markets"),
+        _col(header, "Total Paid"),
+        _col(header, "Bonus Units"),
+        _col(header, "Paid+Bonus"),
+        _col(header, "Net"),
+    )
+    out = {}
+    for row in table[hdr_i + 1 :]:
+        cells = [_norm(c) for c in row]
+        if not any(cells):
+            continue
+        key = "TOTAL" if cells[c_mkt].upper().startswith("TOTAL") else market_of(cells[c_mkt])
+        if not key:
+            raise CBMParseError(f"summary: market {cells[c_mkt]!r} not recognised")
+        vals = (
+            _int(cells[c_paid]),
+            _int(cells[c_bonus]),
+            _int(cells[c_both]),
+            _money(cells[c_net]),
+        )
+        if any(v is None for v in vals):
+            raise CBMParseError(f"summary {cells[c_mkt]}: unreadable {cells}")
+        out[key] = vals
+    if "TOTAL" not in out:
+        raise CBMParseError("summary: 'Total Airtime' row not found")
+    return out
+
+
+def parse_cbm_proposal(
+    path: str, today: Optional[date] = None, year_hint: Optional[int] = None
+) -> CBMOrder:
+    with pdfplumber.open(path) as pdf:
+        texts = [pg.extract_text() or "" for pg in pdf.pages]
+        tables = [t for pg in pdf.pages for t in (pg.extract_tables() or [])]
+    text = "\n".join(texts)
+    if not is_cbm_proposal_text(text):
+        raise CBMParseError(f"not a {CLIENT_NAME} (SOS) proposal: {Path(path).name}")
+
+    m = _AGENCY_RE.search(text)
+    agency_label, campaign_tag = (_norm(m.group(1)), _norm(m.group(2))) if m else ("", "")
+    contact = _field(text, "Contact")
+    email = _field(text, "Email")
+    billing = _field(text, "Billing Cycle") or "Broadcast"
+    market_text = _field(text, "Market")
+
+    sections: List[CBMMarketSection] = []
+    week_dates: Optional[List[date]] = None
+    summary = None
+    for t in tables:
+        hdr = next(
+            (i for i, r in enumerate(t) if any("Language Block" in _norm(c) for c in r)),
+            None,
+        )
+        if hdr is not None:
+            sec, wd = _parse_grid(t, hdr, year_hint, today)
+            if week_dates is None:
+                week_dates = wd
+            elif wd != week_dates:
+                raise CBMParseError(f"{sec.banner}: week columns {wd} differ from {week_dates}")
+            if any(s.market == sec.market for s in sections):
+                raise CBMParseError(f"market {sec.market} appears twice")
+            sections.append(sec)
+        elif any(any("Paid+Bonus" in _norm(c) for c in r) for r in t):
+            summary = _parse_summary(t)
+    if not sections:
+        raise CBMParseError("no market grids (Language Block / Total Units) found")
+    if summary is None:
+        raise CBMParseError("'Summary of investment' table not found")
+    if week_dates[0].weekday() != 0:
+        raise CBMParseError(f"first week column {week_dates[0]} is not a Monday")
+    for a, b in zip(week_dates, week_dates[1:]):
+        if (b - a).days != 7:
+            raise CBMParseError(f"week columns {a} → {b} are not 7 days apart")
+
+    # ── summary vs grids ──
+    for sec in sections:
+        got = (sec.paid_units, sec.bonus_units, sec.paid_units + sec.bonus_units, sec.paid_net)
+        want = summary.get(sec.market)
+        if want is None:
+            raise CBMParseError(f"summary has no row for {sec.market} ({sec.banner})")
+        if want[:3] != got[:3] or abs(want[3] - got[3]) > 0.005:
+            raise CBMParseError(f"summary {sec.market} {want} ≠ grid {got}")
+    extra = set(summary) - {"TOTAL"} - {s.market for s in sections}
+    if extra:
+        raise CBMParseError(f"summary lists markets with no grid: {sorted(extra)}")
+    tp = sum(s.paid_units for s in sections)
+    tb = sum(s.bonus_units for s in sections)
+    tn = sum(s.paid_net for s in sections)
+    tot = summary["TOTAL"]
+    if tot[:3] != (tp, tb, tp + tb) or abs(tot[3] - tn) > 0.005:
+        raise CBMParseError(f"Total Airtime {tot} ≠ grids {(tp, tb, tp + tb, tn)}")
+
+    return CBMOrder(
+        agency_label=agency_label,
+        campaign_tag=campaign_tag,
+        contact=contact,
+        email=email,
+        billing_cycle=billing,
+        market_text=market_text,
+        week_dates=week_dates,
+        sections=sections,
+        total_units=tp + tb,
+        total_paid_units=tp,
+        total_bonus_units=tb,
+        total_net=tn,
+        source_path=str(path),
+    )
+
+
+# ─── the pair ────────────────────────────────────────────────────────────────
+
+
+def _pdf_text(path: Path) -> str:
+    try:
+        with pdfplumber.open(str(path)) as pdf:
+            return "\n".join(pg.extract_text() or "" for pg in pdf.pages[:2])
+    except Exception:
+        return ""
+
+
+def find_companions(path: str) -> tuple[List[Path], List[Path]]:
+    """Other CBM PDFs in the same folder: (proposals, IOs), never the file itself."""
+    p = Path(path)
+    proposals, ios = [], []
+    for other in sorted(p.parent.glob("*.pdf")) if p.parent.is_dir() else []:
+        if other.resolve() == p.resolve() or other.name.startswith("."):
+            continue
+        txt = _pdf_text(other)
+        if is_cbm_proposal_text(txt):
+            proposals.append(other)
+        elif is_cbm_io_text(txt):
+            ios.append(other)
+    return proposals, ios
+
+
+def reconcile_with_io(order: CBMOrder, io: CBMInsertionOrder) -> None:
+    """The IO's per-market (paid+bonus) counts and total must equal the proposal's."""
+    want = {s.market: (s.paid_units, s.bonus_units) for s in order.sections}
+    if io.market_counts != want:
+        raise CBMParseError(f"IO per-market counts {io.market_counts} ≠ proposal {want}")
+    if abs(io.total - order.total_net) > 0.005:
+        raise CBMParseError(f"IO total ${io.total:,.2f} ≠ proposal ${order.total_net:,.2f}")
+    if io.flight_start != order.week_dates[0]:
+        raise CBMParseError(
+            f"IO flight starts {io.flight_start}, proposal's first week is {order.week_dates[0]}"
+        )
+    last = order.week_dates[-1]
+    if not (last <= io.flight_end <= last + timedelta(days=6)):
+        raise CBMParseError(f"IO flight end {io.flight_end} is not in the last week {last}")
+
+
+def parse_cbm(path: str, today: Optional[date] = None) -> CBMOrder:
+    """Parse the proposal (the order). Given the IO instead, find the proposal beside
+    it; either way attach the IO when one sits in the folder and reconcile."""
+    text = _pdf_text(Path(path))
+    io: Optional[CBMInsertionOrder] = None
+    proposal_path = Path(path)
+    if is_cbm_io_text(text) and not is_cbm_proposal_text(text):
+        io = parse_cbm_io_text(text, str(path))
+        proposals, _ = find_companions(path)
+        if not proposals:
+            raise CBMParseError(
+                f"{Path(path).name} is the CBM Insertion Order — it carries no lines. "
+                "Drop the 'Crossings TV Media Proposal' PDF beside it."
+            )
+        if len(proposals) > 1:
+            raise CBMParseError(
+                f"several SOS proposals beside the IO: {[p.name for p in proposals]}"
+            )
+        proposal_path = proposals[0]
+    order = parse_cbm_proposal(
+        str(proposal_path), today=today, year_hint=io.flight_start.year if io else None
+    )
+    if io is None:
+        _, ios = find_companions(str(proposal_path))
+        for cand in ios:
+            try:
+                c = parse_cbm_io(str(cand))
+                reconcile_with_io(order, c)
+            except CBMParseError:
+                continue
+            io = c
+            break
+    else:
+        reconcile_with_io(order, io)
+    order.source_path = str(path)
+    if io is not None:
+        order.io = io
+        order.companion_path = (
+            io.source_path
+            if Path(path).resolve() == proposal_path.resolve()
+            else str(proposal_path)
+        )
+    return order
+
+
+if __name__ == "__main__":  # pragma: no cover
+    import sys
+
+    for p in sys.argv[1:]:
+        o = parse_cbm(p)
+        print(
+            f"{Path(p).name}: {o.client} ({o.agency_label}: {o.campaign_tag}) | {','.join(o.markets)} | "
+            f"{o.flight_start}–{o.flight_end} | :{o.length_sec} | {o.total_spots} spots ${o.total_cost:,.2f}"
+            f" | IO: {o.io.campaign if o.io else 'none'}"
+        )
+        for ln in o.lines:
+            print(
+                f"   {ln.market} {ln.description:<40} {ln.weekly_spots} = {ln.total_spots} @ {ln.net_rate}"
+            )
