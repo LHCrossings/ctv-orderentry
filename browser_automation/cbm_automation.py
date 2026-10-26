@@ -218,7 +218,9 @@ def gather_cbm_inputs(source_path: str) -> Optional[dict]:
             f":{order.io.length_sec or '?'}, ${order.io.total:,.2f} — reconciles with the proposal ✓"
         )
     else:
-        print("IO:         none beside the proposal — campaign name/flight end/length are defaults")
+        print(
+            "IO:         none beside the proposal — the campaign name, flight end and length will be asked"
+        )
     print(f"Markets:    {order.market_text} → {', '.join(order.markets)}")
     print(
         f"Weeks:      {', '.join(f'{d.month}/{d.day}/{d.strftime("%y")}' for d in order.week_dates)}   "
@@ -284,16 +286,22 @@ def gather_cbm_inputs(source_path: str) -> Optional[dict]:
     desc_prefix = (
         cust.description_name if cust and getattr(cust, "description_name", "") else ""
     ) or DEFAULT_DESCRIPTION_PREFIX
+    campaign = order.campaign_name
+    if order.io is None:
+        # proposal-only entry (Lee 10/26): the sheet carries just the tag ("SOS");
+        # the campaign name lives on CBM's IO — type it so the description/ref carry it
+        raw = input(f"  Campaign name (from the CBM IO) [{campaign}]: ").strip()
+        campaign = raw or campaign
     default_code, default_desc = default_code_desc(
-        start_override, order.campaign_name, code_prefix, desc_prefix
+        start_override, campaign, code_prefix, desc_prefix
     )
     print()
     raw = input(f"  Contract code [{default_code}]: ").strip()
     contract_code = raw or default_code
     raw = input(f"  Description [{default_desc}]: ").strip()
     description = raw or default_desc
-    raw = input(f"  Customer order ref [{order.campaign_name}]: ").strip()
-    customer_ref = raw or order.campaign_name
+    raw = input(f"  Customer order ref [{campaign}]: ").strip()
+    customer_ref = raw or campaign
     billing_cycle = MEDIA_CENTER.get(order.billing_cycle.upper(), 316)
     print(
         f"  Billing: {order.billing_cycle} (CENTROMEDIA {billing_cycle})   Separation: {separation}"
@@ -314,6 +322,7 @@ def gather_cbm_inputs(source_path: str) -> Optional[dict]:
         "contract_code": contract_code,
         "description": description,
         "customer_ref": customer_ref,
+        "campaign": campaign,
         "media_center_id": billing_cycle,
         "spot_duration": length_sec,
         "start_date_override": fmt_mmddyyyy(start_override),
@@ -335,10 +344,11 @@ def _create_cbm_contract(order: CBMOrder, inputs: dict, dry_run: bool = False) -
     billing_type = inputs.get("billing_type", "direct")
     start_d = parse_date(inputs.get("start_date_override") or order.flight_start)
     end_d = parse_date(inputs.get("end_date_override") or order.flight_end)
-    default_code, default_desc = default_code_desc(start_d, order.campaign_name)
+    campaign = inputs.get("campaign") or order.campaign_name
+    default_code, default_desc = default_code_desc(start_d, campaign)
     contract_code = inputs.get("contract_code") or default_code
     description = inputs.get("description") or default_desc
-    customer_ref = inputs.get("customer_ref") or order.campaign_name
+    customer_ref = inputs.get("customer_ref") or campaign
     length_sec = int(inputs.get("spot_duration") or order.length_sec)
     media_center_id = int(
         inputs.get("media_center_id") or MEDIA_CENTER.get(order.billing_cycle.upper(), 316)

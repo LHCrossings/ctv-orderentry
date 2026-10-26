@@ -4,6 +4,27 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A Prompt Default Described From the Flow I Tested Is Not the Default of the Flow the User Chose — Run the Gather the Way the User Said They Would Use It Before Describing What It Offers
+
+**Session:** Lee, California Black Media 3208 — "This isn't what was offered me" (2026-10-26)
+
+**Rule:** Lee chose "proposal only" for the CBM parser; I built the IO as an optional companion
+and then described the description default ("offered as `CA Black Media - SOS Vote Education C3
+2611`") from dry runs where BOTH files sat in the fixture folder. He dropped the proposal alone
+(as he had said he would), the companion search found nothing, and the gather offered
+`CA Black Media - SOS 2611`, ref `SOS`, end 11/8 — three values he had to type from memory of my
+summary. The manifest's `io_detail.description` (`... - SOS 10/26-11/08`) was the one-query
+proof of which flow ran. Fixed by asking for the campaign name whenever the IO is absent.
+
+**How to apply:**
+1. When a value's default depends on an optional input (a companion file, a DB row, an env
+   flag), state the default for EACH branch, or test the branch the user named. "Offered as X"
+   is a claim about the user's screen; run the gather on the exact input shape they will use.
+2. A default that needs information the chosen input cannot carry (the campaign name is only on
+   the IO) is a PROMPT, not a derivation — ask, with the sheet's tag as the fallback.
+3. To learn what an entry actually saw, read its manifest (`io_detail` is the parser's view of
+   the dropped file; `user_inputs` are the answers) before asking the user to recall a prompt.
+
 ## A Column Named "Month" Held the AIR DATE on Half the Contracts — a Label Hid It; Changing the Key to the Raw Value Exposed It. Normalise a Key to What Its Name Says Before Grouping On It
 
 **Session:** Lee, Resorts World one-click backwrite "backwrites the monthly amounts horribly" (2026-10-24)
