@@ -889,6 +889,9 @@ EXEC web_sales_savecontractgeneral
         # line is an ordinary is_billboard line and keeps its own link at 0.
         linked_line_id: Optional[int] = None,
         linked_pos: int = 1,
+        # Etere's "Hide from scheduler" box: a line that carries money but must never
+        # place (production / services items entered as line listings, 2203 shape).
+        hide_from_scheduler: bool = False,
         # Unused kwargs kept for interface compatibility with EtereClient
         **_kwargs,
     ) -> int:
@@ -1105,7 +1108,7 @@ EXEC web_sales_InsertContractLine
             False,              # @controlloNielsen
             False,              # @paidFixed
             False,              # @joinFiller
-            False,              # @hidefromscheduler
+            bool(hide_from_scheduler),  # @hidefromscheduler
             0,                  # @eventLevel
             "",                 # @viewgroup
             0,                  # @rowtype
