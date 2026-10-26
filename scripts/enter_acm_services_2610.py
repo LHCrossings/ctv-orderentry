@@ -53,8 +53,8 @@ def main() -> int:
         default=317,
         help="317 Calendar (Lee: October money), 316 Broadcast",
     )
-    ap.add_argument("--market", default="NYC")
-    ap.add_argument("--code", default="ACM 2610")
+    ap.add_argument("--market", default="LAX")  # Lee 10/26: California client → Los Angeles
+    ap.add_argument("--code", default="ACM PROD 2610")  # Lee: PROD tags a production/services contract
     ap.add_argument("--desc", default="ACM Subtitling & Proofing 2610")
     a = ap.parse_args()
     assert abs(sum(v for _, v in ITEMS) - TOTAL) < 0.005, "items do not sum to the email total"

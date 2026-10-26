@@ -999,3 +999,4 @@ as October (Lee's call), after a rolled-back dry run and his go-ahead.
 - [x] `scripts/enter_acm_services_2610.py` — dry run default, readback (header, lines, hide, 0 placed, CIG) before commit
 - [x] live: 3211 `ACM 2610`, fresh-connection readback 6 lines / $1,560 / hide 1 / 0 placed / CIG 10/26 $1,560
 - [x] commit, push, deploy; memory `project_services_only_contracts.md`
+- [x] 10/26 follow-up: Lee renamed the code `ACM PROD 2610`; lines moved NYC → LAX ("California client"), blocks reloaded, 0 placed, $1,560 intact
