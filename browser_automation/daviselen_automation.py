@@ -447,6 +447,14 @@ def gather_daviselen_inputs(pdf_path: str) -> dict:
 # DIRECT DB HELPERS
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Every Daviselen line enters as Rotation (PRENOTAZIONE=1), paid and bonus.
+# Lee, 2026-10-27: So Cal Toyota buys 1x/week on M-F or M-Su program lines; under
+# Priority (Etere's default for a narrow program window) the scheduler's first-fit
+# always lands that one spot on Monday. Rotation spreads it across the week.
+# add_contract_line already forces Rotation for bonus; this makes paid match.
+DAVISELEN_SCHEDULING_TYPE = 1
+
+
 def _parse_date(s):
     """Parse MM/DD/YYYY, YYYY-MM-DD, or MM/DD/YY to date. Accepts date objects."""
     if isinstance(s, date):
@@ -529,6 +537,7 @@ def _create_daviselen_contract_direct(order: "DaviselenOrder", user_input: dict)
                     duration=str(line.duration),
                     is_bonus=is_bonus,
                     booking_code=booking_code,
+                    scheduling_type=DAVISELEN_SCHEDULING_TYPE,
                     separation_intervals=separation,
                     contract_id=contract_id,
                     language=order_language,

@@ -1000,3 +1000,20 @@ as October (Lee's call), after a rolled-back dry run and his go-ahead.
 - [x] live: 3211 `ACM 2610`, fresh-connection readback 6 lines / $1,560 / hide 1 / 0 placed / CIG 10/26 $1,560
 - [x] commit, push, deploy; memory `project_services_only_contracts.md`
 - [x] 10/26 follow-up: Lee renamed the code `ACM PROD 2610`; lines moved NYC → LAX ("California client"), blocks reloaded, 0 placed, $1,560 intact
+
+## Daviselen So Cal Toyota → Rotation (2026-10-27)
+
+Lee: 1x/week M-F / M-Su program lines under Priority always land Monday; make every
+Daviselen line Rotation, and flip the four December estimates awaiting approval.
+
+- [x] `daviselen_automation.py`: `DAVISELEN_SCHEDULING_TYPE = 1` passed on the one
+      `add_contract_line` site (only path; the module is direct-DB end to end)
+- [x] `tests/unit/test_daviselen_scheduling_type.py` pins the call site + constant (AST)
+- [x] `scripts/repair_daviselen_3213_rotation.py` (dry run / --apply, refuses placed lines,
+      fresh-connection readback): 3213-3216 — 25 lines, 19 paid flipped 0→1, 6 bonus already 1,
+      0 placed. Readback: 25/25 Rotation.
+
+### Review
+Priority first-fit was Etere's default for a narrow program window (`_default_prenotazione`);
+the client's auto-detect only picks Rotation for monthly or >2h windows. Same shape as the
+WorldLink 9/7 change. Charmaine (the other Daviselen-system agency) untouched.
