@@ -460,3 +460,11 @@ def test_missing_header_field_refuses(monkeypatch, raw_oe):
     _mutate(monkeypatch, raw_oe, rename)
     with pytest.raises(IWCCAParseError, match="OrderNo header field not found"):
         parse_iwcca(str(CHINESE_OE))
+
+
+def test_work_order_default_comes_from_the_io_campaign_line():
+    from browser_automation.iwcca_automation import work_order_from_campaign
+
+    assert work_order_from_campaign("FY26-27 Covered California OE - Action (26116)") == "26116"
+    assert work_order_from_campaign("FY26-27 Covered California Branding - Education") == ""
+    assert work_order_from_campaign(parse_iwcca(str(CHINESE_OE)).campaign) == "26116"

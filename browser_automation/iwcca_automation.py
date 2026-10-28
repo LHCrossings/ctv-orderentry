@@ -105,6 +105,18 @@ def build_notes(order: IWCCAOrder, desc_line: str, work_order: str, agreement: s
     return "\n".join(ln.strip() for ln in lines if ln and ln.strip())
 
 
+def work_order_from_campaign(campaign: str) -> str:
+    """The IO states its own work order as the parenthesised number on the
+    Campaign line ("FY26-27 Covered California OE - Action (26116)"). It beats
+    the remembered one: the OE Action orders (3219-3221, 2026-10-28) were
+    entered with the Branding campaign's 26053 because the prompt only offered
+    the newest contract's note and the agency's billing email said 26116."""
+    import re
+
+    m = re.search(r"\((\d{4,6})\)\s*$", campaign or "")
+    return m.group(1) if m else ""
+
+
 def _last_note_refs() -> tuple[str, str]:
     """(work order, standard agreement) from the newest IW CCA contract's note, or
     ('', '') — remembered spellings only, shown at the prompt, never written silently."""
@@ -388,8 +400,13 @@ def gather_iwcca_inputs(source_path: str) -> Optional[dict]:
     description = raw or default_desc
     print(f"  Customer Order Ref: {order.order_no}")
     desc_default = complete_description(order.description_io, order.campaign, order.language)
-    wo_default, ag_default = _last_note_refs()
+    wo_remembered, ag_default = _last_note_refs()
+    wo_default = work_order_from_campaign(order.campaign) or wo_remembered
     print(f"  Notes line 1: {order.campaign}")
+    if wo_remembered and wo_default != wo_remembered:
+        print(
+            f"  ⚠ this IO's campaign carries work order {wo_default}; the last contract used {wo_remembered}"
+        )
     raw = input(f"  Notes line 2 [{desc_default}]: ").strip()
     desc_line = raw or desc_default
     raw = input(f"  Work Order [{wo_default or 'none'}]: ").strip()
