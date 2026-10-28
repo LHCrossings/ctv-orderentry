@@ -4,6 +4,37 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## A SQL Filter Compared a MARKET-LOCAL Time With the Server's PACIFIC Clock — "Upcoming" Must Be Decided After the Timezone Conversion, in One Clock; and an Agent Handed a Past Start Records NOW
+
+**Session:** Lee, Admerasia McD 3189 WDC — "go to add the two spots again, the recorder just instantly starts recording. The spots aren't airing so why?" (2026-10-27)
+
+**Rule:** `_fetch_etere_spots`'s upcoming filter was `tp.DATA + ORA >= GETDATE() + 10 min` in SQL.
+`TPALINSE.ORA` is the market's own broadcast clock (a WDC spot at 21:08 is 21:08 Eastern = 18:08 PT)
+while `GETDATE()` is Pacific, so every Eastern spot stayed "upcoming" for three hours after it aired
+and Central ones for two. At 19:15 PT Lee pulled 3189 to re-book a cut-off capture, the page listed
+the 21:08 ET spot that had aired at 18:08 PT, Schedule All posted its capture_start (18:07:44 PT,
+converted correctly, already past), and the Datamover agent treats a past start as "start now":
+65 s of whatever WDC was airing at 19:17 PT, filed as the spot. Three clicks also booked the next
+day's spot three times — the page's Schedule All had no dedupe (the server's auto path did). The
+PT conversion already existed five lines below the SQL; the filter just ran before it.
+
+**How to apply:**
+1. A "future / upcoming / expired" predicate on a column whose clock is per-row (market, user,
+   device) is applied AFTER the conversion to one common clock, never in SQL against `GETDATE()`.
+   SQL keeps only a date prefilter (`DATA >= yesterday`); the cut-off and the "first upcoming
+   airing" pick live in Python in PT, with `now_pt` injectable for tests
+   (`test_airchecks_upcoming_filter_sql.py`: a WDC 21:08 ET row at 19:15 PT is NOT upcoming).
+2. "First airing" means first UPCOMING airing: rank after the filter, not before it.
+3. Any client that POSTs captures dedupes against the agent's queue with the same key as the
+   server (`ISCI | network | start-to-minute`); a second click reports "already queued".
+4. Diagnostic signature: a capture whose `created_at` is later than its `start_time`, or a
+   "complete" capture seconds after it was created. The agent list shows it in one read.
+5. A cut-off recording cannot be re-done; book the ISCI's NEXT airing (here 10/29 21:18 ET,
+   capture 9ee7d527) — once the filter is right, `schedule_airchecks_for_contract` does
+   exactly that and skips the one already queued.
+
+---
+
 ## The Market a Non-Airtime Contract's Money Lands In Is the Operator's Call Every Time — Ask, Never Infer It From the Client
 
 **Session:** Lee, ACM services contract 3211 (2026-10-26) — "it's good to ask which market should the money be applied to, since any client can be for any market"
