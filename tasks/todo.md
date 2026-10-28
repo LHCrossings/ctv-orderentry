@@ -1029,3 +1029,8 @@ WorldLink 9/7 change. Charmaine (the other Daviselen-system agency) untouched.
 - [x] static/js/portal-link.js injected site-wide (app.py middleware, last </body>)
 - [x] clones the page's 🏠 as a second button → http://portal.home/; home button untouched
 - [x] tests/unit/test_portal_link_injection.py; verified on the Jumpbox served page
+
+## IW CCA OE Action 35569/35581/35588 would not parse (2026-10-28)
+- [x] header per labelled field (Market: added, Flight Dates moved to line 2)
+- [x] grid read across every page; continuation header rows dropped; columns asserted
+- [x] three IOs as fixtures + tests; six older fixtures unchanged; deployed f5870a0

@@ -4,6 +4,36 @@ Core lessons that apply to all new parsers and ongoing work. Parser-specific qui
 
 ---
 
+## One Regex Spanning Four Labelled Fields Breaks When the Agency Adds a Fifth — Match Each Label on Its Own; and a Grid That Fit on One Page Will Not Always (third appearance of "read every page")
+
+**Session:** Lee, IW Group / Covered California OE Action 35569/35581/35588 — "I need to find out why these three parsers are not working" (2026-10-28)
+
+**Rule:** IW's October export added `Market: Sacramnto-Stkton-Modesto` to the station line and
+moved `Flight Dates` to its own line with the page count. The header was one regex that required
+Station → Flight Dates → OrderNo → Date in that order on one line, so all three orders failed at
+"header line not found". Behind that, the eight-line Chinese order continued its grid on page 2
+(with the repeated order header above it and the Subtotal below), and the grid reader took
+`pages[0]` only — the 7/22 SAGENT "read EVERY page" lesson and the 9/29 EQC "walk every header"
+lesson, seen a third time. The two-line header had been in the 10/15 opAD lesson as a rule ("a
+field regex ends at the NEXT label on the line or end of line") and was not applied here.
+
+**How to apply:**
+1. A labelled header is read field by field: `label:` → value → lookahead to the next known
+   label or end of line (`_header_field`), each required field raising with ITS name. Any new
+   field the agency inserts is then a no-op, and one it renames fails by name.
+2. A grid reader walks every page that carries the grid header, keeps only the rows BELOW a
+   continuation page's last header row (the whole order header repeats above it), drops
+   `Page N of M` footers, and asserts the week columns sit at page 1's x positions before
+   stitching (`_grid_rows`; shifted page-2 columns refuse). Reconciliation then runs over the
+   whole order: 392 spots / $7,880 / monthly 60-104-228 matched the printed summary.
+3. When the document names the market (`Market:` DMA), it becomes the gather's default
+   (`_market_from_dma`: Sacramento → CVC) — a stated value, not an inference. `Station:
+   Crossings TV` alone still offers no market.
+4. Fixture every new shape the day it arrives (`tests/fixtures/iwcca/cca_355*_oe.pdf`), plus
+   the no-op and tamper pairs; the six older fixtures parse identically.
+
+---
+
 ## A SQL Filter Compared a MARKET-LOCAL Time With the Server's PACIFIC Clock — "Upcoming" Must Be Decided After the Timezone Conversion, in One Clock; and an Agent Handed a Past Start Records NOW
 
 **Session:** Lee, Admerasia McD 3189 WDC — "go to add the two spots again, the recorder just instantly starts recording. The spots aren't airing so why?" (2026-10-27)
