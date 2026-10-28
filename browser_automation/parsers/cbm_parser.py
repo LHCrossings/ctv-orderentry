@@ -46,6 +46,7 @@ _LANGUAGES = (
     ("CANTONESE", "Cantonese"),
     ("CHINESE", "Chinese"),
     ("FILIPINO", "Filipino"),
+    ("FILPINO", "Filipino"),  # Charmaine's ACoM Asian Law Caucus sheet spells it so (10/28)
     ("TAGALOG", "Filipino"),
     ("KOREAN", "Korean"),
     ("HMONG", "Hmong"),
@@ -87,6 +88,15 @@ def is_cbm_proposal_text(text: str) -> bool:
     up = _up(text)
     return "CROSSINGS TV MEDIA PROPOSAL" in up and bool(
         re.search(r"AGENCY:\s*AMERICAN COMMUNITY MEDIA\s*:\s*SOS\b", up)
+    )
+
+
+def is_acom_proposal_text(text: str) -> bool:
+    """Any Charmaine proposal whose Agency line reads 'AMERICAN COMMUNITY MEDIA: <client>'
+    (the SOS one is CBM's; every other client enters as ACM — Lee 2026-10-28)."""
+    up = _up(text)
+    return "CROSSINGS TV MEDIA PROPOSAL" in up and bool(
+        re.search(r"AGENCY:\s*AMERICAN COMMUNITY MEDIA\s*:\s*\S", up)
     )
 
 
@@ -151,20 +161,52 @@ def _mdy(s: str) -> date:
     return date(y + 2000 if y < 100 else y, m, d)
 
 
+def _year_for(mon: int, day: int, prev: Optional[date], year_hint: Optional[int], today) -> int:
+    if prev is not None:
+        return prev.year + (1 if mon < prev.month else 0)
+    if year_hint:
+        return year_hint
+    return infer_year(mon, day, today)
+
+
 def _week_header(
     cell: str, prev: Optional[date], year_hint: Optional[int], today
-) -> Optional[date]:
-    m = re.fullmatch(r"(\d{1,2})-([A-Za-z]{3})", _norm(cell))
-    if not m:
-        return None
-    day, mon = int(m.group(1)), _MONTHS.get(m.group(2).upper())
-    if not mon:
-        return None
-    if prev is not None:
-        return date(prev.year + (1 if mon < prev.month else 0), mon, day)
-    if year_hint:
-        return date(year_hint, mon, day)
-    return date(infer_year(mon, day, today), mon, day)
+) -> Optional[tuple[date, Optional[date]]]:
+    """A grid column header → (column start, column end or None).
+
+    '26-Oct' is a broadcast week (end None → +6 days). A short flight is printed as
+    ONE column carrying its date range, '10/30-11/3' (Asian Law Caucus, 10/28):
+    the end is the range's own end, and the start need not be a Monday."""
+    c = _norm(cell)
+    m = re.fullmatch(r"(\d{1,2})-([A-Za-z]{3})", c)
+    if m:
+        day, mon = int(m.group(1)), _MONTHS.get(m.group(2).upper())
+        if not mon:
+            return None
+        return date(_year_for(mon, day, prev, year_hint, today), mon, day), None
+    m = re.fullmatch(
+        r"(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\s*-\s*(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?", c
+    )
+    if m:
+        m1, d1, y1, m2, d2, y2 = m.groups()
+        mon, day = int(m1), int(d1)
+        year = (
+            int(y1) + (2000 if y1 and len(y1) == 2 else 0)
+            if y1
+            else _year_for(mon, day, prev, year_hint, today)
+        )
+        start = date(year, mon, day)
+        mon2, day2 = int(m2), int(d2)
+        year2 = (
+            int(y2) + (2000 if y2 and len(y2) == 2 else 0)
+            if y2
+            else (year + (1 if mon2 < mon else 0))
+        )
+        end = date(year2, mon2, day2)
+        if end < start:
+            raise CBMParseError(f"week column {c!r} ends before it starts")
+        return start, end
+    return None
 
 
 # ─── model ───────────────────────────────────────────────────────────────────
@@ -250,8 +292,14 @@ class CBMMarketSection:
     banner: str  # 'California-Los Angeles Spectrum 1519'
     lines: List[CBMLine] = field(default_factory=list)
     paid_units: int = 0
-    paid_net: float = 0.0
+    paid_net: float = 0.0  # airtime only (the grid's Paid footer minus production)
     bonus_units: int = 0
+    production: List[tuple] = field(default_factory=list)  # (description, units, amount)
+    week_end: Optional[date] = None  # set when the grid's one column is a date range
+
+    @property
+    def production_total(self) -> float:
+        return round(sum(a for _, _, a in self.production), 2)
 
     @property
     def paid_lines(self) -> List[CBMLine]:
@@ -280,10 +328,21 @@ class CBMOrder:
     io: Optional[CBMInsertionOrder] = None
     companion_path: str = ""  # the other document of the pair, when found
     rates_are_net: bool = True
+    no_separation: bool = False  # sheet says 'Airtime: No separation requirement'
+    week_end: Optional[date] = None  # the range column's end (short flights)
+    total_contract: Optional[float] = None  # 'Total Contract' when the sheet carries production
 
     @property
     def client(self) -> str:
         return CLIENT_NAME
+
+    @property
+    def production(self) -> List[tuple]:
+        return [p for s in self.sections for p in s.production]
+
+    @property
+    def production_total(self) -> float:
+        return round(sum(s.production_total for s in self.sections), 2)
 
     @property
     def agency(self) -> str:
@@ -320,7 +379,12 @@ class CBMOrder:
 
     @property
     def flight_end(self) -> str:
-        d = self.io.flight_end if self.io else self.week_dates[-1] + timedelta(days=6)
+        if self.io:
+            d = self.io.flight_end
+        elif self.week_end:
+            d = self.week_end
+        else:
+            d = self.week_dates[-1] + timedelta(days=6)
         return f"{d.month:02d}/{d.day:02d}/{d.year}"
 
     @property
@@ -432,17 +496,27 @@ def _parse_grid(
         _col(header, "NET", 1),
     )
     weeks: List[tuple[int, date]] = []
+    week_end: Optional[date] = None
     prev = None
     for i, c in enumerate(header):
-        d = _week_header(c, prev, year_hint, today)
-        if d is not None:
+        wh = _week_header(c, prev, year_hint, today)
+        if wh is not None:
+            d, end = wh
             weeks.append((i, d))
             prev = d
+            if end is not None:
+                week_end = end
     if not weeks:
-        raise CBMParseError(f"{banner}: no week columns ('26-Oct') in the grid header")
+        raise CBMParseError(
+            f"{banner}: no week columns ('26-Oct' / '10/30-11/3') in the grid header"
+        )
+    if week_end is not None and len(weeks) != 1:
+        raise CBMParseError(
+            f"{banner}: a date-range column only makes sense as the grid's single column"
+        )
     week_dates = [d for _, d in weeks]
 
-    section = CBMMarketSection(market=market, banner=banner)
+    section = CBMMarketSection(market=market, banner=banner, week_end=week_end)
     paid_row = bonus_row = None
     for row in table[hdr_i + 1 :]:
         cells = [_norm(c) for c in row]
@@ -456,6 +530,17 @@ def _parse_grid(
             bonus_row = cells
             continue
         block, dp = cells[c_lang], cells[c_dp]
+        if label.startswith("PRODUCTION"):
+            # 'Production services | :30s Filipino & Punjabi | $3,000.00 | 0 | 2 | $3,000.00':
+            # money for the Production box, never an airtime line (Lee, Crispin rule).
+            amount = _money(cells[c_total])
+            units = _int(cells[c_units]) if cells[c_units] else 0
+            if amount is None or not amount:
+                raise CBMParseError(f"{banner} {block}: production row with no amount: {cells}")
+            if any(_int(cells[ci]) for ci, _ in weeks):
+                raise CBMParseError(f"{banner} {block}: production row carries week spots: {cells}")
+            section.production.append((f"{block} {dp}".strip(), units or 0, amount))
+            continue
         if not block or not dp:
             raise CBMParseError(f"{banner}: row with blank language/daypart: {cells}")
         spots = []
@@ -504,14 +589,20 @@ def _parse_grid(
         )
     if not section.lines:
         raise CBMParseError(f"{banner}: no airtime rows")
-    if paid_row is None or bonus_row is None:
-        raise CBMParseError(f"{banner}: Paid/Bonus footer rows not found")
+    if paid_row is None:
+        raise CBMParseError(f"{banner}: Paid footer row not found")
+    if bonus_row is None and section.bonus_lines:
+        raise CBMParseError(
+            f"{banner}: Bonus footer row not found although the grid has bonus rows"
+        )
 
     # ── the grid's own footers ──
     for name, footer, rows in (
         ("Paid", paid_row, section.paid_lines),
         ("Bonus", bonus_row, section.bonus_lines),
     ):
+        if footer is None:
+            continue  # a paid-only grid prints no Bonus footer
         for k, (ci, d) in enumerate(weeks):
             want = _int(footer[ci]) if footer[ci] else 0
             got = sum(ln.weekly_spots[k] for ln in rows)
@@ -525,13 +616,16 @@ def _parse_grid(
                 f"{banner} {name} units {footer[c_units]!r} ≠ lines {sum(ln.total_spots for ln in rows)}"
             )
     paid_net = _money(paid_row[c_total])
-    if paid_net is None or abs(paid_net - sum(ln.net_total for ln in section.paid_lines)) > 0.005:
+    airtime_net = round(sum(ln.net_total for ln in section.paid_lines), 2)
+    # The Paid footer sums airtime AND production (Asian Law Caucus: 4,224 + 3,000 = 7,224).
+    if paid_net is None or abs(paid_net - airtime_net - section.production_total) > 0.005:
         raise CBMParseError(
-            f"{banner} Paid NET {paid_row[c_total]!r} ≠ lines {sum(ln.net_total for ln in section.paid_lines):.2f}"
+            f"{banner} Paid NET {paid_row[c_total]!r} ≠ airtime {airtime_net:.2f}"
+            + (f" + production {section.production_total:.2f}" if section.production else "")
         )
     section.paid_units = sum(ln.total_spots for ln in section.paid_lines)
     section.bonus_units = sum(ln.total_spots for ln in section.bonus_lines)
-    section.paid_net = paid_net
+    section.paid_net = airtime_net
     return section, week_dates
 
 
@@ -539,24 +633,43 @@ def _parse_summary(table: List[List[str]]) -> dict:
     """{'LAX': (paid, bonus, both, net), 'TOTAL': (...)} from 'Summary of investment'."""
     hdr_i = next(i for i, r in enumerate(table) if any("Paid+Bonus" in _norm(c) for c in r))
     header = [_norm(c) for c in table[hdr_i]]
-    c_mkt, c_paid, c_bonus, c_both, c_net = (
+    c_mkt, c_paid, c_both, c_net = (
         _col(header, "Markets"),
         _col(header, "Total Paid"),
-        _col(header, "Bonus Units"),
         _col(header, "Paid+Bonus"),
         _col(header, "Net"),
     )
+    # A paid-only proposal prints no 'Bonus Units' column (Asian Law Caucus, 10/28).
+    c_bonus = _col(header, "Bonus Units") if any("Bonus Units" in c for c in header) else None
     out = {}
     for row in table[hdr_i + 1 :]:
         cells = [_norm(c) for c in row]
         if not any(cells):
             continue
-        key = "TOTAL" if cells[c_mkt].upper().startswith("TOTAL") else market_of(cells[c_mkt])
-        if not key:
-            raise CBMParseError(f"summary: market {cells[c_mkt]!r} not recognised")
+        label = cells[c_mkt].upper()
+        if label.startswith("PRODUCTION"):
+            # 'Production | 2 | n/a | $3,000.00' — units, then the amount
+            amount = _money(cells[c_net])
+            if amount is None:
+                raise CBMParseError(f"summary Production: unreadable {cells}")
+            out["PRODUCTION"] = (_int(cells[c_paid]) or 0, None, None, amount)
+            continue
+        if label.startswith("TOTAL CONTRACT"):
+            amount = _money(cells[c_net])
+            if amount is None:
+                raise CBMParseError(f"summary Total Contract: unreadable {cells}")
+            out["CONTRACT"] = (None, None, None, amount)
+            continue
+        if label.startswith("TOTAL"):
+            key = "TOTAL"
+        else:
+            # rows are per MARKET (SOS: LAX/SF/CVC) or per LANGUAGE (Asian Law Caucus: Punjabi/Filipino)
+            key = market_of(cells[c_mkt]) or ("LANG:" + language_of(cells[c_mkt])[0])
+            if key == "LANG:":
+                raise CBMParseError(f"summary: {cells[c_mkt]!r} is neither a market nor a language")
         vals = (
             _int(cells[c_paid]),
-            _int(cells[c_bonus]),
+            _int(cells[c_bonus]) if c_bonus is not None else 0,
             _int(cells[c_both]),
             _money(cells[c_net]),
         )
@@ -571,12 +684,28 @@ def _parse_summary(table: List[List[str]]) -> dict:
 def parse_cbm_proposal(
     path: str, today: Optional[date] = None, year_hint: Optional[int] = None
 ) -> CBMOrder:
+    """CBM's SOS proposal — the ACoM template reader behind its SOS gate."""
+    return parse_acom_proposal(path, today, year_hint, require_sos=True)
+
+
+def parse_acom_proposal(
+    path: str,
+    today: Optional[date] = None,
+    year_hint: Optional[int] = None,
+    *,
+    require_sos: bool = False,
+) -> CBMOrder:
+    """Charmaine's 'Crossings TV Media Proposal' for an American Community Media client.
+    `require_sos` keeps CBM's gate; the ACM parser reads every other client through here."""
     with pdfplumber.open(path) as pdf:
         texts = [pg.extract_text() or "" for pg in pdf.pages]
         tables = [t for pg in pdf.pages for t in (pg.extract_tables() or [])]
     text = "\n".join(texts)
-    if not is_cbm_proposal_text(text):
+    if require_sos and not is_cbm_proposal_text(text):
         raise CBMParseError(f"not a {CLIENT_NAME} (SOS) proposal: {Path(path).name}")
+    if not is_acom_proposal_text(text):
+        raise CBMParseError(f"not an AMERICAN COMMUNITY MEDIA proposal: {Path(path).name}")
+    no_separation = bool(re.search(r"AIRTIME:\s*NO SEPARATION", _up(text)))
 
     m = _AGENCY_RE.search(text)
     agency_label, campaign_tag = (_norm(m.group(1)), _norm(m.group(2))) if m else ("", "")
@@ -608,29 +737,70 @@ def parse_cbm_proposal(
         raise CBMParseError("no market grids (Language Block / Total Units) found")
     if summary is None:
         raise CBMParseError("'Summary of investment' table not found")
-    if week_dates[0].weekday() != 0:
-        raise CBMParseError(f"first week column {week_dates[0]} is not a Monday")
-    for a, b in zip(week_dates, week_dates[1:]):
-        if (b - a).days != 7:
-            raise CBMParseError(f"week columns {a} → {b} are not 7 days apart")
+    week_end = sections[0].week_end
+    if any(s.week_end != week_end for s in sections):
+        raise CBMParseError("market grids disagree on the date-range column")
+    if week_end is None:
+        if week_dates[0].weekday() != 0:
+            raise CBMParseError(f"first week column {week_dates[0]} is not a Monday")
+        for a, b in zip(week_dates, week_dates[1:]):
+            if (b - a).days != 7:
+                raise CBMParseError(f"week columns {a} → {b} are not 7 days apart")
 
     # ── summary vs grids ──
-    for sec in sections:
-        got = (sec.paid_units, sec.bonus_units, sec.paid_units + sec.bonus_units, sec.paid_net)
-        want = summary.get(sec.market)
-        if want is None:
-            raise CBMParseError(f"summary has no row for {sec.market} ({sec.banner})")
-        if want[:3] != got[:3] or abs(want[3] - got[3]) > 0.005:
-            raise CBMParseError(f"summary {sec.market} {want} ≠ grid {got}")
-    extra = set(summary) - {"TOTAL"} - {s.market for s in sections}
-    if extra:
-        raise CBMParseError(f"summary lists markets with no grid: {sorted(extra)}")
+    production_total = round(sum(s.production_total for s in sections), 2)
     tp = sum(s.paid_units for s in sections)
     tb = sum(s.bonus_units for s in sections)
-    tn = sum(s.paid_net for s in sections)
+    tn = round(sum(s.paid_net for s in sections), 2)
+    by_market = {
+        k: v
+        for k, v in summary.items()
+        if k not in ("TOTAL", "PRODUCTION", "CONTRACT") and not k.startswith("LANG:")
+    }
+    by_lang = {k[5:]: v for k, v in summary.items() if k.startswith("LANG:")}
+    if by_market:
+        for sec in sections:
+            got = (sec.paid_units, sec.bonus_units, sec.paid_units + sec.bonus_units, sec.paid_net)
+            want = by_market.get(sec.market)
+            if want is None:
+                raise CBMParseError(f"summary has no row for {sec.market} ({sec.banner})")
+            if want[:3] != got[:3] or abs(want[3] - got[3]) > 0.005:
+                raise CBMParseError(f"summary {sec.market} {want} ≠ grid {got}")
+        extra = set(by_market) - {s.market for s in sections}
+        if extra:
+            raise CBMParseError(f"summary lists markets with no grid: {sorted(extra)}")
+    if by_lang:
+        lines = [ln for s in sections for ln in s.lines]
+        for lang, want in by_lang.items():
+            paid = sum(ln.total_spots for ln in lines if ln.language == lang and not ln.is_bonus)
+            bonus = sum(ln.total_spots for ln in lines if ln.language == lang and ln.is_bonus)
+            net = round(
+                sum(ln.net_total for ln in lines if ln.language == lang and not ln.is_bonus), 2
+            )
+            got = (paid, bonus, paid + bonus, net)
+            if want[:3] != got[:3] or abs(want[3] - got[3]) > 0.005:
+                raise CBMParseError(f"summary {lang} {want} ≠ grid lines {got}")
+        extra = set(by_lang) - {ln.language for ln in lines}
+        if extra:
+            raise CBMParseError(f"summary lists languages with no lines: {sorted(extra)}")
+    if not by_market and not by_lang:
+        raise CBMParseError("summary has no market or language rows")
     tot = summary["TOTAL"]
     if tot[:3] != (tp, tb, tp + tb) or abs(tot[3] - tn) > 0.005:
         raise CBMParseError(f"Total Airtime {tot} ≠ grids {(tp, tb, tp + tb, tn)}")
+    if production_total or "PRODUCTION" in summary:
+        want_p = summary.get("PRODUCTION", (0, None, None, 0.0))[3]
+        if abs(want_p - production_total) > 0.005:
+            raise CBMParseError(
+                f"summary Production {want_p:.2f} ≠ grid production rows {production_total:.2f}"
+            )
+    total_contract = None
+    if "CONTRACT" in summary:
+        total_contract = summary["CONTRACT"][3]
+        if abs(total_contract - (tn + production_total)) > 0.005:
+            raise CBMParseError(
+                f"Total Contract {total_contract:.2f} ≠ airtime {tn:.2f} + production {production_total:.2f}"
+            )
 
     return CBMOrder(
         agency_label=agency_label,
@@ -646,6 +816,9 @@ def parse_cbm_proposal(
         total_bonus_units=tb,
         total_net=tn,
         source_path=str(path),
+        no_separation=no_separation,
+        week_end=week_end,
+        total_contract=total_contract,
     )
 
 

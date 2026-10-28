@@ -3056,9 +3056,9 @@ class OrderProcessingService:
         inp = order.order_input if isinstance(order.order_input, dict) else {}
         try:
             from browser_automation.acm_automation import run_acm_order
-            from browser_automation.parsers.acm_parser import parse_acm_xlsx
+            from browser_automation.parsers.acm_parser import parse_acm
 
-            parsed = parse_acm_xlsx(str(order.pdf_path))
+            parsed = parse_acm(str(order.pdf_path))
             results = run_acm_order(parsed, inp)  # list of (label, success)
 
             contracts = [

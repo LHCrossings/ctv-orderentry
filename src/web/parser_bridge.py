@@ -118,7 +118,7 @@ _REGISTRY = {
     "RWNY": ("browser_automation.parsers.rwny_parser", "parse_rwny_pdf"),
     "SIERRADONOR": ("browser_automation.parsers.sierra_parser", "parse_sierra"),
     "FIGHTTHEBITE": ("browser_automation.parsers.fightthebite_parser", "parse_fightthebite_file"),
-    "ACM": ("browser_automation.parsers.acm_parser", "parse_acm_xlsx"),
+    "ACM": ("browser_automation.parsers.acm_parser", "parse_acm"),
     "TT": ("browser_automation.parsers.tt_parser", "parse_tt_xlsx"),
     # Dispatcher: official Brand Time Schedule IO (.pdf) or proposal (.xlsx/.xlsm)
     "CRISPIN": ("browser_automation.parsers.crispin_parser", "parse_crispin"),

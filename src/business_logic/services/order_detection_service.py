@@ -198,6 +198,8 @@ class OrderDetectionService:
         # MEDIA: SOS") or CBM's own Docusign Insertion Order
         if self._is_cbm(first_page_text):
             return OrderType.CBM
+        if self._is_acm_proposal(first_page_text):
+            return OrderType.ACM
 
         # Health Plan of San Joaquin — house Media Proposal, client-keyed (must
         # precede San Joaquin County: both texts contain "San Joaquin")
@@ -316,6 +318,16 @@ class OrderDetectionService:
         from browser_automation.parsers.cbm_parser import is_cbm_text
 
         return is_cbm_text(text)
+
+    def _is_acm_proposal(self, text: str) -> bool:
+        """Charmaine's proposal for any other American Community Media client
+        (Asian Law Caucus, 2026-10-28) — the SOS one is CBM's and is tested first."""
+        from browser_automation.parsers.cbm_parser import (
+            is_acom_proposal_text,
+            is_cbm_proposal_text,
+        )
+
+        return is_acom_proposal_text(text) and not is_cbm_proposal_text(text)
 
     def _is_hpsj(self, text: str) -> bool:
         """Health Plan of San Joaquin house proposal — client-keyed."""
