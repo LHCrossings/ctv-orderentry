@@ -382,3 +382,81 @@ def test_other_client_refuses(monkeypatch, raw):
     _mutate(monkeypatch, raw, relabel)
     with pytest.raises(IWCCAParseError, match="not an IW Group"):
         parse_iwcca(str(CHINESE))
+
+
+# ─── October 2026 export: two-line header with Market, grid across pages ──────
+# IW's 10/26 "OE - Action" IOs (35569/35581/35588) moved Flight Dates to a second
+# line, added "Market:", and the eight-line Chinese order continues its grid on
+# page 2 where the Subtotal sits. Both shapes refused entry (Lee, 2026-10-28).
+
+CHINESE_OE = FIX / "cca_35569_chinese_oe.pdf"
+VIET_OE = FIX / "cca_35581_vietnamese_oe.pdf"
+FILIPINO_OE = FIX / "cca_35588_filipino_oe.pdf"
+
+
+@pytest.fixture(scope="module")
+def raw_oe(real_pdfplumber):
+    return ip._extract(str(CHINESE_OE))
+
+
+def test_two_line_header_with_market_field():
+    o = parse_iwcca(str(VIET_OE))
+    assert o.order_no == "35581" and o.io_date == "10/26/2026"
+    assert (o.flight_start, o.flight_end, o.weeks_stated) == ("11/09/2026", "01/31/2027", 12)
+    assert o.campaign == "FY26-27 Covered California OE - Action (26116)"
+    assert o.description_io == "KBTV (Crossings TV) - Y26-27 OE Action V"
+    assert o.language == "Vietnamese" and o.market_hint == "CVC"
+    assert o.week_start_dates[3] == "11/30/2026"  # the dark Thanksgiving week is a column
+    assert [ln.weekly_spots[3] for ln in o.lines] == [0, 0, 0, 0]
+    assert o.total_net == 2245.0 and o.total_spots == 196
+
+
+def test_market_field_names_the_market_when_the_station_does_not():
+    # 'Station: Crossings TV' alone never named a market (test_header); the new
+    # 'Market: Sacramnto-Stkton-Modesto' field does.
+    o = parse_iwcca(str(CHINESE_OE))
+    assert o.market_hint == "CVC"
+    assert ip._market_from_dma("Sacramnto-Stkton-Modesto") == "CVC"
+    assert ip._market_from_dma("Somewhere Else") == ""
+
+
+def test_grid_continues_across_pages():
+    o = parse_iwcca(str(CHINESE_OE))
+    assert len(o.lines) == 8 and o.total_spots == 392 and o.total_net == 7880.0
+    assert o.monthly == [
+        ((2026, 11), 60, 1230.0),
+        ((2026, 12), 104, 2090.0),
+        ((2027, 1), 228, 4560.0),
+    ]
+    # lines 7 and 8 are the page-2 rows
+    assert [ln.description_text[:14] for ln in o.lines[6:]] == ["Cantonese - :1", "Cantonese - :1"]
+    assert [ln.is_bonus for ln in o.lines] == [False, True] * 4
+    # a repeated page-2 header never leaks into a description
+    for ln in o.lines:
+        assert "Program" not in ln.description_text and "Page" not in ln.description_text
+
+
+def test_filipino_oe_parses():
+    o = parse_iwcca(str(FILIPINO_OE))
+    assert o.language == "Filipino" and len(o.lines) == 4 and o.total_net == 2930.0
+
+
+def test_continuation_page_with_shifted_columns_refuses(monkeypatch, raw_oe):
+    def shift(pages):
+        for w in pages[1][1]:
+            w["x0"] += 6.0
+            w["x1"] += 6.0
+
+    _mutate(monkeypatch, raw_oe, shift)
+    with pytest.raises(IWCCAParseError, match="page 2: week column"):
+        parse_iwcca(str(CHINESE_OE))
+
+
+def test_missing_header_field_refuses(monkeypatch, raw_oe):
+    def rename(pages):
+        text, words = pages[0]
+        pages[0] = (text.replace("OrderNo:", "Order#:"), words)
+
+    _mutate(monkeypatch, raw_oe, rename)
+    with pytest.raises(IWCCAParseError, match="OrderNo header field not found"):
+        parse_iwcca(str(CHINESE_OE))

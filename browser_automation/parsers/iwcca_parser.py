@@ -282,6 +282,113 @@ def _language_in(text: str) -> str:
     return ""
 
 
+_HEADER_LABELS = r"(?:Station|Market|Flight Dates|OrderNo|Date|Page|Campaign|Description):"
+_DATE_RE = r"\d{1,2}/\d{1,2}/\d{4}"
+
+# Nielsen DMA names as IW's system prints them (abbreviated) → our market code.
+_DMA_MARKETS = (
+    ("SACRAM", "CVC"),
+    ("FRESNO", "CVC"),
+    ("SAN FRANCISCO", "SFO"),
+    ("LOS ANGELES", "LAX"),
+    ("SEATTLE", "SEA"),
+)
+
+
+def _header_field(text: str, label: str, pattern: str, required: bool = True) -> str:
+    """Value of `label:` on page 1, ending at the next header label or end of line."""
+    m = re.search(
+        rf"(?<![A-Za-z]){re.escape(label)}:\s*({pattern})\s*(?={_HEADER_LABELS}|$)",
+        text,
+        re.MULTILINE,
+    )
+    if not m:
+        if required:
+            raise IWCCAParseError(f"{label} header field not found")
+        return ""
+    return m.group(1).strip()
+
+
+def _header_fields(text1: str):
+    station = _header_field(text1, "Station", r"[^\n]+?")
+    market_dma = _header_field(text1, "Market", r"[^\n]+?", required=False)
+    flight = _header_field(
+        text1, "Flight Dates", rf"{_DATE_RE}\s*-\s*{_DATE_RE}\s*\(\d+\s*weeks?\)"
+    )
+    fm = re.fullmatch(rf"({_DATE_RE})\s*-\s*({_DATE_RE})\s*\((\d+)\s*weeks?\)", flight)
+    assert fm is not None  # the field pattern already guaranteed the shape
+    order_no = _header_field(text1, "OrderNo", r"\d+")
+    io_date = _header_field(text1, "Date", _DATE_RE)
+    return station, market_dma, fm.group(1), fm.group(2), fm.group(3), order_no, io_date
+
+
+def _market_from_dma(dma: str) -> str:
+    upper = dma.upper()
+    for key, code in _DMA_MARKETS:
+        if key in upper:
+            return code
+    return ""
+
+
+_PAGE_RE = re.compile(r"^Page\s+\d+\s+of\s+\d+$")
+
+
+def _is_grid_header(ws: List[dict]) -> bool:
+    return {"Days", "Time", "Len"} <= {w["text"] for w in ws}
+
+
+def _day_header(ws: List[dict]) -> Optional[List[dict]]:
+    ws = _split_glued_day(ws)
+    nums = [w for w in ws if re.fullmatch(r"\d{2}", w["text"])]
+    if len(nums) >= 6 and any(w["text"] == "Spots" for w in ws):
+        return sorted(nums, key=lambda w: w["x0"])
+    return None
+
+
+def _grid_rows(pages: List[Tuple[str, List[dict]]]) -> List[Tuple[float, List[dict]]]:
+    """The schedule grid's visual rows across EVERY page that carries it.
+
+    An order longer than one page (OrderNo 35569, eight lines, 2026-10-26)
+    continues the grid on page 2 under a repeated header and prints the
+    Subtotal there; reading page 1 alone raised "Subtotal row not found".
+    Continuation pages must repeat the week columns at the same x positions
+    (the cell→column match keys on page 1's centres); their repeated header
+    rows and every "Page N of M" footer are dropped so they cannot be read as
+    a line's description."""
+    first = _cluster_rows(pages[0][1])
+    out = [(top, ws) for top, ws in first if not _page_footer(ws)]
+    ref_days = next((d for _, ws in first if (d := _day_header(ws))), None)
+    for pno, (_, words) in enumerate(pages[1:], start=2):
+        rows = _cluster_rows(words)
+        if not any(_is_grid_header(ws) for _, ws in rows):
+            continue  # terms / signature page
+        days = next((d for _, ws in rows if (d := _day_header(ws))), None)
+        if ref_days is None or days is None or len(days) != len(ref_days):
+            raise IWCCAParseError(f"page {pno}: week header does not match page 1")
+        for a, b in zip(ref_days, days):
+            if abs(_centre(a) - _centre(b)) > 1.0 or a["text"] != b["text"]:
+                raise IWCCAParseError(
+                    f"page {pno}: week column {b['text']} sits at {_centre(b):.1f}, page 1 has {a['text']} at {_centre(a):.1f}"
+                )
+        # A continuation page repeats the whole order header (station block,
+        # campaign, description, year/month/day rows) above its grid: keep only
+        # the rows BELOW the last header row, so none of it can be read as the
+        # previous line's description.
+        last_hdr = max(
+            i for i, (_, ws) in enumerate(rows) if _is_grid_header(ws) or _day_header(ws)
+        )
+        offset = (pno - 1) * 10_000.0
+        for top, ws in rows[last_hdr + 1 :]:
+            if _page_footer(ws):
+                continue
+            out.append((top + offset, ws))
+    return out
+
+
+def _page_footer(ws: List[dict]) -> bool:
+    return bool(_PAGE_RE.match(" ".join(w["text"] for w in ws)))
+
+
 # ─── Parse ───────────────────────────────────────────────────────────────────
 
 
@@ -296,14 +403,11 @@ def parse_iwcca(path: str) -> IWCCAOrder:
     text1, words1 = pages[0]
 
     # ── header ──
-    m = re.search(
-        r"Station:\s*(.*?)\s+Flight Dates:\s*(\d{1,2}/\d{1,2}/\d{4})\s*-\s*(\d{1,2}/\d{1,2}/\d{4})"
-        r"\s*\((\d+)\s*weeks?\)\s*OrderNo:\s*(\d+)\s*Date:\s*(\d{1,2}/\d{1,2}/\d{4})",
-        text1,
-    )
-    if not m:
-        raise IWCCAParseError("Station / Flight Dates / OrderNo header line not found")
-    station, fs, fe, weeks_stated, order_no, io_date = m.groups()
+    # Each labelled field is matched on its own and ends at the NEXT label or the
+    # end of its line: IW's October 2026 export (OrderNo 35569/35581/35588) added a
+    # "Market:" field and moved Flight Dates onto a second line, and the one-shot
+    # Station→Flight Dates→OrderNo→Date regex matched nothing.
+    station, market_dma, fs, fe, weeks_stated, order_no, io_date = _header_fields(text1)
     flight_start = datetime.strptime(fs, "%m/%d/%Y").date()
     flight_end = datetime.strptime(fe, "%m/%d/%Y").date()
     if flight_end < flight_start:
@@ -326,11 +430,11 @@ def parse_iwcca(path: str) -> IWCCAOrder:
     if not campaign:
         raise IWCCAParseError("Campaign line not found")
 
-    market_hint = "CVC" if "KBTV" in station.upper() else ""
+    market_hint = "CVC" if "KBTV" in station.upper() else _market_from_dma(market_dma)
     order_language = language_from_filename(path)
 
     # ── grid geometry: month row + day-number row ──
-    rows = _cluster_rows(words1)
+    rows = _grid_rows(pages)
     day_hdr: Optional[Tuple[float, List[dict]]] = None
     month_hdr: Optional[List[dict]] = None
     for idx, (top, ws) in enumerate(rows):
