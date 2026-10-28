@@ -68,6 +68,8 @@ def create_app(config: ApplicationConfig | None = None) -> FastAPI:
     # base template) and automatically covers future pages. Non-HTML responses
     # (JSON, static assets, SSE streams) are passed through untouched.
     _BH_TAG = b'<script src="/static/js/broadcast-health.js?v=20261006"></script>'
+    # Header button to the main portal next to every page's 🏠 (Kurt, 2026-10-28).
+    _PORTAL_TAG = b'<script src="/static/js/portal-link.js?v=20261028"></script>'
 
     # Shared date/time entry helpers (formatDateInput / parseDateInput /
     # fmtAirtime), previously copy-pasted into a dozen templates. Injected into
@@ -100,6 +102,7 @@ def create_app(config: ApplicationConfig | None = None) -> FastAPI:
         else:
             body = _inject_last(body, b"</body>", _DATE_TAG)
         body = _inject_last(body, b"</body>", _BH_TAG)
+        body = _inject_last(body, b"</body>", _PORTAL_TAG)
         headers = dict(response.headers)
         headers.pop("content-length", None)  # body length changed; let Response recompute
         return Response(
