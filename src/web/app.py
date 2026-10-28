@@ -69,7 +69,7 @@ def create_app(config: ApplicationConfig | None = None) -> FastAPI:
     # (JSON, static assets, SSE streams) are passed through untouched.
     _BH_TAG = b'<script src="/static/js/broadcast-health.js?v=20261006"></script>'
     # Header button to the main portal next to every page's 🏠 (Kurt, 2026-10-28).
-    _PORTAL_TAG = b'<script src="/static/js/portal-link.js?v=20261028"></script>'
+    _PORTAL_TAG = b'<script src="/static/js/portal-link.js?v=20261028b"></script>'
 
     # Shared date/time entry helpers (formatDateInput / parseDateInput /
     # fmtAirtime), previously copy-pasted into a dozen templates. Injected into

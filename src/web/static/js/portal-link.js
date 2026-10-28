@@ -30,14 +30,24 @@
     // (class home-btn, or cr-back on the two billing pages). Clone it so the
     // portal button inherits whichever styling that page uses.
     var home = document.querySelector('a.home-btn[href="/"], a.cr-back[href="/"]');
-    if (!home) return;
+    var el;
+    if (home) {
+      el = home.cloneNode(false);
+      el.classList.add("portal-btn");
+    } else {
+      // The Control Room landing page (portal.html) IS home and carries no 🏠;
+      // put the portal button where the 🏠 sits everywhere else (Lee 10/28).
+      var logo = document.querySelector(".header-inner .logo");
+      if (!logo) return;
+      el = document.createElement("a");
+      el.className = "home-btn portal-btn";
+    }
     injectStyles();
-    var el = home.cloneNode(false);
-    el.classList.add("portal-btn");
     el.href = PORTAL_URL;
     el.title = "Main portal";
     el.textContent = "🌐";
-    home.insertAdjacentElement("afterend", el);
+    if (home) home.insertAdjacentElement("afterend", el);
+    else logo.insertAdjacentElement("afterbegin", el);
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);

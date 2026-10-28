@@ -27,6 +27,13 @@ def test_script_targets_the_portal_and_leaves_the_home_button_alone():
     assert "home.href" not in JS and "home.textContent" not in JS
 
 
+def test_landing_page_without_a_home_button_gets_the_fallback_mount():
+    portal = (TEMPLATES / "portal.html").read_text()
+    assert "🏠" not in portal and 'class="logo"' in portal
+    assert 'querySelector(".header-inner .logo")' in JS
+    assert 'insertAdjacentElement("afterbegin", el)' in JS
+
+
 def test_every_home_button_matches_the_mount_selector():
     missing = []
     for path in TEMPLATES.rglob("*.html"):
