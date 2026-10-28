@@ -1017,3 +1017,10 @@ Daviselen line Rotation, and flip the four December estimates awaiting approval.
 Priority first-fit was Etere's default for a narrow program window (`_default_prenotazione`);
 the client's auto-detect only picks Rotation for monthly or >2h windows. Same shape as the
 WorldLink 9/7 change. Charmaine (the other Daviselen-system agency) untouched.
+
+## Aircheck "records instantly" on an already-aired WDC spot (2026-10-27)
+- [ ] `_fetch_etere_spots`: upcoming filter + first-airing pick in Python, in PT (SQL compared Eastern air time to the Pacific clock)
+- [ ] Air Checks page Schedule All: skip captures already on the agent, never post a past start
+- [ ] tests: rendered SQL has no GETDATE-vs-ORA compare; WDC 21:08 ET at 19:15 PT is NOT upcoming
+- [ ] deploy; book 3189 MCIM137526VH next airing (10/29 21:18 ET); remove the 3 duplicate 10/28 captures
+- [ ] lessons.md + memory

@@ -1019,9 +1019,20 @@ async function scheduleAllSpots() {
     const msg = document.getElementById('schedAllMsg');
     btn.disabled = true;
 
-    let ok = 0, fail = 0;
+    // Same dedup key as the server's auto-schedule (ISCI, network, start-to-minute):
+    // a second click on Schedule All must not book a second recording.
+    let queued = new Set();
+    try {
+        const r = await fetch(`${AGENT}/captures`, { signal: AbortSignal.timeout(4000) });
+        if (r.ok) (await r.json()).forEach(c => queued.add(
+            `${String(c.isci_code || '').trim().toUpperCase()}|${c.network}|${String(c.start_time || '').slice(0, 16)}`));
+    } catch {}
+
+    let ok = 0, fail = 0, skipped = 0;
     for (const s of etereSpots) {
-        btn.textContent = `Scheduling ${ok + fail + 1} of ${etereSpots.length}…`;
+        btn.textContent = `Scheduling ${ok + fail + skipped + 1} of ${etereSpots.length}…`;
+        const key = `${s.isci_code.trim().toUpperCase()}|${s.network}|${s.capture_start.slice(0, 16)}`;
+        if (queued.has(key)) { skipped++; continue; }
         try {
             const resp = await fetch(`${AGENT}/captures`, {
                 method:  'POST',
@@ -1036,15 +1047,16 @@ async function scheduleAllSpots() {
                     original_ora:     s.air_ora,
                 }),
             });
-            if (resp.ok) { ok++; } else { fail++; }
+            if (resp.ok) { ok++; queued.add(key); } else { fail++; }
         } catch { fail++; }
     }
 
     btn.textContent = `⏺ Schedule All ${etereSpots.length} Aircheck${etereSpots.length !== 1 ? 's' : ''}`;
     btn.disabled = false;
 
+    const already = skipped ? ` (${skipped} already queued)` : '';
     if (!fail) {
-        flash(msg, `✓ ${ok} airchecks scheduled.`, true);
+        flash(msg, `✓ ${ok} airchecks scheduled${already}.`, true);
         await loadCaptures();
         startPolling();
     } else {

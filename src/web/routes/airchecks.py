@@ -41,23 +41,32 @@ POST_ROLL_SECS = 30
 
 
 def _fetch_etere_spots(
-    contract_id: int, *, upcoming_only: bool = True, first_only: bool = True
+    contract_id: int,
+    *,
+    upcoming_only: bool = True,
+    first_only: bool = True,
+    now_pt: datetime | None = None,
 ) -> list[dict]:
     """The aircheck spot set for a contract: one row per (ISCI, market) first
     airing, future only (the capture set). `upcoming_only=False` keeps aired
     spots and `first_only=False` keeps every airing (the Order Lookup match set).
+
+    "Upcoming" is decided in Python, in Pacific time, AFTER each row's
+    market-local air time is converted — TPALINSE.ORA is market-local (a WDC
+    spot at 21:08 is 18:08 PT) while GETDATE() is Pacific, so a SQL compare of
+    the two kept an Eastern spot "upcoming" for three hours after it aired and
+    the agent, handed a start already in the past, recorded immediately
+    (Lee, 3189, 2026-10-27). `now_pt` is naive Pacific; None = now.
     """
     from browser_automation.etere_direct_client import connect as _db_connect
 
+    # Cheap prefilter only; the real cut-off is applied below in PT.
     upcoming_filter = (
-        """
-              AND DATEADD(MILLISECOND, dbo.tcFrames2Msec(dbo.getVideoStandard(tp.COD_USER), tp.ORA) % 86400000,
-                          CAST(tp.DATA AS DATETIME)) >= DATEADD(MINUTE, 10, GETDATE())"""
+        "\n              AND tp.DATA >= CAST(DATEADD(DAY, -1, GETDATE()) AS DATE)"
         if upcoming_only
         else ""
     )
     sql = """
-        WITH ranked AS (
             SELECT
                 f.COD_PROGRA   AS isci_code,
                 tp.COD_USER    AS market_id,
@@ -66,11 +75,7 @@ def _fetch_etere_spots(
                 dbo.tcFrames2Msec(dbo.getVideoStandard(tp.COD_USER), tp.ORA) AS air_ms,
                 cr.DURATA      AS duration_frames,
                 ct.CUSTOMERREF AS customer_ref,
-                a.RAG_SOCIAL   AS client_name,
-                ROW_NUMBER() OVER (
-                    PARTITION BY f.COD_PROGRA, tp.COD_USER
-                    ORDER BY tp.DATA, tp.ORA
-                ) AS rn
+                a.RAG_SOCIAL   AS client_name
             FROM TPALINSE tp
             JOIN trafficPalinse tpa  ON tpa.id_tpalinse      = tp.ID_TPALINSE
             JOIN CONTRATTIRIGHE cr   ON cr.ID_CONTRATTIRIGHE = tpa.id_contrattirighe
@@ -81,19 +86,23 @@ def _fetch_etere_spots(
               AND f.COD_PROGRA IS NOT NULL
               AND f.COD_PROGRA != ''
               AND tp.NEWTYPE = 'COM'
-        )
-        SELECT isci_code, market_id, air_date, air_ora, air_ms, duration_frames, customer_ref, client_name
-        FROM ranked
-        WHERE %s
-        ORDER BY isci_code, market_id
-    """ % (contract_id, upcoming_filter, "rn = 1" if first_only else "1 = 1")
+            ORDER BY f.COD_PROGRA, tp.COD_USER, tp.DATA, tp.ORA
+    """ % (contract_id, upcoming_filter)
+
+    if now_pt is None:
+        now_pt = datetime.now(_PT).replace(tzinfo=None)
+    cutoff_pt = now_pt + timedelta(minutes=10)
 
     results = []
+    seen: set[tuple[str, str]] = set()
     with _db_connect() as conn:
         cur = conn.cursor(as_dict=True)
         cur.execute(sql)
         for row in cur.fetchall():
             network = MARKET_NAMES.get(int(row["market_id"]), f"MKT{row['market_id']}")
+            isci = row["isci_code"].strip()
+            if first_only and (isci, network) in seen:
+                continue
 
             air_date = row["air_date"]
             if hasattr(air_date, "date"):
@@ -104,6 +113,10 @@ def _fetch_etere_spots(
                 air_date, datetime.min.time(), tzinfo=market_tz
             ) + timedelta(seconds=air_secs)
             air_dt = air_dt_loc.astimezone(_PT).replace(tzinfo=None)  # naive PT for Datamover
+            if upcoming_only and air_dt < cutoff_pt:
+                continue  # aired (or about to) — rows are in air order, so the next one is the first upcoming
+            if first_only:
+                seen.add((isci, network))
 
             tz_abbr = air_dt_loc.strftime("%Z")
             h12 = air_dt_loc.hour % 12 or 12
@@ -120,7 +133,7 @@ def _fetch_etere_spots(
 
             results.append(
                 {
-                    "isci_code": row["isci_code"].strip(),
+                    "isci_code": isci,
                     "air_ora": int(row["air_ora"]),
                     "client_name": client_name,
                     "customer_ref": customer_ref,
