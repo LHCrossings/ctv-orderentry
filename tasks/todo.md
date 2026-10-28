@@ -1024,3 +1024,8 @@ WorldLink 9/7 change. Charmaine (the other Daviselen-system agency) untouched.
 - [x] tests: rendered SQL has no GETDATE-vs-ORA compare; WDC 21:08 ET at 19:15 PT is NOT upcoming
 - [x] deploy; book 3189 MCIM137526VH next airing (10/29 21:18 ET); remove the 3 duplicate 10/28 captures
 - [x] lessons.md + memory
+
+## Portal header button (Kurt, 2026-10-28)
+- [x] static/js/portal-link.js injected site-wide (app.py middleware, last </body>)
+- [x] clones the page's 🏠 as a second button → http://portal.home/; home button untouched
+- [x] tests/unit/test_portal_link_injection.py; verified on the Jumpbox served page
