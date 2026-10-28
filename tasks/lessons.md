@@ -34,6 +34,42 @@ field regex ends at the NEXT label on the line or end of line") and was not appl
 
 ---
 
+## A Template Reader Built for ONE Client Is Gated on That Client — Gate the ROUTE on the Client and the READER on the Template, So the Next Client Is a Routing Line, Not a Parser
+
+**Session:** Lee, Asian Law Caucus ACoM proposal held pending approval — "whatever we need to do to tweak the ACM parser to accept this order as ACM, let's do that now" (2026-10-28)
+
+**Rule:** The CBM parser (10/26) read Charmaine's ACoM proposal template but gated the reader
+itself on `AMERICAN COMMUNITY MEDIA: SOS`, and the "ACM parser" read only ACM's own Excel
+workbook. Two days later the same template arrived for another ACM client and nothing could
+read it: the scanner sent it to the Charmaine parser (0 orders), the CBM reader refused on the
+gate, and behind the gate four smaller shape differences waited (a single date-RANGE column
+`10/30-11/3` instead of `26-Oct` weeks, a Production row inside the Paid total, no Bonus
+footer or column on a paid-only sheet, a summary by LANGUAGE rather than by market). Lee's
+operating rule makes the split explicit: the agency line's client decides the order type (SOS →
+CBM, anything else → ACM; "if this is CA Black Media, Charmaine edits the PDF so the right
+parser runs"), and one reader handles the template.
+
+**How to apply:**
+1. Detection keys on the party (`Agency: AMERICAN COMMUNITY MEDIA: <client>` → ACM, the SOS
+   gate stays CBM's); the reader (`parse_acom_proposal`) takes any client and the CBM entry
+   point is that reader behind its gate. One order type, one dispatcher, two readers
+   (`parse_acm`: xlsx | pdf) — the Crispin rule — and BOTH call sites (service + bridge) use it.
+2. Every "the sheet always has X" in a reader is a guess from one client's sheets: a Bonus
+   footer, a Bonus Units column, Monday week columns, market-keyed summary rows. Make each
+   optional with the reconciliation adjusted (Paid NET = airtime + production; Total Contract
+   = airtime + production; summary rows by market OR language) rather than raising.
+3. A clock-time end on the last day is Lee's split rule, not Viewpoint's trim: the day before
+   keeps its full window, the last day gets its own line ending at the cutoff
+   (`plan_cutoff_ranges`: 40 M-F spots over Fri/Mon/Tue → 27 through 11/2 at 14/day + 13 on
+   11/3 4p-5p). Caps are computed per range from the ACTIVE days, never from the pattern width.
+4. Separation stated on a sheet ("No separation requirement") only sets the DEFAULT offered;
+   the value is Lee's at the prompt (3/0/0 here, like the Viewpoint political buys).
+5. Rehearse before the order exists: `python -m browser_automation.acm_automation <pdf>
+   --dry-run --cutoff 5p` writes header + lines + the Production box in a transaction, verifies
+   CONTRATTISPESE, and rolls back; the fixture and tamper tests pin the sheet's own totals.
+
+---
+
 ## A SQL Filter Compared a MARKET-LOCAL Time With the Server's PACIFIC Clock — "Upcoming" Must Be Decided After the Timezone Conversion, in One Clock; and an Agent Handed a Past Start Records NOW
 
 **Session:** Lee, Admerasia McD 3189 WDC — "go to add the two spots again, the recorder just instantly starts recording. The spots aren't airing so why?" (2026-10-27)

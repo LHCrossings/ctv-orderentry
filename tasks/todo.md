@@ -1034,3 +1034,14 @@ WorldLink 9/7 change. Charmaine (the other Daviselen-system agency) untouched.
 - [x] header per labelled field (Market: added, Flight Dates moved to line 2)
 - [x] grid read across every page; continuation header rows dropped; columns asserted
 - [x] three IOs as fixtures + tests; six older fixtures unchanged; deployed f5870a0
+
+## ACM parser accepts Charmaine's ACoM proposal PDF — Asian Law Caucus, held pending approval (2026-10-28)
+Lee: hold the order; it is listed as American Community Media (if it turns out to be CA Black Media,
+Charmaine edits the PDF so the CBM parser runs). Split lines so 11/2 runs its full window and 11/3 only
+to 5p. Separation 3/0/0 for this order. Production $3,000 → Production box.
+- [x] cbm_parser: generic ACoM proposal reader (`parse_acom_proposal`): any `Agency: AMERICAN COMMUNITY MEDIA: <client>`, date-RANGE week column (`10/30-11/3`), Production rows, Paid-only footer, summary by language + Production + Total Contract
+- [x] acm_parser: `parse_acm(path)` dispatcher (xlsx → parse_acm_xlsx, pdf → parse_acm_pdf) → AcmOrder (+ client_name, production, no_separation, billing_cycle, week_end)
+- [x] acm_automation: PDF gather (start/end confirm, cutoff prompt, 3/0/0 when the sheet says no separation, `ACM <yymm>` / `ACM <client> <yymm>` defaults with precedent); entry: per-range caps, cutoff split (full window through the day before, last day to the cutoff), production box + verify
+- [x] detection: ACoM non-SOS PDF → ACM (CBM keeps SOS); scan cache v22; service + bridge call `parse_acm`
+- [x] fixture tests/fixtures/acm/ + tests (parse, detection both ways, cutoff split, tamper); full unit suite; deploy
+- [x] dry run on the real PDF through gather + `--dry-run` entry; lesson + memory
