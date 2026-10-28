@@ -20,8 +20,7 @@
     var s = document.createElement("style");
     s.id = "portal-link-styles";
     s.textContent =
-      ".portal-btn{margin-left:6px;}" +
-      ".portal-btn::after{content:\"portal\";}";
+      ".portal-btn::after{content:\"portal\";}";  // header .logo / .cr-logo already gap:14px
     document.head.appendChild(s);
   }
 
