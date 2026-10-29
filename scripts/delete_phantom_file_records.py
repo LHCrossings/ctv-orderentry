@@ -18,6 +18,9 @@ encrypted, so `--rehearse` PROVES that inside a transaction (every phantom's met
 and file row gone; each asset's real-copy count unchanged; FS_METAFILE shrunk by exactly the
 target count) and rolls back; anything else rolls back and exits 2. Run --rehearse before --apply.
 
+The procedure leaves the metafile's referencing rows in place (FS_XFILEFILM asset link,
+smptemetadata), so the script deletes those two first, in the same transaction.
+
 Target = a file record whose FILE_ID contains a colon and whose physical size is 0 or NULL,
 on an asset that still has at least one real (colon-free) record. Never anything else.
 
@@ -135,13 +138,32 @@ def main():
         real_before = _real_copy_counts(cur, fids)
         cur.execute("SELECT COUNT(*) FROM FS_METAFILE")
         total_before = int(cur.fetchone()[0])
-        for m in mids:
-            cur.execute("EXEC fs_metafile_delete @id_metafile=%s, @opt_outputMetafileIds=0", (m,))
-            try:
-                while cur.nextset():
-                    pass
-            except Exception as exc:  # noqa: BLE001 — a late server error must surface
-                raise RuntimeError(f"fs_metafile_delete {m}: {exc}") from exc
+        cur.execute("SELECT COUNT(*) FROM wf_instance WHERE activity_state = 6")
+        active_wf_before = int(cur.fetchone()[0])
+        try:
+            for m in mids:
+                # fs_metafile_delete removes the metafile and its FS_FILE rows but not the
+                # rows that reference the metafile (10/28 rehearsal: FK
+                # fke_FS_XFILEFILM_ID_METAFILE), so the phantom's asset link and any SMPTE
+                # metadata go first, inside the same transaction.
+                cur.execute("DELETE FROM smptemetadata WHERE id_metafile=%s", (m,))
+                cur.execute("DELETE FROM FS_XFILEFILM WHERE ID_METAFILE=%s", (m,))
+                if cur.rowcount != 1:
+                    raise RuntimeError(
+                        f"metafile {m}: expected one asset link, found {cur.rowcount}"
+                    )
+                cur.execute(
+                    "EXEC fs_metafile_delete @id_metafile=%s, @opt_outputMetafileIds=0", (m,)
+                )
+                try:
+                    while cur.nextset():
+                        pass
+                except Exception as exc:  # noqa: BLE001 — a late server error must surface
+                    raise RuntimeError(f"fs_metafile_delete {m}: {exc}") from exc
+        except Exception as exc:  # noqa: BLE001
+            conn.rollback()
+            print(f"ROLLED BACK — {exc}")
+            sys.exit(2)
         after = _counts(cur, mids)
         real_after = _real_copy_counts(cur, fids)
         cur.execute("SELECT COUNT(*) FROM FS_METAFILE")
@@ -153,6 +175,12 @@ def main():
             problems.append(
                 f"FS_METAFILE shrank by {total_before - total_after}, expected {len(mids)}"
             )
+        cur.execute("SELECT COUNT(*) FROM wf_instance WHERE activity_state = 6")
+        active_wf_after = int(cur.fetchone()[0])
+        if active_wf_after != active_wf_before:
+            # Etere may queue a file-delete workflow per removed metafile; for a name that
+            # cannot exist on disk that is a job that fails and loops — refuse.
+            problems.append(f"active workflow instances {active_wf_before} -> {active_wf_after}")
         if problems:
             conn.rollback()
             print("ROLLED BACK — verification failed:", problems)
