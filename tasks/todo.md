@@ -1057,3 +1057,10 @@ Datamover (EtereMM9) crashes in the background; jobs for it sit in wf_job with n
 ### Review
 Runbook text uses Lee's words (close Datamover, Etere Ingest, Etere Active Sync; sign out, sign in).
 Not done: cleaning the 6 looping instances (Lee's call), Etere ticket for a v36 MM9 build.
+
+## Abort the looping workflow instances (Lee, 2026-10-29)
+- [x] census: the 346 "Delete on CIBn" instances with start_cnt >= 5 are the DESIGN (Wait [1d] → check schedule → wait again; hundreds complete daily) — untouched. True loopers = 6 instances with an open non-Wait step the Agent aborts/restarts every 20 h
+- [x] `scripts/abort_looping_workflow_instances.py` (list / --rehearse / --apply): Etere's own `wf_runtime_instanceAbort`, backup JSON in logs/, in-txn verify (state 8, 0 jobs), fresh-connection readback. Aborted instances stay aborted (737 in state 8 for 660 days)
+- [x] applied: 1116885, 915478, 1012932, 1012933, 1116887, 1529711 → state 8; watchdog: 0 open steps, 0 looping
+### Review
+MCIM032324VH still has two CIB3 copies ("Too many metafile selected") — the file stays on CIB3; HMONG-REPORT031625F/G and V-TOPNEWS071725C assets have no file anywhere and are expired.

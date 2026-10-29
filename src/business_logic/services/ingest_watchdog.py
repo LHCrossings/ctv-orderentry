@@ -21,9 +21,12 @@ Rules (thresholds in minutes, measured on the SQL Server clock):
   * stall    — an Initial Import step other than a Wait open longer than INGEST_STALL_MIN, or a
                restore's Datamover (mm-*) step open longer than RESTORE_STALL_MIN.
   * looping  — an instance restarted LOOP_RESTARTS or more times: the SQL Agent aborts a stuck
-               instance after 20 h and restarts it, and 300+ instances have looped like that for
-               months (V-TOPNEWS071725C 563 restarts, HMONG-REPORT031625F/G 712). They are
-               counted so someone cleans them up, and never alarm.
+               instance after 20 h and restarts it, so a step that can never complete loops for
+               months (V-TOPNEWS071725C 563 restarts, HMONG-REPORT031625F/G 712; six such
+               instances were aborted 10/29 with scripts/abort_looping_workflow_instances.py).
+               They are counted so someone cleans them up, and never alarm. The "Delete on
+               CIBn" instances that wait a day and re-check for weeks are NOT loopers: that
+               wait-check-wait cycle is the design, and they sit in a Wait step anyway.
 
 Shared by `scripts/check_ingest_stalls.py` (CLI) and the Broadcast Health status task
 (`src/web/routes/broadcast_health.py`), which polls every few minutes and shows a stall in the
